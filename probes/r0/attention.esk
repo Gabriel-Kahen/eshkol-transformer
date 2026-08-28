@@ -1,0 +1,13 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define q (reshape #(0.0 0.0 0.0 0.0) 2 2))
+(define k (reshape #(0.0 0.0 0.0 0.0) 2 2))
+(define v (reshape #(1.0 2.0 3.0 4.0) 2 2))
+(define result (scaled-dot-attention q k v))
+(display
+  (if (and (near (tensor-get result 0 0) 2.0 1e-8)
+           (near (tensor-get result 0 1) 3.0 1e-8)
+           (near (tensor-get result 1 0) 2.0 1e-8)
+           (near (tensor-get result 1 1) 3.0 1e-8))
+      "PASS scaled dot attention" "FAIL scaled dot attention"))
+(newline)
+(display "R0_DONE attention") (newline)

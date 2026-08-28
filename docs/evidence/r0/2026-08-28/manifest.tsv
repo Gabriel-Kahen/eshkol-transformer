@@ -1,0 +1,185 @@
+name	exit_code	expectation	command
+configure	0	build	cmake -S /home/gabe/.cache/eshkol-r0/source -B /home/gabe/.cache/eshkol-r0/work3/build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DESHKOL_BUILD_TESTS=ON -DLLVM_CONFIG_EXECUTABLE=/home/gabe/.cache/eshkol-r0/llvm21/root/usr/bin/llvm-config-21
+build	0	build	cmake --build /home/gabe/.cache/eshkol-r0/work3/build --parallel 2
+upstream_ctest	0	upstream-tests	ctest --test-dir /home/gabe/.cache/eshkol-r0/work3/build --output-on-failure
+compiler_help	0	discovery	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run --help
+activations.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/activations.esk -o /home/gabe/.cache/eshkol-r0/work3/activations.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+activations.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/activations.aot
+activations.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/activations.aot
+activations.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/activations.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+activations.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/activations.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+attention.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/attention.esk -o /home/gabe/.cache/eshkol-r0/work3/attention.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+attention.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/attention.aot
+attention.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/attention.aot
+attention.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/attention.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+attention.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/attention.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_attention.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_attention.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_attention.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_attention.aot_run_1	139	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_attention.aot
+autodiff_attention.aot_run_2	139	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_attention.aot
+autodiff_attention.jit_run	139	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_attention.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_attention.jit_run_2	139	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_attention.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_control_flow.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_control_flow.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_control_flow.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_control_flow.aot_run_1	134	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_control_flow.aot
+autodiff_control_flow.aot_run_2	134	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_control_flow.aot
+autodiff_control_flow.jit_run	134	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_control_flow.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_control_flow.jit_run_2	134	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_control_flow.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_embedding.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_embedding.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_embedding.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_embedding.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_embedding.aot
+autodiff_embedding.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_embedding.aot
+autodiff_embedding.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_embedding.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_embedding.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_embedding.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_forward.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_forward.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_forward.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_forward.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_forward.aot
+autodiff_forward.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_forward.aot
+autodiff_forward.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_forward.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_forward.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_forward.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_gradient_scalar.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_gradient_scalar.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_gradient_scalar.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_gradient_scalar.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_gradient_scalar.aot
+autodiff_gradient_scalar.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_gradient_scalar.aot
+autodiff_gradient_scalar.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_gradient_scalar.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_gradient_scalar.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_gradient_scalar.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_gradient_tensor.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_gradient_tensor.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_gradient_tensor.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_gradient_tensor.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_gradient_tensor.aot
+autodiff_gradient_tensor.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_gradient_tensor.aot
+autodiff_gradient_tensor.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_gradient_tensor.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_gradient_tensor.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_gradient_tensor.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_layer_norm.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_layer_norm.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_layer_norm.aot_run_1	139	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_layer_norm.aot
+autodiff_layer_norm.aot_run_2	139	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_layer_norm.aot
+autodiff_layer_norm.jit_run	139	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_layer_norm.jit_run_2	139	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_matmul.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_matmul.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_matmul.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_matmul.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_matmul.aot
+autodiff_matmul.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_matmul.aot
+autodiff_matmul.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_matmul.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_matmul.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_matmul.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_relu.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_relu.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_relu.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_relu.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_relu.aot
+autodiff_relu.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_relu.aot
+autodiff_relu.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_relu.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_relu.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_relu.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_repeated_calls.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_repeated_calls.esk -o /home/gabe/.cache/eshkol-r0/work3/autodiff_repeated_calls.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_repeated_calls.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/autodiff_repeated_calls.aot
+autodiff_repeated_calls.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/autodiff_repeated_calls.aot
+autodiff_repeated_calls.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_repeated_calls.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+autodiff_repeated_calls.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_repeated_calls.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+batch_matmul.aot_compile	1	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/batch_matmul.esk -o /home/gabe/.cache/eshkol-r0/work3/batch_matmul.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+batch_matmul.jit_run	1	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/batch_matmul.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+batch_matmul.jit_run_2	1	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/batch_matmul.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+broadcast.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/broadcast.esk -o /home/gabe/.cache/eshkol-r0/work3/broadcast.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+broadcast.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/broadcast.aot
+broadcast.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/broadcast.aot
+broadcast.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/broadcast.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+broadcast.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/broadcast.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+causal_mask.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/causal_mask.esk -o /home/gabe/.cache/eshkol-r0/work3/causal_mask.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+causal_mask.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/causal_mask.aot
+causal_mask.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/causal_mask.aot
+causal_mask.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/causal_mask.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+causal_mask.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/causal_mask.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+dtype_boolean.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/dtype_boolean.esk -o /home/gabe/.cache/eshkol-r0/work3/dtype_boolean.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+dtype_boolean.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/dtype_boolean.aot
+dtype_boolean.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/dtype_boolean.aot
+dtype_boolean.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/dtype_boolean.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+dtype_boolean.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/dtype_boolean.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+dtype_integer.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/dtype_integer.esk -o /home/gabe/.cache/eshkol-r0/work3/dtype_integer.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+dtype_integer.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/dtype_integer.aot
+dtype_integer.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/dtype_integer.aot
+dtype_integer.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/dtype_integer.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+dtype_integer.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/dtype_integer.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+embedding.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/embedding.esk -o /home/gabe/.cache/eshkol-r0/work3/embedding.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+embedding.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/embedding.aot
+embedding.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/embedding.aot
+embedding.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/embedding.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+embedding.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/embedding.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+file_binary_io.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_binary_io.esk -o /home/gabe/.cache/eshkol-r0/work3/file_binary_io.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+file_binary_io.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/file_binary_io.aot
+file_binary_io.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/file_binary_io.aot
+file_binary_io.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_binary_io.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+file_binary_io.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_binary_io.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+file_io.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_io.esk -o /home/gabe/.cache/eshkol-r0/work3/file_io.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+file_io.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/file_io.aot
+file_io.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/file_io.aot
+file_io.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_io.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+file_io.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_io.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+file_rename.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_rename.esk -o /home/gabe/.cache/eshkol-r0/work3/file_rename.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+file_rename.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/file_rename.aot
+file_rename.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/file_rename.aot
+file_rename.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_rename.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+file_rename.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/file_rename.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+layer_norm.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/layer_norm.esk -o /home/gabe/.cache/eshkol-r0/work3/layer_norm.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+layer_norm.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/layer_norm.aot
+layer_norm.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/layer_norm.aot
+layer_norm.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/layer_norm.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+layer_norm.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/layer_norm.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+matmul.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/matmul.esk -o /home/gabe/.cache/eshkol-r0/work3/matmul.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+matmul.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/matmul.aot
+matmul.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/matmul.aot
+matmul.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/matmul.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+matmul.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/matmul.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+memory_loop.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/memory_loop.esk -o /home/gabe/.cache/eshkol-r0/work3/memory_loop.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+memory_loop.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/memory_loop.aot
+memory_loop.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/memory_loop.aot
+memory_loop.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/memory_loop.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+memory_loop.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/memory_loop.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+precision_f64.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/precision_f64.esk -o /home/gabe/.cache/eshkol-r0/work3/precision_f64.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+precision_f64.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/precision_f64.aot
+precision_f64.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/precision_f64.aot
+precision_f64.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/precision_f64.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+precision_f64.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/precision_f64.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+rank_nine.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rank_nine.esk -o /home/gabe/.cache/eshkol-r0/work3/rank_nine.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+rank_nine.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/rank_nine.aot
+rank_nine.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/rank_nine.aot
+rank_nine.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rank_nine.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+rank_nine.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rank_nine.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+rms_norm.aot_compile	1	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rms_norm.esk -o /home/gabe/.cache/eshkol-r0/work3/rms_norm.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+rms_norm.jit_run	1	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rms_norm.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+rms_norm.jit_run_2	1	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rms_norm.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+rng.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rng.esk -o /home/gabe/.cache/eshkol-r0/work3/rng.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+rng.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/rng.aot
+rng.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/rng.aot
+rng.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rng.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+rng.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rng.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+tensor_core.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/tensor_core.esk -o /home/gabe/.cache/eshkol-r0/work3/tensor_core.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+tensor_core.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/tensor_core.aot
+tensor_core.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/tensor_core.aot
+tensor_core.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/tensor_core.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+tensor_core.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/tensor_core.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+tensor_dot.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/tensor_dot.esk -o /home/gabe/.cache/eshkol-r0/work3/tensor_dot.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+tensor_dot.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/tensor_dot.aot
+tensor_dot.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/tensor_dot.aot
+tensor_dot.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/tensor_dot.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+tensor_dot.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/tensor_dot.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+transpose_ownership.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/transpose_ownership.esk -o /home/gabe/.cache/eshkol-r0/work3/transpose_ownership.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+transpose_ownership.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/transpose_ownership.aot
+transpose_ownership.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/transpose_ownership.aot
+transpose_ownership.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/transpose_ownership.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+transpose_ownership.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/transpose_ownership.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+view_alias.aot_compile	0	capability-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/view_alias.esk -o /home/gabe/.cache/eshkol-r0/work3/view_alias.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+view_alias.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0/work3/view_alias.aot
+view_alias.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0/work3/view_alias.aot
+view_alias.jit_run	0	jit	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/view_alias.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+view_alias.jit_run_2	0	jit-repeat	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/view_alias.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.broadcast_shape_mismatch.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/broadcast_shape_mismatch.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.broadcast_shape_mismatch.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.broadcast_shape_mismatch.aot_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.broadcast_shape_mismatch.aot
+negative.broadcast_shape_mismatch.jit_run	139	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/broadcast_shape_mismatch.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.embedding_index_out_of_bounds.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/embedding_index_out_of_bounds.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.embedding_index_out_of_bounds.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.embedding_index_out_of_bounds.aot_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.embedding_index_out_of_bounds.aot
+negative.embedding_index_out_of_bounds.jit_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/embedding_index_out_of_bounds.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.file_missing.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/file_missing.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.file_missing.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.file_missing.aot_run	139	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.file_missing.aot
+negative.file_missing.jit_run	139	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/file_missing.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.index_out_of_bounds.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/index_out_of_bounds.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.index_out_of_bounds.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.index_out_of_bounds.aot_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.index_out_of_bounds.aot
+negative.index_out_of_bounds.jit_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/index_out_of_bounds.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.indexed_cross_entropy_targets.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/indexed_cross_entropy_targets.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.indexed_cross_entropy_targets.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.indexed_cross_entropy_targets.aot_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.indexed_cross_entropy_targets.aot
+negative.indexed_cross_entropy_targets.jit_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/indexed_cross_entropy_targets.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.matmul_shape_mismatch.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/matmul_shape_mismatch.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.matmul_shape_mismatch.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.matmul_shape_mismatch.aot_run	1	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.matmul_shape_mismatch.aot
+negative.matmul_shape_mismatch.jit_run	1	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/matmul_shape_mismatch.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.negative_dimension.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/negative_dimension.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.negative_dimension.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.negative_dimension.aot_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.negative_dimension.aot
+negative.negative_dimension.jit_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/negative_dimension.esk -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.reshape_size_mismatch.aot_compile	0	expected-failure-compile	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/reshape_size_mismatch.esk -o /home/gabe/.cache/eshkol-r0/work3/negative.reshape_size_mismatch.aot -L /home/gabe/.cache/eshkol-r0/work3/build
+negative.reshape_size_mismatch.aot_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/negative.reshape_size_mismatch.aot
+negative.reshape_size_mismatch.jit_run	0	expected-failure	/home/gabe/.cache/eshkol-r0/work3/build/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/negative/reshape_size_mismatch.esk -L /home/gabe/.cache/eshkol-r0/work3/build

@@ -1,0 +1,9 @@
+[  2%] Built target eshkol-pkg
+[  8%] Built target eshkol-agent-ffi
+[ 84%] Built target eshkol-static
+[ 87%] Built target eshkol-server
+[ 90%] Built target eshkol-repl-lib
+[ 92%] Built target eshkol-lsp
+[ 95%] Built target eshkol-run
+[ 97%] Built target stdlib
+[100%] Built target eshkol-repl

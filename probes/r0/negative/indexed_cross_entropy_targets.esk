@@ -1,0 +1,3 @@
+(define logits (reshape #(2.0 0.0 0.0 2.0) 2 2))
+(define indices #(0 1))
+(display (cross-entropy-loss logits indices))

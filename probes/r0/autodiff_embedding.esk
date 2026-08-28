@@ -1,0 +1,15 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(let* ((actual (gradient
+                 (lambda (weights)
+                   (tensor-sum (embedding #(1 1) (reshape weights 3 2))))
+                 #(0.0 0.0 1.0 2.0 0.0 0.0))))
+  (display
+    (if (and (near (tensor-get actual 0) 0.0 1e-8)
+             (near (tensor-get actual 1) 0.0 1e-8)
+             (near (tensor-get actual 2) 2.0 1e-8)
+             (near (tensor-get actual 3) 2.0 1e-8)
+             (near (tensor-get actual 4) 0.0 1e-8)
+             (near (tensor-get actual 5) 0.0 1e-8))
+        "PASS embedding scatter gradient" "FAIL embedding scatter gradient"))
+  (newline))
+(display "R0_DONE autodiff_embedding") (newline)

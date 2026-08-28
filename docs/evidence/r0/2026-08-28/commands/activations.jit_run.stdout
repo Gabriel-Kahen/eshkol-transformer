@@ -1,0 +1,5 @@
+PASS relu
+PASS sigmoid
+PASS gelu
+PASS axis softmax
+R0_DONE activations

@@ -1,0 +1,13 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define r0-identity-matrix (reshape #(1.0 0.0 0.0 1.0) 2 2))
+(let* ((actual (gradient
+                 (lambda (v) (tensor-sum (matmul (reshape v 2 2) r0-identity-matrix)))
+                 #(1.0 2.0 3.0 4.0))))
+  (display
+    (if (and (near (tensor-get actual 0) 1.0 1e-8)
+             (near (tensor-get actual 1) 1.0 1e-8)
+             (near (tensor-get actual 2) 1.0 1e-8)
+             (near (tensor-get actual 3) 1.0 1e-8))
+        "PASS matmul gradient" "FAIL matmul gradient"))
+  (newline))
+(display "R0_DONE autodiff_matmul") (newline)

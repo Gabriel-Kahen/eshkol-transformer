@@ -1,0 +1,6 @@
+(define value (reshape #(1.0) 1 1 1 1 1 1 1 1 1))
+(display
+  (if (= (tensor-get value 0 0 0 0 0 0 0 0 0) 1.0)
+      "PASS rank-9 tensor" "FAIL rank-9 tensor"))
+(newline)
+(display "R0_DONE rank_nine") (newline)
