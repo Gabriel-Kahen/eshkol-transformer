@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | Clean configure plus smoke test on supported Linux environment | planned |
+| F0 | Package layout, build/test entry points, CI matrix | — | Clean configure plus smoke test on supported Linux environment | review |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | planned |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | planned |
 | Q0 | Test harness and frozen reference-oracle format | — | Deterministic test runner and first Eshkol/PyTorch parity fixture | planned |
@@ -80,4 +80,3 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 - Review and integrate in dependency order; rerun affected downstream gates.
 - Treat Eshkol-core defects as explicit upstream issues or isolated native-extension
   work, never as silent library fallbacks.
-
