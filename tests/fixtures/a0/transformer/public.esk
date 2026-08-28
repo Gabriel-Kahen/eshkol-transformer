@@ -1,0 +1,127 @@
+;;; Declaration-only A0 fixture. Every callable raises if executed. Real public
+;;; modules belong to downstream workstreams.
+
+(require transformer.api_contract)
+
+(provide transformer-api-contract-version transformer-api-modules
+         transformer-api-operations
+         transformer-error? transformer-error-category transformer-error-operation
+         transformer-error-message transformer-error-details transformer-error-cause
+         capability-discover capability-verified? capability-require
+         capability-report-entries capability-entry-name capability-entry-status
+         capability-entry-constraints capability-entry-evidence
+         config-parse config-resolve config-validate config-canonical
+         config-fingerprint config-ref
+         tokenizer-byte tokenizer-load tokenizer-save! tokenizer-encode
+         tokenizer-decode tokenizer-vocab-size tokenizer-fingerprint
+         tokenizer-special-token-id
+         token-dataset-open token-dataset-next-batch token-dataset-cursor
+         token-dataset-end?
+         token-dataset-seek! token-dataset-close! token-batch-inputs
+         token-batch-targets token-batch-loss-mask token-batch-validate
+         module-parameters module-buffers module-state-dict
+         module-load-state-dict! module-train! module-eval! module-zero-grad!
+         model-forward model-output-logits model-output-loss model-output-rng
+         optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
+         optimizer-load-state!
+         trainer-create trainer-step! trainer-train! trainer-evaluate!
+         trainer-state trainer-load-state! metrics-ref
+         generator-create generator-prefill! generator-decode-step!
+         generator-generate! generation-output-ids generation-output-lengths
+         generation-output-text generation-output-rng
+         generation-output-cache-lengths
+         checkpoint-inspect checkpoint-metadata-ref checkpoint-load checkpoint-save!)
+
+(define (a0-declaration-only operation)
+  (raise (list 'unsupported 'declaration-only operation)))
+
+(define (transformer-error? value) (a0-declaration-only 'transformer-error?))
+(define (transformer-error-category value) (a0-declaration-only 'transformer-error-category))
+(define (transformer-error-operation value) (a0-declaration-only 'transformer-error-operation))
+(define (transformer-error-message value) (a0-declaration-only 'transformer-error-message))
+(define (transformer-error-details value) (a0-declaration-only 'transformer-error-details))
+(define (transformer-error-cause value) (a0-declaration-only 'transformer-error-cause))
+
+(define (capability-discover) (a0-declaration-only 'capability-discover))
+(define (capability-verified? report capability)
+  (a0-declaration-only 'capability-verified?))
+(define (capability-require report capability)
+  (error "unsupported capability in A0 declaration fixture" capability))
+(define (capability-report-entries report) (a0-declaration-only 'capability-report-entries))
+(define (capability-entry-name entry) (a0-declaration-only 'capability-entry-name))
+(define (capability-entry-status entry) (a0-declaration-only 'capability-entry-status))
+(define (capability-entry-constraints entry) (a0-declaration-only 'capability-entry-constraints))
+(define (capability-entry-evidence entry) (a0-declaration-only 'capability-entry-evidence))
+
+(define (config-parse text) (a0-declaration-only 'config-parse))
+(define (config-resolve config overrides) (a0-declaration-only 'config-resolve))
+(define (config-validate resolved) (a0-declaration-only 'config-validate))
+(define (config-canonical resolved) (a0-declaration-only 'config-canonical))
+(define (config-fingerprint resolved) (a0-declaration-only 'config-fingerprint))
+(define (config-ref resolved key) (a0-declaration-only 'config-ref))
+
+(define (tokenizer-byte config) (a0-declaration-only 'tokenizer-byte))
+(define (tokenizer-load path) (a0-declaration-only 'tokenizer-load))
+(define (tokenizer-save! tokenizer path) (a0-declaration-only 'tokenizer-save!))
+(define (tokenizer-encode tokenizer text) (a0-declaration-only 'tokenizer-encode))
+(define (tokenizer-decode tokenizer ids) (a0-declaration-only 'tokenizer-decode))
+(define (tokenizer-vocab-size tokenizer) (a0-declaration-only 'tokenizer-vocab-size))
+(define (tokenizer-fingerprint tokenizer) (a0-declaration-only 'tokenizer-fingerprint))
+(define (tokenizer-special-token-id tokenizer name)
+  (a0-declaration-only 'tokenizer-special-token-id))
+
+(define (token-dataset-open config tokenizer) (a0-declaration-only 'token-dataset-open))
+(define (token-dataset-next-batch dataset) (a0-declaration-only 'token-dataset-next-batch))
+(define (token-dataset-cursor dataset) (a0-declaration-only 'token-dataset-cursor))
+(define (token-dataset-end? value) (a0-declaration-only 'token-dataset-end?))
+(define (token-dataset-seek! dataset cursor) (a0-declaration-only 'token-dataset-seek!))
+(define (token-dataset-close! dataset) (a0-declaration-only 'token-dataset-close!))
+(define (token-batch-inputs batch) (a0-declaration-only 'token-batch-inputs))
+(define (token-batch-targets batch) (a0-declaration-only 'token-batch-targets))
+(define (token-batch-loss-mask batch) (a0-declaration-only 'token-batch-loss-mask))
+(define (token-batch-validate batch) (a0-declaration-only 'token-batch-validate))
+
+(define (module-parameters module) (a0-declaration-only 'module-parameters))
+(define (module-buffers module) (a0-declaration-only 'module-buffers))
+(define (module-state-dict module) (a0-declaration-only 'module-state-dict))
+(define (module-load-state-dict! module state) (a0-declaration-only 'module-load-state-dict!))
+(define (module-train! module) (a0-declaration-only 'module-train!))
+(define (module-eval! module) (a0-declaration-only 'module-eval!))
+(define (module-zero-grad! module) (a0-declaration-only 'module-zero-grad!))
+(define (model-forward model input-ids . opts) (a0-declaration-only 'model-forward))
+(define (model-output-logits output) (a0-declaration-only 'model-output-logits))
+(define (model-output-loss output) (a0-declaration-only 'model-output-loss))
+(define (model-output-rng output) (a0-declaration-only 'model-output-rng))
+
+(define (optimizer-create config parameter-tree) (a0-declaration-only 'optimizer-create))
+(define (optimizer-step! optimizer) (a0-declaration-only 'optimizer-step!))
+(define (optimizer-zero-grad! optimizer) (a0-declaration-only 'optimizer-zero-grad!))
+(define (optimizer-state optimizer) (a0-declaration-only 'optimizer-state))
+(define (optimizer-load-state! optimizer state) (a0-declaration-only 'optimizer-load-state!))
+
+(define (trainer-create resolved tokenizer dataset model optimizer)
+  (a0-declaration-only 'trainer-create))
+(define (trainer-step! trainer) (a0-declaration-only 'trainer-step!))
+(define (trainer-train! trainer stop-policy) (a0-declaration-only 'trainer-train!))
+(define (trainer-evaluate! trainer dataset) (a0-declaration-only 'trainer-evaluate!))
+(define (trainer-state trainer) (a0-declaration-only 'trainer-state))
+(define (trainer-load-state! trainer state) (a0-declaration-only 'trainer-load-state!))
+(define (metrics-ref metrics key) (a0-declaration-only 'metrics-ref))
+
+(define (generator-create model tokenizer config) (a0-declaration-only 'generator-create))
+(define (generator-prefill! generator input-ids) (a0-declaration-only 'generator-prefill!))
+(define (generator-decode-step! generator token-ids)
+  (a0-declaration-only 'generator-decode-step!))
+(define (generator-generate! generator input-ids) (a0-declaration-only 'generator-generate!))
+(define (generation-output-ids output) (a0-declaration-only 'generation-output-ids))
+(define (generation-output-lengths output) (a0-declaration-only 'generation-output-lengths))
+(define (generation-output-text output) (a0-declaration-only 'generation-output-text))
+(define (generation-output-rng output) (a0-declaration-only 'generation-output-rng))
+(define (generation-output-cache-lengths output)
+  (a0-declaration-only 'generation-output-cache-lengths))
+
+(define (checkpoint-inspect path) (a0-declaration-only 'checkpoint-inspect))
+(define (checkpoint-metadata-ref metadata key)
+  (a0-declaration-only 'checkpoint-metadata-ref))
+(define (checkpoint-load path capability-report device) (a0-declaration-only 'checkpoint-load))
+(define (checkpoint-save! state path options) (a0-declaration-only 'checkpoint-save!))
