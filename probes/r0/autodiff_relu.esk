@@ -1,0 +1,8 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(let* ((actual (gradient (lambda (v) (tensor-sum (relu v))) #(-2.0 3.0))))
+  (display
+    (if (and (near (tensor-get actual 0) 0.0 1e-8)
+             (near (tensor-get actual 1) 1.0 1e-8))
+        "PASS relu gradient" "FAIL relu gradient"))
+  (newline))
+(display "R0_DONE autodiff_relu") (newline)

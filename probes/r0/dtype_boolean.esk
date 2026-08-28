@@ -1,0 +1,6 @@
+(define values (tensor 2 #t #f))
+(display (if (and (boolean? (tensor-get values 0))
+                  (boolean? (tensor-get values 1)))
+             "BOOLEAN_VALUE_EXPOSED" "BOOLEAN_VALUE_COERCED"))
+(newline)
+(display "R0_DONE dtype_boolean") (newline)

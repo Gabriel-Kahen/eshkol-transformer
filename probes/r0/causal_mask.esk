@@ -1,0 +1,10 @@
+(define mask (causal-mask 3))
+(display
+  (if (and (= (tensor-get mask 0 0) 0.0)
+           (= (tensor-get mask 1 0) 0.0)
+           (= (tensor-get mask 2 2) 0.0)
+           (< (tensor-get mask 0 1) -1e100)
+           (< (tensor-get mask 0 2) -1e100))
+      "PASS causal mask" "FAIL causal mask"))
+(newline)
+(display "R0_DONE causal_mask") (newline)

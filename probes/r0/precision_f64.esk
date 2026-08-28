@@ -1,0 +1,6 @@
+(define value #(1.0000000000000002))
+(display
+  (if (> (- (tensor-get value 0) 1.0) 0.0)
+      "PASS f64 discriminator" "FAIL f64 discriminator"))
+(newline)
+(display "R0_DONE precision_f64") (newline)
