@@ -7,9 +7,11 @@
          transformer-api-operations
          transformer-error? transformer-error-category transformer-error-operation
          transformer-error-message transformer-error-details transformer-error-cause
-         capability-discover capability-verified? capability-require
+         capability-discover capability-request capability-verified? capability-require
          capability-report-entries capability-entry-name capability-entry-status
-         capability-entry-constraints capability-entry-evidence
+         capability-entry-implementation capability-entry-version
+         capability-entry-constraints capability-entry-deterministic?
+         capability-entry-evidence
          config-parse config-resolve config-validate config-canonical
          config-fingerprint config-ref
          tokenizer-byte tokenizer-load tokenizer-save! tokenizer-encode
@@ -21,16 +23,22 @@
          token-batch-targets token-batch-loss-mask token-batch-validate
          module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
+         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
+         parameter-handle-path parameter-handle-shape parameter-handle-dtype
+         parameter-handle-device state-dict-paths state-dict-tensor
+         state-dict-alias-groups
          model-forward model-output-logits model-output-loss model-output-rng
          optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
          optimizer-load-state!
-         trainer-create trainer-step! trainer-train! trainer-evaluate!
+         trainer-create trainer-step! trainer-stop-policy trainer-train!
+         trainer-evaluate!
          trainer-state trainer-load-state! metrics-ref
          generator-create generator-prefill! generator-decode-step!
          generator-generate! generation-output-ids generation-output-lengths
          generation-output-text generation-output-rng
          generation-output-cache-lengths
-         checkpoint-inspect checkpoint-metadata-ref checkpoint-load checkpoint-save!)
+         persistence-policy checkpoint-inspect checkpoint-metadata-ref
+         checkpoint-load checkpoint-save!)
 
 (define (a0-declaration-only operation)
   (raise (list 'unsupported 'declaration-only operation)))
@@ -43,14 +51,23 @@
 (define (transformer-error-cause value) (a0-declaration-only 'transformer-error-cause))
 
 (define (capability-discover) (a0-declaration-only 'capability-discover))
-(define (capability-verified? report capability)
+(define (capability-request operation dtype device shape deterministic?)
+  (a0-declaration-only 'capability-request))
+(define (capability-verified? report capability request)
   (a0-declaration-only 'capability-verified?))
-(define (capability-require report capability)
-  (error "unsupported capability in A0 declaration fixture" capability))
+(define (capability-require report capability request)
+  (display "unsupported: capability-require declaration guard")
+  (newline)
+  (exit 1))
 (define (capability-report-entries report) (a0-declaration-only 'capability-report-entries))
 (define (capability-entry-name entry) (a0-declaration-only 'capability-entry-name))
 (define (capability-entry-status entry) (a0-declaration-only 'capability-entry-status))
+(define (capability-entry-implementation entry)
+  (a0-declaration-only 'capability-entry-implementation))
+(define (capability-entry-version entry) (a0-declaration-only 'capability-entry-version))
 (define (capability-entry-constraints entry) (a0-declaration-only 'capability-entry-constraints))
+(define (capability-entry-deterministic? entry)
+  (a0-declaration-only 'capability-entry-deterministic?))
 (define (capability-entry-evidence entry) (a0-declaration-only 'capability-entry-evidence))
 
 (define (config-parse text) (a0-declaration-only 'config-parse))
@@ -61,8 +78,8 @@
 (define (config-ref resolved key) (a0-declaration-only 'config-ref))
 
 (define (tokenizer-byte config) (a0-declaration-only 'tokenizer-byte))
-(define (tokenizer-load path) (a0-declaration-only 'tokenizer-load))
-(define (tokenizer-save! tokenizer path) (a0-declaration-only 'tokenizer-save!))
+(define (tokenizer-load path policy) (a0-declaration-only 'tokenizer-load))
+(define (tokenizer-save! tokenizer path policy) (a0-declaration-only 'tokenizer-save!))
 (define (tokenizer-encode tokenizer text) (a0-declaration-only 'tokenizer-encode))
 (define (tokenizer-decode tokenizer ids) (a0-declaration-only 'tokenizer-decode))
 (define (tokenizer-vocab-size tokenizer) (a0-declaration-only 'tokenizer-vocab-size))
@@ -88,6 +105,16 @@
 (define (module-train! module) (a0-declaration-only 'module-train!))
 (define (module-eval! module) (a0-declaration-only 'module-eval!))
 (define (module-zero-grad! module) (a0-declaration-only 'module-zero-grad!))
+(define (parameter-tree-paths tree) (a0-declaration-only 'parameter-tree-paths))
+(define (parameter-tree-handle tree path) (a0-declaration-only 'parameter-tree-handle))
+(define (parameter-tree-tie-groups tree) (a0-declaration-only 'parameter-tree-tie-groups))
+(define (parameter-handle-path handle) (a0-declaration-only 'parameter-handle-path))
+(define (parameter-handle-shape handle) (a0-declaration-only 'parameter-handle-shape))
+(define (parameter-handle-dtype handle) (a0-declaration-only 'parameter-handle-dtype))
+(define (parameter-handle-device handle) (a0-declaration-only 'parameter-handle-device))
+(define (state-dict-paths state) (a0-declaration-only 'state-dict-paths))
+(define (state-dict-tensor state path) (a0-declaration-only 'state-dict-tensor))
+(define (state-dict-alias-groups state) (a0-declaration-only 'state-dict-alias-groups))
 (define (model-forward model input-ids . opts) (a0-declaration-only 'model-forward))
 (define (model-output-logits output) (a0-declaration-only 'model-output-logits))
 (define (model-output-loss output) (a0-declaration-only 'model-output-loss))
@@ -102,6 +129,8 @@
 (define (trainer-create resolved tokenizer dataset model optimizer)
   (a0-declaration-only 'trainer-create))
 (define (trainer-step! trainer) (a0-declaration-only 'trainer-step!))
+(define (trainer-stop-policy max-tokens max-updates max-epochs)
+  (a0-declaration-only 'trainer-stop-policy))
 (define (trainer-train! trainer stop-policy) (a0-declaration-only 'trainer-train!))
 (define (trainer-evaluate! trainer dataset) (a0-declaration-only 'trainer-evaluate!))
 (define (trainer-state trainer) (a0-declaration-only 'trainer-state))
@@ -120,8 +149,12 @@
 (define (generation-output-cache-lengths output)
   (a0-declaration-only 'generation-output-cache-lengths))
 
-(define (checkpoint-inspect path) (a0-declaration-only 'checkpoint-inspect))
+(define (persistence-policy max-file-bytes max-metadata-bytes max-tensor-bytes
+                            max-tensors device)
+  (a0-declaration-only 'persistence-policy))
+(define (checkpoint-inspect path policy) (a0-declaration-only 'checkpoint-inspect))
 (define (checkpoint-metadata-ref metadata key)
   (a0-declaration-only 'checkpoint-metadata-ref))
-(define (checkpoint-load path capability-report device) (a0-declaration-only 'checkpoint-load))
-(define (checkpoint-save! state path options) (a0-declaration-only 'checkpoint-save!))
+(define (checkpoint-load path policy capability-report)
+  (a0-declaration-only 'checkpoint-load))
+(define (checkpoint-save! state path policy options) (a0-declaration-only 'checkpoint-save!))

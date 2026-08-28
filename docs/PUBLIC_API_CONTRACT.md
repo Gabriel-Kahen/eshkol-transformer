@@ -1,14 +1,14 @@
 # First-release public API contract
 
-Status: **A0 reviewed draft; declaration harness passing on the F0-pinned Eshkol
-compiler**. This document specifies the target first-release contract. It does not
+Status: **A0 reviewed draft; declaration harness passing on the repository-minimum
+Eshkol v1.3.4 compiler**. This document specifies the target first-release contract. It does not
 claim that Eshkol core implements any tensor, autodiff, device, compiler, or
 persistence capability. R0 must verify each runtime capability, and downstream
 workstreams must fail explicitly when a required capability is absent.
 
 The declaration fixtures exercise only syntax, imports, public names, and selected
 arities. The local A0 harness compiles them twice and verifies the expected negative
-cases against the exact F0 source/version pin; that is declaration evidence, not
+cases against Eshkol v1.3.4; that is declaration evidence, not
 runtime-capability evidence or supported-host CI evidence.
 
 ## 1. Stability and naming
@@ -26,14 +26,16 @@ The public package is split into these conceptual modules:
 - `transformer.generation`
 - `transformer.persistence`
 
-Eshkol has not yet been locally checked for a declaration-only/interface construct.
-Therefore A0 records the public names in `transformer.api_contract`; downstream
+The current compiler accepts `provide`/`require` modules, while A0 intentionally
+implements no public subsystem. It therefore records names in
+`transformer.api_contract` and uses declaration-only stubs under `tests/`; downstream
 workstreams own the real modules and must keep these names and contracts unless a
 contract change is accepted through issue #1.
 
 Names ending in `!` mutate documented in-memory arguments or external state. Other
 public operations have no mutation or external side effect. Opaque values must be
-inspected only through public accessors.
+inspected only through public accessors. Every accessor raises `invalid-argument`
+when given the wrong opaque value type unless a narrower error is stated below.
 Flat option lists use quoted colon symbols, for example `':device 'cpu`; unknown,
 duplicate, missing-value, or ill-typed options are `invalid-argument` errors.
 
@@ -50,7 +52,7 @@ Shapes are row-major dimension lists. Symbols mean:
 |---|---|---|
 | `N` | batch size | `N >= 1` |
 | `T` | current token sequence length | `T >= 1` |
-| `S` | decoded byte/string length | `S >= 0` |
+| `U` | unbatched encoded/decoded token length | `U >= 0` |
 | `V` | tokenizer/model vocabulary size | `V >= 1` and IDs are in `[0,V)` |
 | `D` | model hidden width | `D >= 1` |
 | `L` | decoder layer count | `L >= 1` |
@@ -116,7 +118,8 @@ reported losses and metrics accumulate and return `f32` in the first release.
   existing storage, preserves declared ties, and rejects missing, unexpected,
   duplicate, or conflicting aliases.
 - `module-parameters` enumerates each unique trainable tensor once in stable lexical
-  path order. `module-buffers` does the same for non-trainable tensors. Optimizer
+  path order. `module-buffers` snapshots non-trainable tensors in the same path
+  order using the state-dict accessors below. Optimizer
   parameter groups refer to stable parameter paths, not raw addresses.
 - Dataset and generator calls invalidate only their receiver's previous transient
   iteration result; returned batches/tensors remain owned by the caller.
@@ -159,23 +162,41 @@ commit points below define failure atomicity.
 
 ```scheme
 (capability-discover)
-(capability-verified? report capability)
-(capability-require report capability)
+(capability-request operation dtype device shape deterministic?)
+(capability-verified? report capability request)
+(capability-require report capability request)
 ```
 
 `capability-discover` returns an immutable report. Each entry has a stable capability
 symbol, status (`verified`, `unsupported`, or `unverified`), implementation/version,
 supported dtype/device/shape constraints, determinism properties, and evidence ID.
-`capability-verified?` is true only for `verified`; absence and `unverified` are false.
-`capability-require` returns the matching verified entry or raises `unsupported`.
+`capability-verified?` is true only for `verified` and a matching request; absence
+and `unverified` are false. `capability-require` returns the matching verified entry
+or raises `unsupported`.
 Results may be cached only for one process and must not be serialized as proof for a
 different host.
 
 Reports and entries are inspected with `capability-report-entries`,
 `capability-entry-name`, `capability-entry-status`,
-`capability-entry-constraints`, and `capability-entry-evidence`. Accessors return new
-immutable CPU values, do not mutate, have no gradient, and raise `invalid-argument`
-for malformed inputs.
+`capability-entry-implementation`, `capability-entry-version`,
+`capability-entry-constraints`, `capability-entry-deterministic?`, and
+`capability-entry-evidence`. `capability-request` validates and returns an immutable
+CPU request with exactly `operation`, `dtype`, `device`, `shape` (a concrete
+nonnegative integer dimension list), and `deterministic?`; it raises
+`invalid-argument`, does not mutate, and has no gradient. Matching requires
+operation/dtype/device membership, exact rank,
+every extent within inclusive per-dimension bounds, and a deterministic entry when
+requested. Missing/unknown keys are `invalid-argument`. Accessors return new immutable
+CPU values, do not mutate, and have no gradient.
+
+`capability-report-entries` is sorted by capability-symbol spelling. A constraint is
+an immutable map with exactly `operations` (sorted symbols), `dtypes` (sorted
+symbols), `devices` (stable canonical device descriptors), and `shape-ranges`.
+`shape-ranges` is a list of alternatives; each alternative is a dimension-ordered
+list of `(minimum maximum)` integer pairs, where `#f` maximum means unbounded. A
+request matches when one alternative has its exact rank and all extents are in range.
+Implementation and status are symbols; version and evidence ID are strings. Lists
+and maps returned by accessors are newly owned snapshots.
 
 Required target capability symbols are `tensor.i64`, `tensor.bool`, `tensor.f32`,
 `tensor.contiguous`, `autodiff.reverse`, `kernel.matmul`, `kernel.embedding-backward`,
@@ -192,7 +213,7 @@ runtime evidence.
 |---|---|---|
 | `config-parse text` | Parse UTF-8 text in X1's selected data syntax into an immutable unresolved configuration. File I/O belongs to the caller. No includes, environment reads, code evaluation, or implicit defaults. | New CPU value; `invalid-argument`; no gradient. |
 | `config-resolve config overrides` | Apply schema-known overrides, defaults, and derived values in a specified precedence order; reject unknown/duplicate keys. | New CPU value; `invalid-argument`; no gradient. |
-| `config-validate resolved` | Validate all cross-field invariants including `V`, `D`, `Hq/Hkv/Dh`, context, dtype, device, and reproducibility policy. Returns the same value on success. | No mutation; contract errors above; no gradient. |
+| `config-validate resolved` | Validate all cross-field invariants including `V`, `D`, `Hq/Hkv/Dh`, context, dtype, device, and reproducibility policy. Returns `#t` on success. | No mutation; contract errors above; no gradient. |
 | `config-canonical resolved` | Return canonical UTF-8 text with stable key order and number encoding, excluding secrets and runtime evidence. | New string; `invalid-argument`; no gradient. |
 | `config-fingerprint resolved` | Return lowercase algorithm-qualified digest of `config-canonical`. | New string; `unsupported` if digest unavailable; no gradient. |
 | `config-ref resolved key` | Return a new immutable value for a schema-known key. | CPU; `invalid-argument` for unknown keys; no gradient. |
@@ -206,10 +227,10 @@ schema and syntax.
 | Operation | Shapes and semantics | Dtype/device/ownership/errors/gradient |
 |---|---|---|
 | `tokenizer-byte config` | Construct the deterministic byte tokenizer described by validated config. | New immutable CPU value; `invalid-argument`, `unsupported`; no gradient. |
-| `tokenizer-load path` | Load and fully validate a data-only tokenizer artifact. | New immutable CPU value; `io`, `corrupt-data`, `version-mismatch`, `unsupported`; no gradient. |
-| `tokenizer-save! tokenizer path` | Atomically save a data-only tokenizer artifact after canonical validation. | External filesystem mutation only; tokenizer unchanged; `io`, `invalid-state`, `unsupported`; no gradient. |
-| `tokenizer-encode tokenizer text` | UTF-8 string/byte string -> newly owned `i64[T]`, `T >= 0`; no implicit BOS/EOS unless declared by tokenizer config. | CPU contiguous; `invalid-argument`, `unsupported`; no gradient. |
-| `tokenizer-decode tokenizer ids` | Contiguous `i64[T]` -> newly owned bytes/string under the tokenizer's declared UTF-8 error policy. | CPU; IDs must be in `[0,V)`; shape/dtype/range errors; no gradient. |
+| `tokenizer-load path policy` | Load and fully validate a data-only tokenizer artifact under the persistence policy. | New immutable CPU value; `io`, `corrupt-data`, `version-mismatch`, `unsupported`; no gradient. |
+| `tokenizer-save! tokenizer path policy` | Atomically save a data-only tokenizer artifact after canonical validation and enforce the persistence policy's size limits. | External filesystem mutation only; tokenizer unchanged; `io`, `invalid-state`, `unsupported`; no gradient. |
+| `tokenizer-encode tokenizer text` | UTF-8 string/byte string -> newly owned `i64[U]`, `U >= 0`; no implicit BOS/EOS unless declared by tokenizer config. | CPU contiguous; `invalid-argument`, `unsupported`; no gradient. |
+| `tokenizer-decode tokenizer ids` | Contiguous `i64[U]` -> newly owned bytes/string under the tokenizer's declared UTF-8 error policy. | CPU; IDs must be in `[0,V)`; shape/dtype/range errors; no gradient. |
 | `tokenizer-vocab-size tokenizer` | Return `V`. | Immutable integer; `invalid-state`; no gradient. |
 | `tokenizer-fingerprint tokenizer` | Digest covers format/schema version, vocabulary/merges, special-token table, normalization, and byte/UTF-8 policy. | New string; `invalid-state`, `unsupported`; no gradient. |
 | `tokenizer-special-token-id tokenizer name` | Return the configured `i64` ID; never invent a default. | `invalid-argument` if absent; no gradient. |
@@ -229,7 +250,7 @@ T1/T2 own concrete vocabulary and tokenizer formats. No byte layout is committed
 | `token-batch-inputs batch` | Return newly owned `i64[N,T]`. | Same device, contiguous; no gradient. |
 | `token-batch-targets batch` | Return newly owned `i64[N,T]`. | Same device, contiguous; no gradient. |
 | `token-batch-loss-mask batch` | Return newly owned `bool[N,T]` or nonnegative finite `f32[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-validate batch` | Check ranks/extents/dtypes/device/contiguity/ranges and require positive total mask weight for training. | Returns batch unchanged; structured errors; no gradient. |
+| `token-batch-validate batch` | Check ranks/extents/dtypes/device/contiguity/ranges and require positive total mask weight. | Returns `#t`; structured errors; no gradient. |
 
 No batch dimension, sequence dimension, or mask broadcasting is permitted. D1/D2 own
 the shard and cursor formats.
@@ -238,13 +259,15 @@ the shard and cursor formats.
 `token-dataset-next-batch` does not advance the cursor. `token-dataset-close!` always
 transitions to closed after best-effort release; an I/O release failure is reported,
 but later calls still observe closed.
+After end-of-stream, repeated `token-dataset-next-batch` calls return the same sentinel
+without changing state until seek or close.
 
 ## 10. Modules and models
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
 | `module-parameters module` | Stable lexical-path tree of opaque live handles, one per unique trainable leaf plus tie metadata. Each leaf is contiguous `f32` of arbitrary documented rank on the module device. | New tree retaining module-bounded handles; `invalid-state`; handles carry gradient state. |
-| `module-buffers module` | Stable lexical-path list of uniquely named contiguous `bool`, `i64`, or `f32` leaves of arbitrary documented rank on the module device. | New value snapshot; `invalid-state`; no buffer gradient. |
+| `module-buffers module` | Deep immutable state-dict snapshot limited to uniquely named contiguous `bool`, `i64`, or `f32` non-trainable leaves of arbitrary documented rank on the module device. Inspect with `state-dict-paths`/`state-dict-tensor`; alias groups are empty. | New owned tensors; `invalid-state`; no buffer gradient or live handle. |
 | `module-state-dict module` | Deep data-only snapshot of parameters, buffers, names, shapes, dtypes, devices, and aliases. | New owned state; `invalid-state`, `unsupported`; no new graph. |
 | `module-load-state-dict! module state` | Strict exact-name/shape/dtype/device load; preserve declared ties; no partial load in first release. | Atomic receiver mutation; structured mismatch/version errors; no gradient graph. |
 | `module-train! module` / `module-eval! module` | Set explicit mode recursively. | Mutates mode only; `invalid-state`; no gradient. |
@@ -254,19 +277,41 @@ but later calls still observe closed.
 `model-output-logits` returns new contiguous floating `[N,T,V]`.
 `model-output-loss` returns scalar `f32` when targets/mask were supplied and `#f`
 otherwise. `model-output-rng` returns the new immutable RNG state, the unchanged input
-state for deterministic execution, or `#f` if no RNG was supplied. Accessors do not
-mutate or create a new graph; logits/loss retain the forward graph.
+state only when no stochastic operation consumed it, or `#f` if no RNG was supplied.
+Deterministic seeded stochastic execution still advances RNG reproducibly. Indexed LM
+loss is `sum(mask * per-token-loss) / sum(mask)` with boolean mask cast to 0/1 and
+`f32` accumulation; zero total mask is `invalid-argument`. Accessors do not mutate or
+create a new graph; logits/loss retain the forward graph.
 
 Forward must not mutate parameters, buffers, inputs, or a cache unless an explicit
 mutable cache receiver is supplied by a later accepted contract. Training mode may
 consume explicit RNG state; it must not use hidden global randomness. P1 owns module
 representation; N2/A2/L2/M3 own numerical implementation and gradient evidence.
 
+Parameter paths are immutable lists of nonempty UTF-8 segments; no separator escaping
+exists. Ordering is lexicographic by UTF-8 bytes segment-by-segment. Repeated
+`module-parameters` calls return new tree containers whose handles have the same
+module identity and stable path identity. `optimizer-create` binds that handle set,
+not the transient tree container. `parameter-tree-paths`, `parameter-tree-handle`,
+`parameter-tree-tie-groups`, `parameter-handle-path`, `parameter-handle-shape`,
+`parameter-handle-dtype`, and `parameter-handle-device` inspect it.
+Paths returned by `parameter-tree-paths` are in the ordering above; an unknown lookup
+path is `invalid-argument`. Tie groups contain at least two paths, with paths sorted
+within each group and groups sorted by their first path; each tied path appears in
+exactly one group.
+
+A state dict is an immutable data-only value. `state-dict-paths` returns stable paths;
+`state-dict-tensor` returns a new owned tensor for a path; and
+`state-dict-alias-groups` returns tied paths in the same canonical group ordering.
+Unknown paths are
+`invalid-argument`. Accessors are CPU control-plane, non-mutating, and do not create
+gradient graphs.
+
 ## 11. Optimizer
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
-| `optimizer-create config parameter-tree` | Validate unique paths, groups, dtypes/devices, hyperparameters, and alias graph; bind to the exact tree identity. | New mutable receiver retaining parameter references; mismatch/unsupported errors; no gradient. |
+| `optimizer-create config parameter-tree` | Validate unique paths, groups, dtypes/devices, hyperparameters, alias graph, and stable module/handle identities. | New mutable receiver retaining parameter handles; mismatch/unsupported errors; no gradient. |
 | `optimizer-step! optimizer` | Require valid finite gradients as configured, compute one atomic update, and advance step/RNG/scheduler state only on success. | Mutates bound parameters and optimizer state; no implicit clipping, precision conversion, fallback, or approximate gradient. `invalid-state`, shape/dtype/device/unsupported/determinism errors. |
 | `optimizer-zero-grad! optimizer` | Clear gradients of bound unique parameters once. | Mutates gradient slots; `invalid-state`; no gradient. |
 | `optimizer-state optimizer` | Deep snapshot keyed by stable parameter paths, including groups, step counters, schedules, and precision policy. | New owned state; `invalid-state`; no graph. |
@@ -280,9 +325,10 @@ must raise `unsupported` in the first release unless separately verified.
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
 | `trainer-create resolved tokenizer dataset model optimizer` | Validate identities, fingerprints, tree binding, capabilities, modes, device/dtype policy, and reproducibility state. | New exclusively mutable state machine retaining receivers; structured mismatch/unsupported errors. |
-| `trainer-step! trainer` | Fetch exactly one batch, forward, indexed loss, backward, configured accumulation/clipping, optimizer/scheduler step, and counters as one recoverable state transition. | Mutates trainer/dataset/model gradients/optimizer; returns immutable `f32` metrics. Exact gradient support required; no approximations. |
-| `trainer-train! trainer stop-policy` | Repeat steps until the explicit token/step/epoch/interrupt policy; no hidden wall-clock stopping. | Same mutation; returns immutable summary; propagates categorized errors. |
-| `trainer-evaluate! trainer dataset` | Temporarily use eval mode and no-grad, restore prior mode even on failure, and return token-weighted `f32` metrics. | Model parameters unchanged; may advance only the supplied evaluation dataset; no gradient. |
+| `trainer-step! trainer` | Perform one optimizer update from exactly the configured positive integer `accumulation-steps` microbatches: fetch/forward/backward each, normalize by total mask weight, clip once, update once, then advance scheduler/counters. | Mutates leased state; returns immutable `f32` metrics. Exact gradients required; no approximations. |
+| `trainer-stop-policy max-tokens max-updates max-epochs` | Construct an immutable policy; each limit is `#f` or a positive integer and at least one is present. | CPU; new value; `invalid-argument`; no gradient. |
+| `trainer-train! trainer stop-policy` | Repeat updates until the first supplied limit is reached or explicit interrupt occurs; conditions are tested after each committed update. No hidden wall-clock stopping. | Same mutation; returns immutable summary; propagates errors. |
+| `trainer-evaluate! trainer dataset` | Require a dataset distinct from the leased training dataset; snapshot its cursor, use eval/no-grad, then restore cursor and model mode on success or failure. Return token-weighted `f32` metrics. | Model parameters and both final cursors unchanged; no gradient. |
 | `trainer-state trainer` | Deep complete resume snapshot: model, optimizer, scheduler, RNG, tokenizer fingerprint, dataset cursor, config, versions, and processed-token counters. | New owned data-only state; `invalid-state`, `unsupported`; no graph. |
 | `trainer-load-state! trainer state` | Strictly validate all identities and atomically restore the next-step continuation. | Mutates all retained receivers only after validation; corruption/version/determinism/mismatch errors; no graph. |
 
@@ -294,6 +340,19 @@ scheduler, and counters: the whole step commits after a successful update or rol
 back. `trainer-train!` commits after each successful step; on failure earlier steps
 remain committed and only the current step rolls back. Metrics are opaque immutable
 maps inspected with `metrics-ref`; unknown keys raise `invalid-argument`.
+`max-tokens` counts positions whose boolean mask is true or whose floating mask is
+positive; an update may cross the limit because limits are checked only after commit.
+One epoch ends at the finite training dataset's end sentinel. A streaming dataset
+with `max-epochs` is `invalid-argument`.
+
+All trainer result maps are newly owned CPU values with no gradient. A step map has
+exactly `loss` (weighted mean) and `mask-weight` (weight sum) as `f32`, plus `tokens`,
+`microbatches`, and `update` as nonnegative `i64` counters. A train summary has
+exactly `loss` (weighted mean) and `mask-weight` (weight sum) as `f32`, plus `tokens`,
+`updates`, and `epochs` as nonnegative `i64`. An evaluation map has exactly `loss`
+(weighted mean) and `mask-weight` (weight sum) as `f32`, plus `tokens` and `batches`
+as nonnegative `i64`.
+Zero evaluated mask weight is `invalid-state`; no NaN sentinel is returned.
 
 ## 13. Generator
 
@@ -305,11 +364,15 @@ maps inspected with `metrics-ref`; unknown keys raise `invalid-argument`.
 | `generator-generate! generator input-ids` | Prompt is contiguous `i64[N,T]`; callers encode text explicitly. Return an opaque generation output. Each row stops on configured EOS or explicit maximum-new-token count. | Mutates cache/RNG; no-grad. Sampling is greedy or explicit temperature/top-k/top-p; seeded policies reproduce or raise `determinism-unavailable`. |
 
 `generation-output-ids` returns a new list of `N` contiguous `i64[Gi]` tensors
-containing only generated tokens, `0 <= Gi <= max-new-tokens`, without padding.
+containing only generated tokens, `0 <= Gi <= max-new-tokens`, without padding. An
+emitted EOS is included in `Gi`, IDs, decoded text input, and cache length.
 `generation-output-lengths` returns new `i64[N]`; `generation-output-text` returns a
 new list of `N` decoded values; `generation-output-rng` returns the immutable
-post-generation RNG; `generation-output-cache-lengths` returns new `i64[N]`. These
-accessors are no-grad and non-mutating.
+post-generation RNG; `generation-output-cache-lengths` returns new CPU `i64[N]` equal
+to prompt length plus `Gi`, including EOS. ID tensors are on the generator device;
+lengths/text/RNG metadata are CPU values. Accessors are no-grad/non-mutating and raise
+`invalid-argument` for the wrong output type or `device-mismatch` if retained output
+storage is inconsistent.
 
 Greedy and probability-sort ties choose the lowest token ID. Top-k orders probability
 descending then token ID ascending. Top-p uses that order and the shortest prefix
@@ -324,16 +387,24 @@ sampling and cache implementation.
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
-| `checkpoint-inspect path` | Validate envelope, bounded metadata, versions, entry table, and checksums without constructing executable objects. | New immutable CPU metadata; `io`, `corrupt-data`, `version-mismatch`, `unsupported`; no gradient. |
-| `checkpoint-load path capability-report device` | Verify all bytes/checksums/limits before exposing a data-only state snapshot; reject code, callbacks, foreign paths, and unknown required features. `device` is the explicit target device symbol/descriptor and must be verified by `capability-report` for checkpoint tensor allocation. | New owned CPU metadata plus tensors on exactly `device`; unsupported devices fail before tensor allocation. There is no implicit transfer/fallback and no graph. |
-| `checkpoint-save! state path options` | Validate complete reproducibility state, write a same-directory temporary file, flush as required, then atomically replace target. | State borrowed and unchanged; `io`, `invalid-state`, `unsupported`; no graph. |
+| `persistence-policy max-file-bytes max-metadata-bytes max-tensor-bytes max-tensors device` | Construct immutable hard limits and exact target device; integer limits are positive. | New CPU value; `invalid-argument`; no gradient. |
+| `checkpoint-inspect path policy` | Validate envelope, policy bounds, versions, entry table, and checksums without constructing executable objects; return checkpoint metadata only. | New immutable CPU metadata; `io`, `corrupt-data`, `version-mismatch`, `unsupported`; no gradient. |
+| `checkpoint-load path policy capability-report` | Verify all bytes/checksums/limits before exposing a data-only state snapshot; reject code, callbacks, foreign paths, and unknown required features. Require verified tensor/device capabilities for the policy device. Return exactly a deep-owned trainer state accepted by `trainer-load-state!`. | New owned CPU control metadata plus tensors on exactly the policy device; no implicit conversion/transfer/fallback and no graph. |
+| `checkpoint-save! state path policy options` | Accept only a complete `trainer-state` result, validate it and policy limits, write a same-directory temporary file, flush as required, then atomically replace target. | State borrowed and unchanged; `io`, `invalid-state`, `unsupported`; no graph. |
 
 The only save options are `':overwrite? bool` and
 `':required-features symbol-list`. `checkpoint-metadata-ref metadata key` returns a
-new immutable CPU value for a documented key and raises `invalid-argument` for an
-unknown key; it has no gradient. Save commits only at atomic replacement. Before that
-point the target is unchanged, though a separate temporary may remain after I/O
-failure.
+new immutable CPU value and raises `invalid-argument` for an unknown key; it has no
+gradient. Required metadata keys and values are: `format-id` symbol,
+`format-version` immutable `(major minor)` nonnegative-integer list,
+`required-features` sorted symbol list,
+`checksum-algorithm` symbol, `api-version` string, `config-schema-version` immutable
+`(major minor)` nonnegative-integer list, `tokenizer-fingerprint` string,
+`config-fingerprint` string,
+`tensor-count` nonnegative `i64`, and `payload-bytes` nonnegative `i64`. These are
+logical API metadata, not serialized field names or byte layout. Save commits only at
+atomic replacement. Before that point the target is unchanged, though a separate
+temporary may remain after I/O failure.
 
 Checkpoint, tokenizer, token-shard, cursor, resolved-config, and native ABI formats are
 separate version domains. This contract requires an envelope with a format identifier,

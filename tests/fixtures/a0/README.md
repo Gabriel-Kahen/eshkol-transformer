@@ -9,3 +9,10 @@ commands and executable output, and checks the expected negative phase/diagnosti
 
 These fixtures prove no tensor shapes, dtypes, devices, gradients, performance, or
 runtime capability. Those require R0 and downstream numerical tests.
+
+Run them against the repository-minimum compiler with:
+
+```sh
+ESHKOL_RUNNER=/path/to/eshkol-v1.3.4/bin/eshkol-run \
+  /usr/bin/bash scripts/check_a0_api_contract.sh
+```

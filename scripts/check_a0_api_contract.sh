@@ -25,16 +25,16 @@ trap 'rm -rf -- "$A0_TMP"' EXIT
 
 run_fixture() {
     local source=$1
-    "$A0_RUNNER" --run --no-stdlib \
+    "$A0_RUNNER" --no-stdlib \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
-        "$source"
+        -r "$source"
 }
 
 compile_only_fixture() {
     local source=$1
     local output=$2
-    "$A0_RUNNER" --emit-object --no-stdlib \
+    "$A0_RUNNER" --strict-types --emit-object --no-stdlib \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
         "$source" -o "$output"
@@ -49,6 +49,7 @@ for A0_SOURCE in compile_public_api compile_module_imports; do
     done
     cmp "$A0_TMP/$A0_SOURCE-1.compile.log" \
         "$A0_TMP/$A0_SOURCE-2.compile.log"
+    cmp "$A0_TMP/$A0_SOURCE-1.o" "$A0_TMP/$A0_SOURCE-2.o"
 done
 
 for A0_RUN in 1 2; do
@@ -60,24 +61,32 @@ done
 cmp "$A0_TMP/public-api-1.stdout" "$A0_TMP/public-api-2.stdout"
 grep -Fx "0.1.0-draft" "$A0_TMP/public-api-1.stdout" >/dev/null
 
-if "$A0_RUNNER" --strict-types --emit-object --no-stdlib \
-    -I "$A0_ROOT/lib" \
-    -I "$A0_ROOT/tests/fixtures/a0" \
-    "$A0_ROOT/tests/fixtures/a0/negative_wrong_arity.esk" \
-    -o "$A0_TMP/wrong-arity.o" >"$A0_TMP/wrong-arity.log" 2>&1; then
-    echo "A0 FAIL: wrong-arity fixture unexpectedly compiled" >&2
-    exit 1
-fi
-grep -Ei "arity|argument|expects" "$A0_TMP/wrong-arity.log" >/dev/null
-test ! -e "$A0_TMP/wrong-arity.o"
+for A0_RUN in 1 2; do
+    if "$A0_RUNNER" --strict-types --emit-object --no-stdlib \
+        -I "$A0_ROOT/lib" \
+        -I "$A0_ROOT/tests/fixtures/a0" \
+        "$A0_ROOT/tests/fixtures/a0/negative_wrong_arity.esk" \
+        -o "$A0_TMP/wrong-arity-$A0_RUN.o" \
+        >"$A0_TMP/wrong-arity-$A0_RUN.log" 2>&1; then
+        echo "A0 FAIL: wrong-arity fixture unexpectedly compiled" >&2
+        exit 1
+    fi
+    grep -F "Arity mismatch: tokenizer-encode expects 2 arguments but got 1" \
+        "$A0_TMP/wrong-arity-$A0_RUN.log" >/dev/null
+    test ! -e "$A0_TMP/wrong-arity-$A0_RUN.o"
 
-if run_fixture \
-    "$A0_ROOT/tests/fixtures/a0/negative_unsupported_capability.esk" \
-    >"$A0_TMP/unsupported-capability.log" 2>&1; then
-    echo "A0 FAIL: unsupported-capability fixture unexpectedly succeeded" >&2
-    exit 1
-fi
-grep -Ei "unsupported|device.accelerator" \
-    "$A0_TMP/unsupported-capability.log" >/dev/null
+    if run_fixture \
+        "$A0_ROOT/tests/fixtures/a0/negative_unsupported_capability.esk" \
+        >"$A0_TMP/unsupported-capability-$A0_RUN.log" 2>&1; then
+        echo "A0 FAIL: unsupported-capability fixture unexpectedly succeeded" >&2
+        exit 1
+    fi
+    grep -Fx "unsupported: capability-require declaration guard" \
+        "$A0_TMP/unsupported-capability-$A0_RUN.log" >/dev/null
+done
+
+cmp "$A0_TMP/wrong-arity-1.log" "$A0_TMP/wrong-arity-2.log"
+cmp "$A0_TMP/unsupported-capability-1.log" \
+    "$A0_TMP/unsupported-capability-2.log"
 
 echo "A0 PASS: declarations/imports repeated; expected negatives rejected"
