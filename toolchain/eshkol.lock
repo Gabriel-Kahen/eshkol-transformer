@@ -8,8 +8,8 @@ supported_arch	x86_64
 supported_cc	clang-21
 supported_cxx	clang++-21
 clang_version	21.1.8
-cmake_version	3.22.1
-ninja_version	1.10.1
-make_version	4.3
-bash_version	5.1.16
-git_version	2.34.1
+minimum_cmake_version	3.22.1
+minimum_ninja_version	1.10.1
+minimum_make_version	4.3
+minimum_bash_version	5.1.16
+minimum_git_version	2.34.1

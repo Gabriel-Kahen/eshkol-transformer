@@ -48,17 +48,26 @@ CC="${cc}" CXX="${cxx}" cmake \
 if grep -F 'Manually-specified variables were not used' "${configure_log}" >/dev/null; then
   die "pinned Eshkol ignored one or more required CMake options; see ${configure_log}"
 fi
+cache_file="${build_dir}/CMakeCache.txt"
+cache_cc="$(awk -F= '$1 == "CMAKE_C_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
+cache_cxx="$(awk -F= '$1 == "CMAKE_CXX_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
+[[ -x "${cache_cc}" && -x "${cache_cxx}" ]] || \
+  die "Eshkol CMake cache does not identify executable C and C++ compilers"
+[[ "$(readlink -f "${cache_cc}")" == "$(readlink -f "$(command -v "${cc}")")" ]] || \
+  die "Eshkol build cache retained C compiler ${cache_cc}, not requested ${cc}; use a fresh ESHKOL_BUILD_DIR"
+[[ "$(readlink -f "${cache_cxx}")" == "$(readlink -f "$(command -v "${cxx}")")" ]] || \
+  die "Eshkol build cache retained C++ compiler ${cache_cxx}, not requested ${cxx}; use a fresh ESHKOL_BUILD_DIR"
 cmake --build "${build_dir}" --target eshkol-run --parallel "${ESHKOL_JOBS:-2}"
 verify_eshkol_binary
-cc_version="$("${cc}" --version | sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
-cxx_version="$("${cxx}" --version | sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
+cc_version="$("${cache_cc}" --version | sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
+cxx_version="$("${cache_cxx}" --version | sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
 check_supported_version Clang "${cc_version}" "$(lock_value clang_version)"
 check_supported_version Clang++ "${cxx_version}" "$(lock_value clang_version)"
-check_supported_version CMake "$(cmake --version | awk 'NR == 1 { print $3 }')" "$(lock_value cmake_version)"
-check_supported_version Ninja "$(ninja --version)" "$(lock_value ninja_version)"
-check_supported_version Make "$(make --version | awk 'NR == 1 { print $3 }')" "$(lock_value make_version)"
-check_supported_version Bash "${BASH_VERSION%%(*}" "$(lock_value bash_version)"
-check_supported_version Git "$(git --version | awk '{ print $3 }')" "$(lock_value git_version)"
+check_minimum_version CMake "$(cmake --version | awk 'NR == 1 { print $3 }')" "$(lock_value minimum_cmake_version)"
+check_minimum_version Ninja "$(ninja --version)" "$(lock_value minimum_ninja_version)"
+check_minimum_version Make "$(make --version | awk 'NR == 1 { print $3 }')" "$(lock_value minimum_make_version)"
+check_minimum_version Bash "${BASH_VERSION%%(*}" "$(lock_value minimum_bash_version)"
+check_minimum_version Git "$(git --version | awk '{ print $3 }')" "$(lock_value minimum_git_version)"
 
 {
   printf 'format_version\t1\n'
@@ -67,9 +76,9 @@ check_supported_version Git "$(git --version | awk '{ print $3 }')" "$(lock_valu
   printf 'eshkol_source_dir\t%s\n' "$(readlink -f "${source_dir}")"
   printf 'eshkol_binary_sha256\t%s\n' "$(sha256sum "${build_dir}/eshkol-run" | awk '{ print $1 }')"
   printf 'llvm_version\t%s\n' "$("${llvm}" --version)"
-  printf 'cc_path\t%s\n' "$(command -v "${cc}")"
+  printf 'cc_path\t%s\n' "${cache_cc}"
   printf 'cc_version\t%s\n' "${cc_version}"
-  printf 'cxx_path\t%s\n' "$(command -v "${cxx}")"
+  printf 'cxx_path\t%s\n' "${cache_cxx}"
   printf 'cxx_version\t%s\n' "${cxx_version}"
   printf 'cmake_version\t%s\n' "$(cmake --version | awk 'NR == 1 { print $3 }')"
   printf 'ninja_version\t%s\n' "$(ninja --version)"

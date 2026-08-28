@@ -33,6 +33,13 @@ check_supported_version() {
   fi
 }
 
+check_minimum_version() {
+  local name="$1" actual="$2" minimum="$3" first
+  first="$(printf '%s\n%s\n' "${minimum}" "${actual}" | sort -V | head -n 1)"
+  [[ "${first}" == "${minimum}" ]] || \
+    die "unsupported ${name} version: need at least ${minimum}, got ${actual}"
+}
+
 tsv_value() {
   local file="$1" key="$2" value count
   count="$(awk -F '\t' -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${file}")"
@@ -85,12 +92,15 @@ verify_llvm() {
 }
 
 verify_eshkol_checkout() {
-  local source_dir expected actual
+  local source_dir expected actual dirty
   source_dir="$(eshkol_source_dir)"
   expected="$(lock_value eshkol_commit)"
   [[ -d "${source_dir}/.git" ]] || die "Eshkol source checkout not found at ${source_dir}; run 'make toolchain'"
   actual="$(git -C "${source_dir}" rev-parse HEAD 2>/dev/null || true)"
   [[ "${actual}" == "${expected}" ]] || die "unsupported Eshkol revision at ${source_dir}: expected ${expected}, got ${actual:-unreadable}"
+  dirty="$(git -C "${source_dir}" status --porcelain --untracked-files=all 2>/dev/null || true)"
+  [[ -z "${dirty}" ]] || \
+    die "pinned Eshkol checkout at ${source_dir} contains tracked, staged, or untracked changes; use a clean checkout before building"
 }
 
 verify_eshkol_binary() {
@@ -104,7 +114,7 @@ verify_eshkol_binary() {
 }
 
 verify_eshkol_provenance() {
-  local file binary actual_hash expected_hash source_dir cache_home
+  local file binary actual_hash expected_hash source_dir cache_file cache_home cache_cc cache_cxx
   file="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
   binary="$(eshkol_build_dir)/eshkol-run"
   [[ -r "${file}" ]] || die "Eshkol build provenance not found at ${file}; run 'make toolchain'"
@@ -113,9 +123,19 @@ verify_eshkol_provenance() {
   source_dir="$(readlink -f "$(eshkol_source_dir)")"
   [[ "$(tsv_value "${file}" eshkol_source_dir)" == "${source_dir}" ]] || \
     die "Eshkol provenance source directory does not match ${source_dir}"
-  cache_home="$(awk -F= '$1 == "CMAKE_HOME_DIRECTORY:INTERNAL" { print $2 }' "$(eshkol_build_dir)/CMakeCache.txt")"
+  cache_file="$(eshkol_build_dir)/CMakeCache.txt"
+  [[ -r "${cache_file}" ]] || die "Eshkol CMake cache not found at ${cache_file}; run 'make toolchain'"
+  cache_home="$(awk -F= '$1 == "CMAKE_HOME_DIRECTORY:INTERNAL" { print $2 }' "${cache_file}")"
   [[ "$(readlink -f "${cache_home}")" == "${source_dir}" ]] || \
     die "Eshkol CMake cache is bound to ${cache_home}, not ${source_dir}"
+  cache_cc="$(awk -F= '$1 == "CMAKE_C_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
+  cache_cxx="$(awk -F= '$1 == "CMAKE_CXX_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
+  [[ -x "${cache_cc}" && -x "${cache_cxx}" ]] || \
+    die "Eshkol CMake cache does not identify executable C and C++ compilers"
+  [[ "$(readlink -f "$(tsv_value "${file}" cc_path)")" == "$(readlink -f "${cache_cc}")" ]] || \
+    die "Eshkol provenance C compiler does not match its CMake cache"
+  [[ "$(readlink -f "$(tsv_value "${file}" cxx_path)")" == "$(readlink -f "${cache_cxx}")" ]] || \
+    die "Eshkol provenance C++ compiler does not match its CMake cache"
   expected_hash="$(tsv_value "${file}" eshkol_binary_sha256)"
   actual_hash="$(sha256sum "${binary}" | awk '{ print $1 }')"
   [[ "${actual_hash}" == "${expected_hash}" ]] || \
@@ -123,11 +143,11 @@ verify_eshkol_provenance() {
   check_supported_version LLVM "$(tsv_value "${file}" llvm_version)" "$(lock_value llvm_version)"
   check_supported_version Clang "$(tsv_value "${file}" cc_version)" "$(lock_value clang_version)"
   check_supported_version Clang++ "$(tsv_value "${file}" cxx_version)" "$(lock_value clang_version)"
-  check_supported_version CMake "$(tsv_value "${file}" cmake_version)" "$(lock_value cmake_version)"
-  check_supported_version Ninja "$(tsv_value "${file}" ninja_version)" "$(lock_value ninja_version)"
-  check_supported_version Make "$(tsv_value "${file}" make_version)" "$(lock_value make_version)"
-  check_supported_version Bash "$(tsv_value "${file}" bash_version)" "$(lock_value bash_version)"
-  check_supported_version Git "$(tsv_value "${file}" git_version)" "$(lock_value git_version)"
+  check_minimum_version CMake "$(tsv_value "${file}" cmake_version)" "$(lock_value minimum_cmake_version)"
+  check_minimum_version Ninja "$(tsv_value "${file}" ninja_version)" "$(lock_value minimum_ninja_version)"
+  check_minimum_version Make "$(tsv_value "${file}" make_version)" "$(lock_value minimum_make_version)"
+  check_minimum_version Bash "$(tsv_value "${file}" bash_version)" "$(lock_value minimum_bash_version)"
+  check_minimum_version Git "$(tsv_value "${file}" git_version)" "$(lock_value minimum_git_version)"
 }
 
 verify_toolchain() {
