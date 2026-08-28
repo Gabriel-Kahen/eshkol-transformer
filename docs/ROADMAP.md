@@ -14,7 +14,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | F0 | Package layout, build/test entry points, CI matrix | — | Clean configure plus smoke test on supported Linux environment | planned |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | planned |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | planned |
-| Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and explicit compiled-parity blocker](Q0_VALIDATION.md) | review |
+| Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | review |
 | B0 | Benchmark and memory-measurement harness | F0 | Reproducible baseline report schema and smoke benchmark | planned |
 
 ## Wave 1 — independent foundations
@@ -80,4 +80,3 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 - Review and integrate in dependency order; rerun affected downstream gates.
 - Treat Eshkol-core defects as explicit upstream issues or isolated native-extension
   work, never as silent library fallbacks.
-

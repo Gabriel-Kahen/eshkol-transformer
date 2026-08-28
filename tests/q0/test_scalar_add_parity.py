@@ -25,6 +25,8 @@ _SCALAR = re.compile(
 )
 _VERSION = re.compile(r"Eshkol Compiler v(\d+)\.(\d+)\.(\d+)(?:[-+][^\s]+)?")
 _MINIMUM_VERSION = (1, 3, 4)
+_COMPILE_TIMEOUT_SECONDS = 180
+_RUN_TIMEOUT_SECONDS = 10
 
 
 def _tolerance(bits: str) -> float:
@@ -52,12 +54,16 @@ class CompiledEshkolParityTests(unittest.TestCase):
         ):
             self.fail(f"BLOCKED: ESHKOL_RUN is not an executable file: {explicit}")
 
-        identified = subprocess.run(
-            [runner, "--version"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            identified = subprocess.run(
+                [runner, "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=_RUN_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            self.fail(f"BLOCKED: Eshkol version probe timed out: {error}")
         version_output = identified.stdout + identified.stderr
         match = _VERSION.search(version_output)
         if match is None:
@@ -75,14 +81,18 @@ class CompiledEshkolParityTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             binary = Path(temporary) / "scalar-add"
-            compiled = subprocess.run(
-                [runner, "-o", str(binary), str(PROBE)],
-                cwd=temporary,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if compiled.returncode != 0:
+            try:
+                compiled = subprocess.run(
+                    [runner, "--no-stdlib", "-o", str(binary), str(PROBE)],
+                    cwd=temporary,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=_COMPILE_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as error:
+                self.fail(f"BLOCKED: Eshkol compilation timed out: {error}")
+            if compiled.returncode != 0 or "ERROR:" in compiled.stderr:
                 self.fail(
                     "BLOCKED: compatible Eshkol compilation failed with "
                     f"exit={compiled.returncode}; stdout={compiled.stdout!r}; "
@@ -93,13 +103,17 @@ class CompiledEshkolParityTests(unittest.TestCase):
                     "BLOCKED: compatible Eshkol compilation returned success but "
                     f"did not emit an executable at {binary}"
                 )
-            executed = subprocess.run(
-                [str(binary)],
-                cwd=temporary,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            try:
+                executed = subprocess.run(
+                    [str(binary)],
+                    cwd=temporary,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=_RUN_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as error:
+                self.fail(f"BLOCKED: compiled Eshkol probe timed out: {error}")
             if executed.returncode != 0:
                 self.fail(
                     "BLOCKED: compiled Eshkol executable failed with "

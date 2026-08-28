@@ -82,10 +82,11 @@ CPU float64 scalars, a fixed seed, deterministic-algorithm mode, and one thread.
 
 The parity test invokes real `eshkol-run` (or the explicit `ESHKOL_RUN` path).
 If unavailable, it reports a blocked test and never substitutes Python output.
-The runner must identify as Eshkol 1.3.4 or newer, compile the probe with `-o`, and
-then execute the emitted binary. JIT run mode is not acceptance evidence. The probe
-must emit exactly one scalar line; empty, annotated, or multi-value output is
-rejected.
+The runner must identify as Eshkol 1.3.4 or newer, compile the probe with
+`--no-stdlib -o`, and then execute the emitted binary. Compile and execution are
+bounded by explicit timeouts, and an `ERROR:` diagnostic is failure even if the
+compiler exits zero. JIT run mode is not acceptance evidence. The probe must emit
+exactly one scalar line; empty, annotated, or multi-value output is rejected.
 
 ## F0 integration contract
 
