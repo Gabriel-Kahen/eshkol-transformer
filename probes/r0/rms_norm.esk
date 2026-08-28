@@ -1,0 +1,3 @@
+(define result (rms-norm #(1.0 2.0 3.0) 1e-5))
+(display result) (newline)
+(display "R0_DONE rms_norm") (newline)

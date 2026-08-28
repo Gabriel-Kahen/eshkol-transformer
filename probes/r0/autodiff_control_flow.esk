@@ -1,0 +1,8 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define (branch x) (if (> x 0.0) (* x x) (- x)))
+(display
+  (if (and (near (derivative branch 2.0) 4.0 1e-8)
+           (near (derivative branch -2.0) -1.0 1e-8))
+      "PASS autodiff control flow" "FAIL autodiff control flow"))
+(newline)
+(display "R0_DONE autodiff_control_flow") (newline)

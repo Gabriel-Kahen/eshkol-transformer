@@ -1,0 +1,51 @@
+upstream ctest: zero tests registered
+autodiff_attention: aot_run_1 did not reach its completion marker
+autodiff_attention: aot_run_2 did not reach its completion marker
+autodiff_attention: jit_run did not reach its completion marker
+autodiff_attention: jit_run_2 did not reach its completion marker
+autodiff_control_flow: aot_run_1 emitted an error diagnostic
+autodiff_control_flow: aot_run_1 did not reach its completion marker
+autodiff_control_flow: aot_run_2 emitted an error diagnostic
+autodiff_control_flow: aot_run_2 did not reach its completion marker
+autodiff_control_flow: jit_run emitted an error diagnostic
+autodiff_control_flow: jit_run did not reach its completion marker
+autodiff_control_flow: jit_run_2 emitted an error diagnostic
+autodiff_control_flow: jit_run_2 did not reach its completion marker
+autodiff_embedding: aot_run_1 did not reach its completion marker
+autodiff_embedding: aot_run_2 did not reach its completion marker
+autodiff_embedding: jit_run did not reach its completion marker
+autodiff_embedding: jit_run_2 did not reach its completion marker
+autodiff_gradient_tensor: aot_run_1 did not reach its completion marker
+autodiff_gradient_tensor: aot_run_2 did not reach its completion marker
+autodiff_gradient_tensor: jit_run did not reach its completion marker
+autodiff_gradient_tensor: jit_run_2 did not reach its completion marker
+autodiff_layer_norm: aot_run_1 did not reach its completion marker
+autodiff_layer_norm: aot_run_2 did not reach its completion marker
+autodiff_layer_norm: jit_run did not reach its completion marker
+autodiff_layer_norm: jit_run_2 did not reach its completion marker
+autodiff_matmul: aot_run_1 did not reach its completion marker
+autodiff_matmul: aot_run_2 did not reach its completion marker
+autodiff_matmul: jit_run did not reach its completion marker
+autodiff_matmul: jit_run_2 did not reach its completion marker
+autodiff_relu: aot_run_1 did not reach its completion marker
+autodiff_relu: aot_run_2 did not reach its completion marker
+autodiff_relu: jit_run did not reach its completion marker
+autodiff_relu: jit_run_2 did not reach its completion marker
+batch_matmul: jit_run did not reach its completion marker
+batch_matmul: jit_run_2 did not reach its completion marker
+rms_norm: jit_run did not reach its completion marker
+rms_norm: jit_run_2 did not reach its completion marker
+negative.broadcast_shape_mismatch: malformed input succeeded
+negative.broadcast_shape_mismatch: JIT terminated by signal or timeout instead of explicit error
+negative.embedding_index_out_of_bounds: malformed input succeeded
+negative.embedding_index_out_of_bounds: malformed JIT input succeeded
+negative.file_missing: AOT terminated by signal or timeout instead of explicit error
+negative.file_missing: JIT terminated by signal or timeout instead of explicit error
+negative.index_out_of_bounds: malformed input succeeded
+negative.index_out_of_bounds: malformed JIT input succeeded
+negative.indexed_cross_entropy_targets: malformed input succeeded
+negative.indexed_cross_entropy_targets: malformed JIT input succeeded
+negative.negative_dimension: malformed input succeeded
+negative.negative_dimension: malformed JIT input succeeded
+negative.reshape_size_mismatch: malformed input succeeded
+negative.reshape_size_mismatch: malformed JIT input succeeded

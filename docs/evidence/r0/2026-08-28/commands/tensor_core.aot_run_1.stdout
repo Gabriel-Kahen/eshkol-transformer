@@ -1,0 +1,8 @@
+PASS shape/rank
+PASS index first
+PASS index last
+PASS transpose
+PASS reshape
+PASS rank-3 shape/index
+PASS mutable storage
+R0_DONE tensor_core

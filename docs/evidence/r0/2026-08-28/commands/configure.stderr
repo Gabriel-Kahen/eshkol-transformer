@@ -1,0 +1,4 @@
+CMake Warning at CMakeLists.txt:616 (message):
+  BLAS acceleration: DISABLED (no BLAS library found).  On Ubuntu/Debian:
+  sudo apt install libopenblas-dev.  On Fedora/RHEL: sudo dnf install
+  openblas-devel.  On Arch: sudo pacman -S openblas.

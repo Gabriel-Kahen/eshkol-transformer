@@ -1,0 +1,6 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define (f x) (+ (* x x) (* x x)))
+(define total (+ (gradient f 2.0) (gradient f 2.0)))
+(display (if (near total 16.0 1e-8) "PASS independent repeated gradient calls" "FAIL independent repeated gradient calls"))
+(newline)
+(display "R0_DONE autodiff_repeated_calls") (newline)

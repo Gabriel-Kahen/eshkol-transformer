@@ -1,0 +1,3 @@
+[1m[31m     ERROR:[0m Unknown function: batch-matmul (line 1:12)
+[1m[31m     ERROR:[0m Failed to generate LLVM IR due to earlier code generation errors
+[1m[31m     ERROR:[0m Failed to generate LLVM IR

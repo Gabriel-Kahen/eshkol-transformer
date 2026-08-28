@@ -1,0 +1,2 @@
+PASS gradient scalar finite difference
+R0_DONE autodiff_gradient_scalar

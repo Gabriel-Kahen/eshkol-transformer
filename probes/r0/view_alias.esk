@@ -1,0 +1,6 @@
+(define original (reshape #(1.0 2.0 3.0 4.0) 2 2))
+(define view (reshape original 4))
+(tensor-set! view 0 9.0)
+(display (if (= (tensor-get original 0 0) 9.0) "PASS reshape aliases storage" "FAIL reshape aliases storage"))
+(newline)
+(display "R0_DONE view_alias") (newline)

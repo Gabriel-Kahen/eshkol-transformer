@@ -1,0 +1,2 @@
+PASS matmul 2x3 by 3x2
+R0_DONE matmul
