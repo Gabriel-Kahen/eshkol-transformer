@@ -43,20 +43,20 @@ jobs:
 
       - name: Build pinned Eshkol toolchain
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -lc 'make toolchain'
+        run: /usr/bin/bash -c 'make toolchain'
 
       - name: Fresh configure
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -lc 'make clean && make configure'
+        run: /usr/bin/bash -c 'make clean && make configure'
 
       - name: Build
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -lc 'make build'
+        run: /usr/bin/bash -c 'make build'
 
       - name: Test
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -lc 'make test'
+        run: /usr/bin/bash -c 'make test'
 
       - name: Smoke
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -lc 'make smoke'
+        run: /usr/bin/bash -c 'make smoke'

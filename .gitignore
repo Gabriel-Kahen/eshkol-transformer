@@ -10,3 +10,5 @@ runs/
 *.dylib
 *.dll
 *.log
+__pycache__/
+*.py[cod]

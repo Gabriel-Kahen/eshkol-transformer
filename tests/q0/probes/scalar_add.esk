@@ -1,0 +1,3 @@
+;; Compiled Eshkol side of the first Q0 parity case. No Python substitute.
+(display (+ 1.25 2.5))
+(newline)

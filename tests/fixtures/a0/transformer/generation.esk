@@ -1,0 +1,5 @@
+(require transformer.public)
+(provide generator-create generator-prefill! generator-decode-step!
+         generator-generate! generation-output-ids generation-output-lengths
+         generation-output-text generation-output-rng
+         generation-output-cache-lengths)

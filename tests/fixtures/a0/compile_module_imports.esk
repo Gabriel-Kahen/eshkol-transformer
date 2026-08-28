@@ -1,0 +1,12 @@
+(require transformer.capabilities)
+(require transformer.config)
+(require transformer.tokenizer)
+(require transformer.data)
+(require transformer.module)
+(require transformer.model)
+(require transformer.optim)
+(require transformer.trainer)
+(require transformer.generation)
+(require transformer.persistence)
+
+(define imports-resolved #t)

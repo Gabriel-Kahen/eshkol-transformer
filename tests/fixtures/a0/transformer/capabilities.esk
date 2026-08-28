@@ -1,0 +1,6 @@
+(require transformer.public)
+(provide transformer-error? transformer-error-category transformer-error-operation
+         transformer-error-message transformer-error-details transformer-error-cause
+         capability-discover capability-verified? capability-require
+         capability-report-entries capability-entry-name capability-entry-status
+         capability-entry-constraints capability-entry-evidence)

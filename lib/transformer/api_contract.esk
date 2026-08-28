@@ -1,0 +1,46 @@
+;;; Metadata only. This module implements no tokenizer, tensor, model, training,
+;;; generation, capability, or persistence behavior.
+
+(provide transformer-api-contract-version
+         transformer-api-modules
+         transformer-api-operations)
+
+(define transformer-api-contract-version "0.1.0-draft")
+
+(define transformer-api-modules
+  '(transformer.capabilities
+    transformer.config
+    transformer.tokenizer
+    transformer.data
+    transformer.module
+    transformer.model
+    transformer.optim
+    transformer.trainer
+    transformer.generation
+    transformer.persistence))
+
+(define transformer-api-operations
+  '(transformer-error? transformer-error-category transformer-error-operation
+    transformer-error-message transformer-error-details transformer-error-cause
+    capability-discover capability-verified? capability-require
+    capability-report-entries capability-entry-name capability-entry-status
+    capability-entry-constraints capability-entry-evidence
+    config-parse config-resolve config-validate config-canonical
+    config-fingerprint config-ref
+    tokenizer-byte tokenizer-load tokenizer-save! tokenizer-encode
+    tokenizer-decode tokenizer-vocab-size tokenizer-fingerprint
+    tokenizer-special-token-id
+    token-dataset-open token-dataset-next-batch token-dataset-cursor token-dataset-end?
+    token-dataset-seek! token-dataset-close! token-batch-inputs
+    token-batch-targets token-batch-loss-mask token-batch-validate
+    module-parameters module-buffers module-state-dict
+    module-load-state-dict! module-train! module-eval! module-zero-grad!
+    model-forward model-output-logits model-output-loss model-output-rng
+    optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
+    optimizer-load-state!
+    trainer-create trainer-step! trainer-train! trainer-evaluate!
+    trainer-state trainer-load-state! metrics-ref
+    generator-create generator-prefill! generator-decode-step!
+    generator-generate! generation-output-ids generation-output-lengths
+    generation-output-text generation-output-rng generation-output-cache-lengths
+    checkpoint-inspect checkpoint-metadata-ref checkpoint-load checkpoint-save!))

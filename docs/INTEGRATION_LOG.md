@@ -25,7 +25,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   developer tooling under `scripts/`; compatibility pins under `toolchain/`.
   The initial supported CI lane is Ubuntu 22.04 x86-64, LLVM/Clang 21.1.8,
   and Eshkol commit `90cbd7130f47b8184bcc77b8d5c1b0026da980de`.
-- **Evidence:** `/usr/bin/bash -lc 'make clean && make configure && make build &&
+- **Evidence:** `/usr/bin/bash -c 'make clean && make configure && make build &&
   make test && make smoke'` passed locally as an explicitly unsupported CachyOS
   x86-64 / LLVM 22.1.6 compatibility probe. The test runner performed two fresh AOT
   compilations and executions with byte-identical `eshkol-transformer-smoke:v1\n`
