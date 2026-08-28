@@ -1,0 +1,3 @@
+;; F0-only internal library path; this is not the public transformer API.
+(define (eshkol-transformer-smoke-value)
+  "eshkol-transformer-smoke:v1")

@@ -1,4 +1,6 @@
 .tmp/
+.deps/
+.review-f0-build/
 build/
 checkpoints/
 data/
@@ -8,4 +10,3 @@ runs/
 *.dylib
 *.dll
 *.log
-
