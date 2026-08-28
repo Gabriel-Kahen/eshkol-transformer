@@ -157,4 +157,6 @@ verify_toolchain() {
   verify_eshkol_checkout
   verify_eshkol_binary
   verify_eshkol_provenance
+  export ESHKOL_CXX_COMPILER
+  ESHKOL_CXX_COMPILER="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
 }
