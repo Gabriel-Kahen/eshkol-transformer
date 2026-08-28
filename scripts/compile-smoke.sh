@@ -10,14 +10,15 @@ mkdir -p "${output_dir}"
 binary="${output_dir}/eshkol-transformer-smoke"
 object="${output_dir}/eshkol-transformer-smoke.o"
 depfile="${output_dir}/eshkol-transformer-smoke.d"
-"$(eshkol_build_dir)/eshkol-run" \
+cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
+ESHKOL_CXX_COMPILER="${cxx}" "$(eshkol_build_dir)/eshkol-run" \
   --no-stdlib \
   -I "${PROJECT_ROOT}/src" \
   --emit-depfile "${depfile}" \
   --compile-only \
   "${PROJECT_ROOT}/tests/smoke.esk" \
   -o "${object}"
-"$(eshkol_build_dir)/eshkol-run" \
+ESHKOL_CXX_COMPILER="${cxx}" "$(eshkol_build_dir)/eshkol-run" \
   --no-stdlib \
   -I "${PROJECT_ROOT}/src" \
   "${PROJECT_ROOT}/tests/smoke.esk" \

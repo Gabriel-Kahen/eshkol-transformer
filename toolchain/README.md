@@ -6,9 +6,10 @@ Eshkol, LLVM, and Clang versions plus explicit minimum CMake, Ninja, Make, Bash,
 Git versions. It records the actual host-tool versions in provenance, binding the
 compiler binary hash and CMake source directory to the pinned checkout. Configure
 revalidates that record before project code is compiled. All project commands use
-the workspace-local compiler; there is no PATH, Python, or alternate-runtime
-fallback. Minimums are intentional because GitHub-hosted Ubuntu images update these
-utilities in place; the exact build-critical compiler/runtime inputs remain pinned.
+the workspace-local compiler, and AOT linking explicitly reuses the C++ driver in
+its provenance; there is no PATH, Python, or alternate-runtime fallback. Minimums
+are intentional because GitHub-hosted Ubuntu images update these utilities in place;
+the exact build-critical compiler/runtime inputs remain pinned.
 
 The supported CI lane is Ubuntu 22.04 x86-64 with LLVM/Clang 21.1.8. Install the
 apt.llvm.org Jammy LLVM 21 repository and these packages:
