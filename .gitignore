@@ -1,0 +1,11 @@
+.tmp/
+build/
+checkpoints/
+data/
+runs/
+*.o
+*.so
+*.dylib
+*.dll
+*.log
+

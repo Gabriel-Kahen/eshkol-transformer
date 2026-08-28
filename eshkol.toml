@@ -1,0 +1,11 @@
+[package]
+name = "eshkol-transformer"
+version = "0.0.1"
+description = "Eshkol-native transformer construction, pretraining, evaluation, and generation"
+author = "Gabriel Kahen and contributors"
+entry = "examples/tiny_byte_gpt.esk"
+sources = ["lib/*.esk", "lib/transformer/*.esk", "lib/transformer/**/*.esk", "examples/*.esk", "tests/*.esk"]
+eshkol_version = ">=1.3.4"
+
+[dependencies]
+
