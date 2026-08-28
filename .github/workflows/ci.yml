@@ -24,6 +24,7 @@ jobs:
       ESHKOL_CXX_COMPILER: clang++-21
       LLVM_CONFIG_EXECUTABLE: llvm-config-21
       ESHKOL_JOBS: '2'
+      A0_COMPILER_TIMEOUT_SECONDS: '60'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -53,7 +54,7 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make build'
 
-      - name: Test
+      - name: Test (F0 smoke and A0 contract)
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make test'
 

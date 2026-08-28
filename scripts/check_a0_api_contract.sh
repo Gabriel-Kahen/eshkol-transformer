@@ -1,31 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-A0_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-A0_RUNNER=${ESHKOL_RUNNER:-}
+A0_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+source "${A0_ROOT}/scripts/common.sh"
 
-if [[ -z "$A0_RUNNER" ]]; then
-    for A0_CANDIDATE in \
-        "$A0_ROOT/../eshkol/build/eshkol-run" \
-        "$A0_ROOT/../eshkol/build-poet/eshkol-run"; do
-        if [[ -x "$A0_CANDIDATE" ]]; then
-            A0_RUNNER=$A0_CANDIDATE
-            break
-        fi
-    done
-fi
-
-if [[ -z "$A0_RUNNER" || ! -x "$A0_RUNNER" ]]; then
-    echo "A0 BLOCKED: set ESHKOL_RUNNER to an executable eshkol-run" >&2
-    exit 2
-fi
+require_command timeout
+verify_toolchain
+A0_RUNNER="$(eshkol_build_dir)/eshkol-run"
+A0_COMPILER_TIMEOUT_SECONDS=${A0_COMPILER_TIMEOUT_SECONDS:-60}
+[[ "${A0_COMPILER_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || \
+    die "A0_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
 A0_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-a0.XXXXXX")
 trap 'rm -rf -- "$A0_TMP"' EXIT
 
+run_compiler() {
+    timeout --foreground --signal=TERM --kill-after=5s \
+        "${A0_COMPILER_TIMEOUT_SECONDS}s" "${A0_RUNNER}" "$@"
+}
+
 run_fixture() {
     local source=$1
-    "$A0_RUNNER" --no-stdlib \
+    run_compiler --no-stdlib \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
         -r "$source"
@@ -34,7 +30,7 @@ run_fixture() {
 compile_only_fixture() {
     local source=$1
     local output=$2
-    "$A0_RUNNER" --strict-types --emit-object --no-stdlib \
+    run_compiler --strict-types --emit-object --no-stdlib \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
         "$source" -o "$output"
@@ -62,7 +58,7 @@ cmp "$A0_TMP/public-api-1.stdout" "$A0_TMP/public-api-2.stdout"
 grep -Fx "0.1.0-draft" "$A0_TMP/public-api-1.stdout" >/dev/null
 
 for A0_RUN in 1 2; do
-    if "$A0_RUNNER" --strict-types --emit-object --no-stdlib \
+    if run_compiler --strict-types --emit-object --no-stdlib \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
         "$A0_ROOT/tests/fixtures/a0/negative_wrong_arity.esk" \

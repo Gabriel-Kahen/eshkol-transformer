@@ -1,14 +1,17 @@
 # First-release public API contract
 
-Status: **A0 reviewed draft; declaration harness passing on the repository-minimum
-Eshkol v1.3.4 compiler**. This document specifies the target first-release contract. It does not
+Status: **A0 reviewed draft; declaration harness passing on the F0-pinned canonical
+`tsotchke/eshkol` compiler at commit
+`90cbd7130f47b8184bcc77b8d5c1b0026da980de`**. This document specifies the target
+first-release contract. It does not
 claim that Eshkol core implements any tensor, autodiff, device, compiler, or
 persistence capability. R0 must verify each runtime capability, and downstream
 workstreams must fail explicitly when a required capability is absent.
 
 The declaration fixtures exercise only syntax, imports, public names, and selected
 arities. The local A0 harness compiles them twice and verifies the expected negative
-cases against Eshkol v1.3.4; that is declaration evidence, not
+cases only after F0 verifies the exact source checkout, compiler identity, build
+provenance, and compiler binary hash; that is declaration evidence, not
 runtime-capability evidence or supported-host CI evidence.
 
 ## 1. Stability and naming
@@ -117,9 +120,9 @@ reported losses and metrics accumulate and return `f32` in the first release.
   an alias graph for tied parameters. `module-load-state-dict!` copies values into
   existing storage, preserves declared ties, and rejects missing, unexpected,
   duplicate, or conflicting aliases.
-- `module-parameters` enumerates each unique trainable tensor once in stable lexical
-  path order. `module-buffers` snapshots non-trainable tensors in the same path
-  order using the state-dict accessors below. Optimizer
+- `module-parameters` represents each unique trainable tensor with one live handle
+  while retaining every logical path and tie relationship. `module-buffers` snapshots
+  non-trainable tensors in the same path order using the state-dict accessors below. Optimizer
   parameter groups refer to stable parameter paths, not raw addresses.
 - Dataset and generator calls invalidate only their receiver's previous transient
   iteration result; returned batches/tensors remain owned by the caller.
@@ -290,22 +293,32 @@ representation; N2/A2/L2/M3 own numerical implementation and gradient evidence.
 
 Parameter paths are immutable lists of nonempty UTF-8 segments; no separator escaping
 exists. Ordering is lexicographic by UTF-8 bytes segment-by-segment. Repeated
-`module-parameters` calls return new tree containers whose handles have the same
-module identity and stable path identity. `optimizer-create` binds that handle set,
-not the transient tree container. `parameter-tree-paths`, `parameter-tree-handle`,
+`module-parameters` calls return new tree containers whose unique handles have the
+same module identity and whose complete logical path set is stable.
+`parameter-tree-paths` returns every logical path, including aliases, exactly once.
+`parameter-tree-handle` accepts every returned path; tied paths return the same handle
+identity. Each handle's canonical path is the lexicographically first path in its tie
+group, or its sole path when untied, and `parameter-handle-path` returns that canonical
+path. `optimizer-create` binds the unique handle set, not the transient tree container.
+Optimizer parameter groups use canonical paths only, include each unique handle in
+exactly one group, and reject alias paths or duplicate handles as `invalid-argument`.
+`parameter-tree-paths`, `parameter-tree-handle`,
 `parameter-tree-tie-groups`, `parameter-handle-path`, `parameter-handle-shape`,
 `parameter-handle-dtype`, and `parameter-handle-device` inspect it.
 Paths returned by `parameter-tree-paths` are in the ordering above; an unknown lookup
-path is `invalid-argument`. Tie groups contain at least two paths, with paths sorted
-within each group and groups sorted by their first path; each tied path appears in
-exactly one group.
+path is `invalid-argument`. Tie groups contain at least two logical paths, with paths
+sorted within each group and groups sorted by their first path; each tied path appears
+in exactly one group and the first path is the handle's canonical path.
 
-A state dict is an immutable data-only value. `state-dict-paths` returns stable paths;
-`state-dict-tensor` returns a new owned tensor for a path; and
+A state dict is an immutable data-only value. `state-dict-paths` returns every logical
+parameter and buffer path in the ordering above. `state-dict-tensor` accepts every
+returned path and returns a new owned tensor; tensors returned for tied paths are
+value-equal independent snapshots, while `state-dict-alias-groups` preserves the tie
+relationship. A strict load requires tied-path payloads to be equal before copying
+once into the destination handle; conflicting alias payloads are `corrupt-data`.
 `state-dict-alias-groups` returns tied paths in the same canonical group ordering.
-Unknown paths are
-`invalid-argument`. Accessors are CPU control-plane, non-mutating, and do not create
-gradient graphs.
+Unknown paths are `invalid-argument`. Accessors are CPU control-plane, non-mutating,
+and do not create gradient graphs.
 
 ## 11. Optimizer
 
@@ -324,8 +337,8 @@ must raise `unsupported` in the first release unless separately verified.
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
-| `trainer-create resolved tokenizer dataset model optimizer` | Validate identities, fingerprints, tree binding, capabilities, modes, device/dtype policy, and reproducibility state. | New exclusively mutable state machine retaining receivers; structured mismatch/unsupported errors. |
-| `trainer-step! trainer` | Perform one optimizer update from exactly the configured positive integer `accumulation-steps` microbatches: fetch/forward/backward each, normalize by total mask weight, clip once, update once, then advance scheduler/counters. | Mutates leased state; returns immutable `f32` metrics. Exact gradients required; no approximations. |
+| `trainer-create resolved tokenizer dataset model optimizer` | Validate identities, fingerprints, tree binding, capabilities, modes, device/dtype policy, and reproducibility state. Capture the dataset's current cursor as the immutable epoch-start cursor. | New exclusively mutable state machine retaining receivers; structured mismatch/unsupported errors. |
+| `trainer-step! trainer` | Perform one optimizer update from exactly the configured positive integer `accumulation-steps` microbatches: fetch/forward/backward each, normalize by total mask weight, clip once, update once, then advance scheduler/counters. On finite-dataset end-of-stream, increment the epoch count, seek to the captured epoch-start cursor, and continue filling the same update; an empty finite dataset or an end sentinel from a declared streaming dataset is `invalid-state`. | Mutates leased state; returns immutable `f32` metrics. Exact gradients required; no approximations. |
 | `trainer-stop-policy max-tokens max-updates max-epochs` | Construct an immutable policy; each limit is `#f` or a positive integer and at least one is present. | CPU; new value; `invalid-argument`; no gradient. |
 | `trainer-train! trainer stop-policy` | Repeat updates until the first supplied limit is reached or explicit interrupt occurs; conditions are tested after each committed update. No hidden wall-clock stopping. | Same mutation; returns immutable summary; propagates errors. |
 | `trainer-evaluate! trainer dataset` | Require a dataset distinct from the leased training dataset; snapshot its cursor, use eval/no-grad, then restore cursor and model mode on success or failure. Return token-weighted `f32` metrics. | Model parameters and both final cursors unchanged; no gradient. |
@@ -336,14 +349,32 @@ TR3/C2 own state-machine and exact-resume implementation. Logging is observation
 must not alter numerical order, RNG, cursor, or failure semantics.
 
 `trainer-step!` is transactional across cursor, RNG, gradients, parameters, optimizer,
-scheduler, and counters: the whole step commits after a successful update or rolls
-back. `trainer-train!` commits after each successful step; on failure earlier steps
-remain committed and only the current step rolls back. Metrics are opaque immutable
-maps inspected with `metrics-ref`; unknown keys raise `invalid-argument`.
+scheduler, and counters. Before consuming a batch it records the small step-start
+cursor, RNG, mode, and counter state. Accumulation may advance only the dataset cursor,
+explicit RNG, and transient gradients. Any categorized failure in that phase restores
+the recorded cursor/RNG/mode/counters and clears those gradients.
+
+Before parameter mutation, the implementation validates every gradient and update,
+preallocates required scratch, and proves that the deterministic commit pass contains
+no fallible operation. It may do this with a validation pass plus a recomputed commit
+pass and one-parameter-sized scratch; the contract does not require a full model or
+optimizer snapshot. The commit point is the first parameter write. From that point the
+validated pass completes the parameter/optimizer/scheduler/counter writes without
+raising a recoverable public error. Process termination and hardware loss are outside
+in-process rollback and are recovered from the last durable checkpoint. Thus a
+recoverable failure leaves the whole current step uncommitted without imposing
+model-sized rollback storage. `trainer-train!` commits after each successful step; on
+failure earlier steps remain committed and only the current step rolls back. Metrics
+are opaque immutable maps inspected with `metrics-ref`; unknown keys raise
+`invalid-argument`.
 `max-tokens` counts positions whose boolean mask is true or whose floating mask is
 positive; an update may cross the limit because limits are checked only after commit.
-One epoch ends at the finite training dataset's end sentinel. A streaming dataset
-with `max-epochs` is `invalid-argument`.
+One epoch ends at the finite training dataset's end sentinel. The sentinel itself is
+not a microbatch; the trainer seeks to its captured epoch-start cursor before
+continuing accumulation. One update may cross one or more epoch boundaries, so an
+epoch limit, like a token limit, may be exceeded by the final committed update. The
+epoch-start cursor and current epoch count are part of `trainer-state`. A streaming
+dataset with `max-epochs` is `invalid-argument`.
 
 All trainer result maps are newly owned CPU values with no gradient. A step map has
 exactly `loss` (weighted mean) and `mask-weight` (weight sum) as `f32`, plus `tokens`,
