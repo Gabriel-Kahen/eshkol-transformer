@@ -1,0 +1,6 @@
+(define values #(1 2 3))
+(display (if (and (integer? (tensor-get values 0))
+                  (integer? (tensor-get values 2)))
+             "INTEGER_VALUE_EXPOSED" "INTEGER_VALUE_COERCED"))
+(newline)
+(display "R0_DONE dtype_integer") (newline)

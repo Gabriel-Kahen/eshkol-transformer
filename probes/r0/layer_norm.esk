@@ -1,0 +1,10 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define result (layer-norm #(1.0 2.0 3.0 4.0) 1.0 0.0 1e-5))
+(display
+  (if (and (near (tensor-get result 0) -1.341635 1e-5)
+           (near (tensor-get result 1) -0.447212 1e-5)
+           (near (tensor-get result 2) 0.447212 1e-5)
+           (near (tensor-get result 3) 1.341635 1e-5))
+      "PASS layer norm" "FAIL layer norm"))
+(newline)
+(display "R0_DONE layer_norm") (newline)

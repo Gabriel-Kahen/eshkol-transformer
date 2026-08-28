@@ -1,0 +1,11 @@
+(define a (reshape #(1.0 2.0) 2 1))
+(define b #(10.0 20.0 30.0))
+(define c (tensor-add a b))
+(display
+  (if (and (= (tensor-get c 0 0) 11.0)
+           (= (tensor-get c 0 2) 31.0)
+           (= (tensor-get c 1 0) 12.0)
+           (= (tensor-get c 1 2) 32.0))
+      "PASS broadcast 2x1 plus 3" "FAIL broadcast 2x1 plus 3"))
+(newline)
+(display "R0_DONE broadcast") (newline)
