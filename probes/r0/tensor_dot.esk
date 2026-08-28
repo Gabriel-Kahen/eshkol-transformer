@@ -1,0 +1,4 @@
+(define result (tensor-dot #(1.0 2.0 3.0) #(4.0 5.0 6.0)))
+(display (if (= result 32.0) "PASS tensor dot" "FAIL tensor dot"))
+(newline)
+(display "R0_DONE tensor_dot") (newline)

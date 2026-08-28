@@ -1,0 +1,2 @@
+(define in (open-input-file "eshkol-r0-definitely-missing-file"))
+(display (read-line in))

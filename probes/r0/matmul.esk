@@ -1,0 +1,11 @@
+(define (check name ok)
+  (display (if ok "PASS " "FAIL ")) (display name) (newline))
+(define a (reshape #(0.0 1.0 2.0 3.0 4.0 5.0) 2 3))
+(define b (reshape #(0.0 1.0 2.0 3.0 4.0 5.0) 3 2))
+(define c (matmul a b))
+(check "matmul 2x3 by 3x2"
+       (and (= (tensor-get c 0 0) 10.0)
+            (= (tensor-get c 0 1) 13.0)
+            (= (tensor-get c 1 0) 28.0)
+            (= (tensor-get c 1 1) 40.0)))
+(display "R0_DONE matmul") (newline)
