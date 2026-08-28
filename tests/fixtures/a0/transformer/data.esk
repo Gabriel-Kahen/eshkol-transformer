@@ -1,0 +1,5 @@
+(require transformer.public)
+(provide token-dataset-open token-dataset-next-batch token-dataset-cursor
+         token-dataset-end? token-dataset-seek! token-dataset-close!
+         token-batch-inputs token-batch-targets token-batch-loss-mask
+         token-batch-validate)

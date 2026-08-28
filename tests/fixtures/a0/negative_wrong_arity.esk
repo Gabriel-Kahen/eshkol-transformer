@@ -1,0 +1,5 @@
+(require transformer.public)
+
+;;; Must fail at compile time if arity checking is available, otherwise at runtime.
+;;; tokenizer-encode requires exactly (tokenizer text).
+(tokenizer-encode 'tokenizer)

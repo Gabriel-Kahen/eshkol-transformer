@@ -1,0 +1,3 @@
+(require transformer.public)
+(provide config-parse config-resolve config-validate config-canonical
+         config-fingerprint config-ref)
