@@ -185,7 +185,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   caller supplies the mapped existing A0 category.  Public facades do not export the
   three internal helpers.  Exact grammar, bounds, ownership, and bootstrap behavior
   are documented in [ERROR_CONTRACT.md](ERROR_CONTRACT.md).
-- **Evidence:** `/usr/bin/bash -c 'make test-e1'` passed 106 runtime assertions, two
+- **Evidence:** `/usr/bin/bash -c 'make test-e1'` passed 112 runtime assertions, two
   byte-identical AOT executions, two byte-identical JIT executions, AOT/JIT output
   parity, byte-identical fresh compile objects, production depfile proof, fresh-cache
   first-class internal binding execution, public accessor execution, stable
@@ -193,8 +193,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   nine-op internal surfaces.  Adversarial cases cover
   forged same-message conditions, procedure non-invocation, repeated detached
   snapshots, distinct cause identities, fresh/interned same-spelling key collisions,
-  tagged complex rejection with its observed pinned-runtime predicate matrix, and
-  256 retained registry identities.  The
+  tagged complex rejection with its observed pinned-runtime predicate matrix,
+  malformed bridge shapes/opcodes, and 256 retained registry identities. The public
+  facade also proves that mutating its returned message carrier does not affect a
+  later snapshot. The
   local run used the exact Eshkol commit/compiler pin
   but is an explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6 compatibility
   probe; supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI remains required.

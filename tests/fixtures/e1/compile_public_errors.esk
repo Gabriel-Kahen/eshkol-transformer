@@ -4,10 +4,15 @@
   (guard (raised (#t raised))
     (transformer-error-details 'not-an-error)))
 
+(define first-public-message (transformer-error-message caught))
+(define saved-public-message (string-copy first-public-message))
+(string-set! first-public-message 0 #\X)
+
 (if (and (transformer-error? caught)
          (eq? (transformer-error-category caught) 'invalid-argument)
          (eq? (transformer-error-operation caught) 'transformer-error-details)
          (string? (transformer-error-message caught))
+         (string=? (transformer-error-message caught) saved-public-message)
          (list? (transformer-error-details caught))
          (eq? (transformer-error-cause caught) #f))
     (begin (display "e1-public-errors:v1") (newline))

@@ -259,6 +259,37 @@
        (structured-invalid?
          (lambda () (e1-internal-dispatch 'make '(io op)))
          'e1-internal-dispatch))
+(check "internal bridge rejects excess argument list"
+       (structured-invalid?
+         (lambda ()
+           (e1-internal-dispatch
+             'make (list 'io 'op "message" '() #f 'extra)))
+         'e1-internal-dispatch))
+(check "internal bridge rejects improper argument list"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'make (cons 'io 'tail)))
+         'e1-internal-dispatch))
+(define cyclic-bridge-arguments (list 'io 'op "message" '() #f))
+(set-cdr! (cdr (cdr (cdr (cdr cyclic-bridge-arguments))))
+          cyclic-bridge-arguments)
+(check "internal bridge rejects cyclic argument list"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'make cyclic-bridge-arguments))
+         'e1-internal-dispatch))
+(check "internal bridge rejects procedure opcode"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch (lambda () #t) '()))
+         'e1-internal-dispatch))
+(check "internal bridge rejects malformed accessor arguments"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'category '()))
+         'e1-internal-dispatch))
+(check "internal bridge rejects malformed foreign wrapper arguments"
+       (structured-invalid?
+         (lambda ()
+           (e1-internal-dispatch
+             'wrap-foreign (list 'internal 'op "message" '())))
+         'e1-internal-dispatch))
 
 (check "malformed category string"
        (structured-invalid?
