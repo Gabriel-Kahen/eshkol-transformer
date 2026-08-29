@@ -57,3 +57,26 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   host RSS as device memory or this smoke result as an acceleration baseline.
 - **Reference:** [issue #6](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/6);
   implementation review pending.
+
+## 2026-08-28 — A0 / issue #3
+
+- **Decision:** proposed.
+- **Contract:** The first-release Eshkol API fixes public names and arities, tensor
+  shapes/layouts, dtypes/devices, ownership and mutation, structured errors,
+  capability requests, logical/canonical tied-parameter paths, deterministic trainer
+  accumulation across finite-dataset epoch boundaries, generation semantics, safe
+  persistence limits, and independent API/ABI/format version domains. It commits to
+  no serialized byte layout or native ABI. Runtime capabilities remain unverified
+  unless separately proved.
+- **Evidence:** `/usr/bin/bash -c 'make test-a0'` and
+  `/usr/bin/bash -c 'make test'` passed against the F0-provenance-verified canonical
+  `tsotchke/eshkol` commit
+  `90cbd7130f47b8184bcc77b8d5c1b0026da980de` as an explicitly unsupported CachyOS
+  x86-64 / LLVM-Clang 22.1.6 compatibility run. The A0 harness strict-compiled
+  aggregate declarations twice with byte-identical objects, repeated exact negative
+  diagnostics, repeated executable output, and per-invocation 60-second bounds.
+- **Dependencies / retest:** P1, T1, D1, K1, C1, X1, and later model/training/
+  generation workstreams must implement these contracts or propose a versioned
+  change through issue #1. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI must pass
+  before acceptance.
+- **Reference:** issue #3; [PR #13](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/13).
