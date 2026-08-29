@@ -1,0 +1,67 @@
+;;; Trusted, build-only fixture implementation.  This source is compiled into
+;;; the prelocalized package artifact and is never installed for consumers.
+
+(require e1b_error_consumer_private)
+
+;;; These two fixed-arity functions are the only package implementation thunks
+;;; named in fixture_package_renames.txt.  E1 remains solely responsible for
+;;; validating, copying, registering, and raising the structured error.
+(define (et-e1b-fixture-consumer-a-private path)
+  (begin
+    (et-e1b-private-raise
+      'io 'consumer-a-read "consumer A failed"
+      (list (list 'path path)) #f)
+    #f)
+  :no-return)
+
+(define (et-e1b-fixture-consumer-b-private cause)
+  (begin
+    (et-e1b-private-raise
+      'invalid-state 'consumer-b-step "consumer B failed"
+      '((phase commit)) cause)
+    #f)
+  :no-return)
+
+(define (et-e1b-fixture-category-probe-private category)
+  (begin
+    (et-e1b-private-raise category 'category-probe "category" '() #f)
+    #f)
+  :no-return)
+
+(define (et-e1b-fixture-invalid-category-private)
+  (begin (et-e1b-private-raise 'unknown 'op "message" '() #f) #f)
+  :no-return)
+
+(define (et-e1b-fixture-invalid-operation-private)
+  (begin (et-e1b-private-raise 'io "op" "message" '() #f) #f)
+  :no-return)
+
+(define (et-e1b-fixture-invalid-message-private)
+  (begin (et-e1b-private-raise 'io 'op "" '() #f) #f)
+  :no-return)
+
+(define (et-e1b-fixture-invalid-details-private)
+  (begin (et-e1b-private-raise 'io 'op "message" '((a 1 extra)) #f) #f)
+  :no-return)
+
+(define (et-e1b-fixture-duplicate-details-private)
+  (begin (et-e1b-private-raise 'io 'op "message" '((a 1) (a 2)) #f) #f)
+  :no-return)
+
+(define (et-e1b-fixture-opaque-details-private)
+  (begin
+    (et-e1b-private-raise
+      'io 'op "message" (list (list 'v (vector 1))) #f)
+    #f)
+  :no-return)
+
+(define (et-e1b-fixture-invalid-cause-private)
+  (begin (et-e1b-private-raise 'io 'op "message" '() 'foreign) #f)
+  :no-return)
+
+(define (et-e1b-fixture-owned-private message detail)
+  (begin
+    (et-e1b-private-raise
+      'io 'owned message (list (list 'value detail)) #f)
+    #f)
+  :no-return)

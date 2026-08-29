@@ -22,6 +22,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | E1 | [Shared structured-error construction and accessors](ERROR_CONTRACT.md) | A0, Q0 | 112 construction/accessor/ownership/forgery/negative checks, repeated AOT/JIT parity, and declared-public-boundary gates | complete |
+| E1B | [Separately compiled fixed-arity raise-only consumer boundary](E1B_CONSUMER_BOUNDARY.md) | E1 | Fresh-cache public-package AOT semantics plus closure, arity, localization, guessed-symbol, determinism, and artifact evidence | review |
 | P1 | Named parameter tree, buffers, modules, state dictionaries | A0, R0, Q0, E1 | Nesting, tying, enumeration, validation and round-trip tests | planned |
 | T1 | Byte tokenizer, special tokens, fingerprints and format | A0, Q0, E1 | All-byte/UTF-8 round trips and deterministic format tests | planned |
 | D1 | Versioned token-shard format and corpus writer | A0, Q0, E1 | Checksums, malformed-input tests and deterministic shard fixtures | planned |

@@ -1,0 +1,4 @@
+(require transformer.consumer_a)
+
+(extern void guessed-dispatch ptr ptr :real e1-internal-dispatch)
+(guessed-dispatch (vector 'raise) (vector '()))

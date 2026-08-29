@@ -1,0 +1,20 @@
+;;; Installed public stub.  Its source closure contains no E1 implementation or
+;;; generic construction/raise capability.
+
+(require transformer.error_consumer)
+
+(provide consumer-a-raise)
+
+(define e1b-safe-fixture-consumer-a-call
+  (let ()
+    (extern void e1b-public-consumer-a-raise ptr
+            :real et_e1b_public_fixture_consumer_a_raise_v1 :no-return)
+    (lambda (path)
+      (e1b-public-consumer-a-raise (vector path))
+      #f)))
+
+;;; The direct definition preserves pinned compile-time arity checking.  Its
+;;; helper is source-reachable under flattening but has exactly the same narrow,
+;;; package-specific capability; no generic E1 privilege is reachable.
+(define (consumer-a-raise path)
+  (e1b-safe-fixture-consumer-a-call path))

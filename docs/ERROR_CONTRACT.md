@@ -29,6 +29,11 @@ The public A0 facades load only `transformer.error_public`, whose declared surfa
 contains the six accessors.  The three helpers are absent from the declared surfaces
 of `transformer.public` and `transformer.capabilities`.
 
+Public packages that cannot safely flatten either internal module use the reviewed
+[E1B separately compiled consumer boundary](E1B_CONSUMER_BOUNDARY.md). Their
+installed source closure contains only the six accessors and narrow package-specific
+stubs; E1 construction and identity remain inside one prelocalized trusted artifact.
+
 ## Values and ownership
 
 Categories are exactly `invalid-argument`, `shape-mismatch`, `dtype-mismatch`,
@@ -122,4 +127,10 @@ Run the focused executable contract with:
 
 ```sh
 /usr/bin/bash -c 'make test-e1'
+```
+
+Run the separately compiled public-consumer boundary gate with:
+
+```sh
+/usr/bin/bash -c 'make test-e1b'
 ```

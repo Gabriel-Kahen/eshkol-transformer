@@ -1,0 +1,62 @@
+(require transformer.error_consumer)
+
+(provide consumer-category-probe
+         consumer-invalid-category consumer-invalid-operation
+         consumer-invalid-message consumer-invalid-details
+         consumer-duplicate-details consumer-opaque-details
+         consumer-invalid-cause consumer-owned)
+
+(extern void e1b-safe-category-probe ptr
+        :real et_e1b_public_fixture_category_probe_v1 :no-return)
+(extern void e1b-safe-invalid-category
+        :real et_e1b_public_fixture_invalid_category_v1 :no-return)
+(extern void e1b-safe-invalid-operation
+        :real et_e1b_public_fixture_invalid_operation_v1 :no-return)
+(extern void e1b-safe-invalid-message
+        :real et_e1b_public_fixture_invalid_message_v1 :no-return)
+(extern void e1b-safe-invalid-details
+        :real et_e1b_public_fixture_invalid_details_v1 :no-return)
+(extern void e1b-safe-duplicate-details
+        :real et_e1b_public_fixture_duplicate_details_v1 :no-return)
+(extern void e1b-safe-opaque-details
+        :real et_e1b_public_fixture_opaque_details_v1 :no-return)
+(extern void e1b-safe-invalid-cause
+        :real et_e1b_public_fixture_invalid_cause_v1 :no-return)
+(extern void e1b-safe-owned ptr ptr
+        :real et_e1b_public_fixture_owned_v1 :no-return)
+
+(define (consumer-category-probe category)
+  (e1b-safe-category-probe (vector category))
+  #f)
+
+(define (consumer-invalid-category)
+  (e1b-safe-invalid-category)
+  #f)
+
+(define (consumer-invalid-operation)
+  (e1b-safe-invalid-operation)
+  #f)
+
+(define (consumer-invalid-message)
+  (e1b-safe-invalid-message)
+  #f)
+
+(define (consumer-invalid-details)
+  (e1b-safe-invalid-details)
+  #f)
+
+(define (consumer-duplicate-details)
+  (e1b-safe-duplicate-details)
+  #f)
+
+(define (consumer-opaque-details)
+  (e1b-safe-opaque-details)
+  #f)
+
+(define (consumer-invalid-cause)
+  (e1b-safe-invalid-cause)
+  #f)
+
+(define (consumer-owned message detail)
+  (e1b-safe-owned (vector message) (vector detail))
+  #f)

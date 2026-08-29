@@ -285,3 +285,41 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #24](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/24);
   [PR #32](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/32); merge commit
   `53db2a19725bf4a4fbdb60f4abeb6bb521602b1f`.
+
+## 2026-08-29 — E1B / issue #33
+
+- **Decision:** proposed; integration owner review and supported exact-head CI are
+  pending.
+- **Contract:** Public package stubs import neither `transformer.error_internal` nor
+  `transformer.error_core`. A trusted build-only Eshkol seam accepts exactly
+  category, operation, message, details, and cause, calls only E1's validated raise
+  path, and never returns. Package-specific native wrappers expose only reviewed
+  narrow operations plus the six unchanged unary A0 accessors. The generic seam,
+  constructors, dispatcher, initialization helpers, compiler companions, and raw
+  representation remain `STB_LOCAL` in one completed AOT artifact before arbitrary
+  application source is compiled. Native code performs fixed box validation,
+  transport, initialization, and calls only; E1 retains all value semantics.
+- **Evidence:** `/usr/bin/bash -c 'make test-e1b'` passed 35 public-package AOT
+  semantic checks plus byte-identical repeated trusted artifacts, public objects,
+  executables, link maps, and outputs; exact five-argument diagnostics; both import
+  orders; malformed category/operation/message/details/cause; ownership and identity;
+  public/private depfiles; provide/export allowlists; `nm`, archive-index, `readelf`,
+  dynamic-symbol, strings, and link-map checks; and guessed binding/function/helper/
+  external-variable negatives. Existing E1 passed 112 checks, A0 and K1 remained
+  green, and full `make test`, `make build`, and `make smoke` passed locally against
+  the canonical pin on the explicitly unsupported CachyOS / LLVM-Clang 22
+  compatibility lane. Independent native/ABI, packaging, semantic, adversarial, and
+  evidence reviews informed the implementation. Supported exact-head Ubuntu 22.04 /
+  LLVM-Clang 21.1.8 CI remains pending.
+- **Limitations:** canonical-pin/x86-64 AOT only; one artifact and E1 registry per
+  process; no JIT/bitcode publication; no verified concurrency; safe-only public
+  source aliases remain technically reachable because pinned `provide` is
+  informational. Malicious native-object injection into the trusted partial link is
+  outside scope, while arbitrary compiled Eshkol linked afterward is in scope.
+- **Dependencies / retest:** D1 and X1 must expose only reviewed package-specific
+  wrappers and repeat public-closure, import-both, malformed-value, symbol/link, and
+  full-suite gates. E1B changes no K1/I1 contract and adds no public persistence
+  format.
+- **Reference:** [issue #33](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/33);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  pull request pending.

@@ -1,0 +1,5 @@
+(require transformer.consumer_a)
+
+(extern-var i64 guessed-private-sidecar
+            :extern-symbol et_e1b_private_raise_cabi_v1)
+(display guessed-private-sidecar)

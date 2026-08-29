@@ -1,0 +1,13 @@
+(require transformer.consumer_a)
+
+;;; Guessing the localized generic seam must leave this public application with
+;;; an unresolved symbol when it links only the finalized package artifact.
+(define guessed-generic-raise
+  (let ()
+    (extern void guessed ptr ptr ptr ptr ptr
+            :real et_e1b_consumer_raise_v1 :no-return)
+    (lambda ()
+      (guessed (vector 'io) (vector 'attack) (vector "attack")
+               (vector '()) (vector #f)))))
+
+(guessed-generic-raise)
