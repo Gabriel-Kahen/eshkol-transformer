@@ -35,3 +35,25 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Dependencies / retest:** B0 may consume these commands after F0 merges.
 - **Reference:** issue #2; [PR #8](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/8);
   reviewed head `cf0752afd5e48b4043498ffc1abbcad34a709bb7`.
+
+## 2026-08-28 — B0 / issue #6
+
+- **Decision:** proposed; integration review remains pending.
+- **Contract:** `make benchmark` measures the F0 native smoke artifact from the
+  canonical `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de`
+  toolchain. `benchmarks/smoke_v1.json` is the canonical version-1 checksummed
+  definition. Generated reports use the version-1 checksummed stable/volatile schema
+  documented in `docs/BENCHMARK_FORMAT.md`. B0 supports only direct Linux host-CPU
+  process execution, `CLOCK_MONOTONIC` elapsed nanoseconds, `pidfd` completion
+  notification, and `wait4` peak RSS KiB.
+- **Evidence:** 41 deterministic B0 format, failure-path, runner, and native-launcher
+  tests passed. The full F0 configure/build/test/smoke chain and `make benchmark`
+  passed locally against the exact upstream pin as an explicitly unsupported CachyOS
+  x86-64 / LLVM-Clang 22.1.6 compatibility probe. The generated report validated and
+  labeled itself `compatibility-only`; supported Ubuntu 22.04 / LLVM 21.1.8 CI
+  evidence remains pending.
+- **Dependencies / retest:** AMD4 and PA4 may consume the schema only after B0
+  integration review. They must add direct device evidence and may not reinterpret
+  host RSS as device memory or this smoke result as an acceleration baseline.
+- **Reference:** [issue #6](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/6);
+  implementation review pending.

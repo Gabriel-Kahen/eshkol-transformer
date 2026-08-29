@@ -41,7 +41,9 @@ native artifact and expects `eshkol-transformer-smoke:v1`.
 Production Eshkol source belongs under `src/eshkol_transformer/`, tests under
 `tests/`, developer entry points under `scripts/`, and compatibility pins under
 `toolchain/`. F0 defines no transformer API, runtime capability, numerical-oracle,
-or benchmark contract.
+or model-training contract. B0's reproducible host-process smoke benchmark is
+documented in [docs/BENCHMARK_FORMAT.md](docs/BENCHMARK_FORMAT.md); run it with
+`make benchmark` after `make build`.
 
 ## First release criterion
 
@@ -54,5 +56,6 @@ See:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development roadmap](docs/ROADMAP.md)
 - [Quality gates](docs/QUALITY_GATES.md)
+- [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

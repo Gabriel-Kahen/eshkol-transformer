@@ -15,7 +15,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | planned |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | planned |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | review |
-| B0 | Benchmark and memory-measurement harness | F0 | Reproducible baseline report schema and smoke benchmark | planned |
+| B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md) | review |
 
 ## Wave 1 — independent foundations
 

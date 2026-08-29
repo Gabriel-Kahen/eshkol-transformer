@@ -60,3 +60,7 @@ jobs:
       - name: Smoke
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make smoke'
+
+      - name: Reproducible smoke benchmark
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make benchmark'

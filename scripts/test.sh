@@ -31,3 +31,5 @@ fi
 grep -F 'Eshkol source checkout not found' "${missing_log}" >/dev/null || \
   die "missing-toolchain failure did not provide the expected actionable diagnostic"
 printf 'missing toolchain: PASS (nonzero with actionable diagnostic)\n'
+
+/usr/bin/bash "${PROJECT_ROOT}/scripts/test-b0.sh"
