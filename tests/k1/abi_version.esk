@@ -1,0 +1,8 @@
+;; Fixed-width, fixed-arity K1 link probe. This proves only ABI linkage/version.
+(extern i32 k1-abi-major :real et_kernel_abi_major)
+(extern i32 k1-abi-minor :real et_kernel_abi_minor)
+
+(display (k1-abi-major))
+(display ".")
+(display (k1-abi-minor))
+(newline)

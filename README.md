@@ -57,5 +57,6 @@ See:
 - [Development roadmap](docs/ROADMAP.md)
 - [Quality gates](docs/QUALITY_GATES.md)
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
+- [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

@@ -24,7 +24,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | P1 | Named parameter tree, buffers, modules, state dictionaries | A0, R0, Q0 | Nesting, tying, enumeration, validation and round-trip tests | planned |
 | T1 | Byte tokenizer, special tokens, fingerprints and format | A0, Q0 | All-byte/UTF-8 round trips and deterministic format tests | planned |
 | D1 | Versioned token-shard format and corpus writer | A0, Q0 | Checksums, malformed-input tests and deterministic shard fixtures | planned |
-| K1 | Native kernel ABI/capability layer | A0, R0, Q0 | Capability discovery and explicit unsupported-path tests | planned |
+| K1 | Native kernel ABI/capability layer | A0, R0, Q0 | [Versioned ABI, canonical unverified baseline, and 396 conformance/unsupported/malformed-call checks](K1_KERNEL_ABI.md) | review |
 | C1 | Versioned checkpoint container and atomic I/O | A0, P1, Q0 | Tensor round trip, corruption rejection and atomic-write tests | planned |
 | X1 | Declarative configuration and resolved-run manifests | A0, Q0 | Stable parse/override/validation and canonical output tests | planned |
 
