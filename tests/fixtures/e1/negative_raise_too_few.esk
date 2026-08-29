@@ -1,0 +1,3 @@
+(require transformer.error_internal)
+
+(transformer-error-raise 'io 'op "message" '())

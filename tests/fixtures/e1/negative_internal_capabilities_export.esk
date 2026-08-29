@@ -1,0 +1,4 @@
+(require transformer.capabilities)
+
+;;; The conceptual A0 error facade exposes accessors, never construction helpers.
+(define leaked-constructor transformer-error-make)

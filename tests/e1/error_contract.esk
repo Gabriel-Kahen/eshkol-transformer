@@ -1,0 +1,542 @@
+(require transformer.error_internal)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ")
+        (display name)
+        (newline))))
+
+(define (details-ref details key)
+  (cond ((null? details) #f)
+        ((eq? (car (car details)) key) (car (cdr (car details))))
+        (else (details-ref (cdr details) key))))
+
+(define (repeat-list count value)
+  (if (= count 0) '() (cons value (repeat-list (- count 1) value))))
+
+(define (numbered-entries count)
+  (if (= count 0)
+      '()
+      (cons (list (string->symbol
+                    (string-append "key-" (number->string count)))
+                  count)
+            (numbered-entries (- count 1)))))
+
+(define (cause-chain count cause)
+  (if (= count 0)
+      cause
+      (cause-chain
+        (- count 1)
+        (transformer-error-make 'internal 'cause-depth "nested cause" '()
+                                cause))))
+
+(define (stress-errors count values)
+  (if (= count 0)
+      values
+      (stress-errors
+        (- count 1)
+        (cons (transformer-error-make
+                'internal 'registry-stress "registered"
+                (list (list 'ordinal count)) #f)
+              values))))
+
+(define (registered-stress-errors? values)
+  (if (null? values)
+      #t
+      (and (transformer-error? (car values))
+           (eq? (transformer-error-operation (car values)) 'registry-stress)
+           (registered-stress-errors? (cdr values)))))
+
+(define (structured-invalid? thunk expected-operation)
+  (guard (raised
+           (#t
+             (and (transformer-error? raised)
+                  (eq? (transformer-error-category raised) 'invalid-argument)
+                  (eq? (transformer-error-operation raised) expected-operation)
+                  (string? (transformer-error-message raised))
+                  (list? (transformer-error-details raised))
+                  (eq? (transformer-error-cause raised) #f))))
+    (thunk)
+    #f))
+
+(define categories
+  '(invalid-argument shape-mismatch dtype-mismatch device-mismatch
+    noncontiguous unsupported invalid-state io corrupt-data version-mismatch
+    determinism-unavailable internal))
+
+(let loop ((rest categories))
+  (if (null? rest)
+      #t
+      (let* ((category (car rest))
+             (value
+               (transformer-error-make category 'category-round-trip
+                                       "category" '() #f)))
+        (check "category predicate" (transformer-error? value))
+        (check "category round trip"
+               (eq? (transformer-error-category value) category))
+        (loop (cdr rest)))))
+
+(define source-message (string-copy "owned message"))
+(define source-detail-string (string-copy "mutable detail"))
+(define source-details
+  (list (list 'z-key source-detail-string)
+        (list 'a-key (list 'cpu 7 #t))))
+(define owned
+  (transformer-error-make 'invalid-state 'ownership-test source-message
+                          source-details #f))
+(string-set! source-message 0 #\X)
+(string-set! source-detail-string 0 #\X)
+(set-car! (car source-details) 'changed-key)
+(check "message ingress copy"
+       (string=? (transformer-error-message owned) "owned message"))
+(check "details ingress copy and canonical order"
+       (equal? (transformer-error-details owned)
+               '((a-key (cpu 7 #t)) (z-key "mutable detail"))))
+
+(define returned-message (transformer-error-message owned))
+(define returned-details (transformer-error-details owned))
+(string-set! returned-message 0 #\X)
+(string-set! (details-ref returned-details 'z-key) 0 #\X)
+(set-car! returned-details (list 'forged 1))
+(check "message egress copy"
+       (string=? (transformer-error-message owned) "owned message"))
+(check "details egress deep copy"
+       (equal? (transformer-error-details owned)
+               '((a-key (cpu 7 #t)) (z-key "mutable detail"))))
+
+(check "category accessor" (eq? (transformer-error-category owned) 'invalid-state))
+(check "operation accessor" (eq? (transformer-error-operation owned) 'ownership-test))
+(check "message accessor" (string=? (transformer-error-message owned) "owned message"))
+(check "details accessor" (list? (transformer-error-details owned)))
+(check "cause accessor absent" (eq? (transformer-error-cause owned) #f))
+
+(define root-cause
+  (transformer-error-make 'io 'read-source "read failed"
+                          (list (list 'path "input.bin")) #f))
+(define middle-cause
+  (transformer-error-make 'corrupt-data 'decode-source "decode failed"
+                          '() root-cause))
+(define outer-cause
+  (transformer-error-make 'invalid-state 'load-source "load failed"
+                          '() middle-cause))
+(define returned-middle (transformer-error-cause outer-cause))
+(define returned-root (transformer-error-cause returned-middle))
+(check "nested cause level one"
+       (eq? (transformer-error-category returned-middle) 'corrupt-data))
+(check "nested cause level two"
+       (eq? (transformer-error-category returned-root) 'io))
+(define returned-root-details (transformer-error-details returned-root))
+(string-set! (details-ref returned-root-details 'path) 0 #\X)
+(check "nested cause deep ownership"
+       (string=?
+         (details-ref
+           (transformer-error-details
+             (transformer-error-cause
+               (transformer-error-cause outer-cause)))
+           'path)
+         "input.bin"))
+(define bounded-cause-chain (cause-chain 16 #f))
+(check "cause depth boundary accepted"
+       (transformer-error? bounded-cause-chain))
+(check "cause depth overflow rejected"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'internal 'cause-depth "too deep" '()
+                                   bounded-cause-chain))
+         'transformer-error-make))
+
+(define caught-raised
+  (guard (raised (#t raised))
+    (transformer-error-raise 'unsupported 'raise-test "not available"
+                             (list (list 'capability 'kernel)) root-cause)))
+(check "raise/catch predicate" (transformer-error? caught-raised))
+(check "raise/catch category"
+       (eq? (transformer-error-category caught-raised) 'unsupported))
+(check "raise/catch cause"
+       (eq? (transformer-error-category
+              (transformer-error-cause caught-raised))
+            'io))
+
+(define deterministic-a
+  (transformer-error-make 'internal 'determinism "stable"
+                          '((z 3) (a (one two)) (m "middle")) #f))
+(define deterministic-b
+  (transformer-error-make 'internal 'determinism "stable"
+                          '((m "middle") (z 3) (a (one two))) #f))
+(check "canonical details determinism"
+       (equal? (transformer-error-details deterministic-a)
+               (transformer-error-details deterministic-b)))
+(check "canonical details expected order"
+       (equal? (transformer-error-details deterministic-a)
+               '((a (one two)) (m "middle") (z 3))))
+
+(check "opaque native condition" (error-object? owned))
+(check "not a mutable vector" (not (vector? owned)))
+(check "not a mutable pair" (not (pair? owned)))
+(check "not a procedure" (not (procedure? owned)))
+(check "native shell exposes no irritants"
+       (null? (error-object-irritants owned)))
+(check "native shell exposes only constant text"
+       (string=? (error-object-message owned)
+                 "transformer.error_internal:v1"))
+(define forged-same-message
+  (guard (raised (#t raised))
+    (error "transformer.error_internal:v1")))
+(check "same-message native condition cannot forge identity"
+       (not (transformer-error? forged-same-message)))
+(check "same-message forged accessor rejected"
+       (structured-invalid?
+         (lambda () (transformer-error-category forged-same-message))
+         'transformer-error-category))
+(define generic-message-snapshot (error-object-message owned))
+(string-set! generic-message-snapshot 0 #\X)
+(check "generic condition snapshot cannot mutate transformer error"
+       (and (string=? (transformer-error-message owned) "owned message")
+            (string=? (error-object-message owned)
+                      "transformer.error_internal:v1")))
+(check "forged vector rejected"
+       (not (transformer-error? (vector 'transformer-error 'internal))))
+(define predicate-touched #f)
+(define predicate-procedure (lambda () (set! predicate-touched #t)))
+(check "foreign procedure predicate false"
+       (not (transformer-error? predicate-procedure)))
+(check "predicate does not invoke procedure" (not predicate-touched))
+(check "foreign values predicate false"
+       (and (not (transformer-error? 1))
+            (not (transformer-error? 'error))
+            (not (transformer-error? "error"))
+            (not (transformer-error? '(error)))
+            (not (transformer-error? '#(error)))))
+(define foreign-condition
+  (guard (raised (#t raised)) (error "foreign condition")))
+(check "foreign native condition predicate false"
+       (not (transformer-error? foreign-condition)))
+(check "foreign native condition accessor rejected"
+       (structured-invalid?
+         (lambda () (transformer-error-message foreign-condition))
+         'transformer-error-message))
+
+(define repeated-message-a (transformer-error-message owned))
+(define repeated-message-b (transformer-error-message owned))
+(define repeated-details-a (transformer-error-details owned))
+(define repeated-details-b (transformer-error-details owned))
+(check "repeated message snapshots have distinct ownership"
+       (and (string=? repeated-message-a repeated-message-b)
+            (not (eq? repeated-message-a repeated-message-b))))
+(check "repeated details snapshots have distinct ownership"
+       (and (equal? repeated-details-a repeated-details-b)
+            (not (eq? repeated-details-a repeated-details-b))))
+(define repeated-cause-a (transformer-error-cause outer-cause))
+(define repeated-cause-b (transformer-error-cause outer-cause))
+(check "cause snapshots are registered distinct identities"
+       (and (transformer-error? repeated-cause-a)
+            (transformer-error? repeated-cause-b)
+            (not (eq? repeated-cause-a repeated-cause-b))
+            (not (eq? middle-cause repeated-cause-a))))
+(define same-fields-a
+  (transformer-error-make 'io 'identity "same" '() #f))
+(define same-fields-b
+  (transformer-error-make 'io 'identity "same" '() #f))
+(check "same-field constructed errors retain distinct identities"
+       (and (not (eq? same-fields-a same-fields-b))
+            (transformer-error? same-fields-a)
+            (transformer-error? same-fields-b)))
+(define stress-values (stress-errors 256 '()))
+(check "append-only registry growth preserves every identity"
+       (registered-stress-errors? stress-values))
+
+(check "internal bridge rejects unknown opcode"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'unknown '()))
+         'e1-internal-dispatch))
+(check "internal bridge rejects malformed argument list"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'make '(io op)))
+         'e1-internal-dispatch))
+(check "internal bridge rejects excess argument list"
+       (structured-invalid?
+         (lambda ()
+           (e1-internal-dispatch
+             'make (list 'io 'op "message" '() #f 'extra)))
+         'e1-internal-dispatch))
+(check "internal bridge rejects improper argument list"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'make (cons 'io 'tail)))
+         'e1-internal-dispatch))
+(define cyclic-bridge-arguments (list 'io 'op "message" '() #f))
+(set-cdr! (cdr (cdr (cdr (cdr cyclic-bridge-arguments))))
+          cyclic-bridge-arguments)
+(check "internal bridge rejects cyclic argument list"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'make cyclic-bridge-arguments))
+         'e1-internal-dispatch))
+(check "internal bridge rejects procedure opcode"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch (lambda () #t) '()))
+         'e1-internal-dispatch))
+(check "internal bridge rejects malformed accessor arguments"
+       (structured-invalid?
+         (lambda () (e1-internal-dispatch 'category '()))
+         'e1-internal-dispatch))
+(check "internal bridge rejects malformed foreign wrapper arguments"
+       (structured-invalid?
+         (lambda ()
+           (e1-internal-dispatch
+             'wrap-foreign (list 'internal 'op "message" '())))
+         'e1-internal-dispatch))
+
+(check "malformed category string"
+       (structured-invalid?
+         (lambda () (transformer-error-make "io" 'op "message" '() #f))
+         'transformer-error-make))
+(check "malformed category unknown"
+       (structured-invalid?
+         (lambda () (transformer-error-make 'unknown 'op "message" '() #f))
+         'transformer-error-make))
+(check "malformed operation"
+       (structured-invalid?
+         (lambda () (transformer-error-make 'io "op" "message" '() #f))
+         'transformer-error-make))
+(check "malformed message type"
+       (structured-invalid?
+         (lambda () (transformer-error-make 'io 'op 7 '() #f))
+         'transformer-error-make))
+(check "malformed empty message"
+       (structured-invalid?
+         (lambda () (transformer-error-make 'io 'op "" '() #f))
+         'transformer-error-make))
+(check "malformed long message"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op (make-string 4097 #\x) '() #f))
+         'transformer-error-make))
+(check "malformed details scalar"
+       (structured-invalid?
+         (lambda () (transformer-error-make 'io 'op "message" 1 #f))
+         'transformer-error-make))
+(check "malformed details improper outer list"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message" (cons '(a 1) 2) #f))
+         'transformer-error-make))
+(check "malformed details entry"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message" '((a 1 extra)) #f))
+         'transformer-error-make))
+(check "malformed details key"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message" '(("a" 1)) #f))
+         'transformer-error-make))
+(check "duplicate details key"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message" '((a 1) (a 2)) #f))
+         'transformer-error-make))
+(define fresh-duplicate-key (gensym))
+(define reconstructed-duplicate-key
+  (string->symbol (symbol->string fresh-duplicate-key)))
+(check "duplicate details key uses canonical symbol spelling"
+       (and (not (eq? fresh-duplicate-key reconstructed-duplicate-key))
+            (structured-invalid?
+              (lambda ()
+                (transformer-error-make
+                  'io 'op "message"
+                  (list (list fresh-duplicate-key 1)
+                        (list reconstructed-duplicate-key 2))
+                  #f))
+              'transformer-error-make)))
+(check "executable details value"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (list (list 'callback (lambda () #t))) #f))
+         'transformer-error-make))
+(check "mutable vector details value"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (list (list 'vector (vector 1 2))) #f))
+         'transformer-error-make))
+(check "inexact details value"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message" '((value 1.5)) #f))
+         'transformer-error-make))
+(define tagged-zero-imaginary-complex (make-rectangular 1 0))
+(check "tagged zero-imaginary complex detail rejected"
+       (and (complex? tagged-zero-imaginary-complex)
+            (not (integer? tagged-zero-imaginary-complex))
+            (not (exact? tagged-zero-imaginary-complex))
+            (not (real? tagged-zero-imaginary-complex))
+            (structured-invalid?
+              (lambda ()
+                (transformer-error-make
+                  'io 'op "message"
+                  (list (list 'value tagged-zero-imaginary-complex)) #f))
+              'transformer-error-make)))
+
+(define cyclic-details (list (list 'cycle '())))
+(set-car! (cdr (car cyclic-details)) cyclic-details)
+(check "cyclic details rejected"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message" cyclic-details #f))
+         'transformer-error-make))
+(define shared-value (list 'shared))
+(check "shared details pair rejected"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (list (list 'a shared-value)
+                                         (list 'b shared-value)) #f))
+         'transformer-error-make))
+(define (nested-list depth value)
+  (if (= depth 0) value (list (nested-list (- depth 1) value))))
+(check "details depth bound"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (list (list 'deep (nested-list 17 'x))) #f))
+         'transformer-error-make))
+(check "details node bound"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (list (list 'many (repeat-list 513 'x))) #f))
+         'transformer-error-make))
+(check "details entry bound"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (numbered-entries 65) #f))
+         'transformer-error-make))
+(check "details byte bound"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make 'io 'op "message"
+                                   (list (list 'large
+                                               (make-string 16385 #\x))) #f))
+         'transformer-error-make))
+(check "malformed cause"
+       (structured-invalid?
+         (lambda () (transformer-error-make 'io 'op "message" '() 'cause))
+         'transformer-error-make))
+(check "raise validation names raise helper"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-raise 'unknown 'op "message" '() #f))
+         'transformer-error-raise))
+
+(check "invalid category accessor"
+       (structured-invalid? (lambda () (transformer-error-category 1))
+                            'transformer-error-category))
+(check "invalid operation accessor"
+       (structured-invalid? (lambda () (transformer-error-operation 'x))
+                            'transformer-error-operation))
+(check "invalid message accessor"
+       (structured-invalid? (lambda () (transformer-error-message "x"))
+                            'transformer-error-message))
+(check "invalid details accessor"
+       (structured-invalid? (lambda () (transformer-error-details '()))
+                            'transformer-error-details))
+(check "invalid cause accessor"
+       (structured-invalid? (lambda () (transformer-error-cause '#(x)))
+                            'transformer-error-cause))
+
+(define wrapped-int
+  (transformer-error-wrap-foreign
+    'io 'open-file "native open failed" '((path "x"))
+    'posix 13 "permission denied" root-cause))
+(check "foreign integer status category"
+       (eq? (transformer-error-category wrapped-int) 'io))
+(check "foreign integer status fields"
+       (let ((details (transformer-error-details wrapped-int)))
+         (and (eq? (details-ref details 'source-domain) 'posix)
+              (= (details-ref details 'source-code) 13)
+              (string=? (details-ref details 'source-message)
+                        "permission denied")
+              (string=? (details-ref details 'path) "x"))))
+(check "foreign status retains cause"
+       (eq? (transformer-error-category (transformer-error-cause wrapped-int))
+            'io))
+(define wrapped-symbol
+  (transformer-error-wrap-foreign
+    'internal 'primitive-call "primitive failed" '()
+    'eshkol 'bounds-condition "bounds" #f))
+(check "foreign symbolic status"
+       (eq? (details-ref (transformer-error-details wrapped-symbol) 'source-code)
+            'bounds-condition))
+(define wrapped-zero
+  (transformer-error-wrap-foreign
+    'internal 'primitive-call "zero status retained" '()
+    'native 0 "" #f))
+(check "foreign zero code and empty source message retained"
+       (let ((details (transformer-error-details wrapped-zero)))
+         (and (= (details-ref details 'source-code) 0)
+              (string=? (details-ref details 'source-message) ""))))
+(check "foreign tagged zero-imaginary complex code rejected"
+       (and (complex? tagged-zero-imaginary-complex)
+            (not (integer? tagged-zero-imaginary-complex))
+            (not (exact? tagged-zero-imaginary-complex))
+            (not (real? tagged-zero-imaginary-complex))
+            (structured-invalid?
+              (lambda ()
+                (transformer-error-wrap-foreign
+                  'internal 'primitive-call "tagged complex status" '()
+                  'native tagged-zero-imaginary-complex "source" #f))
+              'transformer-error-wrap-foreign)))
+(check "foreign source-domain validation"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'op "message" '() "native" 1 "source" #f))
+         'transformer-error-wrap-foreign))
+(check "foreign category validation names wrapper"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'unknown 'op "message" '() 'native 1 "source" #f))
+         'transformer-error-wrap-foreign))
+(check "foreign source-code validation"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'op "message" '() 'native 1.0 "source" #f))
+         'transformer-error-wrap-foreign))
+(check "foreign source-message validation"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'op "message" '() 'native 1 2 #f))
+         'transformer-error-wrap-foreign))
+(check "foreign reserved-key collision"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'op "message" '((source-code 9))
+             'native 1 "source" #f))
+         'transformer-error-wrap-foreign))
+(define fresh-reserved-source-code-key (string->symbol "source-code"))
+(check "foreign reserved-key collision uses canonical symbol spelling"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'op "message"
+             (list (list fresh-reserved-source-code-key 9))
+             'native 1 "source" #f))
+         'transformer-error-wrap-foreign))
+
+(display "e1-pass=")
+(display passed)
+(display " e1-fail=")
+(display failed)
+(newline)
+(if (> failed 0) (exit 1) #t)

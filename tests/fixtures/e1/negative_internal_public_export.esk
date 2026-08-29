@@ -1,0 +1,4 @@
+(require transformer.public)
+
+;;; Internal constructors must never become part of transformer.public.
+(define leaked-constructor transformer-error-make)

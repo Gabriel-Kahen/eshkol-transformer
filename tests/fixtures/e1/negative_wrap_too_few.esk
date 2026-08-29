@@ -1,0 +1,4 @@
+(require transformer.error_internal)
+
+(transformer-error-wrap-foreign
+  'internal 'op "message" '() 'native 1 "source")

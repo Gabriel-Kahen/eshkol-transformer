@@ -1,0 +1,400 @@
+;;; Shared E1 structured-error implementation.
+;;;
+;;; Pinned Eshkol file modules do not provide private top-level bindings.  Keep
+;;; representation state and raw helpers lexically captured.  The bridge remains
+;;; technically name-reachable because `provide` is informational on the pin.  It
+;;; is declared here only so the internal facade compiles from a fresh cache.
+
+(provide transformer-error? transformer-error-category
+         transformer-error-operation transformer-error-message
+         transformer-error-details transformer-error-cause
+         e1-internal-dispatch)
+
+(define e1-internal-dispatch
+  (let ((registry '())
+        (max-message-bytes 4096)
+        (max-details-bytes 16384)
+        (max-details-depth 16)
+        (max-details-entries 64)
+        (max-details-nodes 512)
+        (max-cause-depth 16))
+
+    (define (second values) (car (cdr values)))
+    (define (third values) (car (cdr (cdr values))))
+    (define (fourth values) (car (cdr (cdr (cdr values)))))
+    (define (fifth values) (car (cdr (cdr (cdr (cdr values))))))
+    (define (sixth values) (car (cdr (cdr (cdr (cdr (cdr values)))))))
+    (define (seventh values)
+      (car (cdr (cdr (cdr (cdr (cdr (cdr values))))))))
+    (define (eighth values)
+      (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr values)))))))))
+
+    (define (memq-local value values)
+      (cond ((null? values) #f)
+            ((eq? value (car values)) values)
+            (else (memq-local value (cdr values)))))
+
+    (define (append-list left right)
+      (if (null? left)
+          right
+          (cons (car left) (append-list (cdr left) right))))
+
+    (define (exact-list-length? values expected)
+      (let loop ((rest values) (count 0))
+        (cond ((null? rest) (= count expected))
+              ((not (pair? rest)) #f)
+              ((>= count expected) #f)
+              (else (loop (cdr rest) (+ count 1))))))
+
+    (define (category? value)
+      (and (symbol? value)
+           (or (eq? value 'invalid-argument)
+               (eq? value 'shape-mismatch)
+               (eq? value 'dtype-mismatch)
+               (eq? value 'device-mismatch)
+               (eq? value 'noncontiguous)
+               (eq? value 'unsupported)
+               (eq? value 'invalid-state)
+               (eq? value 'io)
+               (eq? value 'corrupt-data)
+               (eq? value 'version-mismatch)
+               (eq? value 'determinism-unavailable)
+               (eq? value 'internal))))
+
+    (define (valid-operation? value)
+      (and (symbol? value)
+           (> (string-byte-length (symbol->string value)) 0)))
+
+    ;;; The native shell deliberately has no caller-visible field data or marker.
+    ;;; Its exact identity is the brand; metadata exists only in the lexical
+    ;;; registry.  A byte-identical foreign condition therefore cannot be forged.
+    (define (make-shell)
+      (guard (raised (#t raised))
+        (error "transformer.error_internal:v1")))
+
+    (define (find-entry value)
+      (let loop ((rest registry))
+        (cond ((null? rest) #f)
+              ((eq? value (car (car rest))) (car rest))
+              (else (loop (cdr rest))))))
+
+    (define (register-error category operation message details cause)
+      (let* ((shell (make-shell))
+             (entry (list shell category operation message details cause)))
+        ;;; Validation and all copying precede this single representation commit.
+        (set! registry (cons entry registry))
+        shell))
+
+    ;;; Bootstrap failures bypass ordinary input validation but still use the same
+    ;;; registered E1 representation.  Constant fields prevent recursive failure.
+    (define (bootstrap-raise operation message)
+      (raise (register-error 'invalid-argument operation message '() #f)))
+
+    (define (check-string value allow-empty? limit operation field-name)
+      (if (not (string? value))
+          (bootstrap-raise operation
+                           (string-append field-name " must be a string"))
+          (let ((bytes (string-byte-length value)))
+            (if (and (or allow-empty? (> bytes 0)) (<= bytes limit))
+                (string-copy value)
+                (bootstrap-raise
+                  operation
+                  (string-append field-name
+                                 " violates the UTF-8 byte bound"))))))
+
+    (define (symbol-before? left right)
+      (string<? (symbol->string left) (symbol->string right)))
+
+    (define (same-symbol-spelling? left right)
+      (string=? (symbol->string left) (symbol->string right)))
+
+    (define (insert-entry entry sorted operation)
+      (cond ((null? sorted) (list entry))
+            ((same-symbol-spelling? (car entry) (car (car sorted)))
+             (bootstrap-raise operation "details contains a duplicate key"))
+            ((symbol-before? (car entry) (car (car sorted)))
+             (cons entry sorted))
+            (else
+             (cons (car sorted)
+                   (insert-entry entry (cdr sorted) operation)))))
+
+    (define (sort-entries entries operation)
+      (let loop ((rest entries) (sorted '()))
+        (if (null? rest)
+            sorted
+            (loop (cdr rest)
+                  (insert-entry (car rest) sorted operation)))))
+
+    (define (normalize-details details operation)
+      (let ((seen '()) (nodes 0) (bytes 0))
+        (define (consume-node!)
+          (set! nodes (+ nodes 1))
+          (if (> nodes max-details-nodes)
+              (bootstrap-raise operation "details exceeds the node bound")
+              #t))
+        (define (consume-bytes! value)
+          (set! bytes (+ bytes value))
+          (if (> bytes max-details-bytes)
+              (bootstrap-raise operation "details exceeds the UTF-8 byte bound")
+              #t))
+        (define (claim-pair! value)
+          (if (memq-local value seen)
+              (bootstrap-raise operation
+                               "details contains a cycle or shared pair")
+              (begin (set! seen (cons value seen)) (consume-node!))))
+        (define (copy-list value depth)
+          (if (> depth max-details-depth)
+              (bootstrap-raise operation
+                               "details exceeds the nesting-depth bound")
+              (cond ((null? value) '())
+                    ((pair? value)
+                     (begin
+                       (claim-pair! value)
+                       (cons (copy-value (car value) (+ depth 1))
+                             (copy-list (cdr value) depth))))
+                    (else
+                     (bootstrap-raise operation
+                                      "details contains an improper list")))))
+        (define (copy-value value depth)
+          (if (> depth max-details-depth)
+              (bootstrap-raise operation
+                               "details exceeds the nesting-depth bound")
+              (begin
+                (consume-node!)
+                (cond ((or (boolean? value) (char? value)) value)
+                      ((and (integer? value) (exact? value) (real? value))
+                       value)
+                      ((symbol? value)
+                       (begin
+                         (consume-bytes!
+                           (string-byte-length (symbol->string value)))
+                         value))
+                      ((string? value)
+                       (begin
+                         (consume-bytes! (string-byte-length value))
+                         (string-copy value)))
+                      ((null? value) '())
+                      ((pair? value) (copy-list value depth))
+                      (else
+                       (bootstrap-raise
+                         operation "details contains a non-data-only value"))))))
+        (define (copy-entry entry)
+          (if (and (pair? entry) (pair? (cdr entry))
+                   (null? (cdr (cdr entry))))
+              (begin
+                (claim-pair! entry)
+                (claim-pair! (cdr entry))
+                (let ((key (car entry)))
+                  (if (not (symbol? key))
+                      (bootstrap-raise operation
+                                       "details key must be a symbol")
+                      (begin
+                        (consume-bytes!
+                          (string-byte-length (symbol->string key)))
+                        (list (string->symbol (symbol->string key))
+                              (copy-value (car (cdr entry)) 1))))))
+              (bootstrap-raise
+                operation
+                "each details entry must be a proper two-element list")))
+        (let loop ((rest details) (count 0) (copied '()))
+          (cond ((null? rest) (sort-entries copied operation))
+                ((not (pair? rest))
+                 (bootstrap-raise operation "details must be a proper alist"))
+                ((>= count max-details-entries)
+                 (bootstrap-raise operation
+                                  "details exceeds the entry bound"))
+                (else
+                 (claim-pair! rest)
+                 (loop (cdr rest) (+ count 1)
+                       (cons (copy-entry (car rest)) copied)))))))
+
+    (define (require-entry value operation)
+      (let ((entry (find-entry value)))
+        (if entry
+            entry
+            (bootstrap-raise operation "expected a transformer error"))))
+
+    (define (clone-error value operation depth)
+      (if (>= depth max-cause-depth)
+          (bootstrap-raise operation "cause exceeds the nesting-depth bound")
+          (let* ((entry (require-entry value operation))
+                 (cause (sixth entry))
+                 (details-copy (normalize-details (fifth entry) operation))
+                 (cause-copy
+                   (if (eq? cause #f)
+                       #f
+                       (clone-error cause operation (+ depth 1)))))
+            (register-error (second entry) (third entry)
+                            (string-copy (fourth entry))
+                            details-copy cause-copy))))
+
+    (define (build-error validation-operation
+                         category operation message details cause)
+      (if (not (category? category))
+          (bootstrap-raise validation-operation
+                           "category is not an A0 error category")
+          (if (not (valid-operation? operation))
+              (bootstrap-raise validation-operation
+                               "operation must be a nonempty symbol")
+              (let* ((message-copy
+                       (check-string message #f max-message-bytes
+                                     validation-operation "message"))
+                     (details-copy
+                       (normalize-details details validation-operation))
+                     (cause-copy
+                       (if (eq? cause #f)
+                           #f
+                           (clone-error cause validation-operation 1))))
+                (register-error category operation message-copy
+                                details-copy cause-copy)))))
+
+    (define (core-make category operation message details cause)
+      (build-error 'transformer-error-make
+                   category operation message details cause))
+
+    (define (core-raise category operation message details cause)
+      (raise (build-error 'transformer-error-raise
+                          category operation message details cause)))
+
+    (define (details-key? details key)
+      (cond ((null? details) #f)
+            ((same-symbol-spelling? (car (car details)) key) #t)
+            (else (details-key? (cdr details) key))))
+
+    (define (core-wrap-foreign category operation message details
+                               source-domain source-code source-message cause)
+      (if (not (symbol? source-domain))
+          (bootstrap-raise 'transformer-error-wrap-foreign
+                           "source-domain must be a symbol")
+          (if (not (or (symbol? source-code)
+                       (and (integer? source-code) (exact? source-code)
+                            (real? source-code))))
+              (bootstrap-raise 'transformer-error-wrap-foreign
+                               "source-code must be an exact integer or symbol")
+              (let* ((normalized
+                       (normalize-details
+                         details 'transformer-error-wrap-foreign))
+                     (source-message-copy
+                       (check-string source-message #t max-message-bytes
+                                     'transformer-error-wrap-foreign
+                                     "source-message")))
+                (if (or (details-key? normalized 'source-domain)
+                        (details-key? normalized 'source-code)
+                        (details-key? normalized 'source-message))
+                    (bootstrap-raise
+                      'transformer-error-wrap-foreign
+                      "details collides with reserved foreign-status keys")
+                    (build-error
+                      'transformer-error-wrap-foreign
+                      category operation message
+                      (append-list
+                        normalized
+                        (list (list 'source-domain source-domain)
+                              (list 'source-code source-code)
+                              (list 'source-message source-message-copy)))
+                      cause))))))
+
+    (define (error-predicate value)
+      (if (find-entry value) #t #f))
+
+    (define (error-category value)
+      (second (require-entry value 'transformer-error-category)))
+
+    (define (error-operation value)
+      (third (require-entry value 'transformer-error-operation)))
+
+    (define (error-message value)
+      (string-copy
+        (fourth (require-entry value 'transformer-error-message))))
+
+    (define (error-details value)
+      (normalize-details
+        (fifth (require-entry value 'transformer-error-details))
+        'transformer-error-details))
+
+    (define (error-cause value)
+      (let* ((entry (require-entry value 'transformer-error-cause))
+             (cause (sixth entry)))
+        (if (eq? cause #f)
+            #f
+            (clone-error cause 'transformer-error-cause 1))))
+
+    ;;; The bridge is an implementation workaround for informational `provide` in
+    ;;; v1.3.4-evolve.  It accepts only fixed opcodes and exact proper argument
+    ;;; lists, then delegates to the same validating accessor/construction paths.
+    (define (internal-dispatch opcode arguments)
+      (cond ((eq? opcode 'predicate)
+             (if (exact-list-length? arguments 1)
+                 (error-predicate (car arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "predicate bridge expects one argument")))
+            ((eq? opcode 'category)
+             (if (exact-list-length? arguments 1)
+                 (error-category (car arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "category bridge expects one argument")))
+            ((eq? opcode 'operation)
+             (if (exact-list-length? arguments 1)
+                 (error-operation (car arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "operation bridge expects one argument")))
+            ((eq? opcode 'message)
+             (if (exact-list-length? arguments 1)
+                 (error-message (car arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "message bridge expects one argument")))
+            ((eq? opcode 'details)
+             (if (exact-list-length? arguments 1)
+                 (error-details (car arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "details bridge expects one argument")))
+            ((eq? opcode 'cause)
+             (if (exact-list-length? arguments 1)
+                 (error-cause (car arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "cause bridge expects one argument")))
+            ((eq? opcode 'make)
+             (if (exact-list-length? arguments 5)
+                 (core-make (car arguments) (second arguments)
+                            (third arguments) (fourth arguments)
+                            (fifth arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "make bridge expects five arguments")))
+            ((eq? opcode 'raise)
+             (if (exact-list-length? arguments 5)
+                 (core-raise (car arguments) (second arguments)
+                             (third arguments) (fourth arguments)
+                             (fifth arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "raise bridge expects five arguments")))
+            ((eq? opcode 'wrap-foreign)
+             (if (exact-list-length? arguments 8)
+                 (core-wrap-foreign
+                   (car arguments) (second arguments) (third arguments)
+                   (fourth arguments) (fifth arguments) (sixth arguments)
+                   (seventh arguments) (eighth arguments))
+                 (bootstrap-raise 'e1-internal-dispatch
+                                  "wrap bridge expects eight arguments")))
+            (else
+             (bootstrap-raise 'e1-internal-dispatch
+                              "unknown internal bridge opcode"))))
+
+    internal-dispatch))
+
+(define (transformer-error? value)
+  (e1-internal-dispatch 'predicate (list value)))
+
+(define (transformer-error-category value)
+  (e1-internal-dispatch 'category (list value)))
+
+(define (transformer-error-operation value)
+  (e1-internal-dispatch 'operation (list value)))
+
+(define (transformer-error-message value)
+  (e1-internal-dispatch 'message (list value)))
+
+(define (transformer-error-details value)
+  (e1-internal-dispatch 'details (list value)))
+
+(define (transformer-error-cause value)
+  (e1-internal-dispatch 'cause (list value)))

@@ -1,0 +1,25 @@
+;;; E1 internal construction/raise boundary.  Downstream implementation modules
+;;; import this module; public facades import transformer.error_public.
+
+(require transformer.error_core)
+
+(provide transformer-error? transformer-error-category
+         transformer-error-operation transformer-error-message
+         transformer-error-details transformer-error-cause
+         transformer-error-make transformer-error-raise
+         transformer-error-wrap-foreign)
+
+(define (transformer-error-make category operation message details cause)
+  (e1-internal-dispatch
+    'make (list category operation message details cause)))
+
+(define (transformer-error-raise category operation message details cause)
+  (e1-internal-dispatch
+    'raise (list category operation message details cause)))
+
+(define (transformer-error-wrap-foreign category operation message details
+                                        source-domain source-code source-message cause)
+  (e1-internal-dispatch
+    'wrap-foreign
+    (list category operation message details
+          source-domain source-code source-message cause)))

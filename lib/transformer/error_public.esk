@@ -1,0 +1,8 @@
+;;; Internal facade used by the A0 public modules.  Construction and raising helpers
+;;; are deliberately absent from this module's dependency graph.
+
+(require transformer.error_core)
+
+(provide transformer-error? transformer-error-category
+         transformer-error-operation transformer-error-message
+         transformer-error-details transformer-error-cause)

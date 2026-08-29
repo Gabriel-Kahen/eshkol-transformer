@@ -1,0 +1,17 @@
+(require transformer.error_internal)
+
+(define bindings
+  (list transformer-error? transformer-error-category
+        transformer-error-operation transformer-error-message
+        transformer-error-details transformer-error-cause
+        transformer-error-make transformer-error-raise
+        transformer-error-wrap-foreign))
+
+(define sample
+  (transformer-error-make
+    'invalid-argument 'compile-error-internal "compile fixture"
+    (list (list 'expected (list 'symbol 'string))) #f))
+
+(if (not (transformer-error? sample))
+    (exit 1)
+    (begin (display "e1-compile:v1") (newline)))
