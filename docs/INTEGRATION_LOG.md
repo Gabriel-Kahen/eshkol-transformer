@@ -149,9 +149,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `7e14cc845902b6a37f9946a163d355085ea704c043863f7e37481b4ab0deec59`.
   The repository-wide `make test` gate also passed with a writable explicit Eshkol
   JIT cache. Independent ABI, negative-test, native-integration, and C-safety reviews
-  were completed and their findings were addressed.
-- **Dependencies / retest:** Supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 CI is
-  still required before acceptance. N2, A2, L2, MP4, AMD4, and DIST5 may consume only
+  were completed and their findings were addressed. Supported Ubuntu 22.04 x86-64 /
+  LLVM-Clang 21.1.8 [CI run 33226881022](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33226881022)
+  passed the integrated F0/A0/B0/K1 gates, including the canonical-report check and
+  full K1 native/Eshkol link gate.
+- **Dependencies / retest:** N2, A2, L2, MP4, AMD4, and DIST5 may consume only
   separately verified provider entries; none may infer support from ABI presence.
   E1 issue #23 owns `transformer.error_internal`; any Eshkol-facing K1 adapter must
   rebase onto reviewed E1 and preserve ABI categories and causes rather than adding a
