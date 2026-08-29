@@ -542,9 +542,14 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   checks), the standalone 23-test Q0 gate, full `make test` (including 41 B0 tests
   and K1 sanitizers), explicit `make build`, `make smoke`, shell syntax, and diff
   hygiene. Independent native-I/O/security, summary-opacity, public-boundary, and
-  documentation reviews found no remaining actionable issue. Exact-head supported
-  CI and D1-R re-review remain pending. The historical run is not acceptance
-  evidence for the new head.
+  documentation reviews found no remaining actionable issue. Supported Ubuntu
+  22.04 / LLVM-Clang 21.1.8
+  [CI run 33273402656](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33273402656)
+  passed build, integrated tests, smoke, and the reproducible benchmark at exact
+  implementation head `aa3b9f2a83eff57af7a4f45e2e079f6a284ebd4b`. Any later
+  documentation-only head requires its own exact-head confirmation before re-review.
+  D1-R re-review remains pending. The historical pre-correction run is not
+  acceptance evidence for the corrected implementation.
 - **Dependencies / retest:** E1 issue #23 is merged through PR #27. D1 imports only
   `transformer.error_public` plus the accepted E1 core; `transformer.error_internal`
   and its three named construction helpers are absent from the data dependency graph.
