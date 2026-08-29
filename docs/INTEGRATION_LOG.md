@@ -122,3 +122,49 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   remains unsupported until new executable evidence is reviewed.
 - **Reference:** issue #4; [PR #12](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/12);
   merge commit `f843f4ce826b56cca14bedfe8fc9f81155ecf1cb`.
+
+## 2026-08-28 — K1 / issue #21
+
+- **Decision:** proposed. The integration task accepted the ABI boundary with
+  required conditions; this repository entry remains proposed until PR review and
+  integration-owner acceptance.
+- **Contract:** Native-kernel ABI 1.0 uses the major-only provider symbol
+  `eshkol_transformer_kernel_provider_v1`, fixed x86-64 v1.0 structure prefixes,
+  compatible-minor discovery, exact-span stride tables for every repeated
+  size-tagged descriptor, explicit process-local resolver registration, deep
+  immutable capability snapshots, strict shape/storage/ownership checks, two-phase
+  failure-atomic dispatch, ABI-local errors, and canonical process-local JSON reports.
+  No filesystem or environment library discovery exists. The provider-free report
+  deterministically contains every required A0 capability as `unverified`, grounded
+  only in R0 evidence merged through PR #15. K1 ships no numerical provider and
+  claims no dtype, CPU backend, accelerator, GPU, operation, gradient, or determinism
+  capability. A0 Eshkol names/arities are unchanged.
+- **Evidence:** `/usr/bin/bash -c 'make test-k1'` passed on the explicitly unsupported
+  CachyOS x86-64 / LLVM-Clang 22.1.6 compatibility lane against clean canonical
+  `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` and compiler
+  `1.3.4-evolve`. The gate passed 596 C ABI, compatible-minor, discovery,
+  exact-request, ownership, malformed-call, failure-atomicity, canonical JSON, and
+  unsupported-path checks; C/C++ warning-clean compilation; ASan/UBSan; byte-identical
+  `C`/`C.UTF-8` reports; strict JSON parse/canonical round trip; and two Eshkol AOT
+  link/runs of the fixed-width ABI version probe. The baseline report SHA-256 is
+  `7e14cc845902b6a37f9946a163d355085ea704c043863f7e37481b4ab0deec59`.
+  The focused gate consumes the archive produced by `make build`, verifies its
+  one-member shape, checks the same-rank canonical-order golden, and uses the same
+  builder for its sanitized archive. The repository-wide `make test` and `make smoke`
+  gates also passed with a writable explicit Eshkol JIT cache. Independent review
+  recorded request-changes at
+  head `7fe93770`; these fixes remain subject to re-review. Supported Ubuntu 22.04
+  x86-64 / LLVM-Clang 21.1.8
+  [CI run 33228813719](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33228813719)
+  passed the revised ABI, canonical build artifact, adversarial/golden checks,
+  sanitizers, and integrated F0/A0/B0/K1 gates at head `099d225`. Re-review remains
+  required before integration.
+- **Dependencies / retest:** N2, A2, L2, MP4, AMD4, and DIST5 may consume only
+  separately verified provider entries; none may infer support from ABI presence.
+  E1 issue #23 owns `transformer.error_internal`; any Eshkol-facing K1 adapter must
+  rebase onto reviewed E1 and preserve ABI categories and causes rather than adding a
+  duplicate error representation. LeakSanitizer remains optional where the executor
+  supports it.
+- **Reference:** [issue #21](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/21);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [PR #25](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/25).

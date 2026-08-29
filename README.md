@@ -32,8 +32,10 @@ From a clean checkout on the supported lane, run:
 
 `toolchain` clones and builds only the pinned Eshkol revision. `configure` rejects a
 missing, wrong-revision, wrong-version, or unsupported toolchain instead of falling
-back to Python or another runtime. `build` performs an explicit AOT compile and
-requires the compiler depfile to contain the Eshkol library source. `test` performs
+back to Python or another runtime. `build` performs an explicit AOT compile,
+requires the compiler depfile to contain the Eshkol library source, and leaves the
+explicit-link K1 archive at `build/k1/libeshkol_transformer_k1.a`; its public header
+remains at `include/eshkol_transformer/kernel_abi.h`. `test` performs
 two fresh AOT compilations and executions, compares output bytes including the final
 newline, and verifies an actionable missing-toolchain failure. `smoke` runs the built
 native artifact and expects `eshkol-transformer-smoke:v1`.
@@ -57,5 +59,6 @@ See:
 - [Development roadmap](docs/ROADMAP.md)
 - [Quality gates](docs/QUALITY_GATES.md)
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
+- [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)
