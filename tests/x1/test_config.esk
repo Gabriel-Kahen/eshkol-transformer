@@ -1,0 +1,350 @@
+(require transformer.config)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (begin (set! passed (+ passed 1)) (display "PASS: ") (display name) (newline))
+      (begin (set! failed (+ failed 1)) (display "FAIL: ") (display name) (newline))))
+
+(define (error-details-contract? details)
+  (or (null? details)
+      (and (pair? details)
+           (null? (cdr details))
+           (pair? (car details))
+           (eq? (car (car details)) 'context)
+           (pair? (cdr (car details)))
+           (null? (cdr (cdr (car details)))))))
+
+(define (error-contract? value category operation)
+  (and (transformer-error? value)
+       (eq? (transformer-error-category value) category)
+       (eq? (transformer-error-operation value) operation)
+       (string? (transformer-error-message value))
+       (error-details-contract? (transformer-error-details value))
+       (not (transformer-error-cause value))))
+
+(define (expect-error name category operation thunk)
+  (check name
+         (guard (caught
+                 (#t (error-contract? caught category operation)))
+           (thunk)
+           #f)))
+
+(define (expect-error-details name category operation expected thunk)
+  (check name
+         (guard (caught
+                 (#t (and (error-contract? caught category operation)
+                          (equal? (transformer-error-details caught)
+                                  expected))))
+           (thunk)
+           #f)))
+
+(define minimal
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.hidden-size\":64,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+
+(define permuted
+  " \n{ \"run.seed\" : 1729, \"model.vocabulary-size\":256,\"model.query-head-count\":4,\"model.layer-count\":2,\"model.hidden-size\":64,\"model.context-length\":128,\"config-schema-minor\":0,\"config-schema-major\":1 }\t")
+
+(define parsed (config-parse minimal))
+(define resolved (config-resolve parsed '()))
+(define canonical (config-canonical resolved))
+(define fingerprint (config-fingerprint resolved))
+
+(check "unresolved configuration uses an opaque native identity"
+       (and (error-object? parsed) (not (pair? parsed))
+            (not (vector? parsed)) (not (procedure? parsed))))
+(check "resolved configuration uses an opaque native identity"
+       (and (error-object? resolved) (not (pair? resolved))
+            (not (vector? resolved)) (not (procedure? resolved))))
+(check "valid minimal parse/resolve/validate" (config-validate resolved))
+(check "derived head size" (= (config-ref resolved 'model.head-size) 16))
+(check "KV heads default from final query heads"
+       (= (config-ref resolved 'model.kv-head-count) 4))
+(check "f32 is a declaration, not an implicit conversion"
+       (eq? (config-ref resolved 'model.dtype) 'f32))
+(check "cpu is a declaration, not an implicit transfer"
+       (eq? (config-ref resolved 'model.device) 'cpu))
+(check "deterministic default is true"
+       (config-ref resolved 'run.deterministic))
+(check "accumulation default is one"
+       (= (config-ref resolved 'training.accumulation-steps) 1))
+(check "schema major ref" (= (config-ref resolved 'config-schema-major) 1))
+(check "schema minor ref" (= (config-ref resolved 'config-schema-minor) 0))
+(check "all 14 source keys parse and validate"
+       (config-validate
+        (config-resolve
+         (config-parse
+          "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.device\":\"cpu\",\"model.dtype\":\"f32\",\"model.head-size\":16,\"model.hidden-size\":64,\"model.kv-head-count\":2,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.deterministic\":true,\"run.seed\":1729,\"training.accumulation-steps\":2}")
+         '())))
+(check "input exactly at byte limit is accepted"
+       (config-validate
+        (config-resolve
+         (config-parse
+          (string-append
+           minimal
+           (make-string (- 16384 (string-byte-length minimal)) #\space)))
+         '())))
+(check "signed i64 maximum seed is accepted"
+       (= (config-ref
+           (config-resolve
+            (config-parse
+             "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.hidden-size\":64,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.seed\":9223372036854775807}")
+            '())
+           'run.seed)
+          9223372036854775807))
+
+(check "input order and JSON whitespace do not change canonical bytes"
+       (string=? canonical
+                 (config-canonical (config-resolve (config-parse permuted) '()))))
+(check "repeated canonical calls are byte-identical"
+       (string=? canonical (config-canonical resolved)))
+(check "canonical output has exactly one final LF"
+       (and (> (string-length canonical) 1)
+            (= (char->integer (string-ref canonical (- (string-length canonical) 1))) 10)
+            (not (= (char->integer
+                     (string-ref canonical (- (string-length canonical) 2))) 10))))
+(check "fingerprint has versioned lowercase prefix and digest width"
+       (and (= (string-length fingerprint) 93)
+            (string=? (substring fingerprint 0 29)
+                      "sha256:eshkol-config-json-v1:")))
+
+(define overridden-a
+  (config-resolve parsed
+                  (list ':run.seed 7 ':model.hidden-size 128
+                        ':model.query-head-count 8)))
+(define overridden-b
+  (config-resolve parsed
+                  (list ':model.query-head-count 8 ':run.seed 7
+                        ':model.hidden-size 128)))
+(check "override beats input" (= (config-ref overridden-a 'run.seed) 7))
+(check "derived head size uses final overlaid values"
+       (= (config-ref overridden-a 'model.head-size) 16))
+(check "KV heads default from final overlaid query heads"
+       (= (config-ref overridden-a 'model.kv-head-count) 8))
+(check "unique override order is irrelevant"
+       (string=? (config-canonical overridden-a)
+                 (config-canonical overridden-b)))
+(check "a changed value changes fingerprint"
+       (not (string=? fingerprint (config-fingerprint overridden-a))))
+
+(define explicit-default
+  (config-resolve
+   (config-parse
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.device\":\"cpu\",\"model.hidden-size\":64,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+   '()))
+(check "provenance is part of canonical identity"
+       (not (string=? canonical (config-canonical explicit-default))))
+(check "provenance is part of fingerprint identity"
+       (not (string=? fingerprint (config-fingerprint explicit-default))))
+
+(define symbolic-overrides
+  (config-resolve parsed
+                  (list ':model.dtype 'f32 ':model.device 'cpu
+                        ':run.deterministic #t)))
+(check "enum overrides use native symbols"
+       (and (eq? (config-ref symbolic-overrides 'model.dtype) 'f32)
+            (eq? (config-ref symbolic-overrides 'model.device) 'cpu)))
+(check "boolean override uses a native boolean"
+       (config-ref symbolic-overrides 'run.deterministic))
+(check "equal enum/boolean overrides still change provenance identity"
+       (not (string=? canonical (config-canonical symbolic-overrides))))
+
+(define forged-config
+  (guard (caught (#t caught))
+    (error "transformer.config:v1")))
+(expect-error "same-message native condition cannot forge unresolved config"
+              'invalid-argument 'config-resolve
+              (lambda () (config-resolve forged-config '())))
+(expect-error "same-message native condition cannot forge resolved config"
+              'invalid-argument 'config-validate
+              (lambda () (config-validate forged-config)))
+
+(expect-error "empty input rejected" 'invalid-argument 'config-parse
+              (lambda () (config-parse "")))
+(expect-error "non-object rejected" 'invalid-argument 'config-parse
+              (lambda () (config-parse "[]")))
+(expect-error "unknown key rejected" 'invalid-argument 'config-parse
+              (lambda () (config-parse "{\"unknown\":1}")))
+(expect-error-details "structured error details preserve rejected context"
+                      'invalid-argument 'config-parse
+                      '((context ("unknown")))
+                      (lambda () (config-parse "{\"unknown\":1}")))
+(expect-error "duplicate key rejected before construction"
+              'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1,\"config-schema-major\":1}")))
+(expect-error "unsupported major rejected" 'version-mismatch 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":2,\"config-schema-minor\":0}")))
+(expect-error "boolean version rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":true,\"config-schema-minor\":0}")))
+(expect-error "trailing comma rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0,}")))
+(expect-error "trailing document rejected" 'invalid-argument 'config-parse
+              (lambda () (config-parse (string-append minimal "{}"))))
+(expect-error "unterminated string rejected" 'invalid-argument 'config-parse
+              (lambda () (config-parse "{\"config-schema-major:1}")))
+(expect-error "unterminated object rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0")))
+(expect-error "missing colon rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\" 1,\"config-schema-minor\":0}")))
+(expect-error "missing comma rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1 \"config-schema-minor\":0}")))
+(expect-error "missing value rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":,\"config-schema-minor\":0}")))
+(expect-error "comments rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1,/*x*/\"config-schema-minor\":0}")))
+(expect-error "exponent notation rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1e0,\"config-schema-minor\":0}")))
+(expect-error "nested object rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":{},\"config-schema-minor\":0}")))
+(expect-error "arrays rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":[],\"config-schema-minor\":0}")))
+(expect-error "escapes rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\\u0000\":1,\"config-schema-minor\":0}")))
+(expect-error "floats rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1.0,\"config-schema-minor\":0}")))
+(expect-error "null rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":null,\"config-schema-minor\":0}")))
+(expect-error "leading zero rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":01,\"config-schema-minor\":0}")))
+(expect-error "negative zero rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":-0,\"config-schema-minor\":0}")))
+(expect-error "integer lexical width rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":10000000000000000000,\"config-schema-minor\":0}")))
+(expect-error "signed i64 overflow rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0,\"run.seed\":9223372036854775808}")))
+(expect-error "non-ASCII schema string rejected" 'invalid-argument 'config-parse
+              (lambda ()
+                (config-parse
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.device\":\"café\"}")))
+(expect-error "input byte limit checked first" 'invalid-argument 'config-parse
+              (lambda () (config-parse (make-string 16385 #\space))))
+
+(expect-error "missing required leaf rejected" 'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve
+                 (config-parse
+                  "{\"config-schema-major\":1,\"config-schema-minor\":0}")
+                 '())))
+(expect-error "duplicate override rejected" 'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve parsed (list ':run.seed 1 ':run.seed 1))))
+(expect-error "unknown override rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list ':unknown 1))))
+(expect-error "non-colon override rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list 'run.seed 1))))
+(expect-error "odd override list rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list ':run.seed))))
+(expect-error "improper override list rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (cons ':run.seed 7))))
+(expect-error "schema version override rejected" 'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve parsed (list ':config-schema-major 1))))
+(expect-error "derived head-size override rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list ':model.head-size 16))))
+(expect-error "wrong override type rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list ':run.seed #t))))
+(expect-error "inexact override value rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list ':run.seed 1.0))))
+(expect-error "executable override value rejected as inert data"
+              'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve parsed (list ':run.seed (lambda () 1)))))
+
+(expect-error "zero range rejected" 'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve parsed (list ':model.context-length 0))))
+(expect-error "negative seed rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve parsed (list ':run.seed -1))))
+(expect-error-details "out-of-i64 override has bounded error context"
+                      'invalid-argument 'config-resolve
+                      '((context (integer-out-of-range)))
+                      (lambda ()
+                        (config-resolve
+                         parsed (list ':run.seed 9223372036854775808))))
+(expect-error "incompatible explicit head size rejected"
+              'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve
+                 (config-parse
+                  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.head-size\":15,\"model.hidden-size\":64,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+                 '())))
+(expect-error "non-divisible derived head size rejected"
+              'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve parsed (list ':model.hidden-size 65))))
+(expect-error "query/KV incompatibility rejected"
+              'invalid-argument 'config-resolve
+              (lambda ()
+                (config-resolve parsed (list ':model.kv-head-count 3))))
+(expect-error "f16 rejected without precision fallback"
+              'unsupported 'config-resolve
+              (lambda () (config-resolve parsed (list ':model.dtype 'f16))))
+(expect-error "accelerator rejected without CPU fallback"
+              'unsupported 'config-resolve
+              (lambda () (config-resolve parsed (list ':model.device 'accelerator))))
+(expect-error "nondeterministic policy rejected"
+              'unsupported 'config-resolve
+              (lambda () (config-resolve parsed (list ':run.deterministic #f))))
+(expect-error "executable-looking string remains inert and unsupported"
+              'unsupported 'config-resolve
+              (lambda ()
+                (config-resolve
+                 (config-parse
+                  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.device\":\"$(touch should-not-run)\",\"model.hidden-size\":64,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+                 '())))
+(expect-error "wrong unresolved value rejected" 'invalid-argument 'config-resolve
+              (lambda () (config-resolve 'fabricated '())))
+(expect-error "wrong resolved value rejected" 'invalid-argument 'config-validate
+              (lambda () (config-validate 'fabricated)))
+(expect-error "unknown reference key rejected" 'invalid-argument 'config-ref
+              (lambda () (config-ref resolved 'unknown)))
+(expect-error "unresolved value cannot be canonicalized"
+              'invalid-argument 'config-canonical
+              (lambda () (config-canonical parsed)))
+(expect-error "unresolved value cannot be fingerprinted"
+              'invalid-argument 'config-fingerprint
+              (lambda () (config-fingerprint parsed)))
+
+(display "X1 SUMMARY: ") (display passed) (display " passed, ")
+(display failed) (display " failed") (newline)
+(if (= failed 0) (exit 0) (exit 1))

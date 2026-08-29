@@ -348,3 +348,38 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `60c9afa182115bc3ebc9bad321e366b8b3979ae6`. Independent review approved exact
   head `1e2f2c9b8d895c43c88ecb2b770e6612fb57c767`; merged-main `make test-e1b`
   and `make test build smoke` passed on the documented local compatibility lane.
+
+## 2026-08-28 — X1 / issue #20
+
+- **Decision:** proposed for integration; issue #1 accepted the schema and
+  canonicalization direction with required clarifications, now incorporated and
+  tested. Only the integration owner may change this entry to `accepted` after
+  independent review and merge.
+- **Contract:** X1 uses the strict, flat, non-executable version-1 JSON source schema
+  and the independently versioned `eshkol-resolved-run` `[1,0]` canonical manifest
+  documented in [CONFIG_FORMAT.md](CONFIG_FORMAT.md). Resolution precedence is
+  defaults, source, unique explicit overrides, then absent-field derivation and full
+  validation. Canonical output contains all resolved leaves and per-leaf provenance;
+  provenance is part of identity. `config-fingerprint` is
+  `sha256:eshkol-config-json-v1:<lowerhex>` over the exact canonical bytes including
+  the final LF. The manifest declares SHA-256 coverage but embeds no circular digest.
+  Version 1 permits no code, includes, environment expansion, secrets, runtime
+  evidence, hidden dtype/device/precision/CPU/scalar/Python fallback, or unsupported
+  version inference.
+- **Evidence:** on the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility lane,
+  the pinned Eshkol `90cbd7130f47b8184bcc77b8d5c1b0026da980de` compiler
+  `v1.3.4-evolve` passes 83 native parse/override/validation/opacity/canonical checks,
+  10 Python reference/isolation checks, two negative internal-surface compilation
+  fixtures, repeated strict AOT compilation, hostile-environment/CWD determinism,
+  exact golden bytes, and direct SHA-256 recomputation. Production dependency
+  inspection proves real merged E1 and no test double. Supported Ubuntu 22.04 /
+  LLVM-Clang 21.1.8 CI remains required before integration acceptance.
+- **Dependencies / retest:** T1 must consume the validated configuration contract
+  before `tokenizer-byte`; C2 may embed the exact manifest and fingerprint only after
+  X1 integration. CLI3 may expose source parsing and overrides only after the same
+  review. Rerun T1, C2, and CLI3 gates after any X1 contract change. Any field,
+  default, version, canonical-byte, provenance, or fingerprint change requires issue
+  #1 coordination and affected downstream retests.
+- **Reference:** [issue #20](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/20);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  implementation PR pending.

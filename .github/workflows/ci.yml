@@ -54,7 +54,7 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make build'
 
-      - name: Test (F0 smoke and A0 contract)
+      - name: Test (F0 smoke, A0 contract, and X1 configuration)
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make test'
 

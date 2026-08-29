@@ -23,6 +23,21 @@
 9. Flat resident memory across a long bounded training loop.
 10. Save/reload generation equivalence.
 
+## Required configuration gates
+
+- Strict, bounded, non-executable parsing with duplicate and unknown keys rejected
+  before a configuration value is constructed.
+- Defaults, input values, explicit overrides, and absent-field derivation tested at
+  their documented precedence boundary, including incompatible combinations.
+- Repeated fresh compilation of the configuration test, plus byte-identical canonical
+  manifests and fingerprints across fresh processes, working directories, and
+  hostile-environment runs.
+- Golden canonical bytes, direct external-fingerprint recomputation,
+  resolved/provenance mutation, malformed manifest, and unsupported version/feature
+  tests.
+- Production dependency inspection proving no Python/PyTorch runtime, evaluator,
+  include expansion, environment interpolation, or hidden execution fallback.
+
 ## Performance evidence
 
 Benchmarks record commit, hardware, OS, compiler, backend, dtype, tensor shapes,
@@ -36,4 +51,3 @@ accelerated until execution on that device is directly observed and tested.
 - No public format change without a version/migration decision.
 - No performance rewrite without correctness parity.
 - Cross-workstream API changes require orchestrator review.
-

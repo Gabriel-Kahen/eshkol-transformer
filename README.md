@@ -40,10 +40,11 @@ two fresh AOT compilations and executions, compares output bytes including the f
 newline, and verifies an actionable missing-toolchain failure. `smoke` runs the built
 native artifact and expects `eshkol-transformer-smoke:v1`.
 
-Production Eshkol source belongs under `src/eshkol_transformer/`, tests under
-`tests/`, developer entry points under `scripts/`, and compatibility pins under
-`toolchain/`. F0 defines no transformer API, runtime capability, numerical-oracle,
-or model-training contract. B0's reproducible host-process smoke benchmark is
+Production Eshkol entry points belong under `src/eshkol_transformer/` and reusable
+modules under `lib/transformer/`; tests belong under `tests/`, developer entry points
+under `scripts/`, and compatibility pins under `toolchain/`. F0 defines no transformer
+API, runtime capability, numerical-oracle, or model-training contract. B0's
+reproducible host-process smoke benchmark is
 documented in [docs/BENCHMARK_FORMAT.md](docs/BENCHMARK_FORMAT.md); run it with
 `make benchmark` after `make build`.
 
@@ -67,5 +68,6 @@ See:
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
+- [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

@@ -4,6 +4,6 @@ version = "0.0.1"
 description = "Eshkol-native transformer construction, pretraining, evaluation, and generation"
 author = "Gabriel Kahen and contributors"
 entry = "tests/smoke.esk"
-sources = ["src/eshkol_transformer/*.esk", "tests/*.esk"]
+sources = ["lib/transformer/*.esk", "src/eshkol_transformer/*.esk", "tests/*.esk"]
 
 [dependencies]

@@ -24,12 +24,12 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | E1 | [Shared structured-error construction and accessors](ERROR_CONTRACT.md) | A0, Q0 | 112 construction/accessor/ownership/forgery/negative checks, repeated AOT/JIT parity, and declared-public-boundary gates | complete |
 | E1B | [Separately compiled fixed-arity raise-only consumer boundary](E1B_CONSUMER_BOUNDARY.md) | E1 | Fresh-cache mixed-facade AOT identity plus closure, arity, localization, exact defined/undefined-symbol allowlists, determinism, and artifact evidence | complete |
 | P1 | Named parameter tree, buffers, modules, state dictionaries | A0, R0, Q0, E1 | Nesting, tying, enumeration, validation and round-trip tests | planned |
-| T1 | Byte tokenizer, special tokens, fingerprints and format | A0, Q0, E1 | All-byte/UTF-8 round trips and deterministic format tests | planned |
+| T1 | Byte tokenizer, special tokens, fingerprints and format | A0, Q0, E1, X1 | All-byte/UTF-8 round trips and deterministic format tests | planned |
 | D1 | Versioned token-shard format and corpus writer | A0, Q0, E1 | Checksums, malformed-input tests and deterministic shard fixtures | planned |
 | K1 | Native kernel ABI/capability layer | A0, R0, Q0 | [Versioned ABI, canonical unverified baseline, and 596 conformance/unsupported/malformed-call checks](K1_KERNEL_ABI.md) | complete |
 | I1 | Exact signed-i64 dense CPU tensor container and bounded K1 storage-copy provider | A0, R0, Q0, E1, K1 | [ABI 1.0 ownership/layout contract, exact boundary round trips, malformed/failure-atomic checks, sanitizers, and canonical-pin AOT interop](I1_I64_TENSOR.md) | complete |
 | C1 | Versioned checkpoint container and atomic I/O | A0, P1, Q0 | Tensor round trip, corruption rejection and atomic-write tests | planned |
-| X1 | Declarative configuration and resolved-run manifests | A0, Q0, E1 | Stable parse/override/validation and canonical output tests | planned |
+| X1 | [Declarative configuration and resolved-run manifests](CONFIG_FORMAT.md) | A0, Q0, E1 | 83 native parse/override/validation/opacity/canonical checks, 10 reference/isolation checks, negative internal-surface compiles, and exact golden bytes/fingerprint on the compatibility lane; supported CI pending | review |
 
 ## Wave 2 — model and training primitives
 

@@ -1,0 +1,6 @@
+(require transformer.config)
+
+(define source
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.hidden-size\":64,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+
+(display (config-canonical (config-resolve (config-parse source) '())))
