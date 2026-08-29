@@ -43,19 +43,40 @@ count and byte length use checked multiplication, and the dense row-major byte
 stride for dimension `d` is `8 * product(shape[d+1..rank))`. Nonempty data and
 caller copy buffers are aligned for `int64_t`.
 
+Every pointer-valued output slot must contain null. A nonnull slot is rejected
+without changing the slot, and a null slot remains null on every failure;
+publication occurs only after all fallible work succeeds. Scalar outputs and
+in/out handle slots are likewise byte-preserved on failure. Every writable
+output span must be disjoint from all process-local live I1 allocations.
+
+The optional 264-byte `et_i64_tensor_error` record is a standalone aligned
+writable object. For every I1 call it must be disjoint from caller shape/copy
+spans, scalar and pointer outputs, handle slots, and every process-local live
+I1 allocation. An error-record alias is rejected as `INVALID_ARGUMENT` before
+mutation and the aliased record is deliberately not written, because no safe
+diagnostic destination exists. The standalone clear helper is a no-op when its
+span overlaps live I1-owned storage.
+
 Values are copied as exact C `int64_t` values across the full
 `INT64_MIN..INT64_MAX` range. There is no parsing or numeric conversion. Copy
-calls require the exact element count and nonaliasing buffers; an empty tensor
-accepts a null buffer. Validation failures leave tensor storage, caller output
-buffers, scalar output slots, and handle output slots unchanged.
+calls require the exact element count. A nonempty copy buffer must be disjoint
+from the control block, shape, strides, data, active borrow, and embedded K1
+descriptor of every process-local live I1 object, not merely the receiver; an
+empty tensor accepts a null buffer. These exclusions are validated before any
+`memcpy`, including before the active-borrow state check. Validation failures
+leave tensor storage, caller output buffers, scalar output slots, handle output
+slots, and error-aliased storage unchanged.
 
 The creator owns shape, stride, and data storage until successful destruction.
 Destroy is null-idempotent and nulls the caller's handle on success. A borrow
 lease owns K1 view metadata whose shape and data are borrowed from the tensor until
 `borrow_end`; at most one lease may be active. The lease authorizes direct external
 use, including passing the view as a K1 output, so I1 cannot prevent writes through
-the live view. The active lease blocks owner-side `copy_from` and destruction, while
-`copy_to` may read. Caller serialization is required. Fabricated,
+the live view. This authorized K1 use is the explicit exception to the container
+copy APIs' owned-storage exclusion. The active lease blocks owner-side `copy_from`
+and destruction, while `copy_to` may read. A process-local, allocation-free live
+registry enforces the exclusions and is updated only on successful create/destroy
+and borrow begin/end commits. Caller serialization is required. Fabricated,
 copied-after-release, and otherwise stale raw pointers are outside the C contract;
 the live-handle checks do not make arbitrary invalid-address dereferences safe.
 
@@ -106,7 +127,7 @@ the canonical Eshkol interop fixture twice. LeakSanitizer can be enabled with
 `I1_ASAN_DETECT_LEAKS=1` where supported; it is disabled under the local traced
 executor where LeakSanitizer itself is unavailable.
 
-The final compatibility-lane run passed 661 normal native checks and 795
+The final compatibility-lane run passed 717 normal native checks and 2,429
 test-hook ASan/UBSan checks. Both AOT executions passed 59 checks with output
 SHA-256
 `de78f6cb1b0ea6ffd169a4dfc1d7500f1f3f1db69dd113f8fd737a978c92d217`.
@@ -120,7 +141,8 @@ and its clean source checkout was the canonical commit
 I1 supplies no tokenizer, token range check, dataset, mask, numerical/model
 operation, gradient, bool/f32 storage, dtype conversion, device transfer,
 accelerator, performance, checkpoint, or file format. It contains no Python or
-PyTorch production path. It makes no concurrency or thread-safety claim.
+PyTorch production path. Its live-object registry is process-local and
+unsynchronized; it makes no concurrency or thread-safety claim.
 
 T1 may consume the owned rank-1 CPU substrate only through a separately reviewed
 production wrapper that supplies tokenizer behavior, E1 public errors, and safe

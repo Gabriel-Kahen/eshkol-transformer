@@ -33,9 +33,38 @@ _Static_assert(offsetof(et_i64_tensor_error, operation) == 8u,
 _Static_assert(offsetof(et_i64_tensor_error, message) == 72u,
                "I1 error message offset changed");
 
+typedef union i1_alias_storage {
+  et_i64_tensor_error error;
+  et_i64_tensor *tensor;
+  et_i64_tensor_borrow *borrow;
+  const et_kernel_tensor_view_v1 *view;
+  size_t size_value;
+  uint64_t extent;
+  int64_t values[33];
+  unsigned char bytes[sizeof(et_i64_tensor_error)];
+} i1_alias_storage;
+
+_Static_assert(sizeof(i1_alias_storage) == sizeof(et_i64_tensor_error),
+               "alias fixture must cover one complete I1 error record");
+
+static void expect_alias_rejection(int32_t result,
+                                   const i1_alias_storage *storage,
+                                   const unsigned char *before) {
+  CHECK(result == ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(memcmp(storage->bytes, before, sizeof(storage->bytes)) == 0);
+}
+
 static void expect_error(int32_t result, const et_i64_tensor_error *error,
                          et_i64_tensor_error_category category,
                          et_i64_tensor_error_code code) {
+  if (result != (int32_t)category || error->category != category ||
+      error->code != code) {
+    fprintf(stderr,
+            "I1 error mismatch: result=%d category=%u code=%u operation=%s "
+            "(expected category=%u code=%u)\n",
+            result, error->category, error->code, error->operation, category,
+            code);
+  }
   CHECK(result == (int32_t)category);
   CHECK(error->category == category);
   CHECK(error->code == code);
@@ -111,11 +140,14 @@ static void test_version_and_nulls(void) {
   expect_error(et_i64_tensor_create_v1(0u, NULL, NULL, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_NULL_ARGUMENT);
-  tensor = (et_i64_tensor *)(void *)&error;
-  expect_error(et_i64_tensor_create_v1(0u, NULL, &tensor, &error), &error,
-               ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
-               ET_I64_TENSOR_CODE_INVALID_BUFFER);
-  CHECK(tensor == NULL);
+  tensor = create_tensor(0u, NULL);
+  {
+    et_i64_tensor *const saved = tensor;
+    expect_error(et_i64_tensor_create_v1(0u, NULL, &tensor, &error), &error,
+                 ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    CHECK(tensor == saved);
+  }
   expect_error(et_i64_tensor_rank_v1(NULL, &result, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_NULL_ARGUMENT);
@@ -336,6 +368,136 @@ static void test_exact_round_trip_and_atomicity(void) {
   }
 }
 
+static void test_error_alias_atomicity(void) {
+  const uint64_t shape[] = {33u};
+  int64_t expected[33];
+  int64_t actual[33];
+  et_i64_tensor_error error;
+  et_i64_tensor *tensor = create_tensor(1u, shape);
+  et_i64_tensor *handle;
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  i1_alias_storage alias;
+  unsigned char before[sizeof(alias.bytes)];
+
+  for (size_t index = 0u; index < 33u; index++) {
+    expected[index] = index == 0u ? INT64_MIN
+                                  : index == 32u ? INT64_MAX
+                                                  : (int64_t)index - 16;
+  }
+  CHECK(et_i64_tensor_copy_from_v1(tensor, expected, 33u, &error) == 0);
+
+#define PREPARE_ALIAS(byte)                                                     \
+  do {                                                                          \
+    memset(&alias, (byte), sizeof(alias));                                      \
+    memcpy(before, alias.bytes, sizeof(before));                                \
+  } while (0)
+
+  PREPARE_ALIAS(0x91);
+  expect_alias_rejection(
+      et_i64_tensor_rank_v1(tensor, &alias.size_value, &alias.error), &alias,
+      before);
+  PREPARE_ALIAS(0x92);
+  expect_alias_rejection(
+      et_i64_tensor_shape_at_v1(tensor, 0u, &alias.extent, &alias.error),
+      &alias, before);
+  PREPARE_ALIAS(0x93);
+  expect_alias_rejection(et_i64_tensor_stride_bytes_at_v1(
+                             tensor, 0u, &alias.size_value, &alias.error),
+                         &alias, before);
+  PREPARE_ALIAS(0x94);
+  expect_alias_rejection(et_i64_tensor_element_count_v1(
+                             tensor, &alias.size_value, &alias.error),
+                         &alias, before);
+  PREPARE_ALIAS(0x95);
+  expect_alias_rejection(et_i64_tensor_byte_length_v1(
+                             tensor, &alias.size_value, &alias.error),
+                         &alias, before);
+
+  /* The invalid dimension proves failure paths reject the alias too. */
+  PREPARE_ALIAS(0x96);
+  expect_alias_rejection(
+      et_i64_tensor_shape_at_v1(tensor, 1u, &alias.extent, &alias.error),
+      &alias, before);
+
+  memset(&alias, 0, sizeof(alias));
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(
+      et_i64_tensor_create_v1(0u, NULL, &alias.tensor, &alias.error), &alias,
+      before);
+  memset(&alias, 0, sizeof(alias));
+  alias.extent = 1u;
+  handle = NULL;
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(
+      et_i64_tensor_create_v1(1u, &alias.extent, &handle, &alias.error),
+      &alias, before);
+  CHECK(handle == NULL);
+  memset(&alias, 0, sizeof(alias));
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(et_i64_tensor_create_v1(
+                             ET_KERNEL_MAX_RANK + 1u, shape, &alias.tensor,
+                             &alias.error),
+                         &alias, before);
+
+  memset(&alias, 0, sizeof(alias));
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(
+      et_i64_tensor_borrow_begin_v1(tensor, &alias.borrow, &alias.error),
+      &alias, before);
+  CHECK(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error) == 0);
+  CHECK(borrow != NULL);
+  memset(&alias, 0, sizeof(alias));
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(
+      et_i64_tensor_borrow_view_v1(borrow, &alias.view, &alias.error), &alias,
+      before);
+  CHECK(et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  CHECK(view != NULL);
+
+  memset(&alias, 0, sizeof(alias));
+  alias.borrow = borrow;
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(
+      et_i64_tensor_borrow_end_v1(&alias.borrow, &alias.error), &alias,
+      before);
+  CHECK(alias.borrow == borrow);
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+  CHECK(borrow == NULL);
+
+  PREPARE_ALIAS(0xa1);
+  expect_alias_rejection(
+      et_i64_tensor_copy_to_v1(tensor, alias.values, 33u, &alias.error),
+      &alias, before);
+  PREPARE_ALIAS(0xa2);
+  expect_alias_rejection(
+      et_i64_tensor_copy_to_v1(tensor, alias.values, 32u, &alias.error),
+      &alias, before);
+  PREPARE_ALIAS(0xa3);
+  expect_alias_rejection(
+      et_i64_tensor_copy_from_v1(tensor, alias.values, 33u, &alias.error),
+      &alias, before);
+  PREPARE_ALIAS(0xa4);
+  expect_alias_rejection(
+      et_i64_tensor_copy_from_v1(tensor, alias.values, 32u, &alias.error),
+      &alias, before);
+  memset(actual, 0, sizeof(actual));
+  CHECK(et_i64_tensor_copy_to_v1(tensor, actual, 33u, &error) == 0);
+  CHECK(memcmp(actual, expected, sizeof(expected)) == 0);
+
+  memset(&alias, 0, sizeof(alias));
+  alias.tensor = tensor;
+  memcpy(before, alias.bytes, sizeof(before));
+  expect_alias_rejection(
+      et_i64_tensor_destroy_v1(&alias.tensor, &alias.error), &alias, before);
+  CHECK(alias.tensor == tensor);
+  handle = alias.tensor;
+  destroy_tensor(&handle);
+  tensor = NULL;
+
+#undef PREPARE_ALIAS
+}
+
 static void test_borrows_and_view(void) {
   const uint64_t shape[] = {2u, 3u};
   const int64_t values[] = {INT64_MIN, -1, 0, 1, INT64_MAX - 1, INT64_MAX};
@@ -353,16 +515,17 @@ static void test_borrows_and_view(void) {
   expect_error(et_i64_tensor_borrow_begin_v1(NULL, &second, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_INVALID_BUFFER);
-  CHECK(second == NULL);
+  CHECK(second == first);
   expect_error(et_i64_tensor_borrow_begin_v1(tensor, &second, &error), &error,
-               ET_I64_TENSOR_ERROR_INVALID_STATE,
-               ET_I64_TENSOR_CODE_ACTIVE_BORROW);
-  CHECK(second == NULL);
+               ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  CHECK(second == first);
   view = (const et_kernel_tensor_view_v1 *)(const void *)first;
   expect_error(et_i64_tensor_borrow_view_v1(NULL, &view, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_INVALID_BUFFER);
-  CHECK(view == NULL);
+  CHECK(view == (const et_kernel_tensor_view_v1 *)(const void *)first);
+  view = NULL;
   expect_error(et_i64_tensor_borrow_view_v1(NULL, &view, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_NULL_ARGUMENT);
@@ -402,7 +565,8 @@ static void test_borrows_and_view(void) {
   expect_error(et_i64_tensor_borrow_view_v1(first, &view, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_INVALID_BUFFER);
-  CHECK(view == NULL);
+  CHECK(view == (const et_kernel_tensor_view_v1 *)(const void *)tensor);
+  view = NULL;
   expect_error(et_i64_tensor_borrow_view_v1(first, &view, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_NULL_ARGUMENT);
@@ -617,6 +781,219 @@ static void test_provider_and_dispatch(void) {
 }
 
 #ifdef ET_I64_TENSOR_TESTING
+static void check_rank9_state(const et_i64_tensor *tensor,
+                              const int64_t *expected) {
+  et_i64_tensor_error error;
+  size_t rank = 0u;
+  size_t count = 0u;
+  size_t bytes = 0u;
+  uint64_t extent = 0u;
+  size_t stride = 0u;
+
+  CHECK(et_i64_tensor_rank_v1(tensor, &rank, &error) == 0);
+  CHECK(rank == 1u);
+  CHECK(et_i64_tensor_shape_at_v1(tensor, 0u, &extent, &error) == 0);
+  CHECK(extent == 9u);
+  CHECK(et_i64_tensor_stride_bytes_at_v1(tensor, 0u, &stride, &error) == 0);
+  CHECK(stride == sizeof(int64_t));
+  CHECK(et_i64_tensor_element_count_v1(tensor, &count, &error) == 0);
+  CHECK(count == 9u);
+  CHECK(et_i64_tensor_byte_length_v1(tensor, &bytes, &error) == 0);
+  CHECK(bytes == 9u * sizeof(int64_t));
+  expect_values(tensor, expected, 9u);
+}
+
+static void test_owned_storage_alias_rejection(void) {
+  const uint64_t shape[] = {9u};
+  const int64_t values[] = {INT64_MIN, -7, -1, 0, 1,
+                            7,         9,  17, INT64_MAX};
+  const int64_t other_values[] = {0, -19, -11, -3, 2, 8, 14, 20, 26};
+  et_i64_tensor_error error;
+  et_i64_tensor *tensor = create_tensor(1u, shape);
+  et_i64_tensor *other = create_tensor(1u, shape);
+  et_i64_tensor_borrow *borrow = NULL;
+  et_i64_tensor_borrow *other_borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  const et_kernel_tensor_view_v1 *other_view = NULL;
+  const void *local_regions[6];
+  const void *other_regions[6];
+  size_t scalar;
+  unsigned char zero_slot[sizeof(void *)] = {0};
+
+  CHECK(et_i64_tensor_copy_from_v1(tensor, values, 9u, &error) == 0);
+  CHECK(et_i64_tensor_copy_from_v1(other, other_values, 9u, &error) == 0);
+  CHECK(et_i64_tensor_test_tensor_control_bytes_v1() != 0u);
+  CHECK(et_i64_tensor_test_metadata_bytes_v1(tensor) == sizeof(uint64_t));
+  CHECK(et_i64_tensor_test_borrow_bytes_v1() != 0u);
+  local_regions[0] = tensor;
+  local_regions[1] = et_i64_tensor_test_shape_storage_v1(tensor);
+  local_regions[2] = et_i64_tensor_test_stride_storage_v1(tensor);
+  local_regions[3] = et_i64_tensor_test_data_storage_v1(tensor);
+
+  for (size_t index = 0u; index < 4u; index++) {
+    CHECK(local_regions[index] != NULL);
+    expect_error(et_i64_tensor_copy_to_v1(
+                     tensor, (int64_t *)(void *)local_regions[index], 9u,
+                     &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+    expect_error(et_i64_tensor_copy_from_v1(
+                     tensor, (const int64_t *)local_regions[index], 9u,
+                     &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+  }
+
+  CHECK(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error) == 0);
+  CHECK(et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  local_regions[4] = borrow;
+  local_regions[5] = view;
+
+  /* With a live lease, copy validation still rejects every owned region first. */
+  for (size_t index = 0u; index < 6u; index++) {
+    expect_error(et_i64_tensor_copy_to_v1(
+                     tensor, (int64_t *)(void *)local_regions[index], 9u,
+                     &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+    expect_error(et_i64_tensor_copy_from_v1(
+                     tensor, (const int64_t *)local_regions[index], 9u,
+                     &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+    view = NULL;
+    CHECK(et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+    CHECK(view->rank == 1u && view->shape[0] == 9u);
+    CHECK(view->byte_length == sizeof(values));
+  }
+
+  /* An error record spanning any same-owner allocation is rejected unwritten. */
+  for (size_t index = 0u; index < 6u; index++) {
+    scalar = 0x5a5a5a5au;
+    CHECK(et_i64_tensor_rank_v1(
+              tensor, &scalar,
+              (et_i64_tensor_error *)(void *)local_regions[index]) ==
+          ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
+    CHECK(scalar == 0x5a5a5a5au);
+    check_rank9_state(tensor, values);
+    view = NULL;
+    CHECK(et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+    et_i64_tensor_error_clear_v1(
+        (et_i64_tensor_error *)(void *)local_regions[index]);
+    check_rank9_state(tensor, values);
+    view = NULL;
+    CHECK(et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  }
+
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+  CHECK(borrow == NULL);
+  check_rank9_state(tensor, values);
+
+  /* The same exclusions are process-wide, not limited to the receiver. */
+  other_regions[0] = other;
+  other_regions[1] = et_i64_tensor_test_shape_storage_v1(other);
+  other_regions[2] = et_i64_tensor_test_stride_storage_v1(other);
+  other_regions[3] = et_i64_tensor_test_data_storage_v1(other);
+  CHECK(et_i64_tensor_borrow_begin_v1(other, &other_borrow, &error) == 0);
+  CHECK(et_i64_tensor_borrow_view_v1(other_borrow, &other_view, &error) == 0);
+  other_regions[4] = other_borrow;
+  other_regions[5] = other_view;
+  for (size_t index = 0u; index < 6u; index++) {
+    expect_error(et_i64_tensor_copy_to_v1(
+                     tensor, (int64_t *)(void *)other_regions[index], 9u,
+                     &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+    check_rank9_state(other, other_values);
+    expect_error(et_i64_tensor_copy_from_v1(
+                     tensor, (const int64_t *)other_regions[index], 9u,
+                     &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+    check_rank9_state(other, other_values);
+
+    scalar = 0x6b6b6b6bu;
+    CHECK(et_i64_tensor_rank_v1(
+              tensor, &scalar,
+              (et_i64_tensor_error *)(void *)other_regions[index]) ==
+          ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
+    CHECK(scalar == 0x6b6b6b6bu);
+    check_rank9_state(tensor, values);
+    check_rank9_state(other, other_values);
+  }
+
+  /* Writable scalar outputs cannot target another live I1 allocation. */
+  for (size_t index = 0u; index < 6u; index++) {
+    expect_error(et_i64_tensor_rank_v1(
+                     tensor, (size_t *)(void *)other_regions[index], &error),
+                 &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                 ET_I64_TENSOR_CODE_INVALID_BUFFER);
+    check_rank9_state(tensor, values);
+    check_rank9_state(other, other_values);
+  }
+
+  CHECK(et_i64_tensor_borrow_end_v1(&other_borrow, &error) == 0);
+  CHECK(other_borrow == NULL);
+  check_rank9_state(other, other_values);
+
+  /* A zero pointer slot inside another tensor's data must not be published. */
+  CHECK(memcmp(et_i64_tensor_test_data_storage_v1(other), zero_slot,
+               sizeof(zero_slot)) == 0);
+  expect_error(et_i64_tensor_create_v1(
+                   0u, NULL,
+                   (et_i64_tensor **)(void *)
+                       et_i64_tensor_test_data_storage_v1(other),
+                   &error),
+               &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  check_rank9_state(other, other_values);
+  expect_error(et_i64_tensor_borrow_begin_v1(
+                   tensor,
+                   (et_i64_tensor_borrow **)(void *)
+                       et_i64_tensor_test_data_storage_v1(other),
+                   &error),
+               &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  check_rank9_state(tensor, values);
+  check_rank9_state(other, other_values);
+
+  CHECK(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error) == 0);
+  expect_error(et_i64_tensor_borrow_view_v1(
+                   borrow,
+                   (const et_kernel_tensor_view_v1 **)(void *)
+                       et_i64_tensor_test_data_storage_v1(other),
+                   &error),
+               &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  check_rank9_state(tensor, values);
+  check_rank9_state(other, other_values);
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+
+  expect_error(et_i64_tensor_destroy_v1(
+                   (et_i64_tensor **)(void *)
+                       et_i64_tensor_test_data_storage_v1(other),
+                   &error),
+               &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  expect_error(et_i64_tensor_borrow_end_v1(
+                   (et_i64_tensor_borrow **)(void *)
+                       et_i64_tensor_test_data_storage_v1(other),
+                   &error),
+               &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  check_rank9_state(tensor, values);
+  check_rank9_state(other, other_values);
+
+  destroy_tensor(&tensor);
+  destroy_tensor(&other);
+}
+
 static void test_borrow_tracking_failures(void) {
   const uint64_t shape[] = {1u};
   et_i64_tensor *owner = create_tensor(1u, shape);
@@ -633,7 +1010,8 @@ static void test_borrow_tracking_failures(void) {
   expect_error(et_i64_tensor_borrow_view_v1(borrow, &view, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_INVALID_BUFFER);
-  CHECK(view == NULL);
+  CHECK(view == (const et_kernel_tensor_view_v1 *)(const void *)owner);
+  view = NULL;
   expect_error(et_i64_tensor_borrow_view_v1(borrow, &view, &error), &error,
                ET_I64_TENSOR_ERROR_INVALID_STATE,
                ET_I64_TENSOR_CODE_INVALID_HANDLE);
@@ -669,6 +1047,9 @@ static void test_allocation_failpoints(void) {
   const uint64_t empty_shape[] = {2u, 0u};
   et_i64_tensor_error error;
   et_i64_tensor *tensor = NULL;
+  et_i64_tensor *saved = NULL;
+  et_i64_tensor_borrow *borrow = NULL;
+  et_i64_tensor_borrow *saved_borrow = NULL;
 
   for (size_t allowed = 0u; allowed < 4u; allowed++) {
     et_i64_tensor_test_fail_alloc_after_v1(allowed);
@@ -698,6 +1079,35 @@ static void test_allocation_failpoints(void) {
     CHECK(tensor == NULL);
   }
   et_i64_tensor_test_reset_allocator_v1();
+
+  tensor = create_tensor(0u, NULL);
+  saved = tensor;
+  et_i64_tensor_test_fail_alloc_after_v1(0u);
+  expect_error(et_i64_tensor_create_v1(0u, NULL, &tensor, &error), &error,
+               ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  CHECK(tensor == saved);
+  et_i64_tensor_test_reset_allocator_v1();
+
+  CHECK(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error) == 0);
+  saved_borrow = borrow;
+  et_i64_tensor_test_fail_alloc_after_v1(0u);
+  expect_error(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error), &error,
+               ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  CHECK(borrow == saved_borrow);
+  et_i64_tensor_test_reset_allocator_v1();
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+
+  et_i64_tensor_test_fail_alloc_after_v1(0u);
+  expect_error(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error), &error,
+               ET_I64_TENSOR_ERROR_INTERNAL,
+               ET_I64_TENSOR_CODE_ALLOCATION_FAILED);
+  CHECK(borrow == NULL);
+  et_i64_tensor_test_reset_allocator_v1();
+  CHECK(et_i64_tensor_borrow_begin_v1(tensor, &borrow, &error) == 0);
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+  destroy_tensor(&tensor);
 }
 #endif
 
@@ -706,9 +1116,11 @@ int main(void) {
   test_shapes_and_strides();
   test_shape_failures();
   test_exact_round_trip_and_atomicity();
+  test_error_alias_atomicity();
   test_borrows_and_view();
   test_provider_and_dispatch();
 #ifdef ET_I64_TENSOR_TESTING
+  test_owned_storage_alias_rejection();
   test_borrow_tracking_failures();
   test_allocation_failpoints();
 #endif

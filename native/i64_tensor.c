@@ -11,6 +11,7 @@
 
 struct et_i64_tensor {
   uint64_t magic;
+  et_i64_tensor *registry_next;
   size_t rank;
   size_t element_count;
   size_t byte_length;
@@ -22,9 +23,16 @@ struct et_i64_tensor {
 
 struct et_i64_tensor_borrow {
   uint64_t magic;
+  et_i64_tensor_borrow *registry_next;
   et_i64_tensor *owner;
   et_kernel_tensor_view_v1 view;
 };
+
+static et_i64_tensor *live_tensors;
+static et_i64_tensor_borrow *live_borrows;
+
+static int storage_aliases_live_i1(const void *storage,
+                                   size_t storage_bytes);
 
 _Static_assert(CHAR_BIT == 8 && sizeof(int64_t) == 8u,
                "I1 requires exact 64-bit int64_t storage");
@@ -58,6 +66,41 @@ void et_i64_tensor_test_set_active_borrow_v1(et_i64_tensor *tensor,
     tensor->active_borrow = borrow;
   }
 }
+
+const uint64_t *et_i64_tensor_test_shape_storage_v1(
+    const et_i64_tensor *tensor) {
+  return tensor != NULL && tensor->magic == ET_I64_TENSOR_MAGIC
+             ? tensor->shape
+             : NULL;
+}
+
+const size_t *et_i64_tensor_test_stride_storage_v1(
+    const et_i64_tensor *tensor) {
+  return tensor != NULL && tensor->magic == ET_I64_TENSOR_MAGIC
+             ? tensor->strides
+             : NULL;
+}
+
+const int64_t *et_i64_tensor_test_data_storage_v1(
+    const et_i64_tensor *tensor) {
+  return tensor != NULL && tensor->magic == ET_I64_TENSOR_MAGIC
+             ? tensor->data
+             : NULL;
+}
+
+size_t et_i64_tensor_test_tensor_control_bytes_v1(void) {
+  return sizeof(et_i64_tensor);
+}
+
+size_t et_i64_tensor_test_metadata_bytes_v1(const et_i64_tensor *tensor) {
+  return tensor != NULL && tensor->magic == ET_I64_TENSOR_MAGIC
+             ? tensor->rank * sizeof(size_t)
+             : 0u;
+}
+
+size_t et_i64_tensor_test_borrow_bytes_v1(void) {
+  return sizeof(et_i64_tensor_borrow);
+}
 #endif
 
 static void *i64_calloc(size_t count, size_t size) {
@@ -77,10 +120,16 @@ static void *i64_calloc(size_t count, size_t size) {
 }
 
 void et_i64_tensor_error_clear_v1(et_i64_tensor_error *error) {
-  if (error != NULL) {
+  if (error != NULL &&
+      !storage_aliases_live_i1(error, sizeof(*error))) {
     memset(error, 0, sizeof(*error));
   }
 }
+
+static int32_t reject_error_alias(void);
+static int error_overlaps(const et_i64_tensor_error *error,
+                          const void *storage, size_t storage_bytes);
+static int error_aliases_live_i1(const et_i64_tensor_error *error);
 
 static int32_t set_i64_error(et_i64_tensor_error *error,
                              et_i64_tensor_error_category category,
@@ -99,6 +148,32 @@ static int32_t set_i64_error(et_i64_tensor_error *error,
 
 static int32_t success(et_i64_tensor_error *error) {
   et_i64_tensor_error_clear_v1(error);
+  return 0;
+}
+
+static int32_t preflight_error_operand(const et_i64_tensor_error *error,
+                                       const void *operand,
+                                       size_t operand_bytes) {
+  if (error_aliases_live_i1(error) ||
+      error_overlaps(error, operand, operand_bytes)) {
+    return reject_error_alias();
+  }
+  return 0;
+}
+
+static int32_t preflight_output_span(void *output, size_t output_bytes,
+                                     et_i64_tensor_error *error,
+                                     const char *operation) {
+  int32_t result =
+      preflight_error_operand(error, output, output_bytes);
+  if (result != 0) {
+    return result;
+  }
+  if (output != NULL && storage_aliases_live_i1(output, output_bytes)) {
+    return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                         ET_I64_TENSOR_CODE_INVALID_BUFFER, operation,
+                         "output storage aliases a live I1 object");
+  }
   return 0;
 }
 
@@ -124,6 +199,78 @@ static int ranges_overlap(const void *left, size_t left_bytes,
   }
   return left_start < right_start + right_bytes &&
          right_start < left_start + left_bytes;
+}
+
+/* An aliased error record cannot safely carry its own diagnostic. */
+static int32_t reject_error_alias(void) {
+  return (int32_t)ET_I64_TENSOR_ERROR_INVALID_ARGUMENT;
+}
+
+static int error_overlaps(const et_i64_tensor_error *error,
+                          const void *storage, size_t storage_bytes) {
+  return error != NULL && storage != NULL && storage_bytes != 0u &&
+         ranges_overlap(error, sizeof(*error), storage, storage_bytes);
+}
+
+static int storage_aliases_live_i1(const void *storage, size_t storage_bytes) {
+  const et_i64_tensor *tensor;
+  const et_i64_tensor_borrow *borrow;
+  for (tensor = live_tensors; tensor != NULL;
+       tensor = tensor->registry_next) {
+    if (ranges_overlap(storage, storage_bytes, tensor, sizeof(*tensor)) ||
+        ranges_overlap(storage, storage_bytes, tensor->shape,
+                       tensor->rank * sizeof(*tensor->shape)) ||
+        ranges_overlap(storage, storage_bytes, tensor->strides,
+                       tensor->rank * sizeof(*tensor->strides)) ||
+        ranges_overlap(storage, storage_bytes, tensor->data,
+                       tensor->byte_length)) {
+      return 1;
+    }
+  }
+  for (borrow = live_borrows; borrow != NULL;
+       borrow = borrow->registry_next) {
+    if (ranges_overlap(storage, storage_bytes, borrow, sizeof(*borrow))) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int error_aliases_live_i1(const et_i64_tensor_error *error) {
+  return error != NULL &&
+         storage_aliases_live_i1(error, sizeof(*error));
+}
+
+static void register_tensor(et_i64_tensor *tensor) {
+  tensor->registry_next = live_tensors;
+  live_tensors = tensor;
+}
+
+static void unregister_tensor(et_i64_tensor *tensor) {
+  et_i64_tensor **cursor = &live_tensors;
+  while (*cursor != NULL && *cursor != tensor) {
+    cursor = &(*cursor)->registry_next;
+  }
+  if (*cursor == tensor) {
+    *cursor = tensor->registry_next;
+    tensor->registry_next = NULL;
+  }
+}
+
+static void register_borrow(et_i64_tensor_borrow *borrow) {
+  borrow->registry_next = live_borrows;
+  live_borrows = borrow;
+}
+
+static void unregister_borrow(et_i64_tensor_borrow *borrow) {
+  et_i64_tensor_borrow **cursor = &live_borrows;
+  while (*cursor != NULL && *cursor != borrow) {
+    cursor = &(*cursor)->registry_next;
+  }
+  if (*cursor == borrow) {
+    *cursor = borrow->registry_next;
+    borrow->registry_next = NULL;
+  }
 }
 
 static int valid_tensor(const et_i64_tensor *tensor) {
@@ -156,6 +303,10 @@ int32_t et_i64_tensor_abi_minor_v1(void) {
 
 int32_t et_i64_tensor_abi_require_v1(uint32_t major, uint32_t minimum_minor,
                                      et_i64_tensor_error *error) {
+  int32_t result = preflight_error_operand(error, NULL, 0u);
+  if (result != 0) {
+    return result;
+  }
   if (major != ET_I64_TENSOR_ABI_MAJOR ||
       minimum_minor > ET_I64_TENSOR_ABI_MINOR) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_VERSION_MISMATCH,
@@ -227,18 +378,26 @@ int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
   et_i64_tensor *tensor = NULL;
   size_t element_count;
   size_t byte_length;
+  size_t shape_bytes =
+      rank <= ET_KERNEL_MAX_RANK ? rank * sizeof(*shape) : 0u;
   int empty;
-  int output_was_nonnull;
   int32_t result;
+  result = preflight_error_operand(error, shape, shape_bytes);
+  if (result != 0) {
+    return result;
+  }
+  result = preflight_output_span(output, output == NULL ? 0u : sizeof(*output),
+                                 error, "i64-tensor-create");
+  if (result != 0) {
+    return result;
+  }
   if (output == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_NULL_ARGUMENT,
                          "i64-tensor-create",
                          "tensor output pointer is null");
   }
-  output_was_nonnull = *output != NULL;
-  *output = NULL;
-  if (output_was_nonnull) {
+  if (*output != NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_INVALID_BUFFER,
                          "i64-tensor-create",
@@ -294,13 +453,21 @@ int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
     }
   }
   tensor->magic = ET_I64_TENSOR_MAGIC;
+  (void)success(error);
+  register_tensor(tensor);
   *output = tensor;
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_destroy_v1(et_i64_tensor **tensor,
                                  et_i64_tensor_error *error) {
   et_i64_tensor *value;
+  int32_t result = preflight_output_span(
+      tensor, tensor == NULL ? 0u : sizeof(*tensor), error,
+      "i64-tensor-destroy");
+  if (result != 0) {
+    return result;
+  }
   if (tensor == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_NULL_ARGUMENT,
@@ -323,18 +490,26 @@ int32_t et_i64_tensor_destroy_v1(et_i64_tensor **tensor,
                          "i64-tensor-destroy",
                          "tensor cannot be destroyed while a view is borrowed");
   }
+  (void)success(error);
+  unregister_tensor(value);
   value->magic = 0u;
   free(value->data);
   free(value->strides);
   free(value->shape);
   free(value);
   *tensor = NULL;
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_rank_v1(const et_i64_tensor *tensor, size_t *rank,
                               et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-rank", error);
+  int32_t result;
+  result = preflight_output_span(rank, rank == NULL ? 0u : sizeof(*rank),
+                                 error, "i64-tensor-rank");
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-rank", error);
   if (result != 0) {
     return result;
   }
@@ -343,14 +518,22 @@ int32_t et_i64_tensor_rank_v1(const et_i64_tensor *tensor, size_t *rank,
                          ET_I64_TENSOR_CODE_NULL_ARGUMENT,
                          "i64-tensor-rank", "rank output pointer is null");
   }
+  (void)success(error);
   *rank = tensor->rank;
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_shape_at_v1(const et_i64_tensor *tensor,
                                   size_t dimension, uint64_t *extent,
                                   et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-shape-at", error);
+  int32_t result;
+  result = preflight_output_span(extent,
+                                 extent == NULL ? 0u : sizeof(*extent), error,
+                                 "i64-tensor-shape-at");
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-shape-at", error);
   if (result != 0) {
     return result;
   }
@@ -366,14 +549,22 @@ int32_t et_i64_tensor_shape_at_v1(const et_i64_tensor *tensor,
                          "i64-tensor-shape-at",
                          "shape dimension is out of range");
   }
+  (void)success(error);
   *extent = tensor->shape[dimension];
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_stride_bytes_at_v1(const et_i64_tensor *tensor,
                                          size_t dimension, size_t *stride,
                                          et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-stride-at", error);
+  int32_t result;
+  result = preflight_output_span(stride,
+                                 stride == NULL ? 0u : sizeof(*stride), error,
+                                 "i64-tensor-stride-at");
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-stride-at", error);
   if (result != 0) {
     return result;
   }
@@ -389,14 +580,22 @@ int32_t et_i64_tensor_stride_bytes_at_v1(const et_i64_tensor *tensor,
                          "i64-tensor-stride-at",
                          "stride dimension is out of range");
   }
+  (void)success(error);
   *stride = tensor->strides[dimension];
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_element_count_v1(const et_i64_tensor *tensor,
                                        size_t *element_count,
                                        et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-element-count", error);
+  int32_t result;
+  result = preflight_output_span(
+      element_count, element_count == NULL ? 0u : sizeof(*element_count),
+      error, "i64-tensor-element-count");
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-element-count", error);
   if (result != 0) {
     return result;
   }
@@ -406,14 +605,22 @@ int32_t et_i64_tensor_element_count_v1(const et_i64_tensor *tensor,
                          "i64-tensor-element-count",
                          "element-count output pointer is null");
   }
+  (void)success(error);
   *element_count = tensor->element_count;
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_byte_length_v1(const et_i64_tensor *tensor,
                                      size_t *byte_length,
                                      et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-byte-length", error);
+  int32_t result;
+  result = preflight_output_span(
+      byte_length, byte_length == NULL ? 0u : sizeof(*byte_length), error,
+      "i64-tensor-byte-length");
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-byte-length", error);
   if (result != 0) {
     return result;
   }
@@ -423,8 +630,9 @@ int32_t et_i64_tensor_byte_length_v1(const et_i64_tensor *tensor,
                          "i64-tensor-byte-length",
                          "byte-length output pointer is null");
   }
+  (void)success(error);
   *byte_length = tensor->byte_length;
-  return success(error);
+  return 0;
 }
 
 static int32_t validate_copy_buffer(const et_i64_tensor *tensor,
@@ -450,11 +658,10 @@ static int32_t validate_copy_buffer(const et_i64_tensor *tensor,
                          ET_I64_TENSOR_CODE_INVALID_BUFFER, operation,
                          "copy buffer is misaligned or its span overflows");
   }
-  if (ranges_overlap(buffer, tensor->byte_length, tensor->data,
-                     tensor->byte_length)) {
+  if (storage_aliases_live_i1(buffer, tensor->byte_length)) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_INVALID_BUFFER, operation,
-                         "copy buffer aliases tensor storage");
+                         "copy buffer aliases I1-owned storage");
   }
   return 0;
 }
@@ -463,7 +670,19 @@ int32_t et_i64_tensor_copy_from_v1(et_i64_tensor *tensor,
                                    const int64_t *source,
                                    size_t element_count,
                                    et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-copy-from", error);
+  size_t copy_bytes = element_count <= SIZE_MAX / sizeof(*source)
+                          ? element_count * sizeof(*source)
+                          : SIZE_MAX;
+  int32_t result = preflight_error_operand(error, source, copy_bytes);
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-copy-from", error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_copy_buffer(tensor, source, element_count,
+                                "i64-tensor-copy-from", error);
   if (result != 0) {
     return result;
   }
@@ -472,11 +691,6 @@ int32_t et_i64_tensor_copy_from_v1(et_i64_tensor *tensor,
                          ET_I64_TENSOR_CODE_ACTIVE_BORROW,
                          "i64-tensor-copy-from",
                          "tensor cannot be mutated while a view is borrowed");
-  }
-  result = validate_copy_buffer(tensor, source, element_count,
-                                "i64-tensor-copy-from", error);
-  if (result != 0) {
-    return result;
   }
   if (tensor->byte_length != 0u) {
     memcpy(tensor->data, source, tensor->byte_length);
@@ -488,7 +702,16 @@ int32_t et_i64_tensor_copy_to_v1(const et_i64_tensor *tensor,
                                  int64_t *destination,
                                  size_t element_count,
                                  et_i64_tensor_error *error) {
-  int32_t result = require_tensor(tensor, "i64-tensor-copy-to", error);
+  size_t copy_bytes = element_count <= SIZE_MAX / sizeof(*destination)
+                          ? element_count * sizeof(*destination)
+                          : SIZE_MAX;
+  int32_t result = preflight_output_span(
+      destination, destination == NULL ? 0u : copy_bytes, error,
+      "i64-tensor-copy-to");
+  if (result != 0) {
+    return result;
+  }
+  result = require_tensor(tensor, "i64-tensor-copy-to", error);
   if (result != 0) {
     return result;
   }
@@ -507,17 +730,19 @@ int32_t et_i64_tensor_borrow_begin_v1(et_i64_tensor *tensor,
                                       et_i64_tensor_borrow **output,
                                       et_i64_tensor_error *error) {
   et_i64_tensor_borrow *borrow;
-  int output_was_nonnull;
-  int32_t result;
+  int32_t result = preflight_output_span(
+      output, output == NULL ? 0u : sizeof(*output), error,
+      "i64-tensor-borrow-begin");
+  if (result != 0) {
+    return result;
+  }
   if (output == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_NULL_ARGUMENT,
                          "i64-tensor-borrow-begin",
                          "borrow output pointer is null");
   }
-  output_was_nonnull = *output != NULL;
-  *output = NULL;
-  if (output_was_nonnull) {
+  if (*output != NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_INVALID_BUFFER,
                          "i64-tensor-borrow-begin",
@@ -551,24 +776,29 @@ int32_t et_i64_tensor_borrow_begin_v1(et_i64_tensor *tensor,
   borrow->view.rank = tensor->rank;
   borrow->view.shape = tensor->shape;
   borrow->magic = ET_I64_BORROW_MAGIC;
+  (void)success(error);
+  register_borrow(borrow);
   tensor->active_borrow = borrow;
   *output = borrow;
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_borrow_view_v1(
     const et_i64_tensor_borrow *borrow,
     const et_kernel_tensor_view_v1 **view, et_i64_tensor_error *error) {
-  int output_was_nonnull;
+  int32_t result = preflight_output_span(
+      (void *)view, view == NULL ? 0u : sizeof(*view), error,
+      "i64-tensor-borrow-view");
+  if (result != 0) {
+    return result;
+  }
   if (view == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_NULL_ARGUMENT,
                          "i64-tensor-borrow-view",
                          "borrow and view output are required");
   }
-  output_was_nonnull = *view != NULL;
-  *view = NULL;
-  if (output_was_nonnull) {
+  if (*view != NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_INVALID_BUFFER,
                          "i64-tensor-borrow-view",
@@ -588,13 +818,20 @@ int32_t et_i64_tensor_borrow_view_v1(
                          "i64-tensor-borrow-view",
                          "borrow lease is invalid or no longer active");
   }
+  (void)success(error);
   *view = &borrow->view;
-  return success(error);
+  return 0;
 }
 
 int32_t et_i64_tensor_borrow_end_v1(et_i64_tensor_borrow **borrow,
                                     et_i64_tensor_error *error) {
   et_i64_tensor_borrow *value;
+  int32_t result = preflight_output_span(
+      borrow, borrow == NULL ? 0u : sizeof(*borrow), error,
+      "i64-tensor-borrow-end");
+  if (result != 0) {
+    return result;
+  }
   if (borrow == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_I64_TENSOR_CODE_NULL_ARGUMENT,
@@ -612,11 +849,13 @@ int32_t et_i64_tensor_borrow_end_v1(et_i64_tensor_borrow **borrow,
                          "i64-tensor-borrow-end",
                          "borrow lease is invalid or no longer active");
   }
+  (void)success(error);
+  unregister_borrow(value);
   value->owner->active_borrow = NULL;
   value->magic = 0u;
   free(value);
   *borrow = NULL;
-  return success(error);
+  return 0;
 }
 
 static int32_t set_kernel_error(et_kernel_error *error,

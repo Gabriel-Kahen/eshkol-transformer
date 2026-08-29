@@ -87,9 +87,22 @@ int32_t et_i64_tensor_abi_major_v1(void);
 int32_t et_i64_tensor_abi_minor_v1(void);
 int32_t et_i64_tensor_abi_require_v1(uint32_t major, uint32_t minimum_minor,
                                      et_i64_tensor_error *error);
+/* Standalone helper: a span overlapping live I1-owned storage is not cleared. */
 void et_i64_tensor_error_clear_v1(et_i64_tensor_error *error);
 
-/* Pointer-valued output slots must contain NULL and remain NULL on failure. */
+/*
+ * Every writable output span must be disjoint from error and every process-
+ * local live I1 object and its owned metadata/data. error must also be disjoint
+ * from the caller shape/copy span and every such live allocation. An error
+ * alias violation returns ET_I64_TENSOR_ERROR_INVALID_ARGUMENT without
+ * modifying error because no diagnostic can be written safely through an
+ * aliased record. These process-local checks are unsynchronized; this ABI makes
+ * no thread-safety claim.
+ *
+ * Pointer-valued output slots must contain NULL. Every output slot, including
+ * a non-NULL pointer-valued slot, is preserved byte-for-byte on failure; a
+ * pointer is published only on success.
+ */
 int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
                                 et_i64_tensor **tensor,
                                 et_i64_tensor_error *error);
@@ -111,6 +124,7 @@ int32_t et_i64_tensor_byte_length_v1(const et_i64_tensor *tensor,
                                      size_t *byte_length,
                                      et_i64_tensor_error *error);
 
+/* Copy buffers must be disjoint from every process-local live I1 allocation. */
 int32_t et_i64_tensor_copy_from_v1(et_i64_tensor *tensor,
                                    const int64_t *source,
                                    size_t element_count,
@@ -142,6 +156,15 @@ void et_i64_tensor_test_set_borrow_owner_v1(et_i64_tensor_borrow *borrow,
                                             et_i64_tensor *owner);
 void et_i64_tensor_test_set_active_borrow_v1(et_i64_tensor *tensor,
                                              et_i64_tensor_borrow *borrow);
+const uint64_t *et_i64_tensor_test_shape_storage_v1(
+    const et_i64_tensor *tensor);
+const size_t *et_i64_tensor_test_stride_storage_v1(
+    const et_i64_tensor *tensor);
+const int64_t *et_i64_tensor_test_data_storage_v1(
+    const et_i64_tensor *tensor);
+size_t et_i64_tensor_test_tensor_control_bytes_v1(void);
+size_t et_i64_tensor_test_metadata_bytes_v1(const et_i64_tensor *tensor);
+size_t et_i64_tensor_test_borrow_bytes_v1(void);
 #endif
 
 #ifdef __cplusplus
