@@ -528,5 +528,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   shuffle, packing, batching, and cursor behavior. A later streaming/I1 integration
   must rerun byte-determinism, publication, corruption, and scale tests.
 - **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18); pull
-  request pending.
+  [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
+  [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29).
