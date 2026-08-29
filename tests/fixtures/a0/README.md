@@ -9,3 +9,10 @@ commands and executable output, and checks the expected negative phase/diagnosti
 
 These fixtures prove no tensor shapes, dtypes, devices, gradients, performance, or
 runtime capability. Those require R0 and downstream numerical tests.
+
+Run them through the F0 toolchain gate, which verifies the exact canonical
+`tsotchke/eshkol` source commit, compiler identity, provenance, and binary hash:
+
+```sh
+/usr/bin/bash -c 'make test-a0'
+```

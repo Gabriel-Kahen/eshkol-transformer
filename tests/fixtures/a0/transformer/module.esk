@@ -1,3 +1,7 @@
 (require transformer.public)
 (provide module-parameters module-buffers module-state-dict
-         module-load-state-dict! module-train! module-eval! module-zero-grad!)
+         module-load-state-dict! module-train! module-eval! module-zero-grad!
+         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
+         parameter-handle-path parameter-handle-shape parameter-handle-dtype
+         parameter-handle-device state-dict-paths state-dict-tensor
+         state-dict-alias-groups)

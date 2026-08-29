@@ -1,4 +1,4 @@
 (require transformer.public)
 
 ;;; The declaration fixture advertises no verified runtime capability.
-(capability-require 'a0-unverified-report 'device.accelerator)
+(capability-require 'a0-unverified-report 'device.accelerator 'concrete-request)
