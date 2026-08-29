@@ -105,9 +105,12 @@
     (define (symbol-before? left right)
       (string<? (symbol->string left) (symbol->string right)))
 
+    (define (same-symbol-spelling? left right)
+      (string=? (symbol->string left) (symbol->string right)))
+
     (define (insert-entry entry sorted operation)
       (cond ((null? sorted) (list entry))
-            ((eq? (car entry) (car (car sorted)))
+            ((same-symbol-spelling? (car entry) (car (car sorted)))
              (bootstrap-raise operation "details contains a duplicate key"))
             ((symbol-before? (car entry) (car (car sorted)))
              (cons entry sorted))
@@ -159,7 +162,8 @@
               (begin
                 (consume-node!)
                 (cond ((or (boolean? value) (char? value)) value)
-                      ((and (integer? value) (exact? value)) value)
+                      ((and (integer? value) (exact? value) (real? value))
+                       value)
                       ((symbol? value)
                        (begin
                          (consume-bytes!
@@ -187,7 +191,8 @@
                       (begin
                         (consume-bytes!
                           (string-byte-length (symbol->string key)))
-                        (list key (copy-value (car (cdr entry)) 1))))))
+                        (list (string->symbol (symbol->string key))
+                              (copy-value (car (cdr entry)) 1))))))
               (bootstrap-raise
                 operation
                 "each details entry must be a proper two-element list")))
@@ -253,7 +258,7 @@
 
     (define (details-key? details key)
       (cond ((null? details) #f)
-            ((eq? (car (car details)) key) #t)
+            ((same-symbol-spelling? (car (car details)) key) #t)
             (else (details-key? (cdr details) key))))
 
     (define (core-wrap-foreign category operation message details
@@ -262,7 +267,8 @@
           (bootstrap-raise 'transformer-error-wrap-foreign
                            "source-domain must be a symbol")
           (if (not (or (symbol? source-code)
-                       (and (integer? source-code) (exact? source-code))))
+                       (and (integer? source-code) (exact? source-code)
+                            (real? source-code))))
               (bootstrap-raise 'transformer-error-wrap-foreign
                                "source-code must be an exact integer or symbol")
               (let* ((normalized

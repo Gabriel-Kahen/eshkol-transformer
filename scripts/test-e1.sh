@@ -148,4 +148,4 @@ cmp "${e1_tmp}/public-leak-1.log" "${e1_tmp}/public-leak-2.log"
 cmp "${e1_tmp}/capabilities-leak-1.log" "${e1_tmp}/capabilities-leak-2.log"
 cmp "${e1_tmp}/wrong-arity-1.log" "${e1_tmp}/wrong-arity-2.log"
 
-printf 'E1 PASS: 102 runtime checks; deterministic AOT/JIT; declared public boundary verified\n'
+printf 'E1 PASS: 106 runtime checks; deterministic AOT/JIT; declared public boundary verified\n'

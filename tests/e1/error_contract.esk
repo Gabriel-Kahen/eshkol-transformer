@@ -309,6 +309,19 @@
          (lambda ()
            (transformer-error-make 'io 'op "message" '((a 1) (a 2)) #f))
          'transformer-error-make))
+(define fresh-duplicate-key (gensym))
+(define reconstructed-duplicate-key
+  (string->symbol (symbol->string fresh-duplicate-key)))
+(check "duplicate details key uses canonical symbol spelling"
+       (and (not (eq? fresh-duplicate-key reconstructed-duplicate-key))
+            (structured-invalid?
+              (lambda ()
+                (transformer-error-make
+                  'io 'op "message"
+                  (list (list fresh-duplicate-key 1)
+                        (list reconstructed-duplicate-key 2))
+                  #f))
+              'transformer-error-make)))
 (check "executable details value"
        (structured-invalid?
          (lambda ()
@@ -325,6 +338,14 @@
        (structured-invalid?
          (lambda ()
            (transformer-error-make 'io 'op "message" '((value 1.5)) #f))
+         'transformer-error-make))
+(define exact-zero-imaginary-complex (make-rectangular 1 0))
+(check "exact zero-imaginary complex detail rejected"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-make
+             'io 'op "message"
+             (list (list 'value exact-zero-imaginary-complex)) #f))
          'transformer-error-make))
 
 (define cyclic-details (list (list 'cycle '())))
@@ -426,6 +447,13 @@
        (let ((details (transformer-error-details wrapped-zero)))
          (and (= (details-ref details 'source-code) 0)
               (string=? (details-ref details 'source-message) ""))))
+(check "foreign exact zero-imaginary complex code rejected"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'primitive-call "complex integer status" '()
+             'native exact-zero-imaginary-complex "source" #f))
+         'transformer-error-wrap-foreign))
 (check "foreign source-domain validation"
        (structured-invalid?
          (lambda ()
@@ -455,6 +483,15 @@
          (lambda ()
            (transformer-error-wrap-foreign
              'internal 'op "message" '((source-code 9))
+             'native 1 "source" #f))
+         'transformer-error-wrap-foreign))
+(define fresh-reserved-source-code-key (string->symbol "source-code"))
+(check "foreign reserved-key collision uses canonical symbol spelling"
+       (structured-invalid?
+         (lambda ()
+           (transformer-error-wrap-foreign
+             'internal 'op "message"
+             (list (list fresh-reserved-source-code-key 9))
              'native 1 "source" #f))
          'transformer-error-wrap-foreign))
 

@@ -22,8 +22,8 @@ adds `source-domain`, `source-code`, and `source-message` to details.  It reject
 caller detail with one of those reserved keys rather than overwriting it.  The caller
 owns the reviewed source-status-to-A0-category mapping: unknown statuses map to
 `internal`, while a known specific category must not be concealed as `internal`.
-`source-domain` is a symbol, `source-code` is an exact integer or symbol, and
-`source-message` is a UTF-8 string that may be empty.
+`source-domain` is a symbol, `source-code` is a representation-real exact integer or
+symbol, and `source-message` is a UTF-8 string that may be empty.
 
 The public A0 facades load only `transformer.error_public`, whose declared surface
 contains the six accessors.  The three helpers are absent from the declared surfaces
@@ -46,10 +46,16 @@ value   = () | boolean | character | exact-integer | symbol | string | (value ..
 ```
 
 Each entry is a proper two-element list, not a dotted pair.  Top-level keys are
-unique and returned in lexicographic `symbol->string` order.  Nested proper lists are
-values, not maps.  Procedures, ports, vectors, bytevectors, hash tables, records,
-other opaque values, inexact/complex numbers, improper lists, cycles, and shared
-pairs are rejected.  Example input `((z-context 1024) (path "run.toml")
+unique by `symbol->string` spelling and returned in lexicographic spelling order;
+fresh and interned symbols with the same spelling collide.  Returned keys are
+canonical `string->symbol` values.  Nested proper lists are values, not maps.
+Procedures, ports, vectors, bytevectors, hash tables, records, other opaque values,
+inexact/complex numbers, improper lists, cycles, and shared pairs are rejected.
+Pinned Eshkol reports an exact zero-imaginary complex such as `1+0i` as both
+`integer?` and `exact?`; E1 additionally requires the tag-level `real?` predicate,
+so that representation is rejected without converting ordinary exact integers or
+bignums through an inexact `real-part` result.  Example input
+`((z-context 1024) (path "run.toml")
 (expected (cpu f32)))` is returned as `((expected (cpu f32)) (path "run.toml")
 (z-context 1024))`.
 
