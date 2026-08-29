@@ -143,4 +143,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   remains gated on a versioned, checksummed persistence format. GPU, physical
   reduced-precision storage, and the supported Ubuntu/LLVM-21 lane remain untested.
 - **Reference:** issue #4; proposed contract coordination in issue #1; Eshkol-core
-  issues tsotchke/eshkol#549–#553; integration PR pending.
+  issues tsotchke/eshkol#549–#553;
+  [PR #16](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/16).
