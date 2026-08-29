@@ -322,4 +322,4 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   format.
 - **Reference:** [issue #33](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/33);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  pull request pending.
+  [PR #34](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/34).
