@@ -1,0 +1,4 @@
+(load "eshkol_transformer/smoke.esk")
+
+(display (eshkol-transformer-smoke-value))
+(newline)

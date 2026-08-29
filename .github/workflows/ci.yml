@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  f0-linux:
+    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+      A0_COMPILER_TIMEOUT_SECONDS: '60'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y \
+            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev
+          test "$(llvm-config-21 --version)" = '21.1.8'
+
+      - name: Build pinned Eshkol toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make toolchain'
+
+      - name: Fresh configure
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make clean && make configure'
+
+      - name: Build
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make build'
+
+      - name: Test (F0 smoke and A0 contract)
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make test'
+
+      - name: Smoke
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make smoke'
+
+      - name: Reproducible smoke benchmark
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash -c 'make benchmark'
