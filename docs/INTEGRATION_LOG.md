@@ -261,4 +261,4 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   it may not infer a K1 capability, mask, packing, cursor, or resume contract.
   Re-test the exact AOT carrier/range checks if the pinned compiler changes.
 - **Reference:** [issue #24](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/24);
-  pull request pending.
+  [PR #32](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/32).
