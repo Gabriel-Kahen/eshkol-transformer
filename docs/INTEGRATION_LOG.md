@@ -519,8 +519,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   gates passed, including 41 B0 tests and the integrated K1 gate. All Eshkol evidence
   used provenance-verified canonical
   `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de`, compiler
-  `v1.3.4-evolve`. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI and integration
-  review remain pending.
+  `v1.3.4-evolve`. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33269298912](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33269298912)
+  passed build, integrated tests, smoke, and the reproducible benchmark at PR head
+  `58d3a5d`. Integration review remains pending.
 - **Dependencies / retest:** E1 issue #23 is merged through PR #27. D1 imports only
   production `transformer.error_internal`; the provisional test adapter is removed,
   and compile evidence asserts the production dependency. T1/D2/T2/DATA4 may consume
