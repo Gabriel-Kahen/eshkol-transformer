@@ -122,3 +122,25 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   remains unsupported until new executable evidence is reviewed.
 - **Reference:** issue #4; [PR #12](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/12);
   merge commit `f843f4ce826b56cca14bedfe8fc9f81155ecf1cb`.
+
+## 2026-08-28 — R0 complete-suite supplement / issue #4
+
+- **Decision:** proposed; integration owner acceptance is pending.
+- **Contract:** Capability discovery is execution-based and limited to the exact
+  observed shape, dtype, backend, and differentiation case. A `gpu-*` symbol that
+  executes while GPU support is disabled is CPU evidence, not device proof. Broken,
+  unsupported, and untested cases must fail explicitly at the project boundary; no
+  hidden CPU/scalar fallback is authorized.
+- **Evidence:** The canonical pinned compatibility-lane suite retained 183 command
+  records and completed with 38 intentional audit failures. Eight supplemental
+  probes retained 48 records; seven passed and corrupt tensor/model rejection failed
+  all four executions. Every runnable positive ran twice under AOT and JIT. An
+  independent fresh-scratch sample corroborated supported and broken cases. See
+  `docs/audits/R0_ESHKOL_CAPABILITY_AUDIT.md` and
+  `docs/evidence/r0/2026-08-28/`.
+- **Dependencies / retest:** K1 may consume only exact observed rows and must reject
+  absent capabilities. P1/N2/A2 remain gated on per-operation gradient evidence; C1
+  remains gated on a versioned, checksummed persistence format. GPU, physical
+  reduced-precision storage, and the supported Ubuntu/LLVM-21 lane remain untested.
+- **Reference:** issue #4; proposed contract coordination in issue #1; Eshkol-core
+  issues tsotchke/eshkol#549–#553; integration PR pending.

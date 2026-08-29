@@ -141,9 +141,9 @@ paths rejected the named candidate. All other rows are `untested-with-reason`.
 Scalar `derivative` and scalar `gradient` use central finite differences with
 epsilon `1e-5` for `f(x)=x*x+x*x` at x=3. Attention derivative uses the same
 method with tolerance `1e-4`. Tensor matmul, ReLU, SiLU, generic tensor, and
-repeated-index embedding use exact analytic references. The first five pass except
-generic tensor gradient and attention derivative; therefore K1/P1 cannot treat the
-advertised reverse-AD surface as generally reliable.
+repeated-index embedding use exact analytic references. Scalar derivative/gradient,
+matmul, ReLU, SiLU, and embedding pass; generic tensor and attention gradients fail.
+K1/P1 therefore cannot treat the advertised reverse-AD surface as generally reliable.
 
 All runnable positive AOT outputs repeated exactly, as did all JIT outputs. Supported
 non-RNG AOT/JIT stdout matched. Fixed seed repeated within AOT and within JIT but the
