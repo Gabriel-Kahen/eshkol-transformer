@@ -39,7 +39,8 @@ jobs:
           sudo apt-get install -y \
             build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
             ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
-            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+            ripgrep
           test "$(llvm-config-21 --version)" = '21.1.8'
 
       - name: Build pinned Eshkol toolchain
