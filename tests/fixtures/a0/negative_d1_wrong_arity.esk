@@ -1,0 +1,5 @@
+(require transformer.public)
+
+;;; token-corpus-write! requires directory, fingerprint, vocab size, shard limit,
+;;; and a proper token list.
+(token-corpus-write! 'directory 'fingerprint 10 3)

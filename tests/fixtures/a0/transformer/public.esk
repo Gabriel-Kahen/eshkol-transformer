@@ -18,6 +18,11 @@
          tokenizer-byte tokenizer-load tokenizer-save! tokenizer-encode
          tokenizer-decode tokenizer-vocab-size tokenizer-fingerprint
          tokenizer-special-token-id
+         token-corpus-write! token-corpus-validate
+         token-corpus-summary-shard-count token-corpus-summary-total-tokens
+         token-corpus-summary-vocab-size token-corpus-summary-shard-token-limit
+         token-corpus-summary-tokenizer-fingerprint
+         token-corpus-summary-total-shard-bytes
          token-dataset-open token-dataset-next-batch token-dataset-cursor
          token-dataset-end?
          token-dataset-seek! token-dataset-close! token-batch-inputs
@@ -80,6 +85,25 @@
 (define (tokenizer-fingerprint tokenizer) (a0-declaration-only 'tokenizer-fingerprint))
 (define (tokenizer-special-token-id tokenizer name)
   (a0-declaration-only 'tokenizer-special-token-id))
+
+(define (token-corpus-write! directory tokenizer-fingerprint vocab-size
+                             shard-token-limit tokens)
+  (a0-declaration-only 'token-corpus-write!))
+(define (token-corpus-validate directory maximum-manifest-bytes maximum-shard-bytes
+                               maximum-total-tokens)
+  (a0-declaration-only 'token-corpus-validate))
+(define (token-corpus-summary-shard-count summary)
+  (a0-declaration-only 'token-corpus-summary-shard-count))
+(define (token-corpus-summary-total-tokens summary)
+  (a0-declaration-only 'token-corpus-summary-total-tokens))
+(define (token-corpus-summary-vocab-size summary)
+  (a0-declaration-only 'token-corpus-summary-vocab-size))
+(define (token-corpus-summary-shard-token-limit summary)
+  (a0-declaration-only 'token-corpus-summary-shard-token-limit))
+(define (token-corpus-summary-tokenizer-fingerprint summary)
+  (a0-declaration-only 'token-corpus-summary-tokenizer-fingerprint))
+(define (token-corpus-summary-total-shard-bytes summary)
+  (a0-declaration-only 'token-corpus-summary-total-shard-bytes))
 
 (define (token-dataset-open config tokenizer) (a0-declaration-only 'token-dataset-open))
 (define (token-dataset-next-batch dataset) (a0-declaration-only 'token-dataset-next-batch))
