@@ -1,0 +1,1222 @@
+;;; P1 module/state-tree implementation. Names ending in -internal are not part
+;;; of the public transformer.module API. The provider boundary is an internal
+;;; integration seam only; no provider is installed by production P1.
+
+(require transformer.error_internal)
+
+(provide module-parameters module-buffers module-state-dict
+         module-load-state-dict! module-train! module-eval! module-zero-grad!
+         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
+         parameter-handle-path parameter-handle-shape parameter-handle-dtype
+         parameter-handle-device state-dict-paths state-dict-tensor
+         state-dict-alias-groups
+         tensor-provider-create-internal tensor-provider-register-internal!
+         module-create-internal module-create-with-provider-internal
+         module-register-parameter-internal!
+         module-register-tied-parameter-internal! module-register-buffer-internal!
+         module-register-child-internal! module-mode-internal
+         parameter-handle-tensor-internal
+         parameter-handle-tensor-identity-internal
+         state-entry-internal state-entry-path-internal state-entry-kind-internal
+         state-entry-shape-internal state-entry-dtype-internal
+         state-entry-device-internal state-entry-layout-internal
+         state-entry-tensor-internal state-dict-create-unsafe-internal
+         state-dict-bind-provider-internal!
+         state-dict-format-internal state-dict-version-internal
+         state-dict-features-internal state-dict-adapter-internal
+         state-dict-entries-internal)
+
+(define module-tag (vector 'transformer-module))
+(define parameter-handle-tag (vector 'transformer-parameter-handle))
+(define parameter-tree-tag (vector 'transformer-parameter-tree))
+(define state-dict-tag (vector 'transformer-state-dict))
+(define state-entry-tag (vector 'transformer-state-entry))
+(define tensor-provider-tag (vector 'transformer-tensor-provider))
+(define state-binding-token-tag (vector 'transformer-state-binding-token))
+
+(define state-format 'transformer-state-dict)
+(define state-major 1)
+(define state-minor 0)
+(define provider-identity-format 'transformer-tensor-provider)
+(define provider-interface-major 1)
+(define provider-interface-minor 0)
+(define row-major-layout 'dense-row-major-contiguous)
+(define tensor-providers '())
+(define state-provider-bindings '())
+(define tensor-provider-admission-active? #f)
+
+(define (fail category operation message details)
+  ;; Never forward untrusted/malformed values into E1 error construction. The
+  ;; operation and message retain the diagnostic; the empty alist is always a
+  ;; bounded, proper, unique-symbol-key, data-only details value.
+  (transformer-error-raise category operation message '() #f))
+
+(define (copy-data value)
+  (cond
+    ((pair? value) (cons (copy-data (car value)) (copy-data (cdr value))))
+    ((vector? value)
+     (let* ((size (vector-length value))
+            (result (make-vector size #f)))
+       (let loop ((index 0))
+         (if (= index size)
+             result
+             (begin
+               (vector-set! result index (copy-data (vector-ref value index)))
+               (loop (+ index 1)))))))
+    ((string? value) (string-copy value))
+    (else value)))
+
+(define (list-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (list-append left right)
+  (if (null? left) right
+      (cons (car left) (list-append (cdr left) right))))
+
+(define (identity-member? value values)
+  (cond
+    ((null? values) #f)
+    ((eq? value (car values)) #t)
+    (else (identity-member? value (cdr values)))))
+
+(define (list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (valid-shape? shape)
+  (and (list? shape)
+       (let loop ((dimensions shape))
+         (if (null? dimensions)
+             #t
+             (and (integer? (car dimensions))
+                  (exact? (car dimensions))
+                  (>= (car dimensions) 0)
+                  (loop (cdr dimensions)))))))
+
+(define (valid-path? path)
+  (and (list? path)
+       (not (null? path))
+       (let loop ((segments path))
+         (if (null? segments)
+             #t
+             (and (string? (car segments))
+                  (> (string-length (car segments)) 0)
+                  (string=? (car segments)
+                            (utf8->string (string->utf8 (car segments))))
+                  (loop (cdr segments)))))))
+
+(define (valid-name? name)
+  (and (string? name) (> (string-length name) 0)
+       (string=? name (utf8->string (string->utf8 name)))))
+
+(define (segment<? left right)
+  (let ((left-bytes (string->utf8 left))
+        (right-bytes (string->utf8 right)))
+    (let loop ((index 0))
+      (cond
+        ((= index (bytevector-length left-bytes))
+         (< index (bytevector-length right-bytes)))
+        ((= index (bytevector-length right-bytes)) #f)
+        ((< (bytevector-u8-ref left-bytes index)
+            (bytevector-u8-ref right-bytes index)) #t)
+        ((> (bytevector-u8-ref left-bytes index)
+            (bytevector-u8-ref right-bytes index)) #f)
+        (else (loop (+ index 1)))))))
+
+(define (path<? left right)
+  (let loop ((a left) (b right))
+    (cond
+      ((null? a) (not (null? b)))
+      ((null? b) #f)
+      ((segment<? (car a) (car b)) #t)
+      ((segment<? (car b) (car a)) #f)
+      (else (loop (cdr a) (cdr b))))))
+
+(define (insert-path path paths)
+  (cond
+    ((null? paths) (list path))
+    ((path<? path (car paths)) (cons path paths))
+    (else (cons (car paths) (insert-path path (cdr paths))))))
+
+(define (sort-paths paths)
+  (let loop ((remaining paths) (result '()))
+    (if (null? remaining)
+        result
+        (loop (cdr remaining) (insert-path (car remaining) result)))))
+
+(define (entry-path entry) (vector-ref entry 1))
+
+(define (insert-entry entry entries)
+  (cond
+    ((null? entries) (list entry))
+    ((path<? (entry-path entry) (entry-path (car entries))) (cons entry entries))
+    (else (cons (car entries) (insert-entry entry (cdr entries))))))
+
+(define (sort-entries entries)
+  (let loop ((remaining entries) (result '()))
+    (if (null? remaining)
+        result
+        (loop (cdr remaining) (insert-entry (car remaining) result)))))
+
+(define (path-member? path paths)
+  (cond
+    ((null? paths) #f)
+    ((equal? path (car paths)) #t)
+    (else (path-member? path (cdr paths)))))
+
+(define (module-value? value)
+  (and (vector? value) (= (vector-length value) 9)
+       (eq? (vector-ref value 0) module-tag)))
+
+(define (handle-value? value)
+  (and (vector? value) (= (vector-length value) 8)
+       (eq? (vector-ref value 0) parameter-handle-tag)))
+
+(define (tree-value? value)
+  (and (vector? value) (= (vector-length value) 3)
+       (eq? (vector-ref value 0) parameter-tree-tag)))
+
+(define (state-value? value)
+  (and (vector? value) (= (vector-length value) 9)
+       (eq? (vector-ref value 0) state-dict-tag)
+       (let ((token (vector-ref value 8)))
+         (and (vector? token) (= (vector-length token) 1)
+              (eq? (vector-ref token 0) state-binding-token-tag)))))
+
+(define (state-entry-value? value)
+  (and (vector? value) (= (vector-length value) 8)
+       (eq? (vector-ref value 0) state-entry-tag)))
+
+(define (tensor-provider-value? value)
+  (and (vector? value) (= (vector-length value) 9)
+       (eq? (vector-ref value 0) tensor-provider-tag)))
+
+(define (require-module operation value)
+  (if (module-value? value) value
+      (fail 'invalid-argument operation "expected module" '())))
+
+(define (require-handle operation value)
+  (if (handle-value? value) value
+      (fail 'invalid-argument operation "expected parameter handle" '())))
+
+(define (require-tree operation value)
+  (if (tree-value? value) value
+      (fail 'invalid-argument operation "expected parameter tree" '())))
+
+(define (require-state operation value)
+  (if (state-value? value) value
+      (fail 'invalid-argument operation "expected state dictionary" '())))
+
+(define (tensor-provider-create-internal
+          (name : symbol)
+          (describe : (-> vector vector))
+          (clone : (-> vector vector))
+          (storage-identical? : (-> vector boolean))
+          (value-equal? : (-> vector boolean))
+          (device-equal? : (-> vector boolean))
+          (prepare-load : (-> vector vector))
+          (commit-load! : (-> vector vector)))
+  (if (not (symbol? name))
+      (fail 'invalid-argument 'tensor-provider-create-internal
+            "provider name must be a symbol" '())
+      (if (not (and (procedure? describe) (procedure? clone)
+                    (procedure? storage-identical?) (procedure? value-equal?)
+                    (procedure? device-equal?) (procedure? prepare-load)
+                    (procedure? commit-load!)))
+          (fail 'invalid-argument 'tensor-provider-create-internal
+                "provider operations must be procedures" '())
+          (vector tensor-provider-tag name describe clone storage-identical?
+                  value-equal? device-equal? prepare-load commit-load!))))
+
+(define (tensor-provider-name provider) (vector-ref provider 1))
+
+(define (tensor-provider-identity provider)
+  (list provider-identity-format provider-interface-major
+        provider-interface-minor (tensor-provider-name provider)))
+
+(define (state-provider-binding-find state)
+  (let ((token (vector-ref state 8)))
+    (let loop ((bindings state-provider-bindings))
+      (cond
+        ((null? bindings) #f)
+        ((eq? token (car (car bindings))) (cdr (car bindings)))
+        (else (loop (cdr bindings)))))))
+
+(define (state-provider-bind! operation state provider)
+  (let ((existing (state-provider-binding-find state)))
+    (if existing
+        (if (eq? existing provider)
+            state
+            (fail 'internal operation
+                  "state is already bound to a different tensor provider" '()))
+        (begin
+          (set! state-provider-bindings
+                (cons (cons (vector-ref state 8) provider)
+                      state-provider-bindings))
+          state))))
+
+(define (tensor-provider-find name)
+  (let loop ((providers tensor-providers))
+    (cond
+      ((null? providers) #f)
+      ((eq? name (tensor-provider-name (car providers))) (car providers))
+      (else (loop (cdr providers))))))
+
+(define (tensor-provider-register-internal! provider)
+  (if tensor-provider-admission-active?
+      (fail 'invalid-state 'tensor-provider-register-internal!
+            "tensor provider admission is not reentrant" '())
+      (if (not (tensor-provider-value? provider))
+          (fail 'invalid-argument 'tensor-provider-register-internal!
+                "expected tensor provider" '())
+          (let ((existing (tensor-provider-find (tensor-provider-name provider))))
+            (if existing
+                (if (eq? existing provider)
+                    provider
+                    (fail 'invalid-state 'tensor-provider-register-internal!
+                          "tensor provider name is already registered" '()))
+                (begin
+                  (tensor-provider-admit! provider)
+                  (set! tensor-providers (cons provider tensor-providers))
+                  provider))))))
+
+(define (require-provider-name operation name)
+  (if (not (symbol? name))
+      (fail 'corrupt-data operation "malformed tensor provider name" '())
+      (let ((provider (tensor-provider-find name)))
+        (if provider provider
+            (fail 'unsupported operation "tensor provider is unavailable" '())))))
+
+(define (require-provider operation provider)
+  (if (tensor-provider-value? provider)
+      provider
+      (fail 'unsupported operation "no verified tensor provider is configured" '())))
+
+(define (valid-device-data-walk? value seen)
+  (cond
+    ((or (symbol? value) (string? value) (boolean? value)
+         (and (integer? value) (exact? value))) #t)
+    ((pair? value)
+     (and (not (identity-member? value seen))
+          (valid-device-data-walk? (car value) (cons value seen))
+          (valid-device-data-walk? (cdr value) (cons value seen))))
+    ((vector? value)
+     (and (not (identity-member? value seen))
+          (let loop ((index 0))
+            (if (= index (vector-length value))
+                #t
+                (and (valid-device-data-walk? (vector-ref value index)
+                                              (cons value seen))
+                     (loop (+ index 1)))))))
+    ((null? value) #t)
+    (else #f)))
+
+(define (valid-device-descriptor? device)
+  (and (not (or (null? device) (boolean? device)
+                (integer? device) (string? device)))
+       (valid-device-data-walk? device '())))
+
+(define (validate-provider-identity operation identity)
+  (if (not (and (list? identity) (= (list-length identity) 4)))
+      (fail 'corrupt-data operation "malformed tensor provider identity" '())
+      (if (not (and (symbol? (car identity))
+                    (integer? (car (cdr identity)))
+                    (exact? (car (cdr identity)))
+                    (integer? (car (cdr (cdr identity))))
+                    (exact? (car (cdr (cdr identity))))
+                    (>= (car (cdr identity)) 0)
+                    (>= (car (cdr (cdr identity))) 0)
+                    (symbol? (car (cdr (cdr (cdr identity)))))))
+          (fail 'corrupt-data operation "malformed tensor provider identity" '())
+          (if (or (not (eq? (car identity) provider-identity-format))
+                  (not (= (car (cdr identity)) provider-interface-major))
+                  (not (= (car (cdr (cdr identity))) provider-interface-minor)))
+              (fail 'version-mismatch operation
+                    "unsupported tensor provider interface version" '())
+              identity))))
+
+(define (tensor-device-equal? operation provider left right)
+  (let ((result ((vector-ref provider 6) (vector left right operation))))
+    (if (boolean? result) result
+        (fail 'internal operation
+              "tensor provider device comparison returned non-boolean" '()))))
+
+(define (tensor-metadata operation provider tensor kind)
+  (let ((metadata ((vector-ref provider 2) (vector tensor kind operation))))
+    (if (not (and (vector? metadata) (= (vector-length metadata) 4)))
+        (fail 'internal operation "tensor provider returned malformed metadata" '())
+        (let ((shape (vector-ref metadata 0))
+              (dtype (vector-ref metadata 1))
+              (device (vector-ref metadata 2))
+              (layout (vector-ref metadata 3)))
+          (if (not (valid-shape? shape))
+              (fail 'corrupt-data operation "tensor provider returned malformed shape" '())
+              (if (not (symbol? dtype))
+                  (fail 'corrupt-data operation "tensor provider returned malformed dtype" '())
+                  (if (not (valid-device-descriptor? device))
+                      (fail 'corrupt-data operation
+                            "tensor provider returned malformed device" '())
+                      (if (not (symbol? layout))
+                          (fail 'corrupt-data operation
+                                "tensor provider returned malformed layout" '())
+                          (if (not (eq? layout row-major-layout))
+                              (fail 'noncontiguous operation
+                                    "tensor is not dense row-major contiguous" '())
+                              (if (and (eq? kind 'parameter) (not (eq? dtype 'f32)))
+                                  (fail 'dtype-mismatch operation
+                                        "parameters require f32 metadata" '())
+                                  (if (and (eq? kind 'buffer)
+                                           (not (or (eq? dtype 'bool)
+                                                    (eq? dtype 'i64)
+                                                    (eq? dtype 'f32))))
+                                      (fail 'dtype-mismatch operation
+                                            "buffers require bool, i64, or f32 metadata"
+                                            '())
+                                      (vector (copy-data shape) dtype
+                                              (copy-data device) layout))))))))))))
+
+(define (same-tensor-metadata! operation provider expected actual)
+  (if (not (equal? (vector-ref expected 0) (vector-ref actual 0)))
+      (fail 'shape-mismatch operation "provider clone changed tensor shape" '())
+      (if (not (eq? (vector-ref expected 1) (vector-ref actual 1)))
+          (fail 'dtype-mismatch operation "provider clone changed tensor dtype" '())
+          (if (not (tensor-device-equal? operation provider
+                                         (vector-ref expected 2)
+                                         (vector-ref actual 2)))
+              (fail 'device-mismatch operation "provider clone changed tensor device" '())
+              #t))))
+
+(define (tensor-copy operation provider tensor kind)
+  (let* ((source-metadata (tensor-metadata operation provider tensor kind))
+         (result ((vector-ref provider 3) (vector tensor kind operation)))
+         (copied
+           (if (and (vector? result) (= (vector-length result) 1))
+               (vector-ref result 0)
+               (fail 'internal operation "tensor provider returned malformed clone" '())))
+         (copied-metadata (tensor-metadata operation provider copied kind)))
+    (same-tensor-metadata! operation provider source-metadata copied-metadata)
+    (if (tensor-storage-identical? operation provider tensor copied kind kind)
+        (fail 'internal operation "tensor provider clone aliases source storage" '())
+        (if (not (tensor-value-equal? operation provider tensor copied kind))
+            (fail 'internal operation "tensor provider clone changed tensor value" '())
+            copied))))
+
+(define (tensor-storage-identical? operation provider left right left-kind right-kind)
+  (let ((result
+          ((vector-ref provider 4)
+            (vector left right left-kind right-kind operation))))
+    (if (boolean? result) result
+        (fail 'internal operation
+              "tensor provider storage comparison returned non-boolean" '()))))
+
+(define (tensor-value-equal? operation provider left right kind)
+  (let ((result ((vector-ref provider 5) (vector left right kind operation))))
+    (if (boolean? result) result
+        (fail 'internal operation "tensor provider equality returned non-boolean" '()))))
+
+(define (tensor-prepare-load operation provider assignments)
+  (let ((result ((vector-ref provider 7) (vector assignments operation))))
+    (if (and (vector? result) (= (vector-length result) 1)
+             (vector? (vector-ref result 0)))
+        (vector-ref result 0)
+        (fail 'internal operation "tensor provider returned malformed load plan" '()))))
+
+(define (tensor-commit-load! operation provider plan)
+  ;; Registration requires this whole-batch commit to be one-shot,
+  ;; allocation-free, infallible, and non-raising after preparation succeeds.
+  ((vector-ref provider 8) plan)
+  ;; A provider contract violation here is outside recoverable load semantics:
+  ;; P1 never raises a normal error after commit has begun.
+  #t)
+
+(define (tensor-provider-admit! provider)
+  (if tensor-provider-admission-active?
+      (fail 'invalid-state 'tensor-provider-register-internal!
+            "tensor provider admission is not reentrant" '())
+      (begin
+        (set! tensor-provider-admission-active? #t)
+        (guard (error
+                 (#t
+                   (set! tensor-provider-admission-active? #f)
+                   (raise error)))
+          (let* ((plan
+                   (tensor-prepare-load 'tensor-provider-register-internal!
+                                        provider '()))
+                 (returned ((vector-ref provider 8) plan)))
+            (set! tensor-provider-admission-active? #f)
+            (if (eq? returned plan)
+                provider
+                (fail 'unsupported 'tensor-provider-register-internal!
+                      "provider commit admission substituted its plan carrier"
+                      '())))))))
+
+(define (module-create-with-provider-internal provider-name)
+  (let ((provider (require-provider-name 'module-create-with-provider-internal
+                                         provider-name)))
+  ;; Fields: tag, mode, parameters, buffers, children, parent, provider,
+  ;; topology-finalized?, logical-device.
+    (vector module-tag 'train '() '() '() #f provider #f #f)))
+
+(define (module-create-internal)
+  (vector module-tag 'train '() '() '() #f #f #f #f))
+
+(define (local-name-used? module name)
+  (let scan ((groups (list (vector-ref module 2) (vector-ref module 3)
+                           (vector-ref module 4))))
+    (if (null? groups)
+        #f
+        (let scan-group ((items (car groups)))
+          (cond
+            ((null? items) (scan (cdr groups)))
+            ((string=? name (vector-ref (car items) 1)) #t)
+            (else (scan-group (cdr items))))))))
+
+(define (module-root module)
+  (if (vector-ref module 5) (module-root (vector-ref module 5)) module))
+
+(define (require-root-module operation module)
+  (require-module operation module)
+  (if (vector-ref module 5)
+      (fail 'invalid-state operation "public module receiver must be a root" '())
+      module))
+
+(define (require-mutable-module operation module)
+  (if (vector-ref (module-root module) 7)
+      (fail 'invalid-state operation "module topology is finalized" '())
+      module))
+
+(define (require-module-provider operation module)
+  (require-provider operation (vector-ref module 6)))
+
+(define (claim-module-device! operation provider module device)
+  (let* ((root (module-root module)) (current (vector-ref root 8)))
+    (if current
+        (if (tensor-device-equal? operation provider current device)
+            #t
+            (fail 'device-mismatch operation
+                  "all module leaves must use one logical device" '()))
+        (vector-set! root 8 (copy-data device)))))
+
+(define (ensure-storage-not-in-module! operation provider tensor kind module)
+  (let scan-parameters ((bindings (vector-ref module 2)))
+    (if (null? bindings)
+        #t
+        (let ((existing (vector-ref (vector-ref (car bindings) 2) 6)))
+          (if (tensor-storage-identical? operation provider tensor existing
+                                         kind 'parameter)
+              (fail 'internal operation
+                    "provider clone aliases existing parameter storage" '())
+              (scan-parameters (cdr bindings))))))
+  (let scan-buffers ((bindings (vector-ref module 3)))
+    (if (null? bindings)
+        #t
+        (let ((existing (vector-ref (car bindings) 2)))
+          (if (tensor-storage-identical? operation provider tensor existing
+                                         kind 'buffer)
+              (fail 'internal operation
+                    "provider clone aliases existing buffer storage" '())
+              (scan-buffers (cdr bindings))))))
+  (let scan-children ((bindings (vector-ref module 4)))
+    (if (null? bindings)
+        #t
+        (begin
+          (ensure-storage-not-in-module! operation provider tensor kind
+                                         (vector-ref (car bindings) 2))
+          (scan-children (cdr bindings))))))
+
+(define (ensure-module-storage-distinct-from-tree! operation provider source tree)
+  (let scan-parameters ((bindings (vector-ref source 2)))
+    (if (null? bindings)
+        #t
+        (begin
+          (ensure-storage-not-in-module!
+            operation provider (vector-ref (vector-ref (car bindings) 2) 6)
+            'parameter tree)
+          (scan-parameters (cdr bindings)))))
+  (let scan-buffers ((bindings (vector-ref source 3)))
+    (if (null? bindings)
+        #t
+        (begin
+          (ensure-storage-not-in-module!
+            operation provider (vector-ref (car bindings) 2) 'buffer tree)
+          (scan-buffers (cdr bindings)))))
+  (let scan-children ((bindings (vector-ref source 4)))
+    (if (null? bindings)
+        #t
+        (begin
+          (ensure-module-storage-distinct-from-tree!
+            operation provider (vector-ref (car bindings) 2) tree)
+          (scan-children (cdr bindings))))))
+
+(define (finalize-tree! module)
+  (vector-set! module 7 #t)
+  (let loop ((children (vector-ref module 4)))
+    (if (null? children)
+        #t
+        (begin
+          (finalize-tree! (vector-ref (car children) 2))
+          (loop (cdr children))))))
+
+(define (finalize-root! module)
+  (finalize-tree! (module-root module)))
+
+(define (module-register-parameter-internal! module name tensor)
+  (require-module 'module-register-parameter-internal! module)
+  (require-mutable-module 'module-register-parameter-internal! module)
+  (let ((provider (require-module-provider
+                    'module-register-parameter-internal! module)))
+    (if (not (valid-name? name))
+        (fail 'invalid-argument 'module-register-parameter-internal!
+              "parameter name must be nonempty UTF-8" name)
+        (if (local-name-used? module name)
+            (fail 'invalid-argument 'module-register-parameter-internal!
+                  "duplicate local module name" name)
+            (let* ((metadata
+                     (tensor-metadata 'module-register-parameter-internal!
+                                      provider tensor 'parameter))
+                   (prepared
+                     (tensor-copy 'module-register-parameter-internal!
+                                  provider tensor 'parameter))
+                   (stored-name (string-copy name))
+                   (handle (vector parameter-handle-tag module #f
+                                   (copy-data (vector-ref metadata 0))
+                                   (vector-ref metadata 1) (vector-ref metadata 2)
+                                   prepared provider)))
+              (ensure-storage-not-in-module!
+                'module-register-parameter-internal! provider prepared 'parameter
+                (module-root module))
+              (claim-module-device! 'module-register-parameter-internal!
+                                    provider module (vector-ref metadata 2))
+              (vector-set! module 2
+                           (cons (vector 'parameter-binding stored-name handle)
+                                 (vector-ref module 2)))
+              handle)))))
+
+(define (module-register-tied-parameter-internal! module name handle)
+  (require-module 'module-register-tied-parameter-internal! module)
+  (require-handle 'module-register-tied-parameter-internal! handle)
+  (require-mutable-module 'module-register-tied-parameter-internal! module)
+  (let ((provider (require-module-provider
+                    'module-register-tied-parameter-internal! module)))
+    (if (not (valid-name? name))
+        (fail 'invalid-argument 'module-register-tied-parameter-internal!
+              "parameter name must be nonempty UTF-8" name)
+        (if (local-name-used? module name)
+            (fail 'invalid-argument 'module-register-tied-parameter-internal!
+                  "duplicate local module name" name)
+            (if (not (eq? (module-root module) (module-root (vector-ref handle 1))))
+                (fail 'invalid-argument 'module-register-tied-parameter-internal!
+                      "tied parameter must belong to the same module tree" name)
+                (if (not (eq? provider (vector-ref handle 7)))
+                    (fail 'unsupported 'module-register-tied-parameter-internal!
+                          "parameter and module tensor providers differ" '())
+                    (begin
+                      (claim-module-device! 'module-register-tied-parameter-internal!
+                                            provider module (vector-ref handle 5))
+                      (vector-set! module 2
+                                   (cons (vector 'parameter-binding
+                                                 (string-copy name) handle)
+                                         (vector-ref module 2)))
+                      handle)))))))
+
+(define (module-register-buffer-internal! module name tensor)
+  (require-module 'module-register-buffer-internal! module)
+  (require-mutable-module 'module-register-buffer-internal! module)
+  (let ((provider (require-module-provider
+                    'module-register-buffer-internal! module)))
+    (if (not (valid-name? name))
+        (fail 'invalid-argument 'module-register-buffer-internal!
+              "buffer name must be nonempty UTF-8" name)
+        (if (local-name-used? module name)
+            (fail 'invalid-argument 'module-register-buffer-internal!
+                  "duplicate local module name" name)
+            (let* ((metadata
+                     (tensor-metadata 'module-register-buffer-internal!
+                                      provider tensor 'buffer))
+                   (prepared
+                     (tensor-copy 'module-register-buffer-internal!
+                                  provider tensor 'buffer))
+                   (binding
+                     (vector 'buffer-binding (string-copy name) prepared)))
+              (ensure-storage-not-in-module!
+                'module-register-buffer-internal! provider prepared 'buffer
+                (module-root module))
+              (claim-module-device! 'module-register-buffer-internal!
+                                    provider module (vector-ref metadata 2))
+              (vector-set! module 3 (cons binding (vector-ref module 3)))
+              binding)))))
+
+(define (module-register-child-internal! module name child)
+  (require-module 'module-register-child-internal! module)
+  (require-module 'module-register-child-internal! child)
+  (require-mutable-module 'module-register-child-internal! module)
+  (require-mutable-module 'module-register-child-internal! child)
+  (if (not (valid-name? name))
+      (fail 'invalid-argument 'module-register-child-internal!
+            "child name must be nonempty UTF-8" name)
+      (if (local-name-used? module name)
+          (fail 'invalid-argument 'module-register-child-internal!
+                "duplicate local module name" name)
+          (if (not (eq? (vector-ref module 6) (vector-ref child 6)))
+              (fail 'unsupported 'module-register-child-internal!
+                    "parent and child tensor providers differ" '())
+              (if (or (eq? module child) (eq? child (module-root module))
+                  (vector-ref child 5))
+              (fail 'invalid-argument 'module-register-child-internal!
+                    "child already has a parent or would form a cycle" name)
+              (let ((parent-device (vector-ref (module-root module) 8))
+                    (child-device (vector-ref child 8)))
+                (if (and parent-device child-device
+                         (not (tensor-device-equal?
+                                'module-register-child-internal!
+                                (vector-ref module 6) parent-device child-device)))
+                    (fail 'device-mismatch 'module-register-child-internal!
+                          "parent and child logical devices differ" '())
+                    (begin
+                      (ensure-module-storage-distinct-from-tree!
+                        'module-register-child-internal! (vector-ref module 6)
+                        child (module-root module))
+                      (if (and (not parent-device) child-device)
+                          (vector-set! (module-root module) 8 child-device)
+                          #t)
+                      (vector-set! child 5 module)
+                      (vector-set! module 4
+                                   (cons (vector 'child-binding (string-copy name) child)
+                                         (vector-ref module 4)))
+                      child))))))))
+
+(define (flatten-parameters module prefix)
+  (list-append
+    (let loop ((bindings (vector-ref module 2)) (result '()))
+      (if (null? bindings)
+          result
+          (loop (cdr bindings)
+                (cons (vector 'flat-parameter
+                              (list-append prefix (list (vector-ref (car bindings) 1)))
+                              (vector-ref (car bindings) 2))
+                      result))))
+    (let loop ((children (vector-ref module 4)) (result '()))
+      (if (null? children)
+          result
+          (loop (cdr children)
+                (list-append
+                  (flatten-parameters
+                    (vector-ref (car children) 2)
+                    (list-append prefix (list (vector-ref (car children) 1))))
+                  result))))))
+
+(define (flatten-buffers module prefix)
+  (list-append
+    (let loop ((bindings (vector-ref module 3)) (result '()))
+      (if (null? bindings)
+          result
+          (loop (cdr bindings)
+                (cons (vector 'flat-buffer
+                              (list-append prefix (list (vector-ref (car bindings) 1)))
+                              (car bindings))
+                      result))))
+    (let loop ((children (vector-ref module 4)) (result '()))
+      (if (null? children)
+          result
+          (loop (cdr children)
+                (list-append
+                  (flatten-buffers
+                    (vector-ref (car children) 2)
+                    (list-append prefix (list (vector-ref (car children) 1))))
+                  result))))))
+
+(define (paths-for-handle entries handle)
+  (let loop ((remaining entries) (paths '()))
+    (if (null? remaining)
+        (list-reverse paths)
+        (loop (cdr remaining)
+              (if (eq? handle (vector-ref (car remaining) 2))
+                  (cons (entry-path (car remaining)) paths)
+                  paths)))))
+
+(define (tie-groups-from-entries entries)
+  (let loop ((remaining entries) (seen '()) (groups '()))
+    (if (null? remaining)
+        (list-reverse groups)
+        (let* ((handle (vector-ref (car remaining) 2))
+               (paths (paths-for-handle entries handle)))
+          (if (identity-member? handle seen)
+              (loop (cdr remaining) seen groups)
+              (begin
+                (vector-set! handle 2 (copy-data (car paths)))
+                (loop (cdr remaining) (cons handle seen)
+                      (if (> (list-length paths) 1) (cons paths groups) groups))))))))
+
+(define (module-parameters module)
+  (require-root-module 'module-parameters module)
+  (finalize-root! module)
+  (let* ((entries (sort-entries (flatten-parameters module '())))
+         (groups (tie-groups-from-entries entries)))
+    (vector parameter-tree-tag entries groups)))
+
+(define (parameter-tree-paths tree)
+  (require-tree 'parameter-tree-paths tree)
+  (let loop ((entries (vector-ref tree 1)) (paths '()))
+    (if (null? entries) (list-reverse paths)
+        (loop (cdr entries) (cons (copy-data (entry-path (car entries))) paths)))))
+
+(define (parameter-tree-handle tree path)
+  (require-tree 'parameter-tree-handle tree)
+  (if (not (valid-path? path))
+      (fail 'invalid-argument 'parameter-tree-handle "invalid parameter path" path)
+      (let loop ((entries (vector-ref tree 1)))
+        (cond
+          ((null? entries)
+           (fail 'invalid-argument 'parameter-tree-handle "unknown parameter path" path))
+          ((equal? path (entry-path (car entries))) (vector-ref (car entries) 2))
+          (else (loop (cdr entries)))))))
+
+(define (parameter-tree-tie-groups tree)
+  (copy-data (vector-ref (require-tree 'parameter-tree-tie-groups tree) 2)))
+
+(define (parameter-handle-path handle)
+  (require-handle 'parameter-handle-path handle)
+  (if (vector-ref handle 2) (copy-data (vector-ref handle 2))
+      (fail 'invalid-state 'parameter-handle-path
+            "handle has not been enumerated in its module tree" '())))
+
+(define (parameter-handle-shape handle)
+  (copy-data (vector-ref (require-handle 'parameter-handle-shape handle) 3)))
+
+(define (parameter-handle-dtype handle)
+  (vector-ref (require-handle 'parameter-handle-dtype handle) 4))
+
+(define (parameter-handle-device handle)
+  (copy-data (vector-ref (require-handle 'parameter-handle-device handle) 5)))
+
+(define (parameter-handle-tensor-internal handle)
+  (let ((value (require-handle 'parameter-handle-tensor-internal handle)))
+    (tensor-copy 'parameter-handle-tensor-internal
+                 (vector-ref value 7) (vector-ref value 6) 'parameter)))
+
+(define (parameter-handle-tensor-identity-internal handle)
+  (vector-ref (require-handle 'parameter-handle-tensor-identity-internal handle) 6))
+
+(define (state-entry-internal path kind shape dtype device layout tensor)
+  (vector state-entry-tag (copy-data path) kind (copy-data shape) dtype
+          (copy-data device) layout tensor))
+
+(define (state-entry-path-internal entry) (copy-data (vector-ref entry 1)))
+(define (state-entry-kind-internal entry) (vector-ref entry 2))
+(define (state-entry-shape-internal entry) (copy-data (vector-ref entry 3)))
+(define (state-entry-dtype-internal entry) (vector-ref entry 4))
+(define (state-entry-device-internal entry) (copy-data (vector-ref entry 5)))
+(define (state-entry-layout-internal entry) (vector-ref entry 6))
+(define (state-entry-tensor-internal entry) (vector-ref entry 7))
+
+(define (state-dict-create-unsafe-internal format major minor features adapter entries aliases)
+  ;; Malformed-state tests deliberately create an unbound logical value. Loading
+  ;; validates it with the destination provider; standalone accessors require a
+  ;; trusted provider binding created by module-state-dict/module-buffers.
+  (vector state-dict-tag format major minor (copy-data features)
+          (copy-data adapter) entries aliases (vector state-binding-token-tag)))
+
+(define (state-dict-format-internal state)
+  (vector-ref (require-state 'state-dict-format-internal state) 1))
+
+(define (state-dict-version-internal state)
+  (let ((value (require-state 'state-dict-version-internal state)))
+    (list (vector-ref value 2) (vector-ref value 3))))
+
+(define (state-dict-features-internal state)
+  (copy-data (vector-ref (require-state 'state-dict-features-internal state) 4)))
+
+(define (state-dict-adapter-internal state)
+  (copy-data (vector-ref (require-state 'state-dict-adapter-internal state) 5)))
+
+(define (state-dict-entries-internal state)
+  (vector-ref (require-state 'state-dict-entries-internal state) 6))
+
+(define (state-entry-from-flat flat kind operation provider)
+  (let* ((path (entry-path flat))
+         (target (vector-ref flat 2))
+         (tensor (if (eq? kind 'parameter)
+                     (vector-ref target 6)
+                     (vector-ref target 2)))
+         (metadata (tensor-metadata operation provider tensor kind)))
+    (state-entry-internal
+      path kind (vector-ref metadata 0) (vector-ref metadata 1)
+      (vector-ref metadata 2) (vector-ref metadata 3)
+      (tensor-copy operation provider tensor kind))))
+
+(define (ensure-entry-storage-unique! operation provider entries category)
+  (let outer ((remaining entries))
+    (if (null? remaining)
+        #t
+        (let ((entry (car remaining)))
+          (let inner ((others (cdr remaining)))
+            (if (null? others)
+                (outer (cdr remaining))
+                (if (tensor-storage-identical?
+                      operation provider (vector-ref entry 7)
+                      (vector-ref (car others) 7) (vector-ref entry 2)
+                      (vector-ref (car others) 2))
+                    (fail category operation
+                          "state entries alias tensor storage" '())
+                    (inner (cdr others)))))))))
+
+(define (state-from-flat parameters buffers aliases operation provider)
+  (let ((entries
+          (sort-entries
+            (list-append
+              (let loop ((items parameters) (result '()))
+                (if (null? items) result
+                    (loop (cdr items)
+                          (cons (state-entry-from-flat
+                                  (car items) 'parameter operation provider)
+                                result))))
+              (let loop ((items buffers) (result '()))
+                (if (null? items) result
+                    (loop (cdr items)
+                          (cons (state-entry-from-flat
+                                  (car items) 'buffer operation provider)
+                                result))))))))
+    (ensure-entry-storage-unique! operation provider entries 'internal)
+    (let ((state
+            (vector state-dict-tag state-format state-major state-minor '()
+                    (tensor-provider-identity provider) entries
+                    (copy-data aliases) (vector state-binding-token-tag))))
+      (state-provider-bind! operation state provider))))
+
+(define (module-state-dict module)
+  (require-root-module 'module-state-dict module)
+  (let* ((provider (require-module-provider 'module-state-dict module))
+         (tree (module-parameters module))
+         (parameters (vector-ref tree 1))
+         (buffers (sort-entries (flatten-buffers module '()))))
+    (state-from-flat parameters buffers (vector-ref tree 2) 'module-state-dict
+                     provider)))
+
+(define (module-buffers module)
+  (require-root-module 'module-buffers module)
+  (let ((provider (require-module-provider 'module-buffers module)))
+    (finalize-root! module)
+    (state-from-flat '() (sort-entries (flatten-buffers module '())) '()
+                     'module-buffers provider)))
+
+(define (valid-feature-list? features)
+  (and (list? features)
+       (let loop ((items features) (previous #f))
+         (if (null? items)
+             #t
+             (and (symbol? (car items))
+                  (or (not previous)
+                      (segment<? (symbol->string previous)
+                                 (symbol->string (car items))))
+                  (loop (cdr items) (car items)))))))
+
+(define (validate-state-entry operation provider entry previous-path seen)
+  (if (not (state-entry-value? entry))
+      (fail 'corrupt-data operation "malformed state entry" '())
+      (let ((path (vector-ref entry 1))
+            (kind (vector-ref entry 2))
+            (shape (vector-ref entry 3))
+            (dtype (vector-ref entry 4))
+            (device (vector-ref entry 5))
+            (layout (vector-ref entry 6))
+            (tensor (vector-ref entry 7)))
+        (if (not (valid-path? path))
+            (fail 'corrupt-data operation "malformed state path" path)
+            (if (path-member? path seen)
+                (fail 'corrupt-data operation "duplicate state path" path)
+                (if (and previous-path (not (path<? previous-path path)))
+                    (fail 'corrupt-data operation "state entries are not canonical" path)
+                    (if (not (or (eq? kind 'parameter) (eq? kind 'buffer)))
+                        (fail 'corrupt-data operation "invalid state entry kind" kind)
+                        (if (not (valid-shape? shape))
+                            (fail 'corrupt-data operation "malformed entry shape" shape)
+                            (if (not (symbol? dtype))
+                                (fail 'corrupt-data operation "malformed entry dtype" '())
+                                (if (not (valid-device-descriptor? device))
+                                    (fail 'corrupt-data operation "malformed entry device" '())
+                                    (if (not (symbol? layout))
+                                        (fail 'corrupt-data operation
+                                              "malformed entry layout" '())
+                                        (let ((metadata
+                                                (tensor-metadata operation provider
+                                                                 tensor kind)))
+                                          (if (not (equal? shape
+                                                           (vector-ref metadata 0)))
+                                              (fail 'shape-mismatch operation
+                                                    "entry shape disagrees with tensor" path)
+                                              (if (not (eq? dtype
+                                                            (vector-ref metadata 1)))
+                                                  (fail 'dtype-mismatch operation
+                                                        "entry dtype disagrees with tensor" path)
+                                                  (if (not (tensor-device-equal?
+                                                             operation provider device
+                                                             (vector-ref metadata 2)))
+                                                      (fail 'device-mismatch operation
+                                                            "entry device disagrees with tensor"
+                                                            path)
+                                                      (if (not (eq? layout
+                                                                    (vector-ref metadata 3)))
+                                                          (fail 'noncontiguous operation
+                                                                "entry layout disagrees with tensor"
+                                                                path)
+                                                          #t))))))))))))))))
+
+(define (validate-state-entries operation provider entries)
+  (if (not (list? entries))
+      (fail 'corrupt-data operation "state entries must be a list" '())
+      (let loop ((items entries) (previous #f) (seen '()))
+        (if (null? items)
+            (ensure-entry-storage-unique! operation provider entries
+                                          'corrupt-data)
+            (begin
+              (validate-state-entry operation provider (car items) previous seen)
+              (loop (cdr items) (entry-path (car items))
+                    (cons (entry-path (car items)) seen)))))))
+
+(define (state-entry-for-path entries path)
+  (let loop ((items entries))
+    (cond
+      ((null? items) #f)
+      ((equal? path (entry-path (car items))) (car items))
+      (else (loop (cdr items))))))
+
+(define (validate-alias-groups operation provider groups entries)
+  (if (not (list? groups))
+      (fail 'corrupt-data operation "alias groups must be a list" '())
+      (let loop ((remaining groups) (previous-first #f) (seen '()))
+        (if (null? remaining)
+            #t
+            (let ((group (car remaining)))
+              (if (or (not (list? group)) (< (list-length group) 2)
+                      (not (let valid-paths ((paths group))
+                             (if (null? paths) #t
+                                 (and (valid-path? (car paths))
+                                      (valid-paths (cdr paths))))))
+                      (not (equal? group (sort-paths group))))
+                  (fail 'corrupt-data operation "malformed alias group" group)
+                  (if (and previous-first
+                           (not (path<? previous-first (car group))))
+                      (fail 'corrupt-data operation "alias groups are not canonical" group)
+                      (let validate-paths ((paths group) (next-seen seen)
+                                           (first-tensor #f))
+                        (if (null? paths)
+                            (loop (cdr remaining) (car group) next-seen)
+                            (let ((entry (state-entry-for-path entries (car paths))))
+                              (if (path-member? (car paths) next-seen)
+                                  (fail 'corrupt-data operation
+                                        "path appears in multiple alias groups" (car paths))
+                                  (if (or (not entry)
+                                          (not (eq? (vector-ref entry 2) 'parameter)))
+                                      (fail 'corrupt-data operation
+                                            "alias path is not a parameter" (car paths))
+                                      (if (and first-tensor
+                                               (not (tensor-value-equal?
+                                                      operation provider first-tensor
+                                                      (vector-ref entry 7) 'parameter)))
+                                          (fail 'corrupt-data operation
+                                                "conflicting tied parameter payloads"
+                                                group)
+                                          (validate-paths
+                                            (cdr paths) (cons (car paths) next-seen)
+                                            (if first-tensor first-tensor
+                                                (vector-ref entry 7))))))))))))))))
+
+(define (validate-state-envelope operation state)
+  (require-state operation state)
+  (if (not (symbol? (vector-ref state 1)))
+      (fail 'corrupt-data operation "malformed state dictionary format" '())
+      (if (not (eq? (vector-ref state 1) state-format))
+          (fail 'version-mismatch operation "unsupported state dictionary format" '())
+      (if (or (not (integer? (vector-ref state 2)))
+              (not (integer? (vector-ref state 3)))
+              (not (exact? (vector-ref state 2)))
+              (not (exact? (vector-ref state 3)))
+              (< (vector-ref state 2) 0)
+              (< (vector-ref state 3) 0))
+          (fail 'corrupt-data operation "malformed state dictionary version"
+                (list (vector-ref state 2) (vector-ref state 3)))
+          (if (or (not (= (vector-ref state 2) state-major))
+                  (not (= (vector-ref state 3) state-minor)))
+              (fail 'version-mismatch operation "unsupported state dictionary version"
+                    (list (vector-ref state 2) (vector-ref state 3)))
+              (if (not (valid-feature-list? (vector-ref state 4)))
+                  (fail 'corrupt-data operation "malformed required-feature list" '())
+                  (if (not (null? (vector-ref state 4)))
+                      (fail 'version-mismatch operation "unsupported required feature"
+                            (vector-ref state 4))
+                      (validate-provider-identity operation
+                                                  (vector-ref state 5)))))))))
+
+(define (validate-state-with-provider operation state provider)
+  (let ((identity (validate-state-envelope operation state)))
+    (if (not (equal? identity (tensor-provider-identity provider)))
+        (fail 'unsupported operation
+              "state and destination tensor providers differ" '())
+        (begin
+          (validate-state-entries operation provider (vector-ref state 6))
+          (validate-alias-groups operation provider (vector-ref state 7)
+                                 (vector-ref state 6))
+          provider))))
+
+(define (validate-bound-state operation state)
+  (require-state operation state)
+  (let ((provider (require-provider operation
+                                    (state-provider-binding-find state))))
+    (validate-state-with-provider operation state provider)))
+
+(define (state-dict-bind-provider-internal! state provider-name)
+  ;; The caller selects a trusted registered provider explicitly. The inert state
+  ;; identity is only compared; it never drives callback lookup.
+  (validate-state-envelope 'state-dict-bind-provider-internal! state)
+  (let ((provider (require-provider-name 'state-dict-bind-provider-internal!
+                                         provider-name)))
+    (validate-state-with-provider 'state-dict-bind-provider-internal!
+                                  state provider)
+    (state-provider-bind! 'state-dict-bind-provider-internal! state provider)))
+
+(define (state-dict-paths state)
+  (validate-bound-state 'state-dict-paths state)
+  (let loop ((entries (vector-ref state 6)) (paths '()))
+    (if (null? entries) (list-reverse paths)
+        (loop (cdr entries) (cons (copy-data (entry-path (car entries))) paths)))))
+
+(define (state-dict-tensor state path)
+  (let ((provider (validate-bound-state 'state-dict-tensor state)))
+    (if (not (valid-path? path))
+        (fail 'invalid-argument 'state-dict-tensor "invalid state path" path)
+        (let ((entry (state-entry-for-path (vector-ref state 6) path)))
+          (if entry
+              (tensor-copy 'state-dict-tensor provider (vector-ref entry 7)
+                           (vector-ref entry 2))
+              (fail 'invalid-argument 'state-dict-tensor
+                    "unknown state path" path))))))
+
+(define (state-dict-alias-groups state)
+  (validate-bound-state 'state-dict-alias-groups state)
+  (copy-data (vector-ref state 7)))
+
+(define (same-entry-contract! operation provider expected actual)
+  (let ((path (entry-path expected)))
+    (if (not (eq? (vector-ref expected 2) (vector-ref actual 2)))
+        (fail 'shape-mismatch operation "state entry kind mismatch" path)
+        (if (not (equal? (vector-ref expected 3) (vector-ref actual 3)))
+            (fail 'shape-mismatch operation "state tensor shape mismatch" path)
+            (if (not (eq? (vector-ref expected 4) (vector-ref actual 4)))
+                (fail 'dtype-mismatch operation "state tensor dtype mismatch" path)
+                (if (not (tensor-device-equal? operation provider
+                                               (vector-ref expected 5)
+                                               (vector-ref actual 5)))
+                    (fail 'device-mismatch operation "state tensor device mismatch" path)
+                    #t))))))
+
+(define (validate-destination-contract operation provider expected incoming)
+  (let loop ((left expected) (right incoming))
+    (cond
+      ((and (null? left) (null? right)) #t)
+      ((or (null? left) (null? right))
+       (fail 'shape-mismatch operation "missing or unexpected state path" '()))
+      ((not (equal? (entry-path (car left)) (entry-path (car right))))
+       (fail 'shape-mismatch operation "missing or unexpected state path"
+             (list (entry-path (car left)) (entry-path (car right)))))
+      (else
+       (same-entry-contract! operation provider (car left) (car right))
+       (loop (cdr left) (cdr right))))))
+
+(define (load-assignments expected incoming)
+  (let loop ((left expected) (right incoming) (seen '()) (updates '()))
+    (if (null? left)
+        (list-reverse updates)
+        (let* ((flat (car left))
+               (target (vector-ref flat 2))
+               (entry (car right))
+               (kind (vector-ref entry 2)))
+          (if (and (eq? kind 'parameter) (identity-member? target seen))
+              (loop (cdr left) (cdr right) seen updates)
+              (let* ((existing
+                       (if (eq? kind 'parameter)
+                           (vector-ref target 6)
+                           (vector-ref target 2)))
+                     (source (vector-ref entry 7)))
+                (loop (cdr left) (cdr right)
+                      (if (eq? kind 'parameter) (cons target seen) seen)
+                      (cons (vector existing source kind) updates))))))))
+
+(define (ensure-assignment-storage-unique! operation provider assignments)
+  (let outer ((remaining assignments))
+    (if (null? remaining)
+        #t
+        (let ((assignment (car remaining)))
+          (let inner ((others (cdr remaining)))
+            (if (null? others)
+                (outer (cdr remaining))
+                (if (tensor-storage-identical?
+                      operation provider (vector-ref assignment 0)
+                      (vector-ref (car others) 0) (vector-ref assignment 2)
+                      (vector-ref (car others) 2))
+                    (fail 'internal operation
+                          "distinct load destinations alias tensor storage" '())
+                    (inner (cdr others)))))))))
+
+(define (module-load-state-dict! module state)
+  (require-root-module 'module-load-state-dict! module)
+  (let ((provider (require-module-provider 'module-load-state-dict! module)))
+    ;; Validate the inert envelope before consulting the process-local binding.
+    ;; Unbound state is never eligible to load or commit.
+    (validate-state-envelope 'module-load-state-dict! state)
+    (let ((bound
+            (require-provider 'module-load-state-dict!
+                              (state-provider-binding-find state))))
+      (if (not (eq? bound provider))
+          (fail 'unsupported 'module-load-state-dict!
+                "state binding and destination tensor providers differ" '())
+          #t))
+    ;; All tensor validation uses only the admitted, explicitly bound provider.
+    (validate-state-with-provider 'module-load-state-dict! state provider)
+    (let* ((tree (module-parameters module))
+         (parameters (vector-ref tree 1))
+         (buffers (sort-entries (flatten-buffers module '())))
+         (destinations (sort-entries (list-append parameters buffers)))
+         (expected-state
+           (state-from-flat parameters buffers (vector-ref tree 2)
+                            'module-load-state-dict! provider))
+         (expected (vector-ref expected-state 6))
+         (incoming (vector-ref state 6)))
+      (validate-destination-contract 'module-load-state-dict! provider
+                                     expected incoming)
+      (if (not (equal? (vector-ref expected-state 7) (vector-ref state 7)))
+          (fail 'shape-mismatch 'module-load-state-dict!
+                "state alias graph does not match destination module" '())
+          (let* ((assignments (load-assignments destinations incoming))
+                 (unique (ensure-assignment-storage-unique!
+                           'module-load-state-dict! provider assignments))
+                 (plan (tensor-prepare-load 'module-load-state-dict! provider
+                                            assignments)))
+            (tensor-commit-load! 'module-load-state-dict! provider plan)
+            #t)))))
+
+(define (set-mode-recursive! module mode)
+  (vector-set! module 1 mode)
+  (let loop ((children (vector-ref module 4)))
+    (if (null? children) #t
+        (begin
+          (set-mode-recursive! (vector-ref (car children) 2) mode)
+          (loop (cdr children))))))
+
+(define (module-train! module)
+  (require-root-module 'module-train! module)
+  (set-mode-recursive! module 'train))
+
+(define (module-eval! module)
+  (require-root-module 'module-eval! module)
+  (set-mode-recursive! module 'eval))
+
+(define (module-mode-internal module)
+  (vector-ref (require-module 'module-mode-internal module) 1))
+
+(define (module-zero-grad! module)
+  (require-root-module 'module-zero-grad! module)
+  (fail 'unsupported 'module-zero-grad!
+        "reverse-mode parameter gradient slots are not verified by R0" '()))

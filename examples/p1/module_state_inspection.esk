@@ -1,0 +1,14 @@
+(require transformer.module)
+
+;;; Construction is deliberately internal until a numerical tensor backend is
+;;; verified. Public consumers inspect modules supplied by model libraries.
+(define module-state-inspection-api
+  (list module-parameters module-buffers module-state-dict
+        module-load-state-dict! module-train! module-eval! module-zero-grad!
+        parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
+        parameter-handle-path parameter-handle-shape parameter-handle-dtype
+        parameter-handle-device state-dict-paths state-dict-tensor
+        state-dict-alias-groups))
+
+(display "p1-public-module-api:v1")
+(newline)
