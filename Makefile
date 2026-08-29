@@ -1,7 +1,7 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: toolchain configure build test test-a0 test-b0 smoke benchmark clean
+.PHONY: toolchain configure build test test-a0 test-b0 test-t1 smoke benchmark clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -21,6 +21,9 @@ test-a0: configure
 
 test-b0:
 	/usr/bin/bash scripts/test-b0.sh
+
+test-t1: configure
+	/usr/bin/bash scripts/test-t1.sh
 
 smoke: build
 	/usr/bin/bash scripts/smoke.sh

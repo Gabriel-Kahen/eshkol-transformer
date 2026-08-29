@@ -1,0 +1,11 @@
+;;; Exposed integer values and tensor rank do not prove contiguous i64 storage.
+;;; This probe deliberately records the blocker rather than supplying a fallback.
+
+(define candidate #(0 255 256))
+(display "T1_I64_STORAGE BLOCKED ")
+(display (if (and (equal? (tensor-shape candidate) '(3))
+                  (integer? (tensor-get candidate 0))
+                  (integer? (tensor-get candidate 2)))
+             "integer-values-exposed-but-storage-dtype-unobservable"
+             "candidate-does-not-even-expose-required-values"))
+(newline)

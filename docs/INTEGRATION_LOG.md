@@ -122,3 +122,38 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   remains unsupported until new executable evidence is reviewed.
 - **Reference:** issue #4; [PR #12](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/12);
   merge commit `f843f4ce826b56cca14bedfe8fc9f81155ecf1cb`.
+
+## 2026-08-28 — T1 / issue #17
+
+- **Decision:** proposed; public-runtime completion is blocked.
+- **Contract:** The byte-tokenizer format proposal fixes byte IDs `0..255`,
+  contiguous special IDs from `256`, explicit prefix/suffix insertion and special
+  decode policies, raw or strict byte handling with no normalization, canonical
+  `eshkol-byte-tokenizer` TSV format version `(1, 0)`, and distinct SHA-256 checksum
+  and identity domains. `tokenizer-fingerprint` is proposed as the immutable UTF-8
+  string `sha256:eshkol-byte-tokenizer-v1:<64 lowercase hex>`. D1 stores that value
+  opaquely within its own length bound and compares its bytes exactly; D1 does not
+  parse or rederive T1 identity. This proposal changes no A0 public name or arity and
+  does not authorize an alternate token-ID representation.
+- **Evidence:** Three independent implementation, test, and contract reviews plus
+  canonical `tsotchke/eshkol@90cbd713` inspection found exact native bytevectors and
+  tagged integer values but no verified contiguous `i64[U]` tensor result. Returning
+  a tagged vector would violate A0 and the no-fallback rule. On the explicitly
+  unsupported CachyOS / LLVM-Clang 22 compatibility lane, `make test-t1` passed 18
+  strict deterministic-format tests and two fresh AOT all-256-byte probes while
+  retaining an explicit i64-storage blocker; the integrated F0/A0/B0 `make test`
+  chain passed 41 Python tests plus its compiled gates, Q0 passed all 23 tests, and
+  build/smoke passed. This is development and blocker evidence, not supported-host
+  or public-tokenizer-runtime acceptance. The exact format and bounded evidence are
+  documented in [TOKENIZER_FORMAT.md](TOKENIZER_FORMAT.md). The public contract
+  proposal and D1 coordination are recorded in
+  [issue #1 comment 5459548566](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5459548566).
+- **Dependencies / retest:** E1 / issue #23 must provide shared structured errors;
+  I1 / issue #24, after K1 / issue #21, must prove the exact contiguous i64 tensor
+  substrate; X1 / issue #20 must provide validated configuration; C1 / issue #19,
+  after P1, must provide the callable internal persistence-policy limits contract.
+  After all four merge, T1 must implement and rerun exhaustive byte/UTF-8/special,
+  format, fingerprint, AOT/JIT, supported-host, and canonical quality gates before
+  moving to `review`.
+- **Reference:** [issue #17](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/17);
+  proposed contract only, not acceptance or closure.

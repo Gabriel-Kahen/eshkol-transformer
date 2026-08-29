@@ -1,0 +1,37 @@
+;;; Development capability evidence only. This is not tokenizer-encode/decode.
+
+(define (fill-bytes! values index)
+  (if (= index 256)
+      #t
+      (begin
+        (bytevector-u8-set! values index index)
+        (fill-bytes! values (+ index 1)))))
+
+(define (all-bytes-equal? left right index)
+  (if (= index 256)
+      #t
+      (and (= (bytevector-u8-ref left index) index)
+           (= (bytevector-u8-ref right index) index)
+           (all-bytes-equal? left right (+ index 1)))))
+
+(define path "t1-bytevector-capability.bin")
+(define original (make-bytevector 256 0))
+(fill-bytes! original 0)
+(define out (open-binary-output-file path))
+(write-bytevector original out)
+(close-port out)
+(define in (open-binary-input-file path))
+(define restored (read-bytevector 256 in))
+(close-port in)
+(file-delete path)
+
+(if (and (bytevector? original)
+         (bytevector? restored)
+         (= (bytevector-length original) 256)
+         (= (bytevector-length restored) 256)
+         (all-bytes-equal? original restored 0))
+    (display "T1_DEV_BYTEVECTOR PASS all 256 values round trip")
+    (display "T1_DEV_BYTEVECTOR FAIL"))
+(newline)
+(display "T1_PUBLIC_TOKENIZER_RUNTIME BLOCKED")
+(newline)
