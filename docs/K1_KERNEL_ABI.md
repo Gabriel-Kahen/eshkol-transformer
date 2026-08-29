@@ -199,9 +199,10 @@ headers, executes ABI and malformed-call conformance twice, verifies canonical J
 runs address/undefined-behavior sanitizers, and AOT-compiles/links/runs the fixed-width
 Eshkol version probe twice with compiler `1.3.4-evolve`.
 
-Local CachyOS/LLVM 22 results are compatibility evidence only. Supported Ubuntu
-22.04 x86-64 / LLVM-Clang 21.1.8 run 33226881022 passed the earlier K1 head, but
-predates the stride/span and normal-artifact corrections and is not evidence for this
-revision. A new supported-lane run is required before integration.
+Local CachyOS/LLVM 22 results are compatibility evidence only. The supported Ubuntu
+22.04 x86-64 / LLVM-Clang 21.1.8 lane passed the revised ABI, normal artifact,
+adversarial checks, canonical goldens, sanitizers, and integrated gates in
+[CI run 33228813719](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33228813719)
+at head `099d22506824dfddf13f810fdfcd0f8253e78e9e`.
 LeakSanitizer is disabled by default because it is unavailable under the local traced
 executor; setting `K1_ASAN_DETECT_LEAKS=1` enables it where supported.
