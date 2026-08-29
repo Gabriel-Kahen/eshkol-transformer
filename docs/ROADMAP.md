@@ -26,6 +26,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | T1 | Byte tokenizer, special tokens, fingerprints and format | A0, Q0, E1 | All-byte/UTF-8 round trips and deterministic format tests | planned |
 | D1 | Versioned token-shard format and corpus writer | A0, Q0, E1 | Checksums, malformed-input tests and deterministic shard fixtures | planned |
 | K1 | Native kernel ABI/capability layer | A0, R0, Q0 | [Versioned ABI, canonical unverified baseline, and 596 conformance/unsupported/malformed-call checks](K1_KERNEL_ABI.md) | review |
+| I1 | Exact signed-i64 dense CPU tensor container and bounded K1 storage-copy provider | A0, R0, Q0, E1, K1 | [ABI 1.0 ownership/layout contract, exact boundary round trips, malformed/failure-atomic checks, sanitizers, and canonical-pin AOT interop](I1_I64_TENSOR.md) | review |
 | C1 | Versioned checkpoint container and atomic I/O | A0, P1, Q0 | Tensor round trip, corruption rejection and atomic-write tests | planned |
 | X1 | Declarative configuration and resolved-run manifests | A0, Q0, E1 | Stable parse/override/validation and canonical output tests | planned |
 

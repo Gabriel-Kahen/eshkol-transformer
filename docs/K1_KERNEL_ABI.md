@@ -16,6 +16,12 @@ advertising does not prove storage or execution. GPU, f16, bf16, f32, i64, bool,
 all target kernel requests therefore fail `capability-require` unless a separately
 reviewed provider supplies exact `verified` evidence. K1 ships no provider.
 
+I1 is a separate downstream ABI and archive. It leaves this provider-free baseline
+unchanged and exposes an explicit resolver-supplied provider with one narrow verified
+`tensor.i64` / `storage.copy` request family. Its exact rank/extent, ownership, and
+evidence bounds are documented in [I1_I64_TENSOR.md](I1_I64_TENSOR.md); presence of
+that separately linked provider is not generic i64 or numerical-kernel evidence.
+
 The test-only provider under `tests/k1` uses names and evidence IDs beginning with
 `test` or `TEST-ONLY`. It is compiled directly into the conformance test, is absent
 from production sources and default discovery, and is not capability evidence.

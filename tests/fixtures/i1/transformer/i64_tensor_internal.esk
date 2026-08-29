@@ -1,0 +1,342 @@
+;;; Test-only canonical-AOT evidence facade for the native exact-i64 container.
+;;; This module is intentionally outside lib/: it demonstrates only the fixed
+;;; shapes and operations exercised by I1 tests and is not a production API.
+;;; The C boundary is fixed-arity and uses only ptr/i64 carriers. Tensor element
+;;; storage remains native; proper lists here carry shape metadata only.
+
+(require transformer.error_internal)
+
+(provide i64-tensor-create i64-tensor-destroy! i64-tensor-release!
+         i64-tensor-rank i64-tensor-shape-at
+         i64-tensor-stride-bytes-at i64-tensor-element-count
+         i64-tensor-byte-length i64-tensor-copy-from4!
+         i64-tensor-copy-to-count! i64-tensor-output-at
+         i64-tensor-seed-output4! i64-tensor-borrow-begin!
+         i64-tensor-borrow-begin-again! i64-tensor-borrow-write-first!
+         i64-tensor-borrow-end! i64-tensor-borrow-dtype
+         i64-tensor-borrow-device i64-tensor-borrow-layout
+         i64-tensor-borrow-offset i64-tensor-borrow-rank
+         i64-tensor-borrow-byte-length i64-tensor-ffi-call-count
+         i64-tensor-abi-major i64-tensor-abi-minor
+         i64-tensor-capability-name i64-tensor-capability-status
+         i64-tensor-capability-operation i64-tensor-capability-dtype
+         i64-tensor-capability-device
+         i64-tensor-capability-deterministic
+         i64-tensor-capability-version i64-tensor-capability-evidence
+         i64-tensor-capability-shape-count
+         i64-tensor-capability-shape0-rank
+         i64-tensor-capability-shape1-rank
+         i64-tensor-capability-shape1-min
+         i64-tensor-capability-shape1-max)
+
+;; The test bridge owns aligned native output/error slots and never passes
+;; addr-of tagged Eshkol storage as a C output buffer.
+(extern ptr i1-context-create :real et_i64_tensor_eshkol_context_create_v1)
+(extern i64 i1-context-release ptr
+        :real et_i64_tensor_eshkol_context_release_v1)
+(extern i64 i1-context-prepare ptr i64
+        :real et_i64_tensor_eshkol_context_prepare_v1)
+(extern i64 i1-context-shape-set ptr i64 i64
+        :real et_i64_tensor_eshkol_context_shape_set_v1)
+(extern i64 i1-context-commit ptr
+        :real et_i64_tensor_eshkol_context_commit_v1)
+(extern i64 i1-context-destroy ptr
+        :real et_i64_tensor_eshkol_context_destroy_tensor_v1)
+(extern i64 i1-context-rank ptr
+        :real et_i64_tensor_eshkol_context_rank_v1)
+(extern i64 i1-context-shape-at ptr i64
+        :real et_i64_tensor_eshkol_context_shape_at_v1)
+(extern i64 i1-context-stride-at ptr i64
+        :real et_i64_tensor_eshkol_context_stride_at_v1)
+(extern i64 i1-context-element-count ptr
+        :real et_i64_tensor_eshkol_context_element_count_v1)
+(extern i64 i1-context-byte-length ptr
+        :real et_i64_tensor_eshkol_context_byte_length_v1)
+(extern i64 i1-context-scalar ptr
+        :real et_i64_tensor_eshkol_context_scalar_v1)
+(extern i64 i1-context-copy-from4 ptr i64 i64 i64 i64
+        :real et_i64_tensor_eshkol_context_copy_from4_v1)
+(extern i64 i1-context-copy-to ptr i64
+        :real et_i64_tensor_eshkol_context_copy_to_v1)
+(extern i64 i1-context-seed-output4 ptr i64 i64 i64 i64
+        :real et_i64_tensor_eshkol_context_seed_output4_v1)
+(extern i64 i1-context-output-at ptr i64
+        :real et_i64_tensor_eshkol_context_output_at_v1)
+(extern i64 i1-context-borrow-begin ptr
+        :real et_i64_tensor_eshkol_context_borrow_begin_v1)
+(extern i64 i1-context-borrow-begin-again ptr
+        :real et_i64_tensor_eshkol_context_borrow_begin_again_v1)
+(extern i64 i1-context-borrow-write-first ptr i64
+        :real et_i64_tensor_eshkol_context_borrow_write_first_v1)
+(extern i64 i1-context-borrow-end ptr
+        :real et_i64_tensor_eshkol_context_borrow_end_v1)
+(extern ptr i1-context-borrow-dtype ptr
+        :real et_i64_tensor_eshkol_context_borrow_dtype_v1)
+(extern ptr i1-context-borrow-device ptr
+        :real et_i64_tensor_eshkol_context_borrow_device_v1)
+(extern i64 i1-context-borrow-layout ptr
+        :real et_i64_tensor_eshkol_context_borrow_layout_v1)
+(extern i64 i1-context-borrow-offset ptr
+        :real et_i64_tensor_eshkol_context_borrow_offset_v1)
+(extern i64 i1-context-borrow-rank ptr
+        :real et_i64_tensor_eshkol_context_borrow_rank_v1)
+(extern i64 i1-context-borrow-byte-length ptr
+        :real et_i64_tensor_eshkol_context_borrow_byte_length_v1)
+(extern i64 i1-context-error-category ptr
+        :real et_i64_tensor_eshkol_context_error_category_v1)
+(extern i64 i1-context-error-code ptr
+        :real et_i64_tensor_eshkol_context_error_code_v1)
+(extern ptr i1-context-error-operation ptr
+        :real et_i64_tensor_eshkol_context_error_operation_v1)
+(extern ptr i1-context-error-message ptr
+        :real et_i64_tensor_eshkol_context_error_message_v1)
+(extern i64 i1-context-call-count ptr
+        :real et_i64_tensor_eshkol_context_call_count_v1)
+
+(extern i64 i1-abi-major :real et_i64_tensor_eshkol_abi_major_v1)
+(extern i64 i1-abi-minor :real et_i64_tensor_eshkol_abi_minor_v1)
+(extern ptr i1-capability-name
+        :real et_i64_tensor_eshkol_capability_name_v1)
+(extern i64 i1-capability-status
+        :real et_i64_tensor_eshkol_capability_status_v1)
+(extern ptr i1-capability-operation
+        :real et_i64_tensor_eshkol_capability_operation_v1)
+(extern ptr i1-capability-dtype
+        :real et_i64_tensor_eshkol_capability_dtype_v1)
+(extern ptr i1-capability-device
+        :real et_i64_tensor_eshkol_capability_device_v1)
+(extern i64 i1-capability-deterministic
+        :real et_i64_tensor_eshkol_capability_deterministic_v1)
+(extern ptr i1-capability-version
+        :real et_i64_tensor_eshkol_capability_version_v1)
+(extern ptr i1-capability-evidence
+        :real et_i64_tensor_eshkol_capability_evidence_v1)
+(extern i64 i1-capability-shape-count
+        :real et_i64_tensor_eshkol_capability_shape_count_v1)
+(extern i64 i1-capability-shape0-rank
+        :real et_i64_tensor_eshkol_capability_shape0_rank_v1)
+(extern i64 i1-capability-shape1-rank
+        :real et_i64_tensor_eshkol_capability_shape1_rank_v1)
+(extern i64 i1-capability-shape1-min
+        :real et_i64_tensor_eshkol_capability_shape1_min_v1)
+(extern i64 i1-capability-shape1-max
+        :real et_i64_tensor_eshkol_capability_shape1_max_v1)
+
+(define i64-min -9223372036854775808)
+(define i64-max 9223372036854775807)
+
+(define (raise-invalid operation message)
+  (transformer-error-raise 'invalid-argument operation message '() #f))
+
+(define (exact-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (<= i64-min value) (<= value i64-max)))
+
+(define (require-i64 value operation role)
+  (if (exact-i64? value)
+      value
+      (raise-invalid operation role)))
+
+(define (require-nonnegative-i64 value operation role)
+  (require-i64 value operation role)
+  (if (< value 0)
+      (raise-invalid operation role)
+      value))
+
+(define (native-category category)
+  (cond ((= category 1) 'invalid-argument)
+        ((= category 2) 'shape-mismatch)
+        ((= category 3) 'noncontiguous)
+        ((= category 4) 'invalid-state)
+        ((= category 5) 'version-mismatch)
+        ((= category 6) 'internal)
+        (else 'internal)))
+
+(define (native-error context operation)
+  (let* ((category-code (i1-context-error-category context))
+         (source-code (i1-context-error-code context))
+         (source-operation
+           (ptr->string (i1-context-error-operation context)))
+         (source-message
+           (ptr->string (i1-context-error-message context))))
+    (transformer-error-wrap-foreign
+      (native-category category-code) operation
+      "native exact-i64 tensor operation failed"
+      (list (list 'source-operation source-operation)
+            (list 'native-category category-code))
+      'i64-tensor source-code source-message #f)))
+
+(define (check-native context operation status)
+  (if (= status 0)
+      #t
+      (raise (native-error context operation))))
+
+(define (check-native-and-release context operation status)
+  (if (= status 0)
+      #t
+      (let ((error (native-error context operation)))
+        (i1-context-release context)
+        (raise error))))
+
+(define (shape-rank shape operation)
+  (define (walk cursor count)
+    (cond ((null? cursor) count)
+          ((>= count 64)
+           (raise-invalid operation "shape rank exceeds 64"))
+          ((not (pair? cursor))
+           (raise-invalid operation "shape must be a proper extent list"))
+          (else
+            (require-nonnegative-i64
+              (car cursor) operation
+              "shape extents must be exact signed-i64 nonnegative integers")
+            (walk (cdr cursor) (+ count 1)))))
+  (walk shape 0))
+
+(define (install-shape! context shape index)
+  (if (null? shape)
+      #t
+      (begin
+        (check-native-and-release
+          context 'i64-tensor-create
+          (i1-context-shape-set context index (car shape)))
+        (install-shape! context (cdr shape) (+ index 1)))))
+
+(define (i64-tensor-create shape)
+  (let ((rank (shape-rank shape 'i64-tensor-create)))
+    (let ((context (i1-context-create)))
+      (if (null? context)
+          (transformer-error-raise
+            'internal 'i64-tensor-create
+            "cannot allocate native exact-i64 interop context" '() #f)
+          (begin
+            (check-native-and-release
+              context 'i64-tensor-create
+              (i1-context-prepare context rank))
+            (install-shape! context shape 0)
+            (check-native-and-release
+              context 'i64-tensor-create (i1-context-commit context))
+            context)))))
+
+(define (i64-tensor-destroy! tensor)
+  (check-native tensor 'i64-tensor-destroy!
+                (i1-context-destroy tensor)))
+
+(define (i64-tensor-release! tensor)
+  (i1-context-release tensor))
+
+(define (read-scalar tensor operation status)
+  (check-native tensor operation status)
+  (i1-context-scalar tensor))
+
+(define (i64-tensor-rank tensor)
+  (read-scalar tensor 'i64-tensor-rank (i1-context-rank tensor)))
+
+(define (i64-tensor-shape-at tensor dimension)
+  (require-nonnegative-i64 dimension 'i64-tensor-shape-at
+                           "dimension must be a nonnegative exact i64")
+  (read-scalar tensor 'i64-tensor-shape-at
+               (i1-context-shape-at tensor dimension)))
+
+(define (i64-tensor-stride-bytes-at tensor dimension)
+  (require-nonnegative-i64 dimension 'i64-tensor-stride-bytes-at
+                           "dimension must be a nonnegative exact i64")
+  (read-scalar tensor 'i64-tensor-stride-bytes-at
+               (i1-context-stride-at tensor dimension)))
+
+(define (i64-tensor-element-count tensor)
+  (read-scalar tensor 'i64-tensor-element-count
+               (i1-context-element-count tensor)))
+
+(define (i64-tensor-byte-length tensor)
+  (read-scalar tensor 'i64-tensor-byte-length
+               (i1-context-byte-length tensor)))
+
+(define (i64-tensor-copy-from4! tensor a b c d)
+  ;; Validate the complete fixed-shape payload before crossing the FFI once.
+  (require-i64 a 'i64-tensor-copy-from4! "element 0 is outside signed i64")
+  (require-i64 b 'i64-tensor-copy-from4! "element 1 is outside signed i64")
+  (require-i64 c 'i64-tensor-copy-from4! "element 2 is outside signed i64")
+  (require-i64 d 'i64-tensor-copy-from4! "element 3 is outside signed i64")
+  (check-native tensor 'i64-tensor-copy-from4!
+                (i1-context-copy-from4 tensor a b c d)))
+
+(define (i64-tensor-copy-to-count! tensor count)
+  (require-nonnegative-i64 count 'i64-tensor-copy-to-count!
+                           "copy count must be a nonnegative exact i64")
+  (check-native tensor 'i64-tensor-copy-to-count!
+                (i1-context-copy-to tensor count)))
+
+(define (i64-tensor-seed-output4! tensor a b c d)
+  (require-i64 a 'i64-tensor-seed-output4! "element 0 is outside signed i64")
+  (require-i64 b 'i64-tensor-seed-output4! "element 1 is outside signed i64")
+  (require-i64 c 'i64-tensor-seed-output4! "element 2 is outside signed i64")
+  (require-i64 d 'i64-tensor-seed-output4! "element 3 is outside signed i64")
+  (check-native tensor 'i64-tensor-seed-output4!
+                (i1-context-seed-output4 tensor a b c d)))
+
+(define (i64-tensor-output-at tensor index)
+  (require-nonnegative-i64 index 'i64-tensor-output-at
+                           "output index must be a nonnegative exact i64")
+  (read-scalar tensor 'i64-tensor-output-at
+               (i1-context-output-at tensor index)))
+
+(define (i64-tensor-borrow-begin! tensor)
+  (check-native tensor 'i64-tensor-borrow-begin!
+                (i1-context-borrow-begin tensor)))
+
+(define (i64-tensor-borrow-begin-again! tensor)
+  (check-native tensor 'i64-tensor-borrow-begin-again!
+                (i1-context-borrow-begin-again tensor)))
+
+(define (i64-tensor-borrow-write-first! tensor value)
+  (require-i64 value 'i64-tensor-borrow-write-first!
+               "borrowed value is outside signed i64")
+  (check-native tensor 'i64-tensor-borrow-write-first!
+                (i1-context-borrow-write-first tensor value)))
+
+(define (i64-tensor-borrow-end! tensor)
+  (check-native tensor 'i64-tensor-borrow-end!
+                (i1-context-borrow-end tensor)))
+
+(define (i64-tensor-borrow-dtype tensor)
+  (ptr->string (i1-context-borrow-dtype tensor)))
+(define (i64-tensor-borrow-device tensor)
+  (ptr->string (i1-context-borrow-device tensor)))
+(define (i64-tensor-borrow-layout tensor)
+  (i1-context-borrow-layout tensor))
+(define (i64-tensor-borrow-offset tensor)
+  (i1-context-borrow-offset tensor))
+(define (i64-tensor-borrow-rank tensor)
+  (i1-context-borrow-rank tensor))
+(define (i64-tensor-borrow-byte-length tensor)
+  (i1-context-borrow-byte-length tensor))
+(define (i64-tensor-ffi-call-count tensor)
+  (i1-context-call-count tensor))
+
+(define (i64-tensor-abi-major) (i1-abi-major))
+(define (i64-tensor-abi-minor) (i1-abi-minor))
+(define (i64-tensor-capability-name)
+  (ptr->string (i1-capability-name)))
+(define (i64-tensor-capability-status) (i1-capability-status))
+(define (i64-tensor-capability-operation)
+  (ptr->string (i1-capability-operation)))
+(define (i64-tensor-capability-dtype)
+  (ptr->string (i1-capability-dtype)))
+(define (i64-tensor-capability-device)
+  (ptr->string (i1-capability-device)))
+(define (i64-tensor-capability-deterministic)
+  (i1-capability-deterministic))
+(define (i64-tensor-capability-version)
+  (ptr->string (i1-capability-version)))
+(define (i64-tensor-capability-evidence)
+  (ptr->string (i1-capability-evidence)))
+(define (i64-tensor-capability-shape-count)
+  (i1-capability-shape-count))
+(define (i64-tensor-capability-shape0-rank)
+  (i1-capability-shape0-rank))
+(define (i64-tensor-capability-shape1-rank)
+  (i1-capability-shape1-rank))
+(define (i64-tensor-capability-shape1-min)
+  (i1-capability-shape1-min))
+(define (i64-tensor-capability-shape1-max)
+  (i1-capability-shape1-max))
