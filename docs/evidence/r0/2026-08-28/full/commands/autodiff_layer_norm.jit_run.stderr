@@ -1,0 +1,13 @@
+[WARN] Type warning: argument 1 of 'near': expected Number, got -> (line 7:20)
+[1m[33m   WARNING:[0m HoTT: 1 type warnings detected (gradual typing continues)
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+[1m[31m     ERROR:[0m /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk:4:54: Type error in layer-norm: expected tensor or numeric vector, got vector
+/home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk:4:54: Type error in layer-norm: expected tensor or numeric vector, got vector
+Unhandled exception: /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk:4:54: Type error in layer-norm: expected tensor or numeric vector, got vector

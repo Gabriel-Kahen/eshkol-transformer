@@ -1,0 +1,17 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define (check name ok)
+  (display (if ok "PASS " "FAIL ")) (display name) (newline))
+
+(define activated (silu #(0.0 1.0)))
+(check "silu"
+       (and (near (tensor-get activated 0) 0.0 1e-12)
+            (near (tensor-get activated 1) 0.7310585786300049 1e-9)))
+
+(define stable (softmax #(1000.0 1001.0 1002.0)))
+(define total (+ (tensor-get stable 0)
+                 (+ (tensor-get stable 1) (tensor-get stable 2))))
+(check "large-logit softmax"
+       (and (near total 1.0 1e-9)
+            (near (tensor-get stable 2) 0.6652409557748218 1e-8)))
+
+(display "R0_DONE activation_transformer") (newline)

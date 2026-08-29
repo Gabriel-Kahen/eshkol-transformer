@@ -1,0 +1,30 @@
+autodiff_attention: aot_run_1 emitted a FAIL marker
+autodiff_attention: aot_run_2 emitted a FAIL marker
+autodiff_attention: jit_run emitted a FAIL marker
+autodiff_attention: jit_run_2 emitted a FAIL marker
+autodiff_gradient_tensor: aot_run_1 emitted a FAIL marker
+autodiff_gradient_tensor: aot_run_2 emitted a FAIL marker
+autodiff_gradient_tensor: jit_run emitted a FAIL marker
+autodiff_gradient_tensor: jit_run_2 emitted a FAIL marker
+autodiff_layer_norm: aot_run_1 emitted an error diagnostic
+autodiff_layer_norm: aot_run_1 did not reach its completion marker
+autodiff_layer_norm: aot_run_2 emitted an error diagnostic
+autodiff_layer_norm: aot_run_2 did not reach its completion marker
+autodiff_layer_norm: jit_run emitted an error diagnostic
+autodiff_layer_norm: jit_run did not reach its completion marker
+autodiff_layer_norm: jit_run_2 emitted an error diagnostic
+autodiff_layer_norm: jit_run_2 did not reach its completion marker
+rms_norm: jit_run emitted an error diagnostic
+rms_norm: jit_run did not reach its completion marker
+rms_norm: jit_run_2 emitted an error diagnostic
+rms_norm: jit_run_2 did not reach its completion marker
+negative.broadcast_shape_mismatch: AOT rejection timed out or terminated by signal
+negative.broadcast_shape_mismatch: JIT rejection timed out or terminated by signal
+negative.file_missing: AOT rejection timed out or terminated by signal
+negative.file_missing: JIT rejection timed out or terminated by signal
+negative.indexed_cross_entropy_targets: malformed AOT input succeeded
+negative.indexed_cross_entropy_targets: malformed JIT input succeeded
+negative.negative_dimension: malformed AOT input succeeded
+negative.negative_dimension: JIT rejection timed out or terminated by signal
+negative.reshape_size_mismatch: malformed AOT input succeeded
+negative.reshape_size_mismatch: malformed JIT input succeeded

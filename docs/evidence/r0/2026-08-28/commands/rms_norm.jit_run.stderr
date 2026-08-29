@@ -1,3 +1,0 @@
-[REPL] Discovered 237 functions, 306 globals from stdlib.bc
-[REPL] Loaded stdlib from: /home/gabe/.cache/eshkol-r0/work3/build/stdlib.o
-Unhandled exception: called a forward-referenced function that was never defined

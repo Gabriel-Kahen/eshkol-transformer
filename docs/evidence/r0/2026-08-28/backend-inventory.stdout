@@ -1,0 +1,16 @@
+version=1.3.4-evolve
+llvm-backend=on
+gpu=off
+gpu-metal=off
+gpu-cuda=off
+blas=off
+xla=off
+tensor-dtypes=f64,f32,f16,bf16,i8
+features_exit=0
+symbol=eshkol_object_abi_v1_h8_s0_a8
+version=1
+header_size=8
+subtype_offset=0
+payload_align=8
+runtime_header_size=8
+abi_exit=0

@@ -1,0 +1,7 @@
+name	exit_code	expectation	command
+compiler_help	0	discovery	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run --help
+autodiff_silu.aot_compile	0	capability-compile	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_silu.esk -o /home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/autodiff_silu-work/autodiff_silu.aot -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal
+autodiff_silu.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/autodiff_silu-work/autodiff_silu.aot
+autodiff_silu.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/autodiff_silu-work/autodiff_silu.aot
+autodiff_silu.jit_run	0	jit	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_silu.esk -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal
+autodiff_silu.jit_run_2	0	jit-repeat	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_silu.esk -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal

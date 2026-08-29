@@ -1,0 +1,2 @@
+PASS tensor serialization round trip
+R0_DONE tensor_serialization

@@ -1,0 +1,14 @@
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+
+[Eshkol] fatal signal: SIGSEGV (segmentation fault) at address 0x0000559e1eb7b000
+[Eshkol] this is most likely a stack overflow (recursion too deep) — use tail recursion or reduce the recursion depth
+[Eshkol] terminating; output above is what made it to stdout before the crash

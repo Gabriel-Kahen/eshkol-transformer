@@ -1,0 +1,2 @@
+cwd=/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/serialization_corruption-work-2/run timeout=300s stream_limit_bytes=2097152 virtual_kib=4194304
+/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/serialization_corruption.esk -o /home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/serialization_corruption-work-2/serialization_corruption.aot -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal

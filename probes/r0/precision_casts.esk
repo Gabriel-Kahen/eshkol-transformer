@@ -1,0 +1,37 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define (check name ok)
+  (display (if ok "PASS " "FAIL ")) (display name) (newline))
+
+(define source (make-tensor '(1) 1.0))
+(define f32 (tensor-cast (make-tensor '(1) 1.00000006) 'f32))
+(define f16 (tensor-cast (make-tensor '(1) 1.0005) 'f16))
+(define bf16 (tensor-cast (make-tensor '(1) 1.006) 'bf16))
+(define i8 (tensor-cast (make-tensor '(1) 3.7) 'i8))
+
+(check "default dtype tag" (eq? (tensor-dtype source) 'f64))
+(check "f32 dtype and quantization"
+       (and (eq? (tensor-dtype f32) 'f32)
+            (near (tensor-get f32 0) 1.0000001192092896 1e-12)))
+(check "f16 dtype and quantization"
+       (and (eq? (tensor-dtype f16) 'f16)
+            (near (tensor-get f16 0) 1.0009765625 1e-12)))
+(check "bf16 dtype and quantization"
+       (and (eq? (tensor-dtype bf16) 'bf16)
+            (near (tensor-get bf16 0) 1.0078125 1e-12)))
+(check "i8 dtype and quantization"
+       (and (eq? (tensor-dtype i8) 'i8)
+            (= (tensor-get i8 0) 4.0)))
+
+(define promoted
+  (tensor-add (make-tensor '(2) 1.0 :dtype 'f16)
+              (make-tensor '(2) 2.0 :dtype 'f32)))
+(check "elementwise dtype promotion" (eq? (tensor-dtype promoted) 'f32))
+
+(define reduced-matmul
+  (matmul (make-tensor '(1 1) 2.0 :dtype 'f16)
+          (make-tensor '(1 1) 3.0 :dtype 'f16)))
+(check "matmul dtype propagation"
+       (and (eq? (tensor-dtype reduced-matmul) 'f16)
+            (= (tensor-get reduced-matmul 0 0) 6.0)))
+
+(display "R0_DONE precision_casts") (newline)

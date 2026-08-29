@@ -1,0 +1,3 @@
+[1m[31m     ERROR:[0m /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk:4:54: Type error in layer-norm: expected tensor or numeric vector, got vector
+/home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk:4:54: Type error in layer-norm: expected tensor or numeric vector, got vector
+Unhandled exception: /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_layer_norm.esk:4:54: Type error in layer-norm: expected tensor or numeric vector, got vector

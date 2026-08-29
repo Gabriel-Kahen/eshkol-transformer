@@ -1,0 +1,29 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define (check name ok)
+  (display (if ok "PASS " "FAIL ")) (display name) (newline))
+
+(define matrix (reshape #(1.0 2.0 3.0 4.0) 2 2))
+(define product (gpu-matmul matrix matrix))
+(check "gpu-matmul alias values"
+       (and (= (tensor-get product 0 0) 7.0)
+            (= (tensor-get product 1 1) 22.0)))
+
+(define summed (gpu-elementwise + matrix matrix))
+(check "gpu-elementwise alias values"
+       (and (= (tensor-get summed 0 1) 4.0)
+            (= (tensor-get summed 1 0) 6.0)))
+
+(define probabilities (gpu-softmax #(1.0 2.0 3.0)))
+(check "gpu-softmax alias values"
+       (near (+ (tensor-get probabilities 0)
+                (+ (tensor-get probabilities 1)
+                   (tensor-get probabilities 2)))
+             1.0 1e-6))
+
+(define transposed (gpu-transpose matrix))
+(check "gpu-transpose alias values"
+       (and (= (tensor-get transposed 0 1) 3.0)
+            (= (tensor-get transposed 1 0) 2.0)))
+
+(check "gpu-reduce alias value" (= (gpu-reduce + matrix) 10.0))
+(display "R0_DONE gpu_aliases") (newline)
