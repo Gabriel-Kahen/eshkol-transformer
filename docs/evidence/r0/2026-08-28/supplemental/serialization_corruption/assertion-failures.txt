@@ -1,0 +1,4 @@
+serialization_corruption: aot_run_1 emitted a FAIL marker
+serialization_corruption: aot_run_2 emitted a FAIL marker
+serialization_corruption: jit_run emitted a FAIL marker
+serialization_corruption: jit_run_2 emitted a FAIL marker

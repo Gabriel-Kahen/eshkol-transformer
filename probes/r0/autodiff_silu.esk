@@ -1,0 +1,9 @@
+(define (near a b tolerance) (< (abs (- a b)) tolerance))
+(define actual
+  (gradient (lambda (v) (tensor-sum (silu v))) #(0.0 1.0)))
+(display
+  (if (and (near (tensor-get actual 0) 0.5 1e-8)
+           (near (tensor-get actual 1) 0.9276705118714867 1e-8))
+      "PASS silu gradient" "FAIL silu gradient"))
+(newline)
+(display "R0_DONE autodiff_silu") (newline)

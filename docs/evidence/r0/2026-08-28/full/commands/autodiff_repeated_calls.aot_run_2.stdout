@@ -1,0 +1,2 @@
+PASS independent repeated gradient calls
+R0_DONE autodiff_repeated_calls

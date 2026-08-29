@@ -1,0 +1,3 @@
+FAIL corrupt tensor rejected
+FAIL corrupt model rejected
+R0_DONE serialization_corruption

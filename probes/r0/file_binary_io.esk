@@ -1,4 +1,4 @@
-(define path "eshkol-r0-binary-io.bin")
+(define path "/tmp/eshkol-r0-binary-io.bin")
 (define out (open-binary-output-file path))
 (write-u8 0 out)
 (write-u8 127 out)

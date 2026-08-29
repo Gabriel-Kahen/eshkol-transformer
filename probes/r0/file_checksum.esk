@@ -1,0 +1,13 @@
+(define path "r0-checksum.txt")
+(if (file-exists? path) (file-delete path) #f)
+(define out (open-output-file path))
+(display "abc" out)
+(close-port out)
+(define digest (sha256-file path))
+(if (file-exists? path) (file-delete path) #f)
+(display
+  (if (string=? digest
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+      "PASS sha256 file" "FAIL sha256 file"))
+(newline)
+(display "R0_DONE file_checksum") (newline)

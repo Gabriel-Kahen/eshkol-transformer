@@ -1,0 +1,16 @@
+format_version	1
+eshkol_repository	https://github.com/tsotchke/eshkol.git
+eshkol_commit	90cbd7130f47b8184bcc77b8d5c1b0026da980de
+eshkol_source_dir	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-src
+eshkol_binary_sha256	caa295b19a6e9388963aa0def99dade63656d2dcbffccad421bd1daaa1db3750
+llvm_version	22.1.6
+cc_path	/usr/bin/clang
+cc_version	22.1.6
+cxx_path	/usr/bin/clang++
+cxx_version	22.1.6
+cmake_version	4.3.3
+ninja_version	1.13.2
+make_version	4.4.1
+bash_version	5.3.15
+git_version	2.55.0
+feature_profile	minimal-no-stdlib-no-agent-ffi-no-xla-no-quantum-no-tensorcore

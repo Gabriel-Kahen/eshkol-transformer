@@ -1,0 +1,8 @@
+PASS default dtype tag
+PASS f32 dtype and quantization
+PASS f16 dtype and quantization
+PASS bf16 dtype and quantization
+PASS i8 dtype and quantization
+PASS elementwise dtype promotion
+PASS matmul dtype propagation
+R0_DONE precision_casts

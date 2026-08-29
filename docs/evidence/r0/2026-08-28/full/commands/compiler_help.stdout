@@ -1,0 +1,56 @@
+Usage: eshkol-run [options] <input.esk|input.o> [input.esk|input.o]
+       eshkol-run -e '<expression>'   (JIT evaluate expression)
+       eshkol-run -r <file.esk>       (JIT run file)
+
+	--help:[-h] = Print this help message.
+	--debug:[-d] = Debugging information added inside the program.
+	--dump-ast:[-a] = Dumps the AST into a .ast file.
+	--dump-ir:[-i] = Dumps the IR into a .ll file.
+	--output:[-o] = Set the output path. The artifact kind follows the
+	    other flags: a native binary by default, a relocatable object
+	    with -c/--compile-only, a shared library with --shared-lib, or
+	    a WebAssembly module with --wasm.
+	--compile-only:[-c] = Compiles into an intermediate object file.
+	--emit-object = Alias for --compile-only.
+	--emit-depfile PATH = With -o/--emit-object, write a Makefile-format
+	    depfile listing the entry source plus every file transitively
+	    reached via (load …)/(import …)/(require …), so a build system
+	    (e.g. ninja DEPFILE) recompiles the object when any of them change.
+	--shared-lib:[-s] = Links a loadable shared library (.dylib/.so/.dll)
+	    with no `main` and LinkOnceODR linkage on every definition. Its
+	    exported functions use the platform C ABI for tagged values, so a
+	    host can dlopen it, call `__eshkol_lib_init__(arena)` once, then
+	    call them as declared in <eshkol/eshkol.h>. Add -c (or name a
+	    `-o <path>.o`) to stop at the library-mode object instead, which
+	    is what a build system linking Eshkol objects wants; that object
+	    keeps Eshkol's internal convention and is not C-callable.
+	-fPIC = Accepted for build-system compatibility.
+	-I DIR = Add a source/module search path.
+	-D NAME[=VALUE] = Accepted for build-system compatibility.
+	--wasm:[-w] = Compiles to WebAssembly (.wasm) format.
+	--profile NAME = Use an execution profile.
+	    Profiles: hosted-native, hosted-wasm, hosted-vm, freestanding-kernel-native,
+	              freestanding-mcu-native, freestanding-vm, embedded-vm.
+	--target TRIPLE = Set the LLVM target triple.
+	--emit-eskb:[-B] PATH = Emit a bytecode-VM ESKB module to PATH
+	    instead of a native artifact.
+	--require-vm-entry NAME = Require a named VM entry in emitted ESKB.
+	--require-vm-entry-zero-arg NAME = Require a named zero-argument VM entry in emitted ESKB.
+	--lib:[-l] = Links a shared library to the resulting executable.
+	--lib-path:[-L] = Adds a directory to the library search path.
+	--no-stdlib:[-n] = Do not auto-load the standard library.
+	--eval:[-e] = JIT evaluate an expression; output is shown via (display ...).
+	--run:[-r] = JIT-compile and run a file in memory (no artifact is
+	    written). Takes the input file as a plain positional argument,
+	    not an option value: `-r file.esk`, not `--run=file.esk`.
+	--version = Print version information.
+	--features = Print this build's compile-time capabilities as
+	    machine-parseable KEY=VALUE lines, then exit.
+	--abi-fingerprint = Print the object-ABI fingerprint (ADR-0012)
+	    this build was compiled against, as KEY=VALUE lines, then exit.
+	--debug-info:[-g] = Emit DWARF debug info (enables lldb/gdb source-level debugging).
+	--optimize:[-O] N = Set LLVM optimization level (0=none, 1=basic, 2=full, 3=aggressive).
+	--strict-types = Type errors are fatal (default: gradual/warnings).
+	--unsafe = Skip all type checks.
+
+Eshkol Compiler v1.3.4-evolve

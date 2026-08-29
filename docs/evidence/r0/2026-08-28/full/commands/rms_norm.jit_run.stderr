@@ -1,0 +1,6 @@
+[1m/home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/rms_norm.esk:1:17:[0m [1;31merror:[0m Unknown function: rms-norm
+    1 | (define result (rms-norm #(1.0 2.0 3.0) 1e-5))
+      |                 [1;31m^[0m
+[1m[31m     ERROR:[0m Failed to generate LLVM IR due to earlier code generation errors
+[1m[31m     ERROR:[0m Failed to generate LLVM IR
+Unhandled exception: called undefined function 'rms-norm' (forward-referenced but never defined; check that the file containing its `define` is `(load …)`ed or `(require …)`d before the call site)

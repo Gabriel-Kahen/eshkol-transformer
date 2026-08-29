@@ -1,0 +1,7 @@
+name	exit_code	expectation	command
+compiler_help	0	discovery	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run --help
+precision_casts.aot_compile	0	capability-compile	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/precision_casts.esk -o /home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/precision_casts-work/precision_casts.aot -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal
+precision_casts.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/precision_casts-work/precision_casts.aot
+precision_casts.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/precision_casts-work/precision_casts.aot
+precision_casts.jit_run	0	jit	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/precision_casts.esk -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal
+precision_casts.jit_run_2	0	jit-repeat	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/precision_casts.esk -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal

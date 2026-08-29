@@ -1,0 +1,7 @@
+name	exit_code	expectation	command
+compiler_help	0	discovery	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run --help
+activation_transformer.aot_compile	0	capability-compile	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/activation_transformer.esk -o /home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/activation_transformer-work/activation_transformer.aot -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal
+activation_transformer.aot_run_1	0	capability-run	/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/activation_transformer-work/activation_transformer.aot
+activation_transformer.aot_run_2	0	deterministic-repeat	/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/activation_transformer-work/activation_transformer.aot
+activation_transformer.jit_run	0	jit	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/activation_transformer.esk -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal
+activation_transformer.jit_run_2	0	jit-repeat	/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run -r /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/activation_transformer.esk -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal

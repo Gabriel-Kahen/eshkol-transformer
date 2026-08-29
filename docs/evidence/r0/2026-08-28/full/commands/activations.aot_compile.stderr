@@ -1,0 +1,14 @@
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+remark: <unknown>:0:0: loop not vectorized: instruction return type cannot be vectorized
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+warning: <unknown>:0:0: loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering

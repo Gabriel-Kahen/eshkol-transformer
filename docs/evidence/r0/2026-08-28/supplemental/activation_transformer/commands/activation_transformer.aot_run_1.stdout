@@ -1,0 +1,3 @@
+PASS silu
+PASS large-logit softmax
+R0_DONE activation_transformer

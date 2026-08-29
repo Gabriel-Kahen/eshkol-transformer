@@ -14,8 +14,9 @@ allocations without misrepresenting the uncapped provenance metadata helpers.
 
 The harness accepts a clean canonical source checkout, records and validates its
 origin and pinned commit, and validates the compiler identity. It can either build
-from scratch or consume an existing F0 build. All compiler temporaries and relative
-file-I/O probes run beneath the harness-owned work directory.
+from scratch or consume an existing F0 build. Compiler temporaries and relative
+file-I/O paths run beneath the harness-owned work directory. Three legacy file-I/O
+probes use unique, self-cleaning absolute paths under `/tmp`.
 
 Run a representative probe from the repository root with an existing F0 build:
 
@@ -44,20 +45,37 @@ executed on that backend.
 
 Probe groups:
 
-- `tensor_core.esk`: construction, shape/rank, indexing, mutation, reshape,
-  transpose, a broadcast candidate, and integer/boolean/f64 values.
-- `matmul.esk`: rectangular matrix multiplication and reference values.
-- `activations.esk`: ReLU, GELU, sigmoid, and axis softmax reference values.
+- `tensor_core.esk`, `rank_nine.esk`, `view_alias.esk`, and
+  `transpose_ownership.esk`: construction, shape/rank, indexing, reshape,
+  transpose, and observed alias/copy behavior. The mutable-storage check in
+  `tensor_core.esk` is a Scheme vector check, not tensor mutation evidence.
+- `broadcast.esk`, `matmul.esk`, `batch_matmul.esk`, and `tensor_dot.esk`:
+  one compatible broadcast shape, rectangular and batched matrix products, and a
+  vector dot product with reference values.
+- `dtype_*.esk` and `precision_f64.esk`: semantic integer/boolean exposure and one
+  value that distinguishes more-than-f32 precision; they do not prove a physical
+  storage dtype.
+- `precision_casts.esk`: public logical dtype tags, quantization, promotion, and
+  matmul propagation for f64/f32/f16/bf16/i8; physical byte width remains unproved.
+- `embedding.esk`, `layer_norm.esk`, `rms_norm.esk`, `causal_mask.esk`, and
+  `attention.esk`: transformer-relevant forward candidates.
+- `activations.esk` and `activation_transformer.esk`: ReLU, GELU, sigmoid, SiLU,
+  axis softmax, and large-logit stability reference values.
 - `autodiff_*.esk`: scalar forward/gradient finite differences, repeated inputs,
   tensor gradients, normalization/activation/attention gradients, and control flow.
 - `rng.esk`: fixed-seed reproducibility.
-- `file_io.esk`: basic non-executable text write/read prerequisite.
+- `gpu_aliases.esk`: numerical reachability of the five `gpu-*` names. This is
+  deliberately paired with compiler/device inventory because the name is not proof
+  that a device executed the operation.
+- `file_*.esk`, `tensor_serialization.esk`, `model_serialization.esk`, and
+  `serialization_corruption.esk`: text/byte I/O, rename, SHA-256, tensor/model
+  round trips, and corrupt-payload rejection. These do not prove fsync or atomic
+  replacement.
 - `memory_loop.esk`: bounded lifetime smoke; peak RSS alone does not prove flat RSS.
 - `negative/*.esk`: malformed inputs; each must produce an actionable compile-time
   or runtime rejection without timing out or terminating by signal.
 
-No public syntax is guessed for f16/bf16/f32 storage, device transfer/identity,
-checksums, or safe tensor serialization. Those remain `untested-with-reason` unless
-the pinned executable exposes a reachable contract. Unsupported named candidates
-(for example batched matmul or RMSNorm) remain in the suite so their diagnostics and
-exit behavior are captured rather than inferred from source.
+No public syntax is guessed for f16/bf16/f32 storage or device transfer/identity.
+Those remain `untested-with-reason` unless the pinned executable exposes a reachable
+contract. Named candidates remain in the suite so their diagnostics and exit
+behavior are captured rather than inferred from source.

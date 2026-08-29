@@ -1,0 +1,2 @@
+PASS silu gradient
+R0_DONE autodiff_silu

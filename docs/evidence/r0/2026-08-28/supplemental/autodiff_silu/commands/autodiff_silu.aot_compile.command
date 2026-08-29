@@ -1,0 +1,2 @@
+cwd=/home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/autodiff_silu-work/run timeout=300s stream_limit_bytes=2097152 virtual_kib=4194304
+/home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal/eshkol-run /home/gabe/.codex/worktrees/ed8f/eshkol-transformer/probes/r0/autodiff_silu.esk -o /home/gabe/.cache/eshkol-r0-canonical-supplemental-20260828/autodiff_silu-work/autodiff_silu.aot -L /home/gabe/.codex/worktrees/49f7/eshkol-transformer/.deps/eshkol-build-minimal

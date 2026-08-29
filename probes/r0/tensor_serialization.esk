@@ -1,0 +1,15 @@
+(define path "r0-tensor-checkpoint.bin")
+(if (file-exists? path) (file-delete path) #f)
+(define original (reshape #(1.0 2.0 3.0 4.0 5.0 6.0) 2 3))
+(define saved (tensor-save path original))
+(define loaded (tensor-load path))
+(define valid
+  (and saved
+       (equal? (tensor-shape loaded) '(2 3))
+       (= (tensor-get loaded 0 0) 1.0)
+       (= (tensor-get loaded 1 2) 6.0)))
+(if (file-exists? path) (file-delete path) #f)
+(display (if valid "PASS tensor serialization round trip"
+                    "FAIL tensor serialization round trip"))
+(newline)
+(display "R0_DONE tensor_serialization") (newline)

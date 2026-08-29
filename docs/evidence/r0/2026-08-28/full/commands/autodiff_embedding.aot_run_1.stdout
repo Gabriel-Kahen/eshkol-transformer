@@ -1,0 +1,2 @@
+PASS embedding scatter gradient
+R0_DONE autodiff_embedding

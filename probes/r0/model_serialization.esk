@@ -1,0 +1,17 @@
+(define path "r0-model-checkpoint.bin")
+(if (file-exists? path) (file-delete path) #f)
+(define weights (reshape #(1.0 2.0 3.0 4.0) 2 2))
+(define saved (model-save path (list (cons "weights" weights))))
+(define loaded (model-load path))
+(define entry (assoc "weights" loaded))
+(define valid
+  (and saved
+       entry
+       (equal? (tensor-shape (cdr entry)) '(2 2))
+       (= (tensor-get (cdr entry) 0 0) 1.0)
+       (= (tensor-get (cdr entry) 1 1) 4.0)))
+(if (file-exists? path) (file-delete path) #f)
+(display (if valid "PASS model serialization round trip"
+                    "FAIL model serialization round trip"))
+(newline)
+(display "R0_DONE model_serialization") (newline)

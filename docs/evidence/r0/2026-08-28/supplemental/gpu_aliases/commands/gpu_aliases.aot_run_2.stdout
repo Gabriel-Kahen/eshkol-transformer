@@ -1,0 +1,6 @@
+PASS gpu-matmul alias values
+PASS gpu-elementwise alias values
+PASS gpu-softmax alias values
+PASS gpu-transpose alias values
+PASS gpu-reduce alias value
+R0_DONE gpu_aliases
