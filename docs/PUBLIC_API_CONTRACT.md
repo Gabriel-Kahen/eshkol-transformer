@@ -254,7 +254,14 @@ D1 adds the following CPU control-plane corpus operations. They serialize a flat
 already-tokenized sequence only; they do not tokenize text or define document,
 iteration, shuffle, packing, batch, target, mask, or cursor semantics.
 They are exported only by `(require transformer.data)`; D1 adds no convenience alias
-or public error-construction surface.
+or public error-construction surface. Its production dependency graph uses
+`transformer.error_public` and the accepted E1 core, not
+`transformer.error_internal`, so requiring data does not resolve the named E1
+helpers `transformer-error-make`, `transformer-error-raise`, or
+`transformer-error-wrap-foreign`. On the pinned compiler, `provide` is
+informational and the accepted `e1-internal-dispatch` core bridge remains technically
+name-reachable; that existing E1 limitation is not a D1 API or an authorization to
+construct errors directly.
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
@@ -267,6 +274,17 @@ or public error-construction surface.
 | `token-corpus-summary-tokenizer-fingerprint summary` | Return a newly owned copy of the opaque tokenizer identity string. | New immutable CPU string; `invalid-argument`; no gradient. |
 | `token-corpus-summary-total-shard-bytes summary` | Return the nonnegative signed-`i64` sum of complete canonical shard file sizes, including every header, payload, and checksum trailer; it is not payload bytes. | New immutable CPU value; `invalid-argument`; no gradient. |
 
+Each returned corpus summary is an observationally immutable identity token, not a
+record or metadata vector. Authoritative metadata is validated, deep-owned, and kept
+in a private lexical identity registry. Only registered identities are accepted by
+the six accessors, and a caller receives one only after a completely successful
+writer or validator call; vectors, procedures, scalars, lookalike conditions, and
+other forged receivers raise `invalid-argument`. The tokenizer-fingerprint accessor
+returns a fresh detached string on every call, so mutating one result cannot affect
+the summary or another result. No summary constructor or registry operation is
+public. The pinned-runtime registry is append-only with process lifetime, linear
+lookup, monotonic memory cost, and no concurrency or thread-safety claim.
+
 The borrowed token list is a first-release CPU control-plane corpus-authoring input.
 It is not an A0 tensor, a `tensor.i64` capability, a substitute for T1 output, or an
 implicit conversion/fallback. This writer validates and traverses the complete list
@@ -276,14 +294,23 @@ determinism, boundary, publication, and corruption gates.
 
 `token-corpus-write!` acquires the canonical `.d1-writer-lock` directory and rejects
 an existing lock. It rejects every preexisting final or deterministic temporary
-target, writes and renames each shard, then writes and renames `manifest.etm` last.
+target. Each temporary is exclusively created at mode `0600` by D1's narrow checked
+native boundary, which validates the bytevector length, loops through partial writes
+until every byte is accepted, retries `EINTR`, rejects zero-byte progress, and checks
+`close(2)`. Only success permits the Eshkol caller to rename the temporary. Write,
+close, and cleanup failures are `io`; an owned temporary is unlinked on write/close
+failure, while a cleanup failure is reported and may require operator recovery.
+
+The writer publishes each checked shard, then writes and renames `manifest.etm` last.
 The manifest rename is the publication commit point. Before it, finalized shards are
 not a valid corpus; after it, the corpus is fully self-validating. A handled failure
-before commit removes this invocation's derived shards, temporaries, and lock. A
-process crash may leave shards, temporaries, and the lock but cannot expose a new
-manifest; recovery requires verifying that no writer is live and removing the
-incomplete derived files and lock before retry. Whole-directory atomicity and durable
-`fsync` semantics are not claimed.
+before commit removes this invocation's derived shards, temporaries, and lock when
+cleanup succeeds. A process crash or cleanup failure may leave shards, temporaries,
+and the lock but cannot expose a new manifest; recovery requires verifying that no
+writer is live and removing the incomplete derived files and lock before retry.
+Whole-directory atomicity, `fsync`, and power-loss durability are not claimed.
+Deterministic I/O faults exist only in a separately linked test archive; production
+contains no fault-injection branch or write fallback.
 
 | Operation | Shapes and semantics | Dtype/device/ownership/errors/gradient |
 |---|---|---|

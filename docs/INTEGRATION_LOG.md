@@ -499,16 +499,23 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Decision:** proposed; the binary v1.0 format direction is accepted with conditions
   by the integration task, while repository acceptance remains pending review.
 - **Contract:** `(require transformer.data)` exports the versioned, checksummed,
-  manifest-last token-corpus writer, strict validator, opaque immutable summary, and
-  six summary accessors documented in `docs/PUBLIC_API_CONTRACT.md`. The corpus uses
+  manifest-last token-corpus writer, strict validator, identity-backed
+  observationally immutable summary, and six summary accessors documented in
+  `docs/PUBLIC_API_CONTRACT.md`. Summary metadata is validated, deep-owned, and held
+  only in a private lexical identity registry; mutable or forged receivers are not
+  summaries, and no constructor escapes. The corpus uses
   `manifest.etm`, canonical `shard-%016d.ets` names, distinct eight-byte magic values,
   little-endian signed-`i64` token semantics, SHA-256 trailers, opaque canonical UTF-8
   tokenizer fingerprints bounded to 1..192 bytes, repeated identity/count metadata,
   and exact v1.0 rejection rules in `docs/TOKEN_SHARD_FORMAT.md`. The fingerprint is
   stored and compared byte-for-byte; D1 does not parse or assume T1's concurrently
-  proposed lexical form. The manifest rename is the publication commit point, not a
-  whole-directory atomicity or power-loss durability claim.
-- **Evidence:** After rebasing onto E1 merge `80371a1`, the local compatibility-only
+  proposed lexical form. A narrow native boundary exclusively creates each
+  deterministic temporary, loops through partial writes, checks every byte and
+  `close(2)`, and permits rename only on success; production contains no fault
+  injection or fallback. The manifest rename is the publication commit point, not a
+  whole-directory atomicity, `fsync`, or power-loss durability claim.
+- **Evidence:** Historical evidence before the current D1-R corrections: after
+  rebasing onto E1 merge `80371a1`, the local compatibility-only
   CachyOS x86-64 / LLVM-Clang 22.1.6 run passed `/usr/bin/bash -c 'make test-d1'`:
   byte-identical strict compilation with a production-E1 depfile, native SHA-256 and
   binary I/O/rename/lock/UTF-8 reachability under an unusable runtime `PATH`, checked
@@ -521,14 +528,33 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de`, compiler
   `v1.3.4-evolve`. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
   [CI run 33269298912](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33269298912)
-  passed build, integrated tests, smoke, and the reproducible benchmark at PR head
-  `58d3a5d`. Integration review remains pending.
+  passed build, integrated tests, smoke, and the reproducible benchmark at obsolete
+  PR head `58d3a5d`. D1-R subsequently requested three high-priority corrections at
+  exact head `52cb854e3e76e9b834ce76631b0acf6c5328553d`: checked write/close status,
+  nonforgeable observational summary immutability, and removal of named E1
+  constructor reachability from `(require transformer.data)`. The candidate is
+  rebased onto accepted K1/E1 documentation main commit
+  `8ab5e5cb00a07d8bff6ffc7c52b72cbae2d6d832` and implements those contract changes.
+  On the provenance-verified canonical pin, the unsupported CachyOS/LLVM-Clang 22
+  compatibility run passed `make test-d1` with 16 format/native-I/O groups plus the
+  compiled SHA-256, primitive, arithmetic, E1, summary-opacity, and fresh-cache AOT
+  reachability probes. It also passed `make test-a0 test-e1` (including 112 E1
+  checks), the standalone 23-test Q0 gate, full `make test` (including 41 B0 tests
+  and K1 sanitizers), explicit `make build`, `make smoke`, shell syntax, and diff
+  hygiene. Independent native-I/O/security, summary-opacity, public-boundary, and
+  documentation reviews found no remaining actionable issue. Exact-head supported
+  CI and D1-R re-review remain pending. The historical run is not acceptance
+  evidence for the new head.
 - **Dependencies / retest:** E1 issue #23 is merged through PR #27. D1 imports only
-  production `transformer.error_internal`; the provisional test adapter is removed,
-  and compile evidence asserts the production dependency. T1/D2/T2/DATA4 may consume
-  this contract only after integration acceptance; D2 retains all iteration,
-  shuffle, packing, batching, and cursor behavior. A later streaming/I1 integration
-  must rerun byte-determinism, publication, corruption, and scale tests.
+  `transformer.error_public` plus the accepted E1 core; `transformer.error_internal`
+  and its three named construction helpers are absent from the data dependency graph.
+  Because pinned `provide` declarations are informational, E1's already accepted
+  `e1-internal-dispatch` core bridge remains technically name-reachable and requires
+  upstream module-opacity retesting. T1/D2/T2/DATA4 may consume this contract only
+  after integration acceptance; D2 retains all iteration, shuffle, packing,
+  batching, and cursor behavior. A later streaming/I1 integration must rerun byte-
+  determinism, publication, corruption, and scale tests.
 - **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
-  [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29).
+  [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);
+  [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028).

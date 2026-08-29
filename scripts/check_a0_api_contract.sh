@@ -5,8 +5,11 @@ A0_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 source "${A0_ROOT}/scripts/common.sh"
 
 require_command timeout
+require_command ar
 verify_toolchain
 A0_RUNNER="$(eshkol_build_dir)/eshkol-run"
+A0_D1_ARTIFACT_DIR="$(project_build_dir)/d1"
+A0_D1_LIBRARY="${A0_D1_ARTIFACT_DIR}/libeshkol_transformer_d1.a"
 A0_COMPILER_TIMEOUT_SECONDS=${A0_COMPILER_TIMEOUT_SECONDS:-60}
 [[ "${A0_COMPILER_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || \
     die "A0_COMPILER_TIMEOUT_SECONDS must be a positive integer"
@@ -14,6 +17,10 @@ A0_COMPILER_TIMEOUT_SECONDS=${A0_COMPILER_TIMEOUT_SECONDS:-60}
 A0_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-a0.XXXXXX")
 trap 'rm -rf -- "$A0_TMP"' EXIT
 A0_JIT_INVOCATION=0
+
+[[ -r "${A0_D1_LIBRARY}" ]] || die "canonical D1 native archive is missing"
+[[ "$(ar t "${A0_D1_LIBRARY}")" == "data_io.o" ]] || \
+    die "canonical D1 native archive has unexpected members"
 
 run_compiler() {
     timeout --foreground --signal=TERM --kill-after=5s \
@@ -34,6 +41,7 @@ run_fixture() {
         -I "$A0_ROOT/tests/fixtures/a0_runtime" \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
+        -L "${A0_D1_ARTIFACT_DIR}" --lib eshkol_transformer_d1 \
         -r "$source"
 }
 

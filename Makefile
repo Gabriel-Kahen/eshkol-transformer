@@ -27,7 +27,7 @@ test: build
 	/usr/bin/bash scripts/test-d1.sh
 	python3 -m unittest -v tests.q0.test_python_isolation
 
-test-a0: configure
+test-a0: build
 	/usr/bin/bash scripts/check_a0_api_contract.sh
 
 test-b0:
@@ -51,7 +51,7 @@ test-x1: configure
 test-p1: configure
 	/usr/bin/bash scripts/test-p1.sh
 
-test-d1: configure
+test-d1: build
 	/usr/bin/bash scripts/test-d1.sh
 
 test-python-isolation:

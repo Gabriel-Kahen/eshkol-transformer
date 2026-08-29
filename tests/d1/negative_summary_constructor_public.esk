@@ -1,0 +1,4 @@
+(require transformer.data)
+
+;;; The implementation record constructor must not resolve through the public facade.
+(define leaked-summary-constructor d1-token-summary-create)
