@@ -51,9 +51,9 @@ _Static_assert(sizeof(et_kernel_tensor_view_v1) == 72u,
                "tensor-view ABI layout changed");
 _Static_assert(sizeof(et_kernel_request_v1) == 56u,
                "request ABI layout changed");
-_Static_assert(sizeof(et_kernel_call_v1) == 104u,
+_Static_assert(sizeof(et_kernel_call_v1) == 88u,
                "call ABI layout changed");
-_Static_assert(sizeof(et_kernel_provider_v1) == 80u,
+_Static_assert(sizeof(et_kernel_provider_v1) == 96u,
                "provider ABI layout changed");
 _Static_assert(offsetof(et_kernel_error, message) == 72u,
                "error message offset changed");
@@ -63,15 +63,46 @@ _Static_assert(offsetof(et_kernel_tensor_view_v1, shape) == 64u,
                "tensor shape offset changed");
 _Static_assert(offsetof(et_kernel_request_v1, deterministic) == 48u,
                "request deterministic offset changed");
-_Static_assert(offsetof(et_kernel_call_v1, outputs) == 96u,
+_Static_assert(offsetof(et_kernel_call_v1, outputs) == 80u,
                "call outputs offset changed");
-_Static_assert(offsetof(et_kernel_provider_v1, invoke_call) == 72u,
+_Static_assert(offsetof(et_kernel_provider_v1, capability_stride) == 56u,
+               "provider capability stride offset changed");
+_Static_assert(offsetof(et_kernel_provider_v1, invoke_call) == 88u,
                "provider callback offset changed");
 
 typedef struct test_provider_v1_1 {
   et_kernel_provider_v1 prefix;
   uint64_t ignored_minor_tail;
 } test_provider_v1_1;
+
+typedef struct test_capability_v1_1 {
+  et_kernel_capability_v1 prefix;
+  unsigned char ignored_minor_tail[8];
+} test_capability_v1_1;
+
+typedef struct test_tensor_view_v1_1 {
+  et_kernel_tensor_view_v1 prefix;
+  uint64_t ignored_minor_tail;
+} test_tensor_view_v1_1;
+
+typedef struct test_request_v1_1 {
+  et_kernel_request_v1 prefix;
+  uint64_t ignored_minor_tail;
+} test_request_v1_1;
+
+typedef struct test_call_v1_1 {
+  et_kernel_call_v1 prefix;
+  uint64_t ignored_minor_tail;
+} test_call_v1_1;
+
+_Static_assert(sizeof(test_capability_v1_1) == 128u,
+               "extended capability test stride changed");
+_Static_assert(sizeof(test_tensor_view_v1_1) == 80u,
+               "extended tensor-view test stride changed");
+_Static_assert(sizeof(test_request_v1_1) == 64u,
+               "extended request test size changed");
+_Static_assert(sizeof(test_call_v1_1) == 96u,
+               "extended call test size changed");
 
 static const et_kernel_dimension_range_v1 mock_dimensions[] = {
     {.minimum = 1u, .maximum = 8u, .maximum_unbounded = 0u, .reserved = {0}},
@@ -129,7 +160,9 @@ static int32_t mock_validate(const et_kernel_call_v1 *call,
 static void mock_invoke(const et_kernel_call_v1 *call) {
   invoke_calls++;
   for (size_t index = 0; index < call->output_count; index++) {
-    memset(call->outputs[index].data, 0x5a, call->outputs[index].byte_length);
+    et_kernel_tensor_view_v1 *output = (et_kernel_tensor_view_v1 *)(
+        (unsigned char *)call->outputs + index * call->output_stride);
+    memset(output->data, 0x5a, output->byte_length);
   }
 }
 
@@ -142,6 +175,8 @@ static et_kernel_provider_v1 mock_provider = {
     .version = "1.1-test",
     .evidence = "TEST-ONLY:NEVER-INSTALLED-OR-DISCOVERED-BY-DEFAULT",
     .capability_count = 1u,
+    .capability_stride = sizeof(et_kernel_capability_v1),
+    .capability_bytes = sizeof(et_kernel_capability_v1),
     .capabilities = &mock_capability,
     .validate_call = mock_validate,
     .invoke_call = mock_invoke,
@@ -236,6 +271,7 @@ static void test_version_and_baseline(void) {
       .deterministic = 1u,
       .reserved = {0},
   };
+  char unterminated_name[ET_KERNEL_MAX_SYMBOL_BYTES + 1u];
   char *json;
 
   CHECK(et_kernel_abi_major() == 1);
@@ -261,6 +297,8 @@ static void test_version_and_baseline(void) {
   CHECK(et_kernel_runtime_capability_at(runtime, 1000u) == NULL);
   CHECK(et_kernel_runtime_capability_find(runtime, "device.accelerator") ==
         NULL);
+  memset(unterminated_name, 'a', sizeof(unterminated_name));
+  CHECK(et_kernel_runtime_capability_find(runtime, unterminated_name) == NULL);
   expect_error(et_kernel_runtime_capability_require(
                    runtime, "kernel.matmul", &request, NULL, &error),
                &error, ET_KERNEL_ERROR_UNSUPPORTED,
@@ -302,6 +340,7 @@ static void test_discovery_versions_and_descriptors(void) {
   const char *const duplicate_operations[] = {"abi-test", "abi-test"};
   et_kernel_capability_v1 duplicates[2];
   et_kernel_capability_v1 malformed_pair[2];
+  unsigned char misaligned_provider[sizeof(et_kernel_provider_v1) + 1u];
 
   resolver_calls = 0;
   expect_error(et_kernel_runtime_discover(resolve_missing, NULL, &runtime,
@@ -311,8 +350,16 @@ static void test_discovery_versions_and_descriptors(void) {
   CHECK(runtime == NULL);
   CHECK(resolver_calls == 1);
 
+  memcpy(misaligned_provider + 1u, &mock_provider, sizeof(mock_provider));
+  expect_error(et_kernel_runtime_discover(resolve_provider,
+                                          misaligned_provider + 1u, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+
   provider = mock_provider;
   provider.abi_major = 2u;
+  provider.capabilities = (const void *)(uintptr_t)1u;
   expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
                                           &error),
                &error, ET_KERNEL_ERROR_VERSION_MISMATCH,
@@ -328,6 +375,7 @@ static void test_discovery_versions_and_descriptors(void) {
 
   provider = mock_provider;
   provider.required_features = UINT64_C(1);
+  provider.capabilities = (const void *)(uintptr_t)1u;
   expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
                                           &error),
                &error, ET_KERNEL_ERROR_VERSION_MISMATCH,
@@ -357,6 +405,7 @@ static void test_discovery_versions_and_descriptors(void) {
   malformed_pair[1] = mock_capability;
   malformed_pair[1].name = NULL;
   provider.capability_count = 2u;
+  provider.capability_bytes = sizeof(malformed_pair);
   provider.capabilities = malformed_pair;
   expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
                                           &error),
@@ -367,6 +416,7 @@ static void test_discovery_versions_and_descriptors(void) {
   duplicates[0] = mock_capability;
   duplicates[1] = mock_capability;
   provider.capability_count = 2u;
+  provider.capability_bytes = sizeof(duplicates);
   provider.capabilities = duplicates;
   expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
                                           &error),
@@ -431,6 +481,185 @@ static void test_discovery_versions_and_descriptors(void) {
   et_kernel_runtime_destroy(runtime);
 }
 
+static void test_extended_capability_tables(void) {
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_error error;
+  et_kernel_provider_v1 provider = mock_provider;
+  et_kernel_capability_v1 exact[2] = {mock_capability, mock_capability};
+  et_kernel_capability_v1 malformed = mock_capability;
+  et_kernel_shape_range_v1 excessive_rank = {
+      .rank = ET_KERNEL_MAX_RANK + 1u,
+      .dimensions = mock_dimensions,
+  };
+  test_capability_v1_1 extended[2];
+  unsigned char overlong[ET_KERNEL_MAX_METADATA_BYTES + 2u];
+  unsigned char misaligned_operations[sizeof(mock_operations) + 1u];
+
+  exact[0].name = "test.exact-first";
+  exact[1].name = "test.exact-second";
+  provider.capability_count = 2u;
+  provider.capability_stride = sizeof(exact[0]);
+  provider.capability_bytes = sizeof(exact);
+  provider.capabilities = exact;
+  CHECK(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                   &error) == 0);
+  CHECK(et_kernel_runtime_capability_find(runtime, "test.exact-first") != NULL);
+  CHECK(et_kernel_runtime_capability_find(runtime, "test.exact-second") != NULL);
+  et_kernel_runtime_destroy(runtime);
+  runtime = NULL;
+
+  memset(extended, 0, sizeof(extended));
+  extended[0].prefix = mock_capability;
+  extended[0].prefix.struct_size = sizeof(extended[0]);
+  extended[0].prefix.name = "test.extended-first";
+  extended[0].prefix.status = ET_KERNEL_CAPABILITY_UNVERIFIED;
+  memset(extended[0].ignored_minor_tail, 0xa5,
+         sizeof(extended[0].ignored_minor_tail));
+  extended[1].prefix = mock_capability;
+  extended[1].prefix.struct_size = sizeof(extended[1]);
+  extended[1].prefix.name = "test.extended-second";
+  memset(extended[1].ignored_minor_tail, 0x5a,
+         sizeof(extended[1].ignored_minor_tail));
+  provider.capability_stride = sizeof(extended[0]);
+  provider.capability_bytes = sizeof(extended);
+  provider.capabilities = extended;
+  CHECK(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                   &error) == 0);
+  CHECK(et_kernel_runtime_capability_find(runtime, "test.extended-first") !=
+        NULL);
+  CHECK(et_kernel_runtime_capability_find(runtime, "test.extended-second") !=
+        NULL);
+  CHECK(extended[0].ignored_minor_tail[0] == 0xa5u);
+  CHECK(extended[1].ignored_minor_tail[0] == 0x5au);
+  et_kernel_runtime_destroy(runtime);
+  runtime = NULL;
+
+  provider.validate_call = NULL;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_NULL_ARGUMENT);
+  provider.validate_call = mock_validate;
+
+  extended[1].prefix.name = extended[0].prefix.name;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_DUPLICATE_ENTRY);
+  extended[1].prefix.name = "test.extended-second";
+
+  provider.capability_stride = ET_KERNEL_CAPABILITY_V1_0_SIZE - 1u;
+  provider.capability_bytes = provider.capability_count *
+                              provider.capability_stride;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+               ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
+
+  provider.capability_stride = ET_KERNEL_CAPABILITY_V1_0_SIZE + 1u;
+  provider.capability_bytes = provider.capability_count *
+                              provider.capability_stride;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+
+  provider.capability_stride = SIZE_MAX - 7u;
+  provider.capability_bytes = 0u;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+
+  provider.capability_stride = sizeof(extended[0]);
+  provider.capability_bytes = sizeof(extended);
+  provider.capabilities = (const unsigned char *)extended + 1u;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+  provider.capabilities = extended;
+
+  provider.capability_bytes--;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+  provider.capability_bytes = sizeof(extended);
+
+  provider.capabilities = (const void *)(UINTPTR_MAX - 7u);
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+  provider.capabilities = extended;
+
+  extended[1].prefix.struct_size = sizeof(extended[1]) + 8u;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+               ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
+  extended[1].prefix.struct_size = sizeof(extended[1]);
+
+  provider = mock_provider;
+  provider.capability_count = 0u;
+  provider.capability_stride = 0u;
+  provider.capability_bytes = 0u;
+  provider.capabilities = NULL;
+  provider.validate_call = NULL;
+  provider.invoke_call = NULL;
+  CHECK(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                   &error) == 0);
+  CHECK(et_kernel_runtime_capability_count(runtime) == 11u);
+  et_kernel_runtime_destroy(runtime);
+  runtime = NULL;
+  provider.capability_stride = ET_KERNEL_CAPABILITY_V1_0_SIZE;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+
+  provider = mock_provider;
+  malformed.shape_range_count = ET_KERNEL_MAX_SHAPE_RANGES + 1u;
+  malformed.shape_ranges = mock_ranges;
+  provider.capabilities = &malformed;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+  malformed = mock_capability;
+  malformed.shape_range_count = 1u;
+  malformed.shape_ranges = &excessive_rank;
+  provider.capabilities = &malformed;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+  malformed = mock_capability;
+  memcpy(misaligned_operations + 1u, mock_operations,
+         sizeof(mock_operations));
+  malformed.operations =
+      (const char *const *)(const void *)(misaligned_operations + 1u);
+  provider.capabilities = &malformed;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+
+  memset(overlong, 'v', sizeof(overlong));
+  provider = mock_provider;
+  provider.version = (const char *)overlong;
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_TEXT);
+  overlong[sizeof(overlong) - 1u] = '\0';
+  expect_error(et_kernel_runtime_discover(resolve_provider, &provider, &runtime,
+                                          &error),
+               &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_TEXT);
+}
+
 static void test_deep_copy_and_canonicalization(void) {
   et_kernel_runtime *runtime = NULL;
   et_kernel_runtime *second_runtime = NULL;
@@ -475,11 +704,23 @@ static void test_deep_copy_and_canonicalization(void) {
 }
 
 static void test_provider_json_canonical_edges(void) {
-  static const et_kernel_dimension_range_v1 rank_one_dimensions[] = {
+  static const et_kernel_dimension_range_v1 rank_one_maximum_dimensions[] = {
       {.minimum = 0u,
        .maximum = UINT64_MAX,
        .maximum_unbounded = 0u,
        .reserved = {0}},
+  };
+  static const et_kernel_dimension_range_v1 rank_one_ten_dimensions[] = {
+      {.minimum = 0u, .maximum = 10u, .maximum_unbounded = 0u, .reserved = {0}},
+  };
+  static const et_kernel_dimension_range_v1 rank_one_twenty_dimensions[] = {
+      {.minimum = 0u, .maximum = 20u, .maximum_unbounded = 0u, .reserved = {0}},
+  };
+  static const et_kernel_dimension_range_v1 rank_one_unbounded_dimensions[] = {
+      {.minimum = 0u, .maximum = 7u, .maximum_unbounded = 1u, .reserved = {0}},
+  };
+  static const et_kernel_dimension_range_v1 rank_one_later_minimum[] = {
+      {.minimum = 1u, .maximum = 2u, .maximum_unbounded = 0u, .reserved = {0}},
   };
   static const et_kernel_dimension_range_v1 rank_two_dimensions[] = {
       {.minimum = 0u,
@@ -490,7 +731,11 @@ static void test_provider_json_canonical_edges(void) {
   };
   static const et_kernel_shape_range_v1 unsorted_ranges[] = {
       {.rank = 2u, .dimensions = rank_two_dimensions},
-      {.rank = 1u, .dimensions = rank_one_dimensions},
+      {.rank = 1u, .dimensions = rank_one_unbounded_dimensions},
+      {.rank = 1u, .dimensions = rank_one_twenty_dimensions},
+      {.rank = 1u, .dimensions = rank_one_later_minimum},
+      {.rank = 1u, .dimensions = rank_one_maximum_dimensions},
+      {.rank = 1u, .dimensions = rank_one_ten_dimensions},
   };
   static const char *const unsorted_symbols[] = {"z-value", "a-value"};
   const et_kernel_capability_v1 capability = {
@@ -508,7 +753,7 @@ static void test_provider_json_canonical_edges(void) {
       .dtypes = unsorted_symbols,
       .device_count = 2u,
       .devices = unsorted_symbols,
-      .shape_range_count = 2u,
+      .shape_range_count = 6u,
       .shape_ranges = unsorted_ranges,
   };
   const et_kernel_provider_v1 provider = {
@@ -520,6 +765,8 @@ static void test_provider_json_canonical_edges(void) {
       .version = "1.1-test",
       .evidence = "TEST-ONLY:JSON-CANONICALIZATION",
       .capability_count = 1u,
+      .capability_stride = sizeof(et_kernel_capability_v1),
+      .capability_bytes = sizeof(et_kernel_capability_v1),
       .capabilities = &capability,
       .validate_call = NULL,
       .invoke_call = NULL,
@@ -544,7 +791,8 @@ static void test_provider_json_canonical_edges(void) {
     CHECK(strstr(c_report,
                  "\"devices\":[\"a-value\",\"z-value\"]") != NULL);
     CHECK(strstr(c_report,
-                 "\"shape_ranges\":[[[0,18446744073709551615]],"
+                 "\"shape_ranges\":[[[0,10]],[[0,20]],"
+                 "[[0,18446744073709551615]],[[0,null]],[[1,2]],"
                  "[[0,null],[1,8]]]") != NULL);
     CHECK(strstr(c_report,
                  "\"evidence\":\"TEST-ONLY\\u000a\\u0009\\\"\\\\"
@@ -600,12 +848,17 @@ static void test_requests_and_dispatch(void) {
   et_kernel_call_v1 call = {
       .struct_size = sizeof(et_kernel_call_v1),
       .capability = "test.mock-dispatch",
-      .request = request,
+      .request = &request,
       .input_count = 1u,
+      .input_stride = sizeof(et_kernel_tensor_view_v1),
+      .input_bytes = sizeof(et_kernel_tensor_view_v1),
       .inputs = &input,
       .output_count = 1u,
+      .output_stride = sizeof(et_kernel_tensor_view_v1),
+      .output_bytes = sizeof(et_kernel_tensor_view_v1),
       .outputs = &output,
   };
+  unsigned char unterminated_dtype[ET_KERNEL_MAX_SYMBOL_BYTES + 1u];
 
   output.data = &output_bits;
   CHECK(et_kernel_runtime_discover(resolve_provider, &mock_provider, &runtime,
@@ -619,23 +872,23 @@ static void test_requests_and_dispatch(void) {
   CHECK(output_bits == UINT32_C(0x5a5a5a5a));
   CHECK(input_bits == UINT32_C(0x3f800000));
 
-  call.request.operation = "missing-operation";
+  request.operation = "missing-operation";
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                ET_KERNEL_ERROR_UNSUPPORTED,
                ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
-  call.request.operation = "abi-test";
-  call.request.dtype = "bf16";
+  request.operation = "abi-test";
+  request.dtype = "bf16";
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                ET_KERNEL_ERROR_UNSUPPORTED,
                ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
-  call.request.dtype = "f32";
-  call.request.device = "gpu:0";
+  request.dtype = "f32";
+  request.device = "gpu:0";
   input.device = "gpu:0";
   output.device = "gpu:0";
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                ET_KERNEL_ERROR_UNSUPPORTED,
                ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
-  call.request.device = "test-cpu";
+  request.device = "test-cpu";
   input.device = "test-cpu";
   output.device = "test-cpu";
 
@@ -666,13 +919,12 @@ static void test_requests_and_dispatch(void) {
   reject_mock_call = 0;
 
   request = mock_request(bad_shape);
-  call.request = request;
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                ET_KERNEL_ERROR_UNSUPPORTED,
                ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
   CHECK(invoke_calls == 1);
 
-  call.request = mock_request(shape);
+  request = mock_request(shape);
   output.data = input.data;
   output_bits = UINT32_C(0x11223344);
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
@@ -704,6 +956,12 @@ static void test_requests_and_dispatch(void) {
                ET_KERNEL_CODE_INVALID_BUFFER);
   input.device = "test-cpu";
   input.dtype = "f64";
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_DTYPE_MISMATCH,
+               ET_KERNEL_CODE_INVALID_TEXT);
+  input.dtype = "f32";
+  memset(unterminated_dtype, 'f', sizeof(unterminated_dtype));
+  input.dtype = (const char *)unterminated_dtype;
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                ET_KERNEL_ERROR_DTYPE_MISMATCH,
                ET_KERNEL_CODE_INVALID_TEXT);
@@ -747,11 +1005,13 @@ static void test_requests_and_dispatch(void) {
     outputs[0].data = &second_output_bits;
     outputs[1].data = ((unsigned char *)&second_output_bits) + 1;
     call.output_count = 2u;
+    call.output_bytes = sizeof(outputs);
     call.outputs = outputs;
     expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                  ET_KERNEL_ERROR_INVALID_ARGUMENT,
                  ET_KERNEL_CODE_ALIASING_OUTPUT);
     call.output_count = 1u;
+    call.output_bytes = sizeof(output);
     call.outputs = &output;
   }
 
@@ -766,14 +1026,192 @@ static void test_requests_and_dispatch(void) {
                ET_KERNEL_ERROR_VERSION_MISMATCH,
                ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
   call.struct_size = sizeof(call);
-  call.request.struct_size = offsetof(et_kernel_request_v1, reserved);
+  request.struct_size = offsetof(et_kernel_request_v1, reserved);
   expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
                ET_KERNEL_ERROR_VERSION_MISMATCH,
                ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
 
   CHECK(et_kernel_runtime_capability_require(
-            runtime, "test.mock-dispatch", &call.request, NULL, NULL) ==
+            runtime, "test.mock-dispatch", call.request, NULL, NULL) ==
         ET_KERNEL_ERROR_VERSION_MISMATCH);
+
+  et_kernel_runtime_destroy(runtime);
+}
+
+static void test_extended_tensor_tables(void) {
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_error error;
+  uint64_t shape[] = {1u};
+  uint32_t input_bits[2] = {UINT32_C(0x3f800000), UINT32_C(0x40000000)};
+  uint32_t output_bits[2] = {UINT32_C(0x11111111), UINT32_C(0x22222222)};
+  et_kernel_request_v1 request = mock_request(shape);
+  test_tensor_view_v1_1 inputs[2];
+  test_tensor_view_v1_1 outputs[2];
+  et_kernel_call_v1 call;
+
+  memset(inputs, 0, sizeof(inputs));
+  memset(outputs, 0, sizeof(outputs));
+  for (size_t index = 0; index < 2u; index++) {
+    inputs[index].prefix.struct_size = sizeof(inputs[index]);
+    inputs[index].prefix.data = &input_bits[index];
+    inputs[index].prefix.byte_length = sizeof(input_bits[index]);
+    inputs[index].prefix.dtype = "f32";
+    inputs[index].prefix.device = "test-cpu";
+    inputs[index].prefix.layout = ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR;
+    inputs[index].prefix.rank = 1u;
+    inputs[index].prefix.shape = shape;
+    inputs[index].ignored_minor_tail = UINT64_C(0xaaaaaaaaaaaaaaaa) + index;
+    outputs[index].prefix = inputs[index].prefix;
+    outputs[index].prefix.data = &output_bits[index];
+    outputs[index].ignored_minor_tail = UINT64_C(0xbbbbbbbbbbbbbbbb) + index;
+  }
+  memset(&call, 0, sizeof(call));
+  call.struct_size = sizeof(call);
+  call.capability = "test.mock-dispatch";
+  call.request = &request;
+  call.input_count = 2u;
+  call.input_stride = sizeof(inputs[0]);
+  call.input_bytes = sizeof(inputs);
+  call.inputs = inputs;
+  call.output_count = 2u;
+  call.output_stride = sizeof(outputs[0]);
+  call.output_bytes = sizeof(outputs);
+  call.outputs = outputs;
+
+  CHECK(et_kernel_runtime_discover(resolve_provider, &mock_provider, &runtime,
+                                   &error) == 0);
+  validate_calls = 0;
+  invoke_calls = 0;
+  reject_mock_call = 0;
+  CHECK(et_kernel_runtime_dispatch(runtime, &call, &error) == 0);
+  CHECK(validate_calls == 1);
+  CHECK(invoke_calls == 1);
+  CHECK(output_bits[0] == UINT32_C(0x5a5a5a5a));
+  CHECK(output_bits[1] == UINT32_C(0x5a5a5a5a));
+  CHECK(inputs[0].ignored_minor_tail == UINT64_C(0xaaaaaaaaaaaaaaaa));
+  CHECK(inputs[1].ignored_minor_tail == UINT64_C(0xaaaaaaaaaaaaaaab));
+  CHECK(outputs[0].ignored_minor_tail == UINT64_C(0xbbbbbbbbbbbbbbbb));
+  CHECK(outputs[1].ignored_minor_tail == UINT64_C(0xbbbbbbbbbbbbbbbc));
+
+  {
+    test_request_v1_1 extended_request = {
+        .prefix = request,
+        .ignored_minor_tail = UINT64_C(0x123456789abcdef0),
+    };
+    test_call_v1_1 extended_call = {
+        .prefix = call,
+        .ignored_minor_tail = UINT64_C(0x0fedcba987654321),
+    };
+    extended_request.prefix.struct_size = sizeof(extended_request);
+    extended_call.prefix.struct_size = sizeof(extended_call);
+    extended_call.prefix.request = &extended_request.prefix;
+    output_bits[0] = UINT32_C(0x11111111);
+    output_bits[1] = UINT32_C(0x22222222);
+    CHECK(et_kernel_runtime_dispatch(runtime, &extended_call.prefix, &error) ==
+          0);
+    CHECK(output_bits[0] == UINT32_C(0x5a5a5a5a));
+    CHECK(output_bits[1] == UINT32_C(0x5a5a5a5a));
+    CHECK(extended_request.ignored_minor_tail ==
+          UINT64_C(0x123456789abcdef0));
+    CHECK(extended_call.ignored_minor_tail ==
+          UINT64_C(0x0fedcba987654321));
+  }
+
+  {
+    et_kernel_call_v1 empty_call = call;
+    empty_call.input_count = 0u;
+    empty_call.input_stride = 0u;
+    empty_call.input_bytes = 0u;
+    empty_call.inputs = NULL;
+    empty_call.output_count = 0u;
+    empty_call.output_stride = 0u;
+    empty_call.output_bytes = 0u;
+    empty_call.outputs = NULL;
+    CHECK(et_kernel_runtime_dispatch(runtime, &empty_call, &error) == 0);
+    CHECK(validate_calls == 3);
+    CHECK(invoke_calls == 3);
+    empty_call.input_stride = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE;
+    expect_error(et_kernel_runtime_dispatch(runtime, &empty_call, &error),
+                 &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                 ET_KERNEL_CODE_INVALID_BUFFER);
+  }
+
+  output_bits[0] = UINT32_C(0x11111111);
+  output_bits[1] = UINT32_C(0x22222222);
+  call.input_stride = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE - 1u;
+  call.input_bytes = call.input_count * call.input_stride;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_VERSION_MISMATCH,
+               ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
+  CHECK(output_bits[0] == UINT32_C(0x11111111));
+  CHECK(output_bits[1] == UINT32_C(0x22222222));
+
+  call.input_stride = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE + 1u;
+  call.input_bytes = call.input_count * call.input_stride;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+
+  call.input_stride = SIZE_MAX - 7u;
+  call.input_bytes = 0u;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+
+  call.input_stride = sizeof(inputs[0]);
+  call.input_bytes = sizeof(inputs);
+  call.inputs = (const unsigned char *)inputs + 1u;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+  call.inputs = inputs;
+
+  inputs[1].prefix.struct_size = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE - 1u;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_VERSION_MISMATCH,
+               ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
+  inputs[1].prefix.struct_size = sizeof(inputs[1]);
+
+  call.output_stride = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE - 1u;
+  call.output_bytes = call.output_count * call.output_stride;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_VERSION_MISMATCH,
+               ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
+
+  call.output_stride = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE + 1u;
+  call.output_bytes = call.output_count * call.output_stride;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+
+  call.output_stride = SIZE_MAX - 7u;
+  call.output_bytes = 0u;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+
+  call.output_stride = sizeof(outputs[0]);
+  call.output_bytes = sizeof(outputs);
+  call.outputs = (unsigned char *)outputs + 1u;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INVALID_BUFFER);
+  call.outputs = outputs;
+
+  outputs[1].prefix.struct_size = sizeof(outputs[1]) + 8u;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_VERSION_MISMATCH,
+               ET_KERNEL_CODE_INVALID_STRUCT_SIZE);
+  outputs[1].prefix.struct_size = sizeof(outputs[1]);
+
+  call.output_bytes--;
+  expect_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+               ET_KERNEL_ERROR_INVALID_ARGUMENT,
+               ET_KERNEL_CODE_INTEGER_OVERFLOW);
+  CHECK(validate_calls == 3);
+  CHECK(invoke_calls == 3);
+  CHECK(output_bits[0] == UINT32_C(0x11111111));
+  CHECK(output_bits[1] == UINT32_C(0x22222222));
 
   et_kernel_runtime_destroy(runtime);
 }
@@ -785,6 +1223,8 @@ int main(void) {
   test_provider_json_canonical_edges();
   test_report_buffer_atomicity();
   test_requests_and_dispatch();
+  test_extended_capability_tables();
+  test_extended_tensor_tables();
   if (failures != 0) {
     fprintf(stderr, "K1 FAIL: %d of %d checks failed\n", failures, checks);
     return 1;

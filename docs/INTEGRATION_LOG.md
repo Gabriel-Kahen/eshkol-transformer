@@ -130,7 +130,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   integration-owner acceptance.
 - **Contract:** Native-kernel ABI 1.0 uses the major-only provider symbol
   `eshkol_transformer_kernel_provider_v1`, fixed x86-64 v1.0 structure prefixes,
-  compatible-minor discovery, explicit process-local resolver registration, deep
+  compatible-minor discovery, exact-span stride tables for every repeated
+  size-tagged descriptor, explicit process-local resolver registration, deep
   immutable capability snapshots, strict shape/storage/ownership checks, two-phase
   failure-atomic dispatch, ABI-local errors, and canonical process-local JSON reports.
   No filesystem or environment library discovery exists. The provider-free report
@@ -141,18 +142,21 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Evidence:** `/usr/bin/bash -c 'make test-k1'` passed on the explicitly unsupported
   CachyOS x86-64 / LLVM-Clang 22.1.6 compatibility lane against clean canonical
   `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` and compiler
-  `1.3.4-evolve`. The gate passed 396 C ABI, compatible-minor, discovery,
+  `1.3.4-evolve`. The gate passed 596 C ABI, compatible-minor, discovery,
   exact-request, ownership, malformed-call, failure-atomicity, canonical JSON, and
   unsupported-path checks; C/C++ warning-clean compilation; ASan/UBSan; byte-identical
   `C`/`C.UTF-8` reports; strict JSON parse/canonical round trip; and two Eshkol AOT
   link/runs of the fixed-width ABI version probe. The baseline report SHA-256 is
   `7e14cc845902b6a37f9946a163d355085ea704c043863f7e37481b4ab0deec59`.
-  The repository-wide `make test` gate also passed with a writable explicit Eshkol
-  JIT cache. Independent ABI, negative-test, native-integration, and C-safety reviews
-  were completed and their findings were addressed. Supported Ubuntu 22.04 x86-64 /
-  LLVM-Clang 21.1.8 [CI run 33226881022](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33226881022)
-  passed the integrated F0/A0/B0/K1 gates, including the canonical-report check and
-  full K1 native/Eshkol link gate.
+  The focused gate consumes the archive produced by `make build`, verifies its
+  one-member shape, checks the same-rank canonical-order golden, and uses the same
+  builder for its sanitized archive. The repository-wide `make test` and `make smoke`
+  gates also passed with a writable explicit Eshkol JIT cache. Independent review
+  recorded request-changes at
+  head `7fe93770`; these fixes remain subject to re-review. Supported Ubuntu 22.04
+  x86-64 / LLVM-Clang 21.1.8 run 33226881022 passed an earlier head but predates these
+  corrections and is not evidence for the revised ABI. The current head still needs
+  a new supported-lane run and re-review before integration.
 - **Dependencies / retest:** N2, A2, L2, MP4, AMD4, and DIST5 may consume only
   separately verified provider entries; none may infer support from ABI presence.
   E1 issue #23 owns `transformer.error_internal`; any Eshkol-facing K1 adapter must

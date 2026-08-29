@@ -19,11 +19,13 @@ extern "C" {
 #define ET_KERNEL_MAX_SHAPE_RANGES 4096u
 #define ET_KERNEL_MAX_RANK 64u
 #define ET_KERNEL_MAX_TENSORS 1024u
+#define ET_KERNEL_MAX_SYMBOL_BYTES 127u
+#define ET_KERNEL_MAX_METADATA_BYTES 1024u
 #define ET_KERNEL_CAPABILITY_V1_0_SIZE ((size_t)120u)
 #define ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ((size_t)72u)
 #define ET_KERNEL_REQUEST_V1_0_SIZE ((size_t)56u)
-#define ET_KERNEL_CALL_V1_0_SIZE ((size_t)104u)
-#define ET_KERNEL_PROVIDER_V1_0_SIZE ((size_t)80u)
+#define ET_KERNEL_CALL_V1_0_SIZE ((size_t)88u)
+#define ET_KERNEL_PROVIDER_V1_0_SIZE ((size_t)96u)
 
 enum {
   ET_KERNEL_CAPABILITY_UNVERIFIED = 0,
@@ -135,11 +137,15 @@ typedef struct et_kernel_request_v1 {
 typedef struct et_kernel_call_v1 {
   size_t struct_size;
   const char *capability;
-  et_kernel_request_v1 request;
+  const et_kernel_request_v1 *request;
   size_t input_count;
-  const et_kernel_tensor_view_v1 *inputs;
+  size_t input_stride;
+  size_t input_bytes;
+  const void *inputs;
   size_t output_count;
-  et_kernel_tensor_view_v1 *outputs;
+  size_t output_stride;
+  size_t output_bytes;
+  void *outputs;
 } et_kernel_call_v1;
 
 typedef int32_t (*et_kernel_validate_call_v1)(const et_kernel_call_v1 *call,
@@ -155,10 +161,77 @@ typedef struct et_kernel_provider_v1 {
   const char *version;
   const char *evidence;
   size_t capability_count;
-  const et_kernel_capability_v1 *capabilities;
+  size_t capability_stride;
+  size_t capability_bytes;
+  const void *capabilities;
   et_kernel_validate_call_v1 validate_call;
   et_kernel_invoke_call_v1 invoke_call;
 } et_kernel_provider_v1;
+
+#if defined(__cplusplus)
+#define ET_KERNEL_STATIC_ASSERT(condition, message) static_assert(condition, message)
+#else
+#define ET_KERNEL_STATIC_ASSERT(condition, message) _Static_assert(condition, message)
+#endif
+ET_KERNEL_STATIC_ASSERT(sizeof(void *) == 8u && sizeof(size_t) == 8u,
+                        "kernel ABI v1 requires 64-bit pointers and size_t");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_error) == 264u &&
+                            offsetof(et_kernel_error, message) == 72u,
+                        "kernel error layout changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_dimension_range_v1) == 24u &&
+                            offsetof(et_kernel_dimension_range_v1,
+                                     maximum_unbounded) == 16u,
+                        "dimension-range layout changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_shape_range_v1) == 16u &&
+                            offsetof(et_kernel_shape_range_v1, dimensions) ==
+                                8u,
+                        "shape-range layout changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_capability_v1) ==
+                            ET_KERNEL_CAPABILITY_V1_0_SIZE,
+                        "capability v1.0 prefix layout changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_capability_v1, shape_ranges) ==
+                            112u,
+                        "capability shape-range offset changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_tensor_view_v1) ==
+                            ET_KERNEL_TENSOR_VIEW_V1_0_SIZE,
+                        "tensor-view v1.0 prefix layout changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_tensor_view_v1, shape) == 64u,
+                        "tensor-view shape offset changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_request_v1) ==
+                            ET_KERNEL_REQUEST_V1_0_SIZE,
+                        "request v1.0 prefix layout changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_request_v1, deterministic) == 48u,
+                        "request deterministic offset changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_call_v1) == ET_KERNEL_CALL_V1_0_SIZE,
+                        "call v1.0 prefix layout changed");
+ET_KERNEL_STATIC_ASSERT(sizeof(et_kernel_provider_v1) ==
+                            ET_KERNEL_PROVIDER_V1_0_SIZE,
+                        "provider v1.0 prefix layout changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_provider_v1, capability_stride) ==
+                            56u,
+                        "provider capability stride offset changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_provider_v1, capability_bytes) ==
+                            64u &&
+                            offsetof(et_kernel_provider_v1, capabilities) ==
+                                72u &&
+                            offsetof(et_kernel_provider_v1, validate_call) ==
+                                80u,
+                        "provider capability table offsets changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_provider_v1, invoke_call) == 88u,
+                        "provider invoke callback offset changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_call_v1, request) == 16u,
+                        "call request pointer offset changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_call_v1, input_count) == 24u &&
+                            offsetof(et_kernel_call_v1, input_stride) == 32u &&
+                            offsetof(et_kernel_call_v1, input_bytes) == 40u &&
+                            offsetof(et_kernel_call_v1, inputs) == 48u &&
+                            offsetof(et_kernel_call_v1, output_count) == 56u &&
+                            offsetof(et_kernel_call_v1, output_stride) == 64u &&
+                            offsetof(et_kernel_call_v1, output_bytes) == 72u,
+                        "call tensor table offsets changed");
+ET_KERNEL_STATIC_ASSERT(offsetof(et_kernel_call_v1, outputs) == 80u,
+                        "call output table offset changed");
+#undef ET_KERNEL_STATIC_ASSERT
 
 typedef const et_kernel_provider_v1 *(*et_kernel_provider_resolver_v1)(
     void *context, const char *symbol_name);

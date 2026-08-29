@@ -12,7 +12,7 @@ configure:
 build: configure
 	/usr/bin/bash scripts/build.sh
 
-test: configure
+test: build
 	/usr/bin/bash scripts/test.sh
 	/usr/bin/bash scripts/check_a0_api_contract.sh
 	/usr/bin/bash scripts/test-k1.sh
@@ -23,7 +23,7 @@ test-a0: configure
 test-b0:
 	/usr/bin/bash scripts/test-b0.sh
 
-test-k1: configure
+test-k1: build
 	/usr/bin/bash scripts/test-k1.sh
 
 smoke: build

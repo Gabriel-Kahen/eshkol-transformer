@@ -24,7 +24,7 @@ from production sources and default discovery, and is not capability evidence.
 
 The provider symbol is `eshkol_transformer_kernel_provider_v1`: the symbol encodes
 only ABI major 1. The provider descriptor carries `abi_major`, `abi_minor`,
-`struct_size`, and `required_features`.
+`struct_size`, `required_features`, and an explicit capability table.
 
 - A major other than 1 is `version-mismatch`.
 - A descriptor smaller than the complete 1.0 prefix is `version-mismatch`.
@@ -35,11 +35,28 @@ only ABI major 1. The provider descriptor carries `abi_major`, `abi_minor`,
 - Capability, request, tensor-view, and call descriptors are also size-tagged and
   reject an undersized prefix before reading later fields.
 
-On the supported x86-64 ABI, the frozen 1.0 prefixes are 80 bytes for a provider,
-120 for a capability, 72 for a tensor view, 56 for a request, and 104 for a call.
+On the supported x86-64 ABI, the frozen 1.0 prefixes are 96 bytes for a provider,
+120 for a capability, 72 for a tensor view, 56 for a request, and 88 for a call.
 Those explicit prefix constants, rather than a future header's total structure size,
 govern compatible-minor discovery. Minor extensions append fields and preserve every
-embedded v1 layout and offset.
+v1 layout and offset. The public C/C++ header asserts these sizes and every table,
+callback, and key nested-record offset at compile time.
+
+Every repeated size-tagged descriptor collection is the four-field tuple `count`,
+`stride`, `bytes`, and `base`. Provider capabilities and call inputs and outputs use
+this rule. A zero count requires a null base, zero stride, and zero byte span. A
+nonzero count requires an aligned base and stride, a stride at least as large as the
+frozen element prefix, nonoverflowing `count * stride`, and exactly
+`bytes == count * stride`. The base plus byte span and every entry offset must fit
+`uintptr_t`; the last entry's complete frozen prefix must fit the span. Each entry
+must declare `frozen-prefix-size <= struct_size <= stride`. Validation completes
+before an entry field is read. Tests cover exact v1.0 multi-entry tables and enlarged
+v1.1 entries with nonzero extension bytes.
+
+The singular request is referenced by pointer from a call, so an appended compatible
+minor request is not embedded at a frozen old size. Shape-range, dimension-range,
+and string-pointer arrays are not size-tagged; their layouts are fixed for ABI major
+1 unless a later separately versioned collection replaces them.
 
 Discovery is explicit and process-local. The caller supplies a resolver callback;
 K1 asks it for the one major-versioned symbol. The runtime does not call `dlopen`,
@@ -50,7 +67,9 @@ path, and it returns the deterministic unverified baseline rather than asserting
 verified absence.
 
 Providers are trusted native code already linked or registered by the embedding
-process. Discovery validates and deep-copies all capability metadata plus the callback
+process. Provider descriptors and all referenced memory must remain immutable and
+readable for the duration of discovery. Discovery validates the complete provider
+before allocation, then deep-copies all capability metadata plus the callback
 addresses into a new runtime-owned immutable snapshot and sorts it canonically. The
 descriptor and metadata may be released after discovery; the linked callback code
 must remain valid for the runtime's lifetime.
@@ -58,7 +77,11 @@ Capability accessors return borrowed read-only pointers valid until
 `et_kernel_runtime_destroy`. Destroying a null runtime is safe.
 
 Capability names, implementations, operations, dtypes, and device descriptors use
-lowercase ASCII symbols. A verified entry must include at least one operation, dtype,
+lowercase ASCII symbols with at most 127 bytes before NUL. Provider and capability
+version/evidence strings are valid UTF-8 with at most 1024 bytes before NUL. Because
+C pointers carry no readable extent, a supplied string must make its maximum plus one
+bytes readable during validation; K1 never scans beyond that bound. A verified entry
+must include at least one operation, dtype,
 device, and shape-range alternative. Matching requires exact symbol membership,
 exact rank, every extent within its inclusive range, and a deterministic entry when
 requested. Missing, unsupported, unverified, or nonmatching entries all cause
@@ -72,7 +95,9 @@ a bound is an explicit malformed-call error before iteration or allocation.
 An ABI tensor view is borrowed storage plus exact byte length, dtype, device, layout,
 zero byte offset, rank, and concrete nonnegative dimensions. ABI v1 recognizes the
 storage widths of `bool`, `f16`, `bf16`, `f32`, and `i64` only so it can validate byte
-counts; recognizing a code is not a capability claim. The call boundary requires:
+counts; recognizing a code is not a capability claim. The call descriptor, request,
+tensor tables, and their metadata must remain immutable for the duration of dispatch.
+The call boundary requires:
 
 - dense row-major layout and zero offset;
 - exact nonoverflowing byte length from dtype and shape;
@@ -124,12 +149,15 @@ Report version 1 is strict UTF-8 JSON with these canonical rules:
 
 - root keys are `abi`, `entries`, `format`, `process_local`, `provider_abi`, and
   `version`, in that order;
+- both `abi` and nonnull `provider_abi` contain `major` then `minor`;
 - entry keys are `constraints`, `deterministic`, `evidence`, `implementation`,
   `name`, `status`, and `version`, in that order;
 - constraint keys are `devices`, `dtypes`, `operations`, and `shape_ranges`, in
   that order;
-- entries and string lists are sorted by raw UTF-8 bytes; shape alternatives are
-  sorted by rank then dimension ranges;
+- entries and string lists are sorted by raw UTF-8 bytes;
+- shape alternatives are sorted by rank, then each dimension in order by minimum,
+  bounded before unbounded, and bounded maximum; each dimension is encoded as
+  `[minimum,maximum]`, with `null` as an unbounded maximum;
 - JSON integers are unsigned base-10 with no leading zero; floating JSON numbers are
   never emitted; unbounded maxima are `null`;
 - strings must be valid UTF-8; quote and backslash use two-byte escapes, U+0000
@@ -145,6 +173,23 @@ The version-1 baseline has SHA-256
 The K1 gate emits it in both `C` and `C.UTF-8` locales, byte-compares the results,
 checks that hash, strict-parses and canonically reserializes it, and exercises provider
 metadata in different source orders to prove canonical round-trip identity.
+The same-rank bounded/unbounded ordering golden has SHA-256
+`dbe33e28b6db407ed9a5e0b1c76f6f24950b716e74e3b2bf88930e11eb7ddb47`.
+
+## Normal build artifact
+
+`make build` produces `build/k1/libeshkol_transformer_k1.a` and its single
+`kernel_abi.o` member under the configured project build tree. Consumers compile
+against the source public header and link explicitly, for example:
+
+```sh
+clang -I include consumer.c build/k1/libeshkol_transformer_k1.a -o consumer
+eshkol-run --no-stdlib -L build/k1 --lib eshkol_transformer_k1 probe.esk -o probe
+```
+
+F0 defines no system-wide install contract, so K1 adds no install or dynamic-library
+search behavior. `make clean` removes the project build tree, including this archive,
+while preserving the pinned toolchain artifacts.
 
 ## Verification
 
@@ -154,8 +199,9 @@ headers, executes ABI and malformed-call conformance twice, verifies canonical J
 runs address/undefined-behavior sanitizers, and AOT-compiles/links/runs the fixed-width
 Eshkol version probe twice with compiler `1.3.4-evolve`.
 
-Local CachyOS/LLVM 22 results are compatibility evidence only. The supported Ubuntu
-22.04 x86-64, LLVM/Clang 21.1.8 lane passed the integrated F0/A0/B0/K1 gates in
-[CI run 33226881022](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33226881022).
+Local CachyOS/LLVM 22 results are compatibility evidence only. Supported Ubuntu
+22.04 x86-64 / LLVM-Clang 21.1.8 run 33226881022 passed the earlier K1 head, but
+predates the stride/span and normal-artifact corrections and is not evidence for this
+revision. A new supported-lane run is required before integration.
 LeakSanitizer is disabled by default because it is unavailable under the local traced
 executor; setting `K1_ASAN_DETECT_LEAKS=1` enables it where supported.

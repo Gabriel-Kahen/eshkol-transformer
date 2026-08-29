@@ -59,12 +59,31 @@ const char *et_kernel_provider_symbol(void) {
   return ET_KERNEL_PROVIDER_SYMBOL_V1;
 }
 
-static int valid_utf8(const char *text) {
-  const unsigned char *cursor = (const unsigned char *)text;
-  if (text == NULL) {
+static int bounded_text_length(const char *text, size_t maximum,
+                               size_t *length) {
+  const char *terminal;
+  if (text == NULL || maximum == SIZE_MAX) {
     return 0;
   }
-  while (*cursor != 0) {
+  terminal = (const char *)memchr(text, '\0', maximum + 1u);
+  if (terminal == NULL) {
+    return 0;
+  }
+  if (length != NULL) {
+    *length = (size_t)(terminal - text);
+  }
+  return 1;
+}
+
+static int valid_utf8(const char *text, size_t maximum) {
+  const unsigned char *cursor = (const unsigned char *)text;
+  size_t length;
+  const unsigned char *end;
+  if (!bounded_text_length(text, maximum, &length)) {
+    return 0;
+  }
+  end = cursor + length;
+  while (cursor < end) {
     uint32_t codepoint;
     size_t continuation;
     if (*cursor < 0x80u) {
@@ -87,6 +106,9 @@ static int valid_utf8(const char *text) {
       return 0;
     }
     cursor++;
+    if ((size_t)(end - cursor) < continuation) {
+      return 0;
+    }
     for (size_t index = 0; index < continuation; index++, cursor++) {
       if ((*cursor & 0xc0u) != 0x80u) {
         return 0;
@@ -106,18 +128,19 @@ static int valid_utf8(const char *text) {
 static int valid_symbol(const char *text) {
   const unsigned char *cursor = (const unsigned char *)text;
   size_t length = 0;
-  if (text == NULL || *cursor < 'a' || *cursor > 'z') {
+  if (!bounded_text_length(text, ET_KERNEL_MAX_SYMBOL_BYTES, &length) ||
+      length == 0u || *cursor < 'a' || *cursor > 'z') {
     return 0;
   }
-  for (; *cursor != 0; cursor++, length++) {
+  for (size_t index = 0; index < length; index++, cursor++) {
     const int valid = (*cursor >= 'a' && *cursor <= 'z') ||
                       (*cursor >= '0' && *cursor <= '9') || *cursor == '.' ||
                       *cursor == '_' || *cursor == '-' || *cursor == ':';
-    if (!valid || length >= 127u) {
+    if (!valid) {
       return 0;
     }
   }
-  return length != 0;
+  return 1;
 }
 
 static char *duplicate_text(const char *text) {
@@ -211,25 +234,60 @@ static int shape_range_compare(const void *left, const void *right) {
   return 0;
 }
 
-static int32_t copy_string_array(const char *operation, size_t count,
-                                 const char *const *source,
-                                 const char *const **destination,
-                                 et_kernel_error *error) {
-  const char **copy = NULL;
-  *destination = NULL;
-  if (count == 0) {
-    return 0;
-  }
-  if (count > ET_KERNEL_MAX_LIST_ENTRIES) {
+static int32_t validate_string_array(const char *operation, size_t count,
+                                     const char *const *source,
+                                     et_kernel_error *error) {
+  if (count > ET_KERNEL_MAX_LIST_ENTRIES ||
+      count > SIZE_MAX / sizeof(*source)) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_INTEGER_OVERFLOW, operation,
                      "capability string list exceeds ABI v1 limit");
   }
-  if (source == NULL || count > SIZE_MAX / sizeof(*copy)) {
+  if (count == 0u) {
+    return source == NULL
+               ? 0
+               : set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                           ET_KERNEL_CODE_INVALID_BUFFER, operation,
+                           "empty capability string list has storage");
+  }
+  if (source == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                     source == NULL ? ET_KERNEL_CODE_NULL_ARGUMENT
-                                    : ET_KERNEL_CODE_INTEGER_OVERFLOW,
-                     operation, "invalid capability string list");
+                     ET_KERNEL_CODE_NULL_ARGUMENT, operation,
+                     "nonempty capability string list has null storage");
+  }
+  if ((uintptr_t)source % _Alignof(const char *) != 0u ||
+      (uintptr_t)source > UINTPTR_MAX - count * sizeof(*source)) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, operation,
+                     "capability string list storage is misaligned or overflows");
+  }
+  for (size_t index = 0; index < count; index++) {
+    if (!valid_symbol(source[index])) {
+      return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                       ET_KERNEL_CODE_INVALID_TEXT, operation,
+                       "capability list contains an invalid symbol");
+    }
+    for (size_t earlier = 0; earlier < index; earlier++) {
+      if (strcmp(source[earlier], source[index]) == 0) {
+        return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                         ET_KERNEL_CODE_DUPLICATE_ENTRY, operation,
+                         "capability list contains a duplicate symbol");
+      }
+    }
+  }
+  return 0;
+}
+
+static int32_t copy_string_array(const char *operation, size_t count,
+                                 const char *const *source,
+                                 const char *const **destination,
+  et_kernel_error *error) {
+  const char **copy = NULL;
+  int32_t result;
+  *destination = NULL;
+  result = validate_string_array(operation, count, source, error);
+  if (result != 0 || count == 0u) {
+    return result;
   }
   copy = (const char **)calloc(count, sizeof(*copy));
   if (copy == NULL) {
@@ -238,12 +296,6 @@ static int32_t copy_string_array(const char *operation, size_t count,
                      "cannot allocate capability string list");
   }
   for (size_t index = 0; index < count; index++) {
-    if (!valid_symbol(source[index])) {
-      free_string_array(index, copy);
-      return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                       ET_KERNEL_CODE_INVALID_TEXT, operation,
-                       "capability list contains an invalid symbol");
-    }
     copy[index] = duplicate_text(source[index]);
     if (copy[index] == NULL) {
       free_string_array(index, copy);
@@ -253,15 +305,78 @@ static int32_t copy_string_array(const char *operation, size_t count,
     }
   }
   qsort(copy, count, sizeof(*copy), string_pointer_compare);
-  for (size_t index = 1; index < count; index++) {
-    if (strcmp(copy[index - 1], copy[index]) == 0) {
-      free_string_array(count, copy);
+  *destination = copy;
+  return 0;
+}
+
+static int32_t validate_shape_ranges(
+    const char *operation, size_t count,
+    const et_kernel_shape_range_v1 *source, et_kernel_error *error) {
+  if (count > ET_KERNEL_MAX_SHAPE_RANGES ||
+      count > SIZE_MAX / sizeof(*source)) {
+    return set_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, operation,
+                     "shape-range list exceeds ABI v1 limit");
+  }
+  if (count == 0u) {
+    return source == NULL
+               ? 0
+               : set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                           ET_KERNEL_CODE_INVALID_BUFFER, operation,
+                           "empty shape-range list has storage");
+  }
+  if (source == NULL) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_NULL_ARGUMENT, operation,
+                     "nonempty shape-range list has null storage");
+  }
+  if ((uintptr_t)source % _Alignof(et_kernel_shape_range_v1) != 0u ||
+      (uintptr_t)source > UINTPTR_MAX - count * sizeof(*source)) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, operation,
+                     "shape-range list storage is misaligned or overflows");
+  }
+  for (size_t range_index = 0; range_index < count; range_index++) {
+    const size_t rank = source[range_index].rank;
+    if (rank > ET_KERNEL_MAX_RANK ||
+        rank > SIZE_MAX / sizeof(*source[range_index].dimensions) ||
+        (rank > 0u && source[range_index].dimensions == NULL)) {
+      return set_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                       rank > ET_KERNEL_MAX_RANK
+                           ? ET_KERNEL_CODE_INTEGER_OVERFLOW
+                           : ET_KERNEL_CODE_INVALID_SHAPE,
+                       operation, "capability contains an invalid shape range");
+    }
+    if (rank > 0u &&
+        ((uintptr_t)source[range_index].dimensions %
+                 _Alignof(et_kernel_dimension_range_v1) !=
+             0u ||
+         (uintptr_t)source[range_index].dimensions >
+             UINTPTR_MAX - rank * sizeof(*source[range_index].dimensions))) {
       return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                       ET_KERNEL_CODE_DUPLICATE_ENTRY, operation,
-                       "capability list contains a duplicate symbol");
+                       ET_KERNEL_CODE_INVALID_BUFFER, operation,
+                       "shape dimension storage is misaligned or overflows");
+    }
+    for (size_t dimension_index = 0; dimension_index < rank;
+         dimension_index++) {
+      const et_kernel_dimension_range_v1 *dimension =
+          &source[range_index].dimensions[dimension_index];
+      if (dimension->maximum_unbounded > 1u ||
+          (!dimension->maximum_unbounded &&
+           dimension->minimum > dimension->maximum)) {
+        return set_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                         ET_KERNEL_CODE_INVALID_SHAPE, operation,
+                         "capability contains an invalid shape range");
+      }
+    }
+    for (size_t earlier = 0; earlier < range_index; earlier++) {
+      if (shape_range_compare(&source[earlier], &source[range_index]) == 0) {
+        return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                         ET_KERNEL_CODE_DUPLICATE_ENTRY, operation,
+                         "capability contains a duplicate shape range");
+      }
     }
   }
-  *destination = copy;
   return 0;
 }
 
@@ -270,20 +385,11 @@ static int32_t copy_shape_ranges(const char *operation, size_t count,
                                  const et_kernel_shape_range_v1 **destination,
                                  et_kernel_error *error) {
   et_kernel_shape_range_v1 *copy = NULL;
+  int32_t result;
   *destination = NULL;
-  if (count == 0) {
-    return 0;
-  }
-  if (count > ET_KERNEL_MAX_SHAPE_RANGES) {
-    return set_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
-                     ET_KERNEL_CODE_INTEGER_OVERFLOW, operation,
-                     "shape-range list exceeds ABI v1 limit");
-  }
-  if (source == NULL || count > SIZE_MAX / sizeof(*copy)) {
-    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                     source == NULL ? ET_KERNEL_CODE_NULL_ARGUMENT
-                                    : ET_KERNEL_CODE_INTEGER_OVERFLOW,
-                     operation, "invalid shape-range list");
+  result = validate_shape_ranges(operation, count, source, error);
+  if (result != 0 || count == 0u) {
+    return result;
   }
   copy = (et_kernel_shape_range_v1 *)calloc(count, sizeof(*copy));
   if (copy == NULL) {
@@ -295,15 +401,8 @@ static int32_t copy_shape_ranges(const char *operation, size_t count,
     const size_t rank = source[range_index].rank;
     et_kernel_dimension_range_v1 *dimensions = NULL;
     copy[range_index].rank = rank;
-    if (rank > ET_KERNEL_MAX_RANK) {
-      goto invalid;
-    }
     if (rank == 0) {
       continue;
-    }
-    if (source[range_index].dimensions == NULL ||
-        rank > SIZE_MAX / sizeof(*dimensions)) {
-      goto invalid;
     }
     dimensions = (et_kernel_dimension_range_v1 *)calloc(
         rank, sizeof(*dimensions));
@@ -320,12 +419,6 @@ static int32_t copy_shape_ranges(const char *operation, size_t count,
          dimension_index++) {
       const et_kernel_dimension_range_v1 dimension =
           source[range_index].dimensions[dimension_index];
-      if (dimension.maximum_unbounded > 1u ||
-          (!dimension.maximum_unbounded &&
-           dimension.minimum > dimension.maximum)) {
-        free(dimensions);
-        goto invalid;
-      }
       dimensions[dimension_index] = dimension;
       memset(dimensions[dimension_index].reserved, 0,
              sizeof(dimensions[dimension_index].reserved));
@@ -333,35 +426,13 @@ static int32_t copy_shape_ranges(const char *operation, size_t count,
     copy[range_index].dimensions = dimensions;
   }
   qsort(copy, count, sizeof(*copy), shape_range_compare);
-  for (size_t index = 1; index < count; index++) {
-    if (shape_range_compare(&copy[index - 1], &copy[index]) == 0) {
-      for (size_t free_index = 0; free_index < count; free_index++) {
-        free((void *)copy[free_index].dimensions);
-      }
-      free(copy);
-      return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                       ET_KERNEL_CODE_DUPLICATE_ENTRY, operation,
-                       "capability contains a duplicate shape range");
-    }
-  }
   *destination = copy;
   return 0;
-
-invalid:
-  for (size_t index = 0; index < count; index++) {
-    free((void *)copy[index].dimensions);
-  }
-  free(copy);
-  return set_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
-                   ET_KERNEL_CODE_INVALID_SHAPE, operation,
-                   "capability contains an invalid shape range");
 }
 
-static int32_t copy_capability(const et_kernel_capability_v1 *source,
-                               et_kernel_capability_v1 *destination,
-                               et_kernel_error *error) {
+static int32_t validate_capability(const et_kernel_capability_v1 *source,
+                                   et_kernel_error *error) {
   int32_t result;
-  memset(destination, 0, sizeof(*destination));
   if (source == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_NULL_ARGUMENT, "capability-discover",
@@ -374,18 +445,58 @@ static int32_t copy_capability(const et_kernel_capability_v1 *source,
                      "provider capability descriptor is truncated");
   }
   if (!valid_symbol(source->name) || !valid_symbol(source->implementation) ||
-      !valid_utf8(source->version) || !valid_utf8(source->evidence) ||
-      strlen(source->version) > 1024u || strlen(source->evidence) > 1024u) {
+      !valid_utf8(source->version, ET_KERNEL_MAX_METADATA_BYTES) ||
+      !valid_utf8(source->evidence, ET_KERNEL_MAX_METADATA_BYTES)) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_INVALID_TEXT, "capability-discover",
                      "provider capability metadata is invalid");
   }
-  if (source->status < ET_KERNEL_CAPABILITY_UNVERIFIED ||
-      source->status > ET_KERNEL_CAPABILITY_UNSUPPORTED ||
+  if (source->status > ET_KERNEL_CAPABILITY_UNSUPPORTED ||
       source->deterministic > 1u) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_INVALID_ENUM, "capability-discover",
                      "provider capability status is invalid");
+  }
+  result = validate_string_array("capability-discover",
+                                 source->operation_count,
+                                 source->operations, error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_string_array("capability-discover", source->dtype_count,
+                                 source->dtypes, error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_string_array("capability-discover", source->device_count,
+                                 source->devices, error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_shape_ranges("capability-discover",
+                                 source->shape_range_count,
+                                 source->shape_ranges, error);
+  if (result != 0) {
+    return result;
+  }
+  if (source->status == ET_KERNEL_CAPABILITY_VERIFIED &&
+      (source->operation_count == 0u || source->dtype_count == 0u ||
+       source->device_count == 0u || source->shape_range_count == 0u)) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_SHAPE, "capability-discover",
+                     "verified capability has incomplete constraints");
+  }
+  return 0;
+}
+
+static int32_t copy_capability(const et_kernel_capability_v1 *source,
+                               et_kernel_capability_v1 *destination,
+                               et_kernel_error *error) {
+  int32_t result;
+  memset(destination, 0, sizeof(*destination));
+  result = validate_capability(source, error);
+  if (result != 0) {
+    return result;
   }
   destination->struct_size = sizeof(*destination);
   destination->status = source->status;
@@ -425,15 +536,6 @@ static int32_t copy_capability(const et_kernel_capability_v1 *source,
                              source->shape_ranges,
                              &destination->shape_ranges, error);
   if (result != 0) {
-    goto failure;
-  }
-  if (destination->status == ET_KERNEL_CAPABILITY_VERIFIED &&
-      (destination->operation_count == 0 || destination->dtype_count == 0 ||
-       destination->device_count == 0 ||
-       destination->shape_range_count == 0)) {
-    result = set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                       ET_KERNEL_CODE_INVALID_SHAPE, "capability-discover",
-                       "verified capability has incomplete constraints");
     goto failure;
   }
   return 0;
@@ -493,13 +595,113 @@ int32_t et_kernel_runtime_baseline(et_kernel_runtime **runtime,
   return create_baseline(runtime, error);
 }
 
-/* Called only after merge_provider has validated every provider capability. */
-static int provider_has_verified_capability(
-    const et_kernel_provider_v1 *provider) {
+static int32_t validate_provider_capability_table(
+    const et_kernel_provider_v1 *provider, et_kernel_error *error) {
+  const size_t alignment = _Alignof(et_kernel_capability_v1);
+  if (provider->capability_count == 0u) {
+    if (provider->capabilities != NULL || provider->capability_stride != 0u ||
+        provider->capability_bytes != 0u) {
+      return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                       ET_KERNEL_CODE_INVALID_BUFFER, "capability-discover",
+                       "empty capability table must have null storage and zero stride");
+    }
+    return 0;
+  }
+  if (provider->capabilities == NULL) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_NULL_ARGUMENT, "capability-discover",
+                     "nonempty capability table has null storage");
+  }
+  if (provider->capability_stride < ET_KERNEL_CAPABILITY_V1_0_SIZE) {
+    return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+                     ET_KERNEL_CODE_INVALID_STRUCT_SIZE,
+                     "capability-discover",
+                     "capability table stride is smaller than the v1.0 prefix");
+  }
+  if (provider->capability_stride % alignment != 0u ||
+      (uintptr_t)provider->capabilities % alignment != 0u) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "capability-discover",
+                     "capability table storage or stride is misaligned");
+  }
+  if (provider->capability_count > SIZE_MAX / provider->capability_stride ||
+      provider->capability_count * provider->capability_stride !=
+          provider->capability_bytes) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "capability-discover",
+                     "capability table byte span is invalid or overflows");
+  }
+  if ((uintptr_t)provider->capabilities >
+      UINTPTR_MAX - provider->capability_bytes) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "capability-discover",
+                     "capability table address range overflows");
+  }
+  return 0;
+}
+
+static int32_t provider_capability_at(
+    const et_kernel_provider_v1 *provider, size_t index,
+    const et_kernel_capability_v1 **capability, et_kernel_error *error) {
+  size_t offset;
+  if (capability == NULL || index >= provider->capability_count ||
+      (provider->capability_stride != 0u &&
+       index > SIZE_MAX / provider->capability_stride)) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "capability-discover",
+                     "capability table offset is invalid");
+  }
+  offset = index * provider->capability_stride;
+  if (offset > provider->capability_bytes -
+                   ET_KERNEL_CAPABILITY_V1_0_SIZE ||
+      (uintptr_t)provider->capabilities > UINTPTR_MAX - offset) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "capability-discover",
+                     "capability table offset exceeds its byte span");
+  }
+  *capability = (const et_kernel_capability_v1 *)(
+      (const unsigned char *)provider->capabilities + offset);
+  if ((*capability)->struct_size < ET_KERNEL_CAPABILITY_V1_0_SIZE ||
+      (*capability)->struct_size > provider->capability_stride) {
+    return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+                     ET_KERNEL_CODE_INVALID_STRUCT_SIZE,
+                     "capability-discover",
+                     "capability descriptor does not fit its table stride");
+  }
+  return 0;
+}
+
+static int32_t validate_provider_capabilities(
+    const et_kernel_provider_v1 *provider, int *has_verified_capability,
+    et_kernel_error *error) {
+  *has_verified_capability = 0;
   for (size_t index = 0; index < provider->capability_count; index++) {
-    if (provider->capabilities[index].status ==
-        ET_KERNEL_CAPABILITY_VERIFIED) {
-      return 1;
+    const et_kernel_capability_v1 *capability;
+    int32_t result = provider_capability_at(provider, index, &capability,
+                                            error);
+    if (result != 0) {
+      return result;
+    }
+    result = validate_capability(capability, error);
+    if (result != 0) {
+      return result;
+    }
+    if (capability->status == ET_KERNEL_CAPABILITY_VERIFIED) {
+      *has_verified_capability = 1;
+    }
+    for (size_t earlier = 0; earlier < index; earlier++) {
+      const et_kernel_capability_v1 *earlier_capability;
+      result = provider_capability_at(provider, earlier, &earlier_capability,
+                                      error);
+      if (result != 0) {
+        return result;
+      }
+      if (strcmp(earlier_capability->name, capability->name) == 0) {
+        return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                         ET_KERNEL_CODE_DUPLICATE_ENTRY,
+                         "capability-discover",
+                         "provider contains duplicate capabilities");
+      }
     }
   }
   return 0;
@@ -510,22 +712,17 @@ static int32_t merge_provider(et_kernel_runtime *runtime,
                               et_kernel_error *error) {
   for (size_t provider_index = 0; provider_index < provider->capability_count;
        provider_index++) {
+    const et_kernel_capability_v1 *source;
     et_kernel_capability_v1 copied;
     size_t destination_index = runtime->capability_count;
     int32_t result;
-    result = copy_capability(&provider->capabilities[provider_index], &copied,
-                             error);
+    result = provider_capability_at(provider, provider_index, &source, error);
     if (result != 0) {
       return result;
     }
-    for (size_t earlier = 0; earlier < provider_index; earlier++) {
-      if (strcmp(provider->capabilities[earlier].name, copied.name) == 0) {
-        free_capability(&copied);
-        return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                         ET_KERNEL_CODE_DUPLICATE_ENTRY,
-                         "capability-discover",
-                         "provider contains duplicate capabilities");
-      }
+    result = copy_capability(source, &copied, error);
+    if (result != 0) {
+      return result;
     }
     for (size_t index = 0; index < runtime->capability_count; index++) {
       if (strcmp(runtime->capabilities[index].name, copied.name) == 0) {
@@ -569,6 +766,7 @@ int32_t et_kernel_runtime_discover(et_kernel_provider_resolver_v1 resolver,
                                    et_kernel_error *error) {
   et_kernel_runtime *runtime = NULL;
   const et_kernel_provider_v1 *provider;
+  int has_verified_capability = 0;
   int32_t result;
   if (runtime_output == NULL || resolver == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
@@ -581,6 +779,11 @@ int32_t et_kernel_runtime_discover(et_kernel_provider_resolver_v1 resolver,
     return set_error(error, ET_KERNEL_ERROR_UNSUPPORTED,
                      ET_KERNEL_CODE_SYMBOL_MISSING, "capability-discover",
                      "required provider symbol is unavailable");
+  }
+  if ((uintptr_t)provider % _Alignof(et_kernel_provider_v1) != 0u) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "capability-discover",
+                     "provider descriptor is misaligned");
   }
   if (provider->struct_size < ET_KERNEL_PROVIDER_V1_0_SIZE) {
     return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
@@ -600,10 +803,9 @@ int32_t et_kernel_runtime_discover(et_kernel_provider_resolver_v1 resolver,
                      "capability-discover",
                      "provider requires unknown ABI features");
   }
-  if (!valid_symbol(provider->name) || !valid_utf8(provider->version) ||
-      !valid_utf8(provider->evidence) ||
-      ((provider->capability_count > 0u) ==
-       (provider->capabilities == NULL))) {
+  if (!valid_symbol(provider->name) ||
+      !valid_utf8(provider->version, ET_KERNEL_MAX_METADATA_BYTES) ||
+      !valid_utf8(provider->evidence, ET_KERNEL_MAX_METADATA_BYTES)) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_INVALID_TEXT, "capability-discover",
                      "provider descriptor metadata is invalid");
@@ -614,6 +816,21 @@ int32_t et_kernel_runtime_discover(et_kernel_provider_resolver_v1 resolver,
                      "capability-discover",
                      "provider capability count exceeds ABI v1 limit");
   }
+  result = validate_provider_capability_table(provider, error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_provider_capabilities(provider, &has_verified_capability,
+                                          error);
+  if (result != 0) {
+    return result;
+  }
+  if (has_verified_capability &&
+      (provider->validate_call == NULL || provider->invoke_call == NULL)) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_NULL_ARGUMENT, "capability-discover",
+                     "verified provider requires validate and invoke callbacks");
+  }
   result = create_baseline(&runtime, error);
   if (result != 0) {
     return result;
@@ -622,13 +839,6 @@ int32_t et_kernel_runtime_discover(et_kernel_provider_resolver_v1 resolver,
   if (result != 0) {
     et_kernel_runtime_destroy(runtime);
     return result;
-  }
-  if (provider_has_verified_capability(provider) &&
-      (provider->validate_call == NULL || provider->invoke_call == NULL)) {
-    et_kernel_runtime_destroy(runtime);
-    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                     ET_KERNEL_CODE_NULL_ARGUMENT, "capability-discover",
-                     "verified provider requires validate and invoke callbacks");
   }
   runtime->validate_call = provider->validate_call;
   runtime->invoke_call = provider->invoke_call;
@@ -653,7 +863,7 @@ const et_kernel_capability_v1 *et_kernel_runtime_capability_at(
 
 const et_kernel_capability_v1 *et_kernel_runtime_capability_find(
     const et_kernel_runtime *runtime, const char *name) {
-  if (runtime == NULL || name == NULL) {
+  if (runtime == NULL || !valid_symbol(name)) {
     return NULL;
   }
   size_t low = 0;
@@ -712,6 +922,11 @@ static int32_t validate_request(const et_kernel_request_v1 *request,
                      ET_KERNEL_CODE_NULL_ARGUMENT, "capability-request",
                      "capability request is null");
   }
+  if ((uintptr_t)request % _Alignof(et_kernel_request_v1) != 0u) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "capability-request",
+                     "capability request is misaligned");
+  }
   if (request->struct_size < ET_KERNEL_REQUEST_V1_0_SIZE) {
     return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
                      ET_KERNEL_CODE_INVALID_STRUCT_SIZE, "capability-request",
@@ -724,6 +939,14 @@ static int32_t validate_request(const et_kernel_request_v1 *request,
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_INVALID_TEXT, "capability-request",
                      "capability request is malformed");
+  }
+  if (request->rank > 0u &&
+      ((uintptr_t)request->shape % _Alignof(uint64_t) != 0u ||
+       (uintptr_t)request->shape >
+           UINTPTR_MAX - request->rank * sizeof(*request->shape))) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "capability-request",
+                     "capability request shape storage is invalid");
   }
   return 0;
 }
@@ -800,8 +1023,13 @@ static int32_t validate_tensor(const et_kernel_tensor_view_v1 *tensor,
                      ET_KERNEL_CODE_INVALID_STRUCT_SIZE, "kernel-dispatch",
                      "tensor view descriptor is truncated");
   }
-  element_size = tensor->dtype == NULL ? 0u : dtype_size(tensor->dtype);
-  if (element_size == 0u || !valid_symbol(tensor->device)) {
+  if (!valid_symbol(tensor->dtype) || !valid_symbol(tensor->device)) {
+    return set_error(error, ET_KERNEL_ERROR_DTYPE_MISMATCH,
+                     ET_KERNEL_CODE_INVALID_TEXT, "kernel-dispatch",
+                     "tensor dtype or device is unsupported by ABI v1");
+  }
+  element_size = dtype_size(tensor->dtype);
+  if (element_size == 0u) {
     return set_error(error, ET_KERNEL_ERROR_DTYPE_MISMATCH,
                      ET_KERNEL_CODE_INVALID_TEXT, "kernel-dispatch",
                      "tensor dtype or device is unsupported by ABI v1");
@@ -826,6 +1054,14 @@ static int32_t validate_tensor(const et_kernel_tensor_view_v1 *tensor,
     return set_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                      ET_KERNEL_CODE_INTEGER_OVERFLOW, "kernel-dispatch",
                      "tensor rank exceeds ABI v1 limit");
+  }
+  if (tensor->rank > 0u &&
+      ((uintptr_t)tensor->shape % _Alignof(uint64_t) != 0u ||
+       (uintptr_t)tensor->shape >
+           UINTPTR_MAX - tensor->rank * sizeof(*tensor->shape))) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "kernel-dispatch",
+                     "tensor shape storage is misaligned or overflows");
   }
   bytes = element_size;
   for (size_t dimension = 0; dimension < tensor->rank; dimension++) {
@@ -867,6 +1103,68 @@ static int buffers_overlap(const et_kernel_tensor_view_v1 *left,
   return left_start < right_end && right_start < left_end;
 }
 
+static int32_t validate_tensor_table(size_t count, size_t stride, size_t bytes,
+                                     const void *base, const char *which,
+                                     et_kernel_error *error) {
+  const size_t alignment = _Alignof(et_kernel_tensor_view_v1);
+  if (count == 0u) {
+    if (base != NULL || stride != 0u || bytes != 0u) {
+      return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                       ET_KERNEL_CODE_INVALID_BUFFER, "kernel-dispatch",
+                       which);
+    }
+    return 0;
+  }
+  if (base == NULL) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_NULL_ARGUMENT, "kernel-dispatch", which);
+  }
+  if (stride < ET_KERNEL_TENSOR_VIEW_V1_0_SIZE) {
+    return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+                     ET_KERNEL_CODE_INVALID_STRUCT_SIZE, "kernel-dispatch",
+                     which);
+  }
+  if (stride % alignment != 0u || (uintptr_t)base % alignment != 0u) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "kernel-dispatch", which);
+  }
+  if (count > SIZE_MAX / stride || count * stride != bytes ||
+      (uintptr_t)base > UINTPTR_MAX - bytes) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "kernel-dispatch",
+                     which);
+  }
+  return 0;
+}
+
+static int32_t tensor_table_at(size_t count, size_t stride, size_t bytes,
+                               const void *base, size_t index,
+                               const et_kernel_tensor_view_v1 **tensor,
+                               et_kernel_error *error) {
+  size_t offset;
+  if (tensor == NULL || index >= count || index > SIZE_MAX / stride) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "kernel-dispatch",
+                     "tensor table offset is invalid");
+  }
+  offset = index * stride;
+  if (offset > bytes - ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ||
+      (uintptr_t)base > UINTPTR_MAX - offset) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INTEGER_OVERFLOW, "kernel-dispatch",
+                     "tensor table offset exceeds its byte span");
+  }
+  *tensor = (const et_kernel_tensor_view_v1 *)((const unsigned char *)base +
+                                                offset);
+  if ((*tensor)->struct_size < ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ||
+      (*tensor)->struct_size > stride) {
+    return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+                     ET_KERNEL_CODE_INVALID_STRUCT_SIZE, "kernel-dispatch",
+                     "tensor descriptor does not fit its table stride");
+  }
+  return 0;
+}
+
 static int32_t validate_call(const et_kernel_call_v1 *call,
                              et_kernel_error *error) {
   int32_t result;
@@ -875,14 +1173,17 @@ static int32_t validate_call(const et_kernel_call_v1 *call,
                      ET_KERNEL_CODE_NULL_ARGUMENT, "kernel-dispatch",
                      "kernel call is null");
   }
+  if ((uintptr_t)call % _Alignof(et_kernel_call_v1) != 0u) {
+    return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                     ET_KERNEL_CODE_INVALID_BUFFER, "kernel-dispatch",
+                     "kernel call descriptor is misaligned");
+  }
   if (call->struct_size < ET_KERNEL_CALL_V1_0_SIZE) {
     return set_error(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
                      ET_KERNEL_CODE_INVALID_STRUCT_SIZE, "kernel-dispatch",
                      "kernel call descriptor is truncated");
   }
-  if (!valid_symbol(call->capability) ||
-      (call->input_count > 0u && call->inputs == NULL) ||
-      (call->output_count > 0u && call->outputs == NULL)) {
+  if (!valid_symbol(call->capability) || call->request == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                      ET_KERNEL_CODE_NULL_ARGUMENT, "kernel-dispatch",
                      "kernel call arrays or capability are invalid");
@@ -893,32 +1194,69 @@ static int32_t validate_call(const et_kernel_call_v1 *call,
                      ET_KERNEL_CODE_INTEGER_OVERFLOW, "kernel-dispatch",
                      "kernel tensor count exceeds ABI v1 limit");
   }
-  result = validate_request(&call->request, error);
+  result = validate_tensor_table(call->input_count, call->input_stride,
+                                 call->input_bytes, call->inputs,
+                                 "input tensor table is invalid", error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_tensor_table(call->output_count, call->output_stride,
+                                 call->output_bytes, call->outputs,
+                                 "output tensor table is invalid", error);
+  if (result != 0) {
+    return result;
+  }
+  result = validate_request(call->request, error);
   if (result != 0) {
     return result;
   }
   for (size_t index = 0; index < call->input_count; index++) {
-    result = validate_tensor(&call->inputs[index], call->request.device, error);
+    const et_kernel_tensor_view_v1 *input;
+    result = tensor_table_at(call->input_count, call->input_stride,
+                             call->input_bytes, call->inputs, index, &input,
+                             error);
+    if (result == 0) {
+      result = validate_tensor(input, call->request->device, error);
+    }
     if (result != 0) {
       return result;
     }
   }
   for (size_t index = 0; index < call->output_count; index++) {
-    result = validate_tensor(&call->outputs[index], call->request.device, error);
+    const et_kernel_tensor_view_v1 *output;
+    result = tensor_table_at(call->output_count, call->output_stride,
+                             call->output_bytes, call->outputs, index, &output,
+                             error);
+    if (result == 0) {
+      result = validate_tensor(output, call->request->device, error);
+    }
     if (result != 0) {
       return result;
     }
     for (size_t input_index = 0; input_index < call->input_count;
          input_index++) {
-      if (buffers_overlap(&call->outputs[index], &call->inputs[input_index])) {
+      const et_kernel_tensor_view_v1 *input;
+      result = tensor_table_at(call->input_count, call->input_stride,
+                               call->input_bytes, call->inputs, input_index,
+                               &input, error);
+      if (result != 0) {
+        return result;
+      }
+      if (buffers_overlap(output, input)) {
         return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          ET_KERNEL_CODE_ALIASING_OUTPUT, "kernel-dispatch",
                          "output storage aliases borrowed input storage");
       }
     }
     for (size_t output_index = 0; output_index < index; output_index++) {
-      if (buffers_overlap(&call->outputs[index],
-                          &call->outputs[output_index])) {
+      const et_kernel_tensor_view_v1 *earlier_output;
+      result = tensor_table_at(call->output_count, call->output_stride,
+                               call->output_bytes, call->outputs, output_index,
+                               &earlier_output, error);
+      if (result != 0) {
+        return result;
+      }
+      if (buffers_overlap(output, earlier_output)) {
         return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          ET_KERNEL_CODE_ALIASING_OUTPUT, "kernel-dispatch",
                          "output storage aliases another output");
@@ -938,7 +1276,8 @@ static int provider_error_is_valid(int32_t result,
       memchr(error->operation, '\0', sizeof(error->operation)) == NULL ||
       memchr(error->message, '\0', sizeof(error->message)) == NULL ||
       error->operation[0] == '\0' || error->message[0] == '\0' ||
-      !valid_utf8(error->operation) || !valid_utf8(error->message)) {
+      !valid_utf8(error->operation, sizeof(error->operation) - 1u) ||
+      !valid_utf8(error->message, sizeof(error->message) - 1u)) {
     return 0;
   }
   return 1;
@@ -958,7 +1297,7 @@ int32_t et_kernel_runtime_dispatch(const et_kernel_runtime *runtime,
     return result;
   }
   result = et_kernel_runtime_capability_require(
-      runtime, call->capability, &call->request, NULL, error);
+      runtime, call->capability, call->request, NULL, error);
   if (result != 0) {
     return result;
   }
