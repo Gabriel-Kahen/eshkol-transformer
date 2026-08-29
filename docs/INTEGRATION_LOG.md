@@ -158,4 +158,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   duplicate error representation. LeakSanitizer remains optional where the executor
   supports it.
 - **Reference:** [issue #21](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/21);
-  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [PR #25](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/25).
