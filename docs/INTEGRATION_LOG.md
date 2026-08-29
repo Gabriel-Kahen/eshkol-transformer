@@ -123,11 +123,9 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** issue #4; [PR #12](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/12);
   merge commit `f843f4ce826b56cca14bedfe8fc9f81155ecf1cb`.
 
-## 2026-08-28 — K1 / issue #21
+## 2026-08-29 — K1 / issue #21
 
-- **Decision:** proposed. The integration task accepted the ABI boundary with
-  required conditions; this repository entry remains proposed until PR review and
-  integration-owner acceptance.
+- **Decision:** accepted after independent re-review and exact-head supported CI.
 - **Contract:** Native-kernel ABI 1.0 uses the major-only provider symbol
   `eshkol_transformer_kernel_provider_v1`, fixed x86-64 v1.0 structure prefixes,
   compatible-minor discovery, exact-span stride tables for every repeated
@@ -151,14 +149,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   The focused gate consumes the archive produced by `make build`, verifies its
   one-member shape, checks the same-rank canonical-order golden, and uses the same
   builder for its sanitized archive. The repository-wide `make test` and `make smoke`
-  gates also passed with a writable explicit Eshkol JIT cache. Independent review
-  recorded request-changes at
-  head `7fe93770`; these fixes remain subject to re-review. Supported Ubuntu 22.04
-  x86-64 / LLVM-Clang 21.1.8
-  [CI run 33228813719](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33228813719)
-  passed the revised ABI, canonical build artifact, adversarial/golden checks,
-  sanitizers, and integrated F0/A0/B0/K1 gates at head `099d225`. Re-review remains
-  required before integration.
+  gates also passed with a writable explicit Eshkol JIT cache. Independent re-review
+  approved exact head `b64f7c8a0988c98d190ea4b87fbf0eb77efe7ed6` with no findings after
+  confirming the stride/span and persistent-build-artifact corrections. Supported
+  Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8
+  [CI run 33229145836](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33229145836)
+  passed at that exact head. Integration reran focused K1, ASan/UBSan, full
+  `make test`, `make build`, and `make smoke` after merge.
 - **Dependencies / retest:** N2, A2, L2, MP4, AMD4, and DIST5 may consume only
   separately verified provider entries; none may infer support from ABI presence.
   E1 issue #23 owns `transformer.error_internal`; any Eshkol-facing K1 adapter must
@@ -167,11 +164,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   supports it.
 - **Reference:** [issue #21](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/21);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  [PR #25](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/25).
+  [PR #25](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/25); merge commit
+  `0e0573b2ceb1c1b5a2bbb46786c13578490e2ae9`.
 
-## 2026-08-28 — E1 / issue #23
+## 2026-08-29 — E1 / issue #23
 
-- **Decision:** proposed.
+- **Decision:** accepted after independent security/contract review, pinned-runtime
+  feasibility review, and exact-head supported CI.
 - **Contract:** `transformer.error_internal` is the single construction and raising
   boundary.  It exports the six unchanged A0 unary accessors plus
   `transformer-error-make` (5), `transformer-error-raise` (5), and
@@ -199,7 +198,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   later snapshot. The
   local run used the exact Eshkol commit/compiler pin
   but is an explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6 compatibility
-  probe; supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI remains required.
+  probe. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33267293761](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33267293761)
+  passed at exact rebased head `a25dada6ac5dcdd39e8f9ba3a5451c022fdeaea7`.
+  Integration then reran merged-main A0, K1, E1, full `make test`, and `make smoke`.
 - **Pinned-runtime limitation:** `define-record-type` is a mutable vector and the
   earlier irritant-held seal was rejected after an adversarial forge succeeded.
   Pinned `provide` declarations are informational, so one validated, unsupported
@@ -220,7 +222,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   source-status mappings remain workstream-owned and require review when they create
   ABI or format commitments.  Rerun A0 and E1 gates after each facade integration.
 - **Reference:** [issue #23](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/23);
-  pull request pending.
+  [PR #27](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/27); merge commit
+  `80371a1f06cc71c44c2d940a57b294a89174a1f0`.
 
 ## 2026-08-29 — I1 / issue #24
 
