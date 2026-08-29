@@ -156,4 +156,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   format, fingerprint, AOT/JIT, supported-host, and canonical quality gates before
   moving to `review`.
 - **Reference:** [issue #17](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/17);
-  proposed contract only, not acceptance or closure.
+  [PR #26](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/26); proposed
+  contract only, not acceptance or closure.
