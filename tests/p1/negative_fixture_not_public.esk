@@ -1,0 +1,4 @@
+(require transformer.module)
+
+;;; The inert structural carrier is not selectable through transformer.module.
+(fixture-tensor-internal '(1) 'f32 'cpu (vector 'not-public))

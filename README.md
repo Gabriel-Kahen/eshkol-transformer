@@ -60,6 +60,12 @@ exports only the six E1 accessors and six fixed package-specific configuration
 wrappers; its trusted implementation source and evidence are not application include
 roots. See [docs/CONFIG_FORMAT.md](docs/CONFIG_FORMAT.md).
 
+The P1 structural module/state-tree gate is `make test-p1`. Its logical in-memory
+state schema, deterministic UTF-8 path ordering, tie semantics, strict loading, and
+explicit tensor-runtime limitations are documented in
+[docs/P1_MODULE_STATE.md](docs/P1_MODULE_STATE.md). It defines no checkpoint file or
+numerical tensor capability.
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
