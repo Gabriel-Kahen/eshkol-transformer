@@ -51,10 +51,11 @@ fresh and interned symbols with the same spelling collide.  Returned keys are
 canonical `string->symbol` values.  Nested proper lists are values, not maps.
 Procedures, ports, vectors, bytevectors, hash tables, records, other opaque values,
 inexact/complex numbers, improper lists, cycles, and shared pairs are rejected.
-Pinned Eshkol reports an exact zero-imaginary complex such as `1+0i` as both
-`integer?` and `exact?`; E1 additionally requires the tag-level `real?` predicate,
-so that representation is rejected without converting ordinary exact integers or
-bignums through an inexact `real-part` result.  Example input
+On the pinned runtime, `(make-rectangular 1 0)` produces a tagged complex value for
+which `complex?` is true and `integer?`, `exact?`, and `real?` are false. E1 requires
+all three of `integer?`, `exact?`, and `real?` for accepted numeric values, so tagged
+complex values are rejected without converting ordinary exact integers or bignums
+through an inexact `real-part` result. Example input
 `((z-context 1024) (path "run.toml")
 (expected (cpu f32)))` is returned as `((expected (cpu f32)) (path "run.toml")
 (z-context 1024))`.

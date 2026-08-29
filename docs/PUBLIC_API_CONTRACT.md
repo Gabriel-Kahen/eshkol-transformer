@@ -134,13 +134,21 @@ reported losses and metrics accumulate and return `f32` in the first release.
   cache/RNG; the model must not be mutated concurrently. Retained objects outlive the
   retaining object.
 
+In this contract, an immutable snapshot is immutable as observable model or runtime
+state: it never aliases mutable source state and cannot be used to mutate that source
+or a later snapshot. The pinned Eshkol runtime does not physically freeze standard
+string and list carriers. When a snapshot accessor returns those carriers, it returns
+a fresh deep-owned copy; caller mutation may change only that detached copy. Opaque
+values and immutable scalar values remain physically immutable where their operation
+contract says so.
+
 ## 5. Error model
 
 Public operations raise an opaque structured error inspected by
 `transformer-error?`, `transformer-error-category`,
 `transformer-error-operation`, `transformer-error-message`,
 `transformer-error-details`, and `transformer-error-cause`. Accessors return new
-immutable CPU values, do not mutate, and have no gradient. Categories:
+detached CPU snapshots, do not mutate error state, and have no gradient. Categories:
 
 | Category | Use |
 |---|---|

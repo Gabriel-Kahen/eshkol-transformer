@@ -339,14 +339,18 @@
          (lambda ()
            (transformer-error-make 'io 'op "message" '((value 1.5)) #f))
          'transformer-error-make))
-(define exact-zero-imaginary-complex (make-rectangular 1 0))
-(check "exact zero-imaginary complex detail rejected"
-       (structured-invalid?
-         (lambda ()
-           (transformer-error-make
-             'io 'op "message"
-             (list (list 'value exact-zero-imaginary-complex)) #f))
-         'transformer-error-make))
+(define tagged-zero-imaginary-complex (make-rectangular 1 0))
+(check "tagged zero-imaginary complex detail rejected"
+       (and (complex? tagged-zero-imaginary-complex)
+            (not (integer? tagged-zero-imaginary-complex))
+            (not (exact? tagged-zero-imaginary-complex))
+            (not (real? tagged-zero-imaginary-complex))
+            (structured-invalid?
+              (lambda ()
+                (transformer-error-make
+                  'io 'op "message"
+                  (list (list 'value tagged-zero-imaginary-complex)) #f))
+              'transformer-error-make)))
 
 (define cyclic-details (list (list 'cycle '())))
 (set-car! (cdr (car cyclic-details)) cyclic-details)
@@ -447,13 +451,17 @@
        (let ((details (transformer-error-details wrapped-zero)))
          (and (= (details-ref details 'source-code) 0)
               (string=? (details-ref details 'source-message) ""))))
-(check "foreign exact zero-imaginary complex code rejected"
-       (structured-invalid?
-         (lambda ()
-           (transformer-error-wrap-foreign
-             'internal 'primitive-call "complex integer status" '()
-             'native exact-zero-imaginary-complex "source" #f))
-         'transformer-error-wrap-foreign))
+(check "foreign tagged zero-imaginary complex code rejected"
+       (and (complex? tagged-zero-imaginary-complex)
+            (not (integer? tagged-zero-imaginary-complex))
+            (not (exact? tagged-zero-imaginary-complex))
+            (not (real? tagged-zero-imaginary-complex))
+            (structured-invalid?
+              (lambda ()
+                (transformer-error-wrap-foreign
+                  'internal 'primitive-call "tagged complex status" '()
+                  'native tagged-zero-imaginary-complex "source" #f))
+              'transformer-error-wrap-foreign)))
 (check "foreign source-domain validation"
        (structured-invalid?
          (lambda ()

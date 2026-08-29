@@ -193,7 +193,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   nine-op internal surfaces.  Adversarial cases cover
   forged same-message conditions, procedure non-invocation, repeated detached
   snapshots, distinct cause identities, fresh/interned same-spelling key collisions,
-  exact zero-imaginary complex rejection, and 256 retained registry identities.  The
+  tagged complex rejection with its observed pinned-runtime predicate matrix, and
+  256 retained registry identities.  The
   local run used the exact Eshkol commit/compiler pin
   but is an explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6 compatibility
   probe; supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI remains required.
@@ -207,6 +208,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   and no verified concurrency or thread-safety behavior.  This identity workaround
   is accepted for the pin and must be retested when upstream gains module opacity or
   an immutable opaque record facility.
+- **A0 snapshot clarification:** on the pinned runtime, standard list and string
+  carriers are not physically frozen. The A0 term `immutable snapshot` commits to
+  immutable observable source state and non-aliasing: accessors return fresh
+  deep-owned carriers whose caller mutation cannot affect the source or a later
+  snapshot. It does not claim physical immutability for those detached carriers.
 - **Dependencies / retest:** P1, T1, D1, K1, and X1 must import this internal boundary
   and remove subsystem-local structured-error representations.  Their explicit
   source-status mappings remain workstream-owned and require review when they create
