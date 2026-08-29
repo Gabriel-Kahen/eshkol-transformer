@@ -382,4 +382,4 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   #1 coordination and affected downstream retests.
 - **Reference:** [issue #20](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/20);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  implementation PR pending.
+  [implementation PR #30](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/30).
