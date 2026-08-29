@@ -95,4 +95,20 @@ cmp "$A0_TMP/wrong-arity-1.log" "$A0_TMP/wrong-arity-2.log"
 cmp "$A0_TMP/unsupported-capability-1.log" \
     "$A0_TMP/unsupported-capability-2.log"
 
+for A0_RUN in 1 2; do
+    if run_compiler --strict-types --emit-object --no-stdlib \
+        -I "$A0_ROOT/lib" \
+        -I "$A0_ROOT/tests/fixtures/a0" \
+        "$A0_ROOT/tests/fixtures/a0/negative_d1_wrong_arity.esk" \
+        -o "$A0_TMP/d1-wrong-arity-$A0_RUN.o" \
+        >"$A0_TMP/d1-wrong-arity-$A0_RUN.log" 2>&1; then
+        echo "A0 FAIL: D1 wrong-arity fixture unexpectedly compiled" >&2
+        exit 1
+    fi
+    grep -F "Arity mismatch: token-corpus-write! expects 5 arguments but got 4" \
+        "$A0_TMP/d1-wrong-arity-$A0_RUN.log" >/dev/null
+    test ! -e "$A0_TMP/d1-wrong-arity-$A0_RUN.o"
+done
+cmp "$A0_TMP/d1-wrong-arity-1.log" "$A0_TMP/d1-wrong-arity-2.log"
+
 echo "A0 PASS: declarations/imports repeated; expected negatives rejected"

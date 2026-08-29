@@ -1,7 +1,7 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: toolchain configure build test test-a0 test-b0 test-e1 test-e1b test-i1 test-k1 test-p1 test-python-isolation test-x1 smoke benchmark clean
+.PHONY: toolchain configure build test test-a0 test-b0 test-d1 test-e1 test-e1b test-i1 test-k1 test-p1 test-python-isolation test-x1 smoke benchmark clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -24,6 +24,7 @@ test: build
 	/usr/bin/bash scripts/test-i1.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
+	/usr/bin/bash scripts/test-d1.sh
 	python3 -m unittest -v tests.q0.test_python_isolation
 
 test-a0: configure
@@ -49,6 +50,9 @@ test-x1: configure
 
 test-p1: configure
 	/usr/bin/bash scripts/test-p1.sh
+
+test-d1: configure
+	/usr/bin/bash scripts/test-d1.sh
 
 test-python-isolation:
 	python3 -m unittest -v tests.q0.test_python_isolation

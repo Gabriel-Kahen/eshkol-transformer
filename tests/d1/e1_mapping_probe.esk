@@ -1,0 +1,46 @@
+;;; Exercise D1's raw-condition normalization through the fixed E1 boundary.
+
+(require transformer.error_internal)
+(load "eshkol_transformer/token_shard.esk")
+
+(define (probe-detail details key)
+  (cond
+    ((null? details) #f)
+    ((eq? (car (car details)) key) (car (cdr (car details))))
+    (else (probe-detail (cdr details) key))))
+
+(define (mapped-ok? mapped)
+  (and (transformer-error? mapped)
+       (eq? (transformer-error-category mapped) 'io)
+       (eq? (transformer-error-operation mapped) 'token-corpus-validate)
+       (eq? (probe-detail (transformer-error-details mapped) 'source-domain)
+            'eshkol-runtime)
+       (eq? (probe-detail (transformer-error-details mapped) 'source-code)
+            'binary-read)
+       (string=? (probe-detail (transformer-error-details mapped) 'source-message)
+                 "raw file primitive condition")
+       (eq? (transformer-error-cause mapped) #f)))
+
+(define passed #f)
+(guard (raw
+        (#t
+         (guard (mapped (#t (if (mapped-ok? mapped)
+                                (set! passed #t)
+                                #t)))
+           (d1-token-reraise-or-wrap
+            'io 'token-corpus-validate "file read failed" 'binary-read raw))))
+  (error "raw file primitive condition"))
+
+(define original
+  (transformer-error-wrap-foreign
+   'io 'token-corpus-validate "existing error" '()
+   'eshkol-runtime 'binary-read "existing source" #f))
+(define preserved #f)
+(guard (reraised (#t (if (eq? reraised original) (set! preserved #t) #t)))
+  (d1-token-reraise-or-wrap
+   'corrupt-data 'token-corpus-validate "must not replace"
+   'utf8-decode original))
+
+(if (and passed preserved)
+    (begin (display "D1_E1_MAPPING_PASS") (newline))
+    (begin (display "D1_E1_MAPPING_FAIL") (newline) (exit 1)))

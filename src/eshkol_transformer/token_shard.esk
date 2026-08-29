@@ -1,0 +1,746 @@
+;;; D1 version-1 token corpus writer and validator.
+;;; This is a CPU control-plane data path. It performs no tensor, dtype, device,
+;;; numerical, tokenizer, dataset-iteration, packing, shuffle, or cursor work.
+
+(require transformer.error_internal)
+(load "eshkol_transformer/sha256.esk")
+
+(define d1-token-corpus-major 1)
+(define d1-token-corpus-minor 0)
+(define d1-token-encoding-i64-le 1)
+(define d1-token-checksum-sha256 1)
+(define d1-token-shard-fixed-header-bytes 80)
+(define d1-token-manifest-fixed-header-bytes 96)
+(define d1-token-manifest-record-bytes 56)
+(define d1-token-checksum-bytes 32)
+(define d1-token-max-i64 9223372036854775807)
+(define d1-token-max-encoded-tokens 1152921504606846900)
+(define d1-token-max-sha-covered-bytes 2305843009213693951)
+(define d1-token-max-fingerprint-bytes 192)
+(define d1-token-max-shard-index 9999999999999999)
+(define d1-token-shard-magic (bytevector 69 83 72 75 84 83 72 49)) ; ESHKTSH1
+(define d1-token-manifest-magic (bytevector 69 83 72 75 84 67 77 49)) ; ESHKTCM1
+
+(define-record-type d1-token-summary
+  (d1-token-summary-create shard-count total-tokens vocab-size shard-token-limit
+                           fingerprint total-shard-bytes)
+  d1-token-summary?
+  (shard-count d1-token-summary-shard-count)
+  (total-tokens d1-token-summary-total-tokens)
+  (vocab-size d1-token-summary-vocab-size)
+  (shard-token-limit d1-token-summary-shard-token-limit)
+  (fingerprint d1-token-summary-fingerprint)
+  (total-shard-bytes d1-token-summary-total-shard-bytes))
+
+(define (d1-token-fail category operation message)
+  (transformer-error-raise category operation message '() #f))
+
+(define (d1-token-list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+
+(define (d1-token-proper-acyclic-list? value)
+  (let loop ((slow value) (fast value))
+    (cond
+      ((null? fast) #t)
+      ((not (pair? fast)) #f)
+      (else
+       (let ((fast-one (cdr fast)))
+         (cond
+           ((null? fast-one) #t)
+           ((not (pair? fast-one)) #f)
+           ((not (pair? slow)) #f)
+           (else
+            (let ((slow-one (cdr slow)) (fast-two (cdr fast-one)))
+              (if (eq? slow-one fast-two)
+                  #f
+                  (loop slow-one fast-two))))))))))
+
+(define (d1-token-list-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted)
+        (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define (d1-token-reraise-or-wrap category operation message source-code caught)
+  (if (transformer-error? caught)
+      (raise caught)
+      (raise
+       (transformer-error-wrap-foreign category operation message '()
+                                       'eshkol-runtime source-code
+                                       (if (error-object? caught)
+                                           (error-object-message caught)
+                                           message)
+                                       #f))))
+
+(define (d1-token-make-summary shard-count total-tokens vocab-size shard-token-limit
+                               fingerprint total-shard-bytes)
+  (d1-token-summary-create shard-count total-tokens vocab-size shard-token-limit
+                           (utf8->string (string->utf8 fingerprint))
+                           total-shard-bytes))
+
+(define (d1-token-valid-nonnegative-integer? value)
+  (and (integer? value) (exact? value)
+       (>= value 0) (<= value d1-token-max-i64)))
+
+(define (d1-token-require-nonnegative value operation field)
+  (if (d1-token-valid-nonnegative-integer? value)
+      value
+      (d1-token-fail 'invalid-argument operation field)))
+
+(define (d1-token-require-positive value operation field)
+  (if (and (d1-token-valid-nonnegative-integer? value) (> value 0))
+      value
+      (d1-token-fail 'invalid-argument operation field)))
+
+(define (d1-token-bytevector=? left right)
+  (and (bytevector? left)
+       (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left))
+             #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (d1-token-copy-into! destination offset source)
+  (let loop ((index 0))
+    (if (= index (bytevector-length source))
+        destination
+        (begin
+          (bytevector-u8-set! destination (+ offset index)
+                              (bytevector-u8-ref source index))
+          (loop (+ index 1))))))
+
+(define (d1-token-write-u16-le! bytes offset value)
+  (bytevector-u8-set! bytes offset (modulo value 256))
+  (bytevector-u8-set! bytes (+ offset 1) (modulo (quotient value 256) 256)))
+
+(define (d1-token-write-u32-le! bytes offset value)
+  (let loop ((index 0) (remaining value))
+    (if (= index 4)
+        bytes
+        (begin
+          (bytevector-u8-set! bytes (+ offset index) (modulo remaining 256))
+          (loop (+ index 1) (quotient remaining 256))))))
+
+(define (d1-token-write-u64-le! bytes offset value)
+  (let loop ((index 0) (remaining value))
+    (if (= index 8)
+        bytes
+        (begin
+          (bytevector-u8-set! bytes (+ offset index) (modulo remaining 256))
+          (loop (+ index 1) (quotient remaining 256))))))
+
+(define (d1-token-read-u16-le bytes offset)
+  (+ (bytevector-u8-ref bytes offset)
+     (* 256 (bytevector-u8-ref bytes (+ offset 1)))))
+
+(define (d1-token-read-le bytes offset width)
+  (let loop ((index (- width 1)) (result 0))
+    (if (< index 0)
+        result
+        (loop (- index 1)
+              (+ (* result 256) (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (d1-token-read-u32-le bytes offset)
+  (d1-token-read-le bytes offset 4))
+
+(define (d1-token-read-u64-le bytes offset)
+  (d1-token-read-le bytes offset 8))
+
+(define (d1-token-zero-range? bytes start end)
+  (let loop ((index start))
+    (if (= index end)
+        #t
+        (and (= 0 (bytevector-u8-ref bytes index)) (loop (+ index 1))))))
+
+(define (d1-token-valid-fingerprint? fingerprint)
+  (and (string? fingerprint)
+       (> (string-length fingerprint) 0)
+       (<= (string-length fingerprint) d1-token-max-fingerprint-bytes)
+       (let ((encoded (string->utf8 fingerprint)))
+         (and (> (bytevector-length encoded) 0)
+              (<= (bytevector-length encoded)
+                  d1-token-max-fingerprint-bytes)))))
+
+(define (d1-token-require-fingerprint fingerprint operation)
+  (if (d1-token-valid-fingerprint? fingerprint)
+      fingerprint
+      (d1-token-fail 'invalid-argument operation
+                     "tokenizer fingerprint must be 1..192 canonical UTF-8 bytes")))
+
+(define (d1-token-path-join directory leaf)
+  (if (and (> (string-length directory) 0)
+           (char=? (string-ref directory (- (string-length directory) 1)) #\/))
+      (string-append directory leaf)
+      (string-append directory "/" leaf)))
+
+(define (d1-token-left-pad-decimal value width)
+  (let ((raw (number->string value)))
+    (let loop ((missing (- width (string-length raw))) (result raw))
+      (if (<= missing 0)
+          result
+          (loop (- missing 1) (string-append "0" result))))))
+
+(define (d1-token-shard-leaf index)
+  (string-append "shard-" (d1-token-left-pad-decimal index 16) ".ets"))
+
+(define (d1-token-manifest-path directory)
+  (d1-token-path-join directory "manifest.etm"))
+
+(define (d1-token-shard-path directory index)
+  (d1-token-path-join directory (d1-token-shard-leaf index)))
+
+(define (d1-token-derived-sizes token-count shard-token-limit fingerprint-bytes
+                                operation)
+  (if (> token-count d1-token-max-encoded-tokens)
+      (d1-token-fail 'invalid-argument operation
+                     "token count exceeds checked i64 byte arithmetic")
+      #t)
+  (let ((shard-count (if (= token-count 0)
+                         0
+                         (quotient (+ token-count shard-token-limit -1)
+                                   shard-token-limit))))
+    (if (> shard-count (+ d1-token-max-shard-index 1))
+        (d1-token-fail 'invalid-argument operation
+                       "shard count exceeds the 16-digit canonical namespace")
+        #t)
+    ;; Width multiplications occur only after the signed/count namespace checks.
+    (let ((largest-shard-count
+           (if (> token-count shard-token-limit) shard-token-limit token-count))
+          (manifest-covered (+ d1-token-manifest-fixed-header-bytes
+                               fingerprint-bytes
+                               (* shard-count d1-token-manifest-record-bytes)))
+          (total-shard-bytes
+           (+ (* token-count 8)
+              (* shard-count
+                 (+ d1-token-shard-fixed-header-bytes fingerprint-bytes
+                    d1-token-checksum-bytes)))))
+      (if (or (> manifest-covered d1-token-max-sha-covered-bytes)
+              (and (> shard-count 0)
+                   (> (+ d1-token-shard-fixed-header-bytes fingerprint-bytes
+                         (* largest-shard-count 8))
+                      d1-token-max-sha-covered-bytes))
+              (> (+ manifest-covered d1-token-checksum-bytes) d1-token-max-i64)
+              (> total-shard-bytes d1-token-max-i64))
+          (d1-token-fail 'invalid-argument operation
+                         "corpus bytes exceed checked i64 or SHA-256 limits")
+          (vector shard-count
+                  (+ manifest-covered d1-token-checksum-bytes)
+                  total-shard-bytes)))))
+
+(define (d1-token-delete-if-present path)
+  (if (file-exists? path)
+      (guard (ignored (#t #f)) (delete-file path))
+      #t))
+
+(define (d1-token-acquire-lock! path operation)
+  (if (file-exists? path)
+      (d1-token-fail 'invalid-argument operation
+                     "concurrent writer or stale writer lock")
+      (guard (error (#t
+                     (d1-token-reraise-or-wrap 'io operation
+                                               "writer lock creation failed"
+                                               'make-directory error)))
+        (if (make-directory path)
+            #t
+            (if (file-exists? path)
+                (d1-token-fail 'invalid-argument operation
+                               "concurrent writer or stale writer lock")
+                (d1-token-fail 'io operation "writer lock creation failed"))))))
+
+(define (d1-token-release-lock! path operation)
+  (guard (error (#t
+                 (d1-token-reraise-or-wrap 'io operation
+                                           "writer lock removal failed"
+                                           'delete-directory error)))
+    (if (delete-directory path)
+        #t
+        (d1-token-fail 'io operation "writer lock removal failed"))))
+
+(define (d1-token-write-temporary-new! path bytes operation)
+  (let ((temporary (string-append path ".tmp")))
+    (if (or (file-exists? path) (file-exists? temporary))
+        (d1-token-fail 'invalid-argument operation "target or deterministic temporary exists")
+        (guard (error (#t
+                       (begin
+                         (d1-token-delete-if-present temporary)
+                         (d1-token-reraise-or-wrap 'io operation "file write failed"
+                                                   'binary-write error))))
+          (let ((port (open-binary-output-file temporary)))
+            (if (not port)
+                (d1-token-fail 'io operation "cannot open temporary output")
+                (begin
+                  (write-bytevector bytes port)
+                  (close-port port))))))))
+
+(define (d1-token-publish-temporary! path operation)
+  (let ((temporary (string-append path ".tmp")))
+    (if (file-exists? path)
+        (begin
+          (d1-token-delete-if-present temporary)
+          (d1-token-fail 'invalid-argument operation "final target already exists"))
+        (guard (error (#t
+                       (begin
+                         (d1-token-delete-if-present temporary)
+                         (d1-token-reraise-or-wrap 'io operation
+                                                   "atomic rename failed"
+                                                   'file-rename error))))
+          (if (file-rename temporary path)
+              #t
+              (begin
+                (d1-token-delete-if-present temporary)
+                (d1-token-fail 'io operation "atomic rename failed")))))))
+
+(define (d1-token-atomic-write-new! path bytes operation)
+  (d1-token-write-temporary-new! path bytes operation)
+  (d1-token-publish-temporary! path operation))
+
+(define (d1-token-file-bytes path maximum operation)
+  (if (not (file-exists? path))
+      (d1-token-fail 'io operation "required file is missing")
+      #t)
+  (guard (error (#t
+                 (d1-token-reraise-or-wrap 'io operation "file read failed"
+                                           'binary-read error)))
+    (let ((size (file-size path)))
+      (if (not (d1-token-valid-nonnegative-integer? size))
+          (d1-token-fail 'io operation "cannot determine file size")
+          #t)
+      (if (> size maximum)
+          (d1-token-fail 'corrupt-data operation "file size exceeds policy")
+          (if (> size (+ d1-token-max-sha-covered-bytes d1-token-checksum-bytes))
+              (d1-token-fail 'corrupt-data operation
+                             "file exceeds the SHA-256 message-length limit")
+              (let ((port (open-binary-input-file path)))
+            (if (not port)
+                (d1-token-fail 'io operation "cannot open input")
+                (let ((bytes (read-bytevector size port)))
+                  (let ((trailing (read-u8 port)))
+                    (close-port port)
+                    (if (or (not (bytevector? bytes))
+                            (not (= (bytevector-length bytes) size))
+                            (not (eof-object? trailing)))
+                        (d1-token-fail 'corrupt-data operation "truncated or trailing input")
+                        bytes))))))))))
+
+(define (d1-token-build-shard index tokens count fingerprint vocab-size)
+  (let* ((fingerprint-bytes (string->utf8 fingerprint))
+         (header-bytes (+ d1-token-shard-fixed-header-bytes
+                          (bytevector-length fingerprint-bytes)))
+         (payload-bytes (* count 8))
+         (unsigned-bytes (+ header-bytes payload-bytes))
+         (file-bytes (+ unsigned-bytes d1-token-checksum-bytes))
+         (result (make-bytevector file-bytes 0)))
+    (d1-token-copy-into! result 0 d1-token-shard-magic)
+    (d1-token-write-u16-le! result 8 d1-token-corpus-major)
+    (d1-token-write-u16-le! result 10 d1-token-corpus-minor)
+    (d1-token-write-u32-le! result 12 header-bytes)
+    (d1-token-write-u32-le! result 16 0)
+    (d1-token-write-u32-le! result 20 d1-token-encoding-i64-le)
+    (d1-token-write-u32-le! result 24 d1-token-checksum-sha256)
+    (d1-token-write-u64-le! result 32 index)
+    (d1-token-write-u64-le! result 40 count)
+    (d1-token-write-u64-le! result 48 payload-bytes)
+    (d1-token-write-u64-le! result 56 vocab-size)
+    (d1-token-write-u32-le! result 64 (bytevector-length fingerprint-bytes))
+    (d1-token-write-u64-le! result 72 file-bytes)
+    (d1-token-copy-into! result d1-token-shard-fixed-header-bytes fingerprint-bytes)
+    (let loop ((offset 0) (remaining tokens))
+      (if (= offset count)
+          remaining
+          (begin
+            (d1-token-write-u64-le! result (+ header-bytes (* offset 8))
+                                    (car remaining))
+            (loop (+ offset 1) (cdr remaining)))))
+    (let* ((next-tokens
+            (let loop ((offset 0) (remaining tokens))
+              (if (= offset count) remaining
+                  (loop (+ offset 1) (cdr remaining)))))
+           (covered (bytevector-copy result 0 unsigned-bytes))
+           (digest (d1-sha256 covered)))
+      (d1-token-copy-into! result unsigned-bytes digest)
+      (vector result digest file-bytes count next-tokens))))
+
+(define (d1-token-build-manifest records shard-count total-tokens total-shard-bytes
+                                 fingerprint vocab-size shard-token-limit)
+  (let* ((fingerprint-bytes (string->utf8 fingerprint))
+         (header-bytes (+ d1-token-manifest-fixed-header-bytes
+                          (bytevector-length fingerprint-bytes)))
+         (record-section-bytes (* shard-count d1-token-manifest-record-bytes))
+         (unsigned-bytes (+ header-bytes record-section-bytes))
+         (manifest-bytes (+ unsigned-bytes d1-token-checksum-bytes))
+         (result (make-bytevector manifest-bytes 0)))
+    (d1-token-copy-into! result 0 d1-token-manifest-magic)
+    (d1-token-write-u16-le! result 8 d1-token-corpus-major)
+    (d1-token-write-u16-le! result 10 d1-token-corpus-minor)
+    (d1-token-write-u32-le! result 12 header-bytes)
+    (d1-token-write-u32-le! result 16 0)
+    (d1-token-write-u32-le! result 20 d1-token-encoding-i64-le)
+    (d1-token-write-u32-le! result 24 d1-token-checksum-sha256)
+    (d1-token-write-u64-le! result 32 shard-count)
+    (d1-token-write-u64-le! result 40 total-tokens)
+    (d1-token-write-u64-le! result 48 total-shard-bytes)
+    (d1-token-write-u64-le! result 56 vocab-size)
+    (d1-token-write-u64-le! result 64 shard-token-limit)
+    (d1-token-write-u32-le! result 72 (bytevector-length fingerprint-bytes))
+    (d1-token-write-u32-le! result 76 d1-token-manifest-record-bytes)
+    (d1-token-write-u64-le! result 80 manifest-bytes)
+    (d1-token-copy-into! result d1-token-manifest-fixed-header-bytes fingerprint-bytes)
+    (let loop ((index 0))
+      (if (= index shard-count)
+          #t
+          (let* ((record (vector-ref records index))
+                 (offset (+ header-bytes (* index d1-token-manifest-record-bytes))))
+            (d1-token-write-u64-le! result offset index)
+            (d1-token-write-u64-le! result (+ offset 8) (vector-ref record 3))
+            (d1-token-write-u64-le! result (+ offset 16) (vector-ref record 2))
+            (d1-token-copy-into! result (+ offset 24) (vector-ref record 1))
+            (loop (+ index 1)))))
+    (d1-token-copy-into! result unsigned-bytes
+                         (d1-sha256 (bytevector-copy result 0 unsigned-bytes)))
+    result))
+
+(define (token-corpus-write! directory fingerprint vocab-size shard-token-limit tokens)
+  (let ((operation 'token-corpus-write!))
+    (if (or (not (string? directory)) (= (string-length directory) 0))
+        (d1-token-fail 'invalid-argument operation "directory must be nonempty")
+        #t)
+    (d1-token-require-fingerprint fingerprint operation)
+    (d1-token-require-positive vocab-size operation "vocab-size must be positive i64")
+    (d1-token-require-positive shard-token-limit operation
+                               "shard-token-limit must be positive i64")
+    (if (not (d1-token-proper-acyclic-list? tokens))
+        (d1-token-fail 'invalid-argument operation
+                       "tokens must be a proper acyclic list")
+        #t)
+    (let ((token-count (d1-token-list-length tokens)))
+      (let validate ((remaining tokens))
+        (if (null? remaining)
+            #t
+            (let ((token (car remaining)))
+              (if (and (d1-token-valid-nonnegative-integer? token)
+                       (< token vocab-size))
+                  (validate (cdr remaining))
+                  (d1-token-fail 'invalid-argument operation
+                                 "token must be i64 in [0,vocab-size)")))))
+      (let* ((fingerprint-bytes (bytevector-length (string->utf8 fingerprint)))
+             (derived (d1-token-derived-sizes token-count shard-token-limit
+                                              fingerprint-bytes operation))
+             (shard-count (vector-ref derived 0))
+             (manifest-path (d1-token-manifest-path directory))
+             (lock-path (d1-token-path-join directory ".d1-writer-lock")))
+        (let ((records (make-vector shard-count #f)))
+          ;; The pre-lock check preserves preexisting user data. The same check is
+          ;; repeated under the lock to reject a race without deleting its target.
+          (if (or (file-exists? manifest-path)
+                  (file-exists? (string-append manifest-path ".tmp")))
+              (d1-token-fail 'invalid-argument operation
+                             "manifest target already exists")
+              #t)
+          (let precheck-before-lock ((index 0))
+            (if (= index shard-count)
+                #t
+                (let ((path (d1-token-shard-path directory index)))
+                  (if (or (file-exists? path)
+                          (file-exists? (string-append path ".tmp")))
+                      (d1-token-fail 'invalid-argument operation
+                                     "shard target already exists")
+                      (precheck-before-lock (+ index 1))))))
+          (d1-token-acquire-lock! lock-path operation)
+          (guard (error (#t
+                         (begin
+                           (let cleanup-shards ((index 0))
+                             (if (= index shard-count)
+                                 #t
+                                 (begin
+                                   (if (vector-ref records index)
+                                       (d1-token-delete-if-present
+                                        (d1-token-shard-path directory index))
+                                       #t)
+                                   (cleanup-shards (+ index 1)))))
+                           (guard (ignored (#t #f)) (delete-directory lock-path))
+                           (raise error))))
+            (if (or (file-exists? manifest-path)
+                    (file-exists? (string-append manifest-path ".tmp")))
+                (d1-token-fail 'invalid-argument operation
+                               "manifest target already exists")
+                #t)
+            (let precheck ((index 0))
+              (if (= index shard-count)
+                  #t
+                  (let ((path (d1-token-shard-path directory index)))
+                    (if (or (file-exists? path)
+                            (file-exists? (string-append path ".tmp")))
+                        (d1-token-fail 'invalid-argument operation
+                                       "shard target already exists")
+                        (precheck (+ index 1))))))
+            (let write-loop ((index 0) (remaining-tokens tokens)
+                             (total-shard-bytes 0))
+              (if (= index shard-count)
+                  (let* ((manifest
+                          (d1-token-build-manifest records shard-count token-count
+                                                   total-shard-bytes fingerprint
+                                                   vocab-size shard-token-limit))
+                         ;; Nothing fallible may remain after manifest publication:
+                         ;; rollback guards must never remove shards behind a visible
+                         ;; manifest. Construct the return value before the commit.
+                         (summary
+                          (d1-token-make-summary shard-count token-count vocab-size
+                                                 shard-token-limit fingerprint
+                                                 total-shard-bytes)))
+                    ;; A complete manifest temporary becomes the exclusion claim
+                    ;; before releasing the directory lock. Thus even an empty
+                    ;; corpus has no unlocked pre-commit writer window.
+                    (d1-token-write-temporary-new! manifest-path manifest operation)
+                    (guard (error (#t
+                                   (begin
+                                     (d1-token-delete-if-present
+                                      (string-append manifest-path ".tmp"))
+                                     (raise error))))
+                      (d1-token-release-lock! lock-path operation)
+                      (d1-token-publish-temporary! manifest-path operation)
+                      summary))
+                  (let* ((remaining-count
+                          (- token-count (* index shard-token-limit)))
+                         (count (if (> remaining-count shard-token-limit)
+                                    shard-token-limit remaining-count))
+                         (record (d1-token-build-shard index remaining-tokens count
+                                                       fingerprint vocab-size))
+                         (path (d1-token-shard-path directory index)))
+                    (d1-token-atomic-write-new! path (vector-ref record 0) operation)
+                    (vector-set! records index record)
+                    (write-loop (+ index 1) (vector-ref record 4)
+                                (+ total-shard-bytes
+                                   (vector-ref record 2))))))))))))
+
+(define (d1-token-validate-header-common bytes magic fixed-header operation)
+  (if (< (bytevector-length bytes) (+ fixed-header d1-token-checksum-bytes))
+      (d1-token-fail 'corrupt-data operation "file is shorter than fixed envelope")
+      #t)
+  (if (not (d1-token-bytevector=? (bytevector-copy bytes 0 8) magic))
+      (d1-token-fail 'corrupt-data operation "malformed format magic")
+      #t)
+  (if (or (not (= (d1-token-read-u16-le bytes 8) d1-token-corpus-major))
+          (not (= (d1-token-read-u16-le bytes 10) d1-token-corpus-minor)))
+      (d1-token-fail 'version-mismatch operation "unsupported format version")
+      #t)
+  (if (not (= (d1-token-read-u32-le bytes 16) 0))
+      (d1-token-fail 'unsupported operation "unknown required features")
+      #t)
+  (if (not (= (d1-token-read-u32-le bytes 20) d1-token-encoding-i64-le))
+      (d1-token-fail 'unsupported operation "unsupported token encoding")
+      #t)
+  (if (not (= (d1-token-read-u32-le bytes 24) d1-token-checksum-sha256))
+      (d1-token-fail 'unsupported operation "unsupported checksum algorithm")
+      #t)
+  (if (or (not (d1-token-zero-range? bytes 28 32))
+          (and (= fixed-header d1-token-manifest-fixed-header-bytes)
+               (not (d1-token-zero-range? bytes 88 96))))
+      (d1-token-fail 'corrupt-data operation "reserved header bytes are nonzero")
+      #t))
+
+(define (d1-token-fingerprint-from bytes offset count operation)
+  (if (or (= count 0) (> count d1-token-max-fingerprint-bytes)
+          (> (+ offset count) (bytevector-length bytes)))
+      (d1-token-fail 'corrupt-data operation "invalid tokenizer fingerprint length")
+      (let ((encoded (bytevector-copy bytes offset (+ offset count))))
+        (guard (error (#t
+                       (d1-token-reraise-or-wrap
+                        'corrupt-data operation "invalid tokenizer fingerprint UTF-8"
+                        'utf8-decode error)))
+          (let ((fingerprint (utf8->string encoded)))
+            (if (and (d1-token-valid-fingerprint? fingerprint)
+                     (d1-token-bytevector=? encoded (string->utf8 fingerprint)))
+                fingerprint
+                (d1-token-fail 'corrupt-data operation
+                               "malformed or noncanonical UTF-8 tokenizer fingerprint")))))))
+
+(define (d1-token-validate-digest bytes operation)
+  (let* ((length (bytevector-length bytes))
+         (covered (- length d1-token-checksum-bytes))
+         (expected (bytevector-copy bytes covered length))
+         (actual (d1-sha256 (bytevector-copy bytes 0 covered))))
+    (if (d1-token-bytevector=? expected actual)
+        actual
+        (d1-token-fail 'corrupt-data operation "SHA-256 mismatch"))))
+
+(define (d1-token-validate-shard path expected-index expected-count expected-bytes
+                                 expected-digest expected-fingerprint expected-vocab
+                                 maximum-shard-bytes)
+  (let* ((operation 'token-corpus-validate)
+         (bytes (d1-token-file-bytes path maximum-shard-bytes operation)))
+    (if (not (= (bytevector-length bytes) expected-bytes))
+        (d1-token-fail 'corrupt-data operation "shard byte size differs from manifest")
+        #t)
+    (d1-token-validate-header-common bytes d1-token-shard-magic
+                                     d1-token-shard-fixed-header-bytes operation)
+    (if (not (d1-token-zero-range? bytes 68 72))
+        (d1-token-fail 'corrupt-data operation "reserved shard bytes are nonzero")
+        #t)
+    (let* ((header-bytes (d1-token-read-u32-le bytes 12))
+           (index (d1-token-read-u64-le bytes 32))
+           (token-count (d1-token-read-u64-le bytes 40))
+           (payload-bytes (d1-token-read-u64-le bytes 48))
+           (vocab-size (d1-token-read-u64-le bytes 56))
+           (fingerprint-bytes (d1-token-read-u32-le bytes 64))
+           (file-bytes (d1-token-read-u64-le bytes 72)))
+      (if (or (not (= header-bytes (+ d1-token-shard-fixed-header-bytes
+                                      fingerprint-bytes)))
+              (not (d1-token-valid-nonnegative-integer? index))
+              (not (d1-token-valid-nonnegative-integer? token-count))
+              (> token-count d1-token-max-encoded-tokens)
+              (not (d1-token-valid-nonnegative-integer? payload-bytes))
+              (not (d1-token-valid-nonnegative-integer? vocab-size))
+              (= vocab-size 0)
+              (not (d1-token-valid-nonnegative-integer? file-bytes))
+              (not (= index expected-index))
+              (not (= token-count expected-count))
+              (not (= payload-bytes (* token-count 8)))
+              (not (= vocab-size expected-vocab))
+              (not (= file-bytes (bytevector-length bytes)))
+              (> (- file-bytes d1-token-checksum-bytes)
+                 d1-token-max-sha-covered-bytes)
+              (not (= file-bytes (+ header-bytes payload-bytes
+                                    d1-token-checksum-bytes))))
+          (d1-token-fail 'corrupt-data operation "malformed or inconsistent shard header")
+          #t)
+      (let ((fingerprint
+             (d1-token-fingerprint-from bytes d1-token-shard-fixed-header-bytes
+                                        fingerprint-bytes operation))
+            (actual-digest (d1-token-validate-digest bytes operation)))
+        (if (not (string=? fingerprint expected-fingerprint))
+            (d1-token-fail 'corrupt-data operation "shard tokenizer identity mismatch")
+            #t)
+        (if (not (d1-token-bytevector=? actual-digest expected-digest))
+            (d1-token-fail 'corrupt-data operation "shard digest differs from manifest")
+            #t)
+        (let token-loop ((offset 0))
+          (if (= offset token-count)
+              #t
+              (let ((token (d1-token-read-u64-le bytes (+ header-bytes (* offset 8)))))
+                (if (< token vocab-size)
+                    (token-loop (+ offset 1))
+                    (d1-token-fail 'corrupt-data operation "token outside [0,vocab-size)")))))))))
+
+(define (token-corpus-validate directory maximum-manifest-bytes maximum-shard-bytes
+                               maximum-total-tokens)
+  (let ((operation 'token-corpus-validate))
+    (if (or (not (string? directory)) (= (string-length directory) 0))
+        (d1-token-fail 'invalid-argument operation "directory must be nonempty")
+        #t)
+    (d1-token-require-positive maximum-manifest-bytes operation
+                               "maximum-manifest-bytes must be positive")
+    (d1-token-require-positive maximum-shard-bytes operation
+                               "maximum-shard-bytes must be positive")
+    (d1-token-require-nonnegative maximum-total-tokens operation
+                                  "maximum-total-tokens must be nonnegative")
+    (let* ((manifest-path (d1-token-manifest-path directory))
+           (bytes (d1-token-file-bytes manifest-path maximum-manifest-bytes operation)))
+      (d1-token-validate-header-common bytes d1-token-manifest-magic
+                                       d1-token-manifest-fixed-header-bytes operation)
+      (let* ((header-bytes (d1-token-read-u32-le bytes 12))
+             (shard-count (d1-token-read-u64-le bytes 32))
+             (total-tokens (d1-token-read-u64-le bytes 40))
+             (total-shard-bytes (d1-token-read-u64-le bytes 48))
+             (vocab-size (d1-token-read-u64-le bytes 56))
+             (shard-token-limit (d1-token-read-u64-le bytes 64))
+             (fingerprint-bytes (d1-token-read-u32-le bytes 72))
+             (record-bytes (d1-token-read-u32-le bytes 76))
+             (manifest-bytes (d1-token-read-u64-le bytes 80)))
+        (if (or (not (= header-bytes (+ d1-token-manifest-fixed-header-bytes
+                                        fingerprint-bytes)))
+                (not (d1-token-valid-nonnegative-integer? shard-count))
+                (> shard-count (+ d1-token-max-shard-index 1))
+                (not (d1-token-valid-nonnegative-integer? total-tokens))
+                (> total-tokens d1-token-max-encoded-tokens)
+                (not (d1-token-valid-nonnegative-integer? total-shard-bytes))
+                (not (d1-token-valid-nonnegative-integer? vocab-size))
+                (not (d1-token-valid-nonnegative-integer? shard-token-limit))
+                (not (d1-token-valid-nonnegative-integer? manifest-bytes))
+                (not (= record-bytes d1-token-manifest-record-bytes))
+                (not (= manifest-bytes (bytevector-length bytes)))
+                (> (- manifest-bytes d1-token-checksum-bytes)
+                   d1-token-max-sha-covered-bytes)
+                (not (= manifest-bytes (+ header-bytes
+                                          (* shard-count record-bytes)
+                                          d1-token-checksum-bytes)))
+                (= vocab-size 0)
+                (= shard-token-limit 0)
+                (> total-tokens maximum-total-tokens)
+                (and (= total-tokens 0) (not (= shard-count 0)))
+                (and (> total-tokens 0) (= shard-count 0)))
+            (d1-token-fail 'corrupt-data operation "malformed or policy-exceeding manifest")
+            #t)
+        (let ((fingerprint
+               (d1-token-fingerprint-from bytes d1-token-manifest-fixed-header-bytes
+                                          fingerprint-bytes operation)))
+          (d1-token-validate-digest bytes operation)
+          (let record-loop ((index 0) (count-sum 0) (byte-sum 0))
+            (if (= index shard-count)
+                (begin
+                  (if (or (not (= count-sum total-tokens))
+                          (not (= byte-sum total-shard-bytes)))
+                      (d1-token-fail 'corrupt-data operation "manifest totals do not match records")
+                      #t)
+                  (d1-token-make-summary shard-count total-tokens vocab-size
+                                         shard-token-limit fingerprint
+                                         total-shard-bytes))
+                (let* ((offset (+ header-bytes (* index record-bytes)))
+                       (record-index (d1-token-read-u64-le bytes offset))
+                       (record-count (d1-token-read-u64-le bytes (+ offset 8)))
+                       (record-file-bytes (d1-token-read-u64-le bytes (+ offset 16)))
+                       (record-digest (bytevector-copy bytes (+ offset 24) (+ offset 56)))
+                       (last? (= index (- shard-count 1))))
+                  (if (or (not (= record-index index))
+                          (not (d1-token-valid-nonnegative-integer? record-index))
+                          (not (d1-token-valid-nonnegative-integer? record-count))
+                          (> record-count d1-token-max-encoded-tokens)
+                          (not (d1-token-valid-nonnegative-integer? record-file-bytes))
+                          (> record-file-bytes
+                             (+ d1-token-max-sha-covered-bytes
+                                d1-token-checksum-bytes))
+                          (= record-count 0)
+                          (> record-count shard-token-limit)
+                          (> record-count (- d1-token-max-i64 count-sum))
+                          (> record-file-bytes
+                             (- d1-token-max-i64 byte-sum))
+                          (and (not last?) (not (= record-count shard-token-limit))))
+                      (d1-token-fail 'corrupt-data operation
+                                     "duplicate, noncontiguous, or noncanonical shard record")
+                      #t)
+                  (d1-token-validate-shard
+                   (d1-token-shard-path directory index) index record-count
+                   record-file-bytes record-digest fingerprint vocab-size
+                   maximum-shard-bytes)
+                  (record-loop (+ index 1) (+ count-sum record-count)
+                               (+ byte-sum record-file-bytes))))))))))
+
+(define (d1-token-require-summary summary operation)
+  (if (d1-token-summary? summary)
+      summary
+      (d1-token-fail 'invalid-argument operation "expected token corpus summary")))
+
+(define (token-corpus-summary-shard-count summary)
+  (d1-token-summary-shard-count
+   (d1-token-require-summary summary 'token-corpus-summary-shard-count)))
+(define (token-corpus-summary-total-tokens summary)
+  (d1-token-summary-total-tokens
+   (d1-token-require-summary summary 'token-corpus-summary-total-tokens)))
+(define (token-corpus-summary-vocab-size summary)
+  (d1-token-summary-vocab-size
+   (d1-token-require-summary summary 'token-corpus-summary-vocab-size)))
+(define (token-corpus-summary-shard-token-limit summary)
+  (d1-token-summary-shard-token-limit
+   (d1-token-require-summary summary 'token-corpus-summary-shard-token-limit)))
+(define (token-corpus-summary-tokenizer-fingerprint summary)
+  (let ((value
+         (d1-token-summary-fingerprint
+          (d1-token-require-summary
+           summary 'token-corpus-summary-tokenizer-fingerprint))))
+    (utf8->string (string->utf8 value))))
+(define (token-corpus-summary-total-shard-bytes summary)
+  (d1-token-summary-total-shard-bytes
+   (d1-token-require-summary summary 'token-corpus-summary-total-shard-bytes)))

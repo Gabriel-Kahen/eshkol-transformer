@@ -493,3 +493,40 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #22](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/22);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [PR #31](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31).
+
+## 2026-08-28 — D1 / issue #18
+
+- **Decision:** proposed; the binary v1.0 format direction is accepted with conditions
+  by the integration task, while repository acceptance remains pending review.
+- **Contract:** `(require transformer.data)` exports the versioned, checksummed,
+  manifest-last token-corpus writer, strict validator, opaque immutable summary, and
+  six summary accessors documented in `docs/PUBLIC_API_CONTRACT.md`. The corpus uses
+  `manifest.etm`, canonical `shard-%016d.ets` names, distinct eight-byte magic values,
+  little-endian signed-`i64` token semantics, SHA-256 trailers, opaque canonical UTF-8
+  tokenizer fingerprints bounded to 1..192 bytes, repeated identity/count metadata,
+  and exact v1.0 rejection rules in `docs/TOKEN_SHARD_FORMAT.md`. The fingerprint is
+  stored and compared byte-for-byte; D1 does not parse or assume T1's concurrently
+  proposed lexical form. The manifest rename is the publication commit point, not a
+  whole-directory atomicity or power-loss durability claim.
+- **Evidence:** After rebasing onto E1 merge `80371a1`, the local compatibility-only
+  CachyOS x86-64 / LLVM-Clang 22.1.6 run passed `/usr/bin/bash -c 'make test-d1'`:
+  byte-identical strict compilation with a production-E1 depfile, native SHA-256 and
+  binary I/O/rename/lock/UTF-8 reachability under an unusable runtime `PATH`, checked
+  arithmetic and production-E1 mapping/identity probes, and 14 deterministic/
+  reference/corruption/boundary groups. The publication cleanup test passed five
+  additional fresh runs. A0 passed; E1 passed 112 checks; Q0 passed 23 tests; the
+  repository-wide `make test`, explicit `make build`, `make smoke`, and diff hygiene
+  gates passed, including 41 B0 tests and the integrated K1 gate. All Eshkol evidence
+  used provenance-verified canonical
+  `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de`, compiler
+  `v1.3.4-evolve`. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI and integration
+  review remain pending.
+- **Dependencies / retest:** E1 issue #23 is merged through PR #27. D1 imports only
+  production `transformer.error_internal`; the provisional test adapter is removed,
+  and compile evidence asserts the production dependency. T1/D2/T2/DATA4 may consume
+  this contract only after integration acceptance; D2 retains all iteration,
+  shuffle, packing, batching, and cursor behavior. A later streaming/I1 integration
+  must rerun byte-determinism, publication, corruption, and scale tests.
+- **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18); pull
+  request pending.
