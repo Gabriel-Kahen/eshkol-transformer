@@ -13,6 +13,7 @@ A0_COMPILER_TIMEOUT_SECONDS=${A0_COMPILER_TIMEOUT_SECONDS:-60}
 
 A0_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-a0.XXXXXX")
 trap 'rm -rf -- "$A0_TMP"' EXIT
+A0_JIT_INVOCATION=0
 
 run_compiler() {
     timeout --foreground --signal=TERM --kill-after=5s \
@@ -21,7 +22,13 @@ run_compiler() {
 
 run_fixture() {
     local source=$1
-    run_compiler --no-stdlib \
+    local jit_cache
+    A0_JIT_INVOCATION=$((A0_JIT_INVOCATION + 1))
+    jit_cache="$A0_TMP/jit-cache-$A0_JIT_INVOCATION"
+    mkdir -p "$jit_cache"
+    # A0 is a declaration/import gate.  Use a fresh cache for each repeated JIT
+    # invocation so both diagnostics cover the same compilation phase.
+    XDG_CACHE_HOME="$jit_cache" run_compiler --optimize 0 --no-stdlib \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
         -r "$source"

@@ -2,6 +2,7 @@
 ;;; modules belong to downstream workstreams.
 
 (require transformer.api_contract)
+(require transformer.error_public)
 
 (provide transformer-api-contract-version transformer-api-modules
          transformer-api-operations
@@ -42,13 +43,6 @@
 
 (define (a0-declaration-only operation)
   (raise (list 'unsupported 'declaration-only operation)))
-
-(define (transformer-error? value) (a0-declaration-only 'transformer-error?))
-(define (transformer-error-category value) (a0-declaration-only 'transformer-error-category))
-(define (transformer-error-operation value) (a0-declaration-only 'transformer-error-operation))
-(define (transformer-error-message value) (a0-declaration-only 'transformer-error-message))
-(define (transformer-error-details value) (a0-declaration-only 'transformer-error-details))
-(define (transformer-error-cause value) (a0-declaration-only 'transformer-error-cause))
 
 (define (capability-discover) (a0-declaration-only 'capability-discover))
 (define (capability-request operation dtype device shape deterministic?)

@@ -168,3 +168,47 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #21](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/21);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [PR #25](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/25).
+
+## 2026-08-28 — E1 / issue #23
+
+- **Decision:** proposed.
+- **Contract:** `transformer.error_internal` is the single construction and raising
+  boundary.  It exports the six unchanged A0 unary accessors plus
+  `transformer-error-make` (5), `transformer-error-raise` (5), and
+  `transformer-error-wrap-foreign` (8).  Errors are native condition identity tokens
+  with constant generic text and no irritants; copied metadata lives in a lexical,
+  append-only process registry.  Only registered identities satisfy the predicate,
+  so byte-identical forged native conditions fail.  Details are bounded, acyclic,
+  canonical symbol-keyed data-only
+  alists; messages/details/causes are copied at ingress and egress.  Foreign wrappers
+  preserve source domain, exact-integer-or-symbol code, and source message while the
+  caller supplies the mapped existing A0 category.  Public facades do not export the
+  three internal helpers.  Exact grammar, bounds, ownership, and bootstrap behavior
+  are documented in [ERROR_CONTRACT.md](ERROR_CONTRACT.md).
+- **Evidence:** `/usr/bin/bash -c 'make test-e1'` passed 102 runtime assertions, two
+  byte-identical AOT executions, two byte-identical JIT executions, AOT/JIT output
+  parity, byte-identical fresh compile objects, production depfile proof, fresh-cache
+  first-class internal binding execution, public accessor execution, stable
+  wrong-arity rejection, and exact source checks for the declared six-op public and
+  nine-op internal surfaces.  Adversarial cases cover
+  forged same-message conditions, procedure non-invocation, repeated detached
+  snapshots, distinct cause identities, and 256 retained registry identities.  The
+  local run used the exact Eshkol commit/compiler pin
+  but is an explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6 compatibility
+  probe; supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI remains required.
+- **Pinned-runtime limitation:** `define-record-type` is a mutable vector and the
+  earlier irritant-held seal was rejected after an adversarial forge succeeded.
+  Pinned `provide` declarations are informational, so one validated, unsupported
+  `e1-internal-dispatch` core bridge remains technically name-reachable although it
+  is absent from the error-public/public/capabilities provide lists and every public
+  API/SemVer surface.  The strong registry has
+  process/arena lifetime, linear lookup, monotonic memory cost, no serialization,
+  and no verified concurrency or thread-safety behavior.  This identity workaround
+  is accepted for the pin and must be retested when upstream gains module opacity or
+  an immutable opaque record facility.
+- **Dependencies / retest:** P1, T1, D1, K1, and X1 must import this internal boundary
+  and remove subsystem-local structured-error representations.  Their explicit
+  source-status mappings remain workstream-owned and require review when they create
+  ABI or format commitments.  Rerun A0 and E1 gates after each facade integration.
+- **Reference:** [issue #23](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/23);
+  pull request pending.
