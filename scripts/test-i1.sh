@@ -6,8 +6,17 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
 require_command ar
 require_command cmp
-require_command rg
+require_command grep
 require_command timeout
+
+i1_unsupported_tool_pattern='(^|[[:space:]])r[g]([[:space:]]|$)'
+printf '%s\n' 'rg --version' | grep -Eq "${i1_unsupported_tool_pattern}" || \
+  die "I1 unsupported-tool regression probe is ineffective"
+if grep -En "${i1_unsupported_tool_pattern}" \
+    "${PROJECT_ROOT}/scripts/build-i1.sh" \
+    "${PROJECT_ROOT}/scripts/test-i1.sh"; then
+  die "I1 scripts must use supported-lane baseline tools, not ripgrep"
+fi
 
 i1_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 i1_cc="$(tsv_value "${i1_provenance}" cc_path)"
@@ -101,7 +110,7 @@ UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 60s \
   "${i1_tmp}/test-i64-tensor-sanitized" >/dev/null
 
-if rg -n -i 'python|pytorch|torch' \
+if grep -Ein 'python|pytorch|torch' \
     "${PROJECT_ROOT}/native/i64_tensor.c" \
     "${PROJECT_ROOT}/include/eshkol_transformer/i64_tensor.h"; then
   die "I1 production path contains a forbidden Python/PyTorch reference"
