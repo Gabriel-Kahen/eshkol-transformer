@@ -2,8 +2,11 @@
 ;;; This is a CPU control-plane data path. It performs no tensor, dtype, device,
 ;;; numerical, tokenizer, dataset-iteration, packing, shuffle, or cursor work.
 
-(require transformer.error_internal)
+(require transformer.error_public)
 (load "eshkol_transformer/sha256.esk")
+
+(extern i64 d1-token-checked-write-new ptr ptr i64
+        :real et_d1_checked_write_new_v1)
 
 (define d1-token-corpus-major 1)
 (define d1-token-corpus-minor 0)
@@ -21,19 +24,8 @@
 (define d1-token-shard-magic (bytevector 69 83 72 75 84 83 72 49)) ; ESHKTSH1
 (define d1-token-manifest-magic (bytevector 69 83 72 75 84 67 77 49)) ; ESHKTCM1
 
-(define-record-type d1-token-summary
-  (d1-token-summary-create shard-count total-tokens vocab-size shard-token-limit
-                           fingerprint total-shard-bytes)
-  d1-token-summary?
-  (shard-count d1-token-summary-shard-count)
-  (total-tokens d1-token-summary-total-tokens)
-  (vocab-size d1-token-summary-vocab-size)
-  (shard-token-limit d1-token-summary-shard-token-limit)
-  (fingerprint d1-token-summary-fingerprint)
-  (total-shard-bytes d1-token-summary-total-shard-bytes))
-
 (define (d1-token-fail category operation message)
-  (transformer-error-raise category operation message '() #f))
+  (e1-internal-dispatch 'raise (list category operation message '() #f)))
 
 (define (d1-token-list-length values)
   (let loop ((remaining values) (count 0))
@@ -66,18 +58,14 @@
   (if (transformer-error? caught)
       (raise caught)
       (raise
-       (transformer-error-wrap-foreign category operation message '()
-                                       'eshkol-runtime source-code
-                                       (if (error-object? caught)
-                                           (error-object-message caught)
-                                           message)
-                                       #f))))
-
-(define (d1-token-make-summary shard-count total-tokens vocab-size shard-token-limit
-                               fingerprint total-shard-bytes)
-  (d1-token-summary-create shard-count total-tokens vocab-size shard-token-limit
-                           (utf8->string (string->utf8 fingerprint))
-                           total-shard-bytes))
+       (e1-internal-dispatch
+        'wrap-foreign
+        (list category operation message '()
+              'eshkol-runtime source-code
+              (if (error-object? caught)
+                  (error-object-message caught)
+                  message)
+              #f)))))
 
 (define (d1-token-valid-nonnegative-integer? value)
   (and (integer? value) (exact? value)
@@ -264,17 +252,17 @@
   (let ((temporary (string-append path ".tmp")))
     (if (or (file-exists? path) (file-exists? temporary))
         (d1-token-fail 'invalid-argument operation "target or deterministic temporary exists")
-        (guard (error (#t
-                       (begin
-                         (d1-token-delete-if-present temporary)
-                         (d1-token-reraise-or-wrap 'io operation "file write failed"
-                                                   'binary-write error))))
-          (let ((port (open-binary-output-file temporary)))
-            (if (not port)
-                (d1-token-fail 'io operation "cannot open temporary output")
-                (begin
-                  (write-bytevector bytes port)
-                  (close-port port))))))))
+        (let ((status
+               (d1-token-checked-write-new temporary bytes
+                                           (bytevector-length bytes))))
+          (if (= status 0)
+              #t
+              (raise
+               (e1-internal-dispatch
+                'wrap-foreign
+                (list 'io operation "checked temporary write failed" '()
+                      'd1-native-io status
+                      "native checked write or close failed" #f))))))))
 
 (define (d1-token-publish-temporary! path operation)
   (let ((temporary (string-append path ".tmp")))
@@ -403,7 +391,8 @@
                          (d1-sha256 (bytevector-copy result 0 unsigned-bytes)))
     result))
 
-(define (token-corpus-write! directory fingerprint vocab-size shard-token-limit tokens)
+(define (d1-token-corpus-write-impl make-summary directory fingerprint vocab-size
+                                    shard-token-limit tokens)
   (let ((operation 'token-corpus-write!))
     (if (or (not (string? directory)) (= (string-length directory) 0))
         (d1-token-fail 'invalid-argument operation "directory must be nonempty")
@@ -488,9 +477,9 @@
                          ;; rollback guards must never remove shards behind a visible
                          ;; manifest. Construct the return value before the commit.
                          (summary
-                          (d1-token-make-summary shard-count token-count vocab-size
-                                                 shard-token-limit fingerprint
-                                                 total-shard-bytes)))
+                          (make-summary shard-count token-count vocab-size
+                                        shard-token-limit fingerprint
+                                        total-shard-bytes)))
                     ;; A complete manifest temporary becomes the exclusion claim
                     ;; before releasing the directory lock. Thus even an empty
                     ;; corpus has no unlocked pre-commit writer window.
@@ -625,8 +614,9 @@
                     (token-loop (+ offset 1))
                     (d1-token-fail 'corrupt-data operation "token outside [0,vocab-size)")))))))))
 
-(define (token-corpus-validate directory maximum-manifest-bytes maximum-shard-bytes
-                               maximum-total-tokens)
+(define (d1-token-corpus-validate-impl make-summary directory
+                                       maximum-manifest-bytes maximum-shard-bytes
+                                       maximum-total-tokens)
   (let ((operation 'token-corpus-validate))
     (if (or (not (string? directory)) (= (string-length directory) 0))
         (d1-token-fail 'invalid-argument operation "directory must be nonempty")
@@ -685,9 +675,9 @@
                           (not (= byte-sum total-shard-bytes)))
                       (d1-token-fail 'corrupt-data operation "manifest totals do not match records")
                       #t)
-                  (d1-token-make-summary shard-count total-tokens vocab-size
-                                         shard-token-limit fingerprint
-                                         total-shard-bytes))
+                  (make-summary shard-count total-tokens vocab-size
+                                shard-token-limit fingerprint
+                                total-shard-bytes))
                 (let* ((offset (+ header-bytes (* index record-bytes)))
                        (record-index (d1-token-read-u64-le bytes offset))
                        (record-count (d1-token-read-u64-le bytes (+ offset 8)))
@@ -718,29 +708,110 @@
                   (record-loop (+ index 1) (+ count-sum record-count)
                                (+ byte-sum record-file-bytes))))))))))
 
-(define (d1-token-require-summary summary operation)
-  (if (d1-token-summary? summary)
-      summary
-      (d1-token-fail 'invalid-argument operation "expected token corpus summary")))
+(define d1-token-summary-public-operations
+  (let ((registry '()))
+    (define (entry-ref entry wanted)
+      (let loop ((remaining entry) (index 0))
+        (if (= index wanted)
+            (car remaining)
+            (loop (cdr remaining) (+ index 1)))))
 
-(define (token-corpus-summary-shard-count summary)
-  (d1-token-summary-shard-count
-   (d1-token-require-summary summary 'token-corpus-summary-shard-count)))
-(define (token-corpus-summary-total-tokens summary)
-  (d1-token-summary-total-tokens
-   (d1-token-require-summary summary 'token-corpus-summary-total-tokens)))
-(define (token-corpus-summary-vocab-size summary)
-  (d1-token-summary-vocab-size
-   (d1-token-require-summary summary 'token-corpus-summary-vocab-size)))
-(define (token-corpus-summary-shard-token-limit summary)
-  (d1-token-summary-shard-token-limit
-   (d1-token-require-summary summary 'token-corpus-summary-shard-token-limit)))
-(define (token-corpus-summary-tokenizer-fingerprint summary)
-  (let ((value
-         (d1-token-summary-fingerprint
-          (d1-token-require-summary
-           summary 'token-corpus-summary-tokenizer-fingerprint))))
-    (utf8->string (string->utf8 value))))
-(define (token-corpus-summary-total-shard-bytes summary)
-  (d1-token-summary-total-shard-bytes
-   (d1-token-require-summary summary 'token-corpus-summary-total-shard-bytes)))
+    (define (find-entry value)
+      (let loop ((remaining registry))
+        (cond
+          ((null? remaining) #f)
+          ((eq? value (car (car remaining))) (car remaining))
+          (else (loop (cdr remaining))))))
+
+    (define (make-shell)
+      (guard (raised (#t raised))
+        (error "transformer.data.summary:v1")))
+
+    (define (make-summary shard-count total-tokens vocab-size shard-token-limit
+                          fingerprint total-shard-bytes)
+      ;; Validate and deep-copy all authoritative metadata before the single
+      ;; registry commit. The returned condition identity contains no fields.
+      (if (and (d1-token-valid-nonnegative-integer? shard-count)
+               (d1-token-valid-nonnegative-integer? total-tokens)
+               (<= total-tokens d1-token-max-encoded-tokens)
+               (d1-token-valid-nonnegative-integer? vocab-size)
+               (> vocab-size 0)
+               (d1-token-valid-nonnegative-integer? shard-token-limit)
+               (> shard-token-limit 0)
+               (d1-token-valid-nonnegative-integer? total-shard-bytes)
+               (string? fingerprint))
+          #t
+          (d1-token-fail 'internal 'd1-token-summary-registration
+                         "invalid private summary metadata"))
+      (let ((fingerprint-bytes (string->utf8 fingerprint)))
+        (if (and (> (bytevector-length fingerprint-bytes) 0)
+                 (<= (bytevector-length fingerprint-bytes)
+                     d1-token-max-fingerprint-bytes))
+            #t
+            (d1-token-fail 'internal 'd1-token-summary-registration
+                           "invalid private summary fingerprint"))
+        (let* ((shell (make-shell))
+               (entry
+                (list shell shard-count total-tokens vocab-size shard-token-limit
+                      (utf8->string (bytevector-copy fingerprint-bytes))
+                      total-shard-bytes)))
+          (set! registry (cons entry registry))
+          shell)))
+
+    (define (require-entry summary operation)
+      (let ((entry (find-entry summary)))
+        (if entry
+            entry
+            (d1-token-fail 'invalid-argument operation
+                           "expected token corpus summary"))))
+
+    ;; Only the eight public procedures escape this lexical scope. The registry,
+    ;; constructor, brand creation, and authoritative metadata never do.
+    (list
+     (lambda (directory fingerprint vocab-size shard-token-limit tokens)
+       (d1-token-corpus-write-impl make-summary directory fingerprint vocab-size
+                                   shard-token-limit tokens))
+     (lambda (directory maximum-manifest-bytes maximum-shard-bytes
+                        maximum-total-tokens)
+       (d1-token-corpus-validate-impl make-summary directory
+                                      maximum-manifest-bytes maximum-shard-bytes
+                                      maximum-total-tokens))
+     (lambda (summary)
+       (entry-ref
+        (require-entry summary 'token-corpus-summary-shard-count) 1))
+     (lambda (summary)
+       (entry-ref
+        (require-entry summary 'token-corpus-summary-total-tokens) 2))
+     (lambda (summary)
+       (entry-ref
+        (require-entry summary 'token-corpus-summary-vocab-size) 3))
+     (lambda (summary)
+       (entry-ref
+        (require-entry summary 'token-corpus-summary-shard-token-limit) 4))
+     (lambda (summary)
+       (let ((value
+              (entry-ref
+               (require-entry
+                summary 'token-corpus-summary-tokenizer-fingerprint)
+               5)))
+         (utf8->string (string->utf8 value))))
+     (lambda (summary)
+       (entry-ref
+        (require-entry summary 'token-corpus-summary-total-shard-bytes) 6)))))
+
+(define token-corpus-write!
+  (d1-token-list-ref d1-token-summary-public-operations 0))
+(define token-corpus-validate
+  (d1-token-list-ref d1-token-summary-public-operations 1))
+(define token-corpus-summary-shard-count
+  (d1-token-list-ref d1-token-summary-public-operations 2))
+(define token-corpus-summary-total-tokens
+  (d1-token-list-ref d1-token-summary-public-operations 3))
+(define token-corpus-summary-vocab-size
+  (d1-token-list-ref d1-token-summary-public-operations 4))
+(define token-corpus-summary-shard-token-limit
+  (d1-token-list-ref d1-token-summary-public-operations 5))
+(define token-corpus-summary-tokenizer-fingerprint
+  (d1-token-list-ref d1-token-summary-public-operations 6))
+(define token-corpus-summary-total-shard-bytes
+  (d1-token-list-ref d1-token-summary-public-operations 7))

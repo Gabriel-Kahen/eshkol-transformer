@@ -1,7 +1,7 @@
 # D1 token corpus format
 
 Status: **D1 v1.0 direction accepted with conditions through issues #1 and #18;
-implementation review-ready**.
+implementation under review**.
 
 ## Scope
 
@@ -151,22 +151,70 @@ before mutation, then atomically creates `.d1-writer-lock` as a directory. An ex
 lock is an explicit concurrent-or-stale-writer rejection. After acquiring the lock,
 the writer rejects preexisting canonical final and deterministic `.tmp` targets.
 
-Each complete shard is written to its same-directory deterministic temporary and
-renamed to its final name. After every shard is final, the complete manifest is
-written to `manifest.etm.tmp`. That complete temporary remains an exclusion claim
+Each complete shard is written to its same-directory deterministic temporary through
+the narrow `et_d1_checked_write_new_v1` native boundary. That boundary opens the new
+temporary with exclusive creation and mode `0600`, checks the Eshkol bytevector's
+declared length against the expected signed-`i64` length, loops until every requested
+byte has been accepted by `write(2)` (retrying `EINTR` and rejecting a zero-byte
+write), and checks `close(2)`. Only a zero result permits the compiled Eshkol caller
+to rename the temporary to its final name. A write or close failure is mapped through
+E1 as `io`; the native result preserves a stable boundary stage and captured `errno` as
+foreign source data. The boundary unlinks the temporary that it exclusively created
+when write or close fails. If that unlink itself fails, it reports a cleanup-stage
+`io` result rather than claiming cleanup succeeded, and the owned temporary may
+remain for operator recovery.
+
+After every shard is final, the complete manifest is written with the same checked
+boundary to `manifest.etm.tmp`. That complete temporary remains an exclusion claim
 while the writer releases the lock, so even an empty corpus has no unclaimed
 concurrent-writer window. It is then renamed to `manifest.etm`; that final rename is
 the publication commit point and nothing fallible remains afterward. A directory
 without the final manifest is not a corpus, so a failure or crash before commit
 cannot expose a partially valid corpus. A handled failure removes this invocation's
-derived shards, temporaries, and lock. A crash may leave incomplete/orphan shards, a
-manifest temporary, and/or the lock; an operator must establish that no writer is
-live, remove those incomplete derived files and lock, then retry.
+derived shards, temporaries, and lock when those cleanup operations succeed. A crash
+or cleanup failure may leave incomplete/orphan shards, a manifest temporary, and/or
+the lock; an operator must establish that no writer is live, remove those incomplete
+derived files and lock, then retry.
 
-This is manifest-last publication, not whole-directory atomicity. Close-plus-rename
-is executed directly by compiled Eshkol and is tested, but v1 provides no `fsync`
-primitive and therefore makes no power-loss durability claim. Overwrite is not
-supported. Preexisting targets are never replaced.
+Production builds contain no fault-injection branch or runtime fallback. A separate
+test-only native archive can deterministically force a partial write, `ENOSPC`,
+`EIO`, or close failure to exercise the write-all loop, E1 mapping, cleanup, and
+no-visible-manifest invariants; it is not linked into production artifacts.
+
+This is manifest-last publication, not whole-directory atomicity. Checked
+write-and-close plus same-directory rename proves in-process publication ordering,
+but v1 provides no `fsync` primitive and therefore makes no power-loss durability
+claim. Successful `close(2)` is not an `fsync` claim. Overwrite is not supported.
+Preexisting targets are never replaced.
+
+## Summary representation and public boundary
+
+Writer and validator results are identity-backed, observationally immutable summary
+tokens. Each token is registered by identity in a private lexical, append-only
+registry; the authoritative six-field metadata is retained only in that registry.
+Metadata is validated before the single registry insertion, the tokenizer
+fingerprint is deep-copied on insertion, and its accessor returns a fresh detached
+copy. The other five fields are immutable exact integers. No record constructor,
+registry, brand operation, or metadata carrier escapes the lexical scope. Accessors
+accept only a registered identity and map a mutable vector, procedure, scalar,
+lookalike condition, or other forged receiver to `invalid-argument` without invoking
+it.
+
+This representation has process lifetime, linear lookup, and monotonic memory cost,
+and D1 makes no concurrency or thread-safety claim for it. It is a pinned-runtime
+workaround to be retested when Eshkol provides module opacity or an immutable opaque
+record facility.
+
+`(require transformer.data)` depends on `transformer.error_public` and the accepted
+E1 core, not `transformer.error_internal`. Consequently it introduces none of the
+named E1 construction helpers `transformer-error-make`,
+`transformer-error-raise`, or `transformer-error-wrap-foreign` into that production
+dependency graph. The pinned compiler treats `provide` declarations as
+informational, however, so E1's already accepted, validated
+`e1-internal-dispatch` bridge remains technically name-reachable through the
+flattened core. D1 uses that bridge only for E1 `raise` and `wrap-foreign` operations;
+it does not make the bridge or any error constructor a D1 public API. This limitation
+must be retested with an upstream opaque-module facility.
 
 ## Validation and errors
 

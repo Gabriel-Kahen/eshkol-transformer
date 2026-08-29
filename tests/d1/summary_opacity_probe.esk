@@ -1,0 +1,133 @@
+;;; Public-consumer checks for the opaque, observationally immutable D1 summary.
+;;; Both identities come from public corpus operations. No implementation
+;;; constructor or internal error module is available to this probe.
+
+(require transformer.data)
+(require transformer.error_public)
+
+(define failures 0)
+
+(define (check condition)
+  (if condition #t (set! failures (+ failures 1))))
+
+(define (list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+
+(define (list-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted)
+        (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define (expect-invalid operation thunk)
+  (guard (raised
+          (#t
+           (check
+            (and (transformer-error? raised)
+                 (eq? (transformer-error-category raised) 'invalid-argument)
+                 (eq? (transformer-error-operation raised) operation)))))
+    (thunk)
+    (set! failures (+ failures 1))))
+
+(define (check-summary summary fingerprint total-shard-bytes)
+  (guard (raised (#t (set! failures (+ failures 1))))
+    (check (= (token-corpus-summary-shard-count summary) 3))
+    (check (= (token-corpus-summary-total-tokens summary) 7))
+    (check (= (token-corpus-summary-vocab-size summary) 257))
+    (check (= (token-corpus-summary-shard-token-limit summary) 3))
+    (check (= (token-corpus-summary-total-shard-bytes summary)
+              total-shard-bytes))
+    (check
+     (string=? (token-corpus-summary-tokenizer-fingerprint summary) fingerprint))))
+
+(define arguments (command-line))
+(if (< (list-length arguments) 3)
+    (begin
+      (display "D1_SUMMARY_OPACITY_FAIL missing directories")
+      (newline)
+      (exit 64)))
+
+(define writer-directory (list-ref arguments 1))
+(define validator-directory (list-ref arguments 2))
+(define writer-fingerprint
+  (utf8->string (string->utf8 "opaque-summary-identity")))
+(define validator-fingerprint
+  (utf8->string (string->utf8 "opaque-summary-identity")))
+
+(define writer-summary
+  (token-corpus-write! writer-directory writer-fingerprint 257 3
+                       '(0 1 256 42 7 8 9)))
+(token-corpus-write! validator-directory validator-fingerprint 257 3
+                     '(0 1 256 42 7 8 9))
+(define validator-summary
+  (token-corpus-validate validator-directory 1048576 1048576 1048576))
+(define expected-total-shard-bytes
+  (token-corpus-summary-total-shard-bytes writer-summary))
+
+(check (> expected-total-shard-bytes 0))
+(check (not (eq? writer-summary validator-summary)))
+(check-summary writer-summary "opaque-summary-identity"
+               expected-total-shard-bytes)
+(check-summary validator-summary "opaque-summary-identity"
+               expected-total-shard-bytes)
+
+;;; Accessor outputs and caller inputs are detached from both stored snapshots.
+(define writer-detached
+  (token-corpus-summary-tokenizer-fingerprint writer-summary))
+(define validator-detached
+  (token-corpus-summary-tokenizer-fingerprint validator-summary))
+(string-set! writer-fingerprint 0 #\X)
+(string-set! validator-fingerprint 0 #\Y)
+(string-set! writer-detached 0 #\Z)
+(string-set! validator-detached 0 #\W)
+(check-summary writer-summary "opaque-summary-identity"
+               expected-total-shard-bytes)
+(check-summary validator-summary "opaque-summary-identity"
+               expected-total-shard-bytes)
+
+;;; Do not trust `vector?` for the pinned runtime's opaque identity carrier. Attempt
+;;; both operations directly. Rejection is acceptable; if copying succeeds, the copy
+;;; is still unregistered, and if mutation succeeds, registry observations must stay
+;;; unchanged.
+(define copied-summary #f)
+(define copy-succeeded #f)
+(guard (raised (#t #t))
+  (set! copied-summary (vector-copy writer-summary))
+  (set! copy-succeeded #t))
+(if copy-succeeded
+    (expect-invalid
+     'token-corpus-summary-shard-count
+     (lambda () (token-corpus-summary-shard-count copied-summary)))
+    #t)
+
+(guard (raised (#t #t))
+  (vector-set! writer-summary 0 #f))
+
+(check-summary writer-summary "opaque-summary-identity"
+               expected-total-shard-bytes)
+(check-summary validator-summary "opaque-summary-identity"
+               expected-total-shard-bytes)
+
+;;; Common forged receiver shapes are rejected and procedures are never invoked.
+(define forged-called #f)
+(expect-invalid
+ 'token-corpus-summary-vocab-size
+ (lambda ()
+   (token-corpus-summary-vocab-size
+    (lambda arguments (set! forged-called #t) 257))))
+(check (not forged-called))
+(expect-invalid
+ 'token-corpus-summary-shard-token-limit
+ (lambda () (token-corpus-summary-shard-token-limit (vector))))
+(expect-invalid
+ 'token-corpus-summary-total-shard-bytes
+ (lambda () (token-corpus-summary-total-shard-bytes 500)))
+
+(if (= failures 0)
+    (begin (display "D1_SUMMARY_OPACITY_PASS") (newline))
+    (begin
+      (display "D1_SUMMARY_OPACITY_FAIL failures=")
+      (display failures)
+      (newline)
+      (exit 1)))

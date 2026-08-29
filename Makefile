@@ -19,7 +19,7 @@ test: build
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-d1.sh
 
-test-a0: configure
+test-a0: build
 	/usr/bin/bash scripts/check_a0_api_contract.sh
 
 test-b0:
@@ -31,7 +31,7 @@ test-k1: build
 test-e1: configure
 	/usr/bin/bash scripts/test-e1.sh
 
-test-d1: configure
+test-d1: build
 	/usr/bin/bash scripts/test-d1.sh
 
 smoke: build
