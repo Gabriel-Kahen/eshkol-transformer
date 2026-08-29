@@ -446,4 +446,4 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   numerical, physical tensor, backend, dtype, device, or module-capability claim.
 - **Reference:** [issue #22](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/22);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  pull request pending.
+  [PR #31](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31).
