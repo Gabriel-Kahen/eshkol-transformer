@@ -14,8 +14,9 @@ Before handoff:
 2. Add finite-difference or reference parity checks for numerical code.
 3. Check deterministic behavior with a fixed seed when randomness is involved.
 4. Update documentation and roadmap evidence.
-5. Record benchmarks only with hardware, backend, dtype, shapes, and command included.
+5. Record benchmarks only with a versioned, checksummed definition and report that
+   includes the command, commit, hardware, OS, compiler, backend, dtype, shapes,
+   warmup, repetitions, elapsed time, throughput, and peak-memory method and units.
 
 The main branch must remain buildable. Experimental kernels stay behind explicit
 capability checks until their correctness and fallback behavior are verified.
-
