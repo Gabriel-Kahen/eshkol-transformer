@@ -225,10 +225,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [PR #27](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/27); merge commit
   `80371a1f06cc71c44c2d940a57b294a89174a1f0`.
 
-## 2026-08-29 — I1 / issue #24
+## 2026-08-30 — I1 / issue #24
 
-- **Decision:** proposed. The integration task approved the ABI and evidence
-  boundary before implementation; acceptance remains with integration review.
+- **Decision:** accepted after independent exact-head re-review, supported CI, and
+  merged-main integration gates.
 - **Contract:** Separate native I1 ABI 1.0 provides a deep-owned exact signed-`i64`
   dense row-major zero-offset CPU container for ranks 0 through 64 in the
   explicit-link archive `build/i1/libeshkol_transformer_i64.a`. Rank 0 has one
@@ -269,12 +269,19 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   compiler SHA-256 was
   `caa295b19a6e9388963aa0def99dade63656d2dcbffccad421bd1daaa1db3750`.
   The repository-wide run also passed the F0 smoke/missing-toolchain probes, 41 B0
-  checks, A0, 596-check K1, 112-check E1, build, and smoke. Supported Ubuntu 22.04
-  x86-64 / LLVM-Clang 21.1.8 CI remains required.
+  checks, A0, 596-check K1, 112-check E1, build, and smoke. Independent final
+  re-review approved exact head
+  `406b06928cf3089ce690dafad5c36a5189a3f940` with no remaining finding after
+  reproducing the invalid-rank shape-span and all earlier alias/failure-atomicity
+  cases. Supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8
+  [CI run 33322029018](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33322029018)
+  passed at that exact head. Integration then reran `make configure build test-i1`
+  and repository-wide `make test build smoke` from merged main; both passed.
 - **Dependencies / retest:** T1 may use only separately reviewed explicit native
   lifetime and E1 wrappers; I1 supplies no tokenizer behavior or production Eshkol
   finalizer. D2 may use rank-2 owned storage only as unverified container behavior;
   it may not infer a K1 capability, mask, packing, cursor, or resume contract.
   Re-test the exact AOT carrier/range checks if the pinned compiler changes.
 - **Reference:** [issue #24](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/24);
-  [PR #32](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/32).
+  [PR #32](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/32); merge commit
+  `53db2a19725bf4a4fbdb60f4abeb6bb521602b1f`.
