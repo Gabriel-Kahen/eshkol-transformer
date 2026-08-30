@@ -19,17 +19,29 @@ D1_CXX="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_
 D1_TIMEOUT_SECONDS=${D1_TIMEOUT_SECONDS:-60}
 D1_ARTIFACT_DIR="$(project_build_dir)/d1"
 D1_LIBRARY="${D1_ARTIFACT_DIR}/libeshkol_transformer_d1.a"
-D1_MODULE="${D1_ARTIFACT_DIR}/stdlib.o"
+D1_EVIDENCE="${D1_LIBRARY}.evidence"
+D1_PUBLIC_EXPORTS="${PROJECT_ROOT}/native/d1_e1b_public_exports.txt"
+D1_UNDEFINED_SYMBOLS="${PROJECT_ROOT}/native/d1_e1b_undefined_symbols.txt"
 [[ "${D1_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || \
   die "D1_TIMEOUT_SECONDS must be a positive integer"
-[[ -r "${D1_LIBRARY}" ]] || die "canonical D1 native archive is missing"
-[[ -r "${D1_ARTIFACT_DIR}/data_io.o" ]] || \
-  die "canonical D1 native object is missing"
-[[ -r "${D1_MODULE}" ]] || die "canonical D1 precompiled module is missing"
-[[ -r "${D1_ARTIFACT_DIR}/stdlib.d" ]] || \
-  die "canonical D1 module depfile is missing"
-[[ "$(ar t "${D1_LIBRARY}")" == "data_io.o" ]] || \
-  die "canonical D1 native archive has unexpected members"
+[[ -r "${D1_LIBRARY}" ]] || die "canonical D1 combined archive is missing"
+[[ "$(ar t "${D1_LIBRARY}")" == "stdlib.o" ]] || \
+  die "canonical D1 combined archive must contain exactly stdlib.o"
+for evidence_file in global-defined.txt package-exports.txt undefined.txt \
+    expected-undefined.txt readelf-symbols.txt nm.txt strings.txt private.d \
+    link.map allowlist-provenance.tsv; do
+  [[ -r "${D1_EVIDENCE}/${evidence_file}" ]] || \
+    die "canonical D1 evidence is missing ${evidence_file}"
+done
+
+D1_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-d1.XXXXXX")
+trap 'rm -rf -- "${D1_TMP}"' EXIT
+D1_PUBLIC_ROOT="${D1_TMP}/public-root"
+mkdir -p "${D1_PUBLIC_ROOT}/transformer"
+for public_module in data error_consumer error_public; do
+  cp "${PROJECT_ROOT}/lib/transformer/${public_module}.esk" \
+    "${D1_PUBLIC_ROOT}/transformer/${public_module}.esk"
+done
 
 D1_PUBLIC_NAMES=(
   token-corpus-write!
@@ -49,94 +61,205 @@ mapfile -t D1_DECLARED_NAMES < <(
 [[ "${D1_DECLARED_NAMES[*]}" == "${D1_PUBLIC_NAMES[*]}" ]] || \
   die "transformer.data must provide exactly the eight accepted D1 names"
 
-grep -F 'lib/stdlib.esk' "${D1_ARTIFACT_DIR}/stdlib.d" >/dev/null
-grep -F 'lib/transformer/data.esk' "${D1_ARTIFACT_DIR}/stdlib.d" >/dev/null
+LC_ALL=C sort -cu "${D1_PUBLIC_EXPORTS}" || \
+  die "D1 public native export manifest is not C-sorted unique text"
+[[ "$(wc -l <"${D1_PUBLIC_EXPORTS}")" == 8 ]] || \
+  die "D1 public native export manifest must contain exactly eight names"
+cmp --silent "${D1_PUBLIC_EXPORTS}" \
+  "${D1_EVIDENCE}/package-exports.txt" || \
+  die "D1 artifact package exports differ from their repository manifest"
+
+{
+  printf '%s\n' \
+    et_e1b_error_category_v1 \
+    et_e1b_error_cause_v1 \
+    et_e1b_error_details_v1 \
+    et_e1b_error_message_v1 \
+    et_e1b_error_operation_v1 \
+    et_e1b_error_predicate_v1
+  cat "${D1_PUBLIC_EXPORTS}"
+} | LC_ALL=C sort -u >"${D1_TMP}/expected-global-defined.txt"
+[[ "$(wc -l <"${D1_TMP}/expected-global-defined.txt")" == 14 ]] || \
+  die "D1 expected global allowlist must contain six E1B plus eight D1 names"
+cmp --silent "${D1_TMP}/expected-global-defined.txt" \
+  "${D1_EVIDENCE}/global-defined.txt" || \
+  die "D1 combined artifact differs from the exact 14-symbol global allowlist"
+nm -g --defined-only --format=posix "${D1_LIBRARY}" |
+  awk '$2 ~ /^[A-Za-z]$/ { print $1 }' | LC_ALL=C sort -u \
+    >"${D1_TMP}/archive-global-defined.txt"
+cmp --silent "${D1_TMP}/expected-global-defined.txt" \
+  "${D1_TMP}/archive-global-defined.txt" || \
+  die "nm found a D1 archive global-definition mismatch"
+readelf --wide --symbols "${D1_LIBRARY}" |
+  awk '$5 == "GLOBAL" && $7 != "UND" { print $8 }' | LC_ALL=C sort -u \
+    >"${D1_TMP}/archive-readelf-global-defined.txt"
+cmp --silent "${D1_TMP}/expected-global-defined.txt" \
+  "${D1_TMP}/archive-readelf-global-defined.txt" || \
+  die "readelf found a D1 archive global-definition mismatch"
+
+LC_ALL=C sort -cu "${D1_UNDEFINED_SYMBOLS}" || \
+  die "D1 undefined-symbol manifest is not C-sorted unique text"
+cmp --silent "${D1_UNDEFINED_SYMBOLS}" \
+  "${D1_EVIDENCE}/expected-undefined.txt" || \
+  die "D1 artifact selected the wrong repository undefined-symbol manifest"
+cmp --silent "${D1_UNDEFINED_SYMBOLS}" "${D1_EVIDENCE}/undefined.txt" || \
+  die "D1 artifact differs from its exact undefined-symbol manifest"
+grep -Fx $'allowlist\t'"$(basename -- "${D1_UNDEFINED_SYMBOLS}")" \
+  "${D1_EVIDENCE}/allowlist-provenance.tsv" >/dev/null || \
+  die "D1 artifact evidence does not identify its repository allowlist"
+
 grep -F 'src/eshkol_transformer/token_shard.esk' \
-  "${D1_ARTIFACT_DIR}/stdlib.d" >/dev/null
-grep -F 'lib/transformer/error_public.esk' \
-  "${D1_ARTIFACT_DIR}/stdlib.d" >/dev/null
+  "${D1_EVIDENCE}/private.d" >/dev/null
 grep -F 'lib/transformer/error_core.esk' \
-  "${D1_ARTIFACT_DIR}/stdlib.d" >/dev/null
-if grep -F 'lib/transformer/error_internal.esk' \
-    "${D1_ARTIFACT_DIR}/stdlib.d" >/dev/null; then
-  die "D1 precompiled module unexpectedly includes transformer.error_internal"
-fi
+  "${D1_EVIDENCE}/private.d" >/dev/null
+grep -F 'lib/transformer/error_internal.esk' \
+  "${D1_EVIDENCE}/private.d" >/dev/null
+grep -F 'native/e1b_error_consumer_private.esk' \
+  "${D1_EVIDENCE}/private.d" >/dev/null
 
-for public_name in "${D1_PUBLIC_NAMES[@]}"; do
-  [[ "$(nm -g --defined-only --format=posix "${D1_MODULE}" |
-      awk -v wanted="${public_name}" '$1 == wanted { count++ } END { print count + 0 }')" == 1 ]] || \
-    die "D1 precompiled module does not define public procedure ${public_name} exactly once"
-  [[ "$(nm -g --defined-only --format=posix "${D1_MODULE}" |
-      awk -v wanted="${public_name}_sexpr" '$1 == wanted { count++ } END { print count + 0 }')" == 1 ]] || \
-    die "D1 precompiled module does not define first-class metadata for ${public_name}"
+d1_require_local_symbol() {
+  local symbol=$1
+  grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${symbol}$" \
+    "${D1_EVIDENCE}/readelf-symbols.txt" >/dev/null || \
+    die "D1 required private symbol is not local: ${symbol}"
+}
+
+D1_REQUIRED_LOCAL_SYMBOLS=(
+  e1-internal-dispatch
+  et-e1b-private-raise__eshkol_internal_abi
+  transformer-error-make
+  transformer-error-raise
+  transformer-error-wrap-foreign
+  et_e1b_private_raise_cabi_v1
+  et_e1b_consumer_raise_v1
+  et_e1b_box_value_v1
+  et_e1b_ensure_private_initialized_v1
+  et_d1_checked_write_new_v1
+  et_e1b_private_d1_token_corpus_write_cabi_v1
+  et_e1b_private_d1_token_corpus_validate_cabi_v1
+)
+while IFS= read -r private_cabi; do
+  D1_REQUIRED_LOCAL_SYMBOLS+=("${private_cabi}")
+done < <(awk '{ print $2 }' "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt")
+for private_symbol in "${D1_REQUIRED_LOCAL_SYMBOLS[@]}"; do
+  d1_require_local_symbol "${private_symbol}"
 done
-if nm -g --defined-only --format=posix "${D1_MODULE}" |
-    awk '{ print $1 }' |
-    grep -E '^(\.Lprivate_slot_|d1-|eshkol_g_d1_2D|et_d1_)' >/dev/null; then
-  die "D1 precompiled module exports a private D1 helper or FFI alias"
-fi
-if readelf --wide --symbols "${D1_MODULE}" |
-    awk '$5 == "GLOBAL" && $7 != "UND" { print $8 }' |
-    grep -E '^(\.Lprivate_slot_|d1-|eshkol_g_d1_2D|et_d1_)' >/dev/null; then
-  die "readelf found a global private D1 helper or FFI alias"
-fi
-if strings -a "${D1_MODULE}" |
-    grep -E '(d1-token-(write-temporary-new!|publish-temporary!|atomic-write-new!|corpus-(write|validate)-impl|checked-write-new))(_sexpr|__eshkol_internal_abi)|eshkol_g_d1_2D' \
-      >/dev/null; then
-  die "D1 precompiled module retains a former helper/FFI symbol name"
-fi
-
-D1_NM_DEFINED="$({
-  nm -g --defined-only --format=posix "${D1_LIBRARY}" |
-    awk '$2 ~ /^[A-Za-z]$/ { print $1 }'
-})"
-[[ "${D1_NM_DEFINED}" == et_d1_checked_write_new_v1 ]] || \
-  die "nm found an unexpected globally defined symbol in the public D1 archive"
-D1_READELF_DEFINED="$({
-  readelf --wide --symbols "${D1_ARTIFACT_DIR}/data_io.o" |
-    awk '$5 == "GLOBAL" && $7 != "UND" { print $8 }'
-})"
-[[ "${D1_READELF_DEFINED}" == et_d1_checked_write_new_v1 ]] || \
-  die "readelf found an unexpected globally defined symbol in the public D1 object"
-if strings -a "${D1_LIBRARY}" |
-    grep -E '(d1-token|d1_token_(write|publish|atomic|corpus|validate|list|helper)|et_d1_(token_)?(write|publish|atomic|corpus|validate|list|helper))' \
-      >/dev/null; then
-  die "canonical D1 native archive contains a private Eshkol/helper-family name"
-fi
-
-D1_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-d1.XXXXXX")
-trap 'rm -rf -- "${D1_TMP}"' EXIT
+for private_text in et-e1b-private-raise e1-internal-dispatch \
+    transformer-error-make transformer-error-raise \
+    transformer-error-wrap-foreign et_e1b_private_raise_cabi_v1 \
+    et_d1_checked_write_new_v1; do
+  grep -F "${private_text}" "${D1_EVIDENCE}/strings.txt" >/dev/null || \
+    die "D1 artifact strings evidence omitted private name ${private_text}"
+done
 
 d1_compile() {
   local source=$1 output=$2
   local cache_home=${D1_CACHE_HOME:-${D1_TMP}/cache}
   local library_dir=${D1_LIBRARY_DIR:-${D1_ARTIFACT_DIR}}
   local library_name=${D1_LIBRARY_NAME:-eshkol_transformer_d1}
-  local module_object=${D1_MODULE_OBJECT:-${library_dir}/stdlib.o}
+  local include_root=${D1_INCLUDE_ROOT:-${D1_PUBLIC_ROOT}}
+  local source_root=${D1_SOURCE_ROOT:-}
+  local include_args=(-I "${include_root}")
+  if [[ -n "${source_root}" ]]; then
+    include_args+=(-I "${source_root}")
+  fi
   shift 2
   mkdir -p "${cache_home}"
-  "${D1_TIMEOUT}" --foreground --signal=TERM --kill-after=5s "${D1_TIMEOUT_SECONDS}s" \
-    env XDG_CACHE_HOME="${cache_home}" ESHKOL_CXX_COMPILER="${D1_CXX}" \
-    ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
-    "${D1_RUNNER}" \
-    --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" \
-    -I "${PROJECT_ROOT}/src" \
-    -L "${library_dir}" --lib "${library_name}" \
-    "${module_object}" "$@" "${source}" -o "${output}"
+  (
+    cd "${include_root}"
+    "${D1_TIMEOUT}" --foreground --signal=TERM --kill-after=5s "${D1_TIMEOUT_SECONDS}s" \
+      env XDG_CACHE_HOME="${cache_home}" ESHKOL_CXX_COMPILER="${D1_CXX}" \
+      ESHKOL_LIB_DIR="${include_root}" \
+      "${D1_RUNNER}" \
+      --strict-types --no-stdlib \
+      "${include_args[@]}" \
+      -L "${library_dir}" --lib "${library_name}" \
+      "$@" "${source}" -o "${output}"
+  )
 }
+
+d1_run_source() {
+  local source=$1
+  local cache_home=${D1_CACHE_HOME:-${D1_TMP}/cache}
+  local library_dir=${D1_LIBRARY_DIR:-${D1_ARTIFACT_DIR}}
+  local library_name=${D1_LIBRARY_NAME:-eshkol_transformer_d1}
+  local include_root=${D1_INCLUDE_ROOT:-${D1_PUBLIC_ROOT}}
+  local source_root=${D1_SOURCE_ROOT:-}
+  local include_args=(-I "${include_root}")
+  if [[ -n "${source_root}" ]]; then
+    include_args+=(-I "${source_root}")
+  fi
+  mkdir -p "${cache_home}"
+  (
+    cd "${include_root}"
+    "${D1_TIMEOUT}" --foreground --signal=TERM --kill-after=5s "${D1_TIMEOUT_SECONDS}s" \
+      env XDG_CACHE_HOME="${cache_home}" ESHKOL_CXX_COMPILER="${D1_CXX}" \
+      ESHKOL_LIB_DIR="${include_root}" \
+      "${D1_RUNNER}" \
+      --strict-types --no-stdlib \
+      "${include_args[@]}" \
+      -L "${library_dir}" --lib "${library_name}" \
+      -r "${source}"
+  )
+}
+
+d1_assert_private_module_unavailable() {
+  local form=$1 source_tag=$2 mode run output log source
+  source="${D1_TMP}/negative-module-${source_tag}.esk"
+  printf '%s\n' "${form}" >"${source}"
+  for mode in source object aot; do
+    for run in 1; do
+      output="${D1_TMP}/negative-module-${source_tag}-${mode}-${run}"
+      log="${output}.log"
+      if [[ "${mode}" == source ]]; then
+        if D1_CACHE_HOME="${output}-cache" \
+            d1_run_source "${source}" >"${log}" 2>&1; then
+          die "D1 private module ${source_tag} unexpectedly loaded from public source"
+        fi
+      elif [[ "${mode}" == object ]]; then
+        if D1_CACHE_HOME="${output}-cache" \
+            d1_compile "${source}" "${output}.o" --compile-only \
+              >"${log}" 2>&1; then
+          die "D1 private module ${source_tag} unexpectedly compiled publicly"
+        fi
+        test ! -e "${output}.o"
+      else
+        if D1_CACHE_HOME="${output}-cache" \
+            d1_compile "${source}" "${output}.bin" >"${log}" 2>&1; then
+          die "D1 private module ${source_tag} unexpectedly linked publicly"
+        fi
+        test ! -e "${output}.bin"
+      fi
+      test -s "${log}"
+    done
+  done
+}
+
+d1_assert_private_module_unavailable \
+  '(require transformer.error_core)' error-core
+d1_assert_private_module_unavailable \
+  '(require transformer.error_internal)' error-internal
+d1_assert_private_module_unavailable \
+  '(load "eshkol_transformer/token_shard.esk")' token-shard
+d1_assert_private_module_unavailable \
+  '(load "d1_e1b_private.esk")' trusted-root
 
 d1_assert_private_binding() {
   local hidden_name=$1 hidden_source=$2 mode run output log depfile
   local source="${D1_TMP}/negative-private-${hidden_source}.esk"
   printf '(require transformer.data)\n\n(define leaked-private-binding %s)\n' \
     "${hidden_name}" >"${source}"
-  for mode in object aot; do
+  for mode in source object aot; do
     for run in 1; do
       output="${D1_TMP}/negative-private-${hidden_source}-${mode}-${run}"
       log="${output}.log"
       depfile="${output}.d"
-      if [[ "${mode}" == object ]]; then
+      if [[ "${mode}" == source ]]; then
+        if D1_CACHE_HOME="${D1_TMP}/negative-private-${hidden_source}-${mode}-cache-${run}" \
+            d1_run_source "${source}" >"${log}" 2>&1; then
+          die "D1 private ${hidden_name} unexpectedly ran from public source"
+        fi
+      elif [[ "${mode}" == object ]]; then
         output="${output}.o"
         if D1_CACHE_HOME="${D1_TMP}/negative-private-${hidden_source}-${mode}-cache-${run}" \
             d1_compile "${source}" "${output}" --emit-depfile "${depfile}" \
@@ -160,10 +283,15 @@ d1_assert_unavailable_call() {
   local hidden_name=$1 hidden_source=$2 mode output log source
   source="${D1_TMP}/negative-direct-${hidden_source}.esk"
   printf '(require transformer.data)\n\n(%s)\n' "${hidden_name}" >"${source}"
-  for mode in object aot; do
+  for mode in source object aot; do
     output="${D1_TMP}/negative-direct-${hidden_source}-${mode}"
     log="${output}.log"
-    if [[ "${mode}" == object ]]; then
+    if [[ "${mode}" == source ]]; then
+      if D1_CACHE_HOME="${output}-cache" \
+          d1_run_source "${source}" >"${log}" 2>&1; then
+        die "D1 private ${hidden_name} unexpectedly ran as a direct source call"
+      fi
+    elif [[ "${mode}" == object ]]; then
       if D1_CACHE_HOME="${output}-cache" \
           d1_compile "${source}" "${output}.o" --compile-only >"${log}" 2>&1; then
         die "D1 private ${hidden_name} unexpectedly compiled as a direct call"
@@ -184,10 +312,15 @@ d1_assert_public_wrong_arity() {
   local public_name=$1 source_tag=$2 mode output log source
   source="${D1_TMP}/negative-arity-${source_tag}.esk"
   printf '(require transformer.data)\n\n(%s)\n' "${public_name}" >"${source}"
-  for mode in object aot; do
+  for mode in source object aot; do
     output="${D1_TMP}/negative-arity-${source_tag}-${mode}"
     log="${output}.log"
-    if [[ "${mode}" == object ]]; then
+    if [[ "${mode}" == source ]]; then
+      if D1_CACHE_HOME="${output}-cache" \
+          d1_run_source "${source}" >"${log}" 2>&1; then
+        die "D1 public ${public_name} accepted a wrong-arity source call"
+      fi
+    elif [[ "${mode}" == object ]]; then
       if D1_CACHE_HOME="${output}-cache" \
           d1_compile "${source}" "${output}.o" --compile-only >"${log}" 2>&1; then
         die "D1 public ${public_name} accepted a wrong-arity object call"
@@ -209,17 +342,37 @@ D1_FAULT_ARTIFACT_DIR="${D1_TMP}/fault-artifacts"
   "${D1_FAULT_ARTIFACT_DIR}" test-faults \
   >"${D1_TMP}/fault-build.stdout" 2>"${D1_TMP}/fault-build.stderr"
 D1_FAULT_LIBRARY="${D1_FAULT_ARTIFACT_DIR}/libeshkol_transformer_d1_faults.a"
+D1_FAULT_EVIDENCE="${D1_FAULT_LIBRARY}.evidence"
+D1_FAULT_UNDEFINED_SYMBOLS="${PROJECT_ROOT}/native/d1_e1b_fault_undefined_symbols.txt"
 [[ -r "${D1_FAULT_LIBRARY}" ]] || die "D1 fault-test archive is missing"
-[[ "$(ar t "${D1_FAULT_LIBRARY}")" == "data_io.o" ]] || \
-  die "D1 fault-test archive has unexpected members"
+[[ "$(ar t "${D1_FAULT_LIBRARY}")" == "stdlib.o" ]] || \
+  die "D1 fault-test archive must contain exactly stdlib.o"
+LC_ALL=C sort -cu "${D1_FAULT_UNDEFINED_SYMBOLS}" || \
+  die "D1 fault undefined-symbol manifest is not C-sorted unique text"
+cmp --silent "${D1_TMP}/expected-global-defined.txt" \
+  "${D1_FAULT_EVIDENCE}/global-defined.txt" || \
+  die "D1 fault artifact differs from the exact 14-symbol global allowlist"
+cmp --silent "${D1_PUBLIC_EXPORTS}" \
+  "${D1_FAULT_EVIDENCE}/package-exports.txt" || \
+  die "D1 fault artifact package exports differ from their repository manifest"
+cmp --silent "${D1_FAULT_UNDEFINED_SYMBOLS}" \
+  "${D1_FAULT_EVIDENCE}/expected-undefined.txt" || \
+  die "D1 fault artifact selected the wrong undefined-symbol manifest"
+cmp --silent "${D1_FAULT_UNDEFINED_SYMBOLS}" \
+  "${D1_FAULT_EVIDENCE}/undefined.txt" || \
+  die "D1 fault artifact differs from its exact undefined-symbol manifest"
+grep -Fx $'allowlist\t'"$(basename -- "${D1_FAULT_UNDEFINED_SYMBOLS}")" \
+  "${D1_FAULT_EVIDENCE}/allowlist-provenance.tsv" >/dev/null || \
+  die "D1 fault artifact evidence does not identify its repository allowlist"
 for forbidden_fault_text in ET_D1_TEST_FAULT ET_D1_TEST_FAIL_CALL \
     short-write write-enospc write-eio close-eio; do
-  if strings "${D1_LIBRARY}" | grep -F "${forbidden_fault_text}" >/dev/null; then
-    die "canonical D1 native archive contains test-fault control: ${forbidden_fault_text}"
+  if grep -F "${forbidden_fault_text}" \
+      "${D1_EVIDENCE}/strings.txt" >/dev/null; then
+    die "canonical D1 combined artifact contains test-fault control: ${forbidden_fault_text}"
   fi
 done
-if nm -u "${D1_LIBRARY}" | grep -E ' (getenv|strtoull|strcmp)$' >/dev/null; then
-  die "canonical D1 native archive references test-fault runtime helpers"
+if grep -E '^(getenv|strtoull)$' "${D1_EVIDENCE}/undefined.txt" >/dev/null; then
+  die "canonical D1 combined artifact references test-fault runtime helpers"
 fi
 
 D1_GUESSED_NATIVE_SYMBOLS=(
@@ -235,43 +388,52 @@ D1_GUESSED_NATIVE_SYMBOLS=(
   et_d1_token_corpus_validate_impl_v1
   d1_token_list_ref
   et_d1_token_list_ref_v1
+  et_d1_checked_write_new_v1
+  et_e1b_private_raise_cabi_v1
+  et_e1b_consumer_raise_v1
+  et_e1b_box_value_v1
+  et_e1b_ensure_private_initialized_v1
 )
+while IFS= read -r private_cabi; do
+  D1_GUESSED_NATIVE_SYMBOLS+=("${private_cabi}")
+done < <(awk '{ print $2 }' "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt")
 for guessed_symbol in "${D1_GUESSED_NATIVE_SYMBOLS[@]}"; do
   guessed_object="${D1_TMP}/negative-native-${guessed_symbol}.o"
-  guessed_binary="${D1_TMP}/negative-native-${guessed_symbol}"
-  guessed_log="${D1_TMP}/negative-native-${guessed_symbol}.log"
+  guessed_combined="${D1_TMP}/negative-native-${guessed_symbol}-combined.o"
   "${D1_CC}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
     -DD1_PRIVATE_SYMBOL="${guessed_symbol}" -c \
     "${PROJECT_ROOT}/tests/d1/negative_native_symbol_link.c" \
     -o "${guessed_object}"
-  if "${D1_CC}" "${guessed_object}" "${D1_LIBRARY}" \
-      -Wl,--no-undefined -o "${guessed_binary}" >"${guessed_log}" 2>&1; then
-    die "guessed D1 private native symbol unexpectedly linked: ${guessed_symbol}"
-  fi
-  grep -F "${guessed_symbol}" "${guessed_log}" >/dev/null
-  test ! -e "${guessed_binary}"
+  "${D1_CC}" -r "${guessed_object}" -Wl,--whole-archive "${D1_LIBRARY}" \
+    -Wl,--no-whole-archive -o "${guessed_combined}"
+  nm -u "${guessed_combined}" | awk '{ print $NF }' |
+    grep -Fx "${guessed_symbol}" >/dev/null || \
+    die "guessed private native symbol resolved from D1 artifact: ${guessed_symbol}"
 done
 
 for run in 1 2; do
-  d1_compile "${PROJECT_ROOT}/tests/d1/compile_data_api.esk" \
+  D1_CACHE_HOME="${D1_TMP}/data-api-${run}-cache" \
+    d1_compile "${PROJECT_ROOT}/tests/d1/compile_data_api.esk" \
     "${D1_TMP}/data-api-${run}.o" \
     --emit-depfile "${D1_TMP}/data-api-${run}.d" --compile-only \
     >"${D1_TMP}/data-api-${run}.stdout" 2>"${D1_TMP}/data-api-${run}.stderr"
   test -s "${D1_TMP}/data-api-${run}.o"
-  grep -F 'lib/transformer/data.esk' "${D1_TMP}/data-api-${run}.d" >/dev/null
-  grep -F 'src/eshkol_transformer/token_shard.esk' "${D1_TMP}/data-api-${run}.d" >/dev/null
-  if grep -F 'src/eshkol_transformer/sha256.esk' \
-      "${D1_TMP}/data-api-${run}.d" >/dev/null; then
-    die "D1 public data graph unexpectedly imports the test-only SHA source"
-  fi
-  grep -F 'lib/transformer/error_public.esk' \
+  grep -F "${D1_PUBLIC_ROOT}/transformer/data.esk" \
     "${D1_TMP}/data-api-${run}.d" >/dev/null
-  grep -F 'lib/transformer/error_core.esk' \
+  grep -F "${D1_PUBLIC_ROOT}/transformer/error_consumer.esk" \
     "${D1_TMP}/data-api-${run}.d" >/dev/null
-  if grep -F 'lib/transformer/error_internal.esk' \
-      "${D1_TMP}/data-api-${run}.d" >/dev/null; then
-    die "D1 public data graph unexpectedly includes transformer.error_internal"
-  fi
+  for private_dependency in \
+      src/eshkol_transformer/token_shard.esk \
+      src/eshkol_transformer/sha256.esk \
+      lib/transformer/error_core.esk \
+      lib/transformer/error_internal.esk \
+      native/e1b_error_consumer_private.esk \
+      native/d1_e1b_private.esk; do
+    if grep -F "${private_dependency}" \
+        "${D1_TMP}/data-api-${run}.d" >/dev/null; then
+      die "D1 public data graph unexpectedly includes ${private_dependency}"
+    fi
+  done
 done
 cmp --silent "${D1_TMP}/data-api-1.o" "${D1_TMP}/data-api-2.o"
 cmp --silent "${D1_TMP}/data-api-1.stdout" "${D1_TMP}/data-api-2.stdout"
@@ -291,7 +453,7 @@ if readelf --wide --symbols "${D1_TMP}/data-api-1.o" |
   die "readelf found a globally defined private D1 binding in the public consumer object"
 fi
 if strings -a "${D1_TMP}/data-api-1.o" |
-    grep -E '(d1-token-(write-temporary-new!|publish-temporary!|atomic-write-new!|corpus-(write|validate)-impl|list-(length|ref))(_sexpr|__eshkol)|eshkol_g_d1_2D)' \
+    grep -E '(d1-token-(write-temporary-new!|publish-temporary!|atomic-write-new!|corpus-(write|validate)-impl|list-(length|ref))(_sexpr|__eshkol)|eshkol_g_d1_2D|et-e1b-private-raise|e1-internal-dispatch|transformer-error-(make|raise|wrap-foreign))' \
       >/dev/null; then
   die "public consumer object contains a compiled private D1 symbol name"
 fi
@@ -305,6 +467,14 @@ D1_GUESSED_ESHKOL_SYMBOLS=(
   d1-token-list-ref
   d1-sha256
   d1-token-checked-write-new
+  et-e1b-private-raise
+  e1-internal-dispatch
+  transformer-error-make
+  transformer-error-raise
+  transformer-error-wrap-foreign
+  et-d1-private-token-corpus-write
+  et-d1-private-token-corpus-validate
+  et-d1-private-token-corpus-summary-shard-count
   d1-token-write-temporary-new!_sexpr
   eshkol_g_d1_2Dtoken_2Dsummary_2Dpublic_2Doperations
   d1-compiled-public-operations
@@ -321,7 +491,7 @@ for guessed_symbol in "${D1_GUESSED_ESHKOL_SYMBOLS[@]}"; do
     "${PROJECT_ROOT}/tests/d1/negative_native_symbol_link.c" \
     -o "${guessed_object}"
   "${D1_CC}" -r "${guessed_object}" "${D1_TMP}/data-api-1.o" \
-    "${D1_MODULE}" \
+    -Wl,--whole-archive "${D1_LIBRARY}" -Wl,--no-whole-archive \
     -o "${guessed_combined}"
   nm -u "${guessed_combined}" | awk '{ print $NF }' |
     grep -Fx "${guessed_symbol}" >/dev/null || \
@@ -341,6 +511,14 @@ D1_PRIVATE_BINDING_NAMES=(
   d1-compiled-public-operations
   d1-sha256
   d1-token-checked-write-new
+  et-e1b-private-raise
+  e1-internal-dispatch
+  transformer-error-make
+  transformer-error-raise
+  transformer-error-wrap-foreign
+  et-d1-private-token-corpus-write
+  et-d1-private-token-corpus-validate
+  et-d1-private-token-corpus-summary-shard-count
 )
 D1_PRIVATE_BINDING_SOURCES=(
   write-temporary
@@ -355,6 +533,14 @@ D1_PRIVATE_BINDING_SOURCES=(
   compiled-operations
   sha256
   checked-write-ffi
+  private-raise
+  internal-dispatch
+  error-make
+  error-raise
+  error-wrap
+  private-write-cabi
+  private-validate-cabi
+  private-summary-accessor-cabi
 )
 for hidden_index in "${!D1_PRIVATE_BINDING_NAMES[@]}"; do
   d1_assert_private_binding \
@@ -371,6 +557,14 @@ D1_DIRECT_PRIVATE_NAMES=(
   d1-token-corpus-validate-impl
   d1-token-list-ref
   d1-sha256
+  et-e1b-private-raise
+  e1-internal-dispatch
+  transformer-error-make
+  transformer-error-raise
+  transformer-error-wrap-foreign
+  et-d1-private-token-corpus-write
+  et-d1-private-token-corpus-validate
+  et-d1-private-token-corpus-summary-shard-count
 )
 D1_DIRECT_PRIVATE_SOURCES=(
   checked-write-ffi
@@ -381,6 +575,14 @@ D1_DIRECT_PRIVATE_SOURCES=(
   corpus-validate-impl
   list-ref
   sha256
+  private-raise
+  internal-dispatch
+  error-make
+  error-raise
+  error-wrap
+  private-write-cabi
+  private-validate-cabi
+  private-summary-accessor-cabi
 )
 for hidden_index in "${!D1_DIRECT_PRIVATE_NAMES[@]}"; do
   d1_assert_unavailable_call \
@@ -424,7 +626,8 @@ for hidden_index in "${!hidden_summary_names[@]}"; do
   hidden_name="${hidden_summary_names[${hidden_index}]}"
   hidden_source="${hidden_summary_sources[${hidden_index}]}"
   for run in 1 2; do
-    if d1_compile \
+    if D1_CACHE_HOME="${D1_TMP}/negative-summary-${hidden_source}-cache-${run}" \
+        d1_compile \
         "${PROJECT_ROOT}/tests/d1/negative_summary_${hidden_source}_public.esk" \
         "${D1_TMP}/negative-summary-${hidden_source}-${run}.o" \
         --compile-only \
@@ -439,10 +642,12 @@ for hidden_index in "${!hidden_summary_names[@]}"; do
     "${D1_TMP}/negative-summary-${hidden_source}-2.log"
 done
 
-d1_compile "${PROJECT_ROOT}/tests/d1/sha256_probe.esk" \
+D1_INCLUDE_ROOT="${PROJECT_ROOT}/lib" D1_SOURCE_ROOT="${PROJECT_ROOT}/src" \
+  d1_compile "${PROJECT_ROOT}/tests/d1/sha256_probe.esk" \
   "${D1_TMP}/sha256-probe" \
   >"${D1_TMP}/sha256.compile.stdout" 2>"${D1_TMP}/sha256.compile.stderr"
-d1_compile "${PROJECT_ROOT}/tests/d1/primitive_probe.esk" \
+D1_INCLUDE_ROOT="${PROJECT_ROOT}/lib" D1_SOURCE_ROOT="${PROJECT_ROOT}/src" \
+  d1_compile "${PROJECT_ROOT}/tests/d1/primitive_probe.esk" \
   "${D1_TMP}/primitive-probe" \
   >"${D1_TMP}/primitive.compile.stdout" 2>"${D1_TMP}/primitive.compile.stderr"
 d1_compile "${PROJECT_ROOT}/tests/d1/corpus_tool.esk" \
@@ -466,6 +671,13 @@ d1_compile "${PROJECT_ROOT}/tests/d1/summary_opacity_probe.esk" \
   "${D1_TMP}/summary-opacity-probe" \
   >"${D1_TMP}/summary-opacity.compile.stdout" \
   2>"${D1_TMP}/summary-opacity.compile.stderr"
+for import_order in data_first error_first; do
+  D1_CACHE_HOME="${D1_TMP}/e1b-${import_order}-cache" \
+    d1_compile "${PROJECT_ROOT}/tests/d1/e1b_import_${import_order}.esk" \
+      "${D1_TMP}/e1b-${import_order}-probe" \
+      >"${D1_TMP}/e1b-${import_order}.compile.stdout" \
+      2>"${D1_TMP}/e1b-${import_order}.compile.stderr"
+done
 
 for compile_log in "${D1_TMP}"/*.compile.stdout "${D1_TMP}"/*.compile.stderr; do
   if grep -F 'ERROR:' "${compile_log}" >/dev/null; then
@@ -501,6 +713,17 @@ PATH=/definitely-not-a-real-path \
   2>"${D1_TMP}/e1-mapping.stderr"
 grep -Fx 'D1_E1_MAPPING_PASS' "${D1_TMP}/e1-mapping.stdout" >/dev/null
 test ! -s "${D1_TMP}/e1-mapping.stderr"
+
+for import_order in data_first error_first; do
+  PATH=/definitely-not-a-real-path \
+    "${D1_TIMEOUT}" --foreground --signal=TERM --kill-after=5s "${D1_TIMEOUT_SECONDS}s" \
+    "${D1_TMP}/e1b-${import_order}-probe" "${D1_TMP}/missing-${import_order}" \
+    >"${D1_TMP}/e1b-${import_order}.stdout" \
+    2>"${D1_TMP}/e1b-${import_order}.stderr"
+  grep -Fx "D1_E1B_$(printf '%s' "${import_order}" | tr '[:lower:]' '[:upper:]')_PASS" \
+    "${D1_TMP}/e1b-${import_order}.stdout" >/dev/null
+  test ! -s "${D1_TMP}/e1b-${import_order}.stderr"
+done
 
 mkdir "${D1_TMP}/summary-writer" "${D1_TMP}/summary-validator"
 PATH=/definitely-not-a-real-path \

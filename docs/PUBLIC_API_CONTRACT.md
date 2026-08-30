@@ -253,19 +253,20 @@ T1/T2 own concrete vocabulary and tokenizer formats. No byte layout is committed
 D1 adds the following CPU control-plane corpus operations. They serialize a flat,
 already-tokenized sequence only; they do not tokenize text or define document,
 iteration, shuffle, packing, batch, target, mask, or cursor semantics.
-They are exported only by `(require transformer.data)`; D1 adds no convenience alias
-or public error-construction surface. Its production dependency graph uses
-`transformer.error_public` and the accepted E1 core, not
-`transformer.error_internal`, so requiring data does not resolve the named E1
-helpers `transformer-error-make`, `transformer-error-raise`, or
-`transformer-error-wrap-foreign`. Because the pinned compiler flattens ordinary
-source modules and treats `provide` as informational, the normal build compiles a
-single Eshkol module object whose declaration facade exposes exactly the eight names
-below. Its one private closure bundle is localized before publication; former write,
-publication, validation, list, SHA, and FFI-alias bindings cannot be referenced,
-called, or linked through the public artifact. The accepted E1 core bridge remains
-an E1 implementation dependency, not a D1 API or authorization to construct errors
-directly.
+They are provided only by `(require transformer.data)`; D1 adds no public
+error-construction surface. The installed facade requires only
+`transformer.error_consumer`, so requiring data does not source-import
+`transformer.error_internal`, `transformer.error_core`, the E1 constructors, or the
+core dispatcher. A never-installed trusted package root joins the Eshkol-authored D1
+implementation to E1B's fixed five-argument nonreturning raise seam in one completed
+registry-owning artifact. That seam, the constructors, dispatcher, checked I/O, and
+all D1 helpers are localized before publication. The artifact has an exact reviewed
+global allowlist of six E1B accessors plus eight fixed D1 wrappers and exact
+repository-owned undefined-symbol manifests. The facade provides exactly the eight
+operations below; its documented pinned-compiler safe-only closure aliases carry
+only the same fixed operation capabilities. Former write, publication, validation,
+list, SHA, FFI, and private bridge bindings cannot be called or linked through the
+public artifact.
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|

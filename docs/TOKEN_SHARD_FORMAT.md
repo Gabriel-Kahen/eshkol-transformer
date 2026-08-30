@@ -205,20 +205,21 @@ and D1 makes no concurrency or thread-safety claim for it. It is a pinned-runtim
 workaround to be retested when Eshkol provides module opacity or an immutable opaque
 record facility.
 
-`(require transformer.data)` depends on `transformer.error_public` and the accepted
-E1 core, not `transformer.error_internal`. Consequently it introduces none of the
-named E1 construction helpers `transformer-error-make`,
-`transformer-error-raise`, or `transformer-error-wrap-foreign` into that production
-dependency graph. Ordinary source loading cannot enforce D1 opacity on the pinned
-flattening compiler, so the supported build compiles the Eshkol implementation once
-and publishes it through the compiler's precompiled-module declaration path. The
-facade declares exactly the eight accepted D1 procedures. All serialization,
-validation, publication, and summary logic remains Eshkol-authored inside one
-localized private closure bundle; the native archive contains only the checked byte
-write/close primitive. Former write/publish/implementation/list/SHA helpers and the
-Eshkol FFI alias are neither declared to consumers nor globally linkable from the
-published object. D1 uses the accepted E1 core only for error mapping and does not
-make that bridge or any error constructor a D1 public API.
+`(require transformer.data)` depends only on `transformer.error_consumer`; its public
+source closure contains neither `transformer.error_internal` nor
+`transformer.error_core`. The never-installed trusted D1 root requires
+`e1b_error_consumer_private` and calls only the fixed five-argument, nonreturning
+`et-e1b-private-raise` seam. The builder resolves and localizes that seam, the E1
+constructors and core dispatcher, the checked byte/write/close primitive, and every
+D1 helper inside one registry-owning relocatable object. Its exact global surface is
+the six E1B accessors plus eight reviewed D1 wrappers, and its repository-owned
+normal and fault undefined-symbol manifests are compared byte-for-byte before
+publication. The installed facade provides exactly the eight accepted D1
+procedures; the pinned compiler's documented safe-only closure aliases convey only
+those same fixed wrapper capabilities and no generic E1 capability. All
+serialization, validation, publication, and summary logic remains Eshkol-authored.
+Former write/publish/implementation/list/SHA helpers and guessed private bridge
+symbols cannot satisfy a later link from the public artifact.
 
 ## Validation and errors
 

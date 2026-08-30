@@ -5,62 +5,42 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
 require_command ar
-require_command objcopy
 
 artifact_dir="${1:-$(project_build_dir)/d1}"
 mode="${2:-normal}"
-provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
-cc="$(tsv_value "${provenance}" cc_path)"
-cxx="$(tsv_value "${provenance}" cxx_path)"
-runner="$(eshkol_build_dir)/eshkol-run"
 parent_dir="$(dirname -- "${artifact_dir}")"
 mkdir -p "${parent_dir}"
 temporary_dir="$(mktemp -d "${parent_dir}/.d1-build.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 
-cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC)
-library_name=libeshkol_transformer_d1.a
 case "${mode}" in
-  normal) ;;
+  normal)
+    package_policy=d1
+    library_name=libeshkol_transformer_d1.a
+    ;;
   test-faults)
-    cflags+=(-DET_D1_TEST_FAULTS)
+    package_policy=d1-test-faults
     library_name=libeshkol_transformer_d1_faults.a
     ;;
   *) die "unknown D1 build mode: ${mode}" ;;
 esac
 
-"${cc}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/data_io.c" \
-  -o "${temporary_dir}/data_io.o"
-ar rcsD "${temporary_dir}/${library_name}" "${temporary_dir}/data_io.o"
-
-env XDG_CACHE_HOME="${temporary_dir}/cache" \
-  ESHKOL_CXX_COMPILER="${cxx}" \
-  ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
-  "${runner}" --strict-types --no-stdlib \
-  -I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/src" \
-  --shared-lib --compile-only \
-  --emit-depfile "${temporary_dir}/stdlib.d" \
-  "${PROJECT_ROOT}/lib/stdlib.esk" -o "${temporary_dir}/stdlib.o"
-
-private_bindings=(
-  d1-compiled-public-operations
-)
-rename_args=()
-localized_bindings=()
-private_index=0
-for private_binding in "${private_bindings[@]}"; do
-  localized_binding=".Lprivate_slot_${private_index}"
-  rename_args+=(--redefine-sym="${private_binding}=${localized_binding}")
-  localized_bindings+=(--localize-symbol="${localized_binding}")
-  private_index=$((private_index + 1))
-done
-objcopy "${rename_args[@]}" "${temporary_dir}/stdlib.o"
-objcopy "${localized_bindings[@]}" "${temporary_dir}/stdlib.o"
+E1B_PACKAGE_POLICY="${package_policy}" \
+  "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+    "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+    "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+    "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" \
+    "${temporary_dir}/stdlib.o" "${PROJECT_ROOT}/src"
+ar rcsD "${temporary_dir}/${library_name}" "${temporary_dir}/stdlib.o"
 
 mkdir -p "${artifact_dir}"
-mv -f "${temporary_dir}/data_io.o" "${artifact_dir}/data_io.o"
+rm -f -- "${artifact_dir}/stdlib.o" "${artifact_dir}/stdlib.d" \
+  "${artifact_dir}/data_io.o"
+rm -rf -- "${artifact_dir}/stdlib.o.evidence"
 mv -f "${temporary_dir}/${library_name}" "${artifact_dir}/${library_name}"
-mv -f "${temporary_dir}/stdlib.o" "${artifact_dir}/stdlib.o"
-mv -f "${temporary_dir}/stdlib.d" "${artifact_dir}/stdlib.d"
-printf 'built D1 precompiled module: %s\n' "${artifact_dir}/stdlib.o"
-printf 'built D1 checked native primitive: %s\n' "${artifact_dir}/${library_name}"
+rm -rf -- "${artifact_dir}/${library_name}.evidence"
+mv "${temporary_dir}/stdlib.o.evidence" \
+  "${artifact_dir}/${library_name}.evidence"
+printf 'built D1 combined E1B artifact: %s\n' \
+  "${artifact_dir}/${library_name}"

@@ -37,14 +37,18 @@ e1b_source="$(eshkol_source_dir)"
 e1b_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 e1b_cc="$(tsv_value "${e1b_provenance}" cc_path)"
 e1b_cxx="$(tsv_value "${e1b_provenance}" cxx_path)"
-undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
 x1_private_root="$(realpath -- "${PROJECT_ROOT}/native/x1_config_consumer_root.esk")"
 p1_private_root="$(realpath -- "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk")"
 p1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/p1_package_bridge.c")"
 p1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/p1_package_renames.txt")"
 p1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/p1_package_public_exports.txt")"
+package_policy="${E1B_PACKAGE_POLICY:-base-e1b}"
+package_native_source=
+package_native_define=
 if [[ "${private_root}" == "${x1_private_root}" ]]; then
-  undefined_symbols="${PROJECT_ROOT}/native/x1_undefined_symbols.txt"
+  [[ "${package_policy}" == base-e1b ]] || \
+    die "X1 trusted root cannot select another package policy"
+  package_policy=x1
 else
   p1_tuple_matches=0
   [[ "${private_root}" == "${p1_private_root}" ]] && \
@@ -56,11 +60,34 @@ else
   [[ "${public_exports}" == "${p1_public_exports}" ]] && \
     p1_tuple_matches=$((p1_tuple_matches + 1))
   if [[ "${p1_tuple_matches}" == 4 ]]; then
-    undefined_symbols="${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt"
+    [[ "${package_policy}" == base-e1b ]] || \
+      die "P1 trusted tuple cannot select another package policy"
+    package_policy=p1
   elif [[ "${p1_tuple_matches}" != 0 ]]; then
     die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
   fi
 fi
+case "${package_policy}" in
+  base-e1b)
+    undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
+    ;;
+  x1)
+    undefined_symbols="${PROJECT_ROOT}/native/x1_undefined_symbols.txt"
+    ;;
+  p1)
+    undefined_symbols="${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt"
+    ;;
+  d1)
+    undefined_symbols="${PROJECT_ROOT}/native/d1_e1b_undefined_symbols.txt"
+    package_native_source="${PROJECT_ROOT}/native/data_io.c"
+    ;;
+  d1-test-faults)
+    undefined_symbols="${PROJECT_ROOT}/native/d1_e1b_fault_undefined_symbols.txt"
+    package_native_source="${PROJECT_ROOT}/native/data_io.c"
+    package_native_define=-DET_D1_TEST_FAULTS
+    ;;
+  *) die "unknown repository-owned E1B package policy: ${package_policy}" ;;
+esac
 [[ -f "${undefined_symbols}" ]] || \
   die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
 [[ -s "${undefined_symbols}" ]] || \
@@ -83,12 +110,13 @@ LC_ALL=C sort -u "${undefined_symbols}" \
 cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
   die "E1B undefined-symbol allowlist must already be byte-exact C-sorted unique text"
 
-awk '
-  NF != 1 || $1 !~ /^et_e1b_public_[a-z0-9_]+_v1$/ { bad = 1; next }
+export_pattern='^et_e1b_public_[a-z0-9_]+_v1$'
+awk -v pattern="${export_pattern}" '
+  NF != 1 || $1 !~ pattern { bad = 1; next }
   { print $1 }
   END { if (bad) exit 1 }
 ' "${public_exports}" | LC_ALL=C sort -u >"${e1b_tmp}/package-exports.txt" || \
-  die "E1B package exports must be one et_e1b_public_*_v1 symbol per line"
+  die "E1B package exports do not match the repository-owned policy"
 [[ -s "${e1b_tmp}/package-exports.txt" ]] || \
   die "E1B package export list must not be empty"
 cmp -s "${public_exports}" "${e1b_tmp}/package-exports.txt" || \
@@ -157,9 +185,22 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
+package_native_objects=()
+if [[ -n "${package_native_source}" ]]; then
+  package_native_objects+=("${e1b_tmp}/package-native.o")
+  package_native_cflags=(
+    -std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
+  )
+  if [[ -n "${package_native_define}" ]]; then
+    package_native_cflags+=("${package_native_define}")
+  fi
+  "${e1b_cc}" "${package_native_cflags[@]}" \
+    -c "${package_native_source}" -o "${package_native_objects[0]}"
+fi
+
 "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
-  "${e1b_tmp}/package-bridge.o" \
+  "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
   -o "${e1b_tmp}/combined.raw.o"
 
 nm -g --defined-only --format=posix "${e1b_tmp}/combined.raw.o" | \
@@ -207,6 +248,16 @@ for privileged in \
     "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
     die "E1B required privileged definition is not local: ${privileged}"
 done
+if [[ "${package_policy}" == d1 || "${package_policy}" == d1-test-faults ]]; then
+  for privileged in \
+    et_d1_checked_write_new_v1 \
+    et_e1b_private_d1_token_corpus_write_cabi_v1 \
+    et_e1b_private_d1_token_corpus_validate_cabi_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "D1 required privileged definition is not local: ${privileged}"
+  done
+fi
 
 evidence_dir="${output_object}.evidence"
 temporary_output="${output_object}.tmp.$$"

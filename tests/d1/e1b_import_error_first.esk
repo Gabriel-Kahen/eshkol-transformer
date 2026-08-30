@@ -1,0 +1,66 @@
+;;; D1/E1B registry and error-accessor regression with error facade imported first.
+
+(require transformer.error_public)
+(require transformer.data)
+
+(define failures 0)
+(define (check condition)
+  (if condition #t (set! failures (+ failures 1))))
+(define (capture thunk)
+  (guard (raised (#t raised)) (thunk) #f))
+(define (list-length values)
+  (let loop ((rest values) (count 0))
+    (if (null? rest) count (loop (cdr rest) (+ count 1)))))
+(define (list-ref values wanted)
+  (let loop ((rest values) (index 0))
+    (if (= index wanted) (car rest) (loop (cdr rest) (+ index 1)))))
+(define (error-kind? value category operation)
+  (and (transformer-error? value)
+       (eq? (transformer-error-category value) category)
+       (eq? (transformer-error-operation value) operation)))
+
+(define arguments (command-line))
+(if (< (list-length arguments) 2)
+    (begin (display "D1_E1B_ERROR_FIRST_FAIL missing path") (newline) (exit 64)))
+(define missing (list-ref arguments 1))
+
+(define first
+  (capture (lambda ()
+             (token-corpus-validate missing 1048576 1048576 1048576))))
+(define first-message
+  (if (transformer-error? first) (transformer-error-message first) ""))
+(define (check-first)
+  (check (and (error-kind? first 'io 'token-corpus-validate)
+              (string=? (transformer-error-message first) first-message)
+              (null? (transformer-error-details first))
+              (eq? (transformer-error-cause first) #f))))
+(check-first)
+
+(define malformed-validate
+  (capture (lambda () (token-corpus-validate "" 1 1 1))))
+(check (error-kind? malformed-validate 'invalid-argument
+                    'token-corpus-validate))
+(check-first)
+
+(define malformed-write
+  (capture (lambda ()
+             (token-corpus-write! missing "identity" 0 1 '(0)))))
+(check (error-kind? malformed-write 'invalid-argument 'token-corpus-write!))
+(check-first)
+
+(define malformed-summary
+  (capture (lambda () (token-corpus-summary-total-tokens 'forged))))
+(check (error-kind? malformed-summary 'invalid-argument
+                    'token-corpus-summary-total-tokens))
+(check-first)
+
+(define later
+  (capture (lambda ()
+             (token-corpus-validate missing 1048576 1048576 1048576))))
+(check (and (error-kind? later 'io 'token-corpus-validate)
+            (not (eq? later first))))
+(check-first)
+
+(if (= failures 0)
+    (begin (display "D1_E1B_ERROR_FIRST_PASS") (newline))
+    (begin (display "D1_E1B_ERROR_FIRST_FAIL") (newline) (exit 1)))

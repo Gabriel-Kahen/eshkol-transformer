@@ -22,6 +22,13 @@ from reference_format import (
     u32,
 )
 
+PRE_E1B_BASELINE_SHA256 = {
+    "manifest.etm": "20f57deafbe49783268fd6e828b0fa76e5c868632b2247f442d7b5c9d8e35f6b",
+    "shard-0000000000000000.ets": "7173f22db83ebfb9ff823671361ee3302aaefe52c0f95821c8c112c2f3c8f0ce",
+    "shard-0000000000000001.ets": "5b1da5d467c5f168650f36602ed8adbea00d025f1f17e1c71660b7e9865cb377",
+    "shard-0000000000000002.ets": "20f45f18c2a1c5ad0e4a7d87e34a51f424acaf5d1295b491dd14d297ddfe9ecb",
+}
+
 
 class CorpusFormatTests(unittest.TestCase):
     @classmethod
@@ -84,15 +91,7 @@ class CorpusFormatTests(unittest.TestCase):
             ],
         )
         digests = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in directory.iterdir()}
-        self.assertEqual(
-            digests,
-            {
-                "manifest.etm": "20f57deafbe49783268fd6e828b0fa76e5c868632b2247f442d7b5c9d8e35f6b",
-                "shard-0000000000000000.ets": "7173f22db83ebfb9ff823671361ee3302aaefe52c0f95821c8c112c2f3c8f0ce",
-                "shard-0000000000000001.ets": "5b1da5d467c5f168650f36602ed8adbea00d025f1f17e1c71660b7e9865cb377",
-                "shard-0000000000000002.ets": "20f45f18c2a1c5ad0e4a7d87e34a51f424acaf5d1295b491dd14d297ddfe9ecb",
-            },
-        )
+        self.assertEqual(digests, PRE_E1B_BASELINE_SHA256)
         self.run_tool("validate", directory)
 
     def test_fresh_process_determinism(self) -> None:

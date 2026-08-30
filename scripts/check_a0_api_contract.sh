@@ -19,8 +19,8 @@ trap 'rm -rf -- "$A0_TMP"' EXIT
 A0_JIT_INVOCATION=0
 
 [[ -r "${A0_D1_LIBRARY}" ]] || die "canonical D1 native archive is missing"
-[[ "$(ar t "${A0_D1_LIBRARY}")" == "data_io.o" ]] || \
-    die "canonical D1 native archive has unexpected members"
+[[ "$(ar t "${A0_D1_LIBRARY}")" == "stdlib.o" ]] || \
+    die "canonical D1 combined archive has unexpected members"
 
 run_compiler() {
     timeout --foreground --signal=TERM --kill-after=5s \

@@ -1,0 +1,8 @@
+et-d1-private-token-corpus-summary-shard-count et_e1b_private_d1_token_corpus_summary_shard_count_cabi_v1
+et-d1-private-token-corpus-summary-shard-token-limit et_e1b_private_d1_token_corpus_summary_shard_token_limit_cabi_v1
+et-d1-private-token-corpus-summary-tokenizer-fingerprint et_e1b_private_d1_token_corpus_summary_tokenizer_fingerprint_cabi_v1
+et-d1-private-token-corpus-summary-total-shard-bytes et_e1b_private_d1_token_corpus_summary_total_shard_bytes_cabi_v1
+et-d1-private-token-corpus-summary-total-tokens et_e1b_private_d1_token_corpus_summary_total_tokens_cabi_v1
+et-d1-private-token-corpus-summary-vocab-size et_e1b_private_d1_token_corpus_summary_vocab_size_cabi_v1
+et-d1-private-token-corpus-validate et_e1b_private_d1_token_corpus_validate_cabi_v1
+et-d1-private-token-corpus-write et_e1b_private_d1_token_corpus_write_cabi_v1

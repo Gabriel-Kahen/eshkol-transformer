@@ -2,23 +2,12 @@
 ;;; This is a CPU control-plane data path. It performs no tensor, dtype, device,
 ;;; numerical, tokenizer, dataset-iteration, packing, shuffle, or cursor work.
 ;;;
-;;; Pinned Eshkol flattens source-required files. This implementation is therefore
-;;; consumed only through the verified precompiled-module declaration path.
-
-(require transformer.error_public)
+;;; This build-only implementation is compiled into the single localized D1/E1B
+;;; package artifact.  It is never part of an installed public source closure.
 ;;; The pin accepts extern declarations only at top level. This declaration emits
 ;;; an undefined reference to the reviewed C ABI, not an Eshkol helper definition.
 (extern i64 d1-token-checked-write-new ptr ptr i64
         :real et_d1_checked_write_new_v1)
-
-(provide token-corpus-write!
-         token-corpus-validate
-         token-corpus-summary-shard-count
-         token-corpus-summary-total-tokens
-         token-corpus-summary-vocab-size
-         token-corpus-summary-shard-token-limit
-         token-corpus-summary-tokenizer-fingerprint
-         token-corpus-summary-total-shard-bytes)
 
 (define d1-compiled-public-operations
   (let ()
@@ -222,7 +211,7 @@
     (define d1-token-manifest-magic (bytevector 69 83 72 75 84 67 77 49)) ; ESHKTCM1
 
     (define (d1-token-fail category operation message)
-      (e1-internal-dispatch 'raise (list category operation message '() #f)))
+      (et-e1b-private-raise category operation message '() #f))
 
     (define (d1-token-list-length values)
       (let loop ((remaining values) (count 0))
@@ -254,15 +243,16 @@
     (define (d1-token-reraise-or-wrap category operation message source-code caught)
       (if (transformer-error? caught)
           (raise caught)
-          (raise
-           (e1-internal-dispatch
-            'wrap-foreign
-            (list category operation message '()
-                  'eshkol-runtime source-code
+          (et-e1b-private-raise
+           category operation message
+           (list
+            (list 'source-domain 'eshkol-runtime)
+            (list 'source-code source-code)
+            (list 'source-message
                   (if (error-object? caught)
                       (error-object-message caught)
-                      message)
-                  #f)))))
+                      message)))
+           #f)))
 
     (define (d1-token-valid-nonnegative-integer? value)
       (and (integer? value) (exact? value)
@@ -454,12 +444,14 @@
                                                (bytevector-length bytes))))
               (if (= status 0)
                   #t
-                  (raise
-                   (e1-internal-dispatch
-                    'wrap-foreign
-                    (list 'io operation "checked temporary write failed" '()
-                          'd1-native-io status
-                          "native checked write or close failed" #f))))))))
+                  (et-e1b-private-raise
+                   'io operation "checked temporary write failed"
+                   (list
+                    (list 'source-domain 'd1-native-io)
+                    (list 'source-code status)
+                    (list 'source-message
+                          "native checked write or close failed"))
+                   #f))))))
 
     (define (d1-token-publish-temporary! path operation)
       (let ((temporary (string-append path ".tmp")))
@@ -995,33 +987,33 @@
        (entry-ref
         (require-entry summary 'token-corpus-summary-total-shard-bytes) 6)))))
 
-;;; These are the only D1 definitions exported by the separately compiled
-;;; module. The captured implementation bindings above are localized in the
-;;; packaged object before consumers link it.
-(define (token-corpus-write! directory fingerprint vocab-size shard-token-limit
-                             tokens)
+;;; These fixed-arity package thunks are renamed to private C-ABI symbols before
+;;; the completed object is localized.
+(define (et-d1-private-token-corpus-write directory fingerprint vocab-size
+                                          shard-token-limit tokens)
   ((vector-ref d1-compiled-public-operations 0)
    directory fingerprint vocab-size shard-token-limit tokens))
 
-(define (token-corpus-validate directory maximum-manifest-bytes
-                               maximum-shard-bytes maximum-total-tokens)
+(define (et-d1-private-token-corpus-validate directory maximum-manifest-bytes
+                                             maximum-shard-bytes
+                                             maximum-total-tokens)
   ((vector-ref d1-compiled-public-operations 1)
    directory maximum-manifest-bytes maximum-shard-bytes maximum-total-tokens))
 
-(define (token-corpus-summary-shard-count summary)
+(define (et-d1-private-token-corpus-summary-shard-count summary)
   ((vector-ref d1-compiled-public-operations 2) summary))
 
-(define (token-corpus-summary-total-tokens summary)
+(define (et-d1-private-token-corpus-summary-total-tokens summary)
   ((vector-ref d1-compiled-public-operations 3) summary))
 
-(define (token-corpus-summary-vocab-size summary)
+(define (et-d1-private-token-corpus-summary-vocab-size summary)
   ((vector-ref d1-compiled-public-operations 4) summary))
 
-(define (token-corpus-summary-shard-token-limit summary)
+(define (et-d1-private-token-corpus-summary-shard-token-limit summary)
   ((vector-ref d1-compiled-public-operations 5) summary))
 
-(define (token-corpus-summary-tokenizer-fingerprint summary)
+(define (et-d1-private-token-corpus-summary-tokenizer-fingerprint summary)
   ((vector-ref d1-compiled-public-operations 6) summary))
 
-(define (token-corpus-summary-total-shard-bytes summary)
+(define (et-d1-private-token-corpus-summary-total-shard-bytes summary)
   ((vector-ref d1-compiled-public-operations 7) summary))

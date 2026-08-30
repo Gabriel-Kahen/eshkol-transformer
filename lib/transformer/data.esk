@@ -1,6 +1,6 @@
 ;;; Public D1 surface. Dataset, batch, shuffle, packing, and cursor behavior remain D2.
 
-(load "eshkol_transformer/token_shard.esk")
+(require transformer.error_consumer)
 
 (provide token-corpus-write!
          token-corpus-validate
@@ -10,3 +10,111 @@
          token-corpus-summary-shard-token-limit
          token-corpus-summary-tokenizer-fingerprint
          token-corpus-summary-total-shard-bytes)
+
+(define e1b-safe-d1-token-corpus-write-call
+  (let ()
+    (extern void e1b-d1-token-corpus-write ptr ptr ptr ptr ptr ptr
+            :real et_e1b_public_d1_token_corpus_write_v1)
+    (lambda (directory fingerprint vocab-size shard-token-limit tokens)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-write
+         (vector directory) (vector fingerprint) (vector vocab-size)
+         (vector shard-token-limit) (vector tokens) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-validate-call
+  (let ()
+    (extern void e1b-d1-token-corpus-validate ptr ptr ptr ptr ptr
+            :real et_e1b_public_d1_token_corpus_validate_v1)
+    (lambda (directory maximum-manifest-bytes maximum-shard-bytes
+                       maximum-total-tokens)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-validate
+         (vector directory) (vector maximum-manifest-bytes)
+         (vector maximum-shard-bytes) (vector maximum-total-tokens) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-summary-shard-count-call
+  (let ()
+    (extern void e1b-d1-token-corpus-summary-shard-count ptr ptr
+            :real et_e1b_public_d1_token_corpus_summary_shard_count_v1)
+    (lambda (summary)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-summary-shard-count (vector summary) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-summary-total-tokens-call
+  (let ()
+    (extern void e1b-d1-token-corpus-summary-total-tokens ptr ptr
+            :real et_e1b_public_d1_token_corpus_summary_total_tokens_v1)
+    (lambda (summary)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-summary-total-tokens (vector summary) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-summary-vocab-size-call
+  (let ()
+    (extern void e1b-d1-token-corpus-summary-vocab-size ptr ptr
+            :real et_e1b_public_d1_token_corpus_summary_vocab_size_v1)
+    (lambda (summary)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-summary-vocab-size (vector summary) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-summary-shard-token-limit-call
+  (let ()
+    (extern void e1b-d1-token-corpus-summary-shard-token-limit ptr ptr
+            :real et_e1b_public_d1_token_corpus_summary_shard_token_limit_v1)
+    (lambda (summary)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-summary-shard-token-limit
+         (vector summary) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-summary-tokenizer-fingerprint-call
+  (let ()
+    (extern void e1b-d1-token-corpus-summary-tokenizer-fingerprint ptr ptr
+            :real et_e1b_public_d1_token_corpus_summary_tokenizer_fingerprint_v1)
+    (lambda (summary)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-summary-tokenizer-fingerprint
+         (vector summary) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d1-token-corpus-summary-total-shard-bytes-call
+  (let ()
+    (extern void e1b-d1-token-corpus-summary-total-shard-bytes ptr ptr
+            :real et_e1b_public_d1_token_corpus_summary_total_shard_bytes_v1)
+    (lambda (summary)
+      (let ((output (vector #f)))
+        (e1b-d1-token-corpus-summary-total-shard-bytes
+         (vector summary) output)
+        (vector-ref output 0)))))
+
+(define (token-corpus-write! directory fingerprint vocab-size shard-token-limit
+                             tokens)
+  (e1b-safe-d1-token-corpus-write-call
+   directory fingerprint vocab-size shard-token-limit tokens))
+
+(define (token-corpus-validate directory maximum-manifest-bytes
+                               maximum-shard-bytes maximum-total-tokens)
+  (e1b-safe-d1-token-corpus-validate-call
+   directory maximum-manifest-bytes maximum-shard-bytes maximum-total-tokens))
+
+(define (token-corpus-summary-shard-count summary)
+  (e1b-safe-d1-token-corpus-summary-shard-count-call summary))
+
+(define (token-corpus-summary-total-tokens summary)
+  (e1b-safe-d1-token-corpus-summary-total-tokens-call summary))
+
+(define (token-corpus-summary-vocab-size summary)
+  (e1b-safe-d1-token-corpus-summary-vocab-size-call summary))
+
+(define (token-corpus-summary-shard-token-limit summary)
+  (e1b-safe-d1-token-corpus-summary-shard-token-limit-call summary))
+
+(define (token-corpus-summary-tokenizer-fingerprint summary)
+  (e1b-safe-d1-token-corpus-summary-tokenizer-fingerprint-call summary))
+
+(define (token-corpus-summary-total-shard-bytes summary)
+  (e1b-safe-d1-token-corpus-summary-total-shard-bytes-call summary))

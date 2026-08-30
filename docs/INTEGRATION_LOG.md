@@ -514,10 +514,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `close(2)`, and permits rename only on success; production contains no fault
   injection or fallback. The manifest rename is the publication commit point, not a
   whole-directory atomicity, `fsync`, or power-loss durability claim. The pinned
-  compiler's supported D1 packaging is one separately compiled Eshkol module object:
-  its declaration facade exposes exactly the eight accepted procedures, its sole
-  private implementation bundle is localized, and its linked native archive exposes
-  only the reviewed checked byte/write/close primitive.
+  compiler's supported D1 packaging is one combined, separately compiled E1B/D1
+  object: its installed facade provides exactly the eight accepted procedures, the
+  shared E1 registry and six accessors live in that object, and the fixed raise seam,
+  private Eshkol implementation, and checked byte/write/close primitive are localized.
 - **Evidence:** Historical evidence before the current D1-R corrections: after
   rebasing onto E1 merge `80371a1`, the local compatibility-only
   CachyOS x86-64 / LLVM-Clang 22.1.6 run passed `/usr/bin/bash -c 'make test-d1'`:
@@ -563,12 +563,28 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   primitive, arithmetic, E1-mapping, summary-opacity, cleanup/no-manifest, and public
   boundary probes. Exact-head supported CI and D1-R re-review remain pending. The
   historical pre-correction runs are not acceptance evidence for this repair.
-- **Dependencies / retest:** E1 issue #23 is merged through PR #27. D1 imports only
-  `transformer.error_public` plus the accepted E1 core; `transformer.error_internal`
-  and its three named construction helpers are absent from the data dependency graph.
-  The pinned compiler's ordinary flattened source path remains unsuitable for D1
-  opacity; consumers must use the produced precompiled module object, and compiler
-  upgrades must rerun all source/object/AOT and crafted-link boundary checks.
+  After E1B acceptance, the dependency-finalization repair rebased D1 onto main
+  `60c9afa` (including accepted I1 and E1B), replaced all generic core-dispatch use
+  with the fixed five-value `et-e1b-private-raise` call in a never-installed trusted
+  root, and packaged D1 with E1B as one registry-owning localized object. The normal
+  artifact exposes exactly six E1B accessor symbols plus eight D1 wrapper symbols;
+  checked I/O, the fixed raise seam, constructors, core dispatcher, private bridge,
+  and D1 helper families are local. Public depfiles contain only
+  `transformer.data` and `transformer.error_consumer`; exact repository normal/fault
+  undefined-symbol manifests, `nm`, `readelf`, `strings`, and crafted-link evidence
+  gate the completed artifact. A staged installed-public root also rejects explicit
+  core, internal, trusted-root, and implementation imports in fresh source, object,
+  and AOT probes. Both mixed import orders preserve error identity and
+  all accessors across later failures. The pre-E1B golden corpus remained
+  byte-identical, and the compatibility lane passed D1's 16 format/fault groups,
+  A0, E1 (112 checks), E1B (35 checks), I1, Q0 (23 tests), and the full integrated
+  suite. Exact-head supported CI and D1-R re-review remain pending.
+- **Dependencies / retest:** E1 issue #23 and E1B issue #33 are merged. The installed
+  D1 facade imports only `transformer.error_consumer`; `transformer.error_internal`,
+  `transformer.error_core`, the fixed raise seam, and all constructors are absent
+  from its source dependency graph. Consumers must link the single completed D1/E1B
+  artifact and must not combine it with another registry-owning E1B artifact.
+  Compiler upgrades must rerun all source/object/AOT and crafted-link boundary checks.
   T1/D2/T2/DATA4 may consume this contract only after integration acceptance; D2
   retains all iteration, shuffle, packing, batching, and cursor behavior. A later
   streaming/I1 integration must rerun byte-determinism, publication, corruption,
