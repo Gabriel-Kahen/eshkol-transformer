@@ -1,0 +1,9 @@
+;;; Build-only E1B entry.  Never place this source in a public module closure.
+
+(require transformer.error_internal)
+
+(define (et-e1b-private-raise category operation message details cause)
+  (begin
+    (transformer-error-raise category operation message details cause)
+    #f)
+  :no-return)

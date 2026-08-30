@@ -1,0 +1,4 @@
+(require transformer.consumer_a)
+
+(extern ptr guessed-helper ptr :real et_e1b_box_value_v1)
+(guessed-helper (vector #f))

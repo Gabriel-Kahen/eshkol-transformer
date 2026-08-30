@@ -27,8 +27,11 @@ run_fixture() {
     jit_cache="$A0_TMP/jit-cache-$A0_JIT_INVOCATION"
     mkdir -p "$jit_cache"
     # A0 is a declaration/import gate.  Use a fresh cache for each repeated JIT
-    # invocation so both diagnostics cover the same compilation phase.
+    # invocation so both diagnostics cover the same compilation phase.  Its
+    # test-only accessor shim keeps this upstream declaration gate independent of
+    # E1B's AOT-only artifact; compile_only_fixture still compiles the real facade.
     XDG_CACHE_HOME="$jit_cache" run_compiler --optimize 0 --no-stdlib \
+        -I "$A0_ROOT/tests/fixtures/a0_runtime" \
         -I "$A0_ROOT/lib" \
         -I "$A0_ROOT/tests/fixtures/a0" \
         -r "$source"

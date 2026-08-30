@@ -1,0 +1,3 @@
+(require transformer.consumer_a)
+
+(transformer-error-category)

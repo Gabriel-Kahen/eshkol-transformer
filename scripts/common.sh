@@ -49,6 +49,16 @@ tsv_value() {
   printf '%s\n' "${value}"
 }
 
+e1b_compare_exact_undefined_allowlist() {
+  local expected="$1" actual="$2"
+  if ! cmp -s "${expected}" "${actual}"; then
+    printf 'E1B undefined-symbol allowlist difference (expected-only, actual-only):\n' \
+      >&2
+    comm -3 "${expected}" "${actual}" >&2
+    return 1
+  fi
+}
+
 eshkol_source_dir() {
   printf '%s\n' "${ESHKOL_SOURCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-src}"
 }

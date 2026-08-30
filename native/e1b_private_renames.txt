@@ -1,0 +1,7 @@
+transformer-error? et_e1b_private_error_predicate_cabi_v1
+transformer-error-category et_e1b_private_error_category_cabi_v1
+transformer-error-operation et_e1b_private_error_operation_cabi_v1
+transformer-error-message et_e1b_private_error_message_cabi_v1
+transformer-error-details et_e1b_private_error_details_cabi_v1
+transformer-error-cause et_e1b_private_error_cause_cabi_v1
+et-e1b-private-raise et_e1b_private_raise_cabi_v1

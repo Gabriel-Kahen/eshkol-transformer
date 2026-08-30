@@ -1,0 +1,128 @@
+(require transformer.error_public)
+(require transformer.consumer_a)
+(require transformer.consumer_b)
+(require transformer.consumer_probe)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ")
+        (display name)
+        (newline))))
+
+(define (details-ref details key)
+  (cond ((null? details) #f)
+        ((eq? (car (car details)) key) (car (cdr (car details))))
+        (else (details-ref (cdr details) key))))
+
+(define (capture thunk)
+  (guard (raised (#t raised))
+    (thunk)
+    #f))
+
+(define (invalid-raise? thunk)
+  (let ((raised (capture thunk)))
+    (and (transformer-error? raised)
+         (eq? (transformer-error-category raised) 'invalid-argument)
+         (eq? (transformer-error-operation raised) 'transformer-error-raise)
+         (null? (transformer-error-details raised))
+         (eq? (transformer-error-cause raised) #f))))
+
+(define first (capture (lambda () (consumer-a-raise "alpha.bin"))))
+(check "consumer A raises E1 identity" (transformer-error? first))
+(check "consumer A category" (eq? (transformer-error-category first) 'io))
+(check "consumer A operation"
+       (eq? (transformer-error-operation first) 'consumer-a-read))
+(check "consumer A message"
+       (string=? (transformer-error-message first) "consumer A failed"))
+(check "consumer A details"
+       (string=? (details-ref (transformer-error-details first) 'path)
+                 "alpha.bin"))
+(check "consumer A cause" (eq? (transformer-error-cause first) #f))
+
+(define second (capture (lambda () (consumer-b-raise first))))
+(define copied-cause (transformer-error-cause second))
+(check "consumer B raises same registry" (transformer-error? second))
+(check "consumer B category"
+       (eq? (transformer-error-category second) 'invalid-state))
+(check "consumer B canonical details"
+       (eq? (details-ref (transformer-error-details second) 'phase) 'commit))
+(check "consumer B cause is E1" (transformer-error? copied-cause))
+(check "consumer B cause is detached identity" (not (eq? copied-cause first)))
+(check "consumer B cause metadata"
+       (and (eq? (transformer-error-category copied-cause) 'io)
+            (eq? (transformer-error-operation copied-cause)
+                 'consumer-a-read)))
+
+(define categories
+  '(invalid-argument shape-mismatch dtype-mismatch device-mismatch
+    noncontiguous unsupported invalid-state io corrupt-data version-mismatch
+    determinism-unavailable internal))
+(define (check-categories rest)
+  (if (null? rest)
+      #t
+      (let* ((category (car rest))
+             (raised
+               (capture (lambda () (consumer-category-probe category)))))
+        (check category
+               (and (transformer-error? raised)
+                    (eq? (transformer-error-category raised) category)))
+        (check-categories (cdr rest)))))
+(check-categories categories)
+
+(define continued #f)
+(guard (raised (#t #t))
+  (consumer-a-raise "nonreturn.bin")
+  (set! continued #t))
+(check "valid raise is nonreturning" (not continued))
+
+(check "malformed category"
+       (invalid-raise? (lambda () (consumer-invalid-category))))
+(check "malformed operation"
+       (invalid-raise? (lambda () (consumer-invalid-operation))))
+(check "malformed message"
+       (invalid-raise? (lambda () (consumer-invalid-message))))
+(check "malformed details"
+       (invalid-raise? (lambda () (consumer-invalid-details))))
+(check "duplicate details"
+       (invalid-raise? (lambda () (consumer-duplicate-details))))
+(check "opaque details"
+       (invalid-raise? (lambda () (consumer-opaque-details))))
+(check "malformed cause"
+       (invalid-raise? (lambda () (consumer-invalid-cause))))
+
+(define source-message (string-copy "owned message"))
+(define source-detail (string-copy "owned detail"))
+(define owned
+  (capture (lambda () (consumer-owned source-message source-detail))))
+(string-set! source-message 0 #\X)
+(string-set! source-detail 0 #\X)
+(check "boundary ingress ownership"
+       (and (string=? (transformer-error-message owned) "owned message")
+            (string=? (details-ref (transformer-error-details owned) 'value)
+                      "owned detail")))
+(define first-message (transformer-error-message owned))
+(string-set! first-message 0 #\X)
+(define first-details (transformer-error-details owned))
+(string-set! (details-ref first-details 'value) 0 #\X)
+(check "boundary egress ownership"
+       (and (string=? (transformer-error-message owned) "owned message")
+            (string=? (details-ref (transformer-error-details owned) 'value)
+                      "owned detail")))
+
+(define forged
+  (guard (raised (#t raised))
+    (error "transformer.error_internal:v1")))
+(check "forged native condition rejected" (not (transformer-error? forged)))
+
+(display "e1b-pass=")
+(display passed)
+(display " e1b-fail=")
+(display failed)
+(newline)
+(if (> failed 0) (exit 1) #t)

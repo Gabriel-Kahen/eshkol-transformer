@@ -1,0 +1,10 @@
+;;; Test-only source adapter for A0's upstream declaration/JIT gate. The real
+;;; artifact-backed facade is strict-compiled by that gate and executed by E1B AOT.
+;;; This adapter preserves A0's pre-E1B runtime behavior without entering an
+;;; installed/public closure.
+
+(require transformer.error_core)
+
+(provide transformer-error? transformer-error-category
+         transformer-error-operation transformer-error-message
+         transformer-error-details transformer-error-cause)

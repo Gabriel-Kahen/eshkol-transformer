@@ -1,0 +1,6 @@
+(require transformer.consumer_a)
+
+(extern void guessed-constructor ptr ptr ptr ptr ptr
+        :real transformer-error-raise :no-return)
+(guessed-constructor
+  (vector 'io) (vector 'attack) (vector "attack") (vector '()) (vector #f))

@@ -1,0 +1,77 @@
+;;; Public-source E1 facade for separately compiled consumer artifacts.
+;;;
+;;; This module deliberately imports neither transformer.error_core nor
+;;; transformer.error_internal.  The provide surface remains the six A0 names.
+;;; Safe-only closure aliases work around a pinned compiler crash and carry no
+;;; construction capability; the completed artifact localizes every privileged
+;;; helper before an application is compiled.
+
+(provide transformer-error? transformer-error-category
+         transformer-error-operation transformer-error-message
+         transformer-error-details transformer-error-cause)
+
+(define e1b-safe-error-predicate
+  (let ()
+    (extern void e1b-call-predicate ptr ptr
+            :real et_e1b_error_predicate_v1)
+    (lambda (value)
+      (let ((input (vector value)) (output (vector #f)))
+        (e1b-call-predicate input output)
+        (vector-ref output 0)))))
+(define (transformer-error? value)
+  (e1b-safe-error-predicate value))
+
+(define e1b-safe-error-category
+  (let ()
+    (extern void e1b-call-category ptr ptr
+            :real et_e1b_error_category_v1)
+    (lambda (value)
+      (let ((input (vector value)) (output (vector #f)))
+        (e1b-call-category input output)
+        (vector-ref output 0)))))
+(define (transformer-error-category value)
+  (e1b-safe-error-category value))
+
+(define e1b-safe-error-operation
+  (let ()
+    (extern void e1b-call-operation ptr ptr
+            :real et_e1b_error_operation_v1)
+    (lambda (value)
+      (let ((input (vector value)) (output (vector #f)))
+        (e1b-call-operation input output)
+        (vector-ref output 0)))))
+(define (transformer-error-operation value)
+  (e1b-safe-error-operation value))
+
+(define e1b-safe-error-message
+  (let ()
+    (extern void e1b-call-message ptr ptr
+            :real et_e1b_error_message_v1)
+    (lambda (value)
+      (let ((input (vector value)) (output (vector #f)))
+        (e1b-call-message input output)
+        (vector-ref output 0)))))
+(define (transformer-error-message value)
+  (e1b-safe-error-message value))
+
+(define e1b-safe-error-details
+  (let ()
+    (extern void e1b-call-details ptr ptr
+            :real et_e1b_error_details_v1)
+    (lambda (value)
+      (let ((input (vector value)) (output (vector #f)))
+        (e1b-call-details input output)
+        (vector-ref output 0)))))
+(define (transformer-error-details value)
+  (e1b-safe-error-details value))
+
+(define e1b-safe-error-cause
+  (let ()
+    (extern void e1b-call-cause ptr ptr
+            :real et_e1b_error_cause_v1)
+    (lambda (value)
+      (let ((input (vector value)) (output (vector #f)))
+        (e1b-call-cause input output)
+        (vector-ref output 0)))))
+(define (transformer-error-cause value)
+  (e1b-safe-error-cause value))

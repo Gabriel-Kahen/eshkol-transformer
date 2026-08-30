@@ -1,0 +1,12 @@
+(require transformer.consumer_a)
+
+;;; Compiler-generated/private thunk names are not security secrets and remain
+;;; unresolvable from a separately compiled public application.
+(define guessed-private-raise
+  (let ()
+    (extern void guessed ptr
+            :real et_e1b_private_fixture_consumer_a_raise_cabi_v1
+            :no-return)
+    (lambda () (guessed (vector "attack.bin")))))
+
+(guessed-private-raise)

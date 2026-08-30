@@ -1,0 +1,17 @@
+;;; Installed public stub.  Only the package-specific one-argument public ABI
+;;; is declared here; the generic five-value raise seam remains unreachable.
+
+(require transformer.error_consumer)
+
+(provide consumer-b-raise)
+
+(define e1b-safe-fixture-consumer-b-call
+  (let ()
+    (extern void e1b-public-consumer-b-raise ptr
+            :real et_e1b_public_fixture_consumer_b_raise_v1 :no-return)
+    (lambda (cause)
+      (e1b-public-consumer-b-raise (vector cause))
+      #f)))
+
+(define (consumer-b-raise cause)
+  (e1b-safe-fixture-consumer-b-call cause))
