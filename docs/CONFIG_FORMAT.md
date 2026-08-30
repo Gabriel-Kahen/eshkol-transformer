@@ -1,8 +1,8 @@
 # X1 configuration and resolved-run manifest contract
 
-Status: **X1 blocked on E1B issue #33**. Issues #1 and #20 accepted the schema and
-canonicalization direction with required clarifications; this contract incorporates
-those conditions. A new review head requires the merged private raise boundary.
+Status: **X1 review candidate**. Issues #1 and #20 accepted the schema and
+canonicalization direction with required clarifications, and merged E1B issue #33
+now supplies the separately compiled raise-only boundary used here.
 
 ## Scope and public operations
 
@@ -26,22 +26,29 @@ independent version domains. Version 1 uses config schema `[1,0]`, resolved-mani
 format `[1,0]`, canonicalization identifier `eshkol-config-json-v1`, and fingerprint
 identifier `sha256:eshkol-config-json-v1`.
 
-Failures use the shared E1 `transformer.error_internal` boundary and the unchanged
-A0 structured-error accessors. X1 passes one of `invalid-argument`,
+Failures use the shared E1 registry through E1B. Installed `transformer.config`
+requires only `transformer.error_consumer`; a never-installed trusted X1 root
+requires `e1b_error_consumer_private` and passes one of `invalid-argument`,
 `version-mismatch`, or `unsupported`, the failing public operation symbol, a bounded
-message, data-only E1 details, and cause `#f` to the five-argument
-`transformer-error-raise`. When X1 has positional failure context, details are the
+message, data-only E1 details, and cause `#f` to the fixed five-value
+`et-e1b-private-raise` seam. The combined object localizes that seam, E1 constructors,
+core dispatcher, implementation helpers, and compiler companions before application
+source is compiled. It globally exports only the six A0 error accessors and six
+package-specific X1 wrappers. When X1 has positional failure context, details are the
 proper E1 map `((context (<bounded-scalar-summary> ...)))`; strings longer than 256
 bytes and non-schema symbols or opaque values are replaced by fixed inert symbols.
 When no context exists details are `()`. No raw error representation, executable
-detail value, or X1-local constructor is in X1's declared surface. Configuration
-identities are native condition shells backed by a lexical identity registry; all
+detail value, E1 constructor, private bridge, core dispatcher, or X1 implementation
+helper is present in the installed source closure. Configuration identities are native
+condition shells backed by the one combined artifact's process-local registry; all
 metadata reads are defensive copies, and adversarial same-message conditions cannot
-forge an identity. The pinned compiler treats `provide` as informational, so the
-required E1 internal helper remains technically name-reachable through the dependency
-graph; calling it is unsupported and E1 still validates every construction. E1B
-issue #33 must replace this dependency with its reviewed private raise-only artifact
-before X1 can return to review.
+forge an identity.
+
+The pinned compiler crashes when a direct public function contains a lexical
+`extern`. As in the reviewed E1B facade, each public fixed-arity X1 function therefore
+calls one source-reachable safe-only closure alias. Each alias conveys only the exact
+same narrow configuration operation; it provides no E1 construction, dispatch,
+representation, or additional configuration capability and is not an A0 export.
 
 ## Source configuration grammar
 
@@ -288,13 +295,14 @@ authenticity or runtime capability.
   making `config-parse` do so would change the public contract.
 - The manifest has no embedded digest and is not self-authenticating. Consumers that
   need corruption detection retain the external fingerprint.
-- Opaque configuration identity metadata is retained in a process-lifetime lexical
-  registry. X1 has no persistence/load API for these identities and makes no verified
-  concurrency or thread-safety claim on the pinned runtime.
-- The pinned compiler does not enforce `provide`; X1 proves its own constructors and
-  raw accessors are lexical, but the current E1 internal dependency remains
-  name-reachable. E1B issue #33 is required to provide a separately compiled,
-  fixed-arity raise-only boundary with no generic or public/global bridge symbol.
+- Opaque configuration and E1 identity metadata is retained in the completed
+  process-local combined artifact. Exactly one such registry-owning artifact is
+  supported per process. X1 has no persistence/load API for these identities and
+  makes no verified concurrency or thread-safety claim on the pinned runtime.
+- The public boundary is canonical-pin, x86-64 LP64 SysV, supported-lane AOT only.
+  No JIT/bitcode artifact is published. The checked-in X1 object has an exact
+  repository-owned runtime-undefined-symbol manifest; arbitrary native-object
+  injection into the trusted partial link is outside scope.
 - Changing a field, default, derivation, range, provenance rule, byte rule, format
   identifier, version, limit, checksum coverage, or fingerprint prefix is a public
   schema/format/canonicalization decision. It requires an explicit version or

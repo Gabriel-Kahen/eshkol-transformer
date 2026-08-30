@@ -83,6 +83,19 @@ class ManifestFormatTests(unittest.TestCase):
                     load_manifest_bytes(raw)
 
     def test_versions_features_limits_and_provenance_are_exact(self) -> None:
+        metadata_mutations = [
+            ("format", "eshkol-resolved-run-v2"),
+            ("canonicalization", "eshkol-config-json-v2"),
+            ("checksum-algorithm", "sha512"),
+            ("checksum-coverage", "resolved-only"),
+        ]
+        for key, replacement in metadata_mutations:
+            changed = copy.deepcopy(self.value)
+            changed[key] = replacement
+            with self.subTest(key=key, replacement=replacement):
+                with self.assertRaises(ManifestError):
+                    load_manifest_bytes(canonical_bytes(changed))
+
         mutations = [
             ("format-version", [2, 0]),
             ("format-version", [True, 0]),

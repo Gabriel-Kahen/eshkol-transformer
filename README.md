@@ -54,6 +54,12 @@ The build also leaves I1's separate exact signed-i64 CPU container archive at
 bounded deterministic `tensor.i64` / `storage.copy` requests; see
 [docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
 
+X1's public `transformer.config` source stub links explicitly against the single
+prelocalized E1B/X1 artifact at `build/x1/libeshkol_transformer_x1.a`. The archive
+exports only the six E1 accessors and six fixed package-specific configuration
+wrappers; its trusted implementation source and evidence are not application include
+roots. See [docs/CONFIG_FORMAT.md](docs/CONFIG_FORMAT.md).
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,

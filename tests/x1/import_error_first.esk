@@ -1,0 +1,22 @@
+(require transformer.error_public)
+(require transformer.config)
+
+(define caught
+  (guard (raised (#t raised))
+    (config-parse
+     "{\"config-schema-major\":1,\"config-schema-major\":1}")
+    #f))
+
+(define recognized (transformer-error? caught))
+(if (and recognized
+         (eq? (transformer-error-category caught) 'invalid-argument)
+         (eq? (transformer-error-operation caught) 'config-parse)
+         (string? (transformer-error-message caught))
+         (pair? (transformer-error-details caught))
+         (eq? (transformer-error-cause caught) #f))
+    (begin (display "x1-import-error-first:v1") (newline))
+    (begin
+      (display "x1-import-error-first:FAIL recognized=")
+      (display recognized)
+      (newline)
+      (exit 1)))

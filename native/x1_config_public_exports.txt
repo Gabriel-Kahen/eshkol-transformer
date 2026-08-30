@@ -1,0 +1,6 @@
+et_e1b_public_x1_config_canonical_v1
+et_e1b_public_x1_config_fingerprint_v1
+et_e1b_public_x1_config_parse_v1
+et_e1b_public_x1_config_ref_v1
+et_e1b_public_x1_config_resolve_v1
+et_e1b_public_x1_config_validate_v1

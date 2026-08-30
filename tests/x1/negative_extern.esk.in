@@ -1,0 +1,4 @@
+(require transformer.config)
+
+(extern void guessed-private-symbol :real @X1_SYMBOL@)
+(guessed-private-symbol)

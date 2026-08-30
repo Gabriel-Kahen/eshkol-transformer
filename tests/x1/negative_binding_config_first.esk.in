@@ -1,0 +1,4 @@
+(require transformer.config)
+(require transformer.error_public)
+
+(define leaked-binding @X1_SYMBOL@)

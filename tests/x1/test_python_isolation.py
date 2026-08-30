@@ -27,6 +27,24 @@ class ProductionIsolationTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, lowered)
 
+    def test_public_config_closure_has_only_the_safe_e1b_facade(self) -> None:
+        source = (ROOT / "lib" / "transformer" / "config.esk").read_text(encoding="utf-8")
+        self.assertIn("(require transformer.error_consumer)", source)
+        forbidden = (
+            "(require transformer.error_internal)",
+            "(require transformer.error_core)",
+            "transformer-error-make",
+            "transformer-error-raise",
+            "transformer-error-wrap-foreign",
+            "e1-internal-dispatch",
+            "et-e1b-private-raise",
+            "x1-make-resolved",
+            "x1-resolved-values",
+        )
+        for token in forbidden:
+            with self.subTest(token=token):
+                self.assertNotIn(token, source)
+
     def test_package_has_no_python_or_torch_runtime_dependency(self) -> None:
         package = (ROOT / "eshkol.toml").read_text(encoding="utf-8").lower()
         self.assertNotIn("python", package)
