@@ -26,8 +26,10 @@ owns the reviewed source-status-to-A0-category mapping: unknown statuses map to
 symbol, and `source-message` is a UTF-8 string that may be empty.
 
 The public A0 facades load only `transformer.error_public`, whose declared surface
-contains the six accessors.  The three helpers are absent from the declared surfaces
-of `transformer.public` and `transformer.capabilities`.
+contains the six accessors and whose closure delegates to the artifact-backed
+`transformer.error_consumer`. It does not load the source `transformer.error_core`
+registry. The three helpers are absent from the declared surfaces of
+`transformer.public` and `transformer.capabilities`.
 
 Public packages that cannot safely flatten either internal module use the reviewed
 [E1B separately compiled consumer boundary](E1B_CONSUMER_BOUNDARY.md). Their
@@ -85,16 +87,18 @@ deep-owned snapshots.  Eshkol strings and lists in those snapshots remain mutabl
 their caller, but changing them cannot change the registry or a later snapshot.
 
 On pinned v1.3.4-evolve, `provide` is informational and required source modules are
-flattened into one compilation unit.  `transformer.error_core` therefore declares
+flattened into one compilation unit. `transformer.error_core` therefore declares
 the six accessors plus one technically name-reachable `e1-internal-dispatch` bridge
-so public and internal facades can share the lexical registry and compile from a
-fresh cache.  The bridge validates a fixed opcode, exact proper argument list, and
-all values before dispatch.  It is an unsupported implementation detail: it is not
+so the trusted `transformer.error_internal` facade can share its lexical registry
+and compile from a fresh cache. E1B compiles that trusted closure into the completed
+artifact and localizes the registry, dispatcher, helpers, and generated companions;
+installed public closures instead use `transformer.error_consumer` and cannot flatten
+`error_core`. The bridge validates a fixed opcode, exact proper argument list, and
+all values before dispatch. It is an unsupported implementation detail: it is not
 in the `transformer.error_public`, `transformer.public`, or
-`transformer.capabilities` provide list, the README API, or the SemVer contract.  The
-supported
-construction boundary remains the three named helpers in
-`transformer.error_internal`.  Retest and remove this workaround when upstream gains
+`transformer.capabilities` provide list, the README API, or the SemVer contract. The
+supported construction boundary remains the three named helpers in
+`transformer.error_internal`. Retest and remove this workaround when upstream gains
 module-private bindings or a suitable opaque record facility.
 
 Identity tokens are not serializable or valid across processes.  The registry is a

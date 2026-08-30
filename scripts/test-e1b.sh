@@ -9,6 +9,7 @@ done
 verify_toolchain
 
 e1b_runner="$(eshkol_build_dir)/eshkol-run"
+e1b_cc="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cc_path)"
 e1b_cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
 e1b_compile_timeout="${E1B_COMPILER_TIMEOUT_SECONDS:-180}"
 e1b_runtime_timeout="${E1B_RUNTIME_TIMEOUT_SECONDS:-10}"
@@ -47,6 +48,7 @@ public_exports="transformer-error? transformer-error-category transformer-error-
     "${public_exports}" ]] || die "E1B public accessor surface drifted"
 
 for public_stub in \
+  "${PROJECT_ROOT}/lib/transformer/error_public.esk" \
   "${PROJECT_ROOT}/lib/transformer/error_consumer.esk" \
   "${PROJECT_ROOT}/tests/fixtures/e1b/public/transformer/consumer_a.esk" \
   "${PROJECT_ROOT}/tests/fixtures/e1b/public/transformer/consumer_b.esk" \
@@ -65,6 +67,7 @@ build_package() {
       "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_bridge.c" \
       "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
       "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_public_exports.txt" \
+      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
       "${output}" "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
       >"${log}" 2>&1
 }
@@ -76,6 +79,10 @@ cmp "${e1b_tmp}/package-1.o.evidence/global-defined.txt" \
   "${e1b_tmp}/package-2.o.evidence/global-defined.txt"
 cmp "${e1b_tmp}/package-1.o.evidence/undefined.txt" \
   "${e1b_tmp}/package-2.o.evidence/undefined.txt"
+cmp "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
+  "${e1b_tmp}/package-1.o.evidence/expected-undefined.txt"
+cmp "${e1b_tmp}/package-1.o.evidence/expected-undefined.txt" \
+  "${e1b_tmp}/package-1.o.evidence/undefined.txt"
 cmp "${e1b_tmp}/package-1.o.evidence/readelf-symbols.txt" \
   "${e1b_tmp}/package-2.o.evidence/readelf-symbols.txt"
 cmp "${e1b_tmp}/package-1.o.evidence/link.map" \
@@ -98,10 +105,75 @@ if find "${e1b_tmp}" -maxdepth 2 -type f \
   die "E1B builder published a private intermediate"
 fi
 
+"${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -c "${PROJECT_ROOT}/tests/fixtures/e1b/negative_undefined_provider.c" \
+  -o "${e1b_tmp}/attacker-provider.o"
+undefined_kinds=(function data tls weak)
+undefined_names=(attacker_function attacker_data attacker_tls attacker_weak)
+undefined_relocations=(R_X86_64_PLT32 R_X86_64_REX_GOTPCRELX R_X86_64_GOTTPOFF WEAK)
+for index in "${!undefined_kinds[@]}"; do
+  kind="${undefined_kinds[${index}]}"
+  symbol="${undefined_names[${index}]}"
+  "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+    -c "${PROJECT_ROOT}/tests/fixtures/e1b/negative_undefined_${kind}_bridge.c" \
+    -o "${e1b_tmp}/attacker-${kind}.o"
+  case "${kind}" in
+    function|data)
+      readelf --wide --syms "${e1b_tmp}/attacker-${kind}.o" | \
+        grep -E "NOTYPE[[:space:]]+GLOBAL[[:space:]]+DEFAULT[[:space:]]+UND[[:space:]]+${symbol}$" \
+        >/dev/null
+      ;;
+    tls)
+      readelf --wide --syms "${e1b_tmp}/attacker-${kind}.o" | \
+        grep -E "TLS[[:space:]]+GLOBAL[[:space:]]+DEFAULT[[:space:]]+UND[[:space:]]+${symbol}$" \
+        >/dev/null
+      ;;
+    weak)
+      readelf --wide --syms "${e1b_tmp}/attacker-${kind}.o" | \
+        grep -E "NOTYPE[[:space:]]+WEAK[[:space:]]+DEFAULT[[:space:]]+UND[[:space:]]+${symbol}$" \
+        >/dev/null
+      ;;
+  esac
+  if [[ "${kind}" != weak ]]; then
+    readelf --wide --relocs "${e1b_tmp}/attacker-${kind}.o" | \
+      grep -E "${undefined_relocations[${index}]}.*${symbol}" >/dev/null
+  fi
+
+  if E1B_COMPILER_TIMEOUT_SECONDS="${e1b_compile_timeout}" \
+      "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/negative_undefined_${kind}_bridge.c" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/negative_undefined_public_exports.txt" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
+        "${e1b_tmp}/rejected-${kind}.o" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
+        >"${e1b_tmp}/rejected-${kind}.log" 2>&1; then
+    die "E1B unlisted ${kind} undefined symbol unexpectedly passed admission"
+  fi
+  grep -F 'final object differs from the exact undefined-symbol allowlist' \
+    "${e1b_tmp}/rejected-${kind}.log" >/dev/null
+  grep -F "${symbol}" "${e1b_tmp}/rejected-${kind}.log" >/dev/null
+  test ! -e "${e1b_tmp}/rejected-${kind}.o"
+  test ! -e "${e1b_tmp}/rejected-${kind}.o.evidence"
+  if "${e1b_cxx}" -r "${e1b_tmp}/rejected-${kind}.o" \
+      "${e1b_tmp}/attacker-provider.o" \
+      -o "${e1b_tmp}/late-bound-${kind}.o" \
+      >"${e1b_tmp}/late-bound-${kind}.log" 2>&1; then
+    die "E1B separately compiled provider satisfied rejected ${kind} reference"
+  fi
+  grep -F "rejected-${kind}.o" "${e1b_tmp}/late-bound-${kind}.log" >/dev/null
+  test ! -e "${e1b_tmp}/late-bound-${kind}.o"
+done
+if grep -E '^attacker_(function|data|tls|weak)$' \
+    "${e1b_tmp}/package-1.o.evidence/undefined.txt" >/dev/null; then
+  die "E1B accepted artifact retained an unreviewed attacker dependency"
+fi
+
 ar rcsD "${e1b_tmp}/libe1b_fixture.a" "${e1b_tmp}/package-1.o"
 nm -s "${e1b_tmp}/libe1b_fixture.a" | \
   awk '/^Archive index:$/ { in_index = 1; next }
-       in_index && /^$/ { exit }
+       in_index && /^$/ { in_index = 0; next }
        in_index { print }' >"${e1b_tmp}/archive-index.txt"
 if grep -E 'et_e1b_(consumer|private|box|ensure)|e1-internal-dispatch|transformer-error-(make|raise|wrap-foreign)' \
     "${e1b_tmp}/archive-index.txt" >/dev/null; then
@@ -152,6 +224,7 @@ for run in 1 2; do
 done
 
 for required_public_source in \
+  lib/transformer/error_public.esk \
   lib/transformer/error_consumer.esk \
   tests/fixtures/e1b/public/transformer/consumer_a.esk \
   tests/fixtures/e1b/public/transformer/consumer_b.esk \
@@ -168,15 +241,38 @@ if grep -E 'e1-internal-dispatch|et_e1b_(consumer|private|box|ensure)' \
   die "E1B public application object contains a privileged binding"
 fi
 
-compile_public_app reverse \
-  "${PROJECT_ROOT}/tests/fixtures/e1b/applications/public_consumer_reverse.esk" \
-  "${e1b_tmp}/public-consumer-reverse" \
-  >"${e1b_tmp}/reverse-compile.stdout" \
-  2>"${e1b_tmp}/reverse-compile.stderr"
-run_program "${e1b_tmp}/public-consumer-reverse" \
-  >"${e1b_tmp}/reverse.stdout" 2>"${e1b_tmp}/reverse.stderr"
-grep -Fx 'e1b-import-both-reverse:v1' "${e1b_tmp}/reverse.stdout" >/dev/null
-test ! -s "${e1b_tmp}/reverse.stderr"
+for run in 1 2; do
+  compile_public_object "reverse-${run}" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/applications/public_consumer_reverse.esk" \
+    "${e1b_tmp}/public-consumer-reverse-${run}.o" \
+    "${e1b_tmp}/public-consumer-reverse-${run}.d" \
+    >"${e1b_tmp}/reverse-object-${run}.stdout" \
+    2>"${e1b_tmp}/reverse-object-${run}.stderr"
+  compile_public_app "reverse-${run}" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/applications/public_consumer_reverse.esk" \
+    "${e1b_tmp}/public-consumer-reverse-${run}" \
+    >"${e1b_tmp}/reverse-compile-${run}.stdout" \
+    2>"${e1b_tmp}/reverse-compile-${run}.stderr"
+  run_program "${e1b_tmp}/public-consumer-reverse-${run}" \
+    >"${e1b_tmp}/reverse-${run}.stdout" \
+    2>"${e1b_tmp}/reverse-${run}.stderr"
+  grep -Fx 'e1b-import-both-reverse:v1' \
+    "${e1b_tmp}/reverse-${run}.stdout" >/dev/null
+  test ! -s "${e1b_tmp}/reverse-${run}.stderr"
+  grep -F 'lib/transformer/error_public.esk' \
+    "${e1b_tmp}/public-consumer-reverse-${run}.d" >/dev/null
+  grep -F 'lib/transformer/error_consumer.esk' \
+    "${e1b_tmp}/public-consumer-reverse-${run}.d" >/dev/null
+  if grep -E 'error_(internal|core)\.esk|e1b_error_consumer_private\.esk|trusted_fixture_package\.esk' \
+      "${e1b_tmp}/public-consumer-reverse-${run}.d" >/dev/null; then
+    die "E1B reverse-order public application depfile contains privileged source"
+  fi
+done
+cmp "${e1b_tmp}/public-consumer-reverse-1.o" \
+  "${e1b_tmp}/public-consumer-reverse-2.o"
+cmp "${e1b_tmp}/public-consumer-reverse-1" \
+  "${e1b_tmp}/public-consumer-reverse-2"
+cmp "${e1b_tmp}/reverse-1.stdout" "${e1b_tmp}/reverse-2.stdout"
 
 if nm -g --defined-only "${e1b_tmp}/public-consumer-1" | \
     grep -E 'et_e1b_(consumer|private|box|ensure)|e1-internal-dispatch|transformer-error-(make|raise|wrap-foreign)' >/dev/null; then

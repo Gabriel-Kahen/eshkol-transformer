@@ -1,5 +1,6 @@
 (require transformer.consumer_b)
 (require transformer.consumer_a)
+(require transformer.error_public)
 
 (define (capture thunk)
   (guard (raised (#t raised))
@@ -9,10 +10,19 @@
 (define first (capture (lambda () (consumer-a-raise "reverse.bin"))))
 (define second (capture (lambda () (consumer-b-raise first))))
 
+(define cause (transformer-error-cause second))
+
 (if (and (transformer-error? first)
          (transformer-error? second)
          (eq? (transformer-error-category first) 'io)
+         (eq? (transformer-error-operation first) 'consumer-a-read)
+         (string=? (transformer-error-message first) "consumer A failed")
+         (string=? (car (cdr (car (transformer-error-details first))))
+                   "reverse.bin")
+         (eq? (transformer-error-cause first) #f)
          (eq? (transformer-error-category second) 'invalid-state)
-         (transformer-error? (transformer-error-cause second)))
+         (transformer-error? cause)
+         (not (eq? cause first))
+         (eq? (transformer-error-operation cause) 'consumer-a-read))
     (begin (display "e1b-import-both-reverse:v1") (newline))
     (exit 1))

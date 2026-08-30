@@ -1,7 +1,9 @@
-;;; Internal facade used by the A0 public modules.  Construction and raising helpers
-;;; are deliberately absent from this module's dependency graph.
+;;; Artifact-backed facade used by the A0 public modules.  Construction and raising
+;;; helpers and the source registry are deliberately absent from this module's
+;;; dependency graph.  A completed E1B consumer artifact supplies the sole process
+;;; registry behind these accessors.
 
-(require transformer.error_core)
+(require transformer.error_consumer)
 
 (provide transformer-error? transformer-error-category
          transformer-error-operation transformer-error-message

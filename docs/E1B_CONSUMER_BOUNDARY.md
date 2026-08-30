@@ -51,13 +51,21 @@ interpret categories, operations, messages, details, causes, or error identities
 
 `scripts/build-e1b-consumer.sh` takes a reviewed build-only Eshkol package root, a
 reviewed package C bridge, a compiler-symbol rename list, an exact package export
-allowlist, an output object, and optional public include directories. Package export
-names must match `et_e1b_public_*_v1`. The allowlist is a build input, not an installed
-data format. The builder emits the localized object and textual depfile, link-map,
-symbol-table, undefined-symbol, export, and strings evidence.
+allowlist, an exact runtime-undefined-symbol allowlist, an output object, and optional
+public include directories. Both allowlists are canonical C-sorted, unique,
+one-symbol-per-line build inputs, not installed data formats. Package export names
+must match `et_e1b_public_*_v1`. After localization the builder compares both the
+global definitions and sorted `nm -u` output byte-for-byte with their reviewed
+allowlists before atomically publishing the object and textual depfile, link-map,
+symbol-table, undefined-symbol, export, and strings evidence. A differently named
+unresolved function, data, TLS, or weak symbol is therefore rejected before an
+application can supply it at the later link.
 
-The installed public Eshkol stubs import `transformer.error_consumer`, never
-`transformer.error_internal` or `transformer.error_core`, and declare only their
+The existing `transformer.error_public` facade and every installed public Eshkol
+package stub import `transformer.error_consumer`, never
+`transformer.error_internal` or `transformer.error_core`. Thus either import order
+resolves the unchanged six accessors to the one artifact registry; no public source
+closure creates the source `error_core` registry. Package stubs declare only their
 narrow package-specific public wrappers. The completed object is archived or linked
 before arbitrary application source is compiled. Never pass untrusted application
 source as a trusted package root: a reference present before localization could be

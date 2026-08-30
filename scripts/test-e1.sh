@@ -120,16 +120,36 @@ for run in 1 2; do
     >"${e1_tmp}/internal-${run}.stdout" 2>"${e1_tmp}/internal-${run}.stderr"
 
   run_compiler --strict-types --no-stdlib \
+    -I "${PROJECT_ROOT}/tests/fixtures/a0_runtime" \
     -I "${PROJECT_ROOT}/lib" \
     -I "${PROJECT_ROOT}/tests/fixtures/a0" \
     -I "${PROJECT_ROOT}/tests/fixtures/e1" \
     -r "${PROJECT_ROOT}/tests/fixtures/e1/compile_public_errors.esk" \
     >"${e1_tmp}/public-${run}.stdout" 2>"${e1_tmp}/public-${run}.stderr"
+
+  run_compiler --strict-types --no-stdlib \
+    -I "${PROJECT_ROOT}/lib" \
+    -I "${PROJECT_ROOT}/tests/fixtures/a0" \
+    -I "${PROJECT_ROOT}/tests/fixtures/e1" \
+    --emit-depfile "${e1_tmp}/artifact-public-${run}.d" --compile-only \
+    "${PROJECT_ROOT}/tests/fixtures/e1/compile_public_errors.esk" \
+    -o "${e1_tmp}/artifact-public-${run}.o" \
+    >"${e1_tmp}/artifact-public-${run}.stdout" \
+    2>"${e1_tmp}/artifact-public-${run}.stderr"
 done
 cmp "${e1_tmp}/internal-1.stdout" "${e1_tmp}/internal-2.stdout"
 grep -Fx 'e1-compile:v1' "${e1_tmp}/internal-1.stdout" >/dev/null
 cmp "${e1_tmp}/public-1.stdout" "${e1_tmp}/public-2.stdout"
 grep -Fx 'e1-public-errors:v1' "${e1_tmp}/public-1.stdout" >/dev/null
+cmp "${e1_tmp}/artifact-public-1.o" "${e1_tmp}/artifact-public-2.o"
+grep -F 'lib/transformer/error_public.esk' \
+  "${e1_tmp}/artifact-public-1.d" >/dev/null
+grep -F 'lib/transformer/error_consumer.esk' \
+  "${e1_tmp}/artifact-public-1.d" >/dev/null
+if grep -E 'error_(internal|core)\.esk' \
+    "${e1_tmp}/artifact-public-1.d" >/dev/null; then
+  die "E1 public facade compile closure contains the source registry"
+fi
 
 for run in 1 2; do
   run_compiler --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \

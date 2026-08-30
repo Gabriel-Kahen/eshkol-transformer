@@ -3,29 +3,37 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-[[ "$#" -ge 5 ]] || die \
-  "usage: $0 TRUSTED_PRIVATE_ROOT.esk PACKAGE_BRIDGE.c PACKAGE_RENAMES.txt PUBLIC_EXPORTS.txt OUTPUT.o [INCLUDE_DIR ...]"
+[[ "$#" -ge 6 ]] || die \
+  "usage: $0 TRUSTED_PRIVATE_ROOT.esk PACKAGE_BRIDGE.c PACKAGE_RENAMES.txt PUBLIC_EXPORTS.txt UNDEFINED_SYMBOLS.txt OUTPUT.o [INCLUDE_DIR ...]"
 
 require_command realpath
 private_root="$(realpath -- "$1")"
 package_bridge="$(realpath -- "$2")"
 package_renames="$(realpath -- "$3")"
 public_exports="$(realpath -- "$4")"
-output_object="$(realpath -m -- "$5")"
-shift 5
+undefined_symbols="$(realpath -- "$5")"
+output_object="$(realpath -m -- "$6")"
+shift 6
 include_dirs=("$@")
 
 [[ -f "${private_root}" ]] || die "E1B private root not found: ${private_root}"
 [[ -f "${package_bridge}" ]] || die "E1B package bridge not found: ${package_bridge}"
 [[ -f "${package_renames}" ]] || die "E1B rename map not found: ${package_renames}"
 [[ -f "${public_exports}" ]] || die "E1B public export list not found: ${public_exports}"
+[[ -f "${undefined_symbols}" ]] || \
+  die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
+[[ -s "${undefined_symbols}" ]] || \
+  die "E1B undefined-symbol allowlist must not be empty"
 [[ "${output_object}" == *.o ]] || die "E1B output must end in .o"
 
 require_command awk
+require_command cmp
+require_command comm
 require_command grep
 require_command nm
 require_command objcopy
 require_command readelf
+require_command sort
 require_command strings
 verify_toolchain
 
@@ -40,6 +48,16 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
 trap 'rm -rf -- "${e1b_tmp}"' EXIT
 mkdir -p "${e1b_tmp}/cache" "$(dirname -- "${output_object}")"
+
+awk '
+  NF != 1 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ { bad = 1 }
+  END { if (bad) exit 1 }
+' "${undefined_symbols}" || \
+  die "E1B undefined-symbol allowlist must be one symbol per line"
+LC_ALL=C sort -u "${undefined_symbols}" \
+  >"${e1b_tmp}/expected-undefined.txt"
+cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
+  die "E1B undefined-symbol allowlist must already be byte-exact C-sorted unique text"
 
 awk '
   /^[[:space:]]*(#|$)/ { next }
@@ -134,8 +152,16 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
   "${e1b_tmp}/global-defined.txt" || \
   die "E1B final object differs from the exact public export allowlist"
 
-nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' \
-  >"${e1b_tmp}/undefined.txt"
+nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
+  LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
+if ! cmp -s "${e1b_tmp}/expected-undefined.txt" \
+    "${e1b_tmp}/undefined.txt"; then
+  printf 'E1B undefined-symbol allowlist difference (expected-only, actual-only):\n' \
+    >&2
+  comm -3 "${e1b_tmp}/expected-undefined.txt" \
+    "${e1b_tmp}/undefined.txt" >&2
+  die "E1B final object differs from the exact undefined-symbol allowlist"
+fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
     "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "E1B final object retains an unresolved privileged reference"
@@ -177,6 +203,8 @@ cp "${e1b_tmp}/package-exports.txt" \
   "${evidence_dir}.tmp.$$/package-exports.txt"
 cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
+cp "${e1b_tmp}/expected-undefined.txt" \
+  "${evidence_dir}.tmp.$$/expected-undefined.txt"
 strings "${e1b_tmp}/combined.o" >"${evidence_dir}.tmp.$$/strings.txt"
 cp "${e1b_tmp}/combined.o" "${temporary_output}"
 rm -rf -- "${evidence_dir}"

@@ -291,35 +291,44 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Decision:** proposed; integration owner review and supported exact-head CI are
   pending.
 - **Contract:** Public package stubs import neither `transformer.error_internal` nor
-  `transformer.error_core`. A trusted build-only Eshkol seam accepts exactly
-  category, operation, message, details, and cause, calls only E1's validated raise
-  path, and never returns. Package-specific native wrappers expose only reviewed
-  narrow operations plus the six unchanged unary A0 accessors. The generic seam,
-  constructors, dispatcher, initialization helpers, compiler companions, and raw
-  representation remain `STB_LOCAL` in one completed AOT artifact before arbitrary
+  `transformer.error_core`. The existing `transformer.error_public` facade and all
+  E1B package stubs use the same artifact-backed six accessors, so one completed AOT
+  artifact owns the sole E1 registry in either import order. A trusted build-only
+  Eshkol seam accepts exactly category, operation, message, details, and cause,
+  calls only E1's validated raise path, and never returns. Package-specific native
+  wrappers expose only reviewed narrow operations plus the six unchanged unary A0
+  accessors. The generic seam, constructors, dispatcher, initialization helpers,
+  compiler companions, and raw representation remain `STB_LOCAL` before arbitrary
   application source is compiled. Native code performs fixed box validation,
-  transport, initialization, and calls only; E1 retains all value semantics.
+  transport, initialization, and calls only; E1 retains all value semantics. The
+  final global definitions and runtime undefined references must each match their
+  reviewed C-sorted build-input allowlists byte-for-byte before publication.
 - **Evidence:** `/usr/bin/bash -c 'make test-e1b'` passed 35 public-package AOT
   semantic checks plus byte-identical repeated trusted artifacts, public objects,
-  executables, link maps, and outputs; exact five-argument diagnostics; both import
-  orders; malformed category/operation/message/details/cause; ownership and identity;
-  public/private depfiles; provide/export allowlists; `nm`, archive-index, `readelf`,
-  dynamic-symbol, strings, and link-map checks; and guessed binding/function/helper/
-  external-variable negatives. Existing E1 passed 112 checks, A0 and K1 remained
-  green, and full `make test`, `make build`, and `make smoke` passed locally against
-  the canonical pin on the explicitly unsupported CachyOS / LLVM-Clang 22
-  compatibility lane. Independent native/ABI, packaging, semantic, adversarial, and
-  evidence reviews informed the implementation. Supported exact-head Ubuntu 22.04 /
-  LLVM-Clang 21.1.8 CI remains pending.
+  executables, link maps, and outputs. Cold-cache strict objects and AOT applications
+  import the real `transformer.error_public` facade with consumer A/B in both orders,
+  recognize the same errors and detached causes through all six accessors, and prove
+  public depfiles exclude both source registry modules. The final artifact exactly
+  matches its 80-name reviewed runtime-undefined allowlist. Distinct unlisted
+  function, data, TLS, and weak references have verified ELF bindings/relocations and
+  each fail before object/evidence publication or later application satisfaction.
+  Exact five-argument diagnostics, malformed category/operation/message/details/
+  cause, ownership, provide/export allowlists, `nm`, archive index, `readelf`, dynamic
+  symbols, strings, link map, and guessed privileged-name negatives remain green.
+  Existing E1 passed 112 checks on the canonical pin in the explicitly unsupported
+  CachyOS / LLVM-Clang 22 compatibility lane. Independent registry/identity,
+  packaging/linker, adversarial-consumer, and evidence reviews informed the repair.
+  Supported exact-head Ubuntu 22.04 / LLVM-Clang 21.1.8 CI remains pending.
 - **Limitations:** canonical-pin/x86-64 AOT only; one artifact and E1 registry per
   process; no JIT/bitcode publication; no verified concurrency; safe-only public
   source aliases remain technically reachable because pinned `provide` is
   informational. Malicious native-object injection into the trusted partial link is
   outside scope, while arbitrary compiled Eshkol linked afterward is in scope.
 - **Dependencies / retest:** D1 and X1 must expose only reviewed package-specific
-  wrappers and repeat public-closure, import-both, malformed-value, symbol/link, and
-  full-suite gates. E1B changes no K1/I1 contract and adds no public persistence
-  format.
+  wrappers in the same combined registry-owning artifact, supply a reviewed exact
+  undefined-symbol manifest for their larger trusted closure, and repeat public-
+  closure, mixed-facade import-order, malformed-value, symbol/link, and full-suite
+  gates. E1B changes no K1/I1 contract and adds no public persistence format.
 - **Reference:** [issue #33](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/33);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [PR #34](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/34).

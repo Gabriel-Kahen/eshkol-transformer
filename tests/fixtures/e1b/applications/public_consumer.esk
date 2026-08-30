@@ -1,3 +1,4 @@
+(require transformer.error_public)
 (require transformer.consumer_a)
 (require transformer.consumer_b)
 (require transformer.consumer_probe)
