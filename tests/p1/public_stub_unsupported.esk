@@ -1,37 +1,62 @@
+(require transformer.error_public)
 (require transformer.module)
 
 (define checks 0)
-(define unsupported-message
-  "unsupported: no verified tensor provider is configured")
-(define (expect-unsupported thunk)
+(define first-error #f)
+
+(define (expect-p1-error operation thunk)
   (guard (raised
            (#t
-             (if (and (error-object? raised)
-                      (string=? unsupported-message
-                                (error-object-message raised)))
-                 (set! checks (+ checks 1))
+             (if (and (transformer-error? raised)
+                      (eq? (transformer-error-category raised)
+                           'invalid-argument)
+                      (eq? (transformer-error-operation raised) operation)
+                      (string=? (transformer-error-message raised)
+                                "expected registered opaque value")
+                      (null? (transformer-error-details raised))
+                      (eq? (transformer-error-cause raised) #f))
+                 (begin
+                   (if (eq? first-error #f) (set! first-error raised) #t)
+                   (set! checks (+ checks 1)))
                  (exit 1))))
     (thunk)
     (exit 1)))
 
-(expect-unsupported (lambda () (module-parameters #f)))
-(expect-unsupported (lambda () (module-buffers #f)))
-(expect-unsupported (lambda () (module-state-dict #f)))
-(expect-unsupported (lambda () (module-load-state-dict! #f #f)))
-(expect-unsupported (lambda () (module-train! #f)))
-(expect-unsupported (lambda () (module-eval! #f)))
-(expect-unsupported (lambda () (module-zero-grad! #f)))
-(expect-unsupported (lambda () (parameter-tree-paths #f)))
-(expect-unsupported (lambda () (parameter-tree-handle #f '())))
-(expect-unsupported (lambda () (parameter-tree-tie-groups #f)))
-(expect-unsupported (lambda () (parameter-handle-path #f)))
-(expect-unsupported (lambda () (parameter-handle-shape #f)))
-(expect-unsupported (lambda () (parameter-handle-dtype #f)))
-(expect-unsupported (lambda () (parameter-handle-device #f)))
-(expect-unsupported (lambda () (state-dict-paths #f)))
-(expect-unsupported (lambda () (state-dict-tensor #f '())))
-(expect-unsupported (lambda () (state-dict-alias-groups #f)))
+(expect-p1-error 'module-parameters (lambda () (module-parameters #f)))
+(expect-p1-error 'module-buffers (lambda () (module-buffers #f)))
+(expect-p1-error 'module-state-dict (lambda () (module-state-dict #f)))
+(expect-p1-error 'module-load-state-dict!
+                 (lambda () (module-load-state-dict! #f #f)))
+(expect-p1-error 'module-train! (lambda () (module-train! #f)))
+(expect-p1-error 'module-eval! (lambda () (module-eval! #f)))
+(expect-p1-error 'module-zero-grad! (lambda () (module-zero-grad! #f)))
+(expect-p1-error 'parameter-tree-paths
+                 (lambda () (parameter-tree-paths #f)))
+(expect-p1-error 'parameter-tree-handle
+                 (lambda () (parameter-tree-handle #f '())))
+(expect-p1-error 'parameter-tree-tie-groups
+                 (lambda () (parameter-tree-tie-groups #f)))
+(expect-p1-error 'parameter-handle-path
+                 (lambda () (parameter-handle-path #f)))
+(expect-p1-error 'parameter-handle-shape
+                 (lambda () (parameter-handle-shape #f)))
+(expect-p1-error 'parameter-handle-dtype
+                 (lambda () (parameter-handle-dtype #f)))
+(expect-p1-error 'parameter-handle-device
+                 (lambda () (parameter-handle-device #f)))
+(expect-p1-error 'state-dict-paths (lambda () (state-dict-paths #f)))
+(expect-p1-error 'state-dict-tensor
+                 (lambda () (state-dict-tensor #f '())))
+(expect-p1-error 'state-dict-alias-groups
+                 (lambda () (state-dict-alias-groups #f)))
 
-(if (= checks 17)
-    (begin (display "p1-public-stubs-unsupported:v1") (newline))
+(define copied-message (transformer-error-message first-error))
+(string-set! copied-message 0 #\X)
+(if (string=? (transformer-error-message first-error)
+              "expected registered opaque value")
+    (set! checks (+ checks 1))
+    (exit 1))
+
+(if (= checks 18)
+    (begin (display "p1-e1b-import-error-first:v1") (newline))
     (exit 1))

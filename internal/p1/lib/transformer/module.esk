@@ -1,17 +1,12 @@
 ;;; Generated trusted P1 root. This source is linked only with the private
-;;; process-local identity archive; all raw FFI names remain outside public builds.
-(require transformer.error_internal)
+;;; process-local identity implementation; all raw FFI names remain outside
+;;; public builds.  E1B is the sole registry-owning error construction seam.
+(require e1b_error_consumer_private)
 
 (extern ptr p1-native-context-create
         :real et_p1_private_context_create_v1)
-(extern i64 p1-native-error-category ptr
-        :real et_p1_private_error_category_v1)
 (extern i64 p1-native-error-code ptr
         :real et_p1_private_error_code_v1)
-(extern ptr p1-native-error-operation ptr
-        :real et_p1_private_error_operation_v1)
-(extern ptr p1-native-error-message ptr
-        :real et_p1_private_error_message_v1)
 (extern ptr p1-native-result-ptr ptr
         :real et_p1_private_result_ptr_v1)
 (extern i64 p1-native-result-i64 ptr
@@ -106,10 +101,11 @@
 (define native-context (p1-native-context-create))
 
 (define (fail category operation message details)
-  ;; Never forward untrusted/malformed values into E1 error construction. The
-  ;; operation and message retain the diagnostic; the empty alist is always a
-  ;; bounded, proper, unique-symbol-key, data-only details value.
-  (transformer-error-raise category operation message '() #f))
+  (begin
+    ;; Caller-controlled P1 values are never forwarded into E1 construction.
+    (et-e1b-private-raise category operation message '() #f)
+    #f)
+  :no-return)
 
 (define (identity-member-local? value values)
   (cond
@@ -124,19 +120,46 @@
     ((= code 3) 'invalid-state)
     (else 'internal)))
 
-(define (native-error operation)
-  (transformer-error-wrap-foreign
-    (native-category (p1-native-error-category native-context))
-    operation "P1 private identity operation failed"
-    (list (list 'native-category
-                (p1-native-error-category native-context)))
-    'p1-private-bridge (p1-native-error-code native-context)
-    (ptr->string (p1-native-error-message native-context)) #f))
+(define (native-message code)
+  (cond
+    ((= code 1) "native identity argument is null")
+    ((= code 2) "native identity context is foreign")
+    ((= code 3) "native identity token is foreign")
+    ((= code 4) "native identity token is stale")
+    ((= code 5) "native identity token has the wrong kind")
+    ((= code 6) "native identity token belongs to another context")
+    ((= code 7) "native identity allocation failed")
+    ((= code 8) "native provider identity is already sealed")
+    ((= code 9) "native provider snapshot does not match")
+    ((= code 10) "native state binding conflicts")
+    ((= code 11) "native state is not bound")
+    ((= code 12) "native context still owns live identities")
+    ((= code 13) "native identity entropy is unavailable")
+    ((= code 14) "native identity capacity is exhausted")
+    ((= code 15) "native identity belongs to another process")
+    ((= code 16) "native identity integrity check failed")
+    ((= code 17) "native provider identifier is invalid")
+    (else "native identity operation returned a malformed status")))
+
+(define (native-raise operation status code)
+  ;; The diagnostic crossing this seam is bounded and data-only.  Native text
+  ;; pointers are deliberately not exposed or copied into E1.
+  (begin
+    (et-e1b-private-raise
+      (native-category status) operation "P1 private identity operation failed"
+      (list (list 'native-category status)
+            (list 'source-domain 'p1-private-bridge)
+            (list 'source-code code)
+            (list 'source-message (native-message code)))
+      #f)
+    #f)
+  :no-return)
 
 (define (native-check operation status)
   (if (= status 0)
       #t
-      (raise (native-error operation))))
+      (native-raise operation status
+                    (p1-native-error-code native-context))))
 
 (define (native-live-count operation)
   (native-check operation (p1-native-live-count native-context))
@@ -473,7 +496,9 @@
                        (p1-native-result-ptr native-context))
         (if (= (p1-native-error-code native-context) 11)
             #f
-            (raise (native-error 'state-provider-binding-find))))))
+            (native-raise
+              'state-provider-binding-find status
+              (p1-native-error-code native-context))))))
 
 (define (state-provider-bind! operation state provider)
   (let ((state-shell (shell-for-raw 'state state))
@@ -537,13 +562,14 @@
             (if (= status 0)
                 (create (+ index 1)
                         (cons (p1-native-result-ptr native-context) created))
-                (let ((caught (native-error operation))
+                (let ((caught-status status)
+                      (caught-code (p1-native-error-code native-context))
                       (released (list-length created)))
                   (native-created-callbacks-revoke! operation created)
                   (if (and (= (native-live-count operation) live-before)
                            (= (native-tombstone-count operation)
                               (+ tombstones-before released)))
-                      (raise caught)
+                      (native-raise operation caught-status caught-code)
                       (fail 'internal operation
                             "partial callback cleanup count mismatch"
                             '())))))))))

@@ -12,24 +12,29 @@ imports or references the trusted root; the trusted root independently provides 
 same 17 bindings plus the pre-existing construction/provider helpers.
 
 Pinned Eshkol flattening cannot protect a provider seam inside one compiled source
-closure. P1 therefore uses a narrow native identity bridge, version 1.0, and two
-alternative archives with the same basename. The normal build emits only the public
-archive. Trusted P1 tests and future reviewed C1/I1 integration explicitly build and
-link the private replacement archive instead; the archives are never linked
-together, and the private archive is not an installed public library.
+closure. P1 therefore uses a narrow native identity bridge, version 1.0, and a
+single prelocalized E1B package object. That object owns the process's sole E1
+registry, the trusted P1 root, the private identity implementation, and 17 fixed-
+arity transport wrappers. Its exact global surface is those 17 A0 operations plus
+the six A0 error accessors. Every E1B seam, generated P1 thunk, and public/private
+identity definition inside it is local. The separately built four-symbol read-only
+identity archive remains an alternative inspection product and is never linked
+beside the registry-owning package. The private replacement identity archive is
+non-installed and exists only for native ABI tests and future reviewed integration.
 The exact layout, ownership, status, and symbol contract is frozen in
 [P1_IDENTITY_ABI.md](P1_IDENTITY_ABI.md).
 
-The trusted implementation's Eshkol-facing error dependency is
-`transformer.error_internal` from E1/#23. It constructs no subsystem-local error
-type. Every trusted P1 error carries a data-only proper alist in `details`, uses `#f`
-when no cause exists, and is inspected through the unchanged A0 accessors. P1 never
-forwards an untrusted offending value into E1; its current trusted errors use the
-empty details alist and place the diagnostic in the operation and message fields.
-The mutually exclusive public root cannot import E1 under the pinned flattening
-compiler without leaking E1's bindings into `transformer.module`; its 17 fail-closed
-stubs therefore raise the compiler's primitive error with an explicit `unsupported`
-message. They carry no provider and cannot reach state or tensor logic.
+The never-installed trusted root imports only `e1b_error_consumer_private` and calls
+the fixed five-value, nonreturning `et-e1b-private-raise`; it never imports
+`transformer.error_internal` or `transformer.error_core`, returns an error object, or
+uses the generic foreign wrapper. Ordinary failures pass an empty details alist so
+caller-controlled paths, cycles, and payloads never enter E1. Native failures map
+the bounded status/code to a fixed primary message and canonical data-only
+`native-category`, `source-domain`, `source-code`, and `source-message` details with
+cause `#f`, snapshotting status before cleanup can overwrite it. The installed root
+imports only `transformer.error_consumer` and declares narrow boxed calls. It
+provides exactly the 17 A0 P1 bindings; importing the error facade in either order
+uses the same artifact registry and unchanged six accessors.
 
 ## Paths, nesting, and identity
 
@@ -217,8 +222,9 @@ Merged R0 evidence does not verify canonical Eshkol f32/i64/bool storage, device
 identity, contiguity, tensor cloning, tensor equality, gradient slots, or in-place
 tensor copying. Production P1 therefore registers no provider. The default internal
 construction path has no tensor provider, and every tensor-dependent public state
-operation fails explicitly with an `unsupported` primitive error message. Trusted
-operations retain the structured E1 taxonomy above.
+operation fails explicitly with a same-registry structured `unsupported` error.
+Malformed public receivers fail with structured `invalid-argument`; both paths use
+the unchanged A0 accessors and taxonomy above.
 
 Structural tests explicitly add the separate `tests/p1/providers` include root and
 compose production modules with an inert `fixture-v1` carrier from the qualified

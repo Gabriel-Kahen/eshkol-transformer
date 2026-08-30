@@ -31,6 +31,12 @@
             #f)))
     (check label caught)))
 
+(define (details-ref details key)
+  (cond
+    ((null? details) #f)
+    ((eq? (car (car details)) key) (car (cdr (car details))))
+    (else (details-ref (cdr details) key))))
+
 (define (fixture-payload shape name)
   (fixture-tensor-internal shape 'f32 'cpu (vector name 'bits-v1)))
 
@@ -46,9 +52,34 @@
       (tombstones-before (p1-test-tombstone-count)))
   (check "callback failpoint armed"
          (= (p1-test-callback-fail-after 3) 0))
-  (expect-error "partial callback allocation fails explicitly" 'internal
-                (lambda ()
-                  (fixture-register-reentrant-target-provider-internal!)))
+  (define callback-error
+    (guard (raised (#t raised))
+      (fixture-register-reentrant-target-provider-internal!)
+      #f))
+  (check "partial callback allocation raises E1 identity"
+         (transformer-error? callback-error))
+  (check "partial callback allocation category"
+         (eq? (transformer-error-category callback-error) 'internal))
+  (check "partial callback allocation operation"
+         (eq? (transformer-error-operation callback-error)
+              'tensor-provider-register-internal!))
+  (check "partial callback allocation bounded message"
+         (string=? (transformer-error-message callback-error)
+                   "P1 private identity operation failed"))
+  (check "partial callback allocation preserves native status"
+         (and (= (details-ref (transformer-error-details callback-error)
+                              'native-category) 4)
+              (= (details-ref (transformer-error-details callback-error)
+                              'source-code) 7)
+              (eq? (details-ref (transformer-error-details callback-error)
+                                'source-domain)
+                   'p1-private-bridge)
+              (string=?
+                (details-ref (transformer-error-details callback-error)
+                             'source-message)
+                "native identity allocation failed")))
+  (check "partial callback allocation cause"
+         (eq? (transformer-error-cause callback-error) #f))
   (check "partial admission revokes its unpublished provider identity"
          (= (p1-test-live-count) (- live-before 1)))
   (check "partial admission leaves exact permanent tombstones"
@@ -97,8 +128,8 @@
   (check "repeated strict load preserves tombstone count"
          (= (p1-test-tombstone-count) tombstones-before)))
 
-(if (= checks 15)
+(if (= checks 20)
     (begin
-      (display "P1 registry atomicity PASS: 15 checks")
+      (display "P1 registry atomicity PASS: 20 checks")
       (newline))
     (exit 1))

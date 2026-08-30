@@ -1,4 +1,8 @@
-;;; Generated public P1 root. No production tensor provider is admitted here.
+;;; Generated installed P1 facade.  The completed P1 package artifact owns E1;
+;;; this source imports only the safe accessor facade and declares the 17 narrow
+;;; fixed-arity package operations.
+
+(require transformer.error_consumer)
 
 (provide module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
@@ -7,37 +11,181 @@
          parameter-handle-device state-dict-paths state-dict-tensor
          state-dict-alias-groups)
 
-(define (module-parameters module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-buffers module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-state-dict module)
-  (error "unsupported: no verified tensor provider is configured"))
+(define p1-safe-module-parameters
+  (let ()
+    (extern void p1-public-module-parameters ptr ptr
+            :real et_e1b_public_p1_module_parameters_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-parameters (vector module) output)
+        (vector-ref output 0)))))
+(define (module-parameters module) (p1-safe-module-parameters module))
+
+(define p1-safe-module-buffers
+  (let ()
+    (extern void p1-public-module-buffers ptr ptr
+            :real et_e1b_public_p1_module_buffers_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-buffers (vector module) output)
+        (vector-ref output 0)))))
+(define (module-buffers module) (p1-safe-module-buffers module))
+
+(define p1-safe-module-state-dict
+  (let ()
+    (extern void p1-public-module-state-dict ptr ptr
+            :real et_e1b_public_p1_module_state_dict_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-state-dict (vector module) output)
+        (vector-ref output 0)))))
+(define (module-state-dict module) (p1-safe-module-state-dict module))
+
+(define p1-safe-module-load-state-dict
+  (let ()
+    (extern void p1-public-module-load-state-dict ptr ptr ptr
+            :real et_e1b_public_p1_module_load_state_dict_v1)
+    (lambda (module state)
+      (let ((output (vector #f)))
+        (p1-public-module-load-state-dict
+          (vector module) (vector state) output)
+        (vector-ref output 0)))))
 (define (module-load-state-dict! module state)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-train! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-eval! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-zero-grad! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-tree-paths tree)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-module-load-state-dict module state))
+
+(define p1-safe-module-train
+  (let ()
+    (extern void p1-public-module-train ptr ptr
+            :real et_e1b_public_p1_module_train_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-train (vector module) output)
+        (vector-ref output 0)))))
+(define (module-train! module) (p1-safe-module-train module))
+
+(define p1-safe-module-eval
+  (let ()
+    (extern void p1-public-module-eval ptr ptr
+            :real et_e1b_public_p1_module_eval_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-eval (vector module) output)
+        (vector-ref output 0)))))
+(define (module-eval! module) (p1-safe-module-eval module))
+
+(define p1-safe-module-zero-grad
+  (let ()
+    (extern void p1-public-module-zero-grad ptr ptr
+            :real et_e1b_public_p1_module_zero_grad_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-zero-grad (vector module) output)
+        (vector-ref output 0)))))
+(define (module-zero-grad! module) (p1-safe-module-zero-grad module))
+
+(define p1-safe-parameter-tree-paths
+  (let ()
+    (extern void p1-public-parameter-tree-paths ptr ptr
+            :real et_e1b_public_p1_parameter_tree_paths_v1)
+    (lambda (tree)
+      (let ((output (vector #f)))
+        (p1-public-parameter-tree-paths (vector tree) output)
+        (vector-ref output 0)))))
+(define (parameter-tree-paths tree) (p1-safe-parameter-tree-paths tree))
+
+(define p1-safe-parameter-tree-handle
+  (let ()
+    (extern void p1-public-parameter-tree-handle ptr ptr ptr
+            :real et_e1b_public_p1_parameter_tree_handle_v1)
+    (lambda (tree path)
+      (let ((output (vector #f)))
+        (p1-public-parameter-tree-handle (vector tree) (vector path) output)
+        (vector-ref output 0)))))
 (define (parameter-tree-handle tree path)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-tree-handle tree path))
+
+(define p1-safe-parameter-tree-tie-groups
+  (let ()
+    (extern void p1-public-parameter-tree-tie-groups ptr ptr
+            :real et_e1b_public_p1_parameter_tree_tie_groups_v1)
+    (lambda (tree)
+      (let ((output (vector #f)))
+        (p1-public-parameter-tree-tie-groups (vector tree) output)
+        (vector-ref output 0)))))
 (define (parameter-tree-tie-groups tree)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-handle-path handle)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-tree-tie-groups tree))
+
+(define p1-safe-parameter-handle-path
+  (let ()
+    (extern void p1-public-parameter-handle-path ptr ptr
+            :real et_e1b_public_p1_parameter_handle_path_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-path (vector handle) output)
+        (vector-ref output 0)))))
+(define (parameter-handle-path handle) (p1-safe-parameter-handle-path handle))
+
+(define p1-safe-parameter-handle-shape
+  (let ()
+    (extern void p1-public-parameter-handle-shape ptr ptr
+            :real et_e1b_public_p1_parameter_handle_shape_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-shape (vector handle) output)
+        (vector-ref output 0)))))
 (define (parameter-handle-shape handle)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-handle-shape handle))
+
+(define p1-safe-parameter-handle-dtype
+  (let ()
+    (extern void p1-public-parameter-handle-dtype ptr ptr
+            :real et_e1b_public_p1_parameter_handle_dtype_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-dtype (vector handle) output)
+        (vector-ref output 0)))))
 (define (parameter-handle-dtype handle)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-handle-dtype handle))
+
+(define p1-safe-parameter-handle-device
+  (let ()
+    (extern void p1-public-parameter-handle-device ptr ptr
+            :real et_e1b_public_p1_parameter_handle_device_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-device (vector handle) output)
+        (vector-ref output 0)))))
 (define (parameter-handle-device handle)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (state-dict-paths state)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-handle-device handle))
+
+(define p1-safe-state-dict-paths
+  (let ()
+    (extern void p1-public-state-dict-paths ptr ptr
+            :real et_e1b_public_p1_state_dict_paths_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-paths (vector state) output)
+        (vector-ref output 0)))))
+(define (state-dict-paths state) (p1-safe-state-dict-paths state))
+
+(define p1-safe-state-dict-tensor
+  (let ()
+    (extern void p1-public-state-dict-tensor ptr ptr ptr
+            :real et_e1b_public_p1_state_dict_tensor_v1)
+    (lambda (state path)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-tensor (vector state) (vector path) output)
+        (vector-ref output 0)))))
 (define (state-dict-tensor state path)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-state-dict-tensor state path))
+
+(define p1-safe-state-dict-alias-groups
+  (let ()
+    (extern void p1-public-state-dict-alias-groups ptr ptr
+            :real et_e1b_public_p1_state_dict_alias_groups_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-alias-groups (vector state) output)
+        (vector-ref output 0)))))
 (define (state-dict-alias-groups state)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-state-dict-alias-groups state))

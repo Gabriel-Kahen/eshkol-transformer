@@ -39,8 +39,11 @@ e1b_cc="$(tsv_value "${e1b_provenance}" cc_path)"
 e1b_cxx="$(tsv_value "${e1b_provenance}" cxx_path)"
 undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
 x1_private_root="$(realpath -- "${PROJECT_ROOT}/native/x1_config_consumer_root.esk")"
+p1_private_root="$(realpath -- "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk")"
 if [[ "${private_root}" == "${x1_private_root}" ]]; then
   undefined_symbols="${PROJECT_ROOT}/native/x1_undefined_symbols.txt"
+elif [[ "${private_root}" == "${p1_private_root}" ]]; then
+  undefined_symbols="${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt"
 fi
 [[ -f "${undefined_symbols}" ]] || \
   die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"

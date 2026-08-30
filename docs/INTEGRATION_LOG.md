@@ -415,12 +415,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   state-dictionary schema 1.0 is an inert, non-executable contract independent of C1
   byte/container versions and contains only the provider identity
   `(transformer-tensor-provider 1 0 provider-id)`. Metadata is redundant validation
-  data and never overrides tensor observations. Mutually exclusive generated public
-  and trusted Eshkol roots share this contract without sharing a flattened compiled
-  closure. The normal build's versioned native identity archive exposes four
-  read-only observations only; its private replacement adds hidden fixed-arity
-  identity/admission/binding cleanup operations and is never installed or linked
-  beside the public archive. Native code performs no schema, tensor, commit,
+  data and never overrides tensor observations. The installed generated root imports
+  only `transformer.error_consumer`; the never-installed trusted root imports only
+  E1B's fixed five-value private raise seam. One prelocalized package object owns the
+  sole E1 registry and exports exactly the 17 P1 operations plus six A0 accessors;
+  every E1B seam, P1 thunk, and native identity definition is localized. The normal
+  build's alternative native identity archive exposes four read-only observations
+  only; its private replacement adds hidden fixed-arity identity/admission/binding
+  cleanup operations and is never installed or linked beside either public product.
+  Native code performs no schema, tensor, commit,
   serialization, or capability logic. A process-local internal provider-v1 boundary
   defaults to no provider. Trusted C1/I1 callers must explicitly bind an
   already-admitted provider with the exact identity before load; serialized metadata
@@ -439,17 +442,21 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   compatibility lane. The focused gate passed 178 structural/ownership/binding/
   validation/atomicity assertions, 118 native token/security/ABI checks, 57 native
   allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
-  unit identity checks, and 15 trusted test-only registry-atomicity checks. The latter
+  unit identity checks, and 20 trusted test-only registry/error-mapping checks. The latter
   drive automatic partial-callback cleanup through an injected failure and prove exact
   live/tombstone deltas plus unchanged registry counts across failed and repeated strict
   loads; their three hidden hooks exist only in a temporary non-production archive.
-  The gate also covers ASan/UBSan and repeated strict
-  AOT compilation and execution,
-  byte-identical objects/output/diagnostics, exact source/object/AOT negative/no-artifact
-  checks, and depfile/`nm`/`readelf`/`strings` production-isolation checks. Fresh-cache
-  source/object/AOT negatives cover every internal Eshkol name; guessed private native
-  create/abort/revoke symbols cannot link through the public archive. Adversarial cases
-  include unbound/wrong-id/conflicting rebind, unknown/unverified provider, raised,
+  Native failpoint errors raise directly through the same E1 registry with bounded
+  canonical data-only status details and cause `#f`, even after cleanup overwrites the
+  native context. The gate also covers ASan/UBSan, both public import orders, and repeated
+  strict AOT compilation and execution; byte-identical package objects, manifests,
+  evidence, application objects, executables, outputs, and AOT diagnostics; exact
+  source/object/AOT negative/no-artifact checks; and depfile/`nm`/`readelf`/`strings`
+  production-isolation checks. Fresh-cache negatives cover every internal Eshkol name;
+  all 25 private native functions remain unresolved against the completed package and
+  resolve only against the deliberate non-installed trusted positive control.
+  Adversarial cases include unbound/wrong-id/conflicting rebind,
+  unknown/unverified provider, raised,
   substituted-vector, allocation-probe, and reentrant admission, later-entry prepare
   failure with unchanged destinations, conflicting aliases, duplicates, malformed
   schema, cyclic caller lists/composites, unsupported versions, and shape/dtype/device

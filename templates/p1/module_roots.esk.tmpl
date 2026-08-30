@@ -1,5 +1,9 @@
 @@P1_PUBLIC_BEGIN@@
-;;; Generated public P1 root. No production tensor provider is admitted here.
+;;; Generated installed P1 facade.  The completed P1 package artifact owns E1;
+;;; this source imports only the safe accessor facade and declares the 17 narrow
+;;; fixed-arity package operations.
+
+(require transformer.error_consumer)
 
 (provide module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
@@ -8,57 +12,196 @@
          parameter-handle-device state-dict-paths state-dict-tensor
          state-dict-alias-groups)
 
-(define (module-parameters module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-buffers module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-state-dict module)
-  (error "unsupported: no verified tensor provider is configured"))
+(define p1-safe-module-parameters
+  (let ()
+    (extern void p1-public-module-parameters ptr ptr
+            :real et_e1b_public_p1_module_parameters_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-parameters (vector module) output)
+        (vector-ref output 0)))))
+(define (module-parameters module) (p1-safe-module-parameters module))
+
+(define p1-safe-module-buffers
+  (let ()
+    (extern void p1-public-module-buffers ptr ptr
+            :real et_e1b_public_p1_module_buffers_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-buffers (vector module) output)
+        (vector-ref output 0)))))
+(define (module-buffers module) (p1-safe-module-buffers module))
+
+(define p1-safe-module-state-dict
+  (let ()
+    (extern void p1-public-module-state-dict ptr ptr
+            :real et_e1b_public_p1_module_state_dict_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-state-dict (vector module) output)
+        (vector-ref output 0)))))
+(define (module-state-dict module) (p1-safe-module-state-dict module))
+
+(define p1-safe-module-load-state-dict
+  (let ()
+    (extern void p1-public-module-load-state-dict ptr ptr ptr
+            :real et_e1b_public_p1_module_load_state_dict_v1)
+    (lambda (module state)
+      (let ((output (vector #f)))
+        (p1-public-module-load-state-dict
+          (vector module) (vector state) output)
+        (vector-ref output 0)))))
 (define (module-load-state-dict! module state)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-train! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-eval! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-zero-grad! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-tree-paths tree)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-module-load-state-dict module state))
+
+(define p1-safe-module-train
+  (let ()
+    (extern void p1-public-module-train ptr ptr
+            :real et_e1b_public_p1_module_train_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-train (vector module) output)
+        (vector-ref output 0)))))
+(define (module-train! module) (p1-safe-module-train module))
+
+(define p1-safe-module-eval
+  (let ()
+    (extern void p1-public-module-eval ptr ptr
+            :real et_e1b_public_p1_module_eval_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-eval (vector module) output)
+        (vector-ref output 0)))))
+(define (module-eval! module) (p1-safe-module-eval module))
+
+(define p1-safe-module-zero-grad
+  (let ()
+    (extern void p1-public-module-zero-grad ptr ptr
+            :real et_e1b_public_p1_module_zero_grad_v1)
+    (lambda (module)
+      (let ((output (vector #f)))
+        (p1-public-module-zero-grad (vector module) output)
+        (vector-ref output 0)))))
+(define (module-zero-grad! module) (p1-safe-module-zero-grad module))
+
+(define p1-safe-parameter-tree-paths
+  (let ()
+    (extern void p1-public-parameter-tree-paths ptr ptr
+            :real et_e1b_public_p1_parameter_tree_paths_v1)
+    (lambda (tree)
+      (let ((output (vector #f)))
+        (p1-public-parameter-tree-paths (vector tree) output)
+        (vector-ref output 0)))))
+(define (parameter-tree-paths tree) (p1-safe-parameter-tree-paths tree))
+
+(define p1-safe-parameter-tree-handle
+  (let ()
+    (extern void p1-public-parameter-tree-handle ptr ptr ptr
+            :real et_e1b_public_p1_parameter_tree_handle_v1)
+    (lambda (tree path)
+      (let ((output (vector #f)))
+        (p1-public-parameter-tree-handle (vector tree) (vector path) output)
+        (vector-ref output 0)))))
 (define (parameter-tree-handle tree path)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-tree-handle tree path))
+
+(define p1-safe-parameter-tree-tie-groups
+  (let ()
+    (extern void p1-public-parameter-tree-tie-groups ptr ptr
+            :real et_e1b_public_p1_parameter_tree_tie_groups_v1)
+    (lambda (tree)
+      (let ((output (vector #f)))
+        (p1-public-parameter-tree-tie-groups (vector tree) output)
+        (vector-ref output 0)))))
 (define (parameter-tree-tie-groups tree)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-handle-path handle)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-tree-tie-groups tree))
+
+(define p1-safe-parameter-handle-path
+  (let ()
+    (extern void p1-public-parameter-handle-path ptr ptr
+            :real et_e1b_public_p1_parameter_handle_path_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-path (vector handle) output)
+        (vector-ref output 0)))))
+(define (parameter-handle-path handle) (p1-safe-parameter-handle-path handle))
+
+(define p1-safe-parameter-handle-shape
+  (let ()
+    (extern void p1-public-parameter-handle-shape ptr ptr
+            :real et_e1b_public_p1_parameter_handle_shape_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-shape (vector handle) output)
+        (vector-ref output 0)))))
 (define (parameter-handle-shape handle)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-handle-shape handle))
+
+(define p1-safe-parameter-handle-dtype
+  (let ()
+    (extern void p1-public-parameter-handle-dtype ptr ptr
+            :real et_e1b_public_p1_parameter_handle_dtype_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-dtype (vector handle) output)
+        (vector-ref output 0)))))
 (define (parameter-handle-dtype handle)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-handle-dtype handle))
+
+(define p1-safe-parameter-handle-device
+  (let ()
+    (extern void p1-public-parameter-handle-device ptr ptr
+            :real et_e1b_public_p1_parameter_handle_device_v1)
+    (lambda (handle)
+      (let ((output (vector #f)))
+        (p1-public-parameter-handle-device (vector handle) output)
+        (vector-ref output 0)))))
 (define (parameter-handle-device handle)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (state-dict-paths state)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-parameter-handle-device handle))
+
+(define p1-safe-state-dict-paths
+  (let ()
+    (extern void p1-public-state-dict-paths ptr ptr
+            :real et_e1b_public_p1_state_dict_paths_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-paths (vector state) output)
+        (vector-ref output 0)))))
+(define (state-dict-paths state) (p1-safe-state-dict-paths state))
+
+(define p1-safe-state-dict-tensor
+  (let ()
+    (extern void p1-public-state-dict-tensor ptr ptr ptr
+            :real et_e1b_public_p1_state_dict_tensor_v1)
+    (lambda (state path)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-tensor (vector state) (vector path) output)
+        (vector-ref output 0)))))
 (define (state-dict-tensor state path)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-state-dict-tensor state path))
+
+(define p1-safe-state-dict-alias-groups
+  (let ()
+    (extern void p1-public-state-dict-alias-groups ptr ptr
+            :real et_e1b_public_p1_state_dict_alias_groups_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-alias-groups (vector state) output)
+        (vector-ref output 0)))))
 (define (state-dict-alias-groups state)
-  (error "unsupported: no verified tensor provider is configured"))
+  (p1-safe-state-dict-alias-groups state))
 @@P1_PUBLIC_END@@
 
 @@P1_TRUSTED_BEGIN@@
 ;;; Generated trusted P1 root. This source is linked only with the private
-;;; process-local identity archive; all raw FFI names remain outside public builds.
-(require transformer.error_internal)
+;;; process-local identity implementation; all raw FFI names remain outside
+;;; public builds.  E1B is the sole registry-owning error construction seam.
+(require e1b_error_consumer_private)
 
 (extern ptr p1-native-context-create
         :real et_p1_private_context_create_v1)
-(extern i64 p1-native-error-category ptr
-        :real et_p1_private_error_category_v1)
 (extern i64 p1-native-error-code ptr
         :real et_p1_private_error_code_v1)
-(extern ptr p1-native-error-operation ptr
-        :real et_p1_private_error_operation_v1)
-(extern ptr p1-native-error-message ptr
-        :real et_p1_private_error_message_v1)
 (extern ptr p1-native-result-ptr ptr
         :real et_p1_private_result_ptr_v1)
 (extern i64 p1-native-result-i64 ptr
@@ -153,10 +296,11 @@
 (define native-context (p1-native-context-create))
 
 (define (fail category operation message details)
-  ;; Never forward untrusted/malformed values into E1 error construction. The
-  ;; operation and message retain the diagnostic; the empty alist is always a
-  ;; bounded, proper, unique-symbol-key, data-only details value.
-  (transformer-error-raise category operation message '() #f))
+  (begin
+    ;; Caller-controlled P1 values are never forwarded into E1 construction.
+    (et-e1b-private-raise category operation message '() #f)
+    #f)
+  :no-return)
 
 (define (identity-member-local? value values)
   (cond
@@ -171,19 +315,46 @@
     ((= code 3) 'invalid-state)
     (else 'internal)))
 
-(define (native-error operation)
-  (transformer-error-wrap-foreign
-    (native-category (p1-native-error-category native-context))
-    operation "P1 private identity operation failed"
-    (list (list 'native-category
-                (p1-native-error-category native-context)))
-    'p1-private-bridge (p1-native-error-code native-context)
-    (ptr->string (p1-native-error-message native-context)) #f))
+(define (native-message code)
+  (cond
+    ((= code 1) "native identity argument is null")
+    ((= code 2) "native identity context is foreign")
+    ((= code 3) "native identity token is foreign")
+    ((= code 4) "native identity token is stale")
+    ((= code 5) "native identity token has the wrong kind")
+    ((= code 6) "native identity token belongs to another context")
+    ((= code 7) "native identity allocation failed")
+    ((= code 8) "native provider identity is already sealed")
+    ((= code 9) "native provider snapshot does not match")
+    ((= code 10) "native state binding conflicts")
+    ((= code 11) "native state is not bound")
+    ((= code 12) "native context still owns live identities")
+    ((= code 13) "native identity entropy is unavailable")
+    ((= code 14) "native identity capacity is exhausted")
+    ((= code 15) "native identity belongs to another process")
+    ((= code 16) "native identity integrity check failed")
+    ((= code 17) "native provider identifier is invalid")
+    (else "native identity operation returned a malformed status")))
+
+(define (native-raise operation status code)
+  ;; The diagnostic crossing this seam is bounded and data-only.  Native text
+  ;; pointers are deliberately not exposed or copied into E1.
+  (begin
+    (et-e1b-private-raise
+      (native-category status) operation "P1 private identity operation failed"
+      (list (list 'native-category status)
+            (list 'source-domain 'p1-private-bridge)
+            (list 'source-code code)
+            (list 'source-message (native-message code)))
+      #f)
+    #f)
+  :no-return)
 
 (define (native-check operation status)
   (if (= status 0)
       #t
-      (raise (native-error operation))))
+      (native-raise operation status
+                    (p1-native-error-code native-context))))
 
 (define (native-live-count operation)
   (native-check operation (p1-native-live-count native-context))
@@ -520,7 +691,9 @@
                        (p1-native-result-ptr native-context))
         (if (= (p1-native-error-code native-context) 11)
             #f
-            (raise (native-error 'state-provider-binding-find))))))
+            (native-raise
+              'state-provider-binding-find status
+              (p1-native-error-code native-context))))))
 
 (define (state-provider-bind! operation state provider)
   (let ((state-shell (shell-for-raw 'state state))
@@ -584,13 +757,14 @@
             (if (= status 0)
                 (create (+ index 1)
                         (cons (p1-native-result-ptr native-context) created))
-                (let ((caught (native-error operation))
+                (let ((caught-status status)
+                      (caught-code (p1-native-error-code native-context))
                       (released (list-length created)))
                   (native-created-callbacks-revoke! operation created)
                   (if (and (= (native-live-count operation) live-before)
                            (= (native-tombstone-count operation)
                               (+ tombstones-before released)))
-                      (raise caught)
+                      (native-raise operation caught-status caught-code)
                       (fail 'internal operation
                             "partial callback cleanup count mismatch"
                             '())))))))))
