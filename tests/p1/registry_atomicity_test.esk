@@ -55,7 +55,7 @@
          (= (p1-test-callback-fail-after -2) 0))
   (define malformed-error
     (guard (raised (#t raised))
-      (fixture-register-reentrant-target-provider-internal!)
+      (fixture-register-malformed-status-provider-internal!)
       #f))
   (check "malformed native status raises E1 identity"
          (transformer-error? malformed-error))

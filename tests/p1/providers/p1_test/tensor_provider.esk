@@ -13,6 +13,7 @@
          fixture-register-raising-provider-internal!
          fixture-register-reentrant-provider-internal!
          fixture-register-self-reentrant-provider-internal!
+         fixture-register-malformed-status-provider-internal!
          fixture-register-reentrant-target-provider-internal!
          fixture-register-collision-provider-internal!
          fixture-register-cyclic-evidence-provider-internal!
@@ -323,6 +324,12 @@
     fixture-storage-identical? fixture-value-equal?
     fixture-device-equal? fixture-prepare-load fixture-commit-load!))
 
+(define malformed-status-provider
+  (tensor-provider-create-internal
+    'malformed-status-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
 (define (fixture-admission-evidence)
   (list
     (vector
@@ -413,6 +420,10 @@
 
 (define (fixture-register-self-reentrant-provider-internal!)
   (tensor-provider-register-internal! self-reentrant-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-malformed-status-provider-internal!)
+  (tensor-provider-register-internal! malformed-status-provider
                                       (fixture-admission-evidence)))
 
 (define (fixture-register-reentrant-target-provider-internal!)
