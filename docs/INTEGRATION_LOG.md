@@ -423,6 +423,9 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   build's alternative native identity archive exposes four read-only observations
   only; its private replacement adds hidden fixed-arity identity/admission/binding
   cleanup operations and is never installed or linked beside either public product.
+  P1's wider undefined-symbol policy is admitted before mutation only for the exact
+  repository-owned trusted-root/bridge/rename/export tuple; copied roots, copied or
+  mismatched bridge/native inputs, partial tuples, and environment overrides reject.
   Native code performs no schema, tensor, commit,
   serialization, or capability logic. A process-local internal provider-v1 boundary
   defaults to no provider. Trusted C1/I1 callers must explicitly bind an

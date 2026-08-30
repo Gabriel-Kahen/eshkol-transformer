@@ -21,6 +21,12 @@ identity definition inside it is local. The separately built four-symbol read-on
 identity archive remains an alternative inspection product and is never linked
 beside the registry-owning package. The private replacement identity archive is
 non-installed and exists only for native ABI tests and future reviewed integration.
+The wider P1 undefined-symbol manifest is selected before any build mutation only
+when canonical paths match the exact repository-owned trusted root, C bridge,
+compiler rename map, and public export manifest as one tuple. The exact bridge binds
+the repository identity source/header through its fixed quoted include. Copied roots,
+copied/spoofed bridges and native inputs, partial tuple substitutions, and environment
+policy overrides cannot opt into the P1 manifest.
 The exact layout, ownership, status, and symbol contract is frozen in
 [P1_IDENTITY_ABI.md](P1_IDENTITY_ABI.md).
 

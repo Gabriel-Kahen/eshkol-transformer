@@ -114,7 +114,42 @@ cmp "${p1_trusted_archive}" \
   "${p1_tmp}/identity-b/trusted/libeshkol_transformer_p1_identity.a"
 
 mkdir -p "${p1_package_link}" "${p1_tmp}/package-b"
-"${PROJECT_ROOT}/scripts/build-p1-package.sh" "${p1_package_object}"
+cp "${p1_trusted_source}" "${p1_tmp}/copied-p1-root.esk"
+if E1B_PACKAGE_PROFILE=p1 "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${p1_tmp}/copied-p1-root.esk" \
+    "${PROJECT_ROOT}/native/p1_package_bridge.c" \
+    "${PROJECT_ROOT}/native/p1_package_renames.txt" \
+    "${PROJECT_ROOT}/native/p1_package_public_exports.txt" \
+    "${p1_tmp}/copied-root-package.o" \
+    >"${p1_tmp}/copied-root-package.log" 2>&1; then
+  die "P1 copied trusted root opted into the wider undefined policy"
+fi
+grep -F 'P1 wider undefined-symbol policy requires the exact reviewed input tuple' \
+  "${p1_tmp}/copied-root-package.log" >/dev/null
+test ! -e "${p1_tmp}/copied-root-package.o"
+test ! -e "${p1_tmp}/copied-root-package.o.evidence"
+
+cp "${PROJECT_ROOT}/native/p1_package_bridge.c" \
+  "${p1_tmp}/p1_package_bridge.c"
+cp "${PROJECT_ROOT}/native/p1_identity.c" "${p1_tmp}/p1_identity.c"
+cp "${PROJECT_ROOT}/native/p1_identity_internal.h" \
+  "${p1_tmp}/p1_identity_internal.h"
+if "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${p1_trusted_source}" \
+    "${p1_tmp}/p1_package_bridge.c" \
+    "${PROJECT_ROOT}/native/p1_package_renames.txt" \
+    "${PROJECT_ROOT}/native/p1_package_public_exports.txt" \
+    "${p1_tmp}/mismatched-package.o" \
+    >"${p1_tmp}/mismatched-package.log" 2>&1; then
+  die "P1 copied bridge/native inputs opted into the wider undefined policy"
+fi
+grep -F 'P1 wider undefined-symbol policy requires the exact reviewed input tuple' \
+  "${p1_tmp}/mismatched-package.log" >/dev/null
+test ! -e "${p1_tmp}/mismatched-package.o"
+test ! -e "${p1_tmp}/mismatched-package.o.evidence"
+
+E1B_PACKAGE_PROFILE=attacker \
+  "${PROJECT_ROOT}/scripts/build-p1-package.sh" "${p1_package_object}"
 "${PROJECT_ROOT}/scripts/build-p1-package.sh" \
   "${p1_tmp}/package-b/eshkol_transformer_p1.o"
 cmp "${p1_package_object}" \
