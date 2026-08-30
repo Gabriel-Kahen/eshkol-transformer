@@ -370,16 +370,30 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   version inference.
 - **Evidence:** on the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility lane,
   the pinned Eshkol `90cbd7130f47b8184bcc77b8d5c1b0026da980de` compiler
-  `v1.3.4-evolve` passes 110 native parse/override/source-admission/validation/
-  opacity/canonical checks, 10 Python reference/isolation checks, two negative
-  X1-internal compilation fixtures, repeated strict AOT compilation,
-  hostile-environment/CWD determinism,
-  exact golden bytes, and direct SHA-256 recomputation. Production dependency
-  inspection proves real merged E1 and no test double. E1B issue #33 must merge before
-  the constructor-leakage negatives, new X1 review head, and supported Ubuntu 22.04 /
-  LLVM-Clang 21.1.8 CI can run for integration acceptance.
-- **Dependencies / retest:** X1 is blocked on E1B issue #33 and remains proposed.
-  T1 must consume the validated configuration contract
+  `v1.3.4-evolve` passes 111 native parse/override/source-admission/validation/
+  opacity/canonical checks and 11 Python reference/isolation checks. The focused
+  gate builds the combined artifact twice byte-identically, compiles strict source
+  objects and AOT applications from fresh caches twice, exercises the E1 public
+  facade and X1 in both import orders against one registry, checks all six A0
+  arities, and rejects source and guessed-link access to constructors, dispatcher,
+  private raise seam, representation helpers, and private X1 entries. The completed
+  object has exactly 12 globals (six E1 accessors plus six X1 wrappers) and exactly
+  matches its reviewed C-sorted 95-name runtime-undefined manifest; all privileged
+  and implementation symbols are local. Golden canonical bytes, metadata/payload/
+  provenance mutations, whole-document SHA-256 including final LF, hostile
+  environment/CWD determinism, and absence of Python/PyTorch runtime dependencies
+  pass. Focused A0, E1 (112), E1B (35), I1, and repository-wide `make test`, followed
+  by separate `make build` and `make smoke`, pass after rebasing on accepted E1B main.
+  Independent parser/canonicalization, E1B packaging/leakage, and test-evidence
+  reviews report no blocker. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 exact-head
+  CI remains required before integration acceptance.
+- **Limitations:** X1 is canonical-pin/x86-64 AOT-only and publishes no JIT/bitcode
+  artifact. One combined artifact/registry is supported per process; concurrency is
+  unverified. The pinned compiler leaves six safe-only source aliases reachable;
+  each conveys only its corresponding public configuration operation. Malicious
+  native injection into the trusted partial link is outside scope.
+- **Dependencies / retest:** X1 remains proposed and must not be merged by its
+  implementation task. T1 must consume the validated configuration contract
   before `tokenizer-byte`; C2 may embed the exact manifest and fingerprint only after
   X1 integration. CLI3 may expose source parsing and overrides only after the same
   review. Rerun T1, C2, and CLI3 gates after any X1 contract change. Any field,
