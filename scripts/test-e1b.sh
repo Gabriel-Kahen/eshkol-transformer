@@ -61,15 +61,18 @@ done
 
 build_package() {
   local output="$1" log="$2"
-  E1B_COMPILER_TIMEOUT_SECONDS="${e1b_compile_timeout}" \
-    "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
-      "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
-      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_bridge.c" \
-      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
-      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_public_exports.txt" \
-      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
-      "${output}" "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
-      >"${log}" 2>&1
+  if ! E1B_COMPILER_TIMEOUT_SECONDS="${e1b_compile_timeout}" \
+      "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_bridge.c" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_public_exports.txt" \
+        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
+        "${output}" "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
+        >"${log}" 2>&1; then
+    sed -n '1,240p' "${log}" >&2
+    die "E1B standard artifact build failed"
+  fi
 }
 
 build_package "${e1b_tmp}/package-1.o" "${e1b_tmp}/build-1.log"
