@@ -288,8 +288,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-08-29 — E1B / issue #33
 
-- **Decision:** proposed; integration owner review and supported exact-head CI are
-  pending.
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and merged-main focused/full regression gates.
 - **Contract:** Public package stubs import neither `transformer.error_internal` nor
   `transformer.error_core`. The existing `transformer.error_public` facade and all
   E1B package stubs use the same artifact-backed six accessors, so one completed AOT
@@ -344,4 +344,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   gates. E1B changes no K1/I1 contract and adds no public persistence format.
 - **Reference:** [issue #33](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/33);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  [PR #34](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/34).
+  [PR #34](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/34); merge commit
+  `60c9afa182115bc3ebc9bad321e366b8b3979ae6`. Independent review approved exact
+  head `1e2f2c9b8d895c43c88ecb2b770e6612fb57c767`; merged-main `make test-e1b`
+  and `make test build smoke` passed on the documented local compatibility lane.
