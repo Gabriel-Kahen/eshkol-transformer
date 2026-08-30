@@ -415,28 +415,42 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   state-dictionary schema 1.0 is an inert, non-executable contract independent of C1
   byte/container versions and contains only the provider identity
   `(transformer-tensor-provider 1 0 provider-id)`. Metadata is redundant validation
-  data and never overrides tensor observations. A process-local internal provider-v1
-  boundary defaults to no provider. Trusted C1/I1 callers must explicitly bind an
+  data and never overrides tensor observations. Mutually exclusive generated public
+  and trusted Eshkol roots share this contract without sharing a flattened compiled
+  closure. The normal build's versioned native identity archive exposes four
+  read-only observations only; its private replacement adds hidden fixed-arity
+  identity/admission/binding cleanup operations and is never installed or linked
+  beside the public archive. Native code performs no schema, tensor, commit,
+  serialization, or capability logic. A process-local internal provider-v1 boundary
+  defaults to no provider. Trusted C1/I1 callers must explicitly bind an
   already-admitted provider with the exact identity before load; serialized metadata
   never selects executable code and snapshots never serialize a binding. Admission,
   binding, exact path/kind/metadata/alias/storage validation, whole-batch preparation,
   and the no-recoverable-branch commit protocol are documented in
-  [P1_MODULE_STATE.md](P1_MODULE_STATE.md). No checkpoint bytes, checksums, encoding,
+  [P1_MODULE_STATE.md](P1_MODULE_STATE.md). Provider admission retains an immutable
+  bridge-owned identity/callback-token snapshot, uses exact 0..127-byte provider IDs,
+  and revokes every unpublished identity on failure. No checkpoint bytes, checksums, encoding,
   magic, filesystem I/O, tensor backend, dtype implementation, or capability claim is
   added.
 - **Evidence:** `/usr/bin/bash -c 'make test-p1'`, `/usr/bin/bash -c 'make test'`,
   `/usr/bin/bash -c 'make build'`, and `/usr/bin/bash -c 'make smoke'` passed against
   canonical `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` and compiler
   `1.3.4-evolve` on the explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6
-  compatibility lane. The focused gate passed 132 structural/ownership/binding/
-  validation/atomicity assertions, repeated strict AOT compilation and execution,
+  compatibility lane. The focused gate passed 157 structural/ownership/binding/
+  validation/atomicity assertions, 105 native token/security/ABI checks, 47 native
+  allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
+  unit identity checks, ASan/UBSan, repeated strict
+  AOT compilation and execution,
   byte-identical objects/output/diagnostics, exact compile-negative/no-artifact
-  checks, and depfile/`nm`/`strings` production-isolation checks. Adversarial cases
+  checks, and depfile/`nm`/`readelf`/`strings` production-isolation checks. Fresh-cache
+  compile/AOT negatives cover every internal Eshkol name; a guessed private native
+  symbol cannot link through the public archive. Adversarial cases
   include unbound/wrong-id/conflicting rebind, unknown/unverified provider, raised,
   substituted-vector, allocation-probe, and reentrant admission, later-entry prepare
   failure with unchanged destinations, conflicting aliases, duplicates, malformed
-  schema, unsupported versions, and shape/dtype/device mismatches. Two independent
-  reviews found no contract or packaging blocker. Supported Ubuntu 22.04 x86-64 /
+  schema, cyclic caller lists/composites, unsupported versions, and shape/dtype/device
+  mismatches. Independent native-security, ABI, packaging/leakage, cyclic-validation,
+  atomicity, evidence, and P1-contract reviews found no blocker. Supported Ubuntu 22.04 x86-64 /
   LLVM-Clang 21.1.8 CI remains required before acceptance.
 - **Dependencies / retest:** C1 remains blocked until this logical contract merges and
   must treat itself, with I1, as a trusted explicit binder rather than perform

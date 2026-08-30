@@ -3,205 +3,364 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-require_command timeout
+require_command ar
+require_command cmp
 require_command env
 require_command nm
+require_command readelf
 require_command rg
 require_command strings
+require_command timeout
 verify_toolchain
 
 p1_runner="$(eshkol_build_dir)/eshkol-run"
-p1_timeout="${P1_COMPILER_TIMEOUT_SECONDS:-180}"
+p1_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
+p1_cc="$(tsv_value "${p1_provenance}" cc_path)"
+p1_timeout="${P1_COMPILER_TIMEOUT_SECONDS:-360}"
 [[ "${p1_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "P1_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
 p1_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-p1.XXXXXX")"
 trap 'rm -rf -- "${p1_tmp}"' EXIT
 
+p1_public_source="${PROJECT_ROOT}/lib/transformer/module.esk"
+p1_trusted_root="${PROJECT_ROOT}/internal/p1/lib"
+p1_trusted_source="${p1_trusted_root}/transformer/module.esk"
+p1_test_source="${PROJECT_ROOT}/tests/p1/module_state_test.esk"
+p1_provider_source="${PROJECT_ROOT}/tests/p1/providers/p1_test/tensor_provider.esk"
+p1_example_source="${PROJECT_ROOT}/examples/p1/module_state_inspection.esk"
+p1_public_link="${p1_tmp}/identity-a/public"
+p1_trusted_link="${p1_tmp}/identity-a/trusted"
+p1_public_archive="${p1_public_link}/libeshkol_transformer_p1_identity.a"
+p1_trusted_archive="${p1_trusted_link}/libeshkol_transformer_p1_identity.a"
+
 run_compiler() {
   timeout --foreground --signal=TERM --kill-after=5s \
     "${p1_timeout}s" env -u ESHKOL_PATH "${p1_runner}" "$@"
 }
 
-compile_production_object() {
+run_fresh_compiler() {
+  local cache="$1"
+  shift
+  mkdir -p "${cache}"
+  timeout --foreground --signal=TERM --kill-after=5s \
+    "${p1_timeout}s" env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+    ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${cache}" "${p1_runner}" "$@"
+}
+
+compile_public_object() {
   local source="$1" output="$2" depfile="$3" log="$4"
   run_compiler --strict-types --emit-object --no-stdlib \
-    --emit-depfile "${depfile}" -I "${PROJECT_ROOT}/lib" \
+    --emit-depfile "${depfile}" -I "${p1_trusted_root}" \
+    -I "${PROJECT_ROOT}/lib" \
     "${source}" -o "${output}" >"${log}" 2>&1
-  [[ -s "${output}" ]] || die "P1 compiler emitted no object: ${output}"
-  [[ -s "${depfile}" ]] || die "P1 compiler emitted no depfile: ${depfile}"
+  [[ -s "${output}" && -s "${depfile}" ]] || \
+    die "P1 public object or depfile is missing: ${source}"
   ! grep -F 'ERROR:' "${log}" >/dev/null || \
     die "P1 compiler reported ERROR while returning success: ${source}"
 }
 
-compile_provider_test_object() {
+compile_trusted_object() {
   local source="$1" output="$2" depfile="$3" log="$4"
   run_compiler --strict-types --emit-object --no-stdlib \
     --emit-depfile "${depfile}" -I "${PROJECT_ROOT}/lib" \
     -I "${PROJECT_ROOT}/tests/p1/providers" \
     "${source}" -o "${output}" >"${log}" 2>&1
-  [[ -s "${output}" ]] || die "P1 compiler emitted no object: ${output}"
-  [[ -s "${depfile}" ]] || die "P1 compiler emitted no depfile: ${depfile}"
+  [[ -s "${output}" && -s "${depfile}" ]] || \
+    die "P1 trusted object or depfile is missing: ${source}"
   ! grep -F 'ERROR:' "${log}" >/dev/null || \
     die "P1 compiler reported ERROR while returning success: ${source}"
 }
 
-compile_production_aot() {
+compile_public_aot() {
   local source="$1" output="$2" log="$3"
-  run_compiler --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+  run_compiler --strict-types --no-stdlib -I "${p1_trusted_root}" \
+    -I "${PROJECT_ROOT}/lib" \
+    -L "${p1_public_link}" --lib eshkol_transformer_p1_identity \
     "${source}" -o "${output}" >"${log}" 2>&1
-  [[ -x "${output}" ]] || die "P1 compiler emitted no executable: ${output}"
-  ! grep -F 'ERROR:' "${log}" >/dev/null || \
-    die "P1 AOT compiler reported ERROR while returning success: ${source}"
+  [[ -x "${output}" ]] || die "P1 public AOT executable is missing"
 }
 
-compile_provider_test_aot() {
+compile_trusted_aot() {
   local source="$1" output="$2" log="$3"
   run_compiler --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
     -I "${PROJECT_ROOT}/tests/p1/providers" \
+    -L "${p1_trusted_link}" --lib eshkol_transformer_p1_identity \
     "${source}" -o "${output}" >"${log}" 2>&1
-  [[ -x "${output}" ]] || die "P1 compiler emitted no executable: ${output}"
-  ! grep -F 'ERROR:' "${log}" >/dev/null || \
-    die "P1 AOT compiler reported ERROR while returning success: ${source}"
+  [[ -x "${output}" ]] || die "P1 trusted AOT executable is missing"
 }
 
-module_source="${PROJECT_ROOT}/lib/transformer/module.esk"
-module_internal_source="${PROJECT_ROOT}/lib/transformer/module_internal.esk"
-test_source="${PROJECT_ROOT}/tests/p1/module_state_test.esk"
-provider_source="${PROJECT_ROOT}/tests/p1/providers/p1_test/tensor_provider.esk"
-example_source="${PROJECT_ROOT}/examples/p1/module_state_inspection.esk"
+"${PROJECT_ROOT}/scripts/generate-p1-roots.sh" --check
+"${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
+  "${p1_tmp}/identity-a" normal all
+"${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
+  "${p1_tmp}/identity-b" normal all
+
+cmp "${p1_public_archive}" \
+  "${p1_tmp}/identity-b/public/libeshkol_transformer_p1_identity.a"
+cmp "${p1_trusted_archive}" \
+  "${p1_tmp}/identity-b/trusted/libeshkol_transformer_p1_identity.a"
+
+printf '%s\n' \
+  et_p1_public_identity_abi_major_v1 \
+  et_p1_public_identity_abi_minor_v1 \
+  et_p1_public_token_kind_v1 \
+  et_p1_public_token_live_v1 \
+  >"${p1_tmp}/public-symbols.expected"
+LC_ALL=C nm -g --defined-only "${p1_public_archive}" | \
+  awk '$2 ~ /^[A-Z]$/ { print $3 }' | LC_ALL=C sort \
+  >"${p1_tmp}/public-symbols.actual"
+cmp "${p1_tmp}/public-symbols.expected" "${p1_tmp}/public-symbols.actual"
+
+if nm -a "${p1_public_archive}" | rg 'et_p1_private_' >/dev/null; then
+  die "P1 public archive contains a privileged symbol"
+fi
+if readelf -Ws "${p1_public_link}/p1_identity.o" | \
+    rg 'et_p1_private_' >/dev/null; then
+  die "P1 public object contains a privileged symbol"
+fi
+if strings -a "${p1_public_archive}" | \
+    rg -i 'module_internal|p1-native-|fixture|provider-seal|provider-abort' \
+      >/dev/null; then
+  die "P1 public archive contains a private source or operation marker"
+fi
+
+trusted_private_count="$(readelf -Ws \
+  "${p1_trusted_link}/p1_identity.o" | \
+  awk '/et_p1_private_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
+       END { print n + 0 }')" || die "P1 private symbol visibility changed"
+[[ "${trusted_private_count}" == 25 ]] || \
+  die "P1 trusted ABI symbol count changed: ${trusted_private_count}"
+
+p1_public_cflags=(
+  -std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion
+  -Wsign-conversion -Wshadow
+  -I "${PROJECT_ROOT}/native"
+)
+p1_cflags=("${p1_public_cflags[@]}" -DET_P1_PRIVATE_API=1)
+"${p1_cc}" "${p1_cflags[@]}" \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity.c" "${p1_trusted_archive}" \
+  -o "${p1_tmp}/test-p1-identity"
+"${p1_tmp}/test-p1-identity" >"${p1_tmp}/identity.stdout"
+grep -F 'P1 identity PASS: 105 checks' "${p1_tmp}/identity.stdout" >/dev/null
+
+"${p1_cc}" "${p1_cflags[@]}" \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity_failpoints.c" \
+  "${p1_trusted_archive}" -Wl,--wrap=calloc -Wl,--wrap=getrandom \
+  -o "${p1_tmp}/test-p1-identity-failpoints"
+"${p1_tmp}/test-p1-identity-failpoints" \
+  >"${p1_tmp}/failpoints.stdout"
+grep -F 'P1 failpoint PASS: 47 checks' \
+  "${p1_tmp}/failpoints.stdout" >/dev/null
+
+"${p1_cc}" "${p1_public_cflags[@]}" -c \
+  "${PROJECT_ROOT}/tests/p1/p1_public_identity_probe.c" \
+  -o "${p1_tmp}/p1-public-probe.o"
+"${p1_cc}" "${p1_cflags[@]}" -c \
+  "${PROJECT_ROOT}/tests/p1/p1_trusted_identity_probe.c" \
+  -o "${p1_tmp}/p1-trusted-probe.o"
+"${p1_cc}" "${p1_cflags[@]}" -c \
+  "${PROJECT_ROOT}/tests/p1/test_p1_cross_role_identity.c" \
+  -o "${p1_tmp}/p1-cross-role-main.o"
+"${p1_cc}" "${p1_tmp}/p1-public-probe.o" \
+  "${p1_tmp}/p1-trusted-probe.o" "${p1_tmp}/p1-cross-role-main.o" \
+  "${p1_trusted_archive}" -o "${p1_tmp}/test-p1-cross-role"
+"${p1_tmp}/test-p1-cross-role" >"${p1_tmp}/cross-role.stdout"
+grep -F 'P1 cross-role PASS: 8 checks' \
+  "${p1_tmp}/cross-role.stdout" >/dev/null
+
+"${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
+  "${p1_tmp}/identity-sanitize" sanitize trusted
+sanitized_archive="${p1_tmp}/identity-sanitize/trusted/libeshkol_transformer_p1_identity.a"
+"${p1_cc}" "${p1_cflags[@]}" -fsanitize=address,undefined \
+  -fno-omit-frame-pointer "${PROJECT_ROOT}/tests/p1/test_p1_identity.c" \
+  "${sanitized_archive}" -o "${p1_tmp}/test-p1-identity-sanitized"
+ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  "${p1_tmp}/test-p1-identity-sanitized" >/dev/null
+"${p1_cc}" "${p1_cflags[@]}" -fsanitize=address,undefined \
+  -fno-omit-frame-pointer \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity_failpoints.c" \
+  "${sanitized_archive}" -Wl,--wrap=calloc -Wl,--wrap=getrandom \
+  -o "${p1_tmp}/test-p1-failpoints-sanitized"
+ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  "${p1_tmp}/test-p1-failpoints-sanitized" >/dev/null
 
 for run in 1 2; do
-  compile_production_object "${module_source}" "${p1_tmp}/module-${run}.o" \
-    "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.compile.log"
-  compile_provider_test_object "${test_source}" "${p1_tmp}/test-${run}.o" \
-    "${p1_tmp}/test-${run}.d" "${p1_tmp}/test-${run}.compile.log"
-  compile_production_object "${example_source}" "${p1_tmp}/example-${run}.o" \
-    "${p1_tmp}/example-${run}.d" "${p1_tmp}/example-${run}.compile.log"
+  compile_public_object "${p1_public_source}" "${p1_tmp}/module-${run}.o" \
+    "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.log"
+  compile_public_object "${p1_example_source}" "${p1_tmp}/example-${run}.o" \
+    "${p1_tmp}/example-${run}.d" "${p1_tmp}/example-${run}.log"
+  compile_trusted_object "${p1_test_source}" "${p1_tmp}/test-${run}.o" \
+    "${p1_tmp}/test-${run}.d" "${p1_tmp}/test-${run}.log"
 
-  compile_provider_test_aot "${test_source}" "${p1_tmp}/test-${run}" \
-    "${p1_tmp}/test-${run}.aot.log"
-  timeout --foreground --signal=TERM --kill-after=2s 20s \
-    "${p1_tmp}/test-${run}" >"${p1_tmp}/test-${run}.stdout" \
-    2>"${p1_tmp}/test-${run}.stderr"
-
-  compile_production_aot "${example_source}" "${p1_tmp}/example-${run}" \
+  compile_public_aot "${p1_example_source}" "${p1_tmp}/example-${run}" \
     "${p1_tmp}/example-${run}.aot.log"
   timeout --foreground --signal=TERM --kill-after=2s 20s \
     "${p1_tmp}/example-${run}" >"${p1_tmp}/example-${run}.stdout" \
     2>"${p1_tmp}/example-${run}.stderr"
+
+  compile_trusted_aot "${p1_test_source}" "${p1_tmp}/test-${run}" \
+    "${p1_tmp}/test-${run}.aot.log"
+  timeout --foreground --signal=TERM --kill-after=2s 30s \
+    "${p1_tmp}/test-${run}" >"${p1_tmp}/test-${run}.stdout" \
+    2>"${p1_tmp}/test-${run}.stderr"
 done
 
 for run in 1 2; do
   for stem in module example; do
     depfile="${p1_tmp}/${stem}-${run}.d"
-    grep -F "${module_source}" "${depfile}" >/dev/null || \
-      die "P1 production depfile omits transformer.module: ${depfile}"
-    grep -F "${module_internal_source}" "${depfile}" >/dev/null || \
-      die "P1 production depfile omits transformer.module_internal: ${depfile}"
-    if grep -F "${PROJECT_ROOT}/tests/" "${depfile}" >/dev/null; then
-      die "P1 production dependency graph includes test support: ${depfile}"
+    grep -F "${p1_public_source}" "${depfile}" >/dev/null || \
+      die "P1 public depfile omits transformer.module"
+    if rg 'module_internal|templates/p1|tests/p1/providers|native/p1_identity' \
+        "${depfile}" >/dev/null; then
+      die "P1 public dependency closure contains a trusted source"
+    fi
+    if nm -a "${p1_tmp}/${stem}-${run}.o" | \
+        rg 'et_p1_private_|p1-native-|module_internal' >/dev/null; then
+      die "P1 public Eshkol object contains a private symbol"
+    fi
+    if strings -a "${p1_tmp}/${stem}-${run}.o" | \
+        rg -i 'module_internal|p1-native-|fixture|p1-core-dispatch' >/dev/null; then
+      die "P1 public Eshkol object contains a private marker"
     fi
   done
+  grep -F "${p1_trusted_source}" "${p1_tmp}/test-${run}.d" >/dev/null || \
+    die "P1 trusted depfile omits its alternative transformer.module root"
+  if grep -F "${p1_public_source}" "${p1_tmp}/test-${run}.d" >/dev/null; then
+    die "P1 trusted dependency closure contains the public Eshkol root"
+  fi
+  grep -F "${p1_provider_source}" "${p1_tmp}/test-${run}.d" >/dev/null || \
+    die "P1 trusted depfile omits the explicit test provider"
+  nm -u "${p1_tmp}/test-${run}.o" | \
+    rg 'et_p1_private_provider_seal_v1' >/dev/null || \
+    die "P1 trusted object omits its explicit private bridge reference"
+done
 
-  grep -F "${provider_source}" "${p1_tmp}/test-${run}.d" >/dev/null || \
-    die "P1 structural test omitted the explicit test-only provider"
+for stem in module example test; do
+  cmp "${p1_tmp}/${stem}-1.o" "${p1_tmp}/${stem}-2.o"
+  cmp "${p1_tmp}/${stem}-1.log" "${p1_tmp}/${stem}-2.log"
+done
+cmp "${p1_tmp}/example-1.aot.log" "${p1_tmp}/example-2.aot.log"
+cmp "${p1_tmp}/test-1.aot.log" "${p1_tmp}/test-2.aot.log"
+cmp "${p1_tmp}/example-1.stdout" "${p1_tmp}/example-2.stdout"
+cmp "${p1_tmp}/test-1.stdout" "${p1_tmp}/test-2.stdout"
+cmp "${PROJECT_ROOT}/tests/expected/p1-example.stdout" \
+  "${p1_tmp}/example-1.stdout"
+cmp "${PROJECT_ROOT}/tests/expected/p1.stdout" "${p1_tmp}/test-1.stdout"
+[[ ! -s "${p1_tmp}/example-1.stderr" && \
+   ! -s "${p1_tmp}/example-2.stderr" && \
+   ! -s "${p1_tmp}/test-1.stderr" && \
+   ! -s "${p1_tmp}/test-2.stderr" ]] || \
+  die "P1 runtime gate wrote stderr"
 
-  for stem in module example; do
-    LC_ALL=C nm -a --format=posix "${p1_tmp}/${stem}-${run}.o" \
-      >"${p1_tmp}/${stem}-${run}.nm"
-    if rg -ni 'fixture' "${p1_tmp}/${stem}-${run}.nm"; then
-      die "P1 production object contains a fixture symbol: ${stem}-${run}.o"
+negative_sources=(
+  negative_public_provider_internal
+  negative_public_module_internal
+  negative_public_handle_internal
+  negative_public_state_entry_internal
+  negative_public_state_dict_internal
+)
+for stem in "${negative_sources[@]}"; do
+  source="${PROJECT_ROOT}/tests/p1/${stem}.esk"
+  output="${p1_tmp}/${stem}.o"
+  for run in 1 2; do
+    log="${p1_tmp}/${stem}-object-${run}.log"
+    if run_fresh_compiler "${p1_tmp}/cache-${stem}-object-${run}" \
+        --strict-types --emit-object --no-stdlib -I "${PROJECT_ROOT}/lib" \
+        "${source}" -o "${output}" >"${log}" 2>&1; then
+      die "P1 public internal-name negative unexpectedly compiled: ${stem}"
     fi
-    if strings -a "${p1_tmp}/${stem}-${run}.o" | rg -ni 'fixture'; then
-      die "P1 production object contains a fixture identifier: ${stem}-${run}.o"
+    [[ ! -e "${output}" ]] || die "P1 internal-name negative left an object"
+
+    log="${p1_tmp}/${stem}-aot-${run}.log"
+    if run_fresh_compiler "${p1_tmp}/cache-${stem}-aot-${run}" \
+        --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+        -L "${p1_public_link}" --lib eshkol_transformer_p1_identity \
+        "${source}" -o "${p1_tmp}/${stem}" >"${log}" 2>&1; then
+      die "P1 public internal-name negative unexpectedly linked: ${stem}"
     fi
+    [[ ! -e "${p1_tmp}/${stem}" ]] || \
+      die "P1 internal-name negative left an executable"
   done
+  cmp "${p1_tmp}/${stem}-object-1.log" "${p1_tmp}/${stem}-object-2.log"
+  cmp "${p1_tmp}/${stem}-aot-1.log" "${p1_tmp}/${stem}-aot-2.log"
 done
 
-if ! LC_ALL=C nm -a --format=posix "${p1_tmp}/test-1.o" | rg -ni 'fixture' \
-    >/dev/null; then
-  die "P1 test object does not evidence the explicitly composed fixture provider"
-fi
-
-for stem in module test example; do
-  cmp --silent "${p1_tmp}/${stem}-1.o" "${p1_tmp}/${stem}-2.o" || \
-    die "P1 repeated ${stem} objects differ"
-  cmp --silent "${p1_tmp}/${stem}-1.compile.log" \
-    "${p1_tmp}/${stem}-2.compile.log" || \
-    die "P1 repeated ${stem} compile diagnostics differ"
+while IFS=$'\t' read -r visibility name; do
+  if [[ "${visibility}" == internal ]]; then
+    rg -F "${name}" "${p1_tmp}"/negative_public_*-object-1.log \
+      >/dev/null || die "P1 public negative did not diagnose ${name}"
+  fi
+done <"${PROJECT_ROOT}/tools/p1/module_surface.tsv"
+for name in p1-native-context-create p1-native-provider-seal p1-core-dispatch; do
+  rg -F "${name}" "${p1_tmp}/negative_public_provider_internal-object-1.log" \
+    >/dev/null || die "P1 public negative did not diagnose ${name}"
 done
-
-cmp --silent "${p1_tmp}/test-1.aot.log" "${p1_tmp}/test-2.aot.log" || \
-  die "P1 repeated test AOT diagnostics differ"
-cmp --silent "${p1_tmp}/example-1.aot.log" "${p1_tmp}/example-2.aot.log" || \
-  die "P1 repeated example AOT diagnostics differ"
-cmp --silent "${p1_tmp}/test-1.stdout" "${p1_tmp}/test-2.stdout" || \
-  die "P1 repeated test output differs"
-cmp --silent "${p1_tmp}/example-1.stdout" "${p1_tmp}/example-2.stdout" || \
-  die "P1 repeated example output differs"
-cmp --silent "${PROJECT_ROOT}/tests/expected/p1.stdout" \
-  "${p1_tmp}/test-1.stdout" || die "P1 test output mismatch"
-cmp --silent "${PROJECT_ROOT}/tests/expected/p1-example.stdout" \
-  "${p1_tmp}/example-1.stdout" || die "P1 example output mismatch"
-[[ ! -s "${p1_tmp}/test-1.stderr" && ! -s "${p1_tmp}/test-2.stderr" ]] || \
-  die "P1 test executable wrote stderr"
-[[ ! -s "${p1_tmp}/example-1.stderr" && ! -s "${p1_tmp}/example-2.stderr" ]] || \
-  die "P1 example executable wrote stderr"
 
 for run in 1 2; do
-  negative_object="${p1_tmp}/negative-arity-${run}.o"
-  negative_log="${p1_tmp}/negative-arity-${run}.log"
-  if run_compiler --strict-types --emit-object --no-stdlib \
-      -I "${PROJECT_ROOT}/lib" \
-      "${PROJECT_ROOT}/tests/p1/negative_wrong_arity.esk" \
-      -o "${negative_object}" >"${negative_log}" 2>&1; then
-    die "P1 wrong-arity fixture unexpectedly compiled"
+  guessed_object="${p1_tmp}/guessed-private.o"
+  run_fresh_compiler "${p1_tmp}/cache-guessed-object-${run}" \
+    --strict-types --emit-object --no-stdlib \
+    "${PROJECT_ROOT}/tests/p1/negative_guessed_private_native.esk" \
+    -o "${guessed_object}" >"${p1_tmp}/guessed-object-${run}.log" 2>&1
+  nm -u "${guessed_object}" | rg 'et_p1_private_context_create_v1' \
+    >/dev/null || die "P1 guessed-private object lacks the expected undefined symbol"
+  if run_fresh_compiler "${p1_tmp}/cache-guessed-aot-${run}" \
+      --strict-types --no-stdlib -L "${p1_public_link}" \
+      --lib eshkol_transformer_p1_identity \
+      "${PROJECT_ROOT}/tests/p1/negative_guessed_private_native.esk" \
+      -o "${p1_tmp}/guessed-private" \
+      >"${p1_tmp}/guessed-aot-${run}.log" 2>&1; then
+    die "P1 guessed private native symbol linked through the public archive"
   fi
-  grep -F 'Arity mismatch: module-state-dict expects 1 arguments but got 0' \
-    "${negative_log}" >/dev/null || die "P1 wrong-arity diagnostic changed"
-  [[ ! -e "${negative_object}" ]] || die "P1 negative compile left an object"
-
-  negative_object="${p1_tmp}/negative-provider-${run}.o"
-  negative_log="${p1_tmp}/negative-provider-${run}.log"
-  if run_compiler --strict-types --emit-object --no-stdlib \
-      -I "${PROJECT_ROOT}/lib" \
-      "${PROJECT_ROOT}/tests/p1/negative_fixture_not_public.esk" \
-      -o "${negative_object}" >"${negative_log}" 2>&1; then
-    die "P1 test-only tensor provider unexpectedly compiled as public support"
-  fi
-  grep -F 'Unknown function: fixture-tensor-internal' "${negative_log}" \
-    >/dev/null || die "P1 fixture-provider isolation diagnostic changed"
-  [[ ! -e "${negative_object}" ]] || \
-    die "P1 fixture-provider negative compile left an object"
-
-  negative_object="${p1_tmp}/negative-provider-arity-${run}.o"
-  negative_log="${p1_tmp}/negative-provider-arity-${run}.log"
-  if run_compiler --strict-types --emit-object --no-stdlib \
-      -I "${PROJECT_ROOT}/lib" \
-      "${PROJECT_ROOT}/tests/p1/negative_provider_callback_arity.esk" \
-      -o "${negative_object}" >"${negative_log}" 2>&1; then
-    die "P1 wrong-arity tensor-provider callback unexpectedly compiled"
-  fi
-  grep -F "argument 2 of 'tensor-provider-create-internal'" "${negative_log}" \
-    >/dev/null || die "P1 tensor-provider callback diagnostic changed"
-  [[ ! -e "${negative_object}" ]] || \
-    die "P1 tensor-provider callback negative compile left an object"
+  [[ ! -e "${p1_tmp}/guessed-private" ]] || \
+    die "P1 guessed-private link negative left an executable"
 done
-cmp --silent "${p1_tmp}/negative-arity-1.log" \
-  "${p1_tmp}/negative-arity-2.log" || \
-  die "P1 repeated negative diagnostics differ"
-cmp --silent "${p1_tmp}/negative-provider-1.log" \
-  "${p1_tmp}/negative-provider-2.log" || \
-  die "P1 repeated provider-isolation diagnostics differ"
-cmp --silent "${p1_tmp}/negative-provider-arity-1.log" \
-  "${p1_tmp}/negative-provider-arity-2.log" || \
-  die "P1 repeated provider-callback diagnostics differ"
+cmp "${p1_tmp}/guessed-object-1.log" "${p1_tmp}/guessed-object-2.log"
+cmp "${p1_tmp}/guessed-aot-1.log" "${p1_tmp}/guessed-aot-2.log"
+run_compiler --strict-types --no-stdlib -L "${p1_trusted_link}" \
+  --lib eshkol_transformer_p1_identity \
+  "${PROJECT_ROOT}/tests/p1/negative_guessed_private_native.esk" \
+  -o "${p1_tmp}/trusted-private-positive" >/dev/null 2>&1
+"${p1_tmp}/trusted-private-positive" >/dev/null
+
+for run in 1 2; do
+  for negative in negative_wrong_arity negative_fixture_not_public \
+                  negative_provider_callback_arity; do
+    output="${p1_tmp}/${negative}.o"
+    log="${p1_tmp}/${negative}-${run}.log"
+    includes=(-I "${PROJECT_ROOT}/lib")
+    if [[ "${negative}" == negative_provider_callback_arity ]]; then
+      includes=(-I "${p1_trusted_root}" -I "${PROJECT_ROOT}/lib"
+                -I "${PROJECT_ROOT}/tests/p1/providers")
+    fi
+    if run_fresh_compiler "${p1_tmp}/cache-${negative}-${run}" \
+        --strict-types --emit-object --no-stdlib "${includes[@]}" \
+        "${PROJECT_ROOT}/tests/p1/${negative}.esk" -o "${output}" \
+        >"${log}" 2>&1; then
+      die "P1 compile negative unexpectedly succeeded: ${negative}"
+    fi
+    [[ ! -e "${output}" ]] || die "P1 compile negative left an object"
+  done
+done
+cmp "${p1_tmp}/negative_wrong_arity-1.log" \
+  "${p1_tmp}/negative_wrong_arity-2.log"
+cmp "${p1_tmp}/negative_fixture_not_public-1.log" \
+  "${p1_tmp}/negative_fixture_not_public-2.log"
+cmp "${p1_tmp}/negative_provider_callback_arity-1.log" \
+  "${p1_tmp}/negative_provider_callback_arity-2.log"
 
 if rg -ni '(fixture|tests/p1/providers|python|pytorch|torch\.load|finite[- ]difference|scalar[- ]fallback|cpu[- ]fallback)' \
     "${PROJECT_ROOT}/lib/transformer/module.esk" \
-    "${PROJECT_ROOT}/lib/transformer/module_internal.esk"; then
-  die "P1 production module contains a forbidden runtime/fallback reference"
+    "${p1_trusted_source}"; then
+  die "P1 production Eshkol roots contain a forbidden fallback reference"
+fi
+if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p' \
+    "${p1_trusted_source}" | \
+    rg 'state-from-flat|state-provider-bind!|p1-native-state-create' >/dev/null; then
+  die "P1 strict load creates or binds a temporary expected state"
 fi
 
-printf 'P1 PASS: strict compile, AOT, negatives, ownership, atomicity, and determinism\n'
+printf 'P1 PASS: public/private packaging, 157 structural checks, 160 native checks, sanitizers, negatives, atomicity, and determinism\n'

@@ -65,6 +65,9 @@ state schema, deterministic UTF-8 path ordering, tie semantics, strict loading, 
 explicit tensor-runtime limitations are documented in
 [docs/P1_MODULE_STATE.md](docs/P1_MODULE_STATE.md). It defines no checkpoint file or
 numerical tensor capability.
+The narrow process-local native identity boundary used only to enforce P1's
+public/trusted compile separation is documented in
+[docs/P1_IDENTITY_ABI.md](docs/P1_IDENTITY_ABI.md).
 
 ## First release criterion
 

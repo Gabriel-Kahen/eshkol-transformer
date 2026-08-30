@@ -5,8 +5,20 @@
 P1 implements the existing A0 `transformer.module` names and arities. It adds no
 public constructor, registration operation, tensor descriptor, state-version
 accessor, or serialized format. Library construction and malformed-state helpers
-remain in the explicitly unstable `transformer.module_internal` implementation
-surface.
+remain in the explicitly unstable trusted replacement root at
+`internal/p1/lib/transformer/module.esk`. The two Eshkol roots are mutually exclusive generated products of one
+canonical template. The public root provides exactly the 17 A0 bindings and never
+imports or references the trusted root; the trusted root independently provides the
+same 17 bindings plus the pre-existing construction/provider helpers.
+
+Pinned Eshkol flattening cannot protect a provider seam inside one compiled source
+closure. P1 therefore uses a narrow native identity bridge, version 1.0, and two
+alternative archives with the same basename. The normal build emits only the public
+archive. Trusted P1 tests and future reviewed C1/I1 integration explicitly build and
+link the private replacement archive instead; the archives are never linked
+together, and the private archive is not an installed public library.
+The exact layout, ownership, status, and symbol contract is frozen in
+[P1_IDENTITY_ABI.md](P1_IDENTITY_ABI.md).
 
 The Eshkol-facing error dependency is `transformer.error_internal` from E1/#23.
 P1 constructs no subsystem-local error type. Every P1 error carries a data-only
@@ -73,9 +85,10 @@ numbers, encoding, checksum, checkpoint/container version, file path, temporary
 file, filesystem operation, or atomic replacement behavior.
 
 The logical value never contains provider callbacks, registration handles,
-admission results, load plans, or capability evidence. A runtime state object has a
-private lightweight binding token outside these logical fields. A process-local
-side table maps that token—not the state or any tensor—to an admitted provider.
+admission results, load plans, or capability evidence. The trusted root represents
+each runtime state with an unforgeable native identity shell; a native process-local
+registry records only the exact state-token/provider-token binding. Raw Eshkol
+vectors, copied visible metadata, and transplanted tokens cannot authorize a bind.
 Bindings are omitted from logical/serialized state and never reconstructed from the
 inert provider identity.
 
@@ -106,8 +119,11 @@ comparison, exact opaque-device comparison, whole-batch preparation, and whole-b
 commit. Requests and result envelopes are vectors. Registration is explicit,
 process-local, append-only, and rejects provider-ID collisions. It performs no
 environment lookup, dynamic load, or selection from untrusted state metadata.
-Modules store the registered provider descriptor while logical state dictionaries
-store only the inert versioned identity above.
+The trusted Eshkol root deep-copies a private immutable descriptor and retains the
+actual callbacks; native code stores only seven inert callback-identity tokens and
+never receives an Eshkol closure, tensor, payload, plan, or descriptor pointer.
+Modules retain the admitted private snapshot while logical state dictionaries store
+only the inert versioned identity above.
 
 A provider ID has stable cross-process format meaning: it permanently identifies
 the tensor carrier representation, metadata/device equality, exact-value and clone
@@ -115,14 +131,15 @@ semantics, and prepare/commit protocol. Any incompatible carrier, encoding, devi
 or copy semantic requires a new provider ID. Process-local collision rejection is a
 defense, not proof of cross-process compatibility.
 
-Registration performs a structural empty-batch admission probe. Preparation must
-return one plan-carrier vector and commit must return that exact vector identity;
-substitution/allocation of a replacement, a raised error, or reentrant registration
-rejects admission atomically. This probe does not prove nonempty behavior,
-nonallocation, nonraising behavior, or physical tensor atomicity. Before I1/K1/C1
-registers a production provider, that workstream must supply reviewed executable
-evidence that nonempty commit is one-shot, nonraising, nonallocating, nonreentrant,
-infallible, preserves destination storage, and returns the same validated plan.
+Registration requires two through sixteen nontrivial, storage-disjoint scratch
+assignments. It proves that preparation leaves every source and destination
+unchanged, commit mutates every destination in one batch while preserving exact
+destination identity, sources remain unchanged, the exact plan-carrier vector is
+returned, and a second commit is rejected. Substitution/allocation of a replacement,
+a raised error, a partial result, or reentrant registration rejects admission
+atomically. Failed admission revokes every newly created callback identity and the
+unpublished provider identity, restoring the exact native live-entry baseline;
+tombstones are permanent and cannot regain authority.
 
 Every potentially failing operation belongs to preparation. A conforming commit is
 one-shot, infallible, nonallocating, and preserves destination storage identity; a
@@ -132,11 +149,47 @@ provider must supply its own reviewed executable evidence before registration is
 permitted by its integrating workstream.
 
 After the first destination mutation begins, P1 invokes no callback other than the
-single admitted commit and takes no recoverable branch. The commit result is not
-interpreted after mutation; exact carrier return is an admission invariant. Before
-commit, P1 also rejects clone/source aliasing, aliases between independently
+single admitted commit and takes no recoverable branch. It checks only that commit
+returned the already validated exact plan identity; mismatch is a trusted-provider
+`internal` defect, not a recoverable state branch. Before commit, P1 also rejects
+clone/source aliasing, aliases between independently
 registered leaves, aliases between state snapshots (including tied logical paths),
 and aliases between distinct batch destinations.
+
+## Private identity bridge 1.0
+
+The bridge requires 64-bit pointers and fixed-width `i64` calls. Compile-time
+assertions freeze the private token, context, and error-record sizes at 264, 344,
+and 272 bytes. The public archive defines only four read-only functions: ABI major,
+ABI minor, token kind, and token liveness. It contains no context, constructor,
+provider, callback, bind, revoke, result, error, or generic-dispatch symbol. All 25
+fixed-arity private functions have hidden ELF visibility and exist only in the
+trusted replacement archive.
+
+Native scope is limited to opaque identity/capability storage: token creation and
+recognition, bridge-owned immutable provider identity bytes and callback-identity
+snapshots, exact state/provider binding, cleanup/revocation, and deterministic
+live/tombstone counts. C performs no schema validation, list traversal, tensor
+operation, load preparation/commit, serialization, model logic, or capability
+inference.
+
+Provider IDs arrive only after Eshkol validates their semantic `symbol` contract.
+The ABI stores an exact unsigned length plus exact bytes, with
+`ET_P1_IDENTITY_MAX_PROVIDER_ID_BYTES` fixed at 127. Zero length is allowed because
+the existing P1 symbol contract does not exclude an empty symbol. Nonzero lengths
+require a nonnull pointer; negative/oversized spans fail without truncation. The
+bridge never calls `strlen`, interprets NUL, applies a locale/normalization/UTF-8
+rule, or exposes a mutable pointer to its owned bytes.
+
+Tokens carry nonzero 128-bit `getrandom` identities, exact process ownership, kind,
+and duplicated integrity data. Allocation or entropy failure is explicit and has no
+fallback. Foreign, copied, mutated, wrong-kind, cross-context, stale, transplanted,
+or post-fork tokens reject before mutation. Unpublished-provider abort and callback
+revoke are cleanup-only operations: they reject sealed/published/referenced or stale
+tokens and leave permanent tombstones, so allocator address reuse cannot restore
+authority. Arbitrary malicious native object injection is outside the Eshkol-module
+threat model; arbitrary compiled Eshkol linked only with the public package cannot
+reach the private authority.
 
 ## Error mapping
 
@@ -182,8 +235,10 @@ P1 must be retested against merged I1/K1 and later f32 tensor support before any
 numerical or module-capability claim. There is no scalar, CPU, dtype, Python,
 finite-difference, device, or numerical fallback.
 
-The process-local binding side table has no verified concurrency behavior and keeps
-one lightweight token/provider pair for each bound state until process exit. It does
-not retain the state vector, entries, or tensor snapshots, but its small metadata
-cost is monotonic. I1/C1 must retest binding lifetime and synchronization if the
-runtime later supplies weak references, finalizers, or concurrent mutation.
+The native registry has no verified concurrency behavior and makes no concurrency
+claim. Successful opaque shells remain process-local until explicit trusted cleanup
+or process exit; it never retains an Eshkol state vector, entry, tensor snapshot, or
+closure. Strict load constructs no temporary expected state or native binding, so
+rejected and repeated loads add no registry entry. I1/C1 must retest lifetime and
+synchronization if the runtime later supplies weak references, finalizers, or
+concurrent mutation.

@@ -1,7 +1,7 @@
 ;;; Test-only inert tensor carrier for P1 structural control-flow evidence.
 ;;; This module is available only through the explicit tests/p1/providers root.
 
-(require transformer.module_internal)
+(require transformer.module)
 (require transformer.error_internal)
 
 (provide module-create-fixture-internal
@@ -11,34 +11,69 @@
          fixture-tensor-payload-internal
          fixture-register-substituting-provider-internal!
          fixture-register-raising-provider-internal!
-         fixture-register-reentrant-provider-internal!)
+         fixture-register-reentrant-provider-internal!
+         fixture-register-cyclic-evidence-provider-internal!
+         fixture-register-repeat-mutating-provider-internal!)
 
 (define fixture-tensor-tag (vector 'p1-test-fixture-tensor))
 (define fixture-plan-tag (vector 'p1-test-fixture-load-plan))
 (define fixture-provider-name 'fixture-v1)
 (define row-major-layout 'dense-row-major-contiguous)
 (define fixture-shared-clone-payload #f)
+(define fixture-max-shape-rank 64)
+(define fixture-max-data-depth 16)
+(define fixture-max-data-nodes 4096)
 
 (define (fixture-fail category operation message)
   (transformer-error-raise category operation message '() #f))
 
-(define (copy-data value)
+(define (fixture-identity-member? value values)
   (cond
-    ((pair? value) (cons (copy-data (car value)) (copy-data (cdr value))))
-    ((vector? value)
-     (let* ((size (vector-length value))
-            (result (make-vector size #f)))
-       (let loop ((index 0))
-         (if (= index size)
-             result
-             (begin
-               (vector-set! result index (copy-data (vector-ref value index)))
-               (loop (+ index 1)))))))
-    ((string? value) (string-copy value))
-    (else value)))
+    ((null? values) #f)
+    ((eq? value (car values)) #t)
+    (else (fixture-identity-member? value (cdr values)))))
+
+(define (fixture-bounded-list-length values limit)
+  (let loop ((remaining values) (seen '()) (count 0))
+    (cond
+      ((null? remaining) count)
+      ((not (pair? remaining)) #f)
+      ((>= count limit) #f)
+      ((fixture-identity-member? remaining seen) #f)
+      (else (loop (cdr remaining) (cons remaining seen) (+ count 1))))))
+
+(define (copy-data value)
+  (let ((seen '()) (nodes 0))
+    (define (walk item depth)
+      (set! nodes (+ nodes 1))
+      (let ((composite (if (or (pair? item) (vector? item)) item #f)))
+        (if (or (> depth fixture-max-data-depth)
+                (> nodes fixture-max-data-nodes)
+                (and composite
+                     (fixture-identity-member? composite seen)))
+            (fixture-fail
+              'invalid-argument 'p1-test-fixture-copy
+              "fixture data contains a cycle, shared composite, or exceeds bounds")
+            (if composite (set! seen (cons composite seen)) #t)))
+      (cond
+        ((pair? item) (cons (walk (car item) (+ depth 1))
+                            (walk (cdr item) depth)))
+        ((vector? item)
+         (let* ((size (vector-length item))
+                (result (make-vector size #f)))
+           (let loop ((index 0))
+             (if (= index size)
+                 result
+                 (begin
+                   (vector-set! result index
+                                (walk (vector-ref item index) (+ depth 1)))
+                   (loop (+ index 1)))))))
+        ((string? item) (string-copy item))
+        (else item)))
+    (walk value 0)))
 
 (define (valid-shape? shape)
-  (and (list? shape)
+  (and (fixture-bounded-list-length shape fixture-max-shape-rank)
        (let loop ((dimensions shape))
          (if (null? dimensions)
              #t
@@ -277,8 +312,24 @@
     fixture-storage-identical? fixture-value-equal?
     fixture-device-equal? fixture-prepare-load fixture-commit-load!))
 
+(define (fixture-admission-evidence)
+  (list
+    (vector
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-destination-a 'bits-v1))
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-source-a 'bits-v1))
+      'parameter)
+    (vector
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-destination-b 'bits-v1))
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-source-b 'bits-v1))
+      'parameter)))
+
 (define (reentrant-prepare (request : vector)) : vector
-  (tensor-provider-register-internal! reentrant-target-provider)
+  (tensor-provider-register-internal! reentrant-target-provider
+                                      (fixture-admission-evidence))
   (fixture-prepare-load request))
 
 (define reentrant-provider
@@ -287,18 +338,53 @@
     fixture-storage-identical? fixture-value-equal?
     fixture-device-equal? reentrant-prepare fixture-commit-load!))
 
-(tensor-provider-register-internal! fixture-provider)
-(tensor-provider-register-internal! poison-access-provider)
-(tensor-provider-register-internal! alternate-provider)
+(define cyclic-evidence-provider
+  (tensor-provider-create-internal
+    'cyclic-evidence-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define (repeat-mutating-commit (plan : vector)) : vector
+  (if (vector-ref plan 1)
+      (let* ((update (car (vector-ref plan 2)))
+             (destination (vector-ref update 0))
+             (payload (vector-ref destination 5)))
+        (vector-set! payload 0 'repeat-mutation)
+        (fixture-fail 'internal 'tensor-provider-register-internal!
+                      "repeat commit mutated then raised"))
+      (fixture-commit-load! plan)))
+
+(define repeat-mutating-provider
+  (tensor-provider-create-internal
+    'repeat-mutating-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load repeat-mutating-commit))
+
+(tensor-provider-register-internal! fixture-provider
+                                    (fixture-admission-evidence))
+(tensor-provider-register-internal! alternate-provider
+                                    (fixture-admission-evidence))
 
 (define (fixture-register-substituting-provider-internal!)
-  (tensor-provider-register-internal! substituting-provider))
+  (tensor-provider-register-internal! substituting-provider
+                                      (fixture-admission-evidence)))
 
 (define (fixture-register-raising-provider-internal!)
-  (tensor-provider-register-internal! raising-provider))
+  (tensor-provider-register-internal! raising-provider
+                                      (fixture-admission-evidence)))
 
 (define (fixture-register-reentrant-provider-internal!)
-  (tensor-provider-register-internal! reentrant-provider))
+  (tensor-provider-register-internal! reentrant-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-cyclic-evidence-provider-internal!)
+  (let ((evidence (fixture-admission-evidence)))
+    (set-cdr! (cdr evidence) evidence)
+    (tensor-provider-register-internal! cyclic-evidence-provider evidence)))
+
+(define (fixture-register-repeat-mutating-provider-internal!)
+  (tensor-provider-register-internal! repeat-mutating-provider
+                                      (fixture-admission-evidence)))
 
 (define (module-create-fixture-internal)
   (module-create-with-provider-internal fixture-provider-name))

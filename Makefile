@@ -10,7 +10,9 @@ configure:
 	/usr/bin/bash scripts/configure.sh
 
 build: configure
+	/usr/bin/bash scripts/generate-p1-roots.sh --check
 	/usr/bin/bash scripts/build.sh
+	/usr/bin/bash scripts/build-p1-identity.sh
 
 test: build
 	/usr/bin/bash scripts/test.sh

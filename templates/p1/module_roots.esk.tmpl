@@ -1,8 +1,120 @@
-;;; P1 module/state-tree implementation. Names ending in -internal are not part
-;;; of the public transformer.module API. The provider boundary is an internal
-;;; integration seam only; no provider is installed by production P1.
-
+@@P1_PUBLIC_BEGIN@@
+;;; Generated public P1 root. No production tensor provider is admitted here.
 (require transformer.error_internal)
+
+(provide module-parameters module-buffers module-state-dict
+         module-load-state-dict! module-train! module-eval! module-zero-grad!
+         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
+         parameter-handle-path parameter-handle-shape parameter-handle-dtype
+         parameter-handle-device state-dict-paths state-dict-tensor
+         state-dict-alias-groups)
+
+(define (module-parameters module)
+  (transformer-error-raise 'unsupported 'module-parameters
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (module-buffers module)
+  (transformer-error-raise 'unsupported 'module-buffers
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (module-state-dict module)
+  (transformer-error-raise 'unsupported 'module-state-dict
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (module-load-state-dict! module state)
+  (transformer-error-raise 'unsupported 'module-load-state-dict!
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (module-train! module)
+  (transformer-error-raise 'unsupported 'module-train!
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (module-eval! module)
+  (transformer-error-raise 'unsupported 'module-eval!
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (module-zero-grad! module)
+  (transformer-error-raise 'unsupported 'module-zero-grad!
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-tree-paths tree)
+  (transformer-error-raise 'unsupported 'parameter-tree-paths
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-tree-handle tree path)
+  (transformer-error-raise 'unsupported 'parameter-tree-handle
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-tree-tie-groups tree)
+  (transformer-error-raise 'unsupported 'parameter-tree-tie-groups
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-handle-path handle)
+  (transformer-error-raise 'unsupported 'parameter-handle-path
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-handle-shape handle)
+  (transformer-error-raise 'unsupported 'parameter-handle-shape
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-handle-dtype handle)
+  (transformer-error-raise 'unsupported 'parameter-handle-dtype
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (parameter-handle-device handle)
+  (transformer-error-raise 'unsupported 'parameter-handle-device
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (state-dict-paths state)
+  (transformer-error-raise 'unsupported 'state-dict-paths
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (state-dict-tensor state path)
+  (transformer-error-raise 'unsupported 'state-dict-tensor
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+(define (state-dict-alias-groups state)
+  (transformer-error-raise 'unsupported 'state-dict-alias-groups
+    "no verified tensor provider is configured in the public P1 root" '() #f))
+@@P1_PUBLIC_END@@
+
+@@P1_TRUSTED_BEGIN@@
+;;; Generated trusted P1 root. This source is linked only with the private
+;;; process-local identity archive; all raw FFI names remain outside public builds.
+(require transformer.error_internal)
+
+(extern ptr p1-native-context-create
+        :real et_p1_private_context_create_v1)
+(extern i64 p1-native-error-category ptr
+        :real et_p1_private_error_category_v1)
+(extern i64 p1-native-error-code ptr
+        :real et_p1_private_error_code_v1)
+(extern ptr p1-native-error-operation ptr
+        :real et_p1_private_error_operation_v1)
+(extern ptr p1-native-error-message ptr
+        :real et_p1_private_error_message_v1)
+(extern ptr p1-native-result-ptr ptr
+        :real et_p1_private_result_ptr_v1)
+(extern i64 p1-native-result-i64 ptr
+        :real et_p1_private_result_i64_v1)
+(extern i64 p1-native-provider-create ptr ptr i64
+        :real et_p1_private_provider_create_v1)
+(extern i64 p1-native-provider-abort ptr ptr
+        :real et_p1_private_provider_abort_v1)
+(extern i64 p1-native-module-create ptr
+        :real et_p1_private_module_create_v1)
+(extern i64 p1-native-handle-create ptr
+        :real et_p1_private_parameter_handle_create_v1)
+(extern i64 p1-native-tree-create ptr
+        :real et_p1_private_parameter_tree_create_v1)
+(extern i64 p1-native-state-create ptr
+        :real et_p1_private_state_dict_create_v1)
+(extern i64 p1-native-entry-create ptr
+        :real et_p1_private_state_entry_create_v1)
+(extern i64 p1-native-callback-create ptr
+        :real et_p1_private_callback_identity_create_v1)
+(extern i64 p1-native-callback-revoke ptr ptr
+        :real et_p1_private_callback_identity_revoke_v1)
+(extern i64 p1-native-provider-seal ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_p1_private_provider_seal_v1)
+(extern i64 p1-native-provider-matches ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_p1_private_provider_snapshot_matches_v1)
+(extern i64 p1-native-state-bind ptr ptr ptr
+        :real et_p1_private_state_bind_v1)
+(extern i64 p1-native-state-provider ptr ptr
+        :real et_p1_private_state_provider_v1)
+(extern i64 p1-native-state-unbind ptr ptr
+        :real et_p1_private_state_unbind_v1)
+(extern i64 p1-native-state-revoke ptr ptr
+        :real et_p1_private_state_revoke_v1)
+(extern i64 p1-native-live-count ptr
+        :real et_p1_private_live_entry_count_v1)
+(extern i64 p1-native-tombstone-count ptr
+        :real et_p1_private_tombstone_count_v1)
 
 (provide module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
@@ -26,13 +138,15 @@
          state-dict-features-internal state-dict-adapter-internal
          state-dict-entries-internal)
 
+(define p1-trusted-surface
+  (let ()
+
 (define module-tag (vector 'transformer-module))
 (define parameter-handle-tag (vector 'transformer-parameter-handle))
 (define parameter-tree-tag (vector 'transformer-parameter-tree))
 (define state-dict-tag (vector 'transformer-state-dict))
 (define state-entry-tag (vector 'transformer-state-entry))
 (define tensor-provider-tag (vector 'transformer-tensor-provider))
-(define state-binding-token-tag (vector 'transformer-state-binding-token))
 
 (define state-format 'transformer-state-dict)
 (define state-major 1)
@@ -42,8 +156,17 @@
 (define provider-interface-minor 0)
 (define row-major-layout 'dense-row-major-contiguous)
 (define tensor-providers '())
-(define state-provider-bindings '())
 (define tensor-provider-admission-active? #f)
+(define shell-registry '())
+(define max-path-segments 64)
+(define max-shape-rank 64)
+(define max-feature-count 64)
+(define max-state-entries 4096)
+(define max-alias-groups 4096)
+(define max-alias-members 4096)
+(define max-data-depth 16)
+(define max-data-nodes 65536)
+(define native-context (p1-native-context-create))
 
 (define (fail category operation message details)
   ;; Never forward untrusted/malformed values into E1 error construction. The
@@ -51,20 +174,147 @@
   ;; bounded, proper, unique-symbol-key, data-only details value.
   (transformer-error-raise category operation message '() #f))
 
-(define (copy-data value)
+(define (identity-member-local? value values)
   (cond
-    ((pair? value) (cons (copy-data (car value)) (copy-data (cdr value))))
-    ((vector? value)
-     (let* ((size (vector-length value))
-            (result (make-vector size #f)))
-       (let loop ((index 0))
-         (if (= index size)
-             result
-             (begin
-               (vector-set! result index (copy-data (vector-ref value index)))
-               (loop (+ index 1)))))))
-    ((string? value) (string-copy value))
-    (else value)))
+    ((null? values) #f)
+    ((eq? value (car values)) #t)
+    (else (identity-member-local? value (cdr values)))))
+
+(define (native-category code)
+  (cond
+    ((= code 1) 'invalid-argument)
+    ((= code 2) 'unsupported)
+    ((= code 3) 'invalid-state)
+    (else 'internal)))
+
+(define (native-error operation)
+  (transformer-error-wrap-foreign
+    (native-category (p1-native-error-category native-context))
+    operation "P1 private identity operation failed"
+    (list (list 'native-category
+                (p1-native-error-category native-context)))
+    'p1-private-bridge (p1-native-error-code native-context)
+    (ptr->string (p1-native-error-message native-context)) #f))
+
+(define (native-check operation status)
+  (if (= status 0)
+      #t
+      (raise (native-error operation))))
+
+(define (require-native-context operation)
+  (if (null? native-context)
+      (fail 'unsupported operation
+            "P1 private identity capability is unavailable" '())
+      native-context))
+
+(define (native-create-shell kind raw)
+  (require-native-context 'p1-native-create-shell)
+  (native-check
+    'p1-native-create-shell
+    (cond
+      ((eq? kind 'provider)
+       (let ((name (symbol->string (vector-ref raw 1))))
+         (p1-native-provider-create native-context name
+                                    (string-byte-length name))))
+      ((eq? kind 'module) (p1-native-module-create native-context))
+      ((eq? kind 'handle) (p1-native-handle-create native-context))
+      ((eq? kind 'tree) (p1-native-tree-create native-context))
+      ((eq? kind 'state) (p1-native-state-create native-context))
+      ((eq? kind 'entry) (p1-native-entry-create native-context))
+      (else
+        (fail 'internal 'p1-native-create-shell
+              "unknown private identity kind" '()))))
+  (p1-native-result-ptr native-context))
+
+(define (shell-entry value)
+  (let loop ((entries shell-registry))
+    (cond
+      ((null? entries) #f)
+      ((eq? value (vector-ref (car entries) 0)) (car entries))
+      (else (loop (cdr entries))))))
+
+(define (shell-for-raw kind raw)
+  (let find ((entries shell-registry))
+    (cond
+      ((null? entries)
+       (let* ((shell (native-create-shell kind raw))
+              (entry (vector shell kind raw)))
+         (set! shell-registry (cons entry shell-registry))
+         shell))
+      ((and (eq? kind (vector-ref (car entries) 1))
+            (eq? raw (vector-ref (car entries) 2)))
+       (vector-ref (car entries) 0))
+      (else (find (cdr entries))))))
+
+(define (raw-for-shell operation kind value)
+  (let ((entry (shell-entry value)))
+    (if (and entry (eq? kind (vector-ref entry 1)))
+        (vector-ref entry 2)
+        (fail 'invalid-argument operation "expected registered opaque value" '()))))
+
+(define (proper-acyclic-list? values)
+  ;; Floyd's algorithm keeps validation linear and bounded without allocating a
+  ;; caller-sized seen set.  The second pass in bounded-list-length counts only
+  ;; after this pass has proved that the spine terminates.
+  (let loop ((slow values) (fast values))
+    (cond
+      ((null? fast) #t)
+      ((not (pair? fast)) #f)
+      (else
+        (let ((fast-one (cdr fast)))
+          (cond
+            ((null? fast-one) #t)
+            ((not (pair? fast-one)) #f)
+            (else
+              (let ((slow-one (cdr slow))
+                    (fast-two (cdr fast-one)))
+                (if (eq? slow-one fast-two)
+                    #f
+                    (loop slow-one fast-two))))))))))
+
+(define (bounded-list-length values limit)
+  (if (not (proper-acyclic-list? values))
+      #f
+      (let loop ((remaining values) (count 0))
+        (cond
+          ((null? remaining) count)
+          ((>= count limit) #f)
+          (else (loop (cdr remaining) (+ count 1)))))))
+
+(define (copy-data-for operation category value)
+  (let ((nodes 0))
+    (define (consume! depth composite ancestors)
+      (set! nodes (+ nodes 1))
+      (if (or (> depth max-data-depth) (> nodes max-data-nodes)
+              (and composite (identity-member-local? composite ancestors)))
+          (fail category operation
+                "data contains a cycle or exceeds bounds" '())
+          #t))
+    (define (walk item depth ancestors)
+      (let* ((composite (if (or (pair? item) (vector? item)) item #f))
+             (next-ancestors
+               (if composite (cons composite ancestors) ancestors)))
+      (consume! depth composite ancestors)
+      (cond
+        ((pair? item) (cons (walk (car item) (+ depth 1) next-ancestors)
+                            (walk (cdr item) depth next-ancestors)))
+        ((vector? item)
+         (let* ((size (vector-length item))
+                (result (make-vector size #f)))
+           (let loop ((index 0))
+             (if (= index size)
+                 result
+                 (begin
+                   (vector-set! result index
+                                (walk (vector-ref item index) (+ depth 1)
+                                      next-ancestors))
+                   (loop (+ index 1)))))))
+        ((string? item) (string-copy item))
+        (else item))))
+    (walk value 0 '())))
+
+(define (copy-data value)
+  (copy-data-for 'p1-core-copy 'internal value))
 
 (define (list-reverse values)
   (let loop ((remaining values) (result '()))
@@ -87,7 +337,7 @@
         (loop (cdr remaining) (+ count 1)))))
 
 (define (valid-shape? shape)
-  (and (list? shape)
+  (and (bounded-list-length shape max-shape-rank)
        (let loop ((dimensions shape))
          (if (null? dimensions)
              #t
@@ -97,7 +347,7 @@
                   (loop (cdr dimensions)))))))
 
 (define (valid-path? path)
-  (and (list? path)
+  (and (bounded-list-length path max-path-segments)
        (not (null? path))
        (let loop ((segments path))
          (if (null? segments)
@@ -181,17 +431,15 @@
 
 (define (state-value? value)
   (and (vector? value) (= (vector-length value) 9)
-       (eq? (vector-ref value 0) state-dict-tag)
-       (let ((token (vector-ref value 8)))
-         (and (vector? token) (= (vector-length token) 1)
-              (eq? (vector-ref token 0) state-binding-token-tag)))))
+       (eq? (vector-ref value 0) state-dict-tag)))
 
 (define (state-entry-value? value)
   (and (vector? value) (= (vector-length value) 8)
        (eq? (vector-ref value 0) state-entry-tag)))
 
 (define (tensor-provider-value? value)
-  (and (vector? value) (= (vector-length value) 9)
+  (and (vector? value)
+       (or (= (vector-length value) 9) (= (vector-length value) 10))
        (eq? (vector-ref value 0) tensor-provider-tag)))
 
 (define (require-module operation value)
@@ -238,89 +486,225 @@
         provider-interface-minor (tensor-provider-name provider)))
 
 (define (state-provider-binding-find state)
-  (let ((token (vector-ref state 8)))
-    (let loop ((bindings state-provider-bindings))
-      (cond
-        ((null? bindings) #f)
-        ((eq? token (car (car bindings))) (cdr (car bindings)))
-        (else (loop (cdr bindings)))))))
+  (let* ((shell (shell-for-raw 'state state))
+         (status (p1-native-state-provider native-context shell)))
+    (if (= status 0)
+        (raw-for-shell 'state-provider-binding-find 'provider
+                       (p1-native-result-ptr native-context))
+        (if (= (p1-native-error-code native-context) 11)
+            #f
+            (raise (native-error 'state-provider-binding-find))))))
 
 (define (state-provider-bind! operation state provider)
-  (let ((existing (state-provider-binding-find state)))
-    (if existing
-        (if (eq? existing provider)
-            state
-            (fail 'internal operation
-                  "state is already bound to a different tensor provider" '()))
-        (begin
-          (set! state-provider-bindings
-                (cons (cons (vector-ref state 8) provider)
-                      state-provider-bindings))
-          state))))
+  (let ((state-shell (shell-for-raw 'state state))
+        (provider-shell (shell-for-raw 'provider provider)))
+    (native-check operation
+                  (p1-native-state-bind native-context state-shell
+                                        provider-shell))
+    state))
 
-(define (tensor-provider-find name)
+(define (tensor-provider-registration-find name)
   (let loop ((providers tensor-providers))
     (cond
       ((null? providers) #f)
-      ((eq? name (tensor-provider-name (car providers))) (car providers))
+      ((eq? name (vector-ref (car providers) 0)) (car providers))
       (else (loop (cdr providers))))))
 
-(define (tensor-provider-register-internal! provider)
+(define (tensor-provider-find name)
+  (let ((registration (tensor-provider-registration-find name)))
+    (if registration (vector-ref registration 2) #f)))
+
+(define (tensor-provider-snapshot provider)
+  (vector tensor-provider-tag (vector-ref provider 1)
+          (vector-ref provider 2) (vector-ref provider 3)
+          (vector-ref provider 4) (vector-ref provider 5)
+          (vector-ref provider 6) (vector-ref provider 7)
+          (vector-ref provider 8) #f))
+
+(define (replace-shell-raw! operation kind old-raw new-raw)
+  (let find ((entries shell-registry))
+    (cond
+      ((null? entries)
+       (fail 'internal operation "opaque identity registry entry is missing" '()))
+      ((and (eq? kind (vector-ref (car entries) 1))
+            (eq? old-raw (vector-ref (car entries) 2)))
+       (vector-set! (car entries) 2 new-raw))
+      (else (find (cdr entries))))))
+
+(define (native-callback-identities operation)
+  (let create ((index 0) (created '()))
+    (if (= index 7)
+        (let ((result (make-vector 7 #f)))
+          (let install ((remaining (list-reverse created)) (slot 0))
+            (if (null? remaining)
+                result
+                (begin
+                  (vector-set! result slot (car remaining))
+                  (install (cdr remaining) (+ slot 1))))))
+        (let ((status (p1-native-callback-create native-context)))
+          (if (= status 0)
+              (create (+ index 1)
+                      (cons (p1-native-result-ptr native-context) created))
+              (let ((caught (native-error operation)))
+                (let revoke ((remaining created))
+                  (if (null? remaining)
+                      (raise caught)
+                      (begin
+                        (p1-native-callback-revoke native-context
+                                                   (car remaining))
+                        (revoke (cdr remaining)))))))))))
+
+(define (native-provider-seal! operation provider callbacks)
+  (let ((shell (shell-for-raw 'provider provider)))
+    (native-check
+      operation
+      (p1-native-provider-seal
+        native-context shell
+        (vector-ref callbacks 0) (vector-ref callbacks 1)
+        (vector-ref callbacks 2) (vector-ref callbacks 3)
+        (vector-ref callbacks 4) (vector-ref callbacks 5)
+        (vector-ref callbacks 6)))))
+
+(define (native-provider-snapshot-check! operation provider)
+  (if (not (= (vector-length provider) 10))
+      (fail 'unsupported operation "tensor provider is not admitted" '())
+      (let ((callbacks (vector-ref provider 9)))
+        (native-check
+          operation
+          (p1-native-provider-matches
+            native-context (shell-for-raw 'provider provider)
+            (vector-ref callbacks 0) (vector-ref callbacks 1)
+            (vector-ref callbacks 2) (vector-ref callbacks 3)
+            (vector-ref callbacks 4) (vector-ref callbacks 5)
+            (vector-ref callbacks 6))))))
+
+(define (native-callback-identities-revoke! callbacks)
+  (let loop ((index 0))
+    (if (= index 7)
+        #t
+        (begin
+          ;; Each identity was minted in this context and is not yet sealed
+          ;; into a provider. Revocation is therefore an infallible cleanup.
+          (p1-native-callback-revoke native-context
+                                     (vector-ref callbacks index))
+          (loop (+ index 1))))))
+
+(define (native-provider-admission-abort!
+          operation shell shell-record callbacks)
+  (if (vector? callbacks)
+      (native-callback-identities-revoke! callbacks)
+      #t)
+  (native-check operation
+                (p1-native-provider-abort native-context shell))
+  ;; Retain the native tombstone but make the rejected shell unusable through
+  ;; the private Eshkol registry as well.
+  (vector-set! shell-record 1 'revoked-provider)
+  (vector-set! shell-record 2 #f)
+  #t)
+
+(define (tensor-provider-register-internal! provider evidence)
   (if tensor-provider-admission-active?
       (fail 'invalid-state 'tensor-provider-register-internal!
             "tensor provider admission is not reentrant" '())
       (if (not (tensor-provider-value? provider))
           (fail 'invalid-argument 'tensor-provider-register-internal!
                 "expected tensor provider" '())
-          (let ((existing (tensor-provider-find (tensor-provider-name provider))))
+          (let ((existing
+                  (tensor-provider-registration-find
+                    (tensor-provider-name provider))))
             (if existing
-                (if (eq? existing provider)
+                (if (eq? (vector-ref existing 1)
+                         (shell-for-raw 'provider provider))
                     provider
                     (fail 'invalid-state 'tensor-provider-register-internal!
                           "tensor provider name is already registered" '()))
-                (begin
-                  (tensor-provider-admit! provider)
-                  (set! tensor-providers (cons provider tensor-providers))
-                  provider))))))
+                (let* ((admitted (tensor-provider-snapshot provider))
+                       (shell (shell-for-raw 'provider provider))
+                       (shell-record (shell-entry shell))
+                       (registration
+                         (vector (tensor-provider-name admitted)
+                                 shell admitted))
+                       (next-providers (cons registration tensor-providers))
+                       (callbacks #f))
+                  (guard (error
+                           (#t
+                             (native-provider-admission-abort!
+                               'tensor-provider-register-internal!
+                               shell shell-record callbacks)
+                             (raise error)))
+                    (tensor-provider-admit! admitted evidence)
+                    (set! callbacks
+                          (native-callback-identities
+                            'tensor-provider-register-internal!))
+                    (if (or (not shell-record)
+                            (not (eq? (vector-ref shell-record 1) 'provider))
+                            (not (eq? (vector-ref shell-record 2) provider)))
+                        (fail 'internal 'tensor-provider-register-internal!
+                              "opaque provider identity changed during admission"
+                              '())
+                        #t)
+                    (native-provider-seal!
+                      'tensor-provider-register-internal! provider callbacks))
+                  ;; All allocations and recoverable branches precede sealing.
+                  ;; These three writes are bounded and nonraising.
+                  (vector-set! admitted 9 callbacks)
+                  (vector-set! shell-record 2 admitted)
+                  (set! tensor-providers
+                        next-providers)
+                  admitted))))))
 
 (define (require-provider-name operation name)
   (if (not (symbol? name))
       (fail 'corrupt-data operation "malformed tensor provider name" '())
       (let ((provider (tensor-provider-find name)))
-        (if provider provider
+        (if provider
+            (begin (native-provider-snapshot-check! operation provider)
+                   provider)
             (fail 'unsupported operation "tensor provider is unavailable" '())))))
 
 (define (require-provider operation provider)
-  (if (tensor-provider-value? provider)
-      provider
+  (if (and (tensor-provider-value? provider)
+           (= (vector-length provider) 10))
+      (begin (native-provider-snapshot-check! operation provider)
+             provider)
       (fail 'unsupported operation "no verified tensor provider is configured" '())))
-
-(define (valid-device-data-walk? value seen)
-  (cond
-    ((or (symbol? value) (string? value) (boolean? value)
-         (and (integer? value) (exact? value))) #t)
-    ((pair? value)
-     (and (not (identity-member? value seen))
-          (valid-device-data-walk? (car value) (cons value seen))
-          (valid-device-data-walk? (cdr value) (cons value seen))))
-    ((vector? value)
-     (and (not (identity-member? value seen))
-          (let loop ((index 0))
-            (if (= index (vector-length value))
-                #t
-                (and (valid-device-data-walk? (vector-ref value index)
-                                              (cons value seen))
-                     (loop (+ index 1)))))))
-    ((null? value) #t)
-    (else #f)))
 
 (define (valid-device-descriptor? device)
   (and (not (or (null? device) (boolean? device)
                 (integer? device) (string? device)))
-       (valid-device-data-walk? device '())))
+       (let ((seen '()) (nodes 0))
+         (define (walk value depth)
+           (set! nodes (+ nodes 1))
+           (if (or (> depth max-data-depth) (> nodes max-state-entries))
+               #f
+               (cond
+                 ((or (symbol? value) (string? value) (boolean? value)
+                      (and (integer? value) (exact? value))) #t)
+                 ((null? value) #t)
+                 ((pair? value)
+                  (if (identity-member-local? value seen)
+                      #f
+                      (begin
+                        (set! seen (cons value seen))
+                        (and (walk (car value) (+ depth 1))
+                             (or (null? (cdr value))
+                                 (and (pair? (cdr value))
+                                      (walk (cdr value) depth)))))))
+                 ((vector? value)
+                  (if (identity-member-local? value seen)
+                      #f
+                      (begin
+                        (set! seen (cons value seen))
+                        (let loop ((index 0))
+                          (if (= index (vector-length value))
+                              #t
+                              (and (walk (vector-ref value index) (+ depth 1))
+                                   (loop (+ index 1))))))))
+                 (else #f))))
+         (walk device 0))))
 
 (define (validate-provider-identity operation identity)
-  (if (not (and (list? identity) (= (list-length identity) 4)))
+  (if (not (equal? (bounded-list-length identity 5) 4))
       (fail 'corrupt-data operation "malformed tensor provider identity" '())
       (if (not (and (symbol? (car identity))
                     (integer? (car (cdr identity)))
@@ -427,12 +811,81 @@
 (define (tensor-commit-load! operation provider plan)
   ;; Registration requires this whole-batch commit to be one-shot,
   ;; allocation-free, infallible, and non-raising after preparation succeeds.
-  ((vector-ref provider 8) plan)
-  ;; A provider contract violation here is outside recoverable load semantics:
-  ;; P1 never raises a normal error after commit has begun.
-  #t)
+  (let ((returned ((vector-ref provider 8) plan)))
+    (if (eq? returned plan)
+        #t
+        ;; This is a trusted-provider contract violation detected after the
+        ;; mutation boundary, not a recoverable malformed-state branch.
+        (fail 'internal operation
+              "tensor provider substituted the validated commit carrier" '()))))
 
-(define (tensor-provider-admit! provider)
+(define (admission-evidence-valid? evidence)
+  (let ((count (bounded-list-length evidence 17)))
+    (and count (>= count 2) (<= count 16)
+         (let loop ((remaining evidence))
+           (if (null? remaining)
+               #t
+               (let ((assignment (car remaining)))
+                 (and (vector? assignment) (= (vector-length assignment) 3)
+                      (or (eq? (vector-ref assignment 2) 'parameter)
+                          (eq? (vector-ref assignment 2) 'buffer))
+                      (loop (cdr remaining)))))))))
+
+(define (assignment-baselines operation provider assignments field)
+  (let loop ((remaining assignments) (result '()))
+    (if (null? remaining)
+        (list-reverse result)
+        (let* ((assignment (car remaining))
+               (kind (vector-ref assignment 2))
+               (tensor (vector-ref assignment field)))
+          (loop (cdr remaining)
+                (cons (tensor-copy operation provider tensor kind) result))))))
+
+(define (assignments-match-baselines?
+          operation provider assignments field baselines)
+  (let loop ((remaining assignments) (copies baselines))
+    (if (null? remaining)
+        #t
+        (let* ((assignment (car remaining))
+               (kind (vector-ref assignment 2)))
+          (and (tensor-value-equal? operation provider
+                                    (vector-ref assignment field)
+                                    (car copies) kind)
+               (loop (cdr remaining) (cdr copies)))))))
+
+(define (assignments-committed?
+          operation provider assignments destination-identities)
+  (let loop ((remaining assignments) (identities destination-identities))
+    (if (null? remaining)
+        #t
+        (let* ((assignment (car remaining))
+               (destination (vector-ref assignment 0))
+               (source (vector-ref assignment 1))
+               (kind (vector-ref assignment 2)))
+          (and (eq? destination (car identities))
+               (tensor-value-equal? operation provider destination source kind)
+               (loop (cdr remaining) (cdr identities)))))))
+
+(define (assignment-identities assignments field)
+  (let loop ((remaining assignments) (result '()))
+    (if (null? remaining)
+        (list-reverse result)
+        (loop (cdr remaining)
+              (cons (vector-ref (car remaining) field) result)))))
+
+(define (admission-evidence-nontrivial? operation provider assignments)
+  (let loop ((remaining assignments))
+    (if (null? remaining)
+        #t
+        (let* ((assignment (car remaining))
+               (destination (vector-ref assignment 0))
+               (source (vector-ref assignment 1))
+               (kind (vector-ref assignment 2)))
+          (and (not (tensor-value-equal? operation provider
+                                         destination source kind))
+               (loop (cdr remaining)))))))
+
+(define (tensor-provider-admit! provider evidence)
   (if tensor-provider-admission-active?
       (fail 'invalid-state 'tensor-provider-register-internal!
             "tensor provider admission is not reentrant" '())
@@ -442,16 +895,86 @@
                  (#t
                    (set! tensor-provider-admission-active? #f)
                    (raise error)))
-          (let* ((plan
-                   (tensor-prepare-load 'tensor-provider-register-internal!
-                                        provider '()))
-                 (returned ((vector-ref provider 8) plan)))
-            (set! tensor-provider-admission-active? #f)
-            (if (eq? returned plan)
-                provider
-                (fail 'unsupported 'tensor-provider-register-internal!
-                      "provider commit admission substituted its plan carrier"
-                      '())))))))
+          (if (not (admission-evidence-valid? evidence))
+              (begin
+                (set! tensor-provider-admission-active? #f)
+                (fail 'invalid-argument 'tensor-provider-register-internal!
+                      "provider admission requires 2..16 scratch assignments" '()))
+              (let* ((operation 'tensor-provider-register-internal!)
+                     (destination-identities
+                       (assignment-identities evidence 0))
+                     (destination-baselines
+                       (assignment-baselines operation provider evidence 0))
+                     (source-baselines
+                       (assignment-baselines operation provider evidence 1))
+                     (nontrivial
+                       (if (admission-evidence-nontrivial?
+                             operation provider evidence)
+                           #t
+                           (fail 'invalid-argument operation
+                                 "provider admission destinations must differ"
+                                 '())))
+                     (unique
+                       (ensure-assignment-storage-unique!
+                         operation provider evidence))
+                     (disjoint
+                       (ensure-sources-do-not-alias-destinations!
+                         operation provider evidence))
+                     (plan (tensor-prepare-load operation provider evidence)))
+                (if (not (and
+                           (assignments-match-baselines?
+                             operation provider evidence 0
+                             destination-baselines)
+                           (assignments-match-baselines?
+                             operation provider evidence 1 source-baselines)))
+                    (begin
+                      (set! tensor-provider-admission-active? #f)
+                      (fail 'unsupported operation
+                            "provider prepare mutated admission tensors" '()))
+                    (let ((returned ((vector-ref provider 8) plan)))
+                      (if (not (eq? returned plan))
+                          (begin
+                            (set! tensor-provider-admission-active? #f)
+                            (fail 'unsupported operation
+                                  "provider commit substituted its plan carrier"
+                                  '()))
+                          (if (not (and
+                                     (assignments-committed?
+                                       operation provider evidence
+                                       destination-identities)
+                                     (assignments-match-baselines?
+                                       operation provider evidence 1
+                                       source-baselines)))
+                              (begin
+                                (set! tensor-provider-admission-active? #f)
+                                (fail 'unsupported operation
+                                      "provider commit failed admission evidence"
+                                      '()))
+                              (let ((rejected-repeat?
+                                      (guard (raised (#t #t))
+                                        ((vector-ref provider 8) plan)
+                                        #f)))
+                                (if (not rejected-repeat?)
+                                    (begin
+                                      (set! tensor-provider-admission-active? #f)
+                                      (fail 'unsupported operation
+                                            "provider commit accepted a consumed plan"
+                                            '()))
+                                    (if (not (and
+                                               (assignments-committed?
+                                                 operation provider evidence
+                                                 destination-identities)
+                                               (assignments-match-baselines?
+                                                 operation provider evidence 1
+                                                 source-baselines)))
+                                        (begin
+                                          (set! tensor-provider-admission-active? #f)
+                                          (fail 'unsupported operation
+                                                "rejected repeat commit mutated admission tensors"
+                                                '()))
+                                        (begin
+                                          (set! tensor-provider-admission-active? #f)
+                                          provider))))))))))))))
 
 (define (module-create-with-provider-internal provider-name)
   (let ((provider (require-provider-name 'module-create-with-provider-internal
@@ -737,6 +1260,26 @@
                   (cons (entry-path (car remaining)) paths)
                   paths)))))
 
+(define (canonical-path-updates entries)
+  (let loop ((remaining entries) (seen '()) (updates '()))
+    (if (null? remaining)
+        (list-reverse updates)
+        (let* ((handle (vector-ref (car remaining) 2))
+               (paths (paths-for-handle entries handle)))
+          (if (identity-member? handle seen)
+              (loop (cdr remaining) seen updates)
+              (loop (cdr remaining) (cons handle seen)
+                    (cons (vector handle (copy-data (car paths))) updates)))))))
+
+(define (install-canonical-paths! updates)
+  (let loop ((remaining updates))
+    (if (null? remaining)
+        #t
+        (begin
+          (vector-set! (vector-ref (car remaining) 0) 2
+                       (vector-ref (car remaining) 1))
+          (loop (cdr remaining))))))
+
 (define (tie-groups-from-entries entries)
   (let loop ((remaining entries) (seen '()) (groups '()))
     (if (null? remaining)
@@ -745,16 +1288,16 @@
                (paths (paths-for-handle entries handle)))
           (if (identity-member? handle seen)
               (loop (cdr remaining) seen groups)
-              (begin
-                (vector-set! handle 2 (copy-data (car paths)))
-                (loop (cdr remaining) (cons handle seen)
-                      (if (> (list-length paths) 1) (cons paths groups) groups))))))))
+              (loop (cdr remaining) (cons handle seen)
+                    (if (> (list-length paths) 1) (cons paths groups) groups)))))))
 
 (define (module-parameters module)
   (require-root-module 'module-parameters module)
   (finalize-root! module)
   (let* ((entries (sort-entries (flatten-parameters module '())))
-         (groups (tie-groups-from-entries entries)))
+         (groups (tie-groups-from-entries entries))
+         (updates (canonical-path-updates entries)))
+    (install-canonical-paths! updates)
     (vector parameter-tree-tag entries groups)))
 
 (define (parameter-tree-paths tree)
@@ -801,8 +1344,13 @@
   (vector-ref (require-handle 'parameter-handle-tensor-identity-internal handle) 6))
 
 (define (state-entry-internal path kind shape dtype device layout tensor)
-  (vector state-entry-tag (copy-data path) kind (copy-data shape) dtype
-          (copy-data device) layout tensor))
+  (vector state-entry-tag
+          (copy-data-for 'state-entry-internal 'invalid-argument path)
+          kind
+          (copy-data-for 'state-entry-internal 'invalid-argument shape)
+          dtype
+          (copy-data-for 'state-entry-internal 'invalid-argument device)
+          layout tensor))
 
 (define (state-entry-path-internal entry) (copy-data (vector-ref entry 1)))
 (define (state-entry-kind-internal entry) (vector-ref entry 2))
@@ -816,8 +1364,12 @@
   ;; Malformed-state tests deliberately create an unbound logical value. Loading
   ;; validates it with the destination provider; standalone accessors require a
   ;; trusted provider binding created by module-state-dict/module-buffers.
-  (vector state-dict-tag format major minor (copy-data features)
-          (copy-data adapter) entries aliases (vector state-binding-token-tag)))
+  (vector state-dict-tag format major minor
+          (copy-data-for 'state-dict-create-unsafe-internal 'invalid-argument features)
+          (copy-data-for 'state-dict-create-unsafe-internal 'invalid-argument adapter)
+          entries
+          (copy-data-for 'state-dict-create-unsafe-internal 'invalid-argument aliases)
+          #f))
 
 (define (state-dict-format-internal state)
   (vector-ref (require-state 'state-dict-format-internal state) 1))
@@ -846,6 +1398,35 @@
       path kind (vector-ref metadata 0) (vector-ref metadata 1)
       (vector-ref metadata 2) (vector-ref metadata 3)
       (tensor-copy operation provider tensor kind))))
+
+(define (state-entry-contract-from-flat flat kind operation provider)
+  (let* ((path (entry-path flat))
+         (target (vector-ref flat 2))
+         (tensor (if (eq? kind 'parameter)
+                     (vector-ref target 6)
+                     (vector-ref target 2)))
+         (metadata (tensor-metadata operation provider tensor kind)))
+    (vector state-entry-tag path kind (vector-ref metadata 0)
+            (vector-ref metadata 1) (vector-ref metadata 2)
+            (vector-ref metadata 3) tensor)))
+
+(define (state-contract-from-flat parameters buffers operation provider)
+  (sort-entries
+    (list-append
+      (let loop ((items parameters) (result '()))
+        (if (null? items)
+            result
+            (loop (cdr items)
+                  (cons (state-entry-contract-from-flat
+                          (car items) 'parameter operation provider)
+                        result))))
+      (let loop ((items buffers) (result '()))
+        (if (null? items)
+            result
+            (loop (cdr items)
+                  (cons (state-entry-contract-from-flat
+                          (car items) 'buffer operation provider)
+                        result)))))))
 
 (define (ensure-entry-storage-unique! operation provider entries category)
   (let outer ((remaining entries))
@@ -883,7 +1464,7 @@
     (let ((state
             (vector state-dict-tag state-format state-major state-minor '()
                     (tensor-provider-identity provider) entries
-                    (copy-data aliases) (vector state-binding-token-tag))))
+                    (copy-data aliases) #f)))
       (state-provider-bind! operation state provider))))
 
 (define (module-state-dict module)
@@ -903,7 +1484,7 @@
                      'module-buffers provider)))
 
 (define (valid-feature-list? features)
-  (and (list? features)
+  (and (bounded-list-length features max-feature-count)
        (let loop ((items features) (previous #f))
          (if (null? items)
              #t
@@ -965,7 +1546,7 @@
                                                           #t))))))))))))))))
 
 (define (validate-state-entries operation provider entries)
-  (if (not (list? entries))
+  (if (not (bounded-list-length entries max-state-entries))
       (fail 'corrupt-data operation "state entries must be a list" '())
       (let loop ((items entries) (previous #f) (seen '()))
         (if (null? items)
@@ -984,13 +1565,18 @@
       (else (loop (cdr items))))))
 
 (define (validate-alias-groups operation provider groups entries)
-  (if (not (list? groups))
+  (if (not (bounded-list-length groups max-alias-groups))
       (fail 'corrupt-data operation "alias groups must be a list" '())
-      (let loop ((remaining groups) (previous-first #f) (seen '()))
+      (let loop ((remaining groups) (previous-first #f) (seen '())
+                 (total-members 0))
         (if (null? remaining)
             #t
-            (let ((group (car remaining)))
-              (if (or (not (list? group)) (< (list-length group) 2)
+            (let* ((group (car remaining))
+                   (group-members
+                     (bounded-list-length group max-alias-members)))
+              (if (or (not group-members)
+                      (< group-members 2)
+                      (> (+ total-members group-members) max-state-entries)
                       (not (let valid-paths ((paths group))
                              (if (null? paths) #t
                                  (and (valid-path? (car paths))
@@ -1003,7 +1589,8 @@
                       (let validate-paths ((paths group) (next-seen seen)
                                            (first-tensor #f))
                         (if (null? paths)
-                            (loop (cdr remaining) (car group) next-seen)
+                            (loop (cdr remaining) (car group) next-seen
+                                  (+ total-members group-members))
                             (let ((entry (state-entry-for-path entries (car paths))))
                               (if (path-member? (car paths) next-seen)
                                   (fail 'corrupt-data operation
@@ -1160,6 +1747,24 @@
                           "distinct load destinations alias tensor storage" '())
                     (inner (cdr others)))))))))
 
+(define (ensure-sources-do-not-alias-destinations!
+          operation provider assignments)
+  (let scan-sources ((sources assignments))
+    (if (null? sources)
+        #t
+        (let ((source (vector-ref (car sources) 1))
+              (source-kind (vector-ref (car sources) 2)))
+          (let scan-destinations ((destinations assignments))
+            (if (null? destinations)
+                (scan-sources (cdr sources))
+                (if (tensor-storage-identical?
+                      operation provider source
+                      (vector-ref (car destinations) 0)
+                      source-kind (vector-ref (car destinations) 2))
+                    (fail 'corrupt-data operation
+                          "state source aliases destination tensor storage" '())
+                    (scan-destinations (cdr destinations)))))))))
+
 (define (module-load-state-dict! module state)
   (require-root-module 'module-load-state-dict! module)
   (let ((provider (require-module-provider 'module-load-state-dict! module)))
@@ -1175,26 +1780,35 @@
           #t))
     ;; All tensor validation uses only the admitted, explicitly bound provider.
     (validate-state-with-provider 'module-load-state-dict! state provider)
-    (let* ((tree (module-parameters module))
-         (parameters (vector-ref tree 1))
-         (buffers (sort-entries (flatten-buffers module '())))
-         (destinations (sort-entries (list-append parameters buffers)))
-         (expected-state
-           (state-from-flat parameters buffers (vector-ref tree 2)
-                            'module-load-state-dict! provider))
-         (expected (vector-ref expected-state 6))
-         (incoming (vector-ref state 6)))
+    ;; Enumeration, metadata checks, canonical-path copies, and provider prepare
+    ;; are pure with respect to module topology.  The only topology writes occur
+    ;; after the provider's admitted one-shot commit has returned.
+    (let* ((parameters (sort-entries (flatten-parameters module '())))
+           (buffers (sort-entries (flatten-buffers module '())))
+           (destinations (sort-entries (list-append parameters buffers)))
+           (expected
+             (state-contract-from-flat parameters buffers
+                                       'module-load-state-dict! provider))
+           (expected-aliases (tie-groups-from-entries parameters))
+           (canonical-updates (canonical-path-updates parameters))
+           (incoming (vector-ref state 6)))
       (validate-destination-contract 'module-load-state-dict! provider
                                      expected incoming)
-      (if (not (equal? (vector-ref expected-state 7) (vector-ref state 7)))
+      (if (not (equal? expected-aliases (vector-ref state 7)))
           (fail 'shape-mismatch 'module-load-state-dict!
                 "state alias graph does not match destination module" '())
           (let* ((assignments (load-assignments destinations incoming))
                  (unique (ensure-assignment-storage-unique!
                            'module-load-state-dict! provider assignments))
+                 (disjoint (ensure-sources-do-not-alias-destinations!
+                             'module-load-state-dict! provider assignments))
                  (plan (tensor-prepare-load 'module-load-state-dict! provider
                                             assignments)))
             (tensor-commit-load! 'module-load-state-dict! provider plan)
+            ;; These writes are non-callback, nonallocating, and infallible over
+            ;; values fully allocated and validated before commit.
+            (install-canonical-paths! canonical-updates)
+            (finalize-root! module)
             #t)))))
 
 (define (set-mode-recursive! module mode)
@@ -1220,3 +1834,305 @@
   (require-root-module 'module-zero-grad! module)
   (fail 'unsupported 'module-zero-grad!
         "reverse-mode parameter gradient slots are not verified by R0" '()))
+
+(define (unwrap-entry-items operation entries)
+  (if (not (bounded-list-length entries max-state-entries))
+      (fail 'invalid-argument operation
+            "state entry input must be a bounded proper list" '())
+      (let loop ((remaining entries) (result '()))
+        (if (null? remaining)
+            (list-reverse result)
+            (let ((entry (shell-entry (car remaining))))
+              (loop (cdr remaining)
+                    (cons (if (and entry
+                                   (eq? (vector-ref entry 1) 'entry))
+                              (vector-ref entry 2)
+                              (car remaining))
+                          result)))))))
+
+(define (wrap-entry-items operation entries)
+  (if (not (bounded-list-length entries max-state-entries))
+      (fail 'internal operation "private state entry list is malformed" '())
+      (let loop ((remaining entries) (result '()))
+        (if (null? remaining)
+            (list-reverse result)
+            (loop (cdr remaining)
+                  (cons (if (state-entry-value? (car remaining))
+                            (shell-for-raw 'entry (car remaining))
+                            (car remaining))
+                        result))))))
+
+(define (exposed-tensor-provider-create
+          (name : symbol)
+          (describe : (-> vector vector))
+          (clone : (-> vector vector))
+          (storage-identical? : (-> vector boolean))
+          (value-equal? : (-> vector boolean))
+          (device-equal? : (-> vector boolean))
+          (prepare-load : (-> vector vector))
+          (commit-load! : (-> vector vector)))
+  (let ((raw
+          (tensor-provider-create-internal
+            name describe clone storage-identical? value-equal?
+            device-equal? prepare-load commit-load!)))
+    (shell-for-raw 'provider raw)))
+
+(vector
+  (lambda (module)
+    (shell-for-raw
+      'tree (module-parameters
+              (raw-for-shell 'module-parameters 'module module))))
+  (lambda (module)
+    (shell-for-raw
+      'state (module-buffers
+               (raw-for-shell 'module-buffers 'module module))))
+  (lambda (module)
+    (shell-for-raw
+      'state (module-state-dict
+               (raw-for-shell 'module-state-dict 'module module))))
+  (lambda (module state)
+    (module-load-state-dict!
+      (raw-for-shell 'module-load-state-dict! 'module module)
+      (raw-for-shell 'module-load-state-dict! 'state state)))
+  (lambda (module)
+    (module-train! (raw-for-shell 'module-train! 'module module)))
+  (lambda (module)
+    (module-eval! (raw-for-shell 'module-eval! 'module module)))
+  (lambda (module)
+    (module-zero-grad! (raw-for-shell 'module-zero-grad! 'module module)))
+  (lambda (tree)
+    (parameter-tree-paths
+      (raw-for-shell 'parameter-tree-paths 'tree tree)))
+  (lambda (tree path)
+    (shell-for-raw
+      'handle
+      (parameter-tree-handle
+        (raw-for-shell 'parameter-tree-handle 'tree tree) path)))
+  (lambda (tree)
+    (parameter-tree-tie-groups
+      (raw-for-shell 'parameter-tree-tie-groups 'tree tree)))
+  (lambda (handle)
+    (parameter-handle-path
+      (raw-for-shell 'parameter-handle-path 'handle handle)))
+  (lambda (handle)
+    (parameter-handle-shape
+      (raw-for-shell 'parameter-handle-shape 'handle handle)))
+  (lambda (handle)
+    (parameter-handle-dtype
+      (raw-for-shell 'parameter-handle-dtype 'handle handle)))
+  (lambda (handle)
+    (parameter-handle-device
+      (raw-for-shell 'parameter-handle-device 'handle handle)))
+  (lambda (state)
+    (state-dict-paths (raw-for-shell 'state-dict-paths 'state state)))
+  (lambda (state path)
+    (state-dict-tensor
+      (raw-for-shell 'state-dict-tensor 'state state) path))
+  (lambda (state)
+    (state-dict-alias-groups
+      (raw-for-shell 'state-dict-alias-groups 'state state)))
+
+  exposed-tensor-provider-create
+  (lambda (provider evidence)
+    (let ((raw
+            (tensor-provider-register-internal!
+              (raw-for-shell 'tensor-provider-register-internal!
+                             'provider provider)
+              evidence)))
+      (shell-for-raw 'provider raw)))
+  (lambda () (shell-for-raw 'module (module-create-internal)))
+  (lambda (provider-name)
+    (shell-for-raw
+      'module (module-create-with-provider-internal provider-name)))
+  (lambda (module name tensor)
+    (shell-for-raw
+      'handle
+      (module-register-parameter-internal!
+        (raw-for-shell 'module-register-parameter-internal! 'module module)
+        name tensor)))
+  (lambda (module name handle)
+    (shell-for-raw
+      'handle
+      (module-register-tied-parameter-internal!
+        (raw-for-shell 'module-register-tied-parameter-internal! 'module module)
+        name
+        (raw-for-shell 'module-register-tied-parameter-internal!
+                       'handle handle))))
+  (lambda (module name tensor)
+    (module-register-buffer-internal!
+      (raw-for-shell 'module-register-buffer-internal! 'module module)
+      name tensor)
+    #t)
+  (lambda (module name child)
+    (shell-for-raw
+      'module
+      (module-register-child-internal!
+        (raw-for-shell 'module-register-child-internal! 'module module)
+        name
+        (raw-for-shell 'module-register-child-internal! 'module child))))
+  (lambda (module)
+    (module-mode-internal
+      (raw-for-shell 'module-mode-internal 'module module)))
+  (lambda (handle)
+    (parameter-handle-tensor-internal
+      (raw-for-shell 'parameter-handle-tensor-internal 'handle handle)))
+  (lambda (handle)
+    (parameter-handle-tensor-identity-internal
+      (raw-for-shell 'parameter-handle-tensor-identity-internal
+                     'handle handle)))
+  (lambda (path kind shape dtype device layout tensor)
+    (shell-for-raw
+      'entry (state-entry-internal path kind shape dtype device layout tensor)))
+  (lambda (entry)
+    (state-entry-path-internal
+      (raw-for-shell 'state-entry-path-internal 'entry entry)))
+  (lambda (entry)
+    (state-entry-kind-internal
+      (raw-for-shell 'state-entry-kind-internal 'entry entry)))
+  (lambda (entry)
+    (state-entry-shape-internal
+      (raw-for-shell 'state-entry-shape-internal 'entry entry)))
+  (lambda (entry)
+    (state-entry-dtype-internal
+      (raw-for-shell 'state-entry-dtype-internal 'entry entry)))
+  (lambda (entry)
+    (state-entry-device-internal
+      (raw-for-shell 'state-entry-device-internal 'entry entry)))
+  (lambda (entry)
+    (state-entry-layout-internal
+      (raw-for-shell 'state-entry-layout-internal 'entry entry)))
+  (lambda (entry)
+    (state-entry-tensor-internal
+      (raw-for-shell 'state-entry-tensor-internal 'entry entry)))
+  (lambda (format major minor features adapter entries aliases)
+    (shell-for-raw
+      'state
+      (state-dict-create-unsafe-internal
+        format major minor features adapter
+        (unwrap-entry-items 'state-dict-create-unsafe-internal entries)
+        aliases)))
+  (lambda (state provider-name)
+    (let ((raw
+            (state-dict-bind-provider-internal!
+              (raw-for-shell 'state-dict-bind-provider-internal! 'state state)
+              provider-name)))
+      (shell-for-raw 'state raw)))
+  (lambda (state)
+    (state-dict-format-internal
+      (raw-for-shell 'state-dict-format-internal 'state state)))
+  (lambda (state)
+    (state-dict-version-internal
+      (raw-for-shell 'state-dict-version-internal 'state state)))
+  (lambda (state)
+    (state-dict-features-internal
+      (raw-for-shell 'state-dict-features-internal 'state state)))
+  (lambda (state)
+    (state-dict-adapter-internal
+      (raw-for-shell 'state-dict-adapter-internal 'state state)))
+  (lambda (state)
+    (wrap-entry-items
+      'state-dict-entries-internal
+      (state-dict-entries-internal
+        (raw-for-shell 'state-dict-entries-internal 'state state))))))
+  )
+
+(define (module-parameters module)
+  ((vector-ref p1-trusted-surface 0) module))
+(define (module-buffers module)
+  ((vector-ref p1-trusted-surface 1) module))
+(define (module-state-dict module)
+  ((vector-ref p1-trusted-surface 2) module))
+(define (module-load-state-dict! module state)
+  ((vector-ref p1-trusted-surface 3) module state))
+(define (module-train! module)
+  ((vector-ref p1-trusted-surface 4) module))
+(define (module-eval! module)
+  ((vector-ref p1-trusted-surface 5) module))
+(define (module-zero-grad! module)
+  ((vector-ref p1-trusted-surface 6) module))
+(define (parameter-tree-paths tree)
+  ((vector-ref p1-trusted-surface 7) tree))
+(define (parameter-tree-handle tree path)
+  ((vector-ref p1-trusted-surface 8) tree path))
+(define (parameter-tree-tie-groups tree)
+  ((vector-ref p1-trusted-surface 9) tree))
+(define (parameter-handle-path handle)
+  ((vector-ref p1-trusted-surface 10) handle))
+(define (parameter-handle-shape handle)
+  ((vector-ref p1-trusted-surface 11) handle))
+(define (parameter-handle-dtype handle)
+  ((vector-ref p1-trusted-surface 12) handle))
+(define (parameter-handle-device handle)
+  ((vector-ref p1-trusted-surface 13) handle))
+(define (state-dict-paths state)
+  ((vector-ref p1-trusted-surface 14) state))
+(define (state-dict-tensor state path)
+  ((vector-ref p1-trusted-surface 15) state path))
+(define (state-dict-alias-groups state)
+  ((vector-ref p1-trusted-surface 16) state))
+(define (tensor-provider-create-internal
+          (name : symbol)
+          (describe : (-> vector vector))
+          (clone : (-> vector vector))
+          (storage-identical? : (-> vector boolean))
+          (value-equal? : (-> vector boolean))
+          (device-equal? : (-> vector boolean))
+          (prepare-load : (-> vector vector))
+          (commit-load! : (-> vector vector)))
+  ((vector-ref p1-trusted-surface 17)
+    name describe clone storage-identical? value-equal? device-equal?
+    prepare-load commit-load!))
+(define (tensor-provider-register-internal! provider evidence)
+  ((vector-ref p1-trusted-surface 18) provider evidence))
+(define (module-create-internal)
+  ((vector-ref p1-trusted-surface 19)))
+(define (module-create-with-provider-internal provider-name)
+  ((vector-ref p1-trusted-surface 20) provider-name))
+(define (module-register-parameter-internal! module name tensor)
+  ((vector-ref p1-trusted-surface 21) module name tensor))
+(define (module-register-tied-parameter-internal! module name handle)
+  ((vector-ref p1-trusted-surface 22) module name handle))
+(define (module-register-buffer-internal! module name tensor)
+  ((vector-ref p1-trusted-surface 23) module name tensor))
+(define (module-register-child-internal! module name child)
+  ((vector-ref p1-trusted-surface 24) module name child))
+(define (module-mode-internal module)
+  ((vector-ref p1-trusted-surface 25) module))
+(define (parameter-handle-tensor-internal handle)
+  ((vector-ref p1-trusted-surface 26) handle))
+(define (parameter-handle-tensor-identity-internal handle)
+  ((vector-ref p1-trusted-surface 27) handle))
+(define (state-entry-internal path kind shape dtype device layout tensor)
+  ((vector-ref p1-trusted-surface 28)
+   path kind shape dtype device layout tensor))
+(define (state-entry-path-internal entry)
+  ((vector-ref p1-trusted-surface 29) entry))
+(define (state-entry-kind-internal entry)
+  ((vector-ref p1-trusted-surface 30) entry))
+(define (state-entry-shape-internal entry)
+  ((vector-ref p1-trusted-surface 31) entry))
+(define (state-entry-dtype-internal entry)
+  ((vector-ref p1-trusted-surface 32) entry))
+(define (state-entry-device-internal entry)
+  ((vector-ref p1-trusted-surface 33) entry))
+(define (state-entry-layout-internal entry)
+  ((vector-ref p1-trusted-surface 34) entry))
+(define (state-entry-tensor-internal entry)
+  ((vector-ref p1-trusted-surface 35) entry))
+(define (state-dict-create-unsafe-internal
+          format major minor features adapter entries aliases)
+  ((vector-ref p1-trusted-surface 36)
+   format major minor features adapter entries aliases))
+(define (state-dict-bind-provider-internal! state provider-name)
+  ((vector-ref p1-trusted-surface 37) state provider-name))
+(define (state-dict-format-internal state)
+  ((vector-ref p1-trusted-surface 38) state))
+(define (state-dict-version-internal state)
+  ((vector-ref p1-trusted-surface 39) state))
+(define (state-dict-features-internal state)
+  ((vector-ref p1-trusted-surface 40) state))
+(define (state-dict-adapter-internal state)
+  ((vector-ref p1-trusted-surface 41) state))
+(define (state-dict-entries-internal state)
+  ((vector-ref p1-trusted-surface 42) state))
+@@P1_TRUSTED_END@@
