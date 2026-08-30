@@ -7,6 +7,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define I1_TEST_HAS_ASAN 1
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__)
+#define I1_TEST_HAS_ASAN 1
+#endif
+#if defined(I1_TEST_HAS_ASAN)
+#include <sanitizer/asan_interface.h>
+#endif
+
 static int checks;
 static int failures;
 
@@ -22,6 +34,10 @@ static int failures;
 _Static_assert(ET_I64_TENSOR_ABI_MAJOR == 1u, "I1 ABI major changed");
 _Static_assert(ET_I64_TENSOR_ABI_MINOR == 0u, "I1 ABI minor changed");
 _Static_assert(sizeof(int64_t) == 8u, "I1 requires exact signed 64-bit values");
+_Static_assert(sizeof(uintptr_t) == 8u && UINTPTR_MAX == UINT64_MAX,
+               "I1 address-end probes require the frozen x86-64 ABI");
+_Static_assert(_Alignof(uint64_t) == 8u,
+               "I1 shape alignment changed on the frozen x86-64 ABI");
 _Static_assert(sizeof(et_i64_tensor_error) == 264u,
                "I1 error layout changed");
 _Static_assert(offsetof(et_i64_tensor_error, category) == 0u,
@@ -47,11 +63,101 @@ typedef union i1_alias_storage {
 _Static_assert(sizeof(i1_alias_storage) == sizeof(et_i64_tensor_error),
                "alias fixture must cover one complete I1 error record");
 
+typedef union i1_rank65_shape_alias_storage {
+  et_i64_tensor_error error_alignment;
+  uint64_t shape[65];
+  unsigned char bytes[65u * sizeof(uint64_t)];
+} i1_rank65_shape_alias_storage;
+
+typedef union i1_rank66_shape_alias_storage {
+  et_i64_tensor_error error_alignment;
+  uint64_t shape[66];
+  unsigned char bytes[66u * sizeof(uint64_t)];
+} i1_rank66_shape_alias_storage;
+
+typedef union i1_rank257_shape_alias_storage {
+  et_i64_tensor_error error_alignment;
+  uint64_t shape[257];
+  unsigned char bytes[257u * sizeof(uint64_t)];
+} i1_rank257_shape_alias_storage;
+
+_Static_assert(sizeof(i1_rank65_shape_alias_storage) ==
+                   65u * sizeof(uint64_t),
+               "rank-65 fixture must be the exact authorized shape span");
+_Static_assert(sizeof(i1_rank66_shape_alias_storage) ==
+                   66u * sizeof(uint64_t),
+               "rank-66 fixture must be the exact authorized shape span");
+_Static_assert(sizeof(i1_rank257_shape_alias_storage) ==
+                   257u * sizeof(uint64_t),
+               "rank-257 fixture must be the exact authorized shape span");
+
+static void poison_invalid_rank_fixture(void *storage, size_t size) {
+#if defined(I1_TEST_HAS_ASAN)
+  __asan_poison_memory_region(storage, size);
+#else
+  (void)storage;
+  (void)size;
+#endif
+}
+
+static void unpoison_invalid_rank_fixture(void *storage, size_t size) {
+#if defined(I1_TEST_HAS_ASAN)
+  __asan_unpoison_memory_region(storage, size);
+#else
+  (void)storage;
+  (void)size;
+#endif
+}
+
 static void expect_alias_rejection(int32_t result,
                                    const i1_alias_storage *storage,
                                    const unsigned char *before) {
   CHECK(result == ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
   CHECK(memcmp(storage->bytes, before, sizeof(storage->bytes)) == 0);
+}
+
+static void expect_invalid_rank_shape_alias_rejection(
+    size_t rank, unsigned char *storage, size_t storage_size,
+    size_t error_offset, et_i64_tensor *initial_output) {
+  unsigned char before[sizeof(i1_rank257_shape_alias_storage)];
+  unsigned char output_before[sizeof(initial_output)];
+  et_i64_tensor *output = initial_output;
+  et_i64_tensor_error *error;
+  int32_t result;
+
+  CHECK(rank <= SIZE_MAX / sizeof(uint64_t));
+  CHECK(storage_size == rank * sizeof(uint64_t));
+  CHECK(storage_size <= sizeof(before));
+  CHECK(error_offset % _Alignof(et_i64_tensor_error) == 0u);
+  CHECK(error_offset <= storage_size);
+  CHECK(sizeof(*error) <= storage_size - error_offset);
+  if (rank > SIZE_MAX / sizeof(uint64_t) ||
+      storage_size != rank * sizeof(uint64_t) ||
+      storage_size > sizeof(before) ||
+      error_offset % _Alignof(et_i64_tensor_error) != 0u ||
+      error_offset > storage_size ||
+      sizeof(*error) > storage_size - error_offset) {
+    return;
+  }
+
+  memset(storage, 0xa7, storage_size);
+  memcpy(before, storage, storage_size);
+  memcpy(output_before, &output, sizeof(output));
+  error = (et_i64_tensor_error *)(void *)(storage + error_offset);
+
+  /*
+   * Poisoning proves the invalid-rank preflight uses the authorized span only
+   * for address-range validation: it may neither read shape extents nor write
+   * the aliased diagnostic before rejecting the overlap.
+   */
+  poison_invalid_rank_fixture(storage, storage_size);
+  result = et_i64_tensor_create_v1(
+      rank, (const uint64_t *)(const void *)storage, &output, error);
+  unpoison_invalid_rank_fixture(storage, storage_size);
+
+  CHECK(result == ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(memcmp(storage, before, storage_size) == 0);
+  CHECK(memcmp(&output, output_before, sizeof(output)) == 0);
 }
 
 static void expect_error(int32_t result, const et_i64_tensor_error *error,
@@ -269,17 +375,20 @@ static void test_shape_failures(void) {
   et_i64_tensor_error error;
   et_i64_tensor *tensor = NULL;
   uint64_t one = 1u;
+  uint64_t invalid_rank_shape[ET_KERNEL_MAX_RANK + 1u];
   uint64_t overflow = (uint64_t)(SIZE_MAX / sizeof(int64_t)) + 1u;
   uint64_t product_overflow[] = {UINT64_C(4294967296),
                                  UINT64_C(4294967296)};
   _Alignas(uint64_t) unsigned char shape_storage[sizeof(uint64_t) + 1u];
 
+  memset(invalid_rank_shape, 0, sizeof(invalid_rank_shape));
+
   expect_error(et_i64_tensor_create_v1(1u, NULL, &tensor, &error), &error,
                ET_I64_TENSOR_ERROR_SHAPE_MISMATCH,
                ET_I64_TENSOR_CODE_INVALID_SHAPE);
   CHECK(tensor == NULL);
-  expect_error(et_i64_tensor_create_v1(ET_KERNEL_MAX_RANK + 1u, &one, &tensor,
-                                       &error),
+  expect_error(et_i64_tensor_create_v1(ET_KERNEL_MAX_RANK + 1u,
+                                       invalid_rank_shape, &tensor, &error),
                &error, ET_I64_TENSOR_ERROR_SHAPE_MISMATCH,
                ET_I64_TENSOR_CODE_INTEGER_OVERFLOW);
   CHECK(tensor == NULL);
@@ -300,6 +409,83 @@ static void test_shape_failures(void) {
                &error, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
                ET_I64_TENSOR_CODE_INVALID_BUFFER);
   CHECK(tensor == NULL);
+}
+
+static void test_invalid_rank_shape_error_alias_atomicity(void) {
+  i1_rank65_shape_alias_storage rank65;
+  i1_rank66_shape_alias_storage rank66;
+  i1_rank257_shape_alias_storage rank257;
+  i1_alias_storage unrepresentable;
+  unsigned char unrepresentable_before[sizeof(unrepresentable)];
+  unsigned char output_before[sizeof(et_i64_tensor *)];
+  et_i64_tensor_error ordinary_error;
+  et_i64_tensor_error address_end_error;
+  unsigned char address_end_before[sizeof(address_end_error)];
+  et_i64_tensor *output = NULL;
+  et_i64_tensor *preserved = create_tensor(0u, NULL);
+  const uint64_t *const address_end_shape =
+      (const uint64_t *)(uintptr_t)(UINTPTR_MAX - 7u);
+  const size_t unrepresentable_rank =
+      SIZE_MAX / sizeof(uint64_t) + 1u;
+  int32_t result;
+
+  /* The rank-65 regression: error starts at the authorized shape span. */
+  expect_invalid_rank_shape_alias_rejection(
+      65u, rank65.bytes, sizeof(rank65), 0u, NULL);
+
+  /* Exercise an interior overlap and exact preservation of a non-NULL slot. */
+  expect_invalid_rank_shape_alias_rejection(
+      66u, rank66.bytes, sizeof(rank66), 16u, preserved);
+
+  /* A larger bounded rank puts the complete diagnostic at the span's tail. */
+  expect_invalid_rank_shape_alias_rejection(
+      257u, rank257.bytes, sizeof(rank257),
+      sizeof(rank257) - sizeof(et_i64_tensor_error), NULL);
+
+  /*
+   * This deliberately malformed declaration has no representable byte span.
+   * The conservative path must reject it without reading the small probe or
+   * attempting to write its aliased error record.
+   */
+  memset(&unrepresentable, 0xbc, sizeof(unrepresentable));
+  memcpy(unrepresentable_before, unrepresentable.bytes,
+         sizeof(unrepresentable_before));
+  memcpy(output_before, &output, sizeof(output));
+  poison_invalid_rank_fixture(&unrepresentable, sizeof(unrepresentable));
+  result = et_i64_tensor_create_v1(
+      unrepresentable_rank,
+      (const uint64_t *)(const void *)unrepresentable.bytes, &output,
+      &unrepresentable.error);
+  unpoison_invalid_rank_fixture(&unrepresentable, sizeof(unrepresentable));
+  CHECK(result == ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(memcmp(unrepresentable.bytes, unrepresentable_before,
+               sizeof(unrepresentable_before)) == 0);
+  CHECK(memcmp(&output, output_before, sizeof(output)) == 0);
+
+  /*
+   * Multiplication is representable here, but the aligned numeric pointer's
+   * exclusive shape end is not.  It is intentionally non-dereferenceable.
+   */
+  memset(&address_end_error, 0xd3, sizeof(address_end_error));
+  memcpy(address_end_before, &address_end_error, sizeof(address_end_before));
+  output = preserved;
+  memcpy(output_before, &output, sizeof(output));
+  result = et_i64_tensor_create_v1(65u, address_end_shape, &output,
+                                   &address_end_error);
+  CHECK(result == ET_I64_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(memcmp(&address_end_error, address_end_before,
+               sizeof(address_end_before)) == 0);
+  CHECK(memcmp(&output, output_before, sizeof(output)) == 0);
+
+  /* A NULL shape authorizes no storage and permits the ordinary rank error. */
+  output = NULL;
+  expect_error(et_i64_tensor_create_v1(SIZE_MAX, NULL, &output,
+                                       &ordinary_error),
+               &ordinary_error, ET_I64_TENSOR_ERROR_SHAPE_MISMATCH,
+               ET_I64_TENSOR_CODE_INTEGER_OVERFLOW);
+  CHECK(output == NULL);
+
+  destroy_tensor(&preserved);
 }
 
 static void test_exact_round_trip_and_atomicity(void) {
@@ -370,6 +556,7 @@ static void test_exact_round_trip_and_atomicity(void) {
 
 static void test_error_alias_atomicity(void) {
   const uint64_t shape[] = {33u};
+  const uint64_t invalid_rank_shape[ET_KERNEL_MAX_RANK + 1u] = {0u};
   int64_t expected[33];
   int64_t actual[33];
   et_i64_tensor_error error;
@@ -436,8 +623,8 @@ static void test_error_alias_atomicity(void) {
   memset(&alias, 0, sizeof(alias));
   memcpy(before, alias.bytes, sizeof(before));
   expect_alias_rejection(et_i64_tensor_create_v1(
-                             ET_KERNEL_MAX_RANK + 1u, shape, &alias.tensor,
-                             &alias.error),
+                             ET_KERNEL_MAX_RANK + 1u, invalid_rank_shape,
+                             &alias.tensor, &alias.error),
                          &alias, before);
 
   memset(&alias, 0, sizeof(alias));
@@ -1115,6 +1302,7 @@ int main(void) {
   test_version_and_nulls();
   test_shapes_and_strides();
   test_shape_failures();
+  test_invalid_rank_shape_error_alias_atomicity();
   test_exact_round_trip_and_atomicity();
   test_error_alias_atomicity();
   test_borrows_and_view();

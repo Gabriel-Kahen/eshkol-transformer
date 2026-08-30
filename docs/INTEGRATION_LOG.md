@@ -240,8 +240,12 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   nonnull slots on failure, and publish only on success. Copy buffers, writable
   scalar/handle outputs, and error records are checked before mutation against a
   process-local registry of every live I1 control, shape, stride, data, borrow, and
-  descriptor allocation. An aliased error record is rejected without diagnostic
-  mutation because no safe error destination exists. Direct use of an authorized
+  descriptor allocation. A nonnull shape declares a logical span of `rank`
+  contiguous `uint64_t` elements even for an invalid rank; its checked exact span
+  participates in alias validation without memory access. An unrepresentable byte
+  span or exclusive end causes conservative no-write rejection when an error
+  record is supplied. An aliased error record is rejected without diagnostic mutation
+  because no safe error destination exists. Direct use of an authorized
   live borrowed K1 view remains the explicit owned-storage mutation exception.
   The explicit process-local provider accessor supplies exactly one deterministic
   verified K1 row: `tensor.i64` / `storage.copy` / `cpu` / `i64`, for rank 0 and
@@ -253,11 +257,12 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   compatibility lane, `/usr/bin/bash -c 'make test && make build && make smoke'`
   passed against a clean canonical
   `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` checkout and compiler
-  `1.3.4-evolve`. The focused I1 gate passed 717 normal exact-i64, shape/layout,
+  `1.3.4-evolve`. The focused I1 gate passed 764 normal exact-i64, shape/layout,
   ownership, alias, failure-atomic, malformed-call, and K1 dispatch checks twice
-  with identical output; 2,429 allocation-hook and ASan/UBSan checks covering live opaque
-  handles, same- and cross-object owned regions, pointer-slot preservation, and
-  success/failure error aliases; a warning-clean
+  with identical output; 2,476 allocation-hook and ASan/UBSan checks covering live
+  opaque handles, same- and cross-object owned regions, pointer-slot preservation,
+  success/failure error aliases, and invalid-rank checked shape spans without
+  extent reads; a warning-clean
   C++17 consumer; and two canonical-pin AOT executions with 59 checks each. AOT
   output SHA-256 was
   `de78f6cb1b0ea6ffd169a4dfc1d7500f1f3f1db69dd113f8fd737a978c92d217`;

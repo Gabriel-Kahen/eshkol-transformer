@@ -99,6 +99,14 @@ void et_i64_tensor_error_clear_v1(et_i64_tensor_error *error);
  * aliased record. These process-local checks are unsynchronized; this ABI makes
  * no thread-safety claim.
  *
+ * For create, a non-NULL shape with rank N declares a logical N-element
+ * uint64_t address span solely for overlap checking, even when N exceeds the
+ * supported rank of 64; computing it performs no memory access. Supported
+ * ranks require N accessible elements, while invalid-rank shape contents are
+ * never read. If the logical byte count or its address end is not
+ * representable, a non-NULL error record is conservatively rejected without
+ * being written because shape/error disjointness cannot be proved.
+ *
  * Pointer-valued output slots must contain NULL. Every output slot, including
  * a non-NULL pointer-valued slot, is preserved byte-for-byte on failure; a
  * pointer is published only on success.

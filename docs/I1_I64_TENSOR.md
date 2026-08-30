@@ -43,6 +43,18 @@ count and byte length use checked multiplication, and the dense row-major byte
 stride for dimension `d` is `8 * product(shape[d+1..rank))`. Nonempty data and
 caller copy buffers are aligned for `int64_t`.
 
+For every nonnull `shape`, including when `rank` exceeds 64, `rank` declares a
+logical address span of exactly `rank` `uint64_t` elements solely for overlap
+preflight. Computing that span performs no memory access. Supported ranks still
+require the declared elements to be accessible; invalid-rank shape contents are
+never read, so rejection does not access beyond whatever storage the caller made
+available. When `rank * sizeof(uint64_t)` and the span's exclusive end are
+representable, the exact logical span participates in the error-alias check. If
+either is unrepresentable, a nonnull error record is conservatively rejected as
+`INVALID_ARGUMENT` without writing the error, shape storage, or output slot,
+because disjointness cannot be proved. A null shape has no declared logical span;
+an invalid rank is then reported normally.
+
 Every pointer-valued output slot must contain null. A nonnull slot is rejected
 without changing the slot, and a null slot remains null on every failure;
 publication occurs only after all fallible work succeeds. Scalar outputs and
@@ -127,7 +139,7 @@ the canonical Eshkol interop fixture twice. LeakSanitizer can be enabled with
 `I1_ASAN_DETECT_LEAKS=1` where supported; it is disabled under the local traced
 executor where LeakSanitizer itself is unavailable.
 
-The final compatibility-lane run passed 717 normal native checks and 2,429
+The final compatibility-lane run passed 764 normal native checks and 2,476
 test-hook ASan/UBSan checks. Both AOT executions passed 59 checks with output
 SHA-256
 `de78f6cb1b0ea6ffd169a4dfc1d7500f1f3f1db69dd113f8fd737a978c92d217`.

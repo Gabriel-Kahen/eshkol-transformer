@@ -186,6 +186,24 @@ static int pointer_span_fits(const void *pointer, size_t bytes) {
          (pointer != NULL && (uintptr_t)pointer <= UINTPTR_MAX - bytes);
 }
 
+/*
+ * Computes only the caller-declared shape span; it never reads shape.  A
+ * false result means that the span cannot be represented, so a non-NULL error
+ * record cannot be proved disjoint from it and must not be written.
+ */
+static int caller_shape_span(size_t rank, const uint64_t *shape,
+                             size_t *shape_bytes) {
+  *shape_bytes = 0u;
+  if (rank == 0u || shape == NULL) {
+    return 1;
+  }
+  if (rank > SIZE_MAX / sizeof(*shape)) {
+    return 0;
+  }
+  *shape_bytes = rank * sizeof(*shape);
+  return pointer_span_fits(shape, *shape_bytes);
+}
+
 static int ranges_overlap(const void *left, size_t left_bytes,
                           const void *right, size_t right_bytes) {
   const uintptr_t left_start = (uintptr_t)left;
@@ -378,10 +396,16 @@ int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
   et_i64_tensor *tensor = NULL;
   size_t element_count;
   size_t byte_length;
-  size_t shape_bytes =
-      rank <= ET_KERNEL_MAX_RANK ? rank * sizeof(*shape) : 0u;
+  size_t shape_bytes;
   int empty;
   int32_t result;
+  if (!caller_shape_span(rank, shape, &shape_bytes)) {
+    /* No diagnostic is safe until error/shape disjointness is provable. */
+    if (error != NULL) {
+      return reject_error_alias();
+    }
+    shape_bytes = 0u;
+  }
   result = preflight_error_operand(error, shape, shape_bytes);
   if (result != 0) {
     return result;
