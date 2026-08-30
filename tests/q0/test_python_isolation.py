@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -9,10 +10,16 @@ Q0 = ROOT / "tests" / "q0"
 
 class PythonIsolationTests(unittest.TestCase):
     def test_python_and_torch_are_test_only(self) -> None:
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "--", "*.py"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
         python_files = [
-            path
-            for path in ROOT.rglob("*.py")
-            if ".git" not in path.parts and ".tmp" not in path.parts
+            ROOT / item.decode("utf-8")
+            for item in tracked.split(b"\0")
+            if item
         ]
         for path in python_files:
             with self.subTest(path=path.relative_to(ROOT)):
