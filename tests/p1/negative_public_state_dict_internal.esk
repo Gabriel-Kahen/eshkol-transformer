@@ -1,0 +1,10 @@
+(require transformer.module)
+
+(define leaked-state-surface
+  (vector state-dict-create-unsafe-internal
+          state-dict-bind-provider-internal!
+          state-dict-format-internal
+          state-dict-version-internal
+          state-dict-features-internal
+          state-dict-adapter-internal
+          state-dict-entries-internal))

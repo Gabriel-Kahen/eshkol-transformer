@@ -1,4 +1,4 @@
-(require transformer.module_internal)
+(require transformer.module)
 (require transformer.error_internal)
 (require p1_test.tensor_provider)
 
@@ -19,6 +19,13 @@
                    (#t
                      (and (transformer-error? error)
                           (eq? category (transformer-error-category error)))))
+            (thunk)
+            #f)))
+    (check label caught)))
+
+(define (expect-transformer-error label thunk)
+  (let ((caught
+          (guard (error (#t (transformer-error? error)))
             (thunk)
             #f)))
     (check label caught)))
@@ -318,12 +325,18 @@
 (expect-error-contract
   "substituted commit carrier admission" 'unsupported
   'tensor-provider-register-internal!
-  "provider commit admission substituted its plan carrier"
+  "provider commit substituted its plan carrier"
   (lambda () (fixture-register-substituting-provider-internal!)))
+(expect-error "rejected provider shell is permanently stale" 'invalid-argument
+              (lambda ()
+                (fixture-register-substituting-provider-internal!)))
 (expect-error "raising commit admission" 'internal
               (lambda () (fixture-register-raising-provider-internal!)))
 (expect-error "reentrant provider admission" 'invalid-state
               (lambda () (fixture-register-reentrant-provider-internal!)))
+(expect-error "repeat mutate-then-raise admission" 'unsupported
+              (lambda ()
+                (fixture-register-repeat-mutating-provider-internal!)))
 (let ((rejected
         (state-dict-create-unsafe-internal
           (state-dict-format-internal source-state) 1 0 '()
@@ -812,6 +825,168 @@
        (eq? atomic-handle
             (parameter-tree-handle (module-parameters atomic-target)
                                    '("block" "alpha"))))
+
+;; Opaque shells cannot be forged from raw visible vectors.
+(expect-error "forged module shell" 'invalid-argument
+              (lambda () (module-state-dict (vector 'transformer-module))))
+(expect-error "forged tree shell" 'invalid-argument
+              (lambda () (parameter-tree-paths
+                           (vector 'transformer-parameter-tree))))
+(expect-error "forged handle shell" 'invalid-argument
+              (lambda () (parameter-handle-path
+                           (vector 'transformer-parameter-handle))))
+(expect-error "forged state shell" 'invalid-argument
+              (lambda () (state-dict-paths
+                           (vector 'transformer-state-dict))))
+
+;; Every caller-controlled list and composite metadata boundary is bounded and
+;; identity-aware. Cycles must raise E1 errors rather than recurse forever.
+(let ((path (list "z")))
+  (set-cdr! path path)
+  (expect-error "cyclic accessor path" 'invalid-argument
+                (lambda () (state-dict-tensor source-state path)))
+  (expect-error "cyclic entry path" 'invalid-argument
+                (lambda ()
+                  (state-entry-internal
+                    path 'parameter (state-entry-shape-internal z-entry)
+                    (state-entry-dtype-internal z-entry)
+                    (state-entry-device-internal z-entry)
+                    (state-entry-layout-internal z-entry) z-tensor))))
+(let ((shape (list 2)))
+  (set-cdr! shape shape)
+  (expect-error "cyclic entry shape" 'invalid-argument
+                (lambda ()
+                  (state-entry-internal
+                    '("z") 'parameter shape
+                    (state-entry-dtype-internal z-entry)
+                    (state-entry-device-internal z-entry)
+                    (state-entry-layout-internal z-entry) z-tensor))))
+(let ((features (list 'future-feature)))
+  (set-cdr! features features)
+  (expect-error "cyclic feature list" 'invalid-argument
+                (lambda ()
+                  (state-dict-create-unsafe-internal
+                    'transformer-state-dict 1 0 features
+                    valid-provider-identity valid-entries
+                    (state-dict-alias-groups source-state)))))
+(let ((entries (list first-entry)))
+  (set-cdr! entries entries)
+  (expect-error "cyclic entry list" 'invalid-argument
+                (lambda ()
+                  (state-dict-create-unsafe-internal
+                    'transformer-state-dict 1 0 '()
+                    valid-provider-identity entries
+                    (state-dict-alias-groups source-state)))))
+(let* ((group (list '("block" "alpha") '("z")))
+       (aliases (list group)))
+  (set-cdr! (cdr group) group)
+  (expect-error "cyclic alias group" 'invalid-argument
+                (lambda ()
+                  (state-dict-create-unsafe-internal
+                    'transformer-state-dict 1 0 '()
+                    valid-provider-identity valid-entries aliases))))
+(let ((aliases (list '(("block" "alpha") ("z")))))
+  (set-cdr! aliases aliases)
+  (expect-error "cyclic alias list" 'invalid-argument
+                (lambda ()
+                  (state-dict-create-unsafe-internal
+                    'transformer-state-dict 1 0 '()
+                    valid-provider-identity valid-entries aliases))))
+(let ((adapter (list 'transformer-tensor-provider 1 0 'fixture-v1)))
+  (set-cdr! (cdr (cdr (cdr adapter))) adapter)
+  (expect-error "cyclic provider identity" 'invalid-argument
+                (lambda ()
+                  (state-dict-create-unsafe-internal
+                    'transformer-state-dict 1 0 '() adapter valid-entries
+                    (state-dict-alias-groups source-state)))))
+(let ((device (make-vector 1 #f)))
+  (vector-set! device 0 device)
+  (expect-transformer-error
+    "cyclic device descriptor"
+    (lambda ()
+      (let ((entry
+              (state-entry-internal '("z") 'parameter
+                (state-entry-shape-internal z-entry)
+                (state-entry-dtype-internal z-entry) device
+                (state-entry-layout-internal z-entry) z-tensor)))
+        (load-state!
+          destination
+          (restate source-state
+            (replace-entry valid-entries '("z") entry)
+            (state-dict-alias-groups source-state)))))))
+(expect-error "cyclic provider admission evidence" 'invalid-argument
+              (lambda ()
+                (fixture-register-cyclic-evidence-provider-internal!)))
+
+(expect-error "improper accessor path" 'invalid-argument
+              (lambda ()
+                (state-dict-tensor source-state (cons "z" 'tail))))
+(let ((entry
+        (state-entry-internal
+          (cons "z" 'tail) 'parameter
+          (state-entry-shape-internal z-entry)
+          (state-entry-dtype-internal z-entry)
+          (state-entry-device-internal z-entry)
+          (state-entry-layout-internal z-entry) z-tensor)))
+  (expect-error "improper entry path" 'corrupt-data
+                (lambda ()
+                  (load-state!
+                    destination
+                    (restate source-state
+                      (replace-entry valid-entries '("z") entry)
+                      (state-dict-alias-groups source-state))))))
+(let ((entry
+        (state-entry-internal
+          '("z") 'parameter (cons 2 2)
+          (state-entry-dtype-internal z-entry)
+          (state-entry-device-internal z-entry)
+          (state-entry-layout-internal z-entry) z-tensor)))
+  (expect-error "improper entry shape" 'corrupt-data
+                (lambda ()
+                  (load-state!
+                    destination
+                    (restate source-state
+                      (replace-entry valid-entries '("z") entry)
+                      (state-dict-alias-groups source-state))))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 (cons 'feature 'tail)
+          valid-provider-identity valid-entries
+          (state-dict-alias-groups source-state))))
+  (expect-error "improper feature list" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 '() (cons 'transformer-tensor-provider
+                                               'tail)
+          valid-entries (state-dict-alias-groups source-state))))
+  (expect-error "improper provider identity" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
+          (cons '(("block" "alpha") ("z")) 'tail))))
+  (expect-error "improper alias list" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(expect-error "improper entry list ingress" 'invalid-argument
+              (lambda ()
+                (state-dict-create-unsafe-internal
+                  'transformer-state-dict 1 0 '() valid-provider-identity
+                  (cons first-entry 'tail)
+                  (state-dict-alias-groups source-state))))
+
+;; A rejected strict load must leave an unenumerated module open to topology
+;; registration; validation cannot finalize it as a side effect.
+(let ((mutable-after-failure (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    mutable-after-failure "only" (payload 'mutable-before-failure))
+  (expect-error "failed load leaves topology mutable" 'shape-mismatch
+                (lambda ()
+                  (module-load-state-dict! mutable-after-failure source-state)))
+  (check "registration succeeds after failed load"
+         (module-register-buffer-internal!
+           mutable-after-failure "after"
+           (buffer-payload 'mutable-after-failure))))
 
 (display "P1 PASS: ")
 (display checks)

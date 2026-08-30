@@ -1,4 +1,4 @@
-(require transformer.module_internal)
+(require transformer.module)
 
 ;;; Provider callbacks are typed unary vector operations. A two-argument
 ;;; describe callback must fail strict compilation.

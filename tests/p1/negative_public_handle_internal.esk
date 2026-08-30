@@ -1,0 +1,5 @@
+(require transformer.module)
+
+(define leaked-handle-surface
+  (vector parameter-handle-tensor-internal
+          parameter-handle-tensor-identity-internal))

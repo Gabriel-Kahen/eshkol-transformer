@@ -1,0 +1,8 @@
+(require transformer.module)
+
+(define leaked-provider-surface
+  (vector tensor-provider-create-internal
+          tensor-provider-register-internal!
+          p1-native-context-create
+          p1-native-provider-seal
+          p1-core-dispatch))

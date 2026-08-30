@@ -1,0 +1,5 @@
+;;; Compiles as an object, but cannot link through the public P1 artifact.
+(extern ptr guessed-private-context
+        :real et_p1_private_context_create_v1)
+
+(guessed-private-context)

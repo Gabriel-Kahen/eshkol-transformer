@@ -1,0 +1,11 @@
+(require transformer.module)
+
+(define leaked-entry-surface
+  (vector state-entry-internal
+          state-entry-path-internal
+          state-entry-kind-internal
+          state-entry-shape-internal
+          state-entry-dtype-internal
+          state-entry-device-internal
+          state-entry-layout-internal
+          state-entry-tensor-internal))
