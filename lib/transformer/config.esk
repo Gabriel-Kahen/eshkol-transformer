@@ -478,6 +478,78 @@
       (x1-invalid 'config-resolve "missing required configuration key"
                   (list key))))
 
+(define (x1-positive-source-key? key)
+  (x1-symbol-member?
+   key
+   '(model.vocabulary-size model.context-length model.hidden-size
+     model.layer-count model.query-head-count model.kv-head-count
+     model.head-size training.accumulation-steps)))
+
+(define (x1-validate-source-leaf entry)
+  (let ((key (car entry))
+        (value (cdr entry)))
+    (cond
+      ((or (eq? key 'config-schema-major)
+           (eq? key 'config-schema-minor))
+       #t)
+      ((x1-positive-source-key? key)
+       (if (x1-positive-i64? value)
+           #t
+           (x1-invalid 'config-resolve
+                       "explicit source value must be a positive signed i64"
+                       (list key value))))
+      ((eq? key 'run.seed)
+       (if (x1-nonnegative-i64? value)
+           #t
+           (x1-invalid 'config-resolve
+                       "explicit source seed must be a nonnegative signed i64"
+                       (list key value))))
+      ((eq? key 'model.dtype)
+       (cond
+         ((not (string? value))
+          (x1-invalid 'config-resolve
+                      "explicit source dtype must be a string enum"
+                      (list key value)))
+         ((string=? value "f32") #t)
+         (else
+          (x1-unsupported 'config-resolve
+                          "explicit source dtype is not admitted by schema 1.0"
+                          (list key value)))))
+      ((eq? key 'model.device)
+       (cond
+         ((not (string? value))
+          (x1-invalid 'config-resolve
+                      "explicit source device must be a string enum"
+                      (list key value)))
+         ((string=? value "cpu") #t)
+         (else
+          (x1-unsupported 'config-resolve
+                          "explicit source device is not admitted by schema 1.0"
+                          (list key value)))))
+      ((eq? key 'run.deterministic)
+       (cond
+         ((not (boolean? value))
+          (x1-invalid 'config-resolve
+                      "explicit source run.deterministic must be boolean"
+                      (list key value)))
+         (value #t)
+         (else
+          (x1-unsupported 'config-resolve
+                          "explicit nondeterministic source is not supported"
+                          (list key value)))))
+      (else
+       (x1-invalid 'config-resolve "unknown explicit source leaf"
+                   (list key))))))
+
+(define (x1-validate-source-leaves entries)
+  (define (loop keys)
+    (if (null? keys)
+        #t
+        (let ((entry (x1-assoc (car keys) entries)))
+          (if entry (x1-validate-source-leaf entry) #t)
+          (loop (cdr keys)))))
+  (loop x1-schema-keys))
+
 (define (x1-apply-overrides values provenance overrides seen)
   (cond
     ((null? overrides) (cons values provenance))
@@ -556,6 +628,7 @@
                 (x1-required-source-key source (car keys))
                 (require-all (cdr keys)))))
         (require-all required-keys)
+        (x1-validate-source-leaves source)
         (let* ((source-provenance
                 (x1-map (lambda (entry) (cons (car entry) 'input)) source))
                (overridden

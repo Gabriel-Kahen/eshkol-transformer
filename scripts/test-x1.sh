@@ -105,7 +105,7 @@ cmp --silent "${x1_tmp}/test-1.stdout" "${x1_tmp}/test-2.stdout" || \
   die "X1 output changed with CWD or hostile environment"
 [[ ! -e "${PROJECT_ROOT}/should-not-run" && ! -e "${x1_tmp}/should-not-run" ]] || \
   die "executable-looking configuration input created a sentinel"
-grep -Fx 'X1 SUMMARY: 83 passed, 0 failed' "${x1_tmp}/test-1.stdout" >/dev/null || \
+grep -Fx 'X1 SUMMARY: 110 passed, 0 failed' "${x1_tmp}/test-1.stdout" >/dev/null || \
   die "X1 native behavior summary did not report all tests passing"
 
 env -i PATH=/usr/bin:/bin X1_HOSTILE_ENV=first \

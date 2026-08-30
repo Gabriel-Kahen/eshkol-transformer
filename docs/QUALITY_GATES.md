@@ -27,8 +27,10 @@
 
 - Strict, bounded, non-executable parsing with duplicate and unknown keys rejected
   before a configuration value is constructed.
-- Defaults, input values, explicit overrides, and absent-field derivation tested at
-  their documented precedence boundary, including incompatible combinations.
+- Every explicitly present source leaf is validated before overrides, so an override
+  cannot mask an invalid source type, range, enum, or policy. Defaults, valid input
+  values, explicit overrides, and absent-field derivation are tested at their
+  documented precedence boundary, including incompatible combinations.
 - Repeated fresh compilation of the configuration test, plus byte-identical canonical
   manifests and fingerprints across fresh processes, working directories, and
   hostile-environment runs.

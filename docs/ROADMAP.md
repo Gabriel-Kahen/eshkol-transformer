@@ -29,7 +29,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | K1 | Native kernel ABI/capability layer | A0, R0, Q0 | [Versioned ABI, canonical unverified baseline, and 596 conformance/unsupported/malformed-call checks](K1_KERNEL_ABI.md) | complete |
 | I1 | Exact signed-i64 dense CPU tensor container and bounded K1 storage-copy provider | A0, R0, Q0, E1, K1 | [ABI 1.0 ownership/layout contract, exact boundary round trips, malformed/failure-atomic checks, sanitizers, and canonical-pin AOT interop](I1_I64_TENSOR.md) | complete |
 | C1 | Versioned checkpoint container and atomic I/O | A0, P1, Q0 | Tensor round trip, corruption rejection and atomic-write tests | planned |
-| X1 | [Declarative configuration and resolved-run manifests](CONFIG_FORMAT.md) | A0, Q0, E1 | 83 native parse/override/validation/opacity/canonical checks, 10 reference/isolation checks, negative internal-surface compiles, and exact golden bytes/fingerprint on the compatibility lane; supported CI pending | review |
+| X1 | [Declarative configuration and resolved-run manifests](CONFIG_FORMAT.md) | A0, Q0, E1, E1B | Source-before-override admission passes 110 native checks and 10 reference/isolation checks locally; E1B issue #33 must merge before public-boundary negatives, a new review head, and supported CI | blocked |
 
 ## Wave 2 — model and training primitives
 

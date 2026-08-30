@@ -357,9 +357,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   independent review and merge.
 - **Contract:** X1 uses the strict, flat, non-executable version-1 JSON source schema
   and the independently versioned `eshkol-resolved-run` `[1,0]` canonical manifest
-  documented in [CONFIG_FORMAT.md](CONFIG_FORMAT.md). Resolution precedence is
-  defaults, source, unique explicit overrides, then absent-field derivation and full
-  validation. Canonical output contains all resolved leaves and per-leaf provenance;
+  documented in [CONFIG_FORMAT.md](CONFIG_FORMAT.md). Every explicitly present source
+  leaf is admitted by type, range, enum, and policy before override overlay, so an
+  override cannot sanitize invalid input. Resolution precedence for admitted values
+  is defaults, source, unique explicit overrides, then absent-field derivation and
+  full validation. Canonical output contains all resolved leaves and per-leaf provenance;
   provenance is part of identity. `config-fingerprint` is
   `sha256:eshkol-config-json-v1:<lowerhex>` over the exact canonical bytes including
   the final LF. The manifest declares SHA-256 coverage but embeds no circular digest.
@@ -368,13 +370,16 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   version inference.
 - **Evidence:** on the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility lane,
   the pinned Eshkol `90cbd7130f47b8184bcc77b8d5c1b0026da980de` compiler
-  `v1.3.4-evolve` passes 83 native parse/override/validation/opacity/canonical checks,
-  10 Python reference/isolation checks, two negative internal-surface compilation
-  fixtures, repeated strict AOT compilation, hostile-environment/CWD determinism,
+  `v1.3.4-evolve` passes 110 native parse/override/source-admission/validation/
+  opacity/canonical checks, 10 Python reference/isolation checks, two negative
+  X1-internal compilation fixtures, repeated strict AOT compilation,
+  hostile-environment/CWD determinism,
   exact golden bytes, and direct SHA-256 recomputation. Production dependency
-  inspection proves real merged E1 and no test double. Supported Ubuntu 22.04 /
-  LLVM-Clang 21.1.8 CI remains required before integration acceptance.
-- **Dependencies / retest:** T1 must consume the validated configuration contract
+  inspection proves real merged E1 and no test double. E1B issue #33 must merge before
+  the constructor-leakage negatives, new X1 review head, and supported Ubuntu 22.04 /
+  LLVM-Clang 21.1.8 CI can run for integration acceptance.
+- **Dependencies / retest:** X1 is blocked on E1B issue #33 and remains proposed.
+  T1 must consume the validated configuration contract
   before `tokenizer-byte`; C2 may embed the exact manifest and fingerprint only after
   X1 integration. CLI3 may expose source parsing and overrides only after the same
   review. Rerun T1, C2, and CLI3 gates after any X1 contract change. Any field,

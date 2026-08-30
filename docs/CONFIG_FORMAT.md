@@ -1,8 +1,8 @@
 # X1 configuration and resolved-run manifest contract
 
-Status: **X1 implementation review**. Issues #1 and #20 accepted the schema and
+Status: **X1 blocked on E1B issue #33**. Issues #1 and #20 accepted the schema and
 canonicalization direction with required clarifications; this contract incorporates
-those conditions. Only the integration owner may mark the implementation accepted.
+those conditions. A new review head requires the merged private raise boundary.
 
 ## Scope and public operations
 
@@ -39,7 +39,9 @@ identities are native condition shells backed by a lexical identity registry; al
 metadata reads are defensive copies, and adversarial same-message conditions cannot
 forge an identity. The pinned compiler treats `provide` as informational, so the
 required E1 internal helper remains technically name-reachable through the dependency
-graph; calling it is unsupported and E1 still validates every construction.
+graph; calling it is unsupported and E1 still validates every construction. E1B
+issue #33 must replace this dependency with its reviewed private raise-only artifact
+before X1 can return to review.
 
 ## Source configuration grammar
 
@@ -125,20 +127,28 @@ Semantic precedence is `defaults < input < explicit overrides`; derivation appli
 only to a field absent after that overlay. Resolution evaluates it deterministically:
 
 1. Verify the required source schema version and required source keys.
-2. Copy the source values and mark their provenance `input`.
-3. Apply the unique explicit overrides and mark them `override`.
-4. Fill independent absent optional fields from versioned defaults.
-5. Fill `model.kv-head-count`, when absent, from the final query-head count and mark
+2. Validate every explicitly present source leaf's intrinsic type, range, enum, and
+   policy in fixed schema-key order.
+3. Copy the source values and mark their provenance `input`.
+4. Apply the unique explicit overrides and mark them `override`.
+5. Fill independent absent optional fields from versioned defaults.
+6. Fill `model.kv-head-count`, when absent, from the final query-head count and mark
    it `default`.
-6. Derive `model.head-size`, when absent, from the final hidden size and query-head
+7. Derive `model.head-size`, when absent, from the final hidden size and query-head
    count, but only when the division is exact.
-7. Validate every resolved type, range, and cross-field invariant.
+8. Validate every resolved type, range, and cross-field invariant.
 
 Defaults and derivation are evaluated against the final overlaid inputs, but they
 never overwrite a present source or override value. Override list order therefore
 cannot affect the result because repeated paths are invalid. An override equal to the
 source value still has provenance `override`; explicitly supplying a default value
 still has provenance `input`.
+
+An override can repair a cross-field relationship among individually valid source
+leaves, because compatibility is checked on the final overlaid values. It cannot
+sanitize an explicitly supplied source leaf with an invalid type, range, enum, or
+policy: source admission happens first and fails even when the same key has an
+otherwise valid override.
 
 The resolved value has all 14 schema keys. `config-ref` accepts the corresponding
 bare quoted symbol, for example `'model.hidden-size`, and returns a new immutable
@@ -282,8 +292,9 @@ authenticity or runtime capability.
   registry. X1 has no persistence/load API for these identities and makes no verified
   concurrency or thread-safety claim on the pinned runtime.
 - The pinned compiler does not enforce `provide`; X1 proves its own constructors and
-  raw accessors are lexical, but cannot make the required E1 internal dependency
-  physically unreachable by name. That helper is outside X1's public contract.
+  raw accessors are lexical, but the current E1 internal dependency remains
+  name-reachable. E1B issue #33 is required to provide a separately compiled,
+  fixed-arity raise-only boundary with no generic or public/global bridge symbol.
 - Changing a field, default, derivation, range, provenance rule, byte rule, format
   identifier, version, limit, checksum coverage, or fingerprint prefix is a public
   schema/format/canonicalization decision. It requires an explicit version or
