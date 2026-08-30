@@ -579,6 +579,21 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   byte-identical, and the compatibility lane passed D1's 16 format/fault groups,
   A0, E1 (112 checks), E1B (35 checks), I1, Q0 (23 tests), and the full integrated
   suite. Exact-head supported CI and D1-R re-review remain pending.
+  D1-R2 then identified a caller-controlled build-policy mismatch at exact head
+  `383056853a1f269e28a413c346c2a56de0b1874f`. The repair removes
+  `E1B_PACKAGE_POLICY` selection from the generic builder: D1 normal, D1 test-fault,
+  and X1 policy now derive only from their complete canonical repository root,
+  bridge, rename, export, and include tuples. Normal and fault D1 use distinct exact
+  never-installed roots; their undefined manifests and `data_io.c` identity remain
+  hard-coded. Copied/arbitrary roots, partial tuples, missing/extra/shadow includes,
+  all policy overrides, and direct fault publication beneath the production artifact
+  directory are rejected before toolchain use or output/evidence mutation. The
+  compiler subprocess clears caller `ESHKOL_PATH` and pins `ESHKOL_LIB_DIR`; positive
+  normal/fault builds with hostile shadow modules still record only canonical source
+  paths. Sentinel negatives prove rejected routes preserve preexisting object,
+  archive, and evidence bytes. Focused D1, E1B, X1, A0, E1, and I1 gates pass on the
+  compatibility lane, as do the full `make test`, explicit `make build`, and
+  `make smoke` gates. Supported exact-head CI remains required.
 - **Dependencies / retest:** E1 issue #23 and E1B issue #33 are merged. The installed
   D1 facade imports only `transformer.error_consumer`; `transformer.error_internal`,
   `transformer.error_core`, the fixed raise seam, and all constructors are absent
@@ -592,4 +607,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
   [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);
-  [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028).
+  [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028);
+  [D1-R2 requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5471306523).

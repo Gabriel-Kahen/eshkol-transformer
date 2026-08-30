@@ -6,6 +6,9 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 require_command timeout
 require_command python3
 require_command ar
+require_command diff
+require_command env
+require_command find
 require_command nm
 require_command readelf
 require_command strings
@@ -35,7 +38,184 @@ for evidence_file in global-defined.txt package-exports.txt undefined.txt \
 done
 
 D1_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-d1.XXXXXX")
-trap 'rm -rf -- "${D1_TMP}"' EXIT
+d1_cleanup() {
+  rm -rf -- "${D1_TMP}"
+  if [[ -n "${D1_DIRECT_FAULT_OUTPUT:-}" ]]; then
+    rm -f -- "${D1_DIRECT_FAULT_OUTPUT}"
+    rm -rf -- "${D1_DIRECT_FAULT_OUTPUT}.evidence"
+  fi
+}
+trap d1_cleanup EXIT
+
+d1_assert_builder_rejected() {
+  local name=$1 expected=$2 policy=$3 root=$4 bridge=$5 renames=$6 exports=$7
+  shift 7
+  local case_dir="${D1_TMP}/builder-negative-${name}"
+  local output="${case_dir}/candidate.o"
+  local evidence="${output}.evidence"
+  local log="${case_dir}/rejected.log"
+  local empty_tmp="${case_dir}/tmp"
+  local missing_toolchain="${case_dir}/missing-toolchain"
+  local -a builder_command
+  mkdir -p "${evidence}" "${empty_tmp}"
+  printf 'preexisting-output:%s\n' "${name}" >"${output}"
+  printf 'preexisting-evidence:%s\n' "${name}" >"${evidence}/sentinel"
+  cp "${output}" "${case_dir}/expected-output"
+  cp "${evidence}/sentinel" "${case_dir}/expected-evidence"
+
+  builder_command=(
+    "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh"
+    "${root}" "${bridge}" "${renames}" "${exports}" "${output}" "$@"
+  )
+  if [[ "${policy}" == unset ]]; then
+    if env -u E1B_PACKAGE_POLICY TMPDIR="${empty_tmp}" \
+        ESHKOL_BUILD_DIR="${missing_toolchain}" \
+        "${builder_command[@]}" >"${log}" 2>&1; then
+      die "D1 builder negative unexpectedly passed: ${name}"
+    fi
+  else
+    if env E1B_PACKAGE_POLICY="${policy}" TMPDIR="${empty_tmp}" \
+        ESHKOL_BUILD_DIR="${missing_toolchain}" \
+        "${builder_command[@]}" >"${log}" 2>&1; then
+      die "D1 builder policy override unexpectedly passed: ${name}"
+    fi
+  fi
+  grep -F "${expected}" "${log}" >/dev/null || \
+    die "D1 builder negative emitted the wrong diagnostic: ${name}"
+  cmp --silent "${case_dir}/expected-output" "${output}" || \
+    die "D1 builder negative mutated its preexisting output: ${name}"
+  cmp --silent "${case_dir}/expected-evidence" "${evidence}/sentinel" || \
+    die "D1 builder negative mutated its evidence sentinel: ${name}"
+  [[ "$(find "${evidence}" -mindepth 1 -maxdepth 1 -type f -printf '%f\n')" == sentinel ]] || \
+    die "D1 builder negative published evidence: ${name}"
+  [[ -z "$(find "${empty_tmp}" -mindepth 1 -print -quit)" ]] || \
+    die "D1 builder negative created a build temporary: ${name}"
+  if find "${case_dir}" -mindepth 1 \
+      \( -name 'candidate.o.tmp.*' -o -name 'candidate.o.evidence.tmp.*' \) \
+      -print -quit | grep . >/dev/null; then
+    die "D1 builder negative left a publication temporary: ${name}"
+  fi
+}
+
+D1_ADMISSION_FIXTURES="${D1_TMP}/builder-admission-fixtures"
+mkdir -p "${D1_ADMISSION_FIXTURES}/copied-src" \
+  "${D1_ADMISSION_FIXTURES}/shadow/eshkol_transformer"
+cp "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${D1_ADMISSION_FIXTURES}/copied-root.esk"
+cp "${PROJECT_ROOT}/tests/d1/d1_e1b_fault_root.esk" \
+  "${D1_ADMISSION_FIXTURES}/copied-fault-root.esk"
+cp "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${D1_ADMISSION_FIXTURES}/copied-bridge.c"
+cp "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${D1_ADMISSION_FIXTURES}/copied-renames.txt"
+cp "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" \
+  "${D1_ADMISSION_FIXTURES}/copied-exports.txt"
+printf '(error "shadow token shard must never load")\n' \
+  >"${D1_ADMISSION_FIXTURES}/shadow/eshkol_transformer/token_shard.esk"
+printf '(error "shadow D1 private root must never load")\n' \
+  >"${D1_ADMISSION_FIXTURES}/shadow/d1_e1b_private.esk"
+
+d1_assert_builder_rejected copied-root \
+  'repository package components require their exact repository-owned private root' \
+  unset "${D1_ADMISSION_FIXTURES}/copied-root.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" "${PROJECT_ROOT}/src"
+d1_assert_builder_rejected arbitrary-root \
+  'repository package components require their exact repository-owned private root' \
+  unset "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" "${PROJECT_ROOT}/src"
+d1_assert_builder_rejected copied-fault-root \
+  'repository package components require their exact repository-owned private root' \
+  unset "${D1_ADMISSION_FIXTURES}/copied-fault-root.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" "${PROJECT_ROOT}/src"
+d1_assert_builder_rejected copied-bridge \
+  'D1 package policy requires the exact repository D1 bridge' unset \
+  "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${D1_ADMISSION_FIXTURES}/copied-bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" "${PROJECT_ROOT}/src"
+d1_assert_builder_rejected copied-renames \
+  'D1 package policy requires the exact repository D1 rename map' unset \
+  "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${D1_ADMISSION_FIXTURES}/copied-renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" "${PROJECT_ROOT}/src"
+d1_assert_builder_rejected copied-exports \
+  'D1 package policy requires the exact repository D1 export list' unset \
+  "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${D1_ADMISSION_FIXTURES}/copied-exports.txt" "${PROJECT_ROOT}/src"
+d1_assert_builder_rejected copied-include \
+  'D1 package policy requires exactly the repository src include directory' unset \
+  "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" \
+  "${D1_ADMISSION_FIXTURES}/copied-src"
+d1_assert_builder_rejected missing-include \
+  'D1 package policy requires exactly the repository src include directory' unset \
+  "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt"
+d1_assert_builder_rejected extra-include \
+  'D1 package policy requires exactly the repository src include directory' unset \
+  "${PROJECT_ROOT}/native/d1_e1b_private.esk" \
+  "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" \
+  "${PROJECT_ROOT}/src" "${PROJECT_ROOT}/native"
+for override in base-e1b x1 d1 d1-test-faults arbitrary; do
+  d1_assert_builder_rejected "policy-override-${override}" \
+    'E1B_PACKAGE_POLICY overrides are forbidden' "${override}" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_bridge.c" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_public_exports.txt" \
+    "${PROJECT_ROOT}/tests/fixtures/e1b/public"
+done
+
+D1_DIRECT_FAULT_OUTPUT="${D1_ARTIFACT_DIR}/.rejected-direct-fault-route.o"
+D1_DIRECT_FAULT_EVIDENCE="${D1_DIRECT_FAULT_OUTPUT}.evidence"
+mkdir -p "${D1_DIRECT_FAULT_EVIDENCE}"
+printf 'preexisting-direct-fault-output\n' >"${D1_DIRECT_FAULT_OUTPUT}"
+printf 'preexisting-direct-fault-evidence\n' \
+  >"${D1_DIRECT_FAULT_EVIDENCE}/sentinel"
+cp "${D1_DIRECT_FAULT_OUTPUT}" "${D1_TMP}/expected-direct-fault-output"
+cp "${D1_DIRECT_FAULT_EVIDENCE}/sentinel" \
+  "${D1_TMP}/expected-direct-fault-evidence"
+if env -u E1B_PACKAGE_POLICY \
+    ESHKOL_BUILD_DIR="${D1_TMP}/missing-direct-fault-toolchain" \
+    "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+      "${PROJECT_ROOT}/tests/d1/d1_e1b_fault_root.esk" \
+      "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c" \
+      "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt" \
+      "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt" \
+      "${D1_DIRECT_FAULT_OUTPUT}" "${PROJECT_ROOT}/src" \
+      >"${D1_TMP}/direct-fault-route.stdout" \
+      2>"${D1_TMP}/direct-fault-route.stderr"; then
+  die "direct D1 test-fault route unexpectedly targeted the production directory"
+fi
+grep -F 'D1 test-fault object cannot target the canonical production directory' \
+  "${D1_TMP}/direct-fault-route.stderr" >/dev/null
+cmp --silent "${D1_TMP}/expected-direct-fault-output" \
+  "${D1_DIRECT_FAULT_OUTPUT}" || \
+  die "rejected direct fault route mutated its production-directory output"
+cmp --silent "${D1_TMP}/expected-direct-fault-evidence" \
+  "${D1_DIRECT_FAULT_EVIDENCE}/sentinel" || \
+  die "rejected direct fault route mutated its production-directory evidence"
+[[ "$(find "${D1_DIRECT_FAULT_EVIDENCE}" -mindepth 1 -maxdepth 1 \
+    -type f -printf '%f\n')" == sentinel ]] || \
+  die "rejected direct fault route published production-directory evidence"
+rm -f -- "${D1_DIRECT_FAULT_OUTPUT}"
+rm -rf -- "${D1_DIRECT_FAULT_EVIDENCE}"
+
 D1_PUBLIC_ROOT="${D1_TMP}/public-root"
 mkdir -p "${D1_PUBLIC_ROOT}/transformer"
 for public_module in data error_consumer error_public; do
@@ -107,6 +287,9 @@ cmp --silent "${D1_UNDEFINED_SYMBOLS}" "${D1_EVIDENCE}/undefined.txt" || \
 grep -Fx $'allowlist\t'"$(basename -- "${D1_UNDEFINED_SYMBOLS}")" \
   "${D1_EVIDENCE}/allowlist-provenance.tsv" >/dev/null || \
   die "D1 artifact evidence does not identify its repository allowlist"
+grep -Fx $'package_policy\td1' \
+  "${D1_EVIDENCE}/allowlist-provenance.tsv" >/dev/null || \
+  die "D1 artifact evidence does not identify the exact normal package route"
 
 grep -F 'src/eshkol_transformer/token_shard.esk' \
   "${D1_EVIDENCE}/private.d" >/dev/null
@@ -338,7 +521,10 @@ d1_assert_public_wrong_arity() {
 }
 
 D1_FAULT_ARTIFACT_DIR="${D1_TMP}/fault-artifacts"
-/usr/bin/bash "${PROJECT_ROOT}/scripts/build-d1.sh" \
+E1B_PACKAGE_POLICY=d1 \
+  ESHKOL_PATH="${D1_ADMISSION_FIXTURES}/shadow" \
+  ESHKOL_LIB_DIR="${D1_ADMISSION_FIXTURES}/shadow" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-d1.sh" \
   "${D1_FAULT_ARTIFACT_DIR}" test-faults \
   >"${D1_TMP}/fault-build.stdout" 2>"${D1_TMP}/fault-build.stderr"
 D1_FAULT_LIBRARY="${D1_FAULT_ARTIFACT_DIR}/libeshkol_transformer_d1_faults.a"
@@ -364,6 +550,59 @@ cmp --silent "${D1_FAULT_UNDEFINED_SYMBOLS}" \
 grep -Fx $'allowlist\t'"$(basename -- "${D1_FAULT_UNDEFINED_SYMBOLS}")" \
   "${D1_FAULT_EVIDENCE}/allowlist-provenance.tsv" >/dev/null || \
   die "D1 fault artifact evidence does not identify its repository allowlist"
+grep -Fx $'package_policy\td1-test-faults' \
+  "${D1_FAULT_EVIDENCE}/allowlist-provenance.tsv" >/dev/null || \
+  die "D1 fault artifact evidence does not identify the exact test route"
+grep -F 'native/d1_e1b_private.esk' \
+  "${D1_FAULT_EVIDENCE}/private.d" >/dev/null || \
+  die "D1 fault route omitted the canonical private root"
+grep -F 'src/eshkol_transformer/token_shard.esk' \
+  "${D1_FAULT_EVIDENCE}/private.d" >/dev/null || \
+  die "D1 fault route omitted the canonical token-shard source"
+if grep -F "${D1_ADMISSION_FIXTURES}/shadow" \
+    "${D1_FAULT_EVIDENCE}/private.d" >/dev/null; then
+  die "D1 fault route admitted a caller-controlled ESHKOL_PATH module"
+fi
+
+D1_OVERRIDE_ARTIFACT_DIR="${D1_TMP}/inherited-policy-normal"
+E1B_PACKAGE_POLICY=d1-test-faults \
+  ESHKOL_PATH="${D1_ADMISSION_FIXTURES}/shadow" \
+  ESHKOL_LIB_DIR="${D1_ADMISSION_FIXTURES}/shadow" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-d1.sh" \
+    "${D1_OVERRIDE_ARTIFACT_DIR}" normal \
+    >"${D1_TMP}/inherited-policy.stdout" \
+    2>"${D1_TMP}/inherited-policy.stderr"
+D1_OVERRIDE_LIBRARY="${D1_OVERRIDE_ARTIFACT_DIR}/libeshkol_transformer_d1.a"
+cmp --silent "${D1_UNDEFINED_SYMBOLS}" \
+  "${D1_OVERRIDE_LIBRARY}.evidence/expected-undefined.txt" || \
+  die "inherited policy changed the canonical D1 wrapper route"
+grep -Fx $'package_policy\td1' \
+  "${D1_OVERRIDE_LIBRARY}.evidence/allowlist-provenance.tsv" >/dev/null || \
+  die "normal D1 wrapper did not suppress an inherited package-policy override"
+grep -F 'src/eshkol_transformer/token_shard.esk' \
+  "${D1_OVERRIDE_LIBRARY}.evidence/private.d" >/dev/null || \
+  die "normal D1 route omitted the canonical token-shard source"
+if grep -F "${D1_ADMISSION_FIXTURES}/shadow" \
+    "${D1_OVERRIDE_LIBRARY}.evidence/private.d" >/dev/null; then
+  die "normal D1 route admitted a caller-controlled ESHKOL_PATH module"
+fi
+
+D1_PRODUCTION_SNAPSHOT="${D1_TMP}/production-before-fault-route"
+mkdir -p "${D1_PRODUCTION_SNAPSHOT}"
+cp "${D1_LIBRARY}" "${D1_PRODUCTION_SNAPSHOT}/library"
+cp -a "${D1_EVIDENCE}" "${D1_PRODUCTION_SNAPSHOT}/evidence"
+if /usr/bin/bash "${PROJECT_ROOT}/scripts/build-d1.sh" \
+    "$(project_build_dir)/d1" test-faults \
+    >"${D1_TMP}/production-fault-route.stdout" \
+    2>"${D1_TMP}/production-fault-route.stderr"; then
+  die "D1 test-fault route unexpectedly targeted the production directory"
+fi
+grep -F 'D1 test-fault artifact cannot target the canonical production directory' \
+  "${D1_TMP}/production-fault-route.stderr" >/dev/null
+cmp --silent "${D1_PRODUCTION_SNAPSHOT}/library" "${D1_LIBRARY}" || \
+  die "rejected test-fault route mutated the production D1 archive"
+diff -r "${D1_PRODUCTION_SNAPSHOT}/evidence" "${D1_EVIDENCE}" >/dev/null || \
+  die "rejected test-fault route mutated the production D1 evidence"
 for forbidden_fault_text in ET_D1_TEST_FAULT ET_D1_TEST_FAIL_CALL \
     short-write write-enospc write-eio close-eio; do
   if grep -F "${forbidden_fault_text}" \

@@ -63,8 +63,18 @@ is therefore rejected before an application can supply it at the later link.
 
 The undefined-symbol policy is not caller-selectable. The base fixture uses
 `native/e1b_undefined_symbols.txt`; the checked-in X1 trusted root is selected by
-exact repository path and uses the independently reviewed X1-specific
-`native/x1_undefined_symbols.txt`. No command-line manifest argument exists. The
+its exact repository root, bridge, rename, export, and include identities and uses
+the independently reviewed X1-specific `native/x1_undefined_symbols.txt`. D1's
+normal and test-fault policies accept only its exact repository root, bridge,
+rename, export, and sole `src` include identities; copied roots, partial tuples,
+include shadowing, and policy overrides on generic packages are rejected before a
+temporary or published artifact is created. The test-fault policy is derived from
+an exact never-installed test root used by `scripts/build-d1.sh test-faults`, is
+forbidden from targeting the canonical production artifact directory, and uses its
+separate reviewed undefined manifest.
+The compiler subprocess clears caller `ESHKOL_PATH` and pins `ESHKOL_LIB_DIR` to the
+repository public library, so environment module paths cannot replace the classified
+source closure. No command-line manifest argument exists. The
 trusted native consumer bridge is compiled with `-fstack-protector-all`, so both
 supported Clang 21.1.8 and the explicitly unsupported Clang 22.1.6 compatibility
 lane retain `__stack_chk_fail` in the base fixture's frozen 80-name manifest and
