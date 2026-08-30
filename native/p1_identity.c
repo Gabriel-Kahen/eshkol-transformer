@@ -450,6 +450,13 @@ et_p1_private_callback_identity_create_v1(void *candidate) {
   if (context == NULL) {
     return ET_P1_STATUS_INVALID_ARGUMENT;
   }
+  if (test_callback_successes_before_failure == INT64_C(-2)) {
+    test_callback_successes_before_failure = INT64_C(-1);
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_ALLOCATION_FAILED,
+                     "p1-callback-identity-create",
+                     "injected malformed status/code pair");
+  }
   if (test_callback_successes_before_failure == 0) {
     test_callback_successes_before_failure = INT64_C(-1);
     return set_error(context, ET_P1_STATUS_INTERNAL,

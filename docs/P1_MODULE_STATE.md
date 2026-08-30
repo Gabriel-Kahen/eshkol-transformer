@@ -37,7 +37,9 @@ uses the generic foreign wrapper. Ordinary failures pass an empty details alist 
 caller-controlled paths, cycles, and payloads never enter E1. Native failures map
 the bounded status/code to a fixed primary message and canonical data-only
 `native-category`, `source-domain`, `source-code`, and `source-message` details with
-cause `#f`, snapshotting status before cleanup can overwrite it. The installed root
+cause `#f`, snapshotting status before cleanup can overwrite it. Exact valid
+status/code pairs are admitted; unknown or impossible pairs map to bounded
+`internal` diagnostics. The installed root
 imports only `transformer.error_consumer` and declares narrow boxed calls. It
 provides exactly the 17 A0 P1 bindings; importing the error facade in either order
 uses the same artifact registry and unchanged six accessors.

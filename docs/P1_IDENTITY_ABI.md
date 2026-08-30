@@ -85,8 +85,8 @@ pointers or create an intermediate error object. It snapshots the numeric status
 and code before cleanup, maps them to fixed bounded text, and directly invokes
 E1B's five-value nonreturning raise seam. Canonical data-only details contain
 `native-category`, `source-domain` set to `p1-private-bridge`, `source-code`, and
-`source-message`; cause is `#f`. Unknown status/code values map to bounded
-`internal` diagnostics.
+`source-message`; cause is `#f`. Unknown values and impossible status/code pairings
+map to bounded `internal` diagnostics.
 
 Native code is intentionally unable to validate state schema, walk Eshkol data,
 call a provider, inspect a tensor, prepare/commit a load, serialize state, or infer a

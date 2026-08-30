@@ -46,6 +46,40 @@
       module "weight" (fixture-payload shape name))
     module))
 
+;; A test-only sentinel injects an impossible status/code pair without adding a
+;; production symbol. The trusted mapper must reject the pair as bounded internal
+;; data, then perform the same exact unpublished-provider cleanup.
+(let ((live-before (p1-test-live-count))
+      (tombstones-before (p1-test-tombstone-count)))
+  (check "malformed native status failpoint armed"
+         (= (p1-test-callback-fail-after -2) 0))
+  (define malformed-error
+    (guard (raised (#t raised))
+      (fixture-register-reentrant-target-provider-internal!)
+      #f))
+  (check "malformed native status raises E1 identity"
+         (transformer-error? malformed-error))
+  (check "malformed native status maps to internal"
+         (eq? (transformer-error-category malformed-error) 'internal))
+  (check "malformed native status operation"
+         (eq? (transformer-error-operation malformed-error)
+              'tensor-provider-register-internal!))
+  (check "malformed native status is bounded data"
+         (and (= (details-ref (transformer-error-details malformed-error)
+                              'native-category) 1)
+              (= (details-ref (transformer-error-details malformed-error)
+                              'source-code) 7)
+              (string=?
+                (details-ref (transformer-error-details malformed-error)
+                             'source-message)
+                "native identity operation returned a malformed status")))
+  (check "malformed native status cause"
+         (eq? (transformer-error-cause malformed-error) #f))
+  (check "malformed status cleanup revokes unpublished provider"
+         (= (p1-test-live-count) (- live-before 1)))
+  (check "malformed status cleanup leaves one tombstone"
+         (= (p1-test-tombstone-count) (+ tombstones-before 1))))
+
 ;; Drive the Eshkol admission wrapper through a failure after three callback
 ;; identities. It must revoke those callbacks and the unpublished provider.
 (let ((live-before (p1-test-live-count))
@@ -128,8 +162,8 @@
   (check "repeated strict load preserves tombstone count"
          (= (p1-test-tombstone-count) tombstones-before)))
 
-(if (= checks 20)
+(if (= checks 28)
     (begin
-      (display "P1 registry atomicity PASS: 20 checks")
+      (display "P1 registry atomicity PASS: 28 checks")
       (newline))
     (exit 1))

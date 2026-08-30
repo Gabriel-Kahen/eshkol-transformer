@@ -445,13 +445,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   compatibility lane. The focused gate passed 178 structural/ownership/binding/
   validation/atomicity assertions, 118 native token/security/ABI checks, 57 native
   allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
-  unit identity checks, and 20 trusted test-only registry/error-mapping checks. The latter
+  unit identity checks, and 28 trusted test-only registry/error-mapping checks. The latter
   drive automatic partial-callback cleanup through an injected failure and prove exact
   live/tombstone deltas plus unchanged registry counts across failed and repeated strict
   loads; their three hidden hooks exist only in a temporary non-production archive.
   Native failpoint errors raise directly through the same E1 registry with bounded
   canonical data-only status details and cause `#f`, even after cleanup overwrites the
-  native context. The gate also covers ASan/UBSan, both public import orders, and repeated
+  native context; an injected impossible status/code pair maps to `internal` and
+  cleans up without adding a production hook. The gate also covers ASan/UBSan,
+  both public import orders, and repeated
   strict AOT compilation and execution; byte-identical package objects, manifests,
   evidence, application objects, executables, outputs, and AOT diagnostics; exact
   source/object/AOT negative/no-artifact checks; and depfile/`nm`/`readelf`/`strings`
