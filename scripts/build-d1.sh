@@ -45,14 +45,17 @@ env XDG_CACHE_HOME="${temporary_dir}/cache" \
 private_bindings=(
   d1-compiled-public-operations
 )
-objcopy_args=()
+rename_args=()
+localized_bindings=()
 private_index=0
 for private_binding in "${private_bindings[@]}"; do
-  objcopy_args+=(--localize-symbol="${private_binding}")
-  objcopy_args+=(--redefine-sym="${private_binding}=.Lprivate_slot_${private_index}")
+  localized_binding=".Lprivate_slot_${private_index}"
+  rename_args+=(--redefine-sym="${private_binding}=${localized_binding}")
+  localized_bindings+=(--localize-symbol="${localized_binding}")
   private_index=$((private_index + 1))
 done
-objcopy "${objcopy_args[@]}" "${temporary_dir}/stdlib.o"
+objcopy "${rename_args[@]}" "${temporary_dir}/stdlib.o"
+objcopy "${localized_bindings[@]}" "${temporary_dir}/stdlib.o"
 
 mkdir -p "${artifact_dir}"
 mv -f "${temporary_dir}/data_io.o" "${artifact_dir}/data_io.o"

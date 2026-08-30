@@ -35,8 +35,10 @@ missing, wrong-revision, wrong-version, or unsupported toolchain instead of fall
 back to Python or another runtime. `build` performs an explicit AOT compile,
 requires the compiler depfile to contain the Eshkol library source, and leaves the
 explicit-link K1 archive at `build/k1/libeshkol_transformer_k1.a`; its public header
-remains at `include/eshkol_transformer/kernel_abi.h`. It also builds D1's checked
-temporary-file I/O boundary at `build/d1/libeshkol_transformer_d1.a`. `test` performs
+remains at `include/eshkol_transformer/kernel_abi.h`. It also builds D1's sealed
+Eshkol module at `build/d1/stdlib.o` and its single checked-I/O-primitive archive at
+`build/d1/libeshkol_transformer_d1.a`; the D1 test path consumes these same
+artifacts. `test` performs
 two fresh AOT compilations and executions, compares output bytes including the final
 newline, and verifies an actionable missing-toolchain failure. `smoke` runs the built
 native artifact and expects `eshkol-transformer-smoke:v1`.

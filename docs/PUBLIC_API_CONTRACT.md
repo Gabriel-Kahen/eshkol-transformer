@@ -258,10 +258,14 @@ or public error-construction surface. Its production dependency graph uses
 `transformer.error_public` and the accepted E1 core, not
 `transformer.error_internal`, so requiring data does not resolve the named E1
 helpers `transformer-error-make`, `transformer-error-raise`, or
-`transformer-error-wrap-foreign`. On the pinned compiler, `provide` is
-informational and the accepted `e1-internal-dispatch` core bridge remains technically
-name-reachable; that existing E1 limitation is not a D1 API or an authorization to
-construct errors directly.
+`transformer-error-wrap-foreign`. Because the pinned compiler flattens ordinary
+source modules and treats `provide` as informational, the normal build compiles a
+single Eshkol module object whose declaration facade exposes exactly the eight names
+below. Its one private closure bundle is localized before publication; former write,
+publication, validation, list, SHA, and FFI-alias bindings cannot be referenced,
+called, or linked through the public artifact. The accepted E1 core bridge remains
+an E1 implementation dependency, not a D1 API or authorization to construct errors
+directly.
 
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|

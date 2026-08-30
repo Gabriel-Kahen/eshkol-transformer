@@ -513,7 +513,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   deterministic temporary, loops through partial writes, checks every byte and
   `close(2)`, and permits rename only on success; production contains no fault
   injection or fallback. The manifest rename is the publication commit point, not a
-  whole-directory atomicity, `fsync`, or power-loss durability claim.
+  whole-directory atomicity, `fsync`, or power-loss durability claim. The pinned
+  compiler's supported D1 packaging is one separately compiled Eshkol module object:
+  its declaration facade exposes exactly the eight accepted procedures, its sole
+  private implementation bundle is localized, and its linked native archive exposes
+  only the reviewed checked byte/write/close primitive.
 - **Evidence:** Historical evidence before the current D1-R corrections: after
   rebasing onto E1 merge `80371a1`, the local compatibility-only
   CachyOS x86-64 / LLVM-Clang 22.1.6 run passed `/usr/bin/bash -c 'make test-d1'`:
@@ -548,17 +552,27 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   passed build, integrated tests, smoke, and the reproducible benchmark at exact
   implementation head `aa3b9f2a83eff57af7a4f45e2e079f6a284ebd4b`. Any later
   documentation-only head requires its own exact-head confirmation before re-review.
-  D1-R re-review remains pending. The historical pre-correction run is not
-  acceptance evidence for the corrected implementation.
+  The subsequent D1-F repair rebased the complete candidate onto current main after
+  accepted I1 integration and changed the normal build/test path to consume the same
+  precompiled Eshkol facade. Fresh-cache source/object/AOT negatives now cover
+  direct calls, first-class bindings, wrong arities, the former ninth FFI alias, and
+  current write/publish/implementation/list/SHA helper families. Depfile, declared
+  provide, `nm`, `readelf`, `strings`, and crafted relocatable-link checks prove those
+  bindings and guessed native aliases are unavailable. The post-rebase local
+  compatibility lane passed the 16-group D1 format/native-I/O suite and all compiled
+  primitive, arithmetic, E1-mapping, summary-opacity, cleanup/no-manifest, and public
+  boundary probes. Exact-head supported CI and D1-R re-review remain pending. The
+  historical pre-correction runs are not acceptance evidence for this repair.
 - **Dependencies / retest:** E1 issue #23 is merged through PR #27. D1 imports only
   `transformer.error_public` plus the accepted E1 core; `transformer.error_internal`
   and its three named construction helpers are absent from the data dependency graph.
-  Because pinned `provide` declarations are informational, E1's already accepted
-  `e1-internal-dispatch` core bridge remains technically name-reachable and requires
-  upstream module-opacity retesting. T1/D2/T2/DATA4 may consume this contract only
-  after integration acceptance; D2 retains all iteration, shuffle, packing,
-  batching, and cursor behavior. A later streaming/I1 integration must rerun byte-
-  determinism, publication, corruption, and scale tests.
+  The pinned compiler's ordinary flattened source path remains unsuitable for D1
+  opacity; consumers must use the produced precompiled module object, and compiler
+  upgrades must rerun all source/object/AOT and crafted-link boundary checks.
+  T1/D2/T2/DATA4 may consume this contract only after integration acceptance; D2
+  retains all iteration, shuffle, packing, batching, and cursor behavior. A later
+  streaming/I1 integration must rerun byte-determinism, publication, corruption,
+  and scale tests.
 - **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
   [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);

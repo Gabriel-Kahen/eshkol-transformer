@@ -209,12 +209,16 @@ record facility.
 E1 core, not `transformer.error_internal`. Consequently it introduces none of the
 named E1 construction helpers `transformer-error-make`,
 `transformer-error-raise`, or `transformer-error-wrap-foreign` into that production
-dependency graph. The pinned compiler treats `provide` declarations as
-informational, however, so E1's already accepted, validated
-`e1-internal-dispatch` bridge remains technically name-reachable through the
-flattened core. D1 uses that bridge only for E1 `raise` and `wrap-foreign` operations;
-it does not make the bridge or any error constructor a D1 public API. This limitation
-must be retested with an upstream opaque-module facility.
+dependency graph. Ordinary source loading cannot enforce D1 opacity on the pinned
+flattening compiler, so the supported build compiles the Eshkol implementation once
+and publishes it through the compiler's precompiled-module declaration path. The
+facade declares exactly the eight accepted D1 procedures. All serialization,
+validation, publication, and summary logic remains Eshkol-authored inside one
+localized private closure bundle; the native archive contains only the checked byte
+write/close primitive. Former write/publish/implementation/list/SHA helpers and the
+Eshkol FFI alias are neither declared to consumers nor globally linkable from the
+published object. D1 uses the accepted E1 core only for error mapping and does not
+make that bridge or any error constructor a D1 public API.
 
 ## Validation and errors
 

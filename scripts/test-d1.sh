@@ -72,12 +72,12 @@ for public_name in "${D1_PUBLIC_NAMES[@]}"; do
 done
 if nm -g --defined-only --format=posix "${D1_MODULE}" |
     awk '{ print $1 }' |
-    grep -E '^(d1-|eshkol_g_d1_2D|et_d1_)' >/dev/null; then
+    grep -E '^(\.Lprivate_slot_|d1-|eshkol_g_d1_2D|et_d1_)' >/dev/null; then
   die "D1 precompiled module exports a private D1 helper or FFI alias"
 fi
 if readelf --wide --symbols "${D1_MODULE}" |
     awk '$5 == "GLOBAL" && $7 != "UND" { print $8 }' |
-    grep -E '^(d1-|eshkol_g_d1_2D|et_d1_)' >/dev/null; then
+    grep -E '^(\.Lprivate_slot_|d1-|eshkol_g_d1_2D|et_d1_)' >/dev/null; then
   die "readelf found a global private D1 helper or FFI alias"
 fi
 if strings -a "${D1_MODULE}" |
