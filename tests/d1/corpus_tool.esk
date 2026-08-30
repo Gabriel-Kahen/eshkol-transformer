@@ -1,5 +1,17 @@
 (require transformer.data)
 
+;;; The command-line harness deliberately owns these list helpers. They are test
+;;; tooling, not part of transformer.data's eight-name production surface.
+(define (d1-tool-list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+
+(define (d1-tool-list-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted)
+        (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
 (define (d1-tool-category error)
   (if (transformer-error? error) (transformer-error-category error) 'internal))
 
@@ -84,11 +96,11 @@
     (else (raise (list 'invalid-argument 'd1-tool-write "unknown scenario")))))
 
 (define arguments (command-line))
-(if (< (d1-token-list-length arguments) 3)
+(if (< (d1-tool-list-length arguments) 3)
     (begin (display "usage: corpus-tool COMMAND DIRECTORY [SCENARIO]") (newline) (exit 64)))
 
-(define command (d1-token-list-ref arguments 1))
-(define directory (d1-token-list-ref arguments 2))
+(define command (d1-tool-list-ref arguments 1))
+(define directory (d1-tool-list-ref arguments 2))
 (guard (error (#t
                (begin
                  (display "ERROR category=") (display (d1-tool-category error))
@@ -116,10 +128,10 @@
                  (exit 2))))
   (cond
     ((string=? command "write")
-     (if (< (d1-token-list-length arguments) 4)
+     (if (< (d1-tool-list-length arguments) 4)
          (raise (list 'invalid-argument 'd1-tool "missing scenario"))
          (d1-tool-print-summary
-          (d1-tool-write (d1-token-list-ref arguments 3) directory))))
+          (d1-tool-write (d1-tool-list-ref arguments 3) directory))))
     ((string=? command "validate")
      (d1-tool-print-summary
       (token-corpus-validate directory 1048576 1048576 1048576)))

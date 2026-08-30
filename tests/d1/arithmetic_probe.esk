@@ -1,33 +1,33 @@
-;;; Test-only access to private checked-arithmetic logic with synthetic counts.
+;;; Public checked-limit coverage. Private arithmetic helpers must remain lexical;
+;;; these calls prove that every externally supplied size is rejected before I/O.
 
-(require transformer.error_internal)
-(load "eshkol_transformer/token_shard.esk")
+(require transformer.data)
+(require transformer.error_public)
 
 (define failures 0)
+
 (define (expect-invalid thunk)
-  (guard (raised (#t
-                  (if (and (transformer-error? raised)
-                           (eq? (transformer-error-category raised)
-                                'invalid-argument))
-                      #t
-                      (set! failures (+ failures 1)))))
+  (guard (raised
+          (#t
+           (if (and (transformer-error? raised)
+                    (eq? (transformer-error-category raised) 'invalid-argument)
+                    (eq? (transformer-error-operation raised)
+                         'token-corpus-validate))
+               #t
+               (set! failures (+ failures 1)))))
     (thunk)
     (set! failures (+ failures 1))))
 
 (expect-invalid
- (lambda ()
-   (d1-token-derived-sizes 1152921504606846901 1 1 'token-corpus-write!)))
+ (lambda () (token-corpus-validate "." 9223372036854775808 1 1)))
 (expect-invalid
- (lambda ()
-   (d1-token-derived-sizes 10000000000000001 1 1 'token-corpus-write!)))
+ (lambda () (token-corpus-validate "." 1 9223372036854775808 1)))
 (expect-invalid
- (lambda ()
-   (d1-token-derived-sizes 1152921504606846900 116 192
-                           'token-corpus-write!)))
+ (lambda () (token-corpus-validate "." 1 1 9223372036854775808)))
 (expect-invalid
- (lambda ()
-   (d1-token-derived-sizes 288230376151711710 288230376151711710 192
-                           'token-corpus-write!)))
+ (lambda () (token-corpus-validate "." 1 1 -1)))
+(expect-invalid
+ (lambda () (token-corpus-validate "." 1 1 1.0)))
 
 (if (= failures 0)
     (begin (display "D1_ARITHMETIC_PASS") (newline))

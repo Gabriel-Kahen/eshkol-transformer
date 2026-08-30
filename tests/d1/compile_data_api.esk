@@ -1,6 +1,6 @@
 (require transformer.data)
 
-(define d1-public-data-bindings
+(define public-data-bindings
   (list token-corpus-write!
         token-corpus-validate
         token-corpus-summary-shard-count
