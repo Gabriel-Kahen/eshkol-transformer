@@ -320,14 +320,17 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   Exact five-argument diagnostics, malformed category/operation/message/details/
   cause, ownership, provide/export allowlists, `nm`, archive index, `readelf`, dynamic
   symbols, strings, link map, and guessed privileged-name negatives remain green.
-  After rebasing onto merged I1 main `53db2a1`, focused E1 112 and A0 passed; the
+  After rebasing onto accepted I1 main `5914b77`, focused E1 112 and A0 passed; the
   full `make test` built K1 and I1 and passed F0/B0/A0/K1/E1/E1B/I1, including
   sanitizers and 41 Python harness checks; separate `make build` and `make smoke`
   passed. This is canonical-pin evidence on the explicitly unsupported CachyOS /
   LLVM-Clang 22 compatibility lane. Independent registry/identity,
   packaging/linker, adversarial-consumer, and evidence reviews informed and
-  reproduced the repair. Supported exact-head Ubuntu 22.04 / LLVM-Clang 21.1.8 CI
-  remains pending.
+  reproduced the repair. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33325565974](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33325565974)
+  passed on code head `611da5a`: fresh toolchain/configure/build, F0/B0/A0/K1,
+  E1 112, E1B 35, I1, 41 Python harness checks, sanitizers, smoke, and the
+  reproducible smoke benchmark.
 - **Limitations:** canonical-pin/x86-64 AOT only; one artifact and E1 registry per
   process; no JIT/bitcode publication; no verified concurrency; safe-only public
   source aliases remain technically reachable because pinned `provide` is
