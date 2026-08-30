@@ -66,9 +66,9 @@ extract_provides() {
       line=$0
       gsub(/[()]/, " ", line)
       count=split(line, fields, /[[:space:]]+/)
-      for (index=1; index<=count; index++) {
-        if (fields[index] != "" && fields[index] != "provide") {
-          print fields[index]
+      for (field_index=1; field_index<=count; field_index++) {
+        if (fields[field_index] != "" && fields[field_index] != "provide") {
+          print fields[field_index]
         }
       }
       if ($0 ~ /\)[[:space:]]*$/) { exit }

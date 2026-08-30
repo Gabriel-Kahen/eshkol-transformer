@@ -1,0 +1,37 @@
+(require transformer.module)
+
+(define checks 0)
+(define unsupported-message
+  "unsupported: no verified tensor provider is configured")
+(define (expect-unsupported thunk)
+  (guard (raised
+           (#t
+             (if (and (error-object? raised)
+                      (string=? unsupported-message
+                                (error-object-message raised)))
+                 (set! checks (+ checks 1))
+                 (exit 1))))
+    (thunk)
+    (exit 1)))
+
+(expect-unsupported (lambda () (module-parameters #f)))
+(expect-unsupported (lambda () (module-buffers #f)))
+(expect-unsupported (lambda () (module-state-dict #f)))
+(expect-unsupported (lambda () (module-load-state-dict! #f #f)))
+(expect-unsupported (lambda () (module-train! #f)))
+(expect-unsupported (lambda () (module-eval! #f)))
+(expect-unsupported (lambda () (module-zero-grad! #f)))
+(expect-unsupported (lambda () (parameter-tree-paths #f)))
+(expect-unsupported (lambda () (parameter-tree-handle #f '())))
+(expect-unsupported (lambda () (parameter-tree-tie-groups #f)))
+(expect-unsupported (lambda () (parameter-handle-path #f)))
+(expect-unsupported (lambda () (parameter-handle-shape #f)))
+(expect-unsupported (lambda () (parameter-handle-dtype #f)))
+(expect-unsupported (lambda () (parameter-handle-device #f)))
+(expect-unsupported (lambda () (state-dict-paths #f)))
+(expect-unsupported (lambda () (state-dict-tensor #f '())))
+(expect-unsupported (lambda () (state-dict-alias-groups #f)))
+
+(if (= checks 17)
+    (begin (display "p1-public-stubs-unsupported:v1") (newline))
+    (exit 1))

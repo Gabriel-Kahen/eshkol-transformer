@@ -1,50 +1,3 @@
-@@P1_PUBLIC_BEGIN@@
-;;; Generated public P1 root. No production tensor provider is admitted here.
-
-(provide module-parameters module-buffers module-state-dict
-         module-load-state-dict! module-train! module-eval! module-zero-grad!
-         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
-         parameter-handle-path parameter-handle-shape parameter-handle-dtype
-         parameter-handle-device state-dict-paths state-dict-tensor
-         state-dict-alias-groups)
-
-(define (module-parameters module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-buffers module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-state-dict module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-load-state-dict! module state)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-train! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-eval! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (module-zero-grad! module)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-tree-paths tree)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-tree-handle tree path)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-tree-tie-groups tree)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-handle-path handle)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-handle-shape handle)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-handle-dtype handle)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (parameter-handle-device handle)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (state-dict-paths state)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (state-dict-tensor state path)
-  (error "unsupported: no verified tensor provider is configured"))
-(define (state-dict-alias-groups state)
-  (error "unsupported: no verified tensor provider is configured"))
-@@P1_PUBLIC_END@@
-
-@@P1_TRUSTED_BEGIN@@
 ;;; Generated trusted P1 root. This source is linked only with the private
 ;;; process-local identity archive; all raw FFI names remain outside public builds.
 (require transformer.error_internal)
@@ -2244,4 +2197,3 @@
   ((vector-ref p1-trusted-surface 41) state))
 (define (state-dict-entries-internal state)
   ((vector-ref p1-trusted-surface 42) state))
-@@P1_TRUSTED_END@@

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/random.h>
 
 void *__real_calloc(size_t count, size_t size);
@@ -65,6 +66,9 @@ int main(void) {
   int64_t baseline;
   int64_t tombstones;
   const unsigned char embedded_nul_id[3] = {'a', 0u, 'b'};
+  unsigned char maximum_id[ET_P1_IDENTITY_MAX_PROVIDER_ID_BYTES];
+
+  (void)memset(maximum_id, 'm', sizeof(maximum_id));
 
   check(context != NULL, "private context creation succeeds");
   baseline = live_count(context);
@@ -115,6 +119,9 @@ int main(void) {
   check(et_p1_private_provider_create_v1(context, NULL, 1) ==
             ET_P1_STATUS_INVALID_ARGUMENT,
         "nonnull span requirement is explicit");
+  check(et_p1_private_provider_create_v1(context, "negative", -1) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "negative provider identity length is rejected");
   check(et_p1_private_provider_create_v1(
             context, "oversized",
             (int64_t)ET_P1_IDENTITY_MAX_PROVIDER_ID_BYTES + 1) ==
@@ -122,6 +129,24 @@ int main(void) {
         "provider identity length never truncates");
   check(live_count(context) == baseline,
         "invalid provider byte spans publish no identity");
+
+  check(et_p1_private_provider_create_v1(
+            context, maximum_id,
+            (int64_t)ET_P1_IDENTITY_MAX_PROVIDER_ID_BYTES) ==
+            ET_P1_STATUS_OK,
+        "maximum provider identity length is accepted exactly");
+  provider = et_p1_private_result_ptr_v1(context);
+  (void)memset(maximum_id, 'x', sizeof(maximum_id));
+  check(et_p1_public_token_live_v1(provider) == 1,
+        "caller mutation cannot revoke a copied maximum identity");
+  check(et_p1_private_provider_abort_v1(context, provider) ==
+            ET_P1_STATUS_OK,
+        "maximum provider identity can be aborted before publication");
+  check(live_count(context) == baseline,
+        "maximum provider identity abort restores live baseline");
+  tombstones++;
+  check(tombstone_count(context) == tombstones,
+        "maximum provider identity abort leaves one tombstone");
 
   check(et_p1_private_provider_create_v1(context, embedded_nul_id, 3) ==
             ET_P1_STATUS_OK,

@@ -1,5 +1,11 @@
 ;;; Compiles as an object, but cannot link through the public P1 artifact.
 (extern ptr guessed-private-context
         :real et_p1_private_context_create_v1)
+(extern i64 guessed-private-provider-abort ptr ptr
+        :real et_p1_private_provider_abort_v1)
+(extern i64 guessed-private-callback-revoke ptr ptr
+        :real et_p1_private_callback_identity_revoke_v1)
 
-(guessed-private-context)
+(let ((context (guessed-private-context)))
+  (guessed-private-provider-abort context context)
+  (guessed-private-callback-revoke context context))

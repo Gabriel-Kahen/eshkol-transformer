@@ -30,9 +30,11 @@ Compile-time assertions freeze these ABI-v1 facts:
 | Item | Size / offset |
 |---|---:|
 | opaque token allocation | 264 bytes |
-| token callback-token array | offset 24 |
-| token kind | offset 80 |
-| token provider-ID bytes | offset 136 |
+| caller-visible token nonce words | offsets 0 / 8 |
+| private registry record | 256 bytes |
+| registry callback-token array | offset 32 |
+| registry token kind | offset 88 |
+| registry provider-ID bytes | offset 128 |
 | private context | 344 bytes |
 | error record | 272 bytes |
 | error operation/message | offsets 16 / 80 |
@@ -44,12 +46,14 @@ restore authority. Successful state/provider/module/tree/handle/entry shells liv
 until trusted cleanup where supported or process exit. There is no concurrency or
 cross-process claim; post-fork use rejects.
 
-Each token includes kind, owner context, origin PID, a nonzero 128-bit `getrandom`
-identity, and a duplicate integrity value. Recognition finds a registered pointer
-before dereferencing it. Null, foreign, copied, mutated, wrong-kind, cross-context,
-stale, and post-fork tokens reject without mutation. Entropy and allocation failure
-are explicit; there is no random, time, address, file, Python, scalar, CPU, or other
-fallback.
+Each caller-visible token contains only the nonzero 128-bit `getrandom` identity and
+reserved bytes. Its bridge-private registry record authoritatively owns kind, owner
+context, origin PID, duplicate integrity value, provider bytes, callback roles, and
+state binding. Recognition finds the registered pointer before dereferencing it and
+then verifies the nonce against that record. Null, foreign, copied, mutated,
+wrong-kind, cross-context, stale, and post-fork tokens reject without mutation.
+Entropy and allocation failure are explicit; there is no random, time, address,
+file, Python, scalar, CPU, or other fallback.
 
 Provider ID input is an exact byte span with maximum
 `ET_P1_IDENTITY_MAX_PROVIDER_ID_BYTES == 127`. Eshkol validates the semantic symbol

@@ -436,15 +436,19 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `/usr/bin/bash -c 'make build'`, and `/usr/bin/bash -c 'make smoke'` passed against
   canonical `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` and compiler
   `1.3.4-evolve` on the explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6
-  compatibility lane. The focused gate passed 157 structural/ownership/binding/
-  validation/atomicity assertions, 105 native token/security/ABI checks, 47 native
+  compatibility lane. The focused gate passed 178 structural/ownership/binding/
+  validation/atomicity assertions, 118 native token/security/ABI checks, 57 native
   allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
-  unit identity checks, ASan/UBSan, repeated strict
+  unit identity checks, and 15 trusted test-only registry-atomicity checks. The latter
+  drive automatic partial-callback cleanup through an injected failure and prove exact
+  live/tombstone deltas plus unchanged registry counts across failed and repeated strict
+  loads; their three hidden hooks exist only in a temporary non-production archive.
+  The gate also covers ASan/UBSan and repeated strict
   AOT compilation and execution,
-  byte-identical objects/output/diagnostics, exact compile-negative/no-artifact
+  byte-identical objects/output/diagnostics, exact source/object/AOT negative/no-artifact
   checks, and depfile/`nm`/`readelf`/`strings` production-isolation checks. Fresh-cache
-  compile/AOT negatives cover every internal Eshkol name; a guessed private native
-  symbol cannot link through the public archive. Adversarial cases
+  source/object/AOT negatives cover every internal Eshkol name; guessed private native
+  create/abort/revoke symbols cannot link through the public archive. Adversarial cases
   include unbound/wrong-id/conflicting rebind, unknown/unverified provider, raised,
   substituted-vector, allocation-probe, and reentrant admission, later-entry prepare
   failure with unchanged destinations, conflicting aliases, duplicates, malformed

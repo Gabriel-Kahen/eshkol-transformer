@@ -68,6 +68,8 @@ int main(void) {
   void *callbacks_two[7];
   void *state;
   void *temporary_callback;
+  void *duplicate_provider;
+  void *duplicate_callback;
   unsigned char *copy;
   unsigned char saved_nonce_byte;
   int foreign = 0;
@@ -147,6 +149,34 @@ int main(void) {
         "callback cleanup rejects the wrong token kind");
   check(et_p1_public_token_live_v1(temporary_callback) == 0,
         "revoked callback identity is stale");
+
+  before = live_count(context);
+  duplicate_provider = created(
+      context, et_p1_private_provider_create_v1(context, "duplicate", 9),
+      "duplicate-role provider identity creation succeeds");
+  duplicate_callback = created(
+      context, et_p1_private_callback_identity_create_v1(context),
+      "duplicate-role callback identity creation succeeds");
+  check(et_p1_private_provider_seal_v1(
+            context, duplicate_provider, duplicate_callback,
+            duplicate_callback, duplicate_callback, duplicate_callback,
+            duplicate_callback, duplicate_callback, duplicate_callback) ==
+            ET_P1_STATUS_INVALID_STATE,
+        "one callback identity cannot fill multiple provider roles");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_SNAPSHOT_MISMATCH,
+        "duplicate callback roles have exact status data");
+  check(live_count(context) == before + 2,
+        "rejected duplicate roles do not change token liveness");
+  check(et_p1_private_callback_identity_revoke_v1(context,
+                                                   duplicate_callback) ==
+            ET_P1_STATUS_OK,
+        "duplicate-role callback remains unpublished and revocable");
+  check(et_p1_private_provider_abort_v1(context, duplicate_provider) ==
+            ET_P1_STATUS_OK,
+        "duplicate-role provider remains unpublished and abortable");
+  check(live_count(context) == before,
+        "duplicate-role cleanup restores the live baseline");
 
   copy = (unsigned char *)malloc(TOKEN_BYTES);
   check(copy != NULL, "token-copy scratch allocation succeeds");

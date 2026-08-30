@@ -1,5 +1,4 @@
 ;;; Generated public P1 root. No production tensor provider is admitted here.
-(require transformer.error_internal)
 
 (provide module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
@@ -8,41 +7,37 @@
          parameter-handle-device state-dict-paths state-dict-tensor
          state-dict-alias-groups)
 
-(define-values
-  (module-parameters module-buffers module-state-dict
-   module-load-state-dict! module-train! module-eval! module-zero-grad!
-   parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
-   parameter-handle-path parameter-handle-shape parameter-handle-dtype
-   parameter-handle-device state-dict-paths state-dict-tensor)
-  (let ()
-    (define (no-provider operation)
-      (transformer-error-raise
-        'unsupported operation
-        "no verified tensor provider is configured in the public P1 root"
-        '() #f))
-    (values
-      (lambda (module) (no-provider 'module-parameters))
-      (lambda (module) (no-provider 'module-buffers))
-      (lambda (module) (no-provider 'module-state-dict))
-      (lambda (module state) (no-provider 'module-load-state-dict!))
-      (lambda (module) (no-provider 'module-train!))
-      (lambda (module) (no-provider 'module-eval!))
-      (lambda (module) (no-provider 'module-zero-grad!))
-      (lambda (tree) (no-provider 'parameter-tree-paths))
-      (lambda (tree path) (no-provider 'parameter-tree-handle))
-      (lambda (tree) (no-provider 'parameter-tree-tie-groups))
-      (lambda (handle) (no-provider 'parameter-handle-path))
-      (lambda (handle) (no-provider 'parameter-handle-shape))
-      (lambda (handle) (no-provider 'parameter-handle-dtype))
-      (lambda (handle) (no-provider 'parameter-handle-device))
-      (lambda (state) (no-provider 'state-dict-paths))
-      (lambda (state path) (no-provider 'state-dict-tensor)))))
-
-(define-values (state-dict-alias-groups)
-  (let ()
-    (define (no-provider operation)
-      (transformer-error-raise
-        'unsupported operation
-        "no verified tensor provider is configured in the public P1 root"
-        '() #f))
-    (values (lambda (state) (no-provider 'state-dict-alias-groups)))))
+(define (module-parameters module)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (module-buffers module)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (module-state-dict module)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (module-load-state-dict! module state)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (module-train! module)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (module-eval! module)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (module-zero-grad! module)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-tree-paths tree)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-tree-handle tree path)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-tree-tie-groups tree)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-handle-path handle)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-handle-shape handle)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-handle-dtype handle)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (parameter-handle-device handle)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (state-dict-paths state)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (state-dict-tensor state path)
+  (error "unsupported: no verified tensor provider is configured"))
+(define (state-dict-alias-groups state)
+  (error "unsupported: no verified tensor provider is configured"))

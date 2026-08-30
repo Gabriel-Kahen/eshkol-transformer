@@ -78,6 +78,9 @@ static et_p1_record *records;
 #if defined(ET_P1_TRUSTED_BUILD)
 static et_p1_context *contexts;
 static uint8_t private_context_claimed;
+#if defined(ET_P1_TEST_HOOKS)
+static int64_t test_callback_successes_before_failure = INT64_C(-1);
+#endif
 
 static et_p1_record *find_record(const void *candidate) {
   et_p1_record *cursor = records;
@@ -437,11 +440,58 @@ ET_P1_DEFINE_CREATE(et_p1_private_state_dict_create_v1,
                     ET_P1_TOKEN_STATE_DICT, "p1-state-dict-create")
 ET_P1_DEFINE_CREATE(et_p1_private_state_entry_create_v1,
                     ET_P1_TOKEN_STATE_ENTRY, "p1-state-entry-create")
-ET_P1_DEFINE_CREATE(et_p1_private_callback_identity_create_v1,
-                    ET_P1_TOKEN_CALLBACK_IDENTITY,
-                    "p1-callback-identity-create")
 
 #undef ET_P1_DEFINE_CREATE
+
+ET_P1_PRIVATE int64_t
+et_p1_private_callback_identity_create_v1(void *candidate) {
+#if defined(ET_P1_TEST_HOOKS)
+  et_p1_context *context = require_context(candidate);
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  if (test_callback_successes_before_failure == 0) {
+    test_callback_successes_before_failure = INT64_C(-1);
+    return set_error(context, ET_P1_STATUS_INTERNAL,
+                     ET_P1_CODE_ALLOCATION_FAILED,
+                     "p1-callback-identity-create",
+                     "injected callback identity allocation failure");
+  }
+  if (test_callback_successes_before_failure > 0) {
+    test_callback_successes_before_failure--;
+  }
+#endif
+  return create_token(candidate, ET_P1_TOKEN_CALLBACK_IDENTITY,
+                      "p1-callback-identity-create", NULL, 0u);
+}
+
+#if defined(ET_P1_TEST_HOOKS)
+ET_P1_PRIVATE int64_t
+et_p1_test_callback_fail_after_v1(int64_t successful_creations) {
+  test_callback_successes_before_failure = successful_creations;
+  return ET_P1_STATUS_OK;
+}
+
+static int64_t test_count_records(int live) {
+  const et_p1_record *record = records;
+  int64_t count = 0;
+  while (record != NULL) {
+    if ((record->live != 0u) == (live != 0)) {
+      count++;
+    }
+    record = record->next;
+  }
+  return count;
+}
+
+ET_P1_PRIVATE int64_t et_p1_test_live_entry_count_v1(void) {
+  return test_count_records(1);
+}
+
+ET_P1_PRIVATE int64_t et_p1_test_tombstone_count_v1(void) {
+  return test_count_records(0);
+}
+#endif
 
 ET_P1_PRIVATE int64_t et_p1_private_provider_create_v1(
     void *candidate, const void *provider_id, int64_t provider_id_bytes) {
@@ -512,10 +562,18 @@ static int64_t require_callback_set(et_p1_context *context,
                                     void *const callbacks[],
                                     const char *operation) {
   size_t index;
+  size_t previous;
   for (index = 0u; index < ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT; index++) {
     if (require_token(context, callbacks[index],
                       ET_P1_TOKEN_CALLBACK_IDENTITY, operation) == NULL) {
       return context->error.category;
+    }
+    for (previous = 0u; previous < index; previous++) {
+      if (callbacks[previous] == callbacks[index]) {
+        return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                         ET_P1_CODE_SNAPSHOT_MISMATCH, operation,
+                         "provider callback identities must be distinct");
+      }
     }
   }
   return ET_P1_STATUS_OK;

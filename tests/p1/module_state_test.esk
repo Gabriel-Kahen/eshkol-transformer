@@ -4,6 +4,17 @@
 
 (define checks 0)
 
+(define (repeat-value count value)
+  (let loop ((remaining count) (result '()))
+    (if (= remaining 0)
+        result
+        (loop (- remaining 1) (cons value result)))))
+
+(define (nest-vector count value)
+  (if (= count 0)
+      value
+      (nest-vector (- count 1) (vector value))))
+
 (define (check label condition)
   (if condition
       (set! checks (+ checks 1))
@@ -334,6 +345,20 @@
               (lambda () (fixture-register-raising-provider-internal!)))
 (expect-error "reentrant provider admission" 'invalid-state
               (lambda () (fixture-register-reentrant-provider-internal!)))
+(expect-error "self-reentrant provider admission" 'invalid-state
+              (lambda ()
+                (fixture-register-self-reentrant-provider-internal!)))
+(expect-error "self-reentrant provider shell is permanently stale"
+              'invalid-argument
+              (lambda ()
+                (fixture-register-self-reentrant-provider-internal!)))
+(expect-error "reentrant target shell is permanently stale" 'invalid-argument
+              (lambda ()
+                (fixture-register-reentrant-target-provider-internal!)))
+(expect-error "same-name provider admission collision" 'invalid-state
+              (lambda () (fixture-register-collision-provider-internal!)))
+(expect-error "collision provider shell is permanently stale" 'invalid-argument
+              (lambda () (fixture-register-collision-provider-internal!)))
 (expect-error "repeat mutate-then-raise admission" 'unsupported
               (lambda ()
                 (fixture-register-repeat-mutating-provider-internal!)))
@@ -918,6 +943,110 @@
               (lambda ()
                 (fixture-register-cyclic-evidence-provider-internal!)))
 
+;; One-over probes cover every bounded proper-list family. They are built
+;; iteratively so the test itself does not depend on recursive list traversal.
+(expect-error "overlimit accessor path" 'invalid-argument
+              (lambda ()
+                (state-dict-tensor source-state (repeat-value 65 "z"))))
+(let ((entry
+        (state-entry-internal
+          '("z") 'parameter (repeat-value 65 2)
+          (state-entry-dtype-internal z-entry)
+          (state-entry-device-internal z-entry)
+          (state-entry-layout-internal z-entry) z-tensor)))
+  (expect-error "overlimit entry shape" 'corrupt-data
+                (lambda ()
+                  (load-state!
+                    destination
+                    (restate source-state
+                      (replace-entry valid-entries '("z") entry)
+                      (state-dict-alias-groups source-state))))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 (repeat-value 65 'feature)
+          valid-provider-identity valid-entries
+          (state-dict-alias-groups source-state))))
+  (expect-error "overlimit feature list" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(expect-error "overlimit entry list ingress" 'invalid-argument
+              (lambda ()
+                (state-dict-create-unsafe-internal
+                  'transformer-state-dict 1 0 '() valid-provider-identity
+                  (repeat-value 4097 first-entry)
+                  (state-dict-alias-groups source-state))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
+          (repeat-value 4097 '()))))
+  (expect-error "overlimit alias group list" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
+          (list (repeat-value 4097 '("z"))))))
+  (expect-error "overlimit alias member list" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 '()
+          '(transformer-tensor-provider 1 0 fixture-v1 extra)
+          valid-entries (state-dict-alias-groups source-state))))
+  (expect-error "overlimit provider identity" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(expect-error "overlimit provider admission evidence" 'invalid-argument
+              (lambda ()
+                (fixture-register-overlimit-evidence-provider-internal!)))
+(expect-error "improper provider admission evidence" 'invalid-argument
+              (lambda ()
+                (fixture-register-improper-evidence-provider-internal!)))
+
+;; Deep-copy budgets are enforced before unbounded allocation or recursion.
+(expect-error "overlimit metadata string" 'invalid-argument
+              (lambda ()
+                (state-entry-internal '("z") 'parameter '(2) 'f32
+                                      (make-string 65537 #\x)
+                                      'dense-row-major-contiguous z-tensor)))
+(expect-error "overlimit metadata vector" 'invalid-argument
+              (lambda ()
+                (state-entry-internal '("z") 'parameter '(2) 'f32
+                                      (make-vector 65537 #f)
+                                      'dense-row-major-contiguous z-tensor)))
+(expect-error "overlimit metadata node budget" 'invalid-argument
+              (lambda ()
+                (state-entry-internal '("z") 'parameter '(2) 'f32
+                                      (make-vector 65536 #f)
+                                      'dense-row-major-contiguous z-tensor)))
+(expect-error "overlimit metadata depth" 'invalid-argument
+              (lambda ()
+                (state-entry-internal '("z") 'parameter '(2) 'f32
+                                      (nest-vector 17 'cpu)
+                                      'dense-row-major-contiguous z-tensor)))
+(let ((entry
+        (state-entry-internal
+          '("z") 'parameter (state-entry-shape-internal z-entry)
+          (state-entry-dtype-internal z-entry) (make-vector 4096 'cpu)
+          (state-entry-layout-internal z-entry) z-tensor)))
+  (expect-error "overlimit validated device node budget" 'corrupt-data
+                (lambda ()
+                  (load-state!
+                    destination
+                    (restate source-state
+                      (replace-entry valid-entries '("z") entry)
+                      (state-dict-alias-groups source-state))))))
+(let ((entry
+        (state-entry-internal
+          '("z") 'parameter (state-entry-shape-internal z-entry)
+          (state-entry-dtype-internal z-entry) (make-vector 4095 'cpu)
+          (state-entry-layout-internal z-entry) z-tensor)))
+  (expect-error "exact validated device node budget is admitted"
+                'device-mismatch
+                (lambda ()
+                  (load-state!
+                    destination
+                    (restate source-state
+                      (replace-entry valid-entries '("z") entry)
+                      (state-dict-alias-groups source-state))))))
+
 (expect-error "improper accessor path" 'invalid-argument
               (lambda ()
                 (state-dict-tensor source-state (cons "z" 'tail))))
@@ -967,6 +1096,12 @@
           'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
           (cons '(("block" "alpha") ("z")) 'tail))))
   (expect-error "improper alias list" 'corrupt-data
+                (lambda () (load-state! destination state))))
+(let ((state
+        (state-dict-create-unsafe-internal
+          'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
+          (list (cons '("block" "alpha") 'improper-tail)))))
+  (expect-error "improper alias member list" 'corrupt-data
                 (lambda () (load-state! destination state))))
 (expect-error "improper entry list ingress" 'invalid-argument
               (lambda ()

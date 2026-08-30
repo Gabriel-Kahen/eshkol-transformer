@@ -20,12 +20,16 @@ together, and the private archive is not an installed public library.
 The exact layout, ownership, status, and symbol contract is frozen in
 [P1_IDENTITY_ABI.md](P1_IDENTITY_ABI.md).
 
-The Eshkol-facing error dependency is `transformer.error_internal` from E1/#23.
-P1 constructs no subsystem-local error type. Every P1 error carries a data-only
-proper alist in `details`, uses `#f` when no cause exists, and is inspected through
-the unchanged A0 accessors. P1 never forwards an untrusted offending value into E1;
-its current errors use the empty details alist and place the diagnostic in the
-operation and message fields.
+The trusted implementation's Eshkol-facing error dependency is
+`transformer.error_internal` from E1/#23. It constructs no subsystem-local error
+type. Every trusted P1 error carries a data-only proper alist in `details`, uses `#f`
+when no cause exists, and is inspected through the unchanged A0 accessors. P1 never
+forwards an untrusted offending value into E1; its current trusted errors use the
+empty details alist and place the diagnostic in the operation and message fields.
+The mutually exclusive public root cannot import E1 under the pinned flattening
+compiler without leaking E1's bindings into `transformer.module`; its 17 fail-closed
+stubs therefore raise the compiler's primitive error with an explicit `unsupported`
+message. They carry no provider and cannot reach state or tensor logic.
 
 ## Paths, nesting, and identity
 
@@ -159,8 +163,8 @@ and aliases between distinct batch destinations.
 ## Private identity bridge 1.0
 
 The bridge requires 64-bit pointers and fixed-width `i64` calls. Compile-time
-assertions freeze the private token, context, and error-record sizes at 264, 344,
-and 272 bytes. The public archive defines only four read-only functions: ABI major,
+assertions freeze the caller token, private registry record, context, and error-record
+sizes at 264, 256, 344, and 272 bytes. The public archive defines only four read-only functions: ABI major,
 ABI minor, token kind, and token liveness. It contains no context, constructor,
 provider, callback, bind, revoke, result, error, or generic-dispatch symbol. All 25
 fixed-arity private functions have hidden ELF visibility and exist only in the
@@ -213,7 +217,8 @@ Merged R0 evidence does not verify canonical Eshkol f32/i64/bool storage, device
 identity, contiguity, tensor cloning, tensor equality, gradient slots, or in-place
 tensor copying. Production P1 therefore registers no provider. The default internal
 construction path has no tensor provider, and every tensor-dependent public state
-operation fails explicitly with `unsupported`.
+operation fails explicitly with an `unsupported` primitive error message. Trusted
+operations retain the structured E1 taxonomy above.
 
 Structural tests explicitly add the separate `tests/p1/providers` include root and
 compose production modules with an inert `fixture-v1` carrier from the qualified

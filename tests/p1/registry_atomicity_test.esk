@@ -1,0 +1,104 @@
+(require transformer.module)
+(require transformer.error_internal)
+(require p1_test.tensor_provider)
+
+(extern i64 p1-test-callback-fail-after i64
+        :real et_p1_test_callback_fail_after_v1)
+(extern i64 p1-test-live-count
+        :real et_p1_test_live_entry_count_v1)
+(extern i64 p1-test-tombstone-count
+        :real et_p1_test_tombstone_count_v1)
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "P1 registry atomicity FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (expect-error label category thunk)
+  (let ((caught
+          (guard (raised
+                   (#t
+                     (and (transformer-error? raised)
+                          (eq? category
+                               (transformer-error-category raised)))))
+            (thunk)
+            #f)))
+    (check label caught)))
+
+(define (fixture-payload shape name)
+  (fixture-tensor-internal shape 'f32 'cpu (vector name 'bits-v1)))
+
+(define (one-parameter-module shape name)
+  (let ((module (module-create-fixture-internal)))
+    (module-register-parameter-internal!
+      module "weight" (fixture-payload shape name))
+    module))
+
+;; Drive the Eshkol admission wrapper through a failure after three callback
+;; identities. It must revoke those callbacks and the unpublished provider.
+(let ((live-before (p1-test-live-count))
+      (tombstones-before (p1-test-tombstone-count)))
+  (check "callback failpoint armed"
+         (= (p1-test-callback-fail-after 3) 0))
+  (expect-error "partial callback allocation fails explicitly" 'internal
+                (lambda ()
+                  (fixture-register-reentrant-target-provider-internal!)))
+  (check "partial admission revokes its unpublished provider identity"
+         (= (p1-test-live-count) (- live-before 1)))
+  (check "partial admission leaves exact permanent tombstones"
+         (= (p1-test-tombstone-count) (+ tombstones-before 4)))
+  (expect-error "partially admitted provider remains unavailable" 'unsupported
+                (lambda ()
+                  (module-create-with-provider-internal
+                    'reentrant-target-v1))))
+
+;; Construct every shell before each baseline. Failed and repeated strict loads
+;; must not create identities, bindings, or tombstones.
+(define failed-load-source (one-parameter-module '(2) 'source))
+(define failed-load-state (module-state-dict failed-load-source))
+(define failed-load-destination
+  (one-parameter-module '(3) 'mismatched))
+(let ((live-before (p1-test-live-count))
+      (tombstones-before (p1-test-tombstone-count)))
+  (expect-error "failed load rejects shape mismatch" 'shape-mismatch
+                (lambda ()
+                  (module-load-state-dict! failed-load-destination
+                                           failed-load-state)))
+  (check "failed load preserves live registry count"
+         (= (p1-test-live-count) live-before))
+  (check "failed load preserves tombstone count"
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "failed load does not finalize module topology"
+         (module-register-buffer-internal!
+           failed-load-destination "after"
+           (fixture-payload '(1) 'after-failure))))
+
+(let* ((source (one-parameter-module '(2) 'repeat-source))
+       (state (module-state-dict source))
+       (destination (one-parameter-module '(2) 'repeat-destination))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (check "first strict load succeeds"
+         (module-load-state-dict! destination state))
+  (check "first strict load preserves live registry count"
+         (= (p1-test-live-count) live-before))
+  (check "first strict load preserves tombstone count"
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "repeated strict load succeeds"
+         (module-load-state-dict! destination state))
+  (check "repeated strict load preserves live registry count"
+         (= (p1-test-live-count) live-before))
+  (check "repeated strict load preserves tombstone count"
+         (= (p1-test-tombstone-count) tombstones-before)))
+
+(if (= checks 15)
+    (begin
+      (display "P1 registry atomicity PASS: 15 checks")
+      (newline))
+    (exit 1))
