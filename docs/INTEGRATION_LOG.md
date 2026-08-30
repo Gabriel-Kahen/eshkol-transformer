@@ -351,10 +351,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-08-28 — X1 / issue #20
 
-- **Decision:** proposed for integration; issue #1 accepted the schema and
-  canonicalization direction with required clarifications, now incorporated and
-  tested. Only the integration owner may change this entry to `accepted` after
-  independent review and merge.
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and merged-main focused/full regression gates.
 - **Contract:** X1 uses the strict, flat, non-executable version-1 JSON source schema
   and the independently versioned `eshkol-resolved-run` `[1,0]` canonical manifest
   documented in [CONFIG_FORMAT.md](CONFIG_FORMAT.md). Every explicitly present source
@@ -385,15 +383,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   pass. Focused A0, E1 (112), E1B (35), I1, and repository-wide `make test`, followed
   by separate `make build` and `make smoke`, pass after rebasing on accepted E1B main.
   Independent parser/canonicalization, E1B packaging/leakage, and test-evidence
-  reviews report no blocker. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 exact-head
-  CI remains required before integration acceptance.
+  reviews report no blocker. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33329897122](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33329897122)
+  passed at exact reviewed head `246afd8ad6ad663082f7efeec32ec554421e909c`.
 - **Limitations:** X1 is canonical-pin/x86-64 AOT-only and publishes no JIT/bitcode
   artifact. One combined artifact/registry is supported per process; concurrency is
   unverified. The pinned compiler leaves six safe-only source aliases reachable;
   each conveys only its corresponding public configuration operation. Malicious
   native injection into the trusted partial link is outside scope.
-- **Dependencies / retest:** X1 remains proposed and must not be merged by its
-  implementation task. T1 must consume the validated configuration contract
+- **Dependencies / retest:** T1 must consume the validated configuration contract
   before `tokenizer-byte`; C2 may embed the exact manifest and fingerprint only after
   X1 integration. CLI3 may expose source parsing and overrides only after the same
   review. Rerun T1, C2, and CLI3 gates after any X1 contract change. Any field,
@@ -401,4 +399,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   #1 coordination and affected downstream retests.
 - **Reference:** [issue #20](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/20);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  [implementation PR #30](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/30).
+  [implementation PR #30](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/30);
+  merge commit `18276b1284ad5e69bee6de91f3f00096e99e4ca5`. Merged-main
+  `make test-x1` and `make test build smoke` passed on the documented local
+  compatibility lane.
