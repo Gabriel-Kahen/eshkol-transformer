@@ -1,0 +1,201 @@
+;;; Canonical AOT-only proof through a bounded, test-only evidence facade.
+
+(require transformer.i64_tensor_internal)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name expected actual)
+  (if (equal? expected actual)
+      (begin
+        (set! passed (+ passed 1))
+        (display "PASS: ") (display name) (newline))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name)
+        (display " expected=") (write expected)
+        (display " actual=") (write actual) (newline))))
+
+(define (capture-error thunk)
+  (guard (condition ((transformer-error? condition) condition))
+    (thunk)
+    #f))
+
+(define (detail-ref details key)
+  (cond ((null? details) #f)
+        ((eq? (caar details) key) (cadar details))
+        (else (detail-ref (cdr details) key))))
+
+(define (exact-real-integer? value)
+  (and (integer? value) (exact? value) (real? value)))
+
+(check "I1 ABI major" 1 (i64-tensor-abi-major))
+(check "I1 ABI minor" 0 (i64-tensor-abi-minor))
+(check "bounded capability name" "tensor.i64"
+       (i64-tensor-capability-name))
+(check "bounded capability verified status" 1
+       (i64-tensor-capability-status))
+(check "bounded capability operation" "storage.copy"
+       (i64-tensor-capability-operation))
+(check "bounded capability dtype" "i64"
+       (i64-tensor-capability-dtype))
+(check "bounded capability device" "cpu"
+       (i64-tensor-capability-device))
+(check "bounded capability deterministic" 1
+       (i64-tensor-capability-deterministic))
+(check "bounded capability version" "1.0"
+       (i64-tensor-capability-version))
+(check "bounded capability evidence" "I1:bounded-exact-i64-storage.copy-v1"
+       (i64-tensor-capability-evidence))
+(check "capability has exactly scalar and rank-1 shapes" 2
+       (i64-tensor-capability-shape-count))
+(check "capability scalar alternative rank" 0
+       (i64-tensor-capability-shape0-rank))
+(check "capability vector alternative rank" 1
+       (i64-tensor-capability-shape1-rank))
+(check "capability vector minimum extent" 0
+       (i64-tensor-capability-shape1-min))
+(check "capability vector maximum extent" 2305843009213693951
+       (i64-tensor-capability-shape1-max))
+
+(define tensor (i64-tensor-create '(4)))
+(check "rank" 1 (i64-tensor-rank tensor))
+(check "shape extent" 4 (i64-tensor-shape-at tensor 0))
+(check "dense row-major byte stride" 8
+       (i64-tensor-stride-bytes-at tensor 0))
+(check "element count" 4 (i64-tensor-element-count tensor))
+(check "byte length" 32 (i64-tensor-byte-length tensor))
+
+(define calls-before (i64-tensor-ffi-call-count tensor))
+(define above-range-error
+  (capture-error
+    (lambda ()
+      (i64-tensor-copy-from4!
+        tensor 9223372036854775808 0 0 0))))
+(define calls-after (i64-tensor-ffi-call-count tensor))
+(check "above-i64 facade rejection category" 'invalid-argument
+       (transformer-error-category above-range-error))
+(check "above-i64 rejected before FFI" calls-before calls-after)
+
+(define below-range-error
+  (capture-error
+    (lambda ()
+      (i64-tensor-copy-from4!
+        tensor -9223372036854775809 0 0 0))))
+(check "below-i64 facade rejection category" 'invalid-argument
+       (transformer-error-category below-range-error))
+(check "below-i64 rejected before FFI" calls-after
+       (i64-tensor-ffi-call-count tensor))
+
+(define inexact-error
+  (capture-error
+    (lambda () (i64-tensor-copy-from4! tensor 1.0 0 0 0))))
+(check "inexact facade rejection category" 'invalid-argument
+       (transformer-error-category inexact-error))
+(check "inexact value rejected before FFI" calls-after
+       (i64-tensor-ffi-call-count tensor))
+
+(define noninteger-error
+  (capture-error
+    (lambda () (i64-tensor-copy-from4! tensor 1/2 0 0 0))))
+(check "noninteger facade rejection category" 'invalid-argument
+       (transformer-error-category noninteger-error))
+(check "noninteger value rejected before FFI" calls-after
+       (i64-tensor-ffi-call-count tensor))
+
+(define improper-shape-error
+  (capture-error (lambda () (i64-tensor-create (cons 4 5)))))
+(check "improper shape list rejected" 'invalid-argument
+       (transformer-error-category improper-shape-error))
+
+(i64-tensor-copy-from4!
+  tensor -9223372036854775808 9223372036854775807
+  9007199254740993 -9007199254740993)
+(i64-tensor-copy-to-count! tensor 4)
+(check "INT64_MIN exact round trip" -9223372036854775808
+       (i64-tensor-output-at tensor 0))
+(check "INT64_MAX exact round trip" 9223372036854775807
+       (i64-tensor-output-at tensor 1))
+(check "positive beyond-f64 exact round trip" 9007199254740993
+       (i64-tensor-output-at tensor 2))
+(check "negative beyond-f64 exact round trip" -9007199254740993
+       (i64-tensor-output-at tensor 3))
+(check "round-trip carrier remains exact real integer" #t
+       (and (exact-real-integer? (i64-tensor-output-at tensor 0))
+            (exact-real-integer? (i64-tensor-output-at tensor 1))
+            (exact-real-integer? (i64-tensor-output-at tensor 2))
+            (exact-real-integer? (i64-tensor-output-at tensor 3))))
+
+(i64-tensor-seed-output4! tensor 101 102 103 104)
+(define copy-failure
+  (capture-error
+    (lambda () (i64-tensor-copy-to-count! tensor 3))))
+(check "native copy failure maps category" 'shape-mismatch
+       (transformer-error-category copy-failure))
+(check "native copy failure E1 source domain" 'i64-tensor
+       (detail-ref (transformer-error-details copy-failure) 'source-domain))
+(check "native copy failure E1 source code" 6
+       (detail-ref (transformer-error-details copy-failure) 'source-code))
+(check "native copy failure source operation" "i64-tensor-copy-to"
+       (detail-ref (transformer-error-details copy-failure)
+                   'source-operation))
+(check "failed copy leaves caller output 0 unchanged" 101
+       (i64-tensor-output-at tensor 0))
+(check "failed copy leaves caller output 3 unchanged" 104
+       (i64-tensor-output-at tensor 3))
+
+(i64-tensor-borrow-begin! tensor)
+(check "borrow view dtype" "i64" (i64-tensor-borrow-dtype tensor))
+(check "borrow view device" "cpu" (i64-tensor-borrow-device tensor))
+(check "borrow view dense row-major layout" 1
+       (i64-tensor-borrow-layout tensor))
+(check "borrow view zero offset" 0 (i64-tensor-borrow-offset tensor))
+(check "borrow view rank" 1 (i64-tensor-borrow-rank tensor))
+(check "borrow view exact byte span" 32
+       (i64-tensor-borrow-byte-length tensor))
+(define second-borrow-error
+  (capture-error (lambda () (i64-tensor-borrow-begin-again! tensor))))
+(check "second borrow maps invalid-state" 'invalid-state
+       (transformer-error-category second-borrow-error))
+(check "second borrow maps active-borrow code" 9
+       (detail-ref (transformer-error-details second-borrow-error)
+                   'source-code))
+(i64-tensor-borrow-write-first! tensor -17)
+(i64-tensor-borrow-end! tensor)
+(i64-tensor-copy-to-count! tensor 4)
+(check "live borrowed view is directly writable" -17
+       (i64-tensor-output-at tensor 0))
+(i64-tensor-borrow-begin! tensor)
+(define active-borrow-error
+  (capture-error (lambda () (i64-tensor-destroy! tensor))))
+(check "destroy with active borrow maps invalid-state" 'invalid-state
+       (transformer-error-category active-borrow-error))
+(check "destroy with active borrow source code" 9
+       (detail-ref (transformer-error-details active-borrow-error)
+                   'source-code))
+(check "failed destroy leaves tensor live" 32
+       (i64-tensor-byte-length tensor))
+(i64-tensor-borrow-end! tensor)
+(i64-tensor-destroy! tensor)
+(define after-destroy-error
+  (capture-error (lambda () (i64-tensor-rank tensor))))
+(check "use after explicit destroy maps invalid-state" 'invalid-state
+       (transformer-error-category after-destroy-error))
+(i64-tensor-release! tensor)
+
+(define empty (i64-tensor-create '(0 5)))
+(check "zero-extent rank" 2 (i64-tensor-rank empty))
+(check "zero-extent first shape" 0 (i64-tensor-shape-at empty 0))
+(check "zero-extent later shape retained" 5 (i64-tensor-shape-at empty 1))
+(check "zero-extent element count" 0 (i64-tensor-element-count empty))
+(check "zero-extent byte length" 0 (i64-tensor-byte-length empty))
+(i64-tensor-borrow-begin! empty)
+(check "zero-extent K1 view byte span" 0
+       (i64-tensor-borrow-byte-length empty))
+(i64-tensor-borrow-end! empty)
+(i64-tensor-destroy! empty)
+(i64-tensor-release! empty)
+
+(display "I1 AOT interop: ") (display passed) (display " passed, ")
+(display failed) (display " failed") (newline)
+(if (> failed 0) (exit 1) (exit 0))

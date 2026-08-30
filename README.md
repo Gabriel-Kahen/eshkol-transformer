@@ -47,6 +47,12 @@ or model-training contract. B0's reproducible host-process smoke benchmark is
 documented in [docs/BENCHMARK_FORMAT.md](docs/BENCHMARK_FORMAT.md); run it with
 `make benchmark` after `make build`.
 
+The build also leaves I1's separate exact signed-i64 CPU container archive at
+`build/i1/libeshkol_transformer_i64.a`, with its ABI 1.0 header at
+`include/eshkol_transformer/i64_tensor.h`. Its explicit K1 provider verifies only
+bounded deterministic `tensor.i64` / `storage.copy` requests; see
+[docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
@@ -60,5 +66,6 @@ See:
 - [Quality gates](docs/QUALITY_GATES.md)
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
+- [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

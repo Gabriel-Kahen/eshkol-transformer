@@ -224,3 +224,57 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #23](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/23);
   [PR #27](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/27); merge commit
   `80371a1f06cc71c44c2d940a57b294a89174a1f0`.
+
+## 2026-08-29 — I1 / issue #24
+
+- **Decision:** proposed. The integration task approved the ABI and evidence
+  boundary before implementation; acceptance remains with integration review.
+- **Contract:** Separate native I1 ABI 1.0 provides a deep-owned exact signed-`i64`
+  dense row-major zero-offset CPU container for ranks 0 through 64 in the
+  explicit-link archive `build/i1/libeshkol_transformer_i64.a`. Rank 0 has one
+  element; a zero extent at positive rank canonically has null data, zero bytes,
+  and all-zero byte strides. Checked products govern nonempty element and byte
+  spans. One tracked borrow may be active; it blocks owner mutation and destruction
+  but permits reads and direct external mutation through the borrowed K1 view.
+  Pointer-to-pointer outputs require null contained slots, preserve both null and
+  nonnull slots on failure, and publish only on success. Copy buffers, writable
+  scalar/handle outputs, and error records are checked before mutation against a
+  process-local registry of every live I1 control, shape, stride, data, borrow, and
+  descriptor allocation. A nonnull shape declares a logical span of `rank`
+  contiguous `uint64_t` elements even for an invalid rank; its checked exact span
+  participates in alias validation without memory access. An unrepresentable byte
+  span or exclusive end causes conservative no-write rejection when an error
+  record is supplied. An aliased error record is rejected without diagnostic mutation
+  because no safe error destination exists. Direct use of an authorized
+  live borrowed K1 view remains the explicit owned-storage mutation exception.
+  The explicit process-local provider accessor supplies exactly one deterministic
+  verified K1 row: `tensor.i64` / `storage.copy` / `cpu` / `i64`, for rank 0 and
+  rank 1 extent `0..2305843009213693951`. It performs no allocation, cast, transfer,
+  fallback, or partial-success path. All I1 ABI entry points use the `_v1` symbol
+  suffix. K1 sources and A0 names/arities are unchanged;
+  the compiled-Eshkol facade is test-only and maps native failures through E1.
+- **Evidence:** On the explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6
+  compatibility lane, `/usr/bin/bash -c 'make test && make build && make smoke'`
+  passed against a clean canonical
+  `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` checkout and compiler
+  `1.3.4-evolve`. The focused I1 gate passed 764 normal exact-i64, shape/layout,
+  ownership, alias, failure-atomic, malformed-call, and K1 dispatch checks twice
+  with identical output; 2,476 allocation-hook and ASan/UBSan checks covering live
+  opaque handles, same- and cross-object owned regions, pointer-slot preservation,
+  success/failure error aliases, and invalid-rank checked shape spans without
+  extent reads; a warning-clean
+  C++17 consumer; and two canonical-pin AOT executions with 59 checks each. AOT
+  output SHA-256 was
+  `de78f6cb1b0ea6ffd169a4dfc1d7500f1f3f1db69dd113f8fd737a978c92d217`;
+  compiler SHA-256 was
+  `caa295b19a6e9388963aa0def99dade63656d2dcbffccad421bd1daaa1db3750`.
+  The repository-wide run also passed the F0 smoke/missing-toolchain probes, 41 B0
+  checks, A0, 596-check K1, 112-check E1, build, and smoke. Supported Ubuntu 22.04
+  x86-64 / LLVM-Clang 21.1.8 CI remains required.
+- **Dependencies / retest:** T1 may use only separately reviewed explicit native
+  lifetime and E1 wrappers; I1 supplies no tokenizer behavior or production Eshkol
+  finalizer. D2 may use rank-2 owned storage only as unverified container behavior;
+  it may not infer a K1 capability, mask, packing, cursor, or resume contract.
+  Re-test the exact AOT carrier/range checks if the pinned compiler changes.
+- **Reference:** [issue #24](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/24);
+  [PR #32](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/32).

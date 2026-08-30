@@ -1,0 +1,60 @@
+PASS: I1 ABI major
+PASS: I1 ABI minor
+PASS: bounded capability name
+PASS: bounded capability verified status
+PASS: bounded capability operation
+PASS: bounded capability dtype
+PASS: bounded capability device
+PASS: bounded capability deterministic
+PASS: bounded capability version
+PASS: bounded capability evidence
+PASS: capability has exactly scalar and rank-1 shapes
+PASS: capability scalar alternative rank
+PASS: capability vector alternative rank
+PASS: capability vector minimum extent
+PASS: capability vector maximum extent
+PASS: rank
+PASS: shape extent
+PASS: dense row-major byte stride
+PASS: element count
+PASS: byte length
+PASS: above-i64 facade rejection category
+PASS: above-i64 rejected before FFI
+PASS: below-i64 facade rejection category
+PASS: below-i64 rejected before FFI
+PASS: inexact facade rejection category
+PASS: inexact value rejected before FFI
+PASS: noninteger facade rejection category
+PASS: noninteger value rejected before FFI
+PASS: improper shape list rejected
+PASS: INT64_MIN exact round trip
+PASS: INT64_MAX exact round trip
+PASS: positive beyond-f64 exact round trip
+PASS: negative beyond-f64 exact round trip
+PASS: round-trip carrier remains exact real integer
+PASS: native copy failure maps category
+PASS: native copy failure E1 source domain
+PASS: native copy failure E1 source code
+PASS: native copy failure source operation
+PASS: failed copy leaves caller output 0 unchanged
+PASS: failed copy leaves caller output 3 unchanged
+PASS: borrow view dtype
+PASS: borrow view device
+PASS: borrow view dense row-major layout
+PASS: borrow view zero offset
+PASS: borrow view rank
+PASS: borrow view exact byte span
+PASS: second borrow maps invalid-state
+PASS: second borrow maps active-borrow code
+PASS: live borrowed view is directly writable
+PASS: destroy with active borrow maps invalid-state
+PASS: destroy with active borrow source code
+PASS: failed destroy leaves tensor live
+PASS: use after explicit destroy maps invalid-state
+PASS: zero-extent rank
+PASS: zero-extent first shape
+PASS: zero-extent later shape retained
+PASS: zero-extent element count
+PASS: zero-extent byte length
+PASS: zero-extent K1 view byte span
+I1 AOT interop: 59 passed, 0 failed
