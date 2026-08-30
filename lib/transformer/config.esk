@@ -1,0 +1,73 @@
+;;; Installed X1 public source stub. The implementation and its E1 raise privilege
+;;; live only in the prelocalized X1 consumer artifact.
+
+(require transformer.error_consumer)
+
+(provide config-parse config-resolve config-validate config-canonical
+         config-fingerprint config-ref)
+
+(define x1-safe-config-parse
+  (let ()
+    (extern void x1-public-config-parse ptr ptr
+            :real et_e1b_public_x1_config_parse_v1)
+    (lambda (text)
+      (let ((output (vector #f)))
+        (x1-public-config-parse (vector text) output)
+        (vector-ref output 0)))))
+(define (config-parse text)
+  (x1-safe-config-parse text))
+
+(define x1-safe-config-resolve
+  (let ()
+    (extern void x1-public-config-resolve ptr ptr ptr
+            :real et_e1b_public_x1_config_resolve_v1)
+    (lambda (config overrides)
+      (let ((output (vector #f)))
+        (x1-public-config-resolve (vector config) (vector overrides) output)
+        (vector-ref output 0)))))
+(define (config-resolve config overrides)
+  (x1-safe-config-resolve config overrides))
+
+(define x1-safe-config-validate
+  (let ()
+    (extern void x1-public-config-validate ptr ptr
+            :real et_e1b_public_x1_config_validate_v1)
+    (lambda (resolved)
+      (let ((output (vector #f)))
+        (x1-public-config-validate (vector resolved) output)
+        (vector-ref output 0)))))
+(define (config-validate resolved)
+  (x1-safe-config-validate resolved))
+
+(define x1-safe-config-canonical
+  (let ()
+    (extern void x1-public-config-canonical ptr ptr
+            :real et_e1b_public_x1_config_canonical_v1)
+    (lambda (resolved)
+      (let ((output (vector #f)))
+        (x1-public-config-canonical (vector resolved) output)
+        (vector-ref output 0)))))
+(define (config-canonical resolved)
+  (x1-safe-config-canonical resolved))
+
+(define x1-safe-config-fingerprint
+  (let ()
+    (extern void x1-public-config-fingerprint ptr ptr
+            :real et_e1b_public_x1_config_fingerprint_v1)
+    (lambda (resolved)
+      (let ((output (vector #f)))
+        (x1-public-config-fingerprint (vector resolved) output)
+        (vector-ref output 0)))))
+(define (config-fingerprint resolved)
+  (x1-safe-config-fingerprint resolved))
+
+(define x1-safe-config-ref
+  (let ()
+    (extern void x1-public-config-ref ptr ptr ptr
+            :real et_e1b_public_x1_config_ref_v1)
+    (lambda (resolved key)
+      (let ((output (vector #f)))
+        (x1-public-config-ref (vector resolved) (vector key) output)
+        (vector-ref output 0)))))
+(define (config-ref resolved key)
+  (x1-safe-config-ref resolved key))

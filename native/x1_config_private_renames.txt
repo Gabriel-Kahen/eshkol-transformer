@@ -1,0 +1,6 @@
+x1-private-config-canonical et_e1b_private_x1_config_canonical_cabi_v1
+x1-private-config-fingerprint et_e1b_private_x1_config_fingerprint_cabi_v1
+x1-private-config-parse et_e1b_private_x1_config_parse_cabi_v1
+x1-private-config-ref et_e1b_private_x1_config_ref_cabi_v1
+x1-private-config-resolve et_e1b_private_x1_config_resolve_cabi_v1
+x1-private-config-validate et_e1b_private_x1_config_validate_cabi_v1

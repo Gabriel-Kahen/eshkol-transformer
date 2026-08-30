@@ -1,0 +1,5 @@
+(require transformer.config)
+
+;;; The pinned compiler treats `provide` as informational, so this compile
+;;; failure proves X1 constructors are lexical rather than top-level bindings.
+(x1-make-resolved '() '())

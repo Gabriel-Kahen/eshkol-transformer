@@ -1,0 +1,4 @@
+(require transformer.config)
+
+;;; Raw representation access must remain outside the compiled module scope.
+(x1-resolved-values 'fabricated)

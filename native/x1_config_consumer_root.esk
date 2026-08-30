@@ -1,0 +1,6 @@
+;;; Trusted X1 compilation root. Never install this file or add native/ to an
+;;; application include path. The E1B builder compiles this whole closure and
+;;; localizes every non-allowlisted definition before packaging it.
+
+(require e1b_error_consumer_private)
+(require x1_config_private)

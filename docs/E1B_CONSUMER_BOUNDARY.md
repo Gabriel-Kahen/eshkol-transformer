@@ -61,11 +61,15 @@ depfile, link-map, symbol-table, allowlist-provenance, undefined-symbol, export,
 strings evidence. A differently named unresolved function, data, TLS, or weak symbol
 is therefore rejected before an application can supply it at the later link.
 
-The undefined-symbol policy is not caller-selectable. The trusted native consumer
-bridge is compiled with `-fstack-protector-all`, so both supported Clang 21.1.8 and
-the explicitly unsupported Clang 22.1.6 compatibility lane retain
-`__stack_chk_fail` in the same frozen 80-name manifest. The builder validates the
-resulting localized object, not a compiler-dependent optional subset. Unsorted or
+The undefined-symbol policy is not caller-selectable. The base fixture uses
+`native/e1b_undefined_symbols.txt`; the checked-in X1 trusted root is selected by
+exact repository path and uses the independently reviewed X1-specific
+`native/x1_undefined_symbols.txt`. No command-line manifest argument exists. The
+trusted native consumer bridge is compiled with `-fstack-protector-all`, so both
+supported Clang 21.1.8 and the explicitly unsupported Clang 22.1.6 compatibility
+lane retain `__stack_chk_fail` in the base fixture's frozen 80-name manifest and
+X1's reviewed 95-name manifest. The builder validates the resulting localized
+object, not a compiler-dependent optional subset. Unsorted or
 duplicate public-export inputs are likewise rejected rather than normalized.
 
 The existing `transformer.error_public` facade and every installed public Eshkol

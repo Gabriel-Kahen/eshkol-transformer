@@ -1,0 +1,2 @@
+(require transformer.config)
+(config-canonical)

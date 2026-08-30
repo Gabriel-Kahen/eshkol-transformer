@@ -348,3 +348,57 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `60c9afa182115bc3ebc9bad321e366b8b3979ae6`. Independent review approved exact
   head `1e2f2c9b8d895c43c88ecb2b770e6612fb57c767`; merged-main `make test-e1b`
   and `make test build smoke` passed on the documented local compatibility lane.
+
+## 2026-08-28 — X1 / issue #20
+
+- **Decision:** proposed for integration; issue #1 accepted the schema and
+  canonicalization direction with required clarifications, now incorporated and
+  tested. Only the integration owner may change this entry to `accepted` after
+  independent review and merge.
+- **Contract:** X1 uses the strict, flat, non-executable version-1 JSON source schema
+  and the independently versioned `eshkol-resolved-run` `[1,0]` canonical manifest
+  documented in [CONFIG_FORMAT.md](CONFIG_FORMAT.md). Every explicitly present source
+  leaf is admitted by type, range, enum, and policy before override overlay, so an
+  override cannot sanitize invalid input. Resolution precedence for admitted values
+  is defaults, source, unique explicit overrides, then absent-field derivation and
+  full validation. Canonical output contains all resolved leaves and per-leaf provenance;
+  provenance is part of identity. `config-fingerprint` is
+  `sha256:eshkol-config-json-v1:<lowerhex>` over the exact canonical bytes including
+  the final LF. The manifest declares SHA-256 coverage but embeds no circular digest.
+  Version 1 permits no code, includes, environment expansion, secrets, runtime
+  evidence, hidden dtype/device/precision/CPU/scalar/Python fallback, or unsupported
+  version inference.
+- **Evidence:** on the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility lane,
+  the pinned Eshkol `90cbd7130f47b8184bcc77b8d5c1b0026da980de` compiler
+  `v1.3.4-evolve` passes 111 native parse/override/source-admission/validation/
+  opacity/canonical checks and 11 Python reference/isolation checks. The focused
+  gate builds the combined artifact twice byte-identically, compiles strict source
+  objects and AOT applications from fresh caches twice, exercises the E1 public
+  facade and X1 in both import orders against one registry, checks all six A0
+  arities, and rejects source and guessed-link access to constructors, dispatcher,
+  private raise seam, representation helpers, and private X1 entries. The completed
+  object has exactly 12 globals (six E1 accessors plus six X1 wrappers) and exactly
+  matches its reviewed C-sorted 95-name runtime-undefined manifest; all privileged
+  and implementation symbols are local. Golden canonical bytes, metadata/payload/
+  provenance mutations, whole-document SHA-256 including final LF, hostile
+  environment/CWD determinism, and absence of Python/PyTorch runtime dependencies
+  pass. Focused A0, E1 (112), E1B (35), I1, and repository-wide `make test`, followed
+  by separate `make build` and `make smoke`, pass after rebasing on accepted E1B main.
+  Independent parser/canonicalization, E1B packaging/leakage, and test-evidence
+  reviews report no blocker. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 exact-head
+  CI remains required before integration acceptance.
+- **Limitations:** X1 is canonical-pin/x86-64 AOT-only and publishes no JIT/bitcode
+  artifact. One combined artifact/registry is supported per process; concurrency is
+  unverified. The pinned compiler leaves six safe-only source aliases reachable;
+  each conveys only its corresponding public configuration operation. Malicious
+  native injection into the trusted partial link is outside scope.
+- **Dependencies / retest:** X1 remains proposed and must not be merged by its
+  implementation task. T1 must consume the validated configuration contract
+  before `tokenizer-byte`; C2 may embed the exact manifest and fingerprint only after
+  X1 integration. CLI3 may expose source parsing and overrides only after the same
+  review. Rerun T1, C2, and CLI3 gates after any X1 contract change. Any field,
+  default, version, canonical-byte, provenance, or fingerprint change requires issue
+  #1 coordination and affected downstream retests.
+- **Reference:** [issue #20](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/20);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [implementation PR #30](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/30).
