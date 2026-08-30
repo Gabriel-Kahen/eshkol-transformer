@@ -309,7 +309,12 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   import the real `transformer.error_public` facade with consumer A/B in both orders,
   recognize the same errors and detached causes through all six accessors, and prove
   public depfiles exclude both source registry modules. The final artifact exactly
-  matches its 80-name reviewed runtime-undefined allowlist. Distinct unlisted
+  matches one repository-owned 80-name runtime-undefined allowlist on both supported
+  Clang 21.1.8 and compatibility Clang 22.1.6. Explicit
+  `-fstack-protector-all` on the trusted native bridge makes `__stack_chk_fail`
+  deterministic; the final object is still compared byte-for-byte, never against an
+  optional subset. Unsorted public-export input is rejected rather than normalized.
+  Distinct unlisted
   function, data, TLS, and weak references have verified ELF bindings/relocations and
   each fail before object/evidence publication or later application satisfaction.
   Exact five-argument diagnostics, malformed category/operation/message/details/
@@ -329,8 +334,9 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   informational. Malicious native-object injection into the trusted partial link is
   outside scope, while arbitrary compiled Eshkol linked afterward is in scope.
 - **Dependencies / retest:** D1 and X1 must expose only reviewed package-specific
-  wrappers in the same combined registry-owning artifact, supply a reviewed exact
-  undefined-symbol manifest for their larger trusted closure, and repeat public-
+  wrappers in the same combined registry-owning artifact, add a reviewed
+  repository-owned exact undefined-symbol policy for their larger trusted closure,
+  and repeat public-
   closure, mixed-facade import-order, malformed-value, symbol/link, and full-suite
   gates. E1B changes no K1/I1 contract and adds no public persistence format.
 - **Reference:** [issue #33](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/33);

@@ -3,27 +3,22 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-[[ "$#" -ge 6 ]] || die \
-  "usage: $0 TRUSTED_PRIVATE_ROOT.esk PACKAGE_BRIDGE.c PACKAGE_RENAMES.txt PUBLIC_EXPORTS.txt UNDEFINED_SYMBOLS.txt OUTPUT.o [INCLUDE_DIR ...]"
+[[ "$#" -ge 5 ]] || die \
+  "usage: $0 TRUSTED_PRIVATE_ROOT.esk PACKAGE_BRIDGE.c PACKAGE_RENAMES.txt PUBLIC_EXPORTS.txt OUTPUT.o [INCLUDE_DIR ...]"
 
 require_command realpath
 private_root="$(realpath -- "$1")"
 package_bridge="$(realpath -- "$2")"
 package_renames="$(realpath -- "$3")"
 public_exports="$(realpath -- "$4")"
-undefined_symbols="$(realpath -- "$5")"
-output_object="$(realpath -m -- "$6")"
-shift 6
+output_object="$(realpath -m -- "$5")"
+shift 5
 include_dirs=("$@")
 
 [[ -f "${private_root}" ]] || die "E1B private root not found: ${private_root}"
 [[ -f "${package_bridge}" ]] || die "E1B package bridge not found: ${package_bridge}"
 [[ -f "${package_renames}" ]] || die "E1B rename map not found: ${package_renames}"
 [[ -f "${public_exports}" ]] || die "E1B public export list not found: ${public_exports}"
-[[ -f "${undefined_symbols}" ]] || \
-  die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
-[[ -s "${undefined_symbols}" ]] || \
-  die "E1B undefined-symbol allowlist must not be empty"
 [[ "${output_object}" == *.o ]] || die "E1B output must end in .o"
 
 require_command awk
@@ -39,8 +34,14 @@ verify_toolchain
 
 e1b_runner="$(eshkol_build_dir)/eshkol-run"
 e1b_source="$(eshkol_source_dir)"
-e1b_cc="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cc_path)"
-e1b_cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
+e1b_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
+e1b_cc="$(tsv_value "${e1b_provenance}" cc_path)"
+e1b_cxx="$(tsv_value "${e1b_provenance}" cxx_path)"
+undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
+[[ -f "${undefined_symbols}" ]] || \
+  die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
+[[ -s "${undefined_symbols}" ]] || \
+  die "E1B undefined-symbol allowlist must not be empty"
 e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 [[ "${e1b_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
   die "E1B_COMPILER_TIMEOUT_SECONDS must be a positive integer"
@@ -60,7 +61,6 @@ cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
   die "E1B undefined-symbol allowlist must already be byte-exact C-sorted unique text"
 
 awk '
-  /^[[:space:]]*(#|$)/ { next }
   NF != 1 || $1 !~ /^et_e1b_public_[a-z0-9_]+_v1$/ { bad = 1; next }
   { print $1 }
   END { if (bad) exit 1 }
@@ -68,6 +68,8 @@ awk '
   die "E1B package exports must be one et_e1b_public_*_v1 symbol per line"
 [[ -s "${e1b_tmp}/package-exports.txt" ]] || \
   die "E1B package export list must not be empty"
+cmp -s "${public_exports}" "${e1b_tmp}/package-exports.txt" || \
+  die "E1B package export allowlist must already be byte-exact C-sorted unique text"
 
 {
   printf '%s\n' \
@@ -123,6 +125,7 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   "${e1b_tmp}/private.o"
 
 "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -fstack-protector-all \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
   -o "${e1b_tmp}/bridge.o"
@@ -154,12 +157,8 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
-if ! cmp -s "${e1b_tmp}/expected-undefined.txt" \
-    "${e1b_tmp}/undefined.txt"; then
-  printf 'E1B undefined-symbol allowlist difference (expected-only, actual-only):\n' \
-    >&2
-  comm -3 "${e1b_tmp}/expected-undefined.txt" \
-    "${e1b_tmp}/undefined.txt" >&2
+if ! e1b_compare_exact_undefined_allowlist \
+    "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
   die "E1B final object differs from the exact undefined-symbol allowlist"
 fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
@@ -205,6 +204,12 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+{
+  printf 'allowlist\t%s\n' "$(basename -- "${undefined_symbols}")"
+  printf 'llvm_version\t%s\n' "$(tsv_value "${e1b_provenance}" llvm_version)"
+  printf 'cc_version\t%s\n' "$(tsv_value "${e1b_provenance}" cc_version)"
+  printf 'cxx_version\t%s\n' "$(tsv_value "${e1b_provenance}" cxx_version)"
+} >"${evidence_dir}.tmp.$$/allowlist-provenance.tsv"
 strings "${e1b_tmp}/combined.o" >"${evidence_dir}.tmp.$$/strings.txt"
 cp "${e1b_tmp}/combined.o" "${temporary_output}"
 rm -rf -- "${evidence_dir}"

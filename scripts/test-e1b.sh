@@ -3,7 +3,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-for command in ar cmp grep nm readelf strings timeout; do
+for command in ar cmp comm grep nm readelf strings timeout; do
   require_command "${command}"
 done
 verify_toolchain
@@ -22,6 +22,8 @@ e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b-test.XXXXXX")"
 trap 'rm -rf -- "${e1b_tmp}"' EXIT
 trap 'die "E1B evidence command failed at line ${LINENO}"' ERR
 mkdir -p "${e1b_tmp}/cache"
+
+e1b_selected_undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
 
 run_compiler() {
   local cache_name="$1"
@@ -67,13 +69,28 @@ build_package() {
         "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_bridge.c" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_public_exports.txt" \
-        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
         "${output}" "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
         >"${log}" 2>&1; then
     sed -n '1,240p' "${log}" >&2
     die "E1B standard artifact build failed"
   fi
 }
+
+if E1B_COMPILER_TIMEOUT_SECONDS="${e1b_compile_timeout}" \
+    "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+      "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
+      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_bridge.c" \
+      "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
+      "${PROJECT_ROOT}/tests/fixtures/e1b/negative_unsorted_public_exports.txt" \
+      "${e1b_tmp}/unsorted-exports.o" \
+      "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
+      >"${e1b_tmp}/unsorted-exports.log" 2>&1; then
+  die "E1B unsorted public export allowlist unexpectedly passed admission"
+fi
+grep -F 'package export allowlist must already be byte-exact C-sorted unique text' \
+  "${e1b_tmp}/unsorted-exports.log" >/dev/null
+test ! -e "${e1b_tmp}/unsorted-exports.o"
+test ! -e "${e1b_tmp}/unsorted-exports.o.evidence"
 
 build_package "${e1b_tmp}/package-1.o" "${e1b_tmp}/build-1.log"
 build_package "${e1b_tmp}/package-2.o" "${e1b_tmp}/build-2.log"
@@ -82,10 +99,16 @@ cmp "${e1b_tmp}/package-1.o.evidence/global-defined.txt" \
   "${e1b_tmp}/package-2.o.evidence/global-defined.txt"
 cmp "${e1b_tmp}/package-1.o.evidence/undefined.txt" \
   "${e1b_tmp}/package-2.o.evidence/undefined.txt"
-cmp "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
+cmp "${e1b_tmp}/package-1.o.evidence/allowlist-provenance.tsv" \
+  "${e1b_tmp}/package-2.o.evidence/allowlist-provenance.tsv"
+cmp "${e1b_selected_undefined_symbols}" \
   "${e1b_tmp}/package-1.o.evidence/expected-undefined.txt"
+grep -Fx $'allowlist\t'"$(basename -- "${e1b_selected_undefined_symbols}")" \
+  "${e1b_tmp}/package-1.o.evidence/allowlist-provenance.tsv" >/dev/null
 cmp "${e1b_tmp}/package-1.o.evidence/expected-undefined.txt" \
   "${e1b_tmp}/package-1.o.evidence/undefined.txt"
+grep -Fx '__stack_chk_fail' \
+  "${e1b_tmp}/package-1.o.evidence/undefined.txt" >/dev/null
 cmp "${e1b_tmp}/package-1.o.evidence/readelf-symbols.txt" \
   "${e1b_tmp}/package-2.o.evidence/readelf-symbols.txt"
 cmp "${e1b_tmp}/package-1.o.evidence/link.map" \
@@ -142,13 +165,23 @@ for index in "${!undefined_kinds[@]}"; do
       grep -E "${undefined_relocations[${index}]}.*${symbol}" >/dev/null
   fi
 
+  "${e1b_cxx}" -r "${e1b_tmp}/attacker-${kind}.o" \
+    "${e1b_tmp}/attacker-provider.o" \
+    -o "${e1b_tmp}/provider-satisfied-${kind}.o"
+  if nm -u --format=posix "${e1b_tmp}/provider-satisfied-${kind}.o" | \
+      awk '{ print $1 }' | grep -Fx "${symbol}" >/dev/null; then
+    die "E1B positive control did not resolve ${kind} ${symbol}"
+  fi
+  nm -g --defined-only --format=posix \
+    "${e1b_tmp}/provider-satisfied-${kind}.o" | \
+    awk '{ print $1 }' | grep -Fx "${symbol}" >/dev/null
+
   if E1B_COMPILER_TIMEOUT_SECONDS="${e1b_compile_timeout}" \
       "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/trusted_fixture_package.esk" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/negative_undefined_${kind}_bridge.c" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_package_renames.txt" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/negative_undefined_public_exports.txt" \
-        "${PROJECT_ROOT}/tests/fixtures/e1b/fixture_undefined_symbols.txt" \
         "${e1b_tmp}/rejected-${kind}.o" \
         "${PROJECT_ROOT}/tests/fixtures/e1b/public" \
         >"${e1b_tmp}/rejected-${kind}.log" 2>&1; then
@@ -159,14 +192,6 @@ for index in "${!undefined_kinds[@]}"; do
   grep -F "${symbol}" "${e1b_tmp}/rejected-${kind}.log" >/dev/null
   test ! -e "${e1b_tmp}/rejected-${kind}.o"
   test ! -e "${e1b_tmp}/rejected-${kind}.o.evidence"
-  if "${e1b_cxx}" -r "${e1b_tmp}/rejected-${kind}.o" \
-      "${e1b_tmp}/attacker-provider.o" \
-      -o "${e1b_tmp}/late-bound-${kind}.o" \
-      >"${e1b_tmp}/late-bound-${kind}.log" 2>&1; then
-    die "E1B separately compiled provider satisfied rejected ${kind} reference"
-  fi
-  grep -F "rejected-${kind}.o" "${e1b_tmp}/late-bound-${kind}.log" >/dev/null
-  test ! -e "${e1b_tmp}/late-bound-${kind}.o"
 done
 if grep -E '^attacker_(function|data|tls|weak)$' \
     "${e1b_tmp}/package-1.o.evidence/undefined.txt" >/dev/null; then

@@ -51,15 +51,22 @@ interpret categories, operations, messages, details, causes, or error identities
 
 `scripts/build-e1b-consumer.sh` takes a reviewed build-only Eshkol package root, a
 reviewed package C bridge, a compiler-symbol rename list, an exact package export
-allowlist, an exact runtime-undefined-symbol allowlist, an output object, and optional
-public include directories. Both allowlists are canonical C-sorted, unique,
-one-symbol-per-line build inputs, not installed data formats. Package export names
-must match `et_e1b_public_*_v1`. After localization the builder compares both the
-global definitions and sorted `nm -u` output byte-for-byte with their reviewed
-allowlists before atomically publishing the object and textual depfile, link-map,
-symbol-table, undefined-symbol, export, and strings evidence. A differently named
-unresolved function, data, TLS, or weak symbol is therefore rejected before an
-application can supply it at the later link.
+allowlist, an output object, and optional public include directories. The export
+allowlist and repository-owned runtime-undefined-symbol manifest are canonical
+C-sorted, unique, one-symbol-per-line build inputs, not installed data formats.
+Package export names must match `et_e1b_public_*_v1`. After localization the builder
+compares both the global definitions and sorted `nm -u` output byte-for-byte with
+their reviewed allowlists before atomically publishing the object and textual
+depfile, link-map, symbol-table, allowlist-provenance, undefined-symbol, export, and
+strings evidence. A differently named unresolved function, data, TLS, or weak symbol
+is therefore rejected before an application can supply it at the later link.
+
+The undefined-symbol policy is not caller-selectable. The trusted native consumer
+bridge is compiled with `-fstack-protector-all`, so both supported Clang 21.1.8 and
+the explicitly unsupported Clang 22.1.6 compatibility lane retain
+`__stack_chk_fail` in the same frozen 80-name manifest. The builder validates the
+resulting localized object, not a compiler-dependent optional subset. Unsorted or
+duplicate public-export inputs are likewise rejected rather than normalized.
 
 The existing `transformer.error_public` facade and every installed public Eshkol
 package stub import `transformer.error_consumer`, never
@@ -111,5 +118,7 @@ Run the focused evidence gate with:
 
 D1 and X1 must build one trusted package artifact with only their reviewed narrow
 public operations, compile callers after localization, and repeat closure, import-
-both, malformed-error, symbol, link, and full-suite gates. They must not expose the
-generic five-value seam or combine independent E1 registries.
+both, malformed-error, symbol, link, and full-suite gates. A larger trusted closure
+requires a reviewed repository-owned manifest/policy update, never a package argument
+or build-derived optional set. They must not expose the generic five-value seam or
+combine independent E1 registries.
