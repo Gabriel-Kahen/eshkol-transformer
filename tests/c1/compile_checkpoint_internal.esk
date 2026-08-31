@@ -1,0 +1,7 @@
+(require transformer.checkpoint_internal)
+
+;;; Compile-only production closure probe. No tensor codec or provider is admitted.
+(define c1-compile-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+
+(if c1-compile-policy #t #f)

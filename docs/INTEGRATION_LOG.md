@@ -617,3 +617,80 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);
   [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028);
   [D1-R2 requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5471306523).
+## 2026-08-31 — C1 / issue #19
+
+- **Decision:** proposed. This entry records the checkpoint-format freeze request
+  before implementation. Only the integration owner may change it to `accepted`
+  after independent review, supported CI, and merge.
+- **Contract:** C1 format identity is `eshkol-checkpoint` version 1.0. The exact
+  16-byte magic is `89 45 53 48 4b 4f 4c 43 4b 50 54 0d 0a 1a 0a 00`; all
+  multibyte integers are unsigned little-endian and the header carries endianness
+  marker 1. Version 1.0 requires zero feature bits and zero reserved fields and
+  admits only SHA-256. A final 32-byte digest covers the domain
+  `eshkol-checkpoint-container-v1\0` followed by every preceding file byte;
+  each tensor also has a domain-separated SHA-256 over its canonical entry
+  metadata and payload. Declared header, metadata, payload, tensor, and file
+  lengths are exact, nonoverlapping, checked before allocation, and end exactly at
+  EOF. Entries use P1 UTF-8 byte lexical path order and fixed kind, dtype, layout,
+  shape, device, payload, and provider-identity encodings. Alias groups use sorted,
+  disjoint parameter-entry indices. Version 1 hard limits are 1 TiB file bytes,
+  256 MiB metadata bytes, 256 GiB per tensor, 4096 entries, 4096 alias groups and
+  total members, 64 path segments/rank, 65536 UTF-8 bytes per segment, and 127
+  provider-ID bytes; caller policy may only lower them.
+
+  The serialized P1 provider spelling is inert canonical UTF-8 and is never
+  interned as a symbol. It is compared only with trusted codec/provider symbol
+  spellings. The constructed identity is
+  `(transformer-tensor-provider 1 0 provider-id)`. Trusted load explicitly selects
+  an already admitted exact provider and codec, compares the serialized identity,
+  constructs detached tensors, creates one unpublished logical
+  `transformer-state-dict` 1.0 with empty features, and invokes the reviewed P1
+  binding helper. Checkpoint bytes never select or load callbacks, code, native
+  libraries, or providers. The C1 codec seam is trusted/internal and requires exact
+  provider identity plus unary encode/decode callbacks; it is not an A0 API or a
+  capability claim. Current main has no reviewed production P1 tensor-byte codec,
+  and I1 is not one. Production tensor save/load therefore remain unavailable and
+  unsupported, and no capability is advertised; only the isolated inert P1 fixture
+  may prove structural format/control-flow,
+  ownership, and atomicity semantics. C1 does not broaden A0 `checkpoint-save!` or
+  `checkpoint-load` from complete trainer state to P1 state dictionaries; C2 owns
+  that later composition.
+
+  Atomic writes use a narrow C11/Linux byte-I/O boundary only: an unpredictable
+  `openat(O_CREAT|O_EXCL|O_NOFOLLOW)` same-directory temporary, checked
+  short/EINTR/zero writes, temp `fsync`, successful close, atomic `renameat` or
+  `renameat2(RENAME_NOREPLACE)`, then parent-directory `fsync`. Rename is the
+  publication commit point. Pre-rename failure leaves the destination unchanged and
+  attempts exact-temp cleanup; a crash or cleanup failure may leave an untrusted
+  orphan that is never reused or swept. A directory-fsync or later directory-close
+  failure after rename is reported as `io` with publication visible and crash
+  durability conservatively unknown. Load
+  follows no embedded path and rejects symlinks and non-regular inputs.
+- **Evidence:** the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility probe
+  passed `make test` with the pinned Eshkol build: the C1 gate reported 96 logical
+  state, schema, provider, ownership, no-alias, error, and policy checks; two fresh
+  AOT builds produced byte-identical executables and checkpoint bytes with reviewed
+  SHA-256 `177a762eca5a535e01da4d740e676a3481c6617b632d4abe9fe9726dc6bb2769`;
+  an independent parser plus the Eshkol validator passed 992 deterministic malformed,
+  corruption, truncation, trailing-data, version, feature, checksum, overflow,
+  UTF-8, path, alias, schema, provider, and bounded fuzz cases; and the native gate
+  passed failpoint publication/cleanup, pre-existing destination, orphan, short/EINTR/
+  zero I/O, C/C++ ABI, exact-symbol, deterministic-object, ASan, and UBSan checks.
+  The same repository-wide run passed F0/Q0/A0/K1/E1/E1B/I1/X1/P1 and production
+  Python-isolation gates, and a separate explicit unsupported-host `make smoke`
+  rebuilt every artifact including C1 and printed `eshkol-transformer-smoke:v1`.
+  LeakSanitizer execution is unavailable under the local ptrace-restricted executor;
+  the supported CI ASan/UBSan gate remains required. Independent binary/security,
+  atomic-I/O, P1-integration, adversarial-format, and documentation/evidence reviews
+  report no blocker. Exact-head supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI and
+  integration-owner approval remain pending, so this decision stays `proposed`.
+  C1 exposes no independently packaged facade because a second artifact would own a
+  conflicting P1 registry; C2 must package C1 and its trainer schema into one
+  prelocalized registry-owning E1B consumer before exposing A0 persistence operations.
+- **Dependencies / retest:** T1 may consume only the reviewed internal persistence
+  policy and atomic-I/O guarantees after C1 acceptance. C2 must supply the complete
+  trainer-state schema and separately reviewed real tensor codecs before claiming
+  exact resume. Any magic, layout, checksum, codec, limit, durability, or provider
+  change requires issue #1 coordination and C1/T1/C2 retests.
+- **Reference:** [issue #19](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/19);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).

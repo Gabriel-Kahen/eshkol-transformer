@@ -1,0 +1,32 @@
+;;; Independent C1 adversarial-test entry point. This is test-only and composes
+;;; the trusted C1/P1 roots with the isolated fixture provider and codec.
+(require transformer.checkpoint_internal)
+(require transformer.error_internal)
+(require p1_test.tensor_provider)
+(require c1_test.checkpoint_codec)
+
+(define arguments (command-line))
+
+(if (or (not (pair? arguments))
+        (not (pair? (cdr arguments)))
+        (not (null? (cdr (cdr arguments)))))
+    (begin
+      (display "ERROR category=invalid-argument")
+      (newline)
+      (exit 2))
+    (guard (caught
+            (#t
+             (display "ERROR category=")
+             (if (transformer-error? caught)
+                 (display (transformer-error-category caught))
+                 (display "internal"))
+             (newline)
+             (exit 2)))
+      (let ((policy
+              (c1-persistence-policy-internal
+               1048576 524288 262144 64 'cpu)))
+        (c1-checkpoint-load-state-internal
+         (car (cdr arguments)) policy c1-fixture-codec-internal 'fixture-v1)
+        (display "VALID")
+        (newline)
+        (exit 0))))
