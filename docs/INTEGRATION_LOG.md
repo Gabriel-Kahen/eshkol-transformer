@@ -633,9 +633,9 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-08-31 — C1 / issue #19
 
-- **Decision:** proposed. This entry records the checkpoint-format freeze request
-  before implementation. Only the integration owner may change it to `accepted`
-  after independent review, supported CI, and merge.
+- **Decision:** accepted. The version 1.0 checkpoint contract below was independently
+  reviewed, passed supported CI, merged, and passed an integration-owner retest of
+  the actual merge commit.
 - **Contract:** C1 format identity is `eshkol-checkpoint` version 1.0. The exact
   16-byte magic is `89 45 53 48 4b 4f 4c 43 4b 50 54 0d 0a 1a 0a 00`; all
   multibyte integers are unsigned little-endian and the header carries endianness
@@ -703,8 +703,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   LeakSanitizer execution is unavailable under the local ptrace-restricted executor;
   the supported CI ASan/UBSan gate remains required. Independent binary/security,
   atomic-I/O, P1-integration, adversarial-format, and documentation/evidence reviews
-  report no blocker. Exact-head supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI and
-  integration-owner approval remain pending, so this decision stays `proposed`.
+  report no blocker. Exact-head supported Ubuntu 22.04 / LLVM-Clang 21.1.8 run
+  33398133014 passed configure, build, the complete integrated test matrix, smoke,
+  and the reproducible benchmark. Independent C1-R approved exact head
+  `bee6caf02d47d7da597b182cdb01bfbb5e3e1f1a` after reproducing the repaired
+  zero-progress I/O, validation-before-codec, exact/one-over limit, and multi-alias
+  evidence. PR #38 merged as
+  `f5877b07cae3d18da198e5b146594de03c3a50a2`; the integration checkout then passed
+  `make test-c1` on that merge commit with the pinned Eshkol build on the explicitly
+  unsupported local LLVM-Clang 22.1.6 compatibility lane.
   C1 exposes no independently packaged facade because a second artifact would own a
   conflicting P1 registry; C2 must package C1 and its trainer schema into one
   prelocalized registry-owning E1B consumer before exposing A0 persistence operations.
@@ -714,4 +721,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   exact resume. Any magic, layout, checksum, codec, limit, durability, or provider
   change requires issue #1 coordination and C1/T1/C2 retests.
 - **Reference:** [issue #19](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/19);
-  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [PR #38](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/38);
+  [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/38#issuecomment-5479830494);
+  [supported CI run 33398133014](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33398133014);
+  merge commit `f5877b07cae3d18da198e5b146594de03c3a50a2`.
