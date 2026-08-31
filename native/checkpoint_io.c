@@ -42,6 +42,7 @@ static struct {
   uint32_t fail_occurrence;
   uint32_t stage_occurrences[256];
   int32_t fail_errno;
+  int short_io_enabled;
   size_t short_io;
   int deterministic_random;
   uint8_t random_bytes[ET_TEMP_RANDOM_BYTES];
@@ -62,6 +63,7 @@ void et_checkpoint_io_test_fail_v1(uint32_t stage, uint32_t occurrence,
 }
 
 void et_checkpoint_io_test_set_short_io_v1(size_t maximum_bytes) {
+  et_test.short_io_enabled = 1;
   et_test.short_io = maximum_bytes;
 }
 
@@ -262,7 +264,7 @@ static ssize_t wrapped_read(int descriptor, void *buffer, size_t length) {
     return -1;
   }
 #ifdef ET_CHECKPOINT_IO_TESTING
-  if (et_test.short_io != 0u && length > et_test.short_io) {
+  if (et_test.short_io_enabled && length > et_test.short_io) {
     length = et_test.short_io;
   }
 #endif
@@ -275,7 +277,7 @@ static ssize_t wrapped_write(int descriptor, const void *buffer,
     return -1;
   }
 #ifdef ET_CHECKPOINT_IO_TESTING
-  if (et_test.short_io != 0u && length > et_test.short_io) {
+  if (et_test.short_io_enabled && length > et_test.short_io) {
     length = et_test.short_io;
   }
 #endif

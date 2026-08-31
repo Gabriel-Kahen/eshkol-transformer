@@ -111,7 +111,7 @@ def checked_product(values: tuple[int, ...]) -> int:
     return result
 
 
-def parse_golden(raw: bytes) -> Container:
+def parse_golden(raw: bytes, expected_provider: bytes | None = b"fixture-v1") -> Container:
     """Parse and independently validate every canonical v1 structural rule."""
     if len(raw) < HEADER_BYTES + CHECKSUM_BYTES:
         raise FormatError("short file")
@@ -156,7 +156,7 @@ def parse_golden(raw: bytes) -> Container:
     provider = raw[provider_start:provider_end]
     if provider.decode("utf-8").encode("utf-8") != provider:
         raise FormatError("provider UTF-8")
-    if provider != b"fixture-v1":
+    if expected_provider is not None and provider != expected_provider:
         raise FormatError("unexpected golden provider")
 
     records: list[Record] = []
@@ -289,6 +289,69 @@ def repair_tensor(data: bytearray, record: Record) -> None:
     data[record.start + 48:record.start + 80] = hashlib.sha256(
         TENSOR_DOMAIN + record_zero + payload
     ).digest()
+
+
+def build_container(
+    entries: tuple[tuple[tuple[bytes, ...], int, int, tuple[int, ...], bytes], ...],
+    aliases: tuple[tuple[int, ...], ...] = (),
+    provider: bytes = b"fixture-v1",
+) -> bytes:
+    """Build small, fully checksummed canonical or deliberately invalid fixtures."""
+    records: list[bytes] = []
+    payloads: list[bytes] = []
+    relative = 0
+    widths = {1: 1, 2: 8, 3: 4}
+    for path, kind, dtype, extents, payload in entries:
+        encoded_path = b"".join(struct.pack("<I", len(segment)) + segment
+                                for segment in path)
+        record = bytearray(RECORD_PREFIX_BYTES + 8 * len(extents) + len(encoded_path))
+        put64(record, 0, len(record))
+        put64(record, 8, relative)
+        put64(record, 16, len(payload))
+        put32(record, 24, len(encoded_path))
+        put16(record, 28, len(path))
+        put16(record, 30, len(extents))
+        record[32:36] = bytes((kind, dtype, 1, 1))
+        elements = 1
+        for extent in extents:
+            elements *= extent
+        put64(record, 40, elements)
+        for index, extent in enumerate(extents):
+            put64(record, RECORD_PREFIX_BYTES + 8 * index, extent)
+        path_start = RECORD_PREFIX_BYTES + 8 * len(extents)
+        record[path_start:] = encoded_path
+        record[48:80] = hashlib.sha256(TENSOR_DOMAIN + record + payload).digest()
+        records.append(bytes(record))
+        payloads.append(payload)
+        relative += len(payload)
+        if dtype in widths and len(payload) != elements * widths[dtype]:
+            raise AssertionError("boundary fixture payload does not match its shape")
+
+    alias_bytes = b"".join(
+        struct.pack("<II", len(group), 0)
+        + b"".join(struct.pack("<I", member) for member in group)
+        for group in aliases
+    )
+    metadata = provider + b"".join(records) + alias_bytes
+    payload = b"".join(payloads)
+    header = bytearray(HEADER_BYTES)
+    header[:16] = MAGIC
+    put16(header, 16, 1)
+    put32(header, 20, HEADER_BYTES)
+    put32(header, 24, 1)
+    put32(header, 28, 1)
+    put64(header, 40, HEADER_BYTES + len(metadata) + len(payload) + CHECKSUM_BYTES)
+    put64(header, 48, HEADER_BYTES)
+    put64(header, 56, len(metadata))
+    put64(header, 64, HEADER_BYTES + len(metadata))
+    put64(header, 72, len(payload))
+    put32(header, 80, len(entries))
+    put32(header, 84, len(aliases))
+    put32(header, 88, len(provider))
+    put16(header, 92, 1)
+    put16(header, 96, 1)
+    unsigned = bytes(header) + metadata + payload
+    return unsigned + hashlib.sha256(CONTAINER_DOMAIN + unsigned).digest()
 
 
 class Runner:
@@ -552,6 +615,88 @@ def main() -> int:
 
         deep_mutations(runner, parsed)
 
+        # Deterministic exact/one-over v1 boundaries use independently built,
+        # fully checksummed containers rather than stale-checksum header edits.
+        scalar = ((b"scalar",), 2, 3, (), bytes(4))
+        zero = ((b"zero",), 2, 3, (0,), b"")
+        runner.run("boundary-empty-state", build_container(()), None)
+        runner.run("boundary-rank-zero", build_container((scalar,)), None)
+        runner.run("boundary-zero-extent-payload", build_container((zero,)), None)
+        runner.run("boundary-provider-127",
+                   build_container((scalar,), provider=b"p" * MAX_PROVIDER_BYTES),
+                   "unsupported")
+        runner.run("boundary-provider-128",
+                   build_container((scalar,), provider=b"p" * (MAX_PROVIDER_BYTES + 1)),
+                   "corrupt-data")
+        runner.run("boundary-rank-64",
+                   build_container((((b"rank",), 2, 3, (1,) * MAX_RANK, bytes(4)),)),
+                   None)
+        runner.run("boundary-rank-65",
+                   build_container((((b"rank",), 2, 3, (1,) * (MAX_RANK + 1), bytes(4)),)),
+                   "corrupt-data")
+        runner.run("boundary-path-depth-64",
+                   build_container(((tuple(b"x" for _ in range(MAX_SEGMENTS)),
+                                     2, 3, (1,), bytes(4)),)), None)
+        runner.run("boundary-path-depth-65",
+                   build_container(((tuple(b"x" for _ in range(MAX_SEGMENTS + 1)),
+                                     2, 3, (1,), bytes(4)),)), "corrupt-data")
+        runner.run("boundary-segment-65536",
+                   build_container((((b"x" * MAX_SEGMENT_BYTES,),
+                                     2, 3, (1,), bytes(4)),)), None)
+        runner.run("boundary-segment-65537",
+                   build_container((((b"x" * (MAX_SEGMENT_BYTES + 1),),
+                                     2, 3, (1,), bytes(4)),)), "corrupt-data")
+
+        lower_count_entries = tuple(
+            ((f"e{index:02d}".encode(),), 2, 3, (0,), b"")
+            for index in range(65)
+        )
+        runner.run("boundary-lowered-entry-count-64",
+                   build_container(lower_count_entries[:64]), None)
+        runner.run("boundary-lowered-entry-count-65",
+                   build_container(lower_count_entries), "corrupt-data")
+
+        tied_entries = tuple(
+            ((f"t{index}".encode(),), 1, 3, (0,), b"") for index in range(4)
+        )
+        runner.run("boundary-two-disjoint-alias-groups",
+                   build_container(tied_entries, ((0, 1), (2, 3))), None)
+        runner.run("boundary-noncanonical-alias-group-order",
+                   build_container(tied_entries, ((2, 3), (0, 1))), "corrupt-data")
+        runner.run("boundary-overlapping-alias-groups",
+                   build_container(tied_entries, ((0, 1), (1, 2))), "corrupt-data")
+
+        def parser_case(label: str, data: bytes, valid: bool) -> None:
+            try:
+                parse_golden(data, expected_provider=None)
+                accepted = True
+            except (FormatError, UnicodeError):
+                accepted = False
+            if accepted != valid:
+                runner.failures.append(
+                    f"{label}: independent parser acceptance={accepted}, expected={valid}"
+                )
+            runner.checks += 1
+
+        hard_entries = tuple(
+            ((f"h{index:04d}".encode(),), 1, 3, (0,), b"")
+            for index in range(MAX_ENTRIES + 1)
+        )
+        canonical_pairs = tuple((index, index + 1)
+                                for index in range(0, MAX_ALIAS_MEMBERS, 2))
+        parser_case(
+            "boundary-hard-4096-entries-2048-effective-groups-4096-members",
+            build_container(hard_entries[:MAX_ENTRIES], canonical_pairs), True,
+        )
+        parser_case("boundary-hard-entry-count-4097",
+                    build_container(hard_entries), False)
+        parser_case("boundary-hard-alias-header-count-4097",
+                    build_container(tied_entries, ((0, 1),) * (MAX_ALIASES + 1)), False)
+        parser_case("boundary-hard-alias-members-4097",
+                    build_container(hard_entries[:MAX_ENTRIES],
+                                    (tuple(range(MAX_ALIAS_MEMBERS))
+                                     + (MAX_ALIAS_MEMBERS - 1,),)), False)
+
         randomizer = random.Random(0xC1C0FFEE)
         for index in range(arguments.fuzz_cases):
             data = bytearray(raw)
@@ -570,9 +715,9 @@ def main() -> int:
                 print(f"C1 format adversarial: FAIL: ... {len(runner.failures) - 32} more",
                       file=sys.stderr)
             print(f"C1 format adversarial: FAIL ({len(runner.failures)} of "
-                  f"{runner.checks} validator checks)", file=sys.stderr)
+                  f"{runner.checks} format checks)", file=sys.stderr)
             return 1
-        print(f"C1 format adversarial: PASS ({runner.checks} validator checks)")
+        print(f"C1 format adversarial: PASS ({runner.checks} format checks)")
         return 0
 
 

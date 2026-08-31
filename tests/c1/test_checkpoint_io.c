@@ -128,6 +128,17 @@ static size_t first_event(uint32_t stage) {
   return (size_t)-1;
 }
 
+static size_t event_count(uint32_t stage) {
+  size_t count = 0u;
+  size_t index;
+  for (index = 0u; index < et_checkpoint_io_test_event_count_v1(); ++index) {
+    if (et_checkpoint_io_test_event_at_v1(index) == stage) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 static void test_validation(const char *path) {
   test_bytevector *value = make_bytevector(4u, 0x5au);
   int64_t status;
@@ -249,6 +260,57 @@ static void test_preexisting_and_failpoints(const char *directory,
   status = et_checkpoint_io_atomic_write_v1(path, replacement, 12u, 1);
   assert_failure(status, ET_CHECKPOINT_IO_STAGE_CLOSE_DIRECTORY, EIO, 1);
   expect_file(path, replacement->bytes, 12u);
+  free(replacement);
+}
+
+static void test_zero_progress(const char *directory, const char *write_path,
+                               const char *read_path) {
+  static const uint8_t old_bytes[] = "old-artifact";
+  static const uint8_t read_bytes[] = "read1234";
+  test_bytevector *replacement = make_bytevector(12u, 0u);
+  test_bytevector *destination = make_bytevector(8u, 0x5au);
+  uint8_t original[8];
+  struct stat before;
+  struct stat after;
+  char *temporary;
+  int64_t status;
+
+  memcpy(replacement->bytes, "new-artifact", 12u);
+  memset(original, 0x5a, sizeof(original));
+  raw_write(write_path, old_bytes, sizeof(old_bytes) - 1u);
+  CHECK(stat(write_path, &before) == 0);
+  et_checkpoint_io_test_reset_v1();
+  et_checkpoint_io_test_set_short_io_v1(0u);
+  status = et_checkpoint_io_atomic_write_v1(write_path, replacement, 12u, 1);
+  assert_failure(status, ET_CHECKPOINT_IO_STAGE_WRITE_TEMP, EIO, 0);
+  CHECK(event_count(ET_CHECKPOINT_IO_STAGE_WRITE_TEMP) == 1u);
+  CHECK(stat(write_path, &after) == 0);
+  CHECK(before.st_ino == after.st_ino);
+  expect_file(write_path, old_bytes, sizeof(old_bytes) - 1u);
+  temporary = join_path(directory, et_checkpoint_io_test_last_temp_v1());
+  CHECK(lstat(temporary, &after) != 0);
+  CHECK(errno == ENOENT);
+  CHECK(temp_count(directory) == 0u);
+  free(temporary);
+
+  raw_write(read_path, read_bytes, sizeof(read_bytes) - 1u);
+  et_checkpoint_io_test_reset_v1();
+  et_checkpoint_io_test_set_short_io_v1(0u);
+  status = et_checkpoint_io_read_exact_v1(read_path, destination, 8u, 32u);
+  assert_failure(status, ET_CHECKPOINT_IO_STAGE_READ_SOURCE, ENODATA, 0);
+  CHECK(event_count(ET_CHECKPOINT_IO_STAGE_READ_SOURCE) == 1u);
+  CHECK(memcmp(destination->bytes, original, sizeof(original)) == 0);
+  CHECK(temp_count(directory) == 0u);
+
+  /* Reset is a distinct disabled state; it does not inject zero progress. */
+  et_checkpoint_io_test_reset_v1();
+  CHECK(et_checkpoint_io_read_exact_v1(read_path, destination, 8u, 32u) == 0);
+  CHECK(memcmp(destination->bytes, read_bytes, sizeof(read_bytes) - 1u) == 0);
+  CHECK(et_checkpoint_io_atomic_write_v1(write_path, replacement, 12u, 1) ==
+        0);
+  expect_file(write_path, replacement->bytes, 12u);
+
+  free(destination);
   free(replacement);
 }
 
@@ -469,6 +531,7 @@ int main(void) {
   test_validation(destination);
   test_round_trip(directory, roundtrip);
   test_preexisting_and_failpoints(directory, destination);
+  test_zero_progress(directory, destination, read_path);
   test_collision_and_orphan(directory, destination);
   test_read_rejection(directory, read_path);
   test_write_replaces_symlink(directory);

@@ -667,16 +667,18 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   durability conservatively unknown. Load
   follows no embedded path and rejects symlinks and non-regular inputs.
 - **Evidence:** the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility probe
-  passed `make test` with the pinned Eshkol build: the C1 gate reported 96 logical
+  passed the focused C1 gate with the pinned Eshkol build: it reported 127 logical
   state, schema, provider, ownership, no-alias, error, and policy checks; two fresh
   AOT builds produced byte-identical executables and checkpoint bytes with reviewed
   SHA-256 `177a762eca5a535e01da4d740e676a3481c6617b632d4abe9fe9726dc6bb2769`;
-  an independent parser plus the Eshkol validator passed 992 deterministic malformed,
-  corruption, truncation, trailing-data, version, feature, checksum, overflow,
-  UTF-8, path, alias, schema, provider, and bounded fuzz cases; and the native gate
+  an independent parser plus the Eshkol validator passed 1012 cases: 820 deterministic
+  structure-aware malformed, corruption, truncation, trailing-data, exact/one-over
+  boundary, version, feature, checksum, overflow, UTF-8, path, alias, schema, and
+  provider cases, plus 192 reproducibly seeded integrity mutations (which generally
+  prove checksum rejection, not deep-validator reachability); and the native gate
   passed failpoint publication/cleanup, pre-existing destination, orphan, short/EINTR/
   zero I/O, C/C++ ABI, exact-symbol, deterministic-object, ASan, and UBSan checks.
-  The same repository-wide run passed F0/Q0/A0/K1/E1/E1B/I1/X1/P1 and production
+  The earlier repository-wide run passed F0/Q0/A0/K1/E1/E1B/I1/X1/P1 and production
   Python-isolation gates, and a separate explicit unsupported-host `make smoke`
   rebuilt every artifact including C1 and printed `eshkol-transformer-smoke:v1`.
   LeakSanitizer execution is unavailable under the local ptrace-restricted executor;

@@ -145,6 +145,12 @@ paths from indices, verifies tied raw payloads are equal before tensor decoding 
 P1-shell construction, and then lets P1 independently revalidate exact values and
 aliases after decoding.
 
+The header field can represent at most 4096 groups, but the two-member minimum and
+4096 aggregate-member ceiling mean a canonical v1 file can contain at most 2048
+nonempty alias groups. Tests exercise that effective exact ceiling, the 4096-member
+exact ceiling, and independently checksummed one-over, overlapping, and reordered
+group encodings.
+
 ## Container checksum and strict loading
 
 The payload section is the exact concatenation of entry payloads. The final 32 file

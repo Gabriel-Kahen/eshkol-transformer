@@ -74,6 +74,19 @@ cmp "${PROJECT_ROOT}/tests/expected/c1-native.stdout" \
 
 "${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
   "${c1_tmp}/p1-identity" normal all
+mkdir -p "${c1_tmp}/p1-identity-test/trusted"
+"${c1_cc}" "${c1_cflags[@]}" -fPIC -fvisibility=hidden \
+  -DET_P1_TRUSTED_BUILD=1 -DET_P1_TEST_HOOKS=1 \
+  -c "${PROJECT_ROOT}/native/p1_identity.c" \
+  -o "${c1_tmp}/p1-identity-test/trusted/p1_identity.o"
+ar rcsD \
+  "${c1_tmp}/p1-identity-test/trusted/libeshkol_transformer_p1_identity.a" \
+  "${c1_tmp}/p1-identity-test/trusted/p1_identity.o"
+if nm -a "${c1_tmp}/p1-identity/public/libeshkol_transformer_p1_identity.a" \
+    "${c1_tmp}/p1-identity/trusted/libeshkol_transformer_p1_identity.a" | \
+    rg 'et_p1_test_' >/dev/null; then
+  die "C1 production P1 archives contain a test hook"
+fi
 mkdir -p "${c1_tmp}/native-link"
 ar rcsD "${c1_tmp}/native-link/libeshkol_transformer_checkpoint_io.a" \
   "${c1_tmp}/production-a.o"
@@ -90,7 +103,7 @@ compile_c1_aot() {
     -I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native" \
     -I "${PROJECT_ROOT}/tests/p1/providers" \
     -I "${PROJECT_ROOT}/tests/c1/providers" \
-    -L "${c1_tmp}/p1-identity/trusted" \
+    -L "${c1_tmp}/p1-identity-test/trusted" \
     --lib eshkol_transformer_p1_identity \
     -L "${c1_tmp}/native-link" --lib eshkol_transformer_checkpoint_io \
     "${PROJECT_ROOT}/tests/c1/checkpoint_test.esk" -o "${output}" \
@@ -232,4 +245,4 @@ if strings -a "${c1_tmp}/production-a.o" | \
   die "C1 production native artifact contains a forbidden dependency or test marker"
 fi
 
-printf 'C1 PASS: native I/O, sanitizers, repeated AOT, 992 adversarial checks, logical round trip, and isolation\n'
+printf 'C1 PASS: native I/O, sanitizers, repeated AOT, 1012 adversarial checks, logical round trip, and isolation\n'

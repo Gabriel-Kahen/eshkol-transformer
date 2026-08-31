@@ -78,6 +78,7 @@ int64_t et_checkpoint_io_atomic_write_v1(const char *path,
 void et_checkpoint_io_test_reset_v1(void);
 void et_checkpoint_io_test_fail_v1(uint32_t stage, uint32_t occurrence,
                                    int32_t error_number);
+/* Reset disables short-I/O injection. Setting zero injects zero progress. */
 void et_checkpoint_io_test_set_short_io_v1(size_t maximum_bytes);
 void et_checkpoint_io_test_set_random_v1(const uint8_t bytes[16]);
 size_t et_checkpoint_io_test_event_count_v1(void);
