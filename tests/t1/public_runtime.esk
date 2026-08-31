@@ -1,0 +1,153 @@
+(require transformer.config)
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (bytes-equal? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+
+(define args (command-line))
+(define fixture-path (car (cdr args)))
+(define save-path (car (cdr (cdr args))))
+(define minimal
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":8,\"model.hidden-size\":8,\"model.layer-count\":1,\"model.query-head-count\":1,\"model.vocabulary-size\":256,\"run.seed\":0}")
+(define config (config-resolve (config-parse minimal) '()))
+(define tokenizer (tokenizer-byte config))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+
+(check "baseline vocabulary" (= (tokenizer-vocab-size tokenizer) 256))
+(check "baseline fingerprint"
+       (string=? (tokenizer-fingerprint tokenizer)
+                 "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"))
+
+(define all-bytes (make-bytevector 256 0))
+(let fill ((index 0))
+  (if (< index 256)
+      (begin (bytevector-u8-set! all-bytes index index) (fill (+ index 1)))))
+(define all-ids (tokenizer-encode tokenizer all-bytes))
+(check "all 256 bytes round trip"
+       (bytes-equal? (tokenizer-decode tokenizer all-ids) all-bytes))
+(check "empty round trip"
+       (bytes-equal? (tokenizer-decode tokenizer
+                                      (tokenizer-encode tokenizer (bytevector)))
+                     (bytevector)))
+(check "embedded NUL round trip"
+       (bytes-equal?
+        (tokenizer-decode tokenizer
+                          (tokenizer-encode tokenizer (bytevector 0 65 0 255)))
+        (bytevector 0 65 0 255)))
+
+(define loaded (tokenizer-load fixture-path policy))
+(check "loaded vocabulary includes specials" (= (tokenizer-vocab-size loaded) 259))
+(check "loaded fingerprint"
+       (string=? (tokenizer-fingerprint loaded)
+                 "sha256:eshkol-byte-tokenizer-v1:f4c24c4680961301963fb01723297c7a841bfa54241729d24e689401750221b8"))
+(check "special lookup" (and (= (tokenizer-special-token-id loaded "bos") 256)
+                             (= (tokenizer-special-token-id loaded "eos") 257)
+                             (= (tokenizer-special-token-id loaded "invalid") 258)))
+(check "loaded prefix and suffix are omitted during decode"
+       (bytes-equal?
+        (tokenizer-decode loaded (tokenizer-encode loaded (bytevector 1 2 3)))
+        (bytevector 1 2 3)))
+(check "canonical save" (tokenizer-save! loaded save-path policy))
+(define exact-artifact-policy
+  (persistence-policy 552 200 1048576 1 'cpu))
+(check "exact file and payload policy limits load"
+       (string=?
+        (tokenizer-fingerprint
+         (tokenizer-load fixture-path exact-artifact-policy))
+        (tokenizer-fingerprint loaded)))
+(check "exact file and payload policy limits save"
+       (tokenizer-save! loaded save-path exact-artifact-policy))
+
+(check "wrong X1 vocabulary is rejected"
+       (structured-error?
+        'invalid-argument 'tokenizer-byte
+        (lambda ()
+          (tokenizer-byte
+           (config-resolve
+            (config-parse
+             "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":8,\"model.hidden-size\":8,\"model.layer-count\":1,\"model.query-head-count\":1,\"model.vocabulary-size\":257,\"run.seed\":0}")
+            '())))))
+(check "forged tokenizer identity is rejected"
+       (structured-error?
+        'invalid-state 'tokenizer-vocab-size
+        (lambda () (tokenizer-vocab-size (vector 'fake-tokenizer)))))
+(check "forged policy rejects before filesystem I/O"
+       (structured-error?
+        'invalid-argument 'tokenizer-load
+        (lambda ()
+          (tokenizer-load
+           "/definitely/not/a/T1/artifact" (vector 'fake-policy)))))
+(check "forged save policy is rejected"
+       (structured-error?
+        'invalid-argument 'tokenizer-save!
+        (lambda ()
+          (tokenizer-save! loaded save-path (vector 'fake-policy)))))
+(check "file policy can only lower the format limit"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda ()
+          (tokenizer-load
+           fixture-path (persistence-policy 1 1048576 1048576 1 'cpu)))))
+(check "one-under file policy rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda ()
+          (tokenizer-load
+           fixture-path (persistence-policy 551 200 1048576 1 'cpu)))))
+(check "metadata policy can only lower the payload limit"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda ()
+          (tokenizer-load
+           fixture-path (persistence-policy 1048576 1 1048576 1 'cpu)))))
+(check "one-under payload policy rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda ()
+          (tokenizer-load
+           fixture-path (persistence-policy 552 199 1048576 1 'cpu)))))
+(check "unsupported persistence device is explicit"
+       (structured-error?
+        'invalid-argument 'persistence-policy
+        (lambda () (persistence-policy 1 1 1 1 'cuda))))
+
+(check "unknown special is structured invalid-argument"
+       (structured-error?
+        'invalid-argument 'tokenizer-special-token-id
+        (lambda () (tokenizer-special-token-id loaded "absent"))))
+(check "forged decode carrier is rejected"
+       (structured-error?
+        'invalid-argument 'tokenizer-decode
+        (lambda () (tokenizer-decode tokenizer #(1 2 3)))))
+
+(if (= failed 0)
+    (begin
+      (display "T1 PUBLIC PASS: ") (display passed)
+      (display " aggregate tokenizer checks") (newline))
+    (exit 1))

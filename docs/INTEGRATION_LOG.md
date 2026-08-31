@@ -726,3 +726,150 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/38#issuecomment-5479830494);
   [supported CI run 33398133014](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33398133014);
   merge commit `f5877b07cae3d18da198e5b146594de03c3a50a2`.
+
+## 2026-08-31 — T1 / issue #17
+
+- **Decision:** proposed. This entry records the T1 implementation candidate and
+  version-1 tokenizer-format freeze request. The integration owner accepted the
+  Wave-1 aggregate, X1 baseline, C1 policy-shell, and I1 lifetime direction for
+  implementation in issue #1 comment 5480447613. Only the integration owner may
+  change this repository decision to `accepted` after independent review, exact-head
+  supported CI, merge, and a merged-main retest.
+- **Contract:** T1 implements exactly the eight A0 tokenizer operations. Byte IDs are
+  exactly `0..255`; specials are unique, contiguous from 256, and named by
+  `[a-z][a-z0-9._-]{0,63}`. Encoding never recognizes special spellings. Ordered
+  prefix and suffix lists may repeat only configured `omit` specials; decoding an
+  `error` special or an unknown/out-of-range ID is an explicit error. Normalization
+  is `none`. `raw` preserves every byte, including embedded NUL and malformed UTF-8;
+  `strict` rejects malformed input/output without replacement or repair.
+
+  The canonical artifact is the exact versioned seven-bit ASCII TSV grammar in
+  `docs/TOKENIZER_FORMAT.md`: fixed record order and v1 limits, canonical unsigned
+  decimal integers, exact payload length, no trailing bytes, and a lowercase SHA-256
+  checksum over `"eshkol-byte-tokenizer-checksum-v1\n" || A`. Tokenizer identity is
+  lowercase SHA-256 over `"sha256:eshkol-byte-tokenizer-v1\n" || H || P`; the public
+  spelling is exactly
+  `sha256:eshkol-byte-tokenizer-v1:<64-lowercase-hex>`. Version 1.0 has no features or
+  optional fields. A higher v1 minor is readable only with no required feature and
+  canonical inert optional fields. Artifact bytes are inert data and cannot select
+  code, callbacks, providers, native libraries, paths, or capabilities.
+
+  `tokenizer-byte` accepts only a same-aggregate validated X1 schema-1.0 resolved
+  config with `model.vocabulary-size = 256` and constructs the raw/none/no-special/
+  no-prefix/no-suffix baseline. Explicit specials, prefix/suffix behavior, and
+  `raw|strict` policy come only from a validated artifact. T1 and the accepted E1,
+  P1, D1, X1, and C1 trusted sources form one canonical aggregate, then localize
+  once. Its exact public boundary is 46 globals: E1 6, P1 17, D1 8, X1 6,
+  `persistence-policy` 1, and T1 8. Already-localized artifacts are not inputs.
+  Installed module surfaces remain narrow, and `transformer.persistence` exposes
+  only `persistence-policy` until C2.
+
+  The public policy is an unforgeable observationally immutable same-aggregate shell
+  containing copied C1-validated fields, and every use revalidates it. T1's effective
+  file limit is `min(max-file-bytes, 1048576)` and its payload/metadata limit is
+  `min(max-metadata-bytes, 1048576)`. The retained tensor limit/count fields do not
+  apply to this tensor-free artifact; device is `cpu`. Forged, copied, mutated,
+  foreign-aggregate, or malformed policies reject before I/O. T1 consumes C1 exact
+  reads and atomic publication. Rename is the save commit point; a post-rename parent
+  sync/close failure reports publication visible and durability unknown rather than
+  claiming universal crash durability.
+
+  `tokenizer-encode` returns a fresh sealed, rank-1, dense contiguous CPU I1 tensor
+  with exact signed-`i64` storage and no alternate carrier, cast, transfer, or
+  fallback. Its private fixed-arity shell operations are create, length, write,
+  read, seal, and unpublished-only abort. Registry admission precedes every pointer
+  dereference; writes are construction-only; abort ends the borrow and destroys and
+  unregisters an unpublished tensor. Decode accepts only a sealed shell from the
+  same aggregate. Native code implements transport and lifetime only; all tokenizer,
+  UTF-8, special, parser, serializer, checksum, identity, policy, and error semantics
+  remain Eshkol-authored.
+- **Evidence:** the current implementation candidate wires `make test-t1` to the
+  development-only Python format oracle and frozen fixture, direct C/C++ shell ABI
+  checks, ASan/UBSan execution, repeat builds/runs, exact 46-global admission, and a
+  compiled Eshkol AOT public-runtime test. The public AOT path is authoritative;
+  Python is neither linked nor executed by the production artifact. The independent
+  documentation review ran all 26 development-oracle semantic, format, corruption,
+  policy-limit, determinism, and hostile-environment tests successfully; the frozen
+  artifact is 552 bytes with a 200-byte payload and SHA-256
+  `93af83bf36428ff4b65b32a7e0a976e389fdf2b93bddaaa7c1d7b889460e8353`. The
+  authoritative Eshkol/native gate passed twice on the compatibility host: 110 shell
+  admission/exact-i64/lifetime/failpoint checks with C11, C++17, ASan, and UBSan; 9
+  build-only semantic checks; 61 public adversarial AOT checks per repetition; and 32
+  byte-identical generated adversarial artifacts per repetition. Boundary evidence
+  fixes 46 global definitions, 40 non-E1 package exports, 144 undefined symbols, and
+  the exact ten-source closure; it also passes ten flattened private-binding
+  negatives, eleven crafted native-link negatives, reverse-import and hostile-path
+  probes, copied/prelocalized/standalone-root rejection, cross-artifact registry
+  collision, and production Python isolation. `make build`, `make test`, `make
+  smoke`, and `make benchmark` pass on the explicitly unsupported CachyOS / LLVM
+  22.1.6 compatibility lane.
+
+  Independent T1-R review of head
+  `02a3e419f237dce343fd93642515bddf0785e6e2` found that two public-AOT loads of one
+  valid 472,645-byte combined-boundary artifact (4,096 specials with 64-byte names,
+  4,096 prefix entries, and 4,096 suffix entries) reached at least 819 MiB of the
+  pinned runtime's 1-GiB heap and emitted its 80-percent warning. That head proved
+  syntax admission but did not provide acceptable operational-boundary evidence.
+  The repair candidate preserves every exact v1 maximum, removes insertion-sort
+  allocation amplification, and adds repeat public-AOT exact-max/one-over tests with
+  bounded elapsed-time, RSS, heap-warning, canonical-save, and byte-determinism
+  checks. Two frozen focused-gate runs completed the exact-max public AOT in 129,392
+  KiB and 126,124 KiB peak RSS, below the explicit 512-MiB evidence budget, without
+  the runtime heap warning; both made the canonical save byte-identical and rejected
+  the three count-plus-one fixtures. The registry-lifetime AOT probe separately
+  performs 16 baseline versus 128 growth cycles; every cycle discards one new policy,
+  two tokenizer identities, and one sealed encode result, then verifies that the
+  oldest values of every kind remain usable. Two frozen repetitions measured
+  baseline/growth peak RSS of 48,652/57,080 KiB and 46,560/55,016 KiB, positive
+  retained deltas of 8,428 KiB and 8,456 KiB. The gate requires the exact four
+  oldest-identity checks, bounds each case at 30 seconds and 262,144 KiB RSS, and
+  requires growth RSS to exceed baseline RSS.
+
+  A later exact-head T1-R audit found that the same public-runtime claim also
+  lacked exact optional-header evidence. The additive gate generates a deterministic
+  98,891-byte version-1.1 artifact with 4,096 sorted unique inert optional-field
+  records and one value of exactly 64 decoded bytes. Two bounded public-AOT
+  repetitions load it, check its fixed fingerprint
+  `sha256:eshkol-byte-tokenizer-v1:0831b9f3c303b182c9bc6bd83a3359875dd8156b8a340cdacd4ded012df8e53c`,
+  save it byte-identically, reload it, and reject a separately checksummed 4,097-count
+  artifact as `corrupt-data` / `tokenizer-load` with message
+  `invalid optional-field count`; the existing adversarial public AOT retains the
+  65-decoded-byte rejection. The combined exact-special/insertion and optional-limit
+  executions measured 142,600 KiB and 142,864 KiB peak RSS, below the unchanged
+  512-MiB evidence budget, without a heap-pressure warning. This changes no v1
+  limit, API, fingerprint rule, package topology, or runtime implementation.
+
+  The aggregate public `tokenizer-save!` AOT also repeats injected short-write,
+  `EINTR`, zero-write, temporary-file sync/close, publication, directory sync/close,
+  and cleanup-failure cases. It checks the exact E1 category, operation, native
+  cause/domain/status/errno/stage, published and durability fields, reloads the old
+  or new artifact as appropriate, rejects partial publication, and verifies orphan
+  cleanup behavior. Independent implementation, format/security, lifetime/ABI,
+  package-boundary, and documentation/evidence subreviews report no repair blocker.
+  Exact-head T1-R re-review and supported CI remain pending and must be recorded
+  before acceptance. No lower operational ceiling, accepted repair commit, or
+  supported repair-CI URL is claimed by this proposed entry.
+- **Measured limitations / unsupported:** three strong append-only registries retain
+  all successful tokenizer cores, persistence-policy shells and copied fields, and
+  sealed encoded I1 shells/storage until process exit. Dropping caller references
+  does not reclaim them. Registry lookup is linear in registered identities and
+  cumulative memory grows monotonically; there is no registry-count ceiling,
+  finalizer, weak identity, or public release operation. Concurrent or reentrant T1
+  registry use is unverified and unsupported; callers serialize all T1 operations.
+  Applications construct/load once and reuse identities. A bounded worker process
+  and exit are the only current reclamation boundary where retention cannot be
+  bounded. The shell is not a public raw pointer seam, K1 capability, general tensor
+  interop surface, numerical kernel, device/dtype conversion, or performance claim.
+  Exact v1 per-artifact maxima remain supported admission ceilings but do not promise
+  bounded cumulative process use or indefinite repeated admissions. No
+  power-loss, NFS, FUSE, hostile-parent, or concurrent-writer durability guarantee is
+  made. T2/D2/training must not depend on repeated ephemeral encoding until a
+  separately reviewed reclamation or reuse design exists.
+- **Dependencies / retest:** this candidate consumes the accepted A0, Q0, E1/E1B,
+  I1, X1, P1, D1, and C1 contracts without changing their public names or arities.
+  Any format, fingerprint domain, aggregate topology, public export, policy mapping,
+  native shell ABI, admission, publication, lifetime, or reclamation change requires
+  issue #1 coordination and complete T1 plus affected dependency retests.
+- **Reference:** [issue #17](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/17);
+  [accepted implementation contract in issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5480447613);
+  [T1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5482913383).

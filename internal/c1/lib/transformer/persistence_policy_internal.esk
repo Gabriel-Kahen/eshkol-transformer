@@ -1,0 +1,60 @@
+;;; C1 persistence-policy identity and validation, factored so trusted
+;;; consumers need not import the checkpoint codec/parser implementation.
+(require e1b_error_consumer_private)
+
+(provide c1-persistence-policy-internal c1-require-policy)
+
+(define c1-policy-tag (vector 'c1-persistence-policy))
+(define c1-policy-u64-max 18446744073709551615)
+(define c1-policy-hard-file-bytes 1099511627776)
+(define c1-policy-hard-metadata-bytes 268435456)
+(define c1-policy-hard-tensor-bytes 274877906944)
+(define c1-policy-hard-tensors 4096)
+
+(define (c1-policy-fail-raw category operation message)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax c1-policy-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (c1-policy-fail-raw category operation message))) result))))
+
+(define (c1-policy-exact-nonnegative? value)
+  (and (integer? value) (exact? value) (real? value) (>= value 0)))
+
+(define (c1-policy-u64? value)
+  (and (c1-policy-exact-nonnegative? value)
+       (<= value c1-policy-u64-max)))
+
+(define (c1-valid-policy-values? max-file max-metadata max-tensor
+                                 max-tensors device)
+  (and (c1-policy-u64? max-file) (> max-file 0)
+       (<= max-file c1-policy-hard-file-bytes)
+       (c1-policy-u64? max-metadata) (> max-metadata 0)
+       (<= max-metadata c1-policy-hard-metadata-bytes)
+       (c1-policy-u64? max-tensor) (> max-tensor 0)
+       (<= max-tensor c1-policy-hard-tensor-bytes)
+       (c1-policy-u64? max-tensors) (> max-tensors 0)
+       (<= max-tensors c1-policy-hard-tensors)
+       (eq? device 'cpu)))
+
+(define (c1-persistence-policy-internal max-file max-metadata max-tensor
+                                        max-tensors device)
+  (if (not (c1-valid-policy-values?
+            max-file max-metadata max-tensor max-tensors device))
+      (c1-policy-fail 'invalid-argument 'persistence-policy
+                      "invalid or unsupported checkpoint persistence policy")
+      (vector c1-policy-tag max-file max-metadata max-tensor max-tensors 'cpu)))
+
+(define (c1-require-policy operation policy)
+  (if (and (vector? policy) (= (vector-length policy) 6)
+           (eq? (vector-ref policy 0) c1-policy-tag)
+           (c1-valid-policy-values?
+            (vector-ref policy 1) (vector-ref policy 2)
+            (vector-ref policy 3) (vector-ref policy 4)
+            (vector-ref policy 5)))
+      policy
+      (c1-policy-fail 'invalid-argument operation
+                      "expected C1 persistence policy")))

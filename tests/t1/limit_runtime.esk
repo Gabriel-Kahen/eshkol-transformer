@@ -1,0 +1,121 @@
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+
+(define (optional-count-error? thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) 'corrupt-data)
+                   (eq? (transformer-error-operation caught) 'tokenizer-load)
+                   (string=? (transformer-error-message caught)
+                             "invalid optional-field count")
+                   (eq? (transformer-error-cause caught) #f))))
+    (thunk)
+    #f))
+
+(define (argument index)
+  (let loop ((remaining (cdr (command-line))) (position 0))
+    (if (= position index) (car remaining)
+        (loop (cdr remaining) (+ position 1)))))
+
+(define exact-path (argument 0))
+(define specials-over-path (argument 1))
+(define prefix-over-path (argument 2))
+(define suffix-over-path (argument 3))
+(define optional-path (argument 4))
+(define optional-over-path (argument 5))
+(define save-path (argument 6))
+(define optional-save-path (argument 7))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define optional-max-fingerprint
+  "sha256:eshkol-byte-tokenizer-v1:0831b9f3c303b182c9bc6bd83a3359875dd8156b8a340cdacd4ded012df8e53c")
+
+;;; Two loads exercise both exact syntax admission and retained tokenizer
+;;; identities in one process. Every exact-max name is exactly 64 ASCII bytes.
+(define first (tokenizer-load exact-path policy))
+(define second (tokenizer-load exact-path policy))
+(check "exact combined maxima load twice"
+       (and (= (tokenizer-vocab-size first) 4352)
+            (= (tokenizer-vocab-size second) 4352)
+            (string=? (tokenizer-fingerprint first)
+                      (tokenizer-fingerprint second))))
+(check "exact 64-byte boundary names"
+       (and
+        (= (tokenizer-special-token-id
+            first
+            "a000000000000000000000000000000000000000000000000000000000000000")
+           256)
+        (= (tokenizer-special-token-id
+            second
+            "a000000000000000000000000000000000000000000000000000000000004095")
+           4351)))
+(check "exact prefix and suffix maxima execute"
+       (= (bytevector-length
+           (tokenizer-decode first (tokenizer-encode first (bytevector))))
+          0))
+(check "exact-max canonical save" (tokenizer-save! first save-path policy))
+
+(check "special count one-over rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load specials-over-path policy))))
+(check "prefix count one-over rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load prefix-over-path policy))))
+(check "suffix count one-over rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load suffix-over-path policy))))
+
+;;; Version 1.1 admits inert optional fields. The generated artifact contains
+;;; exactly 4096 sorted records, and its final value is 128 lowercase hex
+;;; characters (exactly 64 decoded bytes).
+(define optional-max (tokenizer-load optional-path policy))
+(define optional-max-second (tokenizer-load optional-path policy))
+(check "exact optional-field count loads"
+       (and (= (tokenizer-vocab-size optional-max) 256)
+            (= (tokenizer-vocab-size optional-max-second) 256)
+            (string=? (tokenizer-fingerprint optional-max)
+                      optional-max-fingerprint)
+            (string=? (tokenizer-fingerprint optional-max-second)
+                      optional-max-fingerprint)))
+(check "exact optional-field artifact saves canonically"
+       (tokenizer-save! optional-max optional-save-path policy))
+(define optional-reloaded (tokenizer-load optional-save-path policy))
+(check "exact optional-field save reloads identically"
+       (and (= (tokenizer-vocab-size optional-reloaded) 256)
+            (string=? (tokenizer-fingerprint optional-max)
+                      (tokenizer-fingerprint optional-reloaded))))
+(check "optional-field count one-over rejects"
+       (optional-count-error?
+        (lambda () (tokenizer-load optional-over-path policy))))
+(define optional-after-rejection (tokenizer-load optional-path policy))
+(check "optional-field rejection leaves runtime usable"
+       (and (= (tokenizer-vocab-size optional-after-rejection) 256)
+            (string=? (tokenizer-fingerprint optional-after-rejection)
+                      (tokenizer-fingerprint optional-max))))
+
+(if (= failed 0)
+    (begin
+      (display "T1 LIMIT PUBLIC PASS: ") (display passed)
+      (display " exact/one-over runtime checks") (newline))
+    (exit 1))

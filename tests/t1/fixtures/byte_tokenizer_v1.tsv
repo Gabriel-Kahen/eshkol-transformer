@@ -1,0 +1,26 @@
+format	eshkol-byte-tokenizer
+version	1	0
+required-features	0
+optional-fields	0
+limit-file-bytes	1048576
+limit-specials	4096
+limit-name-bytes	64
+limit-header-items	4096
+limit-optional-value-bytes	64
+limit-prefix	4096
+limit-suffix	4096
+payload-bytes	200
+kind	byte
+normalization	none
+utf8-policy	raw
+byte-ids	0	255
+special-count	3
+special	256	bos	omit
+special	257	eos	omit
+special	258	invalid	error
+prefix-count	1
+prefix	0	256
+suffix-count	1
+suffix	0	257
+checksum-algorithm	sha256
+checksum	e0fb129d0886a0301fbbc93a2dd0da91e0255f00e5dcdeddd00561a505957c76

@@ -48,13 +48,45 @@ d1_include_dir="$(realpath -- "${PROJECT_ROOT}/src")"
 d1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_undefined_symbols.txt")"
 d1_fault_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_fault_undefined_symbols.txt")"
 d1_native_source="$(realpath -- "${PROJECT_ROOT}/native/data_io.c")"
+t1_private_root="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_root.esk")"
+t1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_package_bridge.c")"
+t1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_private_renames.txt")"
+t1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_public_exports.txt")"
+t1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_undefined_symbols.txt")"
+t1_include_p1="$(realpath -- "${PROJECT_ROOT}/internal/p1/lib")"
+t1_include_c1="$(realpath -- "${PROJECT_ROOT}/internal/c1/lib")"
+t1_include_t1="$(realpath -- "${PROJECT_ROOT}/internal/t1/lib")"
+t1_include_src="$(realpath -- "${PROJECT_ROOT}/src")"
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
   die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
 package_policy=
 package_native_source=
+package_native_sources=()
 package_native_define=
-if [[ "${private_root}" == "${d1_private_root}" || \
+if [[ "${private_root}" == "${t1_private_root}" ]]; then
+    [[ "${package_bridge}" == "${t1_package_bridge}" ]] || \
+      die "T1 aggregate policy requires the exact repository bridge"
+    [[ "${package_renames}" == "${t1_package_renames}" ]] || \
+      die "T1 aggregate policy requires the exact repository rename map"
+    [[ "${public_exports}" == "${t1_public_exports}" ]] || \
+      die "T1 aggregate policy requires the exact repository export list"
+    [[ "${#canonical_include_dirs[@]}" == 4 && \
+       "${canonical_include_dirs[0]}" == "${t1_include_p1}" && \
+       "${canonical_include_dirs[1]}" == "${t1_include_c1}" && \
+       "${canonical_include_dirs[2]}" == "${t1_include_t1}" && \
+       "${canonical_include_dirs[3]}" == "${t1_include_src}" ]] || \
+      die "T1 aggregate policy requires exact ordered trusted include roots"
+    package_policy=t1-wave1-aggregate
+    undefined_symbols="${t1_undefined_symbols}"
+    package_native_sources=(
+      "${PROJECT_ROOT}/native/data_io.c"
+      "${PROJECT_ROOT}/native/checkpoint_io.c"
+      "${PROJECT_ROOT}/native/kernel_abi.c"
+      "${PROJECT_ROOT}/native/i64_tensor.c"
+      "${PROJECT_ROOT}/native/t1_i64_shell.c"
+    )
+elif [[ "${private_root}" == "${d1_private_root}" || \
       "${private_root}" == "${d1_fault_private_root}" ]]; then
     [[ "${package_bridge}" == "${d1_package_bridge}" ]] || \
       die "D1 package policy requires the exact repository D1 bridge"
@@ -66,6 +98,7 @@ if [[ "${private_root}" == "${d1_private_root}" || \
        "${canonical_include_dirs[0]}" == "${d1_include_dir}" ]] || \
       die "D1 package policy requires exactly the repository src include directory"
     package_native_source="${d1_native_source}"
+    package_native_sources=("${d1_native_source}")
     if [[ "${private_root}" == "${d1_private_root}" ]]; then
       package_policy=d1
       undefined_symbols="${d1_undefined_symbols}"
@@ -111,7 +144,8 @@ else
   for reserved_input in \
       "${d1_package_bridge}" "${d1_package_renames}" "${d1_public_exports}" \
       "${x1_package_bridge}" "${x1_package_renames}" "${x1_public_exports}" \
-      "${p1_package_bridge}" "${p1_package_renames}" "${p1_public_exports}"; do
+      "${p1_package_bridge}" "${p1_package_renames}" "${p1_public_exports}" \
+      "${t1_package_bridge}" "${t1_package_renames}" "${t1_public_exports}"; do
     if [[ "${package_bridge}" == "${reserved_input}" || \
           "${package_renames}" == "${reserved_input}" || \
           "${public_exports}" == "${reserved_input}" ]]; then
@@ -201,10 +235,17 @@ run_compiler() {
       "${e1b_timeout_seconds}s" "${e1b_runner}" "$@"
 }
 
-include_args=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
+if [[ "${package_policy}" == t1-wave1-aggregate ]]; then
+  include_args=()
+else
+  include_args=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
+fi
 for include_dir in "${canonical_include_dirs[@]}"; do
   include_args+=(-I "${include_dir}")
 done
+if [[ "${package_policy}" == t1-wave1-aggregate ]]; then
+  include_args+=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
+fi
 
 (
   cd "${e1b_tmp}"
@@ -232,6 +273,11 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
 
 {
   cat "${PROJECT_ROOT}/native/e1b_private_renames.txt"
+  if [[ "${package_policy}" == t1-wave1-aggregate ]]; then
+    cat "${PROJECT_ROOT}/native/x1_config_private_renames.txt"
+    cat "${PROJECT_ROOT}/native/p1_package_renames.txt"
+    cat "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt"
+  fi
   cat "${package_renames}"
 } >"${e1b_tmp}/renames.txt"
 objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
@@ -248,16 +294,23 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
 package_native_objects=()
-if [[ -n "${package_native_source}" ]]; then
-  package_native_objects+=("${e1b_tmp}/package-native.o")
+if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   package_native_cflags=(
     -std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
+    -fPIC -fvisibility=hidden -fno-common
+    -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
   )
   if [[ -n "${package_native_define}" ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
-  "${e1b_cc}" "${package_native_cflags[@]}" \
-    -c "${package_native_source}" -o "${package_native_objects[0]}"
+  native_index=0
+  for package_native_source in "${package_native_sources[@]}"; do
+    package_native_object="${e1b_tmp}/package-native-${native_index}.o"
+    "${e1b_cc}" "${package_native_cflags[@]}" \
+      -c "${package_native_source}" -o "${package_native_object}"
+    package_native_objects+=("${package_native_object}")
+    native_index=$((native_index + 1))
+  done
 fi
 
 "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
@@ -291,6 +344,11 @@ if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-er
     "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "E1B final object retains an unresolved privileged reference"
 fi
+if [[ "${package_policy}" == t1-wave1-aggregate ]] && \
+   grep -E '^et_(t1|i64|checkpoint|p1|d1|kernel)_' \
+     "${e1b_tmp}/undefined.txt" >/dev/null; then
+  die "T1 aggregate retains an unresolved trusted native reference"
+fi
 
 readelf --wide --syms "${e1b_tmp}/combined.o" \
   >"${e1b_tmp}/readelf-symbols.txt"
@@ -318,6 +376,17 @@ if [[ "${package_policy}" == d1 || "${package_policy}" == d1-test-faults ]]; the
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
       "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
       die "D1 required privileged definition is not local: ${privileged}"
+  done
+fi
+if [[ "${package_policy}" == t1-wave1-aggregate ]]; then
+  for privileged in \
+    et_t1_i64_shell_create_v1 et_t1_i64_shell_read_v1 \
+    et_i64_tensor_create_v1 et_checkpoint_io_atomic_write_v1 \
+    et_p1_private_context_create_v1 \
+    et_e1b_private_t1_tokenizer_encode_cabi_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "T1 aggregate required privileged definition is not local: ${privileged}"
   done
 fi
 
