@@ -103,6 +103,8 @@ cmp "${e1b_tmp}/package-1.o.evidence/allowlist-provenance.tsv" \
   "${e1b_tmp}/package-2.o.evidence/allowlist-provenance.tsv"
 cmp "${e1b_selected_undefined_symbols}" \
   "${e1b_tmp}/package-1.o.evidence/expected-undefined.txt"
+grep -Fx $'package_policy\tbase-e1b' \
+  "${e1b_tmp}/package-1.o.evidence/allowlist-provenance.tsv" >/dev/null
 grep -Fx $'allowlist\t'"$(basename -- "${e1b_selected_undefined_symbols}")" \
   "${e1b_tmp}/package-1.o.evidence/allowlist-provenance.tsv" >/dev/null
 cmp "${e1b_tmp}/package-1.o.evidence/expected-undefined.txt" \

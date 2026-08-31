@@ -64,7 +64,10 @@ is therefore rejected before an application can supply it at the later link.
 The undefined-symbol policy is not caller-selectable. The base fixture uses
 `native/e1b_undefined_symbols.txt`; the checked-in X1 trusted root is selected by
 its exact repository root, bridge, rename, export, and include identities and uses
-the independently reviewed X1-specific `native/x1_undefined_symbols.txt`. D1's
+the independently reviewed X1-specific `native/x1_undefined_symbols.txt`. P1's
+never-installed trusted root is selected only by its exact repository root, bridge,
+rename, and export identities with no optional include directories, and uses
+`native/p1_package_undefined_symbols.txt`. D1's
 normal and test-fault policies accept only its exact repository root, bridge,
 rename, export, and sole `src` include identities; copied roots, partial tuples,
 include shadowing, and policy overrides on generic packages are rejected before a
@@ -78,7 +81,7 @@ source closure. No command-line manifest argument exists. The
 trusted native consumer bridge is compiled with `-fstack-protector-all`, so both
 supported Clang 21.1.8 and the explicitly unsupported Clang 22.1.6 compatibility
 lane retain `__stack_chk_fail` in the base fixture's frozen 80-name manifest and
-X1's reviewed 95-name manifest. The builder validates the resulting localized
+the reviewed package-specific manifests. The builder validates the resulting localized
 object, not a compiler-dependent optional subset. Unsorted or
 duplicate public-export inputs are likewise rejected rather than normalized.
 
@@ -130,7 +133,7 @@ Run the focused evidence gate with:
 /usr/bin/bash -c 'make test-e1b'
 ```
 
-D1 and X1 must build one trusted package artifact with only their reviewed narrow
+D1, P1, and X1 must each build one trusted package artifact with only their reviewed narrow
 public operations, compile callers after localization, and repeat closure, import-
 both, malformed-error, symbol, link, and full-suite gates. A larger trusted closure
 requires a reviewed repository-owned manifest/policy update, never a package argument

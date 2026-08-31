@@ -594,6 +594,14 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   archive, and evidence bytes. Focused D1, E1B, X1, A0, E1, and I1 gates pass on the
   compatibility lane, as do the full `make test`, explicit `make build`, and
   `make smoke` gates. Supported exact-head CI remains required.
+  After P1 merged at `b68ec9f9a64583800cfa888da2916f6ea99134b4`, the
+  dependency-order rebase retained that hardened classifier and added P1 only as
+  its exact repository trusted-root/bridge/rename/export tuple with no optional
+  include directories and its fixed undefined-symbol manifest. P1 policy evidence,
+  trusted-root depfile provenance, and a hostile `ESHKOL_PATH`/`ESHKOL_LIB_DIR`
+  build are now explicit gates. Focused E1B, X1, P1, D1, A0, E1, and production
+  Python-isolation gates pass, as do the integrated `make test`, explicit build,
+  and smoke compatibility gates; supported exact-head CI remains required.
 - **Dependencies / retest:** E1 issue #23 and E1B issue #33 are merged. The installed
   D1 facade imports only `transformer.error_consumer`; `transformer.error_internal`,
   `transformer.error_core`, the fixed raise seam, and all constructors are absent

@@ -81,6 +81,8 @@ cmp "${PROJECT_ROOT}/native/x1_config_public_exports.txt" \
   "${x1_tmp}/x1-package-1.o.evidence/package-exports.txt"
 cmp "${PROJECT_ROOT}/native/x1_undefined_symbols.txt" \
   "${x1_tmp}/x1-package-1.o.evidence/expected-undefined.txt"
+grep -Fx $'package_policy\tx1' \
+  "${x1_tmp}/x1-package-1.o.evidence/allowlist-provenance.tsv" >/dev/null
 cmp "${x1_tmp}/x1-package-1.o.evidence/expected-undefined.txt" \
   "${x1_tmp}/x1-package-1.o.evidence/undefined.txt"
 for private_source in \
