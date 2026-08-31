@@ -825,6 +825,20 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   oldest-identity checks, bounds each case at 30 seconds and 262,144 KiB RSS, and
   requires growth RSS to exceed baseline RSS.
 
+  A later exact-head T1-R audit found that the same public-runtime claim also
+  lacked exact optional-header evidence. The additive gate generates a deterministic
+  98,891-byte version-1.1 artifact with 4,096 sorted unique inert optional-field
+  records and one value of exactly 64 decoded bytes. Two bounded public-AOT
+  repetitions load it, check its fixed fingerprint
+  `sha256:eshkol-byte-tokenizer-v1:0831b9f3c303b182c9bc6bd83a3359875dd8156b8a340cdacd4ded012df8e53c`,
+  save it byte-identically, reload it, and reject a separately checksummed 4,097-count
+  artifact as `corrupt-data` / `tokenizer-load` with message
+  `invalid optional-field count`; the existing adversarial public AOT retains the
+  65-decoded-byte rejection. The combined exact-special/insertion and optional-limit
+  executions measured 142,600 KiB and 142,864 KiB peak RSS, below the unchanged
+  512-MiB evidence budget, without a heap-pressure warning. This changes no v1
+  limit, API, fingerprint rule, package topology, or runtime implementation.
+
   The aggregate public `tokenizer-save!` AOT also repeats injected short-write,
   `EINTR`, zero-write, temporary-file sync/close, publication, directory sync/close,
   and cleanup-failure cases. It checks the exact E1 category, operation, native

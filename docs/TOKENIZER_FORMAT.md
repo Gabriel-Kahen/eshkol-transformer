@@ -152,7 +152,8 @@ Version 1.0 hard limits are:
 - specials: 4,096;
 - special-name bytes: 1..64;
 - record bytes before LF: at most 256;
-- required-feature and optional-field records: 4,096 each;
+- required-feature and optional-field count fields: at most 4,096 each; nonzero
+  required-feature counts remain unsupported, while v1.0 requires both counts zero;
 - optional-field decoded bytes: 1..64;
 - prefix and suffix entries: 4,096 each; and
 - token IDs: nonnegative signed `i64`, further constrained by the byte/special rules.

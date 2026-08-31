@@ -243,7 +243,7 @@ done
 diff -ru "${t1_tmp}/limits-1" "${t1_tmp}/limits-2"
 cmp "${t1_tmp}/limits-1.stdout" "${t1_tmp}/limits-2.stdout"
 grep -Fx \
-  'T1 LIMIT FIXTURES PASS: 4 deterministic artifacts; exact-max 472645 bytes' \
+  'T1 LIMIT FIXTURES PASS: 6 deterministic artifacts; exact-max 472645 bytes; optional-max 98891 bytes' \
   "${t1_tmp}/limits-1.stdout" >/dev/null
 
 run_bounded_runtime() {
@@ -317,16 +317,21 @@ for repetition in 1 2; do
     "${t1_tmp}/limits-${repetition}/specials-one-over.tsv" \
     "${t1_tmp}/limits-${repetition}/prefix-one-over.tsv" \
     "${t1_tmp}/limits-${repetition}/suffix-one-over.tsv" \
-    "${t1_tmp}/limit-saved-${repetition}.tsv"
+    "${t1_tmp}/limits-${repetition}/optional-max.tsv" \
+    "${t1_tmp}/limits-${repetition}/optional-one-over.tsv" \
+    "${t1_tmp}/limit-saved-${repetition}.tsv" \
+    "${t1_tmp}/limit-optional-saved-${repetition}.tsv"
   if grep -F 'Heap usage at' \
       "${t1_tmp}/limit-runtime-${repetition}.stderr" >/dev/null; then
     die "T1 exact-max runtime emitted a heap-pressure warning"
   fi
-  printf 'T1 exact-max measured max RSS: %s KiB\n' "${t1_measured_rss}"
-  grep -Fx 'T1 LIMIT PUBLIC PASS: 7 exact/one-over runtime checks' \
+  printf 'T1 combined-limit measured max RSS: %s KiB\n' "${t1_measured_rss}"
+  grep -Fx 'T1 LIMIT PUBLIC PASS: 12 exact/one-over runtime checks' \
     "${t1_tmp}/limit-runtime-${repetition}.stdout" >/dev/null
   cmp "${t1_tmp}/limits-${repetition}/exact-max.tsv" \
     "${t1_tmp}/limit-saved-${repetition}.tsv"
+  cmp "${t1_tmp}/limits-${repetition}/optional-max.tsv" \
+    "${t1_tmp}/limit-optional-saved-${repetition}.tsv"
 done
 cmp "${t1_tmp}/limit-runtime-1.stdout" \
   "${t1_tmp}/limit-runtime-2.stdout"

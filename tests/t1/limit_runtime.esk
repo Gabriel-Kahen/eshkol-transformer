@@ -20,13 +20,33 @@
     (thunk)
     #f))
 
-(define args (command-line))
-(define exact-path (car (cdr args)))
-(define specials-over-path (car (cdr (cdr args))))
-(define prefix-over-path (car (cdr (cdr (cdr args)))))
-(define suffix-over-path (car (cdr (cdr (cdr (cdr args))))))
-(define save-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
+(define (optional-count-error? thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) 'corrupt-data)
+                   (eq? (transformer-error-operation caught) 'tokenizer-load)
+                   (string=? (transformer-error-message caught)
+                             "invalid optional-field count")
+                   (eq? (transformer-error-cause caught) #f))))
+    (thunk)
+    #f))
+
+(define (argument index)
+  (let loop ((remaining (cdr (command-line))) (position 0))
+    (if (= position index) (car remaining)
+        (loop (cdr remaining) (+ position 1)))))
+
+(define exact-path (argument 0))
+(define specials-over-path (argument 1))
+(define prefix-over-path (argument 2))
+(define suffix-over-path (argument 3))
+(define optional-path (argument 4))
+(define optional-over-path (argument 5))
+(define save-path (argument 6))
+(define optional-save-path (argument 7))
 (define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define optional-max-fingerprint
+  "sha256:eshkol-byte-tokenizer-v1:0831b9f3c303b182c9bc6bd83a3359875dd8156b8a340cdacd4ded012df8e53c")
 
 ;;; Two loads exercise both exact syntax admission and retained tokenizer
 ;;; identities in one process. Every exact-max name is exactly 64 ASCII bytes.
@@ -65,6 +85,34 @@
        (structured-error?
         'corrupt-data 'tokenizer-load
         (lambda () (tokenizer-load suffix-over-path policy))))
+
+;;; Version 1.1 admits inert optional fields. The generated artifact contains
+;;; exactly 4096 sorted records, and its final value is 128 lowercase hex
+;;; characters (exactly 64 decoded bytes).
+(define optional-max (tokenizer-load optional-path policy))
+(define optional-max-second (tokenizer-load optional-path policy))
+(check "exact optional-field count loads"
+       (and (= (tokenizer-vocab-size optional-max) 256)
+            (= (tokenizer-vocab-size optional-max-second) 256)
+            (string=? (tokenizer-fingerprint optional-max)
+                      optional-max-fingerprint)
+            (string=? (tokenizer-fingerprint optional-max-second)
+                      optional-max-fingerprint)))
+(check "exact optional-field artifact saves canonically"
+       (tokenizer-save! optional-max optional-save-path policy))
+(define optional-reloaded (tokenizer-load optional-save-path policy))
+(check "exact optional-field save reloads identically"
+       (and (= (tokenizer-vocab-size optional-reloaded) 256)
+            (string=? (tokenizer-fingerprint optional-max)
+                      (tokenizer-fingerprint optional-reloaded))))
+(check "optional-field count one-over rejects"
+       (optional-count-error?
+        (lambda () (tokenizer-load optional-over-path policy))))
+(define optional-after-rejection (tokenizer-load optional-path policy))
+(check "optional-field rejection leaves runtime usable"
+       (and (= (tokenizer-vocab-size optional-after-rejection) 256)
+            (string=? (tokenizer-fingerprint optional-after-rejection)
+                      (tokenizer-fingerprint optional-max))))
 
 (if (= failed 0)
     (begin
