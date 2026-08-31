@@ -351,10 +351,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-08-28 — X1 / issue #20
 
-- **Decision:** proposed for integration; issue #1 accepted the schema and
-  canonicalization direction with required clarifications, now incorporated and
-  tested. Only the integration owner may change this entry to `accepted` after
-  independent review and merge.
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and merged-main focused/full regression gates.
 - **Contract:** X1 uses the strict, flat, non-executable version-1 JSON source schema
   and the independently versioned `eshkol-resolved-run` `[1,0]` canonical manifest
   documented in [CONFIG_FORMAT.md](CONFIG_FORMAT.md). Every explicitly present source
@@ -385,15 +383,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   pass. Focused A0, E1 (112), E1B (35), I1, and repository-wide `make test`, followed
   by separate `make build` and `make smoke`, pass after rebasing on accepted E1B main.
   Independent parser/canonicalization, E1B packaging/leakage, and test-evidence
-  reviews report no blocker. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 exact-head
-  CI remains required before integration acceptance.
+  reviews report no blocker. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33329897122](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33329897122)
+  passed at exact reviewed head `246afd8ad6ad663082f7efeec32ec554421e909c`.
 - **Limitations:** X1 is canonical-pin/x86-64 AOT-only and publishes no JIT/bitcode
   artifact. One combined artifact/registry is supported per process; concurrency is
   unverified. The pinned compiler leaves six safe-only source aliases reachable;
   each conveys only its corresponding public configuration operation. Malicious
   native injection into the trusted partial link is outside scope.
-- **Dependencies / retest:** X1 remains proposed and must not be merged by its
-  implementation task. T1 must consume the validated configuration contract
+- **Dependencies / retest:** T1 must consume the validated configuration contract
   before `tokenizer-byte`; C2 may embed the exact manifest and fingerprint only after
   X1 integration. CLI3 may expose source parsing and overrides only after the same
   review. Rerun T1, C2, and CLI3 gates after any X1 contract change. Any field,
@@ -401,13 +399,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   #1 coordination and affected downstream retests.
 - **Reference:** [issue #20](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/20);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  [implementation PR #30](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/30).
+  [implementation PR #30](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/30);
+  merge commit `18276b1284ad5e69bee6de91f3f00096e99e4ca5`. Merged-main
+  `make test-x1` and `make test build smoke` passed on the documented local
+  compatibility lane.
 
 ## 2026-08-29 — P1 / issue #22
 
-- **Decision:** proposed. The integration task accepted the logical state-tree and
-  provider-binding contract with required conditions; this repository entry remains
-  proposed until PR review and integration-owner acceptance.
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and merged-main focused regression gates.
 - **Contract:** `transformer.module` retains exactly the 17 merged A0 public names and
   arities. Nested module, parameter, and buffer paths use deterministic UTF-8 byte
   lexical order; tied parameter paths retain destination identity while snapshots
@@ -482,22 +482,28 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   failure with unchanged destinations, conflicting aliases, duplicates, malformed
   schema, cyclic caller lists/composites, unsupported versions, and shape/dtype/device
   mismatches. Independent native-security, ABI, packaging/leakage, cyclic-validation,
-  atomicity, evidence, and P1-contract reviews found no blocker. Supported Ubuntu 22.04 x86-64 /
-  LLVM-Clang 21.1.8 CI remains required before acceptance.
-- **Dependencies / retest:** C1 remains blocked until this logical contract merges and
-  must treat itself, with I1, as a trusted explicit binder rather than perform
+  atomicity, evidence, and P1-contract reviews found no blocker. Supported Ubuntu
+  22.04 x86-64 / LLVM-Clang 21.1.8
+  [CI run 33352609244](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33352609244)
+  passed at exact reviewed head `3b7ad986aba0c5dda860bc36a74aeee55c511878`.
+  The actual merged-main commit also passed `make test-p1` with all 178 structural,
+  183 native, and 102 registry/atomicity checks.
+- **Dependencies / retest:** C1 may consume this merged logical contract and must
+  treat itself, with I1, as a trusted explicit binder rather than perform
   metadata-driven provider lookup. The test-only provider proves only P1 control-flow
   and ownership semantics. I1/K1 and later real f32 support must repeat round-trip,
   mutation, storage-lifetime, device, and commit-infallibility tests before any
   numerical, physical tensor, backend, dtype, device, or module-capability claim.
 - **Reference:** [issue #22](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/22);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
-  [PR #31](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31).
+  [PR #31](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31);
+  [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31#issuecomment-5473456290);
+  merge commit `b68ec9f9a64583800cfa888da2916f6ea99134b4`.
 
 ## 2026-08-28 — D1 / issue #18
 
-- **Decision:** proposed; the binary v1.0 format direction is accepted with conditions
-  by the integration task, while repository acceptance remains pending review.
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and an actual merged-main focused D1 rerun.
 - **Contract:** `(require transformer.data)` exports the versioned, checksummed,
   manifest-last token-corpus writer, strict validator, identity-backed
   observationally immutable summary, and six summary accessors documented in
@@ -601,14 +607,19 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   trusted-root depfile provenance, and a hostile `ESHKOL_PATH`/`ESHKOL_LIB_DIR`
   build are now explicit gates. Focused E1B, X1, P1, D1, A0, E1, and production
   Python-isolation gates pass, as do the integrated `make test`, explicit build,
-  and smoke compatibility gates; supported exact-head CI remains required.
+  and smoke compatibility gates. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33359439566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33359439566)
+  passed at exact independently approved head
+  `ea8b6d1c87356aabbfce95e40726ca8983e5366f`. After merge, actual main passed
+  `make test-d1`, including all 16 format/native-I/O tests and the strict compiled
+  writer/validator boundary gates, on the documented local compatibility lane.
 - **Dependencies / retest:** E1 issue #23 and E1B issue #33 are merged. The installed
   D1 facade imports only `transformer.error_consumer`; `transformer.error_internal`,
   `transformer.error_core`, the fixed raise seam, and all constructors are absent
   from its source dependency graph. Consumers must link the single completed D1/E1B
   artifact and must not combine it with another registry-owning E1B artifact.
   Compiler upgrades must rerun all source/object/AOT and crafted-link boundary checks.
-  T1/D2/T2/DATA4 may consume this contract only after integration acceptance; D2
+  T1/D2/T2/DATA4 may now consume this accepted contract; D2
   retains all iteration, shuffle, packing, batching, and cursor behavior. A later
   streaming/I1 integration must rerun byte-determinism, publication, corruption,
   and scale tests.
@@ -616,4 +627,6 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
   [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);
   [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028);
-  [D1-R2 requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5471306523).
+  [D1-R2 requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5471306523);
+  [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5474526166);
+  merge commit `98cf060b397ab00cd33c68521de952e24bda8704`.
