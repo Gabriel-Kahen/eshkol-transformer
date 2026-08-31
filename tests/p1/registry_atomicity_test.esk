@@ -31,20 +31,19 @@
             #f)))
     (check label caught)))
 
+(define (error-contract? category operation thunk)
+  (guard (raised
+           (#t
+             (and (transformer-error? raised)
+                  (eq? category (transformer-error-category raised))
+                  (eq? operation (transformer-error-operation raised))
+                  (null? (transformer-error-details raised))
+                  (eq? (transformer-error-cause raised) #f))))
+    (thunk)
+    #f))
+
 (define (expect-error-contract label category operation thunk)
-  (let ((caught
-          (guard (raised
-                   (#t
-                     (and (transformer-error? raised)
-                          (eq? category
-                               (transformer-error-category raised))
-                          (eq? operation
-                               (transformer-error-operation raised))
-                          (null? (transformer-error-details raised))
-                          (eq? (transformer-error-cause raised) #f))))
-            (thunk)
-            #f)))
-    (check label caught)))
+  (check label (error-contract? category operation thunk)))
 
 (define (details-ref details key)
   (cond
@@ -233,6 +232,228 @@
          (= (p1-test-live-count) live-before))
   (check "repeated strict load preserves tombstone count"
          (= (p1-test-tombstone-count) tombstones-before)))
+
+;; Names and every path segment share the ownership-copy v1 domain: nonempty
+;; valid UTF-8 encoded in at most 65536 bytes. The multibyte parameter fixture
+;; proves that the limit is encoded bytes, not character count.
+(define (double-string value count)
+  (if (= count 0)
+      value
+      (double-string (string-append value value) (- count 1))))
+
+(define exact-multibyte-name (double-string "é" 15))
+(define exact-tie-name (make-string 65536 #\t))
+(define exact-buffer-name (make-string 65536 #\b))
+(define exact-child-name (make-string 65536 #\c))
+(define one-over-name (string-append exact-multibyte-name "x"))
+
+(let* ((source-child (module-create-fixture-internal))
+       (source-handle
+         (module-register-parameter-internal!
+           source-child exact-multibyte-name
+           (fixture-payload '(2) 'name-bound-source)))
+       (source-tie
+         (module-register-tied-parameter-internal!
+           source-child exact-tie-name source-handle))
+       (source-buffer
+         (module-register-buffer-internal!
+           source-child exact-buffer-name
+           (fixture-device-payload 'cpu 'name-bound-buffer)))
+       (source (module-create-fixture-internal))
+       (source-attachment
+         (module-register-child-internal!
+           source exact-child-name source-child))
+       (parameter-path (list exact-child-name exact-multibyte-name))
+       (tie-path (list exact-child-name exact-tie-name))
+       (buffer-path (list exact-child-name exact-buffer-name))
+       (expected-tree-paths (list tie-path parameter-path))
+       (expected-state-paths (list buffer-path tie-path parameter-path))
+       (source-tree (module-parameters source))
+       (source-state (module-state-dict source))
+       (destination-child (module-create-fixture-internal))
+       (destination-handle
+         (module-register-parameter-internal!
+           destination-child exact-multibyte-name
+           (fixture-payload '(2) 'name-bound-old)))
+       (destination-storage
+         (parameter-handle-tensor-identity-internal destination-handle))
+       (destination-tie
+         (module-register-tied-parameter-internal!
+           destination-child exact-tie-name destination-handle))
+       (destination-buffer
+         (module-register-buffer-internal!
+           destination-child exact-buffer-name
+           (fixture-device-payload 'cpu 'name-bound-old-buffer)))
+       (destination (module-create-fixture-internal))
+       (destination-attachment
+         (module-register-child-internal!
+           destination exact-child-name destination-child))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (check "name fixtures use exact encoded-byte boundary"
+         (and (= (string-byte-length exact-multibyte-name) 65536)
+              (= (string-length exact-multibyte-name) 32768)
+              (= (string-byte-length exact-tie-name) 65536)
+              (= (string-byte-length exact-buffer-name) 65536)
+              (= (string-byte-length exact-child-name) 65536)
+              (= (string-byte-length one-over-name) 65537)
+              (= (string-length one-over-name) 32769)))
+  (check "exact-bound parameter and tied names are admitted"
+         (eq? source-tie source-handle))
+  (check "exact-bound prebuilt child name is admitted"
+         (and (eq? source-attachment source-child)
+              (eq? destination-attachment destination-child)))
+  (check "exact-bound generated tree paths and lookups agree"
+         (and (equal? (parameter-tree-paths source-tree) expected-tree-paths)
+              (eq? (parameter-tree-handle source-tree parameter-path)
+                   source-handle)
+              (eq? (parameter-tree-handle source-tree tie-path)
+                   source-handle)))
+  (check "exact-bound tied name survives canonical copying"
+         (and (equal? (parameter-handle-path source-handle) tie-path)
+              (equal? (parameter-tree-tie-groups source-tree)
+                      (list (list tie-path parameter-path)))))
+  (check "exact-bound state snapshot paths round-trip"
+         (equal? (state-dict-paths source-state) expected-state-paths))
+  (check "exact-bound state snapshot aliases round-trip"
+         (equal? (state-dict-alias-groups source-state)
+                 (list (list tie-path parameter-path))))
+  (check "exact-bound parameter, tie, and buffer state access"
+         (and (equal? (fixture-tensor-payload-internal
+                        (state-dict-tensor source-state parameter-path))
+                      (vector 'name-bound-source 'bits-v1))
+              (equal? (fixture-tensor-payload-internal
+                        (state-dict-tensor source-state tie-path))
+                      (vector 'name-bound-source 'bits-v1))
+              (equal? (fixture-tensor-payload-internal
+                        (state-dict-tensor source-state buffer-path))
+                      (vector 'name-bound-buffer 'bits-v1))))
+  (check "exact-bound strict state load succeeds"
+         (module-load-state-dict! destination source-state))
+  (check "exact-bound load preserves live identities"
+         (= (p1-test-live-count) live-before))
+  (check "exact-bound load preserves tombstones"
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "exact-bound load preserves destination identity and values"
+         (let ((destination-tree (module-parameters destination))
+               (destination-state (module-state-dict destination)))
+           (and (eq? (parameter-tree-handle destination-tree parameter-path)
+                     destination-handle)
+                (eq? (parameter-tree-handle destination-tree tie-path)
+                     destination-tie)
+                (eq? destination-storage
+                     (parameter-handle-tensor-identity-internal
+                       destination-handle))
+                (equal? (state-dict-paths destination-state)
+                        expected-state-paths)
+                (equal? (state-dict-alias-groups destination-state)
+                        (list (list tie-path parameter-path)))
+                (equal? (fixture-tensor-payload-internal
+                          (state-dict-tensor destination-state parameter-path))
+                        (vector 'name-bound-source 'bits-v1))
+                (equal? (fixture-tensor-payload-internal
+                          (state-dict-tensor destination-state tie-path))
+                        (vector 'name-bound-source 'bits-v1))
+                (equal? (fixture-tensor-payload-internal
+                          (state-dict-tensor destination-state buffer-path))
+                        (vector 'name-bound-buffer 'bits-v1)))))
+  (check "exact-bound trusted state entry path round-trips"
+         (let ((entry
+                 (state-entry-internal
+                   parameter-path 'parameter '(1) 'f32 'cpu
+                   'dense-row-major-contiguous
+                   (fixture-payload '(1) 'exact-entry))))
+           (equal? (state-entry-path-internal entry) parameter-path)))
+  (let ((over-entry-tensor (fixture-payload '(1) 'over-entry)))
+    (let ((ingress-live-before (p1-test-live-count))
+          (ingress-tombstones-before (p1-test-tombstone-count)))
+      (expect-error-contract
+        "one-over parameter-tree path rejects at ingress" 'invalid-argument
+        'parameter-tree-handle
+        (lambda ()
+          (parameter-tree-handle source-tree
+                                 (list exact-child-name one-over-name))))
+      (expect-error-contract
+        "one-over state path rejects before provider validation" 'invalid-argument
+        'state-dict-tensor
+        (lambda ()
+          (state-dict-tensor source-state
+                             (list exact-child-name one-over-name))))
+      (check "one-over state-entry ingress preserves identities and handles"
+             (and
+               (error-contract?
+                 'invalid-argument 'state-entry-internal
+                 (lambda ()
+                   (state-entry-internal
+                     (list one-over-name) 'parameter '(1) 'f32 'cpu
+                     'dense-row-major-contiguous over-entry-tensor)))
+               (= (p1-test-live-count) ingress-live-before)
+               (= (p1-test-tombstone-count) ingress-tombstones-before)
+               (eq? (parameter-tree-handle source-tree parameter-path)
+                    source-handle))))))
+
+;; Every registration family rejects 65537 encoded bytes before provider work
+;; or mutation. The detached CPU subtree and empty parent additionally prove
+;; that failed prebuilt attachment cannot claim a device or parent the child.
+(let* ((parent (module-create-fixture-internal))
+       (tie-root (module-create-fixture-internal))
+       (tie-handle
+         (module-register-parameter-internal!
+           tie-root "anchor" (fixture-payload '(1) 'name-bound-anchor)))
+       (candidate (module-create-fixture-internal))
+       (candidate-handle
+         (module-register-parameter-internal!
+           candidate exact-multibyte-name
+           (fixture-payload '(1) 'name-bound-candidate)))
+       (recovery-parent (module-create-fixture-internal))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (expect-error-contract
+    "one-over parameter name rejects before provider dispatch" 'invalid-argument
+    'module-register-parameter-internal!
+    (lambda ()
+      (module-register-parameter-internal! parent one-over-name #f)))
+  (expect-error-contract
+    "one-over tied name rejects before mutation" 'invalid-argument
+    'module-register-tied-parameter-internal!
+    (lambda ()
+      (module-register-tied-parameter-internal!
+        tie-root one-over-name tie-handle)))
+  (expect-error-contract
+    "one-over buffer name rejects before provider dispatch" 'invalid-argument
+    'module-register-buffer-internal!
+    (lambda ()
+      (module-register-buffer-internal! parent one-over-name #f)))
+  (expect-error-contract
+    "one-over prebuilt child path rejects before attachment" 'invalid-argument
+    'module-register-child-internal!
+    (lambda ()
+      (module-register-child-internal! parent one-over-name candidate)))
+  (check "one-over registration preserves live identities and tombstones"
+         (and (= (p1-test-live-count) live-before)
+              (= (p1-test-tombstone-count) tombstones-before)))
+  (check "one-over registration leaves parent device unclaimed"
+         (module-register-buffer-internal!
+           parent "safe"
+           (fixture-device-payload (vector 'accelerator 9) 'name-bound-safe)))
+  (check "one-over registration leaves parent topology and handles unchanged"
+         (let ((tree (module-parameters parent))
+               (state (module-state-dict parent)))
+           (and (null? (parameter-tree-paths tree))
+                (equal? (state-dict-paths state) '(("safe")))
+                (equal? (parameter-tree-paths (module-parameters tie-root))
+                        '(("anchor")))
+                (eq? (parameter-tree-handle
+                       (module-parameters tie-root) '("anchor"))
+                     tie-handle))))
+  (check "one-over child remains attachable with its exact-bound path"
+         (and (eq? (module-register-child-internal!
+                     recovery-parent "accepted" candidate)
+                   candidate)
+              (eq? (parameter-tree-handle
+                     (module-parameters recovery-parent)
+                     (list "accepted" exact-multibyte-name))
+                   candidate-handle))))
 
 ;; The deepest legal leaf has 63 child segments plus its local name. Every
 ;; generated path must round-trip through tree/state lookup, and strict load
@@ -531,8 +752,8 @@
                 (null? (parameter-tree-paths
                          (module-parameters candidate)))))))
 
-(if (= checks 78)
+(if (= checks 102)
     (begin
-      (display "P1 registry atomicity PASS: 78 checks")
+      (display "P1 registry atomicity PASS: 102 checks")
       (newline))
     (exit 1))

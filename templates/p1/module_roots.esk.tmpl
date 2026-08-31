@@ -565,21 +565,25 @@
                   (>= (car dimensions) 0)
                   (loop (cdr dimensions)))))))
 
+(define (valid-name? name)
+  (and (string? name)
+       (> (string-length name) 0)
+       (<= (string-byte-length name) max-string-bytes)
+       (string=? name (utf8->string (string->utf8 name)))))
+
 (define (valid-path? path)
   (and (bounded-list-length path max-path-segments)
        (not (null? path))
        (let loop ((segments path))
          (if (null? segments)
              #t
-             (and (string? (car segments))
-                  (> (string-length (car segments)) 0)
-                  (string=? (car segments)
-                            (utf8->string (string->utf8 (car segments))))
+             (and (valid-name? (car segments))
                   (loop (cdr segments)))))))
 
-(define (valid-name? name)
-  (and (string? name) (> (string-length name) 0)
-       (string=? name (utf8->string (string->utf8 name)))))
+(define (require-valid-name operation message name)
+  (if (valid-name? name)
+      #t
+      (fail 'invalid-argument operation message '())))
 
 (define (segment<? left right)
   (let ((left-bytes (string->utf8 left))
@@ -1539,12 +1543,11 @@
 (define (prepare-parameter-registration module name tensor)
   (require-module 'module-register-parameter-internal! module)
   (require-mutable-module 'module-register-parameter-internal! module)
+  (require-valid-name 'module-register-parameter-internal!
+                      "parameter name must be 1..65536 encoded UTF-8 bytes" name)
   (let ((provider (require-module-provider
                     'module-register-parameter-internal! module)))
-    (if (not (valid-name? name))
-        (fail 'invalid-argument 'module-register-parameter-internal!
-              "parameter name must be nonempty UTF-8" name)
-        (if (local-name-used? module name)
+    (if (local-name-used? module name)
             (fail 'invalid-argument 'module-register-parameter-internal!
                   "duplicate local module name" name)
             (let ((topology-updates
@@ -1572,7 +1575,7 @@
                           'module-register-parameter-internal! provider module
                           (vector-ref metadata 2))))
                   (vector module handle next-bindings topology-updates
-                          device-plan))))))))
+                          device-plan)))))))
 
 (define (commit-parameter-registration! plan)
   (commit-module-device! (vector-ref plan 4))
@@ -1588,12 +1591,11 @@
   (require-module 'module-register-tied-parameter-internal! module)
   (require-handle 'module-register-tied-parameter-internal! handle)
   (require-mutable-module 'module-register-tied-parameter-internal! module)
+  (require-valid-name 'module-register-tied-parameter-internal!
+                      "parameter name must be 1..65536 encoded UTF-8 bytes" name)
   (let ((provider (require-module-provider
                     'module-register-tied-parameter-internal! module)))
-    (if (not (valid-name? name))
-        (fail 'invalid-argument 'module-register-tied-parameter-internal!
-              "parameter name must be nonempty UTF-8" name)
-        (if (local-name-used? module name)
+    (if (local-name-used? module name)
             (fail 'invalid-argument 'module-register-tied-parameter-internal!
                   "duplicate local module name" name)
             (if (not (eq? (module-root module) (module-root (vector-ref handle 1))))
@@ -1613,17 +1615,16 @@
                                             provider module (vector-ref handle 5))
                       (vector-set! module 2 next-bindings)
                       (apply-leaf-topology-updates! topology-updates)
-                      handle)))))))
+                      handle))))))
 
 (define (module-register-buffer-internal! module name tensor)
   (require-module 'module-register-buffer-internal! module)
   (require-mutable-module 'module-register-buffer-internal! module)
+  (require-valid-name 'module-register-buffer-internal!
+                      "buffer name must be 1..65536 encoded UTF-8 bytes" name)
   (let ((provider (require-module-provider
                     'module-register-buffer-internal! module)))
-    (if (not (valid-name? name))
-        (fail 'invalid-argument 'module-register-buffer-internal!
-              "buffer name must be nonempty UTF-8" name)
-        (if (local-name-used? module name)
+    (if (local-name-used? module name)
             (fail 'invalid-argument 'module-register-buffer-internal!
                   "duplicate local module name" name)
             (let ((topology-updates
@@ -1645,17 +1646,16 @@
                                       provider module (vector-ref metadata 2))
                 (vector-set! module 3 next-bindings)
                 (apply-leaf-topology-updates! topology-updates)
-                binding))))))
+                binding)))))
 
 (define (module-register-child-internal! module name child)
   (require-module 'module-register-child-internal! module)
   (require-module 'module-register-child-internal! child)
   (require-mutable-module 'module-register-child-internal! module)
   (require-mutable-module 'module-register-child-internal! child)
-  (if (not (valid-name? name))
-      (fail 'invalid-argument 'module-register-child-internal!
-            "child name must be nonempty UTF-8" name)
-      (if (local-name-used? module name)
+  (require-valid-name 'module-register-child-internal!
+                      "child name must be 1..65536 encoded UTF-8 bytes" name)
+  (if (local-name-used? module name)
           (fail 'invalid-argument 'module-register-child-internal!
                 "duplicate local module name" name)
           (if (not (eq? (vector-ref module 6) (vector-ref child 6)))
@@ -1690,7 +1690,7 @@
                       (vector-set! child 5 module)
                       (vector-set! module 4 next-children)
                       (apply-child-topology-updates! topology-updates)
-                      child))))))))
+                      child)))))))
 
 (define (flatten-parameters module prefix)
   (list-append
@@ -1816,7 +1816,7 @@
 (define (parameter-tree-handle tree path)
   (require-tree 'parameter-tree-handle tree)
   (if (not (valid-path? path))
-      (fail 'invalid-argument 'parameter-tree-handle "invalid parameter path" path)
+      (fail 'invalid-argument 'parameter-tree-handle "invalid parameter path" '())
       (let loop ((entries (vector-ref tree 1)))
         (cond
           ((null? entries)
@@ -2201,9 +2201,9 @@
         (loop (cdr entries) (cons (copy-data (entry-path (car entries))) paths)))))
 
 (define (state-dict-tensor state path)
-  (let ((provider (validate-bound-state 'state-dict-tensor state)))
-    (if (not (valid-path? path))
-        (fail 'invalid-argument 'state-dict-tensor "invalid state path" path)
+  (if (not (valid-path? path))
+      (fail 'invalid-argument 'state-dict-tensor "invalid state path" '())
+      (let ((provider (validate-bound-state 'state-dict-tensor state)))
         (let ((entry (state-entry-for-path (vector-ref state 6) path)))
           (if entry
               (tensor-copy 'state-dict-tensor provider (vector-ref entry 7)

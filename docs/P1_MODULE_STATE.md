@@ -46,17 +46,23 @@ uses the same artifact registry and unchanged six accessors.
 
 ## Paths, nesting, and identity
 
-A logical path is a nonempty list of nonempty valid UTF-8 strings. Ordering is
-lexicographic by the encoded UTF-8 bytes of each segment, segment by segment; if all
-shared segments compare equal, the shorter path sorts first. Registration order,
-host locale, and display spelling do not affect enumeration.
+A logical path is a nonempty list of valid UTF-8 segments. Each segment contains
+1..65536 encoded UTF-8 bytes, inclusive; this is a per-segment bound, not an
+aggregate path-byte bound. Ordering is lexicographic by the encoded UTF-8 bytes of
+each segment, segment by segment; if all shared segments compare equal, the shorter
+path sorts first. Registration order, host locale, and display spelling do not affect
+enumeration.
 
 Parameter, buffer, and child names share one local namespace. Duplicate names,
 shared children, cycles, and cross-root parameter ties are rejected. Enumeration
 flattens the complete nested module tree and then applies the global path ordering.
-Registration copies caller-owned name strings. A root tree is finalized on its first
-public enumeration or state access, after which every registration operation fails
-with `invalid-state`; attached child modules are not independent public roots.
+Registration validates the same 1..65536 encoded-byte domain before provider lookup
+or callback, ownership allocation, identity/device work, or topology mutation, then
+copies caller-owned name strings. Prebuilt-subtree attachment applies that gate to
+its new child edge; every existing subtree segment was already copied through the
+same admission gate. A root tree is finalized on its first public enumeration or
+state access, after which every registration operation fails with `invalid-state`;
+attached child modules are not independent public roots.
 
 One root tree contains at most 4096 modules and 4096 logical parameter/buffer
 entries. Module depth is at most 64 child edges, and every generated leaf path is at

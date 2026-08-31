@@ -427,7 +427,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   repository-owned trusted-root/bridge/rename/export tuple; copied roots, copied or
   mismatched bridge/native inputs, partial tuples, and environment overrides reject.
   Native code performs no schema, tensor, commit,
-  serialization, or capability logic. A process-local internal provider-v1 boundary
+  serialization, or capability logic. Every parameter, tied-parameter, buffer, and
+  child name—and every caller or generated path segment—shares one inclusive
+  1..65536 encoded UTF-8 byte domain. Admission rejects one-over input before
+  provider lookup/callback, allocation, identity/device work, or topology mutation;
+  prebuilt attachment applies the same gate to its new edge. A process-local internal provider-v1 boundary
   defaults to no provider. Trusted C1/I1 callers must explicitly bind an
   already-admitted provider with the exact identity before load; serialized metadata
   never selects executable code and snapshots never serialize a binding. Admission,
@@ -451,13 +455,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   compatibility lane. The focused gate passed 178 structural/ownership/binding/
   validation/atomicity assertions, 118 native token/security/ABI checks, 57 native
   allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
-  unit identity checks, and 78 trusted test-only registry/error-mapping/topology-bound
+  unit identity checks, and 102 trusted test-only registry/error-mapping/topology/name-bound
   checks. The latter
   drive automatic partial-callback cleanup through an injected failure and prove exact
   live/tombstone deltas plus unchanged registry counts across failed and repeated strict
   loads; exact and one-over 64-segment/depth and 4096-entry/node fixtures additionally
   prove generated lookup, full tied/buffer state round-trip, atomic subtree/leaf
-  rejection, and bounded finalization. Their three hidden hooks exist only in a
+  rejection, bounded finalization, and exact/one-over 65536-byte multibyte name/path
+  admission across every registration family, lookup, snapshot, and strict load.
+  Their three hidden hooks exist only in a
   temporary non-production archive.
   Native failpoint errors raise directly through the same E1 registry with bounded
   canonical data-only status details and cause `#f`, even after cleanup overwrites the
