@@ -44,6 +44,16 @@ is non-streaming: load holds an Eshkol file bytevector plus a native staging cop
 temporary checksum/payload copies; save similarly constructs several aggregate
 buffers. Deployments must select materially lower, memory-safe policy limits. No
 claim is made that the hard ceilings fit available address space or memory.
+Executable Eshkol tests admit the exact hard file, metadata, tensor, and entry policy
+ceilings and reject each one-over value arithmetically without allocating those
+sizes. A compact independently checksummed wire fixture covers the exact 4096-entry,
+2048-effective-group, and 4096-member boundary plus entry/group/member one-over cases
+in the independent parser. Attempting to inspect the approximately 430-KiB exact
+fixture with the pinned Eshkol runtime exhausted its fixed 1-GiB heap and emitted heap
+limit diagnostics, so this is explicitly parser-only hard-structure evidence, not a
+runtime-validation claim. The executable Eshkol validator instead covers exact 64
+and one-over 65 under a lowered entry policy. No runtime allocation at the hard
+storage ceilings is claimed.
 
 Version 1 accepts only `cpu`, `dense-row-major-contiguous`, parameter `f32`, and
 buffer `bool`, `i64`, or `f32`. A valid P1 state outside that codec domain is
@@ -149,7 +159,9 @@ The header field can represent at most 4096 groups, but the two-member minimum a
 4096 aggregate-member ceiling mean a canonical v1 file can contain at most 2048
 nonempty alias groups. Tests exercise that effective exact ceiling, the 4096-member
 exact ceiling, and independently checksummed one-over, overlapping, and reordered
-group encodings.
+group encodings through the independent parser. Executable Eshkol validation covers
+multiple disjoint groups and the lowered entry-policy boundary described above; the
+pinned-runtime hard-structure limitation is measured there rather than hidden.
 
 ## Container checksum and strict loading
 

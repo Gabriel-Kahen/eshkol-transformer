@@ -741,6 +741,27 @@
                   exact-file-bytes exact-metadata-bytes 8
                   (- exact-entry-count 1) 'cpu))))
 
+(check "exact hard policy ceilings admit without allocation"
+       (vector?
+        (c1-persistence-policy-internal
+         1099511627776 268435456 274877906944 4096 'cpu)))
+(expect-error "one over hard file policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627777 268435456 274877906944 4096 'cpu)))
+(expect-error "one over hard metadata policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627776 268435457 274877906944 4096 'cpu)))
+(expect-error "one over hard tensor policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627776 268435456 274877906945 4096 'cpu)))
+(expect-error "one over hard entry policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627776 268435456 274877906944 4097 'cpu)))
+
 (expect-error "wrong selected provider" 'unsupported
               (lambda ()
                 (c1-checkpoint-decode-state-internal

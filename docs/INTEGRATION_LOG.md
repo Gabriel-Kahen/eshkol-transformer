@@ -681,7 +681,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   durability conservatively unknown. Load
   follows no embedded path and rejects symlinks and non-regular inputs.
 - **Evidence:** the unsupported CachyOS / LLVM-Clang 22.1.6 compatibility probe
-  passed the focused C1 gate with the pinned Eshkol build: it reported 127 logical
+  passed the focused C1 gate with the pinned Eshkol build: it reported 136 logical
   state, schema, provider, ownership, no-alias, error, and policy checks; two fresh
   AOT builds produced byte-identical executables and checkpoint bytes with reviewed
   SHA-256 `177a762eca5a535e01da4d740e676a3481c6617b632d4abe9fe9726dc6bb2769`;
@@ -689,7 +689,12 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   structure-aware malformed, corruption, truncation, trailing-data, exact/one-over
   boundary, version, feature, checksum, overflow, UTF-8, path, alias, schema, and
   provider cases, plus 192 reproducibly seeded integrity mutations (which generally
-  prove checksum rejection, not deep-validator reachability); and the native gate
+  prove checksum rejection, not deep-validator reachability). Exact hard policy
+  values and each one-over value execute in Eshkol without allocating those sizes;
+  the independently checksummed 4096-entry/2048-group/4096-member wire boundary is
+  parser-only because an attempted approximately 430-KiB Eshkol inspect exhausted
+  the pinned runtime's fixed 1-GiB heap. The executable validator covers exact 64 and
+  one-over 65 under its lowered policy. The native gate
   passed failpoint publication/cleanup, pre-existing destination, orphan, short/EINTR/
   zero I/O, C/C++ ABI, exact-symbol, deterministic-object, ASan, and UBSan checks.
   The earlier repository-wide run passed F0/Q0/A0/K1/E1/E1B/I1/X1/P1 and production
