@@ -30,6 +30,12 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make smoke'
 ```
 
+Run the focused T1 tokenizer gate with:
+
+```bash
+/usr/bin/bash -c 'make test-t1'
+```
+
 `toolchain` clones and builds only the pinned Eshkol revision. `configure` rejects a
 missing, wrong-revision, wrong-version, or unsupported toolchain instead of falling
 back to Python or another runtime. `build` performs an explicit AOT compile,
@@ -78,6 +84,18 @@ deterministic format, corruption, ownership, native ABI, failpoint, sanitizer, a
 production-isolation gate with `make test-c1`. C1 intentionally exposes no public
 trainer checkpoint API and no production tensor codec; C2 owns that composition.
 
+T1's Eshkol-authored byte tokenizer, special-token rules, canonical artifact,
+fingerprint, C1-backed persistence limits, and exact-I1 output lifetime are specified
+in [docs/TOKENIZER_FORMAT.md](docs/TOKENIZER_FORMAT.md). The build creates one
+canonical `build/t1/libeshkol_transformer_wave1.a` aggregate from trusted source
+inputs and localizes it once. Its public boundary is exactly 46 globals: six E1
+error accessors, seventeen P1 module/state wrappers, eight D1 data wrappers, six X1
+configuration wrappers, one C1 persistence-policy wrapper, and eight T1 tokenizer
+wrappers. The installed `transformer.persistence` surface contains only
+`persistence-policy`; C2 checkpoint operations remain unavailable. The authoritative
+runtime test is compiled Eshkol AOT; Python participates only as an independent
+development oracle and never in the production archive or execution path.
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
@@ -94,6 +112,7 @@ See:
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
+- [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

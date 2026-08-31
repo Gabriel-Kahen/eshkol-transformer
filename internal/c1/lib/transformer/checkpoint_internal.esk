@@ -3,6 +3,7 @@
 (require transformer.module)
 (require e1b_error_consumer_private)
 (require c1_sha256)
+(require transformer.persistence_policy_internal)
 
 (extern i64 c1-native-read-exact ptr ptr i64 i64
         :real et_checkpoint_io_read_exact_v1)
@@ -20,7 +21,6 @@
          c1-checkpoint-inspect-internal
          c1-checkpoint-metadata-ref-internal)
 
-(define c1-policy-tag (vector 'c1-persistence-policy))
 (define c1-codec-tag (vector 'c1-checkpoint-codec))
 (define c1-metadata-tag (vector 'c1-checkpoint-metadata))
 (define c1-magic
@@ -165,36 +165,6 @@
 (define (c1-read-u64 bytes offset) (c1-read-le bytes offset 8))
 
 (define (c1-min left right) (if (< left right) left right))
-
-(define (c1-valid-policy-values? max-file max-metadata max-tensor
-                                 max-tensors device)
-  (and (c1-u64? max-file) (> max-file 0)
-       (<= max-file c1-hard-file-bytes)
-       (c1-u64? max-metadata) (> max-metadata 0)
-       (<= max-metadata c1-hard-metadata-bytes)
-       (c1-u64? max-tensor) (> max-tensor 0)
-       (<= max-tensor c1-hard-tensor-bytes)
-       (c1-u64? max-tensors) (> max-tensors 0)
-       (<= max-tensors c1-hard-tensors)
-       (eq? device 'cpu)))
-
-(define (c1-persistence-policy-internal max-file max-metadata max-tensor
-                                        max-tensors device)
-  (if (not (c1-valid-policy-values?
-            max-file max-metadata max-tensor max-tensors device))
-      (c1-fail 'invalid-argument 'persistence-policy
-               "invalid or unsupported checkpoint persistence policy")
-      (vector c1-policy-tag max-file max-metadata max-tensor max-tensors 'cpu)))
-
-(define (c1-require-policy operation policy)
-  (if (and (vector? policy) (= (vector-length policy) 6)
-           (eq? (vector-ref policy 0) c1-policy-tag)
-           (c1-valid-policy-values?
-            (vector-ref policy 1) (vector-ref policy 2)
-            (vector-ref policy 3) (vector-ref policy 4)
-            (vector-ref policy 5)))
-      policy
-      (c1-fail 'invalid-argument operation "expected C1 persistence policy")))
 
 (define (c1-checkpoint-codec-internal provider-id encode decode)
   (if (or (not (symbol? provider-id))

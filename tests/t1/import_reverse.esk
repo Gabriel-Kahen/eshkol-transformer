@@ -1,0 +1,19 @@
+(require transformer.error_public)
+(require transformer.tokenizer)
+(require transformer.persistence)
+(require transformer.data)
+(require transformer.module)
+(require transformer.config)
+
+(define caught
+  (guard (raised (#t raised))
+    (tokenizer-byte 'not-an-aggregate-config)
+    #f))
+
+(if (and (transformer-error? caught)
+         (eq? (transformer-error-category caught) 'invalid-argument)
+         (eq? (transformer-error-operation caught) 'tokenizer-byte)
+         (string? (transformer-error-message caught))
+         (eq? (transformer-error-cause caught) #f))
+    (begin (display "t1-import-reverse:v1") (newline))
+    (exit 1))

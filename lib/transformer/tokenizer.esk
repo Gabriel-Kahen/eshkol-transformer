@@ -1,0 +1,96 @@
+;;; Wave 1 installed tokenizer facade. All implementation and identity state
+;;; live in the one prelocalized canonical Wave 1 aggregate.
+(require transformer.error_consumer)
+
+(provide tokenizer-byte tokenizer-load tokenizer-save! tokenizer-encode
+         tokenizer-decode tokenizer-vocab-size tokenizer-fingerprint
+         tokenizer-special-token-id)
+
+(define t1-safe-tokenizer-byte
+  (let ()
+    (extern void t1-public-tokenizer-byte ptr ptr
+            :real et_e1b_public_t1_tokenizer_byte_v1)
+    (lambda (config)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-byte (vector config) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-load
+  (let ()
+    (extern void t1-public-tokenizer-load ptr ptr ptr
+            :real et_e1b_public_t1_tokenizer_load_v1)
+    (lambda (path policy)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-load (vector path) (vector policy) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-save
+  (let ()
+    (extern void t1-public-tokenizer-save ptr ptr ptr ptr
+            :real et_e1b_public_t1_tokenizer_save_v1)
+    (lambda (tokenizer path policy)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-save
+         (vector tokenizer) (vector path) (vector policy) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-encode
+  (let ()
+    (extern void t1-public-tokenizer-encode ptr ptr ptr
+            :real et_e1b_public_t1_tokenizer_encode_v1)
+    (lambda (tokenizer input)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-encode (vector tokenizer) (vector input) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-decode
+  (let ()
+    (extern void t1-public-tokenizer-decode ptr ptr ptr
+            :real et_e1b_public_t1_tokenizer_decode_v1)
+    (lambda (tokenizer ids)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-decode (vector tokenizer) (vector ids) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-vocab-size
+  (let ()
+    (extern void t1-public-tokenizer-vocab-size ptr ptr
+            :real et_e1b_public_t1_tokenizer_vocab_size_v1)
+    (lambda (tokenizer)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-vocab-size (vector tokenizer) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-fingerprint
+  (let ()
+    (extern void t1-public-tokenizer-fingerprint ptr ptr
+            :real et_e1b_public_t1_tokenizer_fingerprint_v1)
+    (lambda (tokenizer)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-fingerprint (vector tokenizer) output)
+        (vector-ref output 0)))))
+
+(define t1-safe-tokenizer-special-token-id
+  (let ()
+    (extern void t1-public-tokenizer-special-token-id ptr ptr ptr
+            :real et_e1b_public_t1_tokenizer_special_token_id_v1)
+    (lambda (tokenizer name)
+      (let ((output (vector #f)))
+        (t1-public-tokenizer-special-token-id
+         (vector tokenizer) (vector name) output)
+        (vector-ref output 0)))))
+
+(define (tokenizer-byte config) (t1-safe-tokenizer-byte config))
+(define (tokenizer-load path policy) (t1-safe-tokenizer-load path policy))
+(define (tokenizer-save! tokenizer path policy)
+  (t1-safe-tokenizer-save tokenizer path policy))
+(define (tokenizer-encode tokenizer input)
+  (t1-safe-tokenizer-encode tokenizer input))
+(define (tokenizer-decode tokenizer ids)
+  (t1-safe-tokenizer-decode tokenizer ids))
+(define (tokenizer-vocab-size tokenizer)
+  (t1-safe-tokenizer-vocab-size tokenizer))
+(define (tokenizer-fingerprint tokenizer)
+  (t1-safe-tokenizer-fingerprint tokenizer))
+(define (tokenizer-special-token-id tokenizer name)
+  (t1-safe-tokenizer-special-token-id tokenizer name))

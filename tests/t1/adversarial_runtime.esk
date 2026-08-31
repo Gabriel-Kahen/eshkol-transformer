@@ -1,0 +1,149 @@
+(require transformer.config)
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (bytes-equal? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+
+(define (argument index)
+  (let loop ((remaining (cdr (command-line))) (position 0))
+    (if (= position index) (car remaining)
+        (loop (cdr remaining) (+ position 1)))))
+
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define minimal
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":8,\"model.hidden-size\":8,\"model.layer-count\":1,\"model.query-head-count\":1,\"model.vocabulary-size\":256,\"run.seed\":0}")
+(define raw (tokenizer-byte (config-resolve (config-parse minimal) '())))
+(define strict (tokenizer-load (argument 0) policy))
+(define overlap (tokenizer-load (argument 1) policy))
+(define optional (tokenizer-load (argument 2) policy))
+
+(check "higher minor inert optional field loads"
+       (and (= (tokenizer-vocab-size optional) 259)
+            (string? (tokenizer-fingerprint optional))))
+(check "repeated overlapping omit insertions load and round trip"
+       (and (= (tokenizer-vocab-size overlap) 258)
+            (= (tokenizer-special-token-id overlap "boundary") 256)
+            (= (tokenizer-special-token-id overlap "forbidden") 257)
+            (bytes-equal?
+             (tokenizer-decode overlap
+                               (tokenizer-encode overlap (bytevector 0 120 255)))
+             (bytevector 0 120 255))))
+
+(define valid-utf8
+  (list (bytevector)
+        (bytevector 65 83 67 73 73)
+        (bytevector 99 97 102 195 169 32 99 97 102 101 204 129)
+        (bytevector 206 187 208 150 215 144 216 180)
+        (bytevector 230 188 162 229 173 151 240 159 153 130)))
+(let loop ((remaining valid-utf8))
+  (if (not (null? remaining))
+      (begin
+        (check "strict valid UTF-8 remains byte exact"
+               (bytes-equal?
+                (tokenizer-decode strict
+                                  (tokenizer-encode strict (car remaining)))
+                (car remaining)))
+        (loop (cdr remaining)))))
+
+(define malformed-utf8
+  (list (bytevector 128)
+        (bytevector 192 128)
+        (bytevector 224 128 128)
+        (bytevector 237 160 128)
+        (bytevector 244 144 128 128)
+        (bytevector 245 128 128 128)
+        (bytevector 226 130)
+        (bytevector 255)))
+(let loop ((remaining malformed-utf8))
+  (if (not (null? remaining))
+      (let* ((input (car remaining))
+             (raw-shell (tokenizer-encode raw input)))
+        (check "raw malformed UTF-8 remains byte exact"
+               (bytes-equal? (tokenizer-decode raw raw-shell) input))
+        (check "strict encode rejects malformed UTF-8"
+               (structured-error?
+                'invalid-argument 'tokenizer-encode
+                (lambda () (tokenizer-encode strict input))))
+        (check "strict decode rejects malformed UTF-8 from sealed shell"
+               (structured-error?
+                'invalid-argument 'tokenizer-decode
+                (lambda () (tokenizer-decode strict raw-shell))))
+        (loop (cdr remaining)))))
+
+;;; Each invalid artifact is independently opened and rejected by the public
+;;; aggregate.  A valid load afterwards proves no failed parse was published.
+(define invalid-cases
+  (list
+   (list "corrupt body/checksum" 'corrupt-data 3)
+   (list "truncated artifact" 'corrupt-data 4)
+   (list "trailing artifact bytes" 'corrupt-data 5)
+   (list "bad checksum" 'corrupt-data 6)
+   (list "unsupported major" 'version-mismatch 7)
+   (list "noncanonical version" 'corrupt-data 8)
+   (list "unknown required feature" 'unsupported 9)
+   (list "optional field in v1.0" 'corrupt-data 10)
+   (list "changed reserved limit" 'corrupt-data 11)
+   (list "unknown checksum algorithm" 'unsupported 12)
+   (list "payload length overflow" 'corrupt-data 13)
+   (list "overlong line" 'corrupt-data 14)
+   (list "non-ASCII artifact" 'corrupt-data 15)
+   (list "malformed special name" 'corrupt-data 16)
+   (list "special name collision" 'corrupt-data 17)
+   (list "special ID/order collision" 'corrupt-data 18)
+   (list "unknown insertion ID" 'corrupt-data 19)
+   (list "error special insertion" 'corrupt-data 20)
+   (list "unknown decode policy" 'corrupt-data 21)
+   (list "unsupported normalization" 'corrupt-data 22)
+   (list "payload size mismatch" 'corrupt-data 23)
+   (list "noncanonical insertion order" 'corrupt-data 24)
+   (list "unknown suffix insertion" 'corrupt-data 25)
+   (list "duplicate optional field" 'corrupt-data 26)
+   (list "special count above hard limit" 'corrupt-data 27)
+   (list "prefix count above hard limit" 'corrupt-data 28)
+   (list "special name above hard limit" 'corrupt-data 29)
+   (list "optional value above hard limit" 'corrupt-data 30)
+   (list "artifact above hard file limit" 'corrupt-data 31)))
+(let loop ((remaining invalid-cases))
+  (if (not (null? remaining))
+      (let ((case (car remaining)))
+        (check (car case)
+               (structured-error?
+                (car (cdr case)) 'tokenizer-load
+                (lambda ()
+                  (tokenizer-load (argument (car (cdr (cdr case)))) policy))))
+        (loop (cdr remaining)))))
+
+(check "validation failure publishes no tokenizer and valid load still works"
+       (= (tokenizer-vocab-size (tokenizer-load (argument 0) policy)) 259))
+
+(if (= failed 0)
+    (begin
+      (display "T1 ADVERSARIAL PUBLIC PASS: ") (display passed)
+      (display " delivered-runtime checks") (newline))
+    (exit 1))

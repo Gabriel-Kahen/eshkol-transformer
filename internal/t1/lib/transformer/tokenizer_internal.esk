@@ -1,0 +1,158 @@
+;;; Trusted T1 tokenizer registry for the single Wave 1 aggregate.
+;;;
+;;; This source is loaded only into the aggregate before localization. It has no
+;;; provide form, public wrapper, native declaration, persistence operation, or
+;;; I1 lifetime policy. The aggregate owns those seams. X1 registry identity is
+;;; checked directly in the same compilation unit; no standalone X1 identity is
+;;; accepted.
+
+(require e1b_error_consumer_private)
+(load "t1_tokenizer_core.esk")
+
+(define t1-private-tokenizer-registry '())
+
+(define (t1-private-raise-raw category operation message)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax t1-private-raise
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (t1-private-raise-raw category operation message))) result))))
+
+(define (t1-private-make-shell)
+  (guard (raised (#t raised))
+    (error "transformer.tokenizer:v1")))
+
+(define (t1-private-entry value)
+  (let loop ((remaining t1-private-tokenizer-registry))
+    (cond
+      ((null? remaining) #f)
+      ((eq? value (car (car remaining))) (car remaining))
+      (else (loop (cdr remaining))))))
+
+(define (t1-private-register-core core)
+  (if (not (t1-core-tokenizer? core))
+      (t1-private-raise 'internal 't1-private-register-core
+                        "invalid tokenizer core registration"))
+  (let* ((shell (t1-private-make-shell))
+         (entry (list shell core))
+         (next (cons entry t1-private-tokenizer-registry)))
+    (set! t1-private-tokenizer-registry next)
+    shell))
+
+(define (t1-private-require-core tokenizer operation category)
+  (let ((entry (t1-private-entry tokenizer)))
+    (if entry (car (cdr entry))
+        (t1-private-raise category operation
+                          "expected a registered tokenizer"))))
+
+(define (t1-private-map-core-error operation thunk)
+  (guard
+   (caught
+    ((t1-core-error? caught)
+     (t1-private-raise
+      (t1-core-error-category caught) operation
+      (t1-core-error-message caught)))
+    (else
+     (t1-private-raise 'internal operation
+                       "unexpected tokenizer core failure")))
+   (thunk)))
+
+;;; X1 v1 intentionally has no tokenizer fields. The accepted Wave 1 rule is
+;;; therefore exactly V=256 -> raw/none/empty byte tokenizer.
+(define (t1-private-tokenizer-byte config)
+  (if (not (x1-resolved? config))
+      (t1-private-raise 'invalid-argument 'tokenizer-byte
+                        "config must be a same-aggregate X1 resolved value"))
+  (let ((vocab-size
+         (x1-private-config-ref config 'model.vocabulary-size)))
+    (if (not (= vocab-size 256))
+        (t1-private-raise 'invalid-argument 'tokenizer-byte
+                          "byte tokenizer requires vocabulary size 256"))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-byte
+            (lambda ()
+              (t1-private-register-core
+               (t1-tokenizer-core-create 'raw '() '() '()))))))
+      result)))
+
+(define (t1-private-tokenizer-parse bytes metadata-limit)
+  (let ((result
+         (t1-private-map-core-error
+          'tokenizer-load
+          (lambda ()
+            (let ((parsed
+                   (t1-tokenizer-core-parse-under-limit bytes metadata-limit)))
+              (t1-private-register-core parsed))))))
+    result))
+
+(define (t1-private-tokenizer-serialize tokenizer)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-save! 'invalid-state)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-save!
+            (lambda () (t1-tokenizer-core-serialize core)))))
+      result)))
+
+(define (t1-private-tokenizer-encode-staging tokenizer input)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-encode
+                                  'invalid-argument)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-encode
+            (lambda () (t1-tokenizer-core-encode-i64-le core input)))))
+      result)))
+
+(define (t1-private-tokenizer-decode-staging tokenizer encoded)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-decode
+                                  'invalid-argument)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-decode
+            (lambda () (t1-tokenizer-core-decode-i64-le core encoded)))))
+      result)))
+
+(define (t1-private-tokenizer-vocab-size tokenizer)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-vocab-size
+                                  'invalid-state)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-vocab-size
+            (lambda () (t1-tokenizer-core-vocab-size core)))))
+      result)))
+
+(define (t1-private-tokenizer-fingerprint tokenizer)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-fingerprint
+                                  'invalid-state)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-fingerprint
+            (lambda () (t1-tokenizer-core-fingerprint core)))))
+      result)))
+
+(define (t1-private-tokenizer-payload-size tokenizer)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-save! 'invalid-state)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-save!
+            (lambda () (t1-tokenizer-core-payload-size core)))))
+      result)))
+
+(define (t1-private-tokenizer-special-token-id tokenizer name)
+  (let ((core
+         (t1-private-require-core tokenizer 'tokenizer-special-token-id
+                                  'invalid-argument)))
+    (let ((result
+           (t1-private-map-core-error
+            'tokenizer-special-token-id
+            (lambda () (t1-tokenizer-core-special-token-id core name)))))
+      result)))

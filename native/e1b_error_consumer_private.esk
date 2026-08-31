@@ -2,6 +2,8 @@
 
 (require transformer.error_internal)
 
+(provide et-e1b-private-raise)
+
 (define (et-e1b-private-raise category operation message details cause)
   (begin
     (transformer-error-raise category operation message details cause)

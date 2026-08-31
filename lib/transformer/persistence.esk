@@ -1,0 +1,19 @@
+;;; Wave 1 public persistence surface. Checkpoint operations remain C2-owned.
+(require transformer.error_consumer)
+
+(provide persistence-policy)
+
+(define t1-safe-persistence-policy
+  (let ()
+    (extern void t1-public-persistence-policy ptr ptr ptr ptr ptr ptr
+            :real et_e1b_public_c1_persistence_policy_v1)
+    (lambda (max-file max-metadata max-tensor max-tensors device)
+      (let ((output (vector #f)))
+        (t1-public-persistence-policy
+         (vector max-file) (vector max-metadata) (vector max-tensor)
+         (vector max-tensors) (vector device) output)
+        (vector-ref output 0)))))
+
+(define (persistence-policy max-file max-metadata max-tensor max-tensors device)
+  (t1-safe-persistence-policy
+   max-file max-metadata max-tensor max-tensors device))

@@ -1,0 +1,77 @@
+;;; Build-only test for semantic branches that public sealed-shell construction
+;;; intentionally makes unreachable.  This file is never linked or installed.
+(load "internal/t1/lib/t1_tokenizer_core.esk")
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (core-error? category thunk)
+  (guard (caught
+          (#t (and (t1-core-error? caught)
+                   (eq? (t1-core-error-category caught) category))))
+    (thunk)
+    #f))
+
+(define configured
+  (t1-tokenizer-core-create
+   'raw
+   (list (list 256 "omit" 'omit) (list 257 "forbidden" 'error))
+   '() '()))
+(define forbidden (make-bytevector 8 0))
+(bytevector-u8-set! forbidden 0 1)
+(bytevector-u8-set! forbidden 1 1)
+
+(check "error-policy special decode rejects"
+       (core-error?
+        'invalid-argument
+        (lambda () (t1-tokenizer-core-decode-i64-le configured forbidden))))
+(check "unknown special decode rejects"
+       (let ((unknown (make-bytevector 8 0)))
+         (bytevector-u8-set! unknown 0 2)
+         (bytevector-u8-set! unknown 1 1)
+         (core-error?
+          'invalid-argument
+          (lambda () (t1-tokenizer-core-decode-i64-le configured unknown)))))
+
+(define malformed-specials
+  (list
+   (list (list 255 "bad" 'omit))
+   (list (list 257 "gap" 'omit))
+   (list (list 256 "same" 'omit) (list 257 "same" 'omit))
+   (list (list 256 "Upper" 'omit))
+   (list (list 256 "policy" 'replace))))
+(let loop ((remaining malformed-specials))
+  (if (not (null? remaining))
+      (begin
+        (check "malformed special grammar rejects before construction"
+               (core-error?
+                'invalid-argument
+                (lambda ()
+                  (t1-tokenizer-core-create 'raw (car remaining) '() '()))))
+        (loop (cdr remaining)))))
+
+(check "unknown insertion rejects before construction"
+       (core-error?
+        'invalid-argument
+        (lambda ()
+          (t1-tokenizer-core-create
+           'raw (list (list 256 "omit" 'omit)) (list 257) '()))))
+(check "error insertion rejects before construction"
+       (core-error?
+        'invalid-argument
+        (lambda ()
+          (t1-tokenizer-core-create
+           'raw (list (list 256 "forbidden" 'error)) (list 256) '()))))
+
+(if (= failed 0)
+    (begin
+      (display "T1 CORE ADVERSARIAL PASS: ") (display passed)
+      (display " build-only semantic checks") (newline))
+    (exit 1))
