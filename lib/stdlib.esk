@@ -1,0 +1,4 @@
+;;; D1 precompiled module root. The name intentionally activates the pinned
+;;; compiler's verified precompiled-module declaration path for transformer.data.
+
+(require transformer.data)

@@ -1,0 +1,2 @@
+;; Never installed. Its exact repository identity selects the D1 test-fault build.
+(load "d1_e1b_private.esk")

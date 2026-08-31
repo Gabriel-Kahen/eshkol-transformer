@@ -1,0 +1,34 @@
+;;; Public checked-limit coverage. Private arithmetic helpers must remain lexical;
+;;; these calls prove that every externally supplied size is rejected before I/O.
+
+(require transformer.data)
+(require transformer.error_public)
+
+(define failures 0)
+
+(define (expect-invalid thunk)
+  (guard (raised
+          (#t
+           (if (and (transformer-error? raised)
+                    (eq? (transformer-error-category raised) 'invalid-argument)
+                    (eq? (transformer-error-operation raised)
+                         'token-corpus-validate))
+               #t
+               (set! failures (+ failures 1)))))
+    (thunk)
+    (set! failures (+ failures 1))))
+
+(expect-invalid
+ (lambda () (token-corpus-validate "." 9223372036854775808 1 1)))
+(expect-invalid
+ (lambda () (token-corpus-validate "." 1 9223372036854775808 1)))
+(expect-invalid
+ (lambda () (token-corpus-validate "." 1 1 9223372036854775808)))
+(expect-invalid
+ (lambda () (token-corpus-validate "." 1 1 -1)))
+(expect-invalid
+ (lambda () (token-corpus-validate "." 1 1 1.0)))
+
+(if (= failures 0)
+    (begin (display "D1_ARITHMETIC_PASS") (newline))
+    (begin (display "D1_ARITHMETIC_FAIL") (newline) (exit 1)))

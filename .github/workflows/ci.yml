@@ -55,7 +55,7 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make build'
 
-      - name: Test (F0/A0/B0/E1/E1B/K1/I1/P1/X1)
+      - name: Test (F0/A0/B0/D1/E1/E1B/I1/K1/P1/Q0/X1)
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make test'
 

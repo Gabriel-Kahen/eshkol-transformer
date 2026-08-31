@@ -493,3 +493,127 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #22](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/22);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [PR #31](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31).
+
+## 2026-08-28 — D1 / issue #18
+
+- **Decision:** proposed; the binary v1.0 format direction is accepted with conditions
+  by the integration task, while repository acceptance remains pending review.
+- **Contract:** `(require transformer.data)` exports the versioned, checksummed,
+  manifest-last token-corpus writer, strict validator, identity-backed
+  observationally immutable summary, and six summary accessors documented in
+  `docs/PUBLIC_API_CONTRACT.md`. Summary metadata is validated, deep-owned, and held
+  only in a private lexical identity registry; mutable or forged receivers are not
+  summaries, and no constructor escapes. The corpus uses
+  `manifest.etm`, canonical `shard-%016d.ets` names, distinct eight-byte magic values,
+  little-endian signed-`i64` token semantics, SHA-256 trailers, opaque canonical UTF-8
+  tokenizer fingerprints bounded to 1..192 bytes, repeated identity/count metadata,
+  and exact v1.0 rejection rules in `docs/TOKEN_SHARD_FORMAT.md`. The fingerprint is
+  stored and compared byte-for-byte; D1 does not parse or assume T1's concurrently
+  proposed lexical form. A narrow native boundary exclusively creates each
+  deterministic temporary, loops through partial writes, checks every byte and
+  `close(2)`, and permits rename only on success; production contains no fault
+  injection or fallback. The manifest rename is the publication commit point, not a
+  whole-directory atomicity, `fsync`, or power-loss durability claim. The pinned
+  compiler's supported D1 packaging is one combined, separately compiled E1B/D1
+  object: its installed facade provides exactly the eight accepted procedures, the
+  shared E1 registry and six accessors live in that object, and the fixed raise seam,
+  private Eshkol implementation, and checked byte/write/close primitive are localized.
+- **Evidence:** Historical evidence before the current D1-R corrections: after
+  rebasing onto E1 merge `80371a1`, the local compatibility-only
+  CachyOS x86-64 / LLVM-Clang 22.1.6 run passed `/usr/bin/bash -c 'make test-d1'`:
+  byte-identical strict compilation with a production-E1 depfile, native SHA-256 and
+  binary I/O/rename/lock/UTF-8 reachability under an unusable runtime `PATH`, checked
+  arithmetic and production-E1 mapping/identity probes, and 14 deterministic/
+  reference/corruption/boundary groups. The publication cleanup test passed five
+  additional fresh runs. A0 passed; E1 passed 112 checks; Q0 passed 23 tests; the
+  repository-wide `make test`, explicit `make build`, `make smoke`, and diff hygiene
+  gates passed, including 41 B0 tests and the integrated K1 gate. All Eshkol evidence
+  used provenance-verified canonical
+  `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de`, compiler
+  `v1.3.4-evolve`. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33269298912](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33269298912)
+  passed build, integrated tests, smoke, and the reproducible benchmark at obsolete
+  PR head `58d3a5d`. D1-R subsequently requested three high-priority corrections at
+  exact head `52cb854e3e76e9b834ce76631b0acf6c5328553d`: checked write/close status,
+  nonforgeable observational summary immutability, and removal of named E1
+  constructor reachability from `(require transformer.data)`. The candidate is
+  rebased onto accepted K1/E1 documentation main commit
+  `8ab5e5cb00a07d8bff6ffc7c52b72cbae2d6d832` and implements those contract changes.
+  On the provenance-verified canonical pin, the unsupported CachyOS/LLVM-Clang 22
+  compatibility run passed `make test-d1` with 16 format/native-I/O groups plus the
+  compiled SHA-256, primitive, arithmetic, E1, summary-opacity, and fresh-cache AOT
+  reachability probes. It also passed `make test-a0 test-e1` (including 112 E1
+  checks), the standalone 23-test Q0 gate, full `make test` (including 41 B0 tests
+  and K1 sanitizers), explicit `make build`, `make smoke`, shell syntax, and diff
+  hygiene. Independent native-I/O/security, summary-opacity, public-boundary, and
+  documentation reviews found no remaining actionable issue. Supported Ubuntu
+  22.04 / LLVM-Clang 21.1.8
+  [CI run 33273402656](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33273402656)
+  passed build, integrated tests, smoke, and the reproducible benchmark at exact
+  implementation head `aa3b9f2a83eff57af7a4f45e2e079f6a284ebd4b`. Any later
+  documentation-only head requires its own exact-head confirmation before re-review.
+  The subsequent D1-F repair rebased the complete candidate onto current main after
+  accepted I1 integration and changed the normal build/test path to consume the same
+  precompiled Eshkol facade. Fresh-cache source/object/AOT negatives now cover
+  direct calls, first-class bindings, wrong arities, the former ninth FFI alias, and
+  current write/publish/implementation/list/SHA helper families. Depfile, declared
+  provide, `nm`, `readelf`, `strings`, and crafted relocatable-link checks prove those
+  bindings and guessed native aliases are unavailable. The post-rebase local
+  compatibility lane passed the 16-group D1 format/native-I/O suite and all compiled
+  primitive, arithmetic, E1-mapping, summary-opacity, cleanup/no-manifest, and public
+  boundary probes. Exact-head supported CI and D1-R re-review remain pending. The
+  historical pre-correction runs are not acceptance evidence for this repair.
+  After E1B acceptance, the dependency-finalization repair rebased D1 onto main
+  `60c9afa` (including accepted I1 and E1B), replaced all generic core-dispatch use
+  with the fixed five-value `et-e1b-private-raise` call in a never-installed trusted
+  root, and packaged D1 with E1B as one registry-owning localized object. The normal
+  artifact exposes exactly six E1B accessor symbols plus eight D1 wrapper symbols;
+  checked I/O, the fixed raise seam, constructors, core dispatcher, private bridge,
+  and D1 helper families are local. Public depfiles contain only
+  `transformer.data` and `transformer.error_consumer`; exact repository normal/fault
+  undefined-symbol manifests, `nm`, `readelf`, `strings`, and crafted-link evidence
+  gate the completed artifact. A staged installed-public root also rejects explicit
+  core, internal, trusted-root, and implementation imports in fresh source, object,
+  and AOT probes. Both mixed import orders preserve error identity and
+  all accessors across later failures. The pre-E1B golden corpus remained
+  byte-identical, and the compatibility lane passed D1's 16 format/fault groups,
+  A0, E1 (112 checks), E1B (35 checks), I1, Q0 (23 tests), and the full integrated
+  suite. Exact-head supported CI and D1-R re-review remain pending.
+  D1-R2 then identified a caller-controlled build-policy mismatch at exact head
+  `383056853a1f269e28a413c346c2a56de0b1874f`. The repair removes
+  `E1B_PACKAGE_POLICY` selection from the generic builder: D1 normal, D1 test-fault,
+  and X1 policy now derive only from their complete canonical repository root,
+  bridge, rename, export, and include tuples. Normal and fault D1 use distinct exact
+  never-installed roots; their undefined manifests and `data_io.c` identity remain
+  hard-coded. Copied/arbitrary roots, partial tuples, missing/extra/shadow includes,
+  all policy overrides, and direct fault publication beneath the production artifact
+  directory are rejected before toolchain use or output/evidence mutation. The
+  compiler subprocess clears caller `ESHKOL_PATH` and pins `ESHKOL_LIB_DIR`; positive
+  normal/fault builds with hostile shadow modules still record only canonical source
+  paths. Sentinel negatives prove rejected routes preserve preexisting object,
+  archive, and evidence bytes. Focused D1, E1B, X1, A0, E1, and I1 gates pass on the
+  compatibility lane, as do the full `make test`, explicit `make build`, and
+  `make smoke` gates. Supported exact-head CI remains required.
+  After P1 merged at `b68ec9f9a64583800cfa888da2916f6ea99134b4`, the
+  dependency-order rebase retained that hardened classifier and added P1 only as
+  its exact repository trusted-root/bridge/rename/export tuple with no optional
+  include directories and its fixed undefined-symbol manifest. P1 policy evidence,
+  trusted-root depfile provenance, and a hostile `ESHKOL_PATH`/`ESHKOL_LIB_DIR`
+  build are now explicit gates. Focused E1B, X1, P1, D1, A0, E1, and production
+  Python-isolation gates pass, as do the integrated `make test`, explicit build,
+  and smoke compatibility gates; supported exact-head CI remains required.
+- **Dependencies / retest:** E1 issue #23 and E1B issue #33 are merged. The installed
+  D1 facade imports only `transformer.error_consumer`; `transformer.error_internal`,
+  `transformer.error_core`, the fixed raise seam, and all constructors are absent
+  from its source dependency graph. Consumers must link the single completed D1/E1B
+  artifact and must not combine it with another registry-owning E1B artifact.
+  Compiler upgrades must rerun all source/object/AOT and crafted-link boundary checks.
+  T1/D2/T2/DATA4 may consume this contract only after integration acceptance; D2
+  retains all iteration, shuffle, packing, batching, and cursor behavior. A later
+  streaming/I1 integration must rerun byte-determinism, publication, corruption,
+  and scale tests.
+- **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
+  [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);
+  [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028);
+  [D1-R2 requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5471306523).

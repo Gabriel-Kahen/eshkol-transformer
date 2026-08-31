@@ -1,0 +1,11 @@
+(require transformer.data)
+
+(define public-data-bindings
+  (list token-corpus-write!
+        token-corpus-validate
+        token-corpus-summary-shard-count
+        token-corpus-summary-total-tokens
+        token-corpus-summary-vocab-size
+        token-corpus-summary-shard-token-limit
+        token-corpus-summary-tokenizer-fingerprint
+        token-corpus-summary-total-shard-bytes))

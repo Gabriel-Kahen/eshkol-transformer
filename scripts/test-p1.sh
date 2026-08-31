@@ -148,7 +148,27 @@ grep -F 'P1 wider undefined-symbol policy requires the exact reviewed input tupl
 test ! -e "${p1_tmp}/mismatched-package.o"
 test ! -e "${p1_tmp}/mismatched-package.o.evidence"
 
-E1B_PACKAGE_PROFILE=attacker \
+mkdir -p "${p1_tmp}/unexpected-include"
+if "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${p1_trusted_source}" \
+    "${PROJECT_ROOT}/native/p1_package_bridge.c" \
+    "${PROJECT_ROOT}/native/p1_package_renames.txt" \
+    "${PROJECT_ROOT}/native/p1_package_public_exports.txt" \
+    "${p1_tmp}/extra-include-package.o" \
+    "${p1_tmp}/unexpected-include" \
+    >"${p1_tmp}/extra-include-package.log" 2>&1; then
+  die "P1 exact tuple accepted an optional include directory"
+fi
+grep -F 'P1 wider undefined-symbol policy requires the exact reviewed input tuple' \
+  "${p1_tmp}/extra-include-package.log" >/dev/null
+test ! -e "${p1_tmp}/extra-include-package.o"
+test ! -e "${p1_tmp}/extra-include-package.o.evidence"
+
+mkdir -p "${p1_tmp}/shadow"
+printf '(error "hostile P1 private seam must never load")\n' \
+  >"${p1_tmp}/shadow/e1b_error_consumer_private.esk"
+ESHKOL_PATH="${p1_tmp}/shadow" ESHKOL_LIB_DIR="${p1_tmp}/shadow" \
+  E1B_PACKAGE_PROFILE=attacker \
   "${PROJECT_ROOT}/scripts/build-p1-package.sh" "${p1_package_object}"
 "${PROJECT_ROOT}/scripts/build-p1-package.sh" \
   "${p1_tmp}/package-b/eshkol_transformer_p1.o"
@@ -160,6 +180,19 @@ for evidence in global-defined.txt undefined.txt expected-undefined.txt \
   cmp "${p1_package_object}.evidence/${evidence}" \
     "${p1_tmp}/package-b/eshkol_transformer_p1.o.evidence/${evidence}"
 done
+grep -Fx $'package_policy\tp1' \
+  "${p1_package_object}.evidence/allowlist-provenance.tsv" >/dev/null
+grep -F "${p1_trusted_source}" \
+  "${p1_package_object}.evidence/private.d" >/dev/null || \
+  die "P1 package depfile omits the exact trusted root"
+if grep -F "${p1_public_source}" \
+    "${p1_package_object}.evidence/private.d" >/dev/null; then
+  die "P1 package depfile contains the installed public root"
+fi
+if grep -F "${p1_tmp}/shadow" \
+    "${p1_package_object}.evidence/private.d" >/dev/null; then
+  die "P1 package depfile contains hostile environment source"
+fi
 ar rcsD "${p1_package_archive}" "${p1_package_object}"
 nm -s "${p1_package_archive}" | \
   awk '/^Archive index:$/ { in_index = 1; next }

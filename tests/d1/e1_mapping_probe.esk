@@ -1,0 +1,33 @@
+;;; Exercise D1's public file-error normalization without importing E1 constructors.
+
+(require transformer.data)
+(require transformer.error_public)
+
+(define (probe-list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+
+(define (probe-list-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted)
+        (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define arguments (command-line))
+(if (< (probe-list-length arguments) 2)
+    (begin (display "D1_E1_MAPPING_FAIL missing path") (newline) (exit 64)))
+
+(define passed #f)
+(guard (mapped
+        (#t
+         (if (and (transformer-error? mapped)
+                  (eq? (transformer-error-category mapped) 'io)
+                  (eq? (transformer-error-operation mapped)
+                       'token-corpus-validate)
+                  (eq? (transformer-error-cause mapped) #f))
+             (set! passed #t))))
+  (token-corpus-validate (probe-list-ref arguments 1) 1048576 1048576 1048576))
+
+(if passed
+    (begin (display "D1_E1_MAPPING_PASS") (newline))
+    (begin (display "D1_E1_MAPPING_FAIL") (newline) (exit 1)))

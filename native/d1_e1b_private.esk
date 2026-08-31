@@ -1,0 +1,7 @@
+;;; Trusted D1/E1B package root.  This source and everything it loads are build
+;;; inputs only; installed consumers receive transformer/data.esk and the
+;;; completed localized object.
+
+(require e1b_error_consumer_private)
+
+(load "eshkol_transformer/token_shard.esk")
