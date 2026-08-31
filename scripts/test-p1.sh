@@ -585,4 +585,4 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
   die "P1 strict load creates or binds a temporary expected state"
 fi
 
-printf 'P1 PASS: E1B-integrated public/private packaging, 178 structural checks, 183 native checks, 28 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+printf 'P1 PASS: E1B-integrated public/private packaging, 178 structural checks, 183 native checks, 78 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'

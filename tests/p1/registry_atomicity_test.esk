@@ -31,6 +31,21 @@
             #f)))
     (check label caught)))
 
+(define (expect-error-contract label category operation thunk)
+  (let ((caught
+          (guard (raised
+                   (#t
+                     (and (transformer-error? raised)
+                          (eq? category
+                               (transformer-error-category raised))
+                          (eq? operation
+                               (transformer-error-operation raised))
+                          (null? (transformer-error-details raised))
+                          (eq? (transformer-error-cause raised) #f))))
+            (thunk)
+            #f)))
+    (check label caught)))
+
 (define (details-ref details key)
   (cond
     ((null? details) #f)
@@ -45,6 +60,63 @@
     (module-register-parameter-internal!
       module "weight" (fixture-payload shape name))
     module))
+
+(define (build-chain edges)
+  (let ((root (module-create-fixture-internal)))
+    (let loop ((remaining edges) (tail root))
+      (if (= remaining 0)
+          (vector root tail)
+          (let ((child (module-create-fixture-internal)))
+            (module-register-child-internal! tail "n" child)
+            (loop (- remaining 1) child))))))
+
+(define (path-at-depth child-edges leaf)
+  (let loop ((remaining child-edges) (result (list leaf)))
+    (if (= remaining 0)
+        result
+        (loop (- remaining 1) (cons "n" result)))))
+
+(define (proper-list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (fixture-device-payload device name)
+  (fixture-tensor-internal '(1) 'i64 device (vector name 'bits-v1)))
+
+(define (fill-ties! module handle count)
+  (let loop ((index 0) (last handle))
+    (if (= index count)
+        last
+        (loop (+ index 1)
+              (module-register-tied-parameter-internal!
+                module (string-append "tie-" (number->string index))
+                handle)))))
+
+(define (build-entry-batches batch-count entries-per-batch)
+  (let ((root (module-create-fixture-internal)))
+    (let loop ((index 0) (last-base #f) (last-handle #f))
+      (if (= index batch-count)
+          (vector root last-base last-handle)
+          (let* ((child (module-create-fixture-internal))
+                 (base
+                   (module-register-parameter-internal!
+                     child "base" (fixture-payload '(1) index)))
+                 (last
+                   (fill-ties! child base (- entries-per-batch 1))))
+            (module-register-child-internal!
+              root (string-append "batch-" (number->string index)) child)
+            (loop (+ index 1) base last))))))
+
+(define (fill-empty-children! module count prefix)
+  (let loop ((index 0))
+    (if (= index count)
+        #t
+        (begin
+          (module-register-child-internal!
+            module (string-append prefix (number->string index))
+            (module-create-fixture-internal))
+          (loop (+ index 1))))))
 
 ;; A test-only sentinel injects an impossible status/code pair without adding a
 ;; production symbol. The trusted mapper must reject the pair as bounded internal
@@ -162,8 +234,305 @@
   (check "repeated strict load preserves tombstone count"
          (= (p1-test-tombstone-count) tombstones-before)))
 
-(if (= checks 28)
+;; The deepest legal leaf has 63 child segments plus its local name. Every
+;; generated path must round-trip through tree/state lookup, and strict load
+;; must finish with only the precomputed bounded finalization tail after commit.
+(let* ((source-chain (build-chain 63))
+       (source (vector-ref source-chain 0))
+       (source-tail (vector-ref source-chain 1))
+       (deep-path (path-at-depth 63 "weight"))
+       (buffer-path (path-at-depth 63 "state"))
+       (tie-path (path-at-depth 63 "tied"))
+       (source-handle
+         (module-register-parameter-internal!
+           source-tail "weight" (fixture-payload '(2) 'deep-source)))
+       (source-tie
+         (module-register-tied-parameter-internal!
+           source-tail "tied" source-handle))
+       (source-buffer
+         (module-register-buffer-internal!
+           source-tail "state" (fixture-device-payload 'cpu 'deep-buffer)))
+       (source-terminal (module-create-fixture-internal))
+       (source-terminal-binding
+         (module-register-child-internal! source-tail "terminal" source-terminal))
+       (source-tree (module-parameters source))
+       (source-state (module-state-dict source))
+       (destination-chain (build-chain 63))
+       (destination (vector-ref destination-chain 0))
+       (destination-tail (vector-ref destination-chain 1))
+       (destination-handle
+         (module-register-parameter-internal!
+           destination-tail "weight" (fixture-payload '(2) 'deep-old)))
+       (destination-storage
+         (parameter-handle-tensor-identity-internal destination-handle))
+       (destination-tie
+         (module-register-tied-parameter-internal!
+           destination-tail "tied" destination-handle))
+       (destination-buffer
+         (module-register-buffer-internal!
+           destination-tail "state" (fixture-device-payload 'cpu 'deep-old-buffer)))
+       (destination-terminal (module-create-fixture-internal))
+       (destination-terminal-binding
+         (module-register-child-internal!
+           destination-tail "terminal" destination-terminal))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (check "exact-depth generated path has 64 segments"
+         (= (proper-list-length deep-path) 64))
+  (check "exact-depth tree lookup accepts generated path"
+         (eq? (parameter-tree-handle source-tree deep-path) source-handle))
+  (check "exact-depth handle reports canonical alias path"
+         (equal? (parameter-handle-path source-handle) tie-path))
+  (check "exact-depth tie path is generated"
+         (and (equal? (parameter-handle-path source-tie) tie-path)
+              (eq? (parameter-tree-handle source-tree tie-path)
+                   source-handle)))
+  (check "exact-depth parameter state access"
+         (equal? (fixture-tensor-payload-internal
+                   (state-dict-tensor source-state deep-path))
+                 (vector 'deep-source 'bits-v1)))
+  (check "exact-depth buffer state access"
+         (equal? (fixture-tensor-payload-internal
+                   (state-dict-tensor source-state buffer-path))
+                 (vector 'deep-buffer 'bits-v1)))
+  (check "exact-depth strict load succeeds"
+         (module-load-state-dict! destination source-state))
+  (check "exact-depth load preserves live identities"
+         (= (p1-test-live-count) live-before))
+  (check "exact-depth load preserves tombstones"
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "exact-depth load preserves handle identity"
+         (eq? (parameter-tree-handle (module-parameters destination) deep-path)
+              destination-handle))
+  (check "exact-depth load preserves tensor storage identity"
+         (eq? destination-storage
+              (parameter-handle-tensor-identity-internal destination-handle)))
+  (check "exact-depth load round-trips paths, aliases, parameters, and buffers"
+         (let ((destination-state (module-state-dict destination)))
+           (and (equal? (state-dict-paths destination-state)
+                        (state-dict-paths source-state))
+                (equal? (state-dict-alias-groups destination-state)
+                        (state-dict-alias-groups source-state))
+                (equal? (fixture-tensor-payload-internal
+                          (state-dict-tensor destination-state deep-path))
+                        (vector 'deep-source 'bits-v1))
+                (equal? (fixture-tensor-payload-internal
+                          (state-dict-tensor destination-state tie-path))
+                        (vector 'deep-source 'bits-v1))
+                (equal? (fixture-tensor-payload-internal
+                          (state-dict-tensor destination-state buffer-path))
+                        (vector 'deep-buffer 'bits-v1)))))
+  (expect-error "exact-depth successful load finalizes topology" 'invalid-state
+                (lambda ()
+                  (module-register-buffer-internal!
+                    destination-terminal "late"
+                    (fixture-device-payload 'cpu 'late)))))
+
+;; A module at depth 64 is legal but cannot accept a leaf, because that would
+;; generate a 65-segment path. Invalid tensors prove rejection precedes provider
+;; dispatch; all three leaf families preserve identity and topology state.
+(let* ((chain (build-chain 64))
+       (root (vector-ref chain 0))
+       (tail (vector-ref chain 1))
+       (anchor
+         (module-register-parameter-internal!
+           root "anchor" (fixture-payload '(1) 'anchor)))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (expect-error-contract
+    "one-over parameter leaf rejects before provider dispatch" 'invalid-argument
+    'module-register-parameter-internal!
+    (lambda () (module-register-parameter-internal! tail "parameter" #f)))
+  (expect-error-contract
+    "one-over tied leaf rejects before mutation" 'invalid-argument
+    'module-register-tied-parameter-internal!
+    (lambda () (module-register-tied-parameter-internal! tail "tied" anchor)))
+  (expect-error-contract
+    "one-over buffer leaf rejects before provider dispatch" 'invalid-argument
+    'module-register-buffer-internal!
+    (lambda () (module-register-buffer-internal! tail "buffer" #f)))
+  (check "one-over leaf rejection preserves live identities"
+         (= (p1-test-live-count) live-before))
+  (check "one-over leaf rejection preserves tombstones"
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "one-over leaf rejection preserves existing topology"
+         (let ((tree (module-parameters root)))
+           (and (equal? (parameter-tree-paths tree) '(("anchor")))
+                (eq? (parameter-tree-handle tree '("anchor")) anchor)))))
+
+(let* ((chain (build-chain 64))
+       (root (vector-ref chain 0))
+       (tail (vector-ref chain 1))
+       (cpu-tensor (fixture-device-payload 'cpu 'rejected-device))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (expect-error-contract
+    "one-over leaf does not claim root device" 'invalid-argument
+    'module-register-buffer-internal!
+    (lambda () (module-register-buffer-internal! tail "rejected" cpu-tensor)))
+  (check "one-over device rejection preserves identities"
+         (and (= (p1-test-live-count) live-before)
+              (= (p1-test-tombstone-count) tombstones-before)))
+  (check "root accepts different device after rejected deep leaf"
+         (module-register-buffer-internal!
+           root "after"
+           (fixture-device-payload (vector 'accelerator 7) 'after-device))))
+
+;; A valid standalone 64-segment leaf cannot be shifted under another root.
+;; Rejection must leave the child a root and must not reserve the parent name or
+;; inherit the child's logical device.
+(let* ((child-chain (build-chain 63))
+       (child (vector-ref child-chain 0))
+       (child-tail (vector-ref child-chain 1))
+       (child-path (path-at-depth 63 "weight"))
+       (child-handle
+         (module-register-parameter-internal!
+           child-tail "weight" (fixture-payload '(1) 'shifted-child)))
+       (parent (module-create-fixture-internal))
+       (replacement (module-create-fixture-internal))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (expect-error-contract
+    "shifted prebuilt leaf path one-over rejects" 'invalid-argument
+    'module-register-child-internal!
+    (lambda () (module-register-child-internal! parent "candidate" child)))
+  (check "shifted subtree rejection preserves live identities"
+         (= (p1-test-live-count) live-before))
+  (check "shifted subtree rejection preserves tombstones"
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "rejected subtree remains an independently usable root"
+         (eq? (parameter-tree-handle (module-parameters child) child-path)
+              child-handle))
+  (check "rejected subtree name remains reusable"
+         (module-register-child-internal! parent "candidate" replacement))
+  (check "rejected subtree does not claim parent device"
+         (module-register-buffer-internal!
+           parent "after"
+           (fixture-device-payload (vector 'accelerator 8) 'after-subtree))))
+
+;; An empty topology may reach depth 64, but attaching it below another root
+;; would create depth 65 and must leave both roots unchanged.
+(let* ((candidate-chain (build-chain 64))
+       (candidate (vector-ref candidate-chain 0))
+       (parent (module-create-fixture-internal))
+       (replacement (module-create-fixture-internal))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (expect-error-contract
+    "topology depth one-over subtree rejects" 'invalid-argument
+    'module-register-child-internal!
+    (lambda () (module-register-child-internal! parent "candidate" candidate)))
+  (check "topology depth rejection preserves identities"
+         (and (= (p1-test-live-count) live-before)
+              (= (p1-test-tombstone-count) tombstones-before)))
+  (check "topology depth rejection leaves candidate a root"
+         (null? (parameter-tree-paths (module-parameters candidate))))
+  (check "topology depth rejection leaves parent name reusable"
+         (module-register-child-internal! parent "candidate" replacement)))
+
+;; A shifted subtree may independently reach the exact module-depth and path
+;; limits: local leaf span 63, local topology height 63, plus one parent edge.
+(let* ((subtree-chain (build-chain 62))
+       (subtree (vector-ref subtree-chain 0))
+       (subtree-tail (vector-ref subtree-chain 1))
+       (handle
+         (module-register-parameter-internal!
+           subtree-tail "weight" (fixture-payload '(1) 'exact-subtree)))
+       (terminal (module-create-fixture-internal))
+       (parent (module-create-fixture-internal))
+       (path (cons "outer" (path-at-depth 62 "weight"))))
+  (module-register-child-internal! subtree-tail "terminal" terminal)
+  (check "exact shifted subtree attachment succeeds"
+         (module-register-child-internal! parent "outer" subtree))
+  (check "exact shifted subtree generates a 64-segment path"
+         (= (proper-list-length path) 64))
+  (check "exact shifted subtree path lookup succeeds"
+         (eq? (parameter-tree-handle (module-parameters parent) path) handle)))
+
+;; The state schema admits exactly 4096 logical parameter/buffer paths. Tied
+;; paths avoid irrelevant provider cloning while still counting as state entries.
+(let* ((entry-batches (build-entry-batches 64 64))
+       (module (vector-ref entry-batches 0))
+       (base (vector-ref entry-batches 1))
+       (last (vector-ref entry-batches 2))
+       (empty-child (module-create-fixture-internal))
+       (live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count)))
+  (check "exact 4096th state entry is admitted" (eq? last base))
+  (expect-error-contract
+    "4097th tied entry rejects" 'invalid-argument
+    'module-register-tied-parameter-internal!
+    (lambda () (module-register-tied-parameter-internal! module "over-tie" base)))
+  (expect-error-contract
+    "4097th parameter entry rejects before provider dispatch" 'invalid-argument
+    'module-register-parameter-internal!
+    (lambda () (module-register-parameter-internal! module "over-param" #f)))
+  (expect-error-contract
+    "4097th buffer entry rejects before provider dispatch" 'invalid-argument
+    'module-register-buffer-internal!
+    (lambda () (module-register-buffer-internal! module "over-buffer" #f)))
+  (check "entry-bound rejection preserves identities"
+         (and (= (p1-test-live-count) live-before)
+              (= (p1-test-tombstone-count) tombstones-before)))
+  (check "entry-bound rejection leaves topology mutable"
+         (module-register-child-internal! module "empty" empty-child))
+  (let* ((overflow-parent (one-parameter-module '(1) 'overflow-parent))
+         (replacement (module-create-fixture-internal))
+         (overflow-live-before (p1-test-live-count))
+         (overflow-tombstones-before (p1-test-tombstone-count)))
+    (expect-error-contract
+      "prebuilt subtree entry sum one-over rejects" 'invalid-argument
+      'module-register-child-internal!
+      (lambda ()
+        (module-register-child-internal! overflow-parent "candidate" module)))
+    (check "subtree entry rejection preserves identities"
+           (and (= (p1-test-live-count) overflow-live-before)
+                (= (p1-test-tombstone-count) overflow-tombstones-before)))
+    (check "entry-overflow child remains a root"
+           (module-train! module))
+    (check "entry-overflow parent name remains reusable"
+           (module-register-child-internal!
+             overflow-parent "candidate" replacement))))
+
+;; Parent + detached subtree may sum to the exact 4096-entry boundary.
+(let* ((entry-batches (build-entry-batches 63 65))
+       (child (vector-ref entry-batches 0))
+       (child-base (vector-ref entry-batches 1))
+       (child-last (vector-ref entry-batches 2))
+       (parent (one-parameter-module '(1) 'exact-parent-entry)))
+  (check "prebuilt subtree reaches 4095 entries" (eq? child-last child-base))
+  (check "prebuilt subtree exact 4096-entry sum attaches"
+         (module-register-child-internal! parent "child" child)))
+
+;; Empty modules cannot evade bounded finalization work. Root plus 4095 direct
+;; children is exact; the next child rejects, and observation finalizes the
+;; precomputed 4096-module plan without recursive post-commit traversal.
+(let ((root (module-create-fixture-internal)))
+  (let loop ((index 0))
+    (if (= index 63)
+        #t
+        (let ((branch (module-create-fixture-internal)))
+          (fill-empty-children! branch 64 "leaf-")
+          (module-register-child-internal!
+            root (string-append "branch-" (number->string index)) branch)
+          (loop (+ index 1)))))
+  (let ((candidate (module-create-fixture-internal))
+        (live-before (p1-test-live-count))
+        (tombstones-before (p1-test-tombstone-count)))
+    (expect-error-contract
+      "topology node count one-over rejects" 'invalid-argument
+      'module-register-child-internal!
+      (lambda () (module-register-child-internal! root "one-over" candidate)))
+    (check "node-bound rejection preserves identities"
+           (and (= (p1-test-live-count) live-before)
+                (= (p1-test-tombstone-count) tombstones-before)))
+    (check "exact 4096-node observation finalizes bounded plan"
+           (and (null? (parameter-tree-paths (module-parameters root)))
+                (null? (parameter-tree-paths
+                         (module-parameters candidate)))))))
+
+(if (= checks 78)
     (begin
-      (display "P1 registry atomicity PASS: 28 checks")
+      (display "P1 registry atomicity PASS: 78 checks")
       (newline))
     (exit 1))

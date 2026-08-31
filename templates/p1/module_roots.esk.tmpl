@@ -285,6 +285,8 @@
 (define tensor-provider-admission-active-shell #f)
 (define shell-registry '())
 (define max-path-segments 64)
+(define max-topology-depth max-path-segments)
+(define max-topology-nodes 4096)
 (define max-shape-rank 64)
 (define max-feature-count 64)
 (define max-state-entries 4096)
@@ -417,9 +419,11 @@
   (let find ((entries shell-registry))
     (cond
       ((null? entries)
-       (let* ((shell (native-create-shell kind raw))
-              (entry (vector shell kind raw)))
-         (set! shell-registry (cons entry shell-registry))
+       (let* ((entry (vector #f kind raw))
+              (next-registry (cons entry shell-registry))
+              (shell (native-create-shell kind raw)))
+         (vector-set! entry 0 shell)
+         (set! shell-registry next-registry)
          shell))
       ((and (eq? kind (vector-ref (car entries) 1))
             (eq? raw (vector-ref (car entries) 2)))
@@ -633,7 +637,7 @@
     (else (path-member? path (cdr paths)))))
 
 (define (module-value? value)
-  (and (vector? value) (= (vector-length value) 9)
+  (and (vector? value) (= (vector-length value) 13)
        (eq? (vector-ref value 0) module-tag)))
 
 (define (handle-value? value)
@@ -1277,11 +1281,13 @@
   (let ((provider (require-provider-name 'module-create-with-provider-internal
                                          provider-name)))
   ;; Fields: tag, mode, parameters, buffers, children, parent, provider,
-  ;; topology-finalized?, logical-device.
-    (vector module-tag 'train '() '() '() #f provider #f #f)))
+  ;; topology-finalized?, logical-device, subtree entry count, subtree node
+  ;; count, subtree height in child edges, and maximum generated entry-path
+  ;; depth relative to this module (zero when the subtree has no leaves).
+    (vector module-tag 'train '() '() '() #f provider #f #f 0 1 0 0)))
 
 (define (module-create-internal)
-  (vector module-tag 'train '() '() '() #f #f #f #f))
+  (vector module-tag 'train '() '() '() #f #f #f #f 0 1 0 0))
 
 (define (local-name-used? module name)
   (let scan ((groups (list (vector-ref module 2) (vector-ref module 3)
@@ -1311,79 +1317,226 @@
 (define (require-module-provider operation module)
   (require-provider operation (vector-ref module 6)))
 
-(define (claim-module-device! operation provider module device)
+(define (preflight-module-device operation provider module device)
   (let* ((root (module-root module)) (current (vector-ref root 8)))
     (if current
         (if (tensor-device-equal? operation provider current device)
-            #t
+            (vector root #f #f)
             (fail 'device-mismatch operation
                   "all module leaves must use one logical device" '()))
-        (vector-set! root 8 (copy-data device)))))
+        (vector root #t (copy-data device)))))
+
+(define (commit-module-device! plan)
+  (if (vector-ref plan 1)
+      (vector-set! (vector-ref plan 0) 8 (vector-ref plan 2))
+      #t))
+
+(define (claim-module-device! operation provider module device)
+  (commit-module-device!
+    (preflight-module-device operation provider module device)))
+
+(define (module-storage-items module)
+  ;; A tied parameter has many logical paths but one authoritative handle and
+  ;; one storage.  Deduplicate by handle identity before invoking provider
+  ;; storage comparisons so subtree admission is bounded by unique storages,
+  ;; not the Cartesian product of aliases.
+  (let walk ((pending (list module)) (seen-handles '()) (items '()))
+    (if (null? pending)
+        (list-reverse items)
+        (let* ((current (car pending))
+               (parameter-result
+                 (let scan ((bindings (vector-ref current 2))
+                            (seen seen-handles) (result items))
+                   (if (null? bindings)
+                       (vector seen result)
+                       (let ((handle (vector-ref (car bindings) 2)))
+                         (if (identity-member? handle seen)
+                             (scan (cdr bindings) seen result)
+                             (scan
+                               (cdr bindings) (cons handle seen)
+                               (cons (vector (vector-ref handle 6) 'parameter)
+                                     result)))))))
+               (next-seen (vector-ref parameter-result 0))
+               (with-buffers
+                 (let scan ((bindings (vector-ref current 3))
+                            (result (vector-ref parameter-result 1)))
+                   (if (null? bindings)
+                       result
+                       (scan
+                         (cdr bindings)
+                         (cons (vector (vector-ref (car bindings) 2) 'buffer)
+                               result))))))
+          (walk (prepend-child-modules (vector-ref current 4) (cdr pending))
+                next-seen with-buffers)))))
+
+(define (ensure-storage-distinct-from-items! operation provider tensor kind items)
+  (let loop ((remaining items))
+    (if (null? remaining)
+        #t
+        (if (tensor-storage-identical?
+              operation provider tensor (vector-ref (car remaining) 0)
+              kind (vector-ref (car remaining) 1))
+            (fail 'internal operation
+                  (if (eq? (vector-ref (car remaining) 1) 'parameter)
+                      "provider clone aliases existing parameter storage"
+                      "provider clone aliases existing buffer storage")
+                  '())
+            (loop (cdr remaining))))))
 
 (define (ensure-storage-not-in-module! operation provider tensor kind module)
-  (let scan-parameters ((bindings (vector-ref module 2)))
-    (if (null? bindings)
-        #t
-        (let ((existing (vector-ref (vector-ref (car bindings) 2) 6)))
-          (if (tensor-storage-identical? operation provider tensor existing
-                                         kind 'parameter)
-              (fail 'internal operation
-                    "provider clone aliases existing parameter storage" '())
-              (scan-parameters (cdr bindings))))))
-  (let scan-buffers ((bindings (vector-ref module 3)))
-    (if (null? bindings)
-        #t
-        (let ((existing (vector-ref (car bindings) 2)))
-          (if (tensor-storage-identical? operation provider tensor existing
-                                         kind 'buffer)
-              (fail 'internal operation
-                    "provider clone aliases existing buffer storage" '())
-              (scan-buffers (cdr bindings))))))
-  (let scan-children ((bindings (vector-ref module 4)))
-    (if (null? bindings)
-        #t
-        (begin
-          (ensure-storage-not-in-module! operation provider tensor kind
-                                         (vector-ref (car bindings) 2))
-          (scan-children (cdr bindings))))))
+  (ensure-storage-distinct-from-items!
+    operation provider tensor kind (module-storage-items module)))
 
 (define (ensure-module-storage-distinct-from-tree! operation provider source tree)
-  (let scan-parameters ((bindings (vector-ref source 2)))
-    (if (null? bindings)
-        #t
-        (begin
-          (ensure-storage-not-in-module!
-            operation provider (vector-ref (vector-ref (car bindings) 2) 6)
-            'parameter tree)
-          (scan-parameters (cdr bindings)))))
-  (let scan-buffers ((bindings (vector-ref source 3)))
-    (if (null? bindings)
-        #t
-        (begin
-          (ensure-storage-not-in-module!
-            operation provider (vector-ref (car bindings) 2) 'buffer tree)
-          (scan-buffers (cdr bindings)))))
-  (let scan-children ((bindings (vector-ref source 4)))
-    (if (null? bindings)
-        #t
-        (begin
-          (ensure-module-storage-distinct-from-tree!
-            operation provider (vector-ref (car bindings) 2) tree)
-          (scan-children (cdr bindings))))))
+  (let ((tree-items (module-storage-items tree)))
+    (let loop ((source-items (module-storage-items source)))
+      (if (null? source-items)
+          #t
+          (begin
+            (ensure-storage-distinct-from-items!
+              operation provider (vector-ref (car source-items) 0)
+              (vector-ref (car source-items) 1) tree-items)
+            (loop (cdr source-items)))))))
 
-(define (finalize-tree! module)
-  (vector-set! module 7 #t)
-  (let loop ((children (vector-ref module 4)))
-    (if (null? children)
+(define (module-ancestry operation module)
+  (let loop ((current module) (depth 0) (result '()))
+    (if (> depth max-topology-depth)
+        (fail 'internal operation "module topology depth invariant failed" '())
+        (let ((next (cons current result)))
+          (if (vector-ref current 5)
+              (loop (vector-ref current 5) (+ depth 1) next)
+              (vector next depth))))))
+
+(define (preflight-leaf-registration operation module)
+  (let* ((ancestry (module-ancestry operation module))
+         (modules (vector-ref ancestry 0))
+         (depth (vector-ref ancestry 1))
+         (root (car modules)))
+    (if (>= depth max-path-segments)
+        (fail 'invalid-argument operation
+              "registered leaf path exceeds topology depth bound" '())
+        (if (>= (vector-ref root 9) max-state-entries)
+            (fail 'invalid-argument operation
+                  "module state schema exceeds entry bound" '())
+            (let loop ((remaining modules) (module-depth 0) (updates '()))
+              (if (null? remaining)
+                  (list-reverse updates)
+                  (let* ((current (car remaining))
+                         (candidate-path-depth (+ (- depth module-depth) 1))
+                         (current-path-depth (vector-ref current 12)))
+                    (loop
+                      (cdr remaining) (+ module-depth 1)
+                      (cons
+                        (vector current (+ (vector-ref current 9) 1)
+                                (if (> candidate-path-depth current-path-depth)
+                                    candidate-path-depth current-path-depth))
+                        updates)))))))))
+
+(define (apply-leaf-topology-updates! updates)
+  (let loop ((remaining updates))
+    (if (null? remaining)
         #t
         (begin
-          (finalize-tree! (vector-ref (car children) 2))
-          (loop (cdr children))))))
+          (vector-set! (vector-ref (car remaining) 0) 9
+                       (vector-ref (car remaining) 1))
+          (vector-set! (vector-ref (car remaining) 0) 12
+                       (vector-ref (car remaining) 2))
+          (loop (cdr remaining))))))
 
-(define (finalize-root! module)
-  (finalize-tree! (module-root module)))
+(define (preflight-child-topology operation module child)
+  (let* ((ancestry (module-ancestry operation module))
+         (modules (vector-ref ancestry 0))
+         (parent-depth (vector-ref ancestry 1))
+         (root (car modules))
+         (child-entries (vector-ref child 9))
+         (child-nodes (vector-ref child 10))
+         (child-entry-depth (vector-ref child 12))
+         (deepest (+ parent-depth 1 (vector-ref child 11)))
+         (deepest-entry
+           (if (= child-entry-depth 0)
+               0
+               (+ parent-depth 1 child-entry-depth))))
+    (if (> deepest max-topology-depth)
+        (fail 'invalid-argument operation
+              "attached child exceeds topology depth bound" '())
+        (if (> deepest-entry max-path-segments)
+            (fail 'invalid-argument operation
+                  "attached child generates an over-limit entry path" '())
+        (if (> (+ (vector-ref root 9) child-entries) max-state-entries)
+            (fail 'invalid-argument operation
+                  "attached child exceeds module state entry bound" '())
+            (if (> (+ (vector-ref root 10) child-nodes) max-topology-nodes)
+                (fail 'invalid-argument operation
+                      "attached child exceeds topology node bound" '())
+                (let loop ((remaining modules) (depth 0) (updates '()))
+                  (if (null? remaining)
+                      (list-reverse updates)
+                      (let* ((current (car remaining))
+                             (candidate-height (- deepest depth))
+                             (current-height (vector-ref current 11))
+                             (candidate-entry-depth
+                               (if (= deepest-entry 0)
+                                   0
+                                   (- deepest-entry depth)))
+                             (current-entry-depth (vector-ref current 12)))
+                        (loop
+                          (cdr remaining) (+ depth 1)
+                          (cons
+                            (vector current
+                                    (+ (vector-ref current 9) child-entries)
+                                    (+ (vector-ref current 10) child-nodes)
+                                    (if (> candidate-height current-height)
+                                        candidate-height current-height)
+                                    (if (> candidate-entry-depth
+                                           current-entry-depth)
+                                        candidate-entry-depth
+                                        current-entry-depth))
+                            updates)))))))))))
 
-(define (module-register-parameter-internal! module name tensor)
+(define (apply-child-topology-updates! updates)
+  (let loop ((remaining updates))
+    (if (null? remaining)
+        #t
+        (let ((update (car remaining)))
+          (vector-set! (vector-ref update 0) 9 (vector-ref update 1))
+          (vector-set! (vector-ref update 0) 10 (vector-ref update 2))
+          (vector-set! (vector-ref update 0) 11 (vector-ref update 3))
+          (vector-set! (vector-ref update 0) 12 (vector-ref update 4))
+          (loop (cdr remaining))))))
+
+(define (prepend-child-modules children pending)
+  (let loop ((remaining children) (result pending))
+    (if (null? remaining)
+        result
+        (loop (cdr remaining)
+              (cons (vector-ref (car remaining) 2) result)))))
+
+(define (finalization-plan operation module)
+  (let ((root (module-root module)))
+    (let loop ((pending (list root)) (result '()) (count 0))
+      (if (null? pending)
+          (if (= count (vector-ref root 10))
+              (list-reverse result)
+              (fail 'internal operation
+                    "module topology node count invariant failed" '()))
+          (if (>= count max-topology-nodes)
+              (fail 'internal operation
+                    "module topology exceeds finalization bound" '())
+              (let ((current (car pending)))
+                (loop
+                  (prepend-child-modules (vector-ref current 4)
+                                         (cdr pending))
+                  (cons current result) (+ count 1))))))))
+
+(define (finalize-modules! modules)
+  (let loop ((remaining modules))
+    (if (null? remaining)
+        #t
+        (begin
+          (vector-set! (car remaining) 7 #t)
+          (loop (cdr remaining))))))
+
+(define (prepare-parameter-registration module name tensor)
   (require-module 'module-register-parameter-internal! module)
   (require-mutable-module 'module-register-parameter-internal! module)
   (let ((provider (require-module-provider
@@ -1394,26 +1547,42 @@
         (if (local-name-used? module name)
             (fail 'invalid-argument 'module-register-parameter-internal!
                   "duplicate local module name" name)
-            (let* ((metadata
-                     (tensor-metadata 'module-register-parameter-internal!
-                                      provider tensor 'parameter))
-                   (prepared
-                     (tensor-copy 'module-register-parameter-internal!
-                                  provider tensor 'parameter))
-                   (stored-name (string-copy name))
-                   (handle (vector parameter-handle-tag module #f
-                                   (copy-data (vector-ref metadata 0))
-                                   (vector-ref metadata 1) (vector-ref metadata 2)
-                                   prepared provider)))
-              (ensure-storage-not-in-module!
-                'module-register-parameter-internal! provider prepared 'parameter
-                (module-root module))
-              (claim-module-device! 'module-register-parameter-internal!
-                                    provider module (vector-ref metadata 2))
-              (vector-set! module 2
-                           (cons (vector 'parameter-binding stored-name handle)
-                                 (vector-ref module 2)))
-              handle)))))
+            (let ((topology-updates
+                    (preflight-leaf-registration
+                      'module-register-parameter-internal! module)))
+              (let* ((metadata
+                       (tensor-metadata 'module-register-parameter-internal!
+                                        provider tensor 'parameter))
+                     (prepared
+                       (tensor-copy 'module-register-parameter-internal!
+                                    provider tensor 'parameter))
+                     (stored-name (string-copy name))
+                     (handle (vector parameter-handle-tag module #f
+                                     (copy-data (vector-ref metadata 0))
+                                     (vector-ref metadata 1)
+                                     (vector-ref metadata 2) prepared provider))
+                     (next-bindings
+                       (cons (vector 'parameter-binding stored-name handle)
+                             (vector-ref module 2))))
+                (ensure-storage-not-in-module!
+                  'module-register-parameter-internal! provider prepared
+                  'parameter (module-root module))
+                (let ((device-plan
+                        (preflight-module-device
+                          'module-register-parameter-internal! provider module
+                          (vector-ref metadata 2))))
+                  (vector module handle next-bindings topology-updates
+                          device-plan))))))))
+
+(define (commit-parameter-registration! plan)
+  (commit-module-device! (vector-ref plan 4))
+  (vector-set! (vector-ref plan 0) 2 (vector-ref plan 2))
+  (apply-leaf-topology-updates! (vector-ref plan 3))
+  (vector-ref plan 1))
+
+(define (module-register-parameter-internal! module name tensor)
+  (commit-parameter-registration!
+    (prepare-parameter-registration module name tensor)))
 
 (define (module-register-tied-parameter-internal! module name handle)
   (require-module 'module-register-tied-parameter-internal! module)
@@ -1433,13 +1602,17 @@
                 (if (not (eq? provider (vector-ref handle 7)))
                     (fail 'unsupported 'module-register-tied-parameter-internal!
                           "parameter and module tensor providers differ" '())
-                    (begin
+                    (let* ((topology-updates
+                             (preflight-leaf-registration
+                               'module-register-tied-parameter-internal! module))
+                           (next-bindings
+                             (cons (vector 'parameter-binding
+                                           (string-copy name) handle)
+                                   (vector-ref module 2))))
                       (claim-module-device! 'module-register-tied-parameter-internal!
                                             provider module (vector-ref handle 5))
-                      (vector-set! module 2
-                                   (cons (vector 'parameter-binding
-                                                 (string-copy name) handle)
-                                         (vector-ref module 2)))
+                      (vector-set! module 2 next-bindings)
+                      (apply-leaf-topology-updates! topology-updates)
                       handle)))))))
 
 (define (module-register-buffer-internal! module name tensor)
@@ -1453,21 +1626,26 @@
         (if (local-name-used? module name)
             (fail 'invalid-argument 'module-register-buffer-internal!
                   "duplicate local module name" name)
-            (let* ((metadata
-                     (tensor-metadata 'module-register-buffer-internal!
-                                      provider tensor 'buffer))
-                   (prepared
-                     (tensor-copy 'module-register-buffer-internal!
-                                  provider tensor 'buffer))
-                   (binding
-                     (vector 'buffer-binding (string-copy name) prepared)))
-              (ensure-storage-not-in-module!
-                'module-register-buffer-internal! provider prepared 'buffer
-                (module-root module))
-              (claim-module-device! 'module-register-buffer-internal!
-                                    provider module (vector-ref metadata 2))
-              (vector-set! module 3 (cons binding (vector-ref module 3)))
-              binding)))))
+            (let ((topology-updates
+                    (preflight-leaf-registration
+                      'module-register-buffer-internal! module)))
+              (let* ((metadata
+                       (tensor-metadata 'module-register-buffer-internal!
+                                        provider tensor 'buffer))
+                     (prepared
+                       (tensor-copy 'module-register-buffer-internal!
+                                    provider tensor 'buffer))
+                     (binding
+                       (vector 'buffer-binding (string-copy name) prepared))
+                     (next-bindings (cons binding (vector-ref module 3))))
+                (ensure-storage-not-in-module!
+                  'module-register-buffer-internal! provider prepared 'buffer
+                  (module-root module))
+                (claim-module-device! 'module-register-buffer-internal!
+                                      provider module (vector-ref metadata 2))
+                (vector-set! module 3 next-bindings)
+                (apply-leaf-topology-updates! topology-updates)
+                binding))))))
 
 (define (module-register-child-internal! module name child)
   (require-module 'module-register-child-internal! module)
@@ -1487,8 +1665,15 @@
                   (vector-ref child 5))
               (fail 'invalid-argument 'module-register-child-internal!
                     "child already has a parent or would form a cycle" name)
-              (let ((parent-device (vector-ref (module-root module) 8))
-                    (child-device (vector-ref child 8)))
+              (let* ((topology-updates
+                       (preflight-child-topology
+                         'module-register-child-internal! module child))
+                     (root (module-root module))
+                     (parent-device (vector-ref root 8))
+                     (child-device (vector-ref child 8))
+                     (binding
+                       (vector 'child-binding (string-copy name) child))
+                     (next-children (cons binding (vector-ref module 4))))
                 (if (and parent-device child-device
                          (not (tensor-device-equal?
                                 'module-register-child-internal!
@@ -1498,14 +1683,13 @@
                     (begin
                       (ensure-module-storage-distinct-from-tree!
                         'module-register-child-internal! (vector-ref module 6)
-                        child (module-root module))
+                        child root)
                       (if (and (not parent-device) child-device)
-                          (vector-set! (module-root module) 8 child-device)
+                          (vector-set! root 8 child-device)
                           #t)
                       (vector-set! child 5 module)
-                      (vector-set! module 4
-                                   (cons (vector 'child-binding (string-copy name) child)
-                                         (vector-ref module 4)))
+                      (vector-set! module 4 next-children)
+                      (apply-child-topology-updates! topology-updates)
                       child))))))))
 
 (define (flatten-parameters module prefix)
@@ -1561,12 +1745,13 @@
   (let loop ((remaining entries) (seen '()) (updates '()))
     (if (null? remaining)
         (list-reverse updates)
-        (let* ((handle (vector-ref (car remaining) 2))
-               (paths (paths-for-handle entries handle)))
+        (let ((handle (vector-ref (car remaining) 2)))
           (if (identity-member? handle seen)
               (loop (cdr remaining) seen updates)
-              (loop (cdr remaining) (cons handle seen)
-                    (cons (vector handle (copy-data (car paths))) updates)))))))
+              (let ((paths (paths-for-handle entries handle)))
+                (loop (cdr remaining) (cons handle seen)
+                      (cons (vector handle (copy-data (car paths)))
+                            updates))))))))
 
 (define (install-canonical-paths! updates)
   (let loop ((remaining updates))
@@ -1581,21 +1766,46 @@
   (let loop ((remaining entries) (seen '()) (groups '()))
     (if (null? remaining)
         (list-reverse groups)
-        (let* ((handle (vector-ref (car remaining) 2))
-               (paths (paths-for-handle entries handle)))
+        (let ((handle (vector-ref (car remaining) 2)))
           (if (identity-member? handle seen)
               (loop (cdr remaining) seen groups)
-              (loop (cdr remaining) (cons handle seen)
-                    (if (> (list-length paths) 1) (cons paths groups) groups)))))))
+              (let ((paths (paths-for-handle entries handle)))
+                (loop (cdr remaining) (cons handle seen)
+                      (if (> (list-length paths) 1)
+                          (cons paths groups) groups))))))))
+
+(define (validate-generated-entry-paths! operation entries)
+  (let ((count (bounded-list-length entries max-state-entries)))
+    (if (not count)
+        (fail 'internal operation
+              "generated module entries exceed state schema bound" '())
+        (let loop ((remaining entries))
+          (if (null? remaining)
+              count
+              (if (valid-path? (entry-path (car remaining)))
+                  (loop (cdr remaining))
+                  (fail 'internal operation
+                        "generated module path violates path contract" '())))))))
+
+(define (commit-module-observation! observation)
+  ;; Every allocation, validation, callback, shell registration, and traversal
+  ;; must finish before this vector-set-only bounded tail begins.
+  (install-canonical-paths! (vector-ref observation 1))
+  (finalize-modules! (vector-ref observation 2))
+  (vector-ref observation 0))
+
+(define (prepare-module-parameters module)
+  (require-root-module 'module-parameters module)
+  (let* ((finalizers (finalization-plan 'module-parameters module))
+         (entries (sort-entries (flatten-parameters module '())))
+         (count (validate-generated-entry-paths! 'module-parameters entries))
+         (groups (tie-groups-from-entries entries))
+         (updates (canonical-path-updates entries))
+         (tree (vector parameter-tree-tag entries groups)))
+    (vector tree updates finalizers)))
 
 (define (module-parameters module)
-  (require-root-module 'module-parameters module)
-  (finalize-root! module)
-  (let* ((entries (sort-entries (flatten-parameters module '())))
-         (groups (tie-groups-from-entries entries))
-         (updates (canonical-path-updates entries)))
-    (install-canonical-paths! updates)
-    (vector parameter-tree-tag entries groups)))
+  (commit-module-observation! (prepare-module-parameters module)))
 
 (define (parameter-tree-paths tree)
   (require-tree 'parameter-tree-paths tree)
@@ -1767,21 +1977,41 @@
                     (copy-data aliases) #f)))
       (state-provider-bind! operation state provider))))
 
-(define (module-state-dict module)
+(define (prepare-module-state-dict module)
   (require-root-module 'module-state-dict module)
   (let* ((provider (require-module-provider 'module-state-dict module))
-         (tree (module-parameters module))
-         (parameters (vector-ref tree 1))
-         (buffers (sort-entries (flatten-buffers module '()))))
-    (state-from-flat parameters buffers (vector-ref tree 2) 'module-state-dict
-                     provider)))
+         (finalizers (finalization-plan 'module-state-dict module))
+         (parameters (sort-entries (flatten-parameters module '())))
+         (buffers (sort-entries (flatten-buffers module '())))
+         (parameter-count
+           (validate-generated-entry-paths! 'module-state-dict parameters))
+         (buffer-count
+           (validate-generated-entry-paths! 'module-state-dict buffers))
+         (entry-count (+ parameter-count buffer-count))
+         (groups (tie-groups-from-entries parameters))
+         (updates (canonical-path-updates parameters)))
+    (if (not (= entry-count (vector-ref module 9)))
+        (fail 'internal 'module-state-dict
+              "module state entry count invariant failed" '())
+        (let ((state
+                (state-from-flat parameters buffers groups 'module-state-dict
+                                 provider)))
+          (vector state updates finalizers)))))
+
+(define (module-state-dict module)
+  (commit-module-observation! (prepare-module-state-dict module)))
+
+(define (prepare-module-buffers module)
+  (require-root-module 'module-buffers module)
+  (let* ((provider (require-module-provider 'module-buffers module))
+         (finalizers (finalization-plan 'module-buffers module))
+         (buffers (sort-entries (flatten-buffers module '())))
+         (count (validate-generated-entry-paths! 'module-buffers buffers))
+         (state (state-from-flat '() buffers '() 'module-buffers provider)))
+    (vector state '() finalizers)))
 
 (define (module-buffers module)
-  (require-root-module 'module-buffers module)
-  (let ((provider (require-module-provider 'module-buffers module)))
-    (finalize-root! module)
-    (state-from-flat '() (sort-entries (flatten-buffers module '())) '()
-                     'module-buffers provider)))
+  (commit-module-observation! (prepare-module-buffers module)))
 
 (define (valid-feature-list? features)
   (and (bounded-list-length features max-feature-count)
@@ -2083,15 +2313,29 @@
     ;; Enumeration, metadata checks, canonical-path copies, and provider prepare
     ;; are pure with respect to module topology.  The only topology writes occur
     ;; after the provider's admitted one-shot commit has returned.
-    (let* ((parameters (sort-entries (flatten-parameters module '())))
+    (let* ((finalizers
+             (finalization-plan 'module-load-state-dict! module))
+           (parameters (sort-entries (flatten-parameters module '())))
            (buffers (sort-entries (flatten-buffers module '())))
+           (parameter-count
+             (validate-generated-entry-paths!
+               'module-load-state-dict! parameters))
+           (buffer-count
+             (validate-generated-entry-paths!
+               'module-load-state-dict! buffers))
+           (entry-count (+ parameter-count buffer-count))
            (destinations (sort-entries (list-append parameters buffers)))
            (expected
              (state-contract-from-flat parameters buffers
                                        'module-load-state-dict! provider))
            (expected-aliases (tie-groups-from-entries parameters))
            (canonical-updates (canonical-path-updates parameters))
+           (observation (vector #t canonical-updates finalizers))
            (incoming (vector-ref state 6)))
+      (if (not (= entry-count (vector-ref module 9)))
+          (fail 'internal 'module-load-state-dict!
+                "module state entry count invariant failed" '())
+          #t)
       (validate-destination-contract 'module-load-state-dict! provider
                                      expected incoming)
       (if (not (equal? expected-aliases (vector-ref state 7)))
@@ -2105,27 +2349,22 @@
                  (plan (tensor-prepare-load 'module-load-state-dict! provider
                                             assignments)))
             (tensor-commit-load! 'module-load-state-dict! provider plan)
-            ;; These writes are non-callback, nonallocating, and infallible over
-            ;; values fully allocated and validated before commit.
-            (install-canonical-paths! canonical-updates)
-            (finalize-root! module)
-            #t)))))
+            (commit-module-observation! observation))))))
 
-(define (set-mode-recursive! module mode)
-  (vector-set! module 1 mode)
-  (let loop ((children (vector-ref module 4)))
-    (if (null? children) #t
+(define (set-mode-modules! modules mode)
+  (let loop ((remaining modules))
+    (if (null? remaining) #t
         (begin
-          (set-mode-recursive! (vector-ref (car children) 2) mode)
-          (loop (cdr children))))))
+          (vector-set! (car remaining) 1 mode)
+          (loop (cdr remaining))))))
 
 (define (module-train! module)
   (require-root-module 'module-train! module)
-  (set-mode-recursive! module 'train))
+  (set-mode-modules! (finalization-plan 'module-train! module) 'train))
 
 (define (module-eval! module)
   (require-root-module 'module-eval! module)
-  (set-mode-recursive! module 'eval))
+  (set-mode-modules! (finalization-plan 'module-eval! module) 'eval))
 
 (define (module-mode-internal module)
   (vector-ref (require-module 'module-mode-internal module) 1))
@@ -2179,17 +2418,26 @@
 
 (vector
   (lambda (module)
-    (shell-for-raw
-      'tree (module-parameters
-              (raw-for-shell 'module-parameters 'module module))))
+    (let* ((observation
+             (prepare-module-parameters
+               (raw-for-shell 'module-parameters 'module module)))
+           (shell (shell-for-raw 'tree (vector-ref observation 0))))
+      (commit-module-observation! observation)
+      shell))
   (lambda (module)
-    (shell-for-raw
-      'state (module-buffers
-               (raw-for-shell 'module-buffers 'module module))))
+    (let* ((observation
+             (prepare-module-buffers
+               (raw-for-shell 'module-buffers 'module module)))
+           (shell (shell-for-raw 'state (vector-ref observation 0))))
+      (commit-module-observation! observation)
+      shell))
   (lambda (module)
-    (shell-for-raw
-      'state (module-state-dict
-               (raw-for-shell 'module-state-dict 'module module))))
+    (let* ((observation
+             (prepare-module-state-dict
+               (raw-for-shell 'module-state-dict 'module module)))
+           (shell (shell-for-raw 'state (vector-ref observation 0))))
+      (commit-module-observation! observation)
+      shell))
   (lambda (module state)
     (module-load-state-dict!
       (raw-for-shell 'module-load-state-dict! 'module module)
@@ -2245,11 +2493,14 @@
     (shell-for-raw
       'module (module-create-with-provider-internal provider-name)))
   (lambda (module name tensor)
-    (shell-for-raw
-      'handle
-      (module-register-parameter-internal!
-        (raw-for-shell 'module-register-parameter-internal! 'module module)
-        name tensor)))
+    (let* ((plan
+             (prepare-parameter-registration
+               (raw-for-shell 'module-register-parameter-internal!
+                              'module module)
+               name tensor))
+           (shell (shell-for-raw 'handle (vector-ref plan 1))))
+      (commit-parameter-registration! plan)
+      shell))
   (lambda (module name handle)
     (shell-for-raw
       'handle

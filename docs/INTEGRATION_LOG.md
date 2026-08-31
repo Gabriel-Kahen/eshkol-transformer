@@ -433,7 +433,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   never selects executable code and snapshots never serialize a binding. Admission,
   binding, exact path/kind/metadata/alias/storage validation, whole-batch preparation,
   and the no-recoverable-branch commit protocol are documented in
-  [P1_MODULE_STATE.md](P1_MODULE_STATE.md). Provider admission retains an immutable
+  [P1_MODULE_STATE.md](P1_MODULE_STATE.md). Construction admits at most 4096 modules,
+  4096 state entries, 64 child edges, and 64 generated path segments; leaf and
+  prebuilt-subtree registration validate prospective cached counts, shifted height,
+  and shifted leaf span before any callback or mutation. Observation precomputes a
+  bounded iterative finalization plan, leaving only finite vector writes after its
+  commit boundary, and subtree storage checks compare unique authoritative handles
+  so tied aliases cannot multiply provider-callback work. Provider admission retains an immutable
   bridge-owned identity/callback-token snapshot, uses exact 0..127-byte provider IDs,
   and revokes every unpublished identity on failure. No checkpoint bytes, checksums, encoding,
   magic, filesystem I/O, tensor backend, dtype implementation, or capability claim is
@@ -445,10 +451,14 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   compatibility lane. The focused gate passed 178 structural/ownership/binding/
   validation/atomicity assertions, 118 native token/security/ABI checks, 57 native
   allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
-  unit identity checks, and 28 trusted test-only registry/error-mapping checks. The latter
+  unit identity checks, and 78 trusted test-only registry/error-mapping/topology-bound
+  checks. The latter
   drive automatic partial-callback cleanup through an injected failure and prove exact
   live/tombstone deltas plus unchanged registry counts across failed and repeated strict
-  loads; their three hidden hooks exist only in a temporary non-production archive.
+  loads; exact and one-over 64-segment/depth and 4096-entry/node fixtures additionally
+  prove generated lookup, full tied/buffer state round-trip, atomic subtree/leaf
+  rejection, and bounded finalization. Their three hidden hooks exist only in a
+  temporary non-production archive.
   Native failpoint errors raise directly through the same E1 registry with bounded
   canonical data-only status details and cause `#f`, even after cleanup overwrites the
   native context; an injected impossible status/code pair maps to `internal` and

@@ -58,6 +58,27 @@ Registration copies caller-owned name strings. A root tree is finalized on its f
 public enumeration or state access, after which every registration operation fails
 with `invalid-state`; attached child modules are not independent public roots.
 
+One root tree contains at most 4096 modules and 4096 logical parameter/buffer
+entries. Module depth is at most 64 child edges, and every generated leaf path is at
+most 64 segments; consequently, a module at child depth 64 may not accept a leaf.
+These are admission-time invariants, not deferred accessor checks. Leaf registration
+and prebuilt-subtree attachment validate the prospective root totals, shifted subtree
+height, and shifted maximum leaf span before provider callbacks, identity admission,
+device claiming, parent/name mutation, or cached-count mutation. Exact-bound trees
+remain valid inputs to path lookup and state operations; one-over attempts leave both
+roots and all live/tombstone identity counts unchanged.
+
+Private module records cache authoritative subtree entry count, node count, height,
+and maximum generated leaf-path span. Each successful registration applies a
+precomputed bounded ancestor-update vector; failed registration applies none.
+Observation and mode changes likewise build and validate a bounded, iterative
+finalization plan before committing any public shell or tensor mutation. Their
+post-commit finalization tail performs only the precomputed finite vector writes and
+contains no allocation, callback, validation, recursive traversal, or recoverable
+raise. Storage-disjointness checks deduplicate tied bindings by authoritative handle
+identity, then compare every unique storage; aliases therefore cannot amplify
+subtree-admission work without weakening storage isolation.
+
 Every leaf in one root tree carries the same logical device metadata. Mixed-device
 leaf registration or child attachment is rejected with `device-mismatch`. Provider
 identities must also agree across an attached tree. Devices may be `cpu` or finite,
