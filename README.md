@@ -95,6 +95,12 @@ wrappers. The installed `transformer.persistence` surface contains only
 `persistence-policy`; C2 checkpoint operations remain unavailable. The authoritative
 runtime test is compiled Eshkol AOT; Python participates only as an independent
 development oracle and never in the production archive or execution path.
+Tokenizer, policy, and successful encoded-tensor identities are strongly retained in
+append-only aggregate registries until process exit. Their lookup cost is linear and
+their memory cost is cumulative, so applications should construct/load once, reuse
+identities, serialize T1 calls, and use a bounded worker process when a process-exit
+reclamation boundary is required. Exact per-artifact format limits do not bound this
+cumulative process-lifetime cost; see the lifecycle guidance in the T1 contract.
 
 ## First release criterion
 

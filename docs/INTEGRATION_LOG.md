@@ -802,16 +802,52 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   probes, copied/prelocalized/standalone-root rejection, cross-artifact registry
   collision, and production Python isolation. `make build`, `make test`, `make
   smoke`, and `make benchmark` pass on the explicitly unsupported CachyOS / LLVM
-  22.1.6 compatibility lane. Independent reviews found no blocker. A review PR and
-  supported Ubuntu 22.04 / LLVM-Clang 21.1.8 exact-head CI are still pending and must
-  be recorded before acceptance. No accepted commit or supported CI URL is claimed
-  by this proposed entry.
-- **Measured limitations / unsupported:** successful sealed output shells are
-  retained until process exit because the pinned runtime has no reviewed finalizer;
-  repeated successful encodes therefore grow memory monotonically. Concurrent or
-  reentrant shell use is unverified and unsupported; callers serialize use. The
-  shell is not a public raw pointer seam, K1 capability, general tensor interop
-  surface, numerical kernel, device/dtype conversion, or performance claim. No
+  22.1.6 compatibility lane.
+
+  Independent T1-R review of head
+  `02a3e419f237dce343fd93642515bddf0785e6e2` found that two public-AOT loads of one
+  valid 472,645-byte combined-boundary artifact (4,096 specials with 64-byte names,
+  4,096 prefix entries, and 4,096 suffix entries) reached at least 819 MiB of the
+  pinned runtime's 1-GiB heap and emitted its 80-percent warning. That head proved
+  syntax admission but did not provide acceptable operational-boundary evidence.
+  The repair candidate preserves every exact v1 maximum, removes insertion-sort
+  allocation amplification, and adds repeat public-AOT exact-max/one-over tests with
+  bounded elapsed-time, RSS, heap-warning, canonical-save, and byte-determinism
+  checks. Two frozen focused-gate runs completed the exact-max public AOT in 129,392
+  KiB and 126,124 KiB peak RSS, below the explicit 512-MiB evidence budget, without
+  the runtime heap warning; both made the canonical save byte-identical and rejected
+  the three count-plus-one fixtures. The registry-lifetime AOT probe separately
+  performs 16 baseline versus 128 growth cycles; every cycle discards one new policy,
+  two tokenizer identities, and one sealed encode result, then verifies that the
+  oldest values of every kind remain usable. Two frozen repetitions measured
+  baseline/growth peak RSS of 48,652/57,080 KiB and 46,560/55,016 KiB, positive
+  retained deltas of 8,428 KiB and 8,456 KiB. The gate requires the exact four
+  oldest-identity checks, bounds each case at 30 seconds and 262,144 KiB RSS, and
+  requires growth RSS to exceed baseline RSS.
+
+  The aggregate public `tokenizer-save!` AOT also repeats injected short-write,
+  `EINTR`, zero-write, temporary-file sync/close, publication, directory sync/close,
+  and cleanup-failure cases. It checks the exact E1 category, operation, native
+  cause/domain/status/errno/stage, published and durability fields, reloads the old
+  or new artifact as appropriate, rejects partial publication, and verifies orphan
+  cleanup behavior. Independent implementation, format/security, lifetime/ABI,
+  package-boundary, and documentation/evidence subreviews report no repair blocker.
+  Exact-head T1-R re-review and supported CI remain pending and must be recorded
+  before acceptance. No lower operational ceiling, accepted repair commit, or
+  supported repair-CI URL is claimed by this proposed entry.
+- **Measured limitations / unsupported:** three strong append-only registries retain
+  all successful tokenizer cores, persistence-policy shells and copied fields, and
+  sealed encoded I1 shells/storage until process exit. Dropping caller references
+  does not reclaim them. Registry lookup is linear in registered identities and
+  cumulative memory grows monotonically; there is no registry-count ceiling,
+  finalizer, weak identity, or public release operation. Concurrent or reentrant T1
+  registry use is unverified and unsupported; callers serialize all T1 operations.
+  Applications construct/load once and reuse identities. A bounded worker process
+  and exit are the only current reclamation boundary where retention cannot be
+  bounded. The shell is not a public raw pointer seam, K1 capability, general tensor
+  interop surface, numerical kernel, device/dtype conversion, or performance claim.
+  Exact v1 per-artifact maxima remain supported admission ceilings but do not promise
+  bounded cumulative process use or indefinite repeated admissions. No
   power-loss, NFS, FUSE, hostile-parent, or concurrent-writer durability guarantee is
   made. T2/D2/training must not depend on repeated ephemeral encoding until a
   separately reviewed reclamation or reuse design exists.
@@ -821,4 +857,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   native shell ABI, admission, publication, lifetime, or reclamation change requires
   issue #1 coordination and complete T1 plus affected dependency retests.
 - **Reference:** [issue #17](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/17);
-  [accepted implementation contract in issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5480447613).
+  [accepted implementation contract in issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5480447613);
+  [T1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5482913383).

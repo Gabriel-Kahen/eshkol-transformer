@@ -360,18 +360,6 @@
        (let ((policy (car (cdr (cdr value)))))
          (or (eq? policy 'omit) (eq? policy 'error)))))
 
-(define (t1-core-insert-special special sorted)
-  (if (or (null? sorted) (< (car special) (car (car sorted))))
-      (cons special sorted)
-      (cons (car sorted)
-            (t1-core-insert-special special (cdr sorted)))))
-
-(define (t1-core-sort-specials specials)
-  (let loop ((remaining specials) (result '()))
-    (if (null? remaining) result
-        (loop (cdr remaining)
-              (t1-core-insert-special (car remaining) result)))))
-
 (define (t1-core-copy-special special)
   (list (car special) (t1-core-copy-string (car (cdr special)))
         (car (cdr (cdr special)))))
@@ -399,9 +387,12 @@
                       "special count exceeds 4096"))
     (let copy ((remaining specials) (result '()))
       (if (null? remaining)
-          (let ((sorted (t1-core-sort-specials (t1-core-reverse result))))
-            (let check ((items sorted) (expected 256) (seen-names '()))
-              (if (null? items) sorted
+          (let ((checked (t1-core-reverse result)))
+            ;; Public artifacts already require ascending contiguous IDs.  Keep
+            ;; canonicalization allocation linear instead of insertion-sorting
+            ;; the sequence and allocating O(n^2) pairs.
+            (let check ((items checked) (expected 256) (seen-names '()))
+              (if (null? items) checked
                   (let* ((special (car items))
                          (name (car (cdr special))))
                     (if (not (= (car special) expected))

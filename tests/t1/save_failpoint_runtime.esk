@@ -1,0 +1,149 @@
+(require transformer.config)
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(extern i64 t1-test-io-reset
+        :real et_t1_test_io_reset_v1)
+(extern i64 t1-test-io-configure i64
+        :real et_t1_test_io_configure_v1)
+(extern i64 t1-test-io-injections
+        :real et_t1_test_io_injections_v1)
+(extern i64 t1-test-io-writes
+        :real et_t1_test_io_writes_v1)
+
+(define (details-ref details key absent)
+  (cond ((null? details) absent)
+        ((eq? (car (car details)) key) (car (cdr (car details))))
+        (else (details-ref (cdr details) key absent))))
+
+(define (mode-number name)
+  (cond ((string=? name "short") 1)
+        ((string=? name "zero") 2)
+        ((string=? name "eintr") 3)
+        ((string=? name "sync-temp") 4)
+        ((string=? name "close-temp") 5)
+        ((string=? name "publish") 6)
+        ((string=? name "sync-directory") 7)
+        ((string=? name "close-directory") 8)
+        ((string=? name "cleanup") 9)
+        (else -1)))
+
+(define (expected-stage mode)
+  (cond ((string=? mode "zero") 10)
+        ((string=? mode "sync-temp") 11)
+        ((string=? mode "close-temp") 12)
+        ((string=? mode "publish") 13)
+        ((string=? mode "sync-directory") 14)
+        ((string=? mode "close-directory") 16)
+        ((string=? mode "cleanup") 15)
+        (else 0)))
+
+(define (expected-errno mode)
+  (if (string=? mode "cleanup") 13 5))
+
+(define (committed-mode? mode)
+  (or (string=? mode "sync-directory")
+      (string=? mode "close-directory")))
+
+(define (success-mode? mode)
+  (or (string=? mode "short") (string=? mode "eintr")))
+
+(define (list-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define args (command-line))
+(if (not (= (list-count args) 4)) (exit 2))
+(define fixture-path (car (cdr args)))
+(define target-path (car (cdr (cdr args))))
+(define mode (car (cdr (cdr (cdr args)))))
+(define mode-value (mode-number mode))
+(if (< mode-value 0) (exit 2))
+
+(define minimal
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":8,\"model.hidden-size\":8,\"model.layer-count\":1,\"model.query-head-count\":1,\"model.vocabulary-size\":256,\"run.seed\":0}")
+(define config (config-resolve (config-parse minimal) '()))
+(define old-tokenizer (tokenizer-byte config))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define new-tokenizer (tokenizer-load fixture-path policy))
+(define old-fingerprint (tokenizer-fingerprint old-tokenizer))
+(define new-fingerprint (tokenizer-fingerprint new-tokenizer))
+
+;; Establish the complete old value through the production public path before
+;; any test injection is armed.
+(if (not (tokenizer-save! old-tokenizer target-path policy)) (exit 1))
+(if (not (= (t1-test-io-configure mode-value) 0)) (exit 1))
+
+(define injection-count 0)
+(define write-count 0)
+(define outcome
+  (guard (caught
+          (#t (begin
+                (set! injection-count (t1-test-io-injections))
+                (set! write-count (t1-test-io-writes))
+                (t1-test-io-reset)
+                caught)))
+    (let ((saved (tokenizer-save! new-tokenizer target-path policy)))
+      (set! injection-count (t1-test-io-injections))
+      (set! write-count (t1-test-io-writes))
+      (t1-test-io-reset)
+      saved)))
+
+(define expected-new?
+  (or (success-mode? mode) (committed-mode? mode)))
+(define observed-fingerprint
+  (tokenizer-fingerprint (tokenizer-load target-path policy)))
+(define identity-ok?
+  (string=? observed-fingerprint
+            (if expected-new? new-fingerprint old-fingerprint)))
+
+(define outcome-ok?
+  (if (success-mode? mode)
+      (and (eq? outcome #t)
+           (> injection-count 0)
+           (if (string=? mode "short") (> write-count 1)
+               (= write-count 2)))
+      (let* ((stage (expected-stage mode))
+             (native-errno (expected-errno mode))
+             (published? (committed-mode? mode))
+             (details (if (transformer-error? outcome)
+                          (transformer-error-details outcome) '()))
+             (expected-status
+              (+ native-errno (* stage 65536)
+                 (if published? 16777216 0))))
+        (and (transformer-error? outcome)
+             (eq? (transformer-error-category outcome) 'io)
+             (eq? (transformer-error-operation outcome) 'tokenizer-save!)
+             (string=? (transformer-error-message outcome)
+                       "atomic tokenizer publication failed")
+             (eq? (transformer-error-cause outcome) #f)
+             (eq? (details-ref details 'source-domain #f) 'c1-native-io)
+             (= (details-ref details 'source-code -1) expected-status)
+             (string=?
+              (details-ref details 'source-message "")
+              "atomic tokenizer publication failed")
+             (= (details-ref details 'native-errno -1) native-errno)
+             (= (details-ref details 'native-stage -1) stage)
+             (eq? (details-ref details 'published? 'absent) published?)
+             (eq? (details-ref details 'durability 'absent)
+                  (if published? 'unknown 'not-published))
+             (= injection-count (if (string=? mode "cleanup") 2 1))))))
+
+(if (and outcome-ok? identity-ok?)
+    (begin
+      (display "T1 SAVE FAILPOINT PASS: ")
+      (display mode)
+      (newline))
+    (begin
+      (display "T1 SAVE FAILPOINT FAIL: ")
+      (display mode)
+      (display " injections=")
+      (display injection-count)
+      (display " writes=")
+      (display write-count)
+      (display " identity-ok?=")
+      (display identity-ok?)
+      (newline)
+      (exit 1)))

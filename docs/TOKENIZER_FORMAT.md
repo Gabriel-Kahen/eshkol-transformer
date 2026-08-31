@@ -157,6 +157,18 @@ Version 1.0 hard limits are:
 - prefix and suffix entries: 4,096 each; and
 - token IDs: nonnegative signed `i64`, further constrained by the byte/special rules.
 
+These are exact canonical-format ceilings and supported per-artifact runtime
+admission ceilings in a fresh process on the supported lane; T1
+does not silently substitute a lower special, prefix, suffix, or name limit. A caller
+policy may lower only the effective file and payload limits described below; it has
+no count-specific field. RSS and elapsed-time thresholds used by the quality gate are
+evidence budgets, not hidden input limits or new serialized fields. Admission at a
+format ceiling does not promise memory proportional to serialized bytes,
+constant-time processing, or an unlimited number of admissions in one process. The
+trusted representation deep-owns parsed metadata, and the process-lifetime retention
+rules below make cumulative resource use a separate operational concern from whether
+one artifact is valid.
+
 Readers bound file and line lengths before allocation, then validate ASCII and record
 order, numbers/counts, version/features, declared limits/size, checksum, and all
 semantic invariants before registering a tokenizer. Duplicate or unknown records,
@@ -208,10 +220,35 @@ from the same aggregate only. Native code transports exact values and manages
 lifetime; Eshkol owns tokenization, UTF-8, special handling, parsing, serialization,
 checksums, fingerprints, policy selection, and errors.
 
-The pinned runtime has no reviewed finalizer. Successful shells and their I1 storage
-remain live until process exit. Memory therefore grows monotonically with successful
-encodes. There is no concurrent/reentrant shell-use or automatic reclamation claim;
-callers serialize access. T2/D2/training must not adopt repeated ephemeral encoding
-without a separately reviewed reclamation/reuse mechanism. The shell is not a K1
-capability, general tensor interoperability surface, numerical kernel, cast, transfer,
-fallback, or performance claim.
+## Process lifetime, complexity, and operational use
+
+The aggregate has three strong append-only process-lifetime identity registries:
+
+- every successful `tokenizer-byte` or `tokenizer-load` retains its tokenizer shell,
+  complete deep-owned core, canonical artifact bytes, and parsed metadata;
+- every successful `persistence-policy` retains its shell and private copy of all
+  five validated fields; and
+- every successful `tokenizer-encode` retains the Eshkol admission entry, native
+  sealed shell, owned I1 tensor storage, and live borrow/view.
+
+Each registry prepends new entries and uses a linear identity scan. Lookup is
+therefore O(N) in successfully registered values, and retained memory grows
+monotonically with their count and size. Dropping an application reference does not
+remove the strong registry reference. The pinned runtime has no reviewed finalizer,
+weak-identity facility, explicit public release operation, or automatic reclamation
+path for these values. Failed operations before publication do not register a
+tokenizer or policy, and unpublished encoded shells are aborted and destroyed, but
+successful published values remain live until process exit.
+
+Registry mutation and lookup are not synchronized, and concurrent or reentrant use
+is unverified. Callers must serialize T1 construction, load/save, encode/decode, and
+accessor calls. Long-running code should construct a policy once, construct or load a
+tokenizer once, and reuse those identities. It must not repeatedly recreate equal
+policies/tokenizers or assume temporary encode results are reclaimed. Where bounded
+retention cannot be arranged, a bounded worker process and process exit are the only
+currently reviewed reclamation boundary. T2/D2/training must not adopt repeated
+ephemeral encoding without a separately reviewed reclamation/reuse mechanism.
+
+The shell is not a K1 capability, general tensor interoperability surface, numerical
+kernel, cast, transfer, fallback, or performance claim. The exact format limits are
+not a promise that cumulative append-only registry growth is bounded.

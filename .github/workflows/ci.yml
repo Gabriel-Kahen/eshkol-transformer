@@ -17,7 +17,7 @@ jobs:
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       CC: clang-21
       CXX: clang++-21

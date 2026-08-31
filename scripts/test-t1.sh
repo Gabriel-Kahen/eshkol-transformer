@@ -4,7 +4,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in cmp grep nm python3 timeout; do
+for command in ar cmp find grep nm ps python3 sleep strings timeout; do
   require_command "${command}"
 done
 
@@ -32,7 +32,7 @@ for repetition in 1 2; do
   "${t1_tmp}/i64-shell" >"${t1_tmp}/i64-shell-${repetition}.stdout"
 done
 cmp "${t1_tmp}/i64-shell-1.stdout" "${t1_tmp}/i64-shell-2.stdout"
-grep -E '^T1 I64 SHELL PASS: [0-9]+ admission, exact-i64, lifetime, and failure checks$' \
+grep -Fx 'T1 I64 SHELL PASS: 110 admission, exact-i64, lifetime, and failure checks' \
   "${t1_tmp}/i64-shell-1.stdout" >/dev/null
 
 "${t1_cc}" "${t1_native_flags[@]}" -fno-omit-frame-pointer \
@@ -77,8 +77,72 @@ t1_object="$(project_build_dir)/t1/wave1.o"
   die "T1 Wave 1 aggregate was not published"
 [[ "$(nm -g --defined-only --format=posix "${t1_object}" | wc -l)" == 46 ]] || \
   die "T1 Wave 1 aggregate does not expose exactly 46 globals"
+if nm -a "${t1_object}" | \
+    grep -E 'et_t1_test_io_|T1_SAVE_FAILPOINT_TEST_ONLY' >/dev/null; then
+  die "production T1 aggregate contains a test-only save failpoint"
+fi
+if strings -a "${t1_object}" | \
+    grep -E 'et_t1_test_io_|T1_SAVE_FAILPOINT_TEST_ONLY' >/dev/null; then
+  die "production T1 aggregate strings contain a test-only save failpoint"
+fi
+if grep -ER 'et_t1_test_io_|t1_save_failpoints|T1_SAVE_FAILPOINT_TEST_ONLY' \
+    "${PROJECT_ROOT}/lib/transformer/tokenizer.esk" \
+    "${PROJECT_ROOT}/lib/transformer/persistence.esk" \
+    "${PROJECT_ROOT}/internal/t1" \
+    "${PROJECT_ROOT}/native/t1_wave1_root.esk" \
+    "${PROJECT_ROOT}/native/t1_wave1_package_bridge.c" \
+    "${PROJECT_ROOT}/native/t1_i64_shell.c" \
+    "${PROJECT_ROOT}/native/t1_i64_shell.h" \
+    "${PROJECT_ROOT}/scripts/build-t1.sh" \
+    "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" >/dev/null; then
+  die "production T1 source or builder references a test-only save failpoint"
+fi
+
+"${t1_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -fstack-protector-all -fno-common \
+  -c "${PROJECT_ROOT}/tests/t1/t1_save_failpoints.c" \
+  -o "${t1_tmp}/t1-save-failpoints.o"
+ar rcsD "${t1_tmp}/libeshkol_transformer_t1_save_failpoints.a" \
+  "${t1_tmp}/t1-save-failpoints.o"
 
 t1_runner="$(eshkol_build_dir)/eshkol-run"
+ESHKOL_CXX_COMPILER="${t1_cxx}" \
+  timeout --foreground --signal=TERM --kill-after=5s 240s \
+  "${t1_runner}" --strict-types --no-stdlib \
+  -I "${PROJECT_ROOT}/lib" \
+  -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
+  -L "${t1_tmp}" --lib eshkol_transformer_t1_save_failpoints \
+  "${PROJECT_ROOT}/tests/t1/save_failpoint_runtime.esk" \
+  -o "${t1_tmp}/save-failpoint-runtime"
+t1_save_failpoint_modes=(
+  short eintr zero sync-temp close-temp publish
+  sync-directory close-directory cleanup
+)
+for repetition in 1 2; do
+  for mode in "${t1_save_failpoint_modes[@]}"; do
+    case_dir="${t1_tmp}/save-failpoint-${repetition}-${mode}"
+    mkdir -p "${case_dir}"
+    target="${case_dir}/tokenizer.tsv"
+    timeout --foreground --signal=TERM --kill-after=5s 60s \
+      "${t1_tmp}/save-failpoint-runtime" \
+      "${t1_fixture}" "${target}" "${mode}" \
+      >"${case_dir}/stdout" 2>"${case_dir}/stderr"
+    grep -Fx "T1 SAVE FAILPOINT PASS: ${mode}" \
+      "${case_dir}/stdout" >/dev/null
+    [[ ! -s "${case_dir}/stderr" ]] || \
+      die "T1 save failpoint ${mode} emitted stderr"
+    temp_count="$({ find "${case_dir}" -maxdepth 1 -type f \
+      -name '.et-c1-*.tmp' -print; } | wc -l)"
+    if [[ "${mode}" == cleanup ]]; then
+      [[ "${temp_count}" == 1 ]] || \
+        die "T1 cleanup failure did not retain exactly one unpublished temp"
+    else
+      [[ "${temp_count}" == 0 ]] || \
+        die "T1 save failpoint ${mode} left an unpublished temp"
+    fi
+  done
+done
+
 for repetition in 1 2; do
   ESHKOL_CXX_COMPILER="${t1_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 240s \
@@ -91,12 +155,23 @@ for repetition in 1 2; do
     "${t1_tmp}/public-runtime-${repetition}" \
     "${t1_fixture}" "${t1_tmp}/saved-${repetition}.tsv" \
     >"${t1_tmp}/public-runtime-${repetition}.stdout"
-  grep -E '^T1 PUBLIC PASS: [0-9]+ aggregate tokenizer checks$' \
+  grep -Fx 'T1 PUBLIC PASS: 23 aggregate tokenizer checks' \
     "${t1_tmp}/public-runtime-${repetition}.stdout" >/dev/null
   cmp "${t1_fixture}" "${t1_tmp}/saved-${repetition}.tsv"
 done
 cmp "${t1_tmp}/public-runtime-1.stdout" \
   "${t1_tmp}/public-runtime-2.stdout"
+for production_aot in "${t1_tmp}/public-runtime-1" \
+    "${t1_tmp}/public-runtime-2"; do
+  if nm -a "${production_aot}" | \
+      grep -E 'et_t1_test_io_|T1_SAVE_FAILPOINT_TEST_ONLY' >/dev/null; then
+    die "production T1 AOT executable defines a test-only save failpoint"
+  fi
+  if strings -a "${production_aot}" | \
+      grep -E 'et_t1_test_io_|T1_SAVE_FAILPOINT_TEST_ONLY' >/dev/null; then
+    die "production T1 AOT strings contain a test-only save failpoint"
+  fi
+done
 
 for fixture_set in adversarial-1 adversarial-2; do
   (
@@ -157,6 +232,139 @@ for repetition in 1 2; do
 done
 cmp "${t1_tmp}/adversarial-runtime-1.stdout" \
   "${t1_tmp}/adversarial-runtime-2.stdout"
+
+for fixture_set in limits-1 limits-2; do
+  (
+    cd -- "${PROJECT_ROOT}"
+    PYTHONDONTWRITEBYTECODE=1 python3 -m tests.t1.generate_limit_fixtures \
+      --output-directory "${t1_tmp}/${fixture_set}"
+  ) >"${t1_tmp}/${fixture_set}.stdout"
+done
+diff -ru "${t1_tmp}/limits-1" "${t1_tmp}/limits-2"
+cmp "${t1_tmp}/limits-1.stdout" "${t1_tmp}/limits-2.stdout"
+grep -Fx \
+  'T1 LIMIT FIXTURES PASS: 4 deterministic artifacts; exact-max 472645 bytes' \
+  "${t1_tmp}/limits-1.stdout" >/dev/null
+
+run_bounded_runtime() {
+  local label="$1" maximum_seconds="$2" maximum_rss="$3"
+  local stdout="$4" stderr="$5"
+  shift 5
+  local process_id state rss status timed_out=0 max_rss=0
+  local start_seconds="${SECONDS}" grace complete=0
+  "$@" >"${stdout}" 2>"${stderr}" &
+  process_id=$!
+  while true; do
+    if ! kill -0 "${process_id}" 2>/dev/null; then
+      break
+    fi
+    state=
+    rss=
+    read -r state rss \
+      < <(ps -o stat=,rss= -p "${process_id}" 2>/dev/null || true) || true
+    if [[ "${state:-}" == Z* ]]; then
+      break
+    fi
+    if [[ "${rss:-}" =~ ^[0-9]+$ && "${rss}" -gt "${max_rss}" ]]; then
+      max_rss="${rss}"
+    fi
+    if (( SECONDS - start_seconds >= maximum_seconds )); then
+      timed_out=1
+      break
+    fi
+    sleep 0.05
+  done
+  if [[ "${timed_out}" == 1 ]]; then
+    kill -TERM "${process_id}" 2>/dev/null || true
+    for ((grace = 0; grace < 100; grace++)); do
+      if ! kill -0 "${process_id}" 2>/dev/null; then
+        complete=1
+        break
+      fi
+      state="$(ps -o stat= -p "${process_id}" 2>/dev/null || true)"
+      if [[ "${state:-}" == Z* ]]; then
+        complete=1
+        break
+      fi
+      sleep 0.05
+    done
+    if [[ "${complete}" == 0 ]]; then
+      kill -KILL "${process_id}" 2>/dev/null || true
+    fi
+  fi
+  if wait "${process_id}"; then status=0; else status=$?; fi
+  [[ "${timed_out}" == 0 ]] || \
+    die "${label} exceeded ${maximum_seconds} seconds"
+  [[ "${status}" == 0 ]] || die "${label} failed: ${status}"
+  [[ "${max_rss}" -gt 0 && "${max_rss}" -le "${maximum_rss}" ]] || \
+    die "${label} exceeded ${maximum_rss} KiB RSS: ${max_rss} KiB"
+  t1_measured_rss="${max_rss}"
+}
+
+for repetition in 1 2; do
+  ESHKOL_CXX_COMPILER="${t1_cxx}" \
+    timeout --foreground --signal=TERM --kill-after=5s 240s \
+    "${t1_runner}" --strict-types --no-stdlib \
+    -I "${PROJECT_ROOT}/lib" \
+    -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
+    "${PROJECT_ROOT}/tests/t1/limit_runtime.esk" \
+    -o "${t1_tmp}/limit-runtime-${repetition}"
+  run_bounded_runtime 'T1 exact-max runtime' 60 524288 \
+    "${t1_tmp}/limit-runtime-${repetition}.stdout" \
+    "${t1_tmp}/limit-runtime-${repetition}.stderr" \
+    "${t1_tmp}/limit-runtime-${repetition}" \
+    "${t1_tmp}/limits-${repetition}/exact-max.tsv" \
+    "${t1_tmp}/limits-${repetition}/specials-one-over.tsv" \
+    "${t1_tmp}/limits-${repetition}/prefix-one-over.tsv" \
+    "${t1_tmp}/limits-${repetition}/suffix-one-over.tsv" \
+    "${t1_tmp}/limit-saved-${repetition}.tsv"
+  if grep -F 'Heap usage at' \
+      "${t1_tmp}/limit-runtime-${repetition}.stderr" >/dev/null; then
+    die "T1 exact-max runtime emitted a heap-pressure warning"
+  fi
+  printf 'T1 exact-max measured max RSS: %s KiB\n' "${t1_measured_rss}"
+  grep -Fx 'T1 LIMIT PUBLIC PASS: 7 exact/one-over runtime checks' \
+    "${t1_tmp}/limit-runtime-${repetition}.stdout" >/dev/null
+  cmp "${t1_tmp}/limits-${repetition}/exact-max.tsv" \
+    "${t1_tmp}/limit-saved-${repetition}.tsv"
+done
+cmp "${t1_tmp}/limit-runtime-1.stdout" \
+  "${t1_tmp}/limit-runtime-2.stdout"
+
+for repetition in 1 2; do
+  ESHKOL_CXX_COMPILER="${t1_cxx}" \
+    timeout --foreground --signal=TERM --kill-after=5s 240s \
+    "${t1_runner}" --strict-types --no-stdlib \
+    -I "${PROJECT_ROOT}/lib" \
+    -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
+    "${PROJECT_ROOT}/tests/t1/registry_lifetime.esk" \
+    -o "${t1_tmp}/registry-lifetime-${repetition}"
+  run_bounded_runtime 'T1 registry baseline runtime' 30 262144 \
+    "${t1_tmp}/registry-baseline-${repetition}.stdout" \
+    "${t1_tmp}/registry-baseline-${repetition}.stderr" \
+    "${t1_tmp}/registry-lifetime-${repetition}" "${t1_fixture}" baseline
+  t1_registry_baseline_rss="${t1_measured_rss}"
+  grep -Fx \
+    'T1 REGISTRY LIFETIME PASS: 4 oldest-identity checks after 16 growth cycles' \
+    "${t1_tmp}/registry-baseline-${repetition}.stdout" >/dev/null
+  run_bounded_runtime 'T1 registry growth runtime' 30 262144 \
+    "${t1_tmp}/registry-growth-${repetition}.stdout" \
+    "${t1_tmp}/registry-growth-${repetition}.stderr" \
+    "${t1_tmp}/registry-lifetime-${repetition}" "${t1_fixture}" growth
+  t1_registry_growth_rss="${t1_measured_rss}"
+  grep -Fx \
+    'T1 REGISTRY LIFETIME PASS: 4 oldest-identity checks after 128 growth cycles' \
+    "${t1_tmp}/registry-growth-${repetition}.stdout" >/dev/null
+  [[ "${t1_registry_growth_rss}" -gt "${t1_registry_baseline_rss}" ]] || \
+    die "T1 retained registry growth did not increase measured RSS"
+  printf 'T1 registry retained RSS: baseline=%s KiB growth=%s KiB delta=%s KiB\n' \
+    "${t1_registry_baseline_rss}" "${t1_registry_growth_rss}" \
+    "$((t1_registry_growth_rss - t1_registry_baseline_rss))"
+done
+cmp "${t1_tmp}/registry-baseline-1.stdout" \
+  "${t1_tmp}/registry-baseline-2.stdout"
+cmp "${t1_tmp}/registry-growth-1.stdout" \
+  "${t1_tmp}/registry-growth-2.stdout"
 
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-t1-boundary.sh"
 

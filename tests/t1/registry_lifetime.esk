@@ -1,0 +1,66 @@
+(require transformer.config)
+(require transformer.persistence)
+(require transformer.tokenizer)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define args (command-line))
+(define fixture-path (car (cdr args)))
+(define mode (car (cdr (cdr args))))
+(define cycles
+  (cond ((string=? mode "baseline") 16)
+        ((string=? mode "growth") 128)
+        (else (exit 2))))
+(define minimal
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":8,\"model.hidden-size\":8,\"model.layer-count\":1,\"model.query-head-count\":1,\"model.vocabulary-size\":256,\"run.seed\":0}")
+(define config (config-resolve (config-parse minimal) '()))
+(define first-policy
+  (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define first-byte (tokenizer-byte config))
+(define first-loaded (tokenizer-load fixture-path first-policy))
+(define first-encoded
+  (tokenizer-encode first-byte (bytevector 0 1 2 255)))
+(define first-fingerprint (tokenizer-fingerprint first-loaded))
+
+;;; Every cycle appends one policy, two tokenizer identities, and one sealed
+;;; encode result. The caller discards each value; the accepted private
+;;; registries nevertheless retain it until process exit.
+(let grow ((index 0))
+  (if (< index cycles)
+      (begin
+        (persistence-policy 1048576 1048576 1048576 1 'cpu)
+        (tokenizer-byte config)
+        (tokenizer-load fixture-path first-policy)
+        (tokenizer-encode first-byte (bytevector index))
+        (grow (+ index 1)))))
+
+(check "oldest policy survives append-only growth"
+       (string=? (tokenizer-fingerprint
+                  (tokenizer-load fixture-path first-policy))
+                 first-fingerprint))
+(check "oldest byte tokenizer survives append-only growth"
+       (= (tokenizer-vocab-size first-byte) 256))
+(check "oldest loaded tokenizer survives append-only growth"
+       (string=? (tokenizer-fingerprint first-loaded) first-fingerprint))
+(check "oldest sealed encode survives append-only growth"
+       (let ((decoded (tokenizer-decode first-byte first-encoded)))
+         (and (= (bytevector-length decoded) 4)
+              (= (bytevector-u8-ref decoded 0) 0)
+              (= (bytevector-u8-ref decoded 1) 1)
+              (= (bytevector-u8-ref decoded 2) 2)
+              (= (bytevector-u8-ref decoded 3) 255))))
+
+(if (= failed 0)
+    (begin
+      (display "T1 REGISTRY LIFETIME PASS: ") (display passed)
+      (display " oldest-identity checks after ") (display cycles)
+      (display " growth cycles") (newline))
+    (exit 1))

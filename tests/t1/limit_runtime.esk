@@ -1,0 +1,73 @@
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+
+(define args (command-line))
+(define exact-path (car (cdr args)))
+(define specials-over-path (car (cdr (cdr args))))
+(define prefix-over-path (car (cdr (cdr (cdr args)))))
+(define suffix-over-path (car (cdr (cdr (cdr (cdr args))))))
+(define save-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+
+;;; Two loads exercise both exact syntax admission and retained tokenizer
+;;; identities in one process. Every exact-max name is exactly 64 ASCII bytes.
+(define first (tokenizer-load exact-path policy))
+(define second (tokenizer-load exact-path policy))
+(check "exact combined maxima load twice"
+       (and (= (tokenizer-vocab-size first) 4352)
+            (= (tokenizer-vocab-size second) 4352)
+            (string=? (tokenizer-fingerprint first)
+                      (tokenizer-fingerprint second))))
+(check "exact 64-byte boundary names"
+       (and
+        (= (tokenizer-special-token-id
+            first
+            "a000000000000000000000000000000000000000000000000000000000000000")
+           256)
+        (= (tokenizer-special-token-id
+            second
+            "a000000000000000000000000000000000000000000000000000000000004095")
+           4351)))
+(check "exact prefix and suffix maxima execute"
+       (= (bytevector-length
+           (tokenizer-decode first (tokenizer-encode first (bytevector))))
+          0))
+(check "exact-max canonical save" (tokenizer-save! first save-path policy))
+
+(check "special count one-over rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load specials-over-path policy))))
+(check "prefix count one-over rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load prefix-over-path policy))))
+(check "suffix count one-over rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load suffix-over-path policy))))
+
+(if (= failed 0)
+    (begin
+      (display "T1 LIMIT PUBLIC PASS: ") (display passed)
+      (display " exact/one-over runtime checks") (newline))
+    (exit 1))
