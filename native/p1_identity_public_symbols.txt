@@ -1,0 +1,4 @@
+et_p1_public_identity_abi_major_v1
+et_p1_public_identity_abi_minor_v1
+et_p1_public_token_kind_v1
+et_p1_public_token_live_v1

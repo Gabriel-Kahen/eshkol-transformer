@@ -39,8 +39,27 @@ e1b_cc="$(tsv_value "${e1b_provenance}" cc_path)"
 e1b_cxx="$(tsv_value "${e1b_provenance}" cxx_path)"
 undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
 x1_private_root="$(realpath -- "${PROJECT_ROOT}/native/x1_config_consumer_root.esk")"
+p1_private_root="$(realpath -- "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk")"
+p1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/p1_package_bridge.c")"
+p1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/p1_package_renames.txt")"
+p1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/p1_package_public_exports.txt")"
 if [[ "${private_root}" == "${x1_private_root}" ]]; then
   undefined_symbols="${PROJECT_ROOT}/native/x1_undefined_symbols.txt"
+else
+  p1_tuple_matches=0
+  [[ "${private_root}" == "${p1_private_root}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  [[ "${package_bridge}" == "${p1_package_bridge}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  [[ "${package_renames}" == "${p1_package_renames}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  [[ "${public_exports}" == "${p1_public_exports}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  if [[ "${p1_tuple_matches}" == 4 ]]; then
+    undefined_symbols="${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt"
+  elif [[ "${p1_tuple_matches}" != 0 ]]; then
+    die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
+  fi
 fi
 [[ -f "${undefined_symbols}" ]] || \
   die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"

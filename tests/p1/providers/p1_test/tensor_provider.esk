@@ -1,0 +1,460 @@
+;;; Test-only inert tensor carrier for P1 structural control-flow evidence.
+;;; This module is available only through the explicit tests/p1/providers root.
+
+(require transformer.module)
+(require transformer.error_internal)
+
+(provide module-create-fixture-internal
+         fixture-tensor-internal fixture-tensor-unsafe-internal
+         fixture-tensor-shared-clone-internal
+         fixture-reset-shared-clone-internal!
+         fixture-tensor-payload-internal
+         fixture-register-substituting-provider-internal!
+         fixture-register-raising-provider-internal!
+         fixture-register-reentrant-provider-internal!
+         fixture-register-self-reentrant-provider-internal!
+         fixture-register-malformed-status-provider-internal!
+         fixture-register-reentrant-target-provider-internal!
+         fixture-register-collision-provider-internal!
+         fixture-register-cyclic-evidence-provider-internal!
+         fixture-register-overlimit-evidence-provider-internal!
+         fixture-register-improper-evidence-provider-internal!
+         fixture-register-repeat-mutating-provider-internal!)
+
+(define fixture-tensor-tag (vector 'p1-test-fixture-tensor))
+(define fixture-plan-tag (vector 'p1-test-fixture-load-plan))
+(define fixture-provider-name 'fixture-v1)
+(define row-major-layout 'dense-row-major-contiguous)
+(define fixture-shared-clone-payload #f)
+(define fixture-max-shape-rank 64)
+(define fixture-max-data-depth 16)
+(define fixture-max-data-nodes 4096)
+
+(define (fixture-fail category operation message)
+  (transformer-error-raise category operation message '() #f))
+
+(define (fixture-identity-member? value values)
+  (cond
+    ((null? values) #f)
+    ((eq? value (car values)) #t)
+    (else (fixture-identity-member? value (cdr values)))))
+
+(define (fixture-bounded-list-length values limit)
+  (let loop ((remaining values) (seen '()) (count 0))
+    (cond
+      ((null? remaining) count)
+      ((not (pair? remaining)) #f)
+      ((>= count limit) #f)
+      ((fixture-identity-member? remaining seen) #f)
+      (else (loop (cdr remaining) (cons remaining seen) (+ count 1))))))
+
+(define (copy-data value)
+  (let ((seen '()) (nodes 0))
+    (define (walk item depth)
+      (set! nodes (+ nodes 1))
+      (let ((composite (if (or (pair? item) (vector? item)) item #f)))
+        (if (or (> depth fixture-max-data-depth)
+                (> nodes fixture-max-data-nodes)
+                (and composite
+                     (fixture-identity-member? composite seen)))
+            (fixture-fail
+              'invalid-argument 'p1-test-fixture-copy
+              "fixture data contains a cycle, shared composite, or exceeds bounds")
+            (if composite (set! seen (cons composite seen)) #t)))
+      (cond
+        ((pair? item) (cons (walk (car item) (+ depth 1))
+                            (walk (cdr item) depth)))
+        ((vector? item)
+         (let* ((size (vector-length item))
+                (result (make-vector size #f)))
+           (let loop ((index 0))
+             (if (= index size)
+                 result
+                 (begin
+                   (vector-set! result index
+                                (walk (vector-ref item index) (+ depth 1)))
+                   (loop (+ index 1)))))))
+        ((string? item) (string-copy item))
+        (else item)))
+    (walk value 0)))
+
+(define (valid-shape? shape)
+  (and (fixture-bounded-list-length shape fixture-max-shape-rank)
+       (let loop ((dimensions shape))
+         (if (null? dimensions)
+             #t
+             (and (integer? (car dimensions)) (exact? (car dimensions))
+                  (>= (car dimensions) 0) (loop (cdr dimensions)))))))
+
+(define (valid-payload? payload)
+  (and (vector? payload)
+       (let loop ((index 0))
+         (if (= index (vector-length payload))
+             #t
+             (let ((value (vector-ref payload index)))
+               (and (or (symbol? value) (boolean? value)
+                        (and (integer? value) (exact? value)))
+                    (loop (+ index 1))))))))
+
+(define (fixture-tensor? value)
+  (and (vector? value) (= (vector-length value) 8)
+       (eq? (vector-ref value 0) fixture-tensor-tag)))
+
+(define (fixture-tensor-unsafe-internal shape dtype device contiguous? payload
+                                        fail-copy?)
+  (vector fixture-tensor-tag (copy-data shape) dtype (copy-data device) contiguous?
+          (copy-data payload) fail-copy? 'test-only))
+
+(define (fixture-describe (request : vector)) : vector
+  (let ((tensor (vector-ref request 0))
+        (kind (vector-ref request 1))
+        (operation (vector-ref request 2)))
+    (if (not (fixture-tensor? tensor))
+        (fixture-fail 'unsupported operation "test carrier does not own tensor")
+        (if (not (valid-shape? (vector-ref tensor 1)))
+            (fixture-fail 'corrupt-data operation "malformed test tensor shape")
+            (if (not (symbol? (vector-ref tensor 2)))
+                (fixture-fail 'corrupt-data operation "malformed test tensor dtype")
+                (if (not (or (symbol? (vector-ref tensor 3))
+                             (vector? (vector-ref tensor 3))))
+                    (fixture-fail 'corrupt-data operation
+                                  "malformed test tensor device")
+                    (if (not (boolean? (vector-ref tensor 4)))
+                        (fixture-fail 'corrupt-data operation
+                                      "malformed test tensor layout")
+                        (if (not (vector-ref tensor 4))
+                            (fixture-fail 'noncontiguous operation
+                                          "test tensor is noncontiguous")
+                            (if (not (valid-payload? (vector-ref tensor 5)))
+                                (fixture-fail 'corrupt-data operation
+                                              "malformed test tensor payload")
+                                (if (not (or (boolean? (vector-ref tensor 6))
+                                             (eq? (vector-ref tensor 6)
+                                                  'share-clone)))
+                                    (fixture-fail 'corrupt-data operation
+                                                  "malformed test failure flag")
+                                    (if (not (eq? (vector-ref tensor 7)
+                                                  'test-only))
+                                        (fixture-fail 'corrupt-data operation
+                                                      "malformed test tensor marker")
+                                        (vector
+                                          (copy-data (vector-ref tensor 1))
+                                          (vector-ref tensor 2)
+                                          (vector-ref tensor 3)
+                                          row-major-layout))))))))))))
+
+(define (fixture-tensor-internal shape dtype device payload)
+  (let ((tensor
+          (fixture-tensor-unsafe-internal shape dtype device #t payload #f)))
+    (fixture-describe (vector tensor 'buffer 'fixture-tensor-internal))
+    tensor))
+
+(define (fixture-tensor-shared-clone-internal shape dtype device payload)
+  (vector fixture-tensor-tag (copy-data shape) dtype (copy-data device) #t
+          (copy-data payload) 'share-clone 'test-only))
+
+(define (fixture-reset-shared-clone-internal!)
+  (set! fixture-shared-clone-payload #f))
+
+(define (fixture-tensor-payload-internal tensor)
+  (fixture-describe (vector tensor 'buffer 'fixture-tensor-payload-internal))
+  (copy-data (vector-ref tensor 5)))
+
+(define (fixture-clone (request : vector)) : vector
+  (fixture-describe request)
+  (let ((tensor (vector-ref request 0))
+        (operation (vector-ref request 2)))
+    (if (eq? (vector-ref tensor 6) #t)
+        (fixture-fail 'unsupported operation "injected test clone failure")
+        (if (eq? (vector-ref tensor 6) 'share-clone)
+            (begin
+              (if fixture-shared-clone-payload
+                  #t
+                  (set! fixture-shared-clone-payload
+                        (copy-data (vector-ref tensor 5))))
+              (vector
+                (vector fixture-tensor-tag (copy-data (vector-ref tensor 1))
+                        (vector-ref tensor 2) (copy-data (vector-ref tensor 3)) #t
+                        fixture-shared-clone-payload 'share-clone 'test-only)))
+            (vector
+              (fixture-tensor-unsafe-internal
+                (vector-ref tensor 1) (vector-ref tensor 2)
+                (vector-ref tensor 3) (vector-ref tensor 4)
+                (vector-ref tensor 5) #f))))))
+
+(define (fixture-storage-identical? (request : vector)) : boolean
+  (let ((left (vector-ref request 0))
+        (right (vector-ref request 1))
+        (left-kind (vector-ref request 2))
+        (right-kind (vector-ref request 3))
+        (operation (vector-ref request 4)))
+    (fixture-describe (vector left left-kind operation))
+    (fixture-describe (vector right right-kind operation))
+    (eq? (vector-ref left 5) (vector-ref right 5))))
+
+(define (fixture-value-equal? (request : vector)) : boolean
+  (let ((left (vector-ref request 0))
+        (right (vector-ref request 1))
+        (kind (vector-ref request 2))
+        (operation (vector-ref request 3)))
+    (fixture-describe (vector left kind operation))
+    (fixture-describe (vector right kind operation))
+    (and (equal? (vector-ref left 1) (vector-ref right 1))
+         (eq? (vector-ref left 2) (vector-ref right 2))
+         (equal? (vector-ref left 3) (vector-ref right 3))
+         (eq? (vector-ref left 4) (vector-ref right 4))
+         (equal? (vector-ref left 5) (vector-ref right 5)))))
+
+(define (metadata-compatible! operation destination source kind)
+  (let ((left (fixture-describe (vector destination kind operation)))
+        (right (fixture-describe (vector source kind operation))))
+    (if (not (equal? (vector-ref left 0) (vector-ref right 0)))
+        (fixture-fail 'shape-mismatch operation "test load shape mismatch")
+        (if (not (eq? (vector-ref left 1) (vector-ref right 1)))
+            (fixture-fail 'dtype-mismatch operation "test load dtype mismatch")
+            (if (not (equal? (vector-ref left 2) (vector-ref right 2)))
+                (fixture-fail 'device-mismatch operation "test load device mismatch")
+                #t)))))
+
+(define (fixture-device-equal? (request : vector)) : boolean
+  (equal? (vector-ref request 0) (vector-ref request 1)))
+
+(define (fixture-prepare-load (request : vector)) : vector
+  (let ((assignments (vector-ref request 0))
+        (operation (vector-ref request 1)))
+    (let loop ((remaining assignments) (updates '()))
+      (if (null? remaining)
+          (vector (vector fixture-plan-tag #f updates))
+          (let* ((assignment (car remaining))
+                 (destination (vector-ref assignment 0))
+                 (source (vector-ref assignment 1))
+                 (kind (vector-ref assignment 2)))
+            (metadata-compatible! operation destination source kind)
+            (if (not (= (vector-length (vector-ref destination 5))
+                        (vector-length (vector-ref source 5))))
+                (fixture-fail 'unsupported operation
+                              "test copy requires equal payload storage")
+                (let ((prepared
+                        (vector-ref
+                          (fixture-clone (vector source kind operation)) 0)))
+                  (loop (cdr remaining)
+                        (cons (vector destination prepared) updates)))))))))
+
+(define (copy-payload-into! destination source)
+  (let ((target (vector-ref destination 5))
+        (prepared (vector-ref source 5)))
+    (let loop ((index 0))
+      (if (= index (vector-length target))
+          #t
+          (begin
+            (vector-set! target index (vector-ref prepared index))
+            (loop (+ index 1)))))))
+
+(define (fixture-commit-load! (plan : vector)) : vector
+  (if (or (not (= (vector-length plan) 3))
+          (not (eq? (vector-ref plan 0) fixture-plan-tag))
+          (vector-ref plan 1))
+      (fixture-fail 'internal 'module-load-state-dict!
+                    "invalid or consumed test load plan")
+      (begin
+        (vector-set! plan 1 #t)
+        (let loop ((updates (vector-ref plan 2)))
+          (if (null? updates)
+              #t
+              (begin
+                (copy-payload-into! (vector-ref (car updates) 0)
+                                    (vector-ref (car updates) 1))
+                (loop (cdr updates)))))
+        plan)))
+
+(define fixture-provider
+  (tensor-provider-create-internal
+    fixture-provider-name fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define (poison-vector (request : vector)) : vector
+  (fixture-fail 'internal 'poison-provider "poison provider callback selected")
+  (vector))
+
+(define (poison-boolean (request : vector)) : boolean
+  (fixture-fail 'internal 'poison-provider "poison provider callback selected")
+  #f)
+
+(define poison-access-provider
+  (tensor-provider-create-internal
+    'poison-access-v1 poison-vector poison-vector poison-boolean poison-boolean
+    poison-boolean fixture-prepare-load fixture-commit-load!))
+
+(define alternate-provider
+  (tensor-provider-create-internal
+    'alternate-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define collision-provider
+  (tensor-provider-create-internal
+    fixture-provider-name fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define (substituting-commit (plan : vector)) : vector
+  (vector 'allocated-substitute-plan))
+
+(define substituting-provider
+  (tensor-provider-create-internal
+    'substituting-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load substituting-commit))
+
+(define (raising-commit (plan : vector)) : vector
+  (fixture-fail 'internal 'tensor-provider-register-internal!
+                "injected admission commit failure")
+  (vector))
+
+(define raising-provider
+  (tensor-provider-create-internal
+    'raising-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load raising-commit))
+
+(define reentrant-target-provider
+  (tensor-provider-create-internal
+    'reentrant-target-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define malformed-status-provider
+  (tensor-provider-create-internal
+    'malformed-status-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define (fixture-admission-evidence)
+  (list
+    (vector
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-destination-a 'bits-v1))
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-source-a 'bits-v1))
+      'parameter)
+    (vector
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-destination-b 'bits-v1))
+      (fixture-tensor-internal '(2) 'f32 'cpu
+                               (vector 'admission-source-b 'bits-v1))
+      'parameter)))
+
+(define (reentrant-prepare (request : vector)) : vector
+  (tensor-provider-register-internal! reentrant-target-provider
+                                      (fixture-admission-evidence))
+  (fixture-prepare-load request))
+
+(define reentrant-provider
+  (tensor-provider-create-internal
+    'reentrant-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? reentrant-prepare fixture-commit-load!))
+
+(define (self-reentrant-prepare (request : vector)) : vector
+  (tensor-provider-register-internal! self-reentrant-provider
+                                      (fixture-admission-evidence))
+  (fixture-prepare-load request))
+
+(define self-reentrant-provider
+  (tensor-provider-create-internal
+    'self-reentrant-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? self-reentrant-prepare fixture-commit-load!))
+
+(define cyclic-evidence-provider
+  (tensor-provider-create-internal
+    'cyclic-evidence-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define overlimit-evidence-provider
+  (tensor-provider-create-internal
+    'overlimit-evidence-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define improper-evidence-provider
+  (tensor-provider-create-internal
+    'improper-evidence-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+
+(define (repeat-mutating-commit (plan : vector)) : vector
+  (if (vector-ref plan 1)
+      (let* ((update (car (vector-ref plan 2)))
+             (destination (vector-ref update 0))
+             (payload (vector-ref destination 5)))
+        (vector-set! payload 0 'repeat-mutation)
+        (fixture-fail 'internal 'tensor-provider-register-internal!
+                      "repeat commit mutated then raised"))
+      (fixture-commit-load! plan)))
+
+(define repeat-mutating-provider
+  (tensor-provider-create-internal
+    'repeat-mutating-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load repeat-mutating-commit))
+
+(tensor-provider-register-internal! fixture-provider
+                                    (fixture-admission-evidence))
+(tensor-provider-register-internal! alternate-provider
+                                    (fixture-admission-evidence))
+
+(define (fixture-register-substituting-provider-internal!)
+  (tensor-provider-register-internal! substituting-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-raising-provider-internal!)
+  (tensor-provider-register-internal! raising-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-reentrant-provider-internal!)
+  (tensor-provider-register-internal! reentrant-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-self-reentrant-provider-internal!)
+  (tensor-provider-register-internal! self-reentrant-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-malformed-status-provider-internal!)
+  (tensor-provider-register-internal! malformed-status-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-reentrant-target-provider-internal!)
+  (tensor-provider-register-internal! reentrant-target-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-collision-provider-internal!)
+  (tensor-provider-register-internal! collision-provider
+                                      (fixture-admission-evidence)))
+
+(define (fixture-register-cyclic-evidence-provider-internal!)
+  (let ((evidence (fixture-admission-evidence)))
+    (set-cdr! (cdr evidence) evidence)
+    (tensor-provider-register-internal! cyclic-evidence-provider evidence)))
+
+(define (fixture-register-overlimit-evidence-provider-internal!)
+  (let ((assignment (car (fixture-admission-evidence))))
+    (let loop ((count 17) (evidence '()))
+      (if (= count 0)
+          (tensor-provider-register-internal! overlimit-evidence-provider
+                                              evidence)
+          (loop (- count 1) (cons assignment evidence))))))
+
+(define (fixture-register-improper-evidence-provider-internal!)
+  (tensor-provider-register-internal!
+    improper-evidence-provider
+    (cons (car (fixture-admission-evidence)) 'improper-tail)))
+
+(define (fixture-register-repeat-mutating-provider-internal!)
+  (tensor-provider-register-internal! repeat-mutating-provider
+                                      (fixture-admission-evidence)))
+
+(define (module-create-fixture-internal)
+  (module-create-with-provider-internal fixture-provider-name))

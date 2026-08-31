@@ -299,8 +299,10 @@ mutable cache receiver is supplied by a later accepted contract. Training mode m
 consume explicit RNG state; it must not use hidden global randomness. P1 owns module
 representation; N2/A2/L2/M3 own numerical implementation and gradient evidence.
 
-Parameter paths are immutable lists of nonempty UTF-8 segments; no separator escaping
-exists. Ordering is lexicographic by UTF-8 bytes segment-by-segment. Repeated
+Parameter paths are immutable lists of UTF-8 segments containing 1..65536 encoded
+bytes each, inclusive; the bound is per segment and no separator escaping exists.
+Registration and caller-path validation use this exact domain before provider work
+or mutation. Ordering is lexicographic by UTF-8 bytes segment-by-segment. Repeated
 `module-parameters` calls return new tree containers whose unique handles have the
 same module identity and whose complete logical path set is stable.
 `parameter-tree-paths` returns every logical path, including aliases, exactly once.

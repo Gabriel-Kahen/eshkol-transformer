@@ -1,0 +1,17 @@
+(require transformer.module)
+(require transformer.error_public)
+
+(define raised
+  (guard (condition (#t condition))
+    (module-state-dict #f)
+    #f))
+
+(if (and (transformer-error? raised)
+         (eq? (transformer-error-category raised) 'invalid-argument)
+         (eq? (transformer-error-operation raised) 'module-state-dict)
+         (string=? (transformer-error-message raised)
+                   "expected registered opaque value")
+         (null? (transformer-error-details raised))
+         (eq? (transformer-error-cause raised) #f))
+    (begin (display "p1-e1b-import-module-first:v1") (newline))
+    (exit 1))

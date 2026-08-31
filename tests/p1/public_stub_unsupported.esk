@@ -1,0 +1,62 @@
+(require transformer.error_public)
+(require transformer.module)
+
+(define checks 0)
+(define first-error #f)
+
+(define (expect-p1-error operation thunk)
+  (guard (raised
+           (#t
+             (if (and (transformer-error? raised)
+                      (eq? (transformer-error-category raised)
+                           'invalid-argument)
+                      (eq? (transformer-error-operation raised) operation)
+                      (string=? (transformer-error-message raised)
+                                "expected registered opaque value")
+                      (null? (transformer-error-details raised))
+                      (eq? (transformer-error-cause raised) #f))
+                 (begin
+                   (if (eq? first-error #f) (set! first-error raised) #t)
+                   (set! checks (+ checks 1)))
+                 (exit 1))))
+    (thunk)
+    (exit 1)))
+
+(expect-p1-error 'module-parameters (lambda () (module-parameters #f)))
+(expect-p1-error 'module-buffers (lambda () (module-buffers #f)))
+(expect-p1-error 'module-state-dict (lambda () (module-state-dict #f)))
+(expect-p1-error 'module-load-state-dict!
+                 (lambda () (module-load-state-dict! #f #f)))
+(expect-p1-error 'module-train! (lambda () (module-train! #f)))
+(expect-p1-error 'module-eval! (lambda () (module-eval! #f)))
+(expect-p1-error 'module-zero-grad! (lambda () (module-zero-grad! #f)))
+(expect-p1-error 'parameter-tree-paths
+                 (lambda () (parameter-tree-paths #f)))
+(expect-p1-error 'parameter-tree-handle
+                 (lambda () (parameter-tree-handle #f '())))
+(expect-p1-error 'parameter-tree-tie-groups
+                 (lambda () (parameter-tree-tie-groups #f)))
+(expect-p1-error 'parameter-handle-path
+                 (lambda () (parameter-handle-path #f)))
+(expect-p1-error 'parameter-handle-shape
+                 (lambda () (parameter-handle-shape #f)))
+(expect-p1-error 'parameter-handle-dtype
+                 (lambda () (parameter-handle-dtype #f)))
+(expect-p1-error 'parameter-handle-device
+                 (lambda () (parameter-handle-device #f)))
+(expect-p1-error 'state-dict-paths (lambda () (state-dict-paths #f)))
+(expect-p1-error 'state-dict-tensor
+                 (lambda () (state-dict-tensor #f '())))
+(expect-p1-error 'state-dict-alias-groups
+                 (lambda () (state-dict-alias-groups #f)))
+
+(define copied-message (transformer-error-message first-error))
+(string-set! copied-message 0 #\X)
+(if (string=? (transformer-error-message first-error)
+              "expected registered opaque value")
+    (set! checks (+ checks 1))
+    (exit 1))
+
+(if (= checks 18)
+    (begin (display "p1-e1b-import-error-first:v1") (newline))
+    (exit 1))

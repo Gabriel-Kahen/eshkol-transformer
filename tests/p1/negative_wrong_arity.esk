@@ -1,0 +1,4 @@
+(require transformer.module)
+
+;;; module-state-dict requires exactly one module receiver.
+(module-state-dict)
