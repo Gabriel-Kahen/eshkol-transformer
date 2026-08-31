@@ -1,0 +1,4 @@
+(require transformer.data)
+
+;;; The implementation registration helper must not resolve through the public facade.
+(define leaked-summary-maker d1-token-make-summary)

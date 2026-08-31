@@ -21,9 +21,119 @@ include_dirs=("$@")
 [[ -f "${public_exports}" ]] || die "E1B public export list not found: ${public_exports}"
 [[ "${output_object}" == *.o ]] || die "E1B output must end in .o"
 
+canonical_include_dirs=()
+for include_dir in "${include_dirs[@]}"; do
+  [[ -d "${include_dir}" ]] || die "E1B include directory not found: ${include_dir}"
+  canonical_include_dirs+=("$(realpath -- "${include_dir}")")
+done
+
+base_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/e1b_undefined_symbols.txt")"
+x1_private_root="$(realpath -- "${PROJECT_ROOT}/native/x1_config_consumer_root.esk")"
+x1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/x1_config_consumer_bridge.c")"
+x1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/x1_config_private_renames.txt")"
+x1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/x1_config_public_exports.txt")"
+x1_include_dir="$(realpath -- "${PROJECT_ROOT}/native")"
+x1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/x1_undefined_symbols.txt")"
+p1_private_root="$(realpath -- "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk")"
+p1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/p1_package_bridge.c")"
+p1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/p1_package_renames.txt")"
+p1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/p1_package_public_exports.txt")"
+p1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt")"
+d1_private_root="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_private.esk")"
+d1_fault_private_root="$(realpath -- "${PROJECT_ROOT}/tests/d1/d1_e1b_fault_root.esk")"
+d1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c")"
+d1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt")"
+d1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_public_exports.txt")"
+d1_include_dir="$(realpath -- "${PROJECT_ROOT}/src")"
+d1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_undefined_symbols.txt")"
+d1_fault_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_fault_undefined_symbols.txt")"
+d1_native_source="$(realpath -- "${PROJECT_ROOT}/native/data_io.c")"
+
+[[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
+  die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
+package_policy=
+package_native_source=
+package_native_define=
+if [[ "${private_root}" == "${d1_private_root}" || \
+      "${private_root}" == "${d1_fault_private_root}" ]]; then
+    [[ "${package_bridge}" == "${d1_package_bridge}" ]] || \
+      die "D1 package policy requires the exact repository D1 bridge"
+    [[ "${package_renames}" == "${d1_package_renames}" ]] || \
+      die "D1 package policy requires the exact repository D1 rename map"
+    [[ "${public_exports}" == "${d1_public_exports}" ]] || \
+      die "D1 package policy requires the exact repository D1 export list"
+    [[ "${#canonical_include_dirs[@]}" == 1 && \
+       "${canonical_include_dirs[0]}" == "${d1_include_dir}" ]] || \
+      die "D1 package policy requires exactly the repository src include directory"
+    package_native_source="${d1_native_source}"
+    if [[ "${private_root}" == "${d1_private_root}" ]]; then
+      package_policy=d1
+      undefined_symbols="${d1_undefined_symbols}"
+    else
+      package_policy=d1-test-faults
+      undefined_symbols="${d1_fault_undefined_symbols}"
+      package_native_define=-DET_D1_TEST_FAULTS
+    fi
+elif [[ "${private_root}" == "${x1_private_root}" ]]; then
+  [[ "${package_bridge}" == "${x1_package_bridge}" ]] || \
+    die "X1 package policy requires the exact repository bridge"
+  [[ "${package_renames}" == "${x1_package_renames}" ]] || \
+    die "X1 package policy requires the exact repository rename map"
+  [[ "${public_exports}" == "${x1_public_exports}" ]] || \
+    die "X1 package policy requires the exact repository export list"
+  [[ "${#canonical_include_dirs[@]}" == 1 && \
+     "${canonical_include_dirs[0]}" == "${x1_include_dir}" ]] || \
+    die "X1 package policy requires exactly the repository native include directory"
+  package_policy=x1
+  undefined_symbols="${x1_undefined_symbols}"
+elif [[ "${private_root}" == "${p1_private_root}" ]]; then
+  [[ "${package_bridge}" == "${p1_package_bridge}" ]] || \
+    die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
+  [[ "${package_renames}" == "${p1_package_renames}" ]] || \
+    die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
+  [[ "${public_exports}" == "${p1_public_exports}" ]] || \
+    die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
+  [[ "${#canonical_include_dirs[@]}" == 0 ]] || \
+    die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
+  package_policy=p1
+  undefined_symbols="${p1_undefined_symbols}"
+else
+  p1_tuple_matches=0
+  [[ "${package_bridge}" == "${p1_package_bridge}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  [[ "${package_renames}" == "${p1_package_renames}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  [[ "${public_exports}" == "${p1_public_exports}" ]] && \
+    p1_tuple_matches=$((p1_tuple_matches + 1))
+  if [[ "${p1_tuple_matches}" != 0 ]]; then
+    die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
+  fi
+  for reserved_input in \
+      "${d1_package_bridge}" "${d1_package_renames}" "${d1_public_exports}" \
+      "${x1_package_bridge}" "${x1_package_renames}" "${x1_public_exports}" \
+      "${p1_package_bridge}" "${p1_package_renames}" "${p1_public_exports}"; do
+    if [[ "${package_bridge}" == "${reserved_input}" || \
+          "${package_renames}" == "${reserved_input}" || \
+          "${public_exports}" == "${reserved_input}" ]]; then
+      die "repository package components require their exact repository-owned private root"
+    fi
+  done
+  package_policy=base-e1b
+  undefined_symbols="${base_undefined_symbols}"
+fi
+if [[ "${package_policy}" == d1-test-faults ]]; then
+  canonical_d1_artifact_dir="$(realpath -m -- "$(project_build_dir)/d1")"
+  case "${output_object}" in
+    "${canonical_d1_artifact_dir}"/*)
+      die "D1 test-fault object cannot target the canonical production directory"
+      ;;
+  esac
+fi
+
 require_command awk
 require_command cmp
 require_command comm
+require_command env
 require_command grep
 require_command nm
 require_command objcopy
@@ -37,11 +147,6 @@ e1b_source="$(eshkol_source_dir)"
 e1b_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 e1b_cc="$(tsv_value "${e1b_provenance}" cc_path)"
 e1b_cxx="$(tsv_value "${e1b_provenance}" cxx_path)"
-undefined_symbols="${PROJECT_ROOT}/native/e1b_undefined_symbols.txt"
-x1_private_root="$(realpath -- "${PROJECT_ROOT}/native/x1_config_consumer_root.esk")"
-if [[ "${private_root}" == "${x1_private_root}" ]]; then
-  undefined_symbols="${PROJECT_ROOT}/native/x1_undefined_symbols.txt"
-fi
 [[ -f "${undefined_symbols}" ]] || \
   die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
 [[ -s "${undefined_symbols}" ]] || \
@@ -64,12 +169,13 @@ LC_ALL=C sort -u "${undefined_symbols}" \
 cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
   die "E1B undefined-symbol allowlist must already be byte-exact C-sorted unique text"
 
-awk '
-  NF != 1 || $1 !~ /^et_e1b_public_[a-z0-9_]+_v1$/ { bad = 1; next }
+export_pattern='^et_e1b_public_[a-z0-9_]+_v1$'
+awk -v pattern="${export_pattern}" '
+  NF != 1 || $1 !~ pattern { bad = 1; next }
   { print $1 }
   END { if (bad) exit 1 }
 ' "${public_exports}" | LC_ALL=C sort -u >"${e1b_tmp}/package-exports.txt" || \
-  die "E1B package exports must be one et_e1b_public_*_v1 symbol per line"
+  die "E1B package exports do not match the repository-owned policy"
 [[ -s "${e1b_tmp}/package-exports.txt" ]] || \
   die "E1B package export list must not be empty"
 cmp -s "${public_exports}" "${e1b_tmp}/package-exports.txt" || \
@@ -87,14 +193,17 @@ cmp -s "${public_exports}" "${e1b_tmp}/package-exports.txt" || \
 } | LC_ALL=C sort -u >"${e1b_tmp}/expected-global-defined.txt"
 
 run_compiler() {
-  XDG_CACHE_HOME="${e1b_tmp}/cache" ESHKOL_CXX_COMPILER="${e1b_cxx}" \
+  env -u ESHKOL_PATH \
+    XDG_CACHE_HOME="${e1b_tmp}/cache" \
+    ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+    ESHKOL_CXX_COMPILER="${e1b_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s \
       "${e1b_timeout_seconds}s" "${e1b_runner}" "$@"
 }
 
 include_args=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
-for include_dir in "${include_dirs[@]}"; do
-  include_args+=(-I "$(realpath -- "${include_dir}")")
+for include_dir in "${canonical_include_dirs[@]}"; do
+  include_args+=(-I "${include_dir}")
 done
 
 (
@@ -138,9 +247,22 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
+package_native_objects=()
+if [[ -n "${package_native_source}" ]]; then
+  package_native_objects+=("${e1b_tmp}/package-native.o")
+  package_native_cflags=(
+    -std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
+  )
+  if [[ -n "${package_native_define}" ]]; then
+    package_native_cflags+=("${package_native_define}")
+  fi
+  "${e1b_cc}" "${package_native_cflags[@]}" \
+    -c "${package_native_source}" -o "${package_native_objects[0]}"
+fi
+
 "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
-  "${e1b_tmp}/package-bridge.o" \
+  "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
   -o "${e1b_tmp}/combined.raw.o"
 
 nm -g --defined-only --format=posix "${e1b_tmp}/combined.raw.o" | \
@@ -188,6 +310,16 @@ for privileged in \
     "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
     die "E1B required privileged definition is not local: ${privileged}"
 done
+if [[ "${package_policy}" == d1 || "${package_policy}" == d1-test-faults ]]; then
+  for privileged in \
+    et_d1_checked_write_new_v1 \
+    et_e1b_private_d1_token_corpus_write_cabi_v1 \
+    et_e1b_private_d1_token_corpus_validate_cabi_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "D1 required privileged definition is not local: ${privileged}"
+  done
+fi
 
 evidence_dir="${output_object}.evidence"
 temporary_output="${output_object}.tmp.$$"
@@ -209,6 +341,7 @@ cp "${e1b_tmp}/undefined.txt" \
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
 {
+  printf 'package_policy\t%s\n' "${package_policy}"
   printf 'allowlist\t%s\n' "$(basename -- "${undefined_symbols}")"
   printf 'llvm_version\t%s\n' "$(tsv_value "${e1b_provenance}" llvm_version)"
   printf 'cc_version\t%s\n' "$(tsv_value "${e1b_provenance}" cc_version)"

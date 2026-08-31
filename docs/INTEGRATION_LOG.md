@@ -403,3 +403,230 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   merge commit `18276b1284ad5e69bee6de91f3f00096e99e4ca5`. Merged-main
   `make test-x1` and `make test build smoke` passed on the documented local
   compatibility lane.
+
+## 2026-08-29 — P1 / issue #22
+
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and merged-main focused regression gates.
+- **Contract:** `transformer.module` retains exactly the 17 merged A0 public names and
+  arities. Nested module, parameter, and buffer paths use deterministic UTF-8 byte
+  lexical order; tied parameter paths retain destination identity while snapshots
+  contain independent value-equal entries and canonical lexical alias groups. Logical
+  state-dictionary schema 1.0 is an inert, non-executable contract independent of C1
+  byte/container versions and contains only the provider identity
+  `(transformer-tensor-provider 1 0 provider-id)`. Metadata is redundant validation
+  data and never overrides tensor observations. The installed generated root imports
+  only `transformer.error_consumer`; the never-installed trusted root imports only
+  E1B's fixed five-value private raise seam. One prelocalized package object owns the
+  sole E1 registry and exports exactly the 17 P1 operations plus six A0 accessors;
+  every E1B seam, P1 thunk, and native identity definition is localized. The normal
+  build's alternative native identity archive exposes four read-only observations
+  only; its private replacement adds hidden fixed-arity identity/admission/binding
+  cleanup operations and is never installed or linked beside either public product.
+  P1's wider undefined-symbol policy is admitted before mutation only for the exact
+  repository-owned trusted-root/bridge/rename/export tuple; copied roots, copied or
+  mismatched bridge/native inputs, partial tuples, and environment overrides reject.
+  Native code performs no schema, tensor, commit,
+  serialization, or capability logic. Every parameter, tied-parameter, buffer, and
+  child name—and every caller or generated path segment—shares one inclusive
+  1..65536 encoded UTF-8 byte domain. Admission rejects one-over input before
+  provider lookup/callback, allocation, identity/device work, or topology mutation;
+  prebuilt attachment applies the same gate to its new edge. A process-local internal provider-v1 boundary
+  defaults to no provider. Trusted C1/I1 callers must explicitly bind an
+  already-admitted provider with the exact identity before load; serialized metadata
+  never selects executable code and snapshots never serialize a binding. Admission,
+  binding, exact path/kind/metadata/alias/storage validation, whole-batch preparation,
+  and the no-recoverable-branch commit protocol are documented in
+  [P1_MODULE_STATE.md](P1_MODULE_STATE.md). Construction admits at most 4096 modules,
+  4096 state entries, 64 child edges, and 64 generated path segments; leaf and
+  prebuilt-subtree registration validate prospective cached counts, shifted height,
+  and shifted leaf span before any callback or mutation. Observation precomputes a
+  bounded iterative finalization plan, leaving only finite vector writes after its
+  commit boundary, and subtree storage checks compare unique authoritative handles
+  so tied aliases cannot multiply provider-callback work. Provider admission retains an immutable
+  bridge-owned identity/callback-token snapshot, uses exact 0..127-byte provider IDs,
+  and revokes every unpublished identity on failure. No checkpoint bytes, checksums, encoding,
+  magic, filesystem I/O, tensor backend, dtype implementation, or capability claim is
+  added.
+- **Evidence:** `/usr/bin/bash -c 'make test-p1'`, `/usr/bin/bash -c 'make test'`,
+  `/usr/bin/bash -c 'make build'`, and `/usr/bin/bash -c 'make smoke'` passed against
+  canonical `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de` and compiler
+  `1.3.4-evolve` on the explicitly unsupported CachyOS x86-64 / LLVM-Clang 22.1.6
+  compatibility lane. The focused gate passed 178 structural/ownership/binding/
+  validation/atomicity assertions, 118 native token/security/ABI checks, 57 native
+  allocation/entropy/partial-admission failpoint checks, 8 cross-role translation-
+  unit identity checks, and 102 trusted test-only registry/error-mapping/topology/name-bound
+  checks. The latter
+  drive automatic partial-callback cleanup through an injected failure and prove exact
+  live/tombstone deltas plus unchanged registry counts across failed and repeated strict
+  loads; exact and one-over 64-segment/depth and 4096-entry/node fixtures additionally
+  prove generated lookup, full tied/buffer state round-trip, atomic subtree/leaf
+  rejection, bounded finalization, and exact/one-over 65536-byte multibyte name/path
+  admission across every registration family, lookup, snapshot, and strict load.
+  Their three hidden hooks exist only in a
+  temporary non-production archive.
+  Native failpoint errors raise directly through the same E1 registry with bounded
+  canonical data-only status details and cause `#f`, even after cleanup overwrites the
+  native context; an injected impossible status/code pair maps to `internal` and
+  cleans up without adding a production hook. The gate also covers ASan/UBSan,
+  both public import orders, and repeated
+  strict AOT compilation and execution; byte-identical package objects, manifests,
+  evidence, application objects, executables, outputs, and AOT diagnostics; exact
+  source/object/AOT negative/no-artifact checks; and depfile/`nm`/`readelf`/`strings`
+  production-isolation checks. Fresh-cache negatives cover every internal Eshkol name;
+  all 25 private native functions remain unresolved against the completed package and
+  resolve only against the deliberate non-installed trusted positive control.
+  Adversarial cases include unbound/wrong-id/conflicting rebind,
+  unknown/unverified provider, raised,
+  substituted-vector, allocation-probe, and reentrant admission, later-entry prepare
+  failure with unchanged destinations, conflicting aliases, duplicates, malformed
+  schema, cyclic caller lists/composites, unsupported versions, and shape/dtype/device
+  mismatches. Independent native-security, ABI, packaging/leakage, cyclic-validation,
+  atomicity, evidence, and P1-contract reviews found no blocker. Supported Ubuntu
+  22.04 x86-64 / LLVM-Clang 21.1.8
+  [CI run 33352609244](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33352609244)
+  passed at exact reviewed head `3b7ad986aba0c5dda860bc36a74aeee55c511878`.
+  The actual merged-main commit also passed `make test-p1` with all 178 structural,
+  183 native, and 102 registry/atomicity checks.
+- **Dependencies / retest:** C1 may consume this merged logical contract and must
+  treat itself, with I1, as a trusted explicit binder rather than perform
+  metadata-driven provider lookup. The test-only provider proves only P1 control-flow
+  and ownership semantics. I1/K1 and later real f32 support must repeat round-trip,
+  mutation, storage-lifetime, device, and commit-infallibility tests before any
+  numerical, physical tensor, backend, dtype, device, or module-capability claim.
+- **Reference:** [issue #22](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/22);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [PR #31](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31);
+  [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/31#issuecomment-5473456290);
+  merge commit `b68ec9f9a64583800cfa888da2916f6ea99134b4`.
+
+## 2026-08-28 — D1 / issue #18
+
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and an actual merged-main focused D1 rerun.
+- **Contract:** `(require transformer.data)` exports the versioned, checksummed,
+  manifest-last token-corpus writer, strict validator, identity-backed
+  observationally immutable summary, and six summary accessors documented in
+  `docs/PUBLIC_API_CONTRACT.md`. Summary metadata is validated, deep-owned, and held
+  only in a private lexical identity registry; mutable or forged receivers are not
+  summaries, and no constructor escapes. The corpus uses
+  `manifest.etm`, canonical `shard-%016d.ets` names, distinct eight-byte magic values,
+  little-endian signed-`i64` token semantics, SHA-256 trailers, opaque canonical UTF-8
+  tokenizer fingerprints bounded to 1..192 bytes, repeated identity/count metadata,
+  and exact v1.0 rejection rules in `docs/TOKEN_SHARD_FORMAT.md`. The fingerprint is
+  stored and compared byte-for-byte; D1 does not parse or assume T1's concurrently
+  proposed lexical form. A narrow native boundary exclusively creates each
+  deterministic temporary, loops through partial writes, checks every byte and
+  `close(2)`, and permits rename only on success; production contains no fault
+  injection or fallback. The manifest rename is the publication commit point, not a
+  whole-directory atomicity, `fsync`, or power-loss durability claim. The pinned
+  compiler's supported D1 packaging is one combined, separately compiled E1B/D1
+  object: its installed facade provides exactly the eight accepted procedures, the
+  shared E1 registry and six accessors live in that object, and the fixed raise seam,
+  private Eshkol implementation, and checked byte/write/close primitive are localized.
+- **Evidence:** Historical evidence before the current D1-R corrections: after
+  rebasing onto E1 merge `80371a1`, the local compatibility-only
+  CachyOS x86-64 / LLVM-Clang 22.1.6 run passed `/usr/bin/bash -c 'make test-d1'`:
+  byte-identical strict compilation with a production-E1 depfile, native SHA-256 and
+  binary I/O/rename/lock/UTF-8 reachability under an unusable runtime `PATH`, checked
+  arithmetic and production-E1 mapping/identity probes, and 14 deterministic/
+  reference/corruption/boundary groups. The publication cleanup test passed five
+  additional fresh runs. A0 passed; E1 passed 112 checks; Q0 passed 23 tests; the
+  repository-wide `make test`, explicit `make build`, `make smoke`, and diff hygiene
+  gates passed, including 41 B0 tests and the integrated K1 gate. All Eshkol evidence
+  used provenance-verified canonical
+  `tsotchke/eshkol@90cbd7130f47b8184bcc77b8d5c1b0026da980de`, compiler
+  `v1.3.4-evolve`. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33269298912](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33269298912)
+  passed build, integrated tests, smoke, and the reproducible benchmark at obsolete
+  PR head `58d3a5d`. D1-R subsequently requested three high-priority corrections at
+  exact head `52cb854e3e76e9b834ce76631b0acf6c5328553d`: checked write/close status,
+  nonforgeable observational summary immutability, and removal of named E1
+  constructor reachability from `(require transformer.data)`. The candidate is
+  rebased onto accepted K1/E1 documentation main commit
+  `8ab5e5cb00a07d8bff6ffc7c52b72cbae2d6d832` and implements those contract changes.
+  On the provenance-verified canonical pin, the unsupported CachyOS/LLVM-Clang 22
+  compatibility run passed `make test-d1` with 16 format/native-I/O groups plus the
+  compiled SHA-256, primitive, arithmetic, E1, summary-opacity, and fresh-cache AOT
+  reachability probes. It also passed `make test-a0 test-e1` (including 112 E1
+  checks), the standalone 23-test Q0 gate, full `make test` (including 41 B0 tests
+  and K1 sanitizers), explicit `make build`, `make smoke`, shell syntax, and diff
+  hygiene. Independent native-I/O/security, summary-opacity, public-boundary, and
+  documentation reviews found no remaining actionable issue. Supported Ubuntu
+  22.04 / LLVM-Clang 21.1.8
+  [CI run 33273402656](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33273402656)
+  passed build, integrated tests, smoke, and the reproducible benchmark at exact
+  implementation head `aa3b9f2a83eff57af7a4f45e2e079f6a284ebd4b`. Any later
+  documentation-only head requires its own exact-head confirmation before re-review.
+  The subsequent D1-F repair rebased the complete candidate onto current main after
+  accepted I1 integration and changed the normal build/test path to consume the same
+  precompiled Eshkol facade. Fresh-cache source/object/AOT negatives now cover
+  direct calls, first-class bindings, wrong arities, the former ninth FFI alias, and
+  current write/publish/implementation/list/SHA helper families. Depfile, declared
+  provide, `nm`, `readelf`, `strings`, and crafted relocatable-link checks prove those
+  bindings and guessed native aliases are unavailable. The post-rebase local
+  compatibility lane passed the 16-group D1 format/native-I/O suite and all compiled
+  primitive, arithmetic, E1-mapping, summary-opacity, cleanup/no-manifest, and public
+  boundary probes. Exact-head supported CI and D1-R re-review remain pending. The
+  historical pre-correction runs are not acceptance evidence for this repair.
+  After E1B acceptance, the dependency-finalization repair rebased D1 onto main
+  `60c9afa` (including accepted I1 and E1B), replaced all generic core-dispatch use
+  with the fixed five-value `et-e1b-private-raise` call in a never-installed trusted
+  root, and packaged D1 with E1B as one registry-owning localized object. The normal
+  artifact exposes exactly six E1B accessor symbols plus eight D1 wrapper symbols;
+  checked I/O, the fixed raise seam, constructors, core dispatcher, private bridge,
+  and D1 helper families are local. Public depfiles contain only
+  `transformer.data` and `transformer.error_consumer`; exact repository normal/fault
+  undefined-symbol manifests, `nm`, `readelf`, `strings`, and crafted-link evidence
+  gate the completed artifact. A staged installed-public root also rejects explicit
+  core, internal, trusted-root, and implementation imports in fresh source, object,
+  and AOT probes. Both mixed import orders preserve error identity and
+  all accessors across later failures. The pre-E1B golden corpus remained
+  byte-identical, and the compatibility lane passed D1's 16 format/fault groups,
+  A0, E1 (112 checks), E1B (35 checks), I1, Q0 (23 tests), and the full integrated
+  suite. Exact-head supported CI and D1-R re-review remain pending.
+  D1-R2 then identified a caller-controlled build-policy mismatch at exact head
+  `383056853a1f269e28a413c346c2a56de0b1874f`. The repair removes
+  `E1B_PACKAGE_POLICY` selection from the generic builder: D1 normal, D1 test-fault,
+  and X1 policy now derive only from their complete canonical repository root,
+  bridge, rename, export, and include tuples. Normal and fault D1 use distinct exact
+  never-installed roots; their undefined manifests and `data_io.c` identity remain
+  hard-coded. Copied/arbitrary roots, partial tuples, missing/extra/shadow includes,
+  all policy overrides, and direct fault publication beneath the production artifact
+  directory are rejected before toolchain use or output/evidence mutation. The
+  compiler subprocess clears caller `ESHKOL_PATH` and pins `ESHKOL_LIB_DIR`; positive
+  normal/fault builds with hostile shadow modules still record only canonical source
+  paths. Sentinel negatives prove rejected routes preserve preexisting object,
+  archive, and evidence bytes. Focused D1, E1B, X1, A0, E1, and I1 gates pass on the
+  compatibility lane, as do the full `make test`, explicit `make build`, and
+  `make smoke` gates. Supported exact-head CI remains required.
+  After P1 merged at `b68ec9f9a64583800cfa888da2916f6ea99134b4`, the
+  dependency-order rebase retained that hardened classifier and added P1 only as
+  its exact repository trusted-root/bridge/rename/export tuple with no optional
+  include directories and its fixed undefined-symbol manifest. P1 policy evidence,
+  trusted-root depfile provenance, and a hostile `ESHKOL_PATH`/`ESHKOL_LIB_DIR`
+  build are now explicit gates. Focused E1B, X1, P1, D1, A0, E1, and production
+  Python-isolation gates pass, as do the integrated `make test`, explicit build,
+  and smoke compatibility gates. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8
+  [CI run 33359439566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33359439566)
+  passed at exact independently approved head
+  `ea8b6d1c87356aabbfce95e40726ca8983e5366f`. After merge, actual main passed
+  `make test-d1`, including all 16 format/native-I/O tests and the strict compiled
+  writer/validator boundary gates, on the documented local compatibility lane.
+- **Dependencies / retest:** E1 issue #23 and E1B issue #33 are merged. The installed
+  D1 facade imports only `transformer.error_consumer`; `transformer.error_internal`,
+  `transformer.error_core`, the fixed raise seam, and all constructors are absent
+  from its source dependency graph. Consumers must link the single completed D1/E1B
+  artifact and must not combine it with another registry-owning E1B artifact.
+  Compiler upgrades must rerun all source/object/AOT and crafted-link boundary checks.
+  T1/D2/T2/DATA4 may now consume this accepted contract; D2
+  retains all iteration, shuffle, packing, batching, and cursor behavior. A later
+  streaming/I1 integration must rerun byte-determinism, publication, corruption,
+  and scale tests.
+- **Reference:** [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [issue #18](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/18);
+  [PR #29](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29);
+  [D1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5464425028);
+  [D1-R2 requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5471306523);
+  [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/29#issuecomment-5474526166);
+  merge commit `98cf060b397ab00cd33c68521de952e24bda8704`.

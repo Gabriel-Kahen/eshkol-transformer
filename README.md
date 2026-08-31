@@ -35,7 +35,10 @@ missing, wrong-revision, wrong-version, or unsupported toolchain instead of fall
 back to Python or another runtime. `build` performs an explicit AOT compile,
 requires the compiler depfile to contain the Eshkol library source, and leaves the
 explicit-link K1 archive at `build/k1/libeshkol_transformer_k1.a`; its public header
-remains at `include/eshkol_transformer/kernel_abi.h`. `test` performs
+remains at `include/eshkol_transformer/kernel_abi.h`. It also builds D1's single
+localized E1B/D1 archive at `build/d1/libeshkol_transformer_d1.a`, with exact
+symbol-policy evidence beside it; the D1 test path consumes that same artifact.
+`test` performs
 two fresh AOT compilations and executions, compares output bytes including the final
 newline, and verifies an actionable missing-toolchain failure. `smoke` runs the built
 native artifact and expects `eshkol-transformer-smoke:v1`.
@@ -60,6 +63,15 @@ exports only the six E1 accessors and six fixed package-specific configuration
 wrappers; its trusted implementation source and evidence are not application include
 roots. See [docs/CONFIG_FORMAT.md](docs/CONFIG_FORMAT.md).
 
+The P1 structural module/state-tree gate is `make test-p1`. Its logical in-memory
+state schema, deterministic UTF-8 path ordering, tie semantics, strict loading, and
+explicit tensor-runtime limitations are documented in
+[docs/P1_MODULE_STATE.md](docs/P1_MODULE_STATE.md). It defines no checkpoint file or
+numerical tensor capability.
+The narrow process-local native identity boundary used only to enforce P1's
+public/trusted compile separation is documented in
+[docs/P1_IDENTITY_ABI.md](docs/P1_IDENTITY_ABI.md).
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
@@ -75,5 +87,6 @@ See:
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
+- [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

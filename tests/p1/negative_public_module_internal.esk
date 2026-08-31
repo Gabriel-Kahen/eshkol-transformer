@@ -1,0 +1,10 @@
+(require transformer.module)
+
+(define leaked-module-surface
+  (vector module-create-internal
+          module-create-with-provider-internal
+          module-register-parameter-internal!
+          module-register-tied-parameter-internal!
+          module-register-buffer-internal!
+          module-register-child-internal!
+          module-mode-internal))

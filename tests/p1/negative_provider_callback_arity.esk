@@ -1,0 +1,11 @@
+(require transformer.module)
+
+;;; Provider callbacks are typed unary vector operations. A two-argument
+;;; describe callback must fail strict compilation.
+(define (bad-describe (left : vector) (right : vector)) : vector left)
+(define (unary-vector (request : vector)) : vector request)
+(define (unary-boolean (request : vector)) : boolean #t)
+
+(tensor-provider-create-internal
+  'invalid-provider bad-describe unary-vector unary-boolean unary-boolean
+  unary-boolean unary-vector unary-vector)
