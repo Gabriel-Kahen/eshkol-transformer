@@ -1,0 +1,40 @@
+;;; Test-only C1 codec for P1's inert fixture carrier. This proves format and
+;;; ownership control flow only; it is not a production tensor codec.
+(require transformer.checkpoint_internal)
+(require p1_test.tensor_provider)
+
+(provide c1-fixture-codec-internal)
+
+(define (c1-fixture-encode (request : vector)) : bytevector
+  (let* ((tensor (vector-ref request 0))
+         (payload (fixture-tensor-payload-internal tensor))
+         (size (vector-length payload))
+         (bytes (make-bytevector size 0)))
+    (let loop ((index 0))
+      (if (= index size)
+          bytes
+          (let ((value (vector-ref payload index)))
+            (if (or (not (integer? value)) (not (exact? value))
+                    (< value 0) (> value 255))
+                (raise "C1 fixture codec requires byte-valued payloads")
+                (begin
+                  (bytevector-u8-set! bytes index value)
+                  (loop (+ index 1)))))))))
+
+(define (c1-fixture-decode (request : vector)) : vector
+  (let* ((bytes (vector-ref request 0))
+         (shape (vector-ref request 2))
+         (dtype (vector-ref request 3))
+         (device (vector-ref request 4))
+         (size (bytevector-length bytes))
+         (payload (make-vector size 0)))
+    (let loop ((index 0))
+      (if (= index size)
+          (fixture-tensor-internal shape dtype device payload)
+          (begin
+            (vector-set! payload index (bytevector-u8-ref bytes index))
+            (loop (+ index 1)))))))
+
+(define c1-fixture-codec-internal
+  (c1-checkpoint-codec-internal
+   'fixture-v1 c1-fixture-encode c1-fixture-decode))

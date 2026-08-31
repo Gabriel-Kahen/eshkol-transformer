@@ -1,0 +1,4 @@
+(require transformer.checkpoint_internal)
+
+;;; The C1 trusted implementation must not be reachable from the public root.
+(c1-persistence-policy-internal 1 1 1 1 'cpu)

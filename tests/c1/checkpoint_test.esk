@@ -1,0 +1,808 @@
+(require transformer.checkpoint_internal)
+(require transformer.error_internal)
+(require p1_test.tensor_provider)
+(require c1_test.checkpoint_codec)
+
+(extern i64 c1-p1-test-live-count
+        :real et_p1_test_live_entry_count_v1)
+(extern i64 c1-p1-test-tombstone-count
+        :real et_p1_test_tombstone_count_v1)
+(extern i64 c1-test-native-atomic-write ptr ptr i64 i64
+        :real et_checkpoint_io_atomic_write_v1)
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C1 FAIL: ") (display label) (newline) (exit 1))))
+
+(define (expect-error label category thunk)
+  (let ((caught (guard (error (#t error)) (thunk) #f)))
+    (check (string-append label " structured") (transformer-error? caught))
+    (check (string-append label " category")
+           (and (transformer-error? caught)
+                (eq? category (transformer-error-category caught))))
+    caught))
+
+(define (details-ref details key)
+  (cond
+    ((null? details) #f)
+    ((eq? (car (car details)) key) (car (cdr (car details))))
+    (else (details-ref (cdr details) key))))
+
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (copy-bytes bytes)
+  (bytevector-copy bytes 0 (bytevector-length bytes)))
+
+(define (mutate bytes index value)
+  (let ((result (copy-bytes bytes)))
+    (bytevector-u8-set! result index value)
+    result))
+
+(define (append-byte bytes value)
+  (let* ((size (bytevector-length bytes))
+         (result (make-bytevector (+ size 1) 0)))
+    (bytevector-copy! result 0 bytes 0 size)
+    (bytevector-u8-set! result size value)
+    result))
+
+(define c1-test-container-domain
+  (bytevector 101 115 104 107 111 108 45 99 104 101 99 107 112 111 105 110
+              116 45 99 111 110 116 97 105 110 101 114 45 118 49 0))
+(define c1-test-tensor-domain
+  (bytevector 101 115 104 107 111 108 45 99 104 101 99 107 112 111 105 110
+              116 45 116 101 110 115 111 114 45 118 49 0))
+
+(define (test-read-le bytes offset width)
+  (let loop ((index (- width 1)) (result 0))
+    (if (< index 0) result
+        (loop (- index 1)
+              (+ (* result 256) (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (test-read-u32 bytes offset) (test-read-le bytes offset 4))
+(define (test-read-u64 bytes offset) (test-read-le bytes offset 8))
+
+(define (test-write-u32! bytes offset value)
+  (let loop ((index 0) (remaining value))
+    (if (< index 4)
+        (begin
+          (bytevector-u8-set! bytes (+ offset index) (modulo remaining 256))
+          (loop (+ index 1) (quotient remaining 256))))))
+
+(define (test-copy-into! destination offset source)
+  (bytevector-copy! destination offset source 0 (bytevector-length source)))
+
+(define (test-concat parts)
+  (let size ((remaining parts) (total 0))
+    (if (null? remaining)
+        (let ((result (make-bytevector total 0)))
+          (let fill ((items parts) (offset 0))
+            (if (null? items) result
+                (begin
+                  (test-copy-into! result offset (car items))
+                  (fill (cdr items)
+                        (+ offset (bytevector-length (car items))))))))
+        (size (cdr remaining)
+              (+ total (bytevector-length (car remaining)))))))
+
+(define (test-records-start bytes)
+  (+ (test-read-u64 bytes 48) (test-read-u32 bytes 88)))
+
+(define (test-record-offset-with-dtype bytes wanted-dtype)
+  (let loop ((remaining (test-read-u32 bytes 80))
+             (offset (test-records-start bytes)))
+    (cond
+      ((= remaining 0) #f)
+      ((= wanted-dtype (bytevector-u8-ref bytes (+ offset 33))) offset)
+      (else (loop (- remaining 1)
+                  (+ offset (test-read-u64 bytes offset)))))))
+
+(define (test-alias-offset bytes)
+  (let loop ((remaining (test-read-u32 bytes 80))
+             (offset (test-records-start bytes)))
+    (if (= remaining 0) offset
+        (loop (- remaining 1) (+ offset (test-read-u64 bytes offset))))))
+
+(define (test-repair-tensor-checksum! bytes record-offset)
+  (let* ((record-size (test-read-u64 bytes record-offset))
+         (record (bytevector-copy bytes record-offset
+                                  (+ record-offset record-size)))
+         (relative (test-read-u64 bytes (+ record-offset 8)))
+         (payload-size (test-read-u64 bytes (+ record-offset 16)))
+         (payload-start (+ (test-read-u64 bytes 64) relative))
+         (payload (bytevector-copy bytes payload-start
+                                   (+ payload-start payload-size))))
+    (let zero ((index 48))
+      (if (< index 80)
+          (begin
+            (bytevector-u8-set! record index 0)
+            (zero (+ index 1)))))
+    (test-copy-into!
+     bytes (+ record-offset 48)
+     (c1-sha256 (test-concat (list c1-test-tensor-domain record payload))))))
+
+(define (test-repair-whole-checksum! bytes)
+  (let* ((unsigned-size (- (bytevector-length bytes) 32))
+         (digest
+          (c1-sha256
+           (test-concat
+            (list c1-test-container-domain
+                  (bytevector-copy bytes 0 unsigned-size))))))
+    (test-copy-into! bytes unsigned-size digest)))
+
+(define (test-bool-semantic-corruption bytes)
+  (let* ((result (copy-bytes bytes))
+         (record-offset (test-record-offset-with-dtype result 1))
+         (relative (test-read-u64 result (+ record-offset 8)))
+         (payload-start (+ (test-read-u64 result 64) relative)))
+    (bytevector-u8-set! result payload-start 2)
+    (test-repair-tensor-checksum! result record-offset)
+    (test-repair-whole-checksum! result)
+    result))
+
+(define (test-alias-duplicate-corruption bytes)
+  (let* ((result (copy-bytes bytes))
+         (alias-offset (test-alias-offset result))
+         (first-member (test-read-u32 result (+ alias-offset 8))))
+    (test-write-u32! result (+ alias-offset 12) first-member)
+    (test-repair-whole-checksum! result)
+    result))
+
+(define (c1-test-tensor shape dtype values)
+  (fixture-tensor-internal shape dtype 'cpu values))
+
+(define (build-module seed)
+  (let ((module (module-create-fixture-internal)))
+    (module-register-buffer-internal!
+     module "counter" (c1-test-tensor '(1) 'i64
+                               (vector seed 0 0 0 0 0 0 0)))
+    (let ((weight
+           (module-register-parameter-internal!
+            module "weight"
+            (c1-test-tensor '(2) 'f32
+                    (vector seed (+ seed 1) (+ seed 2) (+ seed 3)
+                            (+ seed 4) (+ seed 5) (+ seed 6) (+ seed 7))))))
+      (module-register-tied-parameter-internal! module "alias" weight))
+    (module-register-buffer-internal!
+     module "flags" (c1-test-tensor '(3) 'bool (vector 0 1 0)))
+    module))
+
+(define (build-schema-variant seed weight-shape counter-dtype counter-device
+                              include-flags? tie-alias?)
+  (let ((module (module-create-fixture-internal)))
+    (module-register-buffer-internal!
+     module "counter"
+     (fixture-tensor-internal '(1) counter-dtype counter-device
+                              (vector seed 0 0 0 0 0 0 0)))
+    (let ((weight
+           (module-register-parameter-internal!
+            module "weight"
+            (fixture-tensor-internal
+             weight-shape 'f32 counter-device
+             (if (equal? weight-shape '(2))
+                 (vector seed (+ seed 1) (+ seed 2) (+ seed 3)
+                         (+ seed 4) (+ seed 5) (+ seed 6) (+ seed 7))
+                 (vector seed (+ seed 1) (+ seed 2) (+ seed 3)))))))
+      (if tie-alias?
+          (module-register-tied-parameter-internal! module "alias" weight)
+          (module-register-parameter-internal!
+           module "alias"
+           (fixture-tensor-internal
+            weight-shape 'f32 counter-device
+            (if (equal? weight-shape '(2))
+                (vector seed (+ seed 1) (+ seed 2) (+ seed 3)
+                        (+ seed 4) (+ seed 5) (+ seed 6) (+ seed 7))
+                (vector seed (+ seed 1) (+ seed 2) (+ seed 3)))))))
+    (if include-flags?
+        (module-register-buffer-internal!
+         module "flags" (fixture-tensor-internal '(3) 'bool counter-device
+                                                   (vector 0 1 0))))
+    module))
+
+(define (payload state path)
+  (fixture-tensor-payload-internal (state-dict-tensor state path)))
+
+(define (internal-tensor state path)
+  (let loop ((entries (state-dict-entries-internal state)))
+    (if (equal? path (state-entry-path-internal (car entries)))
+        (state-entry-tensor-internal (car entries))
+        (loop (cdr entries)))))
+
+(define (decode-request-to-fixture request)
+  (let* ((bytes (vector-ref request 0))
+         (shape (vector-ref request 2))
+         (dtype (vector-ref request 3))
+         (payload (make-vector (bytevector-length bytes) 0)))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes))
+          (fixture-tensor-internal shape dtype 'cpu payload)
+          (begin
+            (vector-set! payload index (bytevector-u8-ref bytes index))
+            (loop (+ index 1)))))))
+
+(define policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+(define source
+  (guard (error
+          (#t
+           (display "C1 source error: ")
+           (if (transformer-error? error)
+               (begin (display (transformer-error-category error))
+                      (display " ")
+                      (display (transformer-error-operation error))
+                      (display " ")
+                      (display (transformer-error-message error)))
+               (display error))
+           (newline)
+           (exit 2)))
+    (build-module 11)))
+(define source-state (module-state-dict source))
+(define encoded-a
+  (guard (error
+          (#t
+           (display "C1 setup error: ")
+           (if (transformer-error? error)
+               (begin (display (transformer-error-category error))
+                      (display " ")
+                      (display (transformer-error-message error)))
+               (display error))
+           (newline)
+           (exit 2)))
+    (c1-checkpoint-encode-state-internal source-state policy
+                                         c1-fixture-codec-internal)))
+(define encoded-b
+  (c1-checkpoint-encode-state-internal source-state policy
+                                       c1-fixture-codec-internal))
+
+(check "sha256 abc known answer"
+       (bytes=?
+        (c1-sha256 (string->utf8 "abc"))
+        (bytevector 186 120 22 191 143 1 207 234 65 65 64 222 93 174 34 35
+                    176 3 97 163 150 23 122 156 180 16 255 97 242 0 21 173)))
+(check "deterministic checkpoint bytes" (bytes=? encoded-a encoded-b))
+
+(define metadata
+  (guard (error
+          (#t
+           (display "C1 inspect error: ")
+           (if (transformer-error? error)
+               (begin (display (transformer-error-category error))
+                      (display " ")
+                      (display (transformer-error-operation error))
+                      (display " ")
+                      (display (transformer-error-message error)))
+               (display error))
+           (newline)
+           (exit 2)))
+    (c1-checkpoint-inspect-bytes-internal encoded-a policy)))
+(check "inspect format"
+       (eq? 'eshkol-checkpoint
+            (c1-checkpoint-metadata-ref-internal metadata 'format-id)))
+(check "inspect version"
+       (equal? '(1 0)
+               (c1-checkpoint-metadata-ref-internal metadata 'format-version)))
+(check "inspect provider"
+       (string=? "fixture-v1"
+            (c1-checkpoint-metadata-ref-internal metadata 'provider-id)))
+(define provider-read-a
+  (c1-checkpoint-metadata-ref-internal metadata 'provider-id))
+(define provider-read-b
+  (c1-checkpoint-metadata-ref-internal metadata 'provider-id))
+(check "metadata provider reads preserve value"
+       (string=? provider-read-a provider-read-b))
+(check "metadata provider reads are independently owned"
+       (not (eq? provider-read-a provider-read-b)))
+(check "inspect tensor count"
+       (= 4 (c1-checkpoint-metadata-ref-internal metadata 'tensor-count)))
+
+(define decoded
+  (c1-checkpoint-decode-state-internal encoded-a policy
+                                       c1-fixture-codec-internal 'fixture-v1))
+(check "decoded lexical paths"
+       (equal? '( ("alias") ("counter") ("flags") ("weight"))
+               (state-dict-paths decoded)))
+(check "decoded aliases"
+       (equal? '(( ("alias") ("weight")))
+               (state-dict-alias-groups decoded)))
+(check "decoded tied payload equality"
+       (equal? (payload decoded '("alias")) (payload decoded '("weight"))))
+(check "decoded tied entries have distinct carriers"
+       (not (eq? (internal-tensor decoded '("alias"))
+                 (internal-tensor decoded '("weight")))))
+(check "decoded tied entries have distinct storage"
+       (not (eq? (vector-ref (internal-tensor decoded '("alias")) 5)
+                 (vector-ref (internal-tensor decoded '("weight")) 5))))
+(let ((first (state-dict-tensor decoded '("weight")))
+      (second (state-dict-tensor decoded '("weight"))))
+  (check "repeated state tensor reads return distinct carriers"
+         (not (eq? first second)))
+  (check "repeated state tensor reads return distinct storage"
+         (not (eq? (vector-ref first 5) (vector-ref second 5)))))
+(check "decoded parameter payload"
+       (equal? (vector 11 12 13 14 15 16 17 18)
+               (payload decoded '("weight"))))
+(check "decoded i64 payload"
+       (equal? (vector 11 0 0 0 0 0 0 0)
+               (payload decoded '("counter"))))
+(check "decoded bool payload"
+       (equal? (vector 0 1 0) (payload decoded '("flags"))))
+
+(let* ((source-entry (car (state-dict-entries-internal source-state)))
+       (decoded-entry (car (state-dict-entries-internal decoded)))
+       (source-tensor (state-entry-tensor-internal source-entry))
+       (decoded-tensor (state-entry-tensor-internal decoded-entry)))
+  (check "decoded tensor carrier is independently owned"
+         (not (eq? source-tensor decoded-tensor)))
+  (check "decoded tensor storage is independently owned"
+         (not (eq? (vector-ref source-tensor 5) (vector-ref decoded-tensor 5)))))
+
+(define destination (build-module 90))
+(define destination-tree (module-parameters destination))
+(define destination-handle
+  (parameter-tree-handle destination-tree '("weight")))
+(define destination-identity
+  (parameter-handle-tensor-identity-internal destination-handle))
+(module-load-state-dict! destination decoded)
+(check "module load preserves handle identity"
+       (eq? destination-handle
+            (parameter-tree-handle (module-parameters destination) '("weight"))))
+(check "module load preserves tensor identity"
+       (eq? destination-identity
+            (parameter-handle-tensor-identity-internal destination-handle)))
+(check "module load preserves tie identity"
+       (eq? (parameter-tree-handle (module-parameters destination) '("alias"))
+            (parameter-tree-handle (module-parameters destination) '("weight"))))
+(check "module load restores exact value"
+       (equal? (vector 11 12 13 14 15 16 17 18)
+               (payload (module-state-dict destination) '("weight"))))
+
+(define checkpoint-path "checkpoint.etcp")
+(check "atomic save returns success"
+       (c1-checkpoint-save-state-internal!
+        source-state checkpoint-path policy c1-fixture-codec-internal #f))
+(check "file inspect matches tensor count"
+       (= 4 (c1-checkpoint-metadata-ref-internal
+             (c1-checkpoint-inspect-internal checkpoint-path policy)
+             'tensor-count)))
+(define file-state
+  (c1-checkpoint-load-state-internal
+   checkpoint-path policy c1-fixture-codec-internal 'fixture-v1))
+(check "file logical round trip"
+       (equal? (payload source-state '("weight"))
+               (payload file-state '("weight"))))
+(define no-overwrite-error
+  (expect-error "no-overwrite preserves destination" 'io
+                (lambda ()
+                  (c1-checkpoint-save-state-internal!
+                   source-state checkpoint-path policy
+                   c1-fixture-codec-internal #f))))
+(check "no-overwrite reports not published"
+       (eq? #f (details-ref (transformer-error-details no-overwrite-error)
+                            'published?)))
+(check "no-overwrite reports native stage"
+       (integer? (details-ref (transformer-error-details no-overwrite-error)
+                              'native-stage)))
+(check "atomic overwrite returns success"
+       (c1-checkpoint-save-state-internal!
+        source-state checkpoint-path policy c1-fixture-codec-internal #t))
+(define missing-file-error
+  (expect-error "missing checkpoint file" 'io
+                (lambda ()
+                  (c1-checkpoint-load-state-internal
+                   "missing-checkpoint.etcp" policy
+                   c1-fixture-codec-internal 'fixture-v1))))
+(check "non-native size failure has no fabricated native status"
+       (null? (transformer-error-details missing-file-error)))
+
+(define wrapper-destination (build-module 60))
+(define wrapper-handle
+  (parameter-tree-handle (module-parameters wrapper-destination) '("weight")))
+(define wrapper-identity
+  (parameter-handle-tensor-identity-internal wrapper-handle))
+(c1-checkpoint-load-module-internal!
+ wrapper-destination checkpoint-path policy c1-fixture-codec-internal 'fixture-v1)
+(check "file-to-module wrapper restores exact value"
+       (equal? (vector 11 12 13 14 15 16 17 18)
+               (payload (module-state-dict wrapper-destination) '("weight"))))
+(check "file-to-module wrapper preserves handle identity"
+       (eq? wrapper-identity
+            (parameter-handle-tensor-identity-internal wrapper-handle)))
+
+(define missing-destination
+  (build-schema-variant 70 '(2) 'i64 'cpu #f #t))
+(define missing-handle
+  (parameter-tree-handle (module-parameters missing-destination) '("weight")))
+(define missing-identity
+  (parameter-handle-tensor-identity-internal missing-handle))
+(define missing-before
+  (payload (module-state-dict missing-destination) '("weight")))
+(expect-error "load wrapper missing destination path" 'shape-mismatch
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 missing-destination checkpoint-path policy
+                 c1-fixture-codec-internal 'fixture-v1)))
+(check "missing-path rejection preserves value"
+       (equal? missing-before
+               (payload (module-state-dict missing-destination) '("weight"))))
+(check "missing-path rejection preserves identity"
+       (eq? missing-identity
+            (parameter-handle-tensor-identity-internal missing-handle)))
+
+(define shape-destination
+  (build-schema-variant 80 '(1) 'i64 'cpu #t #t))
+(define shape-before
+  (payload (module-state-dict shape-destination) '("weight")))
+(expect-error "load wrapper shape mismatch" 'shape-mismatch
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 shape-destination checkpoint-path policy
+                 c1-fixture-codec-internal 'fixture-v1)))
+(check "shape rejection preserves value"
+       (equal? shape-before
+               (payload (module-state-dict shape-destination) '("weight"))))
+
+(define alias-destination
+  (build-schema-variant 85 '(2) 'i64 'cpu #t #f))
+(define alias-before
+  (payload (module-state-dict alias-destination) '("weight")))
+(expect-error "load wrapper alias topology mismatch" 'shape-mismatch
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 alias-destination checkpoint-path policy
+                 c1-fixture-codec-internal 'fixture-v1)))
+(check "alias rejection preserves value"
+       (equal? alias-before
+               (payload (module-state-dict alias-destination) '("weight"))))
+
+(define dtype-destination
+  (build-schema-variant 86 '(2) 'f32 'cpu #t #t))
+(define dtype-before
+  (payload (module-state-dict dtype-destination) '("weight")))
+(expect-error "load wrapper dtype mismatch" 'dtype-mismatch
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 dtype-destination checkpoint-path policy
+                 c1-fixture-codec-internal 'fixture-v1)))
+(check "dtype rejection preserves value"
+       (equal? dtype-before
+               (payload (module-state-dict dtype-destination) '("weight"))))
+
+(define device-destination
+  (build-schema-variant 87 '(2) 'i64 'gpu #t #t))
+(define device-before
+  (payload (module-state-dict device-destination) '("weight")))
+(expect-error "load wrapper device mismatch" 'device-mismatch
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 device-destination checkpoint-path policy
+                 c1-fixture-codec-internal 'fixture-v1)))
+(check "device rejection preserves value"
+       (equal? device-before
+               (payload (module-state-dict device-destination) '("weight"))))
+
+(define extra-destination (build-module 88))
+(module-register-buffer-internal!
+ extra-destination "extra" (c1-test-tensor '(1) 'i64 (vector 0 0 0 0 0 0 0 0)))
+(define extra-before
+  (payload (module-state-dict extra-destination) '("weight")))
+(expect-error "load wrapper unexpected destination path" 'shape-mismatch
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 extra-destination checkpoint-path policy
+                 c1-fixture-codec-internal 'fixture-v1)))
+(check "unexpected-path rejection preserves value"
+       (equal? extra-before
+               (payload (module-state-dict extra-destination) '("weight"))))
+
+(define encode-calls 0)
+(define sentinel-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request)
+     (set! encode-calls (+ encode-calls 1))
+     (bytevector))
+   (lambda (request) (vector))))
+(define unsafe-unbound-state
+  (state-dict-create-unsafe-internal
+   'transformer-state-dict 1 0 '()
+   '(transformer-tensor-provider 1 0 fixture-v1) '() '()))
+(expect-error "unbound unsafe state rejected before codec" 'unsupported
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                 unsafe-unbound-state policy sentinel-codec)))
+(check "unbound unsafe state makes zero codec calls" (= encode-calls 0))
+
+(expect-error "tensor policy rejects before codec" 'invalid-state
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                 source-state
+                 (c1-persistence-policy-internal 1048576 524288 1 64 'cpu)
+                 sentinel-codec)))
+(check "tensor policy rejection makes zero codec calls" (= encode-calls 0))
+
+(expect-error "alias metadata policy rejects before codec" 'invalid-state
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                 source-state
+                 (c1-persistence-policy-internal 1048576 25 262144 64 'cpu)
+                 sentinel-codec)))
+(check "alias metadata rejection makes zero codec calls" (= encode-calls 0))
+
+(define mutated-policy-type
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+(vector-set! mutated-policy-type 1 'not-a-size)
+(expect-error "mutated policy type" 'invalid-argument
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a mutated-policy-type)))
+(define mutated-policy-ceiling
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+(vector-set! mutated-policy-ceiling 1 1099511627777)
+(expect-error "mutated policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a mutated-policy-ceiling)))
+
+(define encoded-parameter-calls 0)
+(define inconsistent-tie-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request)
+     (let ((bytes ((vector-ref c1-fixture-codec-internal 2) request)))
+       (if (eq? (vector-ref request 1) 'parameter)
+           (begin
+             (set! encoded-parameter-calls (+ encoded-parameter-calls 1))
+             (if (= encoded-parameter-calls 2)
+                 (bytevector-u8-set!
+                  bytes 0 (+ 1 (bytevector-u8-ref bytes 0))))))
+       bytes))
+   (vector-ref c1-fixture-codec-internal 3)))
+(expect-error "inconsistent tied codec bytes" 'internal
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                 source-state policy inconsistent-tie-codec)))
+
+(define decode-calls 0)
+(define late-failure-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! decode-calls (+ decode-calls 1))
+     (if (= decode-calls 2)
+         (transformer-error-raise 'internal 'c1-late-decode
+                                  "injected late decoder failure" '() #f)
+         (decode-request-to-fixture request)))))
+(expect-error "late decoder failure remains structured" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy late-failure-codec 'fixture-v1)))
+(check "late decoder failure occurs after staging one carrier" (= decode-calls 2))
+
+(define shared-parameter-tensor
+  (c1-test-tensor '(2) 'f32 (vector 11 12 13 14 15 16 17 18)))
+(define shared-parameter-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (if (eq? (vector-ref request 1) 'parameter)
+         shared-parameter-tensor
+         (decode-request-to-fixture request)))))
+(expect-error "decoder shared storage rejected by P1" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy shared-parameter-codec 'fixture-v1)))
+
+(define validation-decode-calls 0)
+(define validation-sentinel-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! validation-decode-calls (+ validation-decode-calls 1))
+     (decode-request-to-fixture request))))
+(define checksum-valid-bool-corruption
+  (test-bool-semantic-corruption encoded-a))
+(define bool-live-before (c1-p1-test-live-count))
+(define bool-tombstones-before (c1-p1-test-tombstone-count))
+(define checksum-valid-bool-error
+  (expect-error "checksum-valid bool semantic corruption" 'corrupt-data
+                (lambda ()
+                  (c1-checkpoint-decode-state-internal
+                   checksum-valid-bool-corruption policy
+                   validation-sentinel-codec 'fixture-v1))))
+(check "bool corruption passes repaired checksums before semantic rejection"
+       (string=? "bool payload contains a non-boolean byte"
+                 (transformer-error-message checksum-valid-bool-error)))
+(check "bool semantic rejection makes zero decoder calls"
+       (= validation-decode-calls 0))
+(check "bool semantic rejection creates zero P1 shells"
+       (= bool-live-before (c1-p1-test-live-count)))
+(check "bool semantic rejection creates zero P1 tombstones"
+       (= bool-tombstones-before (c1-p1-test-tombstone-count)))
+
+(define checksum-valid-alias-corruption
+  (test-alias-duplicate-corruption encoded-a))
+(define alias-live-before (c1-p1-test-live-count))
+(define alias-tombstones-before (c1-p1-test-tombstone-count))
+(define checksum-valid-alias-error
+  (expect-error "checksum-valid late alias duplicate" 'corrupt-data
+                (lambda ()
+                  (c1-checkpoint-decode-state-internal
+                   checksum-valid-alias-corruption policy
+                   validation-sentinel-codec 'fixture-v1))))
+(check "alias corruption passes repaired whole checksum before late rejection"
+       (string=? "alias member is invalid or duplicate"
+                 (transformer-error-message checksum-valid-alias-error)))
+(check "late alias rejection makes zero decoder calls"
+       (= validation-decode-calls 0))
+(check "late alias rejection creates zero P1 shells"
+       (= alias-live-before (c1-p1-test-live-count)))
+(check "late alias rejection creates zero P1 tombstones"
+       (= alias-tombstones-before (c1-p1-test-tombstone-count)))
+
+(define validation-destination (build-module 101))
+(define validation-tree (module-parameters validation-destination))
+(define validation-weight-handle
+  (parameter-tree-handle validation-tree '("weight")))
+(define validation-alias-handle
+  (parameter-tree-handle validation-tree '("alias")))
+(define validation-weight-identity
+  (parameter-handle-tensor-identity-internal validation-weight-handle))
+(define validation-alias-identity
+  (parameter-handle-tensor-identity-internal validation-alias-handle))
+(define validation-before-state (module-state-dict validation-destination))
+(define validation-before-payloads
+  (list (payload validation-before-state '("alias"))
+        (payload validation-before-state '("counter"))
+        (payload validation-before-state '("flags"))
+        (payload validation-before-state '("weight"))))
+(define validation-invalid-path "checksum-valid-invalid.etcp")
+(check "write checksum-valid invalid receiver fixture"
+       (= 0 (c1-test-native-atomic-write
+             validation-invalid-path checksum-valid-alias-corruption
+             (bytevector-length checksum-valid-alias-corruption) 1)))
+(define receiver-live-before (c1-p1-test-live-count))
+(define receiver-tombstones-before (c1-p1-test-tombstone-count))
+(expect-error "checksum-valid invalid file rejects before receiver" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-load-module-internal!
+                 validation-destination validation-invalid-path policy
+                 validation-sentinel-codec 'fixture-v1)))
+(check "invalid file-to-module makes zero decoder calls"
+       (= validation-decode-calls 0))
+(check "invalid file-to-module creates zero P1 shells"
+       (= receiver-live-before (c1-p1-test-live-count)))
+(check "invalid file-to-module creates zero P1 tombstones"
+       (= receiver-tombstones-before (c1-p1-test-tombstone-count)))
+(define validation-after-state (module-state-dict validation-destination))
+(check "invalid file-to-module preserves every receiver payload"
+       (equal? validation-before-payloads
+               (list (payload validation-after-state '("alias"))
+                     (payload validation-after-state '("counter"))
+                     (payload validation-after-state '("flags"))
+                     (payload validation-after-state '("weight")))))
+(check "invalid file-to-module preserves weight identity"
+       (eq? validation-weight-identity
+            (parameter-handle-tensor-identity-internal validation-weight-handle)))
+(check "invalid file-to-module preserves alias identity"
+       (eq? validation-alias-identity
+            (parameter-handle-tensor-identity-internal validation-alias-handle)))
+(check "invalid file-to-module preserves tie identity"
+       (eq? validation-weight-handle validation-alias-handle))
+
+(define exact-file-bytes
+  (c1-checkpoint-metadata-ref-internal metadata 'file-bytes))
+(define exact-metadata-bytes
+  (c1-checkpoint-metadata-ref-internal metadata 'metadata-bytes))
+(define exact-entry-count
+  (c1-checkpoint-metadata-ref-internal metadata 'tensor-count))
+(check "exact lowered file/metadata/tensor/count policy accepts"
+       (c1-checkpoint-inspect-bytes-internal
+        encoded-a
+        (c1-persistence-policy-internal
+         exact-file-bytes exact-metadata-bytes 8 exact-entry-count 'cpu)))
+(expect-error "one over lowered file-byte policy" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a
+                 (c1-persistence-policy-internal
+                  (- exact-file-bytes 1) exact-metadata-bytes 8
+                  exact-entry-count 'cpu))))
+(expect-error "one over lowered metadata-byte policy" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a
+                 (c1-persistence-policy-internal
+                  exact-file-bytes (- exact-metadata-bytes 1) 8
+                  exact-entry-count 'cpu))))
+(expect-error "one over lowered tensor-payload policy" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a
+                 (c1-persistence-policy-internal
+                  exact-file-bytes exact-metadata-bytes 7
+                  exact-entry-count 'cpu))))
+(expect-error "one over lowered entry-count policy" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a
+                 (c1-persistence-policy-internal
+                  exact-file-bytes exact-metadata-bytes 8
+                  (- exact-entry-count 1) 'cpu))))
+
+(check "exact hard policy ceilings admit without allocation"
+       (vector?
+        (c1-persistence-policy-internal
+         1099511627776 268435456 274877906944 4096 'cpu)))
+(expect-error "one over hard file policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627777 268435456 274877906944 4096 'cpu)))
+(expect-error "one over hard metadata policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627776 268435457 274877906944 4096 'cpu)))
+(expect-error "one over hard tensor policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627776 268435456 274877906945 4096 'cpu)))
+(expect-error "one over hard entry policy ceiling" 'invalid-argument
+              (lambda ()
+                (c1-persistence-policy-internal
+                 1099511627776 268435456 274877906944 4097 'cpu)))
+
+(expect-error "wrong selected provider" 'unsupported
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy c1-fixture-codec-internal 'other-v1)))
+(expect-error "truncation" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (bytevector-copy encoded-a 0 (- (bytevector-length encoded-a) 1))
+                 policy)))
+(expect-error "trailing data" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (append-byte encoded-a 0) policy)))
+(expect-error "magic corruption" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (mutate encoded-a 0 0) policy)))
+(expect-error "unsupported major" 'version-mismatch
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (mutate encoded-a 16 2) policy)))
+(expect-error "unsupported feature" 'version-mismatch
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (mutate encoded-a 32 1) policy)))
+(expect-error "reserved header byte" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (mutate encoded-a 100 1) policy)))
+(expect-error "whole checksum corruption" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 (mutate encoded-a (- (bytevector-length encoded-a) 1) 1)
+                 policy)))
+(expect-error "file limit" 'corrupt-data
+              (lambda ()
+                (c1-checkpoint-inspect-bytes-internal
+                 encoded-a
+                 (c1-persistence-policy-internal 256 256 64 4 'cpu))))
+(expect-error "unknown metadata key" 'invalid-argument
+              (lambda ()
+                (c1-checkpoint-metadata-ref-internal metadata 'unknown)))
+
+(display "C1 PASS: ") (display checks) (display " checks") (newline)

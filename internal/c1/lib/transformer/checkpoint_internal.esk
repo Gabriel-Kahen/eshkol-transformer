@@ -1,0 +1,978 @@
+;;; C1 trusted checkpoint implementation. Compile this source only in the same
+;;; single-registry artifact as the trusted P1 root and E1B-private raise seam.
+(require transformer.module)
+(require e1b_error_consumer_private)
+(require c1_sha256)
+
+(extern i64 c1-native-read-exact ptr ptr i64 i64
+        :real et_checkpoint_io_read_exact_v1)
+(extern i64 c1-native-atomic-write ptr ptr i64 i64
+        :real et_checkpoint_io_atomic_write_v1)
+
+(provide c1-persistence-policy-internal
+         c1-checkpoint-codec-internal
+         c1-checkpoint-encode-state-internal
+         c1-checkpoint-decode-state-internal
+         c1-checkpoint-save-state-internal!
+         c1-checkpoint-load-state-internal
+         c1-checkpoint-load-module-internal!
+         c1-checkpoint-inspect-bytes-internal
+         c1-checkpoint-inspect-internal
+         c1-checkpoint-metadata-ref-internal)
+
+(define c1-policy-tag (vector 'c1-persistence-policy))
+(define c1-codec-tag (vector 'c1-checkpoint-codec))
+(define c1-metadata-tag (vector 'c1-checkpoint-metadata))
+(define c1-magic
+  (bytevector 137 69 83 72 75 79 76 67 75 80 84 13 10 26 10 0))
+(define c1-container-domain
+  (bytevector 101 115 104 107 111 108 45 99 104 101 99 107 112 111 105 110
+              116 45 99 111 110 116 97 105 110 101 114 45 118 49 0))
+(define c1-tensor-domain
+  (bytevector 101 115 104 107 111 108 45 99 104 101 99 107 112 111 105 110
+              116 45 116 101 110 115 111 114 45 118 49 0))
+(define c1-header-bytes 128)
+(define c1-checksum-bytes 32)
+(define c1-record-prefix-bytes 80)
+(define c1-major 1)
+(define c1-minor 0)
+(define c1-hard-file-bytes 1099511627776)
+(define c1-hard-metadata-bytes 268435456)
+(define c1-hard-tensor-bytes 274877906944)
+(define c1-hard-tensors 4096)
+(define c1-max-alias-groups 4096)
+(define c1-max-alias-members 4096)
+(define c1-max-path-segments 64)
+(define c1-max-segment-bytes 65536)
+(define c1-max-rank 64)
+(define c1-max-provider-id-bytes 127)
+(define c1-u64-max 18446744073709551615)
+
+(define (c1-fail category operation message)
+  (et-e1b-private-raise category operation message '() #f))
+
+(define (c1-native-fail operation message status)
+  (let* ((native-errno (modulo status 65536))
+         (native-stage (modulo (quotient status 65536) 256))
+         (published? (not (= (bitwise-and status 16777216) 0))))
+    (et-e1b-private-raise
+     'io operation message
+     (list (list 'source-domain 'c1-native-io)
+           (list 'source-code status)
+           (list 'source-message message)
+           (list 'native-errno native-errno)
+           (list 'native-stage native-stage)
+           (list 'published? published?)
+           (list 'durability (if published? 'unknown 'not-published)))
+     #f)))
+
+(define (c1-exact-nonnegative? value)
+  (and (integer? value) (exact? value) (real? value) (>= value 0)))
+
+(define (c1-u64? value)
+  (and (c1-exact-nonnegative? value) (<= value c1-u64-max)))
+
+(define (c1-list-length-bounded value limit)
+  (let loop ((slow value) (fast value) (count 0))
+    (cond
+      ((null? slow) count)
+      ((or (not (pair? slow)) (>= count limit)) #f)
+      (else
+       (let ((next-slow (cdr slow)))
+         (cond
+           ((null? fast) (loop next-slow '() (+ count 1)))
+           ((not (pair? fast)) #f)
+           (else
+            (let ((fast-one (cdr fast)))
+              (cond
+                ((null? fast-one) (loop next-slow '() (+ count 1)))
+                ((not (pair? fast-one)) #f)
+                (else
+                 (let ((fast-two (cdr fast-one)))
+                   (if (eq? next-slow fast-two)
+                       #f
+                       (loop next-slow fast-two (+ count 1))))))))))))))
+
+(define (c1-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (c1-list-append left right)
+  (if (null? left) right
+      (cons (car left) (c1-list-append (cdr left) right))))
+
+(define (c1-copy-bytes bytes)
+  (bytevector-copy bytes 0 (bytevector-length bytes)))
+
+(define (c1-bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left))
+             #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (c1-zero-range? bytes start end)
+  (let loop ((index start))
+    (if (= index end) #t
+        (and (= 0 (bytevector-u8-ref bytes index))
+             (loop (+ index 1))))))
+
+(define (c1-copy-into! destination offset source)
+  (bytevector-copy! destination offset source 0 (bytevector-length source)))
+
+(define (c1-concat parts)
+  (let size ((remaining parts) (total 0))
+    (if (null? remaining)
+        (let ((result (make-bytevector total 0)))
+          (let fill ((items parts) (offset 0))
+            (if (null? items)
+                result
+                (begin
+                  (c1-copy-into! result offset (car items))
+                  (fill (cdr items) (+ offset (bytevector-length (car items))))))))
+        (size (cdr remaining) (+ total (bytevector-length (car remaining)))))))
+
+(define (c1-write-u16! bytes offset value)
+  (bytevector-u8-set! bytes offset (modulo value 256))
+  (bytevector-u8-set! bytes (+ offset 1) (modulo (quotient value 256) 256)))
+
+(define (c1-write-u32! bytes offset value)
+  (let loop ((index 0) (remaining value))
+    (if (< index 4)
+        (begin
+          (bytevector-u8-set! bytes (+ offset index) (modulo remaining 256))
+          (loop (+ index 1) (quotient remaining 256))))))
+
+(define (c1-write-u64! bytes offset value)
+  (let loop ((index 0) (remaining value))
+    (if (< index 8)
+        (begin
+          (bytevector-u8-set! bytes (+ offset index) (modulo remaining 256))
+          (loop (+ index 1) (quotient remaining 256))))))
+
+(define (c1-read-le bytes offset width)
+  (let loop ((index (- width 1)) (result 0))
+    (if (< index 0) result
+        (loop (- index 1)
+              (+ (* result 256) (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (c1-read-u16 bytes offset) (c1-read-le bytes offset 2))
+(define (c1-read-u32 bytes offset) (c1-read-le bytes offset 4))
+(define (c1-read-u64 bytes offset) (c1-read-le bytes offset 8))
+
+(define (c1-min left right) (if (< left right) left right))
+
+(define (c1-valid-policy-values? max-file max-metadata max-tensor
+                                 max-tensors device)
+  (and (c1-u64? max-file) (> max-file 0)
+       (<= max-file c1-hard-file-bytes)
+       (c1-u64? max-metadata) (> max-metadata 0)
+       (<= max-metadata c1-hard-metadata-bytes)
+       (c1-u64? max-tensor) (> max-tensor 0)
+       (<= max-tensor c1-hard-tensor-bytes)
+       (c1-u64? max-tensors) (> max-tensors 0)
+       (<= max-tensors c1-hard-tensors)
+       (eq? device 'cpu)))
+
+(define (c1-persistence-policy-internal max-file max-metadata max-tensor
+                                        max-tensors device)
+  (if (not (c1-valid-policy-values?
+            max-file max-metadata max-tensor max-tensors device))
+      (c1-fail 'invalid-argument 'persistence-policy
+               "invalid or unsupported checkpoint persistence policy")
+      (vector c1-policy-tag max-file max-metadata max-tensor max-tensors 'cpu)))
+
+(define (c1-require-policy operation policy)
+  (if (and (vector? policy) (= (vector-length policy) 6)
+           (eq? (vector-ref policy 0) c1-policy-tag)
+           (c1-valid-policy-values?
+            (vector-ref policy 1) (vector-ref policy 2)
+            (vector-ref policy 3) (vector-ref policy 4)
+            (vector-ref policy 5)))
+      policy
+      (c1-fail 'invalid-argument operation "expected C1 persistence policy")))
+
+(define (c1-checkpoint-codec-internal provider-id encode decode)
+  (if (or (not (symbol? provider-id))
+          (= (bytevector-length (string->utf8 (symbol->string provider-id))) 0)
+          (> (bytevector-length (string->utf8 (symbol->string provider-id)))
+             c1-max-provider-id-bytes)
+          (not (procedure? encode)) (not (procedure? decode)))
+      (c1-fail 'invalid-argument 'c1-checkpoint-codec-internal
+               "invalid trusted checkpoint codec")
+      (vector c1-codec-tag provider-id encode decode)))
+
+(define (c1-require-codec operation codec)
+  (if (and (vector? codec) (= (vector-length codec) 4)
+           (eq? (vector-ref codec 0) c1-codec-tag))
+      codec
+      (c1-fail 'invalid-argument operation "expected trusted checkpoint codec")))
+
+(define (c1-valid-path? path)
+  (let ((count (c1-list-length-bounded path (+ c1-max-path-segments 1))))
+    (and count (> count 0) (<= count c1-max-path-segments)
+         (let loop ((segments path))
+           (if (null? segments) #t
+               (let ((segment (car segments)))
+                 (and (string? segment)
+                      (string=? segment (utf8->string (string->utf8 segment)))
+                      (> (bytevector-length (string->utf8 segment)) 0)
+                      (<= (bytevector-length (string->utf8 segment))
+                          c1-max-segment-bytes)
+                      (loop (cdr segments)))))))))
+
+(define (c1-byte-lex<? left right)
+  (let ((limit (c1-min (bytevector-length left) (bytevector-length right))))
+    (let loop ((index 0))
+      (if (= index limit)
+          (< (bytevector-length left) (bytevector-length right))
+          (let ((a (bytevector-u8-ref left index))
+                (b (bytevector-u8-ref right index)))
+            (cond ((< a b) #t) ((> a b) #f) (else (loop (+ index 1)))))))))
+
+(define (c1-path<? left right)
+  (cond
+    ((null? left) (not (null? right)))
+    ((null? right) #f)
+    (else
+     (let ((a (string->utf8 (car left))) (b (string->utf8 (car right))))
+       (cond ((c1-bytes=? a b) (c1-path<? (cdr left) (cdr right)))
+             ((c1-byte-lex<? a b) #t)
+             (else #f))))))
+
+(define (c1-shape-product shape operation)
+  (let ((rank (c1-list-length-bounded shape (+ c1-max-rank 1))))
+    (if (or (not rank) (> rank c1-max-rank))
+        (c1-fail 'unsupported operation "tensor rank exceeds checkpoint v1")
+        (let loop ((remaining shape) (product 1))
+          (if (null? remaining) product
+              (let ((extent (car remaining)))
+                (if (not (c1-u64? extent))
+                    (c1-fail 'unsupported operation
+                             "tensor extent does not fit checkpoint v1 u64")
+                    (if (and (> extent 0) (> product (quotient c1-u64-max extent)))
+                        (c1-fail 'unsupported operation
+                                 "tensor element count overflows checkpoint v1")
+                        (loop (cdr remaining) (* product extent))))))))))
+
+(define (c1-kind-code kind operation)
+  (cond ((eq? kind 'parameter) 1) ((eq? kind 'buffer) 2)
+        (else (c1-fail 'corrupt-data operation "invalid state entry kind"))))
+
+(define (c1-dtype-code dtype kind operation)
+  (let ((code (cond ((eq? dtype 'bool) 1) ((eq? dtype 'i64) 2)
+                    ((eq? dtype 'f32) 3) (else #f))))
+    (if (or (not code) (and (eq? kind 'parameter) (not (= code 3))))
+        (c1-fail 'unsupported operation "dtype is unsupported by checkpoint v1")
+        code)))
+
+(define (c1-dtype-width code)
+  (cond ((= code 1) 1) ((= code 2) 8) ((= code 3) 4) (else 0)))
+
+(define (c1-encode-path path)
+  (let parts ((remaining path) (result '()) (total 0))
+    (if (null? remaining)
+        (vector (c1-concat (c1-reverse result)) total)
+        (let* ((raw (string->utf8 (car remaining)))
+               (part (make-bytevector (+ 4 (bytevector-length raw)) 0)))
+          (c1-write-u32! part 0 (bytevector-length raw))
+          (c1-copy-into! part 4 raw)
+          (parts (cdr remaining) (cons part result)
+                 (+ total (bytevector-length part)))))))
+
+(define (c1-path-encoded-size path)
+  (let loop ((remaining path) (total 0))
+    (if (null? remaining) total
+        (loop (cdr remaining)
+              (+ total 4 (bytevector-length (string->utf8 (car remaining))))))))
+
+(define (c1-adapter-provider-id adapter operation)
+  (if (and (pair? adapter) (pair? (cdr adapter))
+           (pair? (cdr (cdr adapter))) (pair? (cdr (cdr (cdr adapter))))
+           (null? (cdr (cdr (cdr (cdr adapter)))))
+           (eq? (car adapter) 'transformer-tensor-provider)
+           (= (car (cdr adapter)) 1) (= (car (cdr (cdr adapter))) 0)
+           (symbol? (car (cdr (cdr (cdr adapter))))))
+      (car (cdr (cdr (cdr adapter))))
+      (c1-fail 'corrupt-data operation "malformed P1 provider identity")))
+
+(define (c1-check-codec-id operation codec provider-id)
+  (let ((codec-spelling (symbol->string (vector-ref codec 1)))
+        (provider-spelling
+         (if (symbol? provider-id) (symbol->string provider-id) provider-id)))
+    (if (and (string? provider-spelling)
+             (string=? codec-spelling provider-spelling)) #t
+        (c1-fail 'unsupported operation
+                 "checkpoint and trusted codec provider identities differ"))))
+
+(define (c1-entry-descriptor entry codec payload-offset metadata-used
+                             policy operation)
+  (let* ((path (state-entry-path-internal entry))
+         (kind (state-entry-kind-internal entry))
+         (shape (state-entry-shape-internal entry))
+         (dtype (state-entry-dtype-internal entry))
+         (device (state-entry-device-internal entry))
+         (layout (state-entry-layout-internal entry))
+         (tensor (state-entry-tensor-internal entry)))
+    (if (not (c1-valid-path? path))
+        (c1-fail 'corrupt-data operation "state path is outside P1 bounds"))
+    (if (not (eq? device 'cpu))
+        (c1-fail 'unsupported operation "checkpoint v1 supports only cpu metadata"))
+    (if (not (eq? layout 'dense-row-major-contiguous))
+        (c1-fail 'noncontiguous operation "checkpoint v1 requires dense row-major tensors"))
+    (let* ((kind-code (c1-kind-code kind operation))
+           (dtype-code (c1-dtype-code dtype kind operation))
+           (elements (c1-shape-product shape operation))
+           (width (c1-dtype-width dtype-code))
+           (rank (c1-list-length-bounded shape (+ c1-max-rank 1)))
+           (record-size (+ c1-record-prefix-bytes (* rank 8)
+                           (c1-path-encoded-size path))))
+      (if (and (> elements 0) (> elements (quotient c1-u64-max width)))
+          (c1-fail 'unsupported operation "tensor payload size overflows checkpoint v1"))
+      (let* ((expected (* elements width))
+             (next-metadata (+ metadata-used record-size))
+             (next-payload (+ payload-offset expected)))
+        (if (or (> expected (vector-ref policy 3))
+                (> next-metadata (vector-ref policy 2))
+                (> (+ c1-header-bytes c1-checksum-bytes
+                      next-metadata next-payload)
+                   (vector-ref policy 1)))
+            (c1-fail 'invalid-state operation
+                     "checkpoint allocation would exceed persistence policy"))
+        (let* ((payload ((vector-ref codec 2)
+                         (vector tensor kind shape dtype device layout operation))))
+          (if (or (not (bytevector? payload))
+                  (not (= (bytevector-length payload) expected)))
+              (c1-fail 'internal operation
+                       "trusted codec returned a malformed tensor payload"))
+          (if (and (= dtype-code 1)
+                   (let scan ((index 0))
+                     (if (= index (bytevector-length payload)) #f
+                         (let ((value (bytevector-u8-ref payload index)))
+                           (if (or (= value 0) (= value 1))
+                               (scan (+ index 1)) #t)))))
+              (c1-fail 'internal operation
+                       "trusted codec returned a noncanonical bool payload"))
+          (vector path kind shape dtype kind-code dtype-code elements
+                  payload-offset (c1-copy-bytes payload) record-size))))))
+
+(define (c1-build-record descriptor)
+  (let* ((path (vector-ref descriptor 0))
+         (shape (vector-ref descriptor 2))
+         (path-value (c1-encode-path path))
+         (path-bytes (vector-ref path-value 0))
+         (rank (c1-list-length-bounded shape (+ c1-max-rank 1)))
+         (record-size (vector-ref descriptor 9))
+         (record (make-bytevector record-size 0))
+         (payload (vector-ref descriptor 8)))
+    (c1-write-u64! record 0 record-size)
+    (c1-write-u64! record 8 (vector-ref descriptor 7))
+    (c1-write-u64! record 16 (bytevector-length payload))
+    (c1-write-u32! record 24 (bytevector-length path-bytes))
+    (c1-write-u16! record 28 (c1-list-length-bounded path (+ c1-max-path-segments 1)))
+    (c1-write-u16! record 30 rank)
+    (bytevector-u8-set! record 32 (vector-ref descriptor 4))
+    (bytevector-u8-set! record 33 (vector-ref descriptor 5))
+    (bytevector-u8-set! record 34 1)
+    (bytevector-u8-set! record 35 1)
+    (c1-write-u64! record 40 (vector-ref descriptor 6))
+    (let dims ((remaining shape) (offset c1-record-prefix-bytes))
+      (if (not (null? remaining))
+          (begin
+            (c1-write-u64! record offset (car remaining))
+            (dims (cdr remaining) (+ offset 8)))))
+    (c1-copy-into! record (+ c1-record-prefix-bytes (* rank 8)) path-bytes)
+    (let ((digest (c1-sha256 (c1-concat (list c1-tensor-domain record payload)))))
+      (c1-copy-into! record 48 digest))
+    record))
+
+(define (c1-index-for-path descriptors path)
+  (let loop ((remaining descriptors) (index 0))
+    (cond ((null? remaining) #f)
+          ((equal? path (vector-ref (car remaining) 0)) index)
+          (else (loop (cdr remaining) (+ index 1))))))
+
+(define (c1-int-member? value values)
+  (cond ((null? values) #f)
+        ((= value (car values)) #t)
+        (else (c1-int-member? value (cdr values)))))
+
+(define (c1-descriptor-at descriptors index)
+  (if (= index 0) (car descriptors)
+      (c1-descriptor-at (cdr descriptors) (- index 1))))
+
+(define (c1-alias-encoded-size aliases operation)
+  (let ((groups (c1-list-length-bounded aliases (+ c1-max-alias-groups 1))))
+    (if (or (not groups) (> groups c1-max-alias-groups))
+        (c1-fail 'corrupt-data operation "alias groups exceed checkpoint v1"))
+    (let loop ((remaining aliases) (members 0) (bytes 0))
+      (if (null? remaining) bytes
+          (let ((count (c1-list-length-bounded
+                        (car remaining) (+ c1-max-alias-members 1))))
+            (if (or (not count) (< count 2)
+                    (> (+ members count) c1-max-alias-members))
+                (c1-fail 'corrupt-data operation "malformed alias group"))
+            (loop (cdr remaining) (+ members count)
+                  (+ bytes 8 (* count 4))))))))
+
+(define (c1-encode-aliases aliases descriptors operation)
+  (let ((groups (c1-list-length-bounded aliases (+ c1-max-alias-groups 1))))
+    (if (or (not groups) (> groups c1-max-alias-groups))
+        (c1-fail 'corrupt-data operation "alias groups exceed checkpoint v1"))
+    (let loop ((remaining aliases) (parts '()) (members-total 0)
+               (previous-first #f) (seen '()))
+      (if (null? remaining)
+          (vector (c1-concat (c1-reverse parts)) groups)
+          (let* ((group (car remaining))
+                 (count (c1-list-length-bounded group (+ c1-max-alias-members 1))))
+            (if (or (not count) (< count 2)
+                    (> (+ members-total count) c1-max-alias-members))
+                (c1-fail 'corrupt-data operation "malformed alias group"))
+            (let indices ((paths group) (values '()) (previous #f)
+                          (next-seen seen) (first-payload #f))
+              (if (null? paths)
+                  (let* ((ordered (c1-reverse values))
+                         (first (car ordered))
+                         (bytes (make-bytevector (+ 8 (* count 4)) 0)))
+                    (if (and previous-first (<= first previous-first))
+                        (c1-fail 'corrupt-data operation
+                                 "alias groups are not canonical"))
+                    (c1-write-u32! bytes 0 count)
+                    (let emit ((rest ordered) (offset 8))
+                      (if (not (null? rest))
+                          (begin
+                            (c1-write-u32! bytes offset (car rest))
+                            (emit (cdr rest) (+ offset 4)))))
+                    (loop (cdr remaining) (cons bytes parts)
+                          (+ members-total count) first next-seen))
+                  (let ((index (c1-index-for-path descriptors (car paths))))
+                    (if (not index)
+                        (c1-fail 'corrupt-data operation
+                                 "alias path is missing from state entries"))
+                    (if (not (eq? (vector-ref
+                                    (c1-descriptor-at descriptors index) 1)
+                                  'parameter))
+                        (c1-fail 'corrupt-data operation
+                                 "alias path does not name a parameter"))
+                    (if (or (and previous (<= index previous))
+                            (c1-int-member? index next-seen))
+                        (c1-fail 'corrupt-data operation
+                                 "alias members are duplicate or noncanonical"))
+                    (let ((payload (vector-ref
+                                    (c1-descriptor-at descriptors index) 8)))
+                      (if (and first-payload
+                               (not (c1-bytes=? first-payload payload)))
+                          (c1-fail
+                           'internal operation
+                           "trusted codec encoded tied values inconsistently"))
+                      (indices (cdr paths) (cons index values) index
+                               (cons index next-seen)
+                               (if first-payload first-payload payload)))))))))))
+
+(define (c1-checkpoint-encode-state-internal state policy codec)
+  (let* ((operation 'c1-checkpoint-encode-state-internal)
+         ;; This public P1 accessor validates the bound provider, every entry,
+         ;; storage disjointness, and the complete alias graph before a codec
+         ;; callback can observe a tensor carrier.
+         (aliases (state-dict-alias-groups state))
+         (checked-policy (c1-require-policy operation policy))
+         (checked-codec (c1-require-codec operation codec))
+         (alias-size (c1-alias-encoded-size aliases operation))
+         (format (state-dict-format-internal state))
+         (version (state-dict-version-internal state))
+         (features (state-dict-features-internal state))
+         (provider-id (c1-adapter-provider-id
+                       (state-dict-adapter-internal state) operation))
+         (provider-bytes (string->utf8 (symbol->string provider-id)))
+         (entries (state-dict-entries-internal state))
+         (entry-count (c1-list-length-bounded entries (+ c1-hard-tensors 1)))
+         (initial-metadata (+ (bytevector-length provider-bytes) alias-size)))
+    (if (or (not (eq? format 'transformer-state-dict))
+            (not (equal? version '(1 0))) (not (null? features)))
+        (c1-fail 'version-mismatch operation "unsupported P1 logical state version"))
+    (c1-check-codec-id operation checked-codec provider-id)
+    (if (or (not entry-count) (> entry-count (vector-ref checked-policy 4)))
+        (c1-fail 'invalid-state operation "state tensor count exceeds policy"))
+    (if (or (> initial-metadata (vector-ref checked-policy 2))
+            (> (+ c1-header-bytes c1-checksum-bytes initial-metadata)
+               (vector-ref checked-policy 1)))
+        (c1-fail 'invalid-state operation
+                 "checkpoint alias metadata exceeds persistence policy"))
+    (let describe ((remaining entries) (descriptors '()) (payload-offset 0)
+                   (metadata-used initial-metadata)
+                   (previous-path #f))
+      (if (null? remaining)
+          (let* ((ordered (c1-reverse descriptors))
+                 (alias-value (c1-encode-aliases aliases ordered operation))
+                 (alias-bytes (vector-ref alias-value 0))
+                 (alias-count (vector-ref alias-value 1))
+                 (metadata-size metadata-used)
+                 (file-size (+ c1-header-bytes metadata-size payload-offset
+                               c1-checksum-bytes)))
+            (if (not (= (bytevector-length alias-bytes) alias-size))
+                (c1-fail 'internal operation
+                         "checkpoint alias size preflight changed"))
+            (if (> metadata-size (vector-ref checked-policy 2))
+                (c1-fail 'invalid-state operation "checkpoint metadata exceeds policy"))
+            (if (> file-size (vector-ref checked-policy 1))
+                (c1-fail 'invalid-state operation "checkpoint file exceeds policy"))
+            (let* ((records (let loop ((items ordered) (parts '()))
+                              (if (null? items) (c1-reverse parts)
+                                  (loop (cdr items)
+                                        (cons (c1-build-record (car items)) parts)))))
+                   (metadata (c1-concat
+                              (cons provider-bytes
+                                    (c1-list-append records (list alias-bytes)))))
+                   (payload (c1-concat
+                             (let loop ((items ordered) (parts '()))
+                               (if (null? items) (c1-reverse parts)
+                                   (loop (cdr items)
+                                         (cons (vector-ref (car items) 8) parts))))))
+                   (payload-start (+ c1-header-bytes metadata-size))
+                   (unsigned-size (+ payload-start payload-offset))
+                   (header (make-bytevector c1-header-bytes 0)))
+              (c1-copy-into! header 0 c1-magic)
+              (c1-write-u16! header 16 c1-major)
+              (c1-write-u16! header 18 c1-minor)
+              (c1-write-u32! header 20 c1-header-bytes)
+              (c1-write-u32! header 24 1)
+              (c1-write-u32! header 28 1)
+              (c1-write-u64! header 32 0)
+              (c1-write-u64! header 40 file-size)
+              (c1-write-u64! header 48 c1-header-bytes)
+              (c1-write-u64! header 56 metadata-size)
+              (c1-write-u64! header 64 payload-start)
+              (c1-write-u64! header 72 payload-offset)
+              (c1-write-u32! header 80 entry-count)
+              (c1-write-u32! header 84 alias-count)
+              (c1-write-u32! header 88 (bytevector-length provider-bytes))
+              (c1-write-u16! header 92 1)
+              (c1-write-u16! header 94 0)
+              (c1-write-u16! header 96 1)
+              (c1-write-u16! header 98 0)
+              (let* ((unsigned (c1-concat (list header metadata payload)))
+                     (digest (c1-sha256 (c1-concat
+                                         (list c1-container-domain unsigned)))))
+                (c1-concat (list unsigned digest)))))
+          (let* ((descriptor (c1-entry-descriptor
+                              (car remaining) checked-codec payload-offset
+                              metadata-used checked-policy operation))
+                 (path (vector-ref descriptor 0))
+                 (payload-bytes (bytevector-length (vector-ref descriptor 8)))
+                 (record-size (vector-ref descriptor 9)))
+            (if (and previous-path (not (c1-path<? previous-path path)))
+                (c1-fail 'corrupt-data operation
+                         "state entries are duplicate or noncanonical"))
+            (describe (cdr remaining) (cons descriptor descriptors)
+                      (+ payload-offset payload-bytes)
+                      (+ metadata-used record-size) path))))))
+
+(define (c1-utf8-continuation? value)
+  (and (>= value 128) (<= value 191)))
+
+(define (c1-valid-utf8-range? bytes start length)
+  (let ((end (+ start length)))
+    (let loop ((offset start))
+      (if (= offset end) #t
+          (let ((first (bytevector-u8-ref bytes offset)))
+            (cond
+              ((<= first 127) (loop (+ offset 1)))
+              ((and (>= first 194) (<= first 223)
+                    (< (+ offset 1) end)
+                    (c1-utf8-continuation?
+                     (bytevector-u8-ref bytes (+ offset 1))))
+               (loop (+ offset 2)))
+              ((and (>= first 224) (<= first 239)
+                    (< (+ offset 2) end)
+                    (let ((second (bytevector-u8-ref bytes (+ offset 1)))
+                          (third (bytevector-u8-ref bytes (+ offset 2))))
+                      (and (c1-utf8-continuation? third)
+                           (cond ((= first 224) (and (>= second 160)
+                                                     (<= second 191)))
+                                 ((= first 237) (and (>= second 128)
+                                                     (<= second 159)))
+                                 (else (c1-utf8-continuation? second))))))
+               (loop (+ offset 3)))
+              ((and (>= first 240) (<= first 244)
+                    (< (+ offset 3) end)
+                    (let ((second (bytevector-u8-ref bytes (+ offset 1))))
+                      (and (cond ((= first 240) (and (>= second 144)
+                                                     (<= second 191)))
+                                 ((= first 244) (and (>= second 128)
+                                                     (<= second 143)))
+                                 (else (c1-utf8-continuation? second)))
+                           (c1-utf8-continuation?
+                            (bytevector-u8-ref bytes (+ offset 2)))
+                           (c1-utf8-continuation?
+                            (bytevector-u8-ref bytes (+ offset 3))))))
+               (loop (+ offset 4)))
+              (else #f)))))))
+
+(define (c1-decode-utf8 bytes start length operation)
+  (if (not (c1-valid-utf8-range? bytes start length))
+      (c1-fail 'corrupt-data operation "invalid UTF-8 metadata"))
+  (guard (caught (#t (c1-fail 'corrupt-data operation "invalid UTF-8 metadata")))
+    (let* ((raw (bytevector-copy bytes start (+ start length)))
+           (text (utf8->string raw)))
+      (if (c1-bytes=? raw (string->utf8 text)) text
+          (c1-fail 'corrupt-data operation "noncanonical UTF-8 metadata")))))
+
+(define (c1-parse-path bytes start path-bytes segment-count operation)
+  (let ((end (+ start path-bytes)))
+    (let loop ((offset start) (remaining segment-count) (result '()))
+      (if (= remaining 0)
+          (if (= offset end) (c1-reverse result)
+              (c1-fail 'corrupt-data operation "path byte count is inconsistent"))
+          (if (> (+ offset 4) end)
+              (c1-fail 'corrupt-data operation "truncated path segment length")
+              (let ((length (c1-read-u32 bytes offset)))
+                (if (or (= length 0) (> length c1-max-segment-bytes)
+                        (> (+ offset 4 length) end))
+                    (c1-fail 'corrupt-data operation "invalid path segment length")
+                    (loop (+ offset 4 length) (- remaining 1)
+                          (cons (c1-decode-utf8 bytes (+ offset 4) length operation)
+                                result)))))))))
+
+(define (c1-check-bool-payload bytes start length operation)
+  (let loop ((index start))
+    (if (= index (+ start length)) #t
+        (let ((value (bytevector-u8-ref bytes index)))
+          (if (or (= value 0) (= value 1))
+              (loop (+ index 1))
+              (c1-fail 'corrupt-data operation "bool payload contains a non-boolean byte"))))))
+
+(define (c1-parse-container bytes policy operation)
+  (let* ((checked-policy (c1-require-policy operation policy))
+         (size (if (bytevector? bytes) (bytevector-length bytes) 0)))
+    (if (not (bytevector? bytes))
+        (c1-fail 'invalid-argument operation "checkpoint input must be bytes"))
+    (if (or (< size (+ c1-header-bytes c1-checksum-bytes))
+            (> size (vector-ref checked-policy 1)))
+        (c1-fail 'corrupt-data operation "checkpoint size is outside policy"))
+    (if (not (c1-bytes=? (bytevector-copy bytes 0 16) c1-magic))
+        (c1-fail 'corrupt-data operation "invalid checkpoint magic"))
+    (let ((major (c1-read-u16 bytes 16)) (minor (c1-read-u16 bytes 18)))
+      (if (or (not (= major 1)) (not (= minor 0)))
+          (c1-fail 'version-mismatch operation "unsupported checkpoint version")))
+    (if (not (= (c1-read-u64 bytes 32) 0))
+        (c1-fail 'version-mismatch operation "unsupported required checkpoint feature"))
+    (if (or (not (= (c1-read-u32 bytes 20) c1-header-bytes))
+            (not (= (c1-read-u32 bytes 24) 1))
+            (not (= (c1-read-u32 bytes 28) 1))
+            (not (c1-zero-range? bytes 100 128)))
+        (c1-fail 'corrupt-data operation "malformed checkpoint header"))
+    (if (or (not (= (c1-read-u16 bytes 92) 1))
+            (not (= (c1-read-u16 bytes 94) 0))
+            (not (= (c1-read-u16 bytes 96) 1))
+            (not (= (c1-read-u16 bytes 98) 0)))
+        (c1-fail 'version-mismatch operation "unsupported P1 checkpoint schema"))
+    (let* ((file-size (c1-read-u64 bytes 40))
+           (metadata-offset (c1-read-u64 bytes 48))
+           (metadata-bytes (c1-read-u64 bytes 56))
+           (payload-offset (c1-read-u64 bytes 64))
+           (payload-bytes (c1-read-u64 bytes 72))
+           (entry-count (c1-read-u32 bytes 80))
+           (alias-count (c1-read-u32 bytes 84))
+           (provider-length (c1-read-u32 bytes 88))
+           (unsigned-size (- size c1-checksum-bytes)))
+      (if (or (not (= file-size size))
+              (not (= metadata-offset c1-header-bytes))
+              (> metadata-bytes (vector-ref checked-policy 2))
+              (not (= payload-offset (+ metadata-offset metadata-bytes)))
+              (not (= unsigned-size (+ payload-offset payload-bytes)))
+              (> entry-count (vector-ref checked-policy 4))
+              (> alias-count c1-max-alias-groups)
+              (= provider-length 0)
+              (> provider-length c1-max-provider-id-bytes)
+              (> (+ metadata-offset provider-length) payload-offset))
+          (c1-fail 'corrupt-data operation "checkpoint section bounds are inconsistent"))
+      (let ((actual (c1-sha256
+                     (c1-concat
+                      (list c1-container-domain
+                            (bytevector-copy bytes 0 unsigned-size)))))
+            (expected (bytevector-copy bytes unsigned-size size)))
+        (if (not (c1-bytes=? actual expected))
+            (c1-fail 'corrupt-data operation "checkpoint checksum mismatch")))
+      (let* ((provider-text (c1-decode-utf8 bytes metadata-offset provider-length operation))
+             (records-start (+ metadata-offset provider-length)))
+        (let parse-records ((index 0) (offset records-start)
+                            (expected-payload 0) (previous-path #f)
+                            (descriptors '()))
+          (if (= index entry-count)
+              (let parse-aliases ((remaining alias-count) (at offset)
+                                  (groups '()) (total-members 0)
+                                  (previous-first -1) (seen '()))
+                (if (= remaining 0)
+                    (begin
+                      (if (not (= at payload-offset))
+                          (c1-fail 'corrupt-data operation
+                                   "metadata section has trailing or missing bytes"))
+                      (if (not (= expected-payload payload-bytes))
+                          (c1-fail 'corrupt-data operation
+                                   "tensor payload section is not contiguous"))
+                      (vector provider-text (c1-reverse descriptors)
+                              (c1-reverse groups) entry-count payload-bytes
+                              metadata-bytes file-size))
+                    (if (> (+ at 8) payload-offset)
+                        (c1-fail 'corrupt-data operation "truncated alias record")
+                        (let ((count (c1-read-u32 bytes at))
+                              (reserved (c1-read-u32 bytes (+ at 4))))
+                          (if (or (< count 2) (= count 0) (not (= reserved 0))
+                                  (> (+ total-members count) c1-max-alias-members)
+                                  (> (+ at 8 (* count 4)) payload-offset))
+                              (c1-fail 'corrupt-data operation "malformed alias record"))
+                            (let members ((member 0) (member-offset (+ at 8))
+                                        (paths '()) (previous -1)
+                                        (next-seen seen) (first -1))
+                            (if (= member count)
+                                (begin
+                                  (if (and (>= previous-first 0)
+                                           (<= first previous-first))
+                                      (c1-fail 'corrupt-data operation
+                                               "alias groups are noncanonical"))
+                                  (parse-aliases
+                                   (- remaining 1) (+ at 8 (* count 4))
+                                   (cons (c1-reverse paths) groups)
+                                   (+ total-members count) first next-seen))
+                                (let ((entry-index (c1-read-u32 bytes member-offset)))
+                                  (if (or (>= entry-index entry-count)
+                                          (and (>= previous 0)
+                                               (<= entry-index previous))
+                                          (c1-int-member? entry-index next-seen))
+                                      (c1-fail 'corrupt-data operation
+                                               "alias member is invalid or duplicate"))
+                                  (let ((descriptor
+                                         (let find ((items (c1-reverse descriptors))
+                                                    (wanted entry-index))
+                                           (if (= wanted 0) (car items)
+                                               (find (cdr items) (- wanted 1))))))
+                                    (if (not (eq? (vector-ref descriptor 1) 'parameter))
+                                        (c1-fail 'corrupt-data operation
+                                                 "alias member is not a parameter"))
+                                    (if (and (not (null? paths))
+                                             (not (c1-bytes=?
+                                                   (vector-ref descriptor 8)
+                                                   (vector-ref
+                                                    (let find-first
+                                                        ((items (c1-reverse descriptors))
+                                                         (wanted first))
+                                                      (if (= wanted 0) (car items)
+                                                          (find-first (cdr items)
+                                                                      (- wanted 1)))) 8))))
+                                        (c1-fail 'corrupt-data operation
+                                                 "tied parameter payloads conflict"))
+                                    (members (+ member 1) (+ member-offset 4)
+                                             (cons (vector-ref descriptor 0) paths)
+                                             entry-index (cons entry-index next-seen)
+                                             (if (>= first 0) first entry-index))))))))))
+              (if (> (+ offset c1-record-prefix-bytes) payload-offset)
+                  (c1-fail 'corrupt-data operation "truncated checkpoint entry record")
+                  (let* ((record-size (c1-read-u64 bytes offset))
+                         (relative (c1-read-u64 bytes (+ offset 8)))
+                         (tensor-bytes (c1-read-u64 bytes (+ offset 16)))
+                         (path-bytes (c1-read-u32 bytes (+ offset 24)))
+                         (segments (c1-read-u16 bytes (+ offset 28)))
+                         (rank (c1-read-u16 bytes (+ offset 30)))
+                         (kind-code (bytevector-u8-ref bytes (+ offset 32)))
+                         (dtype-code (bytevector-u8-ref bytes (+ offset 33)))
+                         (device-code (bytevector-u8-ref bytes (+ offset 34)))
+                         (layout-code (bytevector-u8-ref bytes (+ offset 35)))
+                         (elements (c1-read-u64 bytes (+ offset 40)))
+                         (record-end (+ offset record-size)))
+                    (if (or (< record-size c1-record-prefix-bytes)
+                            (> record-end payload-offset)
+                            (not (= record-size
+                                    (+ c1-record-prefix-bytes (* rank 8) path-bytes)))
+                            (= segments 0) (> segments c1-max-path-segments)
+                            (> rank c1-max-rank)
+                            (not (c1-zero-range? bytes (+ offset 36) (+ offset 40)))
+                            (not (or (= kind-code 1) (= kind-code 2)))
+                            (not (or (= dtype-code 1) (= dtype-code 2) (= dtype-code 3)))
+                            (and (= kind-code 1) (not (= dtype-code 3)))
+                            (not (= device-code 1)) (not (= layout-code 1))
+                            (not (= relative expected-payload))
+                            (> tensor-bytes (vector-ref checked-policy 3))
+                            (> (+ payload-offset relative tensor-bytes) unsigned-size))
+                        (c1-fail 'corrupt-data operation "malformed checkpoint entry record"))
+                    (let shape ((dimension 0) (shape-values '()) (product 1))
+                      (if (= dimension rank)
+                          (let* ((ordered-shape (c1-reverse shape-values))
+                                 (width (c1-dtype-width dtype-code))
+                                 (path-start (+ offset c1-record-prefix-bytes (* rank 8)))
+                                 (path (c1-parse-path bytes path-start path-bytes
+                                                      segments operation))
+                                 (payload-start (+ payload-offset relative))
+                                 (payload (bytevector-copy bytes payload-start
+                                                           (+ payload-start tensor-bytes)))
+                                 (record-zero (bytevector-copy bytes offset record-end))
+                                 (expected-digest
+                                  (bytevector-copy record-zero 48 80)))
+                            (if (or (not (= elements product))
+                                    (and (> product 0)
+                                         (> product (quotient c1-u64-max width)))
+                                    (not (= tensor-bytes (* product width)))
+                                    (and previous-path (not (c1-path<? previous-path path))))
+                                (c1-fail 'corrupt-data operation
+                                         "entry shape, size, or path order is inconsistent"))
+                            (let zero ((digest-index 48))
+                              (if (< digest-index 80)
+                                  (begin
+                                    (bytevector-u8-set! record-zero digest-index 0)
+                                    (zero (+ digest-index 1)))))
+                            (if (not (c1-bytes=?
+                                      expected-digest
+                                      (c1-sha256
+                                       (c1-concat
+                                        (list c1-tensor-domain record-zero payload)))))
+                                (c1-fail 'corrupt-data operation
+                                         "tensor checksum mismatch"))
+                            (if (= dtype-code 1)
+                                (c1-check-bool-payload payload 0 tensor-bytes operation))
+                            (let ((descriptor
+                                   (vector path
+                                           (if (= kind-code 1) 'parameter 'buffer)
+                                           ordered-shape
+                                           (cond ((= dtype-code 1) 'bool)
+                                                 ((= dtype-code 2) 'i64)
+                                                 (else 'f32))
+                                           kind-code dtype-code elements relative payload)))
+                              (parse-records (+ index 1) record-end
+                                             (+ expected-payload tensor-bytes)
+                                             path (cons descriptor descriptors))))
+                          (let ((extent (c1-read-u64
+                                         bytes (+ offset c1-record-prefix-bytes
+                                                  (* dimension 8)))))
+                            (if (and (> extent 0)
+                                     (> product (quotient c1-u64-max extent)))
+                                (c1-fail 'corrupt-data operation
+                                         "tensor shape product overflows u64"))
+                            (shape (+ dimension 1) (cons extent shape-values)
+                                   (* product extent)))))))))))))
+
+(define (c1-checkpoint-inspect-bytes-internal bytes policy)
+  (let* ((operation 'checkpoint-inspect)
+         (parsed (c1-parse-container bytes policy operation)))
+    (vector c1-metadata-tag
+            'eshkol-checkpoint '(1 0) '() 'sha256
+            (vector-ref parsed 0) (vector-ref parsed 3)
+            (vector-ref parsed 4) (vector-ref parsed 5)
+            (vector-ref parsed 6))))
+
+(define (c1-checkpoint-metadata-ref-internal metadata key)
+  (if (or (not (vector? metadata)) (not (= (vector-length metadata) 10))
+          (not (eq? (vector-ref metadata 0) c1-metadata-tag)))
+      (c1-fail 'invalid-argument 'checkpoint-metadata-ref
+               "expected checkpoint metadata"))
+  (cond ((eq? key 'format-id) (vector-ref metadata 1))
+        ((eq? key 'format-version) (list 1 0))
+        ((eq? key 'required-features) '())
+        ((eq? key 'checksum-algorithm) 'sha256)
+        ((eq? key 'provider-id) (string-copy (vector-ref metadata 5)))
+        ((eq? key 'tensor-count) (vector-ref metadata 6))
+        ((eq? key 'payload-bytes) (vector-ref metadata 7))
+        ((eq? key 'metadata-bytes) (vector-ref metadata 8))
+        ((eq? key 'file-bytes) (vector-ref metadata 9))
+        (else (c1-fail 'invalid-argument 'checkpoint-metadata-ref
+                       "unknown checkpoint metadata key"))))
+
+(define (c1-checkpoint-decode-state-internal bytes policy codec provider-name)
+  (let* ((operation 'c1-checkpoint-decode-state-internal)
+         (checked-codec (c1-require-codec operation codec))
+         (parsed (c1-parse-container bytes policy operation))
+         (provider-id (vector-ref parsed 0))
+         (descriptors (vector-ref parsed 1))
+         (aliases (vector-ref parsed 2)))
+    (if (not (symbol? provider-name))
+        (c1-fail 'invalid-argument operation "trusted provider name must be a symbol"))
+    (c1-check-codec-id operation checked-codec provider-id)
+    (if (not (string=? (symbol->string provider-name) provider-id))
+        (c1-fail 'unsupported operation
+                 "checkpoint and explicitly selected providers differ"))
+    ;; Codec calls are completed into detached carriers before any P1 entry or
+    ;; state shell is constructed. This prevents a late decoder failure from
+    ;; leaving a partially constructed logical state in P1.
+    (let decode ((remaining descriptors) (decoded '()))
+      (if (null? remaining)
+          (let build ((items (c1-reverse decoded)) (entries '()))
+            (if (null? items)
+                (let ((state
+                       (state-dict-create-unsafe-internal
+                        'transformer-state-dict 1 0 '()
+                        (list 'transformer-tensor-provider 1 0 provider-name)
+                        (c1-reverse entries) aliases)))
+                  (state-dict-bind-provider-internal! state provider-name)
+                  state)
+                (let* ((item (car items))
+                       (descriptor (vector-ref item 0)))
+                  (build
+                   (cdr items)
+                   (cons
+                    (state-entry-internal
+                     (vector-ref descriptor 0)
+                     (vector-ref descriptor 1)
+                     (vector-ref descriptor 2)
+                     (vector-ref descriptor 3)
+                     'cpu 'dense-row-major-contiguous (vector-ref item 1))
+                    entries)))))
+          (let* ((descriptor (car remaining))
+                 (kind (vector-ref descriptor 1))
+                 (shape (vector-ref descriptor 2))
+                 (dtype (vector-ref descriptor 3))
+                 (payload (vector-ref descriptor 8))
+                 (tensor ((vector-ref checked-codec 3)
+                          (vector payload kind shape dtype 'cpu
+                                  'dense-row-major-contiguous operation))))
+            (decode (cdr remaining) (cons (vector descriptor tensor) decoded)))))))
+
+(define (c1-valid-file-path? path)
+  (and (string? path) (> (string-length path) 0)
+       (<= (bytevector-length (string->utf8 path)) 4096)
+       (let loop ((index 0))
+         (if (= index (string-length path)) #t
+             (and (not (char=? (string-ref path index) #\nul))
+                  (loop (+ index 1)))))))
+
+(define (c1-read-file path policy operation)
+  (let ((checked-policy (c1-require-policy operation policy)))
+    (if (not (c1-valid-file-path? path))
+        (c1-fail 'invalid-argument operation "invalid checkpoint path"))
+    (guard (caught (#t (c1-fail 'io operation "checkpoint size query failed")))
+      (let ((size (file-size path)))
+        (if (or (not (c1-exact-nonnegative? size))
+                (> size (vector-ref checked-policy 1)))
+            (c1-fail 'corrupt-data operation "checkpoint file exceeds policy"))
+        (let* ((bytes (make-bytevector size 0))
+               (status (c1-native-read-exact
+                        path bytes size (vector-ref checked-policy 1))))
+          (if (= status 0) bytes
+              (c1-native-fail operation "checked checkpoint read failed" status)))))))
+
+(define (c1-checkpoint-inspect-internal path policy)
+  (c1-checkpoint-inspect-bytes-internal
+   (c1-read-file path policy 'checkpoint-inspect) policy))
+
+(define (c1-checkpoint-save-state-internal! state path policy codec overwrite?)
+  (let ((operation 'c1-checkpoint-save-state-internal!))
+    (if (not (c1-valid-file-path? path))
+        (c1-fail 'invalid-argument operation "invalid checkpoint path"))
+    (if (not (boolean? overwrite?))
+        (c1-fail 'invalid-argument operation "overwrite option must be boolean"))
+    (let* ((bytes (c1-checkpoint-encode-state-internal state policy codec))
+           (status (c1-native-atomic-write
+                    path bytes (bytevector-length bytes) (if overwrite? 1 0))))
+      (if (= status 0) #t
+          (c1-native-fail operation "atomic checkpoint publication failed" status)))))
+
+(define (c1-checkpoint-load-state-internal path policy codec provider-name)
+  (c1-checkpoint-decode-state-internal
+   (c1-read-file path policy 'c1-checkpoint-load-state-internal)
+   policy codec provider-name))
+
+(define (c1-checkpoint-load-module-internal! module path policy codec provider-name)
+  (let ((state (c1-checkpoint-load-state-internal
+                path policy codec provider-name)))
+    (module-load-state-dict! module state)))

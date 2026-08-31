@@ -1,0 +1,142 @@
+;;; Internal Eshkol-native SHA-256 for C1 data-only checkpoint bytes.
+(provide c1-sha256)
+
+(define c1-sha256-u32-mask 4294967295)
+(define c1-sha256-k
+  (vector
+   1116352408 1899447441 3049323471 3921009573
+   961987163 1508970993 2453635748 2870763221
+   3624381080 310598401 607225278 1426881987
+   1925078388 2162078206 2614888103 3248222580
+   3835390401 4022224774 264347078 604807628
+   770255983 1249150122 1555081692 1996064986
+   2554220882 2821834349 2952996808 3210313671
+   3336571891 3584528711 113926993 338241895
+   666307205 773529912 1294757372 1396182291
+   1695183700 1986661051 2177026350 2456956037
+   2730485921 2820302411 3259730800 3345764771
+   3516065817 3600352804 4094571909 275423344
+   430227734 506948616 659060556 883997877
+   958139571 1322822218 1537002063 1747873779
+   1955562222 2024104815 2227730452 2361852424
+   2428436474 2756734187 3204031479 3329325298))
+
+(define (c1-u32 value) (bitwise-and value c1-sha256-u32-mask))
+(define (c1-shr value count)
+  (arithmetic-shift (c1-u32 value) (- count)))
+(define (c1-rotr value count)
+  (c1-u32 (bitwise-or (c1-shr value count)
+                      (arithmetic-shift (c1-u32 value) (- 32 count)))))
+(define (c1-xor3 a b c) (bitwise-xor (bitwise-xor a b) c))
+(define (c1-choice x y z)
+  (c1-u32 (bitwise-xor (bitwise-and x y)
+                       (bitwise-and (bitwise-not x) z))))
+(define (c1-majority x y z)
+  (c1-xor3 (bitwise-and x y) (bitwise-and x z) (bitwise-and y z)))
+(define (c1-big0 x) (c1-xor3 (c1-rotr x 2) (c1-rotr x 13) (c1-rotr x 22)))
+(define (c1-big1 x) (c1-xor3 (c1-rotr x 6) (c1-rotr x 11) (c1-rotr x 25)))
+(define (c1-small0 x) (c1-xor3 (c1-rotr x 7) (c1-rotr x 18) (c1-shr x 3)))
+(define (c1-small1 x) (c1-xor3 (c1-rotr x 17) (c1-rotr x 19) (c1-shr x 10)))
+
+(define (c1-load-be32 bytes offset)
+  (c1-u32
+   (+ (arithmetic-shift (bytevector-u8-ref bytes offset) 24)
+      (arithmetic-shift (bytevector-u8-ref bytes (+ offset 1)) 16)
+      (arithmetic-shift (bytevector-u8-ref bytes (+ offset 2)) 8)
+      (bytevector-u8-ref bytes (+ offset 3)))))
+
+(define (c1-expand! words block offset)
+  (let fill ((index 0))
+    (if (< index 16)
+        (begin
+          (vector-set! words index (c1-load-be32 block (+ offset (* index 4))))
+          (fill (+ index 1)))))
+  (let expand ((index 16))
+    (if (< index 64)
+        (begin
+          (vector-set!
+           words index
+           (c1-u32 (+ (c1-small1 (vector-ref words (- index 2)))
+                      (vector-ref words (- index 7))
+                      (c1-small0 (vector-ref words (- index 15)))
+                      (vector-ref words (- index 16)))))
+          (expand (+ index 1))))))
+
+(define (c1-compress! state words)
+  (let ((work (vector-copy state)))
+    (let rounds ((index 0))
+      (if (< index 64)
+          (let* ((a (vector-ref work 0)) (b (vector-ref work 1))
+                 (c (vector-ref work 2)) (d (vector-ref work 3))
+                 (e (vector-ref work 4)) (f (vector-ref work 5))
+                 (g (vector-ref work 6)) (h (vector-ref work 7))
+                 (t1 (c1-u32 (+ h (c1-big1 e) (c1-choice e f g)
+                                    (vector-ref c1-sha256-k index)
+                                    (vector-ref words index))))
+                 (t2 (c1-u32 (+ (c1-big0 a) (c1-majority a b c)))))
+            (vector-set! work 0 (c1-u32 (+ t1 t2)))
+            (vector-set! work 1 a)
+            (vector-set! work 2 b)
+            (vector-set! work 3 c)
+            (vector-set! work 4 (c1-u32 (+ d t1)))
+            (vector-set! work 5 e)
+            (vector-set! work 6 f)
+            (vector-set! work 7 g)
+            (rounds (+ index 1)))))
+    (let add ((index 0))
+      (if (< index 8)
+          (begin
+            (vector-set! state index
+                         (c1-u32 (+ (vector-ref state index)
+                                    (vector-ref work index))))
+            (add (+ index 1)))))))
+
+(define (c1-pad bytes)
+  (let* ((length (bytevector-length bytes))
+         (padded-length (* (quotient (+ length 72) 64) 64))
+         (padded (make-bytevector padded-length 0))
+         (bit-length (* length 8)))
+    (bytevector-copy! padded 0 bytes 0 length)
+    (bytevector-u8-set! padded length 128)
+    (let loop ((index 0))
+      (if (< index 8)
+          (begin
+            (bytevector-u8-set!
+             padded (+ (- padded-length 8) index)
+             (bitwise-and
+              (arithmetic-shift bit-length (- (* (- 7 index) 8))) 255))
+            (loop (+ index 1)))))
+    padded))
+
+(define (c1-state-bytes state)
+  (let ((digest (make-bytevector 32 0)))
+    (let words ((wi 0))
+      (if (< wi 8)
+          (let ((word (vector-ref state wi)))
+            (let bytes ((bi 0))
+              (if (< bi 4)
+                  (begin
+                    (bytevector-u8-set!
+                     digest (+ (* wi 4) bi)
+                     (bitwise-and
+                      (arithmetic-shift word (- (* (- 3 bi) 8))) 255))
+                    (bytes (+ bi 1)))))
+            (words (+ wi 1)))))
+    digest))
+
+(define (c1-sha256 bytes)
+  (if (not (bytevector? bytes))
+      (raise "c1-sha256: expected a bytevector"))
+  (if (> (bytevector-length bytes) 2305843009213693951)
+      (raise "c1-sha256: input exceeds the SHA-256 length field"))
+  (let* ((padded (c1-pad bytes))
+         (state (vector 1779033703 3144134277 1013904242 2773480762
+                        1359893119 2600822924 528734635 1541459225))
+         (words (make-vector 64 0)))
+    (let blocks ((offset 0))
+      (if (< offset (bytevector-length padded))
+          (begin
+            (c1-expand! words padded offset)
+            (c1-compress! state words)
+            (blocks (+ offset 64)))))
+    (c1-state-bytes state)))

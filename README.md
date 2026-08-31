@@ -72,6 +72,12 @@ The narrow process-local native identity boundary used only to enforce P1's
 public/trusted compile separation is documented in
 [docs/P1_IDENTITY_ABI.md](docs/P1_IDENTITY_ABI.md).
 
+C1's internal data-only checkpoint container and local atomic-I/O boundary are
+specified in [docs/CHECKPOINT_FORMAT.md](docs/CHECKPOINT_FORMAT.md). Run its
+deterministic format, corruption, ownership, native ABI, failpoint, sanitizer, and
+production-isolation gate with `make test-c1`. C1 intentionally exposes no public
+trainer checkpoint API and no production tensor codec; C2 owns that composition.
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
@@ -86,6 +92,7 @@ See:
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
+- [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
