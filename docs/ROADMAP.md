@@ -35,12 +35,14 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
+| P1L | Release-capable P1 provider and state-dictionary lifetime | P1, E1/E1B, Q0, C1, T1 | Provider interface 2.0, explicit state release, state-backed borrowed handles, exact-once cleanup, lifetime negatives, and supported CI | active |
+| I2 | Shared dense CPU-f32 tensor, P1 value/gradient, and atomic-mutation substrate | P1L, K1, Q0, E1/E1B, R0 | [ABI 1.0 exact-bit storage, borrowed K1 views, P1-bound accumulated gradients, whole-batch preflight/commit, sanitizers, packaging negatives, and deterministic AOT evidence](I2_F32_TENSOR.md) | blocked |
 | T2 | Deterministic BPE training and streaming encode/decode | T1, D1 | Merge determinism, byte fallback and corpus round trips | planned |
 | D2 | Memory-bounded shard loader, batching, packing and cursor state | D1, T1, Q0 | Shifted targets, masks, deterministic shuffle and exact resume | planned |
-| N2 | Embedding, linear, normalization, activations, dropout, residuals | P1, K1, Q0 | Forward and gradient parity for every operation | planned |
+| N2 | Embedding, linear, normalization, activations, dropout, residuals | P1, K1, Q0, I2 | Forward and gradient parity for every operation | planned |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | planned |
 | L2 | Fused indexed token cross-entropy | K1, Q0 | Stable per-token loss and direct-backward parity tests | planned |
-| O2 | AdamW, parameter groups, clipping, accumulation and schedules | P1, Q0 | Reference update parity and serializable-state tests | planned |
+| O2 | AdamW, parameter groups, clipping, accumulation and schedules | P1, Q0, I2 | Reference update parity and serializable-state tests | planned |
 | C2 | Full training-state checkpoint schema | C1, D2, O2, X1 | Model/optimizer/scheduler/RNG/cursor exact-resume test | planned |
 
 ## Wave 3 — first complete language model

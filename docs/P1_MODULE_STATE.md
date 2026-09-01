@@ -251,7 +251,7 @@ reach the private authority.
 
 Validation precedes mutation for every category.
 
-## Measured capability limit
+## Measured capability limit and P1L prerequisite
 
 Merged R0 evidence does not verify canonical Eshkol f32/i64/bool storage, device
 identity, contiguity, tensor cloning, tensor equality, gradient slots, or in-place
@@ -260,6 +260,15 @@ construction path has no tensor provider, and every tensor-dependent public stat
 operation fails explicitly with a same-registry structured `unsupported` error.
 Malformed public receivers fail with structured `invalid-argument`; both paths use
 the unchanged A0 accessors and taxonomy above.
+
+P1 provider 1.0 has no owned-carrier release callback, and the pinned runtime has no
+proved finalizer that can safely substitute for one. P1L is therefore a binding
+prerequisite of production I2 integration. It will define provider interface 2.0,
+explicit state-dictionary release, and read-only state-backed tensor handles. Until
+P1L independently merges, I2 registers no production P1 provider or aggregate and
+must not use process-lifetime tensor retention, implicit equality-triggered free, or
+an optional callback hidden inside the 1.0 descriptor. See
+[I2_F32_TENSOR.md](I2_F32_TENSOR.md).
 
 Structural tests explicitly add the separate `tests/p1/providers` include root and
 compose production modules with an inert `fixture-v1` carrier from the qualified
@@ -275,10 +284,10 @@ The injected later-entry failure proves the P1 validation/staging/commit control
 flow and logical ownership semantics only, not physical runtime tensor storage,
 copying, lifetime, mutation, or atomicity. Real tensor-backed module construction,
 snapshot ownership, storage mutation, and state operations remain explicitly
-unsupported until a reviewed provider supplies and proves the required metadata,
-clone, exact-value comparison, whole-batch preflight, and infallible commit contract.
-P1 must be retested against merged I1/K1 and later f32 tensor support before any
-numerical or module-capability claim. There is no scalar, CPU, dtype, Python,
+unsupported until P1L and a reviewed provider supply and prove release, metadata,
+clone, exact-value comparison, whole-batch preflight, and infallible commit. P1 must
+be retested against merged P1L and later f32 tensor support before any numerical or
+module-capability claim. There is no scalar, CPU, dtype, Python,
 finite-difference, device, or numerical fallback.
 
 The native registry has no verified concurrency behavior and makes no concurrency
