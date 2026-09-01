@@ -1,6 +1,6 @@
 @@P1_PUBLIC_BEGIN@@
 ;;; Generated installed P1 facade.  The completed P1 package artifact owns E1;
-;;; this source imports only the safe accessor facade and declares the 17 narrow
+;;; this source imports only the safe accessor facade and declares the 18 narrow
 ;;; fixed-arity package operations.
 
 (require transformer.error_consumer)
@@ -10,7 +10,7 @@
          parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
          parameter-handle-path parameter-handle-shape parameter-handle-dtype
          parameter-handle-device state-dict-paths state-dict-tensor
-         state-dict-alias-groups)
+         state-dict-alias-groups state-dict-release!)
 
 (define p1-safe-module-parameters
   (let ()
@@ -190,6 +190,17 @@
         (vector-ref output 0)))))
 (define (state-dict-alias-groups state)
   (p1-safe-state-dict-alias-groups state))
+
+(define p1-safe-state-dict-release
+  (let ()
+    (extern void p1-public-state-dict-release ptr ptr
+            :real et_e1b_public_p1_state_dict_release_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (p1-public-state-dict-release (vector state) output)
+        (vector-ref output 0)))))
+(define (state-dict-release! state)
+  (p1-safe-state-dict-release state))
 @@P1_PUBLIC_END@@
 
 @@P1_TRUSTED_BEGIN@@
@@ -218,16 +229,16 @@
         :real et_p1_private_parameter_tree_create_v1)
 (extern i64 p1-native-state-create ptr
         :real et_p1_private_state_dict_create_v1)
-(extern i64 p1-native-entry-create ptr
-        :real et_p1_private_state_entry_create_v1)
+(extern i64 p1-native-state-entry-create ptr ptr
+        :real et_p1_private_state_entry_create_for_state_v1)
 (extern i64 p1-native-callback-create ptr
         :real et_p1_private_callback_identity_create_v1)
 (extern i64 p1-native-callback-revoke ptr ptr
         :real et_p1_private_callback_identity_revoke_v1)
-(extern i64 p1-native-provider-seal ptr ptr ptr ptr ptr ptr ptr ptr ptr
-        :real et_p1_private_provider_seal_v1)
-(extern i64 p1-native-provider-matches ptr ptr ptr ptr ptr ptr ptr ptr ptr
-        :real et_p1_private_provider_snapshot_matches_v1)
+(extern i64 p1-native-provider-seal ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_p1_private_provider_seal_release_v1)
+(extern i64 p1-native-provider-matches ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_p1_private_provider_snapshot_matches_release_v1)
 (extern i64 p1-native-state-bind ptr ptr ptr
         :real et_p1_private_state_bind_v1)
 (extern i64 p1-native-state-provider ptr ptr
@@ -236,6 +247,12 @@
         :real et_p1_private_state_unbind_v1)
 (extern i64 p1-native-state-revoke ptr ptr
         :real et_p1_private_state_revoke_v1)
+(extern i64 p1-native-state-tensor-create ptr ptr
+        :real et_p1_private_state_tensor_create_v1)
+(extern i64 p1-native-state-tensor-validate ptr ptr ptr
+        :real et_p1_private_state_tensor_validate_v1)
+(extern i64 p1-native-state-release-begin ptr ptr
+        :real et_p1_private_state_release_begin_v1)
 (extern i64 p1-native-live-count ptr
         :real et_p1_private_live_entry_count_v1)
 (extern i64 p1-native-tombstone-count ptr
@@ -246,7 +263,7 @@
          parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
          parameter-handle-path parameter-handle-shape parameter-handle-dtype
          parameter-handle-device state-dict-paths state-dict-tensor
-         state-dict-alias-groups
+         state-dict-alias-groups state-dict-release!
          tensor-provider-create-internal tensor-provider-register-internal!
          module-create-internal module-create-with-provider-internal
          module-register-parameter-internal!
@@ -257,11 +274,16 @@
          state-entry-internal state-entry-path-internal state-entry-kind-internal
          state-entry-shape-internal state-entry-dtype-internal
          state-entry-device-internal state-entry-layout-internal
-         state-entry-tensor-internal state-dict-create-unsafe-internal
+         state-dict-create-unsafe-internal
          state-dict-bind-provider-internal!
          state-dict-format-internal state-dict-version-internal
          state-dict-features-internal state-dict-adapter-internal
-         state-dict-entries-internal)
+         state-dict-entries-internal
+         state-dict-tensor-borrow-begin-internal
+         state-dict-tensor-borrow-end-internal
+         tensor-provider-preflight-internal
+         tensor-provider-release-owned-internal!
+         state-dict-adopt-owned-internal!)
 
 (define p1-trusted-surface
   (let ()
@@ -271,19 +293,26 @@
 (define parameter-tree-tag (vector 'transformer-parameter-tree))
 (define state-dict-tag (vector 'transformer-state-dict))
 (define state-entry-tag (vector 'transformer-state-entry))
+(define state-lifecycle-tag (vector 'transformer-state-lifecycle))
+(define state-borrow-access-tag (vector 'transformer-state-borrow-access))
+(define state-tensor-tag (vector 'transformer-state-backed-tensor))
 (define tensor-provider-tag (vector 'transformer-tensor-provider))
+(define unsafe-entry-input-tag (vector 'transformer-unsafe-entry-input))
 
 (define state-format 'transformer-state-dict)
 (define state-major 1)
 (define state-minor 0)
 (define provider-identity-format 'transformer-tensor-provider)
-(define provider-interface-major 1)
+(define provider-interface-major 2)
 (define provider-interface-minor 0)
 (define row-major-layout 'dense-row-major-contiguous)
 (define tensor-providers '())
 (define tensor-provider-admission-active? #f)
 (define tensor-provider-admission-active-shell #f)
 (define shell-registry '())
+(define dead-state-raw (vector 'released-state-raw))
+(define dead-state-tensor-raw (vector 'released-state-tensor-raw))
+(define dead-state-entry-raw (vector 'released-state-entry-raw))
 (define max-path-segments 64)
 (define max-topology-depth max-path-segments)
 (define max-topology-nodes 4096)
@@ -321,7 +350,7 @@
   (cond
     ((= status 1)
      (or (= code 1) (= code 2) (= code 3) (= code 5) (= code 6)
-         (= code 16) (= code 17)))
+         (= code 16) (= code 17) (= code 18)))
     ((= status 2)
      (or (= code 9) (= code 11) (= code 13) (= code 14) (= code 15)))
     ((= status 3)
@@ -348,6 +377,7 @@
     ((= code 15) "native identity belongs to another process")
     ((= code 16) "native identity integrity check failed")
     ((= code 17) "native provider identifier is invalid")
+    ((= code 18) "native state tensor belongs to another state")
     (else "native identity operation returned a malformed status")))
 
 (define (native-raise operation status code)
@@ -402,7 +432,9 @@
       ((eq? kind 'handle) (p1-native-handle-create native-context))
       ((eq? kind 'tree) (p1-native-tree-create native-context))
       ((eq? kind 'state) (p1-native-state-create native-context))
-      ((eq? kind 'entry) (p1-native-entry-create native-context))
+      ((eq? kind 'state-tensor)
+       (p1-native-state-tensor-create
+         native-context (shell-for-raw 'state (vector-ref raw 1))))
       (else
         (fail 'internal 'p1-native-create-shell
               "unknown private identity kind" '()))))
@@ -416,8 +448,13 @@
       (else (loop (cdr entries))))))
 
 (define (shell-for-raw kind raw)
-  (let find ((entries shell-registry))
-    (cond
+  (if (or (eq? raw dead-state-raw)
+          (eq? raw dead-state-tensor-raw)
+          (eq? raw dead-state-entry-raw))
+      (fail 'internal 'shell-for-raw
+            "released registry marker cannot be published" '())
+      (let find ((entries shell-registry))
+        (cond
       ((null? entries)
        (let* ((entry (vector #f kind raw))
               (next-registry (cons entry shell-registry))
@@ -428,13 +465,84 @@
       ((and (eq? kind (vector-ref (car entries) 1))
             (eq? raw (vector-ref (car entries) 2)))
        (vector-ref (car entries) 0))
-      (else (find (cdr entries))))))
+      (else (find (cdr entries)))))))
+
+(define (state-entry-shell-for-raw state-shell state raw)
+  ;; Trusted entry identities are state-owned.  Keying the registry by both
+  ;; state and raw entry prevents a temporary unsafe state from sharing the
+  ;; source state's native identity before clone-on-bind replaces its entries.
+  (if (or (eq? state dead-state-raw)
+          (eq? raw dead-state-entry-raw))
+      (fail 'internal 'state-entry-shell-for-raw
+            "released registry marker cannot be published" '())
+      (let find ((records shell-registry))
+        (cond
+          ((null? records)
+           (let* ((record (vector #f 'entry raw state))
+                  (next-registry (cons record shell-registry)))
+             (require-native-context 'state-entry-shell-for-raw)
+             (native-check
+               'state-entry-shell-for-raw
+               (p1-native-state-entry-create native-context state-shell))
+             (let ((shell (p1-native-result-ptr native-context)))
+               (vector-set! record 0 shell)
+               (set! shell-registry next-registry)
+               shell)))
+          ((and (eq? (vector-ref (car records) 1) 'entry)
+                (= (vector-length (car records)) 4)
+                (eq? (vector-ref (car records) 2) raw)
+                (eq? (vector-ref (car records) 3) state))
+           (vector-ref (car records) 0))
+          (else (find (cdr records)))))))
 
 (define (raw-for-shell operation kind value)
   (let ((entry (shell-entry value)))
-    (if (and entry (eq? kind (vector-ref entry 1)))
-        (vector-ref entry 2)
-        (fail 'invalid-argument operation "expected registered opaque value" '()))))
+    (if (not (and entry (eq? kind (vector-ref entry 1))))
+        (fail 'invalid-argument operation "expected registered opaque value" '())
+        (let ((raw (vector-ref entry 2)))
+          (if (or (eq? raw dead-state-raw)
+                  (eq? raw dead-state-tensor-raw)
+                  (eq? raw dead-state-entry-raw))
+              (fail 'invalid-state operation
+                    "registered opaque value is released" '())
+              raw)))))
+
+(define (raw-entry-for-trusted operation value)
+  ;; The private pre-state constructor returns an unregistered construction
+  ;; value so P1 retains no hidden carrier edge if its trusted caller abandons
+  ;; it. Entries exposed from a state remain state-scoped opaque identities.
+  (let ((record (shell-entry value)))
+    (if record
+        (raw-for-shell operation 'entry value)
+        (if (state-entry-value? value)
+            value
+            (fail 'invalid-argument operation
+                  "expected trusted state entry value" '())))))
+
+(define (compact-released-state-shells! state)
+  ;; Replace all registry edges into the released raw graph with shared small
+  ;; markers. Markers retain neither state, entry, carrier, path, nor aliases.
+  (let ((entries (vector-ref state 6)))
+    (let scan ((remaining shell-registry))
+      (if (null? remaining)
+          #t
+          (let* ((record (car remaining))
+                 (kind (vector-ref record 1))
+                 (raw (vector-ref record 2)))
+            (cond
+              ((and (eq? kind 'state) (eq? raw state))
+               (vector-set! record 2 dead-state-raw))
+              ((and (eq? kind 'state-tensor)
+                    (state-tensor-value? raw)
+                    (eq? (vector-ref raw 1) state))
+               (vector-set! record 2 dead-state-tensor-raw))
+              ((and (eq? kind 'entry)
+                    (= (vector-length record) 4)
+                    (eq? (vector-ref record 3) state)
+                    (identity-member-local? raw entries))
+               (vector-set! record 2 dead-state-entry-raw))
+              (else #t))
+            (scan (cdr remaining)))))))
 
 (define (bounded-acyclic-list-spine? values limit)
   ;; Brent's algorithm advances one caller pair per step, uses O(1) identity
@@ -656,13 +764,17 @@
   (and (vector? value) (= (vector-length value) 9)
        (eq? (vector-ref value 0) state-dict-tag)))
 
+(define (state-tensor-value? value)
+  (and (vector? value) (= (vector-length value) 3)
+       (eq? (vector-ref value 0) state-tensor-tag)))
+
 (define (state-entry-value? value)
   (and (vector? value) (= (vector-length value) 8)
        (eq? (vector-ref value 0) state-entry-tag)))
 
 (define (tensor-provider-value? value)
   (and (vector? value)
-       (or (= (vector-length value) 9) (= (vector-length value) 10))
+       (or (= (vector-length value) 10) (= (vector-length value) 11))
        (eq? (vector-ref value 0) tensor-provider-tag)))
 
 (define (require-module operation value)
@@ -681,6 +793,32 @@
   (if (state-value? value) value
       (fail 'invalid-argument operation "expected state dictionary" '())))
 
+(define (state-lifecycle state) (vector-ref state 8))
+
+(define (require-live-state operation value)
+  (let* ((state (require-state operation value))
+         (lifecycle (state-lifecycle state)))
+    (if (and (vector? lifecycle) (= (vector-length lifecycle) 7)
+             (eq? (vector-ref lifecycle 0) state-lifecycle-tag)
+             (eq? (vector-ref lifecycle 1) 'live))
+        state
+        (fail 'invalid-state operation "state dictionary is released" '()))))
+
+(define (state-use-begin! operation state access)
+  (require-live-state operation state)
+  (let ((lifecycle (state-lifecycle state)))
+    (if (not (vector-ref lifecycle 6))
+        (begin (vector-set! lifecycle 6 access) state)
+        (fail 'invalid-state operation
+              "state dictionary access is already active" '()))))
+
+(define (state-use-end! operation state access)
+  (let ((lifecycle (state-lifecycle (require-live-state operation state))))
+    (if (eq? (vector-ref lifecycle 6) access)
+        (begin (vector-set! lifecycle 6 #f) #t)
+        (fail 'invalid-argument operation
+              "state dictionary scoped access handle differs" '()))))
+
 (define (tensor-provider-create-internal
           (name : symbol)
           (describe : (-> vector vector))
@@ -689,18 +827,20 @@
           (value-equal? : (-> vector boolean))
           (device-equal? : (-> vector boolean))
           (prepare-load : (-> vector vector))
-          (commit-load! : (-> vector vector)))
+          (commit-load! : (-> vector vector))
+          (release-owned! : (-> vector vector)))
   (if (not (symbol? name))
       (fail 'invalid-argument 'tensor-provider-create-internal
             "provider name must be a symbol" '())
       (if (not (and (procedure? describe) (procedure? clone)
                     (procedure? storage-identical?) (procedure? value-equal?)
                     (procedure? device-equal?) (procedure? prepare-load)
-                    (procedure? commit-load!)))
+                    (procedure? commit-load!) (procedure? release-owned!)))
           (fail 'invalid-argument 'tensor-provider-create-internal
                 "provider operations must be procedures" '())
           (vector tensor-provider-tag name describe clone storage-identical?
-                  value-equal? device-equal? prepare-load commit-load!))))
+                  value-equal? device-equal? prepare-load commit-load!
+                  release-owned!))))
 
 (define (tensor-provider-name provider) (vector-ref provider 1))
 
@@ -709,6 +849,7 @@
         provider-interface-minor (tensor-provider-name provider)))
 
 (define (state-provider-binding-find state)
+  (require-live-state 'state-provider-binding-find state)
   (let* ((shell (shell-for-raw 'state state))
          (status (p1-native-state-provider native-context shell)))
     (if (= status 0)
@@ -726,6 +867,7 @@
     (native-check operation
                   (p1-native-state-bind native-context state-shell
                                         provider-shell))
+    (vector-set! (state-lifecycle state) 3 provider)
     state))
 
 (define (tensor-provider-registration-find name)
@@ -744,7 +886,7 @@
           (vector-ref provider 2) (vector-ref provider 3)
           (vector-ref provider 4) (vector-ref provider 5)
           (vector-ref provider 6) (vector-ref provider 7)
-          (vector-ref provider 8) #f))
+          (vector-ref provider 8) (vector-ref provider 9) #f))
 
 (define (replace-shell-raw! operation kind old-raw new-raw)
   (let find ((entries shell-registry))
@@ -770,8 +912,8 @@
   (let ((live-before (native-live-count operation))
         (tombstones-before (native-tombstone-count operation)))
     (let create ((index 0) (created '()))
-      (if (= index 7)
-          (let ((result (make-vector 7 #f)))
+      (if (= index 8)
+          (let ((result (make-vector 8 #f)))
             (let install ((remaining (list-reverse created)) (slot 0))
               (if (null? remaining)
                   result
@@ -803,12 +945,12 @@
         (vector-ref callbacks 0) (vector-ref callbacks 1)
         (vector-ref callbacks 2) (vector-ref callbacks 3)
         (vector-ref callbacks 4) (vector-ref callbacks 5)
-        (vector-ref callbacks 6)))))
+        (vector-ref callbacks 6) (vector-ref callbacks 7)))))
 
 (define (native-provider-snapshot-check! operation provider)
-  (if (not (= (vector-length provider) 10))
+  (if (not (= (vector-length provider) 11))
       (fail 'unsupported operation "tensor provider is not admitted" '())
-      (let ((callbacks (vector-ref provider 9)))
+      (let ((callbacks (vector-ref provider 10)))
         (native-check
           operation
           (p1-native-provider-matches
@@ -816,11 +958,11 @@
             (vector-ref callbacks 0) (vector-ref callbacks 1)
             (vector-ref callbacks 2) (vector-ref callbacks 3)
             (vector-ref callbacks 4) (vector-ref callbacks 5)
-            (vector-ref callbacks 6))))))
+            (vector-ref callbacks 6) (vector-ref callbacks 7))))))
 
 (define (native-callback-identities-revoke! operation callbacks)
   (let loop ((index 0))
-    (if (= index 7)
+    (if (= index 8)
         #t
         (begin
           (native-check
@@ -833,7 +975,7 @@
           operation shell shell-record callbacks)
   (let* ((live-before (native-live-count operation))
          (tombstones-before (native-tombstone-count operation))
-         (callback-count (if (vector? callbacks) 7 0))
+         (callback-count (if (vector? callbacks) 8 0))
          (released (+ callback-count 1)))
     (if (vector? callbacks)
         (native-callback-identities-revoke! operation callbacks)
@@ -905,14 +1047,15 @@
                          (vector (tensor-provider-name admitted)
                                  shell admitted))
                        (next-providers (cons registration tensor-providers))
-                       (callbacks #f))
+                       (callbacks #f)
+                       (outcome (vector #f #f))
+                       (abort-failed? #f)
+                       (abort-error #f))
                   (guard (error
                            (#t
-                             (set! tensor-provider-admission-active-shell #f)
-                             (native-provider-admission-abort!
-                               'tensor-provider-register-internal!
-                               shell shell-record callbacks)
-                             (raise error)))
+                             (vector-set! outcome 0 #f)
+                             (vector-set! outcome 1 error)
+                             outcome))
                     (set! tensor-provider-admission-active-shell shell)
                     (tensor-provider-admit! admitted evidence)
                     (set! tensor-provider-admission-active-shell #f)
@@ -921,7 +1064,7 @@
                             'tensor-provider-register-internal!))
                     (if (and (= (native-live-count
                                   'tensor-provider-register-internal!)
-                                (+ live-before 7))
+                                (+ live-before 8))
                              (= (native-tombstone-count
                                   'tensor-provider-register-internal!)
                                 tombstones-before))
@@ -936,14 +1079,30 @@
                               '())
                         #t)
                     (native-provider-seal!
-                      'tensor-provider-register-internal! provider callbacks))
-                  ;; All allocations and recoverable branches precede sealing.
-                  ;; These three writes are bounded and nonraising.
-                  (vector-set! admitted 9 callbacks)
-                  (vector-set! shell-record 2 admitted)
-                  (set! tensor-providers
-                        next-providers)
-                  admitted))))))
+                      'tensor-provider-register-internal! provider callbacks)
+                    (vector-set! outcome 0 #t)
+                    (vector-set! outcome 1 admitted))
+                  (if (vector-ref outcome 0)
+                      (begin
+                        ;; All allocations and recoverable branches precede
+                        ;; sealing. These writes are bounded and nonraising.
+                        (vector-set! admitted 10 callbacks)
+                        (vector-set! shell-record 2 admitted)
+                        (set! tensor-providers next-providers)
+                        admitted)
+                      (begin
+                        (set! tensor-provider-admission-active-shell #f)
+                        (guard (caught
+                                 (#t
+                                   (set! abort-failed? #t)
+                                   (set! abort-error caught)
+                                   #f))
+                          (native-provider-admission-abort!
+                            'tensor-provider-register-internal!
+                            shell shell-record callbacks))
+                        (if abort-failed?
+                            (raise abort-error)
+                            (raise (vector-ref outcome 1)))))))))))
 
 (define (require-provider-name operation name)
   (if (not (symbol? name))
@@ -956,10 +1115,55 @@
 
 (define (require-provider operation provider)
   (if (and (tensor-provider-value? provider)
-           (= (vector-length provider) 10))
+           (= (vector-length provider) 11))
       (begin (native-provider-snapshot-check! operation provider)
              provider)
       (fail 'unsupported operation "no verified tensor provider is configured" '())))
+
+(define (tensor-provider-preflight-internal provider-name major minor)
+  ;; Trusted persistence consumers reject obsolete inert identities before a
+  ;; codec or provider callback can observe a carrier.
+  (if (or (not (integer? major)) (not (exact? major))
+          (not (integer? minor)) (not (exact? minor))
+          (not (= major provider-interface-major))
+          (not (= minor provider-interface-minor)))
+      (fail 'version-mismatch 'tensor-provider-preflight-internal
+            "unsupported tensor provider interface version" '())
+      (require-provider-name 'tensor-provider-preflight-internal
+                             provider-name)))
+
+(define (tensor-provider-release-owned-internal!
+          provider-name major minor release-envelope)
+  (if (not (and (vector? release-envelope)
+                (= (vector-length release-envelope) 4)))
+      (fail 'invalid-argument 'tensor-provider-release-owned-internal!
+            "owned tensor release envelope is invalid" '())
+      #t)
+  ;; This is the last-chance sanitizer for a decoder that republishes storage
+  ;; from a live P1 state and then fails before adoption. It precedes provider
+  ;; lookup/version checks so caller cleanup can never release that storage.
+  (if (and (vector-ref release-envelope 0)
+           (carrier-protected-from-release? (vector-ref release-envelope 0)))
+      (begin
+        (vector-set! release-envelope 0 #f)
+        ;; Cleanup consumers must be able to continue releasing later genuine
+        ;; owners without relying on exception unwinding across this private
+        ;; module seam. False is the narrow protected-carrier rejection status.
+        #f)
+      (if (not (and
+                 (vector-ref release-envelope 0)
+                 (or (eq? (vector-ref release-envelope 1) 'parameter)
+                     (eq? (vector-ref release-envelope 1) 'buffer))
+                 (symbol? (vector-ref release-envelope 2))
+                 (eq? (vector-ref release-envelope 3) #f)))
+          (fail 'invalid-argument 'tensor-provider-release-owned-internal!
+                "owned tensor release envelope is invalid" '())
+          (let ((provider
+                  (tensor-provider-preflight-internal
+                    provider-name major minor)))
+            (tensor-release-owned!
+              'tensor-provider-release-owned-internal!
+              provider release-envelope)))))
 
 (define (device-budget-consume! depth budget)
   (vector-set! budget 0 (+ (vector-ref budget 0) 1))
@@ -1078,20 +1282,241 @@
               (fail 'device-mismatch operation "provider clone changed tensor device" '())
               #t))))
 
-(define (tensor-copy operation provider tensor kind)
-  (let* ((source-metadata (tensor-metadata operation provider tensor kind))
-         (result ((vector-ref provider 3) (vector tensor kind operation)))
-         (copied
-           (if (and (vector? result) (= (vector-length result) 1))
-               (vector-ref result 0)
-               (fail 'internal operation "tensor provider returned malformed clone" '())))
-         (copied-metadata (tensor-metadata operation provider copied kind)))
-    (same-tensor-metadata! operation provider source-metadata copied-metadata)
-    (if (tensor-storage-identical? operation provider tensor copied kind kind)
-        (fail 'internal operation "tensor provider clone aliases source storage" '())
-        (if (not (tensor-value-equal? operation provider tensor copied kind))
-            (fail 'internal operation "tensor provider clone changed tensor value" '())
-            copied))))
+(define (tensor-release-owned! operation provider release-envelope)
+  ;; The exact callback envelope was allocated and ledgered before publication.
+  ;; Release performs no vector/cons allocation and clears carrier retention
+  ;; even when the trusted callback raises after freeing the native owner.
+  (if (not (and (vector? release-envelope)
+                (= (vector-length release-envelope) 4)
+                (vector-ref release-envelope 0)
+                (or (eq? (vector-ref release-envelope 1) 'parameter)
+                    (eq? (vector-ref release-envelope 1) 'buffer))
+                (symbol? (vector-ref release-envelope 2))
+                (eq? (vector-ref release-envelope 3) #f)))
+      (fail 'internal operation "malformed owned tensor release envelope" '())
+      (let ((tensor (vector-ref release-envelope 0))
+            (kind (vector-ref release-envelope 1))
+            (stored-operation (vector-ref release-envelope 2))
+            (returned #f)
+            (callback-failed? #f)
+            (callback-error #f))
+        (guard (caught
+                 (#t
+                   (set! callback-failed? #t)
+                   (set! callback-error caught)
+                   #f))
+          (set! returned ((vector-ref provider 9) release-envelope)))
+        (let ((valid?
+                (and (eq? returned release-envelope)
+                     (eq? (vector-ref release-envelope 0) tensor)
+                     (eq? (vector-ref release-envelope 1) kind)
+                     (eq? (vector-ref release-envelope 2)
+                          stored-operation)
+                     (eq? (vector-ref release-envelope 3) #t))))
+          ;; Clear carrier retention outside the callback handler on every
+          ;; path. Locals above are part of the already-entered call frame; no
+          ;; vector or pair is allocated after release admission.
+          (vector-set! release-envelope 0 #f)
+          (if callback-failed?
+              (raise callback-error)
+              (if valid?
+                  #t
+                  (fail 'internal operation
+                        "tensor provider returned malformed release acknowledgement"
+                        '())))))))
+
+(define (release-owned-list! operation provider ownership)
+  (let ((items (vector-ref ownership 0)))
+    ;; Clearing the ledger before callbacks makes reentrancy and raised release
+    ;; callbacks exact-once. Continue releasing all remaining owners and then
+    ;; rethrow the first provider defect.
+    (vector-set! ownership 0 '())
+    (let loop ((remaining items) (have-first-error? #f) (first-error #f))
+      (if (null? remaining)
+          (if have-first-error? (raise first-error) #t)
+          (let ((item (car remaining))
+                (item-failed? #f)
+                (item-error #f))
+            (if (and (vector? item) (= (vector-length item) 4)
+                     (not (vector-ref item 0)))
+                #t
+                (guard (caught
+                         (#t
+                           (set! item-failed? #t)
+                           (set! item-error caught)
+                           #f))
+                  (tensor-release-owned! operation provider item)))
+            ;; Continue from ordinary control flow so a release callback defect
+            ;; cannot skip later siblings under pinned strict AOT.
+            (loop (cdr remaining)
+                  (or have-first-error? item-failed?)
+                  (if have-first-error? first-error item-error)))))))
+
+(define (owned-carrier-identity-member? carrier envelopes)
+  (cond
+    ((null? envelopes) #f)
+    ((and (vector? (car envelopes))
+          (= (vector-length (car envelopes)) 4)
+          (eq? carrier (vector-ref (car envelopes) 0))) #t)
+    (else (owned-carrier-identity-member? carrier (cdr envelopes)))))
+
+(define (carrier-owned-by-live-state? carrier)
+  ;; The registry is the sole process-local authority for published states.
+  ;; This scan performs only identity reads over already-retained ledgers: it
+  ;; does not invoke providers or retain a new carrier reference.
+  (let scan-states ((records shell-registry))
+    (if (null? records)
+        #f
+        (let* ((record (car records))
+               (kind (vector-ref record 1))
+               (raw (vector-ref record 2)))
+          (if (and (eq? kind 'state)
+                   (not (eq? raw dead-state-raw))
+                   (state-value? raw)
+                   (let ((lifecycle (state-lifecycle raw)))
+                     (and (eq? (vector-ref lifecycle 1) 'live)
+                          (let scan-owned
+                               ((owned (vector-ref
+                                         (vector-ref lifecycle 5) 0)))
+                            (cond
+                              ((null? owned) #f)
+                              ((and (vector-ref (car owned) 0)
+                                    (eq? carrier
+                                         (vector-ref (car owned) 0))) #t)
+                              (else (scan-owned (cdr owned))))))))
+              #t
+              (scan-states (cdr records)))))))
+
+(define (carrier-borrowed-by-module? carrier module)
+  (let scan-parameters ((bindings (vector-ref module 2)))
+    (if (null? bindings)
+        (let scan-buffers ((buffers (vector-ref module 3)))
+          (cond
+            ((null? buffers) #f)
+            ((eq? carrier (vector-ref (car buffers) 2)) #t)
+            (else (scan-buffers (cdr buffers)))))
+        (let ((handle (vector-ref (car bindings) 2)))
+          (if (eq? carrier (vector-ref handle 6))
+              #t
+              (scan-parameters (cdr bindings)))))))
+
+(define (carrier-protected-from-release? carrier)
+  ;; Modules borrow their parameter/buffer carriers and published states own
+  ;; their ledger carriers. Neither class may be authorized by clone, codec,
+  ;; adoption, or the narrow private release helper as a new owner.
+  (if (carrier-owned-by-live-state? carrier)
+      #t
+      (let scan-modules ((records shell-registry))
+        (if (null? records)
+            #f
+            (let* ((record (car records))
+                   (kind (vector-ref record 1))
+                   (raw (vector-ref record 2)))
+              (if (and (eq? kind 'module) (module-value? raw)
+                       (carrier-borrowed-by-module? carrier raw))
+                  #t
+                  (scan-modules (cdr records))))))))
+
+(define (tensor-copy-outcome
+          operation provider tensor kind ownership borrowed-carriers)
+  (let* ((source-metadata #f)
+         (request (vector tensor kind operation #f))
+         (release-envelope (vector #f kind operation #f))
+         (ledger-cell
+           (cons release-envelope (vector-ref ownership 0)))
+         (publication-admitted? #f)
+         (outcome (vector #f #f)))
+    ;; The envelope and its list cell exist before provider publication.
+    (vector-set! ownership 0 ledger-cell)
+    (guard (caught
+             (#t
+               (vector-set! outcome 0 #f)
+               (vector-set! outcome 1 caught)
+               outcome))
+      (vector-set! outcome 0 #t)
+      (set! source-metadata
+            (tensor-metadata operation provider tensor kind))
+      (vector-set! outcome 1 ((vector-ref provider 3) request)))
+    ;; Publication admission also runs outside the callback guard. The exact
+    ;; preallocated release envelope becomes actionable only for a new owner.
+    (let ((published (vector-ref request 3)))
+      (if published
+          (if (or (identity-member-local? published borrowed-carriers)
+                  (carrier-protected-from-release? published)
+                  (eq? published request)
+                  (eq? published release-envelope)
+                  (eq? published kind)
+                  (eq? published operation)
+                  (owned-carrier-identity-member?
+                    published (cdr ledger-cell)))
+              ;; A borrowed source or an earlier owner is not a new owner for
+              ;; this envelope and must never be released through it.
+              (vector-set! release-envelope 0 #f)
+              (begin
+                (vector-set! release-envelope 0 published)
+                (set! publication-admitted? #t)))
+          #t))
+    (if (vector-ref outcome 0)
+        ;; Every validation failure is captured here. The total core never
+        ;; raises across its guard boundary; ownership orchestrators can drain
+        ;; their ledgers in ordinary control flow.
+        (guard (caught
+                 (#t
+                   (vector-set! outcome 0 #f)
+                   (vector-set! outcome 1 caught)
+                   outcome))
+          (let ((returned (vector-ref outcome 1)))
+            (if (not (and (eq? returned request)
+                          (eq? (vector-ref request 0) tensor)
+                          (eq? (vector-ref request 1) kind)
+                          (eq? (vector-ref request 2) operation)))
+                (fail 'internal operation
+                      "tensor provider substituted its clone request" '())
+                #t)
+            (let ((copied (vector-ref request 3)))
+              (if (not copied)
+                  (fail 'internal operation
+                        "tensor provider did not publish its owned clone" '())
+                  #t)
+              ;; Publication identity was sanitized before callback-error
+              ;; propagation and before this envelope became actionable. Do
+              ;; not rescan after installation: a live target ledger would see
+              ;; its own newly recorded carrier as protected storage.
+              (if (not publication-admitted?)
+                  (fail
+                    'internal operation
+                    "tensor provider did not publish a new unique clone identity"
+                    '())
+                  #t)
+              (let ((copied-metadata
+                      (tensor-metadata operation provider copied kind)))
+                (same-tensor-metadata! operation provider source-metadata
+                                       copied-metadata)
+                (if (tensor-storage-identical?
+                      operation provider tensor copied kind kind)
+                    (fail 'internal operation
+                          "tensor provider clone aliases source storage" '())
+                    (if (not (tensor-value-equal?
+                               operation provider tensor copied kind))
+                        (fail 'internal operation
+                              "tensor provider clone changed tensor value" '())
+                        (begin
+                          (vector-set! outcome 0 #t)
+                          (vector-set! outcome 1 copied)
+                          outcome)))))))
+        outcome)
+    outcome))
+
+(define (tensor-copy operation provider tensor kind ownership borrowed-carriers)
+  ;; This wrapper contains no guard. Admission and state snapshot callers have
+  ;; an enclosing ownership guard, so a total-core failure enters that caller's
+  ;; rollback handler without crossing a nested handler rethrow.
+  (let ((outcome
+          (tensor-copy-outcome operation provider tensor kind ownership
+                               borrowed-carriers)))
+    (if (vector-ref outcome 0)
+        (vector-ref outcome 1)
+        (raise (vector-ref outcome 1)))))
 
 (define (tensor-storage-identical? operation provider left right left-kind right-kind)
   (let ((result
@@ -1136,15 +1561,34 @@
                           (eq? (vector-ref assignment 2) 'buffer))
                       (loop (cdr remaining)))))))))
 
-(define (assignment-baselines operation provider assignments field)
+(define (assignment-borrowed-carriers assignments)
+  (let scan ((remaining assignments) (result '()))
+    (if (null? remaining)
+        result
+        (let* ((assignment (car remaining))
+               (destination (vector-ref assignment 0))
+               (source (vector-ref assignment 1))
+               (with-destination
+                 (if (identity-member-local? destination result)
+                     result
+                     (cons destination result))))
+          (scan (cdr remaining)
+                (if (identity-member-local? source with-destination)
+                    with-destination
+                    (cons source with-destination)))))))
+
+(define (assignment-baselines
+          operation provider assignments field ownership borrowed-carriers)
   (let loop ((remaining assignments) (result '()))
     (if (null? remaining)
         (list-reverse result)
         (let* ((assignment (car remaining))
                (kind (vector-ref assignment 2))
                (tensor (vector-ref assignment field)))
-          (loop (cdr remaining)
-                (cons (tensor-copy operation provider tensor kind) result))))))
+          (let ((copy
+                  (tensor-copy operation provider tensor kind ownership
+                               borrowed-carriers)))
+            (loop (cdr remaining) (cons copy result)))))))
 
 (define (assignments-match-baselines?
           operation provider assignments field baselines)
@@ -1194,24 +1638,32 @@
   (if tensor-provider-admission-active?
       (fail 'invalid-state 'tensor-provider-register-internal!
             "tensor provider admission is not reentrant" '())
-      (begin
+      (let ((ownership (vector '()))
+            (outcome (vector #f #f))
+            (cleanup-failed? #f)
+            (cleanup-error #f))
         (set! tensor-provider-admission-active? #t)
         (guard (error
                  (#t
-                   (set! tensor-provider-admission-active? #f)
-                   (raise error)))
+                   (vector-set! outcome 0 #f)
+                   (vector-set! outcome 1 error)
+                   outcome))
           (if (not (admission-evidence-valid? evidence))
               (begin
                 (set! tensor-provider-admission-active? #f)
                 (fail 'invalid-argument 'tensor-provider-register-internal!
                       "provider admission requires 2..16 scratch assignments" '()))
               (let* ((operation 'tensor-provider-register-internal!)
+                     (borrowed-carriers
+                       (assignment-borrowed-carriers evidence))
                      (destination-identities
                        (assignment-identities evidence 0))
                      (destination-baselines
-                       (assignment-baselines operation provider evidence 0))
+                       (assignment-baselines operation provider evidence 0
+                                             ownership borrowed-carriers))
                      (source-baselines
-                       (assignment-baselines operation provider evidence 1))
+                       (assignment-baselines operation provider evidence 1
+                                             ownership borrowed-carriers))
                      (nontrivial
                        (if (admission-evidence-nontrivial?
                              operation provider evidence)
@@ -1278,8 +1730,46 @@
                                                 "rejected repeat commit mutated admission tensors"
                                                 '()))
                                         (begin
+                                          (let ((release-live-before
+                                                  (native-live-count operation))
+                                                (release-tombstones-before
+                                                  (native-tombstone-count
+                                                    operation)))
+                                            (release-owned-list!
+                                              operation provider ownership)
+                                            (if (and
+                                                  (= (native-live-count operation)
+                                                     release-live-before)
+                                                  (= (native-tombstone-count
+                                                       operation)
+                                                     release-tombstones-before))
+                                                #t
+                                                (fail
+                                                  'unsupported operation
+                                                  "provider release callback changed native identity allocation state"
+                                                  '())))
                                           (set! tensor-provider-admission-active? #f)
-                                          provider))))))))))))))
+                                          (vector-set! outcome 0 #t)
+                                          (vector-set! outcome 1 provider)
+                                          outcome)))))))))))
+        (if (vector-ref outcome 0)
+            (vector-ref outcome 1)
+            (begin
+              ;; Cleanup stays inside the admission critical section, but its
+              ;; guard records and returns. The selected error is raised only
+              ;; after the ledger is drained and reentrancy is disabled.
+              (set! tensor-provider-admission-active? #t)
+              (guard (release-error
+                       (#t
+                         (set! cleanup-failed? #t)
+                         (set! cleanup-error release-error)
+                         #f))
+                (release-owned-list!
+                  'tensor-provider-register-internal! provider ownership))
+              (set! tensor-provider-admission-active? #f)
+              (if cleanup-failed?
+                  (raise cleanup-error)
+                  (raise (vector-ref outcome 1))))))))
 
 (define (module-create-with-provider-internal provider-name)
   (let ((provider (require-provider-name 'module-create-with-provider-internal
@@ -1382,8 +1872,8 @@
               kind (vector-ref (car remaining) 1))
             (fail 'internal operation
                   (if (eq? (vector-ref (car remaining) 1) 'parameter)
-                      "provider clone aliases existing parameter storage"
-                      "provider clone aliases existing buffer storage")
+                      "module tensor aliases existing parameter storage"
+                      "module tensor aliases existing buffer storage")
                   '())
             (loop (cdr remaining))))))
 
@@ -1553,34 +2043,45 @@
             (let ((topology-updates
                     (preflight-leaf-registration
                       'module-register-parameter-internal! module)))
-              (let* ((metadata
-                       (tensor-metadata 'module-register-parameter-internal!
-                                        provider tensor 'parameter))
-                     (prepared
-                       (tensor-copy 'module-register-parameter-internal!
-                                    provider tensor 'parameter))
-                     (stored-name (string-copy name))
-                     (handle (vector parameter-handle-tag module #f
-                                     (copy-data (vector-ref metadata 0))
-                                     (vector-ref metadata 1)
-                                     (vector-ref metadata 2) prepared provider))
-                     (next-bindings
-                       (cons (vector 'parameter-binding stored-name handle)
-                             (vector-ref module 2))))
-                (ensure-storage-not-in-module!
-                  'module-register-parameter-internal! provider prepared
-                  'parameter (module-root module))
-                (let ((device-plan
-                        (preflight-module-device
-                          'module-register-parameter-internal! provider module
-                          (vector-ref metadata 2))))
-                  (vector module handle next-bindings topology-updates
-                          device-plan)))))))
+              (let ((ownership (vector '())))
+                (guard (caught
+                         (#t
+                           (release-owned-list!
+                             'module-register-parameter-internal! provider
+                             ownership)
+                           (raise caught)))
+                  (let* ((metadata
+                           (tensor-metadata
+                             'module-register-parameter-internal!
+                             provider tensor 'parameter))
+                         ;; Module bindings borrow provider-owned live tensors.
+                         ;; Only state dictionaries and internal scratch own
+                         ;; provider clones because modules have no release API.
+                         (prepared tensor)
+                         (stored-name (string-copy name))
+                         (handle (vector parameter-handle-tag module #f
+                                         (copy-data (vector-ref metadata 0))
+                                         (vector-ref metadata 1)
+                                         (vector-ref metadata 2) prepared provider))
+                         (next-bindings
+                           (cons (vector 'parameter-binding stored-name handle)
+                                 (vector-ref module 2))))
+                  (ensure-storage-not-in-module!
+                    'module-register-parameter-internal! provider prepared
+                    'parameter (module-root module))
+                  (let ((device-plan
+                          (preflight-module-device
+                            'module-register-parameter-internal! provider module
+                            (vector-ref metadata 2))))
+                    (vector module handle next-bindings topology-updates
+                            device-plan ownership)))))))))
 
 (define (commit-parameter-registration! plan)
   (commit-module-device! (vector-ref plan 4))
   (vector-set! (vector-ref plan 0) 2 (vector-ref plan 2))
   (apply-leaf-topology-updates! (vector-ref plan 3))
+  ;; Ownership transfers to the installed live module binding.
+  (vector-set! (vector-ref plan 5) 0 '())
   (vector-ref plan 1))
 
 (define (module-register-parameter-internal! module name tensor)
@@ -1630,23 +2131,32 @@
             (let ((topology-updates
                     (preflight-leaf-registration
                       'module-register-buffer-internal! module)))
-              (let* ((metadata
-                       (tensor-metadata 'module-register-buffer-internal!
-                                        provider tensor 'buffer))
-                     (prepared
-                       (tensor-copy 'module-register-buffer-internal!
-                                    provider tensor 'buffer))
-                     (binding
-                       (vector 'buffer-binding (string-copy name) prepared))
-                     (next-bindings (cons binding (vector-ref module 3))))
-                (ensure-storage-not-in-module!
-                  'module-register-buffer-internal! provider prepared 'buffer
-                  (module-root module))
-                (claim-module-device! 'module-register-buffer-internal!
-                                      provider module (vector-ref metadata 2))
-                (vector-set! module 3 next-bindings)
-                (apply-leaf-topology-updates! topology-updates)
-                binding)))))
+              (let ((ownership (vector '())))
+                (guard (caught
+                         (#t
+                           (release-owned-list!
+                             'module-register-buffer-internal! provider
+                             ownership)
+                           (raise caught)))
+                  (let* ((metadata
+                           (tensor-metadata 'module-register-buffer-internal!
+                                            provider tensor 'buffer))
+                         ;; See parameter registration: a live module binding
+                         ;; borrows its provider-owned carrier.
+                         (prepared tensor)
+                         (binding
+                           (vector 'buffer-binding (string-copy name) prepared))
+                         (next-bindings
+                           (cons binding (vector-ref module 3))))
+                  (ensure-storage-not-in-module!
+                    'module-register-buffer-internal! provider prepared 'buffer
+                    (module-root module))
+                  (claim-module-device! 'module-register-buffer-internal!
+                                        provider module (vector-ref metadata 2))
+                  (vector-set! module 3 next-bindings)
+                  (apply-leaf-topology-updates! topology-updates)
+                  (vector-set! ownership 0 '())
+                  binding)))))))
 
 (define (module-register-child-internal! module name child)
   (require-module 'module-register-child-internal! module)
@@ -1844,8 +2354,9 @@
 
 (define (parameter-handle-tensor-internal handle)
   (let ((value (require-handle 'parameter-handle-tensor-internal handle)))
-    (tensor-copy 'parameter-handle-tensor-internal
-                 (vector-ref value 7) (vector-ref value 6) 'parameter)))
+    ;; Trusted synchronous consumers borrow the live module carrier. This seam
+    ;; never manufactures an owner that lacks a release path.
+    (vector-ref value 6)))
 
 (define (parameter-handle-tensor-identity-internal handle)
   (vector-ref (require-handle 'parameter-handle-tensor-identity-internal handle) 6))
@@ -1865,49 +2376,91 @@
 (define (state-entry-dtype-internal entry) (vector-ref entry 4))
 (define (state-entry-device-internal entry) (copy-data (vector-ref entry 5)))
 (define (state-entry-layout-internal entry) (vector-ref entry 6))
-(define (state-entry-tensor-internal entry) (vector-ref entry 7))
+(define (copy-state-entry-records entries)
+  (let loop ((remaining entries) (result '()))
+    (if (null? remaining)
+        (list-reverse result)
+        (let ((entry (car remaining)))
+          (loop
+            (cdr remaining)
+            (cons
+              (vector state-entry-tag
+                      (copy-data (vector-ref entry 1))
+                      (vector-ref entry 2)
+                      (copy-data (vector-ref entry 3))
+                      (vector-ref entry 4)
+                      (copy-data (vector-ref entry 5))
+                      (vector-ref entry 6)
+                      (vector-ref entry 7))
+              result))))))
 
-(define (state-dict-create-unsafe-internal format major minor features adapter entries aliases)
+(define (state-dict-create-unsafe-internal format major minor features adapter entry-input aliases)
   ;; Malformed-state tests deliberately create an unbound logical value. Loading
   ;; validates it with the destination provider; standalone accessors require a
   ;; trusted provider binding created by module-state-dict/module-buffers.
-  (vector state-dict-tag format major minor
-          (copy-data-for 'state-dict-create-unsafe-internal
-                         'invalid-argument features)
-          (copy-data-for 'state-dict-create-unsafe-internal
-                         'invalid-argument adapter)
-          entries
-          (copy-data-for 'state-dict-create-unsafe-internal
-                         'invalid-argument aliases)
-          #f))
+  (if (not (and (vector? entry-input) (= (vector-length entry-input) 3)
+                (eq? (vector-ref entry-input 0) unsafe-entry-input-tag)))
+      (fail 'internal 'state-dict-create-unsafe-internal
+            "unsafe entry provenance packet is malformed" '())
+      (vector state-dict-tag format major minor
+              (copy-data-for 'state-dict-create-unsafe-internal
+                             'invalid-argument features)
+              (copy-data-for 'state-dict-create-unsafe-internal
+                             'invalid-argument adapter)
+              (copy-state-entry-records (vector-ref entry-input 1))
+              (copy-data-for 'state-dict-create-unsafe-internal
+                             'invalid-argument aliases)
+              (vector state-lifecycle-tag 'live #f #f '()
+                      (vector '() (vector-ref entry-input 2)) #f))))
 
 (define (state-dict-format-internal state)
-  (vector-ref (require-state 'state-dict-format-internal state) 1))
+  (vector-ref (require-live-state 'state-dict-format-internal state) 1))
 
 (define (state-dict-version-internal state)
-  (let ((value (require-state 'state-dict-version-internal state)))
+  (let ((value (require-live-state 'state-dict-version-internal state)))
     (list (vector-ref value 2) (vector-ref value 3))))
 
 (define (state-dict-features-internal state)
-  (copy-data (vector-ref (require-state 'state-dict-features-internal state) 4)))
+  (copy-data
+    (vector-ref (require-live-state 'state-dict-features-internal state) 4)))
 
 (define (state-dict-adapter-internal state)
-  (copy-data (vector-ref (require-state 'state-dict-adapter-internal state) 5)))
+  (copy-data
+    (vector-ref (require-live-state 'state-dict-adapter-internal state) 5)))
 
 (define (state-dict-entries-internal state)
-  (vector-ref (require-state 'state-dict-entries-internal state) 6))
+  (vector-ref (require-live-state 'state-dict-entries-internal state) 6))
 
-(define (state-entry-from-flat flat kind operation provider)
+(define (flat-tensor-carrier flat kind)
+  (let ((target (vector-ref flat 2)))
+    (if (eq? kind 'parameter)
+        (vector-ref target 6)
+        (vector-ref target 2))))
+
+(define (state-borrowed-carriers parameters buffers)
+  (let collect ((remaining parameters) (kind 'parameter) (result '()))
+    (if (null? remaining)
+        (if (eq? kind 'parameter)
+            (collect buffers 'buffer result)
+            result)
+        (let ((carrier (flat-tensor-carrier (car remaining) kind)))
+          (collect (cdr remaining) kind
+                   (if (identity-member-local? carrier result)
+                       result
+                       (cons carrier result)))))))
+
+(define (state-entry-from-flat
+          flat kind operation provider ownership borrowed-carriers)
   (let* ((path (entry-path flat))
-         (target (vector-ref flat 2))
-         (tensor (if (eq? kind 'parameter)
-                     (vector-ref target 6)
-                     (vector-ref target 2)))
-         (metadata (tensor-metadata operation provider tensor kind)))
+         (tensor (flat-tensor-carrier flat kind))
+         (metadata (tensor-metadata operation provider tensor kind))
+         (copy
+           (tensor-copy operation provider tensor kind ownership
+                        borrowed-carriers)))
     (state-entry-internal
       path kind (vector-ref metadata 0) (vector-ref metadata 1)
       (vector-ref metadata 2) (vector-ref metadata 3)
-      (tensor-copy operation provider tensor kind))))
+      copy)))
 
 (define (state-entry-contract-from-flat flat kind operation provider)
   (let* ((path (entry-path flat))
@@ -1955,27 +2508,91 @@
                     (inner (cdr others)))))))))
 
 (define (state-from-flat parameters buffers aliases operation provider)
-  (let ((entries
-          (sort-entries
-            (list-append
+  (let ((ownership (vector '()))
+        (borrowed-carriers (state-borrowed-carriers parameters buffers))
+        (state #f)
+        (state-shell #f)
+        (entries '())
+        (cleanup-failed? #f)
+        (cleanup-error #f)
+        (outcome (vector #f #f)))
+    (guard (caught
+             (#t
+               (vector-set! outcome 0 #f)
+               (vector-set! outcome 1 caught)
+               outcome))
+      (set! entries
+            (sort-entries
+             (list-append
               (let loop ((items parameters) (result '()))
                 (if (null? items) result
                     (loop (cdr items)
                           (cons (state-entry-from-flat
-                                  (car items) 'parameter operation provider)
+                                  (car items) 'parameter operation provider
+                                  ownership borrowed-carriers)
                                 result))))
               (let loop ((items buffers) (result '()))
                 (if (null? items) result
                     (loop (cdr items)
                           (cons (state-entry-from-flat
-                                  (car items) 'buffer operation provider)
-                                result))))))))
-    (ensure-entry-storage-unique! operation provider entries 'internal)
-    (let ((state
+                                  (car items) 'buffer operation provider
+                                  ownership borrowed-carriers)
+                                result)))))))
+      (ensure-entry-storage-unique! operation provider entries 'internal)
+      (set! state
             (vector state-dict-tag state-format state-major state-minor '()
                     (tensor-provider-identity provider) entries
-                    (copy-data aliases) #f)))
-      (state-provider-bind! operation state provider))))
+                    (copy-data aliases)
+                    (vector state-lifecycle-tag 'live #t provider '()
+                            ownership #f)))
+      ;; Capture publication so rollback can revoke a shell even when native
+      ;; bind fails after shell creation.
+      (set! state-shell (shell-for-raw 'state state))
+      (vector-set! outcome 0 #t)
+      (vector-set! outcome 1
+                   (state-provider-bind! operation state provider)))
+    (if (vector-ref outcome 0)
+        (vector-ref outcome 1)
+        (begin
+          (if state
+              (begin
+                (vector-set! (state-lifecycle state) 1 'released)
+                (vector-set! (state-lifecycle state) 3 #f)
+                (vector-set! (state-lifecycle state) 4 '())
+                (let clear ((remaining entries))
+                  (if (null? remaining)
+                      #t
+                      (begin
+                        (vector-set! (car remaining) 7 #f)
+                        (clear (cdr remaining)))))
+                #t)
+              #t)
+          (if state-shell
+              (guard (revoke-error
+                       (#t
+                         (set! cleanup-failed? #t)
+                         (set! cleanup-error revoke-error)
+                         #f))
+                (native-check operation
+                  (p1-native-state-revoke native-context state-shell)))
+              #t)
+          (guard (release-error
+                   (#t
+                     (if cleanup-failed?
+                         #t
+                         (begin
+                           (set! cleanup-failed? #t)
+                           (set! cleanup-error release-error)))
+                     #f))
+            (release-owned-list! operation provider ownership))
+          ;; Publication rollback severs every registry edge even when native
+          ;; revoke or provider release reports a defect.
+          (if state-shell
+              (compact-released-state-shells! state)
+              #t)
+          (if cleanup-failed?
+              (raise cleanup-error)
+              (raise (vector-ref outcome 1)))))))
 
 (define (prepare-module-state-dict module)
   (require-root-module 'module-state-dict module)
@@ -2142,7 +2759,7 @@
                                                 (vector-ref entry 7))))))))))))))))
 
 (define (validate-state-envelope operation state)
-  (require-state operation state)
+  (require-live-state operation state)
   (if (not (symbol? (vector-ref state 1)))
       (fail 'corrupt-data operation "malformed state dictionary format" '())
       (if (not (eq? (vector-ref state 1) state-format))
@@ -2184,36 +2801,674 @@
                                     (state-provider-binding-find state))))
     (validate-state-with-provider operation state provider)))
 
+(define (unsafe-entry-copy-matches-source? copied source)
+  (and (state-entry-value? copied) (state-entry-value? source)
+       (equal? (vector-ref copied 1) (vector-ref source 1))
+       (eq? (vector-ref copied 2) (vector-ref source 2))
+       (equal? (vector-ref copied 3) (vector-ref source 3))
+       (eq? (vector-ref copied 4) (vector-ref source 4))
+       (equal? (vector-ref copied 5) (vector-ref source 5))
+       (eq? (vector-ref copied 6) (vector-ref source 6))
+       (eq? (vector-ref copied 7) (vector-ref source 7))))
+
+(define (resolve-unsafe-entry-provenance operation state provenance)
+  (if (not provenance)
+      (fail 'unsupported operation
+            "nonempty unsafe state entries lack live owner provenance" '())
+      (let loop ((entries (vector-ref state 6)) (proofs provenance)
+                 (owners '()))
+        (cond
+          ((and (null? entries) (null? proofs)) owners)
+          ((or (null? entries) (null? proofs))
+           (fail 'invalid-state operation
+                 "unsafe state entry provenance differs" '()))
+          (else
+            (let ((proof (car proofs)))
+              (if (not (and (vector? proof) (= (vector-length proof) 2)))
+                  (fail 'invalid-state operation
+                        "unsafe state entry provenance is malformed" '())
+                  (let* ((source-entry
+                           (raw-for-shell operation 'entry
+                                          (vector-ref proof 0)))
+                         (owner
+                           (raw-for-shell operation 'state
+                                          (vector-ref proof 1)))
+                         (lifecycle (state-lifecycle owner)))
+                    (if (not (and (eq? (vector-ref lifecycle 1) 'live)
+                                  (vector-ref lifecycle 2)
+                                  (identity-member-local?
+                                    source-entry (vector-ref owner 6))
+                                  (unsafe-entry-copy-matches-source?
+                                    (car entries) source-entry)))
+                        (fail 'invalid-state operation
+                              "unsafe state entry owner provenance is stale"
+                              '())
+                        (loop
+                          (cdr entries) (cdr proofs)
+                          (if (identity-member-local? owner owners)
+                              owners
+                              (cons owner owners))))))))))))
+
+(define (pin-state-owners! operation owners access)
+  (let loop ((remaining owners))
+    (if (null? remaining)
+        #t
+        (begin
+          (state-use-begin! operation (car remaining) access)
+          (loop (cdr remaining))))))
+
+(define (unpin-state-owners! operation owners access)
+  (let loop ((remaining owners))
+    (if (null? remaining)
+        #t
+        (let* ((owner (car remaining))
+               (lifecycle (state-lifecycle owner)))
+          (if (eq? (vector-ref lifecycle 6) access)
+              (state-use-end! operation owner access)
+              #t)
+          (loop (cdr remaining))))))
+
+(define (clone-unsafe-state-entries
+          operation entries provider ownership borrowed-carriers)
+  (let ((outcome (vector #f #f)))
+    (guard (caught
+             (#t
+               (vector-set! outcome 0 #f)
+               (vector-set! outcome 1 caught)
+               outcome))
+      (let loop ((remaining entries) (result '()))
+        (if (null? remaining)
+            (begin
+              (vector-set! outcome 0 #t)
+              (vector-set! outcome 1 (list-reverse result))
+              outcome)
+            (let* ((entry (car remaining))
+                   (copy-outcome
+                     (tensor-copy-outcome
+                       operation provider (vector-ref entry 7)
+                       (vector-ref entry 2) ownership borrowed-carriers)))
+              (if (not (vector-ref copy-outcome 0))
+                  (begin
+                    (vector-set! outcome 0 #f)
+                    (vector-set! outcome 1 (vector-ref copy-outcome 1))
+                    outcome)
+                  (loop
+                    (cdr remaining)
+                    (cons
+                      (state-entry-internal
+                        (vector-ref entry 1) (vector-ref entry 2)
+                        (vector-ref entry 3) (vector-ref entry 4)
+                        (vector-ref entry 5) (vector-ref entry 6)
+                        (vector-ref copy-outcome 1))
+                      result)))))))
+    outcome))
+
+(define (validate-unsafe-state-clones-outcome
+          operation state provider ownership borrowed-carriers)
+  ;; Source owners remain pinned while this total phase performs every provider
+  ;; callback and source-carrier dereference. No error crosses back into bind;
+  ;; its caller can therefore unpin in ordinary control flow on every branch.
+  (let ((outcome (vector #f #f)))
+    (guard (caught
+             (#t
+               (vector-set! outcome 0 #f)
+               (vector-set! outcome 1 caught)
+               outcome))
+      (validate-state-with-provider operation state provider)
+      (let ((clone-outcome
+              (clone-unsafe-state-entries
+                operation (vector-ref state 6) provider ownership
+                borrowed-carriers)))
+        (if (not (vector-ref clone-outcome 0))
+            (begin
+              (vector-set! outcome 0 #f)
+              (vector-set! outcome 1 (vector-ref clone-outcome 1))
+              outcome)
+            (let ((cloned-entries (vector-ref clone-outcome 1)))
+              (ensure-entry-storage-unique!
+                operation provider cloned-entries 'corrupt-data)
+              (validate-alias-groups operation provider
+                                     (vector-ref state 7) cloned-entries)
+              (vector-set! outcome 0 #t)
+              (vector-set! outcome 1 cloned-entries)
+              outcome))))
+    outcome))
+
+(define (registered-entry-records-for-entries state entries)
+  ;; This snapshot is allocated before native bind. After bind succeeds the
+  ;; bounded tail only mutates these already-existing registry records, so a
+  ;; shell published for a pre-clone entry cannot retain borrowed storage.
+  (let scan ((records shell-registry) (result '()))
+    (if (null? records)
+        result
+        (let ((record (car records)))
+          (scan
+            (cdr records)
+            (if (and (eq? (vector-ref record 1) 'entry)
+                     (= (vector-length record) 4)
+                     (eq? (vector-ref record 3) state)
+                     (identity-member-local?
+                       (vector-ref record 2) entries))
+                (cons record result)
+                result))))))
+
+(define (tombstone-entry-records! records)
+  (let loop ((remaining records))
+    (if (null? remaining)
+        #t
+        (begin
+          (vector-set! (car remaining) 2 dead-state-entry-raw)
+          (loop (cdr remaining))))))
+
+(define (state-bind-pretransfer-outcome operation state provider)
+  ;; Registry snapshot allocation, shell resolution, and native bind are the
+  ;; last fallible steps before ownership transfer. Return a total result so no
+  ;; failure can bypass Eshkol ledger cleanup across a compiled guard handler.
+  (let ((outcome (vector #f #f)))
+    (guard (caught
+             (#t
+               (vector-set! outcome 0 #f)
+               (vector-set! outcome 1 caught)
+               outcome))
+      (let ((pre-bind-entry-records
+              (registered-entry-records-for-entries
+                state (vector-ref state 6)))
+            (state-shell (shell-for-raw 'state state))
+            (provider-shell (shell-for-raw 'provider provider)))
+        (native-check
+          operation
+          (p1-native-state-bind native-context state-shell provider-shell))
+        (vector-set! outcome 0 #t)
+        (vector-set! outcome 1 pre-bind-entry-records)))
+    outcome))
+
 (define (state-dict-bind-provider-internal! state provider-name)
-  ;; The caller selects a trusted registered provider explicitly. The inert state
-  ;; identity is only compared; it never drives callback lookup.
-  (validate-state-envelope 'state-dict-bind-provider-internal! state)
-  (let ((provider (require-provider-name 'state-dict-bind-provider-internal!
-                                         provider-name)))
-    (validate-state-with-provider 'state-dict-bind-provider-internal!
-                                  state provider)
-    (state-provider-bind! 'state-dict-bind-provider-internal! state provider)))
+  (let ((operation 'state-dict-bind-provider-internal!))
+    (state-use-begin! operation state operation)
+    ;; Keep every failure inside an outcome until the target access token has
+    ;; been ended in ordinary control flow. Pinned strict AOT does not reliably
+    ;; transfer a rethrow from a nested cleanup handler into an outer guard.
+    (let ((provider #f)
+          (ownership #f)
+          (owners '())
+          (access #f)
+          (pinned? #f)
+          (rollback? #f)
+          (cloned-entries '())
+          (cleanup-failed? #f)
+          (cleanup-error #f)
+          (outcome (vector #f #f)))
+      (guard (caught
+               (#t
+                 (if pinned?
+                     (unpin-state-owners! operation owners access)
+                     #t)
+                 (set! pinned? #f)
+                 (let clear ((remaining cloned-entries))
+                   (if (null? remaining)
+                       #t
+                       (begin
+                         (vector-set! (car remaining) 7 #f)
+                         (clear (cdr remaining)))))
+                 (if rollback?
+                     (guard (release-error
+                              (#t
+                                (set! cleanup-failed? #t)
+                                (set! cleanup-error release-error)
+                                #f))
+                       (release-owned-list!
+                         operation provider ownership))
+                     #t)
+                 (vector-set! outcome 0 #f)
+                 (vector-set! outcome 1
+                              (if cleanup-failed? cleanup-error caught))
+                 outcome))
+        ;; The caller selects a trusted registered provider explicitly. The
+        ;; inert identity is only compared; it never drives callback lookup.
+        (validate-state-envelope operation state)
+        (set! provider (require-provider-name operation provider-name))
+        (let ((bound (state-provider-binding-find state)))
+          (if bound
+              (begin
+                (validate-state-with-provider operation state provider)
+                (vector-set! outcome 0 #t)
+                (vector-set!
+                  outcome 1
+                  (state-provider-bind! operation state provider)))
+              (let* ((lifecycle (state-lifecycle state))
+                     (provenance
+                       (begin
+                         (set! ownership (vector-ref lifecycle 5))
+                         (set! rollback? #t)
+                         (if (> (vector-length ownership) 1)
+                             (vector-ref ownership 1)
+                             #f)))
+                     (borrowed-carriers
+                       (let collect ((remaining (vector-ref state 6))
+                                     (result '()))
+                         (if (null? remaining)
+                             result
+                             (let ((carrier (vector-ref (car remaining) 7)))
+                               (collect
+                                 (cdr remaining)
+                                 (if (identity-member-local? carrier result)
+                                     result
+                                     (cons carrier result))))))))
+                (set! owners
+                      (resolve-unsafe-entry-provenance
+                        operation state provenance))
+                (set! access
+                      (vector state-borrow-access-tag 'unsafe-bind state))
+                (set! pinned? #t)
+                (pin-state-owners! operation owners access)
+                (let ((validation-outcome
+                        (validate-unsafe-state-clones-outcome
+                          operation state provider ownership
+                          borrowed-carriers)))
+                  (unpin-state-owners! operation owners access)
+                  (set! pinned? #f)
+                  (if (not (vector-ref validation-outcome 0))
+                      (begin
+                        ;; The total pinned phase reports failure without
+                        ;; crossing a guard. Drain every published prefix in
+                        ;; this ordinary path, then let the common tail end the
+                        ;; target access token exactly once.
+                        (guard (release-error
+                                 (#t
+                                   (set! cleanup-failed? #t)
+                                   (set! cleanup-error release-error)
+                                   #f))
+                          (release-owned-list!
+                            operation provider ownership))
+                        (set! rollback? #f)
+                        (vector-set! outcome 0 #f)
+                        (vector-set!
+                          outcome 1
+                          (if cleanup-failed?
+                              cleanup-error
+                              (vector-ref validation-outcome 1))))
+                      (begin
+                        (set! cloned-entries
+                              (vector-ref validation-outcome 1))
+                        ;; Take this registry snapshot after the final provider
+                        ;; callback: a defective callback may have published
+                        ;; another shell for an old target entry while the bind
+                        ;; was open.
+                        (let ((bind-outcome
+                                (state-bind-pretransfer-outcome
+                                  operation state provider)))
+                            (if (not (vector-ref bind-outcome 0))
+                                (begin
+                                  (let clear ((remaining cloned-entries))
+                                    (if (null? remaining)
+                                        #t
+                                        (begin
+                                          (vector-set! (car remaining) 7 #f)
+                                          (clear (cdr remaining)))))
+                                  (guard (release-error
+                                           (#t
+                                             (set! cleanup-failed? #t)
+                                             (set! cleanup-error release-error)
+                                             #f))
+                                    (release-owned-list!
+                                      operation provider ownership))
+                                  (set! rollback? #f)
+                                  (vector-set! outcome 0 #f)
+                                  (vector-set!
+                                    outcome 1
+                                    (if cleanup-failed?
+                                        cleanup-error
+                                        (vector-ref bind-outcome 1))))
+                                (begin
+                                  ;; Native binding succeeded. Every remaining
+                                  ;; action is a bounded nonraising transfer.
+                                  (tombstone-entry-records!
+                                    (vector-ref bind-outcome 1))
+                                  (vector-set! state 6 cloned-entries)
+                                  (vector-set! lifecycle 2 #t)
+                                  (vector-set! lifecycle 3 provider)
+                                  (vector-set! ownership 1 '())
+                                  (set! rollback? #f)
+                                  (vector-set! outcome 0 #t)
+                                  (vector-set! outcome 1 state)))))))))))
+      (state-use-end! operation state operation)
+      (if (vector-ref outcome 0)
+          (vector-ref outcome 1)
+          (raise (vector-ref outcome 1))))))
 
 (define (state-dict-paths state)
-  (validate-bound-state 'state-dict-paths state)
-  (let loop ((entries (vector-ref state 6)) (paths '()))
-    (if (null? entries) (list-reverse paths)
-        (loop (cdr entries) (cons (copy-data (entry-path (car entries))) paths)))))
+  (let ((operation 'state-dict-paths))
+    (state-use-begin! operation state operation)
+    (guard (caught
+             (#t
+               (state-use-end! operation state operation)
+               (raise caught)))
+      (validate-bound-state operation state)
+      (let ((result
+              (let loop ((entries (vector-ref state 6)) (paths '()))
+                (if (null? entries) (list-reverse paths)
+                    (loop (cdr entries)
+                          (cons (copy-data (entry-path (car entries)))
+                                paths))))))
+        (state-use-end! operation state operation)
+        result))))
+
+(define (state-tensor-for-entry state entry)
+  (let* ((lifecycle (state-lifecycle state))
+         (cache (vector-ref lifecycle 4)))
+    (let find ((remaining cache))
+      (cond
+        ((null? remaining)
+         (let ((handle (vector state-tensor-tag state entry)))
+           (vector-set! lifecycle 4 (cons (vector entry handle) cache))
+           handle))
+        ((eq? entry (vector-ref (car remaining) 0))
+         (vector-ref (car remaining) 1))
+        (else (find (cdr remaining)))))))
+
+(define (state-entry-identical-member? entry entries)
+  (cond
+    ((null? entries) #f)
+    ((eq? entry (car entries)) #t)
+    (else (state-entry-identical-member? entry (cdr entries)))))
+
+(define (state-tensor-cached? lifecycle entry tensor)
+  (let find ((remaining (vector-ref lifecycle 4)))
+    (cond
+      ((null? remaining) #f)
+      ((and (eq? entry (vector-ref (car remaining) 0))
+            (eq? tensor (vector-ref (car remaining) 1))) #t)
+      (else (find (cdr remaining))))))
 
 (define (state-dict-tensor state path)
   (if (not (valid-path? path))
       (fail 'invalid-argument 'state-dict-tensor "invalid state path" '())
-      (let ((provider (validate-bound-state 'state-dict-tensor state)))
-        (let ((entry (state-entry-for-path (vector-ref state 6) path)))
-          (if entry
-              (tensor-copy 'state-dict-tensor provider (vector-ref entry 7)
-                           (vector-ref entry 2))
-              (fail 'invalid-argument 'state-dict-tensor
-                    "unknown state path" path))))))
+      (let ((operation 'state-dict-tensor))
+        (state-use-begin! operation state operation)
+        (guard (caught
+                 (#t
+                   (state-use-end! operation state operation)
+                   (raise caught)))
+          (validate-bound-state operation state)
+          (let ((entry (state-entry-for-path (vector-ref state 6) path)))
+            (if entry
+                (let ((result (state-tensor-for-entry state entry)))
+                  (state-use-end! operation state operation)
+                  result)
+                (fail 'invalid-argument operation
+                      "unknown state path" path)))))))
+
+(define (state-dict-tensor-borrow-begin-internal state tensor)
+  (let* ((operation 'state-dict-tensor-borrow-begin-internal)
+         (live-state (require-live-state operation state))
+         (access (vector state-borrow-access-tag 'opening live-state tensor)))
+    (if (or (not (state-tensor-value? tensor))
+            (not (eq? live-state (vector-ref tensor 1)))
+            (not (state-entry-value? (vector-ref tensor 2)))
+            (not (state-entry-identical-member?
+                   (vector-ref tensor 2) (vector-ref live-state 6)))
+            (not (state-tensor-cached?
+                   (state-lifecycle live-state) (vector-ref tensor 2) tensor)))
+        (fail 'invalid-argument operation
+              "state-backed tensor resolution chain is invalid" '())
+        (begin
+          ;; Pin this exact handle before provider validation can observe its
+          ;; carrier. Public release rejects the non-#f active identity.
+          (state-use-begin! operation live-state access)
+          (guard (caught
+                   (#t
+                     (state-use-end! operation live-state access)
+                     (raise caught)))
+            (validate-bound-state operation live-state)
+            (let ((carrier (vector-ref (vector-ref tensor 2) 7)))
+              (if carrier
+                  (begin
+                    ;; This bounded write is the only transition that admits
+                    ;; the matching borrow-end operation.
+                    (vector-set! access 1 'borrowed)
+                    carrier)
+                  (fail 'invalid-state operation
+                        "state-backed tensor is released" '()))))))))
+
+(define (state-dict-tensor-borrow-end-internal state tensor)
+  (let* ((operation 'state-dict-tensor-borrow-end-internal)
+         (live-state (require-live-state operation state)))
+    (if (or (not (state-tensor-value? tensor))
+            (not (eq? live-state (vector-ref tensor 1)))
+            (not (state-entry-value? (vector-ref tensor 2)))
+            (not (state-entry-identical-member?
+                   (vector-ref tensor 2) (vector-ref live-state 6)))
+            (not (state-tensor-cached?
+                   (state-lifecycle live-state) (vector-ref tensor 2) tensor)))
+        (fail 'invalid-argument operation
+              "state-backed tensor resolution chain is invalid" '())
+        (let ((access (vector-ref (state-lifecycle live-state) 6)))
+          (if (and (vector? access) (= (vector-length access) 4)
+                   (eq? (vector-ref access 0) state-borrow-access-tag)
+                   (eq? (vector-ref access 2) live-state)
+                   (eq? (vector-ref access 3) tensor))
+              (if (eq? (vector-ref access 1) 'borrowed)
+                  (state-use-end! operation live-state access)
+                  (fail 'invalid-state operation
+                        "state-backed tensor borrow is still opening" '()))
+              (fail 'invalid-argument operation
+                    "state dictionary scoped access handle differs" '()))))))
 
 (define (state-dict-alias-groups state)
-  (validate-bound-state 'state-dict-alias-groups state)
-  (copy-data (vector-ref state 7)))
+  (let ((operation 'state-dict-alias-groups))
+    (state-use-begin! operation state operation)
+    (guard (caught
+             (#t
+               (state-use-end! operation state operation)
+               (raise caught)))
+      (validate-bound-state operation state)
+      (let ((result (copy-data (vector-ref state 7))))
+        (state-use-end! operation state operation)
+        result))))
+
+(define (state-dict-release-owned! state)
+  (let* ((lifecycle (state-lifecycle state))
+         (provider (vector-ref lifecycle 3))
+         (ownership (vector-ref lifecycle 5))
+         (release-failed? #f)
+         (release-error #f))
+    (if (vector-ref lifecycle 6)
+        (fail 'invalid-state 'state-dict-release!
+              "state dictionary has an active tensor borrow" '())
+        #t)
+    (vector-set! lifecycle 1 'released)
+    (vector-set! lifecycle 4 '())
+    (if (> (vector-length ownership) 1)
+        (vector-set! ownership 1 '())
+        #t)
+    ;; Clear every state entry before invoking provider code. No later path may
+    ;; inspect or compare an opaque carrier after its release callback begins.
+    (let clear ((entries (vector-ref state 6)))
+      (if (null? entries)
+          #t
+          (begin
+            (vector-set! (car entries) 7 #f)
+            (clear (cdr entries)))))
+    (guard (caught
+             (#t
+               (set! release-failed? #t)
+               (set! release-error caught)
+               #f))
+      (if (vector-ref lifecycle 2)
+          (release-owned-list! 'state-dict-release! provider ownership)
+          #t))
+    (vector-set! lifecycle 3 #f)
+    (if release-failed?
+        (raise release-error)
+        #t)))
+
+(define (decoded-owned-record? record)
+  (and (vector? record) (= (vector-length record) 7)
+       (valid-path? (vector-ref record 0))
+       (or (eq? (vector-ref record 1) 'parameter)
+           (eq? (vector-ref record 1) 'buffer))
+       (valid-shape? (vector-ref record 2))
+       (symbol? (vector-ref record 3))
+       (valid-device-descriptor? (vector-ref record 4))
+       (symbol? (vector-ref record 5))
+       (vector-ref record 6)))
+
+(define (decoded-records-match-ownership? records owned)
+  (cond
+    ((and (null? records) (null? owned)) #t)
+    ((or (null? records) (null? owned)) #f)
+    (else
+      (let ((record (car records)) (item (car owned)))
+        (and (vector? item) (= (vector-length item) 4)
+             (vector-ref item 0)
+             (eq? (vector-ref record 6) (vector-ref item 0))
+             (eq? (vector-ref record 1) (vector-ref item 1))
+             (symbol? (vector-ref item 2))
+             (eq? (vector-ref item 3) #f)
+             (decoded-records-match-ownership? (cdr records)
+                                               (cdr owned)))))))
+
+(define (decoded-ownership-identities-unique? owned)
+  (let outer ((remaining owned))
+    (if (null? remaining)
+        #t
+        (let ((envelope (car remaining)))
+          (let inner ((others (cdr remaining)))
+            (cond
+              ((null? others) (outer (cdr remaining)))
+              ((or (eq? envelope (car others))
+                   (eq? (vector-ref envelope 0)
+                        (vector-ref (car others) 0))) #f)
+              (else (inner (cdr others)))))))))
+
+(define (neutralize-live-state-owned-envelopes! owned)
+  ;; Sanitize the entire bounded ledger before any detailed validation can
+  ;; fail. A malformed sibling must not leave a later live-state carrier armed
+  ;; for caller cleanup, and every conflict must be neutralized.
+  (let loop ((remaining owned) (found #f))
+    (if (null? remaining)
+        found
+        (let ((item (car remaining)))
+          (if (and (vector? item) (= (vector-length item) 4)
+                   (vector-ref item 0)
+                   (carrier-protected-from-release? (vector-ref item 0)))
+              (begin
+                (vector-set! item 0 #f)
+                (loop (cdr remaining) #t))
+              (loop (cdr remaining) found))))))
+
+(define (state-dict-adopt-owned-internal!
+          records aliases provider-name major minor ownership)
+  (let* ((operation 'state-dict-adopt-owned-internal!)
+         (record-count (bounded-list-length records max-state-entries))
+         (owned
+           (if (and (vector? ownership) (= (vector-length ownership) 1))
+               (vector-ref ownership 0)
+               #f)))
+    ;; Everything before clearing the caller ledger is non-consuming. C1 keeps
+    ;; responsibility for its decoded prefix if this preflight fails.
+    (if (or (not record-count)
+            (not (bounded-list-length owned max-state-entries)))
+        (fail 'invalid-argument operation
+              "decoded ownership input must be bounded proper lists" '())
+        #t)
+    (if (neutralize-live-state-owned-envelopes! owned)
+        (fail 'invalid-argument operation
+              "decoded ownership republishes a live state carrier" '())
+        #t)
+    ;; Provider lookup is deliberately after the total ownership sanitizer:
+    ;; even a version/name failure must not leave a live carrier armed for the
+    ;; caller's rollback cleanup.
+    (let ((provider
+            (tensor-provider-preflight-internal provider-name major minor)))
+      (let validate-records ((remaining records))
+        (if (null? remaining)
+            #t
+            (if (decoded-owned-record? (car remaining))
+                (validate-records (cdr remaining))
+                (fail 'invalid-argument operation
+                      "decoded owned tensor record is malformed" '()))))
+      (if (or (not (decoded-records-match-ownership? records owned))
+              (not (decoded-ownership-identities-unique? owned)))
+          (fail 'invalid-argument operation
+                "decoded records and ownership ledger differ or duplicate identity"
+                '())
+          #t)
+      (let* ((adopted-ownership (vector owned))
+           (entries
+             (let build ((remaining records) (result '()))
+               (if (null? remaining)
+                   (list-reverse result)
+                   (let ((record (car remaining)))
+                     (build
+                       (cdr remaining)
+                       (cons
+                         (state-entry-internal
+                           (vector-ref record 0) (vector-ref record 1)
+                           (vector-ref record 2) (vector-ref record 3)
+                           (vector-ref record 4) (vector-ref record 5)
+                           (vector-ref record 6))
+                         result))))))
+           (state
+             (vector state-dict-tag state-format state-major state-minor '()
+                     (tensor-provider-identity provider) entries
+                     (copy-data aliases)
+                     (vector state-lifecycle-tag 'live #f #f '()
+                             adopted-ownership #f)))
+           (state-shell #f)
+           (cleanup-failed? #f)
+           (cleanup-error #f)
+           (outcome (vector #f #f)))
+      ;; Clearing the caller ledger is the transfer point. P1 owns every
+      ;; carrier from here through live-state publication.
+      (vector-set! ownership 0 '())
+      (guard (caught
+               (#t
+                 (vector-set! outcome 0 #f)
+                 (vector-set! outcome 1 caught)
+                 outcome))
+        (validate-state-with-provider operation state provider)
+        (set! state-shell (shell-for-raw 'state state))
+        (state-provider-bind! operation state provider)
+        ;; No fallible operation follows transfer into the live state.
+        (vector-set! (state-lifecycle state) 2 #t)
+        (vector-set! outcome 0 #t)
+        (vector-set! outcome 1 state))
+      (if (vector-ref outcome 0)
+          (vector-ref outcome 1)
+          (begin
+            (let clear ((remaining entries))
+              (if (null? remaining)
+                  #t
+                  (begin
+                    (vector-set! (car remaining) 7 #f)
+                    (clear (cdr remaining)))))
+            (vector-set! (state-lifecycle state) 1 'released)
+            (if state-shell
+                (guard (revoke-error
+                         (#t
+                           (set! cleanup-failed? #t)
+                           (set! cleanup-error revoke-error)
+                           #f))
+                  (native-check operation
+                    (p1-native-state-revoke native-context state-shell)))
+                #t)
+            (guard (release-error
+                     (#t
+                       (if cleanup-failed?
+                           #t
+                           (begin
+                             (set! cleanup-failed? #t)
+                             (set! cleanup-error release-error)))
+                       #f))
+              (release-owned-list!
+                operation provider adopted-ownership))
+            (if state-shell
+                (compact-released-state-shells! state)
+                #t)
+            (if cleanup-failed?
+                (raise cleanup-error)
+                (raise (vector-ref outcome 1)))))))))
 
 (define (same-entry-contract! operation provider expected actual)
   (let ((path (entry-path expected)))
@@ -2295,7 +3550,7 @@
                           "state source aliases destination tensor storage" '())
                     (scan-destinations (cdr destinations)))))))))
 
-(define (module-load-state-dict! module state)
+(define (module-load-state-dict-scoped! module state)
   (require-root-module 'module-load-state-dict! module)
   (let ((provider (require-module-provider 'module-load-state-dict! module)))
     ;; Validate the inert envelope before consulting the process-local binding.
@@ -2351,6 +3606,17 @@
             (tensor-commit-load! 'module-load-state-dict! provider plan)
             (commit-module-observation! observation))))))
 
+(define (module-load-state-dict! module state)
+  (let ((operation 'module-load-state-dict!))
+    (state-use-begin! operation state operation)
+    (guard (caught
+             (#t
+               (state-use-end! operation state operation)
+               (raise caught)))
+      (let ((result (module-load-state-dict-scoped! module state)))
+        (state-use-end! operation state operation)
+        result))))
+
 (define (set-mode-modules! modules mode)
   (let loop ((remaining modules))
     (if (null? remaining) #t
@@ -2374,22 +3640,53 @@
   (fail 'unsupported 'module-zero-grad!
         "reverse-mode parameter gradient slots are not verified by R0" '()))
 
+(define (live-owned-state-shell-for-entry entry-record raw-entry)
+  (if (not (= (vector-length entry-record) 4))
+      #f
+      (let ((owner-state (vector-ref entry-record 3)))
+  (let scan ((records shell-registry))
+    (if (null? records)
+        #f
+        (let* ((record (car records))
+               (kind (vector-ref record 1))
+               (raw (vector-ref record 2)))
+          (if (and (eq? kind 'state)
+                   (eq? raw owner-state)
+                   (not (eq? raw dead-state-raw))
+                   (state-value? raw)
+                   (let ((lifecycle (state-lifecycle raw)))
+                     (and (eq? (vector-ref lifecycle 1) 'live)
+                          (vector-ref lifecycle 2)))
+                   (identity-member-local? raw-entry (vector-ref raw 6)))
+              (vector-ref record 0)
+              (scan (cdr records)))))))))
+
 (define (unwrap-entry-items operation entries)
   (if (not (bounded-list-length entries max-state-entries))
       (fail 'invalid-argument operation
             "state entry input must be a bounded proper list" '())
-      (let loop ((remaining entries) (result '()))
+      (let loop ((remaining entries) (result '()) (provenance '())
+                 (proven? #t))
         (if (null? remaining)
-            (list-reverse result)
-            (let ((entry (shell-entry (car remaining))))
-              (loop (cdr remaining)
-                    (cons (if (and entry
-                                   (eq? (vector-ref entry 1) 'entry))
-                              (vector-ref entry 2)
-                              (car remaining))
-                          result)))))))
+            (vector unsafe-entry-input-tag (list-reverse result)
+                    (if proven? (list-reverse provenance) #f))
+            (let* ((value (car remaining))
+                   (shell-record (shell-entry value))
+                   (raw
+                     (if shell-record
+                         (raw-for-shell operation 'entry value)
+                         value))
+                   (owner-shell
+                     (if shell-record
+                         (live-owned-state-shell-for-entry shell-record raw)
+                         #f)))
+              (loop (cdr remaining) (cons raw result)
+                    (if owner-shell
+                        (cons (vector value owner-shell) provenance)
+                        provenance)
+                    (and proven? owner-shell)))))))
 
-(define (wrap-entry-items operation entries)
+(define (wrap-entry-items operation state-shell state entries)
   (if (not (bounded-list-length entries max-state-entries))
       (fail 'internal operation "private state entry list is malformed" '())
       (let loop ((remaining entries) (result '()))
@@ -2397,7 +3694,8 @@
             (list-reverse result)
             (loop (cdr remaining)
                   (cons (if (state-entry-value? (car remaining))
-                            (shell-for-raw 'entry (car remaining))
+                            (state-entry-shell-for-raw
+                              state-shell state (car remaining))
                             (car remaining))
                         result))))))
 
@@ -2409,11 +3707,12 @@
           (value-equal? : (-> vector boolean))
           (device-equal? : (-> vector boolean))
           (prepare-load : (-> vector vector))
-          (commit-load! : (-> vector vector)))
+          (commit-load! : (-> vector vector))
+          (release-owned! : (-> vector vector)))
   (let ((raw
           (tensor-provider-create-internal
             name describe clone storage-identical? value-equal?
-            device-equal? prepare-load commit-load!)))
+            device-equal? prepare-load commit-load! release-owned!)))
     (shell-for-raw 'provider raw)))
 
 (vector
@@ -2474,11 +3773,52 @@
   (lambda (state)
     (state-dict-paths (raw-for-shell 'state-dict-paths 'state state)))
   (lambda (state path)
-    (state-dict-tensor
-      (raw-for-shell 'state-dict-tensor 'state state) path))
+    (shell-for-raw
+      'state-tensor
+      (state-dict-tensor
+        (raw-for-shell 'state-dict-tensor 'state state) path)))
   (lambda (state)
     (state-dict-alias-groups
       (raw-for-shell 'state-dict-alias-groups 'state state)))
+  (lambda (state)
+    (let ((entry (shell-entry state)))
+      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+          (fail 'invalid-argument 'state-dict-release!
+                "expected registered opaque value" '())
+          (let ((raw (vector-ref entry 2)))
+            (if (and (not (eq? raw dead-state-raw))
+                     (eq? (vector-ref (state-lifecycle raw) 1) 'live)
+                     (vector-ref (state-lifecycle raw) 6))
+                (fail 'invalid-state 'state-dict-release!
+                      "state dictionary has an active tensor borrow" '())
+                (let* ((outcome (vector #f #f))
+                       (status
+                         (p1-native-state-release-begin native-context state)))
+                  (native-check 'state-dict-release! status)
+                  (if (= (p1-native-result-i64 native-context) 0)
+                      #t
+                      (if (eq? raw dead-state-raw)
+                          (fail 'internal 'state-dict-release!
+                                "dead state marker began a live release" '())
+                          (begin
+                            ;; Native admission has already tombstoned the
+                            ;; state and every dependent entry/tensor identity.
+                            ;; Sever Eshkol registry edges before provider code
+                            ;; so reentrant stale-handle access fails before it
+                            ;; can observe a carrier being destroyed.
+                            (compact-released-state-shells! raw)
+                            (guard (caught
+                                     (#t
+                                       (vector-set! outcome 0 #f)
+                                       (vector-set! outcome 1 caught)
+                                       outcome))
+                              (vector-set! outcome 0 #t)
+                              (vector-set!
+                                outcome 1
+                                (state-dict-release-owned! raw)))
+                            (if (vector-ref outcome 0)
+                                (vector-ref outcome 1)
+                                (raise (vector-ref outcome 1))))))))))))
 
   exposed-tensor-provider-create
   (lambda (provider evidence)
@@ -2493,14 +3833,21 @@
     (shell-for-raw
       'module (module-create-with-provider-internal provider-name)))
   (lambda (module name tensor)
-    (let* ((plan
-             (prepare-parameter-registration
-               (raw-for-shell 'module-register-parameter-internal!
-                              'module module)
-               name tensor))
-           (shell (shell-for-raw 'handle (vector-ref plan 1))))
-      (commit-parameter-registration! plan)
-      shell))
+    (let ((plan
+            (prepare-parameter-registration
+              (raw-for-shell 'module-register-parameter-internal!
+                             'module module)
+              name tensor)))
+      (guard (caught
+               (#t
+                 (release-owned-list!
+                   'module-register-parameter-internal!
+                   (vector-ref (vector-ref plan 1) 7)
+                   (vector-ref plan 5))
+                 (raise caught)))
+        (let ((shell (shell-for-raw 'handle (vector-ref plan 1))))
+          (commit-parameter-registration! plan)
+          shell))))
   (lambda (module name handle)
     (shell-for-raw
       'handle
@@ -2532,29 +3879,25 @@
       (raw-for-shell 'parameter-handle-tensor-identity-internal
                      'handle handle)))
   (lambda (path kind shape dtype device layout tensor)
-    (shell-for-raw
-      'entry (state-entry-internal path kind shape dtype device layout tensor)))
+    (state-entry-internal path kind shape dtype device layout tensor))
   (lambda (entry)
     (state-entry-path-internal
-      (raw-for-shell 'state-entry-path-internal 'entry entry)))
+      (raw-entry-for-trusted 'state-entry-path-internal entry)))
   (lambda (entry)
     (state-entry-kind-internal
-      (raw-for-shell 'state-entry-kind-internal 'entry entry)))
+      (raw-entry-for-trusted 'state-entry-kind-internal entry)))
   (lambda (entry)
     (state-entry-shape-internal
-      (raw-for-shell 'state-entry-shape-internal 'entry entry)))
+      (raw-entry-for-trusted 'state-entry-shape-internal entry)))
   (lambda (entry)
     (state-entry-dtype-internal
-      (raw-for-shell 'state-entry-dtype-internal 'entry entry)))
+      (raw-entry-for-trusted 'state-entry-dtype-internal entry)))
   (lambda (entry)
     (state-entry-device-internal
-      (raw-for-shell 'state-entry-device-internal 'entry entry)))
+      (raw-entry-for-trusted 'state-entry-device-internal entry)))
   (lambda (entry)
     (state-entry-layout-internal
-      (raw-for-shell 'state-entry-layout-internal 'entry entry)))
-  (lambda (entry)
-    (state-entry-tensor-internal
-      (raw-for-shell 'state-entry-tensor-internal 'entry entry)))
+      (raw-entry-for-trusted 'state-entry-layout-internal entry)))
   (lambda (format major minor features adapter entries aliases)
     (shell-for-raw
       'state
@@ -2581,11 +3924,45 @@
     (state-dict-adapter-internal
       (raw-for-shell 'state-dict-adapter-internal 'state state)))
   (lambda (state)
-    (wrap-entry-items
-      'state-dict-entries-internal
-      (state-dict-entries-internal
-        (raw-for-shell 'state-dict-entries-internal 'state state))))))
-  )
+    (let ((raw-state
+            (raw-for-shell 'state-dict-entries-internal 'state state)))
+      (wrap-entry-items
+        'state-dict-entries-internal state raw-state
+        (state-dict-entries-internal raw-state))))
+  (lambda (state tensor)
+    (let ((raw-state
+            (raw-for-shell 'state-dict-tensor-borrow-begin-internal
+                           'state state))
+          (raw-tensor
+            (raw-for-shell 'state-dict-tensor-borrow-begin-internal
+                           'state-tensor tensor)))
+      (native-check
+        'state-dict-tensor-borrow-begin-internal
+        (p1-native-state-tensor-validate native-context state tensor))
+      (state-dict-tensor-borrow-begin-internal raw-state raw-tensor)))
+  (lambda (state tensor)
+    (let ((raw-state
+            (raw-for-shell 'state-dict-tensor-borrow-end-internal
+                           'state state))
+          (raw-tensor
+            (raw-for-shell 'state-dict-tensor-borrow-end-internal
+                           'state-tensor tensor)))
+      (native-check
+        'state-dict-tensor-borrow-end-internal
+        (p1-native-state-tensor-validate native-context state tensor))
+      (state-dict-tensor-borrow-end-internal raw-state raw-tensor)))
+  (lambda (provider-name major minor)
+    (tensor-provider-preflight-internal provider-name major minor)
+    #t)
+  (lambda (provider-name major minor release-envelope)
+    (tensor-provider-release-owned-internal!
+      provider-name major minor release-envelope))
+  (lambda (records aliases provider-name major minor ownership)
+    (shell-for-raw
+      'state
+      (state-dict-adopt-owned-internal!
+        records aliases provider-name major minor ownership)))
+  )))
 
 (define (module-parameters module)
   ((vector-ref p1-trusted-surface 0) module))
@@ -2621,6 +3998,8 @@
   ((vector-ref p1-trusted-surface 15) state path))
 (define (state-dict-alias-groups state)
   ((vector-ref p1-trusted-surface 16) state))
+(define (state-dict-release! state)
+  ((vector-ref p1-trusted-surface 17) state))
 (define (tensor-provider-create-internal
           (name : symbol)
           (describe : (-> vector vector))
@@ -2629,46 +4008,45 @@
           (value-equal? : (-> vector boolean))
           (device-equal? : (-> vector boolean))
           (prepare-load : (-> vector vector))
-          (commit-load! : (-> vector vector)))
-  ((vector-ref p1-trusted-surface 17)
+          (commit-load! : (-> vector vector))
+          (release-owned! : (-> vector vector)))
+  ((vector-ref p1-trusted-surface 18)
     name describe clone storage-identical? value-equal? device-equal?
-    prepare-load commit-load!))
+    prepare-load commit-load! release-owned!))
 (define (tensor-provider-register-internal! provider evidence)
-  ((vector-ref p1-trusted-surface 18) provider evidence))
+  ((vector-ref p1-trusted-surface 19) provider evidence))
 (define (module-create-internal)
-  ((vector-ref p1-trusted-surface 19)))
+  ((vector-ref p1-trusted-surface 20)))
 (define (module-create-with-provider-internal provider-name)
-  ((vector-ref p1-trusted-surface 20) provider-name))
+  ((vector-ref p1-trusted-surface 21) provider-name))
 (define (module-register-parameter-internal! module name tensor)
-  ((vector-ref p1-trusted-surface 21) module name tensor))
+  ((vector-ref p1-trusted-surface 22) module name tensor))
 (define (module-register-tied-parameter-internal! module name handle)
-  ((vector-ref p1-trusted-surface 22) module name handle))
+  ((vector-ref p1-trusted-surface 23) module name handle))
 (define (module-register-buffer-internal! module name tensor)
-  ((vector-ref p1-trusted-surface 23) module name tensor))
+  ((vector-ref p1-trusted-surface 24) module name tensor))
 (define (module-register-child-internal! module name child)
-  ((vector-ref p1-trusted-surface 24) module name child))
+  ((vector-ref p1-trusted-surface 25) module name child))
 (define (module-mode-internal module)
-  ((vector-ref p1-trusted-surface 25) module))
+  ((vector-ref p1-trusted-surface 26) module))
 (define (parameter-handle-tensor-internal handle)
-  ((vector-ref p1-trusted-surface 26) handle))
-(define (parameter-handle-tensor-identity-internal handle)
   ((vector-ref p1-trusted-surface 27) handle))
+(define (parameter-handle-tensor-identity-internal handle)
+  ((vector-ref p1-trusted-surface 28) handle))
 (define (state-entry-internal path kind shape dtype device layout tensor)
-  ((vector-ref p1-trusted-surface 28)
+  ((vector-ref p1-trusted-surface 29)
    path kind shape dtype device layout tensor))
 (define (state-entry-path-internal entry)
-  ((vector-ref p1-trusted-surface 29) entry))
-(define (state-entry-kind-internal entry)
   ((vector-ref p1-trusted-surface 30) entry))
-(define (state-entry-shape-internal entry)
+(define (state-entry-kind-internal entry)
   ((vector-ref p1-trusted-surface 31) entry))
-(define (state-entry-dtype-internal entry)
+(define (state-entry-shape-internal entry)
   ((vector-ref p1-trusted-surface 32) entry))
-(define (state-entry-device-internal entry)
+(define (state-entry-dtype-internal entry)
   ((vector-ref p1-trusted-surface 33) entry))
-(define (state-entry-layout-internal entry)
+(define (state-entry-device-internal entry)
   ((vector-ref p1-trusted-surface 34) entry))
-(define (state-entry-tensor-internal entry)
+(define (state-entry-layout-internal entry)
   ((vector-ref p1-trusted-surface 35) entry))
 (define (state-dict-create-unsafe-internal
           format major minor features adapter entries aliases)
@@ -2686,4 +4064,18 @@
   ((vector-ref p1-trusted-surface 41) state))
 (define (state-dict-entries-internal state)
   ((vector-ref p1-trusted-surface 42) state))
+(define (state-dict-tensor-borrow-begin-internal state tensor)
+  ((vector-ref p1-trusted-surface 43) state tensor))
+(define (state-dict-tensor-borrow-end-internal state tensor)
+  ((vector-ref p1-trusted-surface 44) state tensor))
+(define (tensor-provider-preflight-internal provider-name major minor)
+  ((vector-ref p1-trusted-surface 45) provider-name major minor))
+(define (tensor-provider-release-owned-internal!
+          provider-name major minor release-envelope)
+  ((vector-ref p1-trusted-surface 46)
+   provider-name major minor release-envelope))
+(define (state-dict-adopt-owned-internal!
+          records aliases provider-name major minor ownership)
+  ((vector-ref p1-trusted-surface 47)
+   records aliases provider-name major minor ownership))
 @@P1_TRUSTED_END@@

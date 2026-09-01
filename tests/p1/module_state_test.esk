@@ -17,7 +17,8 @@
 
 (define (check label condition)
   (if condition
-      (set! checks (+ checks 1))
+      (begin
+        (set! checks (+ checks 1)))
       (begin
         (display "P1 FAIL: ")
         (display label)
@@ -33,6 +34,15 @@
             (thunk)
             #f)))
     (check label caught)))
+
+(define (expect-raised-false label thunk)
+  (let ((caught? #f))
+    (guard (caught
+             (#t
+               (set! caught? (eq? caught #f))
+               #f))
+      (thunk))
+    (check label caught?)))
 
 (define (expect-transformer-error label thunk)
   (let ((caught
@@ -96,7 +106,16 @@
     root))
 
 (define (state-payload state path)
-  (fixture-tensor-payload-internal (state-dict-tensor state path)))
+  (let* ((handle (state-dict-tensor state path))
+         (carrier
+           (state-dict-tensor-borrow-begin-internal state handle)))
+    (guard (caught
+             (#t
+               (state-dict-tensor-borrow-end-internal state handle)
+               (raise caught)))
+      (let ((payload (fixture-tensor-payload-internal carrier)))
+        (state-dict-tensor-borrow-end-internal state handle)
+        payload))))
 
 (define (state-values state)
   (let loop ((paths (state-dict-paths state)) (result '()))
@@ -104,6 +123,27 @@
         result
         (loop (cdr paths)
               (cons (list (car paths) (state-payload state (car paths))) result)))))
+
+(define (module-state-values module)
+  (let ((state (module-state-dict module)))
+    (guard (caught (#t (state-dict-release! state) (raise caught)))
+      (let ((result (state-values state)))
+        (state-dict-release! state)
+        result))))
+
+(define (module-state-paths module)
+  (let ((state (module-state-dict module)))
+    (guard (caught (#t (state-dict-release! state) (raise caught)))
+      (let ((result (state-dict-paths state)))
+        (state-dict-release! state)
+        result))))
+
+(define (module-state-aliases module)
+  (let ((state (module-state-dict module)))
+    (guard (caught (#t (state-dict-release! state) (raise caught)))
+      (let ((result (state-dict-alias-groups state)))
+        (state-dict-release! state)
+        result))))
 
 (define (replace-entry entries path replacement)
   (if (null? entries)
@@ -133,6 +173,15 @@
 (define (load-state! module state)
   (state-dict-bind-provider-internal! state 'fixture-v1)
   (module-load-state-dict! module state))
+
+(define (expect-load-error-and-release label category module state)
+  (expect-error label category (lambda () (load-state! module state)))
+  (state-dict-release! state))
+
+(define (expect-module-load-error-and-release label category module state)
+  (expect-error label category
+                (lambda () (module-load-state-dict! module state)))
+  (state-dict-release! state))
 
 (define source (build-module 'source-parameter 'source-buffer))
 (define permuted (build-module-permuted 'source-parameter 'source-buffer))
@@ -202,7 +251,157 @@
                                                       'unverified-v1)))
   (check "failed rebind preserves original binding"
          (equal? (state-dict-paths reconstructed)
-                 (state-dict-paths source-state))))
+                 (state-dict-paths source-state)))
+  (check "reconstructed owned clone state releases"
+         (state-dict-release! reconstructed)))
+
+(let* ((baseline (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    module "value"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'independent)))
+  (let* ((owner (module-state-dict module))
+         (owner-entry (car (state-dict-entries-internal owner)))
+         (copy
+           (state-dict-create-unsafe-internal
+             (state-dict-format-internal owner) 1 0 '()
+             (state-dict-adapter-internal owner)
+             (state-dict-entries-internal owner) '()))
+         (pre-bind-copy-entry
+           (car (state-dict-entries-internal copy))))
+    (check "unsafe first bind clones borrowed entries"
+           (eq? copy
+                (state-dict-bind-provider-internal! copy 'fixture-v1)))
+    (expect-error "unsafe bind tombstones pre-bind target entry shell"
+                  'invalid-state
+                  (lambda ()
+                    (state-entry-path-internal pre-bind-copy-entry)))
+    (check "unsafe bind preserves source-state entry identity"
+           (equal? (state-entry-path-internal owner-entry) '("value")))
+    (check "unsafe clone owner source releases"
+           (state-dict-release! owner))
+    (check "unsafe bound clone remains readable after source release"
+           (equal? (state-values copy)
+                   (list (list '("value") (vector 'independent)))))
+    (expect-error "source entry shell is stale after owner release"
+                  'invalid-state
+                  (lambda () (state-entry-path-internal owner-entry)))
+    (check "unsafe bound clone releases" (state-dict-release! copy))
+    (check "unsafe independent bind returns owned count to baseline"
+           (= baseline (fixture-owned-live-count-internal)))))
+
+(let* ((baseline (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    module "value"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'released-before-bind)))
+  (let* ((owner (module-state-dict module))
+         (owner-entry (car (state-dict-entries-internal owner)))
+         (copy
+           (state-dict-create-unsafe-internal
+             (state-dict-format-internal owner) 1 0 '()
+             (state-dict-adapter-internal owner)
+             (state-dict-entries-internal owner) '())))
+    (check "unsafe provenance owner releases before bind"
+           (state-dict-release! owner))
+    (let ((describe-before (fixture-describe-call-count-internal)))
+      (expect-error "unsafe bind rejects released provenance before callback"
+                    'invalid-state
+                    (lambda ()
+                      (state-dict-bind-provider-internal! copy 'fixture-v1)))
+      (check "released provenance rejection invokes no tensor callback"
+             (= describe-before (fixture-describe-call-count-internal))))
+    (expect-error "released provenance entry shell is invalid-state"
+                  'invalid-state
+                  (lambda () (state-entry-path-internal owner-entry)))
+    (check "unbound released-provenance state releases"
+           (state-dict-release! copy))
+    (check "released-before-bind path returns owned count to baseline"
+           (= baseline (fixture-owned-live-count-internal)))))
+
+(let* ((direct-entry
+         (state-entry-internal
+           '("direct") 'buffer '(1) 'i64 'cpu
+           'dense-row-major-contiguous
+           (fixture-tensor-internal '(1) 'i64 'cpu (vector 'direct))))
+       (direct-state
+         (state-dict-create-unsafe-internal
+           'transformer-state-dict 1 0 '() valid-provider-identity
+           (list direct-entry) '()))
+       (describe-before (fixture-describe-call-count-internal)))
+  (expect-error "unproven nonempty unsafe state rejects bind" 'unsupported
+                (lambda ()
+                  (state-dict-bind-provider-internal!
+                    direct-state 'fixture-v1)))
+  (check "unproven unsafe rejection invokes no tensor callback"
+         (= describe-before (fixture-describe-call-count-internal)))
+  (check "unproven unsafe state releases"
+         (state-dict-release! direct-state)))
+
+(let* ((baseline (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    module "a"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'first)))
+  (module-register-buffer-internal!
+    module "b"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'second)))
+  (let* ((owner (module-state-dict module))
+         (copy
+           (state-dict-create-unsafe-internal
+             (state-dict-format-internal owner) 1 0 '()
+             (state-dict-adapter-internal owner)
+             (state-dict-entries-internal owner) '()))
+         (before-bind (fixture-owned-live-count-internal)))
+    (fixture-arm-clone-defect-internal! 1 'publish-then-raise)
+    (expect-error "unsafe bind partial clone publication defect" 'internal
+                  (lambda ()
+                    (state-dict-bind-provider-internal! copy 'fixture-v1)))
+    (check "unsafe bind partial clone cleanup returns to prefix baseline"
+           (= before-bind (fixture-owned-live-count-internal)))
+    (expect-error "failed unsafe bind remains unbound" 'unsupported
+                  (lambda () (state-dict-paths copy)))
+    (check "unsafe bind retries after clone rollback"
+           (eq? copy
+                (state-dict-bind-provider-internal! copy 'fixture-v1)))
+    (check "partial-bind source owner releases"
+           (state-dict-release! owner))
+    (check "retried unsafe bind remains readable"
+           (equal? (state-dict-paths copy) '(("a") ("b"))))
+    (check "retried unsafe clone state releases"
+           (state-dict-release! copy))
+    (check "unsafe partial failure and retry return to baseline"
+           (= baseline (fixture-owned-live-count-internal)))))
+
+(let* ((baseline (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    module "a" (fixture-tensor-internal '(1) 'i64 'cpu (vector 'false-a)))
+  (module-register-buffer-internal!
+    module "b" (fixture-tensor-internal '(1) 'i64 'cpu (vector 'false-b)))
+  (let* ((owner (module-state-dict module))
+         (copy
+           (state-dict-create-unsafe-internal
+             (state-dict-format-internal owner) 1 0 '()
+             (state-dict-adapter-internal owner)
+             (state-dict-entries-internal owner) '()))
+         (before-bind (fixture-owned-live-count-internal)))
+    (fixture-arm-clone-defect-internal! 1 'publish-then-raise-false)
+    (expect-raised-false "unsafe bind preserves clone callback raised false"
+                         (lambda ()
+                           (state-dict-bind-provider-internal!
+                             copy 'fixture-v1)))
+    (check "raised-false clone rollback drains published prefix"
+           (= before-bind (fixture-owned-live-count-internal)))
+    (expect-error "raised-false clone rollback ends target access"
+                  'unsupported
+                  (lambda () (state-dict-paths copy)))
+    (check "raised-false unbound target releases"
+           (state-dict-release! copy))
+    (check "raised-false clone source releases"
+           (state-dict-release! owner))
+    (check "raised-false clone rollback returns to baseline"
+           (= baseline (fixture-owned-live-count-internal)))))
 (check "state version internal 1.0"
        (equal? (state-dict-version-internal source-state) '(1 0)))
 (check "state entries globally lexical"
@@ -214,7 +413,7 @@
                '((("block" "alpha") ("z")))))
 (check "state order ignores registration order"
        (equal? (state-dict-paths source-state)
-               (state-dict-paths (module-state-dict permuted))))
+               (module-state-paths permuted)))
 (check "tied snapshots value equal"
        (equal? (state-payload source-state '("block" "alpha"))
                (state-payload source-state '("z"))))
@@ -223,11 +422,366 @@
                  (state-dict-tensor source-state '("z")))))
 (let ((first (state-dict-tensor source-state '("z")))
       (second (state-dict-tensor source-state '("z"))))
-  (check "state tensor snapshots independent" (not (eq? first second)))
-  (vector-set! first 5 (vector 'mutated))
-  (check "snapshot mutation isolated"
+  (check "state tensor handle is cached" (eq? first second))
+  (check "borrow preserves snapshot value"
          (equal? (state-payload source-state '("z"))
                  (vector 'source-parameter 'bits-v1))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (state (module-state-dict source))
+       (handle (state-dict-tensor state '("z"))))
+  (fixture-arm-reentrant-borrow-end-internal! state handle)
+  (expect-error "opening borrow rejects reentrant end and release"
+                'invalid-state
+                (lambda ()
+                  (state-dict-tensor-borrow-begin-internal state handle)))
+  (check "failed opening borrow leaves state live"
+         (equal? (state-dict-paths state)
+                 '(("aa") ("block" "alpha") ("block" "beta")
+                   ("block" "stats") ("z") ("zz"))))
+  (state-dict-release! state)
+  (check "failed opening borrow releases to allocation baseline"
+         (= before (fixture-owned-live-count-internal))))
+
+(let ((baseline (fixture-owned-live-count-internal)))
+  (check "repeated state access and release cycles return to baseline"
+         (let loop ((remaining 12))
+           (if (= remaining 0)
+               #t
+               (let* ((state (module-state-dict source))
+                      (first (state-dict-tensor state '("z")))
+                      (second (state-dict-tensor state '("z")))
+                      (carrier
+                        (state-dict-tensor-borrow-begin-internal state first))
+                      (payload-ok
+                        (equal? (fixture-tensor-payload-internal carrier)
+                                (vector 'source-parameter 'bits-v1)))
+                      (ended
+                        (state-dict-tensor-borrow-end-internal state first))
+                      (released (state-dict-release! state))
+                      (repeated (state-dict-release! state)))
+                 (and (eq? first second) payload-ok ended released repeated
+                      (= baseline (fixture-owned-live-count-internal))
+                      (loop (- remaining 1))))))))
+
+(define (decoded-owned-record path carrier)
+  (vector path 'buffer '(1) 'i64 'cpu
+          'dense-row-major-contiguous carrier))
+
+(define (expect-adoption-metadata-mismatch
+          label category shape dtype device layout)
+  (let* ((before (fixture-owned-live-count-internal))
+         (releases-before (fixture-release-call-count-internal))
+         (carrier
+           (fixture-owned-tensor-internal '(1) 'i64 'cpu (vector 9)))
+         (envelope
+           (vector carrier 'buffer 'state-dict-adopt-owned-internal! #f))
+         (ownership (vector (list envelope))))
+    (expect-error label category
+                  (lambda ()
+                    (state-dict-adopt-owned-internal!
+                      (list (vector '("mismatch") 'buffer shape dtype device
+                                    layout carrier))
+                      '() 'fixture-v1 2 0 ownership)))
+    (check (string-append label " clears transferred envelope")
+           (not (vector-ref envelope 0)))
+    (check (string-append label " releases exactly once")
+           (= (+ releases-before 1)
+              (fixture-release-call-count-internal)))
+    (check (string-append label " restores owned baseline")
+           (= before (fixture-owned-live-count-internal)))))
+
+(expect-adoption-metadata-mismatch
+  "adoption rejects record/carrier shape mismatch" 'shape-mismatch
+  '(2) 'i64 'cpu 'dense-row-major-contiguous)
+(expect-adoption-metadata-mismatch
+  "adoption rejects record/carrier dtype mismatch" 'dtype-mismatch
+  '(1) 'f32 'cpu 'dense-row-major-contiguous)
+(expect-adoption-metadata-mismatch
+  "adoption rejects record/carrier device mismatch" 'device-mismatch
+  '(1) 'i64 'accelerator 'dense-row-major-contiguous)
+(expect-adoption-metadata-mismatch
+  "adoption rejects record/carrier layout mismatch" 'noncontiguous
+  '(1) 'i64 'cpu 'column-major)
+
+(let* ((before (fixture-owned-live-count-internal))
+       (carrier
+         (fixture-owned-tensor-internal '(1) 'i64 'cpu (vector 1)))
+       (envelope
+         (vector carrier 'buffer 'state-dict-adopt-owned-internal! #f))
+       (items (list envelope envelope))
+       (ownership (vector items)))
+  (expect-error "adoption rejects repeated exact envelope" 'invalid-argument
+                (lambda ()
+                  (state-dict-adopt-owned-internal!
+                    (list (decoded-owned-record '("a") carrier)
+                          (decoded-owned-record '("b") carrier))
+                    '() 'fixture-v1 2 0 ownership)))
+  (check "repeated-envelope rejection does not consume caller ledger"
+         (eq? items (vector-ref ownership 0)))
+  (vector-set! ownership 0 '())
+  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 envelope)
+  (check "repeated-envelope rejection cleans unique owner once"
+         (= before (fixture-owned-live-count-internal))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (carrier
+         (fixture-owned-tensor-internal '(1) 'i64 'cpu (vector 2)))
+       (first (vector carrier 'buffer 'state-dict-adopt-owned-internal! #f))
+       (second (vector carrier 'buffer 'state-dict-adopt-owned-internal! #f))
+       (items (list first second))
+       (ownership (vector items)))
+  (expect-error "adoption rejects distinct envelopes for one carrier"
+                'invalid-argument
+                (lambda ()
+                  (state-dict-adopt-owned-internal!
+                    (list (decoded-owned-record '("a") carrier)
+                          (decoded-owned-record '("b") carrier))
+                    '() 'fixture-v1 2 0 ownership)))
+  (check "duplicate-carrier rejection does not consume caller ledger"
+         (eq? items (vector-ref ownership 0)))
+  (vector-set! ownership 0 '())
+  (vector-set! second 0 #f)
+  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 first)
+  (check "duplicate-carrier rejection cleans physical owner once"
+         (= before (fixture-owned-live-count-internal))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (carrier
+         (fixture-owned-tensor-internal '(1) 'i64 'cpu (vector 3)))
+       (first (vector carrier 'buffer 'state-dict-adopt-owned-internal! #f))
+       (copied
+         (vector (vector-ref first 0) (vector-ref first 1)
+                 (vector-ref first 2) (vector-ref first 3)))
+       (items (list first copied))
+       (ownership (vector items)))
+  (expect-error "adoption rejects copied envelope with repeated carrier"
+                'invalid-argument
+                (lambda ()
+                  (state-dict-adopt-owned-internal!
+                    (list (decoded-owned-record '("a") carrier)
+                          (decoded-owned-record '("b") carrier))
+                    '() 'fixture-v1 2 0 ownership)))
+  (check "copied-envelope rejection does not consume caller ledger"
+         (eq? items (vector-ref ownership 0)))
+  (vector-set! ownership 0 '())
+  (vector-set! copied 0 #f)
+  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 first)
+  (check "copied-envelope rejection cleans physical owner once"
+         (= before (fixture-owned-live-count-internal))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (first-module (module-create-fixture-internal))
+       (second-module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    first-module "a"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'first-live)))
+  (module-register-buffer-internal!
+    second-module "b"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'second-live)))
+  (let* ((first-state (module-state-dict first-module))
+         (second-state (module-state-dict second-module))
+         (first-handle (state-dict-tensor first-state '("a")))
+         (second-handle (state-dict-tensor second-state '("b")))
+         (first-carrier
+           (state-dict-tensor-borrow-begin-internal
+             first-state first-handle)))
+    (state-dict-tensor-borrow-end-internal first-state first-handle)
+    (let ((second-carrier
+            (state-dict-tensor-borrow-begin-internal
+              second-state second-handle)))
+      (state-dict-tensor-borrow-end-internal second-state second-handle)
+      (let* ((first-envelope
+               (vector first-carrier 'buffer
+                       'state-dict-adopt-owned-internal! #f))
+             (duplicate-envelope
+               (vector first-carrier 'buffer
+                       'state-dict-adopt-owned-internal! #f))
+             (second-envelope
+               (vector second-carrier 'buffer
+                       'state-dict-adopt-owned-internal! #f))
+             (malformed (vector 'malformed))
+             (items
+               (list first-envelope malformed duplicate-envelope
+                     second-envelope))
+             (ownership (vector items)))
+        (expect-error
+          "adoption sanitizes all live-state carriers before validation"
+          'invalid-argument
+          (lambda ()
+            (state-dict-adopt-owned-internal!
+              (list (decoded-owned-record '("a") first-carrier))
+              '() 'missing-provider 99 99 ownership)))
+        (check "adoption neutralizes duplicate first-state envelopes"
+               (and (not (vector-ref first-envelope 0))
+                    (not (vector-ref duplicate-envelope 0))))
+        (check "adoption neutralizes every live-state envelope"
+               (not (vector-ref second-envelope 0)))
+        (check "adoption sanitizer leaves caller ledger unconsumed"
+               (eq? items (vector-ref ownership 0)))
+        (check "adoption sanitizer invokes no release callback"
+               (= release-before (fixture-release-call-count-internal)))
+        (let ((carrier
+                (state-dict-tensor-borrow-begin-internal
+                  first-state first-handle)))
+          (check "adoption sanitizer preserves first live state"
+                 (equal? (fixture-tensor-payload-internal carrier)
+                         (vector 'first-live)))
+          (state-dict-tensor-borrow-end-internal first-state first-handle))
+        (let ((carrier
+                (state-dict-tensor-borrow-begin-internal
+                  second-state second-handle)))
+          (check "adoption sanitizer preserves second live state"
+                 (equal? (fixture-tensor-payload-internal carrier)
+                         (vector 'second-live)))
+          (state-dict-tensor-borrow-end-internal second-state second-handle))
+        (check "first sanitized live state releases once"
+               (state-dict-release! first-state))
+        (check "second sanitized live state releases once"
+               (state-dict-release! second-state))
+        (check "sanitized adoption states return to baseline"
+               (= before (fixture-owned-live-count-internal)))))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    module "state"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'release-seam-live)))
+  (let* ((state (module-state-dict module))
+         (handle (state-dict-tensor state '("state")))
+         (carrier
+           (state-dict-tensor-borrow-begin-internal state handle)))
+    (state-dict-tensor-borrow-end-internal state handle)
+    (let ((envelope
+            (vector carrier 'wrong-kind 'release-confusion #f)))
+      (check "private release seam rejects protected carrier with false"
+             (not (tensor-provider-release-owned-internal!
+                    'missing-provider 99 99 envelope)))
+      (check "private release seam neutralizes protected envelope"
+             (not (vector-ref envelope 0)))
+      (check "private release seam invokes no provider callback"
+             (= release-before (fixture-release-call-count-internal))))
+    (let ((preserved
+            (state-dict-tensor-borrow-begin-internal state handle)))
+      (check "private release seam preserves live state storage"
+             (equal? (fixture-tensor-payload-internal preserved)
+                     (vector 'release-seam-live)))
+      (state-dict-tensor-borrow-end-internal state handle))
+    (check "private release seam protected state releases once"
+           (state-dict-release! state))
+    (check "private release seam protected state returns to baseline"
+           (= before (fixture-owned-live-count-internal)))))
+
+(let* ((release-before (fixture-release-call-count-internal))
+       (module (module-create-fixture-internal))
+       (carrier
+         (fixture-tensor-internal '(1) 'i64 'cpu (vector 'module-release-live))))
+  (module-register-buffer-internal! module "state" carrier)
+  (let ((envelope (vector carrier 'buffer 'release-confusion #f)))
+    (check "private release seam rejects live module carrier with false"
+           (not (tensor-provider-release-owned-internal!
+                  'missing-provider 99 99 envelope)))
+    (check "private release seam neutralizes live module envelope"
+           (not (vector-ref envelope 0)))
+    (check "private release seam does not callback for module carrier"
+           (= release-before (fixture-release-call-count-internal)))
+    (check "private release seam preserves module carrier"
+           (equal? (fixture-tensor-payload-internal carrier)
+                   (vector 'module-release-live)))))
+
+(let* ((released-state (module-state-dict source))
+       (detached-paths (state-dict-paths released-state))
+       (detached-aliases (state-dict-alias-groups released-state))
+       (borrowed (state-dict-tensor released-state '("z")))
+       (other-handle (state-dict-tensor released-state '("aa")))
+       (stale-entry (car (state-dict-entries-internal released-state))))
+  (let ((carrier
+          (state-dict-tensor-borrow-begin-internal
+            released-state borrowed)))
+    (expect-error "different handle cannot end active scoped borrow"
+                  'invalid-argument
+                  (lambda ()
+                    (state-dict-tensor-borrow-end-internal
+                      released-state other-handle)))
+    (expect-error "release rejects an active scoped borrow" 'invalid-state
+                  (lambda () (state-dict-release! released-state)))
+    (check "rejected release leaves borrowed carrier live"
+           (equal? (fixture-tensor-payload-internal carrier)
+                   (vector 'source-parameter 'bits-v1)))
+    (check "scoped borrow end succeeds"
+           (state-dict-tensor-borrow-end-internal
+             released-state borrowed)))
+  (check "state release succeeds" (state-dict-release! released-state))
+  (check "state release is idempotent" (state-dict-release! released-state))
+  (check "detached paths outlive state release"
+         (equal? detached-paths
+                 '(("aa") ("block" "alpha") ("block" "beta")
+                   ("block" "stats") ("z") ("zz"))))
+  (check "detached aliases outlive state release"
+         (equal? detached-aliases '((("block" "alpha") ("z")))))
+  (expect-error "released state paths reject use" 'invalid-state
+                (lambda () (state-dict-paths released-state)))
+  (expect-error "released state aliases reject use" 'invalid-state
+                (lambda () (state-dict-alias-groups released-state)))
+  (expect-error "released state tensor lookup rejects use" 'invalid-state
+                (lambda () (state-dict-tensor released-state '("z"))))
+  (expect-error "released state strict load rejects use" 'invalid-state
+                (lambda ()
+                  (module-load-state-dict! source released-state)))
+  (expect-error "released borrowed handle rejects use" 'invalid-state
+                (lambda ()
+                  (state-dict-tensor-borrow-begin-internal
+                    released-state borrowed)))
+  (expect-error "released entry shell rejects use" 'invalid-state
+                (lambda () (state-entry-path-internal stale-entry))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (state (module-state-dict source))
+       (stale (state-dict-tensor state '("z")))
+       (stale-entry (car (state-dict-entries-internal state))))
+  (fixture-malform-next-release-internal!)
+  (expect-error "malformed post-release acknowledgement is reported" 'internal
+                (lambda () (state-dict-release! state)))
+  (check "malformed acknowledgement cleanup returns to baseline"
+         (= before (fixture-owned-live-count-internal)))
+  (check "malformed acknowledgement state release is not retried"
+         (state-dict-release! state))
+  (expect-error "malformed acknowledgement leaves stale handle invalid"
+                'invalid-state
+                (lambda ()
+                  (state-dict-tensor-borrow-begin-internal state stale)))
+  (expect-error "malformed acknowledgement compacts stale entry shell"
+                'invalid-state
+                (lambda () (state-entry-path-internal stale-entry))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    module "a"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'release-false-a)))
+  (module-register-buffer-internal!
+    module "b"
+    (fixture-tensor-internal '(1) 'i64 'cpu (vector 'release-false-b)))
+  (let* ((state (module-state-dict module))
+         (release-before (fixture-release-call-count-internal)))
+    (fixture-raise-false-next-release-internal!)
+    (expect-raised-false "state release preserves callback raised false"
+                         (lambda () (state-dict-release! state)))
+    (check "raised-false release drains owned siblings"
+           (= (+ release-before 2)
+              (fixture-release-call-count-internal)))
+    (check "raised-false release returns owned count to baseline"
+           (= before (fixture-owned-live-count-internal)))
+    (check "raised-false state release is idempotent"
+           (state-dict-release! state))
+    (check "raised-false repeated release invokes no callbacks"
+           (= (+ release-before 2)
+              (fixture-release-call-count-internal)))
+    (expect-error "raised-false released state remains invalid"
+                  'invalid-state
+                  (lambda () (state-dict-paths state)))))
 
 (define destination (build-module 'destination-parameter 'destination-buffer))
 (define destination-tree (module-parameters destination))
@@ -239,11 +793,21 @@
            (state-dict-format-internal source-state) 1 0 '()
            valid-provider-identity (state-dict-entries-internal source-state)
            (state-dict-alias-groups source-state)))
-       (before (state-values (module-state-dict destination))))
+       (before (module-state-values destination)))
   (expect-error "unbound state cannot load" 'unsupported
                 (lambda () (module-load-state-dict! destination unbound)))
   (check "unbound load preserves destination"
-         (equal? before (state-values (module-state-dict destination)))))
+         (equal? before (module-state-values destination)))
+  (state-dict-release! unbound))
+(fixture-arm-reentrant-state-release-internal! source-state)
+(expect-error "provider callback cannot reentrantly release load state"
+              'invalid-state
+              (lambda ()
+                (module-load-state-dict! destination source-state)))
+(check "reentrant release rejection leaves load state live"
+       (equal? (state-dict-paths source-state)
+               '(("aa") ("block" "alpha") ("block" "beta")
+                 ("block" "stats") ("z") ("zz"))))
 (check "strict load succeeds" (load-state! destination source-state))
 (check "load preserves handle identity"
        (eq? destination-handle
@@ -260,10 +824,10 @@
        (equal? (state-dict-paths destination-state)
                (state-dict-paths source-state)))
 (check "round trip values"
-       (equal? (state-values (module-state-dict destination))
+       (equal? (module-state-values destination)
                (state-values source-state)))
 (check "round trip aliases"
-       (equal? (state-dict-alias-groups (module-state-dict destination))
+       (equal? (module-state-aliases destination)
                (state-dict-alias-groups source-state)))
 
 (define child-for-mode (module-create-internal))
@@ -279,7 +843,7 @@
 (define empty (module-create-fixture-internal))
 (check "empty parameters" (null? (parameter-tree-paths (module-parameters empty))))
 (check "empty buffers" (null? (state-dict-paths (module-buffers empty))))
-(check "empty state" (null? (state-dict-paths (module-state-dict empty))))
+(check "empty state" (null? (module-state-paths empty)))
 
 (let ((unicode-module (module-create-fixture-internal)))
   (module-register-parameter-internal! unicode-module "é" (payload 'unicode))
@@ -365,13 +929,14 @@
 (let ((rejected
         (state-dict-create-unsafe-internal
           (state-dict-format-internal source-state) 1 0 '()
-          '(transformer-tensor-provider 1 0 substituting-v1)
+          '(transformer-tensor-provider 2 0 substituting-v1)
           (state-dict-entries-internal source-state)
           (state-dict-alias-groups source-state))))
   (expect-error "failed admission leaves provider unregistered" 'unsupported
                 (lambda ()
                   (state-dict-bind-provider-internal! rejected
-                                                      'substituting-v1))))
+                                                      'substituting-v1)))
+  (state-dict-release! rejected))
 
 (let* ((module (module-create-fixture-internal))
        (device (vector 'accelerator 0))
@@ -428,7 +993,7 @@
   (expect-error-contract
     "cached clone cannot alias untied storage" 'internal
     'module-register-parameter-internal!
-    "provider clone aliases existing parameter storage"
+    "module tensor aliases existing parameter storage"
     (lambda ()
       (module-register-parameter-internal!
         module "second"
@@ -448,6 +1013,146 @@
     "state snapshots cannot share provider storage" 'internal
     'module-state-dict "state entries alias tensor storage"
     (lambda () (module-state-dict module))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    module "a" (payload 'published-prefix))
+  (module-register-parameter-internal!
+    module "z"
+    (fixture-tensor-unsafe-internal
+      '(2 2) 'f32 'cpu #t (vector 'published-failure 'bits-v1)
+      'publish-then-raise))
+  (expect-error "post-publication clone defect is reported" 'internal
+                (lambda () (module-state-dict module)))
+  (check "post-publication clone defect releases prefix and publication"
+         (= before (fixture-owned-live-count-internal))))
+
+(fixture-reset-shared-clone-internal!)
+(let* ((before (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    module "a"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'first) 'exact-republish))
+  (module-register-parameter-internal!
+    module "z"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'second) 'exact-republish))
+  (expect-error "exact clone identity republication is rejected" 'internal
+                (lambda () (module-state-dict module)))
+  (check "exact clone republication releases physical owner once"
+         (= before (fixture-owned-live-count-internal))))
+(fixture-reset-shared-clone-internal!)
+
+(fixture-reset-shared-clone-internal!)
+(let* ((before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (first-module (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    first-module "weight"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'live-state-owner) 'exact-republish))
+  (let* ((first-state (module-state-dict first-module))
+         (first-handle (state-dict-tensor first-state '("weight")))
+         (second-module (module-create-fixture-internal)))
+    (module-register-parameter-internal!
+      second-module "weight"
+      (fixture-tensor-unsafe-internal
+        ;; Value-equal to the protected carrier but backed by distinct source
+        ;; storage, so only exact protected-identity admission can reject it.
+        '(1) 'f32 'cpu #t (vector 'live-state-owner) 'exact-republish))
+    (expect-error "clone cannot republish another live state's carrier"
+                  'internal
+                  (lambda () (module-state-dict second-module)))
+    (check "cross-state clone rejection invokes no release callback"
+           (= release-before (fixture-release-call-count-internal)))
+    (let ((carrier
+            (state-dict-tensor-borrow-begin-internal
+              first-state first-handle)))
+      (check "cross-state clone rejection preserves first state storage"
+             (equal? (fixture-tensor-payload-internal carrier)
+                     (vector 'live-state-owner)))
+      (state-dict-tensor-borrow-end-internal first-state first-handle))
+    (check "cross-state clone owner releases once"
+           (state-dict-release! first-state))
+    (check "cross-state clone cleanup returns to baseline"
+           (= before (fixture-owned-live-count-internal)))))
+(fixture-reset-shared-clone-internal!)
+
+(let* ((before (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal))
+       (source
+         (fixture-tensor-unsafe-internal
+           '(1) 'f32 'cpu #t (vector 'borrowed-source) 'return-source)))
+  (module-register-parameter-internal! module "weight" source)
+  (expect-error "clone cannot publish borrowed source identity" 'internal
+                (lambda () (module-state-dict module)))
+  (check "borrowed source identity is never released"
+         (= before (fixture-owned-live-count-internal)))
+  (check "borrowed source remains readable after clone rejection"
+         (equal? (fixture-tensor-payload-internal source)
+                 (vector 'borrowed-source))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    module "weight"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'request-publication) 'return-request))
+  (expect-error "clone cannot publish P1 request identity" 'internal
+                (lambda () (module-state-dict module)))
+  (check "request identity rejection creates no owner"
+         (= before (fixture-owned-live-count-internal))))
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (module (module-create-fixture-internal))
+       (first
+         (fixture-tensor-unsafe-internal
+           '(1) 'f32 'cpu #t (vector 'first-source) 'cross-publication))
+       (second
+         (fixture-tensor-internal '(1) 'f32 'cpu (vector 'second-source))))
+  (module-register-parameter-internal! module "a" first)
+  (module-register-parameter-internal! module "z" second)
+  (fixture-arm-cross-publication-internal! second)
+  (expect-error "clone cannot publish another borrowed input identity"
+                'internal
+                (lambda () (module-state-dict module)))
+  (check "cross-input rejection invokes no release callback"
+         (= release-before (fixture-release-call-count-internal)))
+  (check "cross-input rejection creates no owned clone"
+         (= owned-before (fixture-owned-live-count-internal)))
+  (check "cross-input rejection preserves first borrowed input"
+         (equal? (fixture-tensor-payload-internal first)
+                 (vector 'first-source)))
+  (check "cross-input rejection preserves second borrowed input"
+         (equal? (fixture-tensor-payload-internal second)
+                 (vector 'second-source))))
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (protected-module (module-create-fixture-internal))
+       (protected
+         (fixture-tensor-internal '(1) 'f32 'cpu (vector 'module-live)))
+       (attacker-module (module-create-fixture-internal))
+       (attacker
+         (fixture-tensor-unsafe-internal
+           '(1) 'f32 'cpu #t (vector 'attacker) 'cross-publication)))
+  (module-register-parameter-internal!
+    protected-module "protected" protected)
+  (module-register-parameter-internal! attacker-module "attacker" attacker)
+  (fixture-arm-cross-publication-internal! protected)
+  (expect-error "clone cannot republish another module's borrowed carrier"
+                'internal
+                (lambda () (module-state-dict attacker-module)))
+  (check "cross-module rejection invokes no release callback"
+         (= release-before (fixture-release-call-count-internal)))
+  (check "cross-module rejection creates no owned clone"
+         (= owned-before (fixture-owned-live-count-internal)))
+  (check "cross-module rejection preserves registered module carrier"
+         (equal? (fixture-tensor-payload-internal protected)
+                 (vector 'module-live))))
 
 (let ((module (module-create-fixture-internal)))
   (module-register-parameter-internal! module "weight" (payload 'cpu))
@@ -483,6 +1188,18 @@
               (lambda () (parameter-tree-handle tree-a '("missing"))))
 (expect-error "unknown state path" 'invalid-argument
               (lambda () (state-dict-tensor source-state '("missing"))))
+(expect-error "forged state release shell" 'invalid-argument
+              (lambda () (state-dict-release! (vector 'forged-state))))
+(expect-error "wrong-kind registered release shell" 'invalid-argument
+              (lambda () (state-dict-release! source)))
+(expect-error "forged state-tensor borrow begin shell" 'invalid-argument
+              (lambda ()
+                (state-dict-tensor-borrow-begin-internal
+                  source-state (vector 'forged-state-tensor))))
+(expect-error "forged state-tensor borrow end shell" 'invalid-argument
+              (lambda ()
+                (state-dict-tensor-borrow-end-internal
+                  source-state (vector 'forged-state-tensor))))
 (expect-error "zero grad explicit unsupported" 'unsupported
               (lambda () (module-zero-grad! source)))
 (let ((duplicate-module (module-create-fixture-internal)))
@@ -507,342 +1224,235 @@
 (define valid-entries (state-dict-entries-internal source-state))
 (define first-entry (car valid-entries))
 (define z-entry (find-entry valid-entries '("z")))
-(define z-tensor (state-entry-tensor-internal z-entry))
-(expect-error "duplicate state path" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state (cons first-entry valid-entries)
-                           (state-dict-alias-groups source-state)))))
-(expect-error "malformed state format" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    #f 1 0 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "unsupported state format" 'version-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'other-state 1 0 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "malformed major version" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 'one 0 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "malformed minor version" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 'zero '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "inexact schema version" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1.0 0 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "negative schema version" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict -1 0 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "unsupported major" 'version-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 2 0 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "unsupported minor" 'version-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 1 '() valid-provider-identity valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "unsupported required feature" 'version-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '(future-feature) valid-provider-identity
-                    valid-entries (state-dict-alias-groups source-state)))))
-(expect-error "missing entry" 'shape-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state (remove-entry valid-entries '("aa"))
-                           (state-dict-alias-groups source-state)))))
-(let ((unexpected
-        (state-entry-internal
-          '("zzz") 'buffer '(2) 'i64 'cpu 'dense-row-major-contiguous
-          (buffer-payload 'unexpected))))
+(define z-tensor (payload 'source-parameter))
+(define malformed-state-owned-before (fixture-owned-live-count-internal))
+(expect-load-error-and-release
+  "duplicate state path" 'corrupt-data destination
+  (restate source-state (cons first-entry valid-entries)
+           (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "malformed state format" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    #f 1 0 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "unsupported state format" 'version-mismatch destination
+  (state-dict-create-unsafe-internal
+    'other-state 1 0 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "malformed major version" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 'one 0 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "malformed minor version" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 'zero '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "inexact schema version" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1.0 0 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "negative schema version" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict -1 0 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "unsupported major" 'version-mismatch destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 2 0 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "unsupported minor" 'version-mismatch destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 1 '() valid-provider-identity valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "unsupported required feature" 'version-mismatch destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '(future-feature) valid-provider-identity
+    valid-entries (state-dict-alias-groups source-state)))
+(let ((missing-state
+        (restate source-state (remove-entry valid-entries '("aa"))
+                 (state-dict-alias-groups source-state))))
+  (expect-error "missing entry" 'shape-mismatch
+                (lambda () (load-state! destination missing-state)))
+  (state-dict-release! missing-state))
+(let* ((unexpected-module (module-create-fixture-internal))
+       (registered
+         (module-register-buffer-internal!
+           unexpected-module "zzz" (buffer-payload 'unexpected)))
+       (unexpected-owner (module-state-dict unexpected-module))
+       (unexpected (car (state-dict-entries-internal unexpected-owner)))
+       (unexpected-state
+         (restate source-state
+                  (let add-last ((items valid-entries))
+                    (if (null? items) (list unexpected)
+                        (cons (car items) (add-last (cdr items)))))
+                  (state-dict-alias-groups source-state))))
   (expect-error "unexpected entry" 'shape-mismatch
+                (lambda () (load-state! destination unexpected-state)))
+  (state-dict-release! unexpected-state)
+  (state-dict-release! unexpected-owner))
+
+(expect-load-error-and-release
+  "malformed feature list" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '(same same) valid-provider-identity
+    valid-entries (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "malformed adapter" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '() #f valid-entries
+    (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "unsupported provider interface version" 'version-mismatch destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '()
+    '(transformer-tensor-provider 1 0 fixture-v1)
+    valid-entries (state-dict-alias-groups source-state)))
+(expect-module-load-error-and-release
+  "negative provider interface major" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '()
+    '(transformer-tensor-provider -1 0 fixture-v1)
+    valid-entries (state-dict-alias-groups source-state)))
+(expect-module-load-error-and-release
+  "negative provider interface minor" 'corrupt-data destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '()
+    '(transformer-tensor-provider 2 -1 fixture-v1)
+    valid-entries (state-dict-alias-groups source-state)))
+
+(expect-load-error-and-release
+  "singleton alias group" 'corrupt-data destination
+  (restate source-state valid-entries '((("z")))))
+(expect-load-error-and-release
+  "non-path alias member" 'corrupt-data destination
+  (restate source-state valid-entries '((bad worse))))
+(expect-load-error-and-release
+  "empty alias path" 'corrupt-data destination
+  (restate source-state valid-entries '((() ("z")))))
+(expect-load-error-and-release
+  "empty alias segment" 'corrupt-data destination
+  (restate source-state valid-entries '((("") ("z")))))
+(expect-load-error-and-release
+  "non-string alias segment" 'corrupt-data destination
+  (restate source-state valid-entries '(((1) ("z")))))
+(expect-load-error-and-release
+  "buffer alias member" 'corrupt-data destination
+  (restate source-state valid-entries '((("aa") ("zz")))))
+
+;; Destination-contract mismatches use complete live one-parameter states, so
+;; tied-entry validation cannot preempt the intended shape/dtype/device error.
+(define (single-parameter-module tensor)
+  (let ((module (module-create-fixture-internal)))
+    (module-register-parameter-internal! module "z" tensor)
+    module))
+
+(define (single-parameter-owner tensor)
+  (module-state-dict (single-parameter-module tensor)))
+
+(define (single-buffer-module tensor)
+  (let ((module (module-create-fixture-internal)))
+    (module-register-buffer-internal! module "z" tensor)
+    module))
+
+(define (single-buffer-owner tensor)
+  (module-state-dict (single-buffer-module tensor)))
+
+(let* ((shape-owner
+         (single-parameter-owner
+           (fixture-tensor-internal '(4) 'f32 'cpu
+                                    (vector 'source-parameter 'bits-v1))))
+       (shape-destination
+         (single-parameter-module
+           (fixture-tensor-internal '(2 2) 'f32 'cpu
+                                    (vector 'destination 'bits-v1))))
+       (dtype-owner
+         (single-buffer-owner
+           (fixture-tensor-internal '(2 2) 'i64 'cpu
+                                    (vector 'source-parameter 'bits-v1))))
+       (dtype-destination
+         (single-buffer-module
+           (fixture-tensor-internal '(2 2) 'f32 'cpu
+                                    (vector 'destination 'bits-v1))))
+       (device-owner
+         (single-parameter-owner
+           (fixture-tensor-internal '(2 2) 'f32 'accelerator
+                                    (vector 'source-parameter 'bits-v1))))
+       (device-destination
+         (single-parameter-module
+           (fixture-tensor-internal '(2 2) 'f32 'cpu
+                                    (vector 'destination 'bits-v1))))
+       (conflict-owner
+         (single-parameter-owner
+           (fixture-tensor-internal '(2 2) 'f32 'cpu
+                                    (vector 'conflict 'bits-v1))))
+       (conflict-entry (car (state-dict-entries-internal conflict-owner)))
+       (conflict-state
+         (restate source-state
+           (replace-entry valid-entries '("z") conflict-entry)
+           (state-dict-alias-groups source-state))))
+  (expect-error "entry tensor shape mismatch" 'shape-mismatch
                 (lambda ()
-                  (load-state!
-                    destination
-                    (restate source-state
-                             (let add-last ((items valid-entries))
-                               (if (null? items) (list unexpected)
-                                   (cons (car items) (add-last (cdr items)))))
-                             (state-dict-alias-groups source-state))))))
+                  (module-load-state-dict! shape-destination shape-owner)))
+  (expect-error "entry tensor dtype mismatch" 'dtype-mismatch
+                (lambda ()
+                  (module-load-state-dict! dtype-destination dtype-owner)))
+  (expect-error "entry tensor device mismatch" 'device-mismatch
+                (lambda ()
+                  (module-load-state-dict! device-destination device-owner)))
+  (expect-error "conflicting tied payload" 'corrupt-data
+                (lambda ()
+                  (load-state! destination conflict-state)))
+  (state-dict-release! conflict-state)
+  (state-dict-release! shape-owner)
+  (state-dict-release! dtype-owner)
+  (state-dict-release! device-owner)
+  (state-dict-release! conflict-owner))
 
-(expect-error "malformed feature list" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '(same same) valid-provider-identity
-                    valid-entries (state-dict-alias-groups source-state)))))
-(expect-error "malformed adapter" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '() #f valid-entries
-                    (state-dict-alias-groups source-state)))))
-(expect-error "unsupported provider interface version" 'version-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '()
-                    '(transformer-tensor-provider 2 0 fixture-v1)
-                    valid-entries (state-dict-alias-groups source-state)))))
-(expect-error "negative provider interface major" 'corrupt-data
-              (lambda ()
-                (module-load-state-dict!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '()
-                    '(transformer-tensor-provider -1 0 fixture-v1)
-                    valid-entries (state-dict-alias-groups source-state)))))
-(expect-error "negative provider interface minor" 'corrupt-data
-              (lambda ()
-                (module-load-state-dict!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '()
-                    '(transformer-tensor-provider 1 -1 fixture-v1)
-                    valid-entries (state-dict-alias-groups source-state)))))
+(let ((alias-mismatch-state
+        (restate source-state valid-entries '())))
+  (expect-error "alias topology mismatch" 'shape-mismatch
+                (lambda ()
+                  (load-state! destination alias-mismatch-state)))
+  (state-dict-release! alias-mismatch-state))
 
-(define invalid-kind-entry
-  (state-entry-internal '("z") 'unknown '(2 2) 'f32 'cpu
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "invalid entry kind" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") invalid-kind-entry)
-                           (state-dict-alias-groups source-state)))))
+(expect-load-error-and-release
+  "unsupported tensor provider" 'unsupported destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '()
+    '(transformer-tensor-provider 2 0 unknown-provider)
+    valid-entries (state-dict-alias-groups source-state)))
+(expect-load-error-and-release
+  "incoming identity cannot select registered callbacks" 'unsupported destination
+  (state-dict-create-unsafe-internal
+    'transformer-state-dict 1 0 '()
+    '(transformer-tensor-provider 2 0 poison-access-v1)
+    valid-entries (state-dict-alias-groups source-state)))
+(check "malformed and unsupported state failures restore owned baseline"
+       (= malformed-state-owned-before (fixture-owned-live-count-internal)))
 
-(define malformed-dtype-entry
-  (state-entry-internal '("z") 'parameter '(2 2) #f 'cpu
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "malformed entry dtype" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") malformed-dtype-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define malformed-shape-entry
-  (state-entry-internal '("z") 'parameter '(2.0 2) 'f32 'cpu
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "malformed entry shape" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") malformed-shape-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define malformed-device-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'f32 #f
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "malformed entry device" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") malformed-device-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define malformed-layout-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'f32 'cpu #f z-tensor))
-(expect-error "malformed entry layout" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") malformed-layout-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(expect-error "singleton alias group" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination (restate source-state valid-entries '((("z")))))))
-(expect-error "non-path alias member" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination (restate source-state valid-entries '((bad worse))))))
-(expect-error "empty alias path" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination (restate source-state valid-entries '((() ("z")))))))
-(expect-error "empty alias segment" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state valid-entries '((("") ("z")))))))
-(expect-error "non-string alias segment" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state valid-entries '(((1) ("z")))))))
-(expect-error "buffer alias member" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state valid-entries '((("aa") ("zz")))))))
-
-(define bad-shape-entry
-  (state-entry-internal '("z") 'parameter '(4) 'f32 'cpu
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "entry tensor shape mismatch" 'shape-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") bad-shape-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define bad-dtype-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'i64 'cpu
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "entry tensor dtype mismatch" 'dtype-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") bad-dtype-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define bad-device-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'f32 'accelerator
-                        'dense-row-major-contiguous z-tensor))
-(expect-error "entry tensor device mismatch" 'device-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") bad-device-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define noncontiguous
-  (fixture-tensor-unsafe-internal '(2 2) 'f32 'cpu #f
-                                  (vector 'source-parameter 'bits-v1) #f))
-(define noncontiguous-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'f32 'cpu
-                        'dense-row-major-contiguous noncontiguous))
-(expect-error "noncontiguous tensor" 'noncontiguous
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") noncontiguous-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(define conflict-tensor
-  (fixture-tensor-internal '(2 2) 'f32 'cpu (vector 'conflict 'bits-v1)))
-(define conflict-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'f32 'cpu
-                        'dense-row-major-contiguous conflict-tensor))
-(expect-error "conflicting tied payload" 'corrupt-data
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") conflict-entry)
-                           (state-dict-alias-groups source-state)))))
-
-(expect-error "alias topology mismatch" 'shape-mismatch
-              (lambda ()
-                (load-state!
-                  destination (restate source-state valid-entries '()))))
-
-(expect-error "unsupported tensor provider" 'unsupported
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '()
-                    '(transformer-tensor-provider 1 0 unknown-provider)
-                    valid-entries (state-dict-alias-groups source-state)))))
-(expect-error "incoming identity cannot select registered callbacks" 'unsupported
-              (lambda ()
-                (load-state!
-                  destination
-                  (state-dict-create-unsafe-internal
-                    'transformer-state-dict 1 0 '()
-                    '(transformer-tensor-provider 1 0 poison-access-v1)
-                    valid-entries (state-dict-alias-groups source-state)))))
-
-(define unsupported-dtype-tensor
-  (fixture-tensor-unsafe-internal '(2 2) 'f16 'cpu #t
-                                  (vector 'source-parameter 'bits-v1) #f))
-(define unsupported-dtype-entry
-  (state-entry-internal '("z") 'parameter '(2 2) 'f16 'cpu
-                        'dense-row-major-contiguous unsupported-dtype-tensor))
-(expect-error "unsupported tensor dtype" 'dtype-mismatch
-              (lambda ()
-                (load-state!
-                  destination
-                  (restate source-state
-                           (replace-entry valid-entries '("z") unsupported-dtype-entry)
-                           (state-dict-alias-groups source-state)))))
-
-;;; A failure while copying the last lexical buffer occurs after earlier values
-;;; have been staged. No destination value may change.
+;;; A provider failure while preparing the second lexical assignment occurs
+;;; after one owned scratch clone has been published. No destination value may
+;;; change, and every scratch owner must be released.
 (define atomic-target (build-module 'atomic-before 'atomic-buffer-before))
-(define atomic-before (state-values (module-state-dict atomic-target)))
+(define atomic-before (module-state-values atomic-target))
 (define atomic-handle
   (parameter-tree-handle (module-parameters atomic-target) '("z")))
-(define zz-entry (find-entry valid-entries '("zz")))
-(define failing-zz-tensor
-  (fixture-tensor-unsafe-internal
-    (state-entry-shape-internal zz-entry)
-    (state-entry-dtype-internal zz-entry)
-    (state-entry-device-internal zz-entry) #t
-    (fixture-tensor-payload-internal (state-entry-tensor-internal zz-entry)) #t))
-(define failing-zz-entry
-  (state-entry-internal '("zz") 'buffer
-                        (state-entry-shape-internal zz-entry)
-                        (state-entry-dtype-internal zz-entry)
-                        (state-entry-device-internal zz-entry)
-                        (state-entry-layout-internal zz-entry)
-                        failing-zz-tensor))
-(define late-failure-state
-  (restate source-state
-           (replace-entry valid-entries '("zz") failing-zz-entry)
-           (state-dict-alias-groups source-state)))
-(expect-error "late staging copy failure" 'unsupported
+(define late-failure-owned-before (fixture-owned-live-count-internal))
+(fixture-arm-clone-defect-internal! 1 'publish-then-raise)
+(expect-error "late staging copy failure" 'internal
               (lambda ()
-                (load-state! atomic-target late-failure-state)))
+                (module-load-state-dict! atomic-target source-state)))
+(check "late staging failure releases every prepared scratch owner"
+       (= late-failure-owned-before (fixture-owned-live-count-internal)))
 (check "late failure preserves every value"
-       (equal? atomic-before (state-values (module-state-dict atomic-target))))
+       (equal? atomic-before (module-state-values atomic-target)))
 (check "late failure preserves handle identity"
        (eq? atomic-handle
             (parameter-tree-handle (module-parameters atomic-target) '("z"))))
@@ -917,7 +1527,7 @@
                   (state-dict-create-unsafe-internal
                     'transformer-state-dict 1 0 '()
                     valid-provider-identity valid-entries aliases))))
-(let ((adapter (list 'transformer-tensor-provider 1 0 'fixture-v1)))
+(let ((adapter (list 'transformer-tensor-provider 2 0 'fixture-v1)))
   (set-cdr! (cdr (cdr (cdr adapter))) adapter)
   (expect-error "cyclic provider identity" 'invalid-argument
                 (lambda ()
@@ -926,19 +1536,21 @@
                     (state-dict-alias-groups source-state)))))
 (let ((device (make-vector 1 #f)))
   (vector-set! device 0 device)
-  (expect-transformer-error
-    "cyclic device descriptor"
-    (lambda ()
-      (let ((entry
-              (state-entry-internal '("z") 'parameter
-                (state-entry-shape-internal z-entry)
-                (state-entry-dtype-internal z-entry) device
-                (state-entry-layout-internal z-entry) z-tensor)))
-        (load-state!
-          destination
-          (restate source-state
-            (replace-entry valid-entries '("z") entry)
-            (state-dict-alias-groups source-state)))))))
+  (let ((state #f))
+    (expect-transformer-error
+      "cyclic device descriptor"
+      (lambda ()
+        (let ((entry
+                (state-entry-internal '("z") 'parameter
+                  (state-entry-shape-internal z-entry)
+                  (state-entry-dtype-internal z-entry) device
+                  (state-entry-layout-internal z-entry) z-tensor)))
+          (set! state
+                (restate source-state
+                  (replace-entry valid-entries '("z") entry)
+                  (state-dict-alias-groups source-state)))
+          (load-state! destination state))))
+    (if state (state-dict-release! state) #t)))
 (expect-error "cyclic provider admission evidence" 'invalid-argument
               (lambda ()
                 (fixture-register-cyclic-evidence-provider-internal!)))
@@ -948,26 +1560,14 @@
 (expect-error "overlimit accessor path" 'invalid-argument
               (lambda ()
                 (state-dict-tensor source-state (repeat-value 65 "z"))))
-(let ((entry
-        (state-entry-internal
-          '("z") 'parameter (repeat-value 65 2)
-          (state-entry-dtype-internal z-entry)
-          (state-entry-device-internal z-entry)
-          (state-entry-layout-internal z-entry) z-tensor)))
-  (expect-error "overlimit entry shape" 'corrupt-data
-                (lambda ()
-                  (load-state!
-                    destination
-                    (restate source-state
-                      (replace-entry valid-entries '("z") entry)
-                      (state-dict-alias-groups source-state))))))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 (repeat-value 65 'feature)
           valid-provider-identity valid-entries
           (state-dict-alias-groups source-state))))
   (expect-error "overlimit feature list" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (expect-error "overlimit entry list ingress" 'invalid-argument
               (lambda ()
                 (state-dict-create-unsafe-internal
@@ -979,20 +1579,23 @@
           'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
           (repeat-value 4097 '()))))
   (expect-error "overlimit alias group list" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
           (list (repeat-value 4097 '("z"))))))
   (expect-error "overlimit alias member list" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 '()
-          '(transformer-tensor-provider 1 0 fixture-v1 extra)
+          '(transformer-tensor-provider 2 0 fixture-v1 extra)
           valid-entries (state-dict-alias-groups source-state))))
   (expect-error "overlimit provider identity" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (expect-error "overlimit provider admission evidence" 'invalid-argument
               (lambda ()
                 (fixture-register-overlimit-evidence-provider-internal!)))
@@ -1021,88 +1624,39 @@
                 (state-entry-internal '("z") 'parameter '(2) 'f32
                                       (nest-vector 17 'cpu)
                                       'dense-row-major-contiguous z-tensor)))
-(let ((entry
-        (state-entry-internal
-          '("z") 'parameter (state-entry-shape-internal z-entry)
-          (state-entry-dtype-internal z-entry) (make-vector 4096 'cpu)
-          (state-entry-layout-internal z-entry) z-tensor)))
-  (expect-error "overlimit validated device node budget" 'corrupt-data
-                (lambda ()
-                  (load-state!
-                    destination
-                    (restate source-state
-                      (replace-entry valid-entries '("z") entry)
-                      (state-dict-alias-groups source-state))))))
-(let ((entry
-        (state-entry-internal
-          '("z") 'parameter (state-entry-shape-internal z-entry)
-          (state-entry-dtype-internal z-entry) (make-vector 4095 'cpu)
-          (state-entry-layout-internal z-entry) z-tensor)))
-  (expect-error "exact validated device node budget is admitted"
-                'device-mismatch
-                (lambda ()
-                  (load-state!
-                    destination
-                    (restate source-state
-                      (replace-entry valid-entries '("z") entry)
-                      (state-dict-alias-groups source-state))))))
-
 (expect-error "improper accessor path" 'invalid-argument
               (lambda ()
                 (state-dict-tensor source-state (cons "z" 'tail))))
-(let ((entry
-        (state-entry-internal
-          (cons "z" 'tail) 'parameter
-          (state-entry-shape-internal z-entry)
-          (state-entry-dtype-internal z-entry)
-          (state-entry-device-internal z-entry)
-          (state-entry-layout-internal z-entry) z-tensor)))
-  (expect-error "improper entry path" 'corrupt-data
-                (lambda ()
-                  (load-state!
-                    destination
-                    (restate source-state
-                      (replace-entry valid-entries '("z") entry)
-                      (state-dict-alias-groups source-state))))))
-(let ((entry
-        (state-entry-internal
-          '("z") 'parameter (cons 2 2)
-          (state-entry-dtype-internal z-entry)
-          (state-entry-device-internal z-entry)
-          (state-entry-layout-internal z-entry) z-tensor)))
-  (expect-error "improper entry shape" 'corrupt-data
-                (lambda ()
-                  (load-state!
-                    destination
-                    (restate source-state
-                      (replace-entry valid-entries '("z") entry)
-                      (state-dict-alias-groups source-state))))))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 (cons 'feature 'tail)
           valid-provider-identity valid-entries
           (state-dict-alias-groups source-state))))
   (expect-error "improper feature list" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 '() (cons 'transformer-tensor-provider
                                                'tail)
           valid-entries (state-dict-alias-groups source-state))))
   (expect-error "improper provider identity" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
           (cons '(("block" "alpha") ("z")) 'tail))))
   (expect-error "improper alias list" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (let ((state
         (state-dict-create-unsafe-internal
           'transformer-state-dict 1 0 '() valid-provider-identity valid-entries
           (list (cons '("block" "alpha") 'improper-tail)))))
   (expect-error "improper alias member list" 'corrupt-data
-                (lambda () (load-state! destination state))))
+                (lambda () (load-state! destination state)))
+  (state-dict-release! state))
 (expect-error "improper entry list ingress" 'invalid-argument
               (lambda ()
                 (state-dict-create-unsafe-internal
@@ -1122,6 +1676,11 @@
          (module-register-buffer-internal!
            mutable-after-failure "after"
            (buffer-payload 'mutable-after-failure))))
+
+;; Successful long-lived fixture snapshots are explicit owners too.
+(state-dict-release! destination-state)
+(state-dict-release! source-state)
+(state-dict-release! buffers)
 
 (display "P1 PASS: ")
 (display checks)

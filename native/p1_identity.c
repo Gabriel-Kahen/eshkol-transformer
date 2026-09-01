@@ -66,7 +66,8 @@ _Static_assert(offsetof(et_p1_token, nonce_lo) == 0u &&
                "P1 caller token nonce layout changed");
 _Static_assert(sizeof(et_p1_record) == 256u,
                "P1 private registry record layout changed");
-_Static_assert(offsetof(et_p1_record, callbacks) == 32u &&
+_Static_assert(offsetof(et_p1_record, binding) == 24u &&
+                   offsetof(et_p1_record, callbacks) == 32u &&
                    offsetof(et_p1_record, kind) == 88u &&
                    offsetof(et_p1_record, provider_id) == 128u,
                "P1 private registry record offsets changed");
@@ -80,6 +81,7 @@ static et_p1_context *contexts;
 static uint8_t private_context_claimed;
 #if defined(ET_P1_TEST_HOOKS)
 static int64_t test_callback_successes_before_failure = INT64_C(-1);
+static uint8_t test_state_bind_fail_next;
 #endif
 
 static et_p1_record *find_record(const void *candidate) {
@@ -120,11 +122,15 @@ static int context_integrity(const et_p1_context *context) {
 }
 #endif
 
-static int token_integrity(const et_p1_record *record) {
-  return record != NULL && record->token != NULL && record->live != 0u &&
-         record->origin_pid == (int64_t)getpid() &&
+static int token_identity_integrity(const et_p1_record *record) {
+  return record != NULL && record->token != NULL &&
          record->token->nonce_lo == record->expected_nonce_lo &&
          record->token->nonce_hi == record->expected_nonce_hi;
+}
+
+static int token_integrity(const et_p1_record *record) {
+  return token_identity_integrity(record) && record->live != 0u &&
+         record->origin_pid == (int64_t)getpid();
 }
 
 #if !defined(ET_P1_TRUSTED_BUILD)
@@ -225,19 +231,13 @@ static et_p1_record *require_token(et_p1_context *context,
                     "token identity is foreign");
     return NULL;
   }
-  if (record->live == 0u) {
-    (void)set_error(context, ET_P1_STATUS_INVALID_STATE,
-                    ET_P1_CODE_STALE_TOKEN, operation,
-                    "token identity is stale or revoked");
-    return NULL;
-  }
   if (record->origin_pid != (int64_t)getpid()) {
     (void)set_error(context, ET_P1_STATUS_UNSUPPORTED,
                     ET_P1_CODE_FORKED_PROCESS, operation,
                     "token identity belongs to a different process");
     return NULL;
   }
-  if (!token_integrity(record)) {
+  if (!token_identity_integrity(record)) {
     (void)set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
                     ET_P1_CODE_TOKEN_INTEGRITY, operation,
                     "token identity is foreign or invalid");
@@ -253,6 +253,12 @@ static et_p1_record *require_token(et_p1_context *context,
     (void)set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
                     ET_P1_CODE_WRONG_TOKEN_KIND, operation,
                     "token has the wrong identity kind");
+    return NULL;
+  }
+  if (record->live == 0u) {
+    (void)set_error(context, ET_P1_STATUS_INVALID_STATE,
+                    ET_P1_CODE_STALE_TOKEN, operation,
+                    "token identity is stale or revoked");
     return NULL;
   }
   return record;
@@ -334,10 +340,14 @@ ET_P1_PUBLIC int64_t et_p1_public_token_kind_v1(const void *token) {
   if (entry == NULL) {
     return ET_P1_TOKEN_FOREIGN;
   }
+  if (entry->origin_pid != (int64_t)getpid() ||
+      !token_identity_integrity(entry)) {
+    return ET_P1_TOKEN_FOREIGN;
+  }
   if (entry->live == 0u) {
     return -entry->kind;
   }
-  return token_integrity(entry) ? entry->kind : ET_P1_TOKEN_FOREIGN;
+  return entry->kind;
 }
 
 ET_P1_PUBLIC int64_t et_p1_public_token_live_v1(const void *token) {
@@ -442,6 +452,36 @@ ET_P1_DEFINE_CREATE(et_p1_private_state_entry_create_v1,
                     ET_P1_TOKEN_STATE_ENTRY, "p1-state-entry-create")
 
 #undef ET_P1_DEFINE_CREATE
+
+ET_P1_PRIVATE int64_t et_p1_private_state_entry_create_for_state_v1(
+    void *candidate, void *state) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_record *state_token;
+  et_p1_record *entry_token;
+  int64_t status;
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  state_token = require_token(context, state, ET_P1_TOKEN_STATE_DICT,
+                              "p1-state-entry-create-for-state");
+  if (state_token == NULL) {
+    return context->error.category;
+  }
+  status = create_token(context, ET_P1_TOKEN_STATE_ENTRY,
+                        "p1-state-entry-create-for-state", NULL, 0u);
+  if (status != ET_P1_STATUS_OK) {
+    return status;
+  }
+  entry_token = find_record(context->result_ptr);
+  if (entry_token == NULL) {
+    return set_error(context, ET_P1_STATUS_INTERNAL,
+                     ET_P1_CODE_ALLOCATION_FAILED,
+                     "p1-state-entry-create-for-state",
+                     "created state entry identity is missing");
+  }
+  entry_token->binding = state_token;
+  return ET_P1_STATUS_OK;
+}
 
 ET_P1_PRIVATE int64_t
 et_p1_private_callback_identity_create_v1(void *candidate) {
@@ -604,6 +644,11 @@ ET_P1_PRIVATE int64_t et_p1_private_provider_seal_v1(
   if (provider_token == NULL) {
     return context->error.category;
   }
+  if (provider_token->binding != NULL) {
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_ALREADY_SEALED, "p1-provider-seal",
+                     "provider uses a different callback interface");
+  }
   if (require_callback_set(context, callbacks, "p1-provider-seal") != 0) {
     return context->error.category;
   }
@@ -652,6 +697,12 @@ ET_P1_PRIVATE int64_t et_p1_private_provider_snapshot_matches_v1(
   if (provider_token == NULL) {
     return context->error.category;
   }
+  if (provider_token->binding != NULL) {
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_SNAPSHOT_MISMATCH,
+                     "p1-provider-snapshot-matches",
+                     "provider uses a different callback interface");
+  }
   if (provider_token->sealed == 0u) {
     return set_error(context, ET_P1_STATUS_INVALID_STATE,
                      ET_P1_CODE_SNAPSHOT_MISMATCH,
@@ -671,6 +722,148 @@ ET_P1_PRIVATE int64_t et_p1_private_provider_snapshot_matches_v1(
     }
   }
   return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_provider_seal_release_v1(
+    void *candidate, void *provider, void *describe, void *clone,
+    void *storage_identical, void *value_equal, void *device_equal,
+    void *prepare, void *commit, void *release_owned) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_record *provider_token;
+  et_p1_record *release_token;
+  void *callbacks[ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT] = {
+      describe, clone, storage_identical, value_equal, device_equal, prepare,
+      commit};
+  size_t index;
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  provider_token = require_token(context, provider, ET_P1_TOKEN_PROVIDER,
+                                 "p1-provider-seal-release");
+  if (provider_token == NULL) {
+    return context->error.category;
+  }
+  if (require_callback_set(context, callbacks,
+                           "p1-provider-seal-release") != 0) {
+    return context->error.category;
+  }
+  release_token = require_token(context, release_owned,
+                                ET_P1_TOKEN_CALLBACK_IDENTITY,
+                                "p1-provider-seal-release");
+  if (release_token == NULL) {
+    return context->error.category;
+  }
+  for (index = 0u; index < ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT; index++) {
+    if (callbacks[index] == release_owned) {
+      return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                       ET_P1_CODE_SNAPSHOT_MISMATCH,
+                       "p1-provider-seal-release",
+                       "provider callback identities must be distinct");
+    }
+  }
+  if (provider_token->sealed != 0u) {
+    if (provider_token->binding != release_token ||
+        release_token->binding != provider_token) {
+      return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                       ET_P1_CODE_ALREADY_SEALED,
+                       "p1-provider-seal-release",
+                       "provider has a conflicting immutable snapshot");
+    }
+    for (index = 0u; index < ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT; index++) {
+      if (provider_token->callbacks[index] != find_record(callbacks[index])) {
+        return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                         ET_P1_CODE_ALREADY_SEALED,
+                         "p1-provider-seal-release",
+                         "provider has a conflicting immutable snapshot");
+      }
+    }
+    return ET_P1_STATUS_OK;
+  }
+  if (provider_token->binding != NULL || release_token->binding != NULL) {
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_SNAPSHOT_MISMATCH,
+                     "p1-provider-seal-release",
+                     "callback identity is already sealed into a provider");
+  }
+  for (index = 0u; index < ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT; index++) {
+    et_p1_record *callback = find_record(callbacks[index]);
+    if (callback == NULL || callback->binding != NULL) {
+      return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                       ET_P1_CODE_SNAPSHOT_MISMATCH,
+                       "p1-provider-seal-release",
+                       "callback identity is already sealed into a provider");
+    }
+  }
+  for (index = 0u; index < ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT; index++) {
+    et_p1_record *callback = find_record(callbacks[index]);
+    provider_token->callbacks[index] = callback;
+    callback->binding = provider_token;
+  }
+  provider_token->binding = release_token;
+  release_token->binding = provider_token;
+  provider_token->sealed = 1u;
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_provider_snapshot_matches_release_v1(
+    void *candidate, const void *provider, const void *describe,
+    const void *clone, const void *storage_identical, const void *value_equal,
+    const void *device_equal, const void *prepare, const void *commit,
+    const void *release_owned) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_record *provider_token;
+  const et_p1_record *release_token;
+  const void *callbacks[ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT] = {
+      describe, clone, storage_identical, value_equal, device_equal, prepare,
+      commit};
+  size_t index;
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  provider_token = require_token(context, provider, ET_P1_TOKEN_PROVIDER,
+                                 "p1-provider-snapshot-matches-release");
+  if (provider_token == NULL) {
+    return context->error.category;
+  }
+  release_token = require_token(context, release_owned,
+                                ET_P1_TOKEN_CALLBACK_IDENTITY,
+                                "p1-provider-snapshot-matches-release");
+  if (release_token == NULL || provider_token->sealed == 0u ||
+      provider_token->binding != release_token ||
+      release_token->binding != provider_token) {
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_SNAPSHOT_MISMATCH,
+                     "p1-provider-snapshot-matches-release",
+                     "provider release callback snapshot differs");
+  }
+  for (index = 0u; index < ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT; index++) {
+    const et_p1_record *callback = find_record(callbacks[index]);
+    if (provider_token->callbacks[index] != callback ||
+        !token_integrity(callback) ||
+        callback->kind != ET_P1_TOKEN_CALLBACK_IDENTITY ||
+        callback->owner != context || callback->binding != provider_token) {
+      return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                       ET_P1_CODE_SNAPSHOT_MISMATCH,
+                       "p1-provider-snapshot-matches-release",
+                       "provider callback identity snapshot differs");
+    }
+  }
+  return ET_P1_STATUS_OK;
+}
+
+static void revoke_state_dependents(et_p1_record *state_token,
+                                    int revoke_entries,
+                                    int revoke_tensors) {
+  et_p1_record *cursor = records;
+  while (cursor != NULL) {
+    if (cursor->live != 0u && cursor->binding == state_token &&
+        ((revoke_entries != 0 && cursor->kind == ET_P1_TOKEN_STATE_ENTRY) ||
+         (revoke_tensors != 0 && cursor->kind == ET_P1_TOKEN_STATE_TENSOR))) {
+      cursor->binding = NULL;
+      cursor->live = 0u;
+    }
+    cursor = cursor->next;
+  }
 }
 
 ET_P1_PRIVATE int64_t et_p1_private_state_bind_v1(
@@ -696,7 +889,16 @@ ET_P1_PRIVATE int64_t et_p1_private_state_bind_v1(
                      ET_P1_CODE_SNAPSHOT_MISMATCH, "p1-state-bind",
                      "provider identity is not admitted and sealed");
   }
+#if defined(ET_P1_TEST_HOOKS)
+  if (test_state_bind_fail_next != 0u) {
+    test_state_bind_fail_next = 0u;
+    return set_error(context, ET_P1_STATUS_INTERNAL,
+                     ET_P1_CODE_ALLOCATION_FAILED, "p1-state-bind",
+                     "injected state binding failure");
+  }
+#endif
   if (state_token->binding == NULL) {
+    revoke_state_dependents(state_token, 1, 0);
     state_token->binding = provider_token;
     return ET_P1_STATUS_OK;
   }
@@ -707,6 +909,13 @@ ET_P1_PRIVATE int64_t et_p1_private_state_bind_v1(
                    ET_P1_CODE_BINDING_CONFLICT, "p1-state-bind",
                    "state is already bound to a different provider identity");
 }
+
+#if defined(ET_P1_TEST_HOOKS)
+ET_P1_PRIVATE int64_t et_p1_test_state_bind_fail_next_v1(void) {
+  test_state_bind_fail_next = 1u;
+  return ET_P1_STATUS_OK;
+}
+#endif
 
 ET_P1_PRIVATE int64_t et_p1_private_state_provider_v1(
     void *candidate, const void *state) {
@@ -757,8 +966,117 @@ ET_P1_PRIVATE int64_t et_p1_private_state_revoke_v1(void *candidate,
   if (state_token == NULL) {
     return context->error.category;
   }
+  revoke_state_dependents(state_token, 1, 1);
   state_token->binding = NULL;
   state_token->live = 0u;
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_state_tensor_create_v1(void *candidate,
+                                                            void *state) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_record *state_token;
+  et_p1_record *tensor_token;
+  int64_t status;
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  state_token = require_token(context, state, ET_P1_TOKEN_STATE_DICT,
+                              "p1-state-tensor-create");
+  if (state_token == NULL) {
+    return context->error.category;
+  }
+  if (state_token->binding == NULL) {
+    return set_error(context, ET_P1_STATUS_UNSUPPORTED,
+                     ET_P1_CODE_UNBOUND_STATE, "p1-state-tensor-create",
+                     "state has no admitted provider binding");
+  }
+  status = create_token(context, ET_P1_TOKEN_STATE_TENSOR,
+                        "p1-state-tensor-create", NULL, 0u);
+  if (status != ET_P1_STATUS_OK) {
+    return status;
+  }
+  tensor_token = find_record(context->result_ptr);
+  if (tensor_token == NULL) {
+    return set_error(context, ET_P1_STATUS_INTERNAL,
+                     ET_P1_CODE_ALLOCATION_FAILED,
+                     "p1-state-tensor-create",
+                     "created state tensor identity is missing");
+  }
+  tensor_token->binding = state_token;
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_state_tensor_validate_v1(
+    void *candidate, const void *state, const void *tensor) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_record *state_token;
+  et_p1_record *tensor_token;
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  state_token = require_token(context, state, ET_P1_TOKEN_STATE_DICT,
+                              "p1-state-tensor-validate");
+  if (state_token == NULL) {
+    return context->error.category;
+  }
+  tensor_token = require_token(context, tensor, ET_P1_TOKEN_STATE_TENSOR,
+                               "p1-state-tensor-validate");
+  if (tensor_token == NULL) {
+    return context->error.category;
+  }
+  if (tensor_token->binding != state_token) {
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_CROSS_STATE,
+                     "p1-state-tensor-validate",
+                     "state tensor belongs to a different state");
+  }
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_state_release_begin_v1(void *candidate,
+                                                            void *state) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_record *state_token;
+  if (context == NULL) {
+    return ET_P1_STATUS_INVALID_ARGUMENT;
+  }
+  if (state == NULL) {
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_NULL_ARGUMENT, "p1-state-release-begin",
+                     "token is null");
+  }
+  state_token = find_record(state);
+  if (state_token == NULL) {
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_FOREIGN_TOKEN, "p1-state-release-begin",
+                     "token identity is foreign");
+  }
+  if (state_token->origin_pid != (int64_t)getpid() ||
+      state_token->token->nonce_lo != state_token->expected_nonce_lo ||
+      state_token->token->nonce_hi != state_token->expected_nonce_hi) {
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_TOKEN_INTEGRITY, "p1-state-release-begin",
+                     "token identity is foreign or invalid");
+  }
+  if (state_token->owner != context) {
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_CROSS_CONTEXT, "p1-state-release-begin",
+                     "token belongs to a different private context");
+  }
+  if (state_token->kind != ET_P1_TOKEN_STATE_DICT) {
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_WRONG_TOKEN_KIND, "p1-state-release-begin",
+                     "token has the wrong identity kind");
+  }
+  if (state_token->live == 0u) {
+    context->result_i64 = 0;
+    return ET_P1_STATUS_OK;
+  }
+  revoke_state_dependents(state_token, 1, 1);
+  state_token->binding = NULL;
+  state_token->live = 0u;
+  context->result_i64 = 1;
   return ET_P1_STATUS_OK;
 }
 

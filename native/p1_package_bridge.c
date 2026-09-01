@@ -28,6 +28,7 @@ P1_DECLARE_UNARY(et_e1b_private_p1_parameter_handle_device_cabi_v1);
 P1_DECLARE_UNARY(et_e1b_private_p1_state_dict_paths_cabi_v1);
 P1_DECLARE_BINARY(et_e1b_private_p1_state_dict_tensor_cabi_v1);
 P1_DECLARE_UNARY(et_e1b_private_p1_state_dict_alias_groups_cabi_v1);
+P1_DECLARE_UNARY(et_e1b_private_p1_state_dict_release_cabi_v1);
 
 #define P1_PUBLIC_UNARY(name, target)                                        \
   void name(void *input, void *output) {                                     \
@@ -80,3 +81,5 @@ P1_PUBLIC_BINARY(et_e1b_public_p1_state_dict_tensor_v1,
                  et_e1b_private_p1_state_dict_tensor_cabi_v1)
 P1_PUBLIC_UNARY(et_e1b_public_p1_state_dict_alias_groups_v1,
                 et_e1b_private_p1_state_dict_alias_groups_cabi_v1)
+P1_PUBLIC_UNARY(et_e1b_public_p1_state_dict_release_v1,
+                et_e1b_private_p1_state_dict_release_cabi_v1)

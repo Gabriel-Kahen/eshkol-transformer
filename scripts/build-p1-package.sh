@@ -22,6 +22,10 @@ cmp "${PROJECT_ROOT}/native/p1_package_defined_symbols.txt" \
 cmp "${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt" \
   "${output}.evidence/undefined.txt" || \
   die "P1 package differs from the exact undefined-symbol manifest"
+[[ "$(wc -l <"${output}.evidence/global-defined.txt")" == 24 ]] || \
+  die "P1 package must expose exactly E1 6 + P1 18 global definitions"
+[[ "$(wc -l <"${output}.evidence/package-exports.txt")" == 18 ]] || \
+  die "P1 package must expose exactly 18 public P1 wrappers"
 
 if nm -u --format=posix "${output}" | awk '{ print $1 }' | \
     grep -E '^(et_e1b_|et_p1_|transformer-error-|e1-internal-dispatch)' \

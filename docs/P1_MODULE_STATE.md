@@ -2,20 +2,22 @@
 
 ## Boundary
 
-P1 implements the existing A0 `transformer.module` names and arities. It adds no
-public constructor, registration operation, tensor descriptor, state-version
-accessor, or serialized format. Library construction and malformed-state helpers
+P1 implements the existing A0 `transformer.module` names and arities and adds the
+public unary `state-dict-release!` lifetime operation. It adds no public constructor,
+registration operation, tensor descriptor, state-version accessor, serialized
+format, or generic privileged dispatcher. Library construction and malformed-state helpers
 remain in the explicitly unstable trusted replacement root at
 `internal/p1/lib/transformer/module.esk`. The two Eshkol roots are mutually exclusive generated products of one
-canonical template. The public root provides exactly the 17 A0 bindings and never
+canonical template. The public root provides exactly 18 bindings and never
 imports or references the trusted root; the trusted root independently provides the
-same 17 bindings plus the pre-existing construction/provider helpers.
+same 18 bindings plus fixed-arity construction, provider, scoped-borrow, and
+state-adoption helpers.
 
 Pinned Eshkol flattening cannot protect a provider seam inside one compiled source
-closure. P1 therefore uses a narrow native identity bridge, version 1.0, and a
+closure. P1 therefore uses a narrow native identity bridge, version 1.1, and a
 single prelocalized E1B package object. That object owns the process's sole E1
-registry, the trusted P1 root, the private identity implementation, and 17 fixed-
-arity transport wrappers. Its exact global surface is those 17 A0 operations plus
+registry, the trusted P1 root, the private identity implementation, and 18 fixed-
+arity transport wrappers. Its exact global surface is those 18 operations plus
 the six A0 error accessors. Every E1B seam, generated P1 thunk, and public/private
 identity definition inside it is local. The separately built four-symbol read-only
 identity archive remains an alternative inspection product and is never linked
@@ -41,7 +43,7 @@ cause `#f`, snapshotting status before cleanup can overwrite it. Exact valid
 status/code pairs are admitted; unknown or impossible pairs map to bounded
 `internal` diagnostics. The installed root
 imports only `transformer.error_consumer` and declares narrow boxed calls. It
-provides exactly the 17 A0 P1 bindings; importing the error facade in either order
+provides exactly the 18 P1 bindings; importing the error facade in either order
 uses the same artifact registry and unchanged six accessors.
 
 ## Paths, nesting, and identity
@@ -110,12 +112,14 @@ The logical value contains:
 - the format and exact major/minor version;
 - a canonical required-feature list;
 - the inert provider identity
-  `(transformer-tensor-provider 1 0 provider-id)`;
+  `(transformer-tensor-provider 2 0 provider-id)`;
 - a raw ordered entry list, preserving duplicates for validation;
 - a canonical parameter-only alias graph.
 
 Each entry contains its logical path, kind (`parameter` or `buffer`), redundant
-shape/dtype/device/layout metadata, and one owned tensor snapshot. Metadata never
+shape/dtype/device/layout metadata, and one owned tensor snapshot. Every owned clone
+has exactly one ledger owner and is either transferred into one live state or
+released exactly once. Metadata never
 overrides the tensor. Before mutation, the loader independently validates tensor
 rank/extents, dtype, device, and dense row-major contiguity, then requires exact
 agreement with entry metadata and the destination leaf.
@@ -136,15 +140,78 @@ vectors, copied visible metadata, and transplanted tokens cannot authorize a bin
 Bindings are omitted from logical/serialized state and never reconstructed from the
 inert provider identity.
 
-`state-dict-bind-provider-internal!` is the trusted C1/I1 handoff. Its caller must
-explicitly name an already admitted provider chosen through trusted policy and
-capability validation. Before adding a binding, it validates the exact state and
-provider-interface versions, provider ID, every tensor/metadata entry, storage
-independence, and aliases using that caller-selected provider. Rebinding the same
+`state-dict-bind-provider-internal!` is the trusted handoff for preconstructed test
+states. A nonempty unsafe state is bindable only when construction captured exact
+registered source-entry and source-state shells from live owned states. First bind
+resolves that provenance before any tensor callback, pins every unique source state,
+clones every borrowed carrier into a preallocated exact-once ownership ledger, and
+unpins only after the last source dereference. Native binding then atomically adopts
+the clones and revokes only the target state's replaced entry identities; the target becomes an independently owned state requiring explicit
+`state-dict-release!`. Published entry shells for the target's pre-bind borrowed
+entries become `invalid-state` tombstones when the entry list is replaced. Released
+or mismatched provenance fails before a tensor callback, direct unproven nonempty
+construction is unsupported, and clone or native-bind failure releases every
+published clone while leaving the target unbound and retryable.
+
+The private pre-state `state-entry-internal` constructor returns an unregistered raw
+construction value to its trusted caller. P1 stores no hidden registry edge to that
+value or its borrowed carrier, and the value cannot establish ownership or bindable
+provenance. Only `state-dict-entries-internal` creates opaque entry identities, and
+those identities are scoped to the exact owning state.
+
+The release-aware C1 decoder instead uses one fixed-arity adoption seam that
+validates a caller ledger before transferring every decoded carrier into one live
+state. Its reviewed trusted-workstream caller must explicitly name an already
+admitted provider chosen through trusted policy and capability validation. Before
+adding a binding, it validates the exact state and provider-interface versions,
+provider ID, every tensor/metadata entry, storage independence, and aliases using
+that trusted-workstream-selected provider, never a provider selected by application
+input or checkpoint bytes. Adoption is rejected
+before transfer if the ledger repeats an envelope identity or a carrier identity;
+the caller retains the complete ledger on every such rejection. The sole exception
+is ownership confusion: before any provider, record, or metadata check, P1 clears
+every envelope that falsely names storage already owned by a live P1 state or
+borrowed by a registered module. This prevents caller rollback from releasing that
+protected storage; all genuinely owned siblings remain in the caller ledger for
+exact-once cleanup. Rebinding the same
 state/provider is identity-preserving and idempotent. Conflicting, unknown,
 unadmitted, malformed, or incompatible bindings fail through E1 without changing
 the existing binding. Unbound states cannot be inspected or loaded and fail
 `unsupported`. State metadata is never used to select or load executable code.
+
+`state-dict-tensor` returns one cached opaque, read-only state-backed identity per
+entry. It never creates another native tensor clone. A trusted synchronous consumer
+must resolve the exact `(state, handle)` pair through P1, which validates native
+identity, state ownership, entry membership, provider binding, and liveness before
+returning the carrier. The consumer ends that borrow in the same call and retains no
+raw pointer or storage view. The state is serialized and nonreentrant while such a
+borrow is active. The private begin/end pair is authority available only to reviewed
+trusted aggregate consumers: such a consumer must not reenter `borrow-end` or public
+release from one of its own callbacks. End authenticates the exact state/handle pair,
+not an application-visible per-borrow capability, so defect containment for a
+malicious trusted consumer is not claimed; I2/C1 executable evidence must prove the
+one-call begin/use/end discipline.
+
+`state-dict-release!` is public, arity 1, and P1-specific. It rejects before mutation
+when a scoped borrow is active. Otherwise its first transition invalidates the state
+and all dependent state-entry and state-tensor identities before provider destruction begins, clears
+every entry carrier, and releases the state ownership ledger exactly once. Repeated
+calls are no-provider-callback, no-native-identity-allocation success. Forged,
+copied, mutated, foreign,
+unregistered, and wrong-kind values are `invalid-argument`; an exact registered dead
+state or dependent handle used by any non-release accessor, load, borrow, or
+serialization path is `invalid-state` before carrier dereference. Cross-state handle
+pairs are `invalid-argument`. Detached copies
+returned by `state-dict-paths` and `state-dict-alias-groups` remain ordinary data and
+may outlive release. Small native identity tombstones may remain for process-lifetime
+stale-authority rejection, but they retain no tensor carrier or storage.
+The Eshkol shell registry likewise replaces every released state, dependent tensor,
+and registered entry edge with a shared compact dead marker on successful release,
+callback-defect cleanup, and post-shell construction rollback. It does not retain the
+released state, entry list, paths, shapes, devices, aliases, or carrier graph.
+The pinned runtime supplies no proved finalizer, so callers must explicitly release
+every successfully returned state. P1 neither hides abandoned states in a strong
+snapshot registry nor treats GC reachability as native-storage reclamation.
 
 ## Strict atomic load
 
@@ -157,15 +224,16 @@ Loading never constructs a module and never performs a partial load. The loader:
    destination assignments without mutating a destination;
 5. invokes exactly one provider commit for the complete prepared batch.
 
-The internal provider-v1 boundary stores seven compile-checked unary callbacks:
+The internal provider 2.0 boundary stores eight compile-checked unary callbacks:
 metadata description, independent clone, storage-identity comparison, exact-value
 comparison, exact opaque-device comparison, whole-batch preparation, and whole-batch
-commit. Requests and result envelopes are vectors. Registration is explicit,
+commit, plus `release-owned!`. Requests and result envelopes are vectors. Registration is explicit,
 process-local, append-only, and rejects provider-ID collisions. It performs no
 environment lookup, dynamic load, or selection from untrusted state metadata.
 The trusted Eshkol root deep-copies a private immutable descriptor and retains the
-actual callbacks; native code stores only seven inert callback-identity tokens and
-never receives an Eshkol closure, tensor, payload, plan, or descriptor pointer.
+actual callbacks; native code stores seven legacy callback-identity slots plus one
+release identity in the compatible 1.1 binding extension and never receives an
+Eshkol closure, tensor, payload, plan, or descriptor pointer.
 Modules retain the admitted private snapshot while logical state dictionaries store
 only the inert versioned identity above.
 
@@ -179,7 +247,22 @@ Registration requires two through sixteen nontrivial, storage-disjoint scratch
 assignments. It proves that preparation leaves every source and destination
 unchanged, commit mutates every destination in one batch while preserving exact
 destination identity, sources remain unchanged, the exact plan-carrier vector is
-returned, and a second commit is rejected. Substitution/allocation of a replacement,
+returned, a second commit is rejected, and every admission clone is released. Clone
+uses a mutable four-slot request envelope and may publish ownership in slot 3 exactly
+once. That slot is single-assignment: a callback may never clear or replace a
+publication, including before raising. Any owned value overwritten before P1 can
+observe it would be an unrepairable provider leak, so each integrating provider must
+prove this rule in executable evidence. Each successful publication must have a new exact carrier
+identity: it cannot be any borrowed carrier in the complete precomputed state or
+admission-evidence input set, the request or its borrowed fields, or an earlier
+owned publication. P1 rejects those ownership-confusion cases before
+making the new envelope actionable, so it never releases a live input and releases
+each prior physical owner once. The check includes carriers in every other live P1
+state and every registered module parameter/buffer, not only the current operation.
+Release consumes one P1-owned carrier, returns the exact same
+preallocated request envelope as acknowledgment, and is admitted as nonallocating,
+nonraising, nonreentrant, and semantically infallible after P1 prevalidation.
+Substitution/allocation of a replacement,
 a raised error, a partial result, or reentrant registration rejects admission
 atomically. Failed admission revokes every newly created callback identity and the
 unpublished provider identity, restoring the exact native live-entry baseline;
@@ -192,6 +275,29 @@ does not claim that the compiler proves those semantic properties. Each producti
 provider must supply its own reviewed executable evidence before registration is
 permitted by its integrating workstream.
 
+P1 clears an ownership ledger before invoking release, continues through all
+remaining owners if a defective callback raises or returns malformed acknowledgment,
+and reports the first defect without retrying a consumed carrier. This applies to
+clone validation, partial state creation, provider-admission scratch, failed or
+successful strict-load scratch, C1 decode/adoption rollback, and explicit state
+release. A provider release callback is never called for live module parameters,
+live gradients, live optimizer storage, or caller/provider-owned module inputs.
+Module registration borrows its already-live carrier for the module lifetime because
+P1 has no module-release API; the integrating constructor/provider remains its owner.
+
+The trusted aggregate exposes only the fixed-arity provider preflight and
+single-envelope release mechanism needed by reviewed consumers such as C1. A later
+O2-specific wrapper may reuse those two private mechanisms only after validating its
+own optimizer-owner ledger and hard-coding its reviewed provider identity; it may not
+accept an application-selected provider or an envelope for P1 state, live parameter,
+gradient, or optimizer-moment storage owned elsewhere. O2 still needs its own
+versioned optimizer-state receiver, liveness/handle checks, and public release
+operation. P1 does not add that sixth optimizer operation or a generic dispatcher.
+As a last-chance invariant, the private release mechanism clears and rejects an
+envelope naming any live P1-state or registered-module carrier before provider lookup
+or callback. This protects a decoder that fails before adoption as well as a future
+O2 wrapper; optimizer moments and gradients remain O2's own ledger responsibility.
+
 After the first destination mutation begins, P1 invokes no callback other than the
 single admitted commit and takes no recoverable branch. It checks only that commit
 returned the already validated exact plan identity; mismatch is a trusted-provider
@@ -200,13 +306,13 @@ clone/source aliasing, aliases between independently
 registered leaves, aliases between state snapshots (including tied logical paths),
 and aliases between distinct batch destinations.
 
-## Private identity bridge 1.0
+## Private identity bridge 1.1
 
 The bridge requires 64-bit pointers and fixed-width `i64` calls. Compile-time
 assertions freeze the caller token, private registry record, context, and error-record
 sizes at 264, 256, 344, and 272 bytes. The public archive defines only four read-only functions: ABI major,
 ABI minor, token kind, and token liveness. It contains no context, constructor,
-provider, callback, bind, revoke, result, error, or generic-dispatch symbol. All 25
+provider, callback, bind, revoke, result, error, or generic-dispatch symbol. All 31
 fixed-arity private functions have hidden ELF visibility and exist only in the
 trusted replacement archive.
 
@@ -281,10 +387,12 @@ P1 must be retested against merged I1/K1 and later f32 tensor support before any
 numerical or module-capability claim. There is no scalar, CPU, dtype, Python,
 finite-difference, device, or numerical fallback.
 
-The native registry has no verified concurrency behavior and makes no concurrency
-claim. Successful opaque shells remain process-local until explicit trusted cleanup
-or process exit; it never retains an Eshkol state vector, entry, tensor snapshot, or
-closure. Strict load constructs no temporary expected state or native binding, so
-rejected and repeated loads add no registry entry. I1/C1 must retest lifetime and
-synchronization if the runtime later supplies weak references, finalizers, or
-concurrent mutation.
+The native registry has no verified concurrent-mutation behavior. P1 therefore
+requires serialized, nonreentrant state use and proves the scoped begin/end rule at
+the trusted boundary. State, state-scoped entry, and state-tensor shells become inert
+tombstones on explicit release; no finalizer or GC reachability is assumed. The registry never
+retains an Eshkol state vector, entry, tensor snapshot, carrier, raw storage pointer,
+or closure. Strict load constructs no temporary expected state or native binding, so
+rejected and repeated loads add no registry entry. Later I2, O2, and C2 work must
+retain this explicit lifetime discipline and independently prove their own receiver
+ownership contracts.

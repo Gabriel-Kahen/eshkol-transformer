@@ -15,6 +15,7 @@ public	parameter-handle-device
 public	state-dict-paths
 public	state-dict-tensor
 public	state-dict-alias-groups
+public	state-dict-release!
 internal	tensor-provider-create-internal
 internal	tensor-provider-register-internal!
 internal	module-create-internal
@@ -33,7 +34,6 @@ internal	state-entry-shape-internal
 internal	state-entry-dtype-internal
 internal	state-entry-device-internal
 internal	state-entry-layout-internal
-internal	state-entry-tensor-internal
 internal	state-dict-create-unsafe-internal
 internal	state-dict-bind-provider-internal!
 internal	state-dict-format-internal
@@ -41,3 +41,8 @@ internal	state-dict-version-internal
 internal	state-dict-features-internal
 internal	state-dict-adapter-internal
 internal	state-dict-entries-internal
+internal	state-dict-tensor-borrow-begin-internal
+internal	state-dict-tensor-borrow-end-internal
+internal	tensor-provider-preflight-internal
+internal	tensor-provider-release-owned-internal!
+internal	state-dict-adopt-owned-internal!

@@ -265,7 +265,7 @@
            (pair? (cdr (cdr adapter))) (pair? (cdr (cdr (cdr adapter))))
            (null? (cdr (cdr (cdr (cdr adapter)))))
            (eq? (car adapter) 'transformer-tensor-provider)
-           (= (car (cdr adapter)) 1) (= (car (cdr (cdr adapter))) 0)
+           (= (car (cdr adapter)) 2) (= (car (cdr (cdr adapter))) 0)
            (symbol? (car (cdr (cdr (cdr adapter))))))
       (car (cdr (cdr (cdr adapter))))
       (c1-fail 'corrupt-data operation "malformed P1 provider identity")))
@@ -279,15 +279,14 @@
         (c1-fail 'unsupported operation
                  "checkpoint and trusted codec provider identities differ"))))
 
-(define (c1-entry-descriptor entry codec payload-offset metadata-used
+(define (c1-entry-descriptor state entry codec payload-offset metadata-used
                              policy operation)
   (let* ((path (state-entry-path-internal entry))
          (kind (state-entry-kind-internal entry))
          (shape (state-entry-shape-internal entry))
          (dtype (state-entry-dtype-internal entry))
          (device (state-entry-device-internal entry))
-         (layout (state-entry-layout-internal entry))
-         (tensor (state-entry-tensor-internal entry)))
+         (layout (state-entry-layout-internal entry)))
     (if (not (c1-valid-path? path))
         (c1-fail 'corrupt-data operation "state path is outside P1 bounds"))
     (if (not (eq? device 'cpu))
@@ -313,8 +312,31 @@
                    (vector-ref policy 1)))
             (c1-fail 'invalid-state operation
                      "checkpoint allocation would exceed persistence policy"))
-        (let* ((payload ((vector-ref codec 2)
-                         (vector tensor kind shape dtype device layout operation))))
+        (let* ((handle (state-dict-tensor state path))
+               (active? #f)
+               (payload
+                 (guard (caught
+                          (#t
+                            (if active?
+                                (begin
+                                  (set! active? #f)
+                                  (state-dict-tensor-borrow-end-internal
+                                    state handle))
+                                #t)
+                            (raise caught)))
+                   (let ((tensor
+                           (state-dict-tensor-borrow-begin-internal
+                             state handle)))
+                     (set! active? #t)
+                     (let ((result
+                             ((vector-ref codec 2)
+                              (vector tensor kind shape dtype device layout
+                                      operation))))
+                       ;; The raw carrier cannot escape this synchronous codec
+                       ;; call. Clear the guard before the infallible paired end.
+                       (set! active? #f)
+                       (state-dict-tensor-borrow-end-internal state handle)
+                       result)))))
           (if (or (not (bytevector? payload))
                   (not (= (bytevector-length payload) expected)))
               (c1-fail 'internal operation
@@ -465,6 +487,7 @@
             (not (equal? version '(1 0))) (not (null? features)))
         (c1-fail 'version-mismatch operation "unsupported P1 logical state version"))
     (c1-check-codec-id operation checked-codec provider-id)
+    (tensor-provider-preflight-internal provider-id 2 0)
     (if (or (not entry-count) (> entry-count (vector-ref checked-policy 4)))
         (c1-fail 'invalid-state operation "state tensor count exceeds policy"))
     (if (or (> initial-metadata (vector-ref checked-policy 2))
@@ -522,14 +545,14 @@
               (c1-write-u32! header 88 (bytevector-length provider-bytes))
               (c1-write-u16! header 92 1)
               (c1-write-u16! header 94 0)
-              (c1-write-u16! header 96 1)
+              (c1-write-u16! header 96 2)
               (c1-write-u16! header 98 0)
               (let* ((unsigned (c1-concat (list header metadata payload)))
                      (digest (c1-sha256 (c1-concat
                                          (list c1-container-domain unsigned)))))
                 (c1-concat (list unsigned digest)))))
           (let* ((descriptor (c1-entry-descriptor
-                              (car remaining) checked-codec payload-offset
+                              state (car remaining) checked-codec payload-offset
                               metadata-used checked-policy operation))
                  (path (vector-ref descriptor 0))
                  (payload-bytes (bytevector-length (vector-ref descriptor 8)))
@@ -637,7 +660,7 @@
         (c1-fail 'corrupt-data operation "malformed checkpoint header"))
     (if (or (not (= (c1-read-u16 bytes 92) 1))
             (not (= (c1-read-u16 bytes 94) 0))
-            (not (= (c1-read-u16 bytes 96) 1))
+            (not (= (c1-read-u16 bytes 96) 2))
             (not (= (c1-read-u16 bytes 98) 0)))
         (c1-fail 'version-mismatch operation "unsupported P1 checkpoint schema"))
     (let* ((file-size (c1-read-u64 bytes 40))
@@ -849,6 +872,182 @@
         (else (c1-fail 'invalid-argument 'checkpoint-metadata-ref
                        "unknown checkpoint metadata key"))))
 
+(define (c1-release-decoded-owned! operation provider-name ownership)
+  (let ((items (vector-ref ownership 0)))
+    ;; Clear before callbacks so a raised provider defect cannot cause a retry.
+    (vector-set! ownership 0 '())
+    (let loop ((remaining items) (defect? #f))
+      (if (null? remaining)
+          (not defect?)
+          (let ((item (car remaining)))
+            (if (and (vector? item) (= (vector-length item) 4)
+                     (not (vector-ref item 0)))
+                (loop (cdr remaining) defect?)
+                (guard (caught
+                         (#t
+                           ;; Provider-2.0 callbacks are admitted as nonraising;
+                           ;; any exception is a defect, but cannot stop sibling
+                           ;; cleanup or be re-raised through nested handlers.
+                           (loop (cdr remaining) #t)))
+                  (let ((released
+                          (tensor-provider-release-owned-internal!
+                            provider-name 2 0 item)))
+                    ;; #f means P1 cleared a carrier protected by a live owner
+                    ;; without invoking the provider. Record the defect and
+                    ;; continue draining every genuine sibling.
+                    (loop (cdr remaining)
+                          (if released defect? #t))))))))))
+
+(define (c1-prior-owned-carrier? carrier envelopes)
+  (cond
+    ((null? envelopes) #f)
+    ((and (vector? (car envelopes))
+          (= (vector-length (car envelopes)) 4)
+          (vector-ref (car envelopes) 0)
+          (eq? carrier (vector-ref (car envelopes) 0)))
+     #t)
+    (else (c1-prior-owned-carrier? carrier (cdr envelopes)))))
+
+(define (c1-borrowed-state-member? carrier borrowed-state)
+  (let ((identities (vector-ref borrowed-state 0))
+        (count (vector-ref borrowed-state 1)))
+    (let loop ((index 0))
+      (if (= index count)
+          #f
+          (if (eq? carrier (vector-ref identities index))
+              #t
+              (loop (+ index 1)))))))
+
+(define (c1-borrowed-state-add! identity borrowed-state)
+  (if (c1-borrowed-state-member? identity borrowed-state)
+      #t
+      (let ((identities (vector-ref borrowed-state 0))
+            (count (vector-ref borrowed-state 1)))
+        (if (= count (vector-length identities))
+            (c1-fail 'internal 'c1-checkpoint-decode-state-internal
+                     "decode borrowed identity capacity exhausted")
+            (begin
+              (vector-set! identities count identity)
+              (vector-set! borrowed-state 1 (+ count 1))
+              #t)))))
+
+(define (c1-decode-borrowed-capacity descriptors)
+  (let loop ((remaining descriptors) (capacity 3))
+    (if (null? remaining)
+        capacity
+        ;; One descriptor, each of its fields, and its later request object.
+        (loop (cdr remaining)
+              (+ capacity 2 (vector-length (car remaining)))))))
+
+(define (c1-add-descriptor-identities! descriptor borrowed-state)
+  (c1-borrowed-state-add! descriptor borrowed-state)
+  (let loop ((index 0))
+    (if (= index (vector-length descriptor))
+        #t
+        (begin
+          (c1-borrowed-state-add!
+            (vector-ref descriptor index) borrowed-state)
+          (loop (+ index 1))))))
+
+(define (c1-complete-decode-borrowed-identities descriptors operation)
+  ;; All parsed descriptor values that can become decoder request inputs are
+  ;; known before the first callback. Preserve their exact identities across
+  ;; every request, including when a stateful codec captures an earlier one.
+  (let ((borrowed-state
+          (vector (make-vector (c1-decode-borrowed-capacity descriptors) #f)
+                  0)))
+    (c1-borrowed-state-add! operation borrowed-state)
+    (c1-borrowed-state-add! 'cpu borrowed-state)
+    (c1-borrowed-state-add! 'dense-row-major-contiguous borrowed-state)
+    (let loop ((remaining descriptors))
+      (if (null? remaining)
+          borrowed-state
+          (begin
+            (c1-add-descriptor-identities!
+              (car remaining) borrowed-state)
+            (loop (cdr remaining)))))))
+
+(define (c1-reject-invalid-publication!
+          operation published borrowed-state release-envelope prior-envelopes)
+  (if (c1-borrowed-state-member? published borrowed-state)
+      (begin
+        ;; Borrowed request inputs never transfer ownership. Clear the tentative
+        ;; ledger claim before failure so cleanup cannot release caller data.
+        (vector-set! release-envelope 0 #f)
+        (c1-fail 'internal operation
+                 "trusted codec published a borrowed decode request input"))
+      (if (c1-prior-owned-carrier? published prior-envelopes)
+          (begin
+            ;; This publication did not create a second owner. Remove the
+            ;; duplicate ledger claim before failure so the prior owner releases
+            ;; exactly once.
+            (vector-set! release-envelope 0 #f)
+            (c1-fail 'internal operation
+                     "trusted codec republished an already owned tensor"))
+          #t)))
+
+(define (c1-decode-one-owned
+          descriptor codec provider-name ownership borrowed-state operation)
+  (let* ((kind (vector-ref descriptor 1))
+         (shape (vector-ref descriptor 2))
+         (dtype (vector-ref descriptor 3))
+         (payload (vector-ref descriptor 8))
+         (request
+           (vector payload kind shape dtype 'cpu
+                   'dense-row-major-contiguous operation #f))
+         (release-envelope (vector #f kind operation #f))
+         (ledger-cell
+           (cons release-envelope (vector-ref ownership 0)))
+         ;; The success bit distinguishes a callback that returned #f from one
+         ;; that raised #f. No callback exception is re-raised from its guard.
+         (callback-outcome (vector #f #f)))
+    ;; Each request is borrowed by the callback and may be captured by a
+    ;; stateful codec. Add it to the complete cross-request identity set before
+    ;; callback entry; descriptor inputs were precomputed before the first call.
+    (c1-borrowed-state-add! request borrowed-state)
+    ;; The exact release envelope and ledger node exist before provider code
+    ;; can publish. Installing a publication is then a single bounded write.
+    (vector-set! ownership 0 ledger-cell)
+    (guard (caught
+             (#t
+               (vector-set! callback-outcome 0 #f)
+               (vector-set! callback-outcome 1 caught)
+               callback-outcome))
+      (let ((returned ((vector-ref codec 3) request)))
+        (vector-set! callback-outcome 0 #t)
+        (vector-set! callback-outcome 1 returned)
+        callback-outcome))
+    ;; Publication admission and every subsequent raise happen in ordinary
+    ;; control flow. The preinstalled envelope therefore remains reachable by
+    ;; the outer ownership ledger on callback failure, including raised #f.
+    (let ((published (vector-ref request 7)))
+      (if published
+          (begin
+            (vector-set! release-envelope 0 published)
+            (c1-reject-invalid-publication!
+              operation published borrowed-state release-envelope
+              (cdr ledger-cell)))
+          #t)
+      (if (not (vector-ref callback-outcome 0))
+          (raise (vector-ref callback-outcome 1)))
+      (let ((returned (vector-ref callback-outcome 1)))
+        (if (not (and (eq? returned request)
+                      (eq? (vector-ref request 0) payload)
+                      (eq? (vector-ref request 1) kind)
+                      (eq? (vector-ref request 2) shape)
+                      (eq? (vector-ref request 3) dtype)
+                      (eq? (vector-ref request 4) 'cpu)
+                      (eq? (vector-ref request 5)
+                           'dense-row-major-contiguous)
+                      (eq? (vector-ref request 6) operation)))
+            (c1-fail 'internal operation
+                     "trusted codec substituted its decode request"))
+        (if (not published)
+            (c1-fail 'internal operation
+                     "trusted codec did not publish an owned tensor"))
+        (vector (vector-ref descriptor 0) kind shape dtype 'cpu
+                'dense-row-major-contiguous published)))))
+
 (define (c1-checkpoint-decode-state-internal bytes policy codec provider-name)
   (let* ((operation 'c1-checkpoint-decode-state-internal)
          (checked-codec (c1-require-codec operation codec))
@@ -862,41 +1061,45 @@
     (if (not (string=? (symbol->string provider-name) provider-id))
         (c1-fail 'unsupported operation
                  "checkpoint and explicitly selected providers differ"))
-    ;; Codec calls are completed into detached carriers before any P1 entry or
-    ;; state shell is constructed. This prevents a late decoder failure from
-    ;; leaving a partially constructed logical state in P1.
-    (let decode ((remaining descriptors) (decoded '()))
-      (if (null? remaining)
-          (let build ((items (c1-reverse decoded)) (entries '()))
-            (if (null? items)
-                (let ((state
-                       (state-dict-create-unsafe-internal
-                        'transformer-state-dict 1 0 '()
-                        (list 'transformer-tensor-provider 1 0 provider-name)
-                        (c1-reverse entries) aliases)))
-                  (state-dict-bind-provider-internal! state provider-name)
-                  state)
-                (let* ((item (car items))
-                       (descriptor (vector-ref item 0)))
-                  (build
-                   (cdr items)
-                   (cons
-                    (state-entry-internal
-                     (vector-ref descriptor 0)
-                     (vector-ref descriptor 1)
-                     (vector-ref descriptor 2)
-                     (vector-ref descriptor 3)
-                     'cpu 'dense-row-major-contiguous (vector-ref item 1))
-                    entries)))))
-          (let* ((descriptor (car remaining))
-                 (kind (vector-ref descriptor 1))
-                 (shape (vector-ref descriptor 2))
-                 (dtype (vector-ref descriptor 3))
-                 (payload (vector-ref descriptor 8))
-                 (tensor ((vector-ref checked-codec 3)
-                          (vector payload kind shape dtype 'cpu
-                                  'dense-row-major-contiguous operation))))
-            (decode (cdr remaining) (cons (vector descriptor tensor) decoded)))))))
+    ;; Exact provider-interface admission is independent of the inert provider
+    ;; spelling and precedes every decoder callback.
+    (tensor-provider-preflight-internal provider-name 2 0)
+    (let ((ownership (vector '()))
+          (borrowed-state
+            (c1-complete-decode-borrowed-identities descriptors operation))
+          (outcome (vector #f #f)))
+      (guard (caught
+               (#t
+                 (vector-set! outcome 0 #f)
+                 (vector-set! outcome 1 caught)
+                 outcome))
+        ;; Each callback publishes one owned carrier through its mutable
+        ;; request. C1 owns the decoded prefix until the one-shot P1 adoption
+        ;; seam clears this ledger at its transfer point.
+        (let decode ((remaining descriptors) (decoded '()))
+          (if (null? remaining)
+              (let ((ordered (c1-reverse decoded)))
+                (vector-set! ownership 0
+                             (c1-reverse (vector-ref ownership 0)))
+                (vector-set! outcome 0 #t)
+                (vector-set!
+                  outcome 1
+                  (state-dict-adopt-owned-internal!
+                    ordered aliases provider-name 2 0 ownership)))
+              (decode
+                (cdr remaining)
+                (cons (c1-decode-one-owned
+                        (car remaining) checked-codec provider-name ownership
+                        borrowed-state operation)
+                      decoded)))))
+      (if (vector-ref outcome 0)
+          (vector-ref outcome 1)
+          (if (c1-release-decoded-owned!
+                operation provider-name ownership)
+              (raise (vector-ref outcome 1))
+              (c1-fail
+                'internal operation
+                "trusted provider release defect during decoder rollback"))))))
 
 (define (c1-valid-file-path? path)
   (and (string? path) (> (string-length path) 0)
@@ -945,4 +1148,10 @@
 (define (c1-checkpoint-load-module-internal! module path policy codec provider-name)
   (let ((state (c1-checkpoint-load-state-internal
                 path policy codec provider-name)))
-    (module-load-state-dict! module state)))
+    (guard (caught
+             (#t
+               (state-dict-release! state)
+               (raise caught)))
+      (let ((result (module-load-state-dict! module state)))
+        (state-dict-release! state)
+        result))))

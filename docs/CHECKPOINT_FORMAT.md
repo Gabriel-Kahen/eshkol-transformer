@@ -2,9 +2,8 @@
 
 ## Status and boundary
 
-This document proposes the `eshkol-checkpoint` version-1.0 byte contract. The
-decision remains **proposed** until independent review and integration-owner
-acceptance. C1 supplies a data-only container around P1 logical state. It does not
+This document specifies the accepted `eshkol-checkpoint` version-1.0 byte contract.
+C1 supplies a data-only container around P1 logical state. It does not
 change the five A0 persistence names, redefine a P1 state dictionary as a complete
 trainer state, or implement C2 exact-resume composition.
 
@@ -90,7 +89,7 @@ The fixed header is 128 bytes:
 | 88 | 4 | provider-ID bytes | 1..127 |
 | 92 | 2 | P1 state major | 1 |
 | 94 | 2 | P1 state minor | 0 |
-| 96 | 2 | P1 provider-interface major | 1 |
+| 96 | 2 | P1 provider-interface major | 2 |
 | 98 | 2 | P1 provider-interface minor | 0 |
 | 100 | 28 | reserved | all zero |
 
@@ -104,6 +103,13 @@ parser keeps it as string/bytes and never interns checkpoint-controlled text. De
 compares it with the spellings of the trusted codec and explicitly selected P1
 provider symbols. It never drives lookup; the trusted provider symbol is the only
 identity passed to P1.
+
+The container remains version 1.0 because provider-interface major/minor were
+already independent canonical header fields. Moving their required value from 1.0
+to release-capable P1 provider 2.0 changes canonical bytes and the reviewed golden
+digest, but does not add, remove, or reinterpret a container field. Provider 1.x
+headers reject as `version-mismatch` before codec or provider callbacks; a matching
+provider spelling cannot upgrade or emulate that identity.
 
 ## Entry records and payloads
 
@@ -178,27 +184,56 @@ Strict load performs, in order:
    order, schema, payload span and tensor checksum, bool bytes, and aliases;
 3. compare the inert provider identity with the explicitly supplied trusted codec
    and provider;
-4. decode every tensor into detached, independent storage through that codec before
-   constructing any P1 entry shell;
-5. construct P1 entries and one unpublished logical state, explicitly bind the
-   already admitted provider, and publish the state only after P1 validation passes.
+4. have each decoder callback publish exactly one detached owned carrier in its
+   mutable request; release the complete published prefix exactly once on callback,
+   request-shape, or later validation failure;
+5. transfer the complete ownership ledger through P1's narrow adoption seam, build
+   one unpublished logical state, explicitly bind the already admitted provider,
+   and publish only after P1 validation passes.
 
 No tensor object, P1 entry/state shell, codec callback, receiver mutation, or public
-result exists before steps 1–3 finish. A late codec failure creates no P1 shells. P1
-does not expose a cleanup/revoke operation for entry/state identities, so a binder
-rejection after step 5 may retain unreachable process-lifetime identity shells; it
-never returns a state or mutates a receiver. A later `module-load-state-dict!` retains P1's
-all-or-nothing prepare/one-commit contract. Container self-inconsistency is
+result exists before steps 1–3 finish. A late codec failure creates no P1 shells and
+releases every published owned carrier. Admission failure clears carrier references,
+releases all transferred owners, and revokes any unpublished state shell; only an
+identity tombstone without tensor storage may remain. A later
+`module-load-state-dict!` retains P1's all-or-nothing prepare/one-commit contract.
+Container self-inconsistency is
 `corrupt-data`; unsupported well-formed version/features are `version-mismatch`;
 trusted codec/provider/device-domain mismatch is `unsupported` or the precise P1
 dtype/device/layout category; system failures are `io`.
 
+The decoder publication slot is single-assignment: a callback writes it at most once
+and never clears or replaces a published owner, including before raising. An
+overwritten owner is unobservable and cannot be reclaimed by C1, so every integrating
+codec must prove this rule in its executable evidence. Every successful decoder
+publication must be a new exact carrier identity. A codec
+may not republish a carrier from an earlier request, even for tied values. C1 checks
+the new identity against the complete owned prefix immediately after publication.
+Before the first callback it records every descriptor/request-input identity, and it
+adds each newly allocated request identity before that request enters the codec, so a
+later callback cannot relabel an earlier payload, shape, or request as an owner;
+on an exact duplicate it clears the duplicate ledger envelope and fails `internal`,
+so the original owner is released exactly once. A codec also may not publish the
+request object or any borrowed request input (payload, kind, shape, dtype, device,
+layout, or operation) as its carrier. C1 clears that tentative envelope and fails
+`internal` without invoking provider release on the borrowed object. A distinct
+owned carrier that shares native storage is not confused with an exact identity;
+P1 validates storage ownership and releases that distinct owner exactly once if
+admission fails.
+
+If decoding fails before adoption, P1's narrow release helper performs a final
+registry check before provider lookup. An envelope that names storage already owned
+by a live P1 state or borrowed by a registered module is cleared and rejected without
+a release callback, while C1 continues cleaning every genuinely owned sibling. A
+defective release callback is never retried: C1 drains the remaining ledger and then
+reports one structured internal rollback defect.
+
 The file-to-module wrapper necessarily decodes and successfully binds a fresh state
-before it can compare receiver schema. A missing/unexpected path, shape, dtype,
-device, or alias-topology rejection leaves that unreachable bound state in P1's
-process-lifetime identity registry, while the receiver remains unchanged. Repeated
-rejected wrapper calls therefore grow this bounded-per-call registry state; P1
-currently exposes no safe revocation operation.
+before it can compare receiver schema. It deterministically calls public
+`state-dict-release!` after both successful and rejected receiver loads, so the
+temporary state's carriers return to the provider baseline without changing the
+receiver. Small invalidated identity tombstones may remain, but retain no tensor
+storage.
 
 ## Internal build-only API
 
@@ -209,12 +244,12 @@ registry owner; they are not independently linkable against another P1 registry.
 | Name | Contract |
 |---|---|
 | `c1-persistence-policy-internal max-file max-metadata max-tensor max-tensors device` | Return a tagged lowering policy; version 1 accepts only `cpu`. The policy is borrowed and every field/ceiling is revalidated on every use, including after caller mutation. |
-| `c1-checkpoint-codec-internal provider-id encode decode` | Build a trusted codec seam for one admitted provider spelling. The callbacks are code supplied by the trusted artifact, never by bytes. |
-| `c1-checkpoint-encode-state-internal state policy codec` | Validate a bound P1 state before invoking the codec; return newly owned canonical bytes. |
-| `c1-checkpoint-decode-state-internal bytes policy codec provider-name` | Strictly validate bytes, explicitly select the trusted provider, and return a newly owned bound P1 state. |
+| `c1-checkpoint-codec-internal provider-id encode decode` | Build a trusted codec seam for one admitted provider spelling. Encode receives a carrier only during one paired state-backed borrow. Decode receives a mutable request and must return that same request after publishing exactly one newly owned carrier. The callbacks are trusted artifact code, never selected by bytes. |
+| `c1-checkpoint-encode-state-internal state policy codec` | Validate a bound live P1 state, resolve each read-only state-backed handle only for a paired synchronous borrow, and return newly owned canonical bytes. No raw carrier is retained. |
+| `c1-checkpoint-decode-state-internal bytes policy codec provider-name` | Strictly validate bytes and exact provider interface 2.0 before callbacks, explicitly select the trusted provider, then return a newly owned releasable bound P1 state. |
 | `c1-checkpoint-save-state-internal! state path policy codec overwrite?` | Encode and atomically publish; borrow state and return `#t` on proved success. |
 | `c1-checkpoint-load-state-internal path policy codec provider-name` | Exact-read then strict-decode into a newly owned bound state. |
-| `c1-checkpoint-load-module-internal! module path policy codec provider-name` | Load a complete state, then delegate receiver mutation to P1's recoverable-error atomic load. Trusted-provider commit invariant failures are not rollback claims. |
+| `c1-checkpoint-load-module-internal! module path policy codec provider-name` | Load a complete temporary state, delegate receiver mutation to P1's recoverable-error atomic load, and release the temporary on success or failure. Trusted-provider commit invariant failures are not rollback claims. |
 | `c1-checkpoint-inspect-bytes-internal bytes policy` / `c1-checkpoint-inspect-internal path policy` | Validate the entire container without decoding tensors; return new CPU metadata. |
 | `c1-checkpoint-metadata-ref-internal metadata key` | Read `format-id`, `format-version`, `required-features`, `checksum-algorithm`, `provider-id` (newly copied string), `tensor-count`, `payload-bytes`, `metadata-bytes`, or `file-bytes`. |
 

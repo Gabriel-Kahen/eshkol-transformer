@@ -70,8 +70,9 @@ wrappers; its trusted implementation source and evidence are not application inc
 roots. See [docs/CONFIG_FORMAT.md](docs/CONFIG_FORMAT.md).
 
 The P1 structural module/state-tree gate is `make test-p1`. Its logical in-memory
-state schema, deterministic UTF-8 path ordering, tie semantics, strict loading, and
-explicit tensor-runtime limitations are documented in
+state schema, deterministic UTF-8 path ordering, tie semantics, strict loading,
+provider 2.0 exact-once ownership, explicit `state-dict-release!`, read-only
+state-backed handles, and tensor-runtime limitations are documented in
 [docs/P1_MODULE_STATE.md](docs/P1_MODULE_STATE.md). It defines no checkpoint file or
 numerical tensor capability.
 The narrow process-local native identity boundary used only to enforce P1's
@@ -88,8 +89,8 @@ T1's Eshkol-authored byte tokenizer, special-token rules, canonical artifact,
 fingerprint, C1-backed persistence limits, and exact-I1 output lifetime are specified
 in [docs/TOKENIZER_FORMAT.md](docs/TOKENIZER_FORMAT.md). The build creates one
 canonical `build/t1/libeshkol_transformer_wave1.a` aggregate from trusted source
-inputs and localizes it once. Its public boundary is exactly 46 globals: six E1
-error accessors, seventeen P1 module/state wrappers, eight D1 data wrappers, six X1
+inputs and localizes it once. Its public boundary is exactly 47 globals: six E1
+error accessors, eighteen P1 module/state wrappers, eight D1 data wrappers, six X1
 configuration wrappers, one C1 persistence-policy wrapper, and eight T1 tokenizer
 wrappers. The installed `transformer.persistence` surface contains only
 `persistence-policy`; C2 checkpoint operations remain unavailable. The authoritative

@@ -36,7 +36,7 @@ if awk -F '\t' 'NF != 2 || ($1 != "public" && $1 != "internal") || \
                     $2 == "" || seen[$2]++ { exit 1 }
                  $1 == "public" { public_count++ }
                  $1 == "internal" { internal_count++ }
-                 END { if (public_count != 17 || internal_count != 26) exit 1 }' \
+                 END { if (public_count != 18 || internal_count != 30) exit 1 }' \
     "${manifest}"; then
   :
 else

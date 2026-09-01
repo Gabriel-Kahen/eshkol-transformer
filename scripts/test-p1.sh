@@ -20,9 +20,19 @@ p1_cxx="$(tsv_value "${p1_provenance}" cxx_path)"
 p1_timeout="${P1_COMPILER_TIMEOUT_SECONDS:-360}"
 [[ "${p1_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "P1_COMPILER_TIMEOUT_SECONDS must be a positive integer"
+p1_lsan="${P1_LSAN:-0}"
+[[ "${p1_lsan}" == 0 || "${p1_lsan}" == 1 ]] || \
+  die "P1_LSAN must be 0 or 1"
 
 p1_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-p1.XXXXXX")"
-trap 'rm -rf -- "${p1_tmp}"' EXIT
+p1_cleanup() {
+  if [[ "${P1_KEEP_TMP:-0}" == 1 ]]; then
+    printf 'P1 preserved temporary evidence: %s\n' "${p1_tmp}" >&2
+  else
+    rm -rf -- "${p1_tmp}"
+  fi
+}
+trap p1_cleanup EXIT
 
 p1_public_source="${PROJECT_ROOT}/lib/transformer/module.esk"
 p1_trusted_root="${PROJECT_ROOT}/internal/p1/lib"
@@ -175,13 +185,20 @@ ESHKOL_PATH="${p1_tmp}/shadow" ESHKOL_LIB_DIR="${p1_tmp}/shadow" \
 cmp "${p1_package_object}" \
   "${p1_tmp}/package-b/eshkol_transformer_p1.o"
 for evidence in global-defined.txt undefined.txt expected-undefined.txt \
-                package-exports.txt readelf-symbols.txt link.map \
+                package-exports.txt public-strings.txt readelf-symbols.txt link.map \
                 allowlist-provenance.tsv; do
   cmp "${p1_package_object}.evidence/${evidence}" \
     "${p1_tmp}/package-b/eshkol_transformer_p1.o.evidence/${evidence}"
 done
+cmp "${PROJECT_ROOT}/native/p1_package_public_strings.txt" \
+  "${p1_package_object}.evidence/public-strings.txt" || \
+  die "P1 package public string manifest drifted"
 grep -Fx $'package_policy\tp1' \
   "${p1_package_object}.evidence/allowlist-provenance.tsv" >/dev/null
+[[ "$(wc -l <"${p1_package_object}.evidence/global-defined.txt")" == 24 ]] || \
+  die "P1 package must expose E1 6 + P1 18 global definitions"
+[[ "$(wc -l <"${p1_package_object}.evidence/package-exports.txt")" == 18 ]] || \
+  die "P1 package must expose exactly 18 public P1 wrappers"
 grep -F "${p1_trusted_source}" \
   "${p1_package_object}.evidence/private.d" >/dev/null || \
   die "P1 package depfile omits the exact trusted root"
@@ -246,7 +263,7 @@ trusted_private_count="$(readelf -Ws \
   "${p1_trusted_link}/p1_identity.o" | \
   awk '/et_p1_private_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 private symbol visibility changed"
-[[ "${trusted_private_count}" == 25 ]] || \
+[[ "${trusted_private_count}" == 31 ]] || \
   die "P1 trusted ABI symbol count changed: ${trusted_private_count}"
 
 p1_public_cflags=(
@@ -271,6 +288,7 @@ fi
   printf '%s\n' \
     et_p1_test_callback_fail_after_v1 \
     et_p1_test_live_entry_count_v1 \
+    et_p1_test_state_bind_fail_next_v1 \
     et_p1_test_tombstone_count_v1
 } | LC_ALL=C sort >"${p1_tmp}/test-trusted-symbols.expected"
 LC_ALL=C nm -g --defined-only "${p1_test_trusted_archive}" | \
@@ -281,7 +299,7 @@ cmp "${p1_tmp}/test-trusted-symbols.expected" \
 test_hook_count="$(readelf -Ws "${p1_test_trusted_link}/p1_identity.o" | \
   awk '/et_p1_test_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 test-hook visibility changed"
-[[ "${test_hook_count}" == 3 ]] || \
+[[ "${test_hook_count}" == 4 ]] || \
   die "P1 test-only hook count changed: ${test_hook_count}"
 "${p1_cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/native" \
@@ -297,15 +315,15 @@ test_hook_count="$(readelf -Ws "${p1_test_trusted_link}/p1_identity.o" | \
   "${PROJECT_ROOT}/tests/p1/test_p1_identity.c" "${p1_trusted_archive}" \
   -o "${p1_tmp}/test-p1-identity"
 "${p1_tmp}/test-p1-identity" >"${p1_tmp}/identity.stdout"
-grep -F 'P1 identity PASS: 118 checks' "${p1_tmp}/identity.stdout" >/dev/null
+grep -F 'P1 identity PASS: 274 checks' "${p1_tmp}/identity.stdout" >/dev/null
 
 "${p1_cc}" "${p1_cflags[@]}" \
   "${PROJECT_ROOT}/tests/p1/test_p1_identity_failpoints.c" \
-  "${p1_trusted_archive}" -Wl,--wrap=calloc -Wl,--wrap=getrandom \
+  "${p1_test_trusted_archive}" -Wl,--wrap=calloc -Wl,--wrap=getrandom \
   -o "${p1_tmp}/test-p1-identity-failpoints"
 "${p1_tmp}/test-p1-identity-failpoints" \
   >"${p1_tmp}/failpoints.stdout"
-grep -F 'P1 failpoint PASS: 57 checks' \
+grep -F 'P1 failpoint PASS: 123 checks' \
   "${p1_tmp}/failpoints.stdout" >/dev/null
 
 "${p1_cc}" "${p1_public_cflags[@]}" -c \
@@ -327,18 +345,28 @@ grep -F 'P1 cross-role PASS: 8 checks' \
 "${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
   "${p1_tmp}/identity-sanitize" sanitize trusted
 sanitized_archive="${p1_tmp}/identity-sanitize/trusted/libeshkol_transformer_p1_identity.a"
+sanitized_test_link="${p1_tmp}/identity-sanitize-test/trusted"
+sanitized_test_archive="${sanitized_test_link}/libeshkol_transformer_p1_identity.a"
+mkdir -p "${sanitized_test_link}"
+"${p1_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion \
+  -Wsign-conversion -Wshadow -fPIC -fvisibility=hidden -fno-common \
+  -DET_P1_TRUSTED_BUILD=1 -DET_P1_TEST_HOOKS=1 \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I "${PROJECT_ROOT}/native" -c "${PROJECT_ROOT}/native/p1_identity.c" \
+  -o "${sanitized_test_link}/p1_identity.o"
+ar rcsD "${sanitized_test_archive}" "${sanitized_test_link}/p1_identity.o"
 "${p1_cc}" "${p1_cflags[@]}" -fsanitize=address,undefined \
   -fno-omit-frame-pointer "${PROJECT_ROOT}/tests/p1/test_p1_identity.c" \
   "${sanitized_archive}" -o "${p1_tmp}/test-p1-identity-sanitized"
-ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+ASAN_OPTIONS="detect_leaks=${p1_lsan}:halt_on_error=1" \
 UBSAN_OPTIONS=halt_on_error=1 \
   "${p1_tmp}/test-p1-identity-sanitized" >/dev/null
 "${p1_cc}" "${p1_cflags[@]}" -fsanitize=address,undefined \
   -fno-omit-frame-pointer \
   "${PROJECT_ROOT}/tests/p1/test_p1_identity_failpoints.c" \
-  "${sanitized_archive}" -Wl,--wrap=calloc -Wl,--wrap=getrandom \
+  "${sanitized_test_archive}" -Wl,--wrap=calloc -Wl,--wrap=getrandom \
   -o "${p1_tmp}/test-p1-failpoints-sanitized"
-ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+ASAN_OPTIONS="detect_leaks=${p1_lsan}:halt_on_error=1" \
 UBSAN_OPTIONS=halt_on_error=1 \
   "${p1_tmp}/test-p1-failpoints-sanitized" >/dev/null
 
@@ -407,10 +435,17 @@ for run in 1 2; do
         rg 'et_p1_private_|et_e1b_(private|consumer|box|ensure)|p1-native-|module_internal' >/dev/null; then
       die "P1 public Eshkol object contains a private symbol"
     fi
-    if strings -a "${p1_tmp}/${stem}-${run}.o" | \
-        rg -i 'module_internal|p1-native-|fixture|p1-core-dispatch' >/dev/null; then
-      die "P1 public Eshkol object contains a private marker"
-    fi
+    for private_marker in module_internal p1-native- fixture p1-core-dispatch \
+        state-dict-tensor-borrow-begin-internal \
+        state-dict-tensor-borrow-end-internal \
+        tensor-provider-preflight-internal \
+        tensor-provider-release-owned-internal! \
+        state-dict-adopt-owned-internal!; do
+      if strings -a "${p1_tmp}/${stem}-${run}.o" | \
+          rg -F "${private_marker}" >/dev/null; then
+        die "P1 public Eshkol object contains private marker ${private_marker}"
+      fi
+    done
   done
   grep -F "${p1_trusted_source}" "${p1_tmp}/test-${run}.d" >/dev/null || \
     die "P1 trusted depfile omits its alternative transformer.module root"
@@ -420,7 +455,7 @@ for run in 1 2; do
   grep -F "${p1_provider_source}" "${p1_tmp}/test-${run}.d" >/dev/null || \
     die "P1 trusted depfile omits the explicit test provider"
   nm -u "${p1_tmp}/test-${run}.o" | \
-    rg 'et_p1_private_provider_seal_v1' >/dev/null || \
+    rg 'et_p1_private_provider_seal_release_v1' >/dev/null || \
     die "P1 trusted object omits its explicit private bridge reference"
 done
 
@@ -589,6 +624,7 @@ for run in 1 2; do
     includes=(-I "${PROJECT_ROOT}/lib")
     if [[ "${negative}" == negative_provider_callback_arity ]]; then
       includes=(-I "${p1_trusted_root}" -I "${PROJECT_ROOT}/lib"
+                -I "${PROJECT_ROOT}/native"
                 -I "${PROJECT_ROOT}/tests/p1/providers")
     fi
     if run_fresh_compiler "${p1_tmp}/cache-${negative}-${run}" \
@@ -618,4 +654,4 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
   die "P1 strict load creates or binds a temporary expected state"
 fi
 
-printf 'P1 PASS: E1B-integrated public/private packaging, 178 structural checks, 183 native checks, 102 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+printf 'P1 PASS: E1B-integrated public/private packaging, 303 structural checks, 405 native checks, 138 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'

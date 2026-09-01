@@ -6,8 +6,20 @@
 
 (provide module-create-fixture-internal
          fixture-tensor-internal fixture-tensor-unsafe-internal
+         fixture-owned-tensor-internal
+         fixture-owned-shared-tensor-internal
          fixture-tensor-shared-clone-internal
          fixture-reset-shared-clone-internal!
+         fixture-owned-live-count-internal
+         fixture-describe-call-count-internal
+         fixture-release-call-count-internal
+         fixture-arm-cross-publication-internal!
+         fixture-arm-clone-defect-internal!
+         fixture-fail-next-release-internal!
+         fixture-raise-false-next-release-internal!
+         fixture-malform-next-release-internal!
+         fixture-arm-reentrant-state-release-internal!
+         fixture-arm-reentrant-borrow-end-internal!
          fixture-tensor-payload-internal
          fixture-register-substituting-provider-internal!
          fixture-register-raising-provider-internal!
@@ -26,6 +38,15 @@
 (define fixture-provider-name 'fixture-v1)
 (define row-major-layout 'dense-row-major-contiguous)
 (define fixture-shared-clone-payload #f)
+(define fixture-exact-clone #f)
+(define fixture-owned-live-count 0)
+(define fixture-describe-call-count 0)
+(define fixture-release-call-count 0)
+(define fixture-cross-publication-carrier #f)
+(define fixture-clone-defect #f)
+(define fixture-release-defect #f)
+(define fixture-reentrant-release-state #f)
+(define fixture-reentrant-borrow #f)
 (define fixture-max-shape-rank 64)
 (define fixture-max-data-depth 16)
 (define fixture-max-data-nodes 4096)
@@ -100,15 +121,62 @@
   (and (vector? value) (= (vector-length value) 8)
        (eq? (vector-ref value 0) fixture-tensor-tag)))
 
+(define (fixture-owned-live-count-internal) fixture-owned-live-count)
+(define (fixture-describe-call-count-internal) fixture-describe-call-count)
+(define (fixture-release-call-count-internal) fixture-release-call-count)
+
+(define (fixture-arm-clone-defect-internal! skip mode)
+  (set! fixture-clone-defect (vector skip mode))
+  #t)
+
+(define (fixture-arm-cross-publication-internal! carrier)
+  (set! fixture-cross-publication-carrier carrier)
+  #t)
+
+(define (fixture-fail-next-release-internal!)
+  (set! fixture-release-defect 'raise)
+  #t)
+
+(define (fixture-raise-false-next-release-internal!)
+  (set! fixture-release-defect 'raise-false)
+  #t)
+
+(define (fixture-malform-next-release-internal!)
+  (set! fixture-release-defect 'malformed-ack)
+  #t)
+
+(define (fixture-arm-reentrant-state-release-internal! state)
+  (set! fixture-reentrant-release-state state)
+  #t)
+
+(define (fixture-arm-reentrant-borrow-end-internal! state handle)
+  (set! fixture-reentrant-borrow (vector state handle))
+  #t)
+
 (define (fixture-tensor-unsafe-internal shape dtype device contiguous? payload
                                         fail-copy?)
   (vector fixture-tensor-tag (copy-data shape) dtype (copy-data device) contiguous?
           (copy-data payload) fail-copy? 'test-only))
 
 (define (fixture-describe (request : vector)) : vector
+  (set! fixture-describe-call-count (+ fixture-describe-call-count 1))
   (let ((tensor (vector-ref request 0))
         (kind (vector-ref request 1))
         (operation (vector-ref request 2)))
+    (if fixture-reentrant-borrow
+        (let ((attempt fixture-reentrant-borrow))
+          (set! fixture-reentrant-borrow #f)
+          (guard (caught (#t caught))
+            (state-dict-tensor-borrow-end-internal
+              (vector-ref attempt 0) (vector-ref attempt 1)))
+          ;; Release must still observe the opening-phase access token.
+          (state-dict-release! (vector-ref attempt 0)))
+        #t)
+    (if fixture-reentrant-release-state
+        (let ((state fixture-reentrant-release-state))
+          (set! fixture-reentrant-release-state #f)
+          (state-dict-release! state))
+        #t)
     (if (not (fixture-tensor? tensor))
         (fixture-fail 'unsupported operation "test carrier does not own tensor")
         (if (not (valid-shape? (vector-ref tensor 1)))
@@ -130,11 +198,24 @@
                                               "malformed test tensor payload")
                                 (if (not (or (boolean? (vector-ref tensor 6))
                                              (eq? (vector-ref tensor 6)
-                                                  'share-clone)))
+                                                  'share-clone)
+                                             (eq? (vector-ref tensor 6)
+                                                  'publish-then-raise)
+                                             (eq? (vector-ref tensor 6)
+                                                  'exact-republish)
+                                             (eq? (vector-ref tensor 6)
+                                                  'return-source)
+                                             (eq? (vector-ref tensor 6)
+                                                  'cross-publication)
+                                             (eq? (vector-ref tensor 6)
+                                                  'return-request)))
                                     (fixture-fail 'corrupt-data operation
                                                   "malformed test failure flag")
-                                    (if (not (eq? (vector-ref tensor 7)
-                                                  'test-only))
+                                    (if (not (or
+                                               (eq? (vector-ref tensor 7)
+                                                    'test-only)
+                                               (eq? (vector-ref tensor 7)
+                                                    'owned-test-only)))
                                         (fixture-fail 'corrupt-data operation
                                                       "malformed test tensor marker")
                                         (vector
@@ -149,12 +230,35 @@
     (fixture-describe (vector tensor 'buffer 'fixture-tensor-internal))
     tensor))
 
+(define (fixture-owned-tensor-internal shape dtype device payload)
+  (let ((tensor
+          (fixture-tensor-unsafe-internal shape dtype device #t payload #f)))
+    (fixture-describe (vector tensor 'buffer 'fixture-owned-tensor-internal))
+    (vector-set! tensor 7 'owned-test-only)
+    (set! fixture-owned-live-count (+ fixture-owned-live-count 1))
+    tensor))
+
 (define (fixture-tensor-shared-clone-internal shape dtype device payload)
+  (if fixture-shared-clone-payload
+      #t
+      (set! fixture-shared-clone-payload (copy-data payload)))
   (vector fixture-tensor-tag (copy-data shape) dtype (copy-data device) #t
-          (copy-data payload) 'share-clone 'test-only))
+          fixture-shared-clone-payload 'share-clone 'test-only))
+
+(define (fixture-owned-shared-tensor-internal shape dtype device payload)
+  (if fixture-shared-clone-payload
+      #t
+      (set! fixture-shared-clone-payload (copy-data payload)))
+  (let ((tensor
+          (vector fixture-tensor-tag (copy-data shape) dtype (copy-data device)
+                  #t fixture-shared-clone-payload 'share-clone
+                  'owned-test-only)))
+    (set! fixture-owned-live-count (+ fixture-owned-live-count 1))
+    tensor))
 
 (define (fixture-reset-shared-clone-internal!)
-  (set! fixture-shared-clone-payload #f))
+  (set! fixture-shared-clone-payload #f)
+  (set! fixture-exact-clone #f))
 
 (define (fixture-tensor-payload-internal tensor)
   (fixture-describe (vector tensor 'buffer 'fixture-tensor-payload-internal))
@@ -164,23 +268,107 @@
   (fixture-describe request)
   (let ((tensor (vector-ref request 0))
         (operation (vector-ref request 2)))
+    (if (and fixture-clone-defect
+             (= (vector-ref fixture-clone-defect 0) 0))
+        (let ((mode (vector-ref fixture-clone-defect 1)))
+          (set! fixture-clone-defect #f)
+          (if (or (eq? mode 'publish-then-raise)
+                  (eq? mode 'publish-then-raise-false))
+              (let ((published
+                      (fixture-owned-tensor-internal
+                        (vector-ref tensor 1) (vector-ref tensor 2)
+                        (vector-ref tensor 3) (vector-ref tensor 5))))
+                (vector-set! request 3 published)
+                (if (eq? mode 'publish-then-raise-false)
+                    (raise #f)
+                    (fixture-fail 'internal operation
+                                  "injected armed post-publication clone defect")))
+              (fixture-fail 'internal operation
+                            "injected armed clone defect")))
+        (begin
+          (if fixture-clone-defect
+              (vector-set! fixture-clone-defect 0
+                           (- (vector-ref fixture-clone-defect 0) 1))
+              #t)
     (if (eq? (vector-ref tensor 6) #t)
         (fixture-fail 'unsupported operation "injected test clone failure")
-        (if (eq? (vector-ref tensor 6) 'share-clone)
-            (begin
-              (if fixture-shared-clone-payload
-                  #t
-                  (set! fixture-shared-clone-payload
-                        (copy-data (vector-ref tensor 5))))
-              (vector
-                (vector fixture-tensor-tag (copy-data (vector-ref tensor 1))
-                        (vector-ref tensor 2) (copy-data (vector-ref tensor 3)) #t
-                        fixture-shared-clone-payload 'share-clone 'test-only)))
-            (vector
-              (fixture-tensor-unsafe-internal
-                (vector-ref tensor 1) (vector-ref tensor 2)
-                (vector-ref tensor 3) (vector-ref tensor 4)
-                (vector-ref tensor 5) #f))))))
+        (begin
+          (cond
+            ((eq? (vector-ref tensor 6) 'return-source)
+             (vector-set! request 3 tensor))
+            ((eq? (vector-ref tensor 6) 'return-request)
+             (vector-set! request 3 request))
+            ((eq? (vector-ref tensor 6) 'cross-publication)
+             (let ((published fixture-cross-publication-carrier))
+               (set! fixture-cross-publication-carrier #f)
+               (vector-set! request 3 published)))
+            ((and (eq? (vector-ref tensor 6) 'exact-republish)
+                  fixture-exact-clone)
+             (vector-set! request 3 fixture-exact-clone))
+            (else
+              (let ((copy
+                      (if (eq? (vector-ref tensor 6) 'share-clone)
+                          (begin
+                            (if fixture-shared-clone-payload
+                                #t
+                                (set! fixture-shared-clone-payload
+                                      (copy-data (vector-ref tensor 5))))
+                            (vector fixture-tensor-tag
+                                    (copy-data (vector-ref tensor 1))
+                                    (vector-ref tensor 2)
+                                    (copy-data (vector-ref tensor 3)) #t
+                                    fixture-shared-clone-payload 'share-clone
+                                    'owned-test-only))
+                          (let ((fresh
+                                  (fixture-tensor-unsafe-internal
+                                    (vector-ref tensor 1) (vector-ref tensor 2)
+                                    (vector-ref tensor 3) (vector-ref tensor 4)
+                                    (vector-ref tensor 5) #f)))
+                            (vector-set! fresh 7 'owned-test-only)
+                            fresh))))
+                (if (eq? (vector-ref tensor 6) 'exact-republish)
+                    (set! fixture-exact-clone copy)
+                    #t)
+                (vector-set! request 3 copy)
+                (set! fixture-owned-live-count
+                      (+ fixture-owned-live-count 1)))))
+          (if (eq? (vector-ref tensor 6) 'publish-then-raise)
+              (fixture-fail 'internal operation
+                            "injected post-publication clone defect")
+              request)))))))
+
+(define (fixture-release-owned! (request : vector)) : vector
+  (set! fixture-release-call-count (+ fixture-release-call-count 1))
+  (let ((tensor (vector-ref request 0)))
+    ;; The successful release path performs only bounded reads/writes. In
+    ;; particular it does not construct a describe request during cleanup.
+    (if (or (not (fixture-tensor? tensor))
+            (not (or (eq? (vector-ref request 1) 'parameter)
+                     (eq? (vector-ref request 1) 'buffer)))
+            (not (symbol? (vector-ref request 2))))
+        (fixture-fail 'internal (vector-ref request 2)
+                      "malformed test owned tensor release request")
+        (if (not (eq? (vector-ref tensor 7) 'owned-test-only))
+        (fixture-fail 'internal (vector-ref request 2)
+                      "test owned tensor was released more than once")
+        (begin
+          (vector-set! tensor 7 'released-test-only)
+          (set! fixture-owned-live-count (- fixture-owned-live-count 1))
+          (if fixture-release-defect
+              (begin
+                (let ((defect fixture-release-defect))
+                  (set! fixture-release-defect #f)
+                  (cond
+                    ((eq? defect 'raise)
+                     (fixture-fail 'internal (vector-ref request 2)
+                                   "injected post-release callback defect"))
+                    ((eq? defect 'raise-false) (raise #f))
+                    (else
+                      (vector-set! request 3 'malformed-ack)
+                      request))))
+              (begin
+                (vector-set! request 3 #t)
+                request)))))))
 
 (define (fixture-storage-identical? (request : vector)) : boolean
   (let ((left (vector-ref request 0))
@@ -219,26 +407,58 @@
 (define (fixture-device-equal? (request : vector)) : boolean
   (equal? (vector-ref request 0) (vector-ref request 1)))
 
-(define (fixture-prepare-load (request : vector)) : vector
+(define (fixture-prepare-load-abort plan caught)
+  (fixture-release-plan! plan)
+  (raise caught)
+  :no-return)
+
+(define (fixture-prepare-load-guarded request)
   (let ((assignments (vector-ref request 0))
-        (operation (vector-ref request 1)))
-    (let loop ((remaining assignments) (updates '()))
-      (if (null? remaining)
-          (vector (vector fixture-plan-tag #f updates))
-          (let* ((assignment (car remaining))
-                 (destination (vector-ref assignment 0))
-                 (source (vector-ref assignment 1))
-                 (kind (vector-ref assignment 2)))
-            (metadata-compatible! operation destination source kind)
-            (if (not (= (vector-length (vector-ref destination 5))
-                        (vector-length (vector-ref source 5))))
-                (fixture-fail 'unsupported operation
-                              "test copy requires equal payload storage")
-                (let ((prepared
-                        (vector-ref
-                          (fixture-clone (vector source kind operation)) 0)))
-                  (loop (cdr remaining)
-                        (cons (vector destination prepared) updates)))))))))
+        (operation (vector-ref request 1))
+        (plan (vector fixture-plan-tag #f '())))
+    (guard (caught
+             (#t
+               (fixture-prepare-load-abort plan caught)))
+      (let loop ((remaining assignments))
+        (if (null? remaining)
+            (vector plan)
+            (let* ((assignment (car remaining))
+                   (destination (vector-ref assignment 0))
+                   (source (vector-ref assignment 1))
+                   (kind (vector-ref assignment 2)))
+              (metadata-compatible! operation destination source kind)
+              (if (not (= (vector-length (vector-ref destination 5))
+                          (vector-length (vector-ref source 5))))
+                  (fixture-fail 'unsupported operation
+                                "test copy requires equal payload storage")
+                  (let* ((clone-request (vector source kind operation #f))
+                         (release-envelope (vector #f kind operation #f))
+                         (update (vector destination #f release-envelope))
+                         (ledger-cell (cons update (vector-ref plan 2))))
+                    ;; Every cleanup object exists before fixture-clone can
+                    ;; publish an owned scratch carrier.
+                    (vector-set! plan 2 ledger-cell)
+                    (guard (caught
+                             (#t
+                               (let ((published (vector-ref clone-request 3)))
+                                 (if published
+                                     (begin
+                                       (vector-set! update 1 published)
+                                       (vector-set! release-envelope 0 published))
+                                     #t))
+                               (raise caught)))
+                      (fixture-clone clone-request)
+                      (let ((published (vector-ref clone-request 3)))
+                        (vector-set! update 1 published)
+                        (vector-set! release-envelope 0 published)
+                        (loop (cdr remaining))))))))))))
+
+(define (fixture-prepare-load (request : vector)) : vector
+  (let ((result (fixture-prepare-load-guarded request)))
+    (if (vector? result)
+        result
+        (fixture-fail 'internal 'fixture-prepare-load
+                      "test prepare-load returned a non-vector"))))
 
 (define (copy-payload-into! destination source)
   (let ((target (vector-ref destination 5))
@@ -250,6 +470,26 @@
             (vector-set! target index (vector-ref prepared index))
             (loop (+ index 1)))))))
 
+(define (fixture-release-plan! plan)
+  (let ((updates (vector-ref plan 2)))
+    (vector-set! plan 2 '())
+    (let loop ((remaining updates) (first-error #f))
+      (if (null? remaining)
+          (if first-error (raise first-error) #t)
+          (let* ((update (car remaining))
+                 (release-envelope (vector-ref update 2)))
+            (vector-set! update 1 #f)
+            (if (vector-ref release-envelope 0)
+                (guard (caught
+                         (#t
+                           (vector-set! release-envelope 0 #f)
+                           (loop (cdr remaining)
+                                 (if first-error first-error caught))))
+                  (fixture-release-owned! release-envelope)
+                  (vector-set! release-envelope 0 #f)
+                  (loop (cdr remaining) first-error))
+                (loop (cdr remaining) first-error)))))))
+
 (define (fixture-commit-load! (plan : vector)) : vector
   (if (or (not (= (vector-length plan) 3))
           (not (eq? (vector-ref plan 0) fixture-plan-tag))
@@ -260,7 +500,7 @@
         (vector-set! plan 1 #t)
         (let loop ((updates (vector-ref plan 2)))
           (if (null? updates)
-              #t
+              (fixture-release-plan! plan)
               (begin
                 (copy-payload-into! (vector-ref (car updates) 0)
                                     (vector-ref (car updates) 1))
@@ -271,7 +511,8 @@
   (tensor-provider-create-internal
     fixture-provider-name fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define (poison-vector (request : vector)) : vector
   (fixture-fail 'internal 'poison-provider "poison provider callback selected")
@@ -284,30 +525,35 @@
 (define poison-access-provider
   (tensor-provider-create-internal
     'poison-access-v1 poison-vector poison-vector poison-boolean poison-boolean
-    poison-boolean fixture-prepare-load fixture-commit-load!))
+    poison-boolean fixture-prepare-load fixture-commit-load! poison-vector))
 
 (define alternate-provider
   (tensor-provider-create-internal
     'alternate-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define collision-provider
   (tensor-provider-create-internal
     fixture-provider-name fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define (substituting-commit (plan : vector)) : vector
+  (fixture-release-plan! plan)
   (vector 'allocated-substitute-plan))
 
 (define substituting-provider
   (tensor-provider-create-internal
     'substituting-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load substituting-commit))
+    fixture-device-equal? fixture-prepare-load substituting-commit
+    fixture-release-owned!))
 
 (define (raising-commit (plan : vector)) : vector
+  (fixture-release-plan! plan)
   (fixture-fail 'internal 'tensor-provider-register-internal!
                 "injected admission commit failure")
   (vector))
@@ -316,19 +562,22 @@
   (tensor-provider-create-internal
     'raising-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load raising-commit))
+    fixture-device-equal? fixture-prepare-load raising-commit
+    fixture-release-owned!))
 
 (define reentrant-target-provider
   (tensor-provider-create-internal
     'reentrant-target-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define malformed-status-provider
   (tensor-provider-create-internal
     'malformed-status-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define (fixture-admission-evidence)
   (list
@@ -345,51 +594,79 @@
                                (vector 'admission-source-b 'bits-v1))
       'parameter)))
 
-(define (reentrant-prepare (request : vector)) : vector
+(define (reentrant-prepare-guarded request)
   (tensor-provider-register-internal! reentrant-target-provider
                                       (fixture-admission-evidence))
   (fixture-prepare-load request))
+
+(define (reentrant-prepare (request : vector)) : vector
+  (let ((result (reentrant-prepare-guarded request)))
+    (if (vector? result) result
+        (fixture-fail 'internal 'reentrant-prepare
+                      "reentrant prepare returned a non-vector"))))
 
 (define reentrant-provider
   (tensor-provider-create-internal
     'reentrant-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? reentrant-prepare fixture-commit-load!))
+    fixture-device-equal? reentrant-prepare fixture-commit-load!
+    fixture-release-owned!))
 
-(define (self-reentrant-prepare (request : vector)) : vector
+(define (self-reentrant-prepare-guarded request)
   (tensor-provider-register-internal! self-reentrant-provider
                                       (fixture-admission-evidence))
   (fixture-prepare-load request))
+
+(define (self-reentrant-prepare (request : vector)) : vector
+  (let ((result (self-reentrant-prepare-guarded request)))
+    (if (vector? result) result
+        (fixture-fail 'internal 'self-reentrant-prepare
+                      "self-reentrant prepare returned a non-vector"))))
 
 (define self-reentrant-provider
   (tensor-provider-create-internal
     'self-reentrant-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? self-reentrant-prepare fixture-commit-load!))
+    fixture-device-equal? self-reentrant-prepare fixture-commit-load!
+    fixture-release-owned!))
 
 (define cyclic-evidence-provider
   (tensor-provider-create-internal
     'cyclic-evidence-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define overlimit-evidence-provider
   (tensor-provider-create-internal
     'overlimit-evidence-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
 
 (define improper-evidence-provider
   (tensor-provider-create-internal
     'improper-evidence-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load fixture-commit-load!))
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
+
+(define repeat-mutating-destination #f)
+
+(define (repeat-mutating-prepare (request : vector)) : vector
+  ;; The ordinary commit drains the plan's owned scratch ledger. Retain only
+  ;; the borrowed admission destination needed by this malicious repeat test;
+  ;; no owned clone or release envelope escapes the plan.
+  (let ((result (fixture-prepare-load request)))
+    (set! repeat-mutating-destination
+          (vector-ref (car (vector-ref request 0)) 0))
+    result))
 
 (define (repeat-mutating-commit (plan : vector)) : vector
   (if (vector-ref plan 1)
-      (let* ((update (car (vector-ref plan 2)))
-             (destination (vector-ref update 0))
+      (let* ((destination repeat-mutating-destination)
              (payload (vector-ref destination 5)))
+        (set! repeat-mutating-destination #f)
         (vector-set! payload 0 'repeat-mutation)
         (fixture-fail 'internal 'tensor-provider-register-internal!
                       "repeat commit mutated then raised"))
@@ -399,7 +676,8 @@
   (tensor-provider-create-internal
     'repeat-mutating-v1 fixture-describe fixture-clone
     fixture-storage-identical? fixture-value-equal?
-    fixture-device-equal? fixture-prepare-load repeat-mutating-commit))
+    fixture-device-equal? repeat-mutating-prepare repeat-mutating-commit
+    fixture-release-owned!))
 
 (tensor-provider-register-internal! fixture-provider
                                     (fixture-admission-evidence))
