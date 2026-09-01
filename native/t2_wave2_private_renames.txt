@@ -1,0 +1,9 @@
+c1-wave2-persistence-policy et_e1b_private_c1_persistence_policy_cabi_v1
+t2-wave2-tokenizer-byte et_e1b_private_t1_tokenizer_byte_cabi_v1
+t2-wave2-tokenizer-decode et_e1b_private_t1_tokenizer_decode_cabi_v1
+t2-wave2-tokenizer-encode et_e1b_private_t1_tokenizer_encode_cabi_v1
+t2-wave2-tokenizer-fingerprint et_e1b_private_t1_tokenizer_fingerprint_cabi_v1
+t2-wave2-tokenizer-load et_e1b_private_t1_tokenizer_load_cabi_v1
+t2-wave2-tokenizer-save et_e1b_private_t1_tokenizer_save_cabi_v1
+t2-wave2-tokenizer-special-token-id et_e1b_private_t1_tokenizer_special_token_id_cabi_v1
+t2-wave2-tokenizer-vocab-size et_e1b_private_t1_tokenizer_vocab_size_cabi_v1

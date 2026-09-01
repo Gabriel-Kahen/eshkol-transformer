@@ -1,0 +1,258 @@
+;;; Canonical Wave 2 trusted compilation root. Never install this source.
+;;; E1, P1, D1, X1, C1, T1, and T2 share one lexical identity universe here;
+;;; the completed object is localized once before any application is compiled.
+
+(require e1b_error_consumer_private)
+(require x1_config_private)
+(require transformer.module)
+(require transformer.persistence_policy_internal)
+(load "eshkol_transformer/token_shard.esk")
+(load "transformer/tokenizer_internal.esk")
+(load "t2_d1_bridge.esk")
+
+(extern ptr t1-shell-create i64 :real et_t1_i64_shell_create_v1)
+(extern i64 t1-shell-length ptr :real et_t1_i64_shell_length_v1)
+(extern i64 t1-shell-write ptr i64 i64 :real et_t1_i64_shell_write_v1)
+(extern i64 t1-shell-read ptr i64 :real et_t1_i64_shell_read_v1)
+(extern i64 t1-shell-seal ptr :real et_t1_i64_shell_seal_v1)
+(extern i64 t1-shell-abort ptr :real et_t1_i64_shell_abort_v1)
+(extern i64 t1-shell-last-status :real et_t1_i64_shell_last_status_v1)
+(extern i64 t1-native-read-exact ptr ptr i64 i64
+        :real et_checkpoint_io_read_exact_v1)
+(extern i64 t1-native-atomic-write ptr ptr i64 i64
+        :real et_checkpoint_io_atomic_write_v1)
+
+(define t2-wave2-limit 1048576)
+(define t2-wave2-i64-max 9223372036854775807)
+(define t2-wave2-policy-registry '())
+(define t2-wave2-tensor-registry '())
+
+(define (t2-wave2-fail-raw category operation message)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax t2-wave2-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (t2-wave2-fail-raw category operation message))) result))))
+
+(define (t2-wave2-io-fail-raw operation message status)
+  (let* ((native-errno (modulo status 65536))
+         (native-stage (modulo (quotient status 65536) 256))
+         (published? (not (= (bitwise-and status 16777216) 0))))
+    (let ((unreachable
+           (et-e1b-private-raise
+            'io operation message
+            (list (list 'source-domain 'c1-native-io)
+                  (list 'source-code status)
+                  (list 'source-message message)
+                  (list 'native-errno native-errno)
+                  (list 'native-stage native-stage)
+                  (list 'published? published?)
+                  (list 'durability (if published? 'unknown 'not-published)))
+            #f)))
+      unreachable)))
+
+(define-syntax t2-wave2-io-fail
+  (syntax-rules ()
+    ((_ operation message status)
+     (let ((result (t2-wave2-io-fail-raw operation message status))) result))))
+
+(define (t2-wave2-native-fail operation status)
+  (t2-wave2-fail
+   (cond ((= status 1) 'invalid-argument)
+         ((= status 2) 'invalid-state)
+         ((= status 3) 'invalid-argument)
+         ((= status 5) 'internal)
+         (else 'internal))
+   operation "T1 exact-i64 transport failed"))
+
+(define (t2-wave2-make-identity message)
+  (guard (raised (#t raised)) (error message)))
+
+(define (t2-wave2-find value registry)
+  (let loop ((remaining registry))
+    (cond ((null? remaining) #f)
+          ((eq? value (vector-ref (car remaining) 0)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (t2-wave2-policy-entry value operation)
+  (let ((entry (t2-wave2-find value t2-wave2-policy-registry)))
+    (if entry
+        (begin
+          ;; Reconstruct through C1 on every use; copied fields are authoritative.
+          (c1-persistence-policy-internal
+           (vector-ref entry 1) (vector-ref entry 2) (vector-ref entry 3)
+           (vector-ref entry 4) (vector-ref entry 5))
+          entry)
+        (t2-wave2-fail 'invalid-argument operation
+                       "expected aggregate persistence policy"))))
+
+(define (t2-wave2-effective value)
+  (if (< value t2-wave2-limit) value t2-wave2-limit))
+
+(define (c1-wave2-persistence-policy max-file max-metadata max-tensor
+                                    max-tensors device)
+  (let ((validated
+         (c1-persistence-policy-internal
+          max-file max-metadata max-tensor max-tensors device)))
+    (let ((shell
+           (t2-wave2-make-identity "transformer.persistence.policy:v1")))
+      (set! t2-wave2-policy-registry
+            (cons (vector shell
+                          (vector-ref validated 1) (vector-ref validated 2)
+                          (vector-ref validated 3) (vector-ref validated 4)
+                          (vector-ref validated 5))
+                  t2-wave2-policy-registry))
+      shell)))
+
+(define (t2-wave2-tokenizer-byte config)
+  (let ((result (t2-private-tokenizer-byte config))) result))
+
+(define (t2-wave2-valid-file-path? path)
+  (and (string? path) (> (string-length path) 0)
+       (<= (bytevector-length (string->utf8 path)) 4096)
+       (let loop ((index 0))
+         (if (= index (string-length path)) #t
+             (and (not (char=? (string-ref path index) #\nul))
+                  (loop (+ index 1)))))))
+
+(define (t2-wave2-file-size path operation)
+  (guard
+   (caught (#t (t2-wave2-fail 'io operation
+                              "tokenizer size query failed")))
+   (file-size path)))
+
+(define (t2-wave2-tokenizer-load path policy)
+  (let* ((operation 'tokenizer-load)
+         (entry (t2-wave2-policy-entry policy operation))
+         (file-limit (t2-wave2-effective (vector-ref entry 1)))
+         (semantic-limit (t2-wave2-effective (vector-ref entry 2))))
+    (if (not (t2-wave2-valid-file-path? path))
+        (t2-wave2-fail 'invalid-argument operation "invalid tokenizer path"))
+    (let ((size (t2-wave2-file-size path operation)))
+      (if (or (not (integer? size)) (not (exact? size)) (not (real? size))
+              (< size 0) (> size file-limit))
+          (t2-wave2-fail 'corrupt-data operation
+                         "tokenizer file exceeds persistence policy"))
+      (let* ((bytes (make-bytevector size 0))
+             (status (t1-native-read-exact path bytes size file-limit)))
+        (if (not (= status 0))
+            (t2-wave2-io-fail operation "checked tokenizer read failed" status))
+        (let ((result
+               (t2-private-tokenizer-parse bytes semantic-limit)))
+          result)))))
+
+(define (t2-wave2-tokenizer-save tokenizer path policy)
+  (let* ((operation 'tokenizer-save!)
+         (entry (t2-wave2-policy-entry policy operation))
+         (file-limit (t2-wave2-effective (vector-ref entry 1)))
+         (semantic-limit (t2-wave2-effective (vector-ref entry 2))))
+    (if (not (t2-wave2-valid-file-path? path))
+        (t2-wave2-fail 'invalid-argument operation "invalid tokenizer path"))
+    (let ((payload-size (t2-private-tokenizer-payload-size tokenizer))
+          (bytes (t2-private-tokenizer-serialize tokenizer)))
+      (if (or (> (bytevector-length bytes) file-limit)
+              (> payload-size semantic-limit))
+          (t2-wave2-fail 'invalid-state operation
+                         "tokenizer artifact exceeds persistence policy"))
+      (let ((status
+             (t1-native-atomic-write
+              path bytes (bytevector-length bytes) 1)))
+        (if (= status 0) #t
+            (t2-wave2-io-fail
+             operation "atomic tokenizer publication failed" status))))))
+
+(define (t2-wave2-staging-i64 staging offset)
+  (let ((value (t1-core-read-u64-le staging offset)))
+    (if (and (integer? value) (exact? value) (real? value)
+             (>= value 0) (<= value t2-wave2-i64-max))
+        value
+        (t2-wave2-fail 'internal 'tokenizer-encode
+                       "semantic staging contains a non-i64 token"))))
+
+(define (t2-wave2-tokenizer-encode tokenizer input)
+  (let* ((operation 'tokenizer-encode)
+         (staging (t2-private-tokenizer-encode-staging tokenizer input))
+         (count (t1-tokenizer-core-encoded-count staging))
+         ;; All Eshkol allocation needed for admission precedes native create.
+         (admission (vector #f))
+         (old-registry t2-wave2-tensor-registry)
+         (next-registry (cons admission old-registry))
+         (shell (t1-shell-create count)))
+    (if (null? shell)
+        (t2-wave2-native-fail operation (t1-shell-last-status)))
+    (let write ((index 0))
+      (if (= index count)
+          (begin
+            (vector-set! admission 0 shell)
+            (set! t2-wave2-tensor-registry next-registry)
+            (let ((status (t1-shell-seal shell)))
+              (if (= status 0)
+                  shell
+                  (begin
+                    ;; Rollback and abort are allocation-free.
+                    (set! t2-wave2-tensor-registry old-registry)
+                    (vector-set! admission 0 #f)
+                    (t1-shell-abort shell)
+                    (t2-wave2-native-fail operation status)))))
+          (let ((status
+                 (t1-shell-write
+                  shell index (t2-wave2-staging-i64 staging (* index 8)))))
+            (if (= status 0)
+                (write (+ index 1))
+                (begin
+                  (t1-shell-abort shell)
+                  (t2-wave2-native-fail operation status))))))))
+
+(define (t2-wave2-tensor-admitted? value)
+  (let loop ((remaining t2-wave2-tensor-registry))
+    (cond ((null? remaining) #f)
+          ((eq? value (vector-ref (car remaining) 0)) #t)
+          (else (loop (cdr remaining))))))
+
+(define (t2-wave2-decode-staging count operation)
+  (if (or (not (integer? count)) (not (exact? count)) (not (real? count))
+          (< count 0) (> count t1-core-max-i64-elements))
+      (t2-wave2-fail 'invalid-argument operation
+                     "token tensor extent cannot be staged as exact i64"))
+  (guard
+   (caught (#t (t2-wave2-fail 'internal operation
+                              "decode staging allocation failed")))
+   (make-bytevector (* count 8) 0)))
+
+(define (t2-wave2-tokenizer-decode tokenizer ids)
+  (let ((operation 'tokenizer-decode))
+    (if (not (t2-wave2-tensor-admitted? ids))
+        (t2-wave2-fail 'invalid-argument operation
+                       "expected sealed aggregate i64 tensor"))
+    (let ((count (t1-shell-length ids)))
+      (if (or (< count 0) (not (= (t1-shell-last-status) 0)))
+          (t2-wave2-native-fail operation (t1-shell-last-status)))
+      (if (and (t2-private-tokenizer-bpe? tokenizer operation)
+               (> count t2-core-max-stream-token-ids))
+          (t2-wave2-fail 'invalid-argument operation
+                         "BPE decode exceeds 73728 token IDs"))
+      (let ((staging (t2-wave2-decode-staging count operation)))
+        (let read ((index 0))
+          (if (= index count)
+              (t2-private-tokenizer-decode-staging tokenizer staging)
+              (let ((value (t1-shell-read ids index)))
+                (if (not (= (t1-shell-last-status) 0))
+                    (t2-wave2-native-fail operation (t1-shell-last-status)))
+                (if (or (not (integer? value)) (not (exact? value))
+                        (not (real? value)) (< value 0))
+                    (t2-wave2-fail 'invalid-argument operation
+                                   "token ID is outside the tokenizer vocabulary"))
+                (t1-core-write-i64-le! staging (* index 8) value)
+                (read (+ index 1)))))))))
+
+(define (t2-wave2-tokenizer-vocab-size tokenizer)
+  (let ((result (t2-private-tokenizer-vocab-size tokenizer))) result))
+
+(define (t2-wave2-tokenizer-fingerprint tokenizer)
+  (let ((result (t2-private-tokenizer-fingerprint tokenizer))) result))
+
+(define (t2-wave2-tokenizer-special-token-id tokenizer name)
+  (let ((result (t2-private-tokenizer-special-token-id tokenizer name))) result))

@@ -12,6 +12,9 @@
 ## Required integration gates
 
 1. Tokenizer encode/decode round-trip and deterministic vocabulary training.
+   BPE evidence includes exact merge tie-breaking, admitted document-order and
+   chunk-partition invariance, whole/stream rank-stage parity, all-byte fallback,
+   strict UTF-8 boundary cases, and measured exact-limit admission.
 2. Shard corruption detection and exact loader-cursor resume.
 3. Tiny transformer forward and gradient parity against a frozen oracle fixture.
 4. One-batch overfit.

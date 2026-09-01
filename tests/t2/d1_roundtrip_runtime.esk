@@ -1,0 +1,87 @@
+(require transformer.data)
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(extern void t2-test-token-corpus-read ptr ptr ptr ptr ptr ptr
+        :real et_e1b_public_t2_test_token_corpus_read_v1)
+
+(define (test-read tokenizer directory manifest-limit shard-limit token-limit)
+  (let ((output (vector #f)))
+    (t2-test-token-corpus-read
+     (vector tokenizer) (vector directory) (vector manifest-limit)
+     (vector shard-limit) (vector token-limit) output)
+    (vector-ref output 0)))
+
+(define (read-u64-le bytes offset)
+  (let loop ((index 7) (result 0))
+    (if (< index 0) result
+        (loop (- index 1)
+              (+ (* result 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (staging=? staging ids)
+  (define (list-count values)
+    (let loop ((remaining values) (count 0))
+      (if (null? remaining) count
+          (loop (cdr remaining) (+ count 1)))))
+  (and (= (bytevector-length staging) (* (list-count ids) 8))
+       (let loop ((remaining ids) (index 0))
+         (if (null? remaining) #t
+             (and (= (read-u64-le staging (* index 8)) (car remaining))
+                  (loop (cdr remaining) (+ index 1)))))))
+
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk) #f))
+
+(define arguments (cdr (command-line)))
+(define bpe-path (car arguments))
+(define alternate-bpe-path (car (cdr arguments)))
+(define corpus-path (car (cdr (cdr arguments))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define bpe (tokenizer-load bpe-path policy))
+(define alternate-bpe (tokenizer-load alternate-bpe-path policy))
+(define ids '(260 259 32 257 100 258 261))
+
+(token-corpus-write! corpus-path (tokenizer-fingerprint bpe)
+                     (tokenizer-vocab-size bpe) 3 ids)
+(define staging (test-read bpe corpus-path 1048576 1048576 65536))
+
+(define passed 0)
+(define (check name condition)
+  (if condition (set! passed (+ passed 1))
+      (begin (display "FAIL: ") (display name) (newline) (exit 1))))
+
+(check "D1 token staging" (staging=? staging ids))
+(check "BPE public roundtrip" (bytes=?
+        (tokenizer-decode
+         bpe (tokenizer-encode bpe (bytevector 98 97 110 97 110 97
+                                                32 98 97 110 100 97 110 97)))
+        (bytevector 98 97 110 97 110 97 32 98 97 110 100 97 110 97)))
+(check "mismatch fixture preserves vocabulary size"
+       (= (tokenizer-vocab-size bpe) (tokenizer-vocab-size alternate-bpe)))
+(check "mismatch fixture changes only tokenizer identity domain"
+       (not (string=? (tokenizer-fingerprint bpe)
+                      (tokenizer-fingerprint alternate-bpe))))
+(check "tokenizer fingerprint mismatch" (structured-error?
+        'invalid-argument 't2-token-corpus-read
+        (lambda ()
+          (test-read alternate-bpe corpus-path 1048576 1048576 65536))))
+(check "T2 D1 limit one-over" (structured-error?
+        'invalid-argument 't2-token-corpus-read
+        (lambda () (test-read bpe corpus-path 1048576 1048576 65537))))
+
+(display "T2 D1 ROUNDTRIP PASS: ") (display passed)
+(display " checks") (newline)

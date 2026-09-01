@@ -882,3 +882,78 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5486249037);
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
+
+## 2026-08-31 — T2 / issue #43
+
+- **Decision:** proposed for integration-owner review; a local implementation
+  candidate now exercises the contract but remains unfrozen and unaccepted.
+- **Contract proposal:** preserve the accepted T1 `eshkol-byte-tokenizer` 1.x byte
+  grammar, fingerprint domain, eight public names/arities, C1 policy mapping, exact
+  I1 result carrier, and process-lifetime rules byte-for-byte. Add a distinct
+  `eshkol-bpe-tokenizer` 1.0 data format and
+  `sha256:eshkol-bpe-tokenizer-v1:<digest>` identity domain rather than treating BPE
+  semantics as an inert T1 minor extension. Byte IDs remain `0..255`. Learned merge
+  IDs are contiguous from 256 in rank order; configured special IDs follow the
+  merge range contiguously. Each merge references only earlier IDs. Training chooses
+  the greatest adjacent-pair count, breaks ties by ascending `(left-id,right-id)`,
+  applies the chosen pair left-to-right without overlap inside each document, never
+  crosses an explicit document boundary, and stops when the requested merge bound is
+  reached or no pair meets the minimum frequency. Admitted document order and chunk
+  partition within a document do not affect learned bytes.
+
+  The proposed v1 operational ceilings are 1,048,576 artifact/payload bytes under
+  the existing lowering persistence policy, 256 learned merges, 256 decoded bytes
+  per learned token, 4,096 specials, 4,096 prefix entries, 4,096 suffix entries,
+  65,536 aggregate training bytes, 4,096 documents, 4,096 training chunks, and
+  65,536 bytes per encode/decode stream and 73,728 decoder token IDs (589,824
+  i64-le staging bytes), closing the maximum 65,536 byte tokens plus 4,096 prefix
+  and 4,096 suffix insertions under round trip. Exact ceilings and one-over rejection are
+  part of the compiled gate; RSS/time thresholds are evidence budgets, not hidden
+  lower admission limits.
+
+  T2 adds no installed public procedure. Existing `tokenizer-load`,
+  `tokenizer-save!`, encode/decode, vocabulary, fingerprint, and special lookup
+  wrappers operate on either accepted T1 byte artifacts or validated T2 BPE
+  artifacts without changing their contracts. BPE training and stateful streaming
+  encode/decode are fixed-arity build-only Eshkol contracts for trusted later CLI/data
+  composition. Streaming uses private i64-le staging chunks and a pipeline of one
+  left-to-right transducer per merge rank, with at most one pending token per rank;
+  it does not publish one retained T1 I1 shell per input chunk. Prefix and suffix
+  specials are applied once per logical stream. No new native ABI,
+  tensor carrier, dtype/device conversion, callback selected by data, or fallback is
+  proposed.
+
+  A canonical Wave-2 successor aggregate is rebuilt from the accepted trusted
+  E1/P1/D1/X1/C1/T1 sources plus T2 and localized once. It retains the same exact 46
+  public globals and cannot be combined with the already-localized Wave-1 aggregate.
+  The Wave-1 archive and all focused T1 evidence remain independently reproducible.
+  To prove D1 round trips without changing D1 v1 bytes or its eight-name facade, the
+  Wave-2 trusted closure adds a bounded internal corpus-token read operation. It
+  fully validates the manifest and shards, then compares the supplied tokenizer
+  fingerprint and vocabulary before returning any tokens; a self-consistent corpus
+  paired with the wrong tokenizer is `invalid-argument`, not `corrupt-data`.
+- **Status / evidence:** local candidate implementation. The distinct v1 artifact,
+  Eshkol trainer, rank-stage whole/stream runtime, strict/raw policy, D1 bridge,
+  unchanged 46-global production aggregate, 47-global test-only aggregate, frozen
+  Python oracle, deterministic fixture generators, exact-limit/adversarial AOTs,
+  and production-oracle isolation gates are checked in for review. Local compiled
+  evidence includes 91 training/stream checks, 6 core checks, 17 delivered-public
+  checks, 6 D1-runtime checks, and 23 Python oracle tests. Two fresh-cache maximum
+  training/stream runs measured 146,640 and 144,684 KiB peak RSS; two public-runtime
+  runs measured 9,728 and 8,348 KiB, all below 524,288 KiB without a heap warning.
+  The focused gate passed; the complete post-review full rerun, supported Ubuntu 22.04 /
+  LLVM-Clang 21.1.8 CI, and an unmerged PR remain required. T2 stays no
+  further than `review` until independent acceptance, merge, merged-main retest, and
+  acceptance-document follow-up.
+- **Dependencies / retest:** any accepted change to the aggregate source closure or
+  D1 trusted internals requires complete T1 and D1 regression/boundary gates. Any
+  public name, native ABI, T1 grammar/fingerprint, D1 byte-format, I1 lifetime, or
+  persistence-policy change requires a new issue #1 decision and affected downstream
+  retests.
+- **Measured limitation:** the inherited D1 summary registry retains every
+  successfully validated internal corpus summary until process exit, even if the
+  later tokenizer identity comparison fails. T2 private cores/states are uniquely
+  owned trusted-build values and are not safe for arbitrary representation mutation;
+  registry operations are serialized.
+- **Reference:** [issue #43](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/43);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
