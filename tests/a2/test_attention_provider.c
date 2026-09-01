@@ -38,6 +38,10 @@ static void expect_reference(const float *actual, const uint32_t *expected_bits,
   for (size_t index = 0u; index < count; index++) {
     float expected;
     memcpy(&expected, &expected_bits[index], sizeof(expected));
+    if (!close_float(actual[index], expected, tolerance))
+      (void)fprintf(stderr,
+                    "reference mismatch at %zu: actual %.9g expected %.9g tolerance %.9g\n",
+                    index, actual[index], expected, tolerance);
     CHECK(close_float(actual[index], expected, tolerance));
   }
 }
@@ -659,6 +663,7 @@ static void test_n2_rectangular_attention(et_kernel_runtime *runtime) {
   memset(output, 0, sizeof(output));
   CHECK(et_kernel_runtime_dispatch(runtime, &forward_call, &error) == 0);
   CHECK(memcmp(output, repeated, sizeof(output)) == 0);
+  expect_reference(output, et_a2_ref_n2_attention_output, Q_COUNT, 2.0e-5f);
   CHECK(memcmp(&output[0], &output[Q_COUNT / 2u],
                (Q_COUNT / 2u) * sizeof(float)) != 0);
 
@@ -667,6 +672,9 @@ static void test_n2_rectangular_attention(et_kernel_runtime *runtime) {
   backward_call = call("kernel.causal-attention", &backward_request,
                        backward_inputs, 7u, backward_outputs, 3u);
   CHECK(et_kernel_runtime_dispatch(runtime, &backward_call, &error) == 0);
+  expect_reference(dq, et_a2_ref_n2_attention_dq, Q_COUNT, 5.0e-5f);
+  expect_reference(dk, et_a2_ref_n2_attention_dk, KV_COUNT, 5.0e-5f);
+  expect_reference(dv, et_a2_ref_n2_attention_dv, KV_COUNT, 5.0e-5f);
   for (size_t operand = 0u; operand < 3u; operand++) {
     float *values = operand == 0u ? q : (operand == 1u ? k : v);
     float *gradient = operand == 0u ? dq : (operand == 1u ? dk : dv);
@@ -899,6 +907,7 @@ static void test_n2_rope_forward_backward(et_kernel_runtime *runtime) {
   memset(output, 0, sizeof(output));
   CHECK(et_kernel_runtime_dispatch(runtime, &invocation, &error) == 0);
   CHECK(memcmp(output, repeated, sizeof(output)) == 0);
+  expect_reference(output, et_a2_ref_n2_rope_output, ELEMENTS, 5.0e-5f);
   CHECK(memcmp(&output[0], &output[ELEMENTS / 2u],
                (ELEMENTS / 2u) * sizeof(float)) != 0);
   for (size_t index = 0u; index < ELEMENTS; index += 2u) {
@@ -910,6 +919,7 @@ static void test_n2_rope_forward_backward(et_kernel_runtime *runtime) {
   outputs[0] = view(dx, sizeof(dx), "f32", 4u, shape);
   req.operation = "rope.backward";
   CHECK(et_kernel_runtime_dispatch(runtime, &invocation, &error) == 0);
+  expect_reference(dx, et_a2_ref_n2_rope_dx, ELEMENTS, 5.0e-5f);
   inputs[0] = view(x, sizeof(x), "f32", 4u, shape);
   outputs[0] = view(output, sizeof(output), "f32", 4u, shape);
   req.operation = "rope.forward";

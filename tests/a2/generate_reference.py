@@ -132,6 +132,46 @@ def build_payload() -> dict[str, object]:
                       ["gqa.gradient.dk", "gqa.gradient.dq", "gqa.gradient.dv"],
                       5.0e-5))
 
+    nq = (torch.arange(64, dtype=torch.float32).remainder(13) - 6).mul(0.0375)
+    nq = nq.reshape(2, 4, 2, 4).requires_grad_()
+    nk = (torch.arange(48, dtype=torch.float32).remainder(11) - 5).mul(0.0525)
+    nk = nk.reshape(2, 2, 3, 4).requires_grad_()
+    nv = (torch.arange(48, dtype=torch.float32).remainder(7) - 2).mul(0.0875)
+    nv = nv.reshape(2, 2, 3, 4).requires_grad_()
+    nupstream = (torch.arange(64, dtype=torch.float32).remainder(9) - 4)
+    nupstream = nupstream.mul(0.045).reshape_as(nq)
+    nqpos = torch.tensor([[1, 4], [2, 6]], dtype=torch.int64)
+    nkpos = torch.tensor([[0, 3, 5], [1, 4, 6]], dtype=torch.int64)
+    nkeep = torch.tensor([[[True, True, True], [True, True, True]],
+                          [[True, False, True], [True, True, True]]])
+    noutput = attention(nq, nk, nv, nqpos, nkpos, nkeep)
+    ndq, ndk, ndv = torch.autograd.grad(
+        (noutput * nupstream).sum(), (nq, nk, nv)
+    )
+    for name, role, value in (
+        ("n2_attention.input.k", "input", nk),
+        ("n2_attention.input.kpos", "input", nkpos),
+        ("n2_attention.input.mask", "input", nkeep),
+        ("n2_attention.input.q", "input", nq),
+        ("n2_attention.input.qpos", "input", nqpos),
+        ("n2_attention.input.upstream", "input", nupstream),
+        ("n2_attention.input.v", "input", nv),
+        ("n2_attention.output.forward", "expected", noutput),
+        ("n2_attention.gradient.dk", "analytic_gradient", ndk),
+        ("n2_attention.gradient.dq", "analytic_gradient", ndq),
+        ("n2_attention.gradient.dv", "analytic_gradient", ndv),
+    ):
+        records.append(tensor(name, role, value))
+    ncommon = ["n2_attention.input.k", "n2_attention.input.kpos",
+               "n2_attention.input.mask", "n2_attention.input.q",
+               "n2_attention.input.qpos", "n2_attention.input.v"]
+    cases.append(case("attention.n2.forward", "causal-attention.forward", "parity",
+                      ncommon, ["n2_attention.output.forward"], 2.0e-5))
+    cases.append(case("attention.n2.gradient", "causal-attention.backward", "gradient",
+                      ncommon + ["n2_attention.input.upstream"],
+                      ["n2_attention.gradient.dk", "n2_attention.gradient.dq",
+                       "n2_attention.gradient.dv"], 5.0e-5))
+
     rx = torch.tensor([[[[1.0, 2.0, -3.0, 4.0],
                          [0.5, -0.25, 2.0, -1.0]]]], requires_grad=True)
     rpos = torch.tensor([[0, MAX_POSITION]], dtype=torch.int64)
@@ -155,6 +195,79 @@ def build_payload() -> dict[str, object]:
     cases.append(case("rope.boundary.gradient", "rope.backward", "gradient",
                       ["rope.input.upstream", "rope.input.positions", "rope.input.inv"],
                       ["rope.gradient.dx"], 5.0e-5))
+
+    nrx = (torch.arange(48, dtype=torch.float32).remainder(17) - 8)
+    nrx = nrx.mul(0.0625).reshape(2, 2, 3, 4).requires_grad_()
+    nrupstream = (torch.arange(48, dtype=torch.float32).remainder(11) - 5)
+    nrupstream = nrupstream.mul(0.075).reshape_as(nrx)
+    nrpos = torch.tensor([[0, 3, 7], [2, 5, 9]], dtype=torch.int64)
+    nrinv = torch.tensor([0.25, 0.03125], dtype=torch.float32)
+    nrout = rope(nrx, nrpos, nrinv)
+    (nrdx,) = torch.autograd.grad((nrout * nrupstream).sum(), (nrx,))
+    for name, role, value in (
+        ("n2_rope.input.inv", "input", nrinv),
+        ("n2_rope.input.positions", "input", nrpos),
+        ("n2_rope.input.upstream", "input", nrupstream),
+        ("n2_rope.input.x", "input", nrx),
+        ("n2_rope.output.forward", "expected", nrout),
+        ("n2_rope.gradient.dx", "analytic_gradient", nrdx),
+    ):
+        records.append(tensor(name, role, value))
+    cases.append(case("rope.n2.forward", "rope.forward", "parity",
+                      ["n2_rope.input.x", "n2_rope.input.positions",
+                       "n2_rope.input.inv"], ["n2_rope.output.forward"], 5.0e-5))
+    cases.append(case("rope.n2.gradient", "rope.backward", "gradient",
+                      ["n2_rope.input.upstream", "n2_rope.input.positions",
+                       "n2_rope.input.inv"], ["n2_rope.gradient.dx"], 5.0e-5))
+
+    cache_q = torch.empty((2, 4, 3, 2), dtype=torch.float32)
+    cache_k = torch.empty((2, 2, 3, 2), dtype=torch.float32)
+    cache_v = torch.empty((2, 2, 3, 2), dtype=torch.float32)
+    cache_positions = torch.tensor([[0, 1, 2], [10, 11, 12]], dtype=torch.int64)
+    for n in range(2):
+        for head in range(4):
+            for token_index in range(3):
+                for dimension in range(2):
+                    index = (((n * 4 + head) * 3 + token_index) * 2 + dimension)
+                    cache_q[n, head, token_index, dimension] = (
+                        ((index + 3 * n) % 17) - 8
+                    ) * 0.055
+        for head in range(2):
+            for token_index in range(3):
+                for dimension in range(2):
+                    index = (((n * 2 + head) * 3 + token_index) * 2 + dimension)
+                    cache_k[n, head, token_index, dimension] = (
+                        ((index + 5 * n) % 13) - 6
+                    ) * 0.0475
+                    cache_v[n, head, token_index, dimension] = (
+                        ((index + 7 * n) % 11) - 4
+                    ) * 0.0825
+    cache_inv = torch.tensor([0.125], dtype=torch.float32)
+    cache_q_rope = rope(cache_q, cache_positions, cache_inv)
+    cache_k_rope = rope(cache_k, cache_positions, cache_inv)
+    incremental = []
+    for token_index in range(3):
+        step_keep = torch.zeros((2, 1, 3), dtype=torch.bool)
+        step_keep[:, :, :token_index + 1] = True
+        incremental.append(attention(
+            cache_q_rope[:, :, token_index:token_index + 1, :],
+            cache_k_rope, cache_v,
+            cache_positions[:, token_index:token_index + 1], cache_positions,
+            step_keep,
+        ).permute(0, 2, 1, 3))
+    cache_incremental = torch.cat(incremental, dim=1)
+    for name, role, value in (
+        ("n2_cache.input.k", "input", cache_k),
+        ("n2_cache.input.positions", "input", cache_positions),
+        ("n2_cache.input.q", "input", cache_q),
+        ("n2_cache.input.v", "input", cache_v),
+        ("n2_cache.output.incremental", "expected", cache_incremental),
+    ):
+        records.append(tensor(name, role, value))
+    cases.append(case("cache.n2.incremental", "cached-incremental.forward", "parity",
+                      ["n2_cache.input.q", "n2_cache.input.k", "n2_cache.input.v",
+                       "n2_cache.input.positions"],
+                      ["n2_cache.output.incremental"], 2.0e-5))
 
     source = Path(__file__).resolve()
     lock = source.with_name("requirements-reference.lock")

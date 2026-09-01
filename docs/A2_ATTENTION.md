@@ -189,8 +189,13 @@ The focused gate must prove:
   provider-free baseline discovery;
 - known-value, frozen-reference, and analytic-gradient parity for MHA and GQA;
 - central finite differences for Q, K, V, and RoPE input values;
-- nondegenerate two-batch rectangular attention and RoPE forward/backward
-  numerical coverage, plus two-batch cached GQA/RoPE incremental parity;
+- pinned independent PyTorch `N=2` vectors with distinguishable batch values,
+  positions, and masks for rectangular attention forward and dQ/dK/dV;
+  distinguishable values and positions for RoPE forward/backward and every cached
+  GQA/RoPE incremental output;
+- rejection of exact attention Q/K/V batch-zero indexing and RoPE batch-zero
+  position mutations, in addition to finite-difference and full/incremental
+  self-consistency checks;
 - exact capability-require/report positives for every published row and negatives
   for dependent-head, odd-RoPE, and broader validator-admitted shapes;
 - causal future-influence and future-gradient exclusion, selective masks, fully

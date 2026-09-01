@@ -9,6 +9,7 @@ require_command cmp
 require_command grep
 require_command nm
 require_command python3
+require_command sed
 require_command sha256sum
 require_command timeout
 
@@ -92,6 +93,33 @@ grep -E '^A2 KV CACHE PASS: [0-9]+ ABI, transaction, lease, atomicity, and adver
   "${A2_TMP}/test_kv_cache-1.stdout" >/dev/null
 grep -E '^A2 CACHE ATTENTION PASS: [0-9]+ incremental/full parity, mask, tail, and determinism checks$' \
   "${A2_TMP}/test_cache_attention-1.stdout" >/dev/null
+
+# The independent N=2 oracle must reject the two exact batch-collapse defects
+# that correlated finite-difference and full-vs-incremental checks cannot see.
+sed -e 's/n \* s->hq/(n - n) * s->hq/' \
+    -e 's/n \* s->hkv/(n - n) * s->hkv/' \
+  "${PROJECT_ROOT}/native/a2_attention_provider.c" \
+  >"${A2_TMP}/attention-batch-zero.c"
+sed -e 's/positions\[n \* s\.t + t\]/positions[(n - n) * s.t + t]/' \
+  "${PROJECT_ROOT}/native/a2_attention_provider.c" \
+  >"${A2_TMP}/rope-batch-zero.c"
+for mutation in attention-batch-zero rope-batch-zero; do
+  cmp "${PROJECT_ROOT}/native/a2_attention_provider.c" \
+    "${A2_TMP}/${mutation}.c" >/dev/null && \
+    die "A2 ${mutation} mutation did not alter the provider source"
+  "${A2_CC}" "${A2_CFLAGS[@]}" -c "${A2_TMP}/${mutation}.c" \
+    -o "${A2_TMP}/${mutation}.o"
+  "${A2_CC}" "${A2_CFLAGS[@]}" \
+    "${PROJECT_ROOT}/tests/a2/test_attention_provider.c" \
+    "${A2_TMP}/${mutation}.o" "${K1_LIBRARY}" -lm \
+    -o "${A2_TMP}/test-${mutation}"
+  if "${A2_TMP}/test-${mutation}" >"${A2_TMP}/${mutation}.stdout" \
+      2>"${A2_TMP}/${mutation}.stderr"; then
+    die "independent N=2 oracle accepted the ${mutation} mutation"
+  fi
+  grep -F 'reference mismatch' "${A2_TMP}/${mutation}.stderr" >/dev/null || \
+    die "${mutation} did not fail at an independent reference assertion"
+done
 
 "${A2_CXX}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/include" "${PROJECT_ROOT}/tests/a2/header_cpp.cpp" \

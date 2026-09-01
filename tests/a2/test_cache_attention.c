@@ -1,5 +1,6 @@
 #include "eshkol_transformer/a2_attention_abi.h"
 #include "eshkol_transformer/a2_kv_cache.h"
+#include "reference_vectors.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -9,6 +10,7 @@
 
 enum { N = 2, HQ = 4, HKV = 2, C = 3, DH = 2, L = 1 };
 #define CACHE_PARITY_ABSOLUTE_TOLERANCE 2.0e-6f
+#define CACHE_ORACLE_ABSOLUTE_TOLERANCE 2.0e-5f
 static size_t checks;
 
 #define CHECK(condition)                                                       \
@@ -147,6 +149,12 @@ static void require_positive_zero(float value) {
   CHECK(bits == UINT32_C(0));
 }
 
+static float reference_float(uint32_t bits) {
+  float value;
+  memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
 /* Stores the full output followed by every incremental one-query output. */
 static void run_scenario(float result[96]) {
   float q[N * HQ * C * DH];
@@ -205,6 +213,17 @@ static void run_scenario(float result[96]) {
   et_kernel_error error;
 
   dispatch_attention(runtime,full_semantic,full_inputs,full_outputs);
+  for (size_t n = 0u; n < N; n++)
+    for (size_t token = 0u; token < C; token++)
+      for (size_t head = 0u; head < HQ; head++)
+        for (size_t d = 0u; d < DH; d++) {
+          size_t actual_index = (((n*HQ+head)*C+token)*DH+d);
+          size_t oracle_index = (((n*C+token)*HQ+head)*DH+d);
+          float expected = reference_float(
+              et_a2_ref_n2_cache_incremental[oracle_index]);
+          CHECK(fabsf(full_output[actual_index]-expected) <=
+                CACHE_ORACLE_ABSOLUTE_TOLERANCE);
+        }
   memcpy(result,full_output,sizeof(full_output));
   CHECK(et_a2_kv_cache_create_v1(L,N,HKV,C,DH,&cache,&error) == 0);
 
@@ -311,7 +330,11 @@ static void run_scenario(float result[96]) {
           float actual = step_output[(n*HQ+head)*DH+d];
           size_t incremental =
               N*HQ*C*DH + ((n*C+token)*HQ+head)*DH+d;
+          size_t oracle_index = ((n*C+token)*HQ+head)*DH+d;
+          float oracle = reference_float(
+              et_a2_ref_n2_cache_incremental[oracle_index]);
           CHECK(fabsf(actual-expected) <= CACHE_PARITY_ABSOLUTE_TOLERANCE);
+          CHECK(fabsf(actual-oracle) <= CACHE_ORACLE_ABSOLUTE_TOLERANCE);
           result[incremental] = actual;
         }
     CHECK(et_a2_kv_cache_transaction_view_end_v1(

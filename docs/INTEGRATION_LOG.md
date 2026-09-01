@@ -990,9 +990,18 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   22.04/LLVM 21 exact-head CI remains pending. The corrected local focused gate
   passes 721 provider, 961 cache, and 677 cached-attention checks in deterministic
   optimized and ASan/UBSan runs, all four frozen-oracle tests, and the private AOT
-  path on the explicitly unsupported compatibility host. It includes `N=2`
-  attention and RoPE forward/backward finite-difference coverage and distinct-batch
-  cached incremental/full parity.
+  path on the explicitly unsupported compatibility host. A subsequent exact-head
+  review found that the `N=2` finite-difference and cached incremental/full checks
+  were correlated with the provider and therefore did not independently prove
+  batch indexing. The corrected frozen PyTorch fixture now adds full `N=2`
+  attention output and dQ/dK/dV with distinguishable batch values, positions, and
+  masks, plus RoPE output/dX and all cached incremental outputs with distinguishable
+  batch values and positions. The header checksum binds the complete fixture; every
+  frozen expected output/gradient word is copied into the C header and compared
+  elementwise. The focused gate now passes
+  1,041 provider, 961 cache, and 869 cached-attention checks plus five oracle-format
+  checks, and it compiles and rejects the reviewer-specified Q/K/V batch-zero and
+  RoPE position-batch-zero source mutations at independent reference assertions.
 - **Dependencies / retest:** M3/G3 cannot treat the private A2 transport as a shared
   tensor API. They remain blocked on a separately accepted f32 carrier, P1 provider,
   provider aggregation, and production Eshkol ownership/lifetime boundary. N2 and
