@@ -3,9 +3,10 @@
 ## Status and dependency boundary
 
 This is a pre-implementation proposal for O2. It freezes no native ABI, provider
-identifier, archive topology, or serialized bytes. O2 has a hard dependency on I2
-(issue #49). A production optimizer and review-ready O2 pull request remain blocked
-until I2 is independently approved and merged.
+identifier, archive topology, or serialized bytes. The binding dependency chain is
+P1L (issue #51) to I2 (issue #49) to O2. A production optimizer and review-ready O2
+pull request remain blocked until both prerequisites are independently approved and
+merged in order.
 
 The five A0 public names and arities remain unchanged:
 
@@ -222,6 +223,16 @@ contains:
   shape/dtype/device/layout metadata plus independent owned dense CPU f32
   `exp-avg` and `exp-avg-sq` tensors;
 - RNG policy `none`.
+
+The receiver/tensor lifetime protocol remains blocked on P1L and I2 rather than
+being inferred here. Before O2 freezes, repeated snapshots, partial construction,
+failed/successful loads, future C2 synchronous inspection, and explicit caller
+disposition must have an exact releasable owned-state receiver or another
+independently reviewed bounded ownership contract. State-backed tensor handles must
+fail after owner release before native dereference. Releasing a snapshot must not
+change live optimizer moments, parameters, gradients, counters, or configuration.
+Process-lifetime tensor retention, hidden finalizers, equality-triggered freeing,
+and a second registry are forbidden.
 
 Parameter values are P1 model state and never occur in optimizer state. Schedule
 values are derived rather than redundantly stored. The logical state contains no

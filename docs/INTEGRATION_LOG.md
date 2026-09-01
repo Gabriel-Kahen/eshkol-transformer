@@ -885,8 +885,9 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-09-01 — O2 / issue #46
 
-- **Decision:** proposed and blocked on I2 issue #49. No carrier/native ABI,
-  provider identifier, archive topology, or serialized optimizer bytes are frozen.
+- **Decision:** proposed and blocked on the binding P1L issue #51 to I2 issue #49
+  dependency chain. No carrier/native ABI, provider identifier, archive topology, or
+  serialized optimizer bytes are frozen.
 - **Contract:** The existing five A0 optimizer names and arities remain unchanged.
   O2 does not change X1 schema 1.0; `optimizer-create` accepts the strict O2-specific
   data-only `transformer-optimizer-config` 1.0 logical value documented in
@@ -912,20 +913,24 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `2bff5394bb2495d011f48192ab6fc2decccbad902ce426af79631e568208e3fb`.
   The Q0 format/numerics/isolation plus O2 reference suite passes 25 tests. This is
   frozen development-reference evidence, not runtime capability evidence.
-- **Dependencies / retest:** I2 must be independently approved and merged before O2
-  freezes a carrier boundary, implements the public runtime, opens a review-ready PR,
-  or changes ROADMAP status. O2 must then repeat I2/P1 ownership, alias, gradient,
+- **Dependencies / retest:** P1L and then I2 must be independently approved and
+  merged before O2 freezes a carrier boundary, implements the public runtime, opens
+  a review-ready PR, or changes ROADMAP status. O2 must then repeat I2/P1 ownership,
+  alias, gradient,
   zeroing, atomic-commit, state-continuation, packaging, sanitizer, Python-isolation,
-  focused/full, and supported Ubuntu 22.04 / LLVM-Clang 21.1.8 gates. I2 executable
-  work subsequently exposed that accepted P1 provider ABI v1 has no carrier-release
-  notification and the pinned runtime has no proved finalizer; O2 moment/snapshot
-  ownership therefore also remains blocked until integration accepts a versioned
-  release seam or another explicit bounded lifetime protocol. C2 remains blocked on
-  completed D2 and O2.
+  focused/full, and supported Ubuntu 22.04 / LLVM-Clang 21.1.8 gates. Integration
+  rejected process-lifetime tensor retention and created P1L to add provider 2.0
+  exact-once release, explicit `state-dict-release!`, and state-backed borrowed tensor
+  handles. O2 moment/snapshot ownership additionally requires an explicit releasable
+  optimizer-state receiver or another reviewed bounded protocol; repeated snapshots,
+  load paths, and future C2 use may not create a native tensor leak. C2 remains
+  blocked on completed D2 and O2.
 - **Reference:** [issue #46](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46);
   [I2 issue #49](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49);
   [binding integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487253506);
   [proposed logical contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487546881);
   [O2 evidence update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487548739);
   [I2 lifetime blocker](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5487674367);
-  [O2 blocker disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487919117).
+  [binding P1L lifetime decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5487927479);
+  [O2 optimizer-state lifetime requirement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5493245836);
+  [O2 dependency update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493252239).
