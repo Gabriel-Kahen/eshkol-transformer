@@ -36,7 +36,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | T2 | Deterministic BPE training and streaming encode/decode | T1, D1 | Merge determinism, byte fallback and corpus round trips | planned |
-| D2 | Memory-bounded shard loader, batching, packing and cursor state | D1, T1, Q0 | Shifted targets, masks, deterministic shuffle and exact resume | planned |
+| D2 | Memory-bounded shard loader, batching, packing and cursor state | D1, T1, Q0 | Shifted targets, masks, deterministic shuffle and exact resume | active |
 | N2 | Embedding, linear, normalization, activations, dropout, residuals | P1, K1, Q0 | Forward and gradient parity for every operation | planned |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | planned |
 | L2 | Fused indexed token cross-entropy | K1, Q0 | Stable per-token loss and direct-backward parity tests | planned |
