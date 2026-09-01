@@ -882,3 +882,56 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5486249037);
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
+
+## 2026-08-31 — L2 proposed contract / issue #44
+
+- **Status:** proposed before implementation; no A0 public name, arity, or
+  persistent format changes.
+- **Native ABI direction:** L2 will provide an isolated version-1.0 native
+  implementation of the existing `kernel.indexed-cross-entropy` capability with
+  exact deterministic CPU-`f32` operations
+  `indexed-cross-entropy.forward` and `indexed-cross-entropy.backward`. Requests
+  have shape `[N,T,V]` with all extents positive. Forward consumes borrowed dense
+  `f32[N,T,V]` logits and `i64[N,T]` targets and writes disjoint caller-owned
+  `f32[N,T]` per-token losses. Backward additionally consumes borrowed
+  `f32[N,T]` upstream gradients and writes disjoint caller-owned
+  `f32[N,T,V]` logit gradients. L2 defines no mask or reduction; later model and
+  trainer composition owns A0's weighted mean.
+- **Numerical/error contract:** forward uses max-subtracted log-sum-exp in fixed
+  row-major vocabulary order. Backward directly computes
+  `upstream * (softmax - one_hot(target))` without allocating one-hot storage,
+  invoking runtime autodiff, or using finite differences. Negative or
+  out-of-range targets are `shape-mismatch`; zero extents are rejected. NaN/Inf
+  operands and finite inputs whose forward result is not finite `f32` reject
+  during validation before commit. There is no allocation, cast, copy, transfer,
+  device substitution, hidden precision, scalar fallback, approximate gradient,
+  or recoverable commit failure. Inputs and outputs remain byte-identical after a
+  validation failure.
+- **Discovery and Eshkol boundary:** a versioned L2 accessor supplies the provider
+  descriptor only to an explicit caller-owned K1 resolver. L2 will not define the
+  global `eshkol_transformer_kernel_provider_v1` symbol, search/load providers,
+  or modify the provider-free K1 baseline. A private fixed-arity opaque transport
+  context will prove real Eshkol AOT calls into the same provider; it is not an A0
+  tensor API, owned f32 carrier, autodiff object, parameter store, or downstream
+  training contract.
+- **Cross-workstream coordination:** A2 requested the L2 ownership/ABI proposal.
+  L2 will remain carrier-neutral and consume only accepted K1 borrowed tensor
+  views; A2/N2 must not depend on the private L2 proof shell. K1 v1 permits one
+  provider callback pair, so a unified N2/A2/L2 provider plus an owned f32/autodiff
+  carrier remains an explicit composition decision before M3 rather than an API
+  any Wave-2 primitive may invent independently.
+  Integration subsequently created the shared I2 substrate at issue #49. L2 sent
+  I2 its exact natural-alignment, immutable-borrow, pairwise-disjoint-input,
+  caller-owned-output, two-phase-lifetime, and accessor-only provider-composition
+  requirements. L2 will remain interoperable with accepted I2 dense f32 K1 views
+  but does not treat I2 as an accepted dependency or production carrier until I2
+  review and integration complete.
+- **Planned evidence:** frozen Q0/PyTorch forward and direct-backward parity,
+  development-only central finite differences, extreme finite logits, exhaustive
+  schema/target/zero/nonfinite/alias/failure-atomicity negatives, repeated
+  deterministic AOT, canonical capability report, sanitizers, production Python
+  isolation, full repository gates, independent reviews, and supported exact-head
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI.
+- **Reference:** [issue #44](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/44);
+  [issue #1 proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487177062);
+  [I2 coordination update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487282264).
