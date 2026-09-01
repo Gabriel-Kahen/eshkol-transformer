@@ -916,10 +916,16 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   freezes a carrier boundary, implements the public runtime, opens a review-ready PR,
   or changes ROADMAP status. O2 must then repeat I2/P1 ownership, alias, gradient,
   zeroing, atomic-commit, state-continuation, packaging, sanitizer, Python-isolation,
-  focused/full, and supported Ubuntu 22.04 / LLVM-Clang 21.1.8 gates. C2 remains
-  blocked on completed D2 and O2.
+  focused/full, and supported Ubuntu 22.04 / LLVM-Clang 21.1.8 gates. I2 executable
+  work subsequently exposed that accepted P1 provider ABI v1 has no carrier-release
+  notification and the pinned runtime has no proved finalizer; O2 moment/snapshot
+  ownership therefore also remains blocked until integration accepts a versioned
+  release seam or another explicit bounded lifetime protocol. C2 remains blocked on
+  completed D2 and O2.
 - **Reference:** [issue #46](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46);
   [I2 issue #49](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49);
   [binding integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487253506);
   [proposed logical contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487546881);
-  [O2 evidence update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487548739).
+  [O2 evidence update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487548739);
+  [I2 lifetime blocker](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5487674367);
+  [O2 blocker disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487919117).
