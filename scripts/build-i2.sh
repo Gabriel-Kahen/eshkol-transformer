@@ -20,7 +20,7 @@ trap 'rm -rf -- "${temporary_dir}"' EXIT
 cflags=(
   -std=c11 -Wall -Wextra -Werror -Wpedantic
   -ffp-contract=off -fexcess-precision=standard -frounding-math
-  -fPIC -fvisibility=hidden -fno-common
+  -fPIC -fvisibility=hidden -fno-common -fstack-protector-all
   -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
 )
 case "${mode}" in
