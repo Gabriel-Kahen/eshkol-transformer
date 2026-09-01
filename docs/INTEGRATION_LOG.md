@@ -729,12 +729,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-08-31 — T1 / issue #17
 
-- **Decision:** proposed. This entry records the T1 implementation candidate and
-  version-1 tokenizer-format freeze request. The integration owner accepted the
-  Wave-1 aggregate, X1 baseline, C1 policy-shell, and I1 lifetime direction for
-  implementation in issue #1 comment 5480447613. Only the integration owner may
-  change this repository decision to `accepted` after independent review, exact-head
-  supported CI, merge, and a merged-main retest.
+- **Decision:** accepted after independent exact-head review, supported CI, merge,
+  and a merged-main retest. The integration owner accepted the Wave-1 aggregate,
+  X1 baseline, C1 policy-shell, and I1 lifetime direction for implementation in
+  issue #1 comment 5480447613; PR #40 implements and freezes the version-1
+  tokenizer contract described below.
 - **Contract:** T1 implements exactly the eight A0 tokenizer operations. Byte IDs are
   exactly `0..255`; specials are unique, contiguous from 256, and named by
   `[a-z][a-z0-9._-]{0,63}`. Encoding never recognizes special spellings. Ordered
@@ -783,7 +782,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   same aggregate. Native code implements transport and lifetime only; all tokenizer,
   UTF-8, special, parser, serializer, checksum, identity, policy, and error semantics
   remain Eshkol-authored.
-- **Evidence:** the current implementation candidate wires `make test-t1` to the
+- **Evidence:** the accepted implementation wires `make test-t1` to the
   development-only Python format oracle and frozen fixture, direct C/C++ shell ABI
   checks, ASan/UBSan execution, repeat builds/runs, exact 46-global admission, and a
   compiled Eshkol AOT public-runtime test. The public AOT path is authoritative;
@@ -845,10 +844,16 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   cause/domain/status/errno/stage, published and durability fields, reloads the old
   or new artifact as appropriate, rejects partial publication, and verifies orphan
   cleanup behavior. Independent implementation, format/security, lifetime/ABI,
-  package-boundary, and documentation/evidence subreviews report no repair blocker.
-  Exact-head T1-R re-review and supported CI remain pending and must be recorded
-  before acceptance. No lower operational ceiling, accepted repair commit, or
-  supported repair-CI URL is claimed by this proposed entry.
+  package-boundary, and documentation/evidence subreviews report no blocker. Final
+  T1-R re-review approved exact head
+  `fae9c35a754bdf735200d74de06d6013a35f4f58` with no findings after fresh focused
+  and boundary runs. Supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI run 33445639643
+  completed build, the integrated F0/A0/B0/C1/D1/E1/E1B/I1/K1/P1/Q0/T1/X1 test
+  matrix, smoke, and the reproducible benchmark successfully in 1h12m14s; its
+  combined-limit runs measured 142,496 KiB and 142,396 KiB peak RSS. PR #40 merged
+  as `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`. A fresh detached merged-main
+  compatibility-lane retest then passed `make test-t1`, including the independent
+  boundary gate; its combined-limit runs measured 142,856 KiB and 140,520 KiB.
 - **Measured limitations / unsupported:** three strong append-only registries retain
   all successful tokenizer cores, persistence-policy shells and copied fields, and
   sealed encoded I1 shells/storage until process exit. Dropping caller references
@@ -865,11 +870,15 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   power-loss, NFS, FUSE, hostile-parent, or concurrent-writer durability guarantee is
   made. T2/D2/training must not depend on repeated ephemeral encoding until a
   separately reviewed reclamation or reuse design exists.
-- **Dependencies / retest:** this candidate consumes the accepted A0, Q0, E1/E1B,
+- **Dependencies / retest:** T1 consumes the accepted A0, Q0, E1/E1B,
   I1, X1, P1, D1, and C1 contracts without changing their public names or arities.
   Any format, fingerprint domain, aggregate topology, public export, policy mapping,
   native shell ABI, admission, publication, lifetime, or reclamation change requires
   issue #1 coordination and complete T1 plus affected dependency retests.
 - **Reference:** [issue #17](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/17);
   [accepted implementation contract in issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5480447613);
-  [T1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5482913383).
+  [T1-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5482913383);
+  [PR #40](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40);
+  [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5486249037);
+  [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
+  merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.

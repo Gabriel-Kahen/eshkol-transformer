@@ -1,11 +1,11 @@
 # T1 byte tokenizer contract
 
-Status: **implementation review candidate**. The format direction was proposed in
-issue #17 and PR #26. The public-runtime topology, X1 interpretation, persistence
-policy, and I1 lifetime rules were accepted for implementation in
+Status: **accepted**. The format direction was proposed in issue #17 and PR #26.
+The public-runtime topology, X1 interpretation, persistence policy, and I1 lifetime
+rules were accepted for implementation in
 [issue #1 comment 5480447613](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5480447613).
-Only the integration owner may mark the repository decision accepted after
-independent exact-head review, supported CI, merge, and merged-main retest.
+PR #40 subsequently passed independent exact-head review, supported CI, merge, and
+merged-main retest; the evidence is recorded in `docs/INTEGRATION_LOG.md`.
 
 ## Public boundary
 
