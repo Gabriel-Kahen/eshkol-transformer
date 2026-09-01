@@ -8,7 +8,9 @@ P1L (issue #51) to I2 (issue #49) to O2. A production optimizer and review-ready
 pull request remain blocked until both prerequisites are independently approved and
 merged in order.
 
-The five accepted A0 public names and arities remain unchanged:
+The accepted O2 public optimizer surface preserves the five existing A0 names and
+adds one exact arity-1 lifecycle operation when the post-P1L/I2 runtime is
+implemented:
 
 ```scheme
 (optimizer-create config parameter-tree)
@@ -16,15 +18,14 @@ The five accepted A0 public names and arities remain unchanged:
 (optimizer-zero-grad! optimizer)
 (optimizer-state optimizer)
 (optimizer-load-state! optimizer state)
+(optimizer-state-release! state)
 ```
 
-They are not sufficient to reclaim optimizer-state moment tensors. O2 proposes one
-additional arity-1 public operation, `(optimizer-state-release! state)`, in
-[integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493291780).
-The independently reviewed lifecycle refinements are in
-[the proposal addendum](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493340320).
-Its exact name/arity and the resulting public-count change are not accepted or frozen.
-Runtime implementation remains blocked until integration resolves it.
+Integration accepted `optimizer-state-release!` with conditions in
+[issue #1 comment 5493412398](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398).
+This accepts the logical public name, arity, ownership, and error contract only. It
+does not freeze a runtime/private ABI or authorize implementation before P1L and I2
+merge.
 
 O2 does not change X1 schema 1.0. The `config` argument is the O2-specific data-only
 logical value below. I2 owns the physical dense CPU f32 carrier, stable P1-handle
@@ -232,8 +233,7 @@ contains:
   `exp-avg` and `exp-avg-sq` tensors;
 - RNG policy `none`.
 
-The receiver/tensor lifetime protocol remains blocked on P1L and I2 rather than
-being inferred here. The pending public proposal makes each snapshot one explicit
+The accepted receiver/tensor lifetime contract makes each snapshot one explicit
 O2 opaque owner with distinct O2 token kinds/ownership ledgers. Partial or rejected
 construction records each successful clone as sole O2 ownership before any later
 fallible action, cleans the exact unpublished ledger prefix once on failure, and
@@ -261,11 +261,12 @@ or consume ownership. Provider metadata is inert and never selects executable co
 P1 `state-dict-release!`, P1 state tokens, and P1 state-backed handles remain
 P1-specific and grant no O2 release authority. Process-lifetime tensor retention,
 hidden finalizers, equality-triggered freeing, generic release dispatch, and a
-second registry are forbidden. P1L must approve a narrow trusted same-aggregate O2
-invocation of the admitted release contract, or O2 must later review its own fixed
-wrapper; no P1 symbol, token code, request layout, or private ABI is inferred here.
-Until issue #1 accepts a concrete public lifecycle, these paragraphs are a proposal
-rather than a frozen API.
+second registry are forbidden. The only admitted release seam is a fixed O2-specific
+private wrapper in the single trusted aggregate, statically bound to the exact
+accepted I2 provider identity and exact O2 ownership-ledger entry. It exposes no
+callback token and accepts no caller-selected provider, P1 state, live optimizer
+moment, parameter, or gradient. No private symbol, token code, request layout, or
+structure ABI is frozen before merged P1L/I2 provide the concrete substrate.
 
 Parameter values are P1 model state and never occur in optimizer state. Schedule
 values are derived rather than redundantly stored. The logical state contains no
@@ -275,8 +276,12 @@ path/operation, or C1/C2 container decision.
 
 Version 1 optimizer snapshots are update-boundary snapshots. Every I2 gradient slot
 must be absent and its accumulation metadata empty; otherwise `optimizer-state`
-raises `invalid-state`. Mid-accumulation checkpointing is not represented by O2 1.0
-and remains a later TR3/C2 contract decision.
+raises `invalid-state`. Snapshot, load, and release additionally require that the
+optimizer is not mutating and no moment/state borrow is live. Mid-accumulation
+checkpointing is not represented by O2 1.0 and remains a later TR3/C2 contract
+decision. This update-boundary call-phase rule grants the detached snapshot no live
+optimizer/handle backreference or authority; implementation must enforce it through
+the accepted caller/aggregate orchestration boundary or return to integration.
 
 `optimizer-load-state!` validates the complete raw state, version/features, provider
 identity, configuration, bound paths/aliases, counter, entry uniqueness,
@@ -337,10 +342,24 @@ is `unsupported`.
   replaced; tensor dtype/device/layout use the matching categories; a stale receiver
   is `invalid-state`; an unavailable or mismatched provider/capability is
   `unsupported`.
-- proposed `optimizer-state-release!`: a wrong-kind or malformed receiver is
-  `invalid-argument`; a busy, forged, copied-token, cross-owner, cross-aggregate, or
-  provider-stale state is `invalid-state`; the exact registered dead token succeeds
-  idempotently; unavailable exact provider/release capability is `unsupported`.
+- `optimizer-state-release!`: malformed, non-state, wrong-kind, forged, copied-token,
+  unregistered, or cross-aggregate receivers are `invalid-argument`; a recognized
+  live owner that is busy, reentrant, releasing, or has an owner-state conflict is
+  `invalid-state`; the exact registered dead token succeeds idempotently. Unavailable
+  exact provider/release capability is `unsupported` only before state construction
+  or load. A post-admission provider invariant violation is `internal`, never a
+  recoverable `unsupported` release branch.
+
+The exact category for a recognized registered dead optimizer-state passed to a
+non-release operation is awaiting the narrow
+[integration clarification](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924);
+O2 proposes `invalid-state` because the receiver is well formed and registered but
+no longer live. No test freezes that category until integration responds.
+
+Future C2 serialization and trusted inspection acquire and end every state/I2/K1
+borrow on every path and release every temporary optimizer-state owner they create.
+They never serialize process-local owner tokens, callback identities, provider
+authority, or capability evidence.
 
 ## Required continuation evidence
 

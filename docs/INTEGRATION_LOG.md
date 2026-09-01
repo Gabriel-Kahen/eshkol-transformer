@@ -885,14 +885,17 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 
 ## 2026-09-01 — O2 / issue #46
 
-- **Decision:** proposed and blocked on the binding P1L issue #51 to I2 issue #49
-  dependency chain. No carrier/native ABI, provider identifier, archive topology, or
-  serialized optimizer bytes are frozen.
+- **Decision:** optimizer-state lifecycle is accepted with conditions in integration
+  comment 5493412398; broader O2 runtime remains blocked on the binding P1L issue #51
+  to I2 issue #49 dependency chain. No carrier/native ABI, provider identifier,
+  archive topology, or serialized optimizer bytes are frozen.
 - **Contract:** The existing five A0 optimizer names and arities remain preserved.
   Because P1L state-dictionary release authority is intentionally not generic, O2
-  proposes an additional arity-1 `optimizer-state-release!` operation for its own
-  opaque moment-snapshot owner; the exact public name/count remains pending issue #1
-  integration verdict. O2 does not change X1 schema 1.0; `optimizer-create` accepts
+  adds the accepted arity-1 `optimizer-state-release!` operation for its own opaque
+  moment-snapshot owner in the later post-P1L/I2 runtime PR. The fixed private release
+  wrapper is same-aggregate and statically gated by the exact accepted I2 provider
+  identity plus O2 ownership-ledger entry; it grants no generic or P1/live-optimizer
+  authority. O2 does not change X1 schema 1.0; `optimizer-create` accepts
   the strict O2-specific data-only `transformer-optimizer-config` 1.0 logical value
   documented in [O2_OPTIMIZER.md](O2_OPTIMIZER.md). Version 1 admits AdamW on dense CPU f32,
   complete canonical P1 parameter groups, optional global L2 clipping, and constant
@@ -927,11 +930,12 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   handles. O2 moment/snapshot ownership additionally requires an explicit releasable
   optimizer-state receiver or another reviewed bounded protocol; repeated snapshots,
   load paths, and future C2 use may not create a native tensor leak. C2 remains
-  blocked on completed D2 and O2. If issue #1 accepts the proposed release operation,
-  O2 must update and retest the A0 operation declaration/count and fixed arity,
-  optimizer package exports/provides, aggregate public-global count, exact
-  defined/undefined/rename/source-closure manifests, both import orders, and affected
-  C2/TR3 consumers before public-surface freeze.
+  blocked on completed D2 and O2. The later O2 runtime PR must update and retest the
+  A0 operation declaration/count and fixed arity, optimizer package
+  exports/provides, E1B and successor-aggregate manifests, aggregate public-global
+  count, exact defined/undefined/rename/source-closure manifests, both import orders,
+  P1L/I2/C1/C2-facing packaging, and affected C2/TR3 consumers before public-surface
+  freeze.
 - **Reference:** [issue #46](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46);
   [I2 issue #49](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49);
   [binding integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487253506);
@@ -942,4 +946,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [O2 optimizer-state lifetime requirement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5493245836);
   [O2 dependency update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493252239);
   [proposed O2 release operation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493291780);
-  [independent-review addendum](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493340320).
+  [independent-review addendum](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493340320);
+  [accepted lifecycle verdict](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398);
+  [O2/I2 shared-seam disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493456203);
+  [dead-state category clarification](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924).
