@@ -882,3 +882,44 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5486249037);
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
+
+## 2026-09-01 — O2 / issue #46
+
+- **Decision:** proposed and blocked on I2 issue #49. No carrier/native ABI,
+  provider identifier, archive topology, or serialized optimizer bytes are frozen.
+- **Contract:** The existing five A0 optimizer names and arities remain unchanged.
+  O2 does not change X1 schema 1.0; `optimizer-create` accepts the strict O2-specific
+  data-only `transformer-optimizer-config` 1.0 logical value documented in
+  [O2_OPTIMIZER.md](O2_OPTIMIZER.md). Version 1 admits AdamW on dense CPU f32,
+  complete canonical P1 parameter groups, optional global L2 clipping, and constant
+  or successful-update-indexed linear warmup/decay. I2 owns stable P1-handle-bound
+  value/gradient storage, explicit accumulated-contribution state, exact zeroing,
+  finite inspection, detached tensor copies, and whole-batch preflight/infallible
+  commit. The caller/TR3 decides when to step. Token ingress and token-based
+  schedules remain TR3 scope. `transformer-optimizer-state` 1.0 is a byte-independent
+  update-boundary logical snapshot of groups, schedule, completed updates, and owned
+  moments; it commits to no C2 encoding or file format.
+- **Evidence:** Independent contract/capability, implementation/package, and
+  test/oracle reviews agree that merged P1/Q0 cannot supply a production optimizer:
+  P1 has no production f32 provider or gradient-slot/mutation seam and
+  `module-zero-grad!` explicitly raises `unsupported`. N2 independently reached the
+  same result. Integration accepted the blocker in issue #1 comment 5487253506 and
+  issue #46 comment 5487253625, added I2 as a hard dependency, and authorized only
+  separable O2 config/state/schedule, frozen-reference, and adversarial-design work
+  before I2 merge. The development-only PyTorch fixture covers two-step AdamW,
+  multiple groups, clipping boundary/scale, unequal-weight accumulation, and both
+  admitted schedules; its canonical 12,698 bytes have SHA-256
+  `2bff5394bb2495d011f48192ab6fc2decccbad902ce426af79631e568208e3fb`.
+  The Q0 format/numerics/isolation plus O2 reference suite passes 25 tests. This is
+  frozen development-reference evidence, not runtime capability evidence.
+- **Dependencies / retest:** I2 must be independently approved and merged before O2
+  freezes a carrier boundary, implements the public runtime, opens a review-ready PR,
+  or changes ROADMAP status. O2 must then repeat I2/P1 ownership, alias, gradient,
+  zeroing, atomic-commit, state-continuation, packaging, sanitizer, Python-isolation,
+  focused/full, and supported Ubuntu 22.04 / LLVM-Clang 21.1.8 gates. C2 remains
+  blocked on completed D2 and O2.
+- **Reference:** [issue #46](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46);
+  [I2 issue #49](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49);
+  [binding integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487253506);
+  [proposed logical contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487546881);
+  [O2 evidence update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487548739).
