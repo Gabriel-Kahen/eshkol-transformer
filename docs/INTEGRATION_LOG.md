@@ -949,4 +949,5 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [independent-review addendum](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493340320);
   [accepted lifecycle verdict](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398);
   [O2/I2 shared-seam disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493456203);
-  [dead-state category clarification](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924).
+  [dead-state category proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924);
+  [accepted dead-state taxonomy](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493574404).

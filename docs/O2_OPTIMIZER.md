@@ -350,11 +350,13 @@ is `unsupported`.
   or load. A post-admission provider invariant violation is `internal`, never a
   recoverable `unsupported` release branch.
 
-The exact category for a recognized registered dead optimizer-state passed to a
-non-release operation is awaiting the narrow
-[integration clarification](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924);
-O2 proposes `invalid-state` because the receiver is well formed and registered but
-no longer live. No test freezes that category until integration responds.
+Integration accepted `invalid-state` for a recognized, registered, exact-kind dead
+optimizer-state passed to any non-release operation in
+[comment 5493574404](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493574404).
+This includes load, trusted inspection/resolution, state-backed moment-handle
+resolution, and future C2 serialization, all before native dereference. Only
+`optimizer-state-release!` on that exact registered dead token succeeds
+idempotently without a provider callback.
 
 Future C2 serialization and trusted inspection acquire and end every state/I2/K1
 borrow on every path and release every temporary optimizer-state owner they create.

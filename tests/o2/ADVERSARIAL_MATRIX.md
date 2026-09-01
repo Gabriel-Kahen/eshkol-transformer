@@ -79,9 +79,8 @@ evidence and must not be marked complete before I2 merges.
   states are `invalid-state`; exact registered dead repeat succeeds; post-admission
   provider defect is `internal`;
 - a dead state used by `optimizer-load-state!`, trusted inspection, C2 serialization,
-  or any state-backed moment handle rejects before I2/K1 dereference with the exact
-  integration-approved non-release category; only exact-token release succeeds, and
-  values/counts remain unchanged;
+  or any state-backed moment handle is `invalid-state` before I2/K1 dereference; only
+  exact-token release succeeds, and values/counts remain unchanged;
 - C2 failpoints at temporary-state construction, borrow begin, every handle resolve,
   every I2/K1 borrow, validation, and encode end every acquired borrow, release every
   temporary owner, leave caller-owned state live/unconsumed, and return counts to
