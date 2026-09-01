@@ -882,3 +882,87 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5486249037);
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
+
+## 2026-08-31 — A2 / issue #45
+
+- **Decision:** accepted for implementation with required cache-view corrections in
+  integration comment `5487284582`; independent exact-head review, supported CI,
+  merge, local retest, and acceptance follow-up remain pending.
+- **Contract:** A2 changes no A0 public name or arity. It proposes a
+  carrier-neutral deterministic CPU-f32 K1 provider obtained only through the
+  versioned `et_a2_kernel_provider_v1` accessor, plus a separate fixed-capacity KV
+  cache ABI 1.0 and a private Eshkol AOT transport. The provider does not export the
+  generic K1 resolver symbol or alter provider-free baseline discovery.
+
+  `kernel.causal-attention` exposes explicit forward and analytic-backward
+  operations with semantic request shape `[N,Hq,Hkv,Tq,Tk,Dh]`. Q is
+  `f32[N,Hq,Tq,Dh]`; K and V are distinct `f32[N,Hkv,Tk,Dh]`; query and key
+  positions are `i64[N,Tq]` and `i64[N,Tk]`; the exact nonbroadcast keep mask is
+  `bool[N,Tq,Tk]`; and the output/upstream is `f32[N,Hq,Tq,Dh]`. Query head `h`
+  maps to KV head `floor(h/(Hq/Hkv))`, with exact divisibility. Version 1 admits
+  proved MHA and GQA with `Hkv >= 2`; MQA remains MOD5 scope. Admission requires a
+  true keep-mask element and `key-position <= query-position`. Stable f32 softmax
+  uses `1/sqrt(Dh)`. A fully masked row returns positive-zero output and zero
+  adjoints. Floating operands are finite; positions are nonnegative, strictly
+  increasing per row, and at most `16777215`. Masks and positions have no gradient.
+
+  `kernel.rope` exposes forward and analytic backward over
+  `f32[N,H,T,Dh]`, exact `i64[N,T]` positions, and positive finite
+  `inv-freq f32[Dh/2]`, with even `Dh >= 2`. Adjacent pairs rotate by
+  `position * inv-freq[i]`; backward applies the inverse rotation. The inv-frequency
+  input avoids freezing an unaccepted model-level base or scaling policy.
+
+  The opaque cache owns distinct, finite-zero-initialized preallocated keys and values
+  `[L,N,Hkv,C,Dh]` and shared exact `i64[N]` logical lengths. Capacity and storage
+  identities are fixed. Append width `A` is positive. A transaction validates
+  `0 <= count[i] <= A`, requires at least one positive count, and proves
+  `length[i] + count[i] <= C` without overflow before it stages each
+  layer exactly once outside committed logical lengths, exposes only a
+  transaction-scoped full-capacity dense `[N,Hkv,C,Dh]` K/V view plus immutable
+  effective `i64[N]` lengths and a dense bool `[N,C]` mask whose bytes are one
+  below each effective length and zero otherwise for a staged layer, and
+  advances shared lengths only after every layer is staged. Abort or precommit
+  failure preserves every observable prefix, length, identity, and source; tail
+  bytes outside logical lengths are deterministically positive zero and excluded
+  by the canonical mask. One live
+  nested layer view may begin only after that layer is staged; while live it blocks
+  stage, commit, abort, and destruction and must be explicitly ended. Commit requires
+  all layers staged and no live view. A caller must use the immutable effective
+  lengths and the exact false-outside-length mask; A2 never exposes a shorter
+  `Tk < C` canonical dense view over capacity-strided storage. Registry admission
+  precedes native-handle dereference.
+
+  K1 validation performs every fallible schema, alias, range, finite-value, and
+  numerical check without mutation. Invoke allocates nothing, cannot fail, and
+  fully writes disjoint caller-owned outputs in a fixed order using explicit serial
+  CPU-f32 arithmetic with contraction disabled. This is a reviewed baseline native
+  kernel, not an accelerated, fused, compiler-reverse-AD, P1, or general tensor
+  capability. There is no core, scalar, dtype, device, cast, transfer, allocation,
+  precision, or cache fallback.
+- **Evidence:** Initial canonical-pin AOT probes prove only narrow scalar/vector
+  gradient behavior. A separate built-in attention probe is noncausal without an
+  explicit mask and compiler/source inspection finds double scalar loops and
+  incomplete fallback/backward behavior, so pinned-core attention/RoPE are rejected.
+  K1 continues to report f32, reverse AD, matmul, and causal attention unverified.
+  Independent contract/capability, implementation/test-design, documentation/
+  packaging, and adversarial/numerical reviews approve the narrow provider/cache
+  boundary after their findings were resolved. The focused gate compile-checks the
+  ABI and passes 348 attention/RoPE provider checks, 780 cache checks, and 407
+  cached-attention integration checks in both optimized and ASan/UBSan builds.
+  It also verifies frozen Q0/PyTorch forward and gradient bits, direct finite
+  differences, MHA/GQA admission, causal and fully-masked boundaries, RoPE boundary
+  positions, transactional failure atomicity and failpoints, archive manifests,
+  provider-free K1 baseline preservation, deterministic repeatability, and a
+  private Eshkol AOT forward/backward/cache path. The private transport remains test
+  evidence only. The complete local repository test gate also passes on the
+  documented unsupported CachyOS/LLVM 22 compatibility host. Supported Ubuntu
+  22.04/LLVM 21 exact-head CI remains pending.
+- **Dependencies / retest:** M3/G3 cannot treat the private A2 transport as a shared
+  tensor API. They remain blocked on a separately accepted f32 carrier, P1 provider,
+  provider aggregation, and production Eshkol ownership/lifetime boundary. N2 and
+  L2 currently define no shared carrier. Any public attention module, P1 binding,
+  general tensor shell, configurable RoPE, MQA, additive mask, accelerator, or cache
+  serialization requires a new issue-#1 decision and affected retests.
+- **Reference:** [issue #45](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/45);
+  [integration proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487219486);
+  integration verdict `5487284582` on issue #1 and issue #45.
