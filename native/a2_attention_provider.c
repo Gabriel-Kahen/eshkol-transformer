@@ -218,6 +218,11 @@ static int validate_positions(const int64_t *positions, size_t n, size_t t) {
   return 1;
 }
 
+static float attention_scale(size_t head_dimension) {
+  const float root = sqrtf((float)head_dimension);
+  return 1.0f / root;
+}
+
 static size_t q_index(const attention_shape *s, size_t n, size_t h,
                       size_t t, size_t d) {
   return (((n * s->hq + h) * s->tq + t) * s->dh) + d;
@@ -366,7 +371,7 @@ static int attention_forward_preflight(
     const attention_shape *s, const float *q, const float *k, const float *v,
     const int64_t *query_positions, const int64_t *key_positions,
     const uint8_t *mask) {
-  const float scale = 1.0f / sqrtf((float)s->dh);
+  const float scale = attention_scale(s->dh);
   for (size_t n = 0; n < s->n; n++) {
     for (size_t hq = 0; hq < s->hq; hq++) {
       const size_t hkv = hq / (s->hq / s->hkv);
@@ -409,7 +414,7 @@ static int attention_backward_preflight(
     const attention_shape *s, const float *q, const float *k, const float *v,
     const int64_t *query_positions, const int64_t *key_positions,
     const uint8_t *mask, const float *upstream) {
-  const float scale = 1.0f / sqrtf((float)s->dh);
+  const float scale = attention_scale(s->dh);
   /* dQ: accumulation order is key position order. */
   for (size_t n = 0; n < s->n; n++) {
     for (size_t hq = 0; hq < s->hq; hq++) {
@@ -680,7 +685,7 @@ static void invoke_attention_forward(const et_kernel_call_v1 *call) {
   const int64_t *key_positions = (const int64_t *)key_position_view->data;
   const uint8_t *mask = (const uint8_t *)mask_view->data;
   float *output = (float *)output_view->data;
-  const float scale = 1.0f / sqrtf((float)s.dh);
+  const float scale = attention_scale(s.dh);
   memset(output, 0, output_view->byte_length);
   for (size_t n = 0; n < s.n; n++) {
     for (size_t hq = 0; hq < s.hq; hq++) {
@@ -735,7 +740,7 @@ static void invoke_attention_backward(const et_kernel_call_v1 *call) {
   float *dq = (float *)dq_view->data;
   float *dk = (float *)dk_view->data;
   float *dv = (float *)dv_view->data;
-  const float scale = 1.0f / sqrtf((float)s.dh);
+  const float scale = attention_scale(s.dh);
   memset(dq, 0, dq_view->byte_length);
   memset(dk, 0, dk_view->byte_length);
   memset(dv, 0, dv_view->byte_length);
@@ -966,26 +971,82 @@ static void provider_invoke_call(const et_kernel_call_v1 *call) {
   }
 }
 
-static const et_kernel_dimension_range_v1 attention_dimensions[] = {
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 2u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 2u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-};
-static const et_kernel_dimension_range_v1 rope_dimensions[] = {
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 1u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-    {.minimum = 2u, .maximum = 0u, .maximum_unbounded = 1u, .reserved = {0}},
-};
+#define EXACT_DIMENSION(value)                                                   \
+  {.minimum = (value), .maximum = (value), .maximum_unbounded = 0u,             \
+   .reserved = {0}}
+
+static const et_kernel_dimension_range_v1 attention_mha_t1_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(1u), EXACT_DIMENSION(1u)};
+static const et_kernel_dimension_range_v1 attention_mha_square_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(2u), EXACT_DIMENSION(1u)};
+static const et_kernel_dimension_range_v1 attention_aot_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(1u)};
+static const et_kernel_dimension_range_v1 attention_scale_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 attention_mha_d2_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 attention_gqa_t1_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(1u), EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 attention_gqa_t3_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(3u), EXACT_DIMENSION(3u), EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 attention_n2_rectangular_dimensions[] = {
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(3u), EXACT_DIMENSION(4u)};
+static const et_kernel_dimension_range_v1 attention_n2_cache_full_dimensions[] = {
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(3u), EXACT_DIMENSION(3u), EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 attention_n2_cache_step_dimensions[] = {
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(3u), EXACT_DIMENSION(2u)};
+
+static const et_kernel_dimension_range_v1 rope_t1_d2_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(1u), EXACT_DIMENSION(1u),
+    EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 rope_t2_d2_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(1u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 rope_t2_d4_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(1u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(4u)};
+static const et_kernel_dimension_range_v1 rope_n2_dimensions[] = {
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(2u), EXACT_DIMENSION(3u),
+    EXACT_DIMENSION(4u)};
+static const et_kernel_dimension_range_v1 rope_n2_q_cache_dimensions[] = {
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(4u), EXACT_DIMENSION(3u),
+    EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 rope_n2_k_cache_dimensions[] = {
+    EXACT_DIMENSION(2u), EXACT_DIMENSION(2u), EXACT_DIMENSION(3u),
+    EXACT_DIMENSION(2u)};
+
 static const et_kernel_shape_range_v1 attention_ranges[] = {
-    {.rank = 6u, .dimensions = attention_dimensions},
+    {.rank = 6u, .dimensions = attention_mha_t1_dimensions},
+    {.rank = 6u, .dimensions = attention_mha_square_dimensions},
+    {.rank = 6u, .dimensions = attention_aot_dimensions},
+    {.rank = 6u, .dimensions = attention_scale_dimensions},
+    {.rank = 6u, .dimensions = attention_mha_d2_dimensions},
+    {.rank = 6u, .dimensions = attention_gqa_t1_dimensions},
+    {.rank = 6u, .dimensions = attention_gqa_t3_dimensions},
+    {.rank = 6u, .dimensions = attention_n2_rectangular_dimensions},
+    {.rank = 6u, .dimensions = attention_n2_cache_full_dimensions},
+    {.rank = 6u, .dimensions = attention_n2_cache_step_dimensions},
 };
 static const et_kernel_shape_range_v1 rope_ranges[] = {
-    {.rank = 4u, .dimensions = rope_dimensions},
+    {.rank = 4u, .dimensions = rope_t1_d2_dimensions},
+    {.rank = 4u, .dimensions = rope_t2_d2_dimensions},
+    {.rank = 4u, .dimensions = rope_t2_d4_dimensions},
+    {.rank = 4u, .dimensions = rope_n2_dimensions},
+    {.rank = 4u, .dimensions = rope_n2_q_cache_dimensions},
+    {.rank = 4u, .dimensions = rope_n2_k_cache_dimensions},
 };
+
+#undef EXACT_DIMENSION
 static const char *const attention_operations[] = {
     "causal-attention.forward", "causal-attention.backward"};
 static const char *const rope_operations[] = {"rope.forward", "rope.backward"};

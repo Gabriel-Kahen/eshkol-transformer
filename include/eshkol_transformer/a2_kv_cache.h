@@ -19,8 +19,35 @@ typedef struct et_a2_kv_cache_transaction_view
     et_a2_kv_cache_transaction_view;
 typedef struct et_a2_kv_cache_read_borrow et_a2_kv_cache_read_borrow;
 
+/*
+ * ABI-wide writable-output rules:
+ *
+ * - A creator or descriptor-accessor pointer slot is required, must be suitably
+ *   aligned for a pointer, must contain NULL on entry, and must be disjoint from
+ *   every other output slot, error, input span (including logical dtype/device
+ *   text through its terminal NUL), and live A2-owned allocation.
+ * - A destroy, commit, abort, or lease-end slot contains its live handle on
+ *   entry and is set to NULL only on success.
+ * - Every output slot is byte-for-byte unchanged on failure. No output pointer
+ *   is published until all validation and allocation for that call succeeds.
+ * - Every caller-declared descriptor, metadata, data, output, and error span
+ *   must have a representable exclusive end. Overflowing spans reject before
+ *   dereference. An error span that cannot safely receive a diagnostic causes
+ *   a raw ET_KERNEL_ERROR_INVALID_ARGUMENT return without mutation.
+ *
+ * These process-local registry and alias checks are unsynchronized; the ABI
+ * makes no thread-safety claim.
+ */
+
 int32_t et_a2_kv_cache_abi_major_v1(void);
 int32_t et_a2_kv_cache_abi_minor_v1(void);
+/*
+ * A wrong major reports VERSION_MISMATCH/ABI_MAJOR_MISMATCH. A requested
+ * minimum minor above the implemented minor reports
+ * VERSION_MISMATCH/UNKNOWN_REQUIRED_FEATURE; it is not mislabeled as a major
+ * mismatch. The requested pair is admitted only when major is exactly 1 and
+ * minimum_minor is at most 0.
+ */
 int32_t et_a2_kv_cache_abi_require_v1(uint32_t major,
                                       uint32_t minimum_minor,
                                       et_kernel_error *error);
@@ -44,7 +71,10 @@ int32_t et_a2_kv_cache_destroy_v1(et_a2_kv_cache **cache,
  * CPU i64 K1 view of shape [batch]. append_width must be positive; every count
  * is in [0,append_width], at least one is positive, and old_length+count must
  * not exceed capacity. Beginning a transaction allocates only control/snapshot
- * state; it never reallocates cache storage.
+ * state; it never reallocates cache storage. The complete physical source
+ * tensors supplied to stage_layer, including all positions beyond a row's
+ * append count up to append_width, must contain finite f32 values. Unused
+ * padding is validated but is neither copied nor made logically visible.
  */
 int32_t et_a2_kv_cache_transaction_begin_v1(
     et_a2_kv_cache *cache, uint64_t append_width,

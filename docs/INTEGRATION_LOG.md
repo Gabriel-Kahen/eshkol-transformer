@@ -895,20 +895,31 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   generic K1 resolver symbol or alter provider-free baseline discovery.
 
   `kernel.causal-attention` exposes explicit forward and analytic-backward
-  operations with semantic request shape `[N,Hq,Hkv,Tq,Tk,Dh]`. Q is
+  operations with semantic request shape `[N,Hq,Hkv,Tq,Tk,Dh]`. K1 v1 range
+  records are disjunctive, so the one uniquely named capability advertises only
+  ten exact min=max rows: `[1,2,2,1,1,1]`, `[1,2,2,2,2,1]`,
+  `[1,2,2,1,2,1]`, `[1,2,2,1,2,2]`, `[1,2,2,2,2,2]`,
+  `[1,4,2,1,1,2]`, `[1,4,2,3,3,2]`, `[2,4,2,2,3,4]`,
+  `[2,4,2,3,3,2]`, and `[2,4,2,1,3,2]`. Broader shapes admitted by the
+  defensive provider validator are unverified and rejected by K1 capability
+  resolution. Q is
   `f32[N,Hq,Tq,Dh]`; K and V are distinct `f32[N,Hkv,Tk,Dh]`; query and key
   positions are `i64[N,Tq]` and `i64[N,Tk]`; the exact nonbroadcast keep mask is
   `bool[N,Tq,Tk]`; and the output/upstream is `f32[N,Hq,Tq,Dh]`. Query head `h`
   maps to KV head `floor(h/(Hq/Hkv))`, with exact divisibility. Version 1 admits
   proved MHA and GQA with `Hkv >= 2`; MQA remains MOD5 scope. Admission requires a
   true keep-mask element and `key-position <= query-position`. Stable f32 softmax
-  uses `1/sqrt(Dh)`. A fully masked row returns positive-zero output and zero
+  serially accumulates the dot product, computes `root=sqrtf((float)Dh)`, then
+  `scale=1.0f/root`, and multiplies the completed sum by that scale. A fully masked
+  row returns positive-zero output and zero
   adjoints. Floating operands are finite; positions are nonnegative, strictly
   increasing per row, and at most `16777215`. Masks and positions have no gradient.
 
   `kernel.rope` exposes forward and analytic backward over
   `f32[N,H,T,Dh]`, exact `i64[N,T]` positions, and positive finite
-  `inv-freq f32[Dh/2]`, with even `Dh >= 2`. Adjacent pairs rotate by
+  `inv-freq f32[Dh/2]`, with exact even `Dh >= 2`. Its one capability advertises
+  only `[1,1,1,2]`, `[1,1,2,2]`, `[1,1,2,4]`, `[2,2,3,4]`,
+  `[2,4,3,2]`, and `[2,2,3,2]`. Adjacent pairs rotate by
   `position * inv-freq[i]`; backward applies the inverse rotation. The inv-frequency
   input avoids freezing an unaccepted model-level base or scaling policy.
 
@@ -939,6 +950,26 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   kernel, not an accelerated, fused, compiler-reverse-AD, P1, or general tensor
   capability. There is no core, scalar, dtype, device, cast, transfer, allocation,
   precision, or cache fallback.
+- **Exact-head review corrections:** Independent A2-R review of
+  `f85a05de077092dcb29bebdbbdb3d9ff81cde111` requested corrections. The repair
+  leaves K1 v1 unchanged and narrows capability metadata to the exact disjunctive
+  rows above; it adds K1 require negatives for `Hq < Hkv`, nondivisible heads,
+  odd RoPE `Dh`, and otherwise valid shapes outside the published rows. The
+  supported-platform arithmetic regression distinguishes reciprocal-then-multiply
+  from divide-after-sum, while the frozen PyTorch fixture remains a tolerance-based
+  mathematical oracle and regenerates byte-identically.
+
+  KV-cache ABI 1.0 now maps a wrong major to
+  `ABI_MAJOR_MISMATCH` and a too-new minimum minor to
+  `UNKNOWN_REQUIRED_FEATURE`. Every creator or descriptor output slot must be
+  pointer-aligned, disjoint (including from logical dtype/device text spans), and
+  NULL on entry; destructive handle slots are nulled only on success;
+  every output remains unchanged on failure. All caller-declared spans require a
+  representable exclusive end before dereference. The entire staged physical
+  `[N,Hkv,A,Dh]` K/V source, including unused padding, must be finite; unused values
+  are validated but not copied or exposed. New high-address, output-slot,
+  finiteness, failpoint-continuation, and two-batch numerical tests close those
+  review findings without changing the accepted full-capacity cache-view contract.
 - **Evidence:** Initial canonical-pin AOT probes prove only narrow scalar/vector
   gradient behavior. A separate built-in attention probe is noncausal without an
   explicit mask and compiler/source inspection finds double scalar loops and
@@ -956,7 +987,12 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   private Eshkol AOT forward/backward/cache path. The private transport remains test
   evidence only. The complete local repository test gate also passes on the
   documented unsupported CachyOS/LLVM 22 compatibility host. Supported Ubuntu
-  22.04/LLVM 21 exact-head CI remains pending.
+  22.04/LLVM 21 exact-head CI remains pending. The corrected local focused gate
+  passes 721 provider, 961 cache, and 677 cached-attention checks in deterministic
+  optimized and ASan/UBSan runs, all four frozen-oracle tests, and the private AOT
+  path on the explicitly unsupported compatibility host. It includes `N=2`
+  attention and RoPE forward/backward finite-difference coverage and distinct-batch
+  cached incremental/full parity.
 - **Dependencies / retest:** M3/G3 cannot treat the private A2 transport as a shared
   tensor API. They remain blocked on a separately accepted f32 carrier, P1 provider,
   provider aggregation, and production Eshkol ownership/lifetime boundary. N2 and
@@ -965,4 +1001,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   serialization requires a new issue-#1 decision and affected retests.
 - **Reference:** [issue #45](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/45);
   [integration proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487219486);
-  integration verdict `5487284582` on issue #1 and issue #45.
+  integration verdict `5487284582` on issue #1 and issue #45;
+  [A2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494434343);
+  [correction direction](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494455136);
+  [cache-bound ledger correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5494455138).

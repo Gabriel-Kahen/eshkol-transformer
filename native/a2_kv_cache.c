@@ -210,6 +210,7 @@ static int output_slot_ok(const void *slot, et_kernel_error *error,
   if (error != NULL && overlaps(slot, sizeof(void *), error, sizeof(*error)))
     return raw_reject();
   if (!span_fits(slot, sizeof(void *)) ||
+      (uintptr_t)slot % _Alignof(void *) != 0u ||
       live_storage_overlap(slot, sizeof(void *)))
     return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                 ET_KERNEL_CODE_ALIASING_OUTPUT, operation,
@@ -341,13 +342,19 @@ static void unlink_borrow(et_a2_kv_cache_read_borrow *target) {
 
 int32_t et_a2_kv_cache_abi_major_v1(void) { return ET_A2_KV_CACHE_ABI_MAJOR; }
 int32_t et_a2_kv_cache_abi_minor_v1(void) { return ET_A2_KV_CACHE_ABI_MINOR; }
-int32_t et_a2_kv_cache_abi_require_v1(uint32_t major, uint32_t minor,
+int32_t et_a2_kv_cache_abi_require_v1(uint32_t major,
+                                      uint32_t minimum_minor,
                                       et_kernel_error *error) {
   if (preflight_error_sink(error) != 0) return raw_reject();
-  if (major != ET_A2_KV_CACHE_ABI_MAJOR || minor > ET_A2_KV_CACHE_ABI_MINOR)
+  if (major != ET_A2_KV_CACHE_ABI_MAJOR)
     return fail(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
                 ET_KERNEL_CODE_ABI_MAJOR_MISMATCH, "a2-kv-cache.abi-require",
-                "unsupported A2 KV-cache ABI version");
+                "requested ABI major does not match supported major 1");
+  if (minimum_minor > ET_A2_KV_CACHE_ABI_MINOR)
+    return fail(error, ET_KERNEL_ERROR_VERSION_MISMATCH,
+                ET_KERNEL_CODE_UNKNOWN_REQUIRED_FEATURE,
+                "a2-kv-cache.abi-require",
+                "requested minimum ABI minor exceeds supported minor 0");
   return success_preflighted(error);
 }
 
@@ -460,6 +467,8 @@ int32_t et_a2_kv_cache_transaction_begin_v1(
   if (overlaps(output, sizeof(*output), counts_view, sizeof(*counts_view)) ||
       overlaps(output, sizeof(*output), counts_view->shape,
                sizeof(*counts_view->shape)) ||
+      overlaps(output, sizeof(*output), counts_view->dtype, sizeof("i64")) ||
+      overlaps(output, sizeof(*output), counts_view->device, sizeof("cpu")) ||
       overlaps(output, sizeof(*output), counts_view->data,
                counts_view->byte_length))
     return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,

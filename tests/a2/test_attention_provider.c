@@ -10,6 +10,8 @@
 
 static size_t checks;
 
+#define ET_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+
 #define CHECK(condition)                                                       \
   do {                                                                         \
     checks++;                                                                  \
@@ -117,6 +119,23 @@ static et_kernel_runtime *make_runtime(void) {
   return runtime;
 }
 
+static void expect_capability_request(et_kernel_runtime *runtime,
+                                      const char *capability,
+                                      const char *operation, size_t rank,
+                                      uint64_t *shape, int supported) {
+  et_kernel_request_v1 req = request(operation, rank, shape);
+  const et_kernel_capability_v1 *entry = NULL;
+  et_kernel_error error;
+  int32_t result = et_kernel_runtime_capability_require(
+      runtime, capability, &req, &entry, &error);
+  CHECK((result == 0) == supported);
+  CHECK((entry != NULL) == supported);
+  if (!supported) {
+    CHECK(error.category == ET_KERNEL_ERROR_UNSUPPORTED);
+    CHECK(error.code == ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
+  }
+}
+
 static void test_metadata(et_kernel_runtime *runtime) {
   const et_kernel_provider_v1 *provider = et_a2_kernel_provider_v1();
   const et_kernel_capability_v1 *attention;
@@ -138,6 +157,87 @@ static void test_metadata(et_kernel_runtime *runtime) {
   CHECK(attention->status == ET_KERNEL_CAPABILITY_VERIFIED);
   CHECK(rope->status == ET_KERNEL_CAPABILITY_VERIFIED);
   CHECK(attention->deterministic == 1u && rope->deterministic == 1u);
+  CHECK(attention->shape_range_count == 10u);
+  CHECK(rope->shape_range_count == 6u);
+  for (size_t range = 0u; range < attention->shape_range_count; range++) {
+    CHECK(attention->shape_ranges[range].rank == 6u);
+    for (size_t dimension = 0u; dimension < 6u; dimension++) {
+      const et_kernel_dimension_range_v1 *constraint =
+          &attention->shape_ranges[range].dimensions[dimension];
+      CHECK(constraint->maximum_unbounded == 0u);
+      CHECK(constraint->minimum == constraint->maximum);
+    }
+  }
+  for (size_t range = 0u; range < rope->shape_range_count; range++) {
+    CHECK(rope->shape_ranges[range].rank == 4u);
+    for (size_t dimension = 0u; dimension < 4u; dimension++) {
+      const et_kernel_dimension_range_v1 *constraint =
+          &rope->shape_ranges[range].dimensions[dimension];
+      CHECK(constraint->maximum_unbounded == 0u);
+      CHECK(constraint->minimum == constraint->maximum);
+      if (dimension == 3u) CHECK(constraint->minimum % 2u == 0u);
+    }
+  }
+  {
+    uint64_t attention_shapes[][6] = {
+        {1u,2u,2u,1u,1u,1u}, {1u,2u,2u,2u,2u,1u},
+        {1u,2u,2u,1u,2u,1u}, {1u,2u,2u,1u,2u,2u},
+        {1u,2u,2u,2u,2u,2u}, {1u,4u,2u,1u,1u,2u},
+        {1u,4u,2u,3u,3u,2u}, {2u,4u,2u,2u,3u,4u},
+        {2u,4u,2u,3u,3u,2u}, {2u,4u,2u,1u,3u,2u},
+    };
+    uint64_t rope_shapes[][4] = {
+        {1u,1u,1u,2u}, {1u,1u,2u,2u}, {1u,1u,2u,4u},
+        {2u,2u,3u,4u}, {2u,4u,3u,2u}, {2u,2u,3u,2u},
+    };
+    uint64_t hq_less_than_hkv[] = {1u,2u,4u,1u,1u,2u};
+    uint64_t nondivisible_heads[] = {1u,3u,2u,1u,1u,2u};
+    uint64_t outside_attention[] = {1u,2u,2u,3u,2u,1u};
+    uint64_t odd_rope[] = {1u,1u,1u,3u};
+    uint64_t outside_rope[] = {1u,2u,1u,2u};
+    for (size_t index = 0u; index < ET_ARRAY_COUNT(attention_shapes); index++) {
+      expect_capability_request(runtime, "kernel.causal-attention",
+                                "causal-attention.forward", 6u,
+                                attention_shapes[index], 1);
+      expect_capability_request(runtime, "kernel.causal-attention",
+                                "causal-attention.backward", 6u,
+                                attention_shapes[index], 1);
+    }
+    for (size_t index = 0u; index < ET_ARRAY_COUNT(rope_shapes); index++) {
+      expect_capability_request(runtime, "kernel.rope", "rope.forward", 4u,
+                                rope_shapes[index], 1);
+      expect_capability_request(runtime, "kernel.rope", "rope.backward", 4u,
+                                rope_shapes[index], 1);
+    }
+    expect_capability_request(runtime, "kernel.causal-attention",
+                              "causal-attention.forward", 6u,
+                              hq_less_than_hkv, 0);
+    expect_capability_request(runtime, "kernel.causal-attention",
+                              "causal-attention.forward", 6u,
+                              nondivisible_heads, 0);
+    expect_capability_request(runtime, "kernel.causal-attention",
+                              "causal-attention.forward", 6u,
+                              outside_attention, 0);
+    expect_capability_request(runtime, "kernel.rope", "rope.forward", 4u,
+                              odd_rope, 0);
+    expect_capability_request(runtime, "kernel.rope", "rope.forward", 4u,
+                              outside_rope, 0);
+  }
+  {
+    size_t bytes = 0u;
+    et_kernel_error error;
+    CHECK(et_kernel_runtime_report_json(runtime, NULL, 0u, &bytes, &error) == 0);
+    char *report = (char *)malloc(bytes);
+    CHECK(report != NULL);
+    CHECK(et_kernel_runtime_report_json(runtime, report, bytes, &bytes, &error) ==
+          0);
+    CHECK(strstr(report,
+        "[[1,1],[2,2],[2,2],[1,1],[1,1],[1,1]]") != NULL);
+    CHECK(strstr(report,
+        "[[2,2],[4,4],[2,2],[2,2],[3,3],[4,4]]") != NULL);
+    CHECK(strstr(report, "[[2,2],[2,2],[3,3],[4,4]]") != NULL);
+    free(report);
+  }
 }
 
 static void test_mha_forward_masks(et_kernel_runtime *runtime) {
@@ -377,6 +477,53 @@ static void test_gqa_forward_backward(et_kernel_runtime *runtime) {
   expect_array(dv, expected_dv, 4u, 1e-6f);
 }
 
+static void test_reciprocal_sqrt_order(et_kernel_runtime *runtime) {
+  uint64_t semantic_shape[] = {1u, 2u, 2u, 1u, 2u, 2u};
+  uint64_t q_shape[] = {1u, 2u, 1u, 2u};
+  uint64_t kv_shape[] = {1u, 2u, 2u, 2u};
+  uint64_t query_position_shape[] = {1u, 1u};
+  uint64_t key_position_shape[] = {1u, 2u};
+  uint64_t mask_shape[] = {1u, 1u, 2u};
+  float q[] = {9.20307636260986328125f, 0.0f,
+               9.20307636260986328125f, 0.0f};
+  float k[] = {1.0f, 0.0f, 0.0f, 0.0f,
+               1.0f, 0.0f, 0.0f, 0.0f};
+  float v[] = {0.0f, 0.0f, 1.0f, 1.0f,
+               0.0f, 0.0f, 1.0f, 1.0f};
+  int64_t query_positions[] = {1};
+  int64_t key_positions[] = {0, 1};
+  uint8_t mask[] = {1u, 1u};
+  float output[4] = {0.0f};
+  et_kernel_tensor_view_v1 inputs[] = {
+      view(q, sizeof(q), "f32", 4u, q_shape),
+      view(k, sizeof(k), "f32", 4u, kv_shape),
+      view(v, sizeof(v), "f32", 4u, kv_shape),
+      view(query_positions, sizeof(query_positions), "i64", 2u,
+           query_position_shape),
+      view(key_positions, sizeof(key_positions), "i64", 2u,
+           key_position_shape),
+      view(mask, sizeof(mask), "bool", 3u, mask_shape),
+  };
+  et_kernel_tensor_view_v1 outputs[] = {
+      view(output, sizeof(output), "f32", 4u, q_shape),
+  };
+  et_kernel_request_v1 req =
+      request("causal-attention.forward", 6u, semantic_shape);
+  et_kernel_call_v1 invocation = call("kernel.causal-attention", &req, inputs,
+                                      6u, outputs, 1u);
+  et_kernel_error error;
+  const uint32_t reciprocal_then_multiply = UINT32_C(0x3ac348a4);
+  const uint32_t divide_after_sum = UINT32_C(0x3ac3489e);
+
+  CHECK(et_kernel_runtime_dispatch(runtime, &invocation, &error) == 0);
+  for (size_t index = 0u; index < ET_ARRAY_COUNT(output); index++) {
+    uint32_t bits;
+    memcpy(&bits, &output[index], sizeof(bits));
+    CHECK(bits == reciprocal_then_multiply);
+    CHECK(bits != divide_after_sum);
+  }
+}
+
 static float attention_loss(et_kernel_runtime *runtime,
                             et_kernel_call_v1 *invocation, float *output,
                             const float *upstream, size_t count) {
@@ -448,6 +595,95 @@ static void test_attention_finite_difference(et_kernel_runtime *runtime) {
       operands[operand][index] = original;
       numerical = (positive - negative) / (2.0f * epsilon);
       CHECK(close_float(gradients[operand][index], numerical, 2.0e-3f));
+    }
+  }
+}
+
+static void test_n2_rectangular_attention(et_kernel_runtime *runtime) {
+  enum { Q_COUNT = 64, KV_COUNT = 48 };
+  uint64_t semantic_shape[] = {2u, 4u, 2u, 2u, 3u, 4u};
+  uint64_t q_shape[] = {2u, 4u, 2u, 4u};
+  uint64_t kv_shape[] = {2u, 2u, 3u, 4u};
+  uint64_t query_position_shape[] = {2u, 2u};
+  uint64_t key_position_shape[] = {2u, 3u};
+  uint64_t mask_shape[] = {2u, 2u, 3u};
+  float q[Q_COUNT], k[KV_COUNT], v[KV_COUNT], upstream[Q_COUNT];
+  float output[Q_COUNT], repeated[Q_COUNT];
+  float dq[Q_COUNT], dk[KV_COUNT], dv[KV_COUNT];
+  int64_t query_positions[] = {1, 4, 2, 6};
+  int64_t key_positions[] = {0, 3, 5, 1, 4, 6};
+  uint8_t mask[] = {1u,1u,1u, 1u,1u,1u,
+                    1u,0u,1u, 1u,1u,1u};
+  et_kernel_tensor_view_v1 forward_inputs[] = {
+      view(q, sizeof(q), "f32", 4u, q_shape),
+      view(k, sizeof(k), "f32", 4u, kv_shape),
+      view(v, sizeof(v), "f32", 4u, kv_shape),
+      view(query_positions, sizeof(query_positions), "i64", 2u,
+           query_position_shape),
+      view(key_positions, sizeof(key_positions), "i64", 2u,
+           key_position_shape),
+      view(mask, sizeof(mask), "bool", 3u, mask_shape),
+  };
+  et_kernel_tensor_view_v1 forward_outputs[] = {
+      view(output, sizeof(output), "f32", 4u, q_shape),
+  };
+  et_kernel_request_v1 forward_request =
+      request("causal-attention.forward", 6u, semantic_shape);
+  et_kernel_call_v1 forward_call = call(
+      "kernel.causal-attention", &forward_request, forward_inputs, 6u,
+      forward_outputs, 1u);
+  et_kernel_tensor_view_v1 backward_inputs[7];
+  et_kernel_tensor_view_v1 backward_outputs[] = {
+      view(dq, sizeof(dq), "f32", 4u, q_shape),
+      view(dk, sizeof(dk), "f32", 4u, kv_shape),
+      view(dv, sizeof(dv), "f32", 4u, kv_shape),
+  };
+  et_kernel_request_v1 backward_request =
+      request("causal-attention.backward", 6u, semantic_shape);
+  et_kernel_call_v1 backward_call;
+  et_kernel_error error;
+  const size_t q_samples[] = {0u, 31u, 32u, 63u};
+  const size_t kv_samples[] = {0u, 23u, 24u, 47u};
+  const float epsilon = 1.0e-3f;
+
+  for (size_t index = 0u; index < Q_COUNT; index++) {
+    q[index] = (float)((int)(index % 13u) - 6) * 0.0375f;
+    upstream[index] = (float)((int)(index % 9u) - 4) * 0.045f;
+  }
+  for (size_t index = 0u; index < KV_COUNT; index++) {
+    k[index] = (float)((int)(index % 11u) - 5) * 0.0525f;
+    v[index] = (float)((int)(index % 7u) - 2) * 0.0875f;
+  }
+  CHECK(et_kernel_runtime_dispatch(runtime, &forward_call, &error) == 0);
+  memcpy(repeated, output, sizeof(output));
+  memset(output, 0, sizeof(output));
+  CHECK(et_kernel_runtime_dispatch(runtime, &forward_call, &error) == 0);
+  CHECK(memcmp(output, repeated, sizeof(output)) == 0);
+  CHECK(memcmp(&output[0], &output[Q_COUNT / 2u],
+               (Q_COUNT / 2u) * sizeof(float)) != 0);
+
+  memcpy(backward_inputs, forward_inputs, sizeof(forward_inputs));
+  backward_inputs[6] = view(upstream, sizeof(upstream), "f32", 4u, q_shape);
+  backward_call = call("kernel.causal-attention", &backward_request,
+                       backward_inputs, 7u, backward_outputs, 3u);
+  CHECK(et_kernel_runtime_dispatch(runtime, &backward_call, &error) == 0);
+  for (size_t operand = 0u; operand < 3u; operand++) {
+    float *values = operand == 0u ? q : (operand == 1u ? k : v);
+    float *gradient = operand == 0u ? dq : (operand == 1u ? dk : dv);
+    const size_t *samples = operand == 0u ? q_samples : kv_samples;
+    for (size_t sample = 0u; sample < 4u; sample++) {
+      const size_t index = samples[sample];
+      const float original = values[index];
+      float positive, negative;
+      values[index] = original + epsilon;
+      positive = attention_loss(runtime, &forward_call, output, upstream,
+                                Q_COUNT);
+      values[index] = original - epsilon;
+      negative = attention_loss(runtime, &forward_call, output, upstream,
+                                Q_COUNT);
+      values[index] = original;
+      CHECK(close_float(gradient[index],
+                        (positive - negative) / (2.0f * epsilon), 4.0e-3f));
     }
   }
 }
@@ -616,6 +852,78 @@ static void test_rope_finite_difference(et_kernel_runtime *runtime) {
     x[index] = original;
     CHECK(close_float(dx[index], (positive - negative) / (2.0f * epsilon),
                       1.0e-3f));
+  }
+}
+
+static float rope_loss(et_kernel_runtime *runtime,
+                       et_kernel_call_v1 *invocation, const float *output,
+                       const float *upstream, size_t count) {
+  et_kernel_error error;
+  float result = 0.0f;
+  CHECK(et_kernel_runtime_dispatch(runtime, invocation, &error) == 0);
+  for (size_t index = 0u; index < count; index++)
+    result += output[index] * upstream[index];
+  return result;
+}
+
+static void test_n2_rope_forward_backward(et_kernel_runtime *runtime) {
+  enum { ELEMENTS = 48 };
+  uint64_t shape[] = {2u, 2u, 3u, 4u};
+  uint64_t position_shape[] = {2u, 3u};
+  uint64_t frequency_shape[] = {2u};
+  float x[ELEMENTS], upstream[ELEMENTS], output[ELEMENTS], repeated[ELEMENTS];
+  float dx[ELEMENTS];
+  int64_t positions[] = {0, 3, 7, 2, 5, 9};
+  float inv_frequency[] = {0.25f, 0.03125f};
+  et_kernel_tensor_view_v1 inputs[] = {
+      view(x, sizeof(x), "f32", 4u, shape),
+      view(positions, sizeof(positions), "i64", 2u, position_shape),
+      view(inv_frequency, sizeof(inv_frequency), "f32", 1u, frequency_shape),
+  };
+  et_kernel_tensor_view_v1 outputs[] = {
+      view(output, sizeof(output), "f32", 4u, shape),
+  };
+  et_kernel_request_v1 req = request("rope.forward", 4u, shape);
+  et_kernel_call_v1 invocation =
+      call("kernel.rope", &req, inputs, 3u, outputs, 1u);
+  et_kernel_error error;
+  const size_t samples[] = {0u, 23u, 24u, 47u};
+  const float epsilon = 1.0e-3f;
+
+  for (size_t index = 0u; index < ELEMENTS; index++) {
+    x[index] = (float)((int)(index % 17u) - 8) * 0.0625f;
+    upstream[index] = (float)((int)(index % 11u) - 5) * 0.075f;
+  }
+  CHECK(et_kernel_runtime_dispatch(runtime, &invocation, &error) == 0);
+  memcpy(repeated, output, sizeof(output));
+  memset(output, 0, sizeof(output));
+  CHECK(et_kernel_runtime_dispatch(runtime, &invocation, &error) == 0);
+  CHECK(memcmp(output, repeated, sizeof(output)) == 0);
+  CHECK(memcmp(&output[0], &output[ELEMENTS / 2u],
+               (ELEMENTS / 2u) * sizeof(float)) != 0);
+  for (size_t index = 0u; index < ELEMENTS; index += 2u) {
+    CHECK(close_float(hypotf(output[index], output[index + 1u]),
+                      hypotf(x[index], x[index + 1u]), 2.0e-6f));
+  }
+
+  inputs[0] = view(upstream, sizeof(upstream), "f32", 4u, shape);
+  outputs[0] = view(dx, sizeof(dx), "f32", 4u, shape);
+  req.operation = "rope.backward";
+  CHECK(et_kernel_runtime_dispatch(runtime, &invocation, &error) == 0);
+  inputs[0] = view(x, sizeof(x), "f32", 4u, shape);
+  outputs[0] = view(output, sizeof(output), "f32", 4u, shape);
+  req.operation = "rope.forward";
+  for (size_t sample = 0u; sample < ET_ARRAY_COUNT(samples); sample++) {
+    const size_t index = samples[sample];
+    const float original = x[index];
+    float positive, negative;
+    x[index] = original + epsilon;
+    positive = rope_loss(runtime, &invocation, output, upstream, ELEMENTS);
+    x[index] = original - epsilon;
+    negative = rope_loss(runtime, &invocation, output, upstream, ELEMENTS);
+    x[index] = original;
+    CHECK(close_float(dx[index], (positive - negative) / (2.0f * epsilon),
+                      1.5e-3f));
   }
 }
 
@@ -816,11 +1124,14 @@ int main(void) {
   test_mha_forward_masks(runtime);
   test_mha_backward(runtime);
   test_gqa_forward_backward(runtime);
+  test_reciprocal_sqrt_order(runtime);
   test_attention_finite_difference(runtime);
+  test_n2_rectangular_attention(runtime);
   test_pytorch_gqa_fixture(runtime);
   test_rope_boundary_and_backward(runtime);
   test_pytorch_rope_fixture(runtime);
   test_rope_finite_difference(runtime);
+  test_n2_rope_forward_backward(runtime);
   test_compatible_tensor_stride(runtime);
   test_failures_are_atomic(runtime);
   test_backward_failure_atomicity(runtime);

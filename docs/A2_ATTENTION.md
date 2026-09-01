@@ -44,6 +44,24 @@ The capability is `kernel.causal-attention`. Its request shape is the semantic
 six-dimensional list `[N,Hq,Hkv,Tq,Tk,Dh]`, with every extent positive,
 `Hkv >= 2`, and `Hq mod Hkv = 0`.
 
+K1 v1 cannot express dependent head constraints or even-only dimensions in one
+rectangular range. A2 therefore publishes one capability with multiple disjunctive,
+exact min=max shape rows. The verified attention rows are:
+
+```text
+[1,2,2,1,1,1] [1,2,2,2,2,1] [1,2,2,1,2,1]
+[1,2,2,1,2,2] [1,2,2,2,2,2] [1,4,2,1,1,2]
+[1,4,2,3,3,2] [2,4,2,2,3,4] [2,4,2,3,3,2]
+[2,4,2,1,3,2]
+```
+
+The provider validator retains the general schema checks above as defense in
+depth, but a shape absent from this list is capability-unverified and K1
+capability resolution rejects it. Direct-provider behavior for a broader
+schema-valid shape is implementation-only and unverified. In particular,
+`Hq < Hkv`, nondivisible head counts, and otherwise schema-valid rectangles
+outside the exact rows are not advertised.
+
 `causal-attention.forward` has these tensor tables:
 
 | Table | Index | Tensor |
@@ -67,17 +85,29 @@ Query head `hq` uses KV head
 
 A key participates only when its keep-mask byte is 1 and its absolute key position
 is no greater than the absolute query position. No broadcasting or additive mask is
-defined. Scores use the fixed serial f32 order
-`sum(Q[d] * K[d]) / sqrtf(Dh)` and a maximum-subtracted f32 softmax over admitted
-keys. A query row with no admitted key returns positive f32 zero in every output
-element. Its dQ is zero and it contributes zero to dK and dV. The implementation
-uses contraction-disabled compilation and makes no cross-platform bitwise libm
-claim; parity tolerances are documented with the oracle evidence.
+defined. Scores use the fixed serial f32 order: accumulate
+`sum = sum + Q[d] * K[d]`, compute `root = sqrtf((float)Dh)`, compute
+`scale = 1.0f / root`, and finally compute `score = sum * scale`. Division of the
+completed dot product by `root` is not an equivalent contracted implementation
+for this contract. A maximum-subtracted f32 softmax follows over admitted keys.
+A query row with no admitted key returns positive f32 zero in every output element.
+Its dQ is zero and it contributes zero to dK and dV. The implementation uses
+contraction-disabled compilation and makes no cross-platform bitwise libm claim.
+The frozen PyTorch fixture remains a tolerance-based mathematical oracle; a
+separate supported-platform bit regression distinguishes reciprocal-then-multiply
+from divide-after-sum, so changing the frozen arithmetic order cannot hide inside
+the oracle tolerance.
 
 ### Rotary positions
 
 The capability is `kernel.rope`; the request shape is `[N,H,T,Dh]`. `Dh` is even
 and at least two.
+
+Its verified exact rows are `[1,1,1,2]`, `[1,1,2,2]`, `[1,1,2,4]`,
+`[2,2,3,4]`, `[2,4,3,2]`, and `[2,2,3,2]`. An odd `Dh`, or an otherwise
+schema-valid even shape outside these rows, is capability-unverified. This exact-row
+encoding is how A2 truthfully represents the even-dimension contract without a K1
+ABI change.
 
 `rope.forward` consumes x `f32[N,H,T,Dh]`, positions `i64[N,T]`, and positive
 finite inverse frequencies `f32[Dh/2]`, then writes y with x's exact shape.
@@ -159,6 +189,10 @@ The focused gate must prove:
   provider-free baseline discovery;
 - known-value, frozen-reference, and analytic-gradient parity for MHA and GQA;
 - central finite differences for Q, K, V, and RoPE input values;
+- nondegenerate two-batch rectangular attention and RoPE forward/backward
+  numerical coverage, plus two-batch cached GQA/RoPE incremental parity;
+- exact capability-require/report positives for every published row and negatives
+  for dependent-head, odd-RoPE, and broader validator-admitted shapes;
 - causal future-influence and future-gradient exclusion, selective masks, fully
   masked rows, T=1, short rectangular sequences, and repeated values;
 - RoPE position-zero, maximum-position, norm, malformed dimension/frequency, and

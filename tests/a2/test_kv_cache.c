@@ -31,6 +31,10 @@ static void expect_success(int32_t result, const et_kernel_error *error) {
   CHECK(error->code == ET_KERNEL_CODE_OK);
 }
 
+static void *exclusive_end_overflow(size_t bytes) {
+  return (void *)(uintptr_t)(UINTPTR_MAX - (bytes - 1u));
+}
+
 static void test_abi_and_create_failures(void) {
   et_kernel_error error;
   et_a2_kv_cache *cache = NULL;
@@ -40,6 +44,20 @@ static void test_abi_and_create_failures(void) {
   expect_success(et_a2_kv_cache_abi_require_v1(1u, 0u, &error), &error);
   expect_failure(et_a2_kv_cache_abi_require_v1(2u, 0u, &error), &error,
                  ET_KERNEL_ERROR_VERSION_MISMATCH);
+  CHECK(error.code == ET_KERNEL_CODE_ABI_MAJOR_MISMATCH);
+  CHECK(strcmp(error.operation,"a2-kv-cache.abi-require") == 0);
+  CHECK(strcmp(error.message,
+               "requested ABI major does not match supported major 1") == 0);
+  expect_failure(et_a2_kv_cache_abi_require_v1(1u, 1u, &error), &error,
+                 ET_KERNEL_ERROR_VERSION_MISMATCH);
+  CHECK(error.code == ET_KERNEL_CODE_UNKNOWN_REQUIRED_FEATURE);
+  CHECK(strcmp(error.message,
+               "requested minimum ABI minor exceeds supported minor 0") == 0);
+  expect_failure(et_a2_kv_cache_abi_require_v1(2u, 1u, &error), &error,
+                 ET_KERNEL_ERROR_VERSION_MISMATCH);
+  CHECK(error.code == ET_KERNEL_CODE_ABI_MAJOR_MISMATCH);
+  CHECK(et_a2_kv_cache_abi_require_v1(1u,1u,NULL) ==
+        ET_KERNEL_ERROR_VERSION_MISMATCH);
   expect_failure(et_a2_kv_cache_create_v1(0,1,1,1,1,&cache,&error), &error,
                  ET_KERNEL_ERROR_SHAPE_MISMATCH);
   CHECK(cache == NULL);
@@ -134,6 +152,19 @@ static void test_transaction_and_views(void) {
 
   expect_success(et_a2_kv_cache_transaction_begin_v1(
       cache,2,&counts,&txn,&error),&error);
+  source_k[8]=NAN; /* Entire row 1 is unused because append_counts[1] is zero. */
+  expect_failure(et_a2_kv_cache_transaction_stage_layer_v1(
+      txn,0,&keys,&values,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(isnan(source_k[8]));
+  expect_failure(et_a2_kv_cache_transaction_view_begin_v1(
+      txn,0,&view,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(view==NULL);
+  source_k[8]=before_k[8];
+  source_v[8]=NAN;
+  expect_failure(et_a2_kv_cache_transaction_stage_layer_v1(
+      txn,0,&keys,&values,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(isnan(source_v[8]));
+  source_v[8]=before_v[8];
   expect_success(et_a2_kv_cache_transaction_stage_layer_v1(
       txn,0,&keys,&values,&error),&error);
   expect_failure(et_a2_kv_cache_transaction_stage_layer_v1(
@@ -505,11 +536,249 @@ static void test_output_and_text_error_alias_atomicity(void) {
   expect_success(et_a2_kv_cache_destroy_v1(&cache,&error),&error);
 }
 
+static void test_output_contract_and_overflowing_spans(void) {
+  et_kernel_error error;
+  et_kernel_error *high_error=(et_kernel_error *)
+      exclusive_end_overflow(sizeof(et_kernel_error));
+  et_a2_kv_cache **high_cache_slot=(et_a2_kv_cache **)
+      exclusive_end_overflow(sizeof(void *));
+  et_a2_kv_cache_transaction **high_txn_slot=(et_a2_kv_cache_transaction **)
+      exclusive_end_overflow(sizeof(void *));
+  et_a2_kv_cache_transaction_view **high_view_slot=
+      (et_a2_kv_cache_transaction_view **)
+      exclusive_end_overflow(sizeof(void *));
+  et_a2_kv_cache_read_borrow **high_borrow_slot=
+      (et_a2_kv_cache_read_borrow **)exclusive_end_overflow(sizeof(void *));
+  const et_kernel_tensor_view_v1 **high_descriptor_slot=
+      (const et_kernel_tensor_view_v1 **)
+      exclusive_end_overflow(sizeof(void *));
+  const et_kernel_tensor_view_v1 *high_descriptor=
+      (const et_kernel_tensor_view_v1 *)
+      exclusive_end_overflow(sizeof(et_kernel_tensor_view_v1));
+  et_a2_kv_cache *cache=NULL,*created=NULL,*cache_sentinel;
+  et_a2_kv_cache_transaction *txn=NULL,*txn_sentinel;
+  et_a2_kv_cache_transaction_view *lease=NULL,*view_sentinel;
+  et_a2_kv_cache_read_borrow *borrow=NULL,*borrow_sentinel;
+  const et_kernel_tensor_view_v1 *k=NULL,*v=NULL,*lengths=NULL,*mask=NULL;
+  uint64_t one_shape[1]={1},source_shape[4]={1,1,1,1};
+  int64_t count_data[1]={1};
+  float key_data[1]={2.0f},value_data[1]={3.0f};
+  _Alignas(void *) unsigned char dtype_slot_storage[2u*sizeof(void *)];
+  _Alignas(void *) unsigned char device_slot_storage[2u*sizeof(void *)];
+  unsigned char dtype_slot_before[sizeof(dtype_slot_storage)];
+  unsigned char device_slot_before[sizeof(device_slot_storage)];
+  et_kernel_tensor_view_v1 counts=make_view(
+      count_data,sizeof(count_data),"i64",1,one_shape);
+  et_kernel_tensor_view_v1 keys=make_view(
+      key_data,sizeof(key_data),"f32",4,source_shape);
+  et_kernel_tensor_view_v1 values=make_view(
+      value_data,sizeof(value_data),"f32",4,source_shape);
+
+  /* Error and creator-output spans whose exclusive ends overflow are raw. */
+  CHECK(et_a2_kv_cache_abi_require_v1(1,0,high_error)==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(et_a2_kv_cache_create_v1(1,1,1,1,1,&created,high_error)==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(created==NULL);
+  CHECK(et_a2_kv_cache_create_v1(1,1,1,1,1,high_cache_slot,&error)==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+
+  /* NULL-on-entry is required and every failed creator preserves its slot. */
+  cache_sentinel=(et_a2_kv_cache *)(uintptr_t)0x1111u;
+  created=cache_sentinel;
+  expect_failure(et_a2_kv_cache_create_v1(1,1,1,1,1,&created,&error),&error,
+                 ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(created==cache_sentinel);
+  expect_success(et_a2_kv_cache_create_v1(1,1,1,2,1,&cache,&error),&error);
+  CHECK(et_a2_kv_cache_destroy_v1(&cache,high_error)==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(cache!=NULL);
+
+  txn_sentinel=(et_a2_kv_cache_transaction *)(uintptr_t)0x2222u;
+  txn=txn_sentinel;
+  expect_failure(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,&counts,&txn,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(txn==txn_sentinel);
+  txn=NULL;
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,&counts,&txn,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(txn==NULL);
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,&counts,high_txn_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,high_descriptor,&txn,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(txn==NULL);
+  CHECK(sizeof(void *)>=4u);
+  memset(dtype_slot_storage,0,sizeof(dtype_slot_storage));
+  memcpy(dtype_slot_storage+sizeof(void *)-3u,"i64",3u);
+  memcpy(dtype_slot_before,dtype_slot_storage,sizeof(dtype_slot_storage));
+  counts.dtype=(const char *)dtype_slot_storage+sizeof(void *)-3u;
+  expect_failure(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,&counts,
+      (et_a2_kv_cache_transaction **)(void *)(dtype_slot_storage+sizeof(void *)),
+      &error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(memcmp(dtype_slot_storage,dtype_slot_before,
+               sizeof(dtype_slot_storage))==0);
+  counts.dtype="i64";
+  memset(device_slot_storage,0,sizeof(device_slot_storage));
+  memcpy(device_slot_storage+sizeof(void *)-3u,"cpu",3u);
+  memcpy(device_slot_before,device_slot_storage,sizeof(device_slot_storage));
+  counts.device=(const char *)device_slot_storage+sizeof(void *)-3u;
+  expect_failure(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,&counts,
+      (et_a2_kv_cache_transaction **)(void *)(device_slot_storage+sizeof(void *)),
+      &error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(memcmp(device_slot_storage,device_slot_before,
+               sizeof(device_slot_storage))==0);
+  counts.device="cpu";
+  {
+    _Alignas(void *) unsigned char misaligned_storage[sizeof(void *)+1u]={0};
+    expect_failure(et_a2_kv_cache_transaction_begin_v1(
+        cache,1,&counts,
+        (et_a2_kv_cache_transaction **)(void *)(misaligned_storage+1u),&error),
+        &error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+    CHECK(txn==NULL);
+  }
+  {
+    et_kernel_tensor_view_v1 malformed=counts;
+    malformed.shape=(const uint64_t *)exclusive_end_overflow(sizeof(uint64_t));
+    CHECK(et_a2_kv_cache_transaction_begin_v1(
+        cache,1,&malformed,&txn,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+    CHECK(txn==NULL);
+    malformed=counts;
+    malformed.data=exclusive_end_overflow(sizeof(int64_t));
+    expect_failure(et_a2_kv_cache_transaction_begin_v1(
+        cache,1,&malformed,&txn,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+    CHECK(txn==NULL);
+    malformed=counts;
+    malformed.dtype=(const char *)exclusive_end_overflow(
+        ET_KERNEL_MAX_SYMBOL_BYTES+1u);
+    expect_failure(et_a2_kv_cache_transaction_begin_v1(
+        cache,1,&malformed,&txn,&error),&error,ET_KERNEL_ERROR_DTYPE_MISMATCH);
+    CHECK(txn==NULL);
+  }
+  expect_success(et_a2_kv_cache_transaction_begin_v1(
+      cache,1,&counts,&txn,&error),&error);
+
+  CHECK(et_a2_kv_cache_transaction_stage_layer_v1(
+      txn,0,&keys,&values,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(et_a2_kv_cache_transaction_stage_layer_v1(
+      txn,0,high_descriptor,&values,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(et_a2_kv_cache_transaction_stage_layer_v1(
+      txn,0,&keys,high_descriptor,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  {
+    et_kernel_tensor_view_v1 malformed=keys;
+    malformed.data=exclusive_end_overflow(sizeof(float));
+    expect_failure(et_a2_kv_cache_transaction_stage_layer_v1(
+        txn,0,&malformed,&values,&error),&error,
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  }
+  view_sentinel=(et_a2_kv_cache_transaction_view *)(uintptr_t)0x3333u;
+  lease=view_sentinel;
+  expect_failure(et_a2_kv_cache_transaction_view_begin_v1(
+      txn,0,&lease,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(lease==view_sentinel);
+  lease=NULL;
+  expect_failure(et_a2_kv_cache_transaction_view_begin_v1(
+      txn,0,&lease,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(lease==NULL); /* Overflow/error failures above left the layer unstaged. */
+  expect_success(et_a2_kv_cache_transaction_stage_layer_v1(
+      txn,0,&keys,&values,&error),&error);
+  CHECK(et_a2_kv_cache_transaction_view_begin_v1(
+      txn,0,&lease,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(lease==NULL);
+  CHECK(et_a2_kv_cache_transaction_view_begin_v1(
+      txn,0,high_view_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  expect_success(et_a2_kv_cache_transaction_view_begin_v1(
+      txn,0,&lease,&error),&error);
+
+  CHECK(et_a2_kv_cache_transaction_view_tensors_v1(
+      lease,&k,&v,&lengths,&mask,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(k==NULL&&v==NULL&&lengths==NULL&&mask==NULL);
+  for(size_t index=0u;index<4u;index++) {
+    const et_kernel_tensor_view_v1 *a=NULL,*b=NULL,*c=NULL,*d=NULL;
+    const et_kernel_tensor_view_v1 **slots[4]={&a,&b,&c,&d};
+    slots[index]=high_descriptor_slot;
+    CHECK(et_a2_kv_cache_transaction_view_tensors_v1(
+        lease,slots[0],slots[1],slots[2],slots[3],&error)==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+    CHECK(a==NULL&&b==NULL&&c==NULL&&d==NULL);
+  }
+  k=(const et_kernel_tensor_view_v1 *)(uintptr_t)0x4444u;
+  expect_failure(et_a2_kv_cache_transaction_view_tensors_v1(
+      lease,&k,&v,&lengths,&mask,&error),&error,
+      ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(k==(const et_kernel_tensor_view_v1 *)(uintptr_t)0x4444u);
+  CHECK(v==NULL&&lengths==NULL&&mask==NULL);
+  CHECK(et_a2_kv_cache_transaction_view_end_v1(
+      &lease,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(lease!=NULL);
+  CHECK(et_a2_kv_cache_transaction_view_end_v1(
+      high_view_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  expect_success(et_a2_kv_cache_transaction_view_end_v1(&lease,&error),&error);
+  CHECK(et_a2_kv_cache_transaction_commit_v1(
+      &txn,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(txn!=NULL);
+  CHECK(et_a2_kv_cache_transaction_abort_v1(
+      &txn,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(txn!=NULL);
+  CHECK(et_a2_kv_cache_transaction_commit_v1(
+      high_txn_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(et_a2_kv_cache_transaction_abort_v1(
+      high_txn_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  expect_success(et_a2_kv_cache_transaction_commit_v1(&txn,&error),&error);
+
+  borrow_sentinel=(et_a2_kv_cache_read_borrow *)(uintptr_t)0x5555u;
+  borrow=borrow_sentinel;
+  expect_failure(et_a2_kv_cache_read_borrow_begin_v1(
+      cache,&borrow,&error),&error,ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(borrow==borrow_sentinel);
+  borrow=NULL;
+  CHECK(et_a2_kv_cache_read_borrow_begin_v1(
+      cache,&borrow,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(borrow==NULL);
+  CHECK(et_a2_kv_cache_read_borrow_begin_v1(
+      cache,high_borrow_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  expect_success(et_a2_kv_cache_read_borrow_begin_v1(cache,&borrow,&error),&error);
+  k=(const et_kernel_tensor_view_v1 *)(uintptr_t)0x6666u;
+  v=lengths=mask=NULL;
+  expect_failure(et_a2_kv_cache_read_borrow_layer_v1(
+      borrow,0,&k,&v,&lengths,&mask,&error),&error,
+      ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(k==(const et_kernel_tensor_view_v1 *)(uintptr_t)0x6666u);
+  CHECK(v==NULL&&lengths==NULL&&mask==NULL);
+  k=v=lengths=mask=NULL;
+  CHECK(et_a2_kv_cache_read_borrow_layer_v1(
+      borrow,0,&k,&v,&lengths,&mask,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(k==NULL&&v==NULL&&lengths==NULL&&mask==NULL);
+  for(size_t index=0u;index<4u;index++) {
+    const et_kernel_tensor_view_v1 *a=NULL,*b=NULL,*c=NULL,*d=NULL;
+    const et_kernel_tensor_view_v1 **slots[4]={&a,&b,&c,&d};
+    slots[index]=high_descriptor_slot;
+    CHECK(et_a2_kv_cache_read_borrow_layer_v1(
+        borrow,0,slots[0],slots[1],slots[2],slots[3],&error)==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+    CHECK(a==NULL&&b==NULL&&c==NULL&&d==NULL);
+  }
+  CHECK(et_a2_kv_cache_read_borrow_end_v1(
+      &borrow,high_error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(borrow!=NULL);
+  CHECK(et_a2_kv_cache_read_borrow_end_v1(
+      high_borrow_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  expect_success(et_a2_kv_cache_read_borrow_end_v1(&borrow,&error),&error);
+  CHECK(et_a2_kv_cache_destroy_v1(
+      high_cache_slot,&error)==ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(cache!=NULL);
+  expect_success(et_a2_kv_cache_destroy_v1(&cache,&error),&error);
+  CHECK(cache==NULL);
+}
+
 int main(void) {
   test_abi_and_create_failures();
   test_transaction_and_views();
   test_validation_atomicity_and_failpoints();
   test_output_and_text_error_alias_atomicity();
+  test_output_contract_and_overflowing_spans();
   if(failures){fprintf(stderr,"A2 KV CACHE FAIL: %d of %d checks\n",failures,checks);return 1;}
   printf("A2 KV CACHE PASS: %d ABI, transaction, lease, atomicity, and adversarial checks\n",checks);
   return 0;
