@@ -8,7 +8,7 @@ P1L (issue #51) to I2 (issue #49) to O2. A production optimizer and review-ready
 pull request remain blocked until both prerequisites are independently approved and
 merged in order.
 
-The five A0 public names and arities remain unchanged:
+The five accepted A0 public names and arities remain unchanged:
 
 ```scheme
 (optimizer-create config parameter-tree)
@@ -17,6 +17,14 @@ The five A0 public names and arities remain unchanged:
 (optimizer-state optimizer)
 (optimizer-load-state! optimizer state)
 ```
+
+They are not sufficient to reclaim optimizer-state moment tensors. O2 proposes one
+additional arity-1 public operation, `(optimizer-state-release! state)`, in
+[integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493291780).
+The independently reviewed lifecycle refinements are in
+[the proposal addendum](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493340320).
+Its exact name/arity and the resulting public-count change are not accepted or frozen.
+Runtime implementation remains blocked until integration resolves it.
 
 O2 does not change X1 schema 1.0. The `config` argument is the O2-specific data-only
 logical value below. I2 owns the physical dense CPU f32 carrier, stable P1-handle
@@ -225,14 +233,39 @@ contains:
 - RNG policy `none`.
 
 The receiver/tensor lifetime protocol remains blocked on P1L and I2 rather than
-being inferred here. Before O2 freezes, repeated snapshots, partial construction,
-failed/successful loads, future C2 synchronous inspection, and explicit caller
-disposition must have an exact releasable owned-state receiver or another
-independently reviewed bounded ownership contract. State-backed tensor handles must
-fail after owner release before native dereference. Releasing a snapshot must not
-change live optimizer moments, parameters, gradients, counters, or configuration.
-Process-lifetime tensor retention, hidden finalizers, equality-triggered freeing,
-and a second registry are forbidden.
+being inferred here. The pending public proposal makes each snapshot one explicit
+O2 opaque owner with distinct O2 token kinds/ownership ledgers. Partial or rejected
+construction records each successful clone as sole O2 ownership before any later
+fallible action, cleans the exact unpublished ledger prefix once on failure, and
+transfers the complete ledger once on publication. Load and future C2 use first
+acquire O2 state-borrow authority, resolve non-owning moment handles synchronously,
+end every I2/K1 borrow in a guaranteed tail, and retain no raw storage or carrier.
+
+Release validates the exact registered O2 receiver, complete ownership ledger,
+liveness, exact accepted I2 provider identity, serialization/nonreentrancy, and zero
+active borrows before mutation. It then atomically closes all state/handle resolution
+by entering an internal releasing state before the first callback. The fixed
+provider-2.0 exact-once tail is nonallocating/nonraising; it publishes dead only after
+all moment clones are released. There is no recoverable rollback after cleanup
+starts. Repeating release on that exact registered dead token is an idempotent no-op;
+other copied, forged, cross-owner, cross-aggregate, or stale tokens reject. Releasing
+a snapshot must not change live optimizer moments, parameters, gradients, counters,
+configuration, P1 state dictionaries, or another clone.
+
+Each optimizer-state-backed moment handle is tied to its exact owner state,
+entry/canonical path, and provider. Trusted resolution validates handle kind,
+owner live/not-releasing state, entry membership, exact provider binding, and borrow
+admission before exposing the owned carrier. The handle can never release, transfer,
+or consume ownership. Provider metadata is inert and never selects executable code.
+
+P1 `state-dict-release!`, P1 state tokens, and P1 state-backed handles remain
+P1-specific and grant no O2 release authority. Process-lifetime tensor retention,
+hidden finalizers, equality-triggered freeing, generic release dispatch, and a
+second registry are forbidden. P1L must approve a narrow trusted same-aggregate O2
+invocation of the admitted release contract, or O2 must later review its own fixed
+wrapper; no P1 symbol, token code, request layout, or private ABI is inferred here.
+Until issue #1 accepts a concrete public lifecycle, these paragraphs are a proposal
+rather than a frozen API.
 
 Parameter values are P1 model state and never occur in optimizer state. Schedule
 values are derived rather than redundantly stored. The logical state contains no
@@ -266,7 +299,10 @@ state load restores them. It never changes parameter values or I2 gradient slots
 failed load preserves the old moments, counter, configuration, schedule, parameters,
 and gradient slots exactly. The input is borrowed; successful load retains no
 caller-mutable carrier. The receiver's I2 gradient slots and accumulation metadata
-must be absent/empty before load; otherwise load is `invalid-state`.
+must be absent/empty before load; otherwise load is `invalid-state`. Load acquires
+the input state-borrow authority before any moment-handle resolution, releases it on
+every path, stages/copies into optimizer-owned moment storage, and never adopts an
+input state carrier.
 
 Unknown major versions, nonzero minor versions, and unknown required features are
 `version-mismatch`. Malformed envelopes, duplicate entries, invalid counters, and
@@ -301,6 +337,10 @@ is `unsupported`.
   replaced; tensor dtype/device/layout use the matching categories; a stale receiver
   is `invalid-state`; an unavailable or mismatched provider/capability is
   `unsupported`.
+- proposed `optimizer-state-release!`: a wrong-kind or malformed receiver is
+  `invalid-argument`; a busy, forged, copied-token, cross-owner, cross-aggregate, or
+  provider-stale state is `invalid-state`; the exact registered dead token succeeds
+  idempotently; unavailable exact provider/release capability is `unsupported`.
 
 ## Required continuation evidence
 
