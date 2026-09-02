@@ -8,8 +8,12 @@ for command in awk cmp grep nm readelf; do
 done
 
 output="${1:-$(project_build_dir)/p1/libeshkol_transformer_p1.o}"
+p1_timeout_seconds="${P1_COMPILER_TIMEOUT_SECONDS:-360}"
+[[ "${p1_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
+  die "P1_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
-"${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+E1B_COMPILER_TIMEOUT_SECONDS="${p1_timeout_seconds}" \
+  "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
   "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk" \
   "${PROJECT_ROOT}/native/p1_package_bridge.c" \
   "${PROJECT_ROOT}/native/p1_package_renames.txt" \
