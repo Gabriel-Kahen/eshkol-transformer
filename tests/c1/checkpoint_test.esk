@@ -26,6 +26,15 @@
                 (eq? category (transformer-error-category caught))))
     caught))
 
+(define (expect-raised-false label thunk)
+  (let ((caught? #f))
+    (guard (caught
+             (#t
+               (set! caught? (eq? caught #f))
+               #f))
+      (thunk))
+    (check label caught?)))
+
 (define (details-ref details key)
   (cond
     ((null? details) #f)
@@ -54,6 +63,11 @@
     (bytevector-copy! result 0 bytes 0 size)
     (bytevector-u8-set! result size value)
     result))
+
+(define (list-count items)
+  (let loop ((remaining items) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
 
 (define c1-test-container-domain
   (bytevector 101 115 104 107 111 108 45 99 104 101 99 107 112 111 105 110
@@ -209,13 +223,33 @@
     module))
 
 (define (payload state path)
-  (fixture-tensor-payload-internal (state-dict-tensor state path)))
+  (let* ((handle (state-dict-tensor state path))
+         (active? #f))
+    (guard (caught
+             (#t
+               (if active?
+                   (begin
+                     (set! active? #f)
+                     (state-dict-tensor-borrow-end-internal state handle))
+                   #t)
+               (raise caught)))
+      (let ((tensor
+              (state-dict-tensor-borrow-begin-internal state handle)))
+        (set! active? #t)
+        (let ((result (fixture-tensor-payload-internal tensor)))
+          (set! active? #f)
+          (state-dict-tensor-borrow-end-internal state handle)
+          result)))))
 
-(define (internal-tensor state path)
-  (let loop ((entries (state-dict-entries-internal state)))
-    (if (equal? path (state-entry-path-internal (car entries)))
-        (state-entry-tensor-internal (car entries))
-        (loop (cdr entries)))))
+(define (module-payload module path)
+  (let ((state (module-state-dict module)))
+    (guard (caught
+             (#t
+               (state-dict-release! state)
+               (raise caught)))
+      (let ((result (payload state path)))
+        (state-dict-release! state)
+        result))))
 
 (define (decode-request-to-fixture request)
   (let* ((bytes (vector-ref request 0))
@@ -224,10 +258,14 @@
          (payload (make-vector (bytevector-length bytes) 0)))
     (let loop ((index 0))
       (if (= index (bytevector-length bytes))
-          (fixture-tensor-internal shape dtype 'cpu payload)
+          (fixture-owned-tensor-internal shape dtype 'cpu payload)
           (begin
             (vector-set! payload index (bytevector-u8-ref bytes index))
             (loop (+ index 1)))))))
+
+(define (publish-decoded! request tensor)
+  (vector-set! request 7 tensor)
+  request)
 
 (define policy
   (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
@@ -245,6 +283,7 @@
            (newline)
            (exit 2)))
     (build-module 11)))
+(define persistent-state-owned-before (fixture-owned-live-count-internal))
 (define source-state (module-state-dict source))
 (define encoded-a
   (guard (error
@@ -315,18 +354,10 @@
                (state-dict-alias-groups decoded)))
 (check "decoded tied payload equality"
        (equal? (payload decoded '("alias")) (payload decoded '("weight"))))
-(check "decoded tied entries have distinct carriers"
-       (not (eq? (internal-tensor decoded '("alias"))
-                 (internal-tensor decoded '("weight")))))
-(check "decoded tied entries have distinct storage"
-       (not (eq? (vector-ref (internal-tensor decoded '("alias")) 5)
-                 (vector-ref (internal-tensor decoded '("weight")) 5))))
 (let ((first (state-dict-tensor decoded '("weight")))
       (second (state-dict-tensor decoded '("weight"))))
-  (check "repeated state tensor reads return distinct carriers"
-         (not (eq? first second)))
-  (check "repeated state tensor reads return distinct storage"
-         (not (eq? (vector-ref first 5) (vector-ref second 5)))))
+  (check "repeated state tensor reads return one stable borrowed handle"
+         (eq? first second)))
 (check "decoded parameter payload"
        (equal? (vector 11 12 13 14 15 16 17 18)
                (payload decoded '("weight"))))
@@ -336,14 +367,49 @@
 (check "decoded bool payload"
        (equal? (vector 0 1 0) (payload decoded '("flags"))))
 
-(let* ((source-entry (car (state-dict-entries-internal source-state)))
-       (decoded-entry (car (state-dict-entries-internal decoded)))
-       (source-tensor (state-entry-tensor-internal source-entry))
-       (decoded-tensor (state-entry-tensor-internal decoded-entry)))
-  (check "decoded tensor carrier is independently owned"
-         (not (eq? source-tensor decoded-tensor)))
-  (check "decoded tensor storage is independently owned"
-         (not (eq? (vector-ref source-tensor 5) (vector-ref decoded-tensor 5)))))
+(check "decoded state handle is independent of source state"
+       (not (eq? (state-dict-tensor source-state '("weight"))
+                 (state-dict-tensor decoded '("weight")))))
+
+(define repeated-lifecycle-owned-before
+  (fixture-owned-live-count-internal))
+(define repeated-lifecycle-native-before (c1-p1-test-live-count))
+(define repeated-lifecycle-cycles 0)
+(define repeated-lifecycle-entry-total 0)
+(define repeated-lifecycle-bytes-stable? #t)
+(let repeat-lifecycle ((remaining 8))
+  (if (= remaining 0)
+      #t
+      (let* ((cycle-bytes
+               (c1-checkpoint-encode-state-internal
+                 source-state policy c1-fixture-codec-internal))
+             (cycle-state
+               (c1-checkpoint-decode-state-internal
+                 cycle-bytes policy c1-fixture-codec-internal 'fixture-v1))
+             (cycle-entries (state-dict-entries-internal cycle-state))
+             (cycle-round-trip
+               (c1-checkpoint-encode-state-internal
+                 cycle-state policy c1-fixture-codec-internal)))
+        (set! repeated-lifecycle-cycles (+ repeated-lifecycle-cycles 1))
+        (set! repeated-lifecycle-entry-total
+              (+ repeated-lifecycle-entry-total (list-count cycle-entries)))
+        (set! repeated-lifecycle-bytes-stable?
+              (and repeated-lifecycle-bytes-stable?
+                   (bytes=? cycle-bytes cycle-round-trip)))
+        (state-dict-release! cycle-state)
+        (state-dict-release! cycle-state)
+        (repeat-lifecycle (- remaining 1)))))
+(check "repeated encode/decode lifecycle completes eight cycles"
+       (= repeated-lifecycle-cycles 8))
+(check "repeated lifecycle enumerates every decoded entry shell"
+       (= repeated-lifecycle-entry-total 32))
+(check "repeated decoded state re-encoding is byte stable"
+       repeated-lifecycle-bytes-stable?)
+(check "repeated lifecycle restores provider-owned baseline"
+       (= repeated-lifecycle-owned-before
+          (fixture-owned-live-count-internal)))
+(check "repeated lifecycle restores native live-count baseline"
+       (= repeated-lifecycle-native-before (c1-p1-test-live-count)))
 
 (define destination (build-module 90))
 (define destination-tree (module-parameters destination))
@@ -363,7 +429,7 @@
             (parameter-tree-handle (module-parameters destination) '("weight"))))
 (check "module load restores exact value"
        (equal? (vector 11 12 13 14 15 16 17 18)
-               (payload (module-state-dict destination) '("weight"))))
+               (module-payload destination '("weight"))))
 
 (define checkpoint-path "checkpoint.etcp")
 (check "atomic save returns success"
@@ -408,11 +474,14 @@
   (parameter-tree-handle (module-parameters wrapper-destination) '("weight")))
 (define wrapper-identity
   (parameter-handle-tensor-identity-internal wrapper-handle))
+(define wrapper-owned-before (fixture-owned-live-count-internal))
 (c1-checkpoint-load-module-internal!
  wrapper-destination checkpoint-path policy c1-fixture-codec-internal 'fixture-v1)
+(check "successful file-to-module releases its temporary decoded state"
+       (= wrapper-owned-before (fixture-owned-live-count-internal)))
 (check "file-to-module wrapper restores exact value"
        (equal? (vector 11 12 13 14 15 16 17 18)
-               (payload (module-state-dict wrapper-destination) '("weight"))))
+               (module-payload wrapper-destination '("weight"))))
 (check "file-to-module wrapper preserves handle identity"
        (eq? wrapper-identity
             (parameter-handle-tensor-identity-internal wrapper-handle)))
@@ -424,15 +493,18 @@
 (define missing-identity
   (parameter-handle-tensor-identity-internal missing-handle))
 (define missing-before
-  (payload (module-state-dict missing-destination) '("weight")))
+  (module-payload missing-destination '("weight")))
+(define missing-wrapper-owned-before (fixture-owned-live-count-internal))
 (expect-error "load wrapper missing destination path" 'shape-mismatch
               (lambda ()
                 (c1-checkpoint-load-module-internal!
                  missing-destination checkpoint-path policy
                  c1-fixture-codec-internal 'fixture-v1)))
+(check "rejected file-to-module releases its temporary decoded state"
+       (= missing-wrapper-owned-before (fixture-owned-live-count-internal)))
 (check "missing-path rejection preserves value"
        (equal? missing-before
-               (payload (module-state-dict missing-destination) '("weight"))))
+               (module-payload missing-destination '("weight"))))
 (check "missing-path rejection preserves identity"
        (eq? missing-identity
             (parameter-handle-tensor-identity-internal missing-handle)))
@@ -440,7 +512,7 @@
 (define shape-destination
   (build-schema-variant 80 '(1) 'i64 'cpu #t #t))
 (define shape-before
-  (payload (module-state-dict shape-destination) '("weight")))
+  (module-payload shape-destination '("weight")))
 (expect-error "load wrapper shape mismatch" 'shape-mismatch
               (lambda ()
                 (c1-checkpoint-load-module-internal!
@@ -448,12 +520,12 @@
                  c1-fixture-codec-internal 'fixture-v1)))
 (check "shape rejection preserves value"
        (equal? shape-before
-               (payload (module-state-dict shape-destination) '("weight"))))
+               (module-payload shape-destination '("weight"))))
 
 (define alias-destination
   (build-schema-variant 85 '(2) 'i64 'cpu #t #f))
 (define alias-before
-  (payload (module-state-dict alias-destination) '("weight")))
+  (module-payload alias-destination '("weight")))
 (expect-error "load wrapper alias topology mismatch" 'shape-mismatch
               (lambda ()
                 (c1-checkpoint-load-module-internal!
@@ -461,12 +533,12 @@
                  c1-fixture-codec-internal 'fixture-v1)))
 (check "alias rejection preserves value"
        (equal? alias-before
-               (payload (module-state-dict alias-destination) '("weight"))))
+               (module-payload alias-destination '("weight"))))
 
 (define dtype-destination
   (build-schema-variant 86 '(2) 'f32 'cpu #t #t))
 (define dtype-before
-  (payload (module-state-dict dtype-destination) '("weight")))
+  (module-payload dtype-destination '("weight")))
 (expect-error "load wrapper dtype mismatch" 'dtype-mismatch
               (lambda ()
                 (c1-checkpoint-load-module-internal!
@@ -474,12 +546,12 @@
                  c1-fixture-codec-internal 'fixture-v1)))
 (check "dtype rejection preserves value"
        (equal? dtype-before
-               (payload (module-state-dict dtype-destination) '("weight"))))
+               (module-payload dtype-destination '("weight"))))
 
 (define device-destination
   (build-schema-variant 87 '(2) 'i64 'gpu #t #t))
 (define device-before
-  (payload (module-state-dict device-destination) '("weight")))
+  (module-payload device-destination '("weight")))
 (expect-error "load wrapper device mismatch" 'device-mismatch
               (lambda ()
                 (c1-checkpoint-load-module-internal!
@@ -487,13 +559,13 @@
                  c1-fixture-codec-internal 'fixture-v1)))
 (check "device rejection preserves value"
        (equal? device-before
-               (payload (module-state-dict device-destination) '("weight"))))
+               (module-payload device-destination '("weight"))))
 
 (define extra-destination (build-module 88))
 (module-register-buffer-internal!
  extra-destination "extra" (c1-test-tensor '(1) 'i64 (vector 0 0 0 0 0 0 0 0)))
 (define extra-before
-  (payload (module-state-dict extra-destination) '("weight")))
+  (module-payload extra-destination '("weight")))
 (expect-error "load wrapper unexpected destination path" 'shape-mismatch
               (lambda ()
                 (c1-checkpoint-load-module-internal!
@@ -501,7 +573,7 @@
                  c1-fixture-codec-internal 'fixture-v1)))
 (check "unexpected-path rejection preserves value"
        (equal? extra-before
-               (payload (module-state-dict extra-destination) '("weight"))))
+               (module-payload extra-destination '("weight"))))
 
 (define encode-calls 0)
 (define sentinel-codec
@@ -514,7 +586,7 @@
 (define unsafe-unbound-state
   (state-dict-create-unsafe-internal
    'transformer-state-dict 1 0 '()
-   '(transformer-tensor-provider 1 0 fixture-v1) '() '()))
+   '(transformer-tensor-provider 2 0 fixture-v1) '() '()))
 (expect-error "unbound unsafe state rejected before codec" 'unsupported
               (lambda ()
                 (c1-checkpoint-encode-state-internal
@@ -571,7 +643,131 @@
                 (c1-checkpoint-encode-state-internal
                  source-state policy inconsistent-tie-codec)))
 
+;; Encoder callbacks run inside one scoped state-backed borrow. Both an E1
+;; exception and raised #f must pair the end before control escapes.
+(define encoder-defect-owned-before (fixture-owned-live-count-internal))
+(define encoder-defect-native-before (c1-p1-test-live-count))
+(define encoder-structured-calls 0)
+(define encoder-structured-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request)
+     (set! encoder-structured-calls (+ encoder-structured-calls 1))
+     (transformer-error-raise
+       'internal 'c1-encoder-structured
+       "injected structured encoder defect" '() #f))
+   (vector-ref c1-fixture-codec-internal 3)))
+(expect-error "structured encoder callback failure" 'internal
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                  source-state policy encoder-structured-codec)))
+(check "structured encoder failure stops after one callback"
+       (= encoder-structured-calls 1))
+(check "structured encoder failure ends its paired borrow"
+       (equal? (payload source-state '("alias"))
+               (vector 11 12 13 14 15 16 17 18)))
+(check "structured encoder failure preserves provider/native baselines"
+       (and (= encoder-defect-owned-before
+               (fixture-owned-live-count-internal))
+            (= encoder-defect-native-before (c1-p1-test-live-count))))
+
+(define encoder-false-calls 0)
+(define encoder-false-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request)
+     (set! encoder-false-calls (+ encoder-false-calls 1))
+     (raise #f))
+   (vector-ref c1-fixture-codec-internal 3)))
+(expect-raised-false
+  "raised-false encoder callback failure is preserved"
+  (lambda ()
+    (c1-checkpoint-encode-state-internal
+      source-state policy encoder-false-codec)))
+(check "raised-false encoder failure stops after one callback"
+       (= encoder-false-calls 1))
+(check "raised-false encoder failure ends its paired borrow"
+       (equal? (payload source-state '("alias"))
+               (vector 11 12 13 14 15 16 17 18)))
+(check "raised-false encoder failure preserves provider/native baselines"
+       (and (= encoder-defect-owned-before
+               (fixture-owned-live-count-internal))
+            (= encoder-defect-native-before (c1-p1-test-live-count))))
+
+;; A codec closure can maliciously retain the state/handle even though neither
+;; is in its request. Release must reject while the borrow is active. If the
+;; closure ends the active borrow itself, C1's mandatory outer end detects the
+;; tampering; no raw carrier is used after that inner end.
+(define encoder-reentrant-handle
+  (state-dict-tensor source-state '("alias")))
+(define encoder-reentrant-release-calls 0)
+(define encoder-reentrant-release-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request)
+     (set! encoder-reentrant-release-calls
+           (+ encoder-reentrant-release-calls 1))
+     (state-dict-release! source-state)
+     ((vector-ref c1-fixture-codec-internal 2) request))
+   (vector-ref c1-fixture-codec-internal 3)))
+(expect-error "encoder reentrant release rejects before mutation"
+              'invalid-state
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                  source-state policy encoder-reentrant-release-codec)))
+(check "encoder reentrant release reaches one active borrow"
+       (= encoder-reentrant-release-calls 1))
+(check "encoder reentrant release preserves the live state"
+       (equal? (payload source-state '("alias"))
+               (vector 11 12 13 14 15 16 17 18)))
+
+(define encoder-reentrant-end-called? #f)
+(define encoder-reentrant-end-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request)
+     (let ((bytes ((vector-ref c1-fixture-codec-internal 2) request)))
+       (set! encoder-reentrant-end-called?
+             (state-dict-tensor-borrow-end-internal
+               source-state encoder-reentrant-handle))
+       bytes))
+   (vector-ref c1-fixture-codec-internal 3)))
+(expect-error "encoder detects reentrant borrow end" 'invalid-argument
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                  source-state policy encoder-reentrant-end-codec)))
+(check "encoder reentrant borrow end reached the active handle"
+       encoder-reentrant-end-called?)
+(check "encoder reentrant borrow end leaves no active borrow"
+       (equal? (payload source-state '("alias"))
+               (vector 11 12 13 14 15 16 17 18)))
+(check "encoder callback defects preserve provider/native baselines"
+       (and (= encoder-defect-owned-before
+               (fixture-owned-live-count-internal))
+            (= encoder-defect-native-before (c1-p1-test-live-count))))
+
+(define codec-overwrite-owned-before (fixture-owned-live-count-internal))
+(define codec-overwrite-release-before
+  (fixture-release-call-count-internal))
+(define codec-overwrite-attempt-before
+  (c1-fixture-publication-overwrite-attempt-count-internal))
+(expect-error "fixture decoder rejects publication overwrite before raise"
+              'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                  encoded-a policy c1-fixture-overwrite-codec-internal
+                  'fixture-v1)))
+(check "fixture decoder records one rejected publication overwrite"
+       (= (c1-fixture-publication-overwrite-attempt-count-internal)
+          (+ codec-overwrite-attempt-before 1)))
+(check "rejected decoder overwrite releases its visible owner exactly once"
+       (= (fixture-release-call-count-internal)
+          (+ codec-overwrite-release-before 1)))
+(check "rejected decoder overwrite restores the owned baseline"
+       (= codec-overwrite-owned-before (fixture-owned-live-count-internal)))
+
 (define decode-calls 0)
+(define late-failure-owned-before (fixture-owned-live-count-internal))
 (define late-failure-codec
   (c1-checkpoint-codec-internal
    'fixture-v1
@@ -581,27 +777,466 @@
      (if (= decode-calls 2)
          (transformer-error-raise 'internal 'c1-late-decode
                                   "injected late decoder failure" '() #f)
-         (decode-request-to-fixture request)))))
+         (publish-decoded! request (decode-request-to-fixture request))))))
 (expect-error "late decoder failure remains structured" 'internal
               (lambda ()
                 (c1-checkpoint-decode-state-internal
                  encoded-a policy late-failure-codec 'fixture-v1)))
 (check "late decoder failure occurs after staging one carrier" (= decode-calls 2))
+(check "late decoder failure releases its decoded prefix"
+       (= late-failure-owned-before (fixture-owned-live-count-internal)))
 
-(define shared-parameter-tensor
-  (c1-test-tensor '(2) 'f32 (vector 11 12 13 14 15 16 17 18)))
-(define shared-parameter-codec
+(define release-raise-decode-calls 0)
+(define release-raise-owned-before (fixture-owned-live-count-internal))
+(define release-raise-calls-before (fixture-release-call-count-internal))
+(define release-raise-prefix-codec
   (c1-checkpoint-codec-internal
    'fixture-v1
    (lambda (request) (bytevector))
    (lambda (request)
-     (if (eq? (vector-ref request 1) 'parameter)
-         shared-parameter-tensor
-         (decode-request-to-fixture request)))))
-(expect-error "decoder shared storage rejected by P1" 'corrupt-data
+     (set! release-raise-decode-calls (+ release-raise-decode-calls 1))
+     (if (= release-raise-decode-calls 3)
+         (transformer-error-raise 'corrupt-data 'c1-release-raise-trigger
+                                  "injected decoder rollback trigger" '() #f)
+         (publish-decoded! request (decode-request-to-fixture request))))))
+(check "decoder-prefix raised-release defect armed"
+       (fixture-fail-next-release-internal!))
+(define release-raise-error
+  (expect-error "decoder-prefix raised-release defect" 'internal
+                (lambda ()
+                  (c1-checkpoint-decode-state-internal
+                   encoded-a policy release-raise-prefix-codec 'fixture-v1))))
+(check "decoder-prefix raised-release reports the first cleanup defect"
+       (string=? (transformer-error-message release-raise-error)
+                 "trusted provider release defect during decoder rollback"))
+(check "decoder-prefix raised-release stages two owners"
+       (= release-raise-decode-calls 3))
+(check "decoder-prefix raised-release consumes each owner without retry"
+       (= (fixture-release-call-count-internal)
+          (+ release-raise-calls-before 2)))
+(check "decoder-prefix raised-release restores the owned baseline"
+       (= release-raise-owned-before (fixture-owned-live-count-internal)))
+
+(define release-malformed-decode-calls 0)
+(define release-malformed-owned-before (fixture-owned-live-count-internal))
+(define release-malformed-calls-before (fixture-release-call-count-internal))
+(define release-malformed-prefix-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! release-malformed-decode-calls
+           (+ release-malformed-decode-calls 1))
+     (if (= release-malformed-decode-calls 3)
+         (transformer-error-raise 'corrupt-data 'c1-release-malformed-trigger
+                                  "injected decoder rollback trigger" '() #f)
+         (publish-decoded! request (decode-request-to-fixture request))))))
+(check "decoder-prefix malformed-release defect armed"
+       (fixture-malform-next-release-internal!))
+(define release-malformed-error
+  (expect-error "decoder-prefix malformed-release defect" 'internal
+                (lambda ()
+                  (c1-checkpoint-decode-state-internal
+                   encoded-a policy release-malformed-prefix-codec
+                   'fixture-v1))))
+(check "decoder-prefix malformed-release reports the first cleanup defect"
+       (string=? (transformer-error-message release-malformed-error)
+                 "trusted provider release defect during decoder rollback"))
+(check "decoder-prefix malformed-release stages two owners"
+       (= release-malformed-decode-calls 3))
+(check "decoder-prefix malformed-release consumes each owner without retry"
+       (= (fixture-release-call-count-internal)
+          (+ release-malformed-calls-before 2)))
+(check "decoder-prefix malformed-release restores the owned baseline"
+       (= release-malformed-owned-before (fixture-owned-live-count-internal)))
+
+(define post-publish-owned-before (fixture-owned-live-count-internal))
+(define post-publish-failure-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (publish-decoded! request (decode-request-to-fixture request))
+     (transformer-error-raise 'internal 'c1-post-publish-decode
+                              "injected post-publication failure" '() #f))))
+(expect-error "post-publication decoder failure" 'internal
               (lambda ()
                 (c1-checkpoint-decode-state-internal
-                 encoded-a policy shared-parameter-codec 'fixture-v1)))
+                 encoded-a policy post-publish-failure-codec 'fixture-v1)))
+(check "post-publication decoder failure releases once"
+       (= post-publish-owned-before (fixture-owned-live-count-internal)))
+
+(define post-publish-false-owned-before
+  (fixture-owned-live-count-internal))
+(define post-publish-false-release-before
+  (fixture-release-call-count-internal))
+(define post-publish-false-calls 0)
+(define post-publish-false-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! post-publish-false-calls (+ post-publish-false-calls 1))
+     (publish-decoded! request (decode-request-to-fixture request))
+     (raise #f))))
+(expect-raised-false
+  "post-publication decoder raised false is preserved"
+  (lambda ()
+    (c1-checkpoint-decode-state-internal
+      encoded-a policy post-publish-false-codec 'fixture-v1)))
+(check "post-publication raised false stops after one callback"
+       (= post-publish-false-calls 1))
+(check "post-publication raised false releases exactly once"
+       (= (fixture-release-call-count-internal)
+          (+ post-publish-false-release-before 1)))
+(check "post-publication raised false restores the owned baseline"
+       (= post-publish-false-owned-before
+          (fixture-owned-live-count-internal)))
+
+(define forged-publication-storage-before
+  (fixture-storage-comparison-call-count-internal))
+(define forged-publication-release-before
+  (fixture-release-call-count-internal))
+(define forged-publication-native-before (c1-p1-test-live-count))
+(define forged-publication-calls 0)
+(define forged-publication-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! forged-publication-calls (+ forged-publication-calls 1))
+     (publish-decoded! request (vector 'forged-owned-carrier)))))
+(expect-error "forged decoder carrier rejects during provider admission"
+              'unsupported
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                  encoded-a policy forged-publication-codec 'fixture-v1)))
+(check "forged decoder carrier stops after one publication"
+       (= forged-publication-calls 1))
+(check "forged decoder carrier is disarmed before comparison or release"
+       (and (= forged-publication-storage-before
+               (fixture-storage-comparison-call-count-internal))
+            (= forged-publication-release-before
+               (fixture-release-call-count-internal))
+            (= forged-publication-native-before (c1-p1-test-live-count))))
+
+(define foreign-publication-storage-before
+  (fixture-storage-comparison-call-count-internal))
+(define foreign-publication-release-before
+  (fixture-release-call-count-internal))
+(define foreign-publication-native-before (c1-p1-test-live-count))
+(define foreign-publication-calls 0)
+(define foreign-publication-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! foreign-publication-calls (+ foreign-publication-calls 1))
+     (publish-decoded!
+       request
+       (fixture-foreign-provider-tensor-internal
+         (vector-ref request 2) (vector-ref request 3)
+         (vector-ref request 4) (vector 1))))))
+(expect-error "foreign-provider decoder carrier rejects during prevalidation"
+              'unsupported
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                  encoded-a policy foreign-publication-codec 'fixture-v1)))
+(check "foreign-provider decoder carrier stops after one publication"
+       (= foreign-publication-calls 1))
+(check "foreign-provider carrier is disarmed before comparison or release"
+       (and (= foreign-publication-storage-before
+               (fixture-storage-comparison-call-count-internal))
+            (= foreign-publication-release-before
+               (fixture-release-call-count-internal))
+            (= foreign-publication-native-before (c1-p1-test-live-count))))
+
+(define substituted-decode-owned-before (fixture-owned-live-count-internal))
+(define substituted-decode-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (publish-decoded! request (decode-request-to-fixture request))
+     (vector))))
+(expect-error "substituted decode request" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy substituted-decode-codec 'fixture-v1)))
+(check "substituted decode request releases publication"
+       (= substituted-decode-owned-before
+          (fixture-owned-live-count-internal)))
+
+(define exact-republish-owned-before (fixture-owned-live-count-internal))
+(define exact-republish-carrier #f)
+(define exact-republish-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (if exact-republish-carrier
+         (let ((published exact-republish-carrier))
+           (set! exact-republish-carrier #f)
+           (publish-decoded! request published))
+         (let ((published (decode-request-to-fixture request)))
+           (set! exact-republish-carrier published)
+           (publish-decoded! request published))))))
+(expect-error "decoder exact carrier republication" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy exact-republish-codec 'fixture-v1)))
+(check "exact carrier republication releases the one owner exactly once"
+       (= exact-republish-owned-before (fixture-owned-live-count-internal)))
+
+(define borrowed-payload-owned-before (fixture-owned-live-count-internal))
+(define borrowed-payload-release-before (fixture-release-call-count-internal))
+(define borrowed-payload-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (let ((borrowed (vector-ref request 0)))
+       ;; Admission must remember the original borrowed identity even if the
+       ;; defective codec substitutes its mutable request slot first.
+       (vector-set! request 0 (bytevector))
+       (publish-decoded! request borrowed)))))
+(expect-error "decoder publishes borrowed payload" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy borrowed-payload-codec 'fixture-v1)))
+(check "borrowed payload publication invokes no release callback"
+       (= borrowed-payload-release-before
+          (fixture-release-call-count-internal)))
+(check "borrowed payload publication preserves owned baseline"
+       (= borrowed-payload-owned-before (fixture-owned-live-count-internal)))
+
+(define borrowed-request-owned-before (fixture-owned-live-count-internal))
+(define borrowed-request-release-before (fixture-release-call-count-internal))
+(define borrowed-request-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request) (publish-decoded! request request))))
+(expect-error "decoder publishes borrowed request" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy borrowed-request-codec 'fixture-v1)))
+(check "borrowed request publication invokes no release callback"
+       (= borrowed-request-release-before
+          (fixture-release-call-count-internal)))
+(check "borrowed request publication preserves owned baseline"
+       (= borrowed-request-owned-before (fixture-owned-live-count-internal)))
+
+(define prior-payload-owned-before (fixture-owned-live-count-internal))
+(define prior-payload-release-before (fixture-release-call-count-internal))
+(define prior-payload-decode-calls 0)
+(define captured-prior-payload #f)
+(define prior-payload-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! prior-payload-decode-calls (+ prior-payload-decode-calls 1))
+     (if (= prior-payload-decode-calls 1)
+         (begin
+           (set! captured-prior-payload (vector-ref request 0))
+           (publish-decoded! request (decode-request-to-fixture request)))
+         (let ((borrowed captured-prior-payload))
+           (set! captured-prior-payload #f)
+           (publish-decoded! request borrowed))))))
+(expect-error "decoder publishes prior request payload" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy prior-payload-codec 'fixture-v1)))
+(check "prior payload confusion reaches the second decoder request"
+       (= prior-payload-decode-calls 2))
+(check "prior payload confusion releases only the genuine prefix owner"
+       (= (fixture-release-call-count-internal)
+          (+ prior-payload-release-before 1)))
+(check "prior payload confusion restores the owned baseline"
+       (= prior-payload-owned-before (fixture-owned-live-count-internal)))
+
+(define prior-request-owned-before (fixture-owned-live-count-internal))
+(define prior-request-release-before (fixture-release-call-count-internal))
+(define prior-request-decode-calls 0)
+(define captured-prior-request #f)
+(define prior-request-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! prior-request-decode-calls (+ prior-request-decode-calls 1))
+     (if (= prior-request-decode-calls 1)
+         (begin
+           (set! captured-prior-request request)
+           (publish-decoded! request (decode-request-to-fixture request)))
+         (let ((borrowed captured-prior-request))
+           (set! captured-prior-request #f)
+           (publish-decoded! request borrowed))))))
+(expect-error "decoder publishes prior request object" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy prior-request-codec 'fixture-v1)))
+(check "prior request confusion reaches the second decoder request"
+       (= prior-request-decode-calls 2))
+(check "prior request confusion releases only the genuine prefix owner"
+       (= (fixture-release-call-count-internal)
+          (+ prior-request-release-before 1)))
+(check "prior request confusion restores the owned baseline"
+       (= prior-request-owned-before (fixture-owned-live-count-internal)))
+
+(define live-state-conflict-owned-before (fixture-owned-live-count-internal))
+(define live-state-conflict-native-before (c1-p1-test-live-count))
+(define live-state-conflict-carrier
+  (fixture-owned-tensor-internal '(1) 'i64 'cpu (vector 73)))
+(define live-state-conflict-envelope
+  (vector live-state-conflict-carrier 'buffer
+          'state-dict-adopt-owned-internal! #f))
+(define live-state-conflict-ownership
+  (vector (list live-state-conflict-envelope)))
+(define live-state-conflict-state
+  (state-dict-adopt-owned-internal!
+    (list
+      (vector '("live") 'buffer '(1) 'i64 'cpu
+              'dense-row-major-contiguous live-state-conflict-carrier))
+    '() 'fixture-v1 2 0 live-state-conflict-ownership))
+(define live-state-conflict-alias
+  (fixture-storage-alias-wrapper-internal live-state-conflict-carrier))
+(check "live-state conflict uses a distinct carrier wrapper"
+       (not (eq? live-state-conflict-alias
+                 live-state-conflict-carrier)))
+(define live-state-conflict-release-before
+  (fixture-release-call-count-internal))
+(define live-state-conflict-decode-calls 0)
+(define live-state-conflict-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! live-state-conflict-decode-calls
+           (+ live-state-conflict-decode-calls 1))
+     (cond
+       ((= live-state-conflict-decode-calls 1)
+        (publish-decoded! request (decode-request-to-fixture request)))
+       ((= live-state-conflict-decode-calls 2)
+        (publish-decoded! request live-state-conflict-alias))
+       (else
+        (transformer-error-raise
+          'corrupt-data 'c1-live-state-conflict-trigger
+          "injected decoder rollback trigger" '() #f))))))
+(expect-error "decoder publishes wrapper over live-state-owned storage" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy live-state-conflict-codec 'fixture-v1)))
+(check "live-state carrier conflict reaches the second decoder request"
+       (= live-state-conflict-decode-calls 2))
+(check "live-state carrier conflict releases only the genuine sibling"
+       (= (fixture-release-call-count-internal)
+          (+ live-state-conflict-release-before 1)))
+(check "live-state carrier conflict preserves its state owner"
+       (= (fixture-owned-live-count-internal)
+          (+ live-state-conflict-owned-before 1)))
+(check "live-state carrier remains synchronously borrowable"
+       (equal? (payload live-state-conflict-state '("live")) (vector 73)))
+(check "live-state carrier owner releases exactly once"
+       (state-dict-release! live-state-conflict-state))
+(check "live-state carrier release invokes its one provider callback"
+       (= (fixture-release-call-count-internal)
+          (+ live-state-conflict-release-before 2)))
+(check "live-state carrier release restores provider/native baselines"
+       (and (= live-state-conflict-owned-before
+               (fixture-owned-live-count-internal))
+            (= live-state-conflict-native-before (c1-p1-test-live-count))))
+(check "live-state carrier repeated release is a no-callback no-op"
+       (and (state-dict-release! live-state-conflict-state)
+            (= (fixture-release-call-count-internal)
+               (+ live-state-conflict-release-before 2))))
+
+(define module-storage-conflict-owned-before
+  (fixture-owned-live-count-internal))
+(define module-storage-conflict-release-before
+  (fixture-release-call-count-internal))
+(define module-storage-conflict-module (module-create-fixture-internal))
+(define module-storage-conflict-carrier
+  (fixture-tensor-internal '(1) 'f32 'cpu (vector 91)))
+(module-register-parameter-internal!
+  module-storage-conflict-module "protected"
+  module-storage-conflict-carrier)
+(define module-storage-conflict-native-before (c1-p1-test-live-count))
+(define module-storage-conflict-alias
+  (fixture-storage-alias-wrapper-internal
+    module-storage-conflict-carrier))
+(check "module conflict uses a distinct carrier wrapper"
+       (not (eq? module-storage-conflict-alias
+                 module-storage-conflict-carrier)))
+(define module-storage-conflict-decode-calls 0)
+(define module-storage-conflict-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! module-storage-conflict-decode-calls
+           (+ module-storage-conflict-decode-calls 1))
+     (if (= module-storage-conflict-decode-calls 2)
+         (publish-decoded! request module-storage-conflict-alias)
+         (publish-decoded! request (decode-request-to-fixture request))))))
+(expect-error "decoder rejects wrapper over module-owned storage"
+              'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                  encoded-a policy module-storage-conflict-codec
+                  'fixture-v1)))
+(check "module storage conflict stops at its second publication"
+       (= module-storage-conflict-decode-calls 2))
+(check "module storage conflict releases exactly one genuine sibling"
+       (= (fixture-release-call-count-internal)
+          (+ module-storage-conflict-release-before 1)))
+(check "module storage conflict restores owned/native baselines"
+       (and (= module-storage-conflict-owned-before
+               (fixture-owned-live-count-internal))
+            (= module-storage-conflict-native-before
+               (c1-p1-test-live-count))))
+(check "module storage conflict preserves protected payload"
+       (equal? (fixture-tensor-payload-internal
+                 module-storage-conflict-carrier)
+               (vector 91)))
+
+(fixture-reset-shared-clone-internal!)
+(define shared-owned-before (fixture-owned-live-count-internal))
+(define shared-release-before (fixture-release-call-count-internal))
+(define shared-decode-calls 0)
+(define shared-first-owner #f)
+(define shared-second-alias #f)
+(define shared-storage-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! shared-decode-calls (+ shared-decode-calls 1))
+     (if (= shared-decode-calls 1)
+         (let ((owner (decode-request-to-fixture request)))
+           (set! shared-first-owner owner)
+           (publish-decoded! request owner))
+         (begin
+           (set! shared-second-alias
+                 (fixture-storage-alias-wrapper-internal shared-first-owner))
+           (publish-decoded! request shared-second-alias))))))
+(expect-error "decoder sibling storage alias rejected before adoption" 'internal
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 encoded-a policy shared-storage-codec 'fixture-v1)))
+(check "decoder sibling alias stops at its second publication"
+       (= shared-decode-calls 2))
+(check "decoder sibling alias uses a distinct carrier wrapper"
+       (not (eq? shared-first-owner shared-second-alias)))
+(check "decoder sibling alias releases only the first genuine owner"
+       (= (fixture-release-call-count-internal)
+          (+ shared-release-before 1)))
+(check "decoder sibling alias never poisons the first allocation"
+       (not (eq? (vector-ref (vector-ref shared-first-owner 5) 0)
+                 'destroyed-protected-storage)))
+(check "decoder sibling alias restores the owned baseline"
+       (= shared-owned-before (fixture-owned-live-count-internal)))
 
 (define validation-decode-calls 0)
 (define validation-sentinel-codec
@@ -610,7 +1245,7 @@
    (lambda (request) (bytevector))
    (lambda (request)
      (set! validation-decode-calls (+ validation-decode-calls 1))
-     (decode-request-to-fixture request))))
+     (publish-decoded! request (decode-request-to-fixture request)))))
 (define checksum-valid-bool-corruption
   (test-bool-semantic-corruption encoded-a))
 (define bool-live-before (c1-p1-test-live-count))
@@ -667,6 +1302,11 @@
         (payload validation-before-state '("counter"))
         (payload validation-before-state '("flags"))
         (payload validation-before-state '("weight"))))
+(state-dict-release! validation-before-state)
+(expect-error "released state serialization rejects before codec" 'invalid-state
+              (lambda ()
+                (c1-checkpoint-encode-state-internal
+                  validation-before-state policy c1-fixture-codec-internal)))
 (define validation-invalid-path "checksum-valid-invalid.etcp")
 (check "write checksum-valid invalid receiver fixture"
        (= 0 (c1-test-native-atomic-write
@@ -700,6 +1340,7 @@
             (parameter-handle-tensor-identity-internal validation-alias-handle)))
 (check "invalid file-to-module preserves tie identity"
        (eq? validation-weight-handle validation-alias-handle))
+(state-dict-release! validation-after-state)
 
 (define exact-file-bytes
   (c1-checkpoint-metadata-ref-internal metadata 'file-bytes))
@@ -766,6 +1407,22 @@
               (lambda ()
                 (c1-checkpoint-decode-state-internal
                  encoded-a policy c1-fixture-codec-internal 'other-v1)))
+(define legacy-provider-decode-calls 0)
+(define legacy-provider-sentinel-codec
+  (c1-checkpoint-codec-internal
+   'fixture-v1
+   (lambda (request) (bytevector))
+   (lambda (request)
+     (set! legacy-provider-decode-calls
+           (+ legacy-provider-decode-calls 1))
+     (publish-decoded! request (decode-request-to-fixture request)))))
+(expect-error "legacy provider 1.x header" 'version-mismatch
+              (lambda ()
+                (c1-checkpoint-decode-state-internal
+                 (mutate encoded-a 96 1) policy
+                 legacy-provider-sentinel-codec 'fixture-v1)))
+(check "legacy provider header rejects before decoder callback"
+       (= legacy-provider-decode-calls 0))
 (expect-error "truncation" 'corrupt-data
               (lambda ()
                 (c1-checkpoint-inspect-bytes-internal
@@ -804,5 +1461,11 @@
 (expect-error "unknown metadata key" 'invalid-argument
               (lambda ()
                 (c1-checkpoint-metadata-ref-internal metadata 'unknown)))
+
+(state-dict-release! file-state)
+(state-dict-release! decoded)
+(state-dict-release! source-state)
+(check "all retained C1 states return owned carriers to baseline"
+       (= persistent-state-owned-before (fixture-owned-live-count-internal)))
 
 (display "C1 PASS: ") (display checks) (display " checks") (newline)
