@@ -39,6 +39,15 @@ class L2OracleParity(unittest.TestCase):
 
     def test_forward_and_direct_backward_match_frozen_pytorch(self) -> None:
         native = self._native()
+        cases = {case["name"]: case for case in self.payload["cases"]}
+        self.assertEqual(
+            cases["indexed_cross_entropy_forward"]["operation"],
+            "indexed-cross-entropy.forward",
+        )
+        self.assertEqual(
+            cases["indexed_cross_entropy_backward"]["operation"],
+            "indexed-cross-entropy.backward",
+        )
         loss = tensor_by_name(self.payload, "output.loss")
         gradient = tensor_by_name(self.payload, "output.gradient")
         self.assertTrue(

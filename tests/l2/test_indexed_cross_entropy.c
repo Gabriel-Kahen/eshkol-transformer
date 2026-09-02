@@ -66,6 +66,41 @@ typedef struct fixture {
   et_kernel_call_v1 call;
 } fixture;
 
+#define MAX_INPUT_BYTES (6u * sizeof(float))
+
+typedef struct input_snapshot {
+  const void *data[3];
+  size_t bytes[3];
+  unsigned char contents[3][MAX_INPUT_BYTES];
+  size_t count;
+} input_snapshot;
+
+static void capture_inputs(const et_kernel_tensor_view_v1 *inputs,
+                           size_t count, input_snapshot *snapshot) {
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->count = count;
+  for (size_t index = 0u; index < count; index++) {
+    snapshot->data[index] = inputs[index].data;
+    snapshot->bytes[index] = inputs[index].byte_length;
+    CHECK(inputs[index].byte_length <= MAX_INPUT_BYTES);
+    if (inputs[index].data != NULL &&
+        inputs[index].byte_length <= MAX_INPUT_BYTES) {
+      memcpy(snapshot->contents[index], inputs[index].data,
+             inputs[index].byte_length);
+    }
+  }
+}
+
+static void check_inputs_unchanged(const input_snapshot *snapshot) {
+  for (size_t index = 0u; index < snapshot->count; index++) {
+    if (snapshot->data[index] != NULL &&
+        snapshot->bytes[index] <= MAX_INPUT_BYTES) {
+      CHECK(memcmp(snapshot->contents[index], snapshot->data[index],
+                   snapshot->bytes[index]) == 0);
+    }
+  }
+}
+
 static void fixture_init(fixture *item) {
   const float logits[] = {1.0f, 2.0f, 3.0f, -1.0f, 0.0f, 1.0f};
   memset(item, 0, sizeof(*item));
@@ -269,6 +304,17 @@ static void test_extremes_and_vocabulary_one(void) {
   CHECK(item.gradients[0] == 1.0f && item.gradients[1] == -1.0f &&
         item.gradients[2] == 0.0f);
 
+  item.logits[0] = -0.0f;
+  item.logits[1] = 0.0f;
+  item.logits[2] = FLT_TRUE_MIN;
+  item.targets[0] = 0;
+  item.upstream[0] = FLT_TRUE_MIN;
+  CHECK(run_forward(runtime, &item, &error) == 0 &&
+        isfinite(item.losses[0]));
+  CHECK(run_backward(runtime, &item, &error) == 0 &&
+        isfinite(item.gradients[0]) && isfinite(item.gradients[1]) &&
+        isfinite(item.gradients[2]));
+
   item.logits_shape[2] = 1u;
   item.forward_inputs[0].byte_length = sizeof(float);
   item.backward_inputs[0].byte_length = sizeof(float);
@@ -325,6 +371,7 @@ static void test_failure_atomicity(void) {
   _Alignas(8) unsigned char overlapping_inputs[32];
   unsigned char misaligned_targets[sizeof(item.targets) + 1u];
   unsigned char before[sizeof(item.gradients)];
+  input_snapshot inputs_before;
   int32_t status;
   fixture_init(&item);
   CHECK(et_kernel_runtime_discover(resolve_l2, NULL, &runtime, &error) == 0);
@@ -333,11 +380,13 @@ static void test_failure_atomicity(void) {
   do {                                                                       \
     memset(item.losses, 0xa5, sizeof(item.losses));                          \
     memcpy(before, item.losses, sizeof(item.losses));                        \
+    capture_inputs(item.forward_inputs, 2u, &inputs_before);                 \
   } while (0)
 #define POISON_BACKWARD()                                                    \
   do {                                                                       \
     memset(item.gradients, 0x5a, sizeof(item.gradients));                    \
     memcpy(before, item.gradients, sizeof(item.gradients));                  \
+    capture_inputs(item.backward_inputs, 3u, &inputs_before);                \
   } while (0)
 
   for (size_t index = 0u; index < 4u; index++) {
@@ -347,21 +396,35 @@ static void test_failure_atomicity(void) {
     status = run_forward(runtime, &item, &error);
     expect_error_unchanged(status, &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                            before, item.losses, sizeof(item.losses));
+    check_inputs_unchanged(&inputs_before);
   }
-  item.targets[1] = 0;
-  item.logits[5] = NAN;
-  POISON_FORWARD();
-  status = run_forward(runtime, &item, &error);
-  expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                         before, item.losses, sizeof(item.losses));
-  item.logits[5] = 1.0f;
-  item.upstream[1] = INFINITY;
-  POISON_BACKWARD();
-  status = run_backward(runtime, &item, &error);
-  expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
-                         before, item.gradients, sizeof(item.gradients));
-  item.upstream[1] = -1.25f;
+  for (size_t position = 0u; position < 3u; position++) {
+    static const size_t positions[] = {0u, 2u, 5u};
+    static const float nonfinite[] = {NAN, INFINITY, -INFINITY};
+    for (size_t value = 0u; value < 3u; value++) {
+      fixture_init(&item);
+      item.logits[positions[position]] = nonfinite[value];
+      POISON_FORWARD();
+      status = run_forward(runtime, &item, &error);
+      expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                             before, item.losses, sizeof(item.losses));
+      check_inputs_unchanged(&inputs_before);
+    }
+  }
+  for (size_t position = 0u; position < 2u; position++) {
+    static const float nonfinite[] = {NAN, INFINITY, -INFINITY};
+    for (size_t value = 0u; value < 3u; value++) {
+      fixture_init(&item);
+      item.upstream[position] = nonfinite[value];
+      POISON_BACKWARD();
+      status = run_backward(runtime, &item, &error);
+      expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                             before, item.gradients, sizeof(item.gradients));
+      check_inputs_unchanged(&inputs_before);
+    }
+  }
 
+  fixture_init(&item);
   item.logits_shape[1] = 1u;
   item.leading_shape[1] = 1u;
   item.forward_inputs[0].byte_length = 3u * sizeof(float);
@@ -375,6 +438,7 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          before, item.losses, sizeof(float));
+  check_inputs_unchanged(&inputs_before);
 
   fixture_init(&item);
   item.forward_inputs[1].data = item.logits;
@@ -382,18 +446,21 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_output.data = item.logits;
   POISON_FORWARD();
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_inputs[0].layout = (et_kernel_layout_v1)0u;
   POISON_FORWARD();
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_NONCONTIGUOUS,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_inputs[1].dtype = "f32";
   item.forward_inputs[1].byte_length = 2u * sizeof(float);
@@ -401,6 +468,7 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_DTYPE_MISMATCH,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_inputs[1].rank = 1u;
   item.forward_inputs[1].byte_length = sizeof(int64_t);
@@ -408,6 +476,7 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_inputs[1].shape = alternate_shape;
   item.forward_inputs[1].byte_length = sizeof(int64_t);
@@ -415,6 +484,7 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_output.rank = 1u;
   item.forward_output.shape = &item.leading_shape[1];
@@ -422,6 +492,7 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.backward_inputs[2].shape = alternate_shape;
   item.backward_inputs[2].byte_length = sizeof(float);
@@ -429,6 +500,7 @@ static void test_failure_atomicity(void) {
   status = run_backward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                          before, item.gradients, sizeof(item.gradients));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   memcpy(misaligned_targets + 1u, item.targets, sizeof(item.targets));
   item.forward_inputs[1].data = misaligned_targets + 1u;
@@ -436,6 +508,7 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   memset(overlapping_inputs, 0, sizeof(overlapping_inputs));
   item.forward_inputs[0].data = overlapping_inputs;
@@ -444,18 +517,21 @@ static void test_failure_atomicity(void) {
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_inputs[0].byte_length--;
   POISON_FORWARD();
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.forward_inputs[0].device = "gpu:0";
   POISON_FORWARD();
   status = run_forward(runtime, &item, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_DEVICE_MISMATCH,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
   fixture_init(&item);
   item.logits_shape[0] = 0u;
   item.leading_shape[0] = 0u;
@@ -495,6 +571,7 @@ static void test_failure_atomicity(void) {
   status = et_kernel_runtime_dispatch(runtime, &item.call, &error);
   expect_error_unchanged(status, &error, ET_KERNEL_ERROR_UNSUPPORTED,
                          before, item.losses, sizeof(item.losses));
+  check_inputs_unchanged(&inputs_before);
 
 #undef POISON_FORWARD
 #undef POISON_BACKWARD

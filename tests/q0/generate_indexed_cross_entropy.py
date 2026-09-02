@@ -81,7 +81,7 @@ def build_payload() -> dict[str, object]:
                 "inputs": ["input.logits", "input.targets", "input.upstream"],
                 "kind": "gradient",
                 "name": "indexed_cross_entropy_backward",
-                "operation": "indexed_cross_entropy.backward",
+                "operation": "indexed-cross-entropy.backward",
                 "tolerance": {
                     "absolute": "3ec92a737110e454",
                     "equal_nan": False,
@@ -93,7 +93,7 @@ def build_payload() -> dict[str, object]:
                 "inputs": ["input.logits", "input.targets"],
                 "kind": "parity",
                 "name": "indexed_cross_entropy_forward",
-                "operation": "indexed_cross_entropy.forward",
+                "operation": "indexed-cross-entropy.forward",
                 "tolerance": {
                     "absolute": "3ec0c6f7a0b5ed8d",
                     "equal_nan": False,
