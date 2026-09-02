@@ -49,7 +49,10 @@
          fixture-register-storage-mutation-provider-internal!
          fixture-register-storage-asymmetric-provider-internal!
          fixture-register-storage-unstable-provider-internal!
-         fixture-register-storage-nonreflexive-provider-internal!)
+         fixture-register-storage-nonreflexive-provider-internal!
+         fixture-callback-failpoint-provider-name-internal
+         fixture-callback-failpoint-provider-role-internal
+         fixture-register-callback-failpoint-provider-internal!)
 
 (define fixture-tensor-tag (vector 'p1-test-fixture-tensor))
 (define fixture-plan-tag (vector 'p1-test-fixture-load-plan))
@@ -1018,6 +1021,40 @@
 (define (fixture-register-storage-nonreflexive-provider-internal!)
   (fixture-register-storage-probe-provider-internal!
     'storage-nonreflexive-v1 fixture-storage-nonreflexive))
+
+(define (fixture-callback-failpoint-provider-name-internal position)
+  (cond
+    ((= position 0) 'callback-failpoint-0-v1)
+    ((= position 1) 'callback-failpoint-1-v1)
+    ((= position 2) 'callback-failpoint-2-v1)
+    ((= position 3) 'callback-failpoint-3-v1)
+    ((= position 4) 'callback-failpoint-4-v1)
+    ((= position 5) 'callback-failpoint-5-v1)
+    ((= position 6) 'callback-failpoint-6-v1)
+    (else 'callback-failpoint-7-release-owned-v1)))
+
+(define (fixture-callback-failpoint-provider-role-internal position)
+  (cond
+    ((= position 0) 'describe)
+    ((= position 1) 'clone)
+    ((= position 2) 'storage-identical?)
+    ((= position 3) 'value-equal?)
+    ((= position 4) 'device-equal?)
+    ((= position 5) 'prepare-load)
+    ((= position 6) 'commit-load!)
+    (else 'release-owned!)))
+
+(define (fixture-register-callback-failpoint-provider-internal! position)
+  ;; Construct the provider inside the attempted registration.  Therefore an
+  ;; allocation failure at callback position N must revoke N callback tokens
+  ;; plus this unpublished provider and return to the caller's live baseline.
+  (tensor-provider-register-internal!
+    (tensor-provider-create-internal
+      (fixture-callback-failpoint-provider-name-internal position)
+      fixture-describe fixture-clone fixture-storage-identical?
+      fixture-value-equal? fixture-device-equal? fixture-prepare-load
+      fixture-commit-load! fixture-release-owned!)
+    (fixture-admission-evidence)))
 
 (define (module-create-fixture-internal)
   (module-create-with-provider-internal fixture-provider-name))

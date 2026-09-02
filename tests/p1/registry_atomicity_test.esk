@@ -217,48 +217,72 @@
   (check "malformed status cleanup leaves one tombstone"
          (= (p1-test-tombstone-count) (+ tombstones-before 1))))
 
-;; Drive the Eshkol admission wrapper through a failure after three callback
-;; identities. It must revoke those callbacks and the unpublished provider.
-(let ((live-before (p1-test-live-count))
-      (tombstones-before (p1-test-tombstone-count)))
-  (check "callback failpoint armed"
-         (= (p1-test-callback-fail-after 3) 0))
-  (define callback-error
-    (guard (raised (#t raised))
-      (fixture-register-reentrant-target-provider-internal!)
-      #f))
-  (check "partial callback allocation raises E1 identity"
-         (transformer-error? callback-error))
-  (check "partial callback allocation category"
-         (eq? (transformer-error-category callback-error) 'internal))
-  (check "partial callback allocation operation"
-         (eq? (transformer-error-operation callback-error)
-              'tensor-provider-register-internal!))
-  (check "partial callback allocation bounded message"
-         (string=? (transformer-error-message callback-error)
-                   "P1 private identity operation failed"))
-  (check "partial callback allocation preserves native status"
-         (and (= (details-ref (transformer-error-details callback-error)
-                              'native-category) 4)
-              (= (details-ref (transformer-error-details callback-error)
-                              'source-code) 7)
-              (eq? (details-ref (transformer-error-details callback-error)
-                                'source-domain)
-                   'p1-private-bridge)
-              (string=?
-                (details-ref (transformer-error-details callback-error)
-                             'source-message)
-                "native identity allocation failed")))
-  (check "partial callback allocation cause"
-         (eq? (transformer-error-cause callback-error) #f))
-  (check "partial admission revokes its unpublished provider identity"
-         (= (p1-test-live-count) (- live-before 1)))
-  (check "partial admission leaves exact permanent tombstones"
-         (= (p1-test-tombstone-count) (+ tombstones-before 4)))
-  (expect-error "partially admitted provider remains unavailable" 'unsupported
-                (lambda ()
-                  (module-create-with-provider-internal
-                    'reentrant-target-v1))))
+;; Exhaust every callback-token allocation position. Position 7 is the
+;; release-owned! identity. The provider is constructed inside each attempt,
+;; so cleanup must restore the pre-attempt live baseline while retaining
+;; exactly N callback tombstones plus one unpublished-provider tombstone.
+(let loop ((position 0))
+  (if (= position 8)
+      #t
+      (let ((live-before (p1-test-live-count))
+            (tombstones-before (p1-test-tombstone-count))
+            (provider-name
+              (fixture-callback-failpoint-provider-name-internal position)))
+        (check "callback-position failpoint armed"
+               (= (p1-test-callback-fail-after position) 0))
+        (let ((callback-error
+                (guard (raised (#t raised))
+                  (fixture-register-callback-failpoint-provider-internal!
+                    position)
+                  #f)))
+          (check "callback-position allocation has exact structured error"
+                 (and (transformer-error? callback-error)
+                      (eq? (transformer-error-category callback-error)
+                           'internal)
+                      (eq? (transformer-error-operation callback-error)
+                           'tensor-provider-register-internal!)
+                      (eq?
+                        (fixture-callback-failpoint-provider-role-internal
+                          position)
+                        (cond
+                          ((= position 0) 'describe)
+                          ((= position 1) 'clone)
+                          ((= position 2) 'storage-identical?)
+                          ((= position 3) 'value-equal?)
+                          ((= position 4) 'device-equal?)
+                          ((= position 5) 'prepare-load)
+                          ((= position 6) 'commit-load!)
+                          (else 'release-owned!)))
+                      (string=? (transformer-error-message callback-error)
+                                "P1 private identity operation failed")
+                      (= (proper-list-length
+                           (transformer-error-details callback-error)) 4)
+                      (= (details-ref
+                           (transformer-error-details callback-error)
+                           'native-category) 4)
+                      (= (details-ref
+                           (transformer-error-details callback-error)
+                           'source-code) 7)
+                      (eq? (details-ref
+                             (transformer-error-details callback-error)
+                             'source-domain)
+                           'p1-private-bridge)
+                      (string=?
+                        (details-ref
+                          (transformer-error-details callback-error)
+                          'source-message)
+                        "native identity allocation failed")
+                      (eq? (transformer-error-cause callback-error) #f))))
+        (expect-error "callback-position provider remains unavailable"
+                      'unsupported
+                      (lambda ()
+                        (module-create-with-provider-internal provider-name)))
+        (check "callback-position cleanup restores exact live baseline"
+               (= (p1-test-live-count) live-before))
+        (check "callback-position cleanup leaves exact tombstones"
+               (= (p1-test-tombstone-count)
+                  (+ tombstones-before position 1)))
+        (loop (+ position 1)))))
 
 ;; Construct every shell before each baseline. Failed and repeated strict loads
 ;; must not create identities, bindings, or tombstones.
@@ -934,8 +958,8 @@
                 (null? (parameter-tree-paths
                          (module-parameters candidate)))))))
 
-(if (= checks 139)
+(if (= checks 169)
     (begin
-      (display "P1 registry atomicity PASS: 139 checks")
+      (display "P1 registry atomicity PASS: 169 checks")
       (newline))
     (exit 1))

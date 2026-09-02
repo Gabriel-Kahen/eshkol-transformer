@@ -940,19 +940,43 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   acceptance evidence: independent P1L-R requested changes for protected-storage
   aliasing, supported C1 leak detection, missing callback-defect combinations,
   retained entry owner graphs, and the absent exact P1 source-closure manifest.
-  The repair candidate now has local compatibility-lane passing evidence for 419 P1
-  structural checks, 405 P1 native checks, and 139 registry checks including the
+  The repaired implementation has local compatibility-lane passing evidence for 419 P1
+  structural checks, 405 P1 native checks, and 169 registry checks including the
   bounded eight-shell released-owner-graph probe and protected/ordinary comparator
   reentrancy attacks against state release and parameter/buffer registration. C1
   passes 245 logical checks plus 1,012 adversarial cases, and the exact T1 47-global
   aggregate/boundary gate passes.
-  The complete P1, C1, and T1 focused gates plus `make build`, `make test`, `make
-  smoke`, and `make benchmark` pass on CachyOS/LLVM 22; the benchmark truthfully
-  reports `compatibility-only`. The repair also adds the exact four-source P1 trusted
-  closure manifest and enables `P1_LSAN=1` plus `C1_LSAN=1` on the supported job. A
-  new exact-head supported Ubuntu 22.04 / LLVM 21.1.8 ASan/UBSan/LSan run and
-  independent re-review remain pending; only those later results can supersede the
-  request-changes verdict.
+  The current bounded repair passes the complete P1, C1, and T1 focused gates on
+  CachyOS/LLVM 22. Before this test-and-documentation-only correction, the unchanged
+  production implementation also passed `make build`, `make test`, `make smoke`, and
+  `make benchmark` on that host; the benchmark truthfully reports
+  `compatibility-only`. The repair also adds the exact four-source P1 trusted closure
+  manifest and enables `P1_LSAN=1` plus `C1_LSAN=1` on the supported job.
+
+  Two supported-run time-budget failures produced two explicit, bounded budget
+  relaxations. Run 33597586986 showed that the larger repaired P1 trusted package no
+  longer fit the generic E1B builder's 120-second inner compile limit; the successful
+  supported invocation later needed about 176.7 seconds. Commit
+  `d5f77fa5bf29d1f1a80c1111fda2b758aea17a14` therefore gives only the P1 package
+  wrapper the already validated `P1_COMPILER_TIMEOUT_SECONDS` default of 360 seconds.
+  The generic E1B default remains 120 seconds. Run 33601354539 then completed Build
+  and the entire Test step, including supported P1/C1 leak detection, but the
+  90-minute outer job budget cancelled Smoke and skipped the benchmark. Commit
+  `937dc5b12962415413dfb0ce7ae2e16909ffa4f1` raises that bounded outer budget to 120
+  minutes.
+
+  Integration admits these bounded build-budget relaxations: one P1-specific inner
+  compile ceiling rises from 120 to 360 seconds and the workflow's outer ceiling
+  rises from 90 to 120 minutes. This disposition neither accepts P1L nor removes a
+  compiler invocation, correctness assertion, test or sanitizer selection, Smoke,
+  or the reproducible benchmark. On prior repair head
+  `937dc5b12962415413dfb0ce7ae2e16909ffa4f1`, supported Ubuntu 22.04 / LLVM-Clang
+  21.1.8 run 33609401595 completed Build, the full test/sanitizer aggregate, Smoke,
+  and benchmark in 1h43m03s with `P1_LSAN=1` and `C1_LSAN=1`; it validates both
+  admitted budgets but predates the exhaustive eight-position callback-allocation
+  evidence. New exact-head supported CI and independent approval remain pending
+  after the bounded findings in review comment 5508808267. The P1L decision remains
+  proposed.
 - **Measured limitations / unsupported:** pinned Eshkol has no proved finalizer, and
   the local ptrace-restricted compatibility executor cannot supply authoritative
   LeakSanitizer evidence. The repository ships no production numerical tensor
@@ -979,4 +1003,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [I2 compatibility confirmation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5502269486);
   [issue #51 downstream disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502293490);
   [integration issue #1 disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5502293552);
-  provisional supported [CI run 33554345381](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33554345381).
+  [timeout-evidence review correction](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55#issuecomment-5508808267);
+  [inner-timeout run 33597586986](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33597586986);
+  [outer-budget run 33601354539](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33601354539);
+  prior-head supported [CI run 33609401595](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33609401595).
