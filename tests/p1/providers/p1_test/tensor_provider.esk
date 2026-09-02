@@ -8,13 +8,25 @@
          fixture-tensor-internal fixture-tensor-unsafe-internal
          fixture-owned-tensor-internal
          fixture-owned-shared-tensor-internal
+         fixture-storage-alias-wrapper-internal
+         fixture-foreign-provider-tensor-internal
          fixture-tensor-shared-clone-internal
          fixture-reset-shared-clone-internal!
          fixture-owned-live-count-internal
          fixture-describe-call-count-internal
+         fixture-storage-identical-call-count-internal
          fixture-release-call-count-internal
+         fixture-storage-comparison-call-count-internal
+         fixture-shared-clone-payload-internal
+         fixture-storage-identical-request-internal
+         fixture-publication-overwrite-attempt-count-internal
          fixture-arm-cross-publication-internal!
          fixture-arm-clone-defect-internal!
+         fixture-arm-storage-comparison-defect-internal!
+         fixture-arm-storage-comparison-reentrant-state-release-internal!
+         fixture-arm-storage-comparison-reentrant-registration-internal!
+         fixture-arm-ordinary-comparison-reentrant-state-release-internal!
+         fixture-arm-ordinary-comparison-reentrant-registration-internal!
          fixture-fail-next-release-internal!
          fixture-raise-false-next-release-internal!
          fixture-malform-next-release-internal!
@@ -31,7 +43,13 @@
          fixture-register-cyclic-evidence-provider-internal!
          fixture-register-overlimit-evidence-provider-internal!
          fixture-register-improper-evidence-provider-internal!
-         fixture-register-repeat-mutating-provider-internal!)
+         fixture-register-repeat-mutating-provider-internal!
+         fixture-register-storage-raise-provider-internal!
+         fixture-register-storage-raise-false-provider-internal!
+         fixture-register-storage-mutation-provider-internal!
+         fixture-register-storage-asymmetric-provider-internal!
+         fixture-register-storage-unstable-provider-internal!
+         fixture-register-storage-nonreflexive-provider-internal!)
 
 (define fixture-tensor-tag (vector 'p1-test-fixture-tensor))
 (define fixture-plan-tag (vector 'p1-test-fixture-load-plan))
@@ -41,9 +59,17 @@
 (define fixture-exact-clone #f)
 (define fixture-owned-live-count 0)
 (define fixture-describe-call-count 0)
+(define fixture-storage-identical-call-count 0)
 (define fixture-release-call-count 0)
+(define fixture-storage-comparison-call-count 0)
+(define fixture-publication-overwrite-attempt-count 0)
 (define fixture-cross-publication-carrier #f)
 (define fixture-clone-defect #f)
+(define fixture-storage-comparison-defect #f)
+(define fixture-storage-comparison-release-state #f)
+(define fixture-storage-comparison-registration #f)
+(define fixture-ordinary-comparison-release #f)
+(define fixture-ordinary-comparison-registration #f)
 (define fixture-release-defect #f)
 (define fixture-reentrant-release-state #f)
 (define fixture-reentrant-borrow #f)
@@ -123,10 +149,42 @@
 
 (define (fixture-owned-live-count-internal) fixture-owned-live-count)
 (define (fixture-describe-call-count-internal) fixture-describe-call-count)
+(define (fixture-storage-identical-call-count-internal)
+  fixture-storage-identical-call-count)
 (define (fixture-release-call-count-internal) fixture-release-call-count)
+(define (fixture-storage-comparison-call-count-internal)
+  fixture-storage-comparison-call-count)
+(define (fixture-publication-overwrite-attempt-count-internal)
+  fixture-publication-overwrite-attempt-count)
 
 (define (fixture-arm-clone-defect-internal! skip mode)
   (set! fixture-clone-defect (vector skip mode))
+  #t)
+
+(define (fixture-arm-storage-comparison-defect-internal! mode)
+  (set! fixture-storage-comparison-defect mode)
+  #t)
+
+(define (fixture-arm-storage-comparison-reentrant-state-release-internal! state)
+  (set! fixture-storage-comparison-release-state state)
+  #t)
+
+(define (fixture-arm-storage-comparison-reentrant-registration-internal!
+          mode module tensor)
+  (set! fixture-storage-comparison-registration (vector mode module tensor))
+  #t)
+
+(define (fixture-arm-ordinary-comparison-reentrant-state-release-internal!
+          source state)
+  ;; The source identity distinguishes the normal clone/source comparison
+  ;; from earlier protected scans, whose left side is the published clone.
+  (set! fixture-ordinary-comparison-release (vector source state))
+  #t)
+
+(define (fixture-arm-ordinary-comparison-reentrant-registration-internal!
+          source mode module)
+  (set! fixture-ordinary-comparison-registration
+        (vector source mode module))
   #t)
 
 (define (fixture-arm-cross-publication-internal! carrier)
@@ -208,14 +266,20 @@
                                              (eq? (vector-ref tensor 6)
                                                   'cross-publication)
                                              (eq? (vector-ref tensor 6)
-                                                  'return-request)))
+                                                  'return-request)
+                                             (eq? (vector-ref tensor 6)
+                                                  'storage-alias-republish)
+                                             (eq? (vector-ref tensor 6)
+                                                  'publish-forged)))
                                     (fixture-fail 'corrupt-data operation
                                                   "malformed test failure flag")
                                     (if (not (or
                                                (eq? (vector-ref tensor 7)
                                                     'test-only)
                                                (eq? (vector-ref tensor 7)
-                                                    'owned-test-only)))
+                                                    'owned-test-only)
+                                               (eq? (vector-ref tensor 7)
+                                                    'protected-alias-test-only)))
                                         (fixture-fail 'corrupt-data operation
                                                       "malformed test tensor marker")
                                         (vector
@@ -256,13 +320,55 @@
     (set! fixture-owned-live-count (+ fixture-owned-live-count 1))
     tensor))
 
+(define (fixture-storage-alias-wrapper-internal tensor)
+  ;; Malicious trusted-boundary fixture: a fresh carrier wrapper over the
+  ;; exact payload allocation retained by another owner. It is deliberately
+  ;; not counted as an owner. If rollback ever calls release-owned! on it, the
+  ;; callback below visibly poisons the protected allocation before raising.
+  (fixture-describe
+    (vector tensor 'buffer 'fixture-storage-alias-wrapper-internal))
+  (vector fixture-tensor-tag
+          (copy-data (vector-ref tensor 1))
+          (vector-ref tensor 2)
+          (copy-data (vector-ref tensor 3))
+          (vector-ref tensor 4)
+          (vector-ref tensor 5)
+          #f 'protected-alias-test-only))
+
+(define (fixture-foreign-provider-tensor-internal shape dtype device payload)
+  ;; A detached carrier from a different hypothetical provider domain. The
+  ;; fixture-v1 metadata callback must reject it before storage comparison or
+  ;; release authority is possible.
+  (vector (vector 'p1-test-foreign-provider-tensor)
+          (copy-data shape) dtype (copy-data device) #t
+          (copy-data payload) #f 'foreign-provider-test-only))
+
 (define (fixture-reset-shared-clone-internal!)
   (set! fixture-shared-clone-payload #f)
   (set! fixture-exact-clone #f))
 
+(define (fixture-shared-clone-payload-internal)
+  (if fixture-shared-clone-payload
+      (copy-data fixture-shared-clone-payload)
+      #f))
+
 (define (fixture-tensor-payload-internal tensor)
   (fixture-describe (vector tensor 'buffer 'fixture-tensor-payload-internal))
   (copy-data (vector-ref tensor 5)))
+
+(define (fixture-publish-clone-once! request published operation)
+  ;; The publication cell is the ownership-transfer boundary. The fixture uses
+  ;; this helper for every owned clone so its integrating evidence can prove an
+  ;; attempted second write raises before the first owner becomes unreachable.
+  (if (vector-ref request 3)
+      (begin
+        (set! fixture-publication-overwrite-attempt-count
+              (+ fixture-publication-overwrite-attempt-count 1))
+        (fixture-fail 'internal operation
+                      "fixture clone publication overwrite rejected"))
+      (begin
+        (vector-set! request 3 published)
+        request)))
 
 (define (fixture-clone (request : vector)) : vector
   (fixture-describe request)
@@ -273,16 +379,23 @@
         (let ((mode (vector-ref fixture-clone-defect 1)))
           (set! fixture-clone-defect #f)
           (if (or (eq? mode 'publish-then-raise)
-                  (eq? mode 'publish-then-raise-false))
+                  (eq? mode 'publish-then-raise-false)
+                  (eq? mode 'publish-then-substitute)
+                  (eq? mode 'publish-then-overwrite-attempt))
               (let ((published
                       (fixture-owned-tensor-internal
                         (vector-ref tensor 1) (vector-ref tensor 2)
                         (vector-ref tensor 3) (vector-ref tensor 5))))
-                (vector-set! request 3 published)
-                (if (eq? mode 'publish-then-raise-false)
-                    (raise #f)
-                    (fixture-fail 'internal operation
-                                  "injected armed post-publication clone defect")))
+                (fixture-publish-clone-once! request published operation)
+                (cond
+                  ((eq? mode 'publish-then-raise-false) (raise #f))
+                  ((eq? mode 'publish-then-substitute) (vector))
+                  ((eq? mode 'publish-then-overwrite-attempt)
+                   (fixture-publish-clone-once! request published operation))
+                  (else
+                   (fixture-fail
+                     'internal operation
+                     "injected armed post-publication clone defect"))))
               (fixture-fail 'internal operation
                             "injected armed clone defect")))
         (begin
@@ -302,12 +415,23 @@
              (let ((published fixture-cross-publication-carrier))
                (set! fixture-cross-publication-carrier #f)
                (vector-set! request 3 published)))
+            ((eq? (vector-ref tensor 6) 'publish-forged)
+             (vector-set! request 3 (vector 'forged-provider-carrier)))
             ((and (eq? (vector-ref tensor 6) 'exact-republish)
                   fixture-exact-clone)
              (vector-set! request 3 fixture-exact-clone))
             (else
               (let ((copy
-                      (if (eq? (vector-ref tensor 6) 'share-clone)
+                      (if (and
+                            (eq? (vector-ref tensor 6)
+                                 'storage-alias-republish)
+                            fixture-exact-clone)
+                          (fixture-storage-alias-wrapper-internal
+                            fixture-exact-clone)
+                          (if (or
+                                (eq? (vector-ref tensor 6) 'share-clone)
+                                (eq? (vector-ref tensor 6)
+                                     'storage-alias-republish))
                           (begin
                             (if fixture-shared-clone-payload
                                 #t
@@ -325,13 +449,21 @@
                                     (vector-ref tensor 3) (vector-ref tensor 4)
                                     (vector-ref tensor 5) #f)))
                             (vector-set! fresh 7 'owned-test-only)
-                            fresh))))
-                (if (eq? (vector-ref tensor 6) 'exact-republish)
+                            fresh)))))
+                (if (or (eq? (vector-ref tensor 6) 'exact-republish)
+                        (and
+                          (eq? (vector-ref tensor 6)
+                               'storage-alias-republish)
+                          (not fixture-exact-clone)))
                     (set! fixture-exact-clone copy)
                     #t)
-                (vector-set! request 3 copy)
-                (set! fixture-owned-live-count
-                      (+ fixture-owned-live-count 1)))))
+                (fixture-publish-clone-once! request copy operation)
+                ;; The alias wrapper is not a second owner. The first clone
+                ;; remains the sole destructive owner of its shared payload.
+                (if (eq? (vector-ref copy 7) 'owned-test-only)
+                    (set! fixture-owned-live-count
+                          (+ fixture-owned-live-count 1))
+                    #t))))
           (if (eq? (vector-ref tensor 6) 'publish-then-raise)
               (fixture-fail 'internal operation
                             "injected post-publication clone defect")
@@ -348,6 +480,15 @@
             (not (symbol? (vector-ref request 2))))
         (fixture-fail 'internal (vector-ref request 2)
                       "malformed test owned tensor release request")
+        (if (eq? (vector-ref tensor 7) 'protected-alias-test-only)
+            (begin
+              (if (> (vector-length (vector-ref tensor 5)) 0)
+                  (vector-set! (vector-ref tensor 5) 0
+                               'destroyed-protected-storage)
+                  #t)
+              (fixture-fail
+                'internal (vector-ref request 2)
+                "protected alias reached destructive release callback"))
         (if (not (eq? (vector-ref tensor 7) 'owned-test-only))
         (fixture-fail 'internal (vector-ref request 2)
                       "test owned tensor was released more than once")
@@ -368,17 +509,125 @@
                       request))))
               (begin
                 (vector-set! request 3 #t)
-                request)))))))
+                request))))))))
 
 (define (fixture-storage-identical? (request : vector)) : boolean
+  (set! fixture-storage-comparison-call-count
+        (+ fixture-storage-comparison-call-count 1))
+  ;; The valid path performs only bounded reads. It allocates no request or
+  ;; result object, mutates/retains no carrier or request field, invokes no
+  ;; nested callback/native seam, and cannot raise after these shape checks.
+  (set! fixture-storage-identical-call-count
+        (+ fixture-storage-identical-call-count 1))
+  (if (not (= (vector-length request) 5))
+      (fixture-fail 'invalid-argument 'fixture-storage-identical?
+                    "malformed fixture storage comparison request")
+      (let ((left (vector-ref request 0))
+            (right (vector-ref request 1))
+            (left-kind (vector-ref request 2))
+            (right-kind (vector-ref request 3))
+            (operation (vector-ref request 4)))
+        (if (not (and (fixture-tensor? left) (fixture-tensor? right)
+                      (or (eq? left-kind 'parameter)
+                          (eq? left-kind 'buffer))
+                      (or (eq? right-kind 'parameter)
+                          (eq? right-kind 'buffer))
+                      (symbol? operation)))
+            (fixture-fail 'invalid-argument 'fixture-storage-identical?
+                          "invalid fixture storage comparison input")
+            (begin
+              (if fixture-storage-comparison-release-state
+                  (let ((state fixture-storage-comparison-release-state))
+                    ;; Clear the one-shot arm before the malicious nested call.
+                    ;; A correct P1 boundary rejects release while this
+                    ;; protected comparison is active.
+                    (set! fixture-storage-comparison-release-state #f)
+                    (state-dict-release! state))
+                  #t)
+              (if fixture-storage-comparison-registration
+                  (let ((attack fixture-storage-comparison-registration))
+                    (set! fixture-storage-comparison-registration #f)
+                    (if (eq? (vector-ref attack 0) 'parameter)
+                        (module-register-parameter-internal!
+                          (vector-ref attack 1) "comparator-attack"
+                          (vector-ref attack 2))
+                        (module-register-buffer-internal!
+                          (vector-ref attack 1) "comparator-attack"
+                          (vector-ref attack 2))))
+                  #t)
+              (if (and fixture-ordinary-comparison-release
+                       (eq? left
+                            (vector-ref fixture-ordinary-comparison-release 0)))
+                  (let ((state
+                          (vector-ref fixture-ordinary-comparison-release 1)))
+                    (set! fixture-ordinary-comparison-release #f)
+                    (state-dict-release! state))
+                  #t)
+              (if (and fixture-ordinary-comparison-registration
+                       (eq? left
+                            (vector-ref
+                              fixture-ordinary-comparison-registration 0)))
+                  (let ((attack fixture-ordinary-comparison-registration))
+                    (set! fixture-ordinary-comparison-registration #f)
+                    ;; `right` is the newly published, independently owned
+                    ;; clone on the normal clone/source comparison path.
+                    (if (eq? (vector-ref attack 1) 'parameter)
+                        (module-register-parameter-internal!
+                          (vector-ref attack 2) "ordinary-comparator-attack"
+                          right)
+                        (module-register-buffer-internal!
+                          (vector-ref attack 2) "ordinary-comparator-attack"
+                          right)))
+                  #t)
+              (if fixture-storage-comparison-defect
+                  (let ((defect fixture-storage-comparison-defect))
+                    (set! fixture-storage-comparison-defect #f)
+                    (if (eq? defect 'raise-false)
+                        (raise #f)
+                        (fixture-fail
+                          'internal operation
+                          "injected storage comparison defect")))
+                  (eq? (vector-ref left 5) (vector-ref right 5))))))))
+
+(define (fixture-storage-identical-request-internal
+          (request : vector)) : boolean
+  ;; Test-only direct access to the provider callback. Callers can preallocate
+  ;; and reuse the request to prove the callback itself has no allocation or
+  ;; retention role.
+  (fixture-storage-identical? request))
+
+(define (fixture-storage-raise (request : vector)) : boolean
+  (fixture-fail 'internal 'fixture-storage-raise
+                "injected storage comparator defect")
+  #f)
+
+(define (fixture-storage-raise-false (request : vector)) : boolean
+  (raise #f)
+  #f)
+
+(define (fixture-storage-mutate-request (request : vector)) : boolean
+  (let ((result (fixture-storage-identical? request)))
+    (vector-set! request 4 'mutated-storage-comparison-operation)
+    result))
+
+(define (fixture-storage-asymmetric (request : vector)) : boolean
   (let ((left (vector-ref request 0))
-        (right (vector-ref request 1))
-        (left-kind (vector-ref request 2))
-        (right-kind (vector-ref request 3))
-        (operation (vector-ref request 4)))
-    (fixture-describe (vector left left-kind operation))
-    (fixture-describe (vector right right-kind operation))
-    (eq? (vector-ref left 5) (vector-ref right 5))))
+        (right (vector-ref request 1)))
+    (if (eq? left right)
+        #t
+        (let ((payload (vector-ref left 5)))
+          (and (> (vector-length payload) 0)
+               (eq? (vector-ref payload 0)
+                    'admission-destination-a))))))
+
+(define fixture-storage-unstable-value #f)
+
+(define (fixture-storage-unstable (request : vector)) : boolean
+  (set! fixture-storage-unstable-value
+        (not fixture-storage-unstable-value))
+  fixture-storage-unstable-value)
+
+(define (fixture-storage-nonreflexive (request : vector)) : boolean #f)
 
 (define (fixture-value-equal? (request : vector)) : boolean
   (let ((left (vector-ref request 0))
@@ -733,6 +982,42 @@
 (define (fixture-register-repeat-mutating-provider-internal!)
   (tensor-provider-register-internal! repeat-mutating-provider
                                       (fixture-admission-evidence)))
+
+(define (fixture-register-storage-probe-provider-internal!
+          (name : symbol) (comparison : (-> vector boolean)))
+  ;; Construct inside the attempted registration. A rejected probe must revoke
+  ;; this unpublished provider and all eight callback identities before return.
+  (tensor-provider-register-internal!
+    (tensor-provider-create-internal
+      name fixture-describe fixture-clone comparison fixture-value-equal?
+      fixture-device-equal? fixture-prepare-load fixture-commit-load!
+      fixture-release-owned!)
+    (fixture-admission-evidence)))
+
+(define (fixture-register-storage-raise-provider-internal!)
+  (fixture-register-storage-probe-provider-internal!
+    'storage-raise-v1 fixture-storage-raise))
+
+(define (fixture-register-storage-raise-false-provider-internal!)
+  (fixture-register-storage-probe-provider-internal!
+    'storage-raise-false-v1 fixture-storage-raise-false))
+
+(define (fixture-register-storage-mutation-provider-internal!)
+  (fixture-register-storage-probe-provider-internal!
+    'storage-mutation-v1 fixture-storage-mutate-request))
+
+(define (fixture-register-storage-asymmetric-provider-internal!)
+  (fixture-register-storage-probe-provider-internal!
+    'storage-asymmetric-v1 fixture-storage-asymmetric))
+
+(define (fixture-register-storage-unstable-provider-internal!)
+  (set! fixture-storage-unstable-value #f)
+  (fixture-register-storage-probe-provider-internal!
+    'storage-unstable-v1 fixture-storage-unstable))
+
+(define (fixture-register-storage-nonreflexive-provider-internal!)
+  (fixture-register-storage-probe-provider-internal!
+    'storage-nonreflexive-v1 fixture-storage-nonreflexive))
 
 (define (module-create-fixture-internal)
   (module-create-with-provider-internal fixture-provider-name))

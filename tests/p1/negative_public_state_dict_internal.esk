@@ -12,4 +12,5 @@
           state-dict-tensor-borrow-end-internal
           tensor-provider-preflight-internal
           tensor-provider-release-owned-internal!
+          tensor-provider-admit-owned-internal!
           state-dict-adopt-owned-internal!))

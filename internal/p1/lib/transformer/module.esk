@@ -77,6 +77,7 @@
          state-dict-tensor-borrow-end-internal
          tensor-provider-preflight-internal
          tensor-provider-release-owned-internal!
+         tensor-provider-admit-owned-internal!
          state-dict-adopt-owned-internal!)
 
 (define p1-trusted-surface
@@ -103,6 +104,8 @@
 (define tensor-providers '())
 (define tensor-provider-admission-active? #f)
 (define tensor-provider-admission-active-shell #f)
+(define protected-storage-comparison-active? #f)
+(define protected-storage-comparison-request (vector #f #f #f #f #f))
 (define shell-registry '())
 (define dead-state-raw (vector 'released-state-raw))
 (define dead-state-tensor-raw (vector 'released-state-tensor-raw))
@@ -126,6 +129,17 @@
     (et-e1b-private-raise category operation message '() #f)
     #f)
   :no-return)
+
+(define (reject-protected-storage-comparison-reentry operation)
+  ;; The comparator runs with raw carrier identities under P1's lifetime pin.
+  ;; No externally callable P1 seam may mutate, retain, transfer, borrow, or
+  ;; destroy authority until that callback returns and the candidate has been
+  ;; settled.  Boundary wrappers call this before shell/native/provider work;
+  ;; internal helpers used by the outer operation remain callable.
+  (if protected-storage-comparison-active?
+      (fail 'invalid-state operation
+            "tensor storage comparison is not reentrant" '())
+      #t))
 
 (define (identity-member-local? value values)
   (cond
@@ -290,6 +304,7 @@
           (else (find (cdr records)))))))
 
 (define (raw-for-shell operation kind value)
+  (reject-protected-storage-comparison-reentry operation)
   (let ((entry (shell-entry value)))
     (if (not (and entry (eq? kind (vector-ref entry 1))))
         (fail 'invalid-argument operation "expected registered opaque value" '())
@@ -305,6 +320,7 @@
   ;; The private pre-state constructor returns an unregistered construction
   ;; value so P1 retains no hidden carrier edge if its trusted caller abandons
   ;; it. Entries exposed from a state remain state-scoped opaque identities.
+  (reject-protected-storage-comparison-reentry operation)
   (let ((record (shell-entry value)))
     (if record
         (raw-for-shell operation 'entry value)
@@ -334,7 +350,8 @@
                     (= (vector-length record) 4)
                     (eq? (vector-ref record 3) state)
                     (identity-member-local? raw entries))
-               (vector-set! record 2 dead-state-entry-raw))
+               (vector-set! record 2 dead-state-entry-raw)
+               (vector-set! record 3 dead-state-raw))
               (else #t))
             (scan (cdr remaining)))))))
 
@@ -933,31 +950,131 @@
       (fail 'invalid-argument 'tensor-provider-release-owned-internal!
             "owned tensor release envelope is invalid" '())
       #t)
+  ;; Taxonomy is structural first: malformed, wrong-kind, or otherwise invalid
+  ;; envelopes are invalid-argument even if a field happens to name a protected
+  ;; live carrier.
+  (if (not (and
+             (vector-ref release-envelope 0)
+             (or (eq? (vector-ref release-envelope 1) 'parameter)
+                 (eq? (vector-ref release-envelope 1) 'buffer))
+             (symbol? (vector-ref release-envelope 2))
+             (eq? (vector-ref release-envelope 3) #f)))
+      (fail 'invalid-argument 'tensor-provider-release-owned-internal!
+            "owned tensor release envelope is invalid" '())
+      #t)
   ;; This is the last-chance sanitizer for a decoder that republishes storage
   ;; from a live P1 state and then fails before adoption. It precedes provider
   ;; lookup/version checks so caller cleanup can never release that storage.
   (if (and (vector-ref release-envelope 0)
-           (carrier-protected-from-release? (vector-ref release-envelope 0)))
+           (carrier-protected-from-release?
+             'tensor-provider-release-owned-internal! #f
+             (vector-ref release-envelope 0)
+             (vector-ref release-envelope 1) #f))
       (begin
         (vector-set! release-envelope 0 #f)
         ;; Cleanup consumers must be able to continue releasing later genuine
         ;; owners without relying on exception unwinding across this private
         ;; module seam. False is the narrow protected-carrier rejection status.
         #f)
-      (if (not (and
-                 (vector-ref release-envelope 0)
-                 (or (eq? (vector-ref release-envelope 1) 'parameter)
-                     (eq? (vector-ref release-envelope 1) 'buffer))
-                 (symbol? (vector-ref release-envelope 2))
-                 (eq? (vector-ref release-envelope 3) #f)))
-          (fail 'invalid-argument 'tensor-provider-release-owned-internal!
-                "owned tensor release envelope is invalid" '())
-          (let ((provider
-                  (tensor-provider-preflight-internal
-                    provider-name major minor)))
-            (tensor-release-owned!
-              'tensor-provider-release-owned-internal!
-              provider release-envelope)))))
+      (let ((provider
+              (tensor-provider-preflight-internal
+                provider-name major minor)))
+        (let ((carrier (vector-ref release-envelope 0))
+              (metadata-ok? #t)
+              (metadata-error #f)
+              (protected? #f))
+          ;; A carrier must first pass this exact admitted provider's metadata
+          ;; boundary. Neutralize before that first fallible provider call;
+          ;; caller rollback must not retry an unvalidated carrier into the
+          ;; destructive release callback.
+          (vector-set! release-envelope 0 #f)
+          (guard (caught
+                   (#t
+                     (set! metadata-ok? #f)
+                     (set! metadata-error caught)
+                     #f))
+            (tensor-metadata
+              'tensor-provider-release-owned-internal! provider carrier
+              (vector-ref release-envelope 1)))
+          (if (not metadata-ok?)
+              (raise metadata-error)
+              #t)
+          ;; A defective comparator can report an error, but caller rollback
+          ;; can never retry this neutral envelope into a destructive callback.
+          (set! protected?
+                (carrier-protected-from-release?
+                  'tensor-provider-release-owned-internal! provider
+                  carrier (vector-ref release-envelope 1) #t))
+          (if protected?
+              #f
+              (begin
+                (vector-set! release-envelope 0 carrier)
+                (tensor-release-owned!
+                  'tensor-provider-release-owned-internal!
+                  provider release-envelope)))))))
+
+(define (tensor-provider-admit-owned-internal!
+          provider-name major minor release-envelope prior-envelopes)
+  (let ((operation 'tensor-provider-admit-owned-internal!))
+    (if (not (and (vector? release-envelope)
+                  (= (vector-length release-envelope) 4)))
+        (fail 'invalid-argument operation
+              "owned tensor admission envelope is invalid" '())
+        #t)
+    (let ((carrier (vector-ref release-envelope 0))
+          (kind (vector-ref release-envelope 1)))
+      ;; Neutralize before provider lookup, metadata validation, or storage
+      ;; comparison. Every fallible exit and every alias result therefore leaves
+      ;; the later ambiguous publication without destructive release authority.
+      (vector-set! release-envelope 0 #f)
+      (if (not (and carrier
+                    (or (eq? kind 'parameter) (eq? kind 'buffer))
+                    (symbol? (vector-ref release-envelope 2))
+                    (eq? (vector-ref release-envelope 3) #f)
+                    (bounded-list-length prior-envelopes max-state-entries)))
+          (fail 'invalid-argument operation
+                "owned tensor admission input is invalid" '())
+          #t)
+      (let validate-priors ((remaining prior-envelopes))
+        (if (null? remaining)
+            #t
+            (let ((item (car remaining)))
+              (if (not (and (vector? item) (= (vector-length item) 4)
+                            (not (eq? item release-envelope))
+                            (or
+                              (not (vector-ref item 0))
+                              (and
+                                (or (eq? (vector-ref item 1) 'parameter)
+                                    (eq? (vector-ref item 1) 'buffer))
+                                (symbol? (vector-ref item 2))
+                                (eq? (vector-ref item 3) #f)))))
+                  (fail 'invalid-argument operation
+                        "prior owned tensor admission envelope is invalid" '())
+                  (validate-priors (cdr remaining))))))
+      (let ((provider
+              (tensor-provider-preflight-internal provider-name major minor)))
+        ;; The candidate and each actionable prior owner cross this exact
+        ;; provider's metadata boundary before their first physical comparison.
+        (tensor-metadata operation provider carrier kind)
+        (let prevalidate-priors ((remaining prior-envelopes))
+          (if (null? remaining)
+              #t
+              (let ((item (car remaining)))
+                (if (vector-ref item 0)
+                    (tensor-metadata operation provider
+                                     (vector-ref item 0)
+                                     (vector-ref item 1))
+                    #t)
+                (prevalidate-priors (cdr remaining)))))
+        (if (or
+              (owned-carrier-storage-member?
+                operation provider carrier kind prior-envelopes '())
+              (carrier-protected-from-release?
+                operation provider carrier kind #t))
+            #f
+            (begin
+              (vector-set! release-envelope 0 carrier)
+              #t))))))
 
 (define (device-budget-consume! depth budget)
   (vector-set! budget 0 (+ (vector-ref budget 0) 1))
@@ -1154,10 +1271,51 @@
           (eq? carrier (vector-ref (car envelopes) 0))) #t)
     (else (owned-carrier-identity-member? carrier (cdr envelopes)))))
 
-(define (carrier-owned-by-live-state? carrier)
+(define (owned-carrier-storage-member?
+          operation provider carrier carrier-kind envelopes stop)
+  ;; Scratch owners earlier in the same ledger are protected just like live
+  ;; state owners. Only actionable, well-formed envelopes participate; the new
+  ;; publication remains disarmed throughout this scan, so an alias or
+  ;; comparator defect can never create a second destructive owner.
+  (cond
+    ((or (null? envelopes) (eq? envelopes stop)) #f)
+    ((and (vector? (car envelopes))
+          (= (vector-length (car envelopes)) 4)
+          (vector-ref (car envelopes) 0)
+          (or (eq? (vector-ref (car envelopes) 1) 'parameter)
+              (eq? (vector-ref (car envelopes) 1) 'buffer))
+          (or
+            (eq? carrier (vector-ref (car envelopes) 0))
+            (protected-storage-identical?
+              operation provider carrier (vector-ref (car envelopes) 0)
+              carrier-kind (vector-ref (car envelopes) 1)))) #t)
+    (else
+      (owned-carrier-storage-member?
+        operation provider carrier carrier-kind (cdr envelopes) stop))))
+
+(define (borrowed-carrier-identity-member? carrier borrowed)
+  (cond
+    ((null? borrowed) #f)
+    ((eq? carrier (vector-ref (car borrowed) 0)) #t)
+    (else (borrowed-carrier-identity-member? carrier (cdr borrowed)))))
+
+(define (borrowed-carrier-storage-member?
+          operation provider carrier carrier-kind borrowed)
+  (cond
+    ((null? borrowed) #f)
+    ((protected-storage-identical?
+       operation provider carrier (vector-ref (car borrowed) 0)
+       carrier-kind (vector-ref (car borrowed) 1)) #t)
+    (else
+      (borrowed-carrier-storage-member?
+        operation provider carrier carrier-kind (cdr borrowed)))))
+
+(define (carrier-owned-by-live-state?
+          operation provider carrier carrier-kind compare-storage?)
   ;; The registry is the sole process-local authority for published states.
-  ;; This scan performs only identity reads over already-retained ledgers: it
-  ;; does not invoke providers or retain a new carrier reference.
+  ;; Exact identity protection does not invoke a provider. After trusted
+  ;; provider preflight, the same scan may use that provider's admitted
+  ;; storage-identity callback to reject a distinct wrapper over live storage.
   (let scan-states ((records shell-registry))
     (if (null? records)
         #f
@@ -1169,36 +1327,60 @@
                    (state-value? raw)
                    (let ((lifecycle (state-lifecycle raw)))
                      (and (eq? (vector-ref lifecycle 1) 'live)
+                          (or (not compare-storage?)
+                              (eq? provider (vector-ref lifecycle 3)))
                           (let scan-owned
                                ((owned (vector-ref
                                          (vector-ref lifecycle 5) 0)))
                             (cond
                               ((null? owned) #f)
-                              ((and (vector-ref (car owned) 0)
-                                    (eq? carrier
-                                         (vector-ref (car owned) 0))) #t)
+                              ((and
+                                 (vector? (car owned))
+                                 (= (vector-length (car owned)) 4)
+                                 (vector-ref (car owned) 0)
+                                 (or
+                                   (eq? carrier
+                                        (vector-ref (car owned) 0))
+                                   (and compare-storage?
+                                        (protected-storage-identical?
+                                          operation provider carrier
+                                          (vector-ref (car owned) 0)
+                                          carrier-kind
+                                          (vector-ref (car owned) 1))))) #t)
                               (else (scan-owned (cdr owned))))))))
               #t
               (scan-states (cdr records)))))))
 
-(define (carrier-borrowed-by-module? carrier module)
+(define (carrier-borrowed-by-module?
+          operation provider carrier carrier-kind module compare-storage?)
   (let scan-parameters ((bindings (vector-ref module 2)))
     (if (null? bindings)
         (let scan-buffers ((buffers (vector-ref module 3)))
           (cond
             ((null? buffers) #f)
-            ((eq? carrier (vector-ref (car buffers) 2)) #t)
+            ((or (eq? carrier (vector-ref (car buffers) 2))
+                 (and compare-storage?
+                      (protected-storage-identical?
+                        operation provider carrier
+                        (vector-ref (car buffers) 2)
+                        carrier-kind 'buffer))) #t)
             (else (scan-buffers (cdr buffers)))))
         (let ((handle (vector-ref (car bindings) 2)))
-          (if (eq? carrier (vector-ref handle 6))
+          (if (or (eq? carrier (vector-ref handle 6))
+                  (and compare-storage?
+                       (protected-storage-identical?
+                         operation provider carrier (vector-ref handle 6)
+                         carrier-kind 'parameter)))
               #t
               (scan-parameters (cdr bindings)))))))
 
-(define (carrier-protected-from-release? carrier)
+(define (carrier-protected-from-release?
+          operation provider carrier carrier-kind compare-storage?)
   ;; Modules borrow their parameter/buffer carriers and published states own
   ;; their ledger carriers. Neither class may be authorized by clone, codec,
   ;; adoption, or the narrow private release helper as a new owner.
-  (if (carrier-owned-by-live-state? carrier)
+  (if (carrier-owned-by-live-state?
+        operation provider carrier carrier-kind compare-storage?)
       #t
       (let scan-modules ((records shell-registry))
         (if (null? records)
@@ -1206,19 +1388,26 @@
             (let* ((record (car records))
                    (kind (vector-ref record 1))
                    (raw (vector-ref record 2)))
-              (if (and (eq? kind 'module) (module-value? raw)
-                       (carrier-borrowed-by-module? carrier raw))
+              (if (and
+                    (eq? kind 'module) (module-value? raw)
+                    (or (not compare-storage?)
+                        (eq? provider (vector-ref raw 6)))
+                    (carrier-borrowed-by-module?
+                      operation provider carrier carrier-kind raw
+                      compare-storage?))
                   #t
                   (scan-modules (cdr records))))))))
 
 (define (tensor-copy-outcome
           operation provider tensor kind ownership borrowed-carriers)
   (let* ((source-metadata #f)
+         (published-metadata #f)
          (request (vector tensor kind operation #f))
          (release-envelope (vector #f kind operation #f))
          (ledger-cell
            (cons release-envelope (vector-ref ownership 0)))
          (publication-admitted? #f)
+         (storage-outcome (vector #f #f))
          (outcome (vector #f #f)))
     ;; The envelope and its list cell exist before provider publication.
     (vector-set! ownership 0 ledger-cell)
@@ -1231,12 +1420,15 @@
       (set! source-metadata
             (tensor-metadata operation provider tensor kind))
       (vector-set! outcome 1 ((vector-ref provider 3) request)))
-    ;; Publication admission also runs outside the callback guard. The exact
-    ;; preallocated release envelope becomes actionable only for a new owner.
+    ;; Publication admission also runs outside the clone callback guard. Every
+    ;; provider storage comparison is captured into the same total outcome so
+    ;; a defective comparison cannot escape around caller ledger cleanup.
     (let ((published (vector-ref request 3)))
       (if published
-          (if (or (identity-member-local? published borrowed-carriers)
-                  (carrier-protected-from-release? published)
+          (if (or (borrowed-carrier-identity-member?
+                    published borrowed-carriers)
+                  (carrier-protected-from-release?
+                    operation provider published kind #f)
                   (eq? published request)
                   (eq? published release-envelope)
                   (eq? published kind)
@@ -1247,8 +1439,42 @@
               ;; this envelope and must never be released through it.
               (vector-set! release-envelope 0 #f)
               (begin
-                (vector-set! release-envelope 0 published)
-                (set! publication-admitted? #t)))
+                (guard (caught
+                         (#t
+                           (vector-set! storage-outcome 0 #f)
+                           (vector-set! storage-outcome 1 caught)
+                           storage-outcome))
+                  (vector-set! storage-outcome 0 #t)
+                  ;; Validate the published carrier with the exact admitted
+                  ;; provider before its first storage-identity comparison.
+                  ;; The release envelope is still neutral here.
+                  (set! published-metadata
+                        (tensor-metadata operation provider published kind))
+                  (vector-set!
+                    storage-outcome 1
+                    (or
+                      (borrowed-carrier-storage-member?
+                        operation provider published kind borrowed-carriers)
+                      (owned-carrier-storage-member?
+                        operation provider published kind (cdr ledger-cell) #f)
+                      (carrier-protected-from-release?
+                        operation provider published kind #t))))
+                (if (not (vector-ref storage-outcome 0))
+                    (begin
+                      ;; A provider that cannot establish physical ownership
+                      ;; separation cannot authorize destructive rollback.
+                      (vector-set! release-envelope 0 #f)
+                      (if (vector-ref outcome 0)
+                          (begin
+                            (vector-set! outcome 0 #f)
+                            (vector-set! outcome 1
+                                         (vector-ref storage-outcome 1)))
+                          #t))
+                    (if (vector-ref storage-outcome 1)
+                        (vector-set! release-envelope 0 #f)
+                        (begin
+                          (vector-set! release-envelope 0 published)
+                          (set! publication-admitted? #t))))))
           #t))
     (if (vector-ref outcome 0)
         ;; Every validation failure is captured here. The total core never
@@ -1282,8 +1508,7 @@
                     "tensor provider did not publish a new unique clone identity"
                     '())
                   #t)
-              (let ((copied-metadata
-                      (tensor-metadata operation provider copied kind)))
+              (let ((copied-metadata published-metadata))
                 (same-tensor-metadata! operation provider source-metadata
                                        copied-metadata)
                 (if (tensor-storage-identical?
@@ -1312,13 +1537,61 @@
         (vector-ref outcome 1)
         (raise (vector-ref outcome 1)))))
 
+(define (protected-storage-identical?
+          operation provider left right left-kind right-kind)
+  ;; One process-local request is allocated before any callback can publish an
+  ;; owner. P1 is serialized/nonreentrant, so protection scans may reuse it
+  ;; without allocating after publication or while a release envelope is
+  ;; disarmed. Every exit clears temporary carrier references.
+  (if protected-storage-comparison-active?
+      (fail 'invalid-state operation
+            "protected storage comparison is not reentrant" '())
+      #t)
+  (set! protected-storage-comparison-active? #t)
+  (vector-set! protected-storage-comparison-request 0 left)
+  (vector-set! protected-storage-comparison-request 1 right)
+  (vector-set! protected-storage-comparison-request 2 left-kind)
+  (vector-set! protected-storage-comparison-request 3 right-kind)
+  (vector-set! protected-storage-comparison-request 4 operation)
+  (let ((returned #f) (callback-failed? #f) (callback-error #f))
+    (guard (caught
+             (#t
+               (set! callback-failed? #t)
+               (set! callback-error caught)
+               #f))
+      (set! returned
+            ((vector-ref provider 4) protected-storage-comparison-request)))
+    (let ((valid?
+            (and (boolean? returned)
+                 (eq? (vector-ref protected-storage-comparison-request 0) left)
+                 (eq? (vector-ref protected-storage-comparison-request 1) right)
+                 (eq? (vector-ref protected-storage-comparison-request 2)
+                      left-kind)
+                 (eq? (vector-ref protected-storage-comparison-request 3)
+                      right-kind)
+                 (eq? (vector-ref protected-storage-comparison-request 4)
+                      operation))))
+      (vector-set! protected-storage-comparison-request 0 #f)
+      (vector-set! protected-storage-comparison-request 1 #f)
+      (vector-set! protected-storage-comparison-request 2 #f)
+      (vector-set! protected-storage-comparison-request 3 #f)
+      (vector-set! protected-storage-comparison-request 4 #f)
+      (set! protected-storage-comparison-active? #f)
+      (if callback-failed?
+          (raise callback-error)
+          (if valid?
+              returned
+              (fail 'internal operation
+                    "tensor provider corrupted protected storage comparison"
+                    '()))))))
+
 (define (tensor-storage-identical? operation provider left right left-kind right-kind)
-  (let ((result
-          ((vector-ref provider 4)
-            (vector left right left-kind right-kind operation))))
-    (if (boolean? result) result
-        (fail 'internal operation
-              "tensor provider storage comparison returned non-boolean" '()))))
+  ;; Every storage comparison, including ordinary pre-commit alias checks,
+  ;; shares the same serialized lifetime pin and preallocated request. A
+  ;; provider callback therefore cannot reenter a public/trusted P1 boundary
+  ;; to retain or destroy either carrier and then return a misleading result.
+  (protected-storage-identical?
+    operation provider left right left-kind right-kind))
 
 (define (tensor-value-equal? operation provider left right kind)
   (let ((result ((vector-ref provider 5) (vector left right kind operation))))
@@ -1362,14 +1635,16 @@
         (let* ((assignment (car remaining))
                (destination (vector-ref assignment 0))
                (source (vector-ref assignment 1))
+               (kind (vector-ref assignment 2))
                (with-destination
-                 (if (identity-member-local? destination result)
+                 (if (borrowed-carrier-identity-member? destination result)
                      result
-                     (cons destination result))))
+                     (cons (vector destination kind) result))))
           (scan (cdr remaining)
-                (if (identity-member-local? source with-destination)
+                (if (borrowed-carrier-identity-member?
+                      source with-destination)
                     with-destination
-                    (cons source with-destination)))))))
+                    (cons (vector source kind) with-destination)))))))
 
 (define (assignment-baselines
           operation provider assignments field ownership borrowed-carriers)
@@ -1428,6 +1703,92 @@
                                          destination source kind))
                (loop (cdr remaining)))))))
 
+(define (admission-storage-item-identity-member? carrier items)
+  (cond
+    ((null? items) #f)
+    ((eq? carrier (vector-ref (car items) 0)) #t)
+    (else
+      (admission-storage-item-identity-member? carrier (cdr items)))))
+
+(define (prevalidate-admission-storage-items operation provider assignments)
+  ;; Provider storage identity is meaningful only for a carrier already
+  ;; accepted by that exact provider. Validate every evidence occurrence
+  ;; before the first comparison, while retaining one kind-tagged item per
+  ;; exact wrapper for the bounded equivalence probe.
+  (let loop ((remaining assignments) (items '()))
+    (if (null? remaining)
+        (list-reverse items)
+        (let* ((assignment (car remaining))
+               (destination (vector-ref assignment 0))
+               (source (vector-ref assignment 1))
+               (kind (vector-ref assignment 2))
+               (with-destination
+                 (begin
+                   (tensor-metadata operation provider destination kind)
+                   (if (admission-storage-item-identity-member?
+                         destination items)
+                       items
+                       (cons (vector destination kind) items)))))
+          (tensor-metadata operation provider source kind)
+          (loop
+            (cdr remaining)
+            (if (admission-storage-item-identity-member?
+                  source with-destination)
+                with-destination
+                (cons (vector source kind) with-destination)))))))
+
+(define (prove-admission-storage-equivalence!
+          operation provider items)
+  ;; Admission evidence declares every distinct scratch carrier physically
+  ;; disjoint. Probe the existing callback as a stable equivalence relation:
+  ;; exact wrappers are reflexive twice, and every distinct pair is false in
+  ;; both directions twice. Non-booleans are rejected by the callback wrapper.
+  (let outer ((remaining items))
+    (if (null? remaining)
+        #t
+        (let* ((left-item (car remaining))
+               (left (vector-ref left-item 0))
+               (left-kind (vector-ref left-item 1))
+               (self-first
+                 (protected-storage-identical?
+                   operation provider left left left-kind left-kind))
+               (self-second
+                 (protected-storage-identical?
+                   operation provider left left left-kind left-kind)))
+          (if (not (and self-first self-second))
+              (fail 'unsupported operation
+                    "provider storage identity is not stably reflexive" '())
+              #t)
+          (let pairs ((others (cdr remaining)))
+            (if (null? others)
+                (outer (cdr remaining))
+                (let* ((right-item (car others))
+                       (right (vector-ref right-item 0))
+                       (right-kind (vector-ref right-item 1))
+                       (left-right-first
+                         (protected-storage-identical?
+                           operation provider left right
+                           left-kind right-kind))
+                       (right-left-first
+                         (protected-storage-identical?
+                           operation provider right left
+                           right-kind left-kind))
+                       (left-right-second
+                         (protected-storage-identical?
+                           operation provider left right
+                           left-kind right-kind))
+                       (right-left-second
+                         (protected-storage-identical?
+                           operation provider right left
+                           right-kind left-kind)))
+                  (if (or left-right-first right-left-first
+                          left-right-second right-left-second)
+                      (fail
+                        'unsupported operation
+                        "provider storage identity is not stable, symmetric, and disjoint"
+                        '())
+                      (pairs (cdr others))))))))))
+
 (define (tensor-provider-admit! provider evidence)
   (if tensor-provider-admission-active?
       (fail 'invalid-state 'tensor-provider-register-internal!
@@ -1448,6 +1809,12 @@
                 (fail 'invalid-argument 'tensor-provider-register-internal!
                       "provider admission requires 2..16 scratch assignments" '()))
               (let* ((operation 'tensor-provider-register-internal!)
+                     (storage-items
+                       (prevalidate-admission-storage-items
+                         operation provider evidence))
+                     (storage-equivalence
+                       (prove-admission-storage-equivalence!
+                         operation provider storage-items))
                      (borrowed-carriers
                        (assignment-borrowed-carriers evidence))
                      (destination-identities
@@ -2239,9 +2606,9 @@
             result)
         (let ((carrier (flat-tensor-carrier (car remaining) kind)))
           (collect (cdr remaining) kind
-                   (if (identity-member-local? carrier result)
+                   (if (borrowed-carrier-identity-member? carrier result)
                        result
-                       (cons carrier result)))))))
+                       (cons (vector carrier kind) result)))))))
 
 (define (state-entry-from-flat
           flat kind operation provider ownership borrowed-carriers)
@@ -2752,6 +3119,7 @@
         #t
         (begin
           (vector-set! (car remaining) 2 dead-state-entry-raw)
+          (vector-set! (car remaining) 3 dead-state-raw)
           (loop (cdr remaining))))))
 
 (define (state-bind-pretransfer-outcome operation state provider)
@@ -2845,9 +3213,13 @@
                              (let ((carrier (vector-ref (car remaining) 7)))
                                (collect
                                  (cdr remaining)
-                                 (if (identity-member-local? carrier result)
+                                 (if (borrowed-carrier-identity-member?
+                                       carrier result)
                                      result
-                                     (cons carrier result))))))))
+                                     (cons
+                                       (vector carrier
+                                               (vector-ref (car remaining) 2))
+                                       result))))))))
                 (set! owners
                       (resolve-unsafe-entry-provenance
                         operation state provenance))
@@ -3135,21 +3507,75 @@
                         (vector-ref (car others) 0))) #f)
               (else (inner (cdr others)))))))))
 
-(define (neutralize-live-state-owned-envelopes! owned)
+(define (neutralize-live-state-owned-envelopes!
+          operation provider owned compare-storage?)
   ;; Sanitize the entire bounded ledger before any detailed validation can
   ;; fail. A malformed sibling must not leave a later live-state carrier armed
   ;; for caller cleanup, and every conflict must be neutralized.
-  (let loop ((remaining owned) (found #f))
-    (if (null? remaining)
-        found
-        (let ((item (car remaining)))
-          (if (and (vector? item) (= (vector-length item) 4)
-                   (vector-ref item 0)
-                   (carrier-protected-from-release? (vector-ref item 0)))
-              (begin
-                (vector-set! item 0 #f)
-                (loop (cdr remaining) #t))
-              (loop (cdr remaining) found))))))
+  (if compare-storage?
+      ;; Ownership ledgers are newest-first. Disarm the current (newer)
+      ;; candidate, sanitize the older tail, then compare the current carrier
+      ;; only against older actionable owners. Thus an alias always sacrifices
+      ;; the newer publication and preserves the original owner.
+      (let ((found #f) (have-error? #f) (first-error #f))
+        (let scan-oldest-first ((remaining owned))
+          (if (null? remaining)
+              #t
+              (let ((item (car remaining)))
+                (if (and (vector? item) (= (vector-length item) 4)
+                         (vector-ref item 0)
+                         (or (eq? (vector-ref item 1) 'parameter)
+                             (eq? (vector-ref item 1) 'buffer)))
+                    (let ((carrier (vector-ref item 0))
+                          (comparison-ok? #t)
+                          (comparison-error #f)
+                          (protected? #f))
+                      ;; Capture and neutralize before the older tail can invoke
+                      ;; any provider callback. Restore only after the older
+                      ;; owners are settled and this carrier proves independent.
+                      (vector-set! item 0 #f)
+                      (scan-oldest-first (cdr remaining))
+                      (guard (caught
+                               (#t
+                                 (set! comparison-ok? #f)
+                                 (set! comparison-error caught)
+                                 #f))
+                        (tensor-metadata
+                          operation provider carrier (vector-ref item 1))
+                        (set! protected?
+                              (or
+                                (carrier-protected-from-release?
+                                  operation provider carrier
+                                  (vector-ref item 1) #t)
+                                (owned-carrier-storage-member?
+                                  operation provider carrier
+                                  (vector-ref item 1) (cdr remaining) '()))))
+                      (if comparison-ok?
+                          (if protected?
+                              (set! found #t)
+                              (vector-set! item 0 carrier))
+                          (begin
+                            (if have-error?
+                                #t
+                                (set! first-error comparison-error))
+                            (set! have-error? #t))))
+                    (scan-oldest-first (cdr remaining))))))
+        (if have-error? (raise first-error) found))
+      ;; The first pass is exact-identity-only and callback-free; its order does
+      ;; not affect ownership preference.
+      (let scan-exact ((remaining owned) (found #f))
+        (if (null? remaining)
+            found
+            (let ((item (car remaining)))
+              (if (and (vector? item) (= (vector-length item) 4)
+                       (vector-ref item 0)
+                       (carrier-protected-from-release?
+                         operation provider (vector-ref item 0)
+                         (vector-ref item 1) #f))
+                  (begin
+                    (vector-set! item 0 #f)
+                    (scan-exact (cdr remaining) #t))
+                  (scan-exact (cdr remaining) found)))))))
 
 (define (state-dict-adopt-owned-internal!
           records aliases provider-name major minor ownership)
@@ -3166,7 +3592,8 @@
         (fail 'invalid-argument operation
               "decoded ownership input must be bounded proper lists" '())
         #t)
-    (if (neutralize-live-state-owned-envelopes! owned)
+    (if (neutralize-live-state-owned-envelopes!
+          operation #f owned #f)
         (fail 'invalid-argument operation
               "decoded ownership republishes a live state carrier" '())
         #t)
@@ -3175,6 +3602,11 @@
     ;; caller's rollback cleanup.
     (let ((provider
             (tensor-provider-preflight-internal provider-name major minor)))
+      (if (neutralize-live-state-owned-envelopes!
+            operation provider owned #t)
+          (fail 'invalid-argument operation
+                "decoded ownership aliases protected live storage" '())
+          #t)
       (let validate-records ((remaining records))
         (if (null? remaining)
             #t
@@ -3503,6 +3935,8 @@
           (prepare-load : (-> vector vector))
           (commit-load! : (-> vector vector))
           (release-owned! : (-> vector vector)))
+  (reject-protected-storage-comparison-reentry
+    'tensor-provider-create-internal)
   (let ((raw
           (tensor-provider-create-internal
             name describe clone storage-identical? value-equal?
@@ -3575,6 +4009,7 @@
     (state-dict-alias-groups
       (raw-for-shell 'state-dict-alias-groups 'state state)))
   (lambda (state)
+    (reject-protected-storage-comparison-reentry 'state-dict-release!)
     (let ((entry (shell-entry state)))
       (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
           (fail 'invalid-argument 'state-dict-release!
@@ -3622,8 +4057,12 @@
                              'provider provider)
               evidence)))
       (shell-for-raw 'provider raw)))
-  (lambda () (shell-for-raw 'module (module-create-internal)))
+  (lambda ()
+    (reject-protected-storage-comparison-reentry 'module-create-internal)
+    (shell-for-raw 'module (module-create-internal)))
   (lambda (provider-name)
+    (reject-protected-storage-comparison-reentry
+      'module-create-with-provider-internal)
     (shell-for-raw
       'module (module-create-with-provider-internal provider-name)))
   (lambda (module name tensor)
@@ -3673,6 +4112,7 @@
       (raw-for-shell 'parameter-handle-tensor-identity-internal
                      'handle handle)))
   (lambda (path kind shape dtype device layout tensor)
+    (reject-protected-storage-comparison-reentry 'state-entry-internal)
     (state-entry-internal path kind shape dtype device layout tensor))
   (lambda (entry)
     (state-entry-path-internal
@@ -3693,6 +4133,8 @@
     (state-entry-layout-internal
       (raw-entry-for-trusted 'state-entry-layout-internal entry)))
   (lambda (format major minor features adapter entries aliases)
+    (reject-protected-storage-comparison-reentry
+      'state-dict-create-unsafe-internal)
     (shell-for-raw
       'state
       (state-dict-create-unsafe-internal
@@ -3746,12 +4188,23 @@
         (p1-native-state-tensor-validate native-context state tensor))
       (state-dict-tensor-borrow-end-internal raw-state raw-tensor)))
   (lambda (provider-name major minor)
+    (reject-protected-storage-comparison-reentry
+      'tensor-provider-preflight-internal)
     (tensor-provider-preflight-internal provider-name major minor)
     #t)
   (lambda (provider-name major minor release-envelope)
+    (reject-protected-storage-comparison-reentry
+      'tensor-provider-release-owned-internal!)
     (tensor-provider-release-owned-internal!
       provider-name major minor release-envelope))
+  (lambda (provider-name major minor release-envelope prior-envelopes)
+    (reject-protected-storage-comparison-reentry
+      'tensor-provider-admit-owned-internal!)
+    (tensor-provider-admit-owned-internal!
+      provider-name major minor release-envelope prior-envelopes))
   (lambda (records aliases provider-name major minor ownership)
+    (reject-protected-storage-comparison-reentry
+      'state-dict-adopt-owned-internal!)
     (shell-for-raw
       'state
       (state-dict-adopt-owned-internal!
@@ -3868,7 +4321,11 @@
           provider-name major minor release-envelope)
   ((vector-ref p1-trusted-surface 46)
    provider-name major minor release-envelope))
+(define (tensor-provider-admit-owned-internal!
+          provider-name major minor release-envelope prior-envelopes)
+  ((vector-ref p1-trusted-surface 47)
+   provider-name major minor release-envelope prior-envelopes))
 (define (state-dict-adopt-owned-internal!
           records aliases provider-name major minor ownership)
-  ((vector-ref p1-trusted-surface 47)
+  ((vector-ref p1-trusted-surface 48)
    records aliases provider-name major minor ownership))

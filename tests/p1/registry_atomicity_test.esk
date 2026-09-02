@@ -361,6 +361,48 @@
                      (= (p1-test-live-count) live-before)
                      (= (fixture-owned-live-count-internal) owned-before)))))))
 
+;; Retain only stale entry shells and detached public metadata after dropping
+;; each released state. This specifically exercises Eshkol registry owner-edge
+;; compaction: every shell remains an invalid-state tombstone, detached copies
+;; stay ordinary data, and no live identity/provider carrier grows with the
+;; retained shell set.
+(let ((live-before (p1-test-live-count))
+      (owned-before (fixture-owned-live-count-internal)))
+  (let build ((index 0) (retained '()))
+    (if (= index 8)
+        (let verify ((remaining retained) (ok? #t) (count 0))
+          (if (null? remaining)
+              (check
+                "retained stale entry shells sever released state graphs"
+                (and ok? (= count 8)
+                     (= (p1-test-live-count) live-before)
+                     (= (fixture-owned-live-count-internal) owned-before)))
+              (let* ((record (car remaining))
+                     (entry (vector-ref record 0))
+                     (paths (vector-ref record 1))
+                     (aliases (vector-ref record 2))
+                     (stale?
+                       (guard (raised
+                                (#t
+                                  (and (transformer-error? raised)
+                                       (eq? (transformer-error-category raised)
+                                            'invalid-state))))
+                         (state-entry-path-internal entry)
+                         #f)))
+                (verify
+                  (cdr remaining)
+                  (and ok? stale?
+                       (equal? paths '(("weight")))
+                       (null? aliases))
+                  (+ count 1)))))
+        (let* ((state (module-state-dict failed-load-source))
+               (entry (car (state-dict-entries-internal state)))
+               (paths (state-dict-paths state))
+               (aliases (state-dict-alias-groups state)))
+          (state-dict-release! state)
+          (build (+ index 1)
+                 (cons (vector entry paths aliases) retained))))))
+
 (let* ((source (one-parameter-module '(2) 'repeat-source))
        (state (module-state-dict source))
        (destination (one-parameter-module '(2) 'repeat-destination))
@@ -892,8 +934,8 @@
                 (null? (parameter-tree-paths
                          (module-parameters candidate)))))))
 
-(if (= checks 138)
+(if (= checks 139)
     (begin
-      (display "P1 registry atomicity PASS: 138 checks")
+      (display "P1 registry atomicity PASS: 139 checks")
       (newline))
     (exit 1))

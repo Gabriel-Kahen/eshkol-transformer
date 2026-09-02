@@ -209,6 +209,13 @@ codec must prove this rule in its executable evidence. Every successful decoder
 publication must be a new exact carrier identity. A codec
 may not republish a carrier from an earlier request, even for tied values. C1 checks
 the new identity against the complete owned prefix immediately after publication.
+It then calls P1's fixed provider-2.0 admission seam while the candidate release
+envelope is disarmed: the selected provider validates carrier metadata and proves
+the candidate physically disjoint from every actionable earlier decoder owner and
+from live P1 state/module storage. Only that success rearms the candidate as one
+new owner. An exact or physical sibling alias leaves the later envelope disarmed,
+so rollback releases only the first genuine owner; metadata/comparator defects also
+leave it disarmed and are never converted into release authority.
 Before the first callback it records every descriptor/request-input identity, and it
 adds each newly allocated request identity before that request enters the codec, so a
 later callback cannot relabel an earlier payload, shape, or request as an owner;
@@ -217,14 +224,29 @@ so the original owner is released exactly once. A codec also may not publish the
 request object or any borrowed request input (payload, kind, shape, dtype, device,
 layout, or operation) as its carrier. C1 clears that tentative envelope and fails
 `internal` without invoking provider release on the borrowed object. A distinct
-owned carrier that shares native storage is not confused with an exact identity;
-P1 validates storage ownership and releases that distinct owner exactly once if
-admission fails.
+wrapper is not proved independent merely because `eq?` is false. P1 uses the exact
+selected provider's authoritative `storage-identical?` callback against every live
+P1-state/registered-module carrier. That comparator must be the total, deterministic,
+nonallocating, nonraising, nonretaining, side-effect-free equivalence relation
+defined by P1: true exactly when release through either carrier would invalidate the
+other, and false exactly for disjoint releasable allocations. The result is not
+release authority. A wrapper over protected live storage is cleared and rejected
+before any destructive release callback; the protected payload remains unchanged
+and proved-independent siblings are still released exactly once under a conforming
+provider. During that protected callback, all externally callable P1 seams capable
+of retaining or changing tensor/state authority reject before registry, native, or
+provider work; a codec/provider cannot reenter state release or module registration
+to invalidate the comparison's lifetime pins.
 
-If decoding fails before adoption, P1's narrow release helper performs a final
-registry check before provider lookup. An envelope that names storage already owned
-by a live P1 state or borrowed by a registered module is cleared and rejected without
-a release callback, while C1 continues cleaning every genuinely owned sibling. A
+If decoding fails before adoption, P1's narrow release helper first applies an exact-
+wrapper registry guard, then preflights the exact provider and applies its physical-
+storage comparator while the envelope is disarmed. An envelope that names storage
+already owned by a live P1 state or borrowed by a registered module is cleared and
+rejected without a release callback, while C1 continues cleaning every genuinely
+owned sibling whose independence can still be proved. A comparator raise, malformed
+result, request mutation, or semantic lie is a trusted-provider defect. P1 fails
+closed and cannot safely reclaim the ambiguous carrier, so no exact-cleanup or live-
+count-baseline claim applies to that violating provider. A
 defective release callback is never retried: C1 drains the remaining ledger and then
 reports one structured internal rollback defect.
 

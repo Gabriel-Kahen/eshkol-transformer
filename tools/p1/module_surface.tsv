@@ -45,4 +45,5 @@ internal	state-dict-tensor-borrow-begin-internal
 internal	state-dict-tensor-borrow-end-internal
 internal	tensor-provider-preflight-internal
 internal	tensor-provider-release-owned-internal!
+internal	tensor-provider-admit-owned-internal!
 internal	state-dict-adopt-owned-internal!

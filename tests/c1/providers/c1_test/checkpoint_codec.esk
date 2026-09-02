@@ -1,9 +1,30 @@
 ;;; Test-only C1 codec for P1's inert fixture carrier. This proves format and
 ;;; ownership control flow only; it is not a production tensor codec.
 (require transformer.checkpoint_internal)
+(require transformer.error_internal)
 (require p1_test.tensor_provider)
 
-(provide c1-fixture-codec-internal)
+(provide c1-fixture-codec-internal
+         c1-fixture-overwrite-codec-internal
+         c1-fixture-publication-overwrite-attempt-count-internal)
+
+(define c1-fixture-publication-overwrite-attempt-count 0)
+
+(define (c1-fixture-publish-decoded-once!
+          (request : vector) (tensor : vector)) : vector
+  (if (vector-ref request 7)
+      (begin
+        (set! c1-fixture-publication-overwrite-attempt-count
+              (+ c1-fixture-publication-overwrite-attempt-count 1))
+        (transformer-error-raise
+          'internal 'c1-fixture-decode
+          "fixture decoder publication overwrite rejected" '() #f))
+      (begin
+        (vector-set! request 7 tensor)
+        request)))
+
+(define (c1-fixture-publication-overwrite-attempt-count-internal)
+  c1-fixture-publication-overwrite-attempt-count)
 
 (define (c1-fixture-encode (request : vector)) : bytevector
   (let* ((tensor (vector-ref request 0))
@@ -31,8 +52,8 @@
     (let loop ((index 0))
       (if (= index size)
           (begin
-            (vector-set!
-              request 7
+            (c1-fixture-publish-decoded-once!
+              request
               (fixture-owned-tensor-internal shape dtype device payload))
             request)
           (begin
@@ -42,3 +63,17 @@
 (define c1-fixture-codec-internal
   (c1-checkpoint-codec-internal
    'fixture-v1 c1-fixture-encode c1-fixture-decode))
+
+(define (c1-fixture-overwrite-decode (request : vector)) : vector
+  (let ((published
+          (fixture-owned-tensor-internal
+            (vector-ref request 2) (vector-ref request 3)
+            (vector-ref request 4) (vector 0))))
+    (c1-fixture-publish-decoded-once! request published)
+    ;; Reusing the exact visible owner proves rejection occurs before a second
+    ;; write without allocating an unobservable carrier.
+    (c1-fixture-publish-decoded-once! request published)))
+
+(define c1-fixture-overwrite-codec-internal
+  (c1-checkpoint-codec-internal
+    'fixture-v1 c1-fixture-encode c1-fixture-overwrite-decode))

@@ -1026,7 +1026,17 @@
             (vector-set! release-envelope 0 published)
             (c1-reject-invalid-publication!
               operation published borrowed-state release-envelope
-              (cdr ledger-cell)))
+              (cdr ledger-cell))
+            ;; Exact wrapper identity is insufficient ownership evidence. Ask
+            ;; the fixed P1 provider seam to validate this publication and
+            ;; prove it physically disjoint from every earlier actionable
+            ;; decoder owner while the candidate envelope is disarmed.
+            (if (tensor-provider-admit-owned-internal!
+                  provider-name 2 0 release-envelope (cdr ledger-cell))
+                #t
+                (c1-fail
+                  'internal operation
+                  "trusted codec published aliased owned tensor storage")))
           #t)
       (if (not (vector-ref callback-outcome 0))
           (raise (vector-ref callback-outcome 1)))

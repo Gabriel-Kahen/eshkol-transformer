@@ -2,6 +2,9 @@
 (require transformer.error_internal)
 (require p1_test.tensor_provider)
 
+(extern i64 p1-module-test-live-count
+        :real et_p1_test_live_entry_count_v1)
+
 (define checks 0)
 
 (define (repeat-value count value)
@@ -66,6 +69,35 @@
     (check (string-append label " details/cause")
            (and (null? (transformer-error-details caught))
                 (not (transformer-error-cause caught))))))
+
+(define (expect-storage-probe-error label category thunk)
+  (let ((owned-before (fixture-owned-live-count-internal))
+        (release-before (fixture-release-call-count-internal))
+        (native-before (p1-module-test-live-count)))
+    (let ((caught (guard (raised (#t raised)) (thunk) #f)))
+      (check (string-append label " structured/category")
+             (and (transformer-error? caught)
+                  (eq? category (transformer-error-category caught))))
+      (check (string-append label " no publication/allocation drift")
+             (and (= owned-before (fixture-owned-live-count-internal))
+                  (= release-before (fixture-release-call-count-internal))
+                  (= native-before (p1-module-test-live-count)))))))
+
+(define (expect-storage-probe-raised-false label thunk)
+  (let ((owned-before (fixture-owned-live-count-internal))
+        (release-before (fixture-release-call-count-internal))
+        (native-before (p1-module-test-live-count))
+        (caught-false? #f))
+    (guard (raised
+             (#t
+               (set! caught-false? (eq? raised #f))
+               #f))
+      (thunk))
+    (check (string-append label " exact raised false") caught-false?)
+    (check (string-append label " no publication/allocation drift")
+           (and (= owned-before (fixture-owned-live-count-internal))
+                (= release-before (fixture-release-call-count-internal))
+                (= native-before (p1-module-test-live-count))))))
 
 (define (payload name)
   (fixture-tensor-internal '(2 2) 'f32 'cpu (vector name 'bits-v1)))
@@ -541,8 +573,9 @@
   (check "duplicate-carrier rejection does not consume caller ledger"
          (eq? items (vector-ref ownership 0)))
   (vector-set! ownership 0 '())
-  (vector-set! second 0 #f)
-  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 first)
+  ;; The ledger is newest-first, so the older tail envelope retains the sole
+  ;; owner and the later duplicate head is neutralized.
+  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 second)
   (check "duplicate-carrier rejection cleans physical owner once"
          (= before (fixture-owned-live-count-internal))))
 
@@ -565,10 +598,54 @@
   (check "copied-envelope rejection does not consume caller ledger"
          (eq? items (vector-ref ownership 0)))
   (vector-set! ownership 0 '())
-  (vector-set! copied 0 #f)
-  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 first)
+  (tensor-provider-release-owned-internal! 'fixture-v1 2 0 copied)
   (check "copied-envelope rejection cleans physical owner once"
          (= before (fixture-owned-live-count-internal))))
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (native-before (p1-module-test-live-count))
+       (storage-before (fixture-storage-identical-call-count-internal))
+       (owner
+         (fixture-owned-tensor-internal
+           '(1) 'i64 'cpu (vector 'adoption-physical-owner)))
+       (alias (fixture-storage-alias-wrapper-internal owner))
+       (owner-envelope
+         (vector owner 'buffer 'state-dict-adopt-owned-internal! #f))
+       (alias-envelope
+         (vector alias 'buffer 'state-dict-adopt-owned-internal! #f))
+       ;; Ownership ledgers are newest-first: the malicious alias was
+       ;; published later and must be sacrificed in favor of the older owner.
+       (items (list alias-envelope owner-envelope))
+       (ownership (vector items)))
+  (expect-error
+    "adoption rejects later wrapper over prior owner storage"
+    'invalid-argument
+    (lambda ()
+      (state-dict-adopt-owned-internal!
+        (list (decoded-owned-record '("alias") alias)
+              (decoded-owned-record '("owner") owner))
+        '() 'fixture-v1 2 0 ownership)))
+  (check "physical-alias rejection leaves caller ledger unconsumed"
+         (eq? items (vector-ref ownership 0)))
+  (check "physical-alias rejection preserves only prior genuine owner"
+         (and (eq? (vector-ref owner-envelope 0) owner)
+              (not (vector-ref alias-envelope 0))))
+  (check "physical-alias rejection executes authoritative comparison"
+         (> (fixture-storage-identical-call-count-internal) storage-before))
+  ;; C1-style caller rollback drains only the still-actionable prior owner.
+  (vector-set! ownership 0 '())
+  (check "caller cleanup releases prior genuine owner exactly once"
+         (tensor-provider-release-owned-internal!
+           'fixture-v1 2 0 owner-envelope))
+  (check "caller cleanup never invokes poisonous alias release"
+         (= (fixture-release-call-count-internal) (+ release-before 1)))
+  (check "poisonous alias cannot corrupt released owner payload"
+         (equal? (fixture-tensor-payload-internal alias)
+                 (vector 'adoption-physical-owner)))
+  (check "physical-alias caller cleanup restores owner/native baselines"
+         (and (= owned-before (fixture-owned-live-count-internal))
+              (= native-before (p1-module-test-live-count)))))
 
 (let* ((before (fixture-owned-live-count-internal))
        (release-before (fixture-release-call-count-internal))
@@ -656,11 +733,14 @@
     (state-dict-tensor-borrow-end-internal state handle)
     (let ((envelope
             (vector carrier 'wrong-kind 'release-confusion #f)))
-      (check "private release seam rejects protected carrier with false"
-             (not (tensor-provider-release-owned-internal!
-                    'missing-provider 99 99 envelope)))
-      (check "private release seam neutralizes protected envelope"
-             (not (vector-ref envelope 0)))
+      (expect-error
+        "private release seam rejects wrong-kind envelope structurally"
+        'invalid-argument
+        (lambda ()
+          (tensor-provider-release-owned-internal!
+            'missing-provider 99 99 envelope)))
+      (check "wrong-kind private release rejects before mutation"
+             (eq? (vector-ref envelope 0) carrier))
       (check "private release seam invokes no provider callback"
              (= release-before (fixture-release-call-count-internal))))
     (let ((preserved
@@ -690,6 +770,293 @@
     (check "private release seam preserves module carrier"
            (equal? (fixture-tensor-payload-internal carrier)
                    (vector 'module-release-live)))))
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (native-before #f)
+       (protected-module (module-create-fixture-internal))
+       (protected
+         (fixture-tensor-internal
+           '(1) 'i64 'cpu (vector 'comparator-protected)))
+       (ambiguous
+         (fixture-owned-tensor-internal
+           '(1) 'i64 'cpu (vector 'ambiguous-owner)))
+       (sibling
+         (fixture-owned-tensor-internal
+           '(1) 'i64 'cpu (vector 'genuine-sibling)))
+       (ambiguous-envelope
+         (vector ambiguous 'buffer 'comparator-defect-release #f))
+       (sibling-envelope
+         (vector sibling 'buffer 'comparator-defect-release #f)))
+  (module-register-buffer-internal!
+    protected-module "protected" protected)
+  (set! native-before (p1-module-test-live-count))
+  (fixture-arm-storage-comparison-defect-internal! 'raise)
+  (expect-error "release comparator defect fails closed" 'internal
+                (lambda ()
+                  (tensor-provider-release-owned-internal!
+                    'fixture-v1 2 0 ambiguous-envelope)))
+  (check "release comparator defect disarms ambiguous envelope"
+         (not (vector-ref ambiguous-envelope 0)))
+  (check "release comparator defect invokes no destructive callback"
+         (= release-before (fixture-release-call-count-internal)))
+  (check "release comparator defect makes no ambiguous cleanup claim"
+         (= (fixture-owned-live-count-internal) (+ owned-before 2)))
+  (check "later genuine sibling still releases exactly once"
+         (tensor-provider-release-owned-internal!
+           'fixture-v1 2 0 sibling-envelope))
+  (check "sibling cleanup leaves only the explicitly ambiguous owner"
+         (and (= (fixture-release-call-count-internal) (+ release-before 1))
+              (= (fixture-owned-live-count-internal) (+ owned-before 1))))
+  ;; The test retains the carrier identity outside the disarmed envelope. Once
+  ;; the injected comparator defect is consumed, a new owner-ledger envelope
+  ;; can explicitly resolve this fixture owner; production may not infer that.
+  (check "test owner explicitly resolves the retained ambiguous carrier"
+         (tensor-provider-release-owned-internal!
+           'fixture-v1 2 0
+           (vector ambiguous 'buffer 'comparator-defect-test-resolution #f)))
+  (check "resolved comparator defect restores all live baselines"
+         (and (= release-before (- (fixture-release-call-count-internal) 2))
+              (= owned-before (fixture-owned-live-count-internal))
+              (= native-before (p1-module-test-live-count))
+              (equal? (fixture-tensor-payload-internal protected)
+                      (vector 'comparator-protected)))))
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (native-before #f)
+       (protected-module (module-create-fixture-internal)))
+  (module-register-buffer-internal!
+    protected-module "protected"
+    (fixture-tensor-internal
+      '(1) 'i64 'cpu (vector 'reentrant-comparator-protected)))
+  (set! native-before (p1-module-test-live-count))
+  (let* ((protected-state (module-state-dict protected-module))
+         (candidate
+           (fixture-owned-tensor-internal
+             '(1) 'i64 'cpu (vector 'reentrant-comparator-candidate)))
+         (candidate-envelope
+           (vector candidate 'buffer 'reentrant-comparator-release #f))
+         (native-live (p1-module-test-live-count)))
+    (fixture-arm-storage-comparison-reentrant-state-release-internal!
+      protected-state)
+    (expect-error
+      "storage comparator cannot reentrantly release protected state"
+      'invalid-state
+      (lambda ()
+        (tensor-provider-release-owned-internal!
+          'fixture-v1 2 0 candidate-envelope)))
+    (check "reentrant comparator failure disarms ambiguous candidate"
+           (not (vector-ref candidate-envelope 0)))
+    (check "reentrant comparator fails before native/provider mutation"
+           (and (= release-before (fixture-release-call-count-internal))
+                (= (fixture-owned-live-count-internal) (+ owned-before 2))
+                (= native-live (p1-module-test-live-count))))
+    (check "reentrant comparator preserves protected state owner and payload"
+           (and (equal? (state-dict-paths protected-state) '(("protected")))
+                (equal? (state-payload protected-state '("protected"))
+                        (vector 'reentrant-comparator-protected))))
+    (check "reentrant comparator preserves retained candidate payload"
+           (equal? (fixture-tensor-payload-internal candidate)
+                   (vector 'reentrant-comparator-candidate)))
+    (check "retained candidate later releases exactly once"
+           (tensor-provider-release-owned-internal!
+             'fixture-v1 2 0
+             (vector candidate 'buffer
+                     'reentrant-comparator-test-resolution #f)))
+    (check "protected state later releases exactly once"
+           (state-dict-release! protected-state))
+    (check "reentrant comparator cleanup restores exact live baselines"
+           (and (= (fixture-release-call-count-internal) (+ release-before 2))
+                (= owned-before (fixture-owned-live-count-internal))
+                (= native-before (p1-module-test-live-count))))))
+
+(define (check-reentrant-comparator-registration mode)
+  (let* ((kind-label (if (eq? mode 'parameter) "parameter" "buffer"))
+         (owned-before (fixture-owned-live-count-internal))
+         (release-before (fixture-release-call-count-internal))
+         (protected-module (module-create-fixture-internal))
+         (target-module (module-create-fixture-internal)))
+    (module-register-buffer-internal!
+      protected-module "protected"
+      (fixture-tensor-internal
+        '(1) 'i64 'cpu (vector 'reentrant-registration-protected)))
+    (let* ((protected-state (module-state-dict protected-module))
+           (candidate
+             (fixture-owned-tensor-internal
+               '(1) 'f32 'cpu (vector 'reentrant-registration-candidate)))
+           (candidate-envelope
+             (vector candidate 'buffer 'reentrant-comparator-registration #f))
+           (native-live (p1-module-test-live-count)))
+      (fixture-arm-storage-comparison-reentrant-registration-internal!
+        mode target-module candidate)
+      (expect-error
+        (string-append "storage comparator cannot reentrantly register "
+                       kind-label)
+        'invalid-state
+        (lambda ()
+          (tensor-provider-release-owned-internal!
+            'fixture-v1 2 0 candidate-envelope)))
+      (check
+        (string-append "reentrant " kind-label
+                       " registration disarms ambiguous candidate")
+        (not (vector-ref candidate-envelope 0)))
+      (check
+        (string-append "reentrant " kind-label
+                       " registration fails before provider/native mutation")
+        (and (= release-before (fixture-release-call-count-internal))
+             (= (fixture-owned-live-count-internal) (+ owned-before 2))
+             (= native-live (p1-module-test-live-count))))
+      (check
+        (string-append "reentrant " kind-label
+                       " registration preserves protected owner and payload")
+        (and (equal? (state-dict-paths protected-state) '(("protected")))
+             (equal? (state-payload protected-state '("protected"))
+                     (vector 'reentrant-registration-protected))))
+      (check
+        (string-append "reentrant " kind-label
+                       " registration preserves retained candidate payload")
+        (equal? (fixture-tensor-payload-internal candidate)
+                (vector 'reentrant-registration-candidate)))
+      ;; The same name must still be available.  Success is executable proof
+      ;; that the malicious callback did not mutate the target module ledger.
+      (let ((benign
+              (fixture-tensor-internal
+                '(1) 'f32 'cpu (vector 'post-rejection-registration))))
+        (check
+          (string-append "reentrant " kind-label
+                         " registration leaves target module unchanged")
+          (if (eq? mode 'parameter)
+              (module-register-parameter-internal!
+                target-module "comparator-attack" benign)
+              (module-register-buffer-internal!
+                target-module "comparator-attack" benign))))
+      (check
+        (string-append "retained " kind-label
+                       " attack candidate later releases exactly once")
+        (tensor-provider-release-owned-internal!
+          'fixture-v1 2 0
+          (vector candidate 'buffer
+                  'reentrant-registration-test-resolution #f)))
+      (check
+        (string-append "protected state after " kind-label
+                       " attack later releases exactly once")
+        (state-dict-release! protected-state))
+      (check
+        (string-append "reentrant " kind-label
+                       " registration cleanup restores owned baselines")
+        (and (= (fixture-release-call-count-internal) (+ release-before 2))
+             (= owned-before (fixture-owned-live-count-internal)))))))
+
+(check-reentrant-comparator-registration 'parameter)
+(check-reentrant-comparator-registration 'buffer)
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (native-before #f)
+       (protected-module (module-create-fixture-internal))
+       (snapshot-module (module-create-fixture-internal))
+       (source
+         (fixture-tensor-internal
+           '(1) 'f32 'cpu (vector 'ordinary-release-source))))
+  (module-register-buffer-internal!
+    protected-module "protected"
+    (fixture-tensor-internal
+      '(1) 'i64 'cpu (vector 'ordinary-release-protected)))
+  (module-register-parameter-internal! snapshot-module "source" source)
+  (set! native-before (p1-module-test-live-count))
+  (let* ((protected-state (module-state-dict protected-module))
+         (native-live (p1-module-test-live-count)))
+    (fixture-arm-ordinary-comparison-reentrant-state-release-internal!
+      source protected-state)
+    (expect-error
+      "ordinary clone comparator cannot reentrantly release state"
+      'invalid-state
+      (lambda () (module-state-dict snapshot-module)))
+    (check "ordinary release attack cleans published clone exactly once"
+           (and (= (fixture-release-call-count-internal) (+ release-before 1))
+                (= (fixture-owned-live-count-internal) (+ owned-before 1))
+                (= native-live (p1-module-test-live-count))))
+    (check "ordinary release attack preserves borrowed source payload"
+           (equal? (fixture-tensor-payload-internal source)
+                   (vector 'ordinary-release-source)))
+    (check "ordinary release attack leaves protected state live and unchanged"
+           (and (equal? (state-dict-paths protected-state) '(("protected")))
+                (equal? (state-payload protected-state '("protected"))
+                        (vector 'ordinary-release-protected))))
+    (check "ordinary release attack protected state later releases once"
+           (state-dict-release! protected-state))
+    (check "ordinary release attack restores exact live baselines"
+           (and (= (fixture-release-call-count-internal) (+ release-before 2))
+                (= owned-before (fixture-owned-live-count-internal))
+                (= native-before (p1-module-test-live-count))))))
+
+(define (check-ordinary-comparator-registration mode)
+  (let* ((kind-label (if (eq? mode 'parameter) "parameter" "buffer"))
+         (owned-before (fixture-owned-live-count-internal))
+         (release-before (fixture-release-call-count-internal))
+         (protected-module (module-create-fixture-internal))
+         (snapshot-module (module-create-fixture-internal))
+         (target-module (module-create-fixture-internal))
+         (source
+           (fixture-tensor-internal
+             '(1) 'f32 'cpu (vector 'ordinary-registration-source))))
+    (module-register-buffer-internal!
+      protected-module "protected"
+      (fixture-tensor-internal
+        '(1) 'i64 'cpu (vector 'ordinary-registration-protected)))
+    (module-register-parameter-internal! snapshot-module "source" source)
+    (let* ((protected-state (module-state-dict protected-module))
+           (native-live (p1-module-test-live-count)))
+      (fixture-arm-ordinary-comparison-reentrant-registration-internal!
+        source mode target-module)
+      (expect-error
+        (string-append "ordinary clone comparator cannot reentrantly register "
+                       kind-label)
+        'invalid-state
+        (lambda () (module-state-dict snapshot-module)))
+      (check
+        (string-append "ordinary " kind-label
+                       " attack cleans published clone exactly once")
+        (and (= (fixture-release-call-count-internal) (+ release-before 1))
+             (= (fixture-owned-live-count-internal) (+ owned-before 1))
+             (= native-live (p1-module-test-live-count))))
+      (check
+        (string-append "ordinary " kind-label
+                       " attack preserves borrowed source payload")
+        (equal? (fixture-tensor-payload-internal source)
+                (vector 'ordinary-registration-source)))
+      (check
+        (string-append "ordinary " kind-label
+                       " attack preserves protected state payload")
+        (and (equal? (state-dict-paths protected-state) '(("protected")))
+             (equal? (state-payload protected-state '("protected"))
+                     (vector 'ordinary-registration-protected))))
+      ;; If the callback had retained the published clone, this exact name
+      ;; would already be occupied and the ordinary registration would fail.
+      (let ((benign
+              (fixture-tensor-internal
+                '(1) 'f32 'cpu (vector 'ordinary-post-rejection))))
+        (check
+          (string-append "ordinary " kind-label
+                         " attack leaves target module unchanged")
+          (if (eq? mode 'parameter)
+              (module-register-parameter-internal!
+                target-module "ordinary-comparator-attack" benign)
+              (module-register-buffer-internal!
+                target-module "ordinary-comparator-attack" benign))))
+      (check
+        (string-append "ordinary " kind-label
+                       " attack protected state later releases once")
+        (state-dict-release! protected-state))
+      (check
+        (string-append "ordinary " kind-label
+                       " attack cleanup restores owned baselines")
+        (and (= (fixture-release-call-count-internal) (+ release-before 2))
+             (= owned-before (fixture-owned-live-count-internal)))))))
+
+(check-ordinary-comparator-registration 'parameter)
+(check-ordinary-comparator-registration 'buffer)
 
 (let* ((released-state (module-state-dict source))
        (detached-paths (state-dict-paths released-state))
@@ -926,6 +1293,24 @@
 (expect-error "repeat mutate-then-raise admission" 'unsupported
               (lambda ()
                 (fixture-register-repeat-mutating-provider-internal!)))
+(expect-storage-probe-error
+  "storage comparator raised error admission" 'internal
+  (lambda () (fixture-register-storage-raise-provider-internal!)))
+(expect-storage-probe-raised-false
+  "storage comparator raised false admission"
+  (lambda () (fixture-register-storage-raise-false-provider-internal!)))
+(expect-storage-probe-error
+  "storage comparator request mutation admission" 'internal
+  (lambda () (fixture-register-storage-mutation-provider-internal!)))
+(expect-storage-probe-error
+  "asymmetric storage comparator admission" 'unsupported
+  (lambda () (fixture-register-storage-asymmetric-provider-internal!)))
+(expect-storage-probe-error
+  "unstable storage comparator admission" 'unsupported
+  (lambda () (fixture-register-storage-unstable-provider-internal!)))
+(expect-storage-probe-error
+  "nonreflexive storage comparator admission" 'unsupported
+  (lambda () (fixture-register-storage-nonreflexive-provider-internal!)))
 (let ((rejected
         (state-dict-create-unsafe-internal
           (state-dict-format-internal source-state) 1 0 '()
@@ -985,6 +1370,128 @@
                                              (vector 'dtype 'bits-v1))))))
 
 (fixture-reset-shared-clone-internal!)
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (native-before (p1-module-test-live-count))
+       (base
+         (fixture-tensor-internal
+           '(2) 'i64 'cpu (vector 'storage-a 'storage-b)))
+       (alias (fixture-storage-alias-wrapper-internal base))
+       (disjoint
+         (fixture-tensor-internal
+           '(2) 'i64 'cpu (vector 'storage-a 'storage-b)))
+       (zero-left
+         (fixture-tensor-internal '(0) 'i64 'cpu (vector)))
+       (zero-right
+         (fixture-tensor-internal '(0) 'i64 'cpu (vector)))
+       (zero-alias (fixture-storage-alias-wrapper-internal zero-left))
+       (same-request
+         (vector base base 'buffer 'buffer 'storage-identity-evidence))
+       (alias-request
+         (vector base alias 'buffer 'buffer 'storage-identity-evidence))
+       (reverse-alias-request
+         (vector alias base 'buffer 'buffer 'storage-identity-evidence))
+       (disjoint-request
+         (vector base disjoint 'buffer 'buffer 'storage-identity-evidence))
+       (reverse-disjoint-request
+         (vector disjoint base 'buffer 'buffer 'storage-identity-evidence))
+       (zero-disjoint-request
+         (vector zero-left zero-right 'buffer 'buffer
+                 'storage-identity-evidence))
+       (zero-alias-request
+         (vector zero-left zero-alias 'buffer 'buffer
+                 'storage-identity-evidence))
+       (describe-before (fixture-describe-call-count-internal)))
+  (check "storage identity is reflexive for the same carrier wrapper"
+         (eq? #t
+              (fixture-storage-identical-request-internal same-request)))
+  (check "storage identity recognizes distinct wrappers of one allocation"
+         (and (not (eq? base alias))
+              (eq? #t
+                   (fixture-storage-identical-request-internal
+                     alias-request))))
+  (check "storage identity is symmetric for shared storage"
+         (eq? #t
+              (fixture-storage-identical-request-internal
+                reverse-alias-request)))
+  (check "storage identity rejects equal-valued disjoint allocations"
+         (and (not (eq? (vector-ref base 5) (vector-ref disjoint 5)))
+              (eq? #f
+                   (fixture-storage-identical-request-internal
+                     disjoint-request))))
+  (check "storage disjointness is symmetric"
+         (eq? #f
+              (fixture-storage-identical-request-internal
+                reverse-disjoint-request)))
+  (check "distinct zero-element tensor resources remain disjoint"
+         (and (not (eq? (vector-ref zero-left 5)
+                        (vector-ref zero-right 5)))
+              (eq? #f
+                   (fixture-storage-identical-request-internal
+                     zero-disjoint-request))))
+  (check "zero-element alias wrappers retain owning-resource identity"
+         (and (not (eq? zero-left zero-alias))
+              (eq? #t
+                   (fixture-storage-identical-request-internal
+                     zero-alias-request))))
+  (check "storage identity returns exact booleans"
+         (and (boolean?
+                (fixture-storage-identical-request-internal alias-request))
+              (boolean?
+                (fixture-storage-identical-request-internal
+                  disjoint-request))))
+  (check "storage identity is stable across repeated preallocated requests"
+         (let loop ((remaining 64))
+           (if (= remaining 0)
+               #t
+               (and
+                 (fixture-storage-identical-request-internal alias-request)
+                 (not (fixture-storage-identical-request-internal
+                        disjoint-request))
+                 (loop (- remaining 1))))))
+  (check "storage comparison leaves every request field unchanged"
+         (and (eq? (vector-ref alias-request 0) base)
+              (eq? (vector-ref alias-request 1) alias)
+              (eq? (vector-ref alias-request 2) 'buffer)
+              (eq? (vector-ref alias-request 3) 'buffer)
+              (eq? (vector-ref alias-request 4)
+                   'storage-identity-evidence)))
+  (check "valid storage comparison invokes no allocating describe callback"
+         (= describe-before (fixture-describe-call-count-internal)))
+  (check "storage comparison allocates no provider/native owner"
+         (and (= owned-before (fixture-owned-live-count-internal))
+              (= release-before (fixture-release-call-count-internal))
+              (= native-before (p1-module-test-live-count))))
+  (check "storage comparison preserves shared and disjoint payloads"
+         (and (equal? (fixture-tensor-payload-internal base)
+                      (vector 'storage-a 'storage-b))
+              (equal? (fixture-tensor-payload-internal alias)
+                      (vector 'storage-a 'storage-b))
+              (equal? (fixture-tensor-payload-internal disjoint)
+                      (vector 'storage-a 'storage-b))))
+  (let ((invalid-request (vector 'forged base 'buffer 'buffer
+                                 'storage-identity-evidence))
+        (invalid-kind (vector base disjoint 'wrong-kind 'buffer
+                              'storage-identity-evidence)))
+    (expect-error "storage comparison rejects malformed request shape"
+                  'invalid-argument
+                  (lambda ()
+                    (fixture-storage-identical-request-internal (vector))))
+    (expect-error "storage comparison rejects forged carrier before dereference"
+                  'invalid-argument
+                  (lambda ()
+                    (fixture-storage-identical-request-internal
+                      invalid-request)))
+    (expect-error "storage comparison rejects kind confusion before dereference"
+                  'invalid-argument
+                  (lambda ()
+                    (fixture-storage-identical-request-internal invalid-kind)))
+    (check "invalid storage inputs invoke no nested callback/native allocation"
+           (and (= owned-before (fixture-owned-live-count-internal))
+                (= release-before (fixture-release-call-count-internal))
+                (= native-before (p1-module-test-live-count))))))
+
+(fixture-reset-shared-clone-internal!)
 (let ((module (module-create-fixture-internal)))
   (module-register-parameter-internal!
     module "first"
@@ -1011,7 +1518,8 @@
   (fixture-reset-shared-clone-internal!)
   (expect-error-contract
     "state snapshots cannot share provider storage" 'internal
-    'module-state-dict "state entries alias tensor storage"
+    'module-state-dict
+    "tensor provider did not publish a new unique clone identity"
     (lambda () (module-state-dict module))))
 
 (let* ((before (fixture-owned-live-count-internal))
@@ -1026,6 +1534,36 @@
   (expect-error "post-publication clone defect is reported" 'internal
                 (lambda () (module-state-dict module)))
   (check "post-publication clone defect releases prefix and publication"
+         (= before (fixture-owned-live-count-internal))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal! module "weight" (payload 'substitute))
+  (fixture-arm-clone-defect-internal! 0 'publish-then-substitute)
+  (expect-error "published clone cannot return a substitute request" 'internal
+                (lambda () (module-state-dict module)))
+  (check "substituted clone request releases its visible owner exactly once"
+         (= (fixture-release-call-count-internal) (+ release-before 1)))
+  (check "substituted clone request restores the owned baseline"
+         (= before (fixture-owned-live-count-internal))))
+
+(let* ((before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (overwrite-before
+         (fixture-publication-overwrite-attempt-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal! module "weight" (payload 'overwrite))
+  (fixture-arm-clone-defect-internal! 0 'publish-then-overwrite-attempt)
+  (expect-error "fixture rejects clone publication overwrite before raise"
+                'internal
+                (lambda () (module-state-dict module)))
+  (check "fixture records one rejected clone publication overwrite"
+         (= (fixture-publication-overwrite-attempt-count-internal)
+            (+ overwrite-before 1)))
+  (check "rejected clone overwrite releases the first owner exactly once"
+         (= (fixture-release-call-count-internal) (+ release-before 1)))
+  (check "rejected clone overwrite restores the owned baseline"
          (= before (fixture-owned-live-count-internal))))
 
 (fixture-reset-shared-clone-internal!)
@@ -1046,25 +1584,115 @@
 (fixture-reset-shared-clone-internal!)
 
 (fixture-reset-shared-clone-internal!)
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    module "a"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'same-allocation)
+      'storage-alias-republish))
+  (module-register-parameter-internal!
+    module "z"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'different-wrapper)
+      'storage-alias-republish))
+  (expect-error
+    "distinct clone wrapper cannot claim prior scratch owner storage" 'internal
+    (lambda () (module-state-dict module)))
+  (check "prior scratch owner is released exactly once"
+         (= (fixture-release-call-count-internal) (+ release-before 1)))
+  (check "prior scratch storage is not poisoned by alias cleanup"
+         (equal? (fixture-shared-clone-payload-internal)
+                 (vector 'same-allocation)))
+  (check "scratch alias rollback restores owned baseline"
+         (= (fixture-owned-live-count-internal) owned-before)))
+(fixture-reset-shared-clone-internal!)
+
+(let* ((owned-before (fixture-owned-live-count-internal))
+       (release-before (fixture-release-call-count-internal))
+       (storage-before (fixture-storage-identical-call-count-internal))
+       (module (module-create-fixture-internal)))
+  (module-register-parameter-internal!
+    module "weight"
+    (fixture-tensor-unsafe-internal
+      '(1) 'f32 'cpu #t (vector 'forged-publication) 'publish-forged))
+  (expect-error
+    "forged clone publication rejects at provider metadata boundary"
+    'unsupported
+    (lambda () (module-state-dict module)))
+  (check "forged clone publication never reaches storage comparator"
+         (= (fixture-storage-identical-call-count-internal) storage-before))
+  (check "forged clone publication invokes no destructive release"
+         (= (fixture-release-call-count-internal) release-before))
+  (check "forged clone publication preserves owned baseline"
+         (= (fixture-owned-live-count-internal) owned-before)))
+
+(let* ((forged (vector 'forged-provider-carrier))
+       (release-envelope
+         (vector forged 'buffer 'forged-private-release #f))
+       (storage-before (fixture-storage-identical-call-count-internal))
+       (release-before (fixture-release-call-count-internal)))
+  (expect-error
+    "private release prevalidates carrier before storage comparison"
+    'unsupported
+    (lambda ()
+      (tensor-provider-release-owned-internal!
+        'fixture-v1 2 0 release-envelope)))
+  (check "private release disarms invalid provider carrier"
+         (not (vector-ref release-envelope 0)))
+  (check "private release invalid carrier never reaches comparator"
+         (= (fixture-storage-identical-call-count-internal) storage-before))
+  (check "private release invalid carrier never reaches release callback"
+         (= (fixture-release-call-count-internal) release-before)))
+
+(let* ((forged (vector 'forged-provider-carrier))
+       (release-envelope
+         (vector forged 'buffer 'forged-adoption #f))
+       (ownership (vector (list release-envelope)))
+       (storage-before (fixture-storage-identical-call-count-internal))
+       (release-before (fixture-release-call-count-internal)))
+  (expect-error
+    "adoption prevalidates carrier before storage comparison"
+    'unsupported
+    (lambda ()
+      (state-dict-adopt-owned-internal!
+        '() '() 'fixture-v1 2 0 ownership)))
+  (check "adoption disarms invalid provider carrier"
+         (not (vector-ref release-envelope 0)))
+  (check "adoption invalid carrier never reaches comparator"
+         (= (fixture-storage-identical-call-count-internal) storage-before))
+  (check "adoption invalid carrier never reaches release callback"
+         (= (fixture-release-call-count-internal) release-before)))
+
+(fixture-reset-shared-clone-internal!)
 (let* ((before (fixture-owned-live-count-internal))
        (release-before (fixture-release-call-count-internal))
        (first-module (module-create-fixture-internal)))
   (module-register-parameter-internal!
     first-module "weight"
-    (fixture-tensor-unsafe-internal
-      '(1) 'f32 'cpu #t (vector 'live-state-owner) 'exact-republish))
+    (fixture-tensor-internal
+      '(1) 'f32 'cpu (vector 'live-state-owner)))
   (let* ((first-state (module-state-dict first-module))
          (first-handle (state-dict-tensor first-state '("weight")))
          (second-module (module-create-fixture-internal)))
-    (module-register-parameter-internal!
-      second-module "weight"
-      (fixture-tensor-unsafe-internal
-        ;; Value-equal to the protected carrier but backed by distinct source
-        ;; storage, so only exact protected-identity admission can reject it.
-        '(1) 'f32 'cpu #t (vector 'live-state-owner) 'exact-republish))
-    (expect-error "clone cannot republish another live state's carrier"
-                  'internal
-                  (lambda () (module-state-dict second-module)))
+    (let* ((protected
+             (state-dict-tensor-borrow-begin-internal
+               first-state first-handle))
+           (alias (fixture-storage-alias-wrapper-internal protected)))
+      (state-dict-tensor-borrow-end-internal first-state first-handle)
+      (check "state storage attack uses a distinct carrier wrapper"
+             (not (eq? alias protected)))
+      (module-register-parameter-internal!
+        second-module "weight"
+        (fixture-tensor-unsafe-internal
+          '(1) 'f32 'cpu #t (vector 'live-state-owner)
+          'cross-publication))
+      (fixture-arm-cross-publication-internal! alias)
+      (expect-error
+        "clone cannot publish a wrapper over another live state's storage"
+        'internal
+        (lambda () (module-state-dict second-module))))
     (check "cross-state clone rejection invokes no release callback"
            (= release-before (fixture-release-call-count-internal)))
     (let ((carrier
@@ -1142,8 +1770,11 @@
   (module-register-parameter-internal!
     protected-module "protected" protected)
   (module-register-parameter-internal! attacker-module "attacker" attacker)
-  (fixture-arm-cross-publication-internal! protected)
-  (expect-error "clone cannot republish another module's borrowed carrier"
+  (let ((alias (fixture-storage-alias-wrapper-internal protected)))
+    (check "module storage attack uses a distinct carrier wrapper"
+           (not (eq? alias protected)))
+    (fixture-arm-cross-publication-internal! alias))
+  (expect-error "clone cannot publish a wrapper over module-owned storage"
                 'internal
                 (lambda () (module-state-dict attacker-module)))
   (check "cross-module rejection invokes no release callback"

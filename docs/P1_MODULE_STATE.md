@@ -29,6 +29,10 @@ compiler rename map, and public export manifest as one tuple. The exact bridge b
 the repository identity source/header through its fixed quoted include. Copied roots,
 copied/spoofed bridges and native inputs, partial tuple substitutions, and environment
 policy overrides cannot opt into the P1 manifest.
+The compiler depfile's complete repository-relative trusted Eshkol closure is
+byte-deterministic and must exactly match the checked-in
+`native/p1_package_source_closure.txt`; adding, removing, or reordering any
+transitive source fails the focused P1 gate.
 The exact layout, ownership, status, and symbol contract is frozen in
 [P1_IDENTITY_ABI.md](P1_IDENTITY_ABI.md).
 
@@ -117,9 +121,12 @@ The logical value contains:
 - a canonical parameter-only alias graph.
 
 Each entry contains its logical path, kind (`parameter` or `buffer`), redundant
-shape/dtype/device/layout metadata, and one owned tensor snapshot. Every owned clone
-has exactly one ledger owner and is either transferred into one live state or
-released exactly once. Metadata never
+shape/dtype/device/layout metadata, and one owned tensor snapshot. With a conforming
+admitted provider, every owned clone has exactly one ledger owner and is either
+transferred into one live state or released exactly once. A provider that violates
+the physical-storage identity obligation below can make an ambiguous publication
+unsafe to destroy; P1 fails closed and makes no exact-cleanup claim for that trusted-
+provider defect. Metadata never
 overrides the tensor. Before mutation, the loader independently validates tensor
 rank/extents, dtype, device, and dense row-major contiguity, then requires exact
 agreement with entry metadata and the destination leaf.
@@ -166,14 +173,19 @@ admitted provider chosen through trusted policy and capability validation. Befor
 adding a binding, it validates the exact state and provider-interface versions,
 provider ID, every tensor/metadata entry, storage independence, and aliases using
 that trusted-workstream-selected provider, never a provider selected by application
-input or checkpoint bytes. Adoption is rejected
-before transfer if the ledger repeats an envelope identity or a carrier identity;
-the caller retains the complete ledger on every such rejection. The sole exception
-is ownership confusion: before any provider, record, or metadata check, P1 clears
-every envelope that falsely names storage already owned by a live P1 state or
-borrowed by a registered module. This prevents caller rollback from releasing that
-protected storage; all genuinely owned siblings remain in the caller ledger for
-exact-once cleanup. Rebinding the same
+input or checkpoint bytes. Adoption is rejected before transfer if the ledger
+repeats an envelope identity or exact carrier identity; the caller retains the
+complete ledger on those rejections. Ownership confusion is handled separately:
+P1 clears every envelope that names storage already owned by a live P1 state or
+borrowed by a registered module. It first applies the infallible exact-wrapper
+guard, then, after exact provider preflight, applies that provider's
+`storage-identical?` callback to distinct wrappers before transfer or any destructive
+release callback. This prevents caller rollback from releasing protected storage;
+every nonambiguous sibling remains in the caller ledger for exact-once cleanup under
+a conforming provider. If the comparator itself violates its contract, P1 disarms
+the ambiguous carrier and makes no exact-cleanup claim for it.
+Provider-reported aliases among newly claimed owners are rejected by complete state
+validation and rolled back through the transferred P1 ledger. Rebinding the same
 state/provider is identity-preserving and idempotent. Conflicting, unknown,
 unadmitted, malformed, or incompatible bindings fail through E1 without changing
 the existing binding. Unbound states cannot be inspected or loaded and fail
@@ -207,8 +219,14 @@ may outlive release. Small native identity tombstones may remain for process-lif
 stale-authority rejection, but they retain no tensor carrier or storage.
 The Eshkol shell registry likewise replaces every released state, dependent tensor,
 and registered entry edge with a shared compact dead marker on successful release,
-callback-defect cleanup, and post-shell construction rollback. It does not retain the
-released state, entry list, paths, shapes, devices, aliases, or carrier graph.
+callback-defect cleanup, and post-shell construction rollback. An entry tombstone
+overwrites both its raw-entry slot and owner-state slot with shared dead markers, so
+no edge back to the released lifecycle graph remains. It does not retain the released
+state, entry list, paths, shapes, devices, aliases, or carrier graph. The focused
+gate includes a bounded probe that retains eight stale entry shells while dropping
+their released states, checks every shell remains `invalid-state`, checks detached
+path/alias copies remain usable, and requires native/provider live counts to stay at
+the pre-loop baseline.
 The pinned runtime supplies no proved finalizer, so callers must explicitly release
 every successfully returned state. P1 neither hides abandoned states in a strong
 snapshot registry nor treats GC reachability as native-storage reclamation.
@@ -237,6 +255,52 @@ Eshkol closure, tensor, payload, plan, or descriptor pointer.
 Modules retain the admitted private snapshot while logical state dictionaries store
 only the inert versioned identity above.
 
+The provider-level `storage-identical?` callback is the authoritative same-provider
+physical-storage identity mechanism. After P1 prevalidates both carriers as live
+values from the same exact provider, it must be total, deterministic, nonallocating,
+nonraising, request-nonretaining, side-effect-free, and semantically infallible. It
+returns true if and only if both carriers reach the same destructively releasable
+allocation—release through either would invalidate the other—and false if and only
+if their allocations are disjoint. The relation is reflexive, symmetric, and stable
+for the serialized call. This definition includes distinct wrapper identities and
+does not use raw data-pointer equality, which is insufficient for separately owned
+zero-element tensors. `eq?` is only a fast exact-wrapper guard and is never proof of
+storage independence. Malformed, foreign, dead, wrong-kind, or wrong-provider
+carriers reject before the callback or native dereference. The boolean is solely an
+ownership-safety predicate and grants no release authority.
+
+P1 allocates one process-local five-slot comparison request before any callback can
+publish an owner and reuses it only under the serialized, nonreentrant rule. It
+validates that the callback preserved every request field, then clears all five
+slots on success, raise, or malformed result. Every provider storage-identity
+invocation, including ordinary post-publication and precommit alias checks, passes
+through this lifetime pin. Clone publication also preallocates its two-slot
+comparison outcome before callback entry. Before clone publication becomes
+actionable, state adoption transfers ownership, or rollback/private release invokes
+`release-owned!`, P1 applies exact and physical identity checks to every earlier
+actionable owner in the newest-first ledger, borrowed inputs, and every carrier
+protected by a live P1 state or registered module under that provider. Newer
+candidates are sacrificed in favor of older genuine owners. Adoption and private
+release pessimistically clear the candidate envelope before comparison and restore
+it only after a valid false result proves independence. A true result leaves a protected alias disarmed
+and rejected before destructive callback use, with its payload unchanged. A raise,
+non-boolean result, request mutation, or reentrancy is a provider defect: P1 leaves
+the ambiguous carrier disarmed, continues scanning later candidates, and reports the
+defect without granting release authority. Proved-independent siblings are still
+cleaned exactly once when their comparisons and release callbacks conform. P1 cannot
+safely reclaim an ambiguous carrier and therefore makes no exact-cleanup or baseline-
+restoration claim for a provider that violates this semantically infallible
+obligation.
+
+While that protected comparison is active, every externally callable public or
+trusted P1 boundary that could observe, mutate, retain, transfer, borrow, or destroy
+tensor/state authority rejects `invalid-state` before shell-registry, native, or
+provider work. This includes state release and module parameter/buffer registration;
+the callback cannot tombstone a compared live owner or retain the disarmed candidate
+and then return a misleading result. Internal helpers belonging to the already
+admitted outer operation remain available, so cleanup can still settle the candidate
+after the callback exits.
+
 A provider ID has stable cross-process format meaning: it permanently identifies
 the tensor carrier representation, metadata/device equality, exact-value and clone
 semantics, and prepare/commit protocol. Any incompatible carrier, encoding, device,
@@ -257,8 +321,29 @@ identity: it cannot be any borrowed carrier in the complete precomputed state or
 admission-evidence input set, the request or its borrowed fields, or an earlier
 owned publication. P1 rejects those ownership-confusion cases before
 making the new envelope actionable, so it never releases a live input and releases
-each prior physical owner once. The check includes carriers in every other live P1
-state and every registered module parameter/buffer, not only the current operation.
+each prior physical owner once under a conforming provider. The check includes
+carriers in every other live P1 state and every registered module parameter/buffer,
+not only the current operation.
+Generic provider admission first validates every evidence carrier, then checks each
+exact wrapper against itself twice and every distinct evidence pair in both
+directions twice through the preallocated protected request. This rejects a raise,
+request mutation, non-reflexivity, asymmetry, instability, or false disjointness
+before clone publication, preparation, or commit. Each real integrating provider,
+including I2, must additionally prove same-allocation distinct-wrapper truth,
+request nonretention, no allocation/write/raise, invalid-input rejection, and native
+owner identity—including distinct zero-element owners—in carrier-native executable
+evidence before use; P1's inert fixture does not prove another provider's owner
+model.
+
+I2 has confirmed that its implementation can canonicalize each prevalidated wrapper
+to the live owning `et_f32_tensor` resource. It will not compare Eshkol wrapper
+identity or raw data pointers: two distinct zero-element tensor owners remain
+disjoint even when both data pointers are null. That compatibility disposition is a
+design commitment, not P1L acceptance or executable I2 integration evidence. I2 has
+not rebased or changed its runtime and remains blocked until P1L is independently
+approved and merged. See the [frozen P1L equivalence decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502247288)
+and [I2 confirmation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5502269486).
+
 Release consumes one P1-owned carrier, returns the exact same
 preallocated request envelope as acknowledgment, and is admitted as nonallocating,
 nonraising, nonreentrant, and semantically infallible after P1 prevalidation.
@@ -285,18 +370,25 @@ live gradients, live optimizer storage, or caller/provider-owned module inputs.
 Module registration borrows its already-live carrier for the module lifetime because
 P1 has no module-release API; the integrating constructor/provider remains its owner.
 
-The trusted aggregate exposes only the fixed-arity provider preflight and
-single-envelope release mechanism needed by reviewed consumers such as C1. A later
-O2-specific wrapper may reuse those two private mechanisms only after validating its
+The trusted aggregate exposes only the fixed-arity provider preflight, owned-carrier
+admission, and single-envelope release mechanisms needed by reviewed consumers such
+as C1. Admission disarms a newly published candidate, validates it with the exact
+provider, compares its physical storage with every earlier actionable owner and all
+protected live P1/module storage, and rearms only a unique carrier; it never releases.
+A later
+O2-specific wrapper may reuse the preflight and release mechanisms only after validating its
 own optimizer-owner ledger and hard-coding its reviewed provider identity; it may not
 accept an application-selected provider or an envelope for P1 state, live parameter,
 gradient, or optimizer-moment storage owned elsewhere. O2 still needs its own
 versioned optimizer-state receiver, liveness/handle checks, and public release
 operation. P1 does not add that sixth optimizer operation or a generic dispatcher.
-As a last-chance invariant, the private release mechanism clears and rejects an
-envelope naming any live P1-state or registered-module carrier before provider lookup
-or callback. This protects a decoder that fails before adoption as well as a future
-O2 wrapper; optimizer moments and gradients remain O2's own ledger responsibility.
+As a last-chance invariant, the private release mechanism first clears and rejects
+an envelope naming the exact wrapper of any live P1-state or registered-module
+carrier. After provider preflight it disarms the envelope, performs the authoritative
+`storage-identical?` scan over those protected carriers, and rearms only a proved-
+independent owner before calling `release-owned!`. This protects a decoder that fails
+before adoption as well as a future O2 wrapper; optimizer moments and gradients
+remain O2's own ledger responsibility.
 
 After the first destination mutation begins, P1 invokes no callback other than the
 single admitted commit and takes no recoverable branch. It checks only that commit
@@ -396,3 +488,21 @@ or closure. Strict load constructs no temporary expected state or native binding
 rejected and repeated loads add no registry entry. Later I2, O2, and C2 work must
 retain this explicit lifetime discipline and independently prove their own receiver
 ownership contracts.
+
+## Coordination records
+
+The proposed contract is tracked in [P1L issue #51](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51).
+Provider 2.0 and the release envelope were coordinated in the
+[I2/P1L compatibility decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5488110508).
+The exact storage equivalence and fail-closed rule are frozen by
+[integration comment 5502247288](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502247288),
+with downstream compatibility recorded on
+[I2 issue #49](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5502269486)
+and the matching [issue #51 disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502293490),
+then acknowledged on [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5502293552).
+The lifecycle taxonomy is fixed by
+[integration comment 5493574404](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493574404),
+and the narrow O2 reuse boundary by
+[integration comment 5493412398](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398).
+PR #55 remains subject to the
+[P1L-R request changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55#issuecomment-5501171044).

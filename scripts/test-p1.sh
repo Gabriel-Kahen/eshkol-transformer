@@ -193,6 +193,24 @@ done
 cmp "${PROJECT_ROOT}/native/p1_package_public_strings.txt" \
   "${p1_package_object}.evidence/public-strings.txt" || \
   die "P1 package public string manifest drifted"
+canonicalize_p1_depfile() {
+  local depfile=$1 output=$2
+  sed -e 's/^[^:]*://' -e 's/\\//g' "${depfile}" | \
+    tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+    sed "s#^${PROJECT_ROOT}/##" >"${output}"
+}
+canonicalize_p1_depfile \
+  "${p1_package_object}.evidence/private.d" \
+  "${p1_tmp}/package-source-closure.txt"
+canonicalize_p1_depfile \
+  "${p1_tmp}/package-b/eshkol_transformer_p1.o.evidence/private.d" \
+  "${p1_tmp}/package-source-closure-repeat.txt"
+cmp "${p1_tmp}/package-source-closure.txt" \
+  "${p1_tmp}/package-source-closure-repeat.txt" || \
+  die "P1 package depfile closure is not byte-deterministic"
+cmp "${PROJECT_ROOT}/native/p1_package_source_closure.txt" \
+  "${p1_tmp}/package-source-closure.txt" || \
+  die "P1 package trusted Eshkol source closure drifted"
 grep -Fx $'package_policy\tp1' \
   "${p1_package_object}.evidence/allowlist-provenance.tsv" >/dev/null
 [[ "$(wc -l <"${p1_package_object}.evidence/global-defined.txt")" == 24 ]] || \
@@ -409,7 +427,7 @@ for run in 1 2; do
     2>"${p1_tmp}/public-reverse-${run}.stderr"
 
   compile_trusted_aot "${p1_test_source}" "${p1_tmp}/test-${run}" \
-    "${p1_tmp}/test-${run}.aot.log"
+    "${p1_tmp}/test-${run}.aot.log" "${p1_test_trusted_link}"
   timeout --foreground --signal=TERM --kill-after=2s 30s \
     "${p1_tmp}/test-${run}" >"${p1_tmp}/test-${run}.stdout" \
     2>"${p1_tmp}/test-${run}.stderr"
@@ -440,6 +458,7 @@ for run in 1 2; do
         state-dict-tensor-borrow-end-internal \
         tensor-provider-preflight-internal \
         tensor-provider-release-owned-internal! \
+        tensor-provider-admit-owned-internal! \
         state-dict-adopt-owned-internal!; do
       if strings -a "${p1_tmp}/${stem}-${run}.o" | \
           rg -F "${private_marker}" >/dev/null; then
@@ -654,4 +673,4 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
   die "P1 strict load creates or binds a temporary expected state"
 fi
 
-printf 'P1 PASS: E1B-integrated public/private packaging, 303 structural checks, 405 native checks, 138 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+printf 'P1 PASS: E1B-integrated public/private packaging, 419 structural checks, 405 native checks, 139 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'

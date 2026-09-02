@@ -16,6 +16,9 @@ c1_cxx="$(tsv_value "${c1_provenance}" cxx_path)"
 c1_timeout="${C1_COMPILER_TIMEOUT_SECONDS:-480}"
 [[ "${c1_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "C1_COMPILER_TIMEOUT_SECONDS must be a positive integer"
+c1_lsan="${C1_LSAN:-0}"
+[[ "${c1_lsan}" == 0 || "${c1_lsan}" == 1 ]] || \
+  die "C1_LSAN must be 0 or 1"
 
 c1_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c1.XXXXXX")"
 c1_cleanup() {
@@ -68,7 +71,8 @@ fi
   "${PROJECT_ROOT}/native/checkpoint_io.c" \
   "${PROJECT_ROOT}/tests/c1/test_checkpoint_io.c" \
   -o "${c1_tmp}/native-sanitized"
-ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 \
+ASAN_OPTIONS="detect_leaks=${c1_lsan}:halt_on_error=1" \
+  UBSAN_OPTIONS=halt_on_error=1 \
   "${c1_tmp}/native-sanitized" >"${c1_tmp}/native-sanitized.stdout"
 cmp "${PROJECT_ROOT}/tests/expected/c1-native.stdout" \
     "${c1_tmp}/native-sanitized.stdout"
