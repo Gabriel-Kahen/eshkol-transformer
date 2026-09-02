@@ -60,13 +60,26 @@ static int64_t live_count(void *context) {
   return et_p1_private_result_i64_v1(context);
 }
 
+static int64_t tombstone_count(void *context) {
+  check(et_p1_private_tombstone_count_v1(context) == ET_P1_STATUS_OK,
+        "tombstone-count query succeeds");
+  return et_p1_private_result_i64_v1(context);
+}
+
 int main(void) {
   void *context;
   void *provider;
   void *provider_two;
   void *callbacks[7];
   void *callbacks_two[7];
+  void *alias_callbacks[7];
   void *state;
+  void *other_state;
+  void *state_tensor;
+  void *release_callback;
+  void *swapped_release_callback;
+  void *legacy_upgrade_release_callback;
+  void *alias_provider;
   void *temporary_callback;
   void *duplicate_provider;
   void *duplicate_callback;
@@ -80,7 +93,7 @@ int main(void) {
 
   check(et_p1_public_identity_abi_major_v1() == 1,
         "ABI major is fixed");
-  check(et_p1_public_identity_abi_minor_v1() == 0,
+  check(et_p1_public_identity_abi_minor_v1() == 1,
         "ABI minor is fixed");
   check(et_p1_public_token_kind_v1(NULL) == ET_P1_TOKEN_FOREIGN,
         "null token is foreign");
@@ -253,9 +266,261 @@ int main(void) {
             ET_P1_STATUS_INVALID_STATE,
         "callback identities cannot be transplanted between providers");
   create_callbacks(context, callbacks_two);
-  check(seal_provider(context, provider_two, callbacks_two) ==
+  release_callback = created(
+      context, et_p1_private_callback_identity_create_v1(context),
+      "release callback identity creation succeeds");
+  check(et_p1_private_provider_seal_release_v1(
+            context, provider_two, callbacks_two[0], callbacks_two[1],
+            callbacks_two[2], callbacks_two[3], callbacks_two[4],
+            callbacks_two[5], callbacks_two[6], release_callback) ==
             ET_P1_STATUS_OK,
-        "second provider snapshot seals");
+        "release-capable provider snapshot seals");
+  check(et_p1_private_provider_seal_release_v1(
+            context, provider_two, callbacks_two[0], callbacks_two[1],
+            callbacks_two[2], callbacks_two[3], callbacks_two[4],
+            callbacks_two[5], callbacks_two[6], release_callback) ==
+            ET_P1_STATUS_OK,
+        "same release-capable provider snapshot seal is idempotent");
+  check(seal_provider(context, provider_two, callbacks_two) ==
+            ET_P1_STATUS_INVALID_STATE,
+        "legacy seal cannot downgrade a release-capable provider");
+  check(match_provider(context, provider_two, callbacks_two) ==
+            ET_P1_STATUS_INVALID_STATE,
+        "legacy match cannot accept a release-capable provider");
+  check(et_p1_private_provider_snapshot_matches_release_v1(
+            context, provider_two, callbacks_two[0], callbacks_two[1],
+            callbacks_two[2], callbacks_two[3], callbacks_two[4],
+            callbacks_two[5], callbacks_two[6], release_callback) ==
+            ET_P1_STATUS_OK,
+        "release-capable provider snapshot matches exactly");
+  check(et_p1_private_callback_identity_revoke_v1(context,
+                                                   release_callback) ==
+            ET_P1_STATUS_INVALID_STATE,
+        "sealed release callback identity cannot be revoked");
+
+  swapped_release_callback = created(
+      context, et_p1_private_callback_identity_create_v1(context),
+      "swapped release callback identity creation succeeds");
+  before = live_count(context);
+  check(et_p1_private_provider_seal_release_v1(
+            context, provider_two, callbacks_two[0], callbacks_two[1],
+            callbacks_two[2], callbacks_two[3], callbacks_two[4],
+            callbacks_two[5], callbacks_two[6], swapped_release_callback) ==
+            ET_P1_STATUS_INVALID_STATE,
+        "release callback substitution cannot reseal a provider");
+  check(live_count(context) == before,
+        "rejected release callback substitution is failure-atomic");
+  check(et_p1_private_provider_snapshot_matches_release_v1(
+            context, provider_two, callbacks_two[0], callbacks_two[1],
+            callbacks_two[2], callbacks_two[3], callbacks_two[4],
+            callbacks_two[5], callbacks_two[6], release_callback) ==
+            ET_P1_STATUS_OK,
+        "rejected release substitution preserves the exact snapshot");
+  check(et_p1_private_callback_identity_revoke_v1(
+            context, swapped_release_callback) == ET_P1_STATUS_OK,
+        "rejected release substitute remains revocable");
+
+  legacy_upgrade_release_callback = created(
+      context, et_p1_private_callback_identity_create_v1(context),
+      "legacy-upgrade release callback identity creation succeeds");
+  before = live_count(context);
+  check(et_p1_private_provider_seal_release_v1(
+            context, provider, callbacks[0], callbacks[1], callbacks[2],
+            callbacks[3], callbacks[4], callbacks[5], callbacks[6],
+            legacy_upgrade_release_callback) == ET_P1_STATUS_INVALID_STATE,
+        "release-aware seal cannot upgrade a legacy provider");
+  check(et_p1_private_provider_snapshot_matches_release_v1(
+            context, provider, callbacks[0], callbacks[1], callbacks[2],
+            callbacks[3], callbacks[4], callbacks[5], callbacks[6],
+            legacy_upgrade_release_callback) == ET_P1_STATUS_INVALID_STATE,
+        "release-aware match cannot accept a legacy provider");
+  check(live_count(context) == before,
+        "rejected legacy upgrade is failure-atomic");
+  check(match_provider(context, provider, callbacks) == ET_P1_STATUS_OK,
+        "rejected release upgrade preserves the legacy snapshot");
+  check(et_p1_private_callback_identity_revoke_v1(
+            context, legacy_upgrade_release_callback) == ET_P1_STATUS_OK,
+        "rejected legacy-upgrade release callback remains revocable");
+
+  before = live_count(context);
+  alias_provider = created(
+      context, et_p1_private_provider_create_v1(context, "alias-v2", 8),
+      "release-role-alias provider identity creation succeeds");
+  create_callbacks(context, alias_callbacks);
+  {
+    size_t index;
+    for (index = 0u; index < 7u; index++) {
+      check(et_p1_private_provider_seal_release_v1(
+                context, alias_provider, alias_callbacks[0],
+                alias_callbacks[1], alias_callbacks[2], alias_callbacks[3],
+                alias_callbacks[4], alias_callbacks[5], alias_callbacks[6],
+                alias_callbacks[index]) == ET_P1_STATUS_INVALID_STATE,
+            "release callback identity cannot alias a legacy callback role");
+    }
+  }
+  check(live_count(context) == before + 8,
+        "rejected release-role alias changes no token liveness");
+  {
+    size_t index;
+    for (index = 0u; index < 7u; index++) {
+      check(et_p1_private_callback_identity_revoke_v1(
+                context, alias_callbacks[index]) == ET_P1_STATUS_OK,
+            "release-role-alias callback remains revocable");
+    }
+  }
+  check(et_p1_private_provider_abort_v1(context, alias_provider) ==
+            ET_P1_STATUS_OK,
+        "release-role-alias provider remains abortable");
+  check(live_count(context) == before,
+        "release-role-alias cleanup restores the live baseline");
+
+  {
+    int forged_state = 0;
+    void *entry_state;
+    void *sibling_state;
+    void *first_entry;
+    void *second_entry;
+    void *sibling_entry;
+    void *late_entry;
+    int64_t live_baseline = live_count(context);
+    int64_t tombstone_baseline = tombstone_count(context);
+
+    check(et_p1_private_state_entry_create_for_state_v1(context, NULL) ==
+              ET_P1_STATUS_INVALID_ARGUMENT,
+          "state-bound entry creation rejects a null state");
+    check(et_p1_private_error_code_v1(context) == ET_P1_CODE_NULL_ARGUMENT,
+          "null state-bound entry creation has exact status data");
+    check(et_p1_private_state_entry_create_for_state_v1(context,
+                                                         &forged_state) ==
+              ET_P1_STATUS_INVALID_ARGUMENT,
+          "state-bound entry creation rejects a forged state");
+    check(et_p1_private_error_code_v1(context) == ET_P1_CODE_FOREIGN_TOKEN,
+          "forged state-bound entry creation has exact status data");
+    check(et_p1_private_state_entry_create_for_state_v1(context, provider) ==
+              ET_P1_STATUS_INVALID_ARGUMENT,
+          "state-bound entry creation rejects a wrong-kind token");
+    check(et_p1_private_error_code_v1(context) ==
+              ET_P1_CODE_WRONG_TOKEN_KIND,
+          "wrong-kind state-bound entry creation has exact status data");
+    check(live_count(context) == live_baseline,
+          "rejected state-bound entry creation is failure-atomic");
+
+    entry_state = created(
+        context, et_p1_private_state_dict_create_v1(context),
+        "entry-owner state creation succeeds");
+    sibling_state = created(
+        context, et_p1_private_state_dict_create_v1(context),
+        "sibling entry-owner state creation succeeds");
+    first_entry = created(
+        context,
+        et_p1_private_state_entry_create_for_state_v1(context, entry_state),
+        "first state-bound entry creation succeeds");
+    second_entry = created(
+        context,
+        et_p1_private_state_entry_create_for_state_v1(context, entry_state),
+        "second state-bound entry creation succeeds");
+    sibling_entry = created(
+        context,
+        et_p1_private_state_entry_create_for_state_v1(context, sibling_state),
+        "cross-state sibling entry creation succeeds");
+    check(et_p1_public_token_kind_v1(first_entry) == ET_P1_TOKEN_STATE_ENTRY &&
+              et_p1_public_token_live_v1(first_entry) == 1,
+          "state-bound entry has its exact live kind");
+
+    copy = (unsigned char *)malloc(TOKEN_BYTES);
+    check(copy != NULL, "entry-owner state copy scratch allocation succeeds");
+    memcpy(copy, entry_state, TOKEN_BYTES);
+    before = live_count(context);
+    check(et_p1_private_state_entry_create_for_state_v1(context, copy) ==
+              ET_P1_STATUS_INVALID_ARGUMENT,
+          "copied state bytes cannot authorize a bound entry");
+    check(live_count(context) == before,
+          "copied state entry rejection creates no token");
+    free(copy);
+
+    before = live_count(context);
+    check(et_p1_private_state_bind_v1(context, entry_state, provider) ==
+              ET_P1_STATUS_OK,
+          "first state bind revokes its construction entries");
+    check(et_p1_public_token_live_v1(first_entry) == 0 &&
+              et_p1_public_token_live_v1(second_entry) == 0,
+          "first bind revokes every entry bound to that state");
+    check(et_p1_public_token_live_v1(sibling_entry) == 1,
+          "first bind preserves another state's entry");
+    check(live_count(context) == before - 2,
+          "first bind removes the exact bound-entry count");
+    check(tombstone_count(context) == tombstone_baseline + 2,
+          "first bind creates exact bound-entry tombstones");
+    before = live_count(context);
+    check(et_p1_private_state_bind_v1(context, entry_state, provider) ==
+              ET_P1_STATUS_OK,
+          "repeated state bind remains idempotent");
+    check(live_count(context) == before,
+          "repeated state bind changes no entry liveness");
+
+    check(et_p1_private_state_bind_v1(context, sibling_state, provider) ==
+              ET_P1_STATUS_OK,
+          "sibling state bind succeeds");
+    check(et_p1_public_token_live_v1(sibling_entry) == 0,
+          "sibling state bind revokes only its own entry");
+    late_entry = created(
+        context,
+        et_p1_private_state_entry_create_for_state_v1(context, sibling_state),
+        "bound state can mint a lifetime-bound entry handle");
+    check(et_p1_private_state_release_begin_v1(context, sibling_state) ==
+                ET_P1_STATUS_OK &&
+              et_p1_private_result_i64_v1(context) == 1,
+          "state release revokes a post-bind entry");
+    check(et_p1_public_token_live_v1(late_entry) == 0,
+          "state release invalidates its bound entry handle");
+    check(et_p1_private_state_entry_create_for_state_v1(context,
+                                                         sibling_state) ==
+              ET_P1_STATUS_INVALID_STATE,
+          "stale state cannot mint a bound entry");
+    check(et_p1_private_state_release_begin_v1(context, entry_state) ==
+                ET_P1_STATUS_OK &&
+              et_p1_private_result_i64_v1(context) == 1,
+          "entry-owner state release succeeds");
+    check(live_count(context) == live_baseline,
+          "bound-entry bind and release restore the live baseline");
+    check(tombstone_count(context) == tombstone_baseline + 6,
+          "bound-entry bind and release leave exact tombstones");
+  }
+
+  {
+    void *revoke_state = created(
+        context, et_p1_private_state_dict_create_v1(context),
+        "revoke-path state creation succeeds");
+    void *revoke_entry;
+    void *revoke_tensor;
+    int64_t live_baseline;
+    int64_t tombstone_baseline;
+
+    check(et_p1_private_state_bind_v1(context, revoke_state, provider) ==
+              ET_P1_STATUS_OK,
+          "revoke-path state bind succeeds");
+    revoke_entry = created(
+        context,
+        et_p1_private_state_entry_create_for_state_v1(context, revoke_state),
+        "revoke-path state entry creation succeeds");
+    revoke_tensor = created(
+        context, et_p1_private_state_tensor_create_v1(context, revoke_state),
+        "revoke-path state tensor creation succeeds");
+    live_baseline = live_count(context);
+    tombstone_baseline = tombstone_count(context);
+    check(et_p1_private_state_revoke_v1(context, revoke_state) ==
+              ET_P1_STATUS_OK,
+          "state revoke succeeds with bound dependents");
+    check(et_p1_public_token_live_v1(revoke_state) == 0 &&
+              et_p1_public_token_live_v1(revoke_entry) == 0 &&
+              et_p1_public_token_live_v1(revoke_tensor) == 0,
+          "state revoke invalidates entry and tensor dependents");
+    check(live_count(context) == live_baseline - 3,
+          "state revoke removes its exact dependent set");
+    check(tombstone_count(context) == tombstone_baseline + 3,
+          "state revoke creates exact dependent tombstones");
+  }
+
   before = live_count(context);
   check(et_p1_private_state_bind_v1(context, state, provider_two) ==
             ET_P1_STATUS_INVALID_STATE,
@@ -294,18 +559,110 @@ int main(void) {
   check(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0,
         "forked process cannot reuse parent authority");
 
+  state_tensor = created(
+      context, et_p1_private_state_tensor_create_v1(context, state),
+      "state-backed tensor identity creation succeeds");
+  check(et_p1_public_token_kind_v1(state_tensor) ==
+            ET_P1_TOKEN_STATE_TENSOR,
+        "state-backed tensor token has its exact kind");
+  check(et_p1_private_state_tensor_validate_v1(context, state, state_tensor) ==
+            ET_P1_STATUS_OK,
+        "state-backed tensor validates against its owner");
+  other_state = created(context, et_p1_private_state_dict_create_v1(context),
+                        "second state identity creation succeeds");
+  check(et_p1_private_state_bind_v1(context, other_state, provider) ==
+            ET_P1_STATUS_OK,
+        "second state binds to the admitted provider");
+  check(et_p1_private_state_tensor_validate_v1(context, other_state,
+                                                state_tensor) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "state-backed tensor rejects a cross-state borrow");
+  check(et_p1_private_error_code_v1(context) == ET_P1_CODE_CROSS_STATE,
+        "cross-state borrow reports an exact argument status");
+  check(et_p1_private_state_release_begin_v1(context, other_state) ==
+                ET_P1_STATUS_OK &&
+            et_p1_private_result_i64_v1(context) == 1,
+        "independent state release succeeds");
+  copy = (unsigned char *)malloc(TOKEN_BYTES);
+  check(copy != NULL, "state-token copy scratch allocation succeeds");
+  memcpy(copy, state, TOKEN_BYTES);
+  check(et_p1_private_state_release_begin_v1(context, copy) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "copied state bytes cannot initiate release");
+  free(copy);
+  saved_nonce_byte = ((unsigned char *)state)[TOKEN_NONCE_OFFSET];
+  ((unsigned char *)state)[TOKEN_NONCE_OFFSET] ^= UINT8_C(1);
+  check(et_p1_private_state_release_begin_v1(context, state) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "mutated state cannot initiate release");
+  check(et_p1_private_error_code_v1(context) == ET_P1_CODE_TOKEN_INTEGRITY,
+        "mutated state release reports token-integrity status");
+  ((unsigned char *)state)[TOKEN_NONCE_OFFSET] = saved_nonce_byte;
+  check(et_p1_private_state_tensor_validate_v1(context, state, state_tensor) ==
+            ET_P1_STATUS_OK,
+        "restored state remains live before release");
   before = live_count(context);
-  check(et_p1_private_state_revoke_v1(context, state) == ET_P1_STATUS_OK,
-        "temporary state identity is revocable");
+  check(et_p1_private_state_release_begin_v1(context, state) ==
+            ET_P1_STATUS_OK,
+        "state release begins exactly once");
+  check(et_p1_private_result_i64_v1(context) == 1,
+        "first state release reports a live transition");
   check(et_p1_public_token_live_v1(state) == 0,
         "revoked state is not live");
+  check(et_p1_public_token_live_v1(state_tensor) == 0,
+        "state release invalidates state-backed tensors");
+  check(et_p1_private_state_tensor_validate_v1(context, state, state_tensor) ==
+            ET_P1_STATUS_INVALID_STATE,
+        "stale state-backed tensor cannot be validated");
   check(et_p1_public_token_kind_v1(state) == -ET_P1_TOKEN_STATE_DICT,
         "revoked state retains only a stale kind observation");
-  check(live_count(context) == before - 1,
-        "state disposal removes one live registry entry");
+  check(live_count(context) == before - 2,
+        "state disposal removes state and dependent tensor entries");
+  check(et_p1_private_state_release_begin_v1(context, state) ==
+            ET_P1_STATUS_OK &&
+            et_p1_private_result_i64_v1(context) == 0,
+        "repeat state release is idempotent");
   check(et_p1_private_state_provider_v1(context, state) ==
             ET_P1_STATUS_INVALID_STATE,
         "stale state lookup fails explicitly");
+  saved_nonce_byte = ((unsigned char *)state)[TOKEN_NONCE_OFFSET];
+  ((unsigned char *)state)[TOKEN_NONCE_OFFSET] ^= UINT8_C(1);
+  check(et_p1_private_state_provider_v1(context, state) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "mutated dead state is invalid argument, not stale state");
+  check(et_p1_private_error_code_v1(context) == ET_P1_CODE_TOKEN_INTEGRITY,
+        "mutated dead state reports token integrity before liveness");
+  check(et_p1_public_token_kind_v1(state) == ET_P1_TOKEN_FOREIGN,
+        "mutated dead state has no public stale-kind authority");
+  ((unsigned char *)state)[TOKEN_NONCE_OFFSET] = saved_nonce_byte;
+  check(et_p1_public_token_kind_v1(state) == -ET_P1_TOKEN_STATE_DICT,
+        "restored dead state retains its exact stale kind");
+  check(et_p1_private_state_release_begin_v1(context, state_tensor) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "dead state tensor used as state is wrong-kind argument");
+  check(et_p1_private_error_code_v1(context) == ET_P1_CODE_WRONG_TOKEN_KIND,
+        "dead wrong-kind token reports kind before liveness");
+  copy = (unsigned char *)malloc(TOKEN_BYTES);
+  check(copy != NULL, "dead-token copy scratch allocation succeeds");
+  memcpy(copy, state, TOKEN_BYTES);
+  check(et_p1_private_state_release_begin_v1(context, copy) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "copied dead state remains foreign");
+  memcpy(copy, state_tensor, TOKEN_BYTES);
+  check(et_p1_private_state_release_begin_v1(context, copy) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "copied dead state tensor remains foreign");
+  free(copy);
+  saved_nonce_byte = ((unsigned char *)state_tensor)[TOKEN_NONCE_OFFSET];
+  ((unsigned char *)state_tensor)[TOKEN_NONCE_OFFSET] ^= UINT8_C(1);
+  check(et_p1_public_token_kind_v1(state_tensor) == ET_P1_TOKEN_FOREIGN,
+        "mutated dead state tensor has no public stale-kind authority");
+  check(et_p1_private_state_release_begin_v1(context, state_tensor) ==
+            ET_P1_STATUS_INVALID_ARGUMENT,
+        "mutated dead state tensor is invalid argument");
+  check(et_p1_private_error_code_v1(context) == ET_P1_CODE_TOKEN_INTEGRITY,
+        "mutated dead tensor reports integrity before kind and liveness");
+  ((unsigned char *)state_tensor)[TOKEN_NONCE_OFFSET] = saved_nonce_byte;
   check(et_p1_private_context_release_v1(context) ==
             ET_P1_STATUS_INVALID_STATE,
         "context release refuses live identities");

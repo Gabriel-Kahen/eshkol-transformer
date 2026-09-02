@@ -46,6 +46,21 @@ Benchmarks record commit, hardware, OS, compiler, backend, dtype, tensor shapes,
 warmup, repetitions, throughput, latency, and peak memory. A backend is not called
 accelerated until execution on that device is directly observed and tested.
 
+## Required native-lifetime gates
+
+- Enumerate every owned-allocation transition: publication, ledger insertion,
+  receiver transfer, rollback, explicit release, and callback defect. Each owned
+  carrier must have exactly one owner and one destruction event.
+- Repeated success and every injected partial-failure path must return provider/native
+  live-allocation counts to their declared baseline. Process-lifetime identity
+  tombstones are acceptable only when they retain no native tensor storage.
+- Explicit release must be idempotent and must invalidate dependent handles before
+  storage destruction. Forged, copied, stale, cross-owner, use-after-release,
+  double-release, active-borrow, and callback-failure cases are negative tests.
+- Run ASan/UBSan and LSan on a supported lane where the runner permits leak
+  detection. A local environment that disables LSan is recorded as a limitation,
+  not reported as leak evidence.
+
 ## Merge policy
 
 - No red required gates.

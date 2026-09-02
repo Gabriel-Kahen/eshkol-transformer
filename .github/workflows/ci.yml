@@ -17,7 +17,7 @@ jobs:
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       CC: clang-21
       CXX: clang++-21
@@ -25,6 +25,8 @@ jobs:
       LLVM_CONFIG_EXECUTABLE: llvm-config-21
       ESHKOL_JOBS: '2'
       A0_COMPILER_TIMEOUT_SECONDS: '60'
+      P1_LSAN: '1'
+      C1_LSAN: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -55,7 +57,7 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make build'
 
-      - name: Test (F0/A0/B0/C1/D1/E1/E1B/I1/I2/K1/P1/Q0/T1/X1)
+      - name: Test (F0/A0/A2/B0/C1/D1/E1/E1B/I1/I2/K1/P1/Q0/T1/X1)
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make test'
 

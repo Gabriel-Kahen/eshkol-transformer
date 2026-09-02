@@ -36,6 +36,12 @@ Run the focused T1 tokenizer gate with:
 /usr/bin/bash -c 'make test-t1'
 ```
 
+Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
+
+```bash
+/usr/bin/bash -c 'make test-a2'
+```
+
 `toolchain` clones and builds only the pinned Eshkol revision. `configure` rejects a
 missing, wrong-revision, wrong-version, or unsupported toolchain instead of falling
 back to Python or another runtime. `build` performs an explicit AOT compile,
@@ -68,9 +74,20 @@ K1 views, and carrier-local value/accumulated-gradient substrate required by N2 
 O2. Its explicit provider accessor verifies only bounded deterministic `tensor.f32`
 / `storage.copy` and never defines K1's canonical provider symbol. The current
 native archive is `build/i2/libeshkol_transformer_f32.a`; production P1/Eshkol
-integration is blocked on the release-capable P1L provider interface and is not
-shipped by this artifact. Run the focused carrier gate with `make test-i2`; see
+integration is under active development against the merged release-capable P1L
+provider interface. Run the focused carrier gate with `make test-i2`; see
 [docs/I2_F32_TENSOR.md](docs/I2_F32_TENSOR.md).
+
+The build leaves A2's carrier-neutral serial CPU-f32 provider and fixed-capacity
+transactional cache in `build/a2/libeshkol_transformer_a2.a`. Consumers obtain the
+provider only from `et_a2_kernel_provider_v1`; the archive does not define K1's
+generic resolver. Cache reads expose full-capacity dense K/V, exact lengths, and a
+canonical false-outside-length bool mask. A2 does not supply a production tensor
+carrier, P1 binding, provider aggregate, accelerator path, or public training module.
+Its exact numerical and lifetime contracts are in
+[docs/A2_ATTENTION.md](docs/A2_ATTENTION.md). Source-tree native consumers link the
+A2 archive before `build/k1/libeshkol_transformer_k1.a` and `-lm`; there is no A2
+install or dynamic-discovery contract.
 
 X1's public `transformer.config` source stub links explicitly against the single
 prelocalized E1B/X1 artifact at `build/x1/libeshkol_transformer_x1.a`. The archive
@@ -79,8 +96,9 @@ wrappers; its trusted implementation source and evidence are not application inc
 roots. See [docs/CONFIG_FORMAT.md](docs/CONFIG_FORMAT.md).
 
 The P1 structural module/state-tree gate is `make test-p1`. Its logical in-memory
-state schema, deterministic UTF-8 path ordering, tie semantics, strict loading, and
-explicit tensor-runtime limitations are documented in
+state schema, deterministic UTF-8 path ordering, tie semantics, strict loading,
+provider 2.0 exact-once ownership, explicit `state-dict-release!`, read-only
+state-backed handles, and tensor-runtime limitations are documented in
 [docs/P1_MODULE_STATE.md](docs/P1_MODULE_STATE.md). It defines no checkpoint file or
 numerical tensor capability.
 The narrow process-local native identity boundary used only to enforce P1's
@@ -97,8 +115,8 @@ T1's Eshkol-authored byte tokenizer, special-token rules, canonical artifact,
 fingerprint, C1-backed persistence limits, and exact-I1 output lifetime are specified
 in [docs/TOKENIZER_FORMAT.md](docs/TOKENIZER_FORMAT.md). The build creates one
 canonical `build/t1/libeshkol_transformer_wave1.a` aggregate from trusted source
-inputs and localizes it once. Its public boundary is exactly 46 globals: six E1
-error accessors, seventeen P1 module/state wrappers, eight D1 data wrappers, six X1
+inputs and localizes it once. Its public boundary is exactly 47 globals: six E1
+error accessors, eighteen P1 module/state wrappers, eight D1 data wrappers, six X1
 configuration wrappers, one C1 persistence-policy wrapper, and eight T1 tokenizer
 wrappers. The installed `transformer.persistence` surface contains only
 `persistence-policy`; C2 checkpoint operations remain unavailable. The authoritative
@@ -126,6 +144,7 @@ See:
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Dense CPU-f32 tensor and parameter-gradient substrate](docs/I2_F32_TENSOR.md)
+- [Causal attention, RoPE, and KV-cache substrate](docs/A2_ATTENTION.md)
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)

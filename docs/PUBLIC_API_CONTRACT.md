@@ -111,13 +111,15 @@ reported losses and metrics accumulate and return `f32` in the first release.
 - A dataset, module/model, optimizer, trainer, generator, and cache is an opaque,
   exclusively mutable object. It is not safe for concurrent mutation.
 - Ordinary tensor inputs are borrowed for the duration of a call. Returned tensors
-  and snapshots are newly owned and do not alias inputs or mutable internals.
+  and snapshots are newly owned and do not alias inputs or mutable internals, except
+  for the explicitly state-backed read-only handles described below.
 - The one exception is a parameter tree: `module-parameters` returns opaque live
   parameter handles, not tensor-value copies. Handles have the module's lifetime and
   authorize controlled optimizer/gradient mutation. `optimizer-create` retains those
   handles and never updates copies.
-- `module-state-dict` and all `*-state` operations deep-copy tensor values and include
-  an alias graph for tied parameters. `module-load-state-dict!` copies values into
+- `module-state-dict` and `module-buffers` return explicitly releasable states that
+  own deep-copied tensor values. State-backed handles borrow those copies; they do
+  not clone storage and cannot outlive the live state. `module-load-state-dict!` copies values into
   existing storage, preserves declared ties, and rejects missing, unexpected,
   duplicate, or conflicting aliases.
 - `module-parameters` represents each unique trainable tensor with one live handle
@@ -345,9 +347,10 @@ without changing state until seek or close.
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
 | `module-parameters module` | Stable lexical-path tree of opaque live handles, one per unique trainable leaf plus tie metadata. Each leaf is contiguous `f32` of arbitrary documented rank on the module device. | New tree retaining module-bounded handles; `invalid-state`; handles carry gradient state. |
-| `module-buffers module` | Deep immutable state-dict snapshot limited to uniquely named contiguous `bool`, `i64`, or `f32` non-trainable leaves of arbitrary documented rank on the module device. Inspect with `state-dict-paths`/`state-dict-tensor`; alias groups are empty. | New owned tensors; `invalid-state`; no buffer gradient or live handle. |
-| `module-state-dict module` | Deep data-only snapshot of parameters, buffers, names, shapes, dtypes, devices, and aliases. | New owned state; `invalid-state`, `unsupported`; no new graph. |
+| `module-buffers module` | Deep state-dict snapshot limited to uniquely named contiguous `bool`, `i64`, or `f32` non-trainable leaves of arbitrary documented rank on the module device. Inspect with `state-dict-paths`/`state-dict-tensor`; alias groups are empty. | New owned releasable state; `invalid-state`; no buffer gradient or live parameter handle. |
+| `module-state-dict module` | Deep data-only snapshot of parameters, buffers, names, shapes, dtypes, devices, and aliases. | New owned releasable state; `invalid-state`, `unsupported`; no new graph. |
 | `module-load-state-dict! module state` | Strict exact-name/shape/dtype/device load; preserve declared ties; no partial load in first release. | Atomic receiver mutation; structured mismatch/version errors; no gradient graph. |
+| `state-dict-release! state` | Release every tensor owned by this state and invalidate the state plus every state-backed tensor handle derived from it. | Idempotent arity-1 mutation; a later state or handle access raises `invalid-state` before native storage is dereferenced. |
 | `module-train! module` / `module-eval! module` | Set explicit mode recursively. | Mutates mode only; `invalid-state`; no gradient. |
 | `module-zero-grad! module` | Clear all parameter gradients to the runtime's documented absent-gradient state. | Mutates gradient slots only; `invalid-state`, `unsupported`; no gradient. |
 | `model-forward model input-ids . opts` | `i64[N,T]` to one opaque model output. The only options are `':targets i64[N,T]`, `':loss-mask bool-or-f32[N,T]`, `':rng rng-state`, and `':deterministic? bool`. Targets and mask appear together; stochastic train mode requires RNG. | Inputs borrowed; no mutation. Output logits/loss differentiate w.r.t. floating parameters, never IDs/targets/mask. Tensor/unsupported/determinism errors apply. |
@@ -396,15 +399,26 @@ path is `invalid-argument`. Tie groups contain at least two logical paths, with 
 sorted within each group and groups sorted by their first path; each tied path appears
 in exactly one group and the first path is the handle's canonical path.
 
-A state dict is an immutable data-only value. `state-dict-paths` returns every logical
-parameter and buffer path in the ordering above. `state-dict-tensor` accepts every
-returned path and returns a new owned tensor; tensors returned for tied paths are
-value-equal independent snapshots, while `state-dict-alias-groups` preserves the tie
-relationship. A strict load requires tied-path payloads to be equal before copying
+A live state dict is a read-only data-only value with explicit ownership and release.
+`state-dict-paths` returns every logical parameter and buffer path in the ordering
+above. `state-dict-tensor` accepts every returned path and returns a cached, opaque,
+read-only state-backed handle, not a tensor clone. Trusted synchronous consumers may
+resolve that handle only while its exact owning state is live, borrow its carrier for
+one call, and end the borrow before returning; they must never retain a raw storage
+pointer. Tied paths have value-equal independent owned entries, while
+`state-dict-alias-groups` preserves the tie relationship. A strict load requires tied-path payloads to be equal before copying
 once into the destination handle; conflicting alias payloads are `corrupt-data`.
 `state-dict-alias-groups` returns tied paths in the same canonical group ordering.
-Unknown paths are `invalid-argument`. Accessors are CPU control-plane, non-mutating,
-and do not create gradient graphs.
+Unknown paths are `invalid-argument`. Detached path and alias metadata may outlive
+the state. `state-dict-release!` is idempotent; its first successful transition
+invalidates the state and all of its handles, and later access raises `invalid-state`
+without dereferencing released storage. Release rejects before mutation while a
+trusted scoped borrow is active. Malformed, forged, copied, unregistered, or
+wrong-kind values are `invalid-argument`; an exact registered dead state or handle
+used by any non-release operation is `invalid-state`. Accessors are CPU control-plane, non-mutating, and
+do not create gradient graphs. Because the pinned runtime has no proved finalizer,
+callers must explicitly release every owned state; dropping the last application
+reference is not a reclamation guarantee.
 
 ## 11. Optimizer
 

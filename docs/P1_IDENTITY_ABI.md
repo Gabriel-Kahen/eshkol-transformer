@@ -1,9 +1,9 @@
-# P1 private identity ABI 1.0
+# P1 private identity ABI 1.1
 
 ## Status and scope
 
-This is a private, process-local P1/C1/I1 integration ABI. It is not an A0, K1,
-I1, checkpoint, serialization, or installed native ABI. Version 1.0 requires
+This is a private, process-local P1/C1/I2 integration ABI. It is not an A0, K1, I1,
+checkpoint, serialization, or installed native ABI. Version 1.1 requires
 64-bit pointers and `size_t`; every call has fixed arity and uses only fixed-width
 `i64`, `ptr`, and bounded byte spans. There is no generic opcode dispatcher.
 
@@ -16,11 +16,11 @@ The public product is
 - `et_p1_public_token_live_v1(token)`.
 
 The trusted product has the same archive basename under a mutually exclusive
-`trusted` directory. It is a replacement, never an additive library. Its 25
+`trusted` directory. It is a replacement, never an additive library. Its 31
 `et_p1_private_*_v1` functions have hidden ELF visibility and cover one private
 context, fixed-kind identity creation, immutable provider admission witnesses,
-exact state/provider binding, unpublished-identity cleanup, error/result access,
-and deterministic live/tombstone counts. The trusted product is not installed by
+exact state/provider binding, state-backed tensor identity and release transitions,
+unpublished-identity cleanup, error/result access, and deterministic live/tombstone counts. The trusted product is not installed by
 the normal build.
 
 ## Frozen layout and ownership
@@ -42,9 +42,17 @@ Compile-time assertions freeze these ABI-v1 facts:
 Tokens and contexts are bridge-owned. Callers hold opaque pointers only and must
 not read, copy, free, or mutate their storage. The registry retains token memory as
 a live identity or permanent tombstone, so an allocator address cannot be reused to
-restore authority. Successful state/provider/module/tree/handle/entry shells live
-until trusted cleanup where supported or process exit. There is no concurrency or
-cross-process claim; post-fork use rejects.
+restore authority. Successful provider/module/tree/handle shells live until trusted
+cleanup where supported or process exit. The legacy ownerless native
+`et_p1_private_state_entry_create_v1` symbol is retained for ABI compatibility only:
+the production trusted Eshkol root never calls it, it carries no Eshkol value or
+carrier authority, and it cannot establish state provenance. Every entry shell
+actually exposed from a state uses the state-scoped constructor and binds to one
+exact state; successful clone-on-bind replacement, rollback, or explicit state
+release makes the affected entries permanent inert tombstones. Explicit state
+release likewise makes the state and every dependent state-tensor shell an inert tombstone. Tombstones
+retain no Eshkol carrier, tensor storage, or raw pointer. There is no concurrent-
+mutation or cross-process claim; use is serialized and post-fork use rejects.
 
 Each caller-visible token contains only the nonzero 128-bit `getrandom` identity and
 reserved bytes. Its bridge-private registry record authoritatively owns kind, owner
@@ -62,11 +70,27 @@ length, rejects negative/oversized spans, and copies exact bytes before publishi
 the token. It never truncates, calls `strlen`, treats NUL specially, performs text
 normalization, or returns a bridge-owned byte pointer.
 
-Seven callback identities are inert native tokens. Actual Eshkol callbacks remain
-in a hidden immutable Eshkol snapshot. Sealing first validates the complete token
-set, then atomically records and back-references it; repeat sealing with the exact
-set is idempotent and any substitution rejects. A sealed callback cannot be
-revoked or transplanted to another provider.
+Provider interface 2.0 has eight callbacks. The original seven callback identities
+remain in the frozen callback-token array; the eighth `release-owned!` identity uses
+the existing record binding field, so ABI 1.1 changes no record size or frozen
+offset. Actual Eshkol callbacks remain in a hidden immutable Eshkol snapshot.
+Release-aware sealing validates the complete eight-token set, then atomically records
+and back-references it; repeat sealing with the exact set is idempotent and any
+substitution rejects. Legacy seven-callback seal/match entrypoints cannot admit or
+downgrade a release-aware provider. A sealed callback cannot be revoked or
+transplanted to another provider.
+
+A state-scoped entry or state-tensor token binds to one exact live state token.
+State-scoped entry creation prevents equal raw entries exposed through different
+states from sharing identity authority. The ABI-only legacy ownerless entry token is
+never accepted as state provenance. Validation rejects foreign,
+copied, mutated, stale, wrong-kind, cross-context, and cross-state pairs before any
+Eshkol carrier is returned. `et_p1_private_state_release_begin_v1` is the native-first
+linearization point: the first valid call tombstones every dependent state-entry and
+state-tensor and then the state, clears native bindings, and returns result `1`; a repeated call on the
+same intact tombstone returns result `0` without allocating or mutating. P1 checks
+for an active scoped borrow before this call and invokes provider destruction only
+after the native transition, so stale handles cannot authorize freed storage.
 
 Callback revoke and provider abort are unpublished failed-admission cleanup calls.
 They accept only live, exact-kind, same-context, unreferenced/unsealed identities.

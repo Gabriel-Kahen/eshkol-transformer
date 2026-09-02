@@ -8,6 +8,8 @@
         :real et_p1_test_live_entry_count_v1)
 (extern i64 p1-test-tombstone-count
         :real et_p1_test_tombstone_count_v1)
+(extern i64 p1-test-state-bind-fail-next
+        :real et_p1_test_state_bind_fail_next_v1)
 
 (define checks 0)
 
@@ -83,6 +85,18 @@
 (define (fixture-device-payload device name)
   (fixture-tensor-internal '(1) 'i64 device (vector name 'bits-v1)))
 
+(define (fixture-state-payload state path)
+  (let* ((handle (state-dict-tensor state path))
+         (carrier
+           (state-dict-tensor-borrow-begin-internal state handle)))
+    (guard (caught
+             (#t
+               (state-dict-tensor-borrow-end-internal state handle)
+               (raise caught)))
+      (let ((payload (fixture-tensor-payload-internal carrier)))
+        (state-dict-tensor-borrow-end-internal state handle)
+        payload))))
+
 (define (fill-ties! module handle count)
   (let loop ((index 0) (last handle))
     (if (= index count)
@@ -116,6 +130,58 @@
             module (string-append prefix (number->string index))
             (module-create-fixture-internal))
           (loop (+ index 1))))))
+
+(check "provider admission releases every scratch clone"
+       (= (fixture-owned-live-count-internal) 0))
+(let ((owned-before (fixture-owned-live-count-internal)))
+  (one-parameter-module '(1) 'borrowed-module-binding)
+  (check "module registration borrows provider-owned carriers"
+         (= (fixture-owned-live-count-internal) owned-before)))
+
+(let* ((owned-baseline (fixture-owned-live-count-internal))
+       (module (one-parameter-module '(1) 'bind-failpoint))
+       (owner (module-state-dict module))
+       (copy
+         (state-dict-create-unsafe-internal
+           (state-dict-format-internal owner) 1 0 '()
+           (state-dict-adapter-internal owner)
+           (state-dict-entries-internal owner) '()))
+       (copy-entry (car (state-dict-entries-internal copy)))
+       (live-before-bind (p1-test-live-count))
+       (tombstones-before-bind (p1-test-tombstone-count))
+       (owned-before-bind (fixture-owned-live-count-internal)))
+  (check "native state-bind failpoint armed"
+         (= (p1-test-state-bind-fail-next) 0))
+  (expect-error "native bind failure after clone is internal" 'internal
+                (lambda ()
+                  (state-dict-bind-provider-internal! copy 'fixture-v1)))
+  (check "native bind failure releases every prepared clone"
+         (= owned-before-bind (fixture-owned-live-count-internal)))
+  (check "native bind failure preserves target entry identity"
+         (and (= (p1-test-live-count) live-before-bind)
+              (= (p1-test-tombstone-count) tombstones-before-bind)
+              (equal? (state-entry-path-internal copy-entry) '("weight"))))
+  (expect-error "native bind failure leaves unsafe state unbound"
+                'unsupported
+                (lambda () (state-dict-paths copy)))
+  (check "native bind failure permits exact retry"
+         (eq? copy
+              (state-dict-bind-provider-internal! copy 'fixture-v1)))
+  (check "successful retry revokes replaced target entry identity"
+         (and (= (p1-test-live-count) (- live-before-bind 1))
+              (= (p1-test-tombstone-count)
+                 (+ tombstones-before-bind 1))))
+  (expect-error "successful retry stales replaced target entry identity"
+                'invalid-state
+                (lambda () (state-entry-path-internal copy-entry)))
+  (check "native bind retry publishes cloned state paths"
+         (equal? (state-dict-paths copy) '(("weight"))))
+  (check "native bind failpoint source owner releases"
+         (state-dict-release! owner))
+  (check "native bind failpoint clone owner releases"
+         (state-dict-release! copy))
+  (check "native bind failpoint returns provider owners to baseline"
+         (= owned-baseline (fixture-owned-live-count-internal))))
 
 ;; A test-only sentinel injects an impossible status/code pair without adding a
 ;; production symbol. The trusted mapper must reject the pair as bounded internal
@@ -151,48 +217,72 @@
   (check "malformed status cleanup leaves one tombstone"
          (= (p1-test-tombstone-count) (+ tombstones-before 1))))
 
-;; Drive the Eshkol admission wrapper through a failure after three callback
-;; identities. It must revoke those callbacks and the unpublished provider.
-(let ((live-before (p1-test-live-count))
-      (tombstones-before (p1-test-tombstone-count)))
-  (check "callback failpoint armed"
-         (= (p1-test-callback-fail-after 3) 0))
-  (define callback-error
-    (guard (raised (#t raised))
-      (fixture-register-reentrant-target-provider-internal!)
-      #f))
-  (check "partial callback allocation raises E1 identity"
-         (transformer-error? callback-error))
-  (check "partial callback allocation category"
-         (eq? (transformer-error-category callback-error) 'internal))
-  (check "partial callback allocation operation"
-         (eq? (transformer-error-operation callback-error)
-              'tensor-provider-register-internal!))
-  (check "partial callback allocation bounded message"
-         (string=? (transformer-error-message callback-error)
-                   "P1 private identity operation failed"))
-  (check "partial callback allocation preserves native status"
-         (and (= (details-ref (transformer-error-details callback-error)
-                              'native-category) 4)
-              (= (details-ref (transformer-error-details callback-error)
-                              'source-code) 7)
-              (eq? (details-ref (transformer-error-details callback-error)
-                                'source-domain)
-                   'p1-private-bridge)
-              (string=?
-                (details-ref (transformer-error-details callback-error)
-                             'source-message)
-                "native identity allocation failed")))
-  (check "partial callback allocation cause"
-         (eq? (transformer-error-cause callback-error) #f))
-  (check "partial admission revokes its unpublished provider identity"
-         (= (p1-test-live-count) (- live-before 1)))
-  (check "partial admission leaves exact permanent tombstones"
-         (= (p1-test-tombstone-count) (+ tombstones-before 4)))
-  (expect-error "partially admitted provider remains unavailable" 'unsupported
-                (lambda ()
-                  (module-create-with-provider-internal
-                    'reentrant-target-v1))))
+;; Exhaust every callback-token allocation position. Position 7 is the
+;; release-owned! identity. The provider is constructed inside each attempt,
+;; so cleanup must restore the pre-attempt live baseline while retaining
+;; exactly N callback tombstones plus one unpublished-provider tombstone.
+(let loop ((position 0))
+  (if (= position 8)
+      #t
+      (let ((live-before (p1-test-live-count))
+            (tombstones-before (p1-test-tombstone-count))
+            (provider-name
+              (fixture-callback-failpoint-provider-name-internal position)))
+        (check "callback-position failpoint armed"
+               (= (p1-test-callback-fail-after position) 0))
+        (let ((callback-error
+                (guard (raised (#t raised))
+                  (fixture-register-callback-failpoint-provider-internal!
+                    position)
+                  #f)))
+          (check "callback-position allocation has exact structured error"
+                 (and (transformer-error? callback-error)
+                      (eq? (transformer-error-category callback-error)
+                           'internal)
+                      (eq? (transformer-error-operation callback-error)
+                           'tensor-provider-register-internal!)
+                      (eq?
+                        (fixture-callback-failpoint-provider-role-internal
+                          position)
+                        (cond
+                          ((= position 0) 'describe)
+                          ((= position 1) 'clone)
+                          ((= position 2) 'storage-identical?)
+                          ((= position 3) 'value-equal?)
+                          ((= position 4) 'device-equal?)
+                          ((= position 5) 'prepare-load)
+                          ((= position 6) 'commit-load!)
+                          (else 'release-owned!)))
+                      (string=? (transformer-error-message callback-error)
+                                "P1 private identity operation failed")
+                      (= (proper-list-length
+                           (transformer-error-details callback-error)) 4)
+                      (= (details-ref
+                           (transformer-error-details callback-error)
+                           'native-category) 4)
+                      (= (details-ref
+                           (transformer-error-details callback-error)
+                           'source-code) 7)
+                      (eq? (details-ref
+                             (transformer-error-details callback-error)
+                             'source-domain)
+                           'p1-private-bridge)
+                      (string=?
+                        (details-ref
+                          (transformer-error-details callback-error)
+                          'source-message)
+                        "native identity allocation failed")
+                      (eq? (transformer-error-cause callback-error) #f))))
+        (expect-error "callback-position provider remains unavailable"
+                      'unsupported
+                      (lambda ()
+                        (module-create-with-provider-internal provider-name)))
+        (check "callback-position cleanup restores exact live baseline"
+               (= (p1-test-live-count) live-before))
+        (check "callback-position cleanup leaves exact tombstones"
+               (= (p1-test-tombstone-count)
+                  (+ tombstones-before position 1)))
+        (loop (+ position 1)))))
 
 ;; Construct every shell before each baseline. Failed and repeated strict loads
 ;; must not create identities, bindings, or tombstones.
@@ -201,7 +291,8 @@
 (define failed-load-destination
   (one-parameter-module '(3) 'mismatched))
 (let ((live-before (p1-test-live-count))
-      (tombstones-before (p1-test-tombstone-count)))
+      (tombstones-before (p1-test-tombstone-count))
+      (owned-before (fixture-owned-live-count-internal)))
   (expect-error "failed load rejects shape mismatch" 'shape-mismatch
                 (lambda ()
                   (module-load-state-dict! failed-load-destination
@@ -210,28 +301,154 @@
          (= (p1-test-live-count) live-before))
   (check "failed load preserves tombstone count"
          (= (p1-test-tombstone-count) tombstones-before))
+  (check "failed load preserves provider clone count"
+         (= (fixture-owned-live-count-internal) owned-before))
   (check "failed load does not finalize module topology"
          (module-register-buffer-internal!
            failed-load-destination "after"
            (fixture-payload '(1) 'after-failure))))
 
+;; State and borrowed-handle identities are explicitly bounded by release.
+;; Cached access must allocate at most one handle, and first release must stale
+;; both identities while a repeated release remains allocation-free.
+(let* ((live-before (p1-test-live-count))
+       (tombstones-before (p1-test-tombstone-count))
+       (owned-before (fixture-owned-live-count-internal))
+       (state (module-state-dict failed-load-source))
+       (entry (car (state-dict-entries-internal state))))
+  (check "live state owns one native identity"
+         (= (p1-test-live-count) (+ live-before 2)))
+  (check "live state owns one provider clone"
+         (= (fixture-owned-live-count-internal) (+ owned-before 1)))
+  (let ((first (state-dict-tensor state '("weight")))
+        (live-with-handle (p1-test-live-count)))
+    (check "first state borrow owns one native identity"
+           (= live-with-handle (+ live-before 3)))
+    (check "repeated state borrow reuses native identity"
+           (and (eq? first (state-dict-tensor state '("weight")))
+                (= (p1-test-live-count) live-with-handle)))
+    (check "borrowed state access creates no provider clone"
+           (= (fixture-owned-live-count-internal) (+ owned-before 1)))
+    (check "first state release succeeds" (state-dict-release! state))
+    (check "state release restores native live baseline"
+           (= (p1-test-live-count) live-before))
+    (check "state release restores provider clone baseline"
+           (= (fixture-owned-live-count-internal) owned-before))
+    (expect-error "state release stales state-owned entry identity"
+                  'invalid-state
+                  (lambda () (state-entry-path-internal entry)))
+    (check "state release tombstones state, entry, and cached handle"
+           (= (p1-test-tombstone-count) (+ tombstones-before 3)))
+    (check "repeat state release is identity-allocation-free"
+           (and (state-dict-release! state)
+                (= (p1-test-live-count) live-before)
+                (= (p1-test-tombstone-count) (+ tombstones-before 3))))))
+
+(let* ((live-before (p1-test-live-count))
+       (owned-before (fixture-owned-live-count-internal))
+       (state (module-state-dict failed-load-source))
+       (entry (car (state-dict-entries-internal state)))
+       (handle (state-dict-tensor state '("weight"))))
+  (check "post-release callback defect armed"
+         (fixture-fail-next-release-internal!))
+  (expect-error "post-release callback defect propagates" 'internal
+                (lambda () (state-dict-release! state)))
+  (check "callback defect still restores native live baseline"
+         (= (p1-test-live-count) live-before))
+  (check "callback defect still restores provider clone baseline"
+         (= (fixture-owned-live-count-internal) owned-before))
+  (expect-error "callback defect leaves borrowed handle stale" 'invalid-state
+                (lambda ()
+                  (state-dict-tensor-borrow-begin-internal state handle)))
+  (expect-error "callback defect leaves state entry stale" 'invalid-state
+                (lambda () (state-entry-path-internal entry)))
+  (check "callback defect is never retried on repeat release"
+         (state-dict-release! state)))
+
+;; Repeated trusted entry inspection may leave only inert tombstones.  Live
+;; native identities and provider-owned tensor storage return to their exact
+;; baselines on every iteration.
+(let ((live-before (p1-test-live-count))
+      (owned-before (fixture-owned-live-count-internal)))
+  (let loop ((index 0) (ok? #t))
+    (if (= index 64)
+        (check "repeated entry inspection and release restore live baselines"
+               (and ok?
+                    (= (p1-test-live-count) live-before)
+                    (= (fixture-owned-live-count-internal) owned-before)))
+        (let* ((state (module-state-dict failed-load-source))
+               (entry (car (state-dict-entries-internal state))))
+          (loop (+ index 1)
+                (and ok?
+                     (equal? (state-entry-path-internal entry) '("weight"))
+                     (state-dict-release! state)
+                     (= (p1-test-live-count) live-before)
+                     (= (fixture-owned-live-count-internal) owned-before)))))))
+
+;; Retain only stale entry shells and detached public metadata after dropping
+;; each released state. This specifically exercises Eshkol registry owner-edge
+;; compaction: every shell remains an invalid-state tombstone, detached copies
+;; stay ordinary data, and no live identity/provider carrier grows with the
+;; retained shell set.
+(let ((live-before (p1-test-live-count))
+      (owned-before (fixture-owned-live-count-internal)))
+  (let build ((index 0) (retained '()))
+    (if (= index 8)
+        (let verify ((remaining retained) (ok? #t) (count 0))
+          (if (null? remaining)
+              (check
+                "retained stale entry shells sever released state graphs"
+                (and ok? (= count 8)
+                     (= (p1-test-live-count) live-before)
+                     (= (fixture-owned-live-count-internal) owned-before)))
+              (let* ((record (car remaining))
+                     (entry (vector-ref record 0))
+                     (paths (vector-ref record 1))
+                     (aliases (vector-ref record 2))
+                     (stale?
+                       (guard (raised
+                                (#t
+                                  (and (transformer-error? raised)
+                                       (eq? (transformer-error-category raised)
+                                            'invalid-state))))
+                         (state-entry-path-internal entry)
+                         #f)))
+                (verify
+                  (cdr remaining)
+                  (and ok? stale?
+                       (equal? paths '(("weight")))
+                       (null? aliases))
+                  (+ count 1)))))
+        (let* ((state (module-state-dict failed-load-source))
+               (entry (car (state-dict-entries-internal state)))
+               (paths (state-dict-paths state))
+               (aliases (state-dict-alias-groups state)))
+          (state-dict-release! state)
+          (build (+ index 1)
+                 (cons (vector entry paths aliases) retained))))))
+
 (let* ((source (one-parameter-module '(2) 'repeat-source))
        (state (module-state-dict source))
        (destination (one-parameter-module '(2) 'repeat-destination))
        (live-before (p1-test-live-count))
-       (tombstones-before (p1-test-tombstone-count)))
+       (tombstones-before (p1-test-tombstone-count))
+       (owned-before (fixture-owned-live-count-internal)))
   (check "first strict load succeeds"
          (module-load-state-dict! destination state))
   (check "first strict load preserves live registry count"
          (= (p1-test-live-count) live-before))
   (check "first strict load preserves tombstone count"
          (= (p1-test-tombstone-count) tombstones-before))
+  (check "first strict load releases provider plan scratch"
+         (= (fixture-owned-live-count-internal) owned-before))
   (check "repeated strict load succeeds"
          (module-load-state-dict! destination state))
   (check "repeated strict load preserves live registry count"
          (= (p1-test-live-count) live-before))
   (check "repeated strict load preserves tombstone count"
-         (= (p1-test-tombstone-count) tombstones-before)))
+         (= (p1-test-tombstone-count) tombstones-before))
+  (check "repeated strict load releases provider plan scratch"
+         (= (fixture-owned-live-count-internal) owned-before)))
 
 ;; Names and every path segment share the ownership-copy v1 domain: nonempty
 ;; valid UTF-8 encoded in at most 65536 bytes. The multibyte parameter fixture
@@ -319,19 +536,16 @@
          (equal? (state-dict-alias-groups source-state)
                  (list (list tie-path parameter-path))))
   (check "exact-bound parameter, tie, and buffer state access"
-         (and (equal? (fixture-tensor-payload-internal
-                        (state-dict-tensor source-state parameter-path))
+         (and (equal? (fixture-state-payload source-state parameter-path)
                       (vector 'name-bound-source 'bits-v1))
-              (equal? (fixture-tensor-payload-internal
-                        (state-dict-tensor source-state tie-path))
+              (equal? (fixture-state-payload source-state tie-path)
                       (vector 'name-bound-source 'bits-v1))
-              (equal? (fixture-tensor-payload-internal
-                        (state-dict-tensor source-state buffer-path))
+              (equal? (fixture-state-payload source-state buffer-path)
                       (vector 'name-bound-buffer 'bits-v1))))
   (check "exact-bound strict state load succeeds"
          (module-load-state-dict! destination source-state))
-  (check "exact-bound load preserves live identities"
-         (= (p1-test-live-count) live-before))
+  (check "exact-bound load preserves live identities after cached borrows"
+         (= (p1-test-live-count) (+ live-before 3)))
   (check "exact-bound load preserves tombstones"
          (= (p1-test-tombstone-count) tombstones-before))
   (check "exact-bound load preserves destination identity and values"
@@ -348,14 +562,11 @@
                         expected-state-paths)
                 (equal? (state-dict-alias-groups destination-state)
                         (list (list tie-path parameter-path)))
-                (equal? (fixture-tensor-payload-internal
-                          (state-dict-tensor destination-state parameter-path))
+                (equal? (fixture-state-payload destination-state parameter-path)
                         (vector 'name-bound-source 'bits-v1))
-                (equal? (fixture-tensor-payload-internal
-                          (state-dict-tensor destination-state tie-path))
+                (equal? (fixture-state-payload destination-state tie-path)
                         (vector 'name-bound-source 'bits-v1))
-                (equal? (fixture-tensor-payload-internal
-                          (state-dict-tensor destination-state buffer-path))
+                (equal? (fixture-state-payload destination-state buffer-path)
                         (vector 'name-bound-buffer 'bits-v1)))))
   (check "exact-bound trusted state entry path round-trips"
          (let ((entry
@@ -509,17 +720,15 @@
               (eq? (parameter-tree-handle source-tree tie-path)
                    source-handle)))
   (check "exact-depth parameter state access"
-         (equal? (fixture-tensor-payload-internal
-                   (state-dict-tensor source-state deep-path))
+         (equal? (fixture-state-payload source-state deep-path)
                  (vector 'deep-source 'bits-v1)))
   (check "exact-depth buffer state access"
-         (equal? (fixture-tensor-payload-internal
-                   (state-dict-tensor source-state buffer-path))
+         (equal? (fixture-state-payload source-state buffer-path)
                  (vector 'deep-buffer 'bits-v1)))
   (check "exact-depth strict load succeeds"
          (module-load-state-dict! destination source-state))
-  (check "exact-depth load preserves live identities"
-         (= (p1-test-live-count) live-before))
+  (check "exact-depth load preserves live identities after cached borrows"
+         (= (p1-test-live-count) (+ live-before 2)))
   (check "exact-depth load preserves tombstones"
          (= (p1-test-tombstone-count) tombstones-before))
   (check "exact-depth load preserves handle identity"
@@ -534,14 +743,11 @@
                         (state-dict-paths source-state))
                 (equal? (state-dict-alias-groups destination-state)
                         (state-dict-alias-groups source-state))
-                (equal? (fixture-tensor-payload-internal
-                          (state-dict-tensor destination-state deep-path))
+                (equal? (fixture-state-payload destination-state deep-path)
                         (vector 'deep-source 'bits-v1))
-                (equal? (fixture-tensor-payload-internal
-                          (state-dict-tensor destination-state tie-path))
+                (equal? (fixture-state-payload destination-state tie-path)
                         (vector 'deep-source 'bits-v1))
-                (equal? (fixture-tensor-payload-internal
-                          (state-dict-tensor destination-state buffer-path))
+                (equal? (fixture-state-payload destination-state buffer-path)
                         (vector 'deep-buffer 'bits-v1)))))
   (expect-error "exact-depth successful load finalizes topology" 'invalid-state
                 (lambda ()
@@ -752,8 +958,8 @@
                 (null? (parameter-tree-paths
                          (module-parameters candidate)))))))
 
-(if (= checks 102)
+(if (= checks 169)
     (begin
-      (display "P1 registry atomicity PASS: 102 checks")
+      (display "P1 registry atomicity PASS: 169 checks")
       (newline))
     (exit 1))

@@ -1,7 +1,7 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: toolchain configure build test test-a0 test-b0 test-c1 test-d1 test-e1 test-e1b test-i1 test-i2 test-k1 test-p1 test-python-isolation test-t1 test-x1 smoke benchmark clean
+.PHONY: toolchain configure build test test-a0 test-a2 test-b0 test-c1 test-d1 test-e1 test-e1b test-i1 test-i2 test-k1 test-p1 test-python-isolation test-t1 test-x1 smoke benchmark clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -12,6 +12,7 @@ configure:
 build: configure
 	/usr/bin/bash scripts/generate-p1-roots.sh --check
 	/usr/bin/bash scripts/build.sh
+	/usr/bin/bash scripts/build-a2.sh
 	/usr/bin/bash scripts/build-p1-identity.sh
 	/usr/bin/bash scripts/build-p1-package.sh
 	/usr/bin/bash scripts/build-c1.sh
@@ -21,6 +22,7 @@ test: build
 	/usr/bin/bash scripts/test.sh
 	/usr/bin/bash scripts/check_a0_api_contract.sh
 	/usr/bin/bash scripts/test-k1.sh
+	/usr/bin/bash scripts/test-a2.sh
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
@@ -34,6 +36,9 @@ test: build
 
 test-a0: build
 	/usr/bin/bash scripts/check_a0_api_contract.sh
+
+test-a2: build
+	/usr/bin/bash scripts/test-a2.sh
 
 test-b0:
 	/usr/bin/bash scripts/test-b0.sh
