@@ -14,7 +14,12 @@
 1. Tokenizer encode/decode round-trip and deterministic vocabulary training.
    BPE evidence includes exact merge tie-breaking, admitted document-order and
    chunk-partition invariance, whole/stream rank-stage parity, all-byte fallback,
-   strict UTF-8 boundary cases, and measured exact-limit admission.
+   every strict UTF-8 split plus F0/F4 scalar boundaries, and measured exact-limit
+   admission. The decoder maximum includes both one 73,728-ID chunk and 73,728
+   one-ID omit-only chunks under count-pinned time/RSS/no-warning gates. Delivered
+   compiled parsers must reject every frozen header/payload/order invariant, and the
+   compiled D1 seam must preserve malformed/truncated/checksum corruption categories
+   while rejecting fingerprint or vocabulary mismatch.
 2. Shard corruption detection and exact loader-cursor resume.
 3. Tiny transformer forward and gradient parity against a frozen oracle fixture.
 4. One-batch overfit.
@@ -42,6 +47,10 @@
   tests.
 - Production dependency inspection proving no Python/PyTorch runtime, evaluator,
   include expansion, environment interpolation, or hidden execution fallback.
+- Successor aggregate boundary inspection proving hostile include/path isolation,
+  exact repository tuple admission, localized private/native symbols, no archive
+  index leakage, deterministic localized objects/archives/evidence/AOT binaries,
+  public-caller closure, and duplicate registry ownership rejection.
 
 ## Performance evidence
 

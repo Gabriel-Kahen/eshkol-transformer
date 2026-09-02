@@ -147,7 +147,15 @@ The focused gate admits every constructible semantic/count maximum and rejects i
 one-over case before unbounded allocation; the physical file gate separately rejects
 1,048,577 bytes. Training/stream and delivered public-runtime processes are bounded
 at 60 seconds and 524,288 KiB peak RSS; the gate also rejects the pinned runtime's
-heap-pressure warning. Other runtime probes have a 60-second timeout. These
+heap-pressure warning. Decoder push validates and sizes the complete current token
+chunk before mutating state, then allocates exactly that chunk's decoded-byte count;
+it never reserves the remaining logical-stream budget. Across successful nonempty
+output pushes this scratch is therefore at most the unchanged 65,536-byte decoded
+stream ceiling. Omit-only pushes allocate only bounded zero-length result objects,
+with their count capped by the unchanged 73,728-ID ceiling. The focused compiled
+gate exercises both one 73,728-ID chunk and the adversarial maximum partition of
+73,728 one-ID chunks under the same time, RSS, and no-warning admission budget.
+Other runtime probes have a 60-second timeout. These
 thresholds are measured evidence budgets, not
 additional hidden format or runtime limits. No GPU, alternate dtype, normalization,
 dropout, stochastic training, approximate count, scalar fallback, Python runtime, or
@@ -183,7 +191,9 @@ left than the longest learned token. Prefix specials occur only in the first log
 output. Decoder state retains at most an incomplete UTF-8 scalar in strict mode.
 Empty chunks are valid. Feed after finish, double finish, forged/wrong-kind state,
 malformed staging, out-of-range ID, and total-limit excess are explicit errors; a
-failed state cannot be resumed. Build-only cores and states are uniquely owned and
+failed state cannot be resumed. Decoder admission depends only on aggregate decoded
+bytes and token IDs, not on chunk partition. Build-only cores and states are uniquely
+owned and
 must not be mutated except through these operations; arbitrary in-place mutation of
 their private vector representation is outside the contract. Registry use is
 serialized.

@@ -258,7 +258,7 @@ class StreamingTests(unittest.TestCase):
 
     def test_strict_utf8_scalars_may_cross_stream_boundaries(self) -> None:
         core = configured("strict")
-        source = "a€U0001f642z".encode()
+        source = "a€\U0001f642z".encode()
         state = StreamEncoder(core)
         output = list(state.push(b"a\xe2"))
         # The complete ASCII byte has entered the rank-stage transducer, but a
@@ -271,6 +271,63 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(encoded, encode_bytes(core, source))
         token_chunks = tuple((token_id,) for token_id in encoded)
         self.assertEqual(self.stream_decode(core, token_chunks), source)
+
+    def test_strict_four_byte_scalar_matches_at_every_split(self) -> None:
+        core = Core(utf8_policy="strict")
+        source = "a€\U0001f642z".encode()
+        expected = encode_bytes(core, source)
+        for split in range(len(source) + 1):
+            with self.subTest(direction="encode", split=split):
+                self.assertEqual(
+                    self.stream_encode(core, (source[:split], source[split:])),
+                    expected,
+                )
+            with self.subTest(direction="decode", split=split):
+                self.assertEqual(
+                    self.stream_decode(core, (expected[:split], expected[split:])),
+                    source,
+                )
+
+    def test_strict_four_byte_utf8_boundaries(self) -> None:
+        core = Core(utf8_policy="strict")
+        valid = (
+            b"\xf0\x90\x80\x80",  # U+10000: lowest F0 scalar.
+            b"\xf4\x8f\xbf\xbf",  # U+10FFFF: highest Unicode scalar.
+        )
+        invalid = (
+            b"\xf0\x8f\xbf\xbf",  # Below U+10000: overlong F0 encoding.
+            b"\xf4\x90\x80\x80",  # Above U+10FFFF.
+        )
+        for source in valid:
+            expected = tuple(source)
+            for split in range(len(source) + 1):
+                with self.subTest(
+                    kind="valid", direction="encode", source=source, split=split
+                ):
+                    self.assertEqual(
+                        self.stream_encode(core, (source[:split], source[split:])),
+                        expected,
+                    )
+                with self.subTest(
+                    kind="valid", direction="decode", source=source, split=split
+                ):
+                    self.assertEqual(
+                        self.stream_decode(core, (expected[:split], expected[split:])),
+                        source,
+                    )
+        for source in invalid:
+            ids = tuple(source)
+            for split in range(len(source) + 1):
+                with self.subTest(
+                    kind="invalid", direction="encode", source=source, split=split
+                ):
+                    with self.assertRaisesRegex(FormatError, "invalid-argument"):
+                        self.stream_encode(core, (source[:split], source[split:]))
+                with self.subTest(
+                    kind="invalid", direction="decode", source=source, split=split
+                ):
+                    with self.assertRaisesRegex(FormatError, "invalid-argument"):
+                        self.stream_decode(core, (ids[:split], ids[split:]))
 
     def test_empty_logical_stream_gets_prefix_and_suffix_once(self) -> None:
         core = configured()

@@ -1682,46 +1682,59 @@
             "stream decoder exceeds 73728 token IDs"))
        (if (= count 0)
            (make-bytevector 0 0)
-           (let ((scratch
-                  (make-bytevector
-                   (- t2-core-max-stream-bytes (vector-ref value 2)) 0)))
-             (let decode ((index 0) (written 0))
-               (if (= index count)
-                   (let ((raw (bytevector-copy scratch 0 written)))
-                     (if (eq? (vector-ref core 1) 'strict)
-                         (let* ((combined
-                                 (t2-core-t1-concat
-                                  (list (vector-ref value 5) raw)))
-                                (split
-                                 (t2-core-strict-split
-                                  combined #f operation)))
-                           (vector-set! value 5 (vector-ref split 1))
-                           (vector-set! value 2
-                                        (+ (vector-ref value 2) written))
-                           (vector-set! value 3
-                                        (+ (vector-ref value 3) count))
-                           (vector-ref split 0))
-                         (begin
-                           (vector-set! value 2
-                                        (+ (vector-ref value 2) written))
-                           (vector-set! value 3
-                                        (+ (vector-ref value 3) count))
-                           raw)))
-                   (let* ((token-id
-                           (t2-core-t1-read-u64-le
-                            i64-le-token-chunk (* index 8)))
-                          (spelling
-                           (t2-core-token-bytes core token-id operation))
-                          (next
-                           (+ written
-                              (if spelling (bytevector-length spelling) 0))))
-                     (if (> next (bytevector-length scratch))
-                         (t2-core-local-fail
-                          'invalid-argument operation
-                          "stream decoder exceeds 65536 decoded bytes"))
-                     (if spelling
-                         (t2-core-t1-copy-into! scratch written spelling))
-                     (decode (+ index 1) next))))))))))
+           (let size ((index 0) (written 0))
+             (if (= index count)
+                 (let ((scratch (make-bytevector written 0)))
+                   (let decode ((position 0) (offset 0))
+                     (if (= position count)
+                         (if (eq? (vector-ref core 1) 'strict)
+                             (let* ((combined
+                                     (t2-core-t1-concat
+                                      (list (vector-ref value 5) scratch)))
+                                    (split
+                                     (t2-core-strict-split
+                                      combined #f operation)))
+                               (vector-set! value 5 (vector-ref split 1))
+                               (vector-set! value 2
+                                            (+ (vector-ref value 2) written))
+                               (vector-set! value 3
+                                            (+ (vector-ref value 3) count))
+                               (vector-ref split 0))
+                             (begin
+                               (vector-set! value 2
+                                            (+ (vector-ref value 2) written))
+                               (vector-set! value 3
+                                            (+ (vector-ref value 3) count))
+                               scratch))
+                         (let* ((token-id
+                                 (t2-core-t1-read-u64-le
+                                  i64-le-token-chunk (* position 8)))
+                                (spelling
+                                 (t2-core-token-bytes
+                                  core token-id operation)))
+                           (if spelling
+                               (t2-core-t1-copy-into!
+                                scratch offset spelling))
+                           (decode
+                            (+ position 1)
+                            (+ offset
+                               (if spelling
+                                   (bytevector-length spelling) 0)))))))
+                 (let* ((token-id
+                         (t2-core-t1-read-u64-le
+                          i64-le-token-chunk (* index 8)))
+                        (spelling
+                         (t2-core-token-bytes core token-id operation))
+                        (next
+                         (+ written
+                            (if spelling (bytevector-length spelling) 0))))
+                   (if (> next
+                          (- t2-core-max-stream-bytes
+                             (vector-ref value 2)))
+                       (t2-core-local-fail
+                        'invalid-argument operation
+                        "stream decoder exceeds 65536 decoded bytes"))
+                   (size (+ index 1) next)))))))))
 
 (define (t2-stream-decoder-finish! state)
   (let* ((operation 't2-stream-decoder-finish!)

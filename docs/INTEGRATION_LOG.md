@@ -936,13 +936,34 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   Eshkol trainer, rank-stage whole/stream runtime, strict/raw policy, D1 bridge,
   unchanged 46-global production aggregate, 47-global test-only aggregate, frozen
   Python oracle, deterministic fixture generators, exact-limit/adversarial AOTs,
-  and production-oracle isolation gates are checked in for review. Local compiled
-  evidence includes 91 training/stream checks, 6 core checks, 17 delivered-public
-  checks, 6 D1-runtime checks, and 23 Python oracle tests. Two fresh-cache maximum
-  training/stream runs measured 146,640 and 144,684 KiB peak RSS; two public-runtime
-  runs measured 9,728 and 8,348 KiB, all below 524,288 KiB without a heap warning.
-  The focused gate passed; the complete post-review full rerun, supported Ubuntu 22.04 /
-  LLVM-Clang 21.1.8 CI, and an unmerged PR remain required. T2 stays no
+  and production-oracle isolation gates are checked in for review. After the
+  independent T2-R request-changes review, decoder push now validates and sizes its
+  current chunk before state mutation and allocates exactly the current decoded-byte
+  count rather than the remaining 65,536-byte budget. The compiled gate exercises
+  the exact maximum partition of 73,728 one-ID omit chunks and the single-chunk
+  equivalent. Compiled public AOT coverage now includes 22 frozen parser rejection
+  checks and four D1 seam negatives; malformed, truncated, and checksum-corrupt D1
+  shards retain `corrupt-data/token-corpus-validate`, while vocabulary-only mismatch
+  is `invalid-argument/t2-token-corpus-read`. Strict UTF-8 evidence uses a real
+  four-byte scalar at every split and pins F0/F4 lower/upper boundary cases.
+
+  Local compiled evidence includes 91 training/stream checks, 6 core checks, 17
+  delivered-public checks, 6 D1-runtime checks, 22 parser negatives, 4 D1 negatives,
+  60 UTF-8 split/boundary checks, and 25 Python oracle tests. Two fresh-cache
+  training/stream runs measured 142,816 and 142,932 KiB peak RSS; the 73,728 one-ID
+  decoder runs measured 10,632 and 10,580 KiB; UTF-8 runs measured 9,144 and 8,564
+  KiB; two public-runtime runs measured 54,984 and 7,832 KiB; the parser-negative,
+  D1 setup, and D1-negative runs measured 57,256, 10,352, and 9,368 KiB. Every
+  bounded process completed within 60 seconds, below 524,288 KiB, with no
+  heap-pressure warning. The T2-specific boundary suite independently retained and
+  byte-compared two localized production and D1-test objects, archives, evidence
+  directories, and public-caller AOT binaries; it proved the exact 46/40 and 47/41
+  surfaces, hostile-path/tuple rejection, private/native localization and archive
+  index closure, crafted-link isolation, public depfile/string closure, and the
+  Wave1+Wave2 duplicate-E1 rejection. Its standalone compatibility run completed in
+  about 12m51s. The complete focused gate passed against current main. Supported
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI, exact-head T2-R rereview, and the unmerged PR
+  remain required. T2 stays no
   further than `review` until independent acceptance, merge, merged-main retest, and
   acceptance-document follow-up.
 - **Dependencies / retest:** any accepted change to the aggregate source closure or
@@ -956,7 +977,8 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   owned trusted-build values and are not safe for arbitrary representation mutation;
   registry operations are serialized.
 - **Reference:** [issue #43](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/43);
-  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [T2-R request changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/54#issuecomment-5514480850).
 ## 2026-08-31 — A2 / issue #45
 
 - **Decision:** accepted for implementation with required cache-view corrections in

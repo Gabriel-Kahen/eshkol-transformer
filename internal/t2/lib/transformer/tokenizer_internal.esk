@@ -67,6 +67,9 @@
      (t2-private-raise
       (t1-core-error-category caught) operation
       (t1-core-error-message caught)))
+    ;; D1 validation already raises a registered E1 structured error. Preserve
+    ;; that category and operation through the private T2 composition seam.
+    ((transformer-error? caught) (raise caught))
     (else
      (t2-private-raise 'internal operation
                        "unexpected tokenizer core failure")))

@@ -1,0 +1,65 @@
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard
+   (caught
+    (#t (and (transformer-error? caught)
+             (eq? (transformer-error-category caught) category)
+             (eq? (transformer-error-operation caught) operation))))
+   (thunk)
+   #f))
+
+(define directory (car (cdr (command-line))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+
+(define (fixture name)
+  (string-append directory "/" name))
+
+(define (reject name category)
+  (check name
+         (structured-error?
+          category 'tokenizer-load
+          (lambda () (tokenizer-load (fixture name) policy)))))
+
+(reject "trailing-byte.tsv" 'corrupt-data)
+(reject "extra-lf.tsv" 'corrupt-data)
+(reject "duplicate-merge-pair.tsv" 'corrupt-data)
+(reject "out-of-order-special.tsv" 'corrupt-data)
+(reject "out-of-order-prefix.tsv" 'corrupt-data)
+(reject "out-of-order-suffix.tsv" 'corrupt-data)
+(reject "required-feature.tsv" 'unsupported)
+(reject "unsupported-major.tsv" 'version-mismatch)
+(reject "unsupported-minor.tsv" 'version-mismatch)
+(reject "altered-limit-file-bytes.tsv" 'corrupt-data)
+(reject "altered-limit-merges.tsv" 'corrupt-data)
+(reject "altered-limit-token-bytes.tsv" 'corrupt-data)
+(reject "altered-limit-specials.tsv" 'corrupt-data)
+(reject "altered-limit-name-bytes.tsv" 'corrupt-data)
+(reject "altered-limit-prefix.tsv" 'corrupt-data)
+(reject "altered-limit-suffix.tsv" 'corrupt-data)
+(reject "altered-payload-size-short.tsv" 'corrupt-data)
+(reject "altered-payload-size-long.tsv" 'corrupt-data)
+(reject "malformed-name.tsv" 'corrupt-data)
+(reject "malformed-special-policy.tsv" 'corrupt-data)
+(reject "malformed-utf8-policy.tsv" 'corrupt-data)
+(reject "learned-token-overflow.tsv" 'corrupt-data)
+
+(if (= failed 0)
+    (begin
+      (display "T2 PARSER NEGATIVES PASS: ")
+      (display passed)
+      (display " compiled rejection checks")
+      (newline))
+    (exit 1))
