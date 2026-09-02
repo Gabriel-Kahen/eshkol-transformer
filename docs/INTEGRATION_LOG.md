@@ -886,20 +886,24 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 ## 2026-09-01 — O2 / issue #46
 
 - **Decision:** optimizer-state lifecycle is accepted with conditions in integration
-  comment 5493412398; broader O2 runtime remains blocked on the binding P1L issue #51
-  to I2 issue #49 dependency chain. No carrier/native ABI, provider identifier,
-  archive topology, or serialized optimizer bytes are frozen.
+  comment 5493412398. P1L issue #51 was independently approved and merged into main
+  as `b72b9fa58042304a71e801415e53f280262edae2`; I2 issue #49 has resumed integration
+  of the accepted provider-2.0/lifetime contract and remains the binding prerequisite
+  for the broader O2 runtime. This O2 branch has not rebased onto or integrated P1L.
+  No O2 carrier/native ABI, concrete provider identifier, archive topology, or
+  serialized optimizer bytes are frozen.
 - **Contract:** The existing five A0 optimizer names and arities remain preserved.
   Because P1L state-dictionary release authority is intentionally not generic, O2
   adds the accepted arity-1 `optimizer-state-release!` operation for its own opaque
   moment-snapshot owner in the later post-P1L/I2 runtime PR. The fixed private release
-  wrapper is same-aggregate and statically gated by the exact accepted I2 provider
-  identity plus O2 ownership-ledger entry; it grants no generic or P1/live-optimizer
-  authority. O2 does not change X1 schema 1.0; `optimizer-create` accepts
-  the strict O2-specific data-only `transformer-optimizer-config` 1.0 logical value
-  documented in [O2_OPTIMIZER.md](O2_OPTIMIZER.md). Version 1 admits AdamW on dense CPU f32,
-  complete canonical P1 parameter groups, optional global L2 clipping, and constant
-  or successful-update-indexed linear warmup/decay. I2 owns stable P1-handle-bound
+  wrapper is same-aggregate and statically gated by the future exact I2 provider
+  identity established by independent review and merge together with the exact O2
+  ownership-ledger entry; it grants no generic or P1/live-optimizer authority. O2
+  does not change X1 schema 1.0; `optimizer-create` accepts the strict O2-specific data-only
+  `transformer-optimizer-config` 1.0 logical value documented in
+  [O2_OPTIMIZER.md](O2_OPTIMIZER.md). Version 1 admits AdamW on dense CPU f32, complete
+  canonical P1 parameter groups, optional global L2 clipping, and constant or
+  successful-update-indexed linear warmup/decay. I2 owns stable P1-handle-bound
   value/gradient storage, explicit accumulated-contribution state, exact zeroing,
   finite inspection, detached tensor copies, and whole-batch preflight/infallible
   commit. The caller/TR3 decides when to step. Token ingress and token-based
@@ -919,9 +923,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `2bff5394bb2495d011f48192ab6fc2decccbad902ce426af79631e568208e3fb`.
   The Q0 format/numerics/isolation plus O2 reference suite passes 25 tests. This is
   frozen development-reference evidence, not runtime capability evidence.
-- **Dependencies / retest:** P1L and then I2 must be independently approved and
-  merged before O2 freezes a carrier boundary, implements the public runtime, opens
-  a review-ready PR, or changes ROADMAP status. O2 must then repeat I2/P1 ownership,
+- **Dependencies / retest:** P1L is merged, but that merge grants no O2 implementation
+  or generic release authority. I2 must still be independently approved and merged
+  before O2 rebases, freezes a carrier boundary, implements the public runtime
+  (including `optimizer-state-release!`), opens a review-ready PR, or changes ROADMAP
+  status. After I2 merges, O2 must inspect the compiled Eshkol tensor, mutation, and
+  autodiff behavior and coordinate any deviation on issue #1 before freezing the
+  runtime seam. O2 must then repeat I2/P1 ownership,
   alias, gradient, zeroing, atomic-commit, state-continuation, packaging, sanitizer,
   Python-isolation,
   focused/full, and supported Ubuntu 22.04 / LLVM-Clang 21.1.8 gates. Integration
@@ -950,4 +958,6 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [accepted lifecycle verdict](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398);
   [O2/I2 shared-seam disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493456203);
   [dead-state category proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924);
-  [accepted dead-state taxonomy](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493574404).
+  [accepted dead-state taxonomy](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493574404);
+  [P1L PR #55](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55);
+  P1L merge commit `b72b9fa58042304a71e801415e53f280262edae2`.

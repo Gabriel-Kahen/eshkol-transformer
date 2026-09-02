@@ -3,10 +3,12 @@
 ## Status and dependency boundary
 
 This is a pre-implementation proposal for O2. It freezes no native ABI, provider
-identifier, archive topology, or serialized bytes. The binding dependency chain is
-P1L (issue #51) to I2 (issue #49) to O2. A production optimizer and review-ready O2
-pull request remain blocked until both prerequisites are independently approved and
-merged in order.
+identifier, archive topology, or serialized bytes. P1L (issue #51) was independently
+approved and merged as `b72b9fa58042304a71e801415e53f280262edae2`. I2 issue #49
+is integrating that accepted provider-2.0/lifetime contract, and remains the
+binding prerequisite for O2. A production optimizer and review-ready O2 pull request
+remain blocked until I2 is independently approved and merged. This O2 branch has not
+rebased onto or integrated P1L.
 
 The accepted O2 public optimizer surface preserves the five existing A0 names and
 adds one exact arity-1 lifecycle operation when the post-P1L/I2 runtime is
@@ -24,8 +26,8 @@ implemented:
 Integration accepted `optimizer-state-release!` with conditions in
 [issue #1 comment 5493412398](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398).
 This accepts the logical public name, arity, ownership, and error contract only. It
-does not freeze a runtime/private ABI or authorize implementation before P1L and I2
-merge.
+does not freeze a runtime/private ABI or authorize implementation before I2 is
+independently approved and merged.
 
 O2 does not change X1 schema 1.0. The `config` argument is the O2-specific data-only
 logical value below. I2 owns the physical dense CPU f32 carrier, stable P1-handle
@@ -242,15 +244,16 @@ acquire O2 state-borrow authority, resolve non-owning moment handles synchronous
 end every I2/K1 borrow in a guaranteed tail, and retain no raw storage or carrier.
 
 Release validates the exact registered O2 receiver, complete ownership ledger,
-liveness, exact accepted I2 provider identity, serialization/nonreentrancy, and zero
-active borrows before mutation. It then atomically closes all state/handle resolution
-by entering an internal releasing state before the first callback. The fixed
-provider-2.0 exact-once tail is nonallocating/nonraising; it publishes dead only after
-all moment clones are released. There is no recoverable rollback after cleanup
-starts. Repeating release on that exact registered dead token is an idempotent no-op;
-other copied, forged, cross-owner, cross-aggregate, or stale tokens reject. Releasing
-a snapshot must not change live optimizer moments, parameters, gradients, counters,
-configuration, P1 state dictionaries, or another clone.
+liveness, serialization/nonreentrancy, zero active borrows, and the future exact I2
+provider identity established by independent review and merge before mutation. It then
+atomically closes all state/handle resolution by entering an internal releasing state
+before the first callback. The fixed provider-2.0 exact-once tail is
+nonallocating/nonraising; it publishes dead only after all moment clones are released.
+There is no recoverable rollback after cleanup starts. Repeating release on that exact
+registered dead token is an idempotent no-op; other copied, forged, cross-owner,
+cross-aggregate, or stale tokens reject. Releasing a snapshot must not change live
+optimizer moments, parameters, gradients, counters, configuration, P1 state
+dictionaries, or another clone.
 
 Each optimizer-state-backed moment handle is tied to its exact owner state,
 entry/canonical path, and provider. Trusted resolution validates handle kind,
@@ -262,11 +265,13 @@ P1 `state-dict-release!`, P1 state tokens, and P1 state-backed handles remain
 P1-specific and grant no O2 release authority. Process-lifetime tensor retention,
 hidden finalizers, equality-triggered freeing, generic release dispatch, and a
 second registry are forbidden. The only admitted release seam is a fixed O2-specific
-private wrapper in the single trusted aggregate, statically bound to the exact
-accepted I2 provider identity and exact O2 ownership-ledger entry. It exposes no
-callback token and accepts no caller-selected provider, P1 state, live optimizer
-moment, parameter, or gradient. No private symbol, token code, request layout, or
-structure ABI is frozen before merged P1L/I2 provide the concrete substrate.
+private wrapper in the single trusted aggregate, statically bound to the future exact
+I2 provider identity established by independent review and merge and the exact O2
+ownership-ledger entry. It exposes no callback token and accepts no caller-selected
+provider, P1 state, live optimizer moment, parameter, or gradient. No private symbol,
+token code, request layout, or structure ABI is frozen by this document; those
+decisions require independently approved and merged I2, compiled-path probes, and
+issue #1 coordination.
 
 Parameter values are P1 model state and never occur in optimizer state. Schedule
 values are derived rather than redundantly stored. The logical state contains no
