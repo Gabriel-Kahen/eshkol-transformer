@@ -1,4 +1,5 @@
 #define ET_P1_PRIVATE_API 1
+#define ET_P1_TEST_HOOKS 1
 #include "p1_identity_internal.h"
 
 #include <errno.h>
@@ -61,6 +62,10 @@ static int64_t tombstone_count(void *context) {
 int main(void) {
   void *context = et_p1_private_context_create_v1();
   void *provider;
+  void *release_callback;
+  void *state;
+  void *state_entry;
+  void *state_tensor;
   void *created_callbacks[7];
   int created = 0;
   int64_t baseline;
@@ -192,6 +197,125 @@ int main(void) {
   tombstones += 4;
   check(tombstone_count(context) == tombstones,
         "partial cleanup identities remain permanent tombstones");
+
+  check(et_p1_private_provider_create_v1(context, "release-nonalloc", 16) ==
+            ET_P1_STATUS_OK,
+        "release-nonallocation provider identity is created");
+  provider = et_p1_private_result_ptr_v1(context);
+  for (created = 0; created < 7; created++) {
+    check(et_p1_private_callback_identity_create_v1(context) ==
+              ET_P1_STATUS_OK,
+          "release-nonallocation callback identity is created");
+    created_callbacks[created] = et_p1_private_result_ptr_v1(context);
+  }
+  check(et_p1_private_callback_identity_create_v1(context) ==
+            ET_P1_STATUS_OK,
+        "release-nonallocation release callback identity is created");
+  release_callback = et_p1_private_result_ptr_v1(context);
+  check(et_p1_private_provider_seal_release_v1(
+            context, provider, created_callbacks[0], created_callbacks[1],
+            created_callbacks[2], created_callbacks[3], created_callbacks[4],
+            created_callbacks[5], created_callbacks[6], release_callback) ==
+            ET_P1_STATUS_OK,
+        "release-nonallocation provider snapshot seals");
+  check(et_p1_private_state_dict_create_v1(context) == ET_P1_STATUS_OK,
+        "release-nonallocation state identity is created");
+  state = et_p1_private_result_ptr_v1(context);
+  baseline = live_count(context);
+  tombstones = tombstone_count(context);
+  fail_calloc_after = 0;
+  check(et_p1_private_state_entry_create_for_state_v1(context, state) ==
+            ET_P1_STATUS_INTERNAL,
+        "state-bound entry token allocation failure is explicit");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_ALLOCATION_FAILED,
+        "state-bound entry token allocation failure has exact status data");
+  check(live_count(context) == baseline,
+        "state-bound entry token allocation failure preserves live count");
+  check(tombstone_count(context) == tombstones,
+        "state-bound entry token allocation failure creates no tombstone");
+  fail_calloc_after = 1;
+  check(et_p1_private_state_entry_create_for_state_v1(context, state) ==
+            ET_P1_STATUS_INTERNAL,
+        "state-bound entry record allocation failure is explicit");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_ALLOCATION_FAILED,
+        "state-bound entry record allocation failure has exact status data");
+  check(live_count(context) == baseline,
+        "state-bound entry record allocation failure preserves live count");
+  check(tombstone_count(context) == tombstones,
+        "state-bound entry record allocation failure creates no tombstone");
+  check(et_p1_private_state_entry_create_for_state_v1(context, state) ==
+            ET_P1_STATUS_OK,
+        "pre-bind state entry identity is created");
+  state_entry = et_p1_private_result_ptr_v1(context);
+  baseline = live_count(context);
+  tombstones = tombstone_count(context);
+  check(et_p1_test_state_bind_fail_next_v1() == ET_P1_STATUS_OK,
+        "state-bind failure is armed");
+  check(et_p1_private_state_bind_v1(context, state, provider) ==
+            ET_P1_STATUS_INTERNAL,
+        "injected state-bind failure is explicit");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_ALLOCATION_FAILED,
+        "injected state-bind failure has exact status data");
+  check(et_p1_public_token_live_v1(state_entry) == 1,
+        "failed state bind preserves its bound construction entry");
+  check(et_p1_private_state_provider_v1(context, state) ==
+            ET_P1_STATUS_UNSUPPORTED,
+        "failed state bind leaves the state unbound");
+  check(live_count(context) == baseline,
+        "failed state bind changes no dependent liveness");
+  check(tombstone_count(context) == tombstones,
+        "failed state bind creates no dependent tombstone");
+  check(et_p1_private_state_bind_v1(context, state, provider) ==
+            ET_P1_STATUS_OK,
+        "release-nonallocation state bind retries");
+  check(et_p1_public_token_live_v1(state_entry) == 0,
+        "successful retry revokes the pre-bind state entry");
+  check(live_count(context) == baseline - 1,
+        "successful retry removes the exact pre-bind entry count");
+  check(tombstone_count(context) == tombstones + 1,
+        "successful retry creates one state-entry tombstone");
+  check(et_p1_private_state_tensor_create_v1(context, state) ==
+            ET_P1_STATUS_OK,
+        "release-nonallocation state tensor identity is created");
+  state_tensor = et_p1_private_result_ptr_v1(context);
+  check(et_p1_public_token_live_v1(state_tensor) == 1,
+        "release-nonallocation state tensor starts live");
+  baseline = live_count(context);
+  tombstones = tombstone_count(context);
+  fail_calloc_after = 0;
+  check(et_p1_private_state_release_begin_v1(context, state) ==
+            ET_P1_STATUS_OK,
+        "first state release succeeds with allocation failure armed");
+  check(et_p1_private_result_i64_v1(context) == 1,
+        "first state release reports its live transition");
+  check(live_count(context) == baseline - 2,
+        "first state release removes state and dependent handle");
+  check(tombstone_count(context) == tombstones + 2,
+        "first state release creates exact state and handle tombstones");
+  check(et_p1_private_state_release_begin_v1(context, state) ==
+            ET_P1_STATUS_OK,
+        "repeated state release succeeds with allocation failure armed");
+  check(et_p1_private_result_i64_v1(context) == 0,
+        "repeated state release reports no transition");
+  check(live_count(context) == baseline - 2,
+        "repeated state release changes no token liveness");
+  check(tombstone_count(context) == tombstones + 2,
+        "repeated state release changes no tombstone count");
+  check(et_p1_private_provider_create_v1(context, "consume-failpoint", 17) ==
+            ET_P1_STATUS_INTERNAL,
+        "state release leaves the allocation failpoint armed");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_ALLOCATION_FAILED,
+        "post-release allocation failure has exact status data");
+  check(et_p1_private_result_ptr_v1(context) == NULL,
+        "post-release allocation failure publishes no identity");
+  check(live_count(context) == baseline - 2,
+        "post-release allocation failure preserves the live count");
+  check(tombstone_count(context) == tombstones + 2,
+        "post-release allocation failure preserves tombstones");
 
   (void)printf("P1 failpoint PASS: %d checks\n", checks);
   return 0;

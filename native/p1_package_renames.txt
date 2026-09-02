@@ -15,3 +15,4 @@ parameter-handle-device et_e1b_private_p1_parameter_handle_device_cabi_v1
 state-dict-paths et_e1b_private_p1_state_dict_paths_cabi_v1
 state-dict-tensor et_e1b_private_p1_state_dict_tensor_cabi_v1
 state-dict-alias-groups et_e1b_private_p1_state_dict_alias_groups_cabi_v1
+state-dict-release! et_e1b_private_p1_state_dict_release_cabi_v1

@@ -1,4 +1,4 @@
 (require transformer.module)
 
-;;; module-state-dict requires exactly one module receiver.
-(module-state-dict)
+;;; state-dict-release! requires exactly one state receiver.
+(state-dict-release!)

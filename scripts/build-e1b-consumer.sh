@@ -39,6 +39,7 @@ p1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/p1_package_bridge.c")"
 p1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/p1_package_renames.txt")"
 p1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/p1_package_public_exports.txt")"
 p1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/p1_package_undefined_symbols.txt")"
+p1_public_strings="$(realpath -- "${PROJECT_ROOT}/native/p1_package_public_strings.txt")"
 d1_private_root="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_private.esk")"
 d1_fault_private_root="$(realpath -- "${PROJECT_ROOT}/tests/d1/d1_e1b_fault_root.esk")"
 d1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/d1_e1b_package_bridge.c")"
@@ -53,6 +54,7 @@ t1_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_package_bridge
 t1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_private_renames.txt")"
 t1_public_exports="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_public_exports.txt")"
 t1_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_undefined_symbols.txt")"
+t1_public_strings="$(realpath -- "${PROJECT_ROOT}/native/t1_wave1_public_strings.txt")"
 t1_include_p1="$(realpath -- "${PROJECT_ROOT}/internal/p1/lib")"
 t1_include_c1="$(realpath -- "${PROJECT_ROOT}/internal/c1/lib")"
 t1_include_t1="$(realpath -- "${PROJECT_ROOT}/internal/t1/lib")"
@@ -74,6 +76,7 @@ package_policy=
 package_native_source=
 package_native_sources=()
 package_native_define=
+package_public_strings=
 if [[ "${private_root}" == "${t2_d1_test_private_root}" ]]; then
     [[ "${package_bridge}" == "${t2_d1_test_package_bridge}" ]] || \
       die "T2 D1 test aggregate policy requires the exact repository bridge"
@@ -135,6 +138,7 @@ elif [[ "${private_root}" == "${t1_private_root}" ]]; then
       die "T1 aggregate policy requires exact ordered trusted include roots"
     package_policy=t1-wave1-aggregate
     undefined_symbols="${t1_undefined_symbols}"
+    package_public_strings="${t1_public_strings}"
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
       "${PROJECT_ROOT}/native/checkpoint_io.c"
@@ -186,6 +190,7 @@ elif [[ "${private_root}" == "${p1_private_root}" ]]; then
     die "P1 wider undefined-symbol policy requires the exact reviewed input tuple"
   package_policy=p1
   undefined_symbols="${p1_undefined_symbols}"
+  package_public_strings="${p1_public_strings}"
 else
   p1_tuple_matches=0
   [[ "${package_bridge}" == "${p1_package_bridge}" ]] && \
@@ -294,7 +299,8 @@ cmp -s "${public_exports}" "${e1b_tmp}/package-exports.txt" || \
 } | LC_ALL=C sort -u >"${e1b_tmp}/expected-global-defined.txt"
 
 run_compiler() {
-  env -u ESHKOL_PATH \
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+    ESHKOL_JIT_CACHE=0 \
     XDG_CACHE_HOME="${e1b_tmp}/cache" \
     ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
     ESHKOL_CXX_COMPILER="${e1b_cxx}" \
@@ -494,6 +500,14 @@ cp "${e1b_tmp}/expected-undefined.txt" \
   printf 'cxx_version\t%s\n' "$(tsv_value "${e1b_provenance}" cxx_version)"
 } >"${evidence_dir}.tmp.$$/allowlist-provenance.tsv"
 strings "${e1b_tmp}/combined.o" >"${evidence_dir}.tmp.$$/strings.txt"
+LC_ALL=C grep -E '^et_e1b_(error|public)_[a-z0-9_]+_v1$' \
+  "${evidence_dir}.tmp.$$/strings.txt" | LC_ALL=C sort -u \
+  >"${evidence_dir}.tmp.$$/public-strings.txt"
+if [[ -n "${package_public_strings}" ]]; then
+  cmp -s "${package_public_strings}" \
+    "${evidence_dir}.tmp.$$/public-strings.txt" || \
+    die "${package_policy} object differs from its exact public string manifest"
+fi
 cp "${e1b_tmp}/combined.o" "${temporary_output}"
 rm -rf -- "${evidence_dir}"
 mv "${evidence_dir}.tmp.$$" "${evidence_dir}"
