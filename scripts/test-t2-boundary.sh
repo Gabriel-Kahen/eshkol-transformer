@@ -107,14 +107,14 @@ d1_object="${d1_one}/wave2-d1-test.o"
 d1_archive="${d1_one}/libeshkol_transformer_wave2_d1_test.a"
 d1_evidence="${d1_object}.evidence"
 
-[[ "$(wc -l <"${production_evidence}/global-defined.txt")" == 46 ]] || \
-  die "Wave 2 production aggregate must expose exactly 46 globals"
-[[ "$(wc -l <"${production_evidence}/package-exports.txt")" == 40 ]] || \
-  die "Wave 2 production package must expose exactly 40 wrappers"
-[[ "$(wc -l <"${d1_evidence}/global-defined.txt")" == 47 ]] || \
-  die "Wave 2 D1 test aggregate must expose exactly 47 globals"
-[[ "$(wc -l <"${d1_evidence}/package-exports.txt")" == 41 ]] || \
-  die "Wave 2 D1 test package must expose exactly 41 wrappers"
+[[ "$(wc -l <"${production_evidence}/global-defined.txt")" == 47 ]] || \
+  die "Wave 2 production aggregate must expose exactly 47 globals"
+[[ "$(wc -l <"${production_evidence}/package-exports.txt")" == 41 ]] || \
+  die "Wave 2 production package must expose exactly 41 wrappers"
+[[ "$(wc -l <"${d1_evidence}/global-defined.txt")" == 48 ]] || \
+  die "Wave 2 D1 test aggregate must expose exactly 48 globals"
+[[ "$(wc -l <"${d1_evidence}/package-exports.txt")" == 42 ]] || \
+  die "Wave 2 D1 test package must expose exactly 42 wrappers"
 cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
   "${production_evidence}/global-defined.txt"
 cmp "${PROJECT_ROOT}/native/t2_wave2_public_exports.txt" \
@@ -123,6 +123,10 @@ cmp "${PROJECT_ROOT}/native/t2_wave2_d1_test_defined_symbols.txt" \
   "${d1_evidence}/global-defined.txt"
 cmp "${PROJECT_ROOT}/native/t2_wave2_d1_test_public_exports.txt" \
   "${d1_evidence}/package-exports.txt"
+cmp "${PROJECT_ROOT}/native/t1_wave1_public_strings.txt" \
+  "${production_evidence}/public-strings.txt"
+cmp "${PROJECT_ROOT}/native/t2_wave2_d1_test_public_strings.txt" \
+  "${d1_evidence}/public-strings.txt"
 [[ "$(ar t "${production_archive}")" == wave2.o ]] || \
   die "Wave 2 archive must contain exactly its once-localized aggregate"
 [[ "$(ar t "${d1_archive}")" == wave2-d1-test.o ]] || \
@@ -164,7 +168,12 @@ check_localized_archive() {
   done
   for native_symbol in et_t1_i64_shell_create_v1 et_i64_tensor_create_v1 \
       et_checkpoint_io_atomic_write_v1 et_d1_checked_write_new_v1 \
-      et_p1_private_context_create_v1; do
+      et_p1_private_context_create_v1 et_p1_private_provider_create_v1 \
+      et_p1_private_provider_seal_release_v1 \
+      et_p1_private_provider_snapshot_matches_release_v1 \
+      et_p1_private_state_release_begin_v1 \
+      et_p1_private_state_tensor_create_v1 \
+      et_p1_private_state_tensor_validate_v1; do
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${native_symbol}$" \
       "${evidence}/readelf-symbols.txt" >/dev/null || \
       die "Wave 2 native definition is not local: ${native_symbol}"
@@ -261,7 +270,8 @@ run_compiler() {
   local cache_name=$1
   shift
   mkdir -p "${t2_boundary_tmp}/cache/${cache_name}"
-  env -u ESHKOL_PATH \
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+    ESHKOL_JIT_CACHE=0 \
     XDG_CACHE_HOME="${t2_boundary_tmp}/cache/${cache_name}" \
     ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
     ESHKOL_CXX_COMPILER="${t2_boundary_cxx}" \
@@ -274,9 +284,14 @@ private_source_bindings=(
   t2-bpe-train-core t2-stream-encoder-open t2-stream-decoder-push!
   t2-token-corpus-read-i64-le t2-test-token-corpus-read
   et-e1b-private-t2-test-token-corpus-read-cabi-v1
+  state-dict-tensor-borrow-begin-internal
+  state-dict-tensor-borrow-end-internal
+  tensor-provider-preflight-internal
+  tensor-provider-release-owned-internal!
+  state-dict-adopt-owned-internal!
 )
 for private_binding in "${private_source_bindings[@]}"; do
-  if run_compiler private-binding-negatives \
+  if run_compiler "private-binding-${private_binding}" \
       --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
       -L "${production_one}" --lib eshkol_transformer_wave2 \
       -e "(begin (require transformer.tokenizer) ${private_binding})" \
@@ -294,7 +309,12 @@ guessed_symbols=(
   et_e1b_private_t2_test_token_corpus_read_cabi_v1
   et_t1_i64_shell_create_v1 et_i64_tensor_create_v1
   et_checkpoint_io_atomic_write_v1 et_d1_checked_write_new_v1
-  et_p1_private_context_create_v1
+  et_p1_private_context_create_v1 et_p1_private_provider_create_v1
+  et_p1_private_provider_seal_release_v1
+  et_p1_private_provider_snapshot_matches_release_v1
+  et_p1_private_state_release_begin_v1
+  et_p1_private_state_tensor_create_v1
+  et_p1_private_state_tensor_validate_v1
 )
 for guessed_symbol in "${guessed_symbols[@]}"; do
   guessed_object="${t2_boundary_tmp}/native-${guessed_symbol}.o"
@@ -339,6 +359,22 @@ cmp "${t2_boundary_tmp}/caller-1.stdout" \
   "${t2_boundary_tmp}/caller-2.stdout"
 grep -Fx 't1-import-reverse:v1' \
   "${t2_boundary_tmp}/caller-1.stdout" >/dev/null
+canonicalize_public_depfile() {
+  local depfile=$1 output=$2
+  sed -e 's/^[^:]*://' -e 's/\\//g' "${depfile}" | \
+    tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+    sed "s#^${PROJECT_ROOT}/##" >"${output}"
+}
+canonicalize_public_depfile "${t2_boundary_tmp}/caller-1.d" \
+  "${t2_boundary_tmp}/public-source-closure.txt"
+canonicalize_public_depfile "${t2_boundary_tmp}/caller-2.d" \
+  "${t2_boundary_tmp}/public-source-closure-repeat.txt"
+cmp "${t2_boundary_tmp}/public-source-closure.txt" \
+  "${t2_boundary_tmp}/public-source-closure-repeat.txt" || \
+  die "Wave 2 public caller depfile closure is not byte-deterministic"
+cmp "${PROJECT_ROOT}/native/t1_wave1_public_source_closure.txt" \
+  "${t2_boundary_tmp}/public-source-closure.txt" || \
+  die "Wave 2 public caller source closure drifted"
 for public_source in config data error_consumer error_public module \
     persistence tokenizer; do
   grep -F "lib/transformer/${public_source}.esk" \
@@ -353,6 +389,16 @@ if strings -a "${t2_boundary_tmp}/caller-1.o" | \
     grep -E 't2-private-|t2-wave2-|t2-bpe-|t2-stream-|t2-token-corpus-read|et-e1b-private|et_e1b_private' >/dev/null; then
   die "Wave 2 public caller contains a private source binding"
 fi
+for private_marker in state-dict-tensor-borrow-begin-internal \
+    state-dict-tensor-borrow-end-internal \
+    tensor-provider-preflight-internal \
+    tensor-provider-release-owned-internal! \
+    state-dict-adopt-owned-internal!; do
+  if strings -a "${t2_boundary_tmp}/caller-1.o" | \
+      grep -F "${private_marker}" >/dev/null; then
+    die "Wave 2 public caller contains private binding ${private_marker}"
+  fi
+done
 nm -u --format=posix "${t2_boundary_tmp}/caller-1.o" | \
   awk '{ print $1 }' | grep '^et_e1b_' | LC_ALL=C sort -u \
   >"${t2_boundary_tmp}/caller-wrapper-refs.txt"
@@ -379,4 +425,4 @@ grep -E 'multiple definition.*et_e1b_error_(predicate|category)_v1' \
   "${t2_boundary_tmp}/wave1-wave2.stderr" >/dev/null || \
   die "Wave 1 plus Wave 2 rejection did not identify duplicate E1 ownership"
 
-printf 'T2 BOUNDARY PASS: exact 46/40 production and 47/41 D1-test surfaces, deterministic localized objects/archives/evidence/AOT, hostile-path and tuple rejection, localization, crafted-link isolation, public closure, and Wave1+Wave2 E1 collision\n'
+printf 'T2 BOUNDARY PASS: exact 47/41 production and 48/42 D1-test surfaces, deterministic localized objects/archives/evidence/AOT, hostile-path and tuple rejection, localization, crafted-link isolation, public closure, and Wave1+Wave2 E1 collision\n'

@@ -14,7 +14,7 @@ Eshkol contracts for trusted later CLI/data composition. They are localized in t
 canonical Wave-2 aggregate and are not independently linkable capabilities.
 
 The Wave-2 aggregate is compiled from the accepted E1/P1/D1/X1/C1/T1 trusted sources
-plus T2 and localized exactly once. Its public global surface remains the accepted 46
+plus T2 and localized exactly once. Its public global surface remains the accepted 47
 definitions. It must not be linked with the already-localized Wave-1 aggregate.
 Public whole-input encode still returns exactly the accepted sealed rank-1 CPU I1
 `i64` shell and therefore retains the accepted process-lifetime behavior. Streaming

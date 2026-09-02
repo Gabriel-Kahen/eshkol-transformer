@@ -28,8 +28,8 @@ E1B_COMPILER_TIMEOUT_SECONDS="${T2_COMPILER_TIMEOUT_SECONDS:-300}" \
   "${PROJECT_ROOT}/internal/t1/lib" \
   "${PROJECT_ROOT}/src"
 
-[[ "$(wc -l < "${aggregate_object}.evidence/global-defined.txt")" == 46 ]] || \
-  die "T2 aggregate must expose exactly the accepted 46 global definitions"
+[[ "$(wc -l < "${aggregate_object}.evidence/global-defined.txt")" == 47 ]] || \
+  die "T2 aggregate must expose exactly the accepted 47 global definitions"
 cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
   "${aggregate_object}.evidence/global-defined.txt"
 cmp "${PROJECT_ROOT}/native/t2_wave2_undefined_symbols.txt" \

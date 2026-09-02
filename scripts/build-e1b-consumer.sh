@@ -69,6 +69,7 @@ t2_d1_test_private_root="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_d1_test_
 t2_d1_test_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_d1_test_package_bridge.c")"
 t2_d1_test_package_renames="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_d1_test_private_renames.txt")"
 t2_d1_test_public_exports="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_d1_test_public_exports.txt")"
+t2_d1_test_public_strings="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_d1_test_public_strings.txt")"
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
   die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
@@ -93,6 +94,7 @@ if [[ "${private_root}" == "${t2_d1_test_private_root}" ]]; then
       die "T2 D1 test aggregate policy requires exact ordered trusted include roots"
     package_policy=t2-wave2-test-d1
     undefined_symbols="${t2_undefined_symbols}"
+    package_public_strings="${t2_d1_test_public_strings}"
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
       "${PROJECT_ROOT}/native/checkpoint_io.c"
@@ -116,6 +118,7 @@ elif [[ "${private_root}" == "${t2_private_root}" ]]; then
       die "T2 aggregate policy requires exact ordered trusted include roots"
     package_policy=t2-wave2-aggregate
     undefined_symbols="${t2_undefined_symbols}"
+    package_public_strings="${t1_public_strings}"
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
       "${PROJECT_ROOT}/native/checkpoint_io.c"

@@ -39,8 +39,8 @@ t2_object="${t2_dir}/wave2.o"
 t2_archive="${t2_dir}/libeshkol_transformer_wave2.a"
 [[ -r "${t2_object}" && -r "${t2_archive}" ]] || \
   die "T2 Wave 2 aggregate was not published"
-[[ "$(nm -g --defined-only --format=posix "${t2_object}" | wc -l)" == 46 ]] || \
-  die "T2 aggregate does not expose exactly 46 globals"
+[[ "$(nm -g --defined-only --format=posix "${t2_object}" | wc -l)" == 47 ]] || \
+  die "T2 aggregate does not expose exactly 47 globals"
 cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
   "${t2_object}.evidence/global-defined.txt"
 cmp "${PROJECT_ROOT}/native/t2_wave2_undefined_symbols.txt" \
@@ -60,8 +60,8 @@ E1B_COMPILER_TIMEOUT_SECONDS="${T2_COMPILER_TIMEOUT_SECONDS:-300}" \
   "${PROJECT_ROOT}/internal/t1/lib" \
   "${PROJECT_ROOT}/src"
 [[ "$(nm -g --defined-only --format=posix \
-       "${t2_tmp}/wave2-d1-test.o" | wc -l)" == 47 ]] || \
-  die "T2 D1 test aggregate must expose exactly 47 globals"
+       "${t2_tmp}/wave2-d1-test.o" | wc -l)" == 48 ]] || \
+  die "T2 D1 test aggregate must expose exactly 48 globals"
 sed -e 's/^[^:]*://' -e 's/\\//g' \
   "${t2_tmp}/wave2-d1-test.o.evidence/private.d" | \
   tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \

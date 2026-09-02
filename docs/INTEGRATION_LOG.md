@@ -924,17 +924,22 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   proposed.
 
   A canonical Wave-2 successor aggregate is rebuilt from the accepted trusted
-  E1/P1/D1/X1/C1/T1 sources plus T2 and localized once. It retains the same exact 46
-  public globals and cannot be combined with the already-localized Wave-1 aggregate.
+  E1/P1/D1/X1/C1/T1 sources plus T2 and localized once. It retains the accepted
+  upstream public surface and cannot be combined with the already-localized Wave-1 aggregate.
   The Wave-1 archive and all focused T1 evidence remain independently reproducible.
   To prove D1 round trips without changing D1 v1 bytes or its eight-name facade, the
-  Wave-2 trusted closure adds a bounded internal corpus-token read operation. It
+  Wave-2 trusted closure adds a bounded internal corpus-token read operation. After
+  accepted P1L integration, the successor aggregate carries its public unary
+  `state-dict-release!` unchanged: production is exactly 47 globals/41 non-E1
+  wrappers and the D1-test-only aggregate is exactly 48/42. T2 itself still adds no
+  installed public procedure or native ABI. It
   fully validates the manifest and shards, then compares the supplied tokenizer
   fingerprint and vocabulary before returning any tokens; a self-consistent corpus
   paired with the wrong tokenizer is `invalid-argument`, not `corrupt-data`.
 - **Status / evidence:** local candidate implementation. The distinct v1 artifact,
   Eshkol trainer, rank-stage whole/stream runtime, strict/raw policy, D1 bridge,
-  unchanged 46-global production aggregate, 47-global test-only aggregate, frozen
+  unchanged T2 API with a 47-global production aggregate and 48-global test-only
+  aggregate, frozen
   Python oracle, deterministic fixture generators, exact-limit/adversarial AOTs,
   and production-oracle isolation gates are checked in for review. After the
   independent T2-R request-changes review, decoder push now validates and sizes its
@@ -957,13 +962,18 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   bounded process completed within 60 seconds, below 524,288 KiB, with no
   heap-pressure warning. The T2-specific boundary suite independently retained and
   byte-compared two localized production and D1-test objects, archives, evidence
-  directories, and public-caller AOT binaries; it proved the exact 46/40 and 47/41
-  surfaces, hostile-path/tuple rejection, private/native localization and archive
-  index closure, crafted-link isolation, public depfile/string closure, and the
-  Wave1+Wave2 duplicate-E1 rejection. Its standalone compatibility run completed in
-  about 12m51s. The complete focused gate passed against current main. Supported
-  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI, exact-head T2-R rereview, and the unmerged PR
-  remain required. T2 stays no
+  directories, and public-caller AOT binaries. After merging accepted main
+  `b72b9fa58042304a71e801415e53f280262edae2`, the complete compatibility gate
+  passed with exact 47/41 production and 48/42 D1-test surfaces, exact public-string
+  and public-source manifests, inherited P1L private-capability negatives, hostile
+  path/tuple rejection, private/native localization and archive index closure,
+  crafted-link isolation, and the Wave1+Wave2 duplicate-E1 rejection. The two
+  training/stream runs measured 142,936 and 144,936 KiB; the exact 73,728 one-ID
+  partitions measured 10,576 and 12,620 KiB; UTF-8 measured 8,972 and 5,824 KiB;
+  public runtime measured 9,540 and 10,564 KiB; parser negatives measured 65,192
+  KiB; D1 setup and negatives measured 2,532 and 3,760 KiB. Supported Ubuntu 22.04
+  / LLVM-Clang 21.1.8 CI, exact-head T2-R rereview, and the unmerged PR remain
+  required. T2 stays no
   further than `review` until independent acceptance, merge, merged-main retest, and
   acceptance-document follow-up.
 - **Dependencies / retest:** any accepted change to the aggregate source closure or

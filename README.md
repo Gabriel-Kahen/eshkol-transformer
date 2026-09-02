@@ -129,7 +129,7 @@ cumulative process-lifetime cost; see the lifecycle guidance in the T1 contract.
 T2 adds a distinct, versioned deterministic BPE artifact without changing T1 bytes
 or the eight tokenizer names/arities. The build leaves the successor aggregate at
 `build/t2/libeshkol_transformer_wave2.a`; applications link either that aggregate or
-the Wave-1 aggregate, never both. Wave 2 preserves the same 46 public globals while
+the Wave-1 aggregate, never both. Wave 2 preserves the same 47 public globals while
 adding localized Eshkol-only training, rank-stage streaming, and bounded D1
 composition contracts. Python is a development oracle only. See
 [docs/BPE_TOKENIZER_FORMAT.md](docs/BPE_TOKENIZER_FORMAT.md).
