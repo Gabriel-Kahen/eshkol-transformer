@@ -34,6 +34,17 @@ typedef struct et_f32_gradient_contribution_v1 {
 
 int32_t et_f32_tensor_is_live_v1(const et_f32_tensor *tensor);
 int32_t et_f32_parameter_is_live_v1(const et_f32_parameter *parameter);
+const et_f32_tensor *
+et_f32_tensor_canonical_owner_v1(const et_f32_tensor *tensor);
+const et_f32_tensor *
+et_f32_parameter_canonical_owner_v1(const et_f32_parameter *parameter);
+int32_t et_f32_tensor_storage_owner_identical_v1(
+    const et_f32_tensor *left, const et_f32_tensor *right);
+int32_t et_f32_owned_tensor_clone_v1(const et_f32_tensor *source,
+                                     et_f32_tensor **owned_clone,
+                                     et_f32_tensor_error *error);
+int32_t et_f32_owned_tensor_release_v1(et_f32_tensor *owned_clone,
+                                       et_f32_tensor_error *error);
 
 int32_t et_f32_parameter_create_v1(const et_f32_tensor *initial_value,
                                    et_f32_parameter **parameter,
@@ -43,6 +54,9 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **parameter,
 int32_t et_f32_parameter_bind_identity_v1(et_f32_parameter *parameter,
                                           const void *identity,
                                           et_f32_tensor_error *error);
+int32_t et_f32_parameter_validate_identity_v1(
+    const et_f32_parameter *parameter, const void *expected_identity,
+    et_f32_tensor_error *error);
 int32_t et_f32_parameter_identity_v1(const et_f32_parameter *parameter,
                                      const void **identity,
                                      et_f32_tensor_error *error);
@@ -100,6 +114,7 @@ typedef struct et_f32_test_live_counts_v1 {
   size_t copy_plans;
   size_t gradient_plans;
   size_t reset_plans;
+  size_t owned_clones;
 } et_f32_test_live_counts_v1;
 
 void et_f32_parameter_test_set_metadata_v1(et_f32_parameter *parameter,

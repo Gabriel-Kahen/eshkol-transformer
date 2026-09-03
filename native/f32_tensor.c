@@ -10,6 +10,8 @@
 #define ET_F32_TENSOR_MAGIC UINT64_C(0x455446333254454e)
 #define ET_F32_BORROW_MAGIC UINT64_C(0x45544633424f5252)
 #define ET_F32_RANK1_MAX ((uint64_t)(SIZE_MAX / sizeof(float)))
+#define ET_F32_OWNERSHIP_ORDINARY 0u
+#define ET_F32_OWNERSHIP_PRIVATE_CLONE 1u
 
 struct et_f32_tensor {
   uint64_t magic;
@@ -22,6 +24,7 @@ struct et_f32_tensor {
   uint64_t *shape;
   size_t *strides;
   float *data;
+  uint32_t ownership_kind;
 };
 
 struct et_f32_tensor_borrow {
@@ -86,6 +89,18 @@ static et_f32_tensor_copy_plan *live_copy_plans;
 static et_f32_parameter *live_parameters;
 static et_f32_gradient_plan *live_gradient_plans;
 static et_f32_gradient_reset_plan *live_reset_plans;
+/*
+ * Published opaque handle addresses are capabilities.  Keep only their inert
+ * control shells reachable after release so malloc cannot recycle an address
+ * into a different live capability (ABA).  All owned payload storage is still
+ * released at the normal lifetime boundary.
+ */
+static et_f32_tensor *retired_tensors;
+static et_f32_tensor_borrow *retired_borrows;
+static et_f32_tensor_copy_plan *retired_copy_plans;
+static et_f32_parameter *retired_parameters;
+static et_f32_gradient_plan *retired_gradient_plans;
+static et_f32_gradient_reset_plan *retired_reset_plans;
 
 _Static_assert(CHAR_BIT == 8, "I2 requires 8-bit bytes");
 _Static_assert(sizeof(float) == 4u && sizeof(uint32_t) == 4u,
@@ -261,6 +276,71 @@ static void unregister_borrow(et_f32_tensor_borrow *borrow) {
   }
 }
 
+static void retire_tensor(et_f32_tensor *tensor) {
+  tensor->magic = 0u;
+  tensor->rank = 0u;
+  tensor->element_count = 0u;
+  tensor->byte_length = 0u;
+  tensor->active_borrow = NULL;
+  tensor->plan_pins = 0u;
+  tensor->shape = NULL;
+  tensor->strides = NULL;
+  tensor->data = NULL;
+  tensor->ownership_kind = ET_F32_OWNERSHIP_ORDINARY;
+  tensor->registry_next = retired_tensors;
+  retired_tensors = tensor;
+}
+
+static void retire_borrow(et_f32_tensor_borrow *borrow) {
+  borrow->magic = 0u;
+  borrow->owner = NULL;
+  memset(&borrow->view, 0, sizeof(borrow->view));
+  borrow->registry_next = retired_borrows;
+  retired_borrows = borrow;
+}
+
+static void retire_copy_plan(et_f32_tensor_copy_plan *plan) {
+  plan->magic = 0u;
+  plan->count = 0u;
+  plan->assignments = NULL;
+  plan->consumed = 0u;
+  plan->registry_next = retired_copy_plans;
+  retired_copy_plans = plan;
+}
+
+static void retire_parameter(et_f32_parameter *parameter) {
+  parameter->magic = 0u;
+  parameter->value = NULL;
+  parameter->gradient = NULL;
+  parameter->identity = NULL;
+  parameter->contribution_count = 0u;
+  parameter->normalization_weight_bits = 0u;
+  parameter->gradient_state = ET_F32_GRADIENT_ABSENT;
+  parameter->plan_pins = 0u;
+  parameter->registry_next = retired_parameters;
+  retired_parameters = parameter;
+}
+
+static void retire_gradient_plan(et_f32_gradient_plan *plan) {
+  plan->magic = 0u;
+  plan->count = 0u;
+  plan->entries = NULL;
+  plan->next_count = 0u;
+  plan->next_weight_bits = 0u;
+  plan->consumed = 0u;
+  plan->registry_next = retired_gradient_plans;
+  retired_gradient_plans = plan;
+}
+
+static void retire_reset_plan(et_f32_gradient_reset_plan *plan) {
+  plan->magic = 0u;
+  plan->count = 0u;
+  plan->parameters = NULL;
+  plan->consumed = 0u;
+  plan->registry_next = retired_reset_plans;
+  retired_reset_plans = plan;
+}
+
 static int storage_aliases_live(const void *storage, size_t bytes) {
   const et_f32_tensor *tensor;
   const et_f32_tensor_borrow *borrow;
@@ -320,6 +400,43 @@ static int storage_aliases_live(const void *storage, size_t bytes) {
     if (ranges_overlap(storage, bytes, reset_plan, sizeof(*reset_plan)) ||
         ranges_overlap(storage, bytes, reset_plan->parameters,
                        reset_plan->count * sizeof(*reset_plan->parameters))) {
+      return 1;
+    }
+  }
+  for (tensor = retired_tensors; tensor != NULL;
+       tensor = tensor->registry_next) {
+    if (ranges_overlap(storage, bytes, tensor, sizeof(*tensor))) {
+      return 1;
+    }
+  }
+  for (borrow = retired_borrows; borrow != NULL;
+       borrow = borrow->registry_next) {
+    if (ranges_overlap(storage, bytes, borrow, sizeof(*borrow))) {
+      return 1;
+    }
+  }
+  for (copy_plan = retired_copy_plans; copy_plan != NULL;
+       copy_plan = copy_plan->registry_next) {
+    if (ranges_overlap(storage, bytes, copy_plan, sizeof(*copy_plan))) {
+      return 1;
+    }
+  }
+  for (parameter = retired_parameters; parameter != NULL;
+       parameter = parameter->registry_next) {
+    if (ranges_overlap(storage, bytes, parameter, sizeof(*parameter))) {
+      return 1;
+    }
+  }
+  for (gradient_plan = retired_gradient_plans; gradient_plan != NULL;
+       gradient_plan = gradient_plan->registry_next) {
+    if (ranges_overlap(storage, bytes, gradient_plan,
+                       sizeof(*gradient_plan))) {
+      return 1;
+    }
+  }
+  for (reset_plan = retired_reset_plans; reset_plan != NULL;
+       reset_plan = reset_plan->registry_next) {
+    if (ranges_overlap(storage, bytes, reset_plan, sizeof(*reset_plan))) {
       return 1;
     }
   }
@@ -602,11 +719,10 @@ int32_t et_f32_tensor_destroy_v1(et_f32_tensor **slot,
   }
   (void)success(error);
   unregister_tensor(tensor);
-  tensor->magic = 0u;
   free(tensor->data);
   free(tensor->strides);
   free(tensor->shape);
-  free(tensor);
+  retire_tensor(tensor);
   *slot = NULL;
   return 0;
 }
@@ -1066,9 +1182,8 @@ int32_t et_f32_tensor_copy_plan_release_v1(
     plan->assignments[index].destination->plan_pins--;
     ((et_f32_tensor *)plan->assignments[index].source)->plan_pins--;
   }
-  plan->magic = 0u;
   free(plan->assignments);
-  free(plan);
+  retire_copy_plan(plan);
   *slot = NULL;
   return success(error);
 }
@@ -1100,6 +1215,62 @@ int32_t et_f32_tensor_is_live_v1(const et_f32_tensor *tensor) {
 int32_t et_f32_parameter_is_live_v1(const et_f32_parameter *parameter) {
   et_f32_parameter *found = find_parameter(parameter);
   return found != NULL && found->magic == ET_F32_PARAMETER_MAGIC ? 1 : 0;
+}
+
+const et_f32_tensor *
+et_f32_tensor_canonical_owner_v1(const et_f32_tensor *candidate) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  return tensor != NULL && tensor->magic == ET_F32_TENSOR_MAGIC ? tensor : NULL;
+}
+
+const et_f32_tensor *
+et_f32_parameter_canonical_owner_v1(const et_f32_parameter *candidate) {
+  et_f32_parameter *parameter = find_parameter(candidate);
+  return parameter != NULL && parameter->magic == ET_F32_PARAMETER_MAGIC &&
+                 valid_tensor(parameter->value)
+             ? parameter->value
+             : NULL;
+}
+
+int32_t et_f32_tensor_storage_owner_identical_v1(
+    const et_f32_tensor *left, const et_f32_tensor *right) {
+  return valid_tensor(left) && valid_tensor(right) && left == right ? 1 : 0;
+}
+
+int32_t et_f32_owned_tensor_clone_v1(const et_f32_tensor *source,
+                                     et_f32_tensor **output,
+                                     et_f32_tensor_error *error) {
+  int32_t result = et_f32_tensor_clone_v1(source, output, error);
+  if (result == 0) {
+    (*output)->ownership_kind = ET_F32_OWNERSHIP_PRIVATE_CLONE;
+  }
+  return result;
+}
+
+int32_t et_f32_owned_tensor_release_v1(et_f32_tensor *candidate,
+                                       et_f32_tensor_error *error) {
+  et_f32_tensor *owned;
+  int32_t result = require_tensor(candidate, "f32-owned-tensor-release", error);
+  if (result != 0) {
+    return result;
+  }
+  owned = (et_f32_tensor *)candidate;
+  for (const et_f32_parameter *parameter = live_parameters;
+       parameter != NULL; parameter = parameter->registry_next) {
+    if (owned == parameter->value || owned == parameter->gradient) {
+      return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                       ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                       "f32-owned-tensor-release",
+                       "parameter storage has no state release authority");
+    }
+  }
+  if (owned->ownership_kind != ET_F32_OWNERSHIP_PRIVATE_CLONE) {
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                     "f32-owned-tensor-release",
+                     "tensor is not a private owned clone");
+  }
+  return et_f32_tensor_destroy_v1(&owned, error);
 }
 
 static int bits_finite(uint32_t bits) {
@@ -1221,10 +1392,9 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
     cursor = &(*cursor)->registry_next;
   }
   *cursor = parameter->registry_next;
-  parameter->magic = 0u;
   (void)et_f32_tensor_destroy_v1(&parameter->gradient, NULL);
   (void)et_f32_tensor_destroy_v1(&parameter->value, NULL);
-  free(parameter);
+  retire_parameter(parameter);
   *slot = NULL;
   return success(error);
 }
@@ -1255,6 +1425,31 @@ int32_t et_f32_parameter_bind_identity_v1(et_f32_parameter *parameter,
     }
   }
   parameter->identity = identity;
+  return success(error);
+}
+
+int32_t et_f32_parameter_validate_identity_v1(
+    const et_f32_parameter *parameter, const void *expected_identity,
+    et_f32_tensor_error *error) {
+  int32_t result = require_parameter(parameter, "f32-parameter-validate", error);
+  if (result != 0) {
+    return result;
+  }
+  if (expected_identity == NULL) {
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                     ET_F32_TENSOR_CODE_NULL_ARGUMENT,
+                     "f32-parameter-validate", "expected identity is null");
+  }
+  if (parameter->identity == NULL) {
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                     "f32-parameter-validate", "parameter is unbound");
+  }
+  if (parameter->identity != expected_identity) {
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                     "f32-parameter-validate", "parameter identity differs");
+  }
   return success(error);
 }
 
@@ -1787,9 +1982,8 @@ int32_t et_f32_gradient_plan_release_v1(et_f32_gradient_plan **slot,
     ((et_f32_tensor *)plan->entries[index].source)->plan_pins--;
     free(plan->entries[index].prepared);
   }
-  plan->magic = 0u;
   free(plan->entries);
-  free(plan);
+  retire_gradient_plan(plan);
   *slot = NULL;
   return success(error);
 }
@@ -1941,9 +2135,8 @@ int32_t et_f32_gradient_reset_plan_release_v1(
   for (size_t index = 0u; index < plan->count; index++) {
     plan->parameters[index]->plan_pins--;
   }
-  plan->magic = 0u;
   free(plan->parameters);
-  free(plan);
+  retire_reset_plan(plan);
   *slot = NULL;
   return success(error);
 }
@@ -1978,30 +2171,47 @@ void et_f32_test_live_counts_snapshot_v1(et_f32_test_live_counts_v1 *counts) {
   }
   for (const et_f32_tensor *item = live_tensors; item != NULL;
        item = item->registry_next) {
-    snapshot.tensors++;
+    if (item->magic == ET_F32_TENSOR_MAGIC) {
+      snapshot.tensors++;
+    }
+    if (item->magic == ET_F32_TENSOR_MAGIC &&
+        item->ownership_kind == ET_F32_OWNERSHIP_PRIVATE_CLONE) {
+      snapshot.owned_clones++;
+    }
   }
   for (const et_f32_parameter *item = live_parameters; item != NULL;
        item = item->registry_next) {
-    snapshot.parameters++;
+    if (item->magic == ET_F32_PARAMETER_MAGIC) {
+      snapshot.parameters++;
+    }
   }
   for (const et_f32_tensor_borrow *item = live_borrows; item != NULL;
        item = item->registry_next) {
-    snapshot.borrows++;
+    if (item->magic == ET_F32_BORROW_MAGIC) {
+      snapshot.borrows++;
+    }
   }
   for (const et_f32_tensor_copy_plan *item = live_copy_plans; item != NULL;
        item = item->registry_next) {
-    snapshot.copy_plans++;
+    if (item->magic == ET_F32_COPY_PLAN_MAGIC) {
+      snapshot.copy_plans++;
+    }
   }
   for (const et_f32_gradient_plan *item = live_gradient_plans; item != NULL;
        item = item->registry_next) {
-    snapshot.gradient_plans++;
+    if (item->magic == ET_F32_GRAD_PLAN_MAGIC) {
+      snapshot.gradient_plans++;
+    }
   }
   for (const et_f32_gradient_reset_plan *item = live_reset_plans; item != NULL;
        item = item->registry_next) {
-    snapshot.reset_plans++;
+    if (item->magic == ET_F32_RESET_PLAN_MAGIC) {
+      snapshot.reset_plans++;
+    }
   }
   *counts = snapshot;
 }
+
 #endif
 
 int32_t et_f32_tensor_borrow_begin_v1(et_f32_tensor *tensor,
@@ -2120,8 +2330,7 @@ int32_t et_f32_tensor_borrow_end_v1(et_f32_tensor_borrow **slot,
   (void)success(error);
   unregister_borrow(borrow);
   borrow->owner->active_borrow = NULL;
-  borrow->magic = 0u;
-  free(borrow);
+  retire_borrow(borrow);
   *slot = NULL;
   return 0;
 }

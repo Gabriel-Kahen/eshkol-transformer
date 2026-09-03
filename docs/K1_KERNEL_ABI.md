@@ -26,9 +26,10 @@ I2 is another separate downstream carrier ABI. Its explicit
 `et_f32_tensor_provider_v1()` accessor verifies only bounded deterministic
 `tensor.f32` / `storage.copy`; it never defines K1's canonical provider symbol or
 changes the provider-free baseline. Its owned storage, borrow, gradient, and future
-provider-composition rules are documented in
-[I2_F32_TENSOR.md](I2_F32_TENSOR.md). P1/Eshkol integration is blocked on P1L and
-is not part of the carrier artifact. Presence of I2 is not evidence for
+multi-provider-composition rules are documented in
+[I2_F32_TENSOR.md](I2_F32_TENSOR.md). The localized I2/P1L aggregate keeps this
+accessor private and still defines no canonical K1 provider symbol. Presence of I2
+is not evidence for
 `tensor.contiguous`, `autodiff.reverse`, a neural kernel, an optimizer operation,
 another dtype/device, or another provider's private test transport.
 

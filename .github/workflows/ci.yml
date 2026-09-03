@@ -27,6 +27,7 @@ jobs:
       A0_COMPILER_TIMEOUT_SECONDS: '60'
       P1_LSAN: '1'
       C1_LSAN: '1'
+      I2_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 

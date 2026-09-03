@@ -374,9 +374,9 @@ is count zero, normalization-weight exact `+0`, and exact-positive-zero backing;
 present retains an unnormalized weighted numerator, positive finite normalization
 weight, and positive contribution count. A successful optimizer step reads but does
 not clear that state. Only an explicit zero-gradient operation performs the atomic,
-idempotent transition to absent. Production P1/Eshkol binding remains blocked on
-P1L's release-capable provider interface and does not add an A0 public name or arity
-in I2. O2 still owns optimizer semantics and TR3 owns accumulation scheduling.
+idempotent transition to absent. The I2 successor aggregate binds this storage to
+P1L's release-capable provider interface without adding an A0 public name or arity.
+O2 still owns optimizer semantics and TR3 owns accumulation scheduling.
 
 Parameter paths are immutable lists of UTF-8 segments containing 1..65536 encoded
 bytes each, inclusive; the bound is per segment and no separator escaping exists.

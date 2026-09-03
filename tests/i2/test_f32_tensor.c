@@ -604,12 +604,108 @@ static void test_provider_and_dispatch(void) {
   destroy_tensor(&output);
 }
 
+static void expect_retired_shell_alias_rejected(et_f32_tensor *live,
+                                                 void *retired) {
+  et_f32_tensor_error error;
+  size_t rank = SIZE_MAX;
+  CHECK(et_f32_tensor_rank_v1(
+            live, &rank, (et_f32_tensor_error *)retired) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(rank == SIZE_MAX);
+  expect_error(et_f32_tensor_rank_v1(live, (size_t *)retired, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_BUFFER);
+}
+
+static void test_released_handle_addresses_never_resurrect(void) {
+  const uint64_t shape[] = {1u};
+  et_f32_tensor_error error;
+  et_f32_tensor *owner = create_tensor(1u, shape);
+  et_f32_tensor *other = create_tensor(1u, shape);
+  et_f32_tensor *stale_tensor = create_tensor(1u, shape);
+  et_f32_tensor *candidate = NULL;
+  et_f32_tensor_borrow *borrow = NULL;
+  et_f32_tensor_borrow *stale_borrow;
+  et_f32_tensor_copy_plan *plan = NULL;
+  et_f32_tensor_copy_plan *stale_plan;
+  et_f32_tensor_copy_assignment_v1 assignment = {
+      .struct_size = sizeof(assignment),
+      .destination = other,
+      .source = owner,
+  };
+  const et_kernel_tensor_view_v1 *view = NULL;
+  size_t rank = SIZE_MAX;
+
+  candidate = stale_tensor;
+  destroy_tensor(&stale_tensor);
+  for (size_t repetition = 0u; repetition < 32u; repetition++) {
+    et_f32_tensor *fresh = create_tensor(1u, shape);
+    CHECK(fresh != candidate);
+    rank = SIZE_MAX;
+    expect_error(et_f32_tensor_rank_v1(candidate, &rank, &error), &error,
+                 ET_F32_TENSOR_ERROR_INVALID_STATE,
+                 ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(rank == SIZE_MAX);
+    destroy_tensor(&fresh);
+  }
+  expect_retired_shell_alias_rejected(owner, candidate);
+  stale_tensor = candidate;
+  expect_error(et_f32_tensor_destroy_v1(&stale_tensor, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(stale_tensor == candidate);
+
+  CHECK(et_f32_tensor_borrow_begin_v1(owner, &borrow, &error) == 0);
+  stale_borrow = borrow;
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  for (size_t repetition = 0u; repetition < 32u; repetition++) {
+    CHECK(et_f32_tensor_borrow_begin_v1(owner, &borrow, &error) == 0);
+    CHECK(borrow != stale_borrow);
+    view = NULL;
+    expect_error(et_f32_tensor_borrow_view_v1(stale_borrow, &view, &error),
+                 &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                 ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(view == NULL);
+    CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  }
+  expect_retired_shell_alias_rejected(owner, stale_borrow);
+  borrow = stale_borrow;
+  expect_error(et_f32_tensor_borrow_end_v1(&borrow, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(borrow == stale_borrow);
+
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &plan, &error) ==
+        0);
+  stale_plan = plan;
+  CHECK(et_f32_tensor_copy_plan_release_v1(&plan, &error) == 0);
+  for (size_t repetition = 0u; repetition < 32u; repetition++) {
+    CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &plan, &error) ==
+          0);
+    CHECK(plan != stale_plan);
+    expect_error(et_f32_tensor_copy_plan_commit_v1(stale_plan, &error), &error,
+                 ET_F32_TENSOR_ERROR_INVALID_STATE,
+                 ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(et_f32_tensor_copy_plan_release_v1(&plan, &error) == 0);
+  }
+  expect_retired_shell_alias_rejected(owner, stale_plan);
+  plan = stale_plan;
+  expect_error(et_f32_tensor_copy_plan_release_v1(&plan, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(plan == stale_plan);
+
+  destroy_tensor(&other);
+  destroy_tensor(&owner);
+}
+
 int main(void) {
   test_version_nulls_and_forgery();
   test_shapes_storage_and_exact_bits();
   test_shape_and_span_failures();
   test_borrow_lifetime_and_alignment();
   test_provider_and_dispatch();
+  test_released_handle_addresses_never_resurrect();
 #ifdef ET_F32_TENSOR_TESTING
   test_owned_aliases_and_error_clear();
   test_allocation_failpoints();

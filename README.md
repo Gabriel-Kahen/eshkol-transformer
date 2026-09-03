@@ -69,13 +69,14 @@ The build also leaves I1's separate exact signed-i64 CPU container archive at
 bounded deterministic `tensor.i64` / `storage.copy` requests; see
 [docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
 
-I2 is developing the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed
-K1 views, and carrier-local value/accumulated-gradient substrate required by N2 and
-O2. Its explicit provider accessor verifies only bounded deterministic `tensor.f32`
-/ `storage.copy` and never defines K1's canonical provider symbol. The current
-native archive is `build/i2/libeshkol_transformer_f32.a`; production P1/Eshkol
-integration is under active development against the merged release-capable P1L
-provider interface. Run the focused carrier gate with `make test-i2`; see
+I2 is integrating the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed
+K1 views, and P1-bound value/accumulated-gradient substrate required by N2 and O2.
+Its explicit provider accessor verifies only bounded deterministic `tensor.f32` /
+`storage.copy` and never defines K1's canonical provider symbol. The native archive
+is `build/i2/libeshkol_transformer_f32.a`; the one-member localized P1L/C1
+integration aggregate is `build/i2/libeshkol_transformer_wave2.a`. The aggregate
+retains the existing E1/X1/P1/D1/C1/T1 public surface and localizes every I2 seam.
+Run the focused gate with `make test-i2`; see
 [docs/I2_F32_TENSOR.md](docs/I2_F32_TENSOR.md).
 
 The build leaves A2's carrier-neutral serial CPU-f32 provider and fixed-capacity

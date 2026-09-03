@@ -1,10 +1,10 @@
 # I2 dense CPU-f32 tensor and parameter-gradient substrate
 
-Status: **blocked on P1L**. I2 is a shared prerequisite of N2 and O2. The
-implemented scope is a versioned carrier-local native storage, gradient, and
-atomic-plan boundary. Production P1/Eshkol implementation, aggregate freeze, and a
-review-ready transition wait for the independently merged release-capable P1L
-contract. I2 adds no A0 public Eshkol name or arity, numerical layer, optimizer
+Status: **active**. I2 is a shared prerequisite of N2 and O2. The merged P1L
+contract now permits integration of the versioned carrier-local native storage,
+gradient, atomic-plan, P1 state-lifetime, and C1 codec boundaries. Review status
+still requires the complete focused gate and supported-CI evidence. I2 adds no new
+A0 public Eshkol name or arity, numerical layer, optimizer
 algorithm, checkpoint format, mixed-precision policy, accelerator support, or
 fallback.
 
@@ -20,9 +20,11 @@ device fallback.
 
 The public C11 header is `include/eshkol_transformer/f32_tensor.h`; ABI 1.0
 exports only `_v1` entry points. The native artifact is
-`build/i2/libeshkol_transformer_f32.a`. Its exact symbol and visibility policy is
-produced by the I2 build gate. No production Eshkol aggregate or P1 provider is
-built on this branch. I2 has no install or dynamic-library search contract.
+`build/i2/libeshkol_transformer_f32.a`. The source-composed integration artifact is
+the one-member `build/i2/libeshkol_transformer_wave2.a`, containing
+`i2_wave2.o`. Exact symbol, string, dependency, source-closure, and visibility
+manifests are checked by the I2 gates. I2 has no install or dynamic-library search
+contract.
 
 ## Owned tensor ABI 1.0
 
@@ -93,37 +95,40 @@ define `eshkol_transformer_kernel_provider_v1`, mutate K1's provider-free
 baseline, or claim `tensor.contiguous`, `autodiff.reverse`, any N2/A2/L2/O2
 kernel, GPU, f16, or bf16.
 
-Later Wave 2 composition must collect descriptors through their versioned accessors,
-reject duplicate capability/operation ownership, and route an unchanged request and
-unchanged view identities to exactly one provider. That aggregate is deferred until
-P1L. N2, A2, and L2 retain ownership of their operation-specific validation and
+Later multi-provider Wave 2 composition must collect descriptors through versioned
+accessors, reject duplicate capability/operation ownership, and route an unchanged
+request and unchanged view identities to exactly one provider. The current I2
+aggregate adds no canonical K1 provider symbol or generic dispatcher. N2, A2, and
+L2 retain ownership of their operation-specific validation and
 numerical evidence. A private test transport or provider resolver is never
 production capability evidence.
 
 ## Carrier-local parameter and gradient identity
 
-The binding P1L 2.0 integration target is
-`(transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1)`. It is not registered by
-the carrier-only artifact. Interface 1.x must not emulate the release callback or
-load 2.0 state. An incompatible carrier, device, clone, gradient, or prepare/commit
+The production aggregate registers the P1 provider identity
+`(transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1)`. The carrier-only archive
+does not register it. Interface 1.x must not emulate the release callback or load
+2.0 state. An incompatible carrier, device, clone, gradient, or prepare/commit
 semantic requires a different provider ID.
 
 The private carrier-local parameter object contains stable live value storage,
 preallocated same-shape gradient storage, one opaque identity binding, and gradient
-metadata. Duplicate identities are rejected in whole-batch plans so a future P1
-canonical tied handle can be updated exactly once. Independent objects have
+metadata. Registration binds it to the exact canonical live P1 handle identity;
+duplicate identities are rejected in whole-batch plans so tied paths update exactly
+once. Independent objects have
 disjoint value and gradient storage. This native identity is not a second P1
 registry and does not authorize an Eshkol handle.
 
-P1L provider interface 2.0 adds an eighth exact-once owned-carrier release callback
+P1L provider interface 2.0 supplies the eighth exact-once owned-carrier release callback
 to describe, detached clone, storage identity, exact value equality, exact device
-equality, whole-batch prepare, and one-shot commit. I2 will integrate only after that
-layout merges. Each successful native clone has one owner and is destroyed exactly
-once. A public `state-dict-tensor` will be only a read-only state-backed identity;
-its private synchronous resolution must validate P1 owner/state/entry/provider
+equality, whole-batch prepare, and one-shot commit. Each successful native clone has
+one owner and is destroyed exactly once. Public `state-dict-tensor` returns only a
+read-only state-backed identity; its private synchronous resolution validates P1
+owner/state/entry/provider
 liveness, acquire/use/end any I2 K1 borrow wholly within one call, and retain no raw
-pointer. State release is admitted only with no active resolution call. The current
-artifact makes no production P1 snapshot/load claim.
+pointer. State release is admitted only with no active resolution call. The focused
+integration test covers production snapshot/load, tied aliases, C1 encode/decode and
+rollback, active-borrow release rejection, and explicit state release.
 
 ## Accumulated gradients
 
@@ -189,36 +194,45 @@ nonfinite arithmetic therefore leave every destination value, gradient byte,
 gradient metadata field, and caller output byte-identical.
 
 The carrier-local reset plan requires a unique identity set and commits exact
-positive-zero bytes plus absent metadata once per object. After P1L integration,
-`module-zero-grad!` must deduplicate canonical P1 handles before constructing this
-plan. Other P1 providers remain outside I2's evidence.
+positive-zero bytes plus absent metadata once per object. Production
+`module-zero-grad!` deduplicates canonical P1 handles before constructing this plan.
+Other P1 providers remain outside I2's evidence.
 
-## P1L integration and lifetime gate
+## P1L integration and lifetime
 
-Native tensor, borrow, parameter, and plan values have explicit release. Process-
-lifetime tensor retention, hidden finalization, equality-triggered free, and a
-generic privileged release dispatcher are rejected. P1L must merge provider
+Native tensor, borrow, owned-state clone, and plan values have explicit release.
+Process-lifetime retention of state snapshots, hidden finalization, equality-
+triggered free, and a generic privileged release dispatcher are rejected. The
+aggregate uses P1L provider
 interface 2.0, public idempotent `state-dict-release!`, state-backed read-only tensor
-handles, and fixed lifecycle identity entrypoints before I2 builds an Eshkol
-aggregate.
+handles, and fixed lifecycle identity entrypoints.
 
 The accepted serialized/nonreentrant rule distinguishes a state-backed identity
 from an active I2 borrow. Private resolution acquires and ends a borrow inside one
 call. `state-dict-release!` rejects before mutation if such a call is active; after
 admission, exact-once I2 destruction is the nonallocating/nonraising/infallible tail.
 Small identity tombstones may remain, but retain no tensor storage. Testing-only
-live counts cover tensors, parameters, borrows, and every plan kind so later P1L
-integration can prove return to baseline on success, rollback, and release.
+live counts cover tensors, owned clones, parameters, borrows, and every plan kind to
+prove return to baseline on success, rollback, and release.
 
-The future aggregate must reuse the one accepted E1B/P1 registry-owning topology,
-localize once, expose no generic privileged dispatcher or canonical K1 symbol, and
-be an alternative to earlier registry-owning artifacts. None of those aggregate or
-application-boundary properties is claimed by the current carrier archive.
+Every published native I2 opaque handle likewise leaves a small inert control-shell
+tombstone after release. Shape, stride, data, prepared-update, assignment, and
+builder payload allocations are freed at the explicit lifetime boundary; the shell
+retains no storage authority. Non-reusable shell addresses prevent a copied stale
+pointer from becoming valid again through allocator address reuse (ABA). This is a
+process-local memory-overhead limit proportional to the number of handles ever
+published, not process-lifetime tensor retention.
 
-## Native errors and future mapping
+The source-composed aggregate reuses the accepted E1B/P1 registry-owning topology,
+localizes once, and exposes the exact existing 47-global E1/X1/P1/D1/C1/T1 surface.
+All I2 and private P1/C1 seams are local; there is no generic privileged dispatcher
+or canonical K1 symbol. This aggregate is an alternative to earlier registry-owning
+artifacts, not an archive to link beside them.
+
+## Native errors and mapping
 
 The 264-byte caller-owned native error record is independent of K1's error record.
-A later P1L aggregate must map its categories to A0/E1 as follows:
+The aggregate maps native categories to A0/E1 as follows:
 
 | I2 category | E1/A0 category |
 |---|---|
@@ -242,11 +256,14 @@ error or output record.
   and borrowing are not a broader K1 capability claim.
 - A tensor permits one active borrow, and all registries require caller
   serialization. Thread safety and concurrent mutation are not claimed.
-- Native objects have explicit release. No Eshkol module/state lifetime claim is
-  made until P1L's explicit release protocol merges and is integrated.
+- P1 states require explicit idempotent `state-dict-release!`; the pinned runtime
+  supplies no finalizer. A0/P1 still defines no module-destroy operation, so live
+  module/parameter carriers remain process-local for the module lifetime and are
+  not reclaimed through the state-release authority.
 - I2 supplies no exact i64 or bool storage, neural operation, general reverse AD,
-  optimizer, clipping/norm algorithm, schedule, checkpoint codec, serialization,
-  performance, or accelerator evidence.
+  optimizer, clipping/norm algorithm, schedule, checkpoint format, performance, or
+  accelerator evidence. Its C1 codec only transports exact I2 f32 state through the
+  existing C1 container contract.
 - A successful optimizer step does not consume or clear accumulated gradients.
   Callers must reset them explicitly at the accepted module/optimizer boundary.
 - I2 supplies native clone/destroy mechanics but does not own O2 optimizer-state
@@ -264,14 +281,13 @@ Run the focused gate with:
 /usr/bin/bash -c 'make test-i2'
 ```
 
-The current carrier gate warning-cleans C11/C++17 consumers, verifies the exact
-one-member archive plus defined/undefined/visibility manifests, runs exact-bit,
+The focused gate warning-cleans C11/C++17 consumers, verifies both exact one-member
+archives plus defined/undefined/string/source-closure/visibility manifests, runs exact-bit,
 storage, shape, alias, borrow, lifetime, gradient, plan, failpoint, failure-atomic,
-and live-count tests, and exercises ASan/UBSan. It also rejects the canonical K1
-provider symbol and production Python/PyTorch references.
-
-Fresh-cache source/object/AOT application-boundary negatives, real P1/C1/T1/I2
-state snapshot/load/release evidence, and the source-composed aggregate are deferred
-until the independently approved P1L merge. Supported Ubuntu 22.04 x86-64 with
-LLVM-Clang 21.1.8 is required at the exact final PR head before I2 can leave blocked
-status or merge.
+and live-count tests, and exercises ASan/UBSan; supported CI additionally enables
+LeakSanitizer. It compiles two fresh-cache strict AOT integration executables,
+requires byte-identical programs and
+stdout, exercises real P1/C1/I2 state ownership, and rejects the canonical K1
+provider symbol and production Python/PyTorch references. Supported Ubuntu 22.04
+x86-64 with LLVM-Clang 21.1.8 is required at the exact final PR head before I2 can
+move from active to review or complete.

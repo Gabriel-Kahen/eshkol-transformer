@@ -180,6 +180,268 @@ static void check_present(et_f32_parameter *parameter, uint64_t count,
   destroy_tensor(&snapshot);
 }
 
+static void test_private_owner_and_identity_seams(void) {
+  const uint64_t shape[] = {2u};
+  const uint64_t zero_shape[] = {0u};
+  const uint32_t bits[] = {UINT32_C(0x3f800000), UINT32_C(0x80000000)};
+  et_f32_tensor_error error;
+  et_f32_tensor *initial = make_tensor(shape, 1u, bits, 2u);
+  et_f32_tensor *ordinary_clone = NULL;
+  et_f32_tensor *owned_a = NULL;
+  et_f32_tensor *owned_b = NULL;
+  et_f32_tensor *zero_source = make_tensor(zero_shape, 1u, NULL, 0u);
+  et_f32_tensor *zero_a = NULL;
+  et_f32_tensor *zero_b = NULL;
+  et_f32_tensor *stale_source = NULL;
+  et_f32_tensor *stale;
+  et_f32_parameter *parameter = make_parameter(initial);
+  et_f32_parameter *stale_parameter;
+  const et_f32_tensor *parameter_value = NULL;
+  et_f32_tensor_borrow *borrow = NULL;
+  et_f32_tensor_copy_assignment_v1 assignment = {
+      .struct_size = sizeof(assignment),
+  };
+  et_f32_tensor_copy_plan *plan = NULL;
+  int identity = 1;
+  int other_identity = 2;
+
+  CHECK(et_f32_tensor_clone_v1(initial, &ordinary_clone, &error) == 0);
+  CHECK(et_f32_owned_tensor_clone_v1(initial, &owned_a, &error) == 0);
+  CHECK(et_f32_owned_tensor_clone_v1(initial, &owned_b, &error) == 0);
+  CHECK(et_f32_owned_tensor_clone_v1(zero_source, &zero_a, &error) == 0);
+  CHECK(et_f32_owned_tensor_clone_v1(zero_source, &zero_b, &error) == 0);
+  CHECK(et_f32_tensor_canonical_owner_v1(owned_a) == owned_a);
+  CHECK(et_f32_tensor_canonical_owner_v1(zero_a) == zero_a);
+  CHECK(et_f32_tensor_canonical_owner_v1(
+            (const et_f32_tensor *)(uintptr_t)0x52525252u) == NULL);
+  check_tensor_bits(owned_a, bits, 2u);
+  {
+    const uint32_t changed[] = {UINT32_C(0x40400000), UINT32_C(0x40800000)};
+    CHECK(et_f32_tensor_copy_bits_from_v1(initial, changed, 2u, &error) == 0);
+    check_tensor_bits(owned_a, bits, 2u);
+    CHECK(et_f32_tensor_copy_bits_from_v1(initial, bits, 2u, &error) == 0);
+  }
+
+  CHECK(et_f32_tensor_storage_owner_identical_v1(owned_a, owned_a) == 1);
+  {
+    const et_f32_tensor *wrapper_a = owned_a;
+    const et_f32_tensor *wrapper_b = owned_a;
+    CHECK(et_f32_tensor_storage_owner_identical_v1(wrapper_a, wrapper_b) ==
+          1);
+  }
+  CHECK(et_f32_tensor_storage_owner_identical_v1(owned_a, owned_b) == 0);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(owned_b, owned_a) == 0);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(zero_a, zero_a) == 1);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(zero_a, zero_b) == 0);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(zero_b, zero_a) == 0);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(
+            (const et_f32_tensor *)(uintptr_t)0x51515151u, owned_a) == 0);
+
+  stale_source = make_tensor(shape, 1u, bits, 2u);
+  stale = stale_source;
+  destroy_tensor(&stale_source);
+  expect_error(et_f32_owned_tensor_clone_v1(stale, &stale_source, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(stale_source == NULL);
+  expect_error(et_f32_owned_tensor_clone_v1(
+                   (const et_f32_tensor *)(uintptr_t)0x71717171u,
+                   &stale_source, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(stale_source == NULL);
+  stale_source = ordinary_clone;
+  expect_error(et_f32_owned_tensor_clone_v1(initial, &stale_source, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_BUFFER);
+  CHECK(stale_source == ordinary_clone);
+  stale_source = NULL;
+
+  expect_error(et_f32_parameter_validate_identity_v1(parameter, &identity,
+                                                      &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(et_f32_parameter_bind_identity_v1(parameter, &identity, &error) == 0);
+  CHECK(et_f32_parameter_validate_identity_v1(parameter, &identity, &error) ==
+        0);
+  expect_error(et_f32_parameter_validate_identity_v1(
+                   parameter, &other_identity, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  expect_error(et_f32_parameter_validate_identity_v1(parameter, NULL, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_NULL_ARGUMENT);
+  CHECK(et_f32_parameter_value_tensor_v1(parameter, &parameter_value, &error) ==
+        0);
+  CHECK(et_f32_parameter_canonical_owner_v1(parameter) == parameter_value);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(parameter_value,
+                                                  parameter_value) == 1);
+  expect_error(et_f32_owned_tensor_release_v1((et_f32_tensor *)parameter_value,
+                                               &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+
+  expect_error(et_f32_owned_tensor_release_v1(NULL, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_NULL_ARGUMENT);
+  expect_error(et_f32_owned_tensor_release_v1(initial, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  expect_error(et_f32_owned_tensor_release_v1(ordinary_clone, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  expect_error(et_f32_owned_tensor_release_v1(
+                   (et_f32_tensor *)(uintptr_t)0x61616161u, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+
+  assignment.destination = owned_a;
+  assignment.source = initial;
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &plan, &error) ==
+        0);
+  expect_error(et_f32_owned_tensor_release_v1(owned_a, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(et_f32_tensor_copy_plan_release_v1(&plan, &error) == 0);
+
+  CHECK(et_f32_tensor_borrow_begin_v1(owned_a, &borrow, &error) == 0);
+  expect_error(et_f32_owned_tensor_release_v1(owned_a, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_ACTIVE_BORROW);
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  stale = owned_a;
+  CHECK(et_f32_owned_tensor_release_v1(owned_a, &error) == 0);
+  CHECK(et_f32_tensor_is_live_v1(stale) == 0);
+  CHECK(et_f32_tensor_canonical_owner_v1(stale) == NULL);
+  CHECK(et_f32_tensor_storage_owner_identical_v1(stale, stale) == 0);
+  expect_error(et_f32_owned_tensor_release_v1(stale, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+
+  CHECK(et_f32_owned_tensor_release_v1(owned_b, &error) == 0);
+  CHECK(et_f32_owned_tensor_release_v1(zero_a, &error) == 0);
+  CHECK(et_f32_owned_tensor_release_v1(zero_b, &error) == 0);
+  destroy_tensor(&ordinary_clone);
+  stale_parameter = parameter;
+  destroy_parameter(&parameter);
+  CHECK(et_f32_parameter_is_live_v1(stale_parameter) == 0);
+  CHECK(et_f32_parameter_canonical_owner_v1(stale_parameter) == NULL);
+  CHECK(et_f32_parameter_canonical_owner_v1(
+            (const et_f32_parameter *)(uintptr_t)0x53535353u) == NULL);
+  expect_error(et_f32_parameter_validate_identity_v1(
+                   stale_parameter, &identity, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  destroy_tensor(&zero_source);
+  destroy_tensor(&initial);
+}
+
+#ifdef ET_F32_TENSOR_TESTING
+static void test_owned_clone_failpoints_and_counts(void) {
+  const uint64_t shape[] = {2u};
+  const uint64_t alias_shape[] = {66u};
+  const uint32_t bits[] = {UINT32_C(0x3f800000), UINT32_C(0x40000000)};
+  const uint32_t alias_bits[66] = {0};
+  et_f32_tensor_error error;
+  et_f32_tensor *source = make_tensor(shape, 1u, bits, 2u);
+  et_f32_tensor *owned = NULL;
+  et_f32_tensor *other = NULL;
+  et_f32_tensor *probe = NULL;
+  et_f32_tensor *alias_source =
+      make_tensor(alias_shape, 1u, alias_bits, 66u);
+  et_f32_tensor *alias_owned = NULL;
+  et_f32_test_live_counts_v1 baseline = {.struct_size = sizeof(baseline)};
+  et_f32_test_live_counts_v1 current = {.struct_size = sizeof(current)};
+  et_f32_test_live_counts_v1 comparison_baseline = {
+      .struct_size = sizeof(comparison_baseline)};
+  int saw_success = 0;
+
+  CHECK(et_f32_owned_tensor_clone_v1(alias_source, &alias_owned, &error) == 0);
+  CHECK(et_f32_owned_tensor_release_v1(
+            alias_owned,
+            (et_f32_tensor_error *)(void *)
+                et_f32_tensor_test_data_storage_v1(alias_owned)) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(et_f32_tensor_is_live_v1(alias_owned) == 1);
+  check_tensor_bits(alias_owned, alias_bits, 66u);
+  CHECK(et_f32_owned_tensor_release_v1(alias_owned, &error) == 0);
+  destroy_tensor(&alias_source);
+
+  et_f32_test_live_counts_snapshot_v1(&baseline);
+  {
+    et_f32_test_live_counts_v1 invalid = {
+        .struct_size = sizeof(invalid) - 1u,
+        .tensors = SIZE_MAX,
+        .owned_clones = SIZE_MAX,
+    };
+    et_f32_test_live_counts_snapshot_v1(&invalid);
+    CHECK(invalid.struct_size == sizeof(invalid) - 1u);
+    CHECK(invalid.tensors == SIZE_MAX);
+    CHECK(invalid.owned_clones == SIZE_MAX);
+  }
+  for (size_t allowed = 0u; allowed < 8u; allowed++) {
+    et_f32_tensor_test_fail_alloc_after_v1(allowed);
+    int32_t result = et_f32_owned_tensor_clone_v1(source, &probe, &error);
+    if (result == 0) {
+      saw_success = 1;
+      et_f32_tensor_test_reset_allocator_v1();
+      CHECK(et_f32_owned_tensor_release_v1(probe, &error) == 0);
+      probe = NULL;
+      break;
+    }
+    expect_error(result, &error, ET_F32_TENSOR_ERROR_INTERNAL,
+                 ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
+    CHECK(probe == NULL);
+    current.struct_size = sizeof(current);
+    et_f32_test_live_counts_snapshot_v1(&current);
+    CHECK(current.tensors == baseline.tensors);
+    CHECK(current.owned_clones == baseline.owned_clones);
+    et_f32_tensor_test_reset_allocator_v1();
+  }
+  CHECK(saw_success);
+  current.struct_size = sizeof(current);
+  et_f32_test_live_counts_snapshot_v1(&current);
+  CHECK(current.tensors == baseline.tensors);
+  CHECK(current.owned_clones == baseline.owned_clones);
+
+  CHECK(et_f32_owned_tensor_clone_v1(source, &owned, &error) == 0);
+  CHECK(et_f32_owned_tensor_clone_v1(source, &other, &error) == 0);
+  current.struct_size = sizeof(current);
+  et_f32_test_live_counts_snapshot_v1(&current);
+  CHECK(current.tensors == baseline.tensors + 2u);
+  CHECK(current.owned_clones == baseline.owned_clones + 2u);
+  et_f32_test_live_counts_snapshot_v1(&comparison_baseline);
+  et_f32_tensor_test_fail_alloc_after_v1(0u);
+  for (size_t repetition = 0u; repetition < 64u; repetition++) {
+    CHECK(et_f32_tensor_storage_owner_identical_v1(owned, owned) == 1);
+    CHECK(et_f32_tensor_storage_owner_identical_v1(owned, other) == 0);
+    CHECK(et_f32_tensor_storage_owner_identical_v1(other, owned) == 0);
+  }
+  current.struct_size = sizeof(current);
+  et_f32_test_live_counts_snapshot_v1(&current);
+  CHECK(current.tensors == comparison_baseline.tensors);
+  CHECK(current.parameters == comparison_baseline.parameters);
+  CHECK(current.borrows == comparison_baseline.borrows);
+  CHECK(current.copy_plans == comparison_baseline.copy_plans);
+  CHECK(current.gradient_plans == comparison_baseline.gradient_plans);
+  CHECK(current.reset_plans == comparison_baseline.reset_plans);
+  CHECK(current.owned_clones == comparison_baseline.owned_clones);
+  CHECK(et_f32_owned_tensor_release_v1(owned, &error) == 0);
+  owned = NULL;
+  CHECK(et_f32_owned_tensor_release_v1(other, &error) == 0);
+  other = NULL;
+  CHECK(et_f32_owned_tensor_clone_v1(source, &probe, &error) ==
+        ET_F32_TENSOR_ERROR_INTERNAL);
+  CHECK(probe == NULL);
+  et_f32_tensor_test_reset_allocator_v1();
+  current.struct_size = sizeof(current);
+  et_f32_test_live_counts_snapshot_v1(&current);
+  CHECK(current.tensors == baseline.tensors);
+  CHECK(current.owned_clones == baseline.owned_clones);
+  destroy_tensor(&source);
+}
+#endif
+
 static void test_parameter_identity_value_and_detachment(void) {
   const uint64_t shape[] = {3u};
   const uint32_t initial_bits[] = {UINT32_C(0x3f800000),
@@ -976,12 +1238,114 @@ static void test_parameter_and_plan_failpoints(void) {
 }
 #endif
 
+static void expect_retired_shell_alias_rejected(et_f32_tensor *live,
+                                                 void *retired) {
+  et_f32_tensor_error error;
+  size_t rank = SIZE_MAX;
+  CHECK(et_f32_tensor_rank_v1(
+            live, &rank, (et_f32_tensor_error *)retired) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(rank == SIZE_MAX);
+  expect_error(et_f32_tensor_rank_v1(live, (size_t *)retired, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+               ET_F32_TENSOR_CODE_INVALID_BUFFER);
+}
+
+static void test_parameter_and_plan_addresses_never_resurrect(void) {
+  const uint64_t shape[] = {1u};
+  const uint32_t bits[] = {UINT32_C(0x3f800000)};
+  et_f32_tensor_error error;
+  et_f32_tensor *initial = make_tensor(shape, 1u, bits, 1u);
+  et_f32_tensor *contribution = make_tensor(shape, 1u, bits, 1u);
+  et_f32_parameter *parameter = make_parameter(initial);
+  et_f32_parameter *stale_parameter = parameter;
+  et_f32_gradient_plan *gradient_plan = NULL;
+  et_f32_gradient_plan *stale_gradient_plan;
+  et_f32_gradient_reset_plan *reset_plan = NULL;
+  et_f32_gradient_reset_plan *stale_reset_plan;
+  et_f32_gradient_contribution_v1 item;
+  et_f32_parameter *parameters[1];
+  int identity = 1;
+
+  destroy_parameter(&parameter);
+  for (size_t repetition = 0u; repetition < 32u; repetition++) {
+    et_f32_parameter *fresh = make_parameter(initial);
+    CHECK(fresh != stale_parameter);
+    expect_error(et_f32_parameter_validate_identity_v1(
+                     stale_parameter, &identity, &error),
+                 &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                 ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    destroy_parameter(&fresh);
+  }
+  expect_retired_shell_alias_rejected(initial, stale_parameter);
+  parameter = stale_parameter;
+  expect_error(et_f32_parameter_destroy_v1(&parameter, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(parameter == stale_parameter);
+
+  parameter = make_parameter(initial);
+  CHECK(et_f32_parameter_bind_identity_v1(parameter, &identity, &error) == 0);
+  item.struct_size = sizeof(item);
+  item.destination = parameter;
+  item.weighted_numerator = contribution;
+  item.expected_ordinal = 0u;
+  CHECK(et_f32_gradient_plan_prepare_v1(
+            1u, &item, UINT32_C(0x3f800000), &gradient_plan, &error) == 0);
+  stale_gradient_plan = gradient_plan;
+  CHECK(et_f32_gradient_plan_release_v1(&gradient_plan, &error) == 0);
+  for (size_t repetition = 0u; repetition < 32u; repetition++) {
+    CHECK(et_f32_gradient_plan_prepare_v1(
+              1u, &item, UINT32_C(0x3f800000), &gradient_plan, &error) == 0);
+    CHECK(gradient_plan != stale_gradient_plan);
+    expect_error(et_f32_gradient_plan_commit_v1(stale_gradient_plan, &error),
+                 &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                 ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(et_f32_gradient_plan_release_v1(&gradient_plan, &error) == 0);
+  }
+  expect_retired_shell_alias_rejected(initial, stale_gradient_plan);
+  gradient_plan = stale_gradient_plan;
+  expect_error(et_f32_gradient_plan_release_v1(&gradient_plan, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(gradient_plan == stale_gradient_plan);
+
+  parameters[0] = parameter;
+  CHECK(et_f32_gradient_reset_plan_prepare_v1(1u, parameters, &reset_plan,
+                                               &error) == 0);
+  stale_reset_plan = reset_plan;
+  CHECK(et_f32_gradient_reset_plan_release_v1(&reset_plan, &error) == 0);
+  for (size_t repetition = 0u; repetition < 32u; repetition++) {
+    CHECK(et_f32_gradient_reset_plan_prepare_v1(1u, parameters, &reset_plan,
+                                                 &error) == 0);
+    CHECK(reset_plan != stale_reset_plan);
+    expect_error(et_f32_gradient_reset_plan_commit_v1(stale_reset_plan,
+                                                       &error),
+                 &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                 ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(et_f32_gradient_reset_plan_release_v1(&reset_plan, &error) == 0);
+  }
+  expect_retired_shell_alias_rejected(initial, stale_reset_plan);
+  reset_plan = stale_reset_plan;
+  expect_error(et_f32_gradient_reset_plan_release_v1(&reset_plan, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(reset_plan == stale_reset_plan);
+
+  destroy_parameter(&parameter);
+  destroy_tensor(&contribution);
+  destroy_tensor(&initial);
+}
+
 int main(void) {
+  test_private_owner_and_identity_seams();
   test_parameter_identity_value_and_detachment();
   test_tensor_batch_copy_atomicity();
   test_gradient_accumulation_and_reset();
   test_binary32_environment_and_edge_rounding();
+  test_parameter_and_plan_addresses_never_resurrect();
 #ifdef ET_F32_TENSOR_TESTING
+  test_owned_clone_failpoints_and_counts();
   test_zero_count_live_error_aliases();
   test_malformed_gradient_state_and_overflow();
   test_parameter_and_plan_failpoints();
@@ -994,6 +1358,7 @@ int main(void) {
     CHECK(counts.copy_plans == 0u);
     CHECK(counts.gradient_plans == 0u);
     CHECK(counts.reset_plans == 0u);
+    CHECK(counts.owned_clones == 0u);
   }
 #endif
   if (failures != 0) {

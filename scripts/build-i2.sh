@@ -67,6 +67,24 @@ awk '
 ar rcsD "${temporary_dir}/libeshkol_transformer_f32.a" \
   "${temporary_dir}/f32_tensor.o"
 
+if [[ "${mode}" == normal ]]; then
+  E1B_COMPILER_TIMEOUT_SECONDS="${I2_COMPILER_TIMEOUT_SECONDS:-360}" \
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${PROJECT_ROOT}/native/i2_wave2_root.esk" \
+    "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+    "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt" \
+    "${PROJECT_ROOT}/native/i2_wave2_public_exports.txt" \
+    "${temporary_dir}/i2_wave2.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/src"
+  cmp "${PROJECT_ROOT}/native/i2_wave2_defined_symbols.txt" \
+    "${temporary_dir}/i2_wave2.o.evidence/global-defined.txt"
+  ar rcsD "${temporary_dir}/libeshkol_transformer_wave2.a" \
+    "${temporary_dir}/i2_wave2.o"
+fi
+
 mkdir -p "${artifact_dir}"
 rm -rf -- "${artifact_dir}/f32_tensor.o.evidence.tmp"
 mkdir -p "${artifact_dir}/f32_tensor.o.evidence.tmp"
@@ -83,8 +101,20 @@ cp "${temporary_dir}/f32-readelf-symbols.txt" \
 mv -f "${temporary_dir}/f32_tensor.o" "${artifact_dir}/f32_tensor.o"
 mv -f "${temporary_dir}/libeshkol_transformer_f32.a" \
   "${artifact_dir}/libeshkol_transformer_f32.a"
+if [[ "${mode}" == normal ]]; then
+  rm -rf -- "${artifact_dir}/i2_wave2.o.evidence"
+  mv "${temporary_dir}/i2_wave2.o.evidence" \
+    "${artifact_dir}/i2_wave2.o.evidence"
+  mv -f "${temporary_dir}/i2_wave2.o" "${artifact_dir}/i2_wave2.o"
+  mv -f "${temporary_dir}/libeshkol_transformer_wave2.a" \
+    "${artifact_dir}/libeshkol_transformer_wave2.a"
+fi
 rm -rf -- "${artifact_dir}/f32_tensor.o.evidence"
 mv "${artifact_dir}/f32_tensor.o.evidence.tmp" \
   "${artifact_dir}/f32_tensor.o.evidence"
 printf 'built I2 carrier-local dense CPU-f32 substrate: %s\n' \
   "${artifact_dir}/libeshkol_transformer_f32.a"
+if [[ "${mode}" == normal ]]; then
+  printf 'built source-composed Wave 2 aggregate: %s\n' \
+    "${artifact_dir}/libeshkol_transformer_wave2.a"
+fi
