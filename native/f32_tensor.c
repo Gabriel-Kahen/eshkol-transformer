@@ -291,6 +291,17 @@ static void retire_tensor(et_f32_tensor *tensor) {
   retired_tensors = tensor;
 }
 
+/* The caller has already proved that tensor is the exact live canonical owner
+ * and has no active borrow or plan pin.  This is the nonraising destruction
+ * tail used after public or parameter-owner release admission. */
+static void destroy_tensor_admitted(et_f32_tensor *tensor) {
+  unregister_tensor(tensor);
+  free(tensor->data);
+  free(tensor->strides);
+  free(tensor->shape);
+  retire_tensor(tensor);
+}
+
 static void retire_borrow(et_f32_tensor_borrow *borrow) {
   borrow->magic = 0u;
   borrow->owner = NULL;
@@ -718,11 +729,7 @@ int32_t et_f32_tensor_destroy_v1(et_f32_tensor **slot,
                      "tensor is retained by a prepared plan");
   }
   (void)success(error);
-  unregister_tensor(tensor);
-  free(tensor->data);
-  free(tensor->strides);
-  free(tensor->shape);
-  retire_tensor(tensor);
+  destroy_tensor_admitted(tensor);
   *slot = NULL;
   return 0;
 }
@@ -1024,14 +1031,18 @@ int32_t et_f32_tensor_copy_plan_prepare_v1(
     return result;
   }
   if (count == 0u || count > ET_F32_PARAMETER_MAX_BATCH ||
-      count > SIZE_MAX / sizeof(*assignments)) {
+      count > SIZE_MAX / ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE) {
     if (assignments != NULL && count > 0u) {
-      if (count > SIZE_MAX / sizeof(*assignments) ||
-          !pointer_span_fits(assignments, count * sizeof(*assignments))) {
+      if (count > SIZE_MAX / ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE ||
+          !pointer_span_fits(
+              assignments,
+              count * ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE)) {
         return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
       }
       if (preflight_error_operand(error, assignments,
-                                  count * sizeof(*assignments)) != 0) {
+                                  count *
+                                      ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE) !=
+          0) {
         return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
       }
     }
@@ -1039,7 +1050,7 @@ int32_t et_f32_tensor_copy_plan_prepare_v1(
                      ET_F32_TENSOR_CODE_INTEGER_OVERFLOW,
                      "f32-copy-plan-prepare", "assignment count is invalid");
   }
-  assignment_bytes = count * sizeof(*assignments);
+  assignment_bytes = count * ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
   result = preflight_error_operand(error, assignments, assignment_bytes);
   if (result != 0) {
     return result;
@@ -1058,7 +1069,7 @@ int32_t et_f32_tensor_copy_plan_prepare_v1(
   }
   for (size_t index = 0u; index < count; index++) {
     const et_f32_tensor_copy_assignment_v1 *item = &assignments[index];
-    if (item->struct_size != sizeof(*item)) {
+    if (item->struct_size != ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE) {
       return set_error(error, ET_F32_TENSOR_ERROR_VERSION_MISMATCH,
                        ET_F32_TENSOR_CODE_INVALID_BUFFER,
                        "f32-copy-plan-prepare", "assignment struct size differs");
@@ -1382,7 +1393,9 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
   }
   if (parameter->plan_pins != 0u ||
       parameter->value->active_borrow != NULL ||
-      parameter->gradient->active_borrow != NULL) {
+      parameter->gradient->active_borrow != NULL ||
+      parameter->value->plan_pins != 0u ||
+      parameter->gradient->plan_pins != 0u) {
     return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
                      ET_F32_TENSOR_CODE_INVALID_HANDLE,
                      "f32-parameter-destroy", "parameter is borrowed or pinned");
@@ -1392,8 +1405,8 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
     cursor = &(*cursor)->registry_next;
   }
   *cursor = parameter->registry_next;
-  (void)et_f32_tensor_destroy_v1(&parameter->gradient, NULL);
-  (void)et_f32_tensor_destroy_v1(&parameter->value, NULL);
+  destroy_tensor_admitted(parameter->gradient);
+  destroy_tensor_admitted(parameter->value);
   retire_parameter(parameter);
   *slot = NULL;
   return success(error);
@@ -1914,6 +1927,7 @@ int32_t et_f32_gradient_plan_prepare_v1(
   plan->magic = ET_F32_GRAD_PLAN_MAGIC;
   for (size_t index = 0u; index < count; index++) {
     plan->entries[index].parameter->plan_pins++;
+    plan->entries[index].parameter->gradient->plan_pins++;
     ((et_f32_tensor *)plan->entries[index].source)->plan_pins++;
   }
   plan->registry_next = live_gradient_plans;
@@ -1979,6 +1993,7 @@ int32_t et_f32_gradient_plan_release_v1(et_f32_gradient_plan **slot,
   *cursor = plan->registry_next;
   for (size_t index = 0u; index < plan->count; index++) {
     plan->entries[index].parameter->plan_pins--;
+    plan->entries[index].parameter->gradient->plan_pins--;
     ((et_f32_tensor *)plan->entries[index].source)->plan_pins--;
     free(plan->entries[index].prepared);
   }
@@ -2036,7 +2051,8 @@ int32_t et_f32_gradient_reset_plan_prepare_v1(
     if (parameters[index]->identity == NULL ||
         !parameter_metadata_valid(parameters[index]) ||
         parameters[index]->plan_pins != 0u ||
-        parameters[index]->gradient->active_borrow != NULL) {
+        parameters[index]->gradient->active_borrow != NULL ||
+        parameters[index]->gradient->plan_pins != 0u) {
       return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
                        ET_F32_TENSOR_CODE_INVALID_HANDLE,
                        "f32-gradient-reset-prepare",
@@ -2070,6 +2086,7 @@ int32_t et_f32_gradient_reset_plan_prepare_v1(
   plan->magic = ET_F32_RESET_PLAN_MAGIC;
   for (size_t index = 0u; index < count; index++) {
     plan->parameters[index]->plan_pins++;
+    plan->parameters[index]->gradient->plan_pins++;
   }
   plan->registry_next = live_reset_plans;
   live_reset_plans = plan;
@@ -2134,6 +2151,7 @@ int32_t et_f32_gradient_reset_plan_release_v1(
   *cursor = plan->registry_next;
   for (size_t index = 0u; index < plan->count; index++) {
     plan->parameters[index]->plan_pins--;
+    plan->parameters[index]->gradient->plan_pins--;
   }
   free(plan->parameters);
   retire_reset_plan(plan);

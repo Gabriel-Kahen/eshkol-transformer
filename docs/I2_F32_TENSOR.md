@@ -26,6 +26,12 @@ the one-member `build/i2/libeshkol_transformer_wave2.a`, containing
 manifests are checked by the I2 gates. I2 has no install or dynamic-library search
 contract.
 
+On the supported x86-64 ABI, `et_f32_tensor_copy_assignment_v1` is frozen at
+24 bytes: `struct_size` is at offset 0, `destination` at offset 8, and `source`
+at offset 16. Callers must publish
+`ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE`; any other size is rejected before a
+plan or mutation is published.
+
 ## Owned tensor ABI 1.0
 
 An `et_f32_tensor` exclusively owns its shape, byte strides, and naturally

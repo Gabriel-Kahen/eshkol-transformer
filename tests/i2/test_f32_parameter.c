@@ -31,6 +31,16 @@ _Static_assert(offsetof(et_f32_gradient_metadata_v1, contribution_count) ==
                "I2 gradient count offset changed");
 _Static_assert(sizeof(et_f32_gradient_contribution_v1) == 32u,
                "I2 contribution layout changed");
+_Static_assert(ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE == 24u,
+               "I2 copy assignment v1.0 constant changed");
+_Static_assert(sizeof(et_f32_tensor_copy_assignment_v1) == 24u,
+               "I2 copy assignment layout changed");
+_Static_assert(offsetof(et_f32_tensor_copy_assignment_v1, struct_size) == 0u,
+               "I2 copy assignment struct_size offset changed");
+_Static_assert(offsetof(et_f32_tensor_copy_assignment_v1, destination) == 8u,
+               "I2 copy assignment destination offset changed");
+_Static_assert(offsetof(et_f32_tensor_copy_assignment_v1, source) == 16u,
+               "I2 copy assignment source offset changed");
 
 static void expect_error(int32_t result, const et_f32_tensor_error *error,
                          et_f32_tensor_error_category category,
@@ -180,6 +190,25 @@ static void check_present(et_f32_parameter *parameter, uint64_t count,
   destroy_tensor(&snapshot);
 }
 
+#ifdef ET_F32_TENSOR_TESTING
+static et_f32_test_live_counts_v1 live_counts(void) {
+  et_f32_test_live_counts_v1 counts = {.struct_size = sizeof(counts)};
+  et_f32_test_live_counts_snapshot_v1(&counts);
+  return counts;
+}
+
+static void check_live_counts(et_f32_test_live_counts_v1 expected) {
+  et_f32_test_live_counts_v1 actual = live_counts();
+  CHECK(actual.tensors == expected.tensors);
+  CHECK(actual.parameters == expected.parameters);
+  CHECK(actual.borrows == expected.borrows);
+  CHECK(actual.copy_plans == expected.copy_plans);
+  CHECK(actual.gradient_plans == expected.gradient_plans);
+  CHECK(actual.reset_plans == expected.reset_plans);
+  CHECK(actual.owned_clones == expected.owned_clones);
+}
+#endif
+
 static void test_private_owner_and_identity_seams(void) {
   const uint64_t shape[] = {2u};
   const uint64_t zero_shape[] = {0u};
@@ -199,7 +228,7 @@ static void test_private_owner_and_identity_seams(void) {
   const et_f32_tensor *parameter_value = NULL;
   et_f32_tensor_borrow *borrow = NULL;
   et_f32_tensor_copy_assignment_v1 assignment = {
-      .struct_size = sizeof(assignment),
+      .struct_size = ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE,
   };
   et_f32_tensor_copy_plan *plan = NULL;
   int identity = 1;
@@ -550,12 +579,32 @@ static void test_tensor_batch_copy_atomicity(void) {
 
   memset(assignments, 0, sizeof(assignments));
   for (size_t index = 0u; index < 2u; index++) {
-    assignments[index].struct_size = sizeof(assignments[index]);
+    assignments[index].struct_size =
+        ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
   }
   assignments[0].destination = destination_a;
   assignments[0].source = source_a;
   assignments[1].destination = destination_b;
   assignments[1].source = wrong;
+  assignments[0].struct_size =
+      ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE - 1u;
+  expect_error(et_f32_tensor_copy_plan_prepare_v1(2u, assignments, &plan,
+                                                  &error),
+               &error, ET_F32_TENSOR_ERROR_VERSION_MISMATCH,
+               ET_F32_TENSOR_CODE_INVALID_BUFFER);
+  CHECK(plan == NULL);
+  check_tensor_bits(destination_a, old_bits, 2u);
+  check_tensor_bits(destination_b, old_bits, 2u);
+  assignments[0].struct_size =
+      ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE + 1u;
+  expect_error(et_f32_tensor_copy_plan_prepare_v1(2u, assignments, &plan,
+                                                  &error),
+               &error, ET_F32_TENSOR_ERROR_VERSION_MISMATCH,
+               ET_F32_TENSOR_CODE_INVALID_BUFFER);
+  CHECK(plan == NULL);
+  check_tensor_bits(destination_a, old_bits, 2u);
+  check_tensor_bits(destination_b, old_bits, 2u);
+  assignments[0].struct_size = ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
   expect_error(et_f32_tensor_copy_plan_prepare_v1(2u, assignments, &plan,
                                                   &error),
                &error, ET_F32_TENSOR_ERROR_SHAPE_MISMATCH,
@@ -638,6 +687,254 @@ static void test_tensor_batch_copy_atomicity(void) {
   destroy_tensor(&destination_a);
   destroy_tensor(&destination_b);
   destroy_tensor(&wrong);
+}
+
+static void test_parameter_destroy_rejects_child_plan_pins(void) {
+  const uint64_t shape[] = {1u};
+  const uint32_t bits[] = {UINT32_C(0x3f800000)};
+  et_f32_tensor_error error;
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_test_live_counts_v1 function_baseline = live_counts();
+  et_f32_test_live_counts_v1 failure_baseline;
+#endif
+  et_f32_tensor *initial = make_tensor(shape, 1u, bits, 1u);
+  et_f32_tensor *copy_destination = make_tensor(shape, 1u, bits, 1u);
+  et_f32_tensor *copy_source_tensor = make_tensor(shape, 1u, bits, 1u);
+  et_f32_parameter *copy_source = make_parameter(initial);
+  et_f32_parameter *copy_target = make_parameter(initial);
+  et_f32_parameter *gradient_source = make_parameter(initial);
+  et_f32_parameter *gradient_destination = make_parameter(initial);
+  et_f32_parameter *saved_parameter;
+  const et_f32_tensor *copy_source_value = NULL;
+  const et_f32_tensor *copy_target_value = NULL;
+  const et_f32_tensor *gradient_source_value = NULL;
+  et_f32_tensor_copy_assignment_v1 assignment;
+  et_f32_tensor_copy_plan *copy_plan = NULL;
+  et_f32_gradient_contribution_v1 contribution;
+  et_f32_gradient_plan *gradient_plan = NULL;
+  int gradient_destination_identity = 1;
+
+  CHECK(et_f32_parameter_value_tensor_v1(copy_source, &copy_source_value,
+                                         &error) == 0);
+  assignment.struct_size = ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
+  assignment.destination = copy_destination;
+  assignment.source = copy_source_value;
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &copy_plan,
+                                           &error) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  failure_baseline = live_counts();
+#endif
+  saved_parameter = copy_source;
+  expect_error(et_f32_parameter_destroy_v1(&copy_source, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(copy_source == saved_parameter);
+  CHECK(et_f32_parameter_is_live_v1(copy_source) == 1);
+  CHECK(et_f32_tensor_is_live_v1(copy_source_value) == 1);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(failure_baseline);
+#endif
+  CHECK(et_f32_tensor_copy_plan_release_v1(&copy_plan, &error) == 0);
+  destroy_parameter(&copy_source);
+  CHECK(et_f32_tensor_is_live_v1(copy_source_value) == 0);
+
+  CHECK(et_f32_parameter_value_tensor_v1(copy_target, &copy_target_value,
+                                         &error) == 0);
+  assignment.destination = (et_f32_tensor *)copy_target_value;
+  assignment.source = copy_source_tensor;
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &copy_plan,
+                                           &error) == 0);
+  CHECK(et_f32_tensor_copy_plan_commit_v1(copy_plan, &error) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  failure_baseline = live_counts();
+#endif
+  saved_parameter = copy_target;
+  expect_error(et_f32_parameter_destroy_v1(&copy_target, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(copy_target == saved_parameter);
+  CHECK(et_f32_parameter_is_live_v1(copy_target) == 1);
+  CHECK(et_f32_tensor_is_live_v1(copy_target_value) == 1);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(failure_baseline);
+#endif
+  CHECK(et_f32_tensor_copy_plan_release_v1(&copy_plan, &error) == 0);
+  destroy_parameter(&copy_target);
+  CHECK(et_f32_tensor_is_live_v1(copy_target_value) == 0);
+
+  CHECK(et_f32_parameter_bind_identity_v1(
+            gradient_destination, &gradient_destination_identity, &error) == 0);
+  CHECK(et_f32_parameter_value_tensor_v1(
+            gradient_source, &gradient_source_value, &error) == 0);
+  contribution.struct_size = sizeof(contribution);
+  contribution.destination = gradient_destination;
+  contribution.weighted_numerator = gradient_source_value;
+  contribution.expected_ordinal = 0u;
+  CHECK(et_f32_gradient_plan_prepare_v1(
+            1u, &contribution, UINT32_C(0x3f800000), &gradient_plan,
+            &error) == 0);
+  CHECK(et_f32_gradient_plan_commit_v1(gradient_plan, &error) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  failure_baseline = live_counts();
+#endif
+  saved_parameter = gradient_source;
+  expect_error(et_f32_parameter_destroy_v1(&gradient_source, &error), &error,
+               ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(gradient_source == saved_parameter);
+  CHECK(et_f32_parameter_is_live_v1(gradient_source) == 1);
+  CHECK(et_f32_tensor_is_live_v1(gradient_source_value) == 1);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(failure_baseline);
+#endif
+  CHECK(et_f32_gradient_plan_release_v1(&gradient_plan, &error) == 0);
+  destroy_parameter(&gradient_source);
+  CHECK(et_f32_tensor_is_live_v1(gradient_source_value) == 0);
+
+  destroy_parameter(&gradient_destination);
+  destroy_tensor(&copy_source_tensor);
+  destroy_tensor(&copy_destination);
+  destroy_tensor(&initial);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(function_baseline);
+#endif
+}
+
+static void test_gradient_borrow_and_plan_orderings(void) {
+  const uint64_t shape[] = {2u};
+  const uint32_t initial_bits[] = {0u, 0u};
+  const uint32_t contribution_bits[] = {UINT32_C(0x3f800000),
+                                        UINT32_C(0x40000000)};
+  et_f32_tensor_error error;
+  et_f32_tensor *initial = make_tensor(shape, 1u, initial_bits, 2u);
+  et_f32_tensor *contribution =
+      make_tensor(shape, 1u, contribution_bits, 2u);
+  et_f32_parameter *parameter = make_parameter(initial);
+  et_f32_gradient_contribution_v1 item = {
+      .struct_size = sizeof(item),
+      .destination = parameter,
+      .weighted_numerator = contribution,
+      .expected_ordinal = 0u,
+  };
+  et_f32_parameter *parameters[] = {parameter};
+  et_f32_gradient_plan *gradient_plan = NULL;
+  et_f32_gradient_reset_plan *reset_plan = NULL;
+  et_f32_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *borrowed_view = NULL;
+  int identity = 1;
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_test_live_counts_v1 baseline;
+#endif
+
+  CHECK(et_f32_parameter_bind_identity_v1(parameter, &identity, &error) == 0);
+  CHECK(et_f32_gradient_plan_prepare_v1(
+            1u, &item, UINT32_C(0x3f800000), &gradient_plan, &error) == 0);
+  CHECK(et_f32_gradient_plan_commit_v1(gradient_plan, &error) == 0);
+  CHECK(et_f32_gradient_plan_release_v1(&gradient_plan, &error) == 0);
+  item.expected_ordinal = 1u;
+  check_present(parameter, 1u, UINT32_C(0x3f800000), contribution_bits, 2u,
+                0);
+#ifdef ET_F32_TENSOR_TESTING
+  baseline = live_counts();
+#endif
+
+  CHECK(et_f32_parameter_gradient_borrow_begin_v1(parameter, &borrow,
+                                                   &error) == 0);
+  CHECK(et_f32_tensor_borrow_view_v1(borrow, &borrowed_view, &error) == 0);
+  CHECK(borrowed_view != NULL);
+  CHECK(memcmp(borrowed_view->data, contribution_bits,
+               sizeof(contribution_bits)) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_fail_alloc_after_v1(0u);
+#endif
+  expect_error(et_f32_gradient_plan_prepare_v1(
+                   1u, &item, UINT32_C(0x3f800000), &gradient_plan, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_reset_allocator_v1();
+#endif
+  CHECK(gradient_plan == NULL);
+  CHECK(memcmp(borrowed_view->data, contribution_bits,
+               sizeof(contribution_bits)) == 0);
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  borrowed_view = NULL;
+  check_present(parameter, 1u, UINT32_C(0x3f800000), contribution_bits, 2u,
+                0);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(baseline);
+#endif
+
+  CHECK(et_f32_gradient_plan_prepare_v1(
+            1u, &item, UINT32_C(0x3f800000), &gradient_plan, &error) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_fail_alloc_after_v1(0u);
+#endif
+  expect_error(et_f32_parameter_gradient_borrow_begin_v1(parameter, &borrow,
+                                                          &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_reset_allocator_v1();
+#endif
+  CHECK(borrow == NULL);
+  CHECK(et_f32_gradient_plan_release_v1(&gradient_plan, &error) == 0);
+  check_present(parameter, 1u, UINT32_C(0x3f800000), contribution_bits, 2u,
+                0);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(baseline);
+#endif
+
+  CHECK(et_f32_parameter_gradient_borrow_begin_v1(parameter, &borrow,
+                                                   &error) == 0);
+  CHECK(et_f32_tensor_borrow_view_v1(borrow, &borrowed_view, &error) == 0);
+  CHECK(borrowed_view != NULL);
+  CHECK(memcmp(borrowed_view->data, contribution_bits,
+               sizeof(contribution_bits)) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_fail_alloc_after_v1(0u);
+#endif
+  expect_error(et_f32_gradient_reset_plan_prepare_v1(
+                   1u, parameters, &reset_plan, &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_reset_allocator_v1();
+#endif
+  CHECK(reset_plan == NULL);
+  CHECK(memcmp(borrowed_view->data, contribution_bits,
+               sizeof(contribution_bits)) == 0);
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  borrowed_view = NULL;
+  check_present(parameter, 1u, UINT32_C(0x3f800000), contribution_bits, 2u,
+                0);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(baseline);
+#endif
+
+  CHECK(et_f32_gradient_reset_plan_prepare_v1(1u, parameters, &reset_plan,
+                                               &error) == 0);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_fail_alloc_after_v1(0u);
+#endif
+  expect_error(et_f32_parameter_gradient_borrow_begin_v1(parameter, &borrow,
+                                                          &error),
+               &error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+               ET_F32_TENSOR_CODE_INVALID_HANDLE);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_tensor_test_reset_allocator_v1();
+#endif
+  CHECK(borrow == NULL);
+  CHECK(et_f32_gradient_reset_plan_release_v1(&reset_plan, &error) == 0);
+  check_present(parameter, 1u, UINT32_C(0x3f800000), contribution_bits, 2u,
+                0);
+#ifdef ET_F32_TENSOR_TESTING
+  check_live_counts(baseline);
+#endif
+
+  destroy_parameter(&parameter);
+  destroy_tensor(&contribution);
+  destroy_tensor(&initial);
 }
 
 static void test_gradient_accumulation_and_reset(void) {
@@ -1152,7 +1449,7 @@ static void test_parameter_and_plan_failpoints(void) {
     et_f32_tensor *destination =
         make_tensor(shape, 1u, old_bits, 2u);
     et_f32_tensor_copy_assignment_v1 assignment = {
-        .struct_size = sizeof(assignment),
+        .struct_size = ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE,
         .destination = destination,
         .source = contribution,
     };
@@ -1341,6 +1638,8 @@ int main(void) {
   test_private_owner_and_identity_seams();
   test_parameter_identity_value_and_detachment();
   test_tensor_batch_copy_atomicity();
+  test_gradient_borrow_and_plan_orderings();
+  test_parameter_destroy_rejects_child_plan_pins();
   test_gradient_accumulation_and_reset();
   test_binary32_environment_and_edge_rounding();
   test_parameter_and_plan_addresses_never_resurrect();

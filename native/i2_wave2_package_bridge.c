@@ -764,7 +764,7 @@ int64_t et_i2_private_copy_builder_set_v1(void *opaque, int64_t index,
     return -1;
   }
   builder->assignments[index].struct_size =
-      sizeof(builder->assignments[index]);
+      ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
   builder->assignments[index].destination = destination_tensor;
   builder->assignments[index].source = source_tensor;
   return 0;
@@ -780,7 +780,7 @@ int64_t et_i2_private_copy_builder_prepare_v1(void *opaque) {
   }
   for (index = 0u; index < builder->count; ++index) {
     if (builder->assignments[index].struct_size !=
-        sizeof(builder->assignments[index])) {
+        ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE) {
       et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
                              ET_F32_TENSOR_CODE_INVALID_HANDLE);
       return -1;

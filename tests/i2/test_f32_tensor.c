@@ -629,7 +629,7 @@ static void test_released_handle_addresses_never_resurrect(void) {
   et_f32_tensor_copy_plan *plan = NULL;
   et_f32_tensor_copy_plan *stale_plan;
   et_f32_tensor_copy_assignment_v1 assignment = {
-      .struct_size = sizeof(assignment),
+      .struct_size = ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE,
       .destination = other,
       .source = owner,
   };

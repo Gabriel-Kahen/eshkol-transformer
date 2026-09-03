@@ -20,6 +20,7 @@ extern "C" {
 
 #define ET_F32_TENSOR_ABI_MAJOR 1u
 #define ET_F32_TENSOR_ABI_MINOR 0u
+#define ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE ((size_t)24u)
 #define ET_F32_TENSOR_ERROR_SOURCE_DOMAIN "f32-tensor"
 #define ET_F32_TENSOR_ERROR_OPERATION_CAPACITY 64u
 #define ET_F32_TENSOR_ERROR_MESSAGE_CAPACITY 192u
@@ -73,7 +74,6 @@ ET_F32_STATIC_ASSERT(offsetof(et_f32_tensor_error, operation) == 8u,
                      "I2 error operation offset changed");
 ET_F32_STATIC_ASSERT(offsetof(et_f32_tensor_error, message) == 72u,
                      "I2 error message offset changed");
-#undef ET_F32_STATIC_ASSERT
 
 typedef struct et_f32_tensor et_f32_tensor;
 typedef struct et_f32_tensor_borrow et_f32_tensor_borrow;
@@ -84,6 +84,22 @@ typedef struct et_f32_tensor_copy_assignment_v1 {
   et_f32_tensor *destination;
   const et_f32_tensor *source;
 } et_f32_tensor_copy_assignment_v1;
+
+ET_F32_STATIC_ASSERT(
+    sizeof(et_f32_tensor_copy_assignment_v1) ==
+        ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE,
+    "I2 copy assignment v1.0 size changed");
+ET_F32_STATIC_ASSERT(
+    offsetof(et_f32_tensor_copy_assignment_v1, struct_size) == 0u,
+    "I2 copy assignment struct_size offset changed");
+ET_F32_STATIC_ASSERT(
+    offsetof(et_f32_tensor_copy_assignment_v1, destination) == 8u,
+    "I2 copy assignment destination offset changed");
+ET_F32_STATIC_ASSERT(
+    offsetof(et_f32_tensor_copy_assignment_v1, source) == 16u,
+    "I2 copy assignment source offset changed");
+
+#undef ET_F32_STATIC_ASSERT
 
 ET_F32_TENSOR_API int32_t et_f32_tensor_abi_major_v1(void);
 ET_F32_TENSOR_API int32_t et_f32_tensor_abi_minor_v1(void);

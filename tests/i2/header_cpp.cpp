@@ -15,6 +15,12 @@ static_assert(offsetof(et_f32_tensor_error, category) == 0u);
 static_assert(offsetof(et_f32_tensor_error, code) == 4u);
 static_assert(offsetof(et_f32_tensor_error, operation) == 8u);
 static_assert(offsetof(et_f32_tensor_error, message) == 72u);
+static_assert(std::is_standard_layout_v<et_f32_tensor_copy_assignment_v1>);
+static_assert(ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE == 24u);
+static_assert(sizeof(et_f32_tensor_copy_assignment_v1) == 24u);
+static_assert(offsetof(et_f32_tensor_copy_assignment_v1, struct_size) == 0u);
+static_assert(offsetof(et_f32_tensor_copy_assignment_v1, destination) == 8u);
+static_assert(offsetof(et_f32_tensor_copy_assignment_v1, source) == 16u);
 
 int main() {
   et_f32_tensor_error error{};
