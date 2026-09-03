@@ -972,8 +972,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   partitions measured 10,576 and 12,620 KiB; UTF-8 measured 8,972 and 5,824 KiB;
   public runtime measured 9,540 and 10,564 KiB; parser negatives measured 65,192
   KiB; D1 setup and negatives measured 2,532 and 3,760 KiB. Supported Ubuntu 22.04
-  / LLVM-Clang 21.1.8 CI, exact-head T2-R rereview, and the unmerged PR remain
-  required. T2 stays no
+  / LLVM-Clang 21.1.8 run 33697384015 then passed Build, the full Test matrix, and
+  Smoke, but its benchmark was cancelled when the job reached the exact 150-minute
+  outer ceiling. The measured run spent 14m02s in Build, 1h55m34s in Test, and
+  13m40s in Smoke before the benchmark received only 3m38s. The workflow outer
+  ceiling therefore rises narrowly from 150 to 180 minutes; no compiler timeout,
+  test, sanitizer, Smoke assertion, or benchmark sample is removed. A new supported
+  exact-head run, exact-head T2-R rereview, and the unmerged PR remain required. T2 stays no
   further than `review` until independent acceptance, merge, merged-main retest, and
   acceptance-document follow-up.
 - **Dependencies / retest:** any accepted change to the aggregate source closure or
