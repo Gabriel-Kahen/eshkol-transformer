@@ -130,7 +130,7 @@ tokenizer error categories. No partial tokenizer is registered.
 
 The production-linked compiled parser matrix freezes every v1 format, ASCII/LF/line,
 envelope, payload, order, arity, checksum, canonical-integer, count, merge, special,
-insertion, and persistence-policy invariant. It contains 344 deterministic,
+insertion, and persistence-policy invariant. It contains 360 deterministic,
 byte-distinct malformed artifacts, asserts exact public category and `tokenizer-load`
 operation for each, and
 immediately reloads the canonical model after every rejection to prove that no failed

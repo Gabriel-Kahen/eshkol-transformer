@@ -507,6 +507,21 @@ def main() -> None:
             f"{second.decode('ascii')}.tsv"
         ] = payload_artifact(swap_records(base_payload, first, second))
 
+    # Fixed payload values are independently pinned, not merely their labels,
+    # positions, and arities.
+    fixtures["wrong-kind.tsv"] = payload_artifact(
+        mutate_field(base_payload, b"kind", 1, b"other")
+    )
+    fixtures["wrong-normalization.tsv"] = payload_artifact(
+        mutate_field(base_payload, b"normalization", 1, b"nfc")
+    )
+    fixtures["wrong-byte-ids-first.tsv"] = payload_artifact(
+        mutate_field(base_payload, b"byte-ids", 1, b"1")
+    )
+    fixtures["wrong-byte-ids-last.tsv"] = payload_artifact(
+        mutate_field(base_payload, b"byte-ids", 2, b"254")
+    )
+
     # Canonical unsigned integer grammar is pinned independently for every
     # envelope/payload numeric field family, outside the prior version-only
     # representative. Counts also receive exact ceiling and one-over models.
@@ -530,6 +545,8 @@ def main() -> None:
                 mutate_field(valid, label, field_index, value)
             )
     payload_integer_fields = (
+        ("byte-ids-first", b"byte-ids", 1),
+        ("byte-ids-last", b"byte-ids", 2),
         ("merge-count", b"merge-count", 1),
         ("merge-rank", b"merge", 1),
         ("merge-result", b"merge", 2),

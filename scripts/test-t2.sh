@@ -31,8 +31,8 @@ t2_cxx="$(tsv_value "${t2_provenance}" cxx_path)"
 cmp "${t2_tmp}/fixture-1.tsv" "${t2_tmp}/fixture-2.tsv"
 cmp "${t2_tmp}/fixture-1.tsv" "${t2_fixture}"
 diff -ru "${t2_tmp}/adversarial-1" "${t2_tmp}/adversarial-2"
-[[ "$(find "${t2_tmp}/adversarial-1" -maxdepth 1 -type f | wc -l)" == 349 ]] || \
-  die "T2 adversarial fixture matrix must contain exactly 349 artifacts"
+[[ "$(find "${t2_tmp}/adversarial-1" -maxdepth 1 -type f | wc -l)" == 365 ]] || \
+  die "T2 adversarial fixture matrix must contain exactly 365 artifacts"
 [[ "$(wc -c <"${t2_fixture}")" == 613 ]] || \
   die "T2 canonical fixture must remain exactly 613 bytes"
 grep -Fx $'payload-bytes\t295' "${t2_fixture}" >/dev/null || \
@@ -42,11 +42,11 @@ mapfile -t parser_invalid_files < <(
     ! -name 'alternate-same-vocab.tsv' ! -name 'valid-max-*.tsv' \
     -printf '%f\n' | sort
 )
-[[ "${#parser_invalid_files[@]}" == 344 ]] || \
-  die "T2 compiled parser matrix must contain exactly 344 invalid artifacts"
+[[ "${#parser_invalid_files[@]}" == 360 ]] || \
+  die "T2 compiled parser matrix must contain exactly 360 invalid artifacts"
 [[ "$(sha256sum "${parser_invalid_files[@]/#/${t2_tmp}\/adversarial-1\/}" | \
-  cut -d' ' -f1 | sort -u | wc -l)" == 344 ]] || \
-  die "T2 compiled parser matrix must contain exactly 344 byte-distinct invalid artifacts"
+  cut -d' ' -f1 | sort -u | wc -l)" == 360 ]] || \
+  die "T2 compiled parser matrix must contain exactly 360 byte-distinct invalid artifacts"
 
 E1B_COMPILER_TIMEOUT_SECONDS="${T2_COMPILER_TIMEOUT_SECONDS:-300}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-t2.sh"
@@ -219,7 +219,7 @@ for repetition in 1 2; do
     "${t2_tmp}/parser-recovered-${repetition}.tsv" \
     "${parser_invalid_files[@]}"
   grep -Fx \
-    'T2 PARSER NEGATIVES PASS: 698 compiled rejection/recovery/ceiling checks' \
+    'T2 PARSER NEGATIVES PASS: 730 compiled rejection/recovery/ceiling checks' \
     "${t2_tmp}/parser-negatives-${repetition}.stdout" >/dev/null
   cmp "${t2_fixture}" "${t2_tmp}/parser-recovered-${repetition}.tsv"
 done

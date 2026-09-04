@@ -986,13 +986,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `e667523adfcde28b88f3238ff336824c04ad166e` accepted the decoder, D1, package,
   UTF-8, API, format, aggregate, and supported-run evidence but required exhaustive
   production-linked coverage for every frozen parser invariant. The bounded repair
-  expands deterministic generated evidence from 32 to 349 artifacts: 344
+  expands deterministic generated evidence from 32 to 365 artifacts: 360
   byte-distinct malformed models, four valid exact-count-ceiling models, and the
   retained alternate D1 model.
-  The public Eshkol AOT asserts 346 exact rejection category/operation tuples including
+  The public Eshkol AOT asserts 362 exact rejection category/operation tuples including
   two lowered-policy cases, performs a frozen-identity valid load after every failure,
   admits exact 613-byte/295-byte policy and merge/special/prefix/suffix count ceilings,
-  and performs a canonical post-matrix save, for 698 checks per repetition. The new
+  and performs a canonical post-matrix save, for 730 checks per repetition. The new
   topology cases exposed boolean-valued one-over field counts escaping through numeric
   `=`; all parser record-shape guards now use a bounded boolean-safe predicate and map
   malformed records to the promised structured `corrupt-data/tokenizer-load` result.
