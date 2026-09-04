@@ -4,7 +4,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp diff grep ldd nm ps python3 rg sha256sum sleep strings timeout; do
+for command in ar cmp cut diff find grep ldd nm ps python3 rg sha256sum sleep sort strings timeout wc; do
   require_command "${command}"
 done
 
@@ -31,6 +31,22 @@ t2_cxx="$(tsv_value "${t2_provenance}" cxx_path)"
 cmp "${t2_tmp}/fixture-1.tsv" "${t2_tmp}/fixture-2.tsv"
 cmp "${t2_tmp}/fixture-1.tsv" "${t2_fixture}"
 diff -ru "${t2_tmp}/adversarial-1" "${t2_tmp}/adversarial-2"
+[[ "$(find "${t2_tmp}/adversarial-1" -maxdepth 1 -type f | wc -l)" == 349 ]] || \
+  die "T2 adversarial fixture matrix must contain exactly 349 artifacts"
+[[ "$(wc -c <"${t2_fixture}")" == 613 ]] || \
+  die "T2 canonical fixture must remain exactly 613 bytes"
+grep -Fx $'payload-bytes\t295' "${t2_fixture}" >/dev/null || \
+  die "T2 canonical fixture must retain its exact 295-byte payload"
+mapfile -t parser_invalid_files < <(
+  find "${t2_tmp}/adversarial-1" -maxdepth 1 -type f -name '*.tsv' \
+    ! -name 'alternate-same-vocab.tsv' ! -name 'valid-max-*.tsv' \
+    -printf '%f\n' | sort
+)
+[[ "${#parser_invalid_files[@]}" == 344 ]] || \
+  die "T2 compiled parser matrix must contain exactly 344 invalid artifacts"
+[[ "$(sha256sum "${parser_invalid_files[@]/#/${t2_tmp}\/adversarial-1\/}" | \
+  cut -d' ' -f1 | sort -u | wc -l)" == 344 ]] || \
+  die "T2 compiled parser matrix must contain exactly 344 byte-distinct invalid artifacts"
 
 E1B_COMPILER_TIMEOUT_SECONDS="${T2_COMPILER_TIMEOUT_SECONDS:-300}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-t2.sh"
@@ -194,12 +210,21 @@ env -u ESHKOL_PATH XDG_CACHE_HOME="${t2_tmp}/parser-negatives-cache" \
   --lib eshkol_transformer_wave2 \
   "${PROJECT_ROOT}/tests/t2/parser_negatives_runtime.esk" \
   -o "${t2_tmp}/parser-negatives-runtime"
-run_bounded "T2 compiled parser negatives" \
-  "${t2_tmp}/parser-negatives.stdout" \
-  "${t2_tmp}/parser-negatives.stderr" \
-  "${t2_tmp}/parser-negatives-runtime" "${t2_tmp}/adversarial-1"
-grep -Fx 'T2 PARSER NEGATIVES PASS: 22 compiled rejection checks' \
-  "${t2_tmp}/parser-negatives.stdout" >/dev/null
+for repetition in 1 2; do
+  run_bounded "T2 compiled parser negatives ${repetition}" \
+    "${t2_tmp}/parser-negatives-${repetition}.stdout" \
+    "${t2_tmp}/parser-negatives-${repetition}.stderr" \
+    "${t2_tmp}/parser-negatives-runtime" \
+    "${t2_tmp}/adversarial-${repetition}" "${t2_fixture}" \
+    "${t2_tmp}/parser-recovered-${repetition}.tsv" \
+    "${parser_invalid_files[@]}"
+  grep -Fx \
+    'T2 PARSER NEGATIVES PASS: 698 compiled rejection/recovery/ceiling checks' \
+    "${t2_tmp}/parser-negatives-${repetition}.stdout" >/dev/null
+  cmp "${t2_fixture}" "${t2_tmp}/parser-recovered-${repetition}.tsv"
+done
+cmp "${t2_tmp}/parser-negatives-1.stdout" \
+  "${t2_tmp}/parser-negatives-2.stdout"
 
 env -u ESHKOL_PATH XDG_CACHE_HOME="${t2_tmp}/d1-cache" \
   ESHKOL_CXX_COMPILER="${t2_cxx}" \

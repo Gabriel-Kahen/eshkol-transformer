@@ -21,45 +21,95 @@
    (thunk)
    #f))
 
-(define directory (car (cdr (command-line))))
-(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define arguments (cdr (command-line)))
+(define directory (car arguments))
+(define canonical (car (cdr arguments)))
+(define saved (car (cdr (cdr arguments))))
+(define invalid-names (cdr (cdr (cdr arguments))))
+
+(define full-policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define exact-policy (persistence-policy 613 295 1048576 1 'cpu))
+(define lowered-file-policy
+  (persistence-policy 612 1048576 1048576 1 'cpu))
+(define lowered-payload-policy
+  (persistence-policy 1048576 294 1048576 1 'cpu))
+
+(define frozen-fingerprint
+  "sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72")
 
 (define (fixture name)
   (string-append directory "/" name))
 
-(define (reject name category)
-  (check name
+(define (valid-tokenizer? tokenizer expected-vocab)
+  (and (= (tokenizer-vocab-size tokenizer) expected-vocab)
+       (if (= expected-vocab 263)
+           (string=? (tokenizer-fingerprint tokenizer) frozen-fingerprint)
+           #t)))
+
+(define (canonical-load-valid? policy)
+  (guard
+   (caught (#t #f))
+   (valid-tokenizer? (tokenizer-load canonical policy) 263)))
+
+(define (expected-category name)
+  (cond
+   ((or (string=? name "algorithm.tsv")
+        (string=? name "required-feature.tsv"))
+    'unsupported)
+   ((or (string=? name "unsupported-major.tsv")
+        (string=? name "unsupported-minor.tsv"))
+    'version-mismatch)
+   (else 'corrupt-data)))
+
+(define (reject-and-recover name path category policy)
+  ;; A returned tokenizer makes this assertion fail, proving no malformed load
+  ;; publishes a caller-visible shell.
+  (check (string-append name ": exact rejection")
          (structured-error?
           category 'tokenizer-load
-          (lambda () (tokenizer-load (fixture name) policy)))))
+          (lambda () (tokenizer-load path policy))))
+  ;; Registry cardinality is intentionally private. Canonical reload with the
+  ;; frozen identity is the public recovery check after every failed parse.
+  (check (string-append name ": valid load after failure")
+         (canonical-load-valid? full-policy)))
 
-(reject "trailing-byte.tsv" 'corrupt-data)
-(reject "extra-lf.tsv" 'corrupt-data)
-(reject "duplicate-merge-pair.tsv" 'corrupt-data)
-(reject "out-of-order-special.tsv" 'corrupt-data)
-(reject "out-of-order-prefix.tsv" 'corrupt-data)
-(reject "out-of-order-suffix.tsv" 'corrupt-data)
-(reject "required-feature.tsv" 'unsupported)
-(reject "unsupported-major.tsv" 'version-mismatch)
-(reject "unsupported-minor.tsv" 'version-mismatch)
-(reject "altered-limit-file-bytes.tsv" 'corrupt-data)
-(reject "altered-limit-merges.tsv" 'corrupt-data)
-(reject "altered-limit-token-bytes.tsv" 'corrupt-data)
-(reject "altered-limit-specials.tsv" 'corrupt-data)
-(reject "altered-limit-name-bytes.tsv" 'corrupt-data)
-(reject "altered-limit-prefix.tsv" 'corrupt-data)
-(reject "altered-limit-suffix.tsv" 'corrupt-data)
-(reject "altered-payload-size-short.tsv" 'corrupt-data)
-(reject "altered-payload-size-long.tsv" 'corrupt-data)
-(reject "malformed-name.tsv" 'corrupt-data)
-(reject "malformed-special-policy.tsv" 'corrupt-data)
-(reject "malformed-utf8-policy.tsv" 'corrupt-data)
-(reject "learned-token-overflow.tsv" 'corrupt-data)
+(let loop ((remaining invalid-names))
+  (if (not (null? remaining))
+      (let ((name (car remaining)))
+        (reject-and-recover name (fixture name)
+                            (expected-category name) full-policy)
+        (loop (cdr remaining)))))
+
+(reject-and-recover "lowered file policy" canonical
+                    'corrupt-data lowered-file-policy)
+(reject-and-recover "lowered payload policy" canonical
+                    'corrupt-data lowered-payload-policy)
+
+(check "exact 613-byte file / 295-byte payload policy admits canonical model"
+       (canonical-load-valid? exact-policy))
+
+(define (check-ceiling name expected-vocab)
+  (check
+   (string-append name ": exact parser count ceiling")
+   (guard
+    (caught (#t #f))
+    (valid-tokenizer? (tokenizer-load (fixture name) full-policy)
+                      expected-vocab))))
+
+(check-ceiling "valid-max-merges.tsv" 512)
+(check-ceiling "valid-max-specials.tsv" 4352)
+(check-ceiling "valid-max-prefix.tsv" 257)
+(check-ceiling "valid-max-suffix.tsv" 257)
+
+(let ((recovered (tokenizer-load canonical full-policy)))
+  (check "canonical save after complete failed-parse matrix"
+         (and (valid-tokenizer? recovered 263)
+              (tokenizer-save! recovered saved full-policy))))
 
 (if (= failed 0)
     (begin
       (display "T2 PARSER NEGATIVES PASS: ")
       (display passed)
-      (display " compiled rejection checks")
+      (display " compiled rejection/recovery/ceiling checks")
       (newline))
     (exit 1))

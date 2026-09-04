@@ -981,6 +981,23 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   exact-head run, exact-head T2-R rereview, and the unmerged PR remain required. T2 stays no
   further than `review` until independent acceptance, merge, merged-main retest, and
   acceptance-document follow-up.
+
+  A subsequent authoritative T2-R rereview of exact head
+  `e667523adfcde28b88f3238ff336824c04ad166e` accepted the decoder, D1, package,
+  UTF-8, API, format, aggregate, and supported-run evidence but required exhaustive
+  production-linked coverage for every frozen parser invariant. The bounded repair
+  expands deterministic generated evidence from 32 to 349 artifacts: 344
+  byte-distinct malformed models, four valid exact-count-ceiling models, and the
+  retained alternate D1 model.
+  The public Eshkol AOT asserts 346 exact rejection category/operation tuples including
+  two lowered-policy cases, performs a frozen-identity valid load after every failure,
+  admits exact 613-byte/295-byte policy and merge/special/prefix/suffix count ceilings,
+  and performs a canonical post-matrix save, for 698 checks per repetition. The new
+  topology cases exposed boolean-valued one-over field counts escaping through numeric
+  `=`; all parser record-shape guards now use a bounded boolean-safe predicate and map
+  malformed records to the promised structured `corrupt-data/tokenizer-load` result.
+  Python remains a deterministic byte generator only. Focused, full, supported, and
+  independent exact-head evidence remain required for this repair; T2 remains `review`.
 - **Dependencies / retest:** any accepted change to the aggregate source closure or
   D1 trusted internals requires complete T1 and D1 regression/boundary gates. Any
   public name, native ABI, T1 grammar/fingerprint, D1 byte-format, I1 lifetime, or
