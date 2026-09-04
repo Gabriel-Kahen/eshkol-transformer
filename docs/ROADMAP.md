@@ -36,7 +36,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | P1L | [Release-capable provider/state ownership correction](P1_MODULE_STATE.md) | P1, E1B, C1, T1 | Provider 2.0 exact-once clone ownership, explicit idempotent state release, scoped read-only state-backed handles, callback-defect/failure cleanup, exact P1/C1/T1 aggregate manifests, sanitizers, deterministic fresh-AOT negatives, and supported CI | review |
-| T2 | Deterministic BPE training and streaming encode/decode | T1, D1 | Merge determinism, byte fallback and corpus round trips | planned |
+| T2 | [Deterministic BPE training and streaming encode/decode](BPE_TOKENIZER_FORMAT.md) | T1, D1 | Canonical repeated artifacts and order/partition-invariant merges; all-byte/raw/strict/F0-F4/special whole-stream parity; exact 65,536-byte/73,728-ID ceilings including 73,728 one-ID chunks and one-over negatives; compiled parser/D1 corrupt-data negatives; deterministic localized object/archive/evidence/AOT boundary suite; exact aggregate manifests; production Python isolation; independent review; supported CI; and merged-main retest | review |
 | D2 | Memory-bounded shard loader, batching, packing and cursor state | D1, T1, Q0 | Shifted targets, masks, deterministic shuffle and exact resume | planned |
 | N2 | Embedding, linear, normalization, activations, dropout, residuals | P1L, K1, Q0 | Forward and gradient parity for every operation | planned |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | review |

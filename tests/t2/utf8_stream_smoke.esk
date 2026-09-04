@@ -1,0 +1,96 @@
+(load "internal/t1/lib/t1_tokenizer_core.esk")
+(load "internal/t2/lib/t2_bpe_core.esk")
+
+(define passed 0)
+(define (check name condition)
+  (if condition (set! passed (+ passed 1))
+      (begin (display "FAIL: ") (display name) (newline) (exit 1))))
+
+(define (expect-invalid name thunk)
+  (guard
+   (caught
+    ((and (t1-core-error? caught)
+          (eq? (t1-core-error-category caught) 'invalid-argument))
+     (set! passed (+ passed 1)))
+    (else
+     (begin (display "FAIL: ") (display name) (display " wrong error")
+            (newline) (exit 1))))
+   (thunk)
+   (begin (display "FAIL: ") (display name) (display " did not fail")
+          (newline) (exit 1))))
+
+(define (bytes->staging bytes)
+  (let* ((length (bytevector-length bytes))
+         (result (make-bytevector (* length 8) 0)))
+    (let loop ((index 0))
+      (if (= index length) result
+          (begin
+            (t1-core-write-i64-le!
+             result (* index 8) (bytevector-u8-ref bytes index))
+            (loop (+ index 1)))))))
+
+(define (stream-encode-at-split model bytes split)
+  (let* ((state (t2-stream-encoder-open model))
+         (length (bytevector-length bytes)))
+    (t1-core-concat
+     (list
+      (t2-stream-encoder-push! state (bytevector-copy bytes 0 split))
+      (t2-stream-encoder-push! state (bytevector-copy bytes split length))
+      (t2-stream-encoder-finish! state)))))
+
+(define (stream-decode-at-split model bytes split)
+  (let* ((state (t2-stream-decoder-open model))
+         (staging (bytes->staging bytes))
+         (offset (* split 8)))
+    (t1-core-concat
+     (list
+      (t2-stream-decoder-push!
+       state (bytevector-copy staging 0 offset))
+      (t2-stream-decoder-push!
+       state (bytevector-copy staging offset (bytevector-length staging)))
+      (t2-stream-decoder-finish! state)))))
+
+(define (check-valid-splits model label bytes)
+  (let ((expected (bytes->staging bytes))
+        (length (bytevector-length bytes)))
+    (let loop ((split 0))
+      (if (<= split length)
+          (begin
+            (check (string-append label " encoder split")
+                   (t1-core-bytes=?
+                    (stream-encode-at-split model bytes split) expected))
+            (check (string-append label " decoder split")
+                   (t1-core-bytes=?
+                    (stream-decode-at-split model bytes split) bytes))
+            (loop (+ split 1)))))))
+
+(define (check-invalid-splits model label bytes)
+  (let ((length (bytevector-length bytes)))
+    (let loop ((split 0))
+      (if (<= split length)
+          (begin
+            (expect-invalid
+             (string-append label " encoder split")
+             (lambda () (stream-encode-at-split model bytes split)))
+            (expect-invalid
+             (string-append label " decoder split")
+             (lambda () (stream-decode-at-split model bytes split)))
+            (loop (+ split 1)))))))
+
+(define model (t2-tokenizer-core-create 'strict '() '() '() '()))
+
+;; a, euro, U+1F642 SLIGHTLY SMILING FACE, z. Every byte boundary is used.
+(check-valid-splits
+ model "four-byte scalar"
+ (bytevector 97 226 130 172 240 159 153 130 122))
+
+;; The exact valid lower F0 and upper F4 boundaries.
+(check-valid-splits model "F0 lower valid" (bytevector 240 144 128 128))
+(check-valid-splits model "F4 upper valid" (bytevector 244 143 191 191))
+
+;; Immediately outside the scalar range: overlong and beyond U+10FFFF.
+(check-invalid-splits model "F0 lower invalid" (bytevector 240 143 191 191))
+(check-invalid-splits model "F4 upper invalid" (bytevector 244 144 128 128))
+
+(display "T2 UTF8 STREAM PASS: ") (display passed) (display " checks")
+(newline)

@@ -1,0 +1,493 @@
+(load "internal/t1/lib/t1_tokenizer_core.esk")
+(load "internal/t2/lib/t2_bpe_core.esk")
+
+(define passed 0)
+(define (check name condition)
+  (if condition (set! passed (+ passed 1))
+      (begin (display "FAIL: ") (display name) (newline) (exit 1))))
+
+(define (expect-core-error name thunk category)
+  (guard
+   (caught
+    ((and (t1-core-error? caught)
+          (eq? (t1-core-error-category caught) category))
+     (set! passed (+ passed 1)))
+    (else
+     (begin (display "FAIL: ") (display name) (display " wrong error")
+            (newline) (exit 1))))
+   (thunk)
+   (begin (display "FAIL: ") (display name) (display " did not fail")
+          (newline) (exit 1))))
+
+(define (must name thunk)
+  (guard
+   (caught
+    (#t
+     (begin
+       (display "FAIL: ") (display name) (display " raised ")
+       (if (t1-core-error? caught)
+           (begin (display (t1-core-error-category caught)) (display ": ")
+                  (display (t1-core-error-message caught)))
+           (write caught))
+       (newline) (exit 1))))
+   (thunk)))
+
+(define (staging->ids bytes)
+  (let ((count (quotient (bytevector-length bytes) 8)))
+    (let loop ((index 0) (out '()))
+      (if (= index count) (t1-core-reverse out)
+          (loop (+ index 1)
+                (cons (t1-core-read-u64-le bytes (* index 8)) out))))))
+
+(define (bytes-append parts) (t1-core-concat parts))
+(define (staging-append parts) (t1-core-concat parts))
+(define (repeat-list count value)
+  (let loop ((remaining count) (out '()))
+    (if (= remaining 0) out
+        (loop (- remaining 1) (cons value out)))))
+(define (repeat-staging count token-id)
+  (let ((result (make-bytevector (* count 8) 0)))
+    (let loop ((index 0))
+      (if (= index count) result
+          (begin (t1-core-write-i64-le! result (* index 8) token-id)
+                 (loop (+ index 1)))))))
+(define (padded-special-name index)
+  (let* ((digits (number->string index))
+         (padding (make-string (- 4 (string-length digits)) #\0)))
+    (string-append "s" padding digits)))
+(define (maximum-special-specs count)
+  (let loop ((index (- count 1)) (out '()))
+    (if (< index 0) out
+        (loop (- index 1)
+              (cons (list (padded-special-name index) 'omit) out)))))
+
+(define specs (list (list "bos" 'omit) (list "eos" 'omit)
+                    (list "invalid" 'error)))
+(define documents
+  (list (list (bytevector 98 97 110) (bytevector 97 110 97))
+        (list (bytevector 98 97 110 100 97 110 97))
+        (list "banana banana")))
+(define model
+  (must "train primary model"
+        (lambda ()
+          (t2-bpe-train-core documents 8 2 'raw specs
+                             (list "bos") (list "eos")))))
+
+(check "trained merge count"
+       (> (t1-core-list-length-bounded (vector-ref model 2) 257) 0))
+(define first-merge (car (vector-ref model 2)))
+(check "first deterministic pair"
+       (and (= (car first-merge) 0) (= (car (cdr first-merge)) 256)
+            (= (car (cdr (cdr first-merge))) 97)
+            (= (car (cdr (cdr (cdr first-merge)))) 110)))
+(check "development oracle fingerprint is pinned"
+       (string=?
+        (t2-tokenizer-core-fingerprint model)
+        "sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72"))
+
+(define reordered
+  (t2-bpe-train-core (t1-core-reverse documents) 8 2 'raw specs
+                     (list "bos") (list "eos")))
+(check "document order artifact parity"
+       (t1-core-bytes=? (t2-tokenizer-core-serialize model)
+                        (t2-tokenizer-core-serialize reordered)))
+(define repartitioned
+  (t2-bpe-train-core
+   (list (list (bytevector 98) (bytevector 97 110 97 110 97))
+         (list (bytevector 98 97) (bytevector 110 100 97 110 97))
+         (list "banana " "banana"))
+   8 2 'raw specs (list "bos") (list "eos")))
+(check "chunk partition artifact parity"
+       (t1-core-bytes=? (t2-tokenizer-core-serialize model)
+                        (t2-tokenizer-core-serialize repartitioned)))
+
+(define boundary-model
+  (t2-bpe-train-core (list (list (bytevector 97))
+                                (list (bytevector 98)))
+                     1 1 'raw '() '() '()))
+(check "document boundary excludes pair"
+       (= (t1-core-list-length-bounded (vector-ref boundary-model 2) 257) 0))
+
+(define tie-model
+  (t2-bpe-train-core (list (list "abac")) 1 1 'raw '() '() '()))
+(define tie-merge (car (vector-ref tie-model 2)))
+(check "numeric pair tie break"
+       (and (= (car (cdr (cdr tie-merge))) 97)
+            (= (car (cdr (cdr (cdr tie-merge)))) 98)))
+
+(define source (bytevector 98 97 110 97 110 97 0 255 98 97 110 100 97 110 97))
+(define whole (t2-tokenizer-core-encode-i64-le model source))
+(define encoder (t2-stream-encoder-open model))
+(define stream-encoded
+  (staging-append
+   (list (t2-stream-encoder-push! encoder (bytevector))
+         (t2-stream-encoder-push! encoder (bytevector-copy source 0 1))
+         (t2-stream-encoder-push! encoder (bytevector-copy source 1 6))
+         (t2-stream-encoder-push! encoder (bytevector-copy source 6 7))
+         (t2-stream-encoder-push! encoder (bytevector-copy source 7
+                                                            (bytevector-length source)))
+         (t2-stream-encoder-finish! encoder))))
+(check "stream encode whole parity" (t1-core-bytes=? stream-encoded whole))
+
+(let boundaries ((boundary 0))
+  (if (<= boundary (bytevector-length source))
+      (let ((split-encoder (t2-stream-encoder-open model)))
+        (check "every encoder boundary parity"
+               (t1-core-bytes=?
+                (staging-append
+                 (list
+                  (t2-stream-encoder-push!
+                   split-encoder (bytevector-copy source 0 boundary))
+                  (t2-stream-encoder-push!
+                   split-encoder
+                   (bytevector-copy source boundary (bytevector-length source)))
+                  (t2-stream-encoder-finish! split-encoder)))
+                whole))
+        (boundaries (+ boundary 1)))))
+
+(define decoder (t2-stream-decoder-open model))
+(define token-bytes (bytevector-length stream-encoded))
+(define decoded
+  (bytes-append
+   (list (must "empty decoder push" (lambda ()
+                 (t2-stream-decoder-push! decoder (make-bytevector 0 0))))
+         (must "prefix decoder push" (lambda ()
+                 (t2-stream-decoder-push!
+                  decoder (bytevector-copy stream-encoded 0 8))))
+         (must "body decoder push" (lambda ()
+                 (t2-stream-decoder-push!
+                  decoder (bytevector-copy stream-encoded 8 token-bytes))))
+         (must "decoder finish" (lambda ()
+                 (t2-stream-decoder-finish! decoder))))))
+(check "stream decode whole parity" (t1-core-bytes=? decoded source))
+
+(let token-boundaries ((boundary 0))
+  (if (<= boundary token-bytes)
+      (if (= (modulo boundary 8) 0)
+          (let ((split-decoder (t2-stream-decoder-open model)))
+            (check "every decoder boundary parity"
+                   (t1-core-bytes=?
+                    (bytes-append
+                     (list
+                      (t2-stream-decoder-push!
+                       split-decoder
+                       (bytevector-copy stream-encoded 0 boundary))
+                      (t2-stream-decoder-push!
+                       split-decoder
+                       (bytevector-copy stream-encoded boundary token-bytes))
+                      (t2-stream-decoder-finish! split-decoder)))
+                    source))
+            (token-boundaries (+ boundary 8)))
+          (token-boundaries (+ boundary 1)))))
+
+(define empty-encoder (t2-stream-encoder-open model))
+(define empty-stream (t2-stream-encoder-finish! empty-encoder))
+(check "empty stream prefix suffix"
+       (t1-core-bytes=? empty-stream
+                        (t2-tokenizer-core-encode-i64-le model (bytevector))))
+
+(define strict-model
+  (t2-bpe-train-core
+   (list (list (bytevector 226) (bytevector 130 172)))
+   1 1 'strict '() '() '()))
+(define strict-encoder (t2-stream-encoder-open strict-model))
+(define strict-first (t2-stream-encoder-push! strict-encoder (bytevector 226)))
+(define strict-second (t2-stream-encoder-push! strict-encoder (bytevector 130)))
+(check "strict encoder retains first incomplete byte"
+       (= (bytevector-length strict-first) 0))
+(check "strict encoder retains second incomplete byte"
+       (= (bytevector-length strict-second) 0))
+(define strict-staging
+  (staging-append
+   (list strict-first strict-second
+         (t2-stream-encoder-push! strict-encoder (bytevector 172))
+         (t2-stream-encoder-finish! strict-encoder))))
+(check "strict encoder scalar crosses chunks"
+       (t1-core-bytes=? strict-staging
+                        (t2-tokenizer-core-encode-i64-le
+                         strict-model (bytevector 226 130 172))))
+(define strict-decoder (t2-stream-decoder-open strict-model))
+(define strict-out-parts
+  (let ((ids (staging->ids strict-staging)))
+    (let loop ((remaining ids) (parts '()))
+      (if (null? remaining)
+          (t1-core-reverse
+           (cons (t2-stream-decoder-finish! strict-decoder) parts))
+          (let ((one (make-bytevector 8 0)))
+            (t1-core-write-i64-le! one 0 (car remaining))
+            (loop (cdr remaining)
+                  (cons (t2-stream-decoder-push! strict-decoder one)
+                        parts)))))))
+(check "strict decoder scalar crosses tokens"
+       (t1-core-bytes=? (bytes-append strict-out-parts)
+                        (bytevector 226 130 172)))
+
+(define malformed-decoder (t2-stream-decoder-open model))
+(expect-core-error "malformed staging" (lambda ()
+  (t2-stream-decoder-push! malformed-decoder (bytevector 0)))
+  'invalid-argument)
+(expect-core-error "failed decoder terminal" (lambda ()
+  (t2-stream-decoder-finish! malformed-decoder)) 'invalid-argument)
+(define error-special-decoder (t2-stream-decoder-open model))
+(expect-core-error "error special decoder rejection" (lambda ()
+  (t2-stream-decoder-push! error-special-decoder
+                           (repeat-staging 1 262))) 'invalid-argument)
+(expect-core-error "error special decoder terminal" (lambda ()
+  (t2-stream-decoder-finish! error-special-decoder)) 'invalid-argument)
+(define unknown-id-decoder (t2-stream-decoder-open model))
+(expect-core-error "unknown decoder ID rejection" (lambda ()
+  (t2-stream-decoder-push! unknown-id-decoder
+                           (repeat-staging 1 263))) 'invalid-argument)
+(expect-core-error "unknown ID decoder terminal" (lambda ()
+  (t2-stream-decoder-finish! unknown-id-decoder)) 'invalid-argument)
+(expect-core-error "wrong-kind encoder state" (lambda ()
+  (t2-stream-encoder-push! (vector 'forged) (bytevector)))
+  'invalid-argument)
+(expect-core-error "wrong-kind decoder state" (lambda ()
+  (t2-stream-decoder-finish! (vector 'forged))) 'invalid-argument)
+(define malformed-stage-encoder (t2-stream-encoder-open model))
+(vector-set! (vector-ref (vector-ref malformed-stage-encoder 2) 0) 0
+             'not-a-token-id)
+(expect-core-error "malformed encoder stage field" (lambda ()
+  (t2-stream-encoder-push! malformed-stage-encoder (bytevector)))
+  'invalid-argument)
+(define malformed-pending-encoder (t2-stream-encoder-open model))
+(vector-set! malformed-pending-encoder 6 (bytevector 226))
+(expect-core-error "raw encoder forged UTF-8 pending" (lambda ()
+  (t2-stream-encoder-finish! malformed-pending-encoder))
+  'invalid-argument)
+(define malformed-pending-decoder (t2-stream-decoder-open strict-model))
+(vector-set! malformed-pending-decoder 5 (bytevector 128))
+(expect-core-error "strict decoder forged UTF-8 pending" (lambda ()
+  (t2-stream-decoder-finish! malformed-pending-decoder))
+  'invalid-argument)
+
+(define finished-encoder (t2-stream-encoder-open model))
+(t2-stream-encoder-finish! finished-encoder)
+(expect-core-error "feed after finish" (lambda ()
+  (t2-stream-encoder-push! finished-encoder (bytevector))) 'invalid-argument)
+(expect-core-error "double finish" (lambda ()
+  (t2-stream-encoder-finish! finished-encoder)) 'invalid-argument)
+
+(expect-core-error "strict training truncation" (lambda ()
+  (t2-bpe-train-core (list (list (bytevector 226))) 1 1 'strict
+                     '() '() '())) 'invalid-argument)
+(expect-core-error "unsorted specials" (lambda ()
+  (t2-bpe-train-core '() 0 1 'raw
+                     (list (list "z" 'omit) (list "a" 'omit))
+                     '() '())) 'invalid-argument)
+(expect-core-error "error special insertion" (lambda ()
+  (t2-bpe-train-core '() 0 1 'raw (list (list "x" 'error))
+                     (list "x") '())) 'invalid-argument)
+(check "exact document count limit"
+       (t2-core-tokenizer?
+        (t2-bpe-train-core (repeat-list 4096 '()) 0 1 'raw
+                           '() '() '())))
+(expect-core-error "one-over document count limit" (lambda ()
+  (t2-bpe-train-core (repeat-list 4097 '()) 0 1 'raw
+                     '() '() '())) 'invalid-argument)
+(check "exact chunk count limit"
+       (t2-core-tokenizer?
+        (t2-bpe-train-core
+         (list (repeat-list 4096 (bytevector))) 0 1 'raw
+         '() '() '())))
+(expect-core-error "one-over chunk count limit" (lambda ()
+  (t2-bpe-train-core
+   (list (repeat-list 4097 (bytevector))) 0 1 'raw
+   '() '() '())) 'invalid-argument)
+(define failed-strict-encoder (t2-stream-encoder-open strict-model))
+(expect-core-error "strict malformed stream" (lambda ()
+  (t2-stream-encoder-push! failed-strict-encoder (bytevector 128)))
+  'invalid-argument)
+(expect-core-error "strict failed stream terminal" (lambda ()
+  (t2-stream-encoder-finish! failed-strict-encoder)) 'invalid-argument)
+
+(define limit-model
+  (t2-bpe-train-core
+   (list (list (make-bytevector 65536 120))) 0 1 'raw '() '() '()))
+(check "exact training byte limit"
+       (= (t1-core-list-length-bounded (vector-ref limit-model 2) 257) 0))
+(expect-core-error "one-over training bytevector limit" (lambda ()
+  (t2-bpe-train-core
+   (list (list (make-bytevector 65537 120))) 0 1 'raw '() '() '()))
+  'invalid-argument)
+(expect-core-error "one-over training string limit" (lambda ()
+  (t2-bpe-train-core
+   (list (list (make-string 65537 #\x))) 0 1 'raw '() '() '()))
+  'invalid-argument)
+(define limit-encoder (t2-stream-encoder-open limit-model))
+(check "exact stream byte limit"
+       (= (bytevector-length
+           (t2-stream-encoder-push! limit-encoder
+                                    (make-bytevector 65536 120)))
+          (* 65536 8)))
+(expect-core-error "one-over stream byte limit" (lambda ()
+  (t2-stream-encoder-push! limit-encoder (bytevector 120)))
+  'invalid-argument)
+(expect-core-error "failed encoder terminal" (lambda ()
+  (t2-stream-encoder-finish! limit-encoder)) 'invalid-argument)
+
+(define all-bytes (make-bytevector 256 0))
+(let fill-all ((index 0))
+  (if (< index 256)
+      (begin (bytevector-u8-set! all-bytes index index)
+             (fill-all (+ index 1)))))
+(define byte-model
+  (t2-bpe-train-core (list (list all-bytes)) 0 1 'raw '() '() '()))
+(define byte-encoder (t2-stream-encoder-open byte-model))
+(define byte-staging
+  (staging-append
+   (list (t2-stream-encoder-push! byte-encoder all-bytes)
+         (t2-stream-encoder-finish! byte-encoder))))
+(define byte-decoder (t2-stream-decoder-open byte-model))
+(check "all 256 bytes stream round trip"
+       (t1-core-bytes=?
+        (bytes-append
+         (list (t2-stream-decoder-push! byte-decoder byte-staging)
+               (t2-stream-decoder-finish! byte-decoder)))
+        all-bytes))
+
+(define maximum-merge-model
+  (t2-bpe-train-core
+   (list (list (bytes-append (list all-bytes all-bytes)))
+         (list (bytevector 97 97)))
+   256 1 'raw '() '() '()))
+(check "exact 256 learned merge limit"
+       (= (t1-core-list-length-bounded
+           (vector-ref maximum-merge-model 2) 257) 256))
+(expect-core-error "one-over learned merge request" (lambda ()
+  (t2-bpe-train-core '() 257 1 'raw '() '() '())) 'invalid-argument)
+
+(define maximum-spelling-model
+  (t2-tokenizer-core-create
+   'raw
+   (list (list 0 256 97 97)
+         (list 1 257 256 256)
+         (list 2 258 257 257)
+         (list 3 259 258 258)
+         (list 4 260 259 259)
+         (list 5 261 260 260)
+         (list 6 262 261 261)
+         (list 7 263 262 262))
+   '() '() '()))
+(check "exact 256-byte learned-token spelling"
+       (= (bytevector-length (vector-ref (vector-ref maximum-spelling-model 3)
+                                         263))
+          256))
+(expect-core-error "one-over learned-token spelling" (lambda ()
+  (t2-tokenizer-core-create
+   'raw
+   (list (list 0 256 97 97)
+         (list 1 257 256 256)
+         (list 2 258 257 257)
+         (list 3 259 258 258)
+         (list 4 260 259 259)
+         (list 5 261 260 260)
+         (list 6 262 261 261)
+         (list 7 263 262 262)
+         (list 8 264 263 97))
+   '() '() '())) 'invalid-argument)
+(check "maximum spelling artifact canonical roundtrip"
+       (t1-core-bytes=?
+        (t2-tokenizer-core-serialize maximum-spelling-model)
+        (t2-tokenizer-core-serialize
+         (t2-tokenizer-core-parse-under-limit
+          (t2-tokenizer-core-serialize maximum-spelling-model) 1048576))))
+
+(define exact-special-model
+  (t2-bpe-train-core '() 0 1 'raw (maximum-special-specs 4096) '() '()))
+(check "exact 4096-special model"
+       (= (t2-tokenizer-core-vocab-size exact-special-model) 4352))
+(check "exact-special artifact canonical roundtrip"
+       (t1-core-bytes=?
+        (t2-tokenizer-core-serialize exact-special-model)
+        (t2-tokenizer-core-serialize
+         (t2-tokenizer-core-parse-under-limit
+          (t2-tokenizer-core-serialize exact-special-model) 1048576))))
+(expect-core-error "one-over special count" (lambda ()
+  (t2-bpe-train-core '() 0 1 'raw (maximum-special-specs 4097) '() '()))
+  'invalid-argument)
+(define name-64 (make-string 64 #\a))
+(check "exact 64-byte special name"
+       (= (t2-tokenizer-core-vocab-size
+           (t2-bpe-train-core '() 0 1 'raw
+                              (list (list name-64 'omit)) '() '()))
+          257))
+(expect-core-error "one-over special name" (lambda ()
+  (t2-bpe-train-core '() 0 1 'raw
+                     (list (list (make-string 65 #\a) 'omit)) '() '()))
+  'invalid-argument)
+
+(define insertion-names (repeat-list 4096 "x"))
+(define maximum-insertion-model
+  (t2-bpe-train-core '() 0 1 'raw (list (list "x" 'omit))
+                     insertion-names insertion-names))
+(check "exact 4096 prefix and suffix limits"
+       (and (= (t1-core-list-length-bounded
+                (vector-ref maximum-insertion-model 5) 4097) 4096)
+            (= (t1-core-list-length-bounded
+                (vector-ref maximum-insertion-model 6) 4097) 4096)))
+(expect-core-error "one-over prefix count" (lambda ()
+  (t2-bpe-train-core '() 0 1 'raw (list (list "x" 'omit))
+                     (repeat-list 4097 "x") '())) 'invalid-argument)
+(expect-core-error "one-over suffix count" (lambda ()
+  (t2-bpe-train-core '() 0 1 'raw (list (list "x" 'omit))
+                     '() (repeat-list 4097 "x"))) 'invalid-argument)
+(define maximum-input (make-bytevector 65536 120))
+(define maximum-insertion-staging
+  (t2-tokenizer-core-encode-i64-le maximum-insertion-model maximum-input))
+(check "maximum input plus insertions produces 73728 IDs"
+       (= (bytevector-length maximum-insertion-staging)
+          t2-core-max-stream-staging-bytes))
+(check "maximum whole encode/decode roundtrip"
+       (t1-core-bytes=?
+        (t2-tokenizer-core-decode-i64-le maximum-insertion-model
+                                         maximum-insertion-staging)
+        maximum-input))
+(define maximum-insertion-encoder
+  (t2-stream-encoder-open maximum-insertion-model))
+(define maximum-stream-staging
+  (staging-append
+   (list (t2-stream-encoder-push! maximum-insertion-encoder maximum-input)
+         (t2-stream-encoder-finish! maximum-insertion-encoder))))
+(define maximum-insertion-decoder
+  (t2-stream-decoder-open maximum-insertion-model))
+(define maximum-stream-decoded
+  (must "maximum stream decoder"
+        (lambda ()
+          (bytes-append
+           (list (t2-stream-decoder-push! maximum-insertion-decoder
+                                          maximum-stream-staging)
+                 (t2-stream-decoder-finish! maximum-insertion-decoder))))))
+(check "maximum streaming encode/decode roundtrip"
+       (t1-core-bytes=? maximum-stream-decoded maximum-input))
+(expect-core-error "one-over whole decoder token limit" (lambda ()
+  (t2-tokenizer-core-decode-i64-le
+   maximum-insertion-model (repeat-staging 73729 256))) 'invalid-argument)
+
+(define exact-decoder (t2-stream-decoder-open byte-model))
+(check "exact decoder byte and token limit"
+       (= (bytevector-length
+           (t2-stream-decoder-push!
+            exact-decoder (repeat-staging 65536 120)))
+          65536))
+(expect-core-error "one-over decoder byte-output limit" (lambda ()
+  (t2-stream-decoder-push! exact-decoder (repeat-staging 1 120)))
+  'invalid-argument)
+(expect-core-error "failed exact decoder terminal" (lambda ()
+  (t2-stream-decoder-finish! exact-decoder)) 'invalid-argument)
+
+(define omit-decoder (t2-stream-decoder-open model))
+(check "exact zero-output omit token limit"
+       (= (bytevector-length
+           (t2-stream-decoder-push!
+            omit-decoder (repeat-staging 73728 260)))
+          0))
+(expect-core-error "one-over omit token limit" (lambda ()
+  (t2-stream-decoder-push! omit-decoder (repeat-staging 1 260)))
+  'invalid-argument)
+(expect-core-error "failed omit decoder terminal" (lambda ()
+  (t2-stream-decoder-finish! omit-decoder)) 'invalid-argument)
+
+(display "T2 TRAINING STREAM PASS: ")
+(display passed) (display " checks") (newline)
