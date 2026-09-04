@@ -1,0 +1,41 @@
+(load "internal/t1/lib/t1_tokenizer_core.esk")
+(load "internal/t2/lib/t2_bpe_core.esk")
+
+(define passed 0)
+(define (check name condition)
+  (if condition (set! passed (+ passed 1))
+      (begin (display "FAIL: ") (display name) (newline) (exit 1))))
+
+(define model
+  (t2-tokenizer-core-create
+   'raw
+   (list (list 0 256 97 98) (list 1 257 256 99))
+   (list (list 258 "bos" 'omit) (list 259 "bad" 'error))
+   (list 258) (list 258)))
+
+(check "vocab" (= (t2-tokenizer-core-vocab-size model) 260))
+(check "special" (= (t2-tokenizer-core-special-token-id model "bos") 258))
+(check "fingerprint" (string=?
+        (t2-tokenizer-core-fingerprint model)
+        (t2-tokenizer-core-fingerprint model)))
+(define parsed
+  (guard
+   (caught
+    (#t
+     (begin
+       (if (t1-core-error? caught)
+           (begin (display (t1-core-error-category caught)) (display ": ")
+                  (display (t1-core-error-message caught)) (newline))
+           (begin (display "non-core: ") (write caught) (newline)))
+       (exit 1))))
+   (t2-tokenizer-core-parse-under-limit
+    (t2-tokenizer-core-serialize model) 1048576)))
+(check "parse fingerprint"
+       (string=? (t2-tokenizer-core-fingerprint parsed)
+                 (t2-tokenizer-core-fingerprint model)))
+(define encoded (t2-tokenizer-core-encode-i64-le model (bytevector 97 98 99)))
+(check "count" (= (t1-tokenizer-core-encoded-count encoded) 3))
+(define decoded (t2-tokenizer-core-decode-i64-le model encoded))
+(check "roundtrip" (t1-core-bytes=? decoded (bytevector 97 98 99)))
+
+(display "T2 CORE SMOKE PASS: ") (display passed) (display " checks") (newline)

@@ -1,0 +1,48 @@
+(load "internal/t1/lib/t1_tokenizer_core.esk")
+(load "internal/t2/lib/t2_bpe_core.esk")
+
+(define maximum-token-ids 73728)
+(define omit-token-id 256)
+(define one-id-chunk (make-bytevector 8 0))
+(t1-core-write-i64-le! one-id-chunk 0 omit-token-id)
+
+(define model
+  (t2-tokenizer-core-create
+   'raw '() (list (list omit-token-id "omit" 'omit)) '() '()))
+
+(define partitioned (t2-stream-decoder-open model))
+(let push-one ((remaining maximum-token-ids))
+  (if (> remaining 0)
+      (begin
+        (if (not (= (bytevector-length
+                     (t2-stream-decoder-push! partitioned one-id-chunk))
+                    0))
+            (begin (display "FAIL: one-ID omit push emitted bytes")
+                   (newline) (exit 1)))
+        (push-one (- remaining 1)))))
+(if (not (= (bytevector-length (t2-stream-decoder-finish! partitioned)) 0))
+    (begin (display "FAIL: partitioned decoder finish emitted bytes")
+           (newline) (exit 1)))
+
+(define one-chunk (make-bytevector (* maximum-token-ids 8) 0))
+(let write ((index 0))
+  (if (< index maximum-token-ids)
+      (begin
+        (t1-core-write-i64-le! one-chunk (* index 8) omit-token-id)
+        (write (+ index 1)))))
+(define whole (t2-stream-decoder-open model))
+(if (not (= (bytevector-length (t2-stream-decoder-push! whole one-chunk)) 0))
+    (begin (display "FAIL: whole omit push emitted bytes")
+           (newline) (exit 1)))
+(if (not (= (bytevector-length (t2-stream-decoder-finish! whole)) 0))
+    (begin (display "FAIL: whole decoder finish emitted bytes")
+           (newline) (exit 1)))
+
+(if (not (and (= (vector-ref partitioned 2) (vector-ref whole 2))
+              (= (vector-ref partitioned 3) maximum-token-ids)
+              (= (vector-ref whole 3) maximum-token-ids)))
+    (begin (display "FAIL: decoder admission depends on chunk partition")
+           (newline) (exit 1)))
+
+(display "T2 DECODER PARTITION PASS: 73728 one-ID omit chunks")
+(newline)

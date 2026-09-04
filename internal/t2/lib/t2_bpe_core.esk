@@ -1,0 +1,1761 @@
+;;; T2 deterministic byte-level BPE core.
+;;;
+;;; Build-only Eshkol. The accepted T1 core must be loaded first. This file uses
+;;; T1's checked byte/list/SHA/UTF-8 helpers but defines a distinct format, identity
+;;; domain, model tag, merge semantics, and bounded streaming state.
+
+(define t2-core-major 1)
+(define t2-core-minor 0)
+(define t2-core-max-artifact-bytes 1048576)
+(define t2-core-max-merges 256)
+(define t2-core-max-token-bytes 256)
+(define t2-core-max-specials 4096)
+(define t2-core-max-prefix 4096)
+(define t2-core-max-suffix 4096)
+(define t2-core-max-training-bytes 65536)
+(define t2-core-max-documents 4096)
+(define t2-core-max-chunks 4096)
+(define t2-core-max-stream-bytes 65536)
+(define t2-core-max-stream-token-ids
+  (+ t2-core-max-stream-bytes t2-core-max-prefix t2-core-max-suffix))
+(define t2-core-max-stream-staging-bytes (* t2-core-max-stream-token-ids 8))
+(define t2-core-max-vocab (+ 256 t2-core-max-merges t2-core-max-specials))
+
+(define t2-core-tokenizer-tag (vector 't2-core-tokenizer-v1))
+(define t2-core-encoder-tag (vector 't2-core-stream-encoder-v1))
+(define t2-core-decoder-tag (vector 't2-core-stream-decoder-v1))
+
+(define t2-core-identity-domain
+  (t1-core-ascii "sha256:eshkol-bpe-tokenizer-v1\n"))
+(define t2-core-checksum-domain
+  (t1-core-ascii "eshkol-bpe-tokenizer-checksum-v1\n"))
+
+;;; Pinned Eshkol requires cross-loaded private calls to return through a local
+;;; frame; a direct tail transfer would demand an unavailable public entry point.
+(define (t2-core-t1-exact-nonnegative-i64? value)
+  (let ((result (t1-core-exact-nonnegative-i64? value)))
+    (if result #t #f)))
+(define (t2-core-t1-special-by-id specials token-id)
+  (let ((result (t1-core-special-by-id specials token-id))) result))
+(define (t2-core-t1-validate-insertions values specials maximum operation field)
+  (let ((result
+         (t1-core-validate-insertions
+          values specials maximum operation field)))
+    result))
+(define (t2-core-t1-concat parts)
+  (let ((result (t1-core-concat parts))) result))
+(define (t2-core-t1-reverse values)
+  (let ((result (t1-core-reverse values))) result))
+(define (t2-core-t1-copy-bytes value)
+  (let ((result (t1-core-copy-bytes value))) result))
+(define (t2-core-t1-copy-string value)
+  (let ((result (t1-core-copy-string value))) result))
+(define (t2-core-t1-canonical-unsigned bytes maximum operation field)
+  (let ((result
+         (t1-core-canonical-unsigned bytes maximum operation field)))
+    result))
+(define (t2-core-t1-parse-name bytes operation field)
+  (let ((result (t1-core-parse-name bytes operation field))) result))
+(define (t2-core-t1-require-fields fields expected operation message)
+  (let ((result
+         (t1-core-require-fields fields expected operation message)))
+    result))
+
+(define t2-core-v1-header
+  (t1-core-ascii
+   (string-append
+    "format\teshkol-bpe-tokenizer\n"
+    "version\t1\t0\n"
+    "required-features\t0\n"
+    "limit-file-bytes\t1048576\n"
+    "limit-merges\t256\n"
+    "limit-token-bytes\t256\n"
+    "limit-specials\t4096\n"
+    "limit-name-bytes\t64\n"
+    "limit-prefix\t4096\n"
+    "limit-suffix\t4096\n")))
+
+(define (t2-core-list-count values limit operation message)
+  ;; Stop after LIMIT+1 pair visits. This bounds rejection of cyclic, improper,
+  ;; and over-limit caller-owned lists without T1's full acyclicity prepass.
+  (let ((count
+         (let loop ((remaining values) (seen 0))
+           (cond ((null? remaining) seen)
+                 ((not (pair? remaining)) #f)
+                 ((> seen limit) #f)
+                 (else (loop (cdr remaining) (+ seen 1)))))))
+    (if (or (not count) (> count limit))
+        (t1-core-fail 'invalid-argument operation message))
+    count))
+
+(define (t2-core-byte-lex<? left right)
+  (let ((left-length (bytevector-length left))
+        (right-length (bytevector-length right)))
+    (let loop ((index 0))
+      (cond ((= index left-length) (< left-length right-length))
+            ((= index right-length) #f)
+            ((< (bytevector-u8-ref left index)
+                (bytevector-u8-ref right index)) #t)
+            ((> (bytevector-u8-ref left index)
+                (bytevector-u8-ref right index)) #f)
+            (else (loop (+ index 1)))))))
+
+(define (t2-core-merge-record? value)
+  (and (= (let loop ((remaining value) (count 0))
+            (cond ((null? remaining) count)
+                  ((or (not (pair? remaining)) (>= count 5)) -1)
+                  (else (loop (cdr remaining) (+ count 1)))))
+          4)
+       (let ((rank?
+              (t2-core-t1-exact-nonnegative-i64? (car value)))
+             (result?
+              (t2-core-t1-exact-nonnegative-i64? (car (cdr value))))
+             (left?
+              (t2-core-t1-exact-nonnegative-i64?
+               (car (cdr (cdr value)))))
+             (right?
+              (t2-core-t1-exact-nonnegative-i64?
+               (car (cdr (cdr (cdr value)))))))
+         (and rank? result? left? right?))))
+
+(define (t2-core-pair-seen? merges left right)
+  (let loop ((remaining merges))
+    (and (not (null? remaining))
+         (let ((merge (car remaining)))
+           (or (and (= left (car (cdr (cdr merge))))
+                    (= right (car (cdr (cdr (cdr merge))))))
+               (loop (cdr remaining)))))))
+
+(define (t2-core-build-token-table merges operation)
+  (let ((count (t2-core-list-count merges t2-core-max-merges operation
+                                   "merge list exceeds 256")))
+    (let ((tokens (make-vector (+ 256 count) #f)))
+      (let bytes ((index 0))
+        (if (< index 256)
+            (begin
+              (vector-set! tokens index (bytevector index))
+              (bytes (+ index 1)))))
+      (let loop ((remaining merges) (rank 0) (seen '()))
+        (if (null? remaining)
+            tokens
+            (let* ((merge (car remaining))
+                   (result-id (+ 256 rank)))
+              (if (not (t2-core-merge-record? merge))
+                  (t1-core-fail 'invalid-argument operation
+                                "malformed BPE merge record"))
+              (let ((stored-rank (car merge))
+                    (stored-result (car (cdr merge)))
+                    (left (car (cdr (cdr merge))))
+                    (right (car (cdr (cdr (cdr merge))))))
+                (if (or (not (= stored-rank rank))
+                        (not (= stored-result result-id))
+                        (>= left result-id) (>= right result-id))
+                    (t1-core-fail 'invalid-argument operation
+                                  "merge ranks, IDs, or references are noncanonical"))
+                (if (t2-core-pair-seen? seen left right)
+                    (t1-core-fail 'invalid-argument operation
+                                  "duplicate merge operand pair"))
+                (let* ((left-bytes (vector-ref tokens left))
+                       (right-bytes (vector-ref tokens right))
+                       (size (+ (bytevector-length left-bytes)
+                                (bytevector-length right-bytes))))
+                  (if (> size t2-core-max-token-bytes)
+                      (t1-core-fail 'invalid-argument operation
+                                    "learned token exceeds 256 bytes"))
+                  (vector-set! tokens result-id
+                               (t1-core-concat (list left-bytes right-bytes)))
+                  (loop (cdr remaining) (+ rank 1)
+                        (cons merge seen))))))))))
+
+(define (t2-core-valid-special-name? name)
+  (and (string? name)
+       (> (string-length name) 0)
+       (<= (string-length name) 64)
+       (let loop ((index 0))
+         (if (= index (string-length name)) #t
+             (let ((scalar (char->integer (string-ref name index))))
+               (and (or (and (>= scalar 97) (<= scalar 122))
+                        (and (> index 0) (>= scalar 48) (<= scalar 57))
+                        (and (> index 0)
+                             (or (= scalar 46) (= scalar 95) (= scalar 45))))
+                    (loop (+ index 1))))))))
+
+(define (t2-core-special-record? value base-id)
+  (and (= (let loop ((remaining value) (count 0))
+            (cond ((null? remaining) count)
+                  ((or (not (pair? remaining)) (>= count 4)) -1)
+                  (else (loop (cdr remaining) (+ count 1)))))
+          3)
+       (t2-core-t1-exact-nonnegative-i64? (car value))
+       (t2-core-valid-special-name? (car (cdr value)))
+       (let ((policy (car (cdr (cdr value)))))
+         (or (eq? policy 'omit) (eq? policy 'error)))
+       (>= (car value) base-id)
+       (< (car value) (+ base-id t2-core-max-specials))))
+
+(define (t2-core-validate-specials specials base-id operation)
+  (let ((count (t2-core-list-count specials t2-core-max-specials operation
+                                   "special count exceeds 4096")))
+    (let loop ((remaining specials) (expected base-id) (names '()) (out '()))
+      (if (null? remaining)
+          (t2-core-t1-reverse out)
+          (let ((special (car remaining)))
+            (if (not (t2-core-special-record? special base-id))
+                (t1-core-fail 'invalid-argument operation
+                              "malformed BPE special record"))
+            (if (not (= (car special) expected))
+                (t1-core-fail 'invalid-argument operation
+                              "BPE special IDs are noncontiguous"))
+            (let ((name (car (cdr special))))
+              (let duplicate ((seen names))
+                (if (not (null? seen))
+                    (if (string=? name (car seen))
+                        (t1-core-fail 'invalid-argument operation
+                                      "BPE special names must be unique")
+                        (duplicate (cdr seen)))))
+              (loop (cdr remaining) (+ expected 1) (cons name names)
+                    (cons (t1-core-copy-special special) out))))))))
+
+(define (t2-core-special-by-id specials token-id)
+  (let ((result (t2-core-t1-special-by-id specials token-id))) result))
+
+(define (t2-core-special-by-name specials name)
+  (let loop ((remaining specials))
+    (cond ((null? remaining) #f)
+          ((string=? name (car (cdr (car remaining)))) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (t2-core-validate-insertions values specials maximum operation field)
+  (let ((result
+         (t2-core-t1-validate-insertions
+          values specials maximum operation field)))
+    result))
+
+(define (t2-core-merge-lines merges)
+  (let loop ((remaining merges) (parts '()))
+    (if (null? remaining) (t2-core-t1-reverse parts)
+        (let ((merge (car remaining)))
+          (loop
+           (cdr remaining)
+           (cons
+            (t1-core-line
+             (t1-core-ascii "merge")
+             (t1-core-decimal (car merge))
+             (t1-core-decimal (car (cdr merge)))
+             (t1-core-decimal (car (cdr (cdr merge))))
+             (t1-core-decimal (car (cdr (cdr (cdr merge))))))
+            parts))))))
+
+(define (t2-core-special-lines specials)
+  (let loop ((remaining specials) (parts '()))
+    (if (null? remaining) (t2-core-t1-reverse parts)
+        (let ((special (car remaining)))
+          (loop
+           (cdr remaining)
+           (cons
+            (t1-core-line
+             (t1-core-ascii "special")
+             (t1-core-decimal (car special))
+             (t1-core-ascii (car (cdr special)))
+             (t1-core-ascii
+              (symbol->string (car (cdr (cdr special))))))
+            parts))))))
+
+(define (t2-core-insertion-lines label values)
+  (let loop ((remaining values) (index 0) (parts '()))
+    (if (null? remaining) (t2-core-t1-reverse parts)
+        (loop
+         (cdr remaining) (+ index 1)
+         (cons
+          (t1-core-line (t1-core-ascii label) (t1-core-decimal index)
+                        (t1-core-decimal (car remaining)))
+          parts)))))
+
+(define (t2-core-payload policy merges specials prefix suffix)
+  (let ((result
+         (t2-core-t1-concat
+          (t1-core-append
+    (list
+     (t1-core-line (t1-core-ascii "kind") (t1-core-ascii "byte-bpe"))
+     (t1-core-line (t1-core-ascii "normalization") (t1-core-ascii "none"))
+     (t1-core-line (t1-core-ascii "utf8-policy")
+                   (t1-core-ascii (symbol->string policy)))
+     (t1-core-line (t1-core-ascii "byte-ids")
+                   (t1-core-ascii "0") (t1-core-ascii "255"))
+     (t1-core-line (t1-core-ascii "merge-count")
+                   (t1-core-decimal
+                    (t1-core-list-length-bounded merges 257))))
+    (t1-core-append
+     (t2-core-merge-lines merges)
+     (t1-core-append
+      (list
+       (t1-core-line (t1-core-ascii "special-count")
+                     (t1-core-decimal
+                      (t1-core-list-length-bounded specials 4097))))
+      (t1-core-append
+       (t2-core-special-lines specials)
+       (t1-core-append
+        (list
+         (t1-core-line (t1-core-ascii "prefix-count")
+                       (t1-core-decimal
+                        (t1-core-list-length-bounded prefix 4097))))
+        (t1-core-append
+         (t2-core-insertion-lines "prefix" prefix)
+         (t1-core-append
+          (list
+           (t1-core-line (t1-core-ascii "suffix-count")
+                         (t1-core-decimal
+                          (t1-core-list-length-bounded suffix 4097))))
+           (t2-core-insertion-lines "suffix" suffix)))))))))))
+    result))
+
+(define (t2-core-build-artifact policy merges specials prefix suffix)
+  (let* ((payload (t2-core-payload policy merges specials prefix suffix))
+         (before-algorithm
+          (t1-core-concat
+           (list t2-core-v1-header
+                 (t1-core-line (t1-core-ascii "payload-bytes")
+                               (t1-core-decimal (bytevector-length payload)))
+                 payload)))
+         (algorithm
+          (t1-core-line (t1-core-ascii "checksum-algorithm")
+                        (t1-core-ascii "sha256")))
+         (signed (t1-core-concat (list before-algorithm algorithm)))
+         (checksum
+          (t1-core-hex
+           (t1-core-sha256
+            (t1-core-concat (list t2-core-checksum-domain signed)))))
+         (artifact
+          (t1-core-concat
+           (list signed
+                 (t1-core-line (t1-core-ascii "checksum")
+                               (t1-core-ascii checksum))))))
+    (if (> (bytevector-length artifact) t2-core-max-artifact-bytes)
+        (t1-core-fail 'invalid-argument 't2-core-build-artifact
+                      "BPE artifact exceeds 1 MiB"))
+    (vector artifact payload)))
+
+(define (t2-tokenizer-core-create policy merges specials prefix suffix)
+  (let ((operation 't2-tokenizer-core-create))
+    (if (not (or (eq? policy 'raw) (eq? policy 'strict)))
+        (t1-core-fail 'invalid-argument operation "invalid BPE UTF-8 policy"))
+    (let* ((tokens (t2-core-build-token-table merges operation))
+           (merge-count (- (vector-length tokens) 256))
+           (checked-specials
+            (t2-core-validate-specials specials (+ 256 merge-count) operation))
+           (checked-prefix
+            (t2-core-validate-insertions
+             prefix checked-specials t2-core-max-prefix operation
+             "BPE prefix count exceeds 4096"))
+           (checked-suffix
+            (t2-core-validate-insertions
+             suffix checked-specials t2-core-max-suffix operation
+             "BPE suffix count exceeds 4096"))
+           (built
+            (t2-core-build-artifact policy merges checked-specials
+                                    checked-prefix checked-suffix))
+           (artifact (vector-ref built 0))
+           (payload (vector-ref built 1))
+           (fingerprint
+            (string-append
+             "sha256:eshkol-bpe-tokenizer-v1:"
+             (t1-core-hex
+              (t1-core-sha256
+               (t1-core-concat
+                (list t2-core-identity-domain t2-core-v1-header payload))))))
+           (copied-merges
+            (let copy ((remaining merges) (out '()))
+              (if (null? remaining) (t1-core-reverse out)
+                  (copy (cdr remaining)
+                        (cons (let ((m (car remaining)))
+                                (list (car m) (car (cdr m))
+                                      (car (cdr (cdr m)))
+                                      (car (cdr (cdr (cdr m))))))
+                              out))))))
+      (vector t2-core-tokenizer-tag policy copied-merges tokens
+              checked-specials checked-prefix checked-suffix
+              artifact fingerprint (bytevector-length payload)))))
+
+(define (t2-core-tokenizer? value)
+  (and (vector? value) (= (vector-length value) 10)
+       (eq? (vector-ref value 0) t2-core-tokenizer-tag)))
+
+(define (t2-core-require-tokenizer value operation)
+  (if (t2-core-tokenizer? value) value
+      (t1-core-fail 'invalid-argument operation
+                    "expected a private BPE tokenizer core")))
+
+(define (t2-tokenizer-core-serialize tokenizer)
+  (let ((result
+         (t2-core-t1-copy-bytes
+          (vector-ref (t2-core-require-tokenizer
+                       tokenizer 't2-tokenizer-core-serialize) 7))))
+    result))
+
+(define (t2-tokenizer-core-fingerprint tokenizer)
+  (let ((result
+         (t2-core-t1-copy-string
+          (vector-ref (t2-core-require-tokenizer
+                       tokenizer 't2-tokenizer-core-fingerprint) 8))))
+    result))
+
+(define (t2-tokenizer-core-payload-size tokenizer)
+  (vector-ref (t2-core-require-tokenizer tokenizer
+                                        't2-tokenizer-core-payload-size) 9))
+
+(define (t2-tokenizer-core-vocab-size tokenizer)
+  (let ((value (t2-core-require-tokenizer tokenizer
+                                         't2-tokenizer-core-vocab-size)))
+    (+ (vector-length (vector-ref value 3))
+       (t1-core-list-length-bounded (vector-ref value 4) 4097))))
+
+(define (t2-tokenizer-core-special-token-id tokenizer name)
+  (let* ((value (t2-core-require-tokenizer
+                 tokenizer 't2-tokenizer-core-special-token-id))
+         (special (and (string? name)
+                       (t2-core-special-by-name (vector-ref value 4) name))))
+    (if special (car special)
+        (t1-core-fail 'invalid-argument
+                      't2-tokenizer-core-special-token-id
+                      "unknown BPE special token"))))
+
+;;; -------------------------------------------------------------------------
+;;; Whole-input vectorized merge application.
+
+(define (t2-core-apply-one-merge current current-length left right result-id)
+  (let ((out (make-vector current-length 0)))
+    (let loop ((input 0) (written 0))
+      (if (= input current-length)
+          (vector out written)
+          (if (and (< (+ input 1) current-length)
+                   (= (vector-ref current input) left)
+                   (= (vector-ref current (+ input 1)) right))
+              (begin (vector-set! out written result-id)
+                     (loop (+ input 2) (+ written 1)))
+              (begin (vector-set! out written (vector-ref current input))
+                     (loop (+ input 1) (+ written 1))))))))
+
+(define (t2-core-input-within-byte-limit? input maximum)
+  (cond
+    ((bytevector? input) (<= (bytevector-length input) maximum))
+    ((string? input)
+     (let loop ((index 0) (total 0))
+       (if (= index (string-length input)) #t
+           (let* ((scalar (char->integer (string-ref input index)))
+                  (width (cond ((<= scalar 127) 1)
+                               ((<= scalar 2047) 2)
+                               ((<= scalar 65535) 3)
+                               (else 4)))
+                  (next (+ total width)))
+             (and (<= next maximum) (loop (+ index 1) next))))))
+    (else #f)))
+
+(define (t2-core-tokenize-bytes tokenizer bytes operation)
+  (let* ((value (t2-core-require-tokenizer tokenizer operation))
+         (length (bytevector-length bytes)))
+    (if (> length t2-core-max-stream-bytes)
+        (t1-core-fail 'invalid-argument operation
+                      "BPE input exceeds 65536 bytes"))
+    (let ((initial (make-vector length 0)))
+      (let fill ((index 0))
+        (if (< index length)
+            (begin (vector-set! initial index (bytevector-u8-ref bytes index))
+                   (fill (+ index 1)))))
+      (let apply ((remaining (vector-ref value 2))
+                  (current initial) (current-length length))
+        (if (null? remaining)
+            (vector current current-length)
+            (let* ((merge (car remaining))
+                   (next
+                    (t2-core-apply-one-merge
+                     current current-length
+                     (car (cdr (cdr merge)))
+                     (car (cdr (cdr (cdr merge))))
+                     (car (cdr merge)))))
+              (apply (cdr remaining) (vector-ref next 0)
+                     (vector-ref next 1))))))))
+
+(define (t2-core-write-vector-ids! result start ids count)
+  (let loop ((index 0))
+    (if (= index count) (+ start count)
+        (begin
+          (t1-core-write-i64-le! result (* (+ start index) 8)
+                                  (vector-ref ids index))
+          (loop (+ index 1))))))
+
+(define (t2-tokenizer-core-encode-i64-le tokenizer input)
+  (let* ((operation 't2-tokenizer-core-encode-i64-le)
+         (value (t2-core-require-tokenizer tokenizer operation)))
+    (if (not (t2-core-input-within-byte-limit?
+              input t2-core-max-stream-bytes))
+        (t1-core-fail 'invalid-argument operation
+                      "BPE input exceeds 65536 bytes or has invalid type"))
+    (let* (
+         (bytes (t1-core-input-bytes input (vector-ref value 1) operation))
+         (tokenized (t2-core-tokenize-bytes value bytes operation))
+         (ids (vector-ref tokenized 0))
+         (count (vector-ref tokenized 1))
+         (prefix (vector-ref value 5))
+         (suffix (vector-ref value 6))
+         (prefix-count (t1-core-list-length-bounded prefix 4097))
+         (suffix-count (t1-core-list-length-bounded suffix 4097))
+         (total (+ prefix-count count suffix-count))
+         (result (make-bytevector (* total 8) 0)))
+    (let ((after-prefix (t1-core-write-id-list! result 0 prefix)))
+      (let ((after-body
+             (t2-core-write-vector-ids! result after-prefix ids count)))
+        (t1-core-write-id-list! result after-body suffix)))
+      result)))
+
+(define (t2-core-token-bytes value token-id operation)
+  (let ((tokens (vector-ref value 3))
+        (specials (vector-ref value 4)))
+    (cond
+      ((and (>= token-id 0) (< token-id (vector-length tokens)))
+       (vector-ref tokens token-id))
+      (else
+       (let ((special (t2-core-special-by-id specials token-id)))
+         (cond ((not special)
+                (t1-core-fail 'invalid-argument operation
+                              "token ID is outside the BPE vocabulary"))
+               ((eq? (car (cdr (cdr special))) 'error)
+                (t1-core-fail 'invalid-argument operation
+                              "BPE special token is forbidden during decode"))
+               (else #f)))))))
+
+(define (t2-tokenizer-core-decode-i64-le tokenizer encoded)
+  (let* ((operation 't2-tokenizer-core-decode-i64-le)
+         (value (t2-core-require-tokenizer tokenizer operation)))
+    (if (not (bytevector? encoded))
+        (t1-core-fail 'invalid-argument operation
+                      "BPE staging value must be a bytevector"))
+    (if (not (= (modulo (bytevector-length encoded) 8) 0))
+        (t1-core-fail 'shape-mismatch operation
+                      "BPE staging byte count is not divisible by eight"))
+    (let ((count (quotient (bytevector-length encoded) 8)))
+      (if (> count t2-core-max-stream-token-ids)
+          (t1-core-fail 'invalid-argument operation
+                        "BPE staging exceeds 73728 token IDs"))
+      (let size ((index 0) (total 0))
+        (if (= index count)
+            (let ((result (make-bytevector total 0)))
+              (let copy ((position 0) (written 0))
+                (if (= position count)
+                    (begin
+                      (if (and (eq? (vector-ref value 1) 'strict)
+                               (not (t1-core-valid-utf8? result)))
+                          (t1-core-fail 'invalid-argument operation
+                                        "decoded BPE bytes are malformed UTF-8"))
+                      result)
+                    (let* ((token-id
+                            (t1-core-read-u64-le encoded (* position 8)))
+                           (spelling
+                            (t2-core-token-bytes value token-id operation)))
+                      (if spelling
+                          (begin
+                            (t1-core-copy-into! result written spelling)
+                            (copy (+ position 1)
+                                  (+ written (bytevector-length spelling))))
+                          (copy (+ position 1) written))))))
+            (let* ((token-id (t1-core-read-u64-le encoded (* index 8)))
+                   (spelling (t2-core-token-bytes value token-id operation))
+                   (next (+ total (if spelling
+                                      (bytevector-length spelling) 0))))
+              (if (> next t2-core-max-stream-bytes)
+                  (t1-core-fail 'invalid-argument operation
+                                "decoded BPE output exceeds 65536 bytes"))
+              (size (+ index 1) next)))))))
+
+;;; -------------------------------------------------------------------------
+;;; Strict canonical parser. Construction followed by exact byte comparison keeps
+;;; the parser and serializer in one canonical domain without accepting aliases.
+
+(define (t2-core-field-symbol bytes operation field allowed)
+  (let ((text (t1-core-ascii-field-string bytes operation field)))
+    (let loop ((remaining allowed))
+      (cond ((null? remaining)
+             (t1-core-fail 'corrupt-data operation field))
+            ((string=? text (symbol->string (car remaining))) (car remaining))
+            (else (loop (cdr remaining)))))))
+
+(define (t2-core-exact-line t2-reader expected missing message operation)
+  (let ((result
+         (t2-core-t1-require-fields
+          (t2-reader missing) expected operation message)))
+    result))
+
+(define (t2-core-fields-length=? fields expected)
+  ;; The shared bounded length helper returns #f for a one-over list. Parser
+  ;; shape checks must reject that value rather than pass it to numeric `=`.
+  (let loop ((remaining fields) (seen 0))
+    (cond ((null? remaining) (= seen expected))
+          ((not (pair? remaining)) #f)
+          ((>= seen expected) #f)
+          (else (loop (cdr remaining) (+ seen 1))))))
+
+(define (t2-core-parse-payload payload operation)
+  (let* ((cursor (vector 0))
+         (length (bytevector-length payload))
+         (t2-reader (lambda (message)
+                     (t1-core-take-line payload cursor length operation message))))
+    (t2-core-exact-line t2-reader '("kind" "byte-bpe")
+                        "missing BPE kind" "invalid BPE kind" operation)
+    (t2-core-exact-line t2-reader '("normalization" "none")
+                        "missing BPE normalization"
+                        "invalid BPE normalization" operation)
+    (let ((policy-fields (t2-reader "missing BPE UTF-8 policy")))
+      (if (or (not (t2-core-fields-length=? policy-fields 2))
+              (not (t1-core-bytes=? (car policy-fields)
+                                    (t1-core-ascii "utf8-policy"))))
+          (t1-core-fail 'corrupt-data operation "malformed BPE UTF-8 policy"))
+      (let ((policy
+             (t2-core-field-symbol (car (cdr policy-fields)) operation
+                                   "invalid BPE UTF-8 policy" '(raw strict))))
+        (t2-core-exact-line t2-reader '("byte-ids" "0" "255")
+                            "missing BPE byte IDs" "invalid BPE byte IDs"
+                            operation)
+        (let* ((merge-count-fields (t2-reader "missing BPE merge count"))
+               (merge-count
+                (if (and (t2-core-fields-length=? merge-count-fields 2)
+                         (t1-core-bytes=? (car merge-count-fields)
+                                          (t1-core-ascii "merge-count")))
+                    (t1-core-canonical-unsigned
+                     (car (cdr merge-count-fields)) t2-core-max-merges operation
+                     "invalid BPE merge count")
+                    (t1-core-fail 'corrupt-data operation
+                                  "malformed BPE merge count"))))
+          (let parse-merges ((rank 0) (merges '()))
+            (if (= rank merge-count)
+                (let* ((special-count-fields
+                        (t2-reader "missing BPE special count"))
+                       (special-count
+                        (if (and
+                             (t2-core-fields-length=? special-count-fields 2)
+                             (t1-core-bytes=?
+                              (car special-count-fields)
+                              (t1-core-ascii "special-count")))
+                            (t1-core-canonical-unsigned
+                             (car (cdr special-count-fields))
+                             t2-core-max-specials operation
+                             "invalid BPE special count")
+                            (t1-core-fail 'corrupt-data operation
+                                          "malformed BPE special count"))))
+                  (let parse-specials ((index 0) (specials '()) (names '()))
+                    (if (= index special-count)
+                        (let* ((prefix-count-fields
+                                (t2-reader "missing BPE prefix count"))
+                               (prefix-count
+                                (if (and
+                                     (t2-core-fields-length=?
+                                      prefix-count-fields 2)
+                                     (t1-core-bytes=?
+                                      (car prefix-count-fields)
+                                      (t1-core-ascii "prefix-count")))
+                                    (t1-core-canonical-unsigned
+                                     (car (cdr prefix-count-fields))
+                                     t2-core-max-prefix operation
+                                     "invalid BPE prefix count")
+                                    (t1-core-fail
+                                     'corrupt-data operation
+                                     "malformed BPE prefix count"))))
+                          (let parse-prefix ((position 0) (prefix '()))
+                            (if (= position prefix-count)
+                                (let* ((suffix-count-fields
+                                        (t2-reader "missing BPE suffix count"))
+                                       (suffix-count
+                                        (if (and
+                                             (t2-core-fields-length=?
+                                              suffix-count-fields 2)
+                                             (t1-core-bytes=?
+                                              (car suffix-count-fields)
+                                              (t1-core-ascii "suffix-count")))
+                                            (t1-core-canonical-unsigned
+                                             (car (cdr suffix-count-fields))
+                                             t2-core-max-suffix operation
+                                             "invalid BPE suffix count")
+                                            (t1-core-fail
+                                             'corrupt-data operation
+                                             "malformed BPE suffix count"))))
+                                  (let parse-suffix
+                                      ((position 0) (suffix '()))
+                                    (if (= position suffix-count)
+                                        (begin
+                                          (if (not (= (vector-ref cursor 0)
+                                                      length))
+                                              (t1-core-fail
+                                               'corrupt-data operation
+                                               "trailing BPE payload records"))
+                                          (vector
+                                           policy
+                                           (t1-core-reverse merges)
+                                           (t1-core-reverse specials)
+                                           (t1-core-reverse prefix)
+                                           (t1-core-reverse suffix)))
+                                        (let ((fields
+                                               (t2-reader
+                                                "missing BPE suffix record")))
+                                          (if (or
+                                               (not (t2-core-fields-length=?
+                                                     fields 3))
+                                               (not (t1-core-bytes=?
+                                                     (car fields)
+                                                     (t1-core-ascii "suffix")))
+                                               (not (=
+                                                     (t1-core-canonical-unsigned
+                                                      (car (cdr fields))
+                                                      t2-core-max-suffix operation
+                                                      "invalid BPE suffix index")
+                                                     position)))
+                                              (t1-core-fail
+                                               'corrupt-data operation
+                                               "malformed BPE suffix record"))
+                                          (parse-suffix
+                                           (+ position 1)
+                                           (cons
+                                            (t1-core-canonical-unsigned
+                                             (car (cdr (cdr fields)))
+                                             t1-core-max-i64 operation
+                                             "invalid BPE suffix ID")
+                                            suffix))))))
+                                (let ((fields
+                                       (t2-reader "missing BPE prefix record")))
+                                  (if (or
+                                       (not (t2-core-fields-length=? fields 3))
+                                       (not (t1-core-bytes=?
+                                             (car fields)
+                                             (t1-core-ascii "prefix")))
+                                       (not (=
+                                             (t1-core-canonical-unsigned
+                                              (car (cdr fields))
+                                              t2-core-max-prefix operation
+                                              "invalid BPE prefix index")
+                                             position)))
+                                      (t1-core-fail
+                                       'corrupt-data operation
+                                       "malformed BPE prefix record"))
+                                  (parse-prefix
+                                   (+ position 1)
+                                   (cons
+                                    (t1-core-canonical-unsigned
+                                     (car (cdr (cdr fields))) t1-core-max-i64
+                                     operation "invalid BPE prefix ID")
+                                    prefix))))))
+                        (let ((fields
+                               (t2-reader "missing BPE special record")))
+                          (if (or
+                               (not (t2-core-fields-length=? fields 4))
+                               (not (t1-core-bytes=?
+                                     (car fields) (t1-core-ascii "special"))))
+                              (t1-core-fail 'corrupt-data operation
+                                            "malformed BPE special record"))
+                          (let* ((id
+                                  (t1-core-canonical-unsigned
+                                   (car (cdr fields)) t1-core-max-i64 operation
+                                   "invalid BPE special ID"))
+                                 (name
+                                  (t1-core-parse-name
+                                   (car (cdr (cdr fields))) operation
+                                   "invalid BPE special name"))
+                                 (decode-policy
+                                  (t2-core-field-symbol
+                                   (car (cdr (cdr (cdr fields)))) operation
+                                   "invalid BPE special policy" '(omit error))))
+                            (let duplicate ((remaining names))
+                              (if (not (null? remaining))
+                                  (if (string=? name (car remaining))
+                                      (t1-core-fail
+                                       'corrupt-data operation
+                                       "duplicate BPE special name")
+                                      (duplicate (cdr remaining)))))
+                            (parse-specials
+                             (+ index 1)
+                             (cons (list id name decode-policy) specials)
+                             (cons name names))))))
+                (let ((fields (t2-reader "missing BPE merge record")))
+                  (if (or (not (t2-core-fields-length=? fields 5))
+                          (not (t1-core-bytes=? (car fields)
+                                                (t1-core-ascii "merge"))))
+                      (t1-core-fail 'corrupt-data operation
+                                    "malformed BPE merge record"))
+                  (parse-merges
+                   (+ rank 1)
+                   (cons
+                    (list
+                     (t1-core-canonical-unsigned
+                      (car (cdr fields)) t2-core-max-merges operation
+                      "invalid BPE merge rank")
+                     (t1-core-canonical-unsigned
+                      (car (cdr (cdr fields))) t1-core-max-i64 operation
+                      "invalid BPE merge result")
+                     (t1-core-canonical-unsigned
+                      (car (cdr (cdr (cdr fields)))) t1-core-max-i64 operation
+                      "invalid BPE left operand")
+                     (t1-core-canonical-unsigned
+                      (car (cdr (cdr (cdr (cdr fields)))))
+                      t1-core-max-i64 operation "invalid BPE right operand"))
+                    merges)))))))))))
+
+;;; Straight-line v1 reader used by the public parser. The older nested reader
+;;; above remains a build-only negative fixture for the compiler's lexical cases.
+(define (t2-core-read-count t2-reader label maximum operation)
+  (let ((fields (t2-reader (string-append "missing " label))))
+    (if (or (not (t2-core-fields-length=? fields 2))
+            (not (t1-core-bytes=? (car fields) (t1-core-ascii label))))
+        (t1-core-fail 'corrupt-data operation
+                      (string-append "malformed " label)))
+    (let ((result
+           (t2-core-t1-canonical-unsigned
+            (car (cdr fields)) maximum operation
+            (string-append "invalid " label))))
+      result)))
+
+(define (t2-core-read-merges t2-reader count operation)
+  (let loop ((rank 0) (out '()))
+    (if (= rank count) (t2-core-t1-reverse out)
+        (let ((fields (t2-reader "missing BPE merge record")))
+          (if (or (not (t2-core-fields-length=? fields 5))
+                  (not (t1-core-bytes=? (car fields)
+                                        (t1-core-ascii "merge"))))
+              (t1-core-fail 'corrupt-data operation
+                            "malformed BPE merge record"))
+          (loop
+           (+ rank 1)
+           (cons
+            (list
+             (t1-core-canonical-unsigned
+              (car (cdr fields)) t2-core-max-merges operation
+              "invalid BPE merge rank")
+             (t1-core-canonical-unsigned
+              (car (cdr (cdr fields))) t1-core-max-i64 operation
+              "invalid BPE merge result")
+             (t1-core-canonical-unsigned
+              (car (cdr (cdr (cdr fields)))) t1-core-max-i64 operation
+              "invalid BPE left operand")
+             (t1-core-canonical-unsigned
+              (car (cdr (cdr (cdr (cdr fields))))) t1-core-max-i64 operation
+              "invalid BPE right operand"))
+            out))))))
+
+(define (t2-core-read-specials t2-reader count operation)
+  (let loop ((index 0) (out '()))
+    (if (= index count) (t2-core-t1-reverse out)
+        (let ((fields (t2-reader "missing BPE special record")))
+          (if (or (not (t2-core-fields-length=? fields 4))
+                  (not (t1-core-bytes=? (car fields)
+                                        (t1-core-ascii "special"))))
+              (t1-core-fail 'corrupt-data operation
+                            "malformed BPE special record"))
+          (loop
+           (+ index 1)
+           (cons
+            (list
+             (t1-core-canonical-unsigned
+              (car (cdr fields)) t1-core-max-i64 operation
+              "invalid BPE special ID")
+             (t2-core-t1-parse-name
+              (car (cdr (cdr fields))) operation
+              "invalid BPE special name")
+             (t2-core-field-symbol
+              (car (cdr (cdr (cdr fields)))) operation
+              "invalid BPE special policy" '(omit error)))
+            out))))))
+
+(define (t2-core-read-insertions t2-reader label count maximum operation)
+  (let loop ((index 0) (out '()))
+    (if (= index count) (t2-core-t1-reverse out)
+        (let ((fields (t2-reader (string-append "missing BPE " label))))
+          (if (or (not (t2-core-fields-length=? fields 3))
+                  (not (t1-core-bytes=? (car fields) (t1-core-ascii label)))
+                  (not (=
+                        (t1-core-canonical-unsigned
+                         (car (cdr fields)) maximum operation
+                         (string-append "invalid BPE " label " index"))
+                        index)))
+              (t1-core-fail 'corrupt-data operation
+                            (string-append "malformed BPE " label)))
+          (loop
+           (+ index 1)
+           (cons
+            (t1-core-canonical-unsigned
+             (car (cdr (cdr fields))) t1-core-max-i64 operation
+             (string-append "invalid BPE " label " ID"))
+            out))))))
+
+(define (t2-core-parse-payload-v1 payload operation)
+  (let* ((cursor (vector 0))
+         (length (bytevector-length payload))
+         (t2-reader
+          (lambda (message)
+            (t1-core-take-line payload cursor length operation message))))
+    (t2-core-exact-line t2-reader '("kind" "byte-bpe")
+                        "missing BPE kind" "invalid BPE kind" operation)
+    (t2-core-exact-line t2-reader '("normalization" "none")
+                        "missing BPE normalization"
+                        "invalid BPE normalization" operation)
+    (let ((policy-fields (t2-reader "missing BPE UTF-8 policy")))
+      (if (or (not (t2-core-fields-length=? policy-fields 2))
+              (not (t1-core-bytes=? (car policy-fields)
+                                    (t1-core-ascii "utf8-policy"))))
+          (t1-core-fail 'corrupt-data operation "malformed BPE UTF-8 policy"))
+      (let ((policy
+             (t2-core-field-symbol (car (cdr policy-fields)) operation
+                                   "invalid BPE UTF-8 policy" '(raw strict))))
+        (t2-core-exact-line t2-reader '("byte-ids" "0" "255")
+                            "missing BPE byte IDs" "invalid BPE byte IDs"
+                            operation)
+        (let* ((merge-count
+                (t2-core-read-count t2-reader "merge-count"
+                                    t2-core-max-merges operation))
+               (merges (t2-core-read-merges t2-reader merge-count operation))
+               (special-count
+                (t2-core-read-count t2-reader "special-count"
+                                    t2-core-max-specials operation))
+               (specials
+                (t2-core-read-specials t2-reader special-count operation))
+               (prefix-count
+                (t2-core-read-count t2-reader "prefix-count"
+                                    t2-core-max-prefix operation))
+               (prefix
+                (t2-core-read-insertions t2-reader "prefix" prefix-count
+                                         t2-core-max-prefix operation))
+               (suffix-count
+                (t2-core-read-count t2-reader "suffix-count"
+                                    t2-core-max-suffix operation))
+               (suffix
+                (t2-core-read-insertions t2-reader "suffix" suffix-count
+                                         t2-core-max-suffix operation)))
+          (if (not (= (vector-ref cursor 0) length))
+              (t1-core-fail 'corrupt-data operation
+                            "trailing BPE payload records"))
+          (vector policy merges specials prefix suffix))))))
+
+(define (t2-tokenizer-core-parse-under-limit bytes metadata-limit)
+  (let ((operation 't2-tokenizer-core-parse-under-limit))
+    (if (not (bytevector? bytes))
+        (t1-core-fail 'invalid-argument operation
+                      "BPE artifact must be a bytevector"))
+    (if (or (not (t2-core-t1-exact-nonnegative-i64? metadata-limit))
+            (> metadata-limit t2-core-max-artifact-bytes))
+        (t1-core-fail 'invalid-argument operation
+                      "invalid BPE metadata limit"))
+    (let ((length (bytevector-length bytes)))
+      (if (> length t2-core-max-artifact-bytes)
+          (t1-core-fail 'corrupt-data operation "BPE artifact exceeds 1 MiB"))
+      (let* ((cursor (vector 0))
+             (t2-reader
+              (lambda (message)
+                (t1-core-take-line bytes cursor length operation message))))
+        (t2-core-exact-line t2-reader '("format" "eshkol-bpe-tokenizer")
+                            "missing BPE format" "invalid BPE format" operation)
+        (let ((version (t2-reader "missing BPE version")))
+          (if (or (not (t2-core-fields-length=? version 3))
+                  (not (t1-core-bytes=? (car version)
+                                        (t1-core-ascii "version"))))
+              (t1-core-fail 'corrupt-data operation "malformed BPE version"))
+          (let ((major
+                 (t1-core-canonical-unsigned
+                  (car (cdr version)) t1-core-max-i64 operation
+                  "invalid BPE major version"))
+                (minor
+                 (t1-core-canonical-unsigned
+                  (car (cdr (cdr version))) t1-core-max-i64 operation
+                  "invalid BPE minor version")))
+            (if (or (not (= major t2-core-major))
+                    (not (= minor t2-core-minor)))
+                (t1-core-fail 'version-mismatch operation
+                              "unsupported BPE tokenizer version"))))
+        (let ((features (t2-reader "missing BPE required-feature count")))
+          (if (or (not (t2-core-fields-length=? features 2))
+                  (not (t1-core-bytes=? (car features)
+                                        (t1-core-ascii "required-features"))))
+              (t1-core-fail 'corrupt-data operation
+                            "malformed BPE required-feature count"))
+          (let ((count
+                 (t1-core-canonical-unsigned
+                  (car (cdr features)) t1-core-max-header-items operation
+                  "invalid BPE required-feature count")))
+            (if (> count 0)
+                (t1-core-fail 'unsupported operation
+                              "required BPE feature is unsupported"))))
+        (let ((limits
+               '(("limit-file-bytes" "1048576")
+                 ("limit-merges" "256")
+                 ("limit-token-bytes" "256")
+                 ("limit-specials" "4096")
+                 ("limit-name-bytes" "64")
+                 ("limit-prefix" "4096")
+                 ("limit-suffix" "4096"))))
+          (let loop ((remaining limits))
+            (if (not (null? remaining))
+                (begin
+                  (t2-core-exact-line t2-reader (car remaining)
+                                      "missing BPE hard limit"
+                                      "BPE hard limit differs from version 1"
+                                      operation)
+                  (loop (cdr remaining))))))
+        (let ((header-end (vector-ref cursor 0))
+              (payload-fields (t2-reader "missing BPE payload size")))
+          (if (or (not (t2-core-fields-length=? payload-fields 2))
+                  (not (t1-core-bytes=? (car payload-fields)
+                                        (t1-core-ascii "payload-bytes"))))
+              (t1-core-fail 'corrupt-data operation
+                            "malformed BPE payload size"))
+          (let* ((payload-size
+                  (t1-core-canonical-unsigned
+                   (car (cdr payload-fields)) t2-core-max-artifact-bytes
+                   operation "invalid BPE payload size"))
+                 (payload-start (vector-ref cursor 0))
+                 (payload-end (+ payload-start payload-size)))
+            (if (> payload-size metadata-limit)
+                (t1-core-fail 'corrupt-data operation
+                              "BPE payload exceeds persistence policy"))
+            (if (> payload-end length)
+                (t1-core-fail 'corrupt-data operation "truncated BPE payload"))
+            (let ((payload (bytevector-copy bytes payload-start payload-end)))
+              (vector-set! cursor 0 payload-end)
+              (let ((algorithm-fields
+                     (t2-reader "missing BPE checksum algorithm")))
+                (if (or
+                     (not (t2-core-fields-length=? algorithm-fields 2))
+                     (not (t1-core-bytes=?
+                           (car algorithm-fields)
+                           (t1-core-ascii "checksum-algorithm"))))
+                    (t1-core-fail 'corrupt-data operation
+                                  "malformed BPE checksum algorithm"))
+                (if (not (t1-core-bytes=?
+                          (car (cdr algorithm-fields))
+                          (t1-core-ascii "sha256")))
+                    (t1-core-fail 'unsupported operation
+                                  "unsupported BPE checksum algorithm")))
+              (let ((algorithm-end (vector-ref cursor 0))
+                    (checksum-fields (t2-reader "missing BPE checksum")))
+                (if (or
+                     (not (t2-core-fields-length=? checksum-fields 2))
+                     (not (t1-core-bytes=? (car checksum-fields)
+                                           (t1-core-ascii "checksum")))
+                     (not (t1-core-lower-hex?
+                           (car (cdr checksum-fields)) 64 #f)))
+                    (t1-core-fail 'corrupt-data operation
+                                  "malformed BPE checksum"))
+                (if (not (= (vector-ref cursor 0) length))
+                    (t1-core-fail 'corrupt-data operation
+                                  "trailing BPE artifact bytes"))
+                (let ((actual
+                       (t1-core-ascii
+                        (t1-core-hex
+                         (t1-core-sha256
+                          (t1-core-concat
+                           (list t2-core-checksum-domain
+                                 (bytevector-copy bytes 0 algorithm-end))))))))
+                  (if (not (t1-core-bytes=? actual
+                                            (car (cdr checksum-fields))))
+                      (t1-core-fail 'corrupt-data operation
+                                    "BPE checksum mismatch")))
+                (let* ((parsed (t2-core-parse-payload-v1 payload operation))
+                       (model
+                        (guard
+                         (caught
+                          ((t1-core-error? caught)
+                           (t1-core-fail 'corrupt-data operation
+                                         (t1-core-error-message caught)))
+                          (else
+                           (t1-core-fail 'internal operation
+                                         "unexpected BPE construction failure")))
+                         (t2-tokenizer-core-create
+                          (vector-ref parsed 0) (vector-ref parsed 1)
+                          (vector-ref parsed 2) (vector-ref parsed 3)
+                          (vector-ref parsed 4)))))
+                  (if (not (t1-core-bytes=?
+                            (t2-tokenizer-core-serialize model) bytes))
+                      (t1-core-fail 'corrupt-data operation
+                                    "BPE artifact is not canonical"))
+                  model)))))))))
+
+;;; -------------------------------------------------------------------------
+;;; Deterministic bounded training and private rank-stage streaming.
+;;;
+;;; These build-only entry points deliberately use private i64-le bytevectors.
+;;; Every call into the separately loaded T1 core returns through a local frame.
+
+(define (t2-core-t1-proper-list? value)
+  (let ((result (t1-core-proper-acyclic-list? value))) result))
+(define (t2-core-t1-list-length values limit)
+  ;; A direct bounded walk rejects a cycle, an improper tail, or a one-over
+  ;; list after at most LIMIT pair visits. T1's helper proves acyclicity first
+  ;; and can therefore traverse attacker-controlled over-limit lists fully.
+  (let loop ((remaining values) (count 0))
+    (cond ((null? remaining) count)
+          ((not (pair? remaining)) #f)
+          ((>= count limit) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+(define (t2-core-t1-input-bytes value policy operation)
+  (let ((result (t1-core-input-bytes value policy operation))) result))
+(define (t2-core-t1-valid-utf8? value)
+  (let ((result (t1-core-valid-utf8? value))) result))
+(define (t2-core-t1-write-i64-le! bytes offset value)
+  (let ((result (t1-core-write-i64-le! bytes offset value))) result))
+(define (t2-core-t1-read-u64-le bytes offset)
+  (let ((result (t1-core-read-u64-le bytes offset))) result))
+(define (t2-core-t1-copy-into! destination offset source)
+  (let ((result (t1-core-copy-into! destination offset source))) result))
+(define-syntax t2-core-local-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (t1-core-fail category operation message)))
+       (vector-ref (vector result) 0)))))
+
+(define (t2-core-bounded-input-bytes value remaining operation message)
+  (cond
+    ((bytevector? value)
+     (if (> (bytevector-length value) remaining)
+         (t2-core-local-fail 'invalid-argument operation message))
+     (let ((bytes (t2-core-t1-copy-bytes value)))
+       (vector-ref (vector bytes) 0)))
+    ((string? value)
+     ;; UTF-8 has at least one byte per scalar. This bounds the encoding
+     ;; allocation before making it, then the exact encoded size is checked.
+     (if (> (string-length value) remaining)
+         (t2-core-local-fail 'invalid-argument operation message))
+     (let ((bytes (t2-core-t1-input-bytes value 'raw operation)))
+       (if (> (bytevector-length bytes) remaining)
+           (t2-core-local-fail 'invalid-argument operation message))
+       bytes))
+    (else
+     (t2-core-local-fail
+      'invalid-argument operation "input chunk must be a string or bytevector"))))
+
+(define (t2-core-training-documents documents policy operation)
+  (let ((document-count
+         (t2-core-t1-list-length documents (+ t2-core-max-documents 1))))
+    (if (or (not document-count)
+            (> document-count t2-core-max-documents))
+        (t2-core-local-fail
+         'invalid-argument operation
+         "training documents must be a bounded proper acyclic list"))
+    (let ((totals (vector 0 0)))
+      (let documents-loop ((remaining documents) (out '()))
+        (if (null? remaining)
+            (t2-core-t1-reverse out)
+            (let* ((chunks (car remaining))
+                   (chunk-count
+                    (t2-core-t1-list-length chunks
+                                             (+ t2-core-max-chunks 1))))
+              (if (not chunk-count)
+                  (t2-core-local-fail
+                   'invalid-argument operation
+                   "each training document must be a proper acyclic chunk list"))
+              (if (> (+ (vector-ref totals 1) chunk-count)
+                     t2-core-max-chunks)
+                  (t2-core-local-fail
+                   'invalid-argument operation
+                   "training input exceeds 4096 aggregate chunks"))
+              (vector-set! totals 1 (+ (vector-ref totals 1) chunk-count))
+              (let chunks-loop ((items chunks) (parts '()))
+                (if (null? items)
+                    (let* ((bytes
+                            (t2-core-t1-concat
+                             (t2-core-t1-reverse parts)))
+                           (length (bytevector-length bytes))
+                           (tokens (make-vector length 0)))
+                      (if (and (eq? policy 'strict)
+                               (not (t2-core-t1-valid-utf8? bytes)))
+                          (t2-core-local-fail
+                           'invalid-argument operation
+                           "strict training document is malformed UTF-8"))
+                      (let fill ((index 0))
+                        (if (< index length)
+                            (begin
+                              (vector-set!
+                               tokens index (bytevector-u8-ref bytes index))
+                              (fill (+ index 1)))))
+                      (documents-loop
+                       (cdr remaining) (cons (vector tokens length) out)))
+                    (let* ((bytes
+                            (t2-core-bounded-input-bytes
+                             (car items)
+                             (- t2-core-max-training-bytes
+                                (vector-ref totals 0))
+                             operation
+                             "training input exceeds 65536 aggregate bytes"))
+                           (length (bytevector-length bytes)))
+                      (vector-set! totals 0 (+ (vector-ref totals 0) length))
+                      (chunks-loop (cdr items) (cons bytes parts)))))))))))
+
+(define (t2-core-validate-special-specs values operation)
+  (let ((count (t2-core-t1-list-length values
+                                        (+ t2-core-max-specials 1))))
+    (if (or (not count) (> count t2-core-max-specials))
+        (t2-core-local-fail
+         'invalid-argument operation
+         "special specs must be a bounded proper acyclic list"))
+    (let loop ((remaining values) (previous #f) (out '()))
+      (if (null? remaining)
+          (t2-core-t1-reverse out)
+          (let ((record (car remaining)))
+            (let ((record-length (t2-core-t1-list-length record 3)))
+              (if (or (not record-length) (not (= record-length 2)))
+                  (t2-core-local-fail
+                   'invalid-argument operation "malformed special spec")))
+            (let ((name (car record))
+                  (policy (car (cdr record))))
+              (if (not (t2-core-valid-special-name? name))
+                  (t2-core-local-fail
+                   'invalid-argument operation "invalid special spec name"))
+              (if (not (or (eq? policy 'omit) (eq? policy 'error)))
+                  (t2-core-local-fail
+                   'invalid-argument operation "invalid special decode policy"))
+              (let ((name-bytes (t2-core-t1-input-bytes name 'raw operation)))
+                (if (and previous
+                         (not (t2-core-byte-lex<? previous name-bytes)))
+                    (t2-core-local-fail
+                     'invalid-argument operation
+                     "special specs must have unique ascending names"))
+                (loop (cdr remaining) name-bytes
+                      (cons (list (t2-core-t1-copy-string name) policy)
+                            out)))))))))
+
+(define (t2-core-require-insertion-names values maximum operation label)
+  (let ((count (t2-core-t1-list-length values (+ maximum 1))))
+    (if (or (not count) (> count maximum))
+        (t2-core-local-fail
+         'invalid-argument operation
+         (string-append label " names must be a bounded proper acyclic list")))
+    values))
+
+(define (t2-core-build-specials specs base-id)
+  (let loop ((remaining specs) (next base-id) (out '()))
+    (if (null? remaining) (t2-core-t1-reverse out)
+        (loop (cdr remaining) (+ next 1)
+              (cons (list next
+                          (t2-core-t1-copy-string (car (car remaining)))
+                          (car (cdr (car remaining))))
+                    out)))))
+
+(define (t2-core-resolve-insertion-names names specials operation label)
+  (let loop ((remaining names) (out '()))
+    (if (null? remaining) (t2-core-t1-reverse out)
+        (let* ((name (car remaining))
+               (special
+                (and (string? name)
+                     (t2-core-special-by-name specials name))))
+          (if (not special)
+              (t2-core-local-fail
+               'invalid-argument operation
+               (string-append label " references an unknown special")))
+          (if (not (eq? (car (cdr (cdr special))) 'omit))
+              (t2-core-local-fail
+               'invalid-argument operation
+               (string-append label " references a non-omit special")))
+          (loop (cdr remaining) (cons (car special) out))))))
+
+(define t2-core-pair-table-width 512)
+
+(define (t2-core-count-training-pairs documents token-lengths counts operation)
+  (let documents-loop ((remaining documents) (touched '()))
+    (if (null? remaining) touched
+        (let* ((document (car remaining))
+               (tokens (vector-ref document 0))
+               (length (vector-ref document 1)))
+          (let pairs-loop ((index 0) (seen touched))
+            (if (>= (+ index 1) length)
+                (documents-loop (cdr remaining) seen)
+                (let* ((left (vector-ref tokens index))
+                       (right (vector-ref tokens (+ index 1)))
+                       (spelling-size
+                        (+ (vector-ref token-lengths left)
+                           (vector-ref token-lengths right))))
+                  (if (> spelling-size t2-core-max-token-bytes)
+                      (pairs-loop (+ index 1) seen)
+                      (let* ((slot (+ (* left t2-core-pair-table-width) right))
+                             (prior (vector-ref counts slot)))
+                        (if (= prior t1-core-max-i64)
+                            (t2-core-local-fail
+                             'internal operation "BPE pair count overflow"))
+                        (vector-set! counts slot (+ prior 1))
+                        (pairs-loop (+ index 1)
+                                    (if (= prior 0) (cons slot seen)
+                                        seen)))))))))))
+
+(define (t2-core-select-training-pair touched counts minimum)
+  (let loop ((remaining touched) (best -1) (best-count 0))
+    (if (null? remaining)
+        (vector best best-count)
+        (let* ((slot (car remaining))
+               (count (vector-ref counts slot)))
+          (vector-set! counts slot 0)
+          (if (and (>= count minimum)
+                   (or (> count best-count)
+                       (and (= count best-count)
+                            (or (= best -1) (< slot best)))))
+              (loop (cdr remaining) slot count)
+              (loop (cdr remaining) best best-count))))))
+
+(define (t2-core-replace-training-pair documents left right result-id)
+  (let loop ((remaining documents) (out '()))
+    (if (null? remaining) (t2-core-t1-reverse out)
+        (let* ((document (car remaining))
+               (replaced
+                (t2-core-apply-one-merge
+                 (vector-ref document 0) (vector-ref document 1)
+                 left right result-id)))
+          (loop (cdr remaining)
+                (cons (vector (vector-ref replaced 0)
+                              (vector-ref replaced 1))
+                      out))))))
+
+(define (t2-bpe-train-core documents maximum-merges minimum-frequency
+                           utf8-policy special-specs prefix-names suffix-names)
+  (let ((operation 't2-bpe-train-core))
+    (if (or (not (t2-core-t1-exact-nonnegative-i64? maximum-merges))
+            (> maximum-merges t2-core-max-merges))
+        (t2-core-local-fail
+         'invalid-argument operation "maximum merges must be in 0..256"))
+    (if (or (not (t2-core-t1-exact-nonnegative-i64? minimum-frequency))
+            (= minimum-frequency 0))
+        (t2-core-local-fail
+         'invalid-argument operation "minimum frequency must be positive"))
+    (if (not (or (eq? utf8-policy 'raw) (eq? utf8-policy 'strict)))
+        (t2-core-local-fail
+         'invalid-argument operation "invalid training UTF-8 policy"))
+    (let* ((training-documents
+            (t2-core-training-documents documents utf8-policy operation))
+           (specs (t2-core-validate-special-specs special-specs operation))
+           (checked-prefix-names
+            (t2-core-require-insertion-names
+             prefix-names t2-core-max-prefix operation "prefix"))
+           (checked-suffix-names
+            (t2-core-require-insertion-names
+             suffix-names t2-core-max-suffix operation "suffix"))
+           (token-lengths (make-vector 512 0))
+           (counts (make-vector (* t2-core-pair-table-width
+                                   t2-core-pair-table-width) 0)))
+      (let initialize-bytes ((index 0))
+        (if (< index 256)
+            (begin (vector-set! token-lengths index 1)
+                   (initialize-bytes (+ index 1)))))
+      (let train ((rank 0) (current training-documents) (merges '()))
+        (if (= rank maximum-merges)
+            (let* ((learned (t2-core-t1-reverse merges))
+                   (specials (t2-core-build-specials specs (+ 256 rank)))
+                   (prefix
+                    (t2-core-resolve-insertion-names
+                     checked-prefix-names specials operation "prefix"))
+                   (suffix
+                    (t2-core-resolve-insertion-names
+                     checked-suffix-names specials operation "suffix")))
+              (t2-tokenizer-core-create
+               utf8-policy learned specials prefix suffix))
+            (let* ((touched
+                    (t2-core-count-training-pairs
+                     current token-lengths counts operation))
+                   (selected
+                    (t2-core-select-training-pair
+                     touched counts minimum-frequency))
+                   (slot (vector-ref selected 0)))
+              (if (= slot -1)
+                  (let* ((learned (t2-core-t1-reverse merges))
+                         (specials
+                          (t2-core-build-specials specs (+ 256 rank)))
+                         (prefix
+                          (t2-core-resolve-insertion-names
+                           checked-prefix-names specials operation "prefix"))
+                         (suffix
+                          (t2-core-resolve-insertion-names
+                           checked-suffix-names specials operation "suffix")))
+                    (t2-tokenizer-core-create
+                     utf8-policy learned specials prefix suffix))
+                  (let* ((left (quotient slot t2-core-pair-table-width))
+                         (right (modulo slot t2-core-pair-table-width))
+                         (result-id (+ 256 rank))
+                         (spelling-size
+                          (+ (vector-ref token-lengths left)
+                             (vector-ref token-lengths right))))
+                    (if (> spelling-size t2-core-max-token-bytes)
+                        (t2-core-local-fail
+                         'internal operation
+                         "selected BPE pair exceeds token byte bound"))
+                    (vector-set! token-lengths result-id spelling-size)
+                    (train
+                     (+ rank 1)
+                     (t2-core-replace-training-pair
+                      current left right result-id)
+                     (cons (list rank result-id left right) merges))))))))))
+
+(define (t2-core-raise-caught caught)
+  (let ((unreachable (raise caught))) unreachable))
+
+(define (t2-core-strict-split bytes final? operation)
+  (let ((length (bytevector-length bytes)))
+    (let scan ((offset 0))
+      (if (= offset length)
+          (vector (t2-core-t1-copy-bytes bytes) (make-bytevector 0 0))
+          (let* ((first (bytevector-u8-ref bytes offset))
+                 (needed
+                  (cond ((<= first 127) 1)
+                        ((and (>= first 194) (<= first 223)) 2)
+                        ((and (>= first 224) (<= first 239)) 3)
+                        ((and (>= first 240) (<= first 244)) 4)
+                        (else
+                         (t2-core-local-fail
+                          'invalid-argument operation
+                          "strict stream contains malformed UTF-8"))))
+                 (available (- length offset)))
+            (let validate ((relative 1))
+              (if (and (< relative needed) (< relative available))
+                  (let ((value
+                         (bytevector-u8-ref bytes (+ offset relative))))
+                    (if (or (< value 128) (> value 191)
+                            (and (= relative 1) (= first 224) (< value 160))
+                            (and (= relative 1) (= first 237) (> value 159))
+                            (and (= relative 1) (= first 240) (< value 144))
+                            (and (= relative 1) (= first 244) (> value 143)))
+                        (t2-core-local-fail
+                         'invalid-argument operation
+                         "strict stream contains malformed UTF-8"))
+                    (validate (+ relative 1)))))
+            (if (< available needed)
+                (if final?
+                    (t2-core-local-fail
+                     'invalid-argument operation
+                     "strict stream ends with truncated UTF-8")
+                    (vector (bytevector-copy bytes 0 offset)
+                            (bytevector-copy bytes offset length)))
+                (scan (+ offset needed))))))))
+
+(define (t2-core-output-add! cell token-id)
+  (vector-set! cell 0 (cons token-id (vector-ref cell 0))))
+
+(define (t2-core-output-add-list! cell values)
+  (let loop ((remaining values))
+    (if (not (null? remaining))
+        (begin (t2-core-output-add! cell (car remaining))
+               (loop (cdr remaining))))))
+
+(define (t2-core-pack-output cell)
+  (let* ((ids (t2-core-t1-reverse (vector-ref cell 0)))
+         (count (t2-core-t1-list-length
+                 ids (+ t2-core-max-stream-token-ids 1)))
+         (result (make-bytevector (* count 8) 0)))
+    (let loop ((remaining ids) (index 0))
+      (if (null? remaining) result
+          (begin
+            (t2-core-t1-write-i64-le!
+             result (* index 8) (car remaining))
+            (loop (cdr remaining) (+ index 1)))))))
+
+(define (t2-core-encoder-send! stages stage-index token-id output)
+  (if (= stage-index (vector-length stages))
+      (t2-core-output-add! output token-id)
+      (let* ((stage (vector-ref stages stage-index))
+             (pending (vector-ref stage 3)))
+        (cond
+          ((= pending -1) (vector-set! stage 3 token-id))
+          ((and (= pending (vector-ref stage 0))
+                (= token-id (vector-ref stage 1)))
+           (vector-set! stage 3 -1)
+           (t2-core-encoder-send!
+            stages (+ stage-index 1) (vector-ref stage 2) output))
+          (else
+           (vector-set! stage 3 token-id)
+           (t2-core-encoder-send!
+            stages (+ stage-index 1) pending output))))))
+
+(define (t2-core-encoder-stages-valid? stages merges)
+  (let loop ((index 0) (remaining merges))
+    (if (null? remaining)
+        (= index (vector-length stages))
+        (and (< index (vector-length stages))
+             (let* ((stage (vector-ref stages index))
+                    (merge (car remaining)))
+               (and (vector? stage) (= (vector-length stage) 4)
+                    (t2-core-t1-exact-nonnegative-i64?
+                     (vector-ref stage 0))
+                    (t2-core-t1-exact-nonnegative-i64?
+                     (vector-ref stage 1))
+                    (t2-core-t1-exact-nonnegative-i64?
+                     (vector-ref stage 2))
+                    (= (vector-ref stage 0) (car (cdr (cdr merge))))
+                    (= (vector-ref stage 1)
+                       (car (cdr (cdr (cdr merge)))))
+                    (= (vector-ref stage 2) (car (cdr merge)))
+                    (let ((pending (vector-ref stage 3)))
+                      (or (and (integer? pending) (exact? pending)
+                               (real? pending) (= pending -1))
+                          (and (t2-core-t1-exact-nonnegative-i64? pending)
+                               (< pending (car (cdr merge))))))
+                    (loop (+ index 1) (cdr remaining))))))))
+
+(define (t2-core-incomplete-utf8? bytes)
+  (let ((length (bytevector-length bytes)))
+    (or (= length 0)
+        (and (<= length 3)
+             (let* ((first (bytevector-u8-ref bytes 0))
+                    (needed
+                     (cond ((and (>= first 194) (<= first 223)) 2)
+                           ((and (>= first 224) (<= first 239)) 3)
+                           ((and (>= first 240) (<= first 244)) 4)
+                           (else 0))))
+               (and (> needed length)
+                    (let loop ((index 1))
+                      (if (= index length) #t
+                          (let ((value (bytevector-u8-ref bytes index)))
+                            (and (>= value 128) (<= value 191)
+                                 (not (and (= index 1) (= first 224)
+                                           (< value 160)))
+                                 (not (and (= index 1) (= first 237)
+                                           (> value 159)))
+                                 (not (and (= index 1) (= first 240)
+                                           (< value 144)))
+                                 (not (and (= index 1) (= first 244)
+                                           (> value 143)))
+                                 (loop (+ index 1))))))))))))
+
+(define (t2-core-stream-pending-valid? core pending)
+  (if (eq? (vector-ref core 1) 'raw)
+      (= (bytevector-length pending) 0)
+      (let ((valid? (t2-core-incomplete-utf8? pending)))
+        (if valid? #t #f))))
+
+(define (t2-core-encoder-state? state)
+  (and (vector? state) (= (vector-length state) 7)
+       (eq? (vector-ref state 0) t2-core-encoder-tag)
+       (t2-core-tokenizer? (vector-ref state 1))
+       (vector? (vector-ref state 2))
+       (= (vector-length (vector-ref state 2))
+          (t2-core-t1-list-length (vector-ref (vector-ref state 1) 2) 257))
+       (t2-core-encoder-stages-valid?
+        (vector-ref state 2) (vector-ref (vector-ref state 1) 2))
+       (t2-core-t1-exact-nonnegative-i64? (vector-ref state 3))
+       (<= (vector-ref state 3) t2-core-max-stream-bytes)
+       (boolean? (vector-ref state 4))
+       (or (eq? (vector-ref state 5) 'open)
+           (eq? (vector-ref state 5) 'failed)
+           (eq? (vector-ref state 5) 'finished))
+       (bytevector? (vector-ref state 6))
+       (<= (bytevector-length (vector-ref state 6)) 3)
+       (let ((pending-valid?
+              (t2-core-stream-pending-valid?
+               (vector-ref state 1) (vector-ref state 6))))
+         (if pending-valid? #t #f))))
+
+(define (t2-core-require-encoder state operation)
+  (if (t2-core-encoder-state? state) state
+      (t2-core-local-fail
+       'invalid-argument operation "expected a private stream encoder state")))
+
+(define (t2-stream-encoder-open core)
+  (let* ((operation 't2-stream-encoder-open)
+         (value (t2-core-require-tokenizer core operation))
+         (merges (vector-ref value 2))
+         (count (t2-core-t1-list-length merges 257))
+         (stages (make-vector count #f)))
+    (let loop ((remaining merges) (index 0))
+      (if (null? remaining)
+          (vector t2-core-encoder-tag value stages 0 #f 'open
+                  (make-bytevector 0 0))
+          (let ((merge (car remaining)))
+            (vector-set! stages index
+                         (vector (car (cdr (cdr merge)))
+                                 (car (cdr (cdr (cdr merge))))
+                                 (car (cdr merge)) -1))
+            (loop (cdr remaining) (+ index 1)))))))
+
+(define (t2-stream-encoder-push! state chunk)
+  (let* ((operation 't2-stream-encoder-push!)
+         (value (t2-core-require-encoder state operation)))
+    (if (not (eq? (vector-ref value 5) 'open))
+        (t2-core-local-fail
+         'invalid-argument operation "stream encoder is failed or finished"))
+    (guard
+     (caught
+      (#t
+       (begin (vector-set! value 5 'failed)
+              (t2-core-raise-caught caught))))
+     (let* ((core (vector-ref value 1))
+            (bytes
+             (t2-core-bounded-input-bytes
+              chunk (- t2-core-max-stream-bytes (vector-ref value 3))
+              operation "stream encoder exceeds 65536 bytes"))
+            (length (bytevector-length bytes))
+            (emittable
+             (if (eq? (vector-ref core 1) 'strict)
+                 (let* ((combined
+                         (t2-core-t1-concat
+                          (list (vector-ref value 6) bytes)))
+                        (split (t2-core-strict-split combined #f operation)))
+                   (vector-set! value 6 (vector-ref split 1))
+                   (vector-ref split 0))
+                 bytes))
+            (emittable-length (bytevector-length emittable)))
+       (let ((output (vector '())))
+         (if (not (vector-ref value 4))
+             (begin
+               (t2-core-output-add-list! output (vector-ref core 5))
+               (vector-set! value 4 #t)))
+         (let send ((index 0))
+           (if (< index emittable-length)
+               (begin
+                 (t2-core-encoder-send!
+                  (vector-ref value 2) 0
+                  (bytevector-u8-ref emittable index) output)
+                 (send (+ index 1)))))
+         (vector-set! value 3 (+ (vector-ref value 3) length))
+         (t2-core-pack-output output))))))
+
+(define (t2-stream-encoder-finish! state)
+  (let* ((operation 't2-stream-encoder-finish!)
+         (value (t2-core-require-encoder state operation)))
+    (if (not (eq? (vector-ref value 5) 'open))
+        (t2-core-local-fail
+         'invalid-argument operation "stream encoder is failed or finished"))
+    (guard
+     (caught
+      (#t
+       (begin (vector-set! value 5 'failed)
+              (t2-core-raise-caught caught))))
+     (let ((core (vector-ref value 1)) (output (vector '())))
+       (if (eq? (vector-ref core 1) 'strict)
+           (t2-core-strict-split (vector-ref value 6) #t operation))
+       (if (not (vector-ref value 4))
+           (begin
+             (t2-core-output-add-list! output (vector-ref core 5))
+             (vector-set! value 4 #t)))
+       (let* ((stages (vector-ref value 2))
+              (count (vector-length stages)))
+         (let flush ((index 0))
+           (if (< index count)
+               (let* ((stage (vector-ref stages index))
+                      (pending (vector-ref stage 3)))
+                 (if (not (= pending -1))
+                     (begin
+                       (vector-set! stage 3 -1)
+                       (t2-core-encoder-send!
+                        stages (+ index 1) pending output)))
+                 (flush (+ index 1))))))
+       (t2-core-output-add-list! output (vector-ref core 6))
+       (vector-set! value 5 'finished)
+       (t2-core-pack-output output)))))
+
+(define (t2-core-decoder-state? state)
+  (and (vector? state) (= (vector-length state) 6)
+       (eq? (vector-ref state 0) t2-core-decoder-tag)
+       (t2-core-tokenizer? (vector-ref state 1))
+       (t2-core-t1-exact-nonnegative-i64? (vector-ref state 2))
+       (<= (vector-ref state 2) t2-core-max-stream-bytes)
+       (t2-core-t1-exact-nonnegative-i64? (vector-ref state 3))
+       (<= (vector-ref state 3) t2-core-max-stream-token-ids)
+       (or (eq? (vector-ref state 4) 'open)
+           (eq? (vector-ref state 4) 'failed)
+           (eq? (vector-ref state 4) 'finished))
+       (bytevector? (vector-ref state 5))
+       (<= (bytevector-length (vector-ref state 5)) 3)
+       (let ((pending-valid?
+              (t2-core-stream-pending-valid?
+               (vector-ref state 1) (vector-ref state 5))))
+         (if pending-valid? #t #f))))
+
+(define (t2-core-require-decoder state operation)
+  (if (t2-core-decoder-state? state) state
+      (t2-core-local-fail
+       'invalid-argument operation "expected a private stream decoder state")))
+
+(define (t2-stream-decoder-open core)
+  (let ((value (t2-core-require-tokenizer core 't2-stream-decoder-open)))
+    (vector t2-core-decoder-tag value 0 0 'open (make-bytevector 0 0))))
+
+(define (t2-stream-decoder-push! state i64-le-token-chunk)
+  (let* ((operation 't2-stream-decoder-push!)
+         (value (t2-core-require-decoder state operation)))
+    (if (not (eq? (vector-ref value 4) 'open))
+        (t2-core-local-fail
+         'invalid-argument operation "stream decoder is failed or finished"))
+    (guard
+     (caught
+      (#t
+       (begin (vector-set! value 4 'failed)
+              (t2-core-raise-caught caught))))
+     (if (or (not (bytevector? i64-le-token-chunk))
+             (not (= (modulo (bytevector-length i64-le-token-chunk) 8) 0)))
+         (t2-core-local-fail
+          'invalid-argument operation "malformed private i64-le staging chunk"))
+     (let* ((core (vector-ref value 1))
+            (count (quotient (bytevector-length i64-le-token-chunk) 8)))
+       (if (> count (- t2-core-max-stream-token-ids (vector-ref value 3)))
+           (t2-core-local-fail
+            'invalid-argument operation
+            "stream decoder exceeds 73728 token IDs"))
+       (if (= count 0)
+           (make-bytevector 0 0)
+           (let size ((index 0) (written 0))
+             (if (= index count)
+                 (let ((scratch (make-bytevector written 0)))
+                   (let decode ((position 0) (offset 0))
+                     (if (= position count)
+                         (if (eq? (vector-ref core 1) 'strict)
+                             (let* ((combined
+                                     (t2-core-t1-concat
+                                      (list (vector-ref value 5) scratch)))
+                                    (split
+                                     (t2-core-strict-split
+                                      combined #f operation)))
+                               (vector-set! value 5 (vector-ref split 1))
+                               (vector-set! value 2
+                                            (+ (vector-ref value 2) written))
+                               (vector-set! value 3
+                                            (+ (vector-ref value 3) count))
+                               (vector-ref split 0))
+                             (begin
+                               (vector-set! value 2
+                                            (+ (vector-ref value 2) written))
+                               (vector-set! value 3
+                                            (+ (vector-ref value 3) count))
+                               scratch))
+                         (let* ((token-id
+                                 (t2-core-t1-read-u64-le
+                                  i64-le-token-chunk (* position 8)))
+                                (spelling
+                                 (t2-core-token-bytes
+                                  core token-id operation)))
+                           (if spelling
+                               (t2-core-t1-copy-into!
+                                scratch offset spelling))
+                           (decode
+                            (+ position 1)
+                            (+ offset
+                               (if spelling
+                                   (bytevector-length spelling) 0)))))))
+                 (let* ((token-id
+                         (t2-core-t1-read-u64-le
+                          i64-le-token-chunk (* index 8)))
+                        (spelling
+                         (t2-core-token-bytes core token-id operation))
+                        (next
+                         (+ written
+                            (if spelling (bytevector-length spelling) 0))))
+                   (if (> next
+                          (- t2-core-max-stream-bytes
+                             (vector-ref value 2)))
+                       (t2-core-local-fail
+                        'invalid-argument operation
+                        "stream decoder exceeds 65536 decoded bytes"))
+                   (size (+ index 1) next)))))))))
+
+(define (t2-stream-decoder-finish! state)
+  (let* ((operation 't2-stream-decoder-finish!)
+         (value (t2-core-require-decoder state operation)))
+    (if (not (eq? (vector-ref value 4) 'open))
+        (t2-core-local-fail
+         'invalid-argument operation "stream decoder is failed or finished"))
+    (guard
+     (caught
+      (#t
+       (begin (vector-set! value 4 'failed)
+              (t2-core-raise-caught caught))))
+     (let ((result
+            (if (eq? (vector-ref (vector-ref value 1) 1) 'strict)
+                (vector-ref
+                 (t2-core-strict-split
+                  (vector-ref value 5) #t operation) 0)
+                (make-bytevector 0 0))))
+       (vector-set! value 4 'finished)
+       result))))

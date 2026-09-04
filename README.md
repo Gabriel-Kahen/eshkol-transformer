@@ -36,6 +36,12 @@ Run the focused T1 tokenizer gate with:
 /usr/bin/bash -c 'make test-t1'
 ```
 
+Run the focused T2 deterministic BPE and streaming gate with:
+
+```bash
+/usr/bin/bash -c 'make test-t2'
+```
+
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
 
 ```bash
@@ -127,6 +133,14 @@ identities, serialize T1 calls, and use a bounded worker process when a process-
 reclamation boundary is required. Exact per-artifact format limits do not bound this
 cumulative process-lifetime cost; see the lifecycle guidance in the T1 contract.
 
+T2 adds a distinct, versioned deterministic BPE artifact without changing T1 bytes
+or the eight tokenizer names/arities. The build leaves the successor aggregate at
+`build/t2/libeshkol_transformer_wave2.a`; applications link either that aggregate or
+the Wave-1 aggregate, never both. Wave 2 preserves the same 47 public globals while
+adding localized Eshkol-only training, rank-stage streaming, and bounded D1
+composition contracts. Python is a development oracle only. See
+[docs/BPE_TOKENIZER_FORMAT.md](docs/BPE_TOKENIZER_FORMAT.md).
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
@@ -146,6 +160,7 @@ See:
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
+- [Deterministic BPE tokenizer and streaming contract](docs/BPE_TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)
