@@ -7,4 +7,10 @@
           state-dict-version-internal
           state-dict-features-internal
           state-dict-adapter-internal
-          state-dict-entries-internal))
+          state-dict-entries-internal
+          state-dict-tensor-borrow-begin-internal
+          state-dict-tensor-borrow-end-internal
+          tensor-provider-preflight-internal
+          tensor-provider-release-owned-internal!
+          tensor-provider-admit-owned-internal!
+          state-dict-adopt-owned-internal!))

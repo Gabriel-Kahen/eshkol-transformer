@@ -62,3 +62,11 @@ model configuration and tensors, optimizer/scheduler state, RNG state, tokenizer
 fingerprint, dataset cursor, resolved run configuration, library/compiler versions,
 and total tokens processed. Writes use a temporary file plus atomic replacement.
 
+Native tensor ownership is explicit. A provider-owned clone has one ledger owner and
+must either transfer into one live receiver state or be released exactly once; GC
+reachability and unproved finalizers are never reclamation mechanisms. P1 state
+dictionaries expose idempotent release and only read-only state-backed handles.
+Trusted consumers validate and borrow those handles synchronously, end the borrow in
+the same call, and retain no raw native pointer. Optimizer snapshots require their
+own versioned receiver ledger and release API; they cannot reuse P1's public state
+release as generic construction or destruction authority.

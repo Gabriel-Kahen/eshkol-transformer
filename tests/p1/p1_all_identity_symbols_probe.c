@@ -18,14 +18,20 @@ ET_P1_GUESS(et_p1_private_parameter_tree_create_v1);
 ET_P1_GUESS(et_p1_private_provider_abort_v1);
 ET_P1_GUESS(et_p1_private_provider_create_v1);
 ET_P1_GUESS(et_p1_private_provider_seal_v1);
+ET_P1_GUESS(et_p1_private_provider_seal_release_v1);
 ET_P1_GUESS(et_p1_private_provider_snapshot_matches_v1);
+ET_P1_GUESS(et_p1_private_provider_snapshot_matches_release_v1);
 ET_P1_GUESS(et_p1_private_result_i64_v1);
 ET_P1_GUESS(et_p1_private_result_ptr_v1);
 ET_P1_GUESS(et_p1_private_state_bind_v1);
 ET_P1_GUESS(et_p1_private_state_dict_create_v1);
 ET_P1_GUESS(et_p1_private_state_entry_create_v1);
+ET_P1_GUESS(et_p1_private_state_entry_create_for_state_v1);
 ET_P1_GUESS(et_p1_private_state_provider_v1);
 ET_P1_GUESS(et_p1_private_state_revoke_v1);
+ET_P1_GUESS(et_p1_private_state_release_begin_v1);
+ET_P1_GUESS(et_p1_private_state_tensor_create_v1);
+ET_P1_GUESS(et_p1_private_state_tensor_validate_v1);
 ET_P1_GUESS(et_p1_private_state_unbind_v1);
 ET_P1_GUESS(et_p1_private_tombstone_count_v1);
 #undef ET_P1_GUESS
@@ -46,14 +52,20 @@ et_p1_guessed_function const et_p1_all_private_guesses[] = {
     et_p1_private_provider_abort_v1,
     et_p1_private_provider_create_v1,
     et_p1_private_provider_seal_v1,
+    et_p1_private_provider_seal_release_v1,
     et_p1_private_provider_snapshot_matches_v1,
+    et_p1_private_provider_snapshot_matches_release_v1,
     et_p1_private_result_i64_v1,
     et_p1_private_result_ptr_v1,
     et_p1_private_state_bind_v1,
     et_p1_private_state_dict_create_v1,
     et_p1_private_state_entry_create_v1,
+    et_p1_private_state_entry_create_for_state_v1,
     et_p1_private_state_provider_v1,
     et_p1_private_state_revoke_v1,
+    et_p1_private_state_release_begin_v1,
+    et_p1_private_state_tensor_create_v1,
+    et_p1_private_state_tensor_validate_v1,
     et_p1_private_state_unbind_v1,
     et_p1_private_tombstone_count_v1,
 };
