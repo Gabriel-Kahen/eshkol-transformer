@@ -177,9 +177,10 @@ bounded CPU control/snapshot descriptors and report allocation failure before
 publishing a lease. Numerical provider dispatch remains allocation-free.
 
 The cache is no-grad and is not serializable. Cache-owned storage is not I2/P1
-parameter or gradient storage. Cached keys are post-RoPE. M3/G3 must not consume the
-private A2 transport until I2/provider aggregation and production ownership are
-separately accepted.
+parameter or gradient storage. Cached keys are post-RoPE. The current I2 aggregate
+does not import or route the A2 provider; M3/G3 must wait for separately reviewed
+multi-provider composition and production ownership rather than consume A2's private
+test transport.
 
 ## Verification boundary
 

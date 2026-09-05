@@ -48,12 +48,27 @@ public contracts are versioned independently of implementations.
 - Every operation declares accepted dtypes, devices, contiguity, broadcasting, and
   gradient support.
 
+I2 supplies the carrier-local boundary for the first shared owned dense CPU-f32
+storage. Its active P1 integration binds stable live parameter value storage and
+explicit accumulated-gradient slots to P1's canonical unique handles while
+preserving ties through the merged release-capable P1L provider interface. Exact i64
+and bool operands remain separate carrier contracts; no numeric vector, cast,
+transfer, or fallback may impersonate them. I2 is a prerequisite of N2 and O2, but
+owns neither numerical layer kernels nor an optimizer algorithm.
+
 ## Native boundary
 
 The first required native/runtime kernels are batched matmul, embedding scatter-add,
 LayerNorm/RMSNorm, activations, causal attention, and indexed cross-entropy. Native
 entry points require ABI versioning, capability discovery, shape guards, deterministic
 test modes, and explicit unsupported errors.
+
+K1 providers are composed explicitly through versioned descriptor accessors. No
+Wave 2 component defines the canonical global provider symbol. Composition rejects
+duplicate capability/operation ownership and routes unchanged borrowed views to one
+provider. The storage owner keeps the data and metadata stable for the complete
+two-phase validate/invoke call; operation providers retain no ordinary view after
+dispatch.
 
 ## Persistence
 

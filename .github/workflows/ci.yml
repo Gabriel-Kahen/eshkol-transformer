@@ -27,6 +27,7 @@ jobs:
       A0_COMPILER_TIMEOUT_SECONDS: '60'
       P1_LSAN: '1'
       C1_LSAN: '1'
+      I2_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -57,7 +58,7 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make build'
 
-      - name: Test (F0/A0/A2/B0/C1/D1/E1/E1B/I1/K1/L2/P1/Q0/T1/T2/X1)
+      - name: Test (F0/A0/A2/B0/C1/D1/E1/E1B/I1/I2/K1/L2/P1/Q0/T1/T2/X1)
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make test'
 
