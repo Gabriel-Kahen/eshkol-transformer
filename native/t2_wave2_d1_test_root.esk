@@ -1,0 +1,13 @@
+;;; Test-only Wave 2 root. Never install or target the canonical T2 directory.
+(load "t2_wave2_root.esk")
+
+(define (t2-test-token-corpus-read tokenizer directory maximum-manifest
+                                   maximum-shard maximum-tokens)
+  (let ((result
+         (t2-private-map-core-error
+          't2-token-corpus-read
+          (lambda ()
+            (t2-token-corpus-read-i64-le
+             tokenizer directory maximum-manifest maximum-shard
+             maximum-tokens)))))
+    result))

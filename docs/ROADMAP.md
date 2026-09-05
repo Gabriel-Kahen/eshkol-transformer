@@ -36,12 +36,12 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | P1L | [Release-capable provider/state ownership correction](P1_MODULE_STATE.md) | P1, E1B, C1, T1 | Provider 2.0 exact-once clone ownership, explicit idempotent state release, scoped read-only state-backed handles, callback-defect/failure cleanup, exact P1/C1/T1 aggregate manifests, sanitizers, deterministic fresh-AOT negatives, and supported CI | complete |
-| I2 | Shared dense CPU-f32 tensor, P1 value/gradient, and atomic-mutation substrate | P1L, K1, Q0, E1/E1B, R0 | [ABI 1.0 exact-bit storage, borrowed K1 views, P1-bound accumulated gradients, whole-batch preflight/commit, sanitizers, packaging negatives, and deterministic AOT evidence](I2_F32_TENSOR.md) | active |
-| T2 | Deterministic BPE training and streaming encode/decode | T1, D1 | Merge determinism, byte fallback and corpus round trips | planned |
+| I2 | Shared dense CPU-f32 tensor, P1 value/gradient, and atomic-mutation substrate | P1L, K1, Q0, E1/E1B, R0 | [ABI 1.0 exact-bit storage, borrowed K1 views, P1-bound accumulated gradients, whole-batch preflight/commit, sanitizers, packaging negatives, and deterministic AOT evidence](I2_F32_TENSOR.md) | review |
+| T2 | [Deterministic BPE training and streaming encode/decode](BPE_TOKENIZER_FORMAT.md) | T1, D1 | Canonical repeated artifacts and order/partition-invariant merges; all-byte/raw/strict/F0-F4/special whole-stream parity; exact 65,536-byte/73,728-ID ceilings including 73,728 one-ID chunks and one-over negatives; compiled parser/D1 corrupt-data negatives; deterministic localized object/archive/evidence/AOT boundary suite; exact aggregate manifests; production Python isolation; independent review; supported CI; and merged-main retest | review |
 | D2 | Memory-bounded shard loader, batching, packing and cursor state | D1, T1, Q0 | Shifted targets, masks, deterministic shuffle and exact resume | planned |
 | N2 | Embedding, linear, normalization, activations, dropout, residuals | P1L, K1, Q0, I2 | Forward and gradient parity for every operation | planned |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | review |
-| L2 | Fused indexed token cross-entropy | K1, Q0 | Stable per-token loss and direct-backward parity tests | planned |
+| L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | review |
 | O2 | AdamW, parameter groups, clipping, accumulation and schedules | P1L, Q0, I2 | Reference update parity and serializable-state tests | planned |
 | C2 | Full training-state checkpoint schema | C1, D2, O2, X1 | Model/optimizer/scheduler/RNG/cursor exact-resume test | planned |
 

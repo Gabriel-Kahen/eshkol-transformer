@@ -1,0 +1,103 @@
+;;; T2-only bounded reader for an already fully validated D1 v1 corpus.
+;;; Build-only and localized in the Wave-2 aggregate. D1 bytes and public APIs are
+;;; unchanged. The caller-supplied tokenizer identity is compared before token
+;;; payload extraction; concurrent namespace mutation retains D1's limitation.
+
+(define t2-d1-max-tokens 65536)
+
+(define (t2-d1-u32-le bytes offset)
+  (+ (bytevector-u8-ref bytes offset)
+     (* 256 (bytevector-u8-ref bytes (+ offset 1)))
+     (* 65536 (bytevector-u8-ref bytes (+ offset 2)))
+     (* 16777216 (bytevector-u8-ref bytes (+ offset 3)))))
+
+(define (t2-d1-path directory leaf)
+  (string-append directory "/" leaf))
+
+(define (t2-d1-shard-name index)
+  (let* ((digits (number->string index))
+         (padding (- 16 (string-length digits))))
+    (string-append "shard-" (make-string padding #\0) digits ".ets")))
+
+(define (t2-d1-file-size path operation)
+  (guard
+   (caught (#t (t1-core-fail 'io operation
+                             "D1 size query failed after validation")))
+   (file-size path)))
+
+(define (t2-d1-read-exact path expected maximum operation)
+  (if (or (< expected 0) (> expected maximum))
+      (t1-core-fail 'corrupt-data operation
+                    "D1 file size changed after validation"))
+  (let ((bytes (make-bytevector expected 0)))
+    (let ((status (t1-native-read-exact path bytes expected maximum)))
+      (if (not (= status 0))
+          (t1-core-fail 'io operation
+                        "D1 checked read failed after validation"))
+      bytes)))
+
+(define (t2-token-corpus-read-i64-le tokenizer directory
+                                           maximum-manifest-bytes
+                                           maximum-shard-bytes
+                                           maximum-total-tokens)
+  (let ((operation 't2-token-corpus-read))
+    (if (or (not (integer? maximum-total-tokens))
+            (not (exact? maximum-total-tokens))
+            (not (real? maximum-total-tokens))
+            (< maximum-total-tokens 0)
+            (> maximum-total-tokens t2-d1-max-tokens))
+        (t1-core-fail 'invalid-argument operation
+                      "T2 D1 token limit must be in [0,65536]"))
+    (let* ((summary
+            (et-d1-private-token-corpus-validate
+             directory maximum-manifest-bytes maximum-shard-bytes
+             maximum-total-tokens))
+           (expected-fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+           (expected-vocab (t2-private-tokenizer-vocab-size tokenizer))
+           (stored-fingerprint
+            (et-d1-private-token-corpus-summary-tokenizer-fingerprint summary))
+           (stored-vocab
+            (et-d1-private-token-corpus-summary-vocab-size summary))
+           (total
+            (et-d1-private-token-corpus-summary-total-tokens summary))
+           (shards
+            (et-d1-private-token-corpus-summary-shard-count summary)))
+      (if (or (not (string=? expected-fingerprint stored-fingerprint))
+              (not (= expected-vocab stored-vocab)))
+          (t1-core-fail 'invalid-argument operation
+                        "D1 corpus tokenizer identity or vocabulary mismatch"))
+      (if (> total t2-d1-max-tokens)
+          (t1-core-fail 'invalid-argument operation
+                        "D1 corpus exceeds T2 extraction limit"))
+      (let* ((manifest-path (t2-d1-path directory "manifest.etm"))
+             (manifest-size (t2-d1-file-size manifest-path operation))
+             (manifest
+              (t2-d1-read-exact manifest-path manifest-size
+                                maximum-manifest-bytes operation))
+             (header-bytes (t2-d1-u32-le manifest 12))
+             (result (make-bytevector (* total 8) 0)))
+        (let shard-loop ((index 0) (written 0))
+          (if (= index shards)
+              (if (= written total) result
+                  (t1-core-fail 'corrupt-data operation
+                                "D1 token total changed after validation"))
+              (let* ((record (+ header-bytes (* index 56)))
+                     (token-count (t1-core-read-u64-le manifest (+ record 8)))
+                     (shard-file-bytes
+                      (t1-core-read-u64-le manifest (+ record 16)))
+                     (shard-path
+                      (t2-d1-path directory (t2-d1-shard-name index)))
+                     (actual-size (t2-d1-file-size shard-path operation))
+                     (shard
+                      (t2-d1-read-exact shard-path actual-size
+                                        maximum-shard-bytes operation))
+                     (shard-header (t2-d1-u32-le shard 12)))
+                (if (not (= actual-size shard-file-bytes))
+                    (t1-core-fail 'corrupt-data operation
+                                  "D1 shard changed after validation"))
+                (if (> (+ written token-count) total)
+                    (t1-core-fail 'corrupt-data operation
+                                  "D1 token count changed after validation"))
+                (bytevector-copy! result (* written 8) shard shard-header
+                                  (+ shard-header (* token-count 8)))
+                (shard-loop (+ index 1) (+ written token-count)))))))))

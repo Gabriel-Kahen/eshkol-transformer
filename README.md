@@ -36,6 +36,12 @@ Run the focused T1 tokenizer gate with:
 /usr/bin/bash -c 'make test-t1'
 ```
 
+Run the focused T2 deterministic BPE and streaming gate with:
+
+```bash
+/usr/bin/bash -c 'make test-t2'
+```
+
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
 
 ```bash
@@ -78,6 +84,13 @@ integration aggregate is `build/i2/libeshkol_transformer_wave2.a`. The aggregate
 retains the existing E1/X1/P1/D1/C1/T1 public surface and localizes every I2 seam.
 Run the focused gate with `make test-i2`; see
 [docs/I2_F32_TENSOR.md](docs/I2_F32_TENSOR.md).
+
+L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
+at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
+`include/eshkol_transformer/indexed_cross_entropy.h`. It exposes only explicit K1
+provider-accessor discovery, per-token forward, and direct backward; it does not
+claim an owned tensor, Eshkol autodiff graph, global provider, or I2 carrier. See
+[docs/L2_INDEXED_CROSS_ENTROPY.md](docs/L2_INDEXED_CROSS_ENTROPY.md).
 
 The build leaves A2's carrier-neutral serial CPU-f32 provider and fixed-capacity
 transactional cache in `build/a2/libeshkol_transformer_a2.a`. Consumers obtain the
@@ -130,6 +143,14 @@ identities, serialize T1 calls, and use a bounded worker process when a process-
 reclamation boundary is required. Exact per-artifact format limits do not bound this
 cumulative process-lifetime cost; see the lifecycle guidance in the T1 contract.
 
+T2 adds a distinct, versioned deterministic BPE artifact without changing T1 bytes
+or the eight tokenizer names/arities. The build leaves the successor aggregate at
+`build/t2/libeshkol_transformer_wave2.a`; applications link either that aggregate or
+the Wave-1 aggregate, never both. Wave 2 preserves the same 47 public globals while
+adding localized Eshkol-only training, rank-stage streaming, and bounded D1
+composition contracts. Python is a development oracle only. See
+[docs/BPE_TOKENIZER_FORMAT.md](docs/BPE_TOKENIZER_FORMAT.md).
+
 ## First release criterion
 
 The first release must deterministically train a byte-level decoder-only transformer,
@@ -145,10 +166,12 @@ See:
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Dense CPU-f32 tensor and parameter-gradient substrate](docs/I2_F32_TENSOR.md)
+- [Fused indexed token cross-entropy](docs/L2_INDEXED_CROSS_ENTROPY.md)
 - [Causal attention, RoPE, and KV-cache substrate](docs/A2_ATTENTION.md)
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
+- [Deterministic BPE tokenizer and streaming contract](docs/BPE_TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

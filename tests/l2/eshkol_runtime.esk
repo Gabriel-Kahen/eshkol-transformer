@@ -1,0 +1,41 @@
+;;; Private AOT evidence transport. This is not a public tensor or loss module.
+(extern ptr l2-create :real et_l2_eshkol_context_create_v1)
+(extern i64 l2-run ptr :real et_l2_eshkol_context_run_v1)
+(extern double l2-loss ptr i64 :real et_l2_eshkol_context_loss_v1)
+(extern double l2-gradient ptr i64 :real et_l2_eshkol_context_gradient_v1)
+(extern i64 l2-invalid-atomic ptr
+        :real et_l2_eshkol_context_invalid_atomic_v1)
+(extern i64 l2-destroy ptr :real et_l2_eshkol_context_destroy_v1)
+
+(define checks 0)
+(define failures 0)
+(define (check-close actual expected tolerance)
+  (set! checks (+ checks 1))
+  (if (<= (abs (- actual expected)) tolerance)
+      #t
+      (set! failures (+ failures 1))))
+(define (check-equal actual expected)
+  (set! checks (+ checks 1))
+  (if (equal? actual expected)
+      #t
+      (set! failures (+ failures 1))))
+
+(define context (l2-create))
+(check-equal (if context 1 0) 1)
+(check-equal (l2-run context) 0)
+(check-close (l2-loss context 0) 0.4076059461 0.000002)
+(check-close (l2-loss context 1) 2.4076058865 0.000003)
+(check-close (l2-gradient context 0) 0.0630213991 0.000003)
+(check-close (l2-gradient context 2) -0.2343313396 0.000003)
+(check-close (l2-gradient context 3) 1.1374617815 0.000004)
+(check-close (l2-gradient context 5) -0.8315511942 0.000004)
+(check-equal (l2-invalid-atomic context) 1)
+(check-equal (l2-destroy context) 0)
+(if (= failures 0)
+    (begin
+      (display "L2 ESHKOL PASS: ") (display checks) (display " checks")
+      (newline))
+    (begin
+      (display "L2 ESHKOL FAIL: ") (display failures) (display " of ")
+      (display checks) (newline)
+      (exit 1)))

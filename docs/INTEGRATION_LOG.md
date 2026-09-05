@@ -883,6 +883,188 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
 
+## 2026-08-31 — L2 proposed contract / issue #44
+
+- **Status:** proposed before implementation; no A0 public name, arity, or
+  persistent format changes.
+- **Native ABI direction:** L2 will provide an isolated version-1.0 native
+  implementation of the existing `kernel.indexed-cross-entropy` capability with
+  exact deterministic CPU-`f32` operations
+  `indexed-cross-entropy.forward` and `indexed-cross-entropy.backward`. Requests
+  have shape `[N,T,V]` with all extents positive. Forward consumes borrowed dense
+  `f32[N,T,V]` logits and `i64[N,T]` targets and writes disjoint caller-owned
+  `f32[N,T]` per-token losses. Backward additionally consumes borrowed
+  `f32[N,T]` upstream gradients and writes disjoint caller-owned
+  `f32[N,T,V]` logit gradients. L2 defines no mask or reduction; later model and
+  trainer composition owns A0's weighted mean.
+- **Numerical/error contract:** forward uses max-subtracted log-sum-exp in fixed
+  row-major vocabulary order. Backward directly computes
+  `upstream * (softmax - one_hot(target))` without allocating one-hot storage,
+  invoking runtime autodiff, or using finite differences. Negative or
+  out-of-range targets are `shape-mismatch`; zero extents are rejected. NaN/Inf
+  operands and finite inputs whose forward result is not finite `f32` reject
+  during validation before commit. There is no allocation, cast, copy, transfer,
+  device substitution, hidden precision, scalar fallback, approximate gradient,
+  or recoverable commit failure. Inputs and outputs remain byte-identical after a
+  validation failure.
+- **Discovery and Eshkol boundary:** a versioned L2 accessor supplies the provider
+  descriptor only to an explicit caller-owned K1 resolver. L2 will not define the
+  global `eshkol_transformer_kernel_provider_v1` symbol, search/load providers,
+  or modify the provider-free K1 baseline. A private fixed-arity opaque transport
+  context will prove real Eshkol AOT calls into the same provider; it is not an A0
+  tensor API, owned f32 carrier, autodiff object, parameter store, or downstream
+  training contract.
+- **Cross-workstream coordination:** A2 requested the L2 ownership/ABI proposal.
+  L2 will remain carrier-neutral and consume only accepted K1 borrowed tensor
+  views; A2/N2 must not depend on the private L2 proof shell. K1 v1 permits one
+  provider callback pair, so a unified N2/A2/L2 provider plus an owned f32/autodiff
+  carrier remains an explicit composition decision before M3 rather than an API
+  any Wave-2 primitive may invent independently.
+  Integration subsequently created the shared I2 substrate at issue #49. L2 sent
+  I2 its exact natural-alignment, immutable-borrow, pairwise-disjoint-input,
+  caller-owned-output, two-phase-lifetime, and accessor-only provider-composition
+  requirements. L2 will remain interoperable with accepted I2 dense f32 K1 views
+  but does not treat I2 as an accepted dependency or production carrier until I2
+  review and integration complete.
+- **Planned evidence:** frozen Q0/PyTorch forward and direct-backward parity,
+  development-only central finite differences, extreme finite logits, exhaustive
+  schema/target/zero/nonfinite/alias/failure-atomicity negatives, repeated
+  deterministic AOT, canonical capability report, sanitizers, production Python
+  isolation, full repository gates, independent reviews, and supported exact-head
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI.
+- **Reference:** [issue #44](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/44);
+  [issue #1 proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487177062);
+  [I2 coordination update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487282264).
+
+## 2026-08-31 — T2 / issue #43
+
+- **Decision:** proposed for integration-owner review; a local implementation
+  candidate now exercises the contract but remains unfrozen and unaccepted.
+- **Contract proposal:** preserve the accepted T1 `eshkol-byte-tokenizer` 1.x byte
+  grammar, fingerprint domain, eight public names/arities, C1 policy mapping, exact
+  I1 result carrier, and process-lifetime rules byte-for-byte. Add a distinct
+  `eshkol-bpe-tokenizer` 1.0 data format and
+  `sha256:eshkol-bpe-tokenizer-v1:<digest>` identity domain rather than treating BPE
+  semantics as an inert T1 minor extension. Byte IDs remain `0..255`. Learned merge
+  IDs are contiguous from 256 in rank order; configured special IDs follow the
+  merge range contiguously. Each merge references only earlier IDs. Training chooses
+  the greatest adjacent-pair count, breaks ties by ascending `(left-id,right-id)`,
+  applies the chosen pair left-to-right without overlap inside each document, never
+  crosses an explicit document boundary, and stops when the requested merge bound is
+  reached or no pair meets the minimum frequency. Admitted document order and chunk
+  partition within a document do not affect learned bytes.
+
+  The proposed v1 operational ceilings are 1,048,576 artifact/payload bytes under
+  the existing lowering persistence policy, 256 learned merges, 256 decoded bytes
+  per learned token, 4,096 specials, 4,096 prefix entries, 4,096 suffix entries,
+  65,536 aggregate training bytes, 4,096 documents, 4,096 training chunks, and
+  65,536 bytes per encode/decode stream and 73,728 decoder token IDs (589,824
+  i64-le staging bytes), closing the maximum 65,536 byte tokens plus 4,096 prefix
+  and 4,096 suffix insertions under round trip. Exact ceilings and one-over rejection are
+  part of the compiled gate; RSS/time thresholds are evidence budgets, not hidden
+  lower admission limits.
+
+  T2 adds no installed public procedure. Existing `tokenizer-load`,
+  `tokenizer-save!`, encode/decode, vocabulary, fingerprint, and special lookup
+  wrappers operate on either accepted T1 byte artifacts or validated T2 BPE
+  artifacts without changing their contracts. BPE training and stateful streaming
+  encode/decode are fixed-arity build-only Eshkol contracts for trusted later CLI/data
+  composition. Streaming uses private i64-le staging chunks and a pipeline of one
+  left-to-right transducer per merge rank, with at most one pending token per rank;
+  it does not publish one retained T1 I1 shell per input chunk. Prefix and suffix
+  specials are applied once per logical stream. No new native ABI,
+  tensor carrier, dtype/device conversion, callback selected by data, or fallback is
+  proposed.
+
+  A canonical Wave-2 successor aggregate is rebuilt from the accepted trusted
+  E1/P1/D1/X1/C1/T1 sources plus T2 and localized once. It retains the accepted
+  upstream public surface and cannot be combined with the already-localized Wave-1 aggregate.
+  The Wave-1 archive and all focused T1 evidence remain independently reproducible.
+  To prove D1 round trips without changing D1 v1 bytes or its eight-name facade, the
+  Wave-2 trusted closure adds a bounded internal corpus-token read operation. After
+  accepted P1L integration, the successor aggregate carries its public unary
+  `state-dict-release!` unchanged: production is exactly 47 globals/41 non-E1
+  wrappers and the D1-test-only aggregate is exactly 48/42. T2 itself still adds no
+  installed public procedure or native ABI. It
+  fully validates the manifest and shards, then compares the supplied tokenizer
+  fingerprint and vocabulary before returning any tokens; a self-consistent corpus
+  paired with the wrong tokenizer is `invalid-argument`, not `corrupt-data`.
+- **Status / evidence:** local candidate implementation. The distinct v1 artifact,
+  Eshkol trainer, rank-stage whole/stream runtime, strict/raw policy, D1 bridge,
+  unchanged T2 API with a 47-global production aggregate and 48-global test-only
+  aggregate, frozen
+  Python oracle, deterministic fixture generators, exact-limit/adversarial AOTs,
+  and production-oracle isolation gates are checked in for review. After the
+  independent T2-R request-changes review, decoder push now validates and sizes its
+  current chunk before state mutation and allocates exactly the current decoded-byte
+  count rather than the remaining 65,536-byte budget. The compiled gate exercises
+  the exact maximum partition of 73,728 one-ID omit chunks and the single-chunk
+  equivalent. Compiled public AOT coverage now includes 22 frozen parser rejection
+  checks and four D1 seam negatives; malformed, truncated, and checksum-corrupt D1
+  shards retain `corrupt-data/token-corpus-validate`, while vocabulary-only mismatch
+  is `invalid-argument/t2-token-corpus-read`. Strict UTF-8 evidence uses a real
+  four-byte scalar at every split and pins F0/F4 lower/upper boundary cases.
+
+  Local compiled evidence includes 91 training/stream checks, 6 core checks, 17
+  delivered-public checks, 6 D1-runtime checks, 22 parser negatives, 4 D1 negatives,
+  60 UTF-8 split/boundary checks, and 25 Python oracle tests. Two fresh-cache
+  training/stream runs measured 142,816 and 142,932 KiB peak RSS; the 73,728 one-ID
+  decoder runs measured 10,632 and 10,580 KiB; UTF-8 runs measured 9,144 and 8,564
+  KiB; two public-runtime runs measured 54,984 and 7,832 KiB; the parser-negative,
+  D1 setup, and D1-negative runs measured 57,256, 10,352, and 9,368 KiB. Every
+  bounded process completed within 60 seconds, below 524,288 KiB, with no
+  heap-pressure warning. The T2-specific boundary suite independently retained and
+  byte-compared two localized production and D1-test objects, archives, evidence
+  directories, and public-caller AOT binaries. After merging accepted main
+  `b72b9fa58042304a71e801415e53f280262edae2`, the complete compatibility gate
+  passed with exact 47/41 production and 48/42 D1-test surfaces, exact public-string
+  and public-source manifests, inherited P1L private-capability negatives, hostile
+  path/tuple rejection, private/native localization and archive index closure,
+  crafted-link isolation, and the Wave1+Wave2 duplicate-E1 rejection. The two
+  training/stream runs measured 142,936 and 144,936 KiB; the exact 73,728 one-ID
+  partitions measured 10,576 and 12,620 KiB; UTF-8 measured 8,972 and 5,824 KiB;
+  public runtime measured 9,540 and 10,564 KiB; parser negatives measured 65,192
+  KiB; D1 setup and negatives measured 2,532 and 3,760 KiB. Supported Ubuntu 22.04
+  / LLVM-Clang 21.1.8 run 33697384015 then passed Build, the full Test matrix, and
+  Smoke, but its benchmark was cancelled when the job reached the exact 150-minute
+  outer ceiling. The measured run spent 14m02s in Build, 1h55m34s in Test, and
+  13m40s in Smoke before the benchmark received only 3m38s. The workflow outer
+  ceiling therefore rises narrowly from 150 to 180 minutes; no compiler timeout,
+  test, sanitizer, Smoke assertion, or benchmark sample is removed. A new supported
+  exact-head run, exact-head T2-R rereview, and the unmerged PR remain required. T2 stays no
+  further than `review` until independent acceptance, merge, merged-main retest, and
+  acceptance-document follow-up.
+
+  A subsequent authoritative T2-R rereview of exact head
+  `e667523adfcde28b88f3238ff336824c04ad166e` accepted the decoder, D1, package,
+  UTF-8, API, format, aggregate, and supported-run evidence but required exhaustive
+  production-linked coverage for every frozen parser invariant. The bounded repair
+  expands deterministic generated evidence from 32 to 365 artifacts: 360
+  byte-distinct malformed models, four valid exact-count-ceiling models, and the
+  retained alternate D1 model.
+  The public Eshkol AOT asserts 362 exact rejection category/operation tuples including
+  two lowered-policy cases, performs a frozen-identity valid load after every failure,
+  admits exact 613-byte/295-byte policy and merge/special/prefix/suffix count ceilings,
+  and performs a canonical post-matrix save, for 730 checks per repetition. The new
+  topology cases exposed boolean-valued one-over field counts escaping through numeric
+  `=`; all parser record-shape guards now use a bounded boolean-safe predicate and map
+  malformed records to the promised structured `corrupt-data/tokenizer-load` result.
+  Python remains a deterministic byte generator only. Focused, full, supported, and
+  independent exact-head evidence remain required for this repair; T2 remains `review`.
+- **Dependencies / retest:** any accepted change to the aggregate source closure or
+  D1 trusted internals requires complete T1 and D1 regression/boundary gates. Any
+  public name, native ABI, T1 grammar/fingerprint, D1 byte-format, I1 lifetime, or
+  persistence-policy change requires a new issue #1 decision and affected downstream
+  retests.
+- **Measured limitation:** the inherited D1 summary registry retains every
+  successfully validated internal corpus summary until process exit, even if the
+  later tokenizer identity comparison fails. T2 private cores/states are uniquely
+  owned trusted-build values and are not safe for arbitrary representation mutation;
+  registry operations are serialized.
+- **Reference:** [issue #43](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/43);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [T2-R request changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/54#issuecomment-5514480850).
+
 ## 2026-09-01 — P1L / issue #51
 
 - **Decision:** proposed; implementation and independent exact-head re-review are in
@@ -1138,3 +1320,42 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [A2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494434343);
   [correction direction](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494455136);
   [cache-bound ledger correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5494455138).
+
+## 2026-09-04 — L2 current-main integration / PR #56
+
+- **Decision:** merge accepted-main parent
+  `b72b9fa58042304a71e801415e53f280262edae2` into reviewed L2 parent
+  `264cfa7f3d6e33d140f264f2077b91d8ff66f9b6` without rewriting either history.
+  The five shared-file conflicts are resolved as a strict union: A2 and L2 remain
+  separately built and tested, both isolated provider/archive contracts remain
+  documented, P1L dependency edges are retained, and A2, P1L, and L2 remain at
+  `review`.
+- **Boundary:** no L2 implementation, ABI header, export manifest, focused test,
+  fixture, oracle generator, or private AOT proof source changes in this integration.
+  No A2 or P1L implementation tree from the accepted-main parent is modified. L2
+  still supplies only its versioned explicit provider accessor and does not define
+  K1's canonical provider symbol, a registry, an owned carrier, or a shared private
+  AOT transport.
+- **Required evidence:** byte-for-byte parent comparisons, focused L2/K1/A2/P1
+  gates, full repository test/smoke/benchmark gates, supported Ubuntu 22.04 / LLVM
+  21 exact-head CI, and a separate independent exact-head L2-R review are required
+  before integration acceptance. PR #56 remains open and must not be merged here.
+
+## 2026-09-04 — L2/T2 current-main refresh / PR #56
+
+- **Decision:** merge accepted T2 main
+  `3006c5c90d1ee40647cababac004f2c75d46fa65` into independently reviewed L2
+  integration head `cab8b790ec8b98a47b064a37c16893979622a265` without rewriting either
+  history. The three content conflicts are strict registry unions: the CI test label
+  names both L2 and T2, the Makefile retains both focused gates, and this log retains
+  both complete workstream records. T2's 180-minute supported-job budget is
+  unchanged. L2 and T2 remain at `review`.
+- **Boundary:** no L2 implementation, ABI, export manifest, focused evidence, oracle,
+  fixture, or private AOT source changes. No accepted T2 implementation, format,
+  aggregate, fixture, oracle, build/test script, or boundary evidence changes. T2
+  adds no tensor/provider contract and L2 adds no tokenizer/aggregate contract; the
+  workstreams interact only through explicit build/test orchestration.
+- **Required evidence:** exact parent byte/mode comparisons, focused L2 and T2 gates,
+  the complete affected repository test/smoke/benchmark gates, new supported Ubuntu
+  22.04 / LLVM-Clang 21.1.8 exact-head CI, and a separate bounded L2-R integration-
+  delta review are required. PR #56 remains open and must not be merged here.
