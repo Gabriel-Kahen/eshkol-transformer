@@ -1,0 +1,3 @@
+et_l2_indexed_cross_entropy_abi_major_v1
+et_l2_indexed_cross_entropy_abi_minor_v1
+et_l2_indexed_cross_entropy_provider_v1

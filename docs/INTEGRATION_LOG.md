@@ -883,6 +883,59 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
 
+## 2026-08-31 — L2 proposed contract / issue #44
+
+- **Status:** proposed before implementation; no A0 public name, arity, or
+  persistent format changes.
+- **Native ABI direction:** L2 will provide an isolated version-1.0 native
+  implementation of the existing `kernel.indexed-cross-entropy` capability with
+  exact deterministic CPU-`f32` operations
+  `indexed-cross-entropy.forward` and `indexed-cross-entropy.backward`. Requests
+  have shape `[N,T,V]` with all extents positive. Forward consumes borrowed dense
+  `f32[N,T,V]` logits and `i64[N,T]` targets and writes disjoint caller-owned
+  `f32[N,T]` per-token losses. Backward additionally consumes borrowed
+  `f32[N,T]` upstream gradients and writes disjoint caller-owned
+  `f32[N,T,V]` logit gradients. L2 defines no mask or reduction; later model and
+  trainer composition owns A0's weighted mean.
+- **Numerical/error contract:** forward uses max-subtracted log-sum-exp in fixed
+  row-major vocabulary order. Backward directly computes
+  `upstream * (softmax - one_hot(target))` without allocating one-hot storage,
+  invoking runtime autodiff, or using finite differences. Negative or
+  out-of-range targets are `shape-mismatch`; zero extents are rejected. NaN/Inf
+  operands and finite inputs whose forward result is not finite `f32` reject
+  during validation before commit. There is no allocation, cast, copy, transfer,
+  device substitution, hidden precision, scalar fallback, approximate gradient,
+  or recoverable commit failure. Inputs and outputs remain byte-identical after a
+  validation failure.
+- **Discovery and Eshkol boundary:** a versioned L2 accessor supplies the provider
+  descriptor only to an explicit caller-owned K1 resolver. L2 will not define the
+  global `eshkol_transformer_kernel_provider_v1` symbol, search/load providers,
+  or modify the provider-free K1 baseline. A private fixed-arity opaque transport
+  context will prove real Eshkol AOT calls into the same provider; it is not an A0
+  tensor API, owned f32 carrier, autodiff object, parameter store, or downstream
+  training contract.
+- **Cross-workstream coordination:** A2 requested the L2 ownership/ABI proposal.
+  L2 will remain carrier-neutral and consume only accepted K1 borrowed tensor
+  views; A2/N2 must not depend on the private L2 proof shell. K1 v1 permits one
+  provider callback pair, so a unified N2/A2/L2 provider plus an owned f32/autodiff
+  carrier remains an explicit composition decision before M3 rather than an API
+  any Wave-2 primitive may invent independently.
+  Integration subsequently created the shared I2 substrate at issue #49. L2 sent
+  I2 its exact natural-alignment, immutable-borrow, pairwise-disjoint-input,
+  caller-owned-output, two-phase-lifetime, and accessor-only provider-composition
+  requirements. L2 will remain interoperable with accepted I2 dense f32 K1 views
+  but does not treat I2 as an accepted dependency or production carrier until I2
+  review and integration complete.
+- **Planned evidence:** frozen Q0/PyTorch forward and direct-backward parity,
+  development-only central finite differences, extreme finite logits, exhaustive
+  schema/target/zero/nonfinite/alias/failure-atomicity negatives, repeated
+  deterministic AOT, canonical capability report, sanitizers, production Python
+  isolation, full repository gates, independent reviews, and supported exact-head
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI.
+- **Reference:** [issue #44](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/44);
+  [issue #1 proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487177062);
+  [I2 coordination update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487282264).
+
 ## 2026-08-31 — T2 / issue #43
 
 - **Decision:** proposed for integration-owner review; a local implementation
@@ -1011,6 +1064,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Reference:** [issue #43](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/43);
   [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
   [T2-R request changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/54#issuecomment-5514480850).
+
 ## 2026-09-01 — P1L / issue #51
 
 - **Decision:** proposed; implementation and independent exact-head re-review are in
@@ -1266,3 +1320,42 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [A2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494434343);
   [correction direction](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494455136);
   [cache-bound ledger correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5494455138).
+
+## 2026-09-04 — L2 current-main integration / PR #56
+
+- **Decision:** merge accepted-main parent
+  `b72b9fa58042304a71e801415e53f280262edae2` into reviewed L2 parent
+  `264cfa7f3d6e33d140f264f2077b91d8ff66f9b6` without rewriting either history.
+  The five shared-file conflicts are resolved as a strict union: A2 and L2 remain
+  separately built and tested, both isolated provider/archive contracts remain
+  documented, P1L dependency edges are retained, and A2, P1L, and L2 remain at
+  `review`.
+- **Boundary:** no L2 implementation, ABI header, export manifest, focused test,
+  fixture, oracle generator, or private AOT proof source changes in this integration.
+  No A2 or P1L implementation tree from the accepted-main parent is modified. L2
+  still supplies only its versioned explicit provider accessor and does not define
+  K1's canonical provider symbol, a registry, an owned carrier, or a shared private
+  AOT transport.
+- **Required evidence:** byte-for-byte parent comparisons, focused L2/K1/A2/P1
+  gates, full repository test/smoke/benchmark gates, supported Ubuntu 22.04 / LLVM
+  21 exact-head CI, and a separate independent exact-head L2-R review are required
+  before integration acceptance. PR #56 remains open and must not be merged here.
+
+## 2026-09-04 — L2/T2 current-main refresh / PR #56
+
+- **Decision:** merge accepted T2 main
+  `3006c5c90d1ee40647cababac004f2c75d46fa65` into independently reviewed L2
+  integration head `cab8b790ec8b98a47b064a37c16893979622a265` without rewriting either
+  history. The three content conflicts are strict registry unions: the CI test label
+  names both L2 and T2, the Makefile retains both focused gates, and this log retains
+  both complete workstream records. T2's 180-minute supported-job budget is
+  unchanged. L2 and T2 remain at `review`.
+- **Boundary:** no L2 implementation, ABI, export manifest, focused evidence, oracle,
+  fixture, or private AOT source changes. No accepted T2 implementation, format,
+  aggregate, fixture, oracle, build/test script, or boundary evidence changes. T2
+  adds no tensor/provider contract and L2 adds no tokenizer/aggregate contract; the
+  workstreams interact only through explicit build/test orchestration.
+- **Required evidence:** exact parent byte/mode comparisons, focused L2 and T2 gates,
+  the complete affected repository test/smoke/benchmark gates, new supported Ubuntu
+  22.04 / LLVM-Clang 21.1.8 exact-head CI, and a separate bounded L2-R integration-
+  delta review are required. PR #56 remains open and must not be merged here.

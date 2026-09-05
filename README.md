@@ -75,6 +75,13 @@ The build also leaves I1's separate exact signed-i64 CPU container archive at
 bounded deterministic `tensor.i64` / `storage.copy` requests; see
 [docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
 
+L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
+at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
+`include/eshkol_transformer/indexed_cross_entropy.h`. It exposes only explicit K1
+provider-accessor discovery, per-token forward, and direct backward; it does not
+claim an owned tensor, Eshkol autodiff graph, global provider, or I2 carrier. See
+[docs/L2_INDEXED_CROSS_ENTROPY.md](docs/L2_INDEXED_CROSS_ENTROPY.md).
+
 The build leaves A2's carrier-neutral serial CPU-f32 provider and fixed-capacity
 transactional cache in `build/a2/libeshkol_transformer_a2.a`. Consumers obtain the
 provider only from `et_a2_kernel_provider_v1`; the archive does not define K1's
@@ -148,6 +155,7 @@ See:
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
+- [Fused indexed token cross-entropy](docs/L2_INDEXED_CROSS_ENTROPY.md)
 - [Causal attention, RoPE, and KV-cache substrate](docs/A2_ATTENTION.md)
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
 - [Configuration and resolved-run format](docs/CONFIG_FORMAT.md)
