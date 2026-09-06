@@ -407,8 +407,9 @@
           (< draw-counter 0))
       (d2-core-fail "D2 shuffle coordinates are outside unsigned u64"))
   (if (> draw-counter d2-core-u64-max)
-      (d2-core-fail
-       "unsupported: D2 shuffle draw counter exhausted unsigned u64"))
+      (d2-core-raise
+       'unsupported 'token-dataset-next-batch
+       "D2 shuffle draw counter exhausted unsigned u64"))
   (if (not (procedure? word-source))
       (d2-core-fail "D2 shuffle requires an explicit SHA-256 word source"))
   (let ((limit (* (quotient d2-core-u64-space range) range)))
@@ -423,8 +424,9 @@
                         d2-core-u64-space
                         (+ counter 1)))
             (if (= counter d2-core-u64-max)
-                (d2-core-fail
-                 "unsupported: D2 shuffle draw counter exhausted unsigned u64")
+                (d2-core-raise
+                 'unsupported 'token-dataset-next-batch
+                 "D2 shuffle draw counter exhausted unsigned u64")
                 (retry (+ counter 1))))))))
 
 (define (d2-core-unbiased-draw range seed window-index draw-counter)
@@ -499,10 +501,12 @@
 (define (d2-core-shuffle-buffer-bytes total-rows window-rows)
   (if (or (not (d2-core-nonnegative-i64? total-rows))
           (not (d2-core-positive-i64? window-rows)))
-      (d2-core-fail "D2 shuffle buffer extents are malformed"))
+      (d2-core-raise 'invalid-argument 'token-dataset-open
+                     "D2 shuffle buffer extents are malformed"))
   (let ((slots (min total-rows window-rows)))
     (if (> slots (quotient d2-core-i64-max 8))
-        (d2-core-fail "D2 shuffle buffer exceeds signed i64"))
+        (d2-core-raise 'invalid-argument 'token-dataset-open
+                       "D2 shuffle buffer exceeds signed i64"))
     (* slots 8)))
 
 (define (d2-core-shuffle-bytevector-ref buffer active-length index)
@@ -610,20 +614,25 @@
   (if (or (not (d2-core-positive-i64? batch-size))
           (not (d2-core-positive-i64? sequence-length))
           (not (d2-core-positive-i64? maximum-batch-bytes)))
-      (d2-core-fail "D2 batch extents and byte limit must be positive i64"))
+      (d2-core-raise 'invalid-argument 'token-dataset-open
+                     "D2 batch extents and byte limit must be positive i64"))
   (if (> batch-size (quotient d2-core-i64-max sequence-length))
-      (d2-core-fail "D2 batch element count exceeds signed i64"))
+      (d2-core-raise 'invalid-argument 'token-dataset-open
+                     "D2 batch element count exceeds signed i64"))
   (let ((elements (* batch-size sequence-length)))
     (if (> elements (quotient d2-core-i64-max 17))
-        (d2-core-fail "D2 batch payload exceeds signed i64"))
+        (d2-core-raise 'invalid-argument 'token-dataset-open
+                       "D2 batch payload exceeds signed i64"))
     (let ((bytes (* 17 elements)))
       (if (> bytes maximum-batch-bytes)
-          (d2-core-fail "D2 batch payload exceeds configured byte limit"))
+          (d2-core-raise 'invalid-argument 'token-dataset-open
+                         "D2 batch payload exceeds configured byte limit"))
       bytes)))
 
 (define (d2-core-checked-payload-add left right)
   (if (> left (- d2-core-i64-max right))
-      (d2-core-fail "D2 working payload exceeds signed i64"))
+      (d2-core-raise 'invalid-argument 'token-dataset-open
+                     "D2 working payload exceeds signed i64"))
   (+ left right))
 
 ;;; Explicit data payload ceiling: one bounded manifest, one bounded shard, the
@@ -635,12 +644,14 @@
           (not (d2-core-positive-i64? maximum-shard-bytes))
           (not (d2-core-positive-i64? shuffle-window-rows))
           (not (d2-core-nonnegative-i64? total-rows)))
-      (d2-core-fail "D2 working payload limits are malformed"))
+      (d2-core-raise 'invalid-argument 'token-dataset-open
+                     "D2 working payload limits are malformed"))
   (let* ((batch (d2-core-batch-payload-bytes
                  batch-size sequence-length maximum-batch-bytes))
          (window-count (min shuffle-window-rows total-rows)))
     (if (> window-count (quotient d2-core-i64-max 8))
-        (d2-core-fail "D2 shuffle window payload exceeds signed i64"))
+        (d2-core-raise 'invalid-argument 'token-dataset-open
+                       "D2 shuffle window payload exceeds signed i64"))
     (let* ((window-bytes (* 8 window-count))
            (payload (d2-core-checked-payload-add
                      maximum-manifest-bytes maximum-shard-bytes))

@@ -205,10 +205,12 @@
                    (d2-core-unbiased-draw-with-source
                     2 1 0 0 (lambda (seed window counter) -1)))))
 (check "counter exhaustion is unsupported"
-       (rejects? (lambda ()
-                   (d2-core-unbiased-draw-with-source
-                    3 1 0 d2-core-u64-max
-                    (lambda (seed window counter) d2-core-u64-max)))))
+       (d2-error-matches?
+        (lambda ()
+          (d2-core-unbiased-draw-with-source
+           3 1 0 d2-core-u64-max
+           (lambda (seed window counter) d2-core-u64-max)))
+        'unsupported 'token-dataset-next-batch))
 (define accepted-at-maximum
   (d2-core-unbiased-draw-with-source
    8 1 0 d2-core-u64-max
@@ -326,9 +328,11 @@
        (= (d2-core-working-payload-bytes 200 1000 2 4 136 50 0)
           1336))
 (check "working payload addition overflow"
-       (rejects? (lambda ()
-                   (d2-core-working-payload-bytes
-                    d2-core-i64-max 1 1 1 17 1 1))))
+       (d2-error-matches?
+        (lambda ()
+          (d2-core-working-payload-bytes
+           d2-core-i64-max 1 1 1 17 1 1))
+        'invalid-argument 'token-dataset-open))
 
 (define digest (make-bytevector 32 17))
 (define (new-state digest-value)
