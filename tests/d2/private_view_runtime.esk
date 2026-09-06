@@ -1,0 +1,159 @@
+(load "d2_wave2_root.esk")
+
+(extern i64 d2-test-view-match ptr i64 i64 i64 ptr i64
+        :real et_d2_test_view_match_v1)
+(extern i64 d2-test-flip-byte ptr i64 i64 :real et_d2_test_flip_byte_v1)
+(extern i64 d2-test-dataset-live :real et_d2_dataset_test_live_count_v1)
+(extern i64 d2-test-batch-live :real et_d2_batch_test_live_count_v1)
+(extern i64 d2-test-borrow-live :real et_d2_batch_test_borrow_count_v1)
+(extern i64 d2-test-allocation-live :real et_d2_test_owned_allocation_count_v1)
+
+(define passed 0)
+(define failed 0)
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin (set! failed (+ failed 1))
+             (display "FAIL: ") (display name) (newline))))
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? category (transformer-error-category caught))
+                   (eq? operation (transformer-error-operation caught)))))
+    (thunk) #f))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (path root name) (string-append root "/" name))
+(define (config directory batch-size sequence-length packing?)
+  (list ':directory directory ':batch-size batch-size
+        ':sequence-length sequence-length
+        ':maximum-manifest-bytes 1048576
+        ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536
+        ':maximum-batch-bytes (* 17 batch-size sequence-length)
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
+(define (i64-bytes values)
+  (let ((result (make-bytevector (* 8 (length values)) 0)))
+    (let loop ((remaining values) (offset 0))
+      (if (null? remaining) result
+          (begin
+            (d2-core-store-unsigned-le! result offset 8 (car remaining))
+            (loop (cdr remaining) (+ offset 8)))))))
+(define (bool-bytes values)
+  (let ((result (make-bytevector (length values) 0)))
+    (let loop ((remaining values) (offset 0))
+      (if (null? remaining) result
+          (begin (bytevector-u8-set! result offset (car remaining))
+                 (loop (cdr remaining) (+ offset 1)))))))
+(define (view=? tensor rows columns dtype-kind expected)
+  (d2-token-tensor-with-view-internal
+   tensor
+   (lambda (view)
+     (= (d2-test-view-match view rows columns dtype-kind expected
+                            (bytevector-length expected)) 1))))
+
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define root (car (cdr (cdr args))))
+(define policy (c1-persistence-policy-internal 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
+(check "native D2 baseline is empty"
+       (and (= (d2-test-dataset-live) 0) (= (d2-test-batch-live) 0)
+            (= (d2-test-borrow-live) 0) (= (d2-test-allocation-live) 0)))
+
+(define (expect-eos name directory)
+  (let ((dataset (d2-token-dataset-open (config directory 1 3 #t) tokenizer)))
+    (check name (d2-token-dataset-end? (d2-token-dataset-next-batch dataset)))
+    (d2-token-dataset-close! dataset)))
+(expect-eos "empty corpus has no shifted row" (path root "empty"))
+(expect-eos "singleton corpus has no shifted row" (path root "singleton"))
+
+(define (check-batch name directory batch-size sequence-length packing?
+                     inputs targets mask)
+  (let* ((dataset (d2-token-dataset-open
+                   (config directory batch-size sequence-length packing?) tokenizer))
+         (batch (d2-token-dataset-next-batch dataset)))
+    (check (string-append name " inputs")
+           (view=? (d2-token-batch-inputs batch) batch-size sequence-length 1
+                   (i64-bytes inputs)))
+    (check (string-append name " targets")
+           (view=? (d2-token-batch-targets batch) batch-size sequence-length 1
+                   (i64-bytes targets)))
+    (check (string-append name " mask")
+           (view=? (d2-token-batch-loss-mask batch) batch-size sequence-length 2
+                   (bool-bytes mask)))
+    (d2-token-batch-release! batch)
+    (d2-token-dataset-close! dataset)))
+
+(check-batch "exact T+1 row" (path root "exact") 1 3 #t
+             '(1 2 3) '(2 3 4) '(1 1 1))
+(check-batch "padded final row and batch" (path root "padded") 2 3 #t
+             '(1 2 0 0 0 0) '(2 3 0 0 0 0) '(1 1 0 0 0 0))
+(check-batch "packed cross-shard row" (path root "cross-shard") 1 3 #t
+             '(10 11 12) '(11 12 13) '(1 1 1))
+(check-batch "unpacked rows never cross shards" (path root "cross-shard") 2 3 #f
+             '(10 0 0 12 0 0) '(11 0 0 13 0 0) '(1 0 0 1 0 0))
+
+(let* ((dataset (d2-token-dataset-open
+                 (config (path root "exact") 1 3 #t) tokenizer))
+       (batch (d2-token-dataset-next-batch dataset))
+       (tensor (d2-token-batch-inputs batch))
+       (marker (vector 'callback-marker)))
+  (check "callback raise is preserved"
+         (guard (caught (#t (eq? caught marker)))
+           (d2-token-tensor-with-view-internal tensor (lambda (view) (raise marker)))
+           #f))
+  (check "callback raise ends native borrow"
+         (and (= (d2-test-borrow-live) 0)
+              (view=? tensor 1 3 1 (i64-bytes '(1 2 3)))))
+  (check "reentrant release rejects during borrow"
+         (d2-token-tensor-with-view-internal
+          tensor
+          (lambda (view)
+            (structured-error? 'invalid-state 'token-batch-release!
+                               (lambda () (d2-token-batch-release! batch))))))
+  (check "reentrant close rejects during borrow"
+         (d2-token-tensor-with-view-internal
+          tensor
+          (lambda (view)
+            (structured-error? 'invalid-state 'token-dataset-close!
+                               (lambda () (d2-token-dataset-close! dataset))))))
+  (check "failed reentrant operations leave batch releasable"
+         (d2-token-batch-release! batch))
+  (d2-token-dataset-close! dataset))
+
+;;; Mutation after open must be detected at use, destroy the unpublished native
+;;; batch, and leave the exact continuation unchanged.
+(let* ((directory (path root "cross-shard"))
+       (shard (path directory "shard-0000000000000001.ets"))
+       (dataset (d2-token-dataset-open (config directory 1 3 #t) tokenizer))
+       (before (d2-token-dataset-cursor dataset))
+       (path-bytes (+ 1 (bytevector-length (string->utf8 shard)))))
+  (check "test mutation reaches second shard payload"
+         (= (d2-test-flip-byte shard path-bytes 175) 1))
+  (check "on-demand revalidation reports next-batch operation"
+         (structured-error? 'corrupt-data 'token-dataset-next-batch
+                            (lambda () (d2-token-dataset-next-batch dataset))))
+  (check "failed revalidation preserves exact cursor"
+         (bytes=? before (d2-token-dataset-cursor dataset)))
+  (check "test mutation restores published shard"
+         (= (d2-test-flip-byte shard path-bytes 175) 1))
+  (let ((batch (d2-token-dataset-next-batch dataset)))
+    (check "restored shard yields exact next batch"
+           (view=? (d2-token-batch-targets batch) 1 3 1
+                   (i64-bytes '(11 12 13))))
+    (d2-token-batch-release! batch))
+  (d2-token-dataset-close! dataset))
+
+(check "all native D2 resources return to baseline"
+       (and (= (d2-test-dataset-live) 0) (= (d2-test-batch-live) 0)
+            (= (d2-test-borrow-live) 0) (= (d2-test-allocation-live) 0)))
+(if (= failed 0)
+    (begin (display "D2 PRIVATE VIEW PASS: ") (display passed)
+           (display " compiled content/lifetime checks") (newline))
+    (exit 1))

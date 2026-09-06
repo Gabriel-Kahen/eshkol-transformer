@@ -1,0 +1,72 @@
+(require transformer.data)
+(require transformer.error_public)
+(require transformer.persistence)
+(require transformer.tokenizer)
+
+(define passed 0)
+(define failed 0)
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+(define (config directory packing?)
+  (list ':directory directory
+        ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576
+        ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536
+        ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1
+        ':packing? packing?))
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define root (car (cdr (cdr args))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (tokenizer-load tokenizer-path policy))
+(define (path name) (string-append root "/" name))
+(define valid (path "small"))
+
+(define (rejects-and-recovers name directory category packing?)
+  (check name
+         (structured-error?
+          category 'token-dataset-open
+          (lambda () (token-dataset-open (config directory packing?) tokenizer))))
+  (let ((dataset (token-dataset-open (config valid #t) tokenizer)))
+    (check (string-append name " leaves publication clean")
+           (token-dataset-close! dataset))))
+
+(rejects-and-recovers "orphan shard without manifest is not published"
+                      (path "missing-manifest") 'io #t)
+(rejects-and-recovers "missing late shard rejects open"
+                      (path "missing-late-shard") 'io #t)
+(rejects-and-recovers "manifest checksum corruption rejects"
+                      (path "corrupt-manifest-checksum") 'corrupt-data #t)
+(rejects-and-recovers "manifest version mismatch is distinct"
+                      (path "version-manifest") 'version-mismatch #t)
+(rejects-and-recovers "manifest required feature is unsupported"
+                      (path "feature-manifest") 'unsupported #t)
+(rejects-and-recovers "shard checksum corruption rejects"
+                      (path "corrupt-shard-checksum") 'corrupt-data #t)
+(rejects-and-recovers "shard version mismatch is distinct"
+                      (path "version-shard") 'version-mismatch #t)
+(rejects-and-recovers "shard required feature is unsupported"
+                      (path "feature-shard") 'unsupported #t)
+(rejects-and-recovers "self-consistent out-of-range token rejects"
+                      (path "invalid-token") 'corrupt-data #t)
+(rejects-and-recovers "unused unpacked singleton shard is still validated"
+                      (path "corrupt-singleton") 'corrupt-data #f)
+
+(if (= failed 0)
+    (begin
+      (display "D2 PUBLIC ERRORS PASS: ") (display passed)
+      (display " compiled rejection/recovery checks") (newline))
+    (exit 1))

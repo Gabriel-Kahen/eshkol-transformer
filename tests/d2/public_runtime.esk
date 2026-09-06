@@ -1,0 +1,277 @@
+(require transformer.data)
+(require transformer.error_public)
+(require transformer.persistence)
+(require transformer.tokenizer)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (u64-le bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256) (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (make-config directory batch-size sequence-length manifest-limit
+                     shard-limit total-limit batch-limit seed window packing?)
+  (list ':directory directory
+        ':batch-size batch-size
+        ':sequence-length sequence-length
+        ':maximum-manifest-bytes manifest-limit
+        ':maximum-shard-bytes shard-limit
+        ':maximum-total-tokens total-limit
+        ':maximum-batch-bytes batch-limit
+        ':shuffle-seed seed
+        ':shuffle-window-rows window
+        ':packing? packing?))
+
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define alternate-tokenizer-path (car (cdr (cdr args))))
+(define corpus-directory (car (cdr (cdr (cdr args)))))
+(define missing-directory (car (cdr (cdr (cdr (cdr args))))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (tokenizer-load tokenizer-path policy))
+(define alternate-tokenizer (tokenizer-load alternate-tokenizer-path policy))
+(define fingerprint (tokenizer-fingerprint tokenizer))
+(define vocab-size (tokenizer-vocab-size tokenizer))
+
+;;; Four shards and five T=3 rows exercise arbitrary packed crossings, three
+;;; batches, an unused final batch row, and live-final-batch precedence.
+(token-corpus-write! corpus-directory fingerprint vocab-size 4
+                     '(10 11 12 13 14 15 16 17 18 19 20 21 22 23))
+
+(define directory-copy (string-copy corpus-directory))
+(define config
+  (make-config directory-copy 2 3 1048576 1048576 14 102 17 4 #t))
+(define dataset (token-dataset-open config tokenizer))
+;;; Mutating both caller-owned carriers after publication cannot affect D2.
+(string-set! directory-copy 0 #\x)
+(set-car! config ':not-a-d2-key)
+
+(define start (token-dataset-cursor dataset))
+(define start-again (token-dataset-cursor dataset))
+(check "cursor is fresh detached storage"
+       (and (not (eq? start start-again)) (bytes=? start start-again)))
+(check "cursor exact ESHKDCU1 physical bytes"
+       (and (= (bytevector-length start) 303)
+            (= (bytevector-u8-ref start 0) 69)
+            (= (bytevector-u8-ref start 1) 83)
+            (= (bytevector-u8-ref start 2) 72)
+            (= (bytevector-u8-ref start 3) 75)
+            (= (bytevector-u8-ref start 4) 68)
+            (= (bytevector-u8-ref start 5) 67)
+            (= (bytevector-u8-ref start 6) 85)
+            (= (bytevector-u8-ref start 7) 49)
+            (= (u64-le start 48) 2)
+            (= (u64-le start 56) 3)
+            (= (u64-le start 88) 102)
+            (= (u64-le start 96) 17)
+            (= (u64-le start 104) 4)
+            (= (u64-le start 112) 5)
+            (= (u64-le start 120) 0)
+            (= (u64-le start 160) 303)
+            (= (u64-le start 168) 0)))
+
+(define first (token-dataset-next-batch dataset))
+(define first-alias first)
+(define first-inputs (token-batch-inputs first))
+(define first-targets (token-batch-targets first))
+(define first-mask (token-batch-loss-mask first))
+(check "fixed batch validates" (token-batch-validate first))
+(check "accessors return stable state-backed identities"
+       (and (eq? first-inputs (token-batch-inputs first))
+            (eq? first-targets (token-batch-targets first))
+            (eq? first-mask (token-batch-loss-mask first))))
+(check "live batch blocks next"
+       (structured-error? 'invalid-state 'token-dataset-next-batch
+                          (lambda () (token-dataset-next-batch dataset))))
+(check "live batch blocks seek"
+       (structured-error? 'invalid-state 'token-dataset-seek!
+                          (lambda () (token-dataset-seek! dataset start))))
+(check "live wrong-kind tensor is invalid-argument"
+       (structured-error? 'invalid-argument 'token-batch-release!
+                          (lambda () (token-batch-release! first-inputs))))
+(check "authentic batch alias releases" (token-batch-release! first-alias))
+(check "exact released alias is idempotent" (token-batch-release! first))
+(check "released batch access is stale"
+       (structured-error? 'invalid-state 'token-batch-validate
+                          (lambda () (token-batch-validate first))))
+(check "released tensor access is stale"
+       (structured-error? 'invalid-state 'token-batch-inputs
+                          (lambda () (token-batch-inputs first))))
+
+(define second (token-dataset-next-batch dataset))
+(define after-second (token-dataset-cursor dataset))
+(check "second batch advances exact ordinal"
+       (= (u64-le after-second 120) 4))
+(token-batch-release! second)
+(define final (token-dataset-next-batch dataset))
+(define final-cursor (token-dataset-cursor dataset))
+(check "final batch commits M while live"
+       (= (u64-le final-cursor 120) (u64-le final-cursor 112)))
+(check "live final batch precedes EOS"
+       (structured-error? 'invalid-state 'token-dataset-next-batch
+                          (lambda () (token-dataset-next-batch dataset))))
+(token-batch-release! final)
+(define eos (token-dataset-next-batch dataset))
+(check "finite EOS sentinel is stable"
+       (and (token-dataset-end? eos)
+            (eq? eos (token-dataset-next-batch dataset))
+            (not (token-dataset-end? #f))))
+
+(check "seek start replays after EOS" (token-dataset-seek! dataset start))
+(define replay (token-dataset-next-batch dataset))
+(check "seek start resets continuation" (= (u64-le (token-dataset-cursor dataset) 120) 2))
+(token-batch-release! replay)
+(check "seek batch boundary restores exact continuation"
+       (token-dataset-seek! dataset after-second))
+(define replay-final (token-dataset-next-batch dataset))
+(check "restored final continuation reaches M"
+       (= (u64-le (token-dataset-cursor dataset) 120) 5))
+(token-batch-release! replay-final)
+
+(define mutated (token-dataset-cursor dataset))
+(define saved-byte (bytevector-u8-ref mutated 40))
+(bytevector-u8-set! mutated 40 (modulo (+ saved-byte 1) 256))
+(define before-bad-seek (token-dataset-cursor dataset))
+(check "mutated detached cursor rejects by checksum"
+       (structured-error? 'corrupt-data 'token-dataset-seek!
+                          (lambda () (token-dataset-seek! dataset mutated))))
+(check "failed seek is atomic"
+       (bytes=? before-bad-seek (token-dataset-cursor dataset)))
+
+(check "forged batch is invalid-argument"
+       (structured-error? 'invalid-argument 'token-batch-validate
+                          (lambda () (token-batch-validate (vector 'fake)))))
+(check "forged dataset is invalid-argument"
+       (structured-error? 'invalid-argument 'token-dataset-cursor
+                          (lambda () (token-dataset-cursor (vector 'fake)))))
+(check "missing manifest is io"
+       (structured-error?
+        'io 'token-dataset-open
+        (lambda ()
+          (token-dataset-open
+           (make-config missing-directory 1 1 1024 1024 1 17 #f 1 #f)
+           tokenizer))))
+(check "same-vocab wrong tokenizer identity rejects"
+       (structured-error?
+        'invalid-argument 'token-dataset-open
+        (lambda ()
+          (token-dataset-open
+           (make-config corpus-directory 1 1 1048576 1048576 14 17 #f 1 #f)
+           alternate-tokenizer))))
+(define exact-limit-dataset
+  (token-dataset-open
+   (make-config corpus-directory 2 3 447 239 14 102 #f 4 #t)
+   tokenizer))
+(check "exact manifest shard total batch and window limits admit"
+       (token-dataset-close! exact-limit-dataset))
+(check "one-under manifest limit is corrupt-data"
+       (structured-error?
+        'corrupt-data 'token-dataset-open
+        (lambda ()
+          (token-dataset-open
+           (make-config corpus-directory 2 3 446 239 14 102 #f 4 #t)
+           tokenizer))))
+(check "one-under shard limit is corrupt-data"
+       (structured-error?
+        'corrupt-data 'token-dataset-open
+        (lambda ()
+          (token-dataset-open
+           (make-config corpus-directory 2 3 447 238 14 102 #f 4 #t)
+           tokenizer))))
+(check "one-under total-token limit is corrupt-data"
+       (structured-error?
+        'corrupt-data 'token-dataset-open
+        (lambda ()
+          (token-dataset-open
+           (make-config corpus-directory 2 3 447 239 13 102 #f 4 #t)
+           tokenizer))))
+
+(define (invalid-config? value)
+  (structured-error? 'invalid-argument 'token-dataset-open
+                     (lambda () (token-dataset-open value tokenizer))))
+(check "improper config rejects" (invalid-config? (cons ':directory corpus-directory)))
+(let ((cyclic (list ':directory corpus-directory)))
+  (set-cdr! (cdr cyclic) cyclic)
+  (check "cyclic config rejects" (invalid-config? cyclic)))
+(define unknown
+  (make-config corpus-directory 1 1 1048576 1048576 14 17 #f 1 #f))
+(set-car! unknown ':unknown)
+(check "unknown config key rejects" (invalid-config? unknown))
+;;; Mutate one otherwise exact config at a time without touching the filesystem.
+(define duplicate
+  (make-config corpus-directory 1 1 1048576 1048576 14 17 #f 1 #f))
+(set-car! duplicate ':batch-size)
+(check "duplicate and missing config key reject" (invalid-config? duplicate))
+(check "batch payload exact one-over rejects before allocation"
+       (invalid-config?
+        (make-config corpus-directory 2 3 1048576 1048576 14 101 #f 1 #f)))
+(check "working-set addition overflow rejects"
+       (invalid-config?
+        (make-config corpus-directory 1 1 9223372036854775807 1 14 17 #f 1 #f)))
+(check "config overflow precedes missing filesystem input"
+       (invalid-config?
+        (make-config missing-directory 1 1 9223372036854775807 1 14 17 #f 1 #f)))
+(check "nonpositive extent rejects"
+       (invalid-config?
+        (make-config corpus-directory 0 3 1048576 1048576 14 102 #f 1 #f)))
+(check "negative total limit rejects"
+       (invalid-config?
+        (make-config corpus-directory 1 1 1048576 1048576 -1 17 #f 1 #f)))
+(check "inexact seed rejects"
+       (invalid-config?
+        (make-config corpus-directory 1 1 1048576 1048576 14 17 1.0 1 #f)))
+(check "nonboolean packing rejects"
+       (invalid-config?
+        (make-config corpus-directory 1 1 1048576 1048576 14 17 #f 1 'no)))
+
+;;; A separate receiver proves close releases its live batch, invalidates all
+;;; dependent shells, and remains idempotently closed.
+(define close-dataset
+  (token-dataset-open
+   (make-config corpus-directory 1 2 1048576 1048576 14 34 #f 1 #f)
+   tokenizer))
+(define close-batch (token-dataset-next-batch close-dataset))
+(check "close best-effort releases a live batch" (token-dataset-close! close-dataset))
+(check "close is idempotent" (token-dataset-close! close-dataset))
+(check "closed dataset rejects access"
+       (structured-error? 'invalid-state 'token-dataset-cursor
+                          (lambda () (token-dataset-cursor close-dataset))))
+(check "close invalidates dependent batch"
+       (structured-error? 'invalid-state 'token-batch-validate
+                          (lambda () (token-batch-validate close-batch))))
+(check "close-released authentic alias remains idempotent"
+       (token-batch-release! close-batch))
+(check "primary dataset closes" (token-dataset-close! dataset))
+
+(if (= failed 0)
+    (begin
+      (display "D2 PUBLIC PASS: ") (display passed)
+      (display " compiled dataset/batch/cursor checks") (newline))
+    (exit 1))

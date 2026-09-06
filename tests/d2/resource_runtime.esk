@@ -1,0 +1,48 @@
+(require transformer.data)
+(require transformer.persistence)
+(require transformer.tokenizer)
+
+(define (config directory)
+  (list ':directory directory
+        ':batch-size 1
+        ':sequence-length 1
+        ':maximum-manifest-bytes 1048576
+        ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536
+        ':maximum-batch-bytes 17
+        ':shuffle-seed 7
+        ':shuffle-window-rows 64
+        ':packing? #t))
+
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define directory (car (cdr (cdr args))))
+(define mode (car (cdr (cdr (cdr args)))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (tokenizer-load tokenizer-path policy))
+
+(if (string=? mode "consume")
+    (let ((dataset (token-dataset-open (config directory) tokenizer)))
+      (let loop ((batches 0))
+        (let ((batch (token-dataset-next-batch dataset)))
+          (if (token-dataset-end? batch)
+              (begin
+                (token-dataset-close! dataset)
+                (display "D2 RESOURCE CONSUME PASS: ")
+                (display batches) (display " batches") (newline))
+              (begin
+                (token-batch-validate batch)
+                (token-batch-release! batch)
+                (loop (+ batches 1)))))))
+    (if (string=? mode "reopen")
+        (let loop ((iteration 0))
+          (if (= iteration 256)
+              (begin
+                (display "D2 RESOURCE REOPEN PASS: 256 datasets") (newline))
+              (let ((dataset (token-dataset-open (config directory) tokenizer)))
+                (let ((batch (token-dataset-next-batch dataset)))
+                  (if (token-dataset-end? batch) #t
+                      (token-batch-release! batch)))
+                (token-dataset-close! dataset)
+                (loop (+ iteration 1)))))
+        (begin (display "unknown D2 resource mode") (newline) (exit 64))))
