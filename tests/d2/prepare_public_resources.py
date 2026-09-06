@@ -72,6 +72,14 @@ def build(output: Path) -> None:
     )
     write_d1_resource(large, shards, fingerprint=FINGERPRINT, vocab=VOCAB)
 
+    medium = output / "medium"
+    medium.mkdir()
+    medium_shards = tuple(
+        tuple((base + offset) % VOCAB for offset in range(min(256, 1025 - base)))
+        for base in range(0, 1025, 256)
+    )
+    write_d1_resource(medium, medium_shards, fingerprint=FINGERPRINT, vocab=VOCAB)
+
     missing_manifest = output / "missing-manifest"
     missing_manifest.mkdir()
     shutil.copy2(small / "shard-0000000000000000.ets", missing_manifest)

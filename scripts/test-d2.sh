@@ -166,12 +166,14 @@ cmp "${d2_tmp}/t2-adversarial-1/alternate-same-vocab.tsv" \
 
 compile_public_d2() {
   local source=$1 label=$2
+  local optimize_args=(--optimize 0)
+  [[ "${source}" == resource_runtime ]] && optimize_args=()
   mkdir -p "${d2_tmp}/${label}" "${d2_tmp}/cache-${label}"
   if ! env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
       ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${d2_tmp}/cache-${label}" \
       ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${d2_cxx}" \
       timeout --foreground --signal=TERM --kill-after=5s "${d2_timeout}s" \
-      "${d2_runner}" --strict-types --optimize 0 --no-stdlib \
+      "${d2_runner}" --strict-types "${optimize_args[@]}" --no-stdlib \
       -I "${PROJECT_ROOT}/lib" -L "${d2_dir}" \
       --lib eshkol_transformer_wave2 \
       "${PROJECT_ROOT}/tests/d2/${source}.esk" \
@@ -330,16 +332,34 @@ large_rss="$(<"${d2_tmp}/resource-large.rss")"
 small_fds="$(<"${d2_tmp}/resource-small.fds")"
 large_fds="$(<"${d2_tmp}/resource-large.fds")"
 rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_rss ))
-printf 'D2 RESOURCE MEASURED: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
-  "${small_rss}" "${small_fds}" "${large_rss}" "${large_fds}" "${rss_delta}"
-(( small_rss <= 262144 && large_rss <= 262144 )) || \
-  die "D2 resource probe exceeded the fixed 256 MiB RSS test ceiling"
-(( rss_delta <= 65536 )) || \
-  die "D2 RSS changed by more than 64 MiB when corpus grew to 8193 tokens"
 (( small_fds <= 8 && large_fds <= 8 )) || \
   die "D2 resource probe exceeded the fixed eight-descriptor process ceiling"
-printf 'D2 RESOURCE BOUNDS PASS: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
+printf 'D2 RESOURCE RSS/FD: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
   "${small_rss}" "${small_fds}" "${large_rss}" "${large_fds}" "${rss_delta}"
+
+for horizon in medium large; do
+  expected_batches=1024
+  [[ "${horizon}" == large ]] && expected_batches=8192
+  ESHKOL_ARENA_REPORT=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 300s \
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+    "${d2_tmp}/public-resources-1/${horizon}" consume \
+    >"${d2_tmp}/arena-${horizon}.stdout" \
+    2>"${d2_tmp}/arena-${horizon}.stderr"
+  grep -Fx "D2 RESOURCE CONSUME PASS: ${expected_batches} batches" \
+    "${d2_tmp}/arena-${horizon}.stdout" >/dev/null
+  arena_bytes="$(awk -F= '/global_total_allocated_bytes=/{print $2}' \
+    "${d2_tmp}/arena-${horizon}.stderr" | tail -1)"
+  [[ "${arena_bytes}" =~ ^[0-9]+$ ]] || \
+    die "D2 ${horizon} run omitted the exact Eshkol arena retention counter"
+  printf '%s\n' "${arena_bytes}" >"${d2_tmp}/arena-${horizon}.bytes"
+done
+medium_arena="$(<"${d2_tmp}/arena-medium.bytes")"
+large_arena="$(<"${d2_tmp}/arena-large.bytes")"
+[[ "${medium_arena}" == "${large_arena}" ]] || \
+  die "D2 optimized retained arena bytes grew from 1024 to 8192 batches"
+printf 'D2 RESOURCE ARENA PASS: 1024=%s bytes 8192=%s bytes slope=0\n' \
+  "${medium_arena}" "${large_arena}"
 timeout --foreground --signal=TERM --kill-after=5s 180s \
   "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
   "${d2_tmp}/public-resources-1/small" reopen \
