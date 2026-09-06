@@ -275,9 +275,16 @@ cmp "${d2_tmp}/private-a/private-view" "${d2_tmp}/private-b/private-view"
 for repetition in a b; do
   resource_index=1
   [[ "${repetition}" == b ]] && resource_index=2
-  "${d2_tmp}/private-${repetition}/private-view" "${d2_fixture}" \
-    "${d2_tmp}/public-resources-${resource_index}" \
-    >"${d2_tmp}/private-view-${repetition}.stdout"
+  if ! timeout --foreground --signal=TERM --kill-after=5s 180s \
+      "${d2_tmp}/private-${repetition}/private-view" "${d2_fixture}" \
+      "${d2_tmp}/public-resources-${resource_index}" \
+      >"${d2_tmp}/private-view-${repetition}.stdout" \
+      2>"${d2_tmp}/private-view-${repetition}.stderr"; then
+    sed -n '1,260p' "${d2_tmp}/private-view-${repetition}.stdout" >&2
+    sed -n '1,260p' "${d2_tmp}/private-view-${repetition}.stderr" >&2
+    die "D2 private-view runtime failed"
+  fi
+  test ! -s "${d2_tmp}/private-view-${repetition}.stderr"
 done
 cmp "${d2_tmp}/private-view-a.stdout" "${d2_tmp}/private-view-b.stdout"
 grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
