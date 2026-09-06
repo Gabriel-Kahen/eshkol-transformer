@@ -303,10 +303,12 @@ run_resource_probe() {
       die "D2 ${label} resource probe timed out"
     fi
     if [[ -r "/proc/${pid}/status" ]]; then
-      rss="$(awk '/^VmRSS:/ { print $2 }' "/proc/${pid}/status")"
+      rss="$(awk '/^VmRSS:/ { print $2 }' "/proc/${pid}/status" 2>/dev/null)" || \
+        rss=0
       [[ "${rss}" =~ ^[0-9]+$ ]] || rss=0
       (( rss > rss_max )) && rss_max=$rss
-      fd_count="$(find "/proc/${pid}/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)"
+      fd_count="$(find "/proc/${pid}/fd" -mindepth 1 -maxdepth 1 \
+        2>/dev/null | wc -l)" || fd_count=0
       (( fd_count > fd_max )) && fd_max=$fd_count
     fi
     sleep 0.01
