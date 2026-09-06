@@ -1,5 +1,21 @@
 # Quality gates
 
+## CI tiers
+
+Blocking pull-request CI has a 15-minute wall-clock target and runs parallel fast
+suites. It must cover compilation and smoke execution, public API admission, native
+numerical and ownership behavior, sanitizer instrumentation, deterministic reference
+formats, and representative malformed inputs. It does not repeat every expensive AOT
+or aggregate-boundary matrix.
+
+Exhaustive acceptance runs nightly and on manual dispatch. It retains every repeated
+fresh-cache compilation, hostile-path and symbol-isolation proof, maximum-size and
+resource-bound case, sanitizer gate, and compiled corruption matrix described below.
+A failing exhaustive run is a main-branch health blocker and must be resolved before
+a release or a workstream is declared accepted. Risky changes to packaging,
+persistence, tokenizer limits, or compiler boundaries should manually dispatch it
+before merge.
+
 ## Required on every numerical component
 
 - Shape, dtype, device, and error-contract tests.
@@ -76,6 +92,8 @@ accelerated until execution on that device is directly observed and tested.
 ## Merge policy
 
 - No red required gates.
+- No unresolved red exhaustive-acceptance run on the candidate revision for a release
+  or workstream acceptance.
 - No undocumented fallback or unsupported case.
 - No public format change without a version/migration decision.
 - No performance rewrite without correctness parity.

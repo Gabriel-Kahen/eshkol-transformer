@@ -1,40 +1,22 @@
-name: CI
+name: Exhaustive acceptance
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  merge_group:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: exhaustive-acceptance-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  fast:
-    name: Fast CI / ${{ matrix.suite }}
+  supported-linux:
+    name: Full Ubuntu 22.04 acceptance
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - suite: native-numerics
-            build_target: build-fast-core
-            test_target: test-fast-core-after-build
-          - suite: contracts-data
-            build_target: build-fast-contracts
-            test_target: test-fast-contracts-after-build
-          - suite: checkpoint-io
-            build_target: build-fast-checkpoint
-            test_target: test-fast-checkpoint-after-build
-          - suite: state-formats
-            build_target: build-fast-state
-            test_target: test-fast-state-after-build
+    timeout-minutes: 240
     env:
       CC: clang-21
       CXX: clang++-21
@@ -73,27 +55,14 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: make toolchain
 
-      - name: Reduced build
+      - name: Clean build
         shell: /usr/bin/bash -euo pipefail {0}
-        run: make clean && make "${{ matrix.build_target }}"
+        run: make clean && make build
 
-      - name: Blocking test subset
+      - name: Full test suite
         shell: /usr/bin/bash -euo pipefail {0}
-        run: make "${{ matrix.test_target }}"
+        run: make test-after-build
 
-      - name: Smoke and benchmark
-        if: matrix.suite == 'native-numerics'
+      - name: Smoke and reproducible benchmark
         shell: /usr/bin/bash -euo pipefail {0}
         run: make smoke-after-build benchmark-after-build
-
-  f0-linux:
-    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
-    if: ${{ always() }}
-    needs: fast
-    runs-on: ubuntu-22.04
-    timeout-minutes: 2
-    steps:
-      - name: Require every fast suite
-        env:
-          FAST_RESULT: ${{ needs.fast.result }}
-        run: test "${FAST_RESULT}" = success

@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | Clean configure plus smoke test on supported Linux environment | complete |
+| F0 | Package layout, build/test entry points, CI matrix | — | Parallel blocking suites with a 15-minute target, plus nightly/manual exhaustive acceptance on supported Linux | complete |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |

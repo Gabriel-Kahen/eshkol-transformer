@@ -30,6 +30,13 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make smoke'
 ```
 
+Pull requests and pushes to `main` use four parallel fast suites with a 15-minute
+wall-clock target. They retain the compiler smoke, public contracts, native numerical
+and ownership tests, sanitizers, format oracles, D1, and C1. The full repeated-AOT,
+hostile-path, maximum-size, and aggregate-boundary suite runs nightly and through the
+`Exhaustive acceptance` workflow's manual dispatch. Run that same full lane locally
+with `make build && make test-after-build`.
+
 Run the focused T1 tokenizer gate with:
 
 ```bash
