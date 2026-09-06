@@ -107,6 +107,18 @@ class ShuffleReferenceTests(unittest.TestCase):
         self.assertEqual(rejection_sample_words(8, ((1 << 64) - 1,)), (7, 1))
         with self.assertRaisesRegex(D2ReferenceError, "unsupported"):
             rejection_sample_words(3, ((1 << 64) - 1,))
+        # An accepted candidate may consume counter UINT64_MAX, but any next
+        # draw is unsupported; a rejected candidate cannot retry past it.
+        self.assertEqual(
+            rejection_sample_words(8, (7,), start_counter=(1 << 64) - 1),
+            (7, 1 << 64),
+        )
+        with self.assertRaisesRegex(D2ReferenceError, "unsupported"):
+            rejection_sample_words(8, (7,), start_counter=1 << 64)
+        with self.assertRaisesRegex(D2ReferenceError, "unsupported"):
+            rejection_sample_words(
+                3, ((1 << 64) - 1, 4), start_counter=(1 << 64) - 1
+            )
 
 
 class CursorResumeTests(unittest.TestCase):

@@ -201,23 +201,45 @@ def _draw(seed: int, window_index: int, counter: int, modulus: int) -> tuple[int
 
     threshold = ((1 << 64) // modulus) * modulus
     while True:
-        material = struct.pack("<qQQ", seed, window_index, counter)
-        word = int.from_bytes(hashlib.sha256(SHUFFLE_DOMAIN + material).digest()[:8], "little")
-        counter += 1
+        if counter > MAX_U64:
+            _fail("unsupported", "shuffle draw counter exhausted unsigned-u64")
+        material = struct.pack("<QQQ", seed, window_index, counter)
+        word = int.from_bytes(
+            hashlib.sha256(SHUFFLE_DOMAIN + material).digest()[:8], "little"
+        )
         if word < threshold:
-            return word % modulus, counter
+            return word % modulus, counter + 1
+        if counter == MAX_U64:
+            _fail("unsupported", "shuffle draw counter exhausted unsigned-u64")
+        counter += 1
 
 
-def rejection_sample_words(modulus: object, words: Iterable[object]) -> tuple[int, int]:
+def rejection_sample_words(
+    modulus: object, words: Iterable[object], *, start_counter: object = 0
+) -> tuple[int, int]:
     """Expose rejection arithmetic independently of SHA-256 for boundary tests."""
 
     bound = exact_i64(modulus, "shuffle modulus", 1)
+    if (
+        isinstance(start_counter, bool)
+        or not isinstance(start_counter, int)
+        or not 0 <= start_counter <= MAX_U64
+    ):
+        _fail("unsupported", "shuffle draw counter exhausted unsigned-u64")
     threshold = ((1 << 64) // bound) * bound
-    for consumed, candidate in enumerate(words, 1):
-        if isinstance(candidate, bool) or not isinstance(candidate, int) or not 0 <= candidate <= MAX_U64:
+    counter = start_counter
+    for candidate in words:
+        if (
+            isinstance(candidate, bool)
+            or not isinstance(candidate, int)
+            or not 0 <= candidate <= MAX_U64
+        ):
             _fail("invalid-argument", "shuffle candidate: expected unsigned-u64")
         if candidate < threshold:
-            return candidate % bound, consumed
+            return candidate % bound, counter + 1
+        if counter == MAX_U64:
+            _fail("unsupported", "shuffle draw counter exhausted unsigned-u64")
+        counter += 1
     _fail("unsupported", "shuffle candidate source exhausted")
 
 
@@ -231,11 +253,13 @@ def window_permutation(total_rows: object, seed: object, window_rows: object) ->
     window_index = 0
     start = 0
     while start < total:
-        stop = min(total, start + window)
+        stop = start + min(window, total - start)
         values = list(range(start, stop))
         counter = 0
         for index in range(len(values) - 1, 0, -1):
-            selected, counter = _draw(normalized_seed, window_index, counter, index + 1)
+            selected, counter = _draw(
+                normalized_seed, window_index, counter, index + 1
+            )
             values[index], values[selected] = values[selected], values[index]
         output.extend(values)
         start = stop
@@ -265,7 +289,9 @@ def _identity_digest(
         "tokenizer_fingerprint": tokenizer_fingerprint,
         "vocab_size": vocab,
     }
-    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    canonical = json.dumps(
+        document, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
     return hashlib.sha256(b"eshkol-d2-reference-identity-v0\x00" + canonical).digest()
 
 
