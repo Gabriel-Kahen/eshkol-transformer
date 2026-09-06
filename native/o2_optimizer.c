@@ -12,6 +12,11 @@
 #define ET_O2_HANDLE_MAGIC UINT64_C(0x45544f3248414e44)
 #define ET_O2_BORROW_MAGIC UINT64_C(0x45544f32424f5252)
 
+_Static_assert(ET_O2_MAX_PARAMETERS <= ET_F32_PARAMETER_MAX_BATCH / 3u,
+               "O2 step exceeds the I2 transaction ceiling");
+_Static_assert(ET_O2_MAX_PARAMETERS <= SIZE_MAX / 3u,
+               "O2 entry multipliers overflow size_t");
+
 typedef struct et_o2_options {
   uint32_t learning_rate_bits;
   uint32_t beta1_bits;
@@ -32,6 +37,7 @@ typedef struct et_o2_config {
 typedef struct et_o2_entry {
   et_f32_parameter *parameter;
   const void *p1_handle;
+  const et_f32_tensor *storage_owner;
   et_f32_tensor *exp_avg;
   et_f32_tensor *exp_avg_sq;
   et_o2_options options;
@@ -578,6 +584,11 @@ static int32_t et_o2_require_optimizer(const et_o2_optimizer *candidate,
                       ET_O2_CODE_PROVIDER_MISMATCH, operation,
                       "optimizer provider invariant is broken");
   }
+  if (optimizer->count == 0u || optimizer->count > ET_O2_MAX_PARAMETERS ||
+      optimizer->entries == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_PROVIDER_DEFECT,
+                      operation, "optimizer receiver bounds are invalid");
+  }
   if (optimizer->busy != 0u) {
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_ACTIVE_BORROW, operation,
@@ -716,6 +727,7 @@ int32_t et_o2_optimizer_builder_set_v1(
   et_o2_entry *entry;
   et_o2_options options;
   et_f32_tensor_error i2_error;
+  const et_f32_tensor *storage_owner;
   size_t previous;
   if (builder == NULL || index >= (builder != NULL ? builder->count : 0u) ||
       parameter == NULL || p1_handle == NULL) {
@@ -739,14 +751,17 @@ int32_t et_o2_optimizer_builder_set_v1(
                       ET_O2_CODE_INVALID_OPTION, "optimizer-create",
                       "AdamW options are invalid");
   }
+  storage_owner = et_f32_parameter_canonical_owner_v1(parameter);
+  if (storage_owner == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, "optimizer-create",
+                      "parameter storage is foreign or stale");
+  }
   for (previous = 0u; previous < builder->count; ++previous) {
     if (builder->entries[previous].initialized != 0u &&
         (builder->entries[previous].parameter == parameter ||
          builder->entries[previous].p1_handle == p1_handle ||
-         et_f32_tensor_storage_owner_identical_v1(
-             et_f32_parameter_canonical_owner_v1(
-                 builder->entries[previous].parameter),
-             et_f32_parameter_canonical_owner_v1(parameter)) == 1)) {
+         builder->entries[previous].storage_owner == storage_owner)) {
       return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
                         ET_O2_CODE_DUPLICATE_PARAMETER, "optimizer-create",
                         "parameter storage is already assigned to a group");
@@ -760,6 +775,7 @@ int32_t et_o2_optimizer_builder_set_v1(
   }
   entry->parameter = parameter;
   entry->p1_handle = p1_handle;
+  entry->storage_owner = storage_owner;
   entry->options = options;
   if (et_o2_create_zero_moment(parameter, &entry->exp_avg, error) != 0 ||
       et_o2_create_zero_moment(parameter, &entry->exp_avg_sq, error) != 0) {
@@ -943,6 +959,142 @@ static int32_t et_o2_borrow_tensor(et_f32_tensor *tensor,
   return ET_O2_STATUS_OK;
 }
 
+static int32_t et_o2_validate_state_moment(et_f32_tensor *tensor,
+                                           int require_nonnegative,
+                                           et_o2_error_v1 *error) {
+  et_f32_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_f32_tensor_error i2_error;
+  size_t index;
+  int32_t result;
+  if ((result = et_o2_borrow_tensor(tensor, &borrow, &view, error,
+                                    "optimizer-load-state!")) != 0) {
+    return result;
+  }
+  if (view->struct_size < sizeof(*view) || view->dtype == NULL ||
+      strcmp(view->dtype, "f32") != 0 || view->device == NULL ||
+      strcmp(view->device, "cpu") != 0 ||
+      view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      view->offset_bytes != 0u || view->byte_length % sizeof(uint32_t) != 0u ||
+      (view->byte_length != 0u && view->data == NULL)) {
+    result = et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                        ET_O2_CODE_INVALID_MOMENT, "optimizer-load-state!",
+                        "optimizer moment metadata is malformed");
+    goto cleanup;
+  }
+  for (index = 0u; index < view->byte_length / sizeof(uint32_t); ++index) {
+    uint32_t bits;
+    memcpy(&bits, (const unsigned char *)view->data + index * sizeof(bits),
+           sizeof(bits));
+    if (!et_o2_bits_finite(bits)) {
+      result = et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                          ET_O2_CODE_NONFINITE, "optimizer-load-state!",
+                          "optimizer moment contains a nonfinite value");
+      goto cleanup;
+    }
+    if (require_nonnegative != 0 && (bits & UINT32_C(0x80000000)) != 0u &&
+        (bits & UINT32_C(0x7fffffff)) != 0u) {
+      result = et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                          ET_O2_CODE_INVALID_MOMENT, "optimizer-load-state!",
+                          "second moment contains a negative value");
+      goto cleanup;
+    }
+  }
+  result = ET_O2_STATUS_OK;
+
+cleanup:
+  memset(&i2_error, 0, sizeof(i2_error));
+  if (et_f32_tensor_borrow_end_v1(&borrow, &i2_error) != 0) {
+    return et_o2_from_i2(&i2_error, error, "optimizer-load-state!",
+                         ET_O2_STATUS_INTERNAL);
+  }
+  return result;
+}
+
+static int32_t et_o2_validate_state_for_load(et_o2_optimizer_state *state,
+                                             et_o2_error_v1 *error) {
+  size_t entry_count;
+  size_t index;
+  int32_t result;
+  if (!et_o2_provider_valid(state)) {
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_PROVIDER_MISMATCH, "optimizer-load-state!",
+                      "optimizer state provider invariant is broken");
+  }
+  if (state->count == 0u || state->count > ET_O2_MAX_PARAMETERS ||
+      state->entries == NULL || state->handles == NULL ||
+      state->owned_clone_count != (uint64_t)(state->count * 2u) ||
+      state->owned_clone_count > (uint64_t)et_o2_owned_state_clones) {
+    return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                      ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
+                      "optimizer state ownership metadata is inconsistent");
+  }
+  if (!et_o2_config_valid(&state->config)) {
+    return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                      ET_O2_CODE_INVALID_OPTION, "optimizer-load-state!",
+                      "optimizer state configuration is invalid");
+  }
+  if (state->completed_updates > (uint64_t)INT64_MAX) {
+    return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                      ET_O2_CODE_COUNTER_OVERFLOW, "optimizer-load-state!",
+                      "optimizer state counter is outside signed-i64 range");
+  }
+  entry_count = state->count * 2u;
+  for (index = 0u; index < state->count; ++index) {
+    if (!et_o2_options_valid(&state->entries[index].options)) {
+      return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                        ET_O2_CODE_INVALID_OPTION, "optimizer-load-state!",
+                        "optimizer state group options are invalid");
+    }
+  }
+  for (index = 0u; index < entry_count; ++index) {
+    et_o2_optimizer_state_handle *handle = state->handles[index];
+    if (et_o2_find_handle(handle) != handle || handle->live == 0u ||
+        handle->owner != state || handle->index != index / 2u ||
+        handle->moment_kind != (uint32_t)(index % 2u)) {
+      return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                        ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
+                        "optimizer state handle metadata is inconsistent");
+    }
+  }
+  for (index = 0u; index < state->count; ++index) {
+    if (et_f32_tensor_is_live_v1(state->entries[index].exp_avg) != 1 ||
+        et_f32_tensor_is_live_v1(state->entries[index].exp_avg_sq) != 1) {
+      return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                        ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
+                        "optimizer state moment owner is invalid");
+    }
+    result =
+        et_o2_validate_state_moment(state->entries[index].exp_avg, 0, error);
+    if (result != 0) {
+      return result;
+    }
+    result =
+        et_o2_validate_state_moment(state->entries[index].exp_avg_sq, 1, error);
+    if (result != 0) {
+      return result;
+    }
+  }
+  for (index = 0u; index < entry_count; ++index) {
+    const et_f32_tensor *left = (index % 2u) == 0u
+                                    ? state->entries[index / 2u].exp_avg
+                                    : state->entries[index / 2u].exp_avg_sq;
+    size_t right_index;
+    for (right_index = index + 1u; right_index < entry_count; ++right_index) {
+      const et_f32_tensor *right =
+          (right_index % 2u) == 0u
+              ? state->entries[right_index / 2u].exp_avg
+              : state->entries[right_index / 2u].exp_avg_sq;
+      if (left == right) {
+        return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                          ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
+                          "optimizer state moments are not independent");
+      }
+    }
+  }
+  return ET_O2_STATUS_OK;
+}
+
 static int32_t et_o2_global_norm(et_o2_optimizer *optimizer,
                                  uint32_t weight_bits, uint32_t *norm_bits,
                                  et_o2_error_v1 *error) {
@@ -952,16 +1104,18 @@ static int32_t et_o2_global_norm(et_o2_optimizer *optimizer,
   for (entry_index = 0u; entry_index < optimizer->count; ++entry_index) {
     et_f32_tensor_borrow *borrow = NULL;
     const et_kernel_tensor_view_v1 *view = NULL;
+    et_f32_tensor_error i2_error;
     size_t element;
+    memset(&i2_error, 0, sizeof(i2_error));
     if (et_f32_parameter_gradient_borrow_begin_v1(
-            optimizer->entries[entry_index].parameter, &borrow, NULL) != 0 ||
-        et_f32_tensor_borrow_view_v1(borrow, &view, NULL) != 0) {
+            optimizer->entries[entry_index].parameter, &borrow, &i2_error) !=
+            0 ||
+        et_f32_tensor_borrow_view_v1(borrow, &view, &i2_error) != 0) {
       if (borrow != NULL) {
         (void)et_f32_tensor_borrow_end_v1(&borrow, NULL);
       }
-      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
-                        ET_O2_CODE_ACTIVE_BORROW, "optimizer-step!",
-                        "gradient cannot be borrowed for norm computation");
+      return et_o2_from_i2(&i2_error, error, "optimizer-step!",
+                           ET_O2_STATUS_INVALID_STATE);
     }
     for (element = 0u; element < view->byte_length / sizeof(float); ++element) {
       uint32_t bits;
@@ -1587,13 +1741,17 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
                       ET_O2_CODE_ACTIVE_BORROW, "optimizer-load-state!",
                       "optimizer state has an active borrow");
   }
-  if (state->count != optimizer->count) {
-    return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
-                      ET_O2_CODE_INVALID_HANDLE, "optimizer-load-state!",
-                      "optimizer state parameter count differs");
-  }
   optimizer->busy = 1u;
   state->active_borrows++;
+  if ((result = et_o2_validate_state_for_load(state, error)) != 0) {
+    goto cleanup;
+  }
+  if (state->count != optimizer->count) {
+    result = et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                        ET_O2_CODE_INVALID_HANDLE, "optimizer-load-state!",
+                        "optimizer state parameter count differs");
+    goto cleanup;
+  }
   if ((result = et_o2_validate_absent_gradients(
            optimizer, "optimizer-load-state!", error)) != 0) {
     goto cleanup;
@@ -1856,6 +2014,7 @@ et_o2_optimizer_state_lifecycle_v1(const et_o2_optimizer_state *candidate,
 int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
                                          et_o2_error_v1 *error) {
   et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  size_t entry_count;
   size_t index;
   int provider_defect = 0;
   if (state == NULL) {
@@ -1872,55 +2031,58 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
                       ET_O2_CODE_ACTIVE_BORROW, "optimizer-state-release!",
                       "optimizer state is busy or releasing");
   }
-  if (!et_o2_provider_valid(state) || state->entries == NULL ||
-      state->handles == NULL ||
-      state->owned_clone_count != (uint64_t)(state->count * 2u)) {
+  if (!et_o2_provider_valid(state)) {
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_PROVIDER_MISMATCH, "optimizer-state-release!",
+                      "optimizer state provider invariant is broken");
+  }
+  if (state->count == 0u || state->count > ET_O2_MAX_PARAMETERS ||
+      state->entries == NULL || state->handles == NULL ||
+      state->owned_clone_count != (uint64_t)(state->count * 2u) ||
+      state->owned_clone_count > (uint64_t)et_o2_owned_state_clones) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
                       "optimizer state ownership ledger is invalid");
   }
-  for (index = 0u; index < state->count * 2u; ++index) {
+  entry_count = state->count * 2u;
+  for (index = 0u; index < entry_count; ++index) {
     et_o2_optimizer_state_handle *handle = state->handles[index];
     if (et_o2_find_handle(handle) != handle || handle->live == 0u ||
         handle->owner != state || handle->index != index / 2u ||
         handle->moment_kind != (uint32_t)(index % 2u)) {
-      return et_o2_fail(
-          error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_PROVIDER_MISMATCH,
-          "optimizer-state-release!", "state-backed handle ledger is invalid");
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
+                        "state-backed handle ledger is invalid");
     }
   }
   for (index = 0u; index < state->count; ++index) {
     if (et_f32_tensor_is_live_v1(state->entries[index].exp_avg) != 1 ||
         et_f32_tensor_is_live_v1(state->entries[index].exp_avg_sq) != 1 ||
-        et_f32_tensor_storage_owner_identical_v1(
-            state->entries[index].exp_avg, state->entries[index].exp_avg_sq) !=
-            0) {
-      return et_o2_fail(
-          error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_PROVIDER_MISMATCH,
-          "optimizer-state-release!", "owned moment ledger is invalid");
+        state->entries[index].exp_avg == state->entries[index].exp_avg_sq) {
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
+                        "owned moment ledger is invalid");
     }
   }
-  for (index = 0u; index < state->count * 2u; ++index) {
+  for (index = 0u; index < entry_count; ++index) {
     const et_f32_tensor *left = (index % 2u) == 0u
                                     ? state->entries[index / 2u].exp_avg
                                     : state->entries[index / 2u].exp_avg_sq;
     size_t right_index;
-    for (right_index = index + 1u; right_index < state->count * 2u;
-         ++right_index) {
+    for (right_index = index + 1u; right_index < entry_count; ++right_index) {
       const et_f32_tensor *right =
           (right_index % 2u) == 0u
               ? state->entries[right_index / 2u].exp_avg
               : state->entries[right_index / 2u].exp_avg_sq;
-      if (et_f32_tensor_storage_owner_identical_v1(left, right) == 1) {
-        return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
-                          ET_O2_CODE_PROVIDER_MISMATCH,
-                          "optimizer-state-release!",
+      if (left == right) {
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                          ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
                           "owned moment ledger contains a duplicate owner");
       }
     }
   }
   state->lifecycle = ET_O2_OPTIMIZER_STATE_RELEASING;
-  for (index = 0u; index < state->count * 2u; ++index) {
+  for (index = 0u; index < entry_count; ++index) {
     state->handles[index]->live = 0u;
   }
   for (index = 0u; index < state->count; ++index) {
@@ -1945,7 +2107,7 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
     state->entries[index].exp_avg = NULL;
     state->entries[index].exp_avg_sq = NULL;
   }
-  for (index = 0u; index < state->count * 2u; ++index) {
+  for (index = 0u; index < entry_count; ++index) {
     state->handles[index]->owner = NULL;
   }
   free(state->handles);
@@ -2058,6 +2220,61 @@ et_o2_test_state_set_owned_clone_count_v1(et_o2_optimizer_state *candidate,
     return -1;
   }
   state->owned_clone_count = owned_clone_count;
+  return 0;
+}
+
+int32_t et_o2_test_state_set_config_v1(
+    et_o2_optimizer_state *candidate, uint32_t clip_kind,
+    uint32_t clip_max_bits, uint32_t schedule_kind, uint64_t warmup_updates,
+    uint64_t total_updates, uint32_t minimum_ratio_bits) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  if (state == NULL || state->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+      state->active_borrows != 0u) {
+    return -1;
+  }
+  state->config.clip_kind = clip_kind;
+  state->config.clip_max_bits = clip_max_bits;
+  state->config.schedule_kind = schedule_kind;
+  state->config.warmup_updates = warmup_updates;
+  state->config.total_updates = total_updates;
+  state->config.minimum_ratio_bits = minimum_ratio_bits;
+  return 0;
+}
+
+int32_t et_o2_test_state_set_option_bits_v1(et_o2_optimizer_state *candidate,
+                                            size_t index, uint32_t option,
+                                            uint32_t bits) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  et_o2_options *options;
+  if (state == NULL || state->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+      state->active_borrows != 0u || index >= state->count ||
+      option > ET_O2_OPTION_WEIGHT_DECAY) {
+    return -1;
+  }
+  options = &state->entries[index].options;
+  if (option == ET_O2_OPTION_LEARNING_RATE) {
+    options->learning_rate_bits = bits;
+  } else if (option == ET_O2_OPTION_BETA1) {
+    options->beta1_bits = bits;
+  } else if (option == ET_O2_OPTION_BETA2) {
+    options->beta2_bits = bits;
+  } else if (option == ET_O2_OPTION_EPSILON) {
+    options->epsilon_bits = bits;
+  } else {
+    options->weight_decay_bits = bits;
+  }
+  return 0;
+}
+
+int32_t
+et_o2_test_state_set_completed_updates_v1(et_o2_optimizer_state *candidate,
+                                          uint64_t completed_updates) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  if (state == NULL || state->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+      state->active_borrows != 0u) {
+    return -1;
+  }
+  state->completed_updates = completed_updates;
   return 0;
 }
 

@@ -13,7 +13,7 @@ extern "C" {
 #define ET_O2_PROVIDER_ABI_MAJOR 2u
 #define ET_O2_PROVIDER_ABI_MINOR 0u
 #define ET_O2_PROVIDER_ID "i2-dense-cpu-f32-v1"
-#define ET_O2_MAX_PARAMETERS ET_F32_PARAMETER_MAX_BATCH
+#define ET_O2_MAX_PARAMETERS 1365u
 
 enum {
   ET_O2_STATUS_OK = 0,
@@ -25,7 +25,8 @@ enum {
   ET_O2_STATUS_UNSUPPORTED = 6,
   ET_O2_STATUS_INVALID_STATE = 7,
   ET_O2_STATUS_VERSION_MISMATCH = 8,
-  ET_O2_STATUS_INTERNAL = 9
+  ET_O2_STATUS_INTERNAL = 9,
+  ET_O2_STATUS_CORRUPT_DATA = 10
 };
 
 enum {
@@ -44,7 +45,9 @@ enum {
   ET_O2_CODE_CONSUMED = 12,
   ET_O2_CODE_PROVIDER_MISMATCH = 13,
   ET_O2_CODE_FLOAT_ENVIRONMENT = 14,
-  ET_O2_CODE_PROVIDER_DEFECT = 15
+  ET_O2_CODE_PROVIDER_DEFECT = 15,
+  ET_O2_CODE_INVALID_MOMENT = 16,
+  ET_O2_CODE_OWNER_CONFLICT = 17
 };
 
 enum { ET_O2_CLIP_NONE = 0, ET_O2_CLIP_GLOBAL_L2 = 1 };
@@ -179,6 +182,16 @@ int32_t et_o2_test_state_set_provider_version_v1(et_o2_optimizer_state *state,
                                                  uint32_t minor);
 int32_t et_o2_test_state_set_owned_clone_count_v1(et_o2_optimizer_state *state,
                                                   uint64_t owned_clone_count);
+int32_t
+et_o2_test_state_set_config_v1(et_o2_optimizer_state *state, uint32_t clip_kind,
+                               uint32_t clip_max_bits, uint32_t schedule_kind,
+                               uint64_t warmup_updates, uint64_t total_updates,
+                               uint32_t minimum_ratio_bits);
+int32_t et_o2_test_state_set_option_bits_v1(et_o2_optimizer_state *state,
+                                            size_t index, uint32_t option,
+                                            uint32_t bits);
+int32_t et_o2_test_state_set_completed_updates_v1(et_o2_optimizer_state *state,
+                                                  uint64_t completed_updates);
 int32_t et_o2_test_optimizer_moment_bits_v1(const et_o2_optimizer *optimizer,
                                             size_t index, uint32_t moment_kind,
                                             uint32_t *bits, size_t count,
