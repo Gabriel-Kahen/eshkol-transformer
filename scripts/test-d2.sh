@@ -4,7 +4,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp grep ldd nm python3 rg sha256sum strings timeout; do
+for command in ar awk cmp find grep ldd nm python3 rg sha256sum sleep strings timeout; do
   require_command "${command}"
 done
 
@@ -292,15 +292,32 @@ grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
 
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
-  timeout --foreground --signal=TERM --kill-after=5s 180s \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
-    "${directory}" consume >"${d2_tmp}/resource-${label}.stdout"
+  local pid rss=0 rss_max=0 fd_count=0 fd_max=0 started=$SECONDS
+  "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+    "${directory}" consume >"${d2_tmp}/resource-${label}.stdout" &
+  pid=$!
+  while kill -0 "${pid}" 2>/dev/null; do
+    if (( SECONDS - started > 180 )); then
+      kill "${pid}" 2>/dev/null || true
+      wait "${pid}" 2>/dev/null || true
+      die "D2 ${label} resource probe timed out"
+    fi
+    if [[ -r "/proc/${pid}/status" ]]; then
+      rss="$(awk '/^VmRSS:/ { print $2 }' "/proc/${pid}/status")"
+      [[ "${rss}" =~ ^[0-9]+$ ]] || rss=0
+      (( rss > rss_max )) && rss_max=$rss
+      fd_count="$(find "/proc/${pid}/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)"
+      (( fd_count > fd_max )) && fd_max=$fd_count
+    fi
+    sleep 0.01
+  done
+  if ! wait "${pid}"; then
+    die "D2 ${label} resource probe failed"
+  fi
   grep -Fx "D2 RESOURCE CONSUME PASS: ${expected} batches" \
     "${d2_tmp}/resource-${label}.stdout" >/dev/null
-  /usr/bin/time -f '%M' -o "${d2_tmp}/resource-${label}.rss" \
-    timeout --foreground --signal=TERM --kill-after=5s 180s \
-      "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
-      "${directory}" consume >/dev/null
+  printf '%s\n' "${rss_max}" >"${d2_tmp}/resource-${label}.rss"
+  printf '%s\n' "${fd_max}" >"${d2_tmp}/resource-${label}.fds"
 }
 run_resource_probe small "${d2_tmp}/public-resources-1/small" 1
 run_resource_probe large "${d2_tmp}/public-resources-1/large" 8192
@@ -313,8 +330,12 @@ large_rss="$(<"${d2_tmp}/resource-large.rss")"
 rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_rss ))
 (( rss_delta <= 65536 )) || \
   die "D2 RSS changed by more than 64 MiB when corpus grew to 8193 tokens"
-printf 'D2 RESOURCE RSS PASS: small=%s KiB large=%s KiB delta=%s KiB\n' \
-  "${small_rss}" "${large_rss}" "${rss_delta}"
+small_fds="$(<"${d2_tmp}/resource-small.fds")"
+large_fds="$(<"${d2_tmp}/resource-large.fds")"
+(( small_fds <= 8 && large_fds <= 8 )) || \
+  die "D2 resource probe exceeded the fixed eight-descriptor process ceiling"
+printf 'D2 RESOURCE BOUNDS PASS: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
+  "${small_rss}" "${small_fds}" "${large_rss}" "${large_fds}" "${rss_delta}"
 timeout --foreground --signal=TERM --kill-after=5s 180s \
   "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
   "${d2_tmp}/public-resources-1/small" reopen \
