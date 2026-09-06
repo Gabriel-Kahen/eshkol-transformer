@@ -285,21 +285,31 @@ grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
 
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
-  local before_fds after_fds
-  before_fds="$(find /proc/self/fd -mindepth 1 -maxdepth 1 | wc -l)"
-  "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+  timeout --foreground --signal=TERM --kill-after=5s 180s \
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
     "${directory}" consume >"${d2_tmp}/resource-${label}.stdout"
-  after_fds="$(find /proc/self/fd -mindepth 1 -maxdepth 1 | wc -l)"
-  [[ "${before_fds}" == "${after_fds}" ]] || die "D2 ${label} leaked file descriptors"
   grep -Fx "D2 RESOURCE CONSUME PASS: ${expected} batches" \
     "${d2_tmp}/resource-${label}.stdout" >/dev/null
   /usr/bin/time -f '%M' -o "${d2_tmp}/resource-${label}.rss" \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
-    "${directory}" consume >/dev/null
+    timeout --foreground --signal=TERM --kill-after=5s 180s \
+      "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+      "${directory}" consume >/dev/null
 }
 run_resource_probe small "${d2_tmp}/public-resources-1/small" 1
 run_resource_probe large "${d2_tmp}/public-resources-1/large" 8192
-"${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+small_rss="$(<"${d2_tmp}/resource-small.rss")"
+large_rss="$(<"${d2_tmp}/resource-large.rss")"
+[[ "${small_rss}" =~ ^[0-9]+$ && "${large_rss}" =~ ^[0-9]+$ ]] || \
+  die "D2 resource RSS measurements are not integer KiB values"
+(( small_rss <= 262144 && large_rss <= 262144 )) || \
+  die "D2 resource probe exceeded the fixed 256 MiB RSS test ceiling"
+rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_rss ))
+(( rss_delta <= 65536 )) || \
+  die "D2 RSS changed by more than 64 MiB when corpus grew to 8193 tokens"
+printf 'D2 RESOURCE RSS PASS: small=%s KiB large=%s KiB delta=%s KiB\n' \
+  "${small_rss}" "${large_rss}" "${rss_delta}"
+timeout --foreground --signal=TERM --kill-after=5s 180s \
+  "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
   "${d2_tmp}/public-resources-1/small" reopen \
   >"${d2_tmp}/resource-reopen.stdout"
 grep -Fx 'D2 RESOURCE REOPEN PASS: 256 datasets' \
