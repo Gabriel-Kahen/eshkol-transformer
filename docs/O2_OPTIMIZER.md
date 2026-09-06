@@ -90,8 +90,9 @@ at most 1,365 groups, 1,365 total canonical paths, 1,365 paths in any group, and
 P1 bounds of 64 segments per path and 1..65,536 UTF-8 bytes per segment. The complete
 config has an additional 16,777,216-byte aggregate UTF-8 budget. These are
 pre-provider traversal bounds; an over-bound, improper, cyclic, malformed,
-unordered, or range-invalid config is `invalid-argument` before P1 lookup or
-allocation.
+unordered, or range-invalid config is `invalid-argument` before P1 lookup,
+provider work, retained/native allocation, or mutation. Validation may use bounded
+temporary Eshkol data structures.
 
 There are 1..1365 groups. Every group is nonempty. Paths within a group are in P1
 UTF-8 byte order, and groups are ordered by their first path. Each path must be the
@@ -346,8 +347,9 @@ Unknown major versions, nonzero minor versions, and unknown required features ar
 `version-mismatch`. Malformed envelopes, duplicate entries, invalid counters, and
 nonfinite moments are `corrupt-data`. Missing/unexpected paths or alias topology are
 `shape-mismatch`; tensor metadata uses the matching A0 shape, dtype,
-device, and noncontiguous categories. An unavailable or mismatched admitted provider
-is `unsupported`.
+device, and noncontiguous categories. An unavailable required provider capability
+before construction/load is `unsupported`; a provider mismatch or defect after
+admission is `internal`.
 
 ## Exact public error mapping
 
@@ -407,6 +409,12 @@ O2 v1 is serialized, process-local, dense CPU f32 only. The arithmetic contract 
 supported only on the reviewed x86-64 binary32/SSE environment above. There is no
 thread-safety, concurrent mutation, performance, mixed-precision, accelerator,
 mid-accumulation snapshot, token-schedule, or C2-byte claim.
+
+Projection-budget tests prove exact walker boundary behavior and exercise the real
+create-time projection, but do not materialize a full public logical projection at
+and one past the 2,097,152-node or 67,108,864-byte ceilings; doing so would require
+an intentionally enormous generated fixture. The public create path still applies
+those exact checked bounds before provider work or retained/native allocation.
 
 The six-operation A0 surface has no optimizer-destroy operation. Each successful
 optimizer therefore retains its receiver, stable P1 handles, and two live moment
