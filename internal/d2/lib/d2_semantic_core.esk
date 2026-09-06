@@ -1,10 +1,9 @@
 ;;; Carrier-neutral D2 row, shuffle, and exact-resume semantics.
 ;;;
 ;;; This file deliberately defines no public wrapper, tensor carrier, or native
-;;; ABI.  The exact SHA-256 shuffle domain and cursor 1.0 bytes are grounded in
-;;; issue #1 proposal comment 5557201280 (including its in-place clarifications),
-;;; but remain internal until that proposal is accepted.  The accepted C1
-;;; Eshkol-native `c1-sha256` definition must be loaded before this core.
+;;; ABI.  The exact SHA-256 shuffle domain, ten-key procedural configuration, and
+;;; ESHKDCU1 cursor 1.0 bytes are accepted by issue #1 comment 5562461427.  The
+;;; accepted C1 Eshkol-native `c1-sha256` definition must be loaded first.
 
 (define d2-core-i64-max 9223372036854775807)
 (define d2-core-u64-space 18446744073709551616)
@@ -15,8 +14,35 @@
 (define d2-core-cursor-checksum-domain
   (string->utf8 "eshkol-token-dataset-cursor-checksum-v1\n"))
 (define d2-core-cursor-magic (string->utf8 "ESHKDCU1"))
+(define d2-core-error-tag (vector 'd2-core-error-v1))
+(define d2-core-config-tag (vector 'd2-core-config-v1))
+
+(define d2-core-config-keys
+  (vector ':directory ':batch-size ':sequence-length
+          ':maximum-manifest-bytes ':maximum-shard-bytes
+          ':maximum-total-tokens ':maximum-batch-bytes ':shuffle-seed
+          ':shuffle-window-rows ':packing?))
 
 (define (d2-core-fail message) (raise message))
+
+(define (d2-core-raise category operation message)
+  (raise (vector d2-core-error-tag category operation message)))
+
+(define (d2-core-error? value)
+  (and (vector? value) (= (vector-length value) 4)
+       (eq? (vector-ref value 0) d2-core-error-tag)))
+
+(define (d2-core-error-category value)
+  (if (d2-core-error? value) (vector-ref value 1)
+      (d2-core-fail "D2 core error category receiver is malformed")))
+
+(define (d2-core-error-operation value)
+  (if (d2-core-error? value) (vector-ref value 2)
+      (d2-core-fail "D2 core error operation receiver is malformed")))
+
+(define (d2-core-error-message value)
+  (if (d2-core-error? value) (vector-ref value 3)
+      (d2-core-fail "D2 core error message receiver is malformed")))
 
 (define (d2-core-exact-integer? value)
   (and (integer? value) (exact? value) (real? value)))
@@ -27,6 +53,187 @@
 
 (define (d2-core-positive-i64? value)
   (and (d2-core-nonnegative-i64? value) (> value 0)))
+
+(define (d2-core-proper-acyclic-list? value)
+  (let loop ((slow value) (fast value))
+    (cond
+      ((null? fast) #t)
+      ((not (pair? fast)) #f)
+      (else
+       (let ((fast-one (cdr fast)))
+         (cond
+           ((null? fast-one) #t)
+           ((not (pair? fast-one)) #f)
+           ((not (pair? slow)) #f)
+           (else
+            (let ((slow-one (cdr slow)) (fast-two (cdr fast-one)))
+              (and (not (eq? slow-one fast-two))
+                   (loop slow-one fast-two))))))))))
+
+(define (d2-core-list-length-exact values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (d2-core-config-key-index key)
+  (let loop ((index 0))
+    (cond ((= index (vector-length d2-core-config-keys)) #f)
+          ((eq? key (vector-ref d2-core-config-keys index)) index)
+          (else (loop (+ index 1))))))
+
+(define (d2-core-string-has-nul? value)
+  (let loop ((index 0))
+    (and (< index (string-length value))
+         (or (= (char->integer (string-ref value index)) 0)
+             (loop (+ index 1))))))
+
+(define (d2-core-utf8-continuation? value)
+  (and (>= value 128) (<= value 191)))
+
+(define (d2-core-valid-utf8? bytes)
+  (let ((length (bytevector-length bytes)))
+    (let loop ((offset 0))
+      (if (= offset length) #t
+          (let ((first (bytevector-u8-ref bytes offset)))
+            (cond
+              ((<= first 127) (loop (+ offset 1)))
+              ((and (>= first 194) (<= first 223)
+                    (< (+ offset 1) length)
+                    (d2-core-utf8-continuation?
+                     (bytevector-u8-ref bytes (+ offset 1))))
+               (loop (+ offset 2)))
+              ((and (>= first 224) (<= first 239)
+                    (< (+ offset 2) length)
+                    (let ((second (bytevector-u8-ref bytes (+ offset 1)))
+                          (third (bytevector-u8-ref bytes (+ offset 2))))
+                      (and
+                       (d2-core-utf8-continuation? third)
+                       (cond
+                         ((= first 224) (and (>= second 160) (<= second 191)))
+                         ((= first 237) (and (>= second 128) (<= second 159)))
+                         (else (d2-core-utf8-continuation? second))))))
+               (loop (+ offset 3)))
+              ((and (>= first 240) (<= first 244)
+                    (< (+ offset 3) length)
+                    (let ((second (bytevector-u8-ref bytes (+ offset 1))))
+                      (and
+                       (cond
+                         ((= first 240) (and (>= second 144) (<= second 191)))
+                         ((= first 244) (and (>= second 128) (<= second 143)))
+                         (else (d2-core-utf8-continuation? second)))
+                       (d2-core-utf8-continuation?
+                        (bytevector-u8-ref bytes (+ offset 2)))
+                       (d2-core-utf8-continuation?
+                        (bytevector-u8-ref bytes (+ offset 3))))))
+               (loop (+ offset 4)))
+              (else #f)))))))
+
+(define (d2-core-normalize-config config)
+  (let ((operation 'token-dataset-open))
+    (if (not (d2-core-proper-acyclic-list? config))
+        (d2-core-raise 'invalid-argument operation
+                       "dataset config must be a proper acyclic option list"))
+    (if (not (= (d2-core-list-length-exact config) 20))
+        (d2-core-raise 'invalid-argument operation
+                       "dataset config must contain exactly ten key/value pairs"))
+    (let ((seen (make-vector 10 #f))
+          (normalized (make-vector 12 #f)))
+      (vector-set! normalized 0 d2-core-config-tag)
+      (vector-set! normalized 11 'logical-only)
+      (let loop ((remaining config))
+        (if (null? remaining)
+            (begin
+              (let verify ((index 0))
+                (if (< index 10)
+                    (if (vector-ref seen index)
+                        (verify (+ index 1))
+                        (d2-core-raise
+                         'invalid-argument operation
+                         "dataset config is missing a required key"))))
+              (let ((batch-size (vector-ref normalized 2))
+                    (sequence-length (vector-ref normalized 3))
+                    (maximum-batch-bytes (vector-ref normalized 7)))
+                (if (> batch-size (quotient d2-core-i64-max sequence-length))
+                    (d2-core-raise 'invalid-argument operation
+                                   "dataset batch element count exceeds signed i64"))
+                (let ((elements (* batch-size sequence-length)))
+                  (if (> elements (quotient d2-core-i64-max 17))
+                      (d2-core-raise 'invalid-argument operation
+                                     "dataset batch payload exceeds signed i64"))
+                  (if (> (* 17 elements) maximum-batch-bytes)
+                      (d2-core-raise
+                       'invalid-argument operation
+                       "dataset batch payload exceeds maximum-batch-bytes"))))
+              normalized)
+            (let* ((key (car remaining))
+                   (value (car (cdr remaining)))
+                   (index (d2-core-config-key-index key)))
+              (if (eq? index #f)
+                  (d2-core-raise 'invalid-argument operation
+                                 "dataset config contains an unknown key"))
+              (if (vector-ref seen index)
+                  (d2-core-raise 'invalid-argument operation
+                                 "dataset config contains a duplicate key"))
+              (vector-set! seen index #t)
+              (cond
+                ((= index 0)
+                 (if (or (not (string? value)) (= (string-length value) 0)
+                         (d2-core-string-has-nul? value))
+                     (d2-core-raise
+                      'invalid-argument operation
+                      "dataset directory must be nonempty UTF-8 without NUL"))
+                 (vector-set! normalized 1
+                              (utf8->string (string->utf8 value))))
+                ((or (= index 1) (= index 2) (= index 3) (= index 4)
+                     (= index 6) (= index 8))
+                 (if (not (d2-core-positive-i64? value))
+                     (d2-core-raise
+                      'invalid-argument operation
+                      "dataset config field must be a positive exact i64"))
+                 (vector-set! normalized (+ index 1) value))
+                ((= index 5)
+                 (if (not (d2-core-nonnegative-i64? value))
+                     (d2-core-raise
+                      'invalid-argument operation
+                      "maximum-total-tokens must be a nonnegative exact i64"))
+                 (vector-set! normalized 6 value))
+                ((= index 7)
+                 (if (and (not (eq? value #f))
+                          (not (d2-core-nonnegative-i64? value)))
+                     (d2-core-raise
+                      'invalid-argument operation
+                      "shuffle-seed must be #f or a nonnegative exact i64"))
+                 (vector-set! normalized 8 value))
+                ((= index 9)
+                 (if (not (boolean? value))
+                     (d2-core-raise 'invalid-argument operation
+                                    "packing? must be boolean"))
+                 (vector-set! normalized 10 value)))
+              (loop (cdr (cdr remaining)))))))))
+
+(define (d2-core-config-valid? config)
+  (and (vector? config) (= (vector-length config) 12)
+       (eq? (vector-ref config 0) d2-core-config-tag)
+       (string? (vector-ref config 1))
+       (> (string-length (vector-ref config 1)) 0)
+       (not (d2-core-string-has-nul? (vector-ref config 1)))
+       (d2-core-positive-i64? (vector-ref config 2))
+       (d2-core-positive-i64? (vector-ref config 3))
+       (d2-core-positive-i64? (vector-ref config 4))
+       (d2-core-positive-i64? (vector-ref config 5))
+       (d2-core-nonnegative-i64? (vector-ref config 6))
+       (d2-core-positive-i64? (vector-ref config 7))
+       (or (eq? (vector-ref config 8) #f)
+           (d2-core-nonnegative-i64? (vector-ref config 8)))
+       (d2-core-positive-i64? (vector-ref config 9))
+       (boolean? (vector-ref config 10))
+       (eq? (vector-ref config 11) 'logical-only)))
+
+(define (d2-core-config-ref config key)
+  (let ((index (d2-core-config-key-index key)))
+    (if (or (not (d2-core-config-valid? config)) (eq? index #f))
+        (d2-core-fail "D2 normalized config or key is malformed"))
+    (vector-ref config (+ index 1))))
 
 (define (d2-core-bytes=? left right)
   (and (bytevector? left) (bytevector? right)
@@ -69,6 +276,13 @@
   (let ((result (make-bytevector 8 0)))
     (d2-core-store-unsigned-le! result 0 8 value)
     result))
+
+(define (d2-core-checked-nonnegative-product left right message)
+  (if (or (not (d2-core-nonnegative-i64? left))
+          (not (d2-core-nonnegative-i64? right))
+          (and (> right 0) (> left (quotient d2-core-i64-max right))))
+      (d2-core-fail message))
+  (* left right))
 
 (define (d2-core-sha256-word seed window-index draw-counter)
   (if (or (not (d2-core-nonnegative-i64? seed))
@@ -137,14 +351,18 @@
         (d2-core-fail "D2 row ordinal is outside the permutation domain"))
     (if packing?
         (let* ((total (d2-core-shard-total shard-lengths))
-               (start (* row-ordinal sequence-length))
+               (start (d2-core-checked-nonnegative-product
+                       row-ordinal sequence-length
+                       "D2 packed row start exceeds signed i64"))
                (true-count (min sequence-length (- total 1 start))))
           (vector 'd2-row-plan #t row-ordinal #f start true-count sequence-length))
         (let locate ((shard 0) (remaining row-ordinal))
           (let* ((length (vector-ref shard-lengths shard))
                  (count (d2-core-length-row-count length sequence-length)))
             (if (< remaining count)
-                (let* ((start (* remaining sequence-length))
+                (let* ((start (d2-core-checked-nonnegative-product
+                               remaining sequence-length
+                               "D2 unpacked row start exceeds signed i64"))
                        (true-count (min sequence-length (- length 1 start))))
                   (vector 'd2-row-plan #f row-ordinal shard start
                           true-count sequence-length))
@@ -222,23 +440,27 @@
       (d2-core-fail "D2 total rows must be a nonnegative i64"))
   (if (not (d2-core-positive-i64? window-rows))
       (d2-core-fail "D2 shuffle window rows must be a positive i64"))
-  (if (or (not (d2-core-nonnegative-i64? window-index))
-          (>= (* window-index window-rows) total-rows))
+  (if (not (d2-core-nonnegative-i64? window-index))
       (d2-core-fail "D2 shuffle window index is outside the row domain"))
   (if (not (vector? buffer))
       (d2-core-fail "D2 shuffle window buffer must be a vector"))
   (if (and (not (eq? seed #f)) (not (d2-core-nonnegative-i64? seed)))
       (d2-core-fail "D2 shuffle seed must be #f or a nonnegative i64"))
-  (let* ((window-start (* window-index window-rows))
-         (window-length (min window-rows (- total-rows window-start))))
-    (if (< (vector-length buffer) window-length)
-        (d2-core-fail "D2 shuffle window buffer is too small"))
-    (let fill ((index 0))
-      (if (< index window-length)
-          (begin
-            (vector-set! buffer index (+ window-start index))
-            (fill (+ index 1)))))
-    (if (not (eq? seed #f))
+  (let* ((window-start
+          (d2-core-checked-nonnegative-product
+           window-index window-rows
+           "D2 shuffle window start exceeds signed i64")))
+    (if (>= window-start total-rows)
+        (d2-core-fail "D2 shuffle window index is outside the row domain"))
+    (let ((window-length (min window-rows (- total-rows window-start))))
+      (if (< (vector-length buffer) window-length)
+          (d2-core-fail "D2 shuffle window buffer is too small"))
+      (let fill ((index 0))
+        (if (< index window-length)
+            (begin
+              (vector-set! buffer index (+ window-start index))
+              (fill (+ index 1)))))
+      (if (not (eq? seed #f))
           (let shuffle ((index (- window-length 1)) (counter 0))
             (if (> index 0)
                 (let* ((draw (d2-core-unbiased-draw-with-source
@@ -249,25 +471,121 @@
                   (vector-set! buffer index (vector-ref buffer selected))
                   (vector-set! buffer selected saved)
                   (shuffle (- index 1) next-counter)))))
-    window-length))
+      window-length)))
 
 (define (d2-core-window-permutation-with-source
          total-rows window-rows seed window-index word-source)
   (if (or (not (d2-core-nonnegative-i64? total-rows))
           (not (d2-core-positive-i64? window-rows))
-          (not (d2-core-nonnegative-i64? window-index))
-          (>= (* window-index window-rows) total-rows))
+          (not (d2-core-nonnegative-i64? window-index)))
       (d2-core-fail "D2 shuffle window request is outside the row domain"))
-  (let* ((start (* window-index window-rows))
-         (length (min window-rows (- total-rows start)))
-         (buffer (make-vector length 0)))
-    (d2-core-fill-window-permutation-with-source!
-     buffer total-rows window-rows seed window-index word-source)
-    buffer))
+  (let* ((start (d2-core-checked-nonnegative-product
+                 window-index window-rows
+                 "D2 shuffle window start exceeds signed i64")))
+    (if (>= start total-rows)
+        (d2-core-fail "D2 shuffle window request is outside the row domain"))
+    (let* ((length (min window-rows (- total-rows start)))
+           (buffer (make-vector length 0)))
+      (d2-core-fill-window-permutation-with-source!
+       buffer total-rows window-rows seed window-index word-source)
+      buffer)))
 
 (define (d2-core-window-permutation total-rows window-rows seed window-index)
   (d2-core-window-permutation-with-source
    total-rows window-rows seed window-index d2-core-sha256-word))
+
+;;; Production loaders use this bytevector form so shuffle storage is exactly one
+;;; u64-le slot per admitted row, not a boxed-vector representation.
+(define (d2-core-shuffle-buffer-bytes total-rows window-rows)
+  (if (or (not (d2-core-nonnegative-i64? total-rows))
+          (not (d2-core-positive-i64? window-rows)))
+      (d2-core-fail "D2 shuffle buffer extents are malformed"))
+  (let ((slots (min total-rows window-rows)))
+    (if (> slots (quotient d2-core-i64-max 8))
+        (d2-core-fail "D2 shuffle buffer exceeds signed i64"))
+    (* slots 8)))
+
+(define (d2-core-shuffle-bytevector-ref buffer active-length index)
+  (if (or (not (bytevector? buffer))
+          (not (d2-core-nonnegative-i64? active-length))
+          (not (d2-core-nonnegative-i64? index))
+          (>= index active-length)
+          (> (* active-length 8) (bytevector-length buffer)))
+      (d2-core-fail "D2 shuffle bytevector index is outside its active window"))
+  (d2-core-load-unsigned-le buffer (* index 8) 8))
+
+(define (d2-core-shuffle-bytevector-set! buffer active-length index value)
+  (if (not (d2-core-nonnegative-i64? value))
+      (d2-core-fail "D2 shuffle ordinal must be a nonnegative i64"))
+  (d2-core-shuffle-bytevector-ref buffer active-length index)
+  (d2-core-store-unsigned-le! buffer (* index 8) 8 value))
+
+(define (d2-core-fill-window-bytevector-with-source!
+         buffer total-rows window-rows seed window-index word-source)
+  (if (or (not (d2-core-nonnegative-i64? total-rows))
+          (not (d2-core-positive-i64? window-rows))
+          (not (d2-core-nonnegative-i64? window-index))
+          (not (bytevector? buffer)))
+      (d2-core-fail "D2 shuffle bytevector request is malformed"))
+  (if (not (= (bytevector-length buffer)
+              (d2-core-shuffle-buffer-bytes total-rows window-rows)))
+      (d2-core-fail "D2 shuffle bytevector has noncanonical storage size"))
+  (if (and (not (eq? seed #f)) (not (d2-core-nonnegative-i64? seed)))
+      (d2-core-fail "D2 shuffle seed must be #f or a nonnegative i64"))
+  (let ((window-start
+         (d2-core-checked-nonnegative-product
+          window-index window-rows
+          "D2 shuffle window start exceeds signed i64")))
+    (if (>= window-start total-rows)
+        (d2-core-fail "D2 shuffle window index is outside the row domain"))
+    (let ((window-length (min window-rows (- total-rows window-start))))
+      (let fill ((index 0))
+        (if (< index window-length)
+            (begin
+              (d2-core-store-unsigned-le!
+               buffer (* index 8) 8 (+ window-start index))
+              (fill (+ index 1)))))
+      (if (not (eq? seed #f))
+          (let shuffle ((index (- window-length 1)) (counter 0))
+            (if (> index 0)
+                (let* ((draw (d2-core-unbiased-draw-with-source
+                              (+ index 1) seed window-index counter word-source))
+                       (selected (vector-ref draw 0))
+                       (next-counter (vector-ref draw 1))
+                       (saved (d2-core-load-unsigned-le buffer (* index 8) 8))
+                       (replacement
+                        (d2-core-load-unsigned-le buffer (* selected 8) 8)))
+                  (d2-core-store-unsigned-le! buffer (* index 8) 8 replacement)
+                  (d2-core-store-unsigned-le! buffer (* selected 8) 8 saved)
+                  (shuffle (- index 1) next-counter)))))
+      window-length)))
+
+(define (d2-core-fill-window-bytevector!
+         buffer total-rows window-rows seed window-index)
+  (d2-core-fill-window-bytevector-with-source!
+   buffer total-rows window-rows seed window-index d2-core-sha256-word))
+
+(define (d2-core-permute-ordinal-in-bytevector-with-source!
+         buffer total-rows window-rows seed ordinal word-source)
+  (if (or (not (d2-core-nonnegative-i64? ordinal))
+          (not (d2-core-positive-i64? window-rows))
+          (>= ordinal total-rows))
+      (d2-core-fail "D2 permutation ordinal is outside the domain"))
+  (let* ((window-index (quotient ordinal window-rows))
+         (window-start
+          (d2-core-checked-nonnegative-product
+           window-index window-rows
+           "D2 shuffle window start exceeds signed i64"))
+         (window-length
+          (d2-core-fill-window-bytevector-with-source!
+           buffer total-rows window-rows seed window-index word-source)))
+    (d2-core-shuffle-bytevector-ref
+     buffer window-length (- ordinal window-start))))
+
+(define (d2-core-permute-ordinal-in-bytevector!
+         buffer total-rows window-rows seed ordinal)
+  (d2-core-permute-ordinal-in-bytevector-with-source!
+   buffer total-rows window-rows seed ordinal d2-core-sha256-word))
 
 (define (d2-core-permute-ordinal-with-source
          total-rows window-rows seed ordinal word-source)
@@ -276,7 +594,9 @@
           (>= ordinal total-rows))
       (d2-core-fail "D2 permutation ordinal is outside the domain"))
   (let* ((window-index (quotient ordinal window-rows))
-         (window-start (* window-index window-rows))
+         (window-start (d2-core-checked-nonnegative-product
+                        window-index window-rows
+                        "D2 shuffle window start exceeds signed i64"))
          (permutation
           (d2-core-window-permutation-with-source
            total-rows window-rows seed window-index word-source)))
@@ -352,7 +672,8 @@
        (eq? (vector-ref state 13) d2-core-shuffle-algorithm)
        (d2-core-nonnegative-i64? (vector-ref state 14))
        (d2-core-nonnegative-i64? (vector-ref state 15))
-       (<= (vector-ref state 15) (vector-ref state 14))
+       (or (eq? expected-tag 'd2-logical-cursor)
+           (<= (vector-ref state 15) (vector-ref state 14)))
        (eq? (vector-ref state 16) 'logical-only)))
 
 (define (d2-core-state-create manifest-sha256 tokenizer-fingerprint vocab-size
@@ -375,7 +696,22 @@
                  d2-core-shuffle-algorithm total-rows 0 'logical-only)))
     (if (not (d2-core-state-valid? state 'd2-dataset-state))
         (d2-core-fail "D2 logical dataset identity is malformed"))
+    (d2-core-working-payload-bytes
+     maximum-manifest-bytes maximum-shard-bytes batch-size sequence-length
+     maximum-batch-bytes shuffle-window-rows total-rows)
     state))
+
+(define (d2-core-state-create-from-config manifest-sha256
+                                           tokenizer-fingerprint vocab-size
+                                           config total-rows)
+  (if (not (d2-core-config-valid? config))
+      (d2-core-fail "D2 normalized dataset config is malformed"))
+  (d2-core-state-create
+   manifest-sha256 tokenizer-fingerprint vocab-size
+   (vector-ref config 2) (vector-ref config 3) (vector-ref config 4)
+   (vector-ref config 5) (vector-ref config 6) (vector-ref config 7)
+   (vector-ref config 8) (vector-ref config 9) (vector-ref config 10)
+   total-rows))
 
 (define (d2-core-state-next-ordinal state)
   (if (not (d2-core-state-valid? state 'd2-dataset-state))
@@ -428,13 +764,16 @@
 
 (define (d2-core-cursor-decode bytes)
   (if (not (bytevector? bytes))
-      (d2-core-fail "D2 cursor must be a bytevector"))
+      (d2-core-raise 'invalid-argument 'token-dataset-seek!
+                     "D2 cursor must be a bytevector"))
   (let ((length (bytevector-length bytes)))
     (if (or (< length 209) (> length 400))
-        (d2-core-fail "corrupt-data: D2 cursor has a noncanonical length"))
+        (d2-core-raise 'corrupt-data 'token-dataset-seek!
+                       "D2 cursor has a noncanonical physical length"))
     (if (not (d2-core-bytes=?
               (bytevector-copy bytes 0 8) d2-core-cursor-magic))
-        (d2-core-fail "corrupt-data: D2 cursor magic mismatch"))
+        (d2-core-raise 'corrupt-data 'token-dataset-seek!
+                       "D2 cursor magic mismatch"))
     (let* ((header-bytes (d2-core-load-unsigned-le bytes 12 4))
            (features (d2-core-load-unsigned-le bytes 16 4))
            (checksum-id (d2-core-load-unsigned-le bytes 20 4))
@@ -447,30 +786,21 @@
               (not (= header-bytes (+ 176 fingerprint-bytes)))
               (not (= length (+ 208 fingerprint-bytes)))
               (not (= (d2-core-load-unsigned-le bytes 160 8) length)))
-          (d2-core-fail "corrupt-data: D2 cursor lengths are noncanonical"))
+          (d2-core-raise 'corrupt-data 'token-dataset-seek!
+                         "D2 cursor lengths are noncanonical"))
       (if (or (not (= (d2-core-load-unsigned-le bytes 8 2) 1))
               (not (= (d2-core-load-unsigned-le bytes 10 2) 0)))
-          (d2-core-fail "version-mismatch: unsupported D2 cursor version"))
+          (d2-core-raise 'version-mismatch 'token-dataset-seek!
+                         "unsupported D2 cursor version"))
       (if (not (= features 0))
-          (d2-core-fail "unsupported: D2 cursor requires unknown features"))
+          (d2-core-raise 'unsupported 'token-dataset-seek!
+                         "D2 cursor requires unknown features"))
       (if (not (= checksum-id 1))
-          (d2-core-fail "unsupported: D2 cursor checksum algorithm is unknown"))
+          (d2-core-raise 'unsupported 'token-dataset-seek!
+                         "D2 cursor checksum algorithm is unknown"))
       (if (and (not (= shuffle-id 0)) (not (= shuffle-id 1)))
-          (d2-core-fail "unsupported: D2 cursor shuffle algorithm is unknown"))
-      (if (or (and (= shuffle-id 0) (not (= seed-present 0)))
-              (and (= shuffle-id 1) (not (= seed-present 1))))
-          (d2-core-fail
-           "corrupt-data: D2 shuffle and seed-presence fields are noncanonical"))
-      (if (and (not (= packing-word 0)) (not (= packing-word 1)))
-          (d2-core-fail "corrupt-data: D2 packing field is noncanonical"))
-      (if (not (= (d2-core-load-unsigned-le bytes 168 8) 0))
-          (d2-core-fail "corrupt-data: D2 cursor reserved field is nonzero"))
-      (let* ((prefix (bytevector-copy bytes 0 header-bytes))
-             (expected (c1-sha256
-                        (d2-core-concat d2-core-cursor-checksum-domain prefix)))
-             (actual (bytevector-copy bytes header-bytes length)))
-        (if (not (d2-core-bytes=? expected actual))
-            (d2-core-fail "corrupt-data: D2 cursor checksum mismatch")))
+          (d2-core-raise 'unsupported 'token-dataset-seek!
+                         "D2 cursor shuffle algorithm is unknown"))
       (let* ((vocab (d2-core-load-unsigned-le bytes 40 8))
              (batch-size (d2-core-load-unsigned-le bytes 48 8))
              (sequence-length (d2-core-load-unsigned-le bytes 56 8))
@@ -485,10 +815,11 @@
              (manifest (bytevector-copy bytes 128 160))
              (fingerprint-raw (bytevector-copy bytes 176 header-bytes))
              (fingerprint
-              (guard (condition
-                      (else (d2-core-fail
-                             "corrupt-data: D2 cursor fingerprint is not UTF-8")))
-                (utf8->string fingerprint-raw)))
+              (if (d2-core-valid-utf8? fingerprint-raw)
+                  (utf8->string fingerprint-raw)
+                  (d2-core-raise
+                   'corrupt-data 'token-dataset-seek!
+                   "D2 cursor fingerprint is not canonical UTF-8")))
              (seed (if (= seed-present 0) #f seed-word))
              (cursor
               (vector 'd2-logical-cursor manifest fingerprint vocab batch-size
@@ -496,10 +827,35 @@
                       batch-limit seed window-rows (= packing-word 1)
                       d2-core-shuffle-algorithm total-rows next-ordinal
                       'logical-only)))
-        (if (or (and (= seed-present 0) (not (= seed-word 0)))
+        ;; All remaining cross-field canonicality precedes checksum validation.
+        (if (or (and (not (= packing-word 0)) (not (= packing-word 1)))
+                (and (not (= seed-present 0)) (not (= seed-present 1)))
+                (and (= shuffle-id 0) (not (= seed-present 0)))
+                (and (= shuffle-id 1) (not (= seed-present 1)))
+                (and (= seed-present 0) (not (= seed-word 0)))
+                (not (= (d2-core-load-unsigned-le bytes 168 8) 0))
                 (not (d2-core-bytes=? (string->utf8 fingerprint) fingerprint-raw))
-                (not (d2-core-state-valid? cursor 'd2-logical-cursor)))
-            (d2-core-fail "corrupt-data: D2 cursor semantic fields are noncanonical"))
+                (not (d2-core-state-valid? cursor 'd2-logical-cursor))
+                (> batch-size (quotient d2-core-i64-max sequence-length))
+                (let ((elements (* batch-size sequence-length)))
+                  (or (> elements (quotient d2-core-i64-max 17))
+                      (> (* 17 elements) batch-limit)))
+                (not
+                 (guard (condition (else #f))
+                   (d2-core-working-payload-bytes
+                    manifest-limit shard-limit batch-size sequence-length
+                    batch-limit window-rows total-rows)
+                   #t)))
+            (d2-core-raise 'corrupt-data 'token-dataset-seek!
+                           "D2 cursor semantic fields are noncanonical"))
+        (let* ((prefix (bytevector-copy bytes 0 header-bytes))
+               (expected
+                (c1-sha256
+                 (d2-core-concat d2-core-cursor-checksum-domain prefix)))
+               (actual (bytevector-copy bytes header-bytes length)))
+          (if (not (d2-core-bytes=? expected actual))
+              (d2-core-raise 'corrupt-data 'token-dataset-seek!
+                             "D2 cursor checksum mismatch")))
         cursor))))
 
 (define (d2-core-state-identity=? state cursor)
@@ -514,11 +870,16 @@
   (if (not (d2-core-state-valid? state 'd2-dataset-state))
       (d2-core-fail "D2 dataset state is malformed"))
   (let ((decoded (d2-core-cursor-decode cursor)))
-  (if (not (d2-core-state-identity=? state decoded))
-      (d2-core-fail "D2 logical cursor belongs to a different dataset"))
-  ;; The only mutation follows complete validation and identity comparison.
-  (vector-set! state 15 (vector-ref decoded 15))
-  state))
+    (if (not (d2-core-state-identity=? state decoded))
+        (d2-core-raise 'invalid-argument 'token-dataset-seek!
+                       "D2 cursor belongs to a different dataset or options"))
+    (if (> (vector-ref decoded 15) (vector-ref state 14))
+        (d2-core-raise 'corrupt-data 'token-dataset-seek!
+                       "D2 cursor next ordinal is outside the dataset"))
+    ;; The only mutation follows complete decode, checksum, identity, and ordinal
+    ;; validation.
+    (vector-set! state 15 (vector-ref decoded 15))
+    state))
 
 ;;; Return [start count end], or #f at stable EOS.  This does not advance state.
 (define (d2-core-next-batch-range state)

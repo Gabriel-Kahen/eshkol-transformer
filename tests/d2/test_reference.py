@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import struct
 import unittest
 
 from tests.d2.reference import (
-    CURSOR_BYTES,
+    CURSOR_FIXED_BYTES,
     D2ReferenceError,
     MAX_I64,
     ReferenceConfig,
@@ -206,9 +207,9 @@ class CursorResumeTests(unittest.TestCase):
         self.assertEqual(dataset.snapshot(), before)
 
         one_over = bytearray(before)
-        total = struct.unpack_from("<Q", one_over, 48)[0]
-        struct.pack_into("<Q", one_over, 56, total + 1)
-        with self.assertRaisesRegex(D2ReferenceError, "noncanonical ordinal"):
+        total = struct.unpack_from("<Q", one_over, 112)[0]
+        struct.pack_into("<Q", one_over, 120, total + 1)
+        with self.assertRaisesRegex(D2ReferenceError, "next ordinal"):
             dataset.seek(resign_reference_cursor(bytes(one_over)))
         self.assertEqual(dataset.snapshot(), before)
 
@@ -222,18 +223,60 @@ class CursorResumeTests(unittest.TestCase):
             other_config.seek(before)
         self.assertEqual(other_config.next_ordinal, 0)
 
-    def test_private_envelope_is_fresh_deterministic_and_exact_length(self) -> None:
+    def test_canonical_cursor_is_fresh_deterministic_and_exact_length(self) -> None:
         dataset = self.dataset()
         first = dataset.snapshot()
         second = dataset.snapshot()
         self.assertIsNot(first, second)
         self.assertEqual(first, second)
-        self.assertEqual(len(first), CURSOR_BYTES)
-        identity, total, ordinal = decode_reference_cursor(first)
-        self.assertEqual(identity, dataset.identity)
-        self.assertEqual(total, len(dataset.rows))
-        self.assertEqual(ordinal, 0)
-        self.assertEqual(encode_reference_cursor(identity, total, ordinal), first)
+        self.assertEqual(
+            len(first),
+            CURSOR_FIXED_BYTES + len(dataset.tokenizer_fingerprint.encode("utf-8")),
+        )
+        fields = decode_reference_cursor(first)
+        self.assertEqual(fields.manifest_digest, dataset.manifest_digest)
+        self.assertEqual(fields.total_rows, len(dataset.rows))
+        self.assertEqual(fields.next_ordinal, 0)
+        self.assertEqual(
+            encode_reference_cursor(
+                fields.manifest_digest,
+                fields.tokenizer_fingerprint,
+                fields.vocab_size,
+                fields.config,
+                fields.total_rows,
+                fields.next_ordinal,
+            ),
+            first,
+        )
+
+    def test_canonical_cursor_matches_compiled_eshkol_golden(self) -> None:
+        config = ReferenceConfig(
+            2,
+            3,
+            None,
+            4,
+            True,
+            maximum_manifest_bytes=4096,
+            maximum_shard_bytes=8192,
+            maximum_total_tokens=9,
+            maximum_batch_bytes=102,
+        )
+        raw = encode_reference_cursor(
+            bytes([17]) * 32,
+            "tokenizer-fingerprint",
+            300,
+            config,
+            3,
+            0,
+        )
+        self.assertEqual(
+            raw[-32:].hex(),
+            "c40ee6719200047cba32bf416b62173c54eb61ed11b8a9753e4648cde44ff497",
+        )
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(),
+            "f1351dc7bdbde22a7edbfb4395939274fb6d9e14e5c45a63561daa80550c5d25",
+        )
 
 
 class ArithmeticAndMemoryTests(unittest.TestCase):

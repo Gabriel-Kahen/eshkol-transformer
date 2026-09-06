@@ -1,16 +1,15 @@
-"""Carrier-neutral, development-only oracle for proposed D2 semantics.
+"""Carrier-neutral, development-only oracle for accepted D2 semantics.
 
 This module intentionally does not import or name a production D2 implementation.
 It materializes rows and permutations for small tests, so it is an oracle rather
-than a memory-bounded loader.  ``D2REFC00`` is a private test envelope used to test
-cursor invariants; it is explicitly not a proposed public cursor format.
+than a memory-bounded loader. Its cursor encoder independently implements the
+accepted canonical ESHKDCU1 version-1.0 bytes.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import json
 import struct
 from typing import Iterable, NoReturn, Sequence
 
@@ -21,9 +20,9 @@ BATCH_ELEMENT_BYTES = 8 + 8 + 1
 ROW_ORDINAL_BYTES = 8
 
 SHUFFLE_DOMAIN = b"eshkol-d2-window-shuffle-v1\n"
-CURSOR_DOMAIN = b"eshkol-d2-reference-cursor-v0\x00"
-CURSOR_MAGIC = b"D2REFC00"
-CURSOR_BYTES = 96
+CURSOR_DOMAIN = b"eshkol-token-dataset-cursor-checksum-v1\n"
+CURSOR_MAGIC = b"ESHKDCU1"
+CURSOR_FIXED_BYTES = 208
 
 
 class D2ReferenceError(ValueError):
@@ -154,6 +153,11 @@ class ReferenceConfig:
     shuffle_seed: int | None = None
     shuffle_window_rows: int = 1
     packing: bool = True
+    directory: str = "corpus"
+    maximum_manifest_bytes: int = 1_048_576
+    maximum_shard_bytes: int = 1_048_576
+    maximum_total_tokens: int = 65_536
+    maximum_batch_bytes: int = 1_048_576
 
     def __post_init__(self) -> None:
         exact_i64(self.batch_size, "batch-size", 1)
@@ -163,6 +167,15 @@ class ReferenceConfig:
         exact_i64(self.shuffle_window_rows, "shuffle-window-rows", 1)
         if not isinstance(self.packing, bool):
             _fail("invalid-argument", "packing: expected boolean")
+        if not isinstance(self.directory, str) or not self.directory or "\x00" in self.directory:
+            _fail("invalid-argument", "directory: expected nonempty UTF-8 without NUL")
+        exact_i64(self.maximum_manifest_bytes, "maximum-manifest-bytes", 1)
+        exact_i64(self.maximum_shard_bytes, "maximum-shard-bytes", 1)
+        exact_i64(self.maximum_total_tokens, "maximum-total-tokens")
+        exact_i64(self.maximum_batch_bytes, "maximum-batch-bytes", 1)
+        batch_payload_bytes(
+            self.batch_size, self.sequence_length, self.maximum_batch_bytes
+        )
 
 
 def _tokens(values: Sequence[object], where: str) -> tuple[int, ...]:
@@ -267,71 +280,186 @@ def window_permutation(total_rows: object, seed: object, window_rows: object) ->
     return tuple(output)
 
 
-def _identity_digest(
-    manifest_digest: bytes, tokenizer_fingerprint: str, vocab_size: int, config: ReferenceConfig
+def _cursor_config_identity(config: ReferenceConfig) -> tuple[object, ...]:
+    return (
+        config.batch_size,
+        config.sequence_length,
+        config.maximum_manifest_bytes,
+        config.maximum_shard_bytes,
+        config.maximum_total_tokens,
+        config.maximum_batch_bytes,
+        config.shuffle_seed,
+        config.shuffle_window_rows,
+        config.packing,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CursorFields:
+    manifest_digest: bytes
+    tokenizer_fingerprint: str
+    vocab_size: int
+    config: ReferenceConfig
+    total_rows: int
+    next_ordinal: int
+
+
+def encode_reference_cursor(
+    manifest_digest: bytes,
+    tokenizer_fingerprint: str,
+    vocab_size: int,
+    config: ReferenceConfig,
+    total_rows: int,
+    next_ordinal: int,
 ) -> bytes:
     if not isinstance(manifest_digest, bytes) or len(manifest_digest) != 32:
         _fail("invalid-argument", "manifest digest: expected 32 bytes")
-    if not isinstance(tokenizer_fingerprint, str) or not tokenizer_fingerprint:
-        _fail("invalid-argument", "tokenizer fingerprint: expected nonempty string")
+    if not isinstance(tokenizer_fingerprint, str):
+        _fail("invalid-argument", "tokenizer fingerprint: expected UTF-8 string")
+    fingerprint = tokenizer_fingerprint.encode("utf-8")
+    if not 1 <= len(fingerprint) <= 192:
+        _fail("invalid-argument", "tokenizer fingerprint: expected 1..192 UTF-8 bytes")
     vocab = exact_i64(vocab_size, "vocab-size", 1)
-    document = {
-        "batch_size": config.batch_size,
-        "manifest_sha256": manifest_digest.hex(),
-        "packing": config.packing,
-        "sequence_length": config.sequence_length,
-        "shuffle_algorithm": (
-            "identity" if config.shuffle_seed is None
-            else "bounded-window-fisher-yates-sha256-v1"
-        ),
-        "shuffle_seed": config.shuffle_seed,
-        "shuffle_window_rows": config.shuffle_window_rows,
-        "tokenizer_fingerprint": tokenizer_fingerprint,
-        "vocab_size": vocab,
-    }
-    canonical = json.dumps(
-        document, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return hashlib.sha256(b"eshkol-d2-reference-identity-v0\x00" + canonical).digest()
-
-
-def encode_reference_cursor(identity_digest: bytes, total_rows: int, next_ordinal: int) -> bytes:
-    if not isinstance(identity_digest, bytes) or len(identity_digest) != 32:
-        _fail("invalid-argument", "cursor identity: expected 32 bytes")
     total = exact_i64(total_rows, "cursor total-rows")
     ordinal = exact_i64(next_ordinal, "cursor next-ordinal")
     if ordinal > total:
         _fail("invalid-argument", "cursor next-ordinal exceeds total rows")
-    prefix = CURSOR_MAGIC + struct.pack("<HHI", 1, 0, CURSOR_BYTES) + identity_digest
-    prefix += struct.pack("<QQ", total, ordinal)
-    assert len(prefix) == 64
-    return prefix + hashlib.sha256(CURSOR_DOMAIN + prefix).digest()
+    if not isinstance(config, ReferenceConfig):
+        _fail("invalid-argument", "cursor config: expected ReferenceConfig")
+
+    header_bytes = 176 + len(fingerprint)
+    cursor_bytes = CURSOR_FIXED_BYTES + len(fingerprint)
+    seed_present = int(config.shuffle_seed is not None)
+    raw = bytearray(cursor_bytes)
+    raw[:8] = CURSOR_MAGIC
+    struct.pack_into("<HH", raw, 8, 1, 0)
+    struct.pack_into("<IIIIIII", raw, 12, header_bytes, 0, 1, seed_present,
+                     int(config.packing), seed_present, len(fingerprint))
+    struct.pack_into(
+        "<QQQQQQQQQQQ",
+        raw,
+        40,
+        vocab,
+        config.batch_size,
+        config.sequence_length,
+        config.maximum_manifest_bytes,
+        config.maximum_shard_bytes,
+        config.maximum_total_tokens,
+        config.maximum_batch_bytes,
+        0 if config.shuffle_seed is None else config.shuffle_seed,
+        config.shuffle_window_rows,
+        total,
+        ordinal,
+    )
+    raw[128:160] = manifest_digest
+    struct.pack_into("<QQ", raw, 160, cursor_bytes, 0)
+    raw[176:header_bytes] = fingerprint
+    raw[header_bytes:] = hashlib.sha256(CURSOR_DOMAIN + raw[:header_bytes]).digest()
+    return bytes(raw)
 
 
-def decode_reference_cursor(raw: object) -> tuple[bytes, int, int]:
+def decode_reference_cursor(raw: object) -> CursorFields:
     if not isinstance(raw, bytes):
-        _fail("invalid-argument", "cursor: expected immutable bytes")
-    if len(raw) != CURSOR_BYTES:
-        _fail("corrupt-data", "cursor: noncanonical byte length")
+        _fail("invalid-argument", "cursor: expected bytevector bytes")
+    if not 209 <= len(raw) <= 400:
+        _fail("corrupt-data", "cursor: noncanonical physical byte length")
     if raw[:8] != CURSOR_MAGIC:
-        _fail("corrupt-data", "cursor: bad test-envelope identity")
-    major, minor, declared_bytes = struct.unpack_from("<HHI", raw, 8)
-    if (major, minor) != (1, 0):
-        _fail("version-mismatch", "cursor: unsupported test-envelope version")
-    if declared_bytes != CURSOR_BYTES:
-        _fail("corrupt-data", "cursor: bad declared byte length")
-    if hashlib.sha256(CURSOR_DOMAIN + raw[:64]).digest() != raw[64:]:
+        _fail("corrupt-data", "cursor: bad magic")
+    header_bytes, features, checksum_id, shuffle_id, packing, seed_present, fp_bytes = (
+        struct.unpack_from("<IIIIIII", raw, 12)
+    )
+    declared_bytes, reserved = struct.unpack_from("<QQ", raw, 160)
+    if (
+        not 1 <= fp_bytes <= 192
+        or header_bytes != 176 + fp_bytes
+        or len(raw) != CURSOR_FIXED_BYTES + fp_bytes
+        or declared_bytes != len(raw)
+    ):
+        _fail("corrupt-data", "cursor: noncanonical size arithmetic")
+    if struct.unpack_from("<HH", raw, 8) != (1, 0):
+        _fail("version-mismatch", "cursor: unsupported version")
+    if features != 0:
+        _fail("unsupported", "cursor: unknown required feature")
+    if checksum_id != 1:
+        _fail("unsupported", "cursor: unknown checksum algorithm")
+    if shuffle_id not in (0, 1):
+        _fail("unsupported", "cursor: unknown shuffle algorithm")
+
+    values = struct.unpack_from("<QQQQQQQQQQQ", raw, 40)
+    (
+        vocab,
+        batch_size,
+        sequence_length,
+        maximum_manifest_bytes,
+        maximum_shard_bytes,
+        maximum_total_tokens,
+        maximum_batch_bytes,
+        seed_word,
+        shuffle_window_rows,
+        total_rows,
+        next_ordinal,
+    ) = values
+    try:
+        fingerprint = raw[176:header_bytes].decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise D2ReferenceError("corrupt-data", "cursor: noncanonical UTF-8") from error
+    if (
+        packing not in (0, 1)
+        or seed_present not in (0, 1)
+        or (shuffle_id, seed_present) not in ((0, 0), (1, 1))
+        or (seed_present == 0 and seed_word != 0)
+        or reserved != 0
+        or fingerprint.encode("utf-8") != raw[176:header_bytes]
+        or not 1 <= vocab <= MAX_I64
+        or not 1 <= batch_size <= MAX_I64
+        or not 1 <= sequence_length <= MAX_I64
+        or not 1 <= maximum_manifest_bytes <= MAX_I64
+        or not 1 <= maximum_shard_bytes <= MAX_I64
+        or not 0 <= maximum_total_tokens <= MAX_I64
+        or not 1 <= maximum_batch_bytes <= MAX_I64
+        or not 0 <= seed_word <= MAX_I64
+        or not 1 <= shuffle_window_rows <= MAX_I64
+        or not 0 <= total_rows <= MAX_I64
+        or not 0 <= next_ordinal <= MAX_I64
+    ):
+        _fail("corrupt-data", "cursor: noncanonical semantic fields")
+    try:
+        config = ReferenceConfig(
+            batch_size,
+            sequence_length,
+            None if seed_present == 0 else seed_word,
+            shuffle_window_rows,
+            bool(packing),
+            maximum_manifest_bytes=maximum_manifest_bytes,
+            maximum_shard_bytes=maximum_shard_bytes,
+            maximum_total_tokens=maximum_total_tokens,
+            maximum_batch_bytes=maximum_batch_bytes,
+        )
+        working_payload_bytes(
+            maximum_manifest_bytes,
+            maximum_shard_bytes,
+            batch_size,
+            sequence_length,
+            shuffle_window_rows,
+            total_rows,
+            maximum_batch_bytes=maximum_batch_bytes,
+        )
+    except D2ReferenceError as error:
+        raise D2ReferenceError("corrupt-data", "cursor: noncanonical resource fields") from error
+    if hashlib.sha256(CURSOR_DOMAIN + raw[:header_bytes]).digest() != raw[header_bytes:]:
         _fail("corrupt-data", "cursor: checksum mismatch")
-    total, ordinal = struct.unpack_from("<QQ", raw, 48)
-    if total > MAX_I64 or ordinal > MAX_I64 or ordinal > total:
-        _fail("corrupt-data", "cursor: noncanonical ordinal range")
-    return raw[16:48], total, ordinal
+    return CursorFields(
+        raw[128:160], fingerprint, vocab, config, total_rows, next_ordinal
+    )
 
 
 def resign_reference_cursor(raw: bytes) -> bytes:
-    if len(raw) != CURSOR_BYTES:
+    if not isinstance(raw, bytes) or not 209 <= len(raw) <= 400:
         _fail("invalid-argument", "cursor: cannot resign noncanonical length")
-    return raw[:64] + hashlib.sha256(CURSOR_DOMAIN + raw[:64]).digest()
+    header_bytes = struct.unpack_from("<I", raw, 12)[0]
+    if header_bytes + 32 != len(raw):
+        _fail("invalid-argument", "cursor: cannot resign noncanonical header")
+    return raw[:header_bytes] + hashlib.sha256(CURSOR_DOMAIN + raw[:header_bytes]).digest()
 
 
 class ReferenceDataset:
@@ -353,19 +481,42 @@ class ReferenceDataset:
         self.order = window_permutation(
             len(self.rows), config.shuffle_seed, config.shuffle_window_rows
         )
-        self.identity = _identity_digest(
-            manifest_digest, tokenizer_fingerprint, vocab_size, config
-        )
+        if not isinstance(manifest_digest, bytes) or len(manifest_digest) != 32:
+            _fail("invalid-argument", "manifest digest: expected 32 bytes")
+        if not isinstance(tokenizer_fingerprint, str):
+            _fail("invalid-argument", "tokenizer fingerprint: expected UTF-8 string")
+        encoded_fingerprint = tokenizer_fingerprint.encode("utf-8")
+        if not 1 <= len(encoded_fingerprint) <= 192:
+            _fail("invalid-argument", "tokenizer fingerprint: expected 1..192 UTF-8 bytes")
+        self.manifest_digest = manifest_digest
+        self.tokenizer_fingerprint = tokenizer_fingerprint
+        self.vocab_size = exact_i64(vocab_size, "vocab-size", 1)
         self.next_ordinal = 0
 
     def snapshot(self) -> bytes:
-        return encode_reference_cursor(self.identity, len(self.rows), self.next_ordinal)
+        return encode_reference_cursor(
+            self.manifest_digest,
+            self.tokenizer_fingerprint,
+            self.vocab_size,
+            self.config,
+            len(self.rows),
+            self.next_ordinal,
+        )
 
     def seek(self, cursor: bytes) -> None:
-        identity, total, ordinal = decode_reference_cursor(cursor)
-        if identity != self.identity or total != len(self.rows):
+        fields = decode_reference_cursor(cursor)
+        if (
+            fields.manifest_digest != self.manifest_digest
+            or fields.tokenizer_fingerprint != self.tokenizer_fingerprint
+            or fields.vocab_size != self.vocab_size
+            or _cursor_config_identity(fields.config)
+            != _cursor_config_identity(self.config)
+            or fields.total_rows != len(self.rows)
+        ):
             _fail("invalid-argument", "cursor identity/config/corpus mismatch")
-        self.next_ordinal = ordinal
+        if fields.next_ordinal > len(self.rows):
+            _fail("corrupt-data", "cursor next ordinal exceeds row count")
+        self.next_ordinal = fields.next_ordinal
 
     def next_batch(self) -> Batch | None:
         if self.next_ordinal == len(self.rows):
