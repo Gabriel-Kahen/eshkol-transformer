@@ -4,51 +4,53 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
-## 2026-09-01 — D2 / issue #42 pre-freeze proposal
+## 2026-09-06 — D2 / issue #42 current-main proposal
 
-- **Decision:** proposed, not accepted. Independent contract, test-design, and
-  packaging reviews found that accepted A0/D1/T1/Q0 do not yet supply a
-  constructible dataset configuration carrier or a reclaimable rank-2 i64/bool
-  batch carrier. Public D2 implementation remains unfrozen pending integration
-  issue #1 decision.
-- **Proposed contract:** interpret `token-dataset-open`'s `config` as an exact
-  proper flat option list containing the corpus directory, positive batch and
-  sequence extents, manifest/shard/total-token/batch-byte limits, optional
-  nonnegative shuffle seed, positive shuffle-window rows, and explicit packing flag.
-  Packed rows cover D1's flat stream continuously,
-  including canonical shard boundaries; unpacked rows treat shards only as explicit
-  packing boundaries and make no document claim. Targets are the exact one-token
-  shift; token ID zero is used only as a masked valid filler. Canonical bounded
-  windows use deterministic Fisher-Yates with domain-separated SHA-256 draws and
-  rejection sampling that removes modulo bias. This is uniform only within each
-  admitted window conditional on the specified digest stream, not a claim of
-  global uniform selection from all permutations.
+- **Decision:** proposed, not accepted. This supersedes the 2026-09-01 proposal
+  after reconciliation with merged D1, T1, T2, P1L, and I2 at main
+  `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. A0 still provides neither a
+  constructible dataset configuration carrier nor a reclaimable batch lifetime.
+  Public wrappers, aggregate counts, and cursor bytes remain unfrozen pending the
+  integration issue #1 decision.
+- **Proposed contract:** `token-dataset-open` borrows an exact proper flat option
+  list containing the directory, positive batch and sequence extents, manifest/
+  shard/total-token/batch-byte limits, optional nonnegative seed, positive shuffle
+  window, and packing flag. Packed rows cross D1 shard boundaries; unpacked rows do
+  not and make no document claim. Targets are the exact one-token shift. Token zero
+  fills only false-mask positions. Consecutive bounded windows use descending
+  Fisher–Yates, domain-separated SHA-256 u64 draws, and rejection sampling without
+  modulo bias; this is uniform only within each window conditional on the digest
+  stream, not a global-uniform-permutation claim.
 
-  The proposal adds `token-batch-release!` and changes the three batch accessors to
-  return the same three precreated, non-allocating borrowed dense CPU tensor views
-  until release. One dataset admits at most one live batch; next/seek while it is
-  live are invalid. Release removes every native registry entry and destroys the
-  two physical i64 arrays and one uint8 bool array. Exact checked batch payload is
-  `17*N*T` bytes and must fit the explicit caller limit before allocation. This is required
-  because the pinned runtime has no proved finalizer and T1's append-only retention
-  is explicitly unavailable to a long-running loader. The cursor is proposed as a
-  canonical, checksummed `eshkol-token-dataset-cursor` 1.0 data snapshot binding the
-  corpus manifest digest, tokenizer/config identity, normalized algorithms/options,
-  next permutation-domain ordinal in `0..M`; ordinal `M` alone means EOS. A narrow native exact-range I/O and batch
-  storage ABI transports bytes/views only; Eshkol owns validation, incremental
-  SHA-256, shuffle, packing, shifting, masks, cursor semantics, and errors. Streaming
-  validation retains no manifest record table and at most one bounded shard plus one
-  batch. D2 defines one finite permutation; seeking the epoch-start cursor replays
-  the same order because no accepted epoch-reseed API exists. D2 exposes only the
-  accepted loss mask; causal attention masks remain A2/model scope.
-- **Packaging / dependencies:** the proposed once-localized cumulative aggregate
-  grows from 46 to 57 globals: the accepted Wave-1 boundary, ten A0 D2 wrappers,
-  and the proposed release wrapper. Already-localized registry owners remain invalid
-  inputs. C2 stays blocked and no O2/C2 API is assumed. D1/T1 boundary and full
-  regression gates are required after any accepted aggregate or lifetime change.
+  The proposal adds `token-batch-release!`. A batch owns two rank-2 I1 exact-i64
+  CPU planes and one separate rank-2 one-byte bool CPU plane, all `[N,T]`. Its three
+  accessors return stable state-backed identities whose K1 views may be borrowed
+  only synchronously by reviewed same-aggregate consumers. One dataset permits one
+  live batch. Release invalidates its current generation before destroying all
+  storage, without retaining a per-batch native/Eshkol registry tombstone. Exact
+  semantic batch payload is `17*N*T` bytes. The proposed maximum semantic working
+  payload is one bounded manifest, one bounded shard, that batch, and exactly
+  `8*min(B,M)` shuffle bytes; no additional working-byte config field exists.
+
+  Open deep-copies normalized options and completely validates the manifest and
+  every shard before publication. On-demand exact-range loads revalidate shard
+  metadata, digest, and tokens. Eshkol owns D1 parsing, SHA-256, row mapping, shuffle,
+  packing, masks, cursor semantics, and E1 errors; the native boundary transports
+  bounded bytes and releasable views only. The detached proposed cursor binds the
+  manifest digest, tokenizer/config identity, normalized algorithm/options, logical
+  row count, and next ordinal in `0..M`; `M` means stable EOS after the live batch is
+  released. Seeking the start cursor replays the same finite order. D2 emits only
+  the bool loss mask; causal attention remains A2/model scope.
+- **Packaging / dependencies:** the proposed once-localized aggregate source-composes
+  merged T2 and I2 trusted closures. It would grow from 47 to 58 globals and 41 to
+  52 package exports: ten accepted D2 wrappers plus the proposed release wrapper.
+  No such aggregate is built while the decision is pending. Already-localized
+  registry owners remain invalid inputs. C2 stays blocked and no O2/C2 API is
+  assumed. D1/T1/T2/I2/P1L and full regression gates are required after acceptance.
 - **Reference:** [issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42);
-  [initial integration proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487210942);
-  [adversarial correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487459098).
+  [initial proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487210942);
+  [adversarial correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487459098);
+  [current-main proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557201280).
 
 ## Schema
 

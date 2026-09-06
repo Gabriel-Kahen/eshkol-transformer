@@ -42,6 +42,12 @@ Run the focused T2 deterministic BPE and streaming gate with:
 /usr/bin/bash -c 'make test-t2'
 ```
 
+D2's memory-bounded loader contract remains proposed on integration issue #1. Its
+carrier-neutral semantics, stdlib-only frozen Q0 fixture, private native candidate,
+and resource gates run with `make test-d2`; no D2 public wrapper or successor
+aggregate is frozen while that decision is pending. See
+[docs/D2_SHARD_LOADER.md](docs/D2_SHARD_LOADER.md).
+
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
 
 ```bash
@@ -173,5 +179,6 @@ See:
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
 - [Deterministic BPE tokenizer and streaming contract](docs/BPE_TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
+- [D2 memory-bounded shard-loader candidate](docs/D2_SHARD_LOADER.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)
