@@ -48,23 +48,33 @@
 (define c1-max-provider-id-bytes 127)
 (define c1-u64-max 18446744073709551615)
 
-(define (c1-fail category operation message)
-  (et-e1b-private-raise category operation message '() #f))
+(define (c1-fail-raw category operation message)
+  (let ((result
+          (et-e1b-private-raise category operation message '() #f)))
+    result))
+(define-syntax c1-fail
+  (syntax-rules () ((_ category operation message)
+    (let ((result (c1-fail-raw category operation message))) result))))
 
-(define (c1-native-fail operation message status)
+(define (c1-native-fail-raw operation message status)
   (let* ((native-errno (modulo status 65536))
          (native-stage (modulo (quotient status 65536) 256))
          (published? (not (= (bitwise-and status 16777216) 0))))
-    (et-e1b-private-raise
-     'io operation message
-     (list (list 'source-domain 'c1-native-io)
-           (list 'source-code status)
-           (list 'source-message message)
-           (list 'native-errno native-errno)
-           (list 'native-stage native-stage)
-           (list 'published? published?)
-           (list 'durability (if published? 'unknown 'not-published)))
-     #f)))
+    (let ((result
+            (et-e1b-private-raise
+             'io operation message
+             (list (list 'source-domain 'c1-native-io)
+                   (list 'source-code status)
+                   (list 'source-message message)
+                   (list 'native-errno native-errno)
+                   (list 'native-stage native-stage)
+                   (list 'published? published?)
+                   (list 'durability (if published? 'unknown 'not-published)))
+             #f)))
+      result)))
+(define-syntax c1-native-fail
+  (syntax-rules () ((_ operation message status)
+    (let ((result (c1-native-fail-raw operation message status))) result))))
 
 (define (c1-exact-nonnegative? value)
   (and (integer? value) (exact? value) (real? value) (>= value 0)))
@@ -160,9 +170,12 @@
         (loop (- index 1)
               (+ (* result 256) (bytevector-u8-ref bytes (+ offset index)))))))
 
-(define (c1-read-u16 bytes offset) (c1-read-le bytes offset 2))
-(define (c1-read-u32 bytes offset) (c1-read-le bytes offset 4))
-(define (c1-read-u64 bytes offset) (c1-read-le bytes offset 8))
+(define (c1-read-u16 bytes offset)
+  (let ((result (c1-read-le bytes offset 2))) result))
+(define (c1-read-u32 bytes offset)
+  (let ((result (c1-read-le bytes offset 4))) result))
+(define (c1-read-u64 bytes offset)
+  (let ((result (c1-read-le bytes offset 8))) result))
 
 (define (c1-min left right) (if (< left right) left right))
 
@@ -1135,8 +1148,10 @@
               (c1-native-fail operation "checked checkpoint read failed" status)))))))
 
 (define (c1-checkpoint-inspect-internal path policy)
-  (c1-checkpoint-inspect-bytes-internal
-   (c1-read-file path policy 'checkpoint-inspect) policy))
+  (let ((result
+          (c1-checkpoint-inspect-bytes-internal
+           (c1-read-file path policy 'checkpoint-inspect) policy)))
+    result))
 
 (define (c1-checkpoint-save-state-internal! state path policy codec overwrite?)
   (let ((operation 'c1-checkpoint-save-state-internal!))
@@ -1151,9 +1166,11 @@
           (c1-native-fail operation "atomic checkpoint publication failed" status)))))
 
 (define (c1-checkpoint-load-state-internal path policy codec provider-name)
-  (c1-checkpoint-decode-state-internal
-   (c1-read-file path policy 'c1-checkpoint-load-state-internal)
-   policy codec provider-name))
+  (let ((result
+          (c1-checkpoint-decode-state-internal
+            (c1-read-file path policy 'c1-checkpoint-load-state-internal)
+            policy codec provider-name)))
+    result))
 
 (define (c1-checkpoint-load-module-internal! module path policy codec provider-name)
   (let ((state (c1-checkpoint-load-state-internal

@@ -335,13 +335,12 @@ owner identity—including distinct zero-element owners—in carrier-native exec
 evidence before use; P1's inert fixture does not prove another provider's owner
 model.
 
-I2 has confirmed that its implementation can canonicalize each prevalidated wrapper
-to the live owning `et_f32_tensor` resource. It will not compare Eshkol wrapper
+I2 canonicalizes each prevalidated wrapper to the live owning `et_f32_tensor`
+resource. It does not compare Eshkol wrapper
 identity or raw data pointers: two distinct zero-element tensor owners remain
-disjoint even when both data pointers are null. That compatibility disposition is a
-design commitment, not P1L acceptance or executable I2 integration evidence. I2 has
-not rebased or changed its runtime and remains blocked until P1L is independently
-approved and merged. See the [frozen P1L equivalence decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502247288)
+disjoint even when both data pointers are null. Native and source-composed I2 tests
+exercise reflexivity, symmetry, distinct wrappers over one owner, distinct nonempty
+owners, and distinct zero-element owners. See the [frozen P1L equivalence decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502247288)
 and [I2 confirmation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5502269486).
 
 Release consumes one P1-owned carrier, returns the exact same
@@ -449,15 +448,22 @@ reach the private authority.
 
 Validation precedes mutation for every category.
 
-## Measured capability limit
+## Measured capability limit and I2 integration
 
-Merged R0 evidence does not verify canonical Eshkol f32/i64/bool storage, device
-identity, contiguity, tensor cloning, tensor equality, gradient slots, or in-place
-tensor copying. Production P1 therefore registers no provider. The default internal
-construction path has no tensor provider, and every tensor-dependent public state
-operation fails explicitly with a same-registry structured `unsupported` error.
+The standalone P1 artifact registers no tensor provider. Its default internal
+construction path therefore fails every tensor-dependent public state operation
+explicitly with a same-registry structured `unsupported` error.
 Malformed public receivers fail with structured `invalid-argument`; both paths use
 the unchanged A0 accessors and taxonomy above.
+
+The source-composed I2 successor aggregate registers the production provider 2.0
+implementation `i2-dense-cpu-f32-v1`. It uses exact-once owned-carrier release,
+explicit state-dictionary release, and read-only state-backed tensor handles; it does
+not retrofit provider 1.x or use process-lifetime tensor retention. Its focused gate
+exercises P1 snapshot/load, tied aliases, active-borrow release rejection, C1
+encode/decode adoption and rollback, exact f32 preservation, gradient reset, and
+native owner-count restoration. See
+[I2_F32_TENSOR.md](I2_F32_TENSOR.md).
 
 Structural tests explicitly add the separate `tests/p1/providers` include root and
 compose production modules with an inert `fixture-v1` carrier from the qualified
@@ -469,14 +475,12 @@ cannot be selected through `transformer.module`. The fixture payload contains on
 exact inert atoms. It is not f32/i64/bool tensor storage, a device or backend, a
 production constructor, capability-discovery evidence, or a fallback.
 
-The injected later-entry failure proves the P1 validation/staging/commit control
-flow and logical ownership semantics only, not physical runtime tensor storage,
-copying, lifetime, mutation, or atomicity. Real tensor-backed module construction,
-snapshot ownership, storage mutation, and state operations remain explicitly
-unsupported until a reviewed provider supplies and proves the required metadata,
-clone, exact-value comparison, whole-batch preflight, and infallible commit contract.
-P1 must be retested against merged I1/K1 and later f32 tensor support before any
-numerical or module-capability claim. There is no scalar, CPU, dtype, Python,
+The inert fixture's injected later-entry failure proves only P1 control flow and
+logical ownership semantics. Physical f32 storage, copying, lifetime, mutation, and
+atomicity evidence belongs to the separately built I2 aggregate and does not expand
+the standalone P1 artifact. Neither artifact thereby claims a neural operation,
+general reverse autodiff, another dtype/device, or optimizer. There is no scalar,
+CPU, dtype, Python,
 finite-difference, device, or numerical fallback.
 
 The native registry has no verified concurrent-mutation behavior. P1 therefore

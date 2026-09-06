@@ -369,6 +369,15 @@ mutable cache receiver is supplied by a later accepted contract. Training mode m
 consume explicit RNG state; it must not use hidden global randomness. P1 owns module
 representation; N2/A2/L2/M3 own numerical implementation and gradient evidence.
 
+I2's carrier-local accumulated-gradient contract uses absent/present slots. Absent
+is count zero, normalization-weight exact `+0`, and exact-positive-zero backing;
+present retains an unnormalized weighted numerator, positive finite normalization
+weight, and positive contribution count. A successful optimizer step reads but does
+not clear that state. Only an explicit zero-gradient operation performs the atomic,
+idempotent transition to absent. The I2 successor aggregate binds this storage to
+P1L's release-capable provider interface without adding an A0 public name or arity.
+O2 still owns optimizer semantics and TR3 owns accumulation scheduling.
+
 Parameter paths are immutable lists of UTF-8 segments containing 1..65536 encoded
 bytes each, inclusive; the bound is per segment and no separator escaping exists.
 Registration and caller-path validation use this exact domain before provider work
