@@ -1,7 +1,25 @@
 # O2 adversarial implementation matrix
 
-This matrix is design input for the post-I2 implementation. It is not runtime
-evidence and must not be marked complete before I2 merges.
+I2 merged as `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. This matrix now
+drives the O2 runtime tests; unchecked cases remain acceptance requirements and
+must not be inferred from adjacent I2 or packaging evidence.
+
+Current focused mappings:
+
+- `test_optimizer_native.c` exercises builder scalar/count/group failures,
+  duplicate and missing protected identities, absent/present-zero/nonfinite and
+  weighted gradient metadata, exact norm boundary, successful-only schedule and
+  update counters, explicit-only gradient clearing, O2/I2 allocation rollback,
+  load continuation, cross-owner handles, synchronous borrows, snapshot clone
+  counts/isolation, busy release, release-tail defects, exact-dead idempotence,
+  and native use-after-release.
+- `config_negatives_runtime.esk` exercises the compiled logical config/group/path
+  validator, tied canonical-path rejection, pending-accumulation snapshot rule,
+  malformed caller-mutated logical state, dead-state use, forged release, and
+  exact-dead public release.
+- `test_native_optimizer.c` owns the small positive native smoke. Packaging tests
+  own cross-aggregate, manifest, source-closure, hostile-path, and public-authority
+  negatives. The frozen Python fixture remains a development oracle only.
 
 ## Construction and parameter groups
 
