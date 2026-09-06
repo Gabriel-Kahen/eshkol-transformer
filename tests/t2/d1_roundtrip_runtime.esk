@@ -1,10 +1,18 @@
-(require transformer.data)
 (require transformer.persistence)
 (require transformer.tokenizer)
 (require transformer.error_public)
 
 (extern void t2-test-token-corpus-read ptr ptr ptr ptr ptr ptr
         :real et_e1b_public_t2_test_token_corpus_read_v1)
+(extern void d1-test-token-corpus-write ptr ptr ptr ptr ptr ptr
+        :real et_e1b_public_d1_token_corpus_write_v1)
+
+(define (d1-test-token-corpus-write! directory fingerprint vocab limit tokens)
+  (let ((output (vector #f)))
+    (d1-test-token-corpus-write
+     (vector directory) (vector fingerprint) (vector vocab) (vector limit)
+     (vector tokens) output)
+    (vector-ref output 0)))
 
 (define (test-read tokenizer directory manifest-limit shard-limit token-limit)
   (let ((output (vector #f)))
@@ -55,8 +63,8 @@
 (define alternate-bpe (tokenizer-load alternate-bpe-path policy))
 (define ids '(260 259 32 257 100 258 261))
 
-(token-corpus-write! corpus-path (tokenizer-fingerprint bpe)
-                     (tokenizer-vocab-size bpe) 3 ids)
+(d1-test-token-corpus-write! corpus-path (tokenizer-fingerprint bpe)
+                             (tokenizer-vocab-size bpe) 3 ids)
 (define staging (test-read bpe corpus-path 1048576 1048576 65536))
 
 (define passed 0)
