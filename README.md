@@ -91,6 +91,16 @@ retains the existing E1/X1/P1/D1/C1/T1 public surface and localizes every I2 sea
 Run the focused gate with `make test-i2`; see
 [docs/I2_F32_TENSOR.md](docs/I2_F32_TENSOR.md).
 
+N2's ABI 1.0 deterministic serial CPU-f32 primitive provider is
+`build/n2/libeshkol_transformer_n2.a`; its only public symbol is the explicit
+`et_n2_kernel_provider_v1` accessor declared in
+`include/eshkol_transformer/n2_primitives_abi.h`. It implements only the exact
+embedding, linear, LayerNorm, GELU, ReLU, dropout, and residual rows documented in
+[docs/N2_PRIMITIVES.md](docs/N2_PRIMITIVES.md). The focused `make test-n2` gate
+exercises those kernels through accepted I2 f32 and I1 exact-i64 borrows. N2 adds
+no carrier, canonical K1 resolver, compiler-autodiff claim, accelerator, mixed
+precision, or fallback.
+
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
 `include/eshkol_transformer/indexed_cross_entropy.h`. It exposes only explicit K1
