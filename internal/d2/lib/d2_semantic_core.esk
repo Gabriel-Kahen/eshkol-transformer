@@ -310,13 +310,11 @@
 ;;; physical batch, and one u64 ordinal per admitted row in the current window.
 (define (d2-core-working-payload-bytes
          maximum-manifest-bytes maximum-shard-bytes batch-size sequence-length
-         maximum-batch-bytes shuffle-window-rows total-rows
-         maximum-working-bytes)
+         maximum-batch-bytes shuffle-window-rows total-rows)
   (if (or (not (d2-core-positive-i64? maximum-manifest-bytes))
           (not (d2-core-positive-i64? maximum-shard-bytes))
           (not (d2-core-positive-i64? shuffle-window-rows))
-          (not (d2-core-nonnegative-i64? total-rows))
-          (not (d2-core-positive-i64? maximum-working-bytes)))
+          (not (d2-core-nonnegative-i64? total-rows)))
       (d2-core-fail "D2 working payload limits are malformed"))
   (let* ((batch (d2-core-batch-payload-bytes
                  batch-size sequence-length maximum-batch-bytes))
@@ -328,8 +326,6 @@
                      maximum-manifest-bytes maximum-shard-bytes))
            (payload (d2-core-checked-payload-add payload batch))
            (payload (d2-core-checked-payload-add payload window-bytes)))
-      (if (> payload maximum-working-bytes)
-          (d2-core-fail "D2 working payload exceeds configured byte limit"))
       payload)))
 
 ;;; Logical dataset state/cursor layout (not a wire format):

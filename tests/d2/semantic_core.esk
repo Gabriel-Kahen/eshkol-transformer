@@ -159,19 +159,18 @@
                    (d2-core-batch-payload-bytes
                     d2-core-i64-max 2 d2-core-i64-max))))
 (check "working payload exact"
-       (= (d2-core-working-payload-bytes 200 1000 2 4 136 5 7 1376)
+       (= (d2-core-working-payload-bytes 200 1000 2 4 136 5 7)
           1376))
-(check "working payload one under rejects"
-       (rejects? (lambda ()
-                   (d2-core-working-payload-bytes
-                    200 1000 2 4 136 5 7 1375))))
+(check "working payload component one over is exact"
+       (= (d2-core-working-payload-bytes 201 1000 2 4 136 5 7)
+          1377))
 (check "empty corpus has no shuffle ordinal payload"
-       (= (d2-core-working-payload-bytes 200 1000 2 4 136 50 0 1336)
+       (= (d2-core-working-payload-bytes 200 1000 2 4 136 50 0)
           1336))
 (check "working payload addition overflow"
        (rejects? (lambda ()
                    (d2-core-working-payload-bytes
-                    d2-core-i64-max 1 1 1 17 1 1 d2-core-i64-max))))
+                    d2-core-i64-max 1 1 1 17 1 1))))
 
 (define digest (make-bytevector 32 17))
 (define (new-state digest-value)
