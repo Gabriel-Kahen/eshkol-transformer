@@ -204,7 +204,7 @@
               'invalid-argument 'optimizer-load-state!
   (lambda ()
     (o2-public-optimizer-load-state!
-      optimizer (vector 'transformer.optimizer-state:v1))))
+      optimizer (vector "transformer.optimizer-state:v1"))))
 (check "state release succeeds" (o2-public-optimizer-state-release! state))
 (check "exact dead release is idempotent"
        (o2-public-optimizer-state-release! state))
