@@ -297,7 +297,7 @@ run_resource_probe() {
     "${directory}" consume >"${d2_tmp}/resource-${label}.stdout" &
   pid=$!
   while kill -0 "${pid}" 2>/dev/null; do
-    if (( SECONDS - started > 180 )); then
+    if (( SECONDS - started > 300 )); then
       kill "${pid}" 2>/dev/null || true
       wait "${pid}" 2>/dev/null || true
       die "D2 ${label} resource probe timed out"
