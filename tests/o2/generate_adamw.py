@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import struct
 from pathlib import Path
@@ -161,6 +162,29 @@ def _single_parameter_case(
             name = f"single.output.step{index}.{suffix}"
             tensors.append(_tensor_record(name, "expected", value))
             outputs.append(name)
+    retained_gradient = parameter.grad.detach().clone()
+    if not torch.equal(retained_gradient, gradients[-1]):
+        raise RuntimeError("AdamW step unexpectedly changed the installed gradient")
+    tensors.append(
+        _tensor_record(
+            "single.output.step2.retained_gradient", "expected", retained_gradient
+        )
+    )
+    outputs.append("single.output.step2.retained_gradient")
+    optimizer.zero_grad(set_to_none=False)
+    explicit_zero_gradient = parameter.grad.detach().clone()
+    tensors.extend(
+        [
+            _tensor_record(
+                "zeroing.input.retained_gradient", "input", retained_gradient
+            ),
+            _tensor_record(
+                "zeroing.output.explicit_zero_gradient",
+                "expected",
+                explicit_zero_gradient,
+            ),
+        ]
+    )
     cases.append(
         _case(
             "adamw_bias_correction_decay_two_steps",
@@ -172,6 +196,159 @@ def _single_parameter_case(
                 "single.input.update_indices",
             ],
             outputs,
+        )
+    )
+    cases.append(
+        _case(
+            "gradient_explicit_zero_after_step",
+            "optimizer.gradient.zero",
+            ["zeroing.input.retained_gradient"],
+            ["zeroing.output.explicit_zero_gradient"],
+            exact=True,
+        )
+    )
+
+
+def _later_bias_correction_case(
+    tensors: list[dict[str, object]], cases: list[dict[str, object]]
+) -> None:
+    initial = torch.tensor([1.25, -0.75, 0.125, -2.5], dtype=torch.float32)
+    gradients = torch.tensor(
+        [
+            [0.5, -0.25, 0.0, 1.0],
+            [-0.125, 0.75, -0.5, 0.25],
+            [0.25, 0.125, 0.75, -1.0],
+            [0.0, -0.5, 0.25, 0.5],
+            [-0.75, 0.25, -0.125, 0.0],
+            [1.0, -1.0, 0.5, -0.25],
+            [0.375, 0.625, -0.875, 0.125],
+        ],
+        dtype=torch.float32,
+    )
+    options = (
+        _f32("3c23d70a"),
+        _f32("3f666666"),
+        _f32("3f7fbe77"),
+        _f32("322bcc77"),
+        _f32("3dcccccd"),
+    )
+    parameter = initial.clone().requires_grad_(True)
+    optimizer = _adamw(
+        [
+            {
+                "params": [parameter],
+                "lr": options[0],
+                "betas": options[1:3],
+                "eps": options[3],
+                "weight_decay": options[4],
+            }
+        ]
+    )
+    for gradient in gradients:
+        parameter.grad = gradient.clone()
+        optimizer.step()
+    state = optimizer.state[parameter]
+    tensors.extend(
+        [
+            _tensor_record("later.input.gradients", "input", gradients),
+            _tensor_record(
+                "later.input.group_options",
+                "input",
+                torch.tensor(options, dtype=torch.float32),
+            ),
+            _tensor_record("later.input.parameter", "input", initial),
+            _tensor_record(
+                "later.input.update_indices",
+                "input",
+                torch.arange(1, 8, dtype=torch.int64),
+            ),
+            _tensor_record("later.output.step7.parameter", "expected", parameter),
+            _tensor_record("later.output.step7.exp_avg", "expected", state["exp_avg"]),
+            _tensor_record(
+                "later.output.step7.exp_avg_sq", "expected", state["exp_avg_sq"]
+            ),
+        ]
+    )
+    cases.append(
+        _case(
+            "adamw_bias_correction_later_step",
+            "optimizer.adamw.step",
+            [
+                "later.input.gradients",
+                "later.input.group_options",
+                "later.input.parameter",
+                "later.input.update_indices",
+            ],
+            [
+                "later.output.step7.exp_avg",
+                "later.output.step7.exp_avg_sq",
+                "later.output.step7.parameter",
+            ],
+        )
+    )
+
+
+def _present_zero_gradient_case(
+    tensors: list[dict[str, object]], cases: list[dict[str, object]]
+) -> None:
+    initial = torch.tensor([2.0, -3.0, 0.0, 0.5], dtype=torch.float32)
+    gradient = torch.zeros_like(initial)
+    options = (
+        _f32("3ca3d70a"),
+        _f32("3f666666"),
+        _f32("3f7fbe77"),
+        _f32("322bcc77"),
+        _f32("3e4ccccd"),
+    )
+    parameter = initial.clone().requires_grad_(True)
+    optimizer = _adamw(
+        [
+            {
+                "params": [parameter],
+                "lr": options[0],
+                "betas": options[1:3],
+                "eps": options[3],
+                "weight_decay": options[4],
+            }
+        ]
+    )
+    parameter.grad = gradient.clone()
+    optimizer.step()
+    state = optimizer.state[parameter]
+    tensors.extend(
+        [
+            _tensor_record("zero.input.gradient", "input", gradient),
+            _tensor_record(
+                "zero.input.gradient_present",
+                "input",
+                torch.tensor([1], dtype=torch.int64),
+            ),
+            _tensor_record(
+                "zero.input.group_options",
+                "input",
+                torch.tensor(options, dtype=torch.float32),
+            ),
+            _tensor_record("zero.input.parameter", "input", initial),
+            _tensor_record("zero.output.exp_avg", "expected", state["exp_avg"]),
+            _tensor_record("zero.output.exp_avg_sq", "expected", state["exp_avg_sq"]),
+            _tensor_record("zero.output.parameter", "expected", parameter),
+        ]
+    )
+    cases.append(
+        _case(
+            "adamw_present_zero_gradient_decay",
+            "optimizer.adamw.step",
+            [
+                "zero.input.gradient",
+                "zero.input.gradient_present",
+                "zero.input.group_options",
+                "zero.input.parameter",
+            ],
+            [
+                "zero.output.exp_avg",
+                "zero.output.exp_avg_sq",
+                "zero.output.parameter",
+            ],
         )
     )
 
@@ -304,6 +481,57 @@ def _clipping_cases(
             )
         )
 
+    first = torch.tensor([3.0, 4.0], dtype=torch.float32)
+    second = torch.tensor([0.0, 12.0, -0.0], dtype=torch.float32)
+    maximum = torch.tensor(_f32("40d00000"), dtype=torch.float32)
+    norm = torch.linalg.vector_norm(torch.cat((first, second)), ord=2)
+    scale = maximum / norm
+    tensors.extend(
+        [
+            _tensor_record(
+                "clip_multi.input.alias_to_unique",
+                "input",
+                torch.tensor([0, 0, 1], dtype=torch.int64),
+            ),
+            _tensor_record("clip_multi.input.first_gradient", "input", first),
+            _tensor_record("clip_multi.input.maximum", "input", maximum),
+            _tensor_record(
+                "clip_multi.input.parameter_order",
+                "input",
+                torch.tensor([0, 1], dtype=torch.int64),
+            ),
+            _tensor_record("clip_multi.input.second_gradient", "input", second),
+            _tensor_record(
+                "clip_multi.output.first_gradient", "expected", first * scale
+            ),
+            _tensor_record(
+                "clip_multi.output.norm", "expected", norm.to(torch.float32)
+            ),
+            _tensor_record(
+                "clip_multi.output.second_gradient", "expected", second * scale
+            ),
+        ]
+    )
+    cases.append(
+        _case(
+            "global_l2_clip_multiple_tensors",
+            "optimizer.gradient.clip",
+            [
+                "clip_multi.input.alias_to_unique",
+                "clip_multi.input.first_gradient",
+                "clip_multi.input.maximum",
+                "clip_multi.input.parameter_order",
+                "clip_multi.input.second_gradient",
+            ],
+            [
+                "clip_multi.output.first_gradient",
+                "clip_multi.output.norm",
+                "clip_multi.output.second_gradient",
+            ],
+            kind="boundary",
+        )
+    )
+
 
 def _accumulation_case(
     tensors: list[dict[str, object]], cases: list[dict[str, object]]
@@ -343,7 +571,20 @@ def _accumulation_case(
     expected = combined.grad.detach().clone()
     accumulated = sum(numerator_gradients) / total_weight
     if not torch.equal(accumulated, expected):
-        raise RuntimeError("numerator-gradient accumulation differs from global backward")
+        raise RuntimeError(
+            "numerator-gradient accumulation differs from global backward"
+        )
+    microbatch_means = torch.stack(
+        [
+            gradient / weight
+            for gradient, weight in zip(numerator_gradients, weights, strict=True)
+        ]
+    )
+    naive_microbatch_mean = microbatch_means.mean(dim=0)
+    if torch.equal(naive_microbatch_mean, expected):
+        raise RuntimeError(
+            "unequal-weight anti-oracle accidentally matches global objective"
+        )
 
     learning_rate = _f32("3c23d70a")
     beta1 = _f32("3f666666")
@@ -381,9 +622,19 @@ def _accumulation_case(
     tensors.extend(
         [
             _tensor_record(
+                "accumulation.input.contribution_ordinals",
+                "input",
+                torch.tensor([0, 1], dtype=torch.int64),
+            ),
+            _tensor_record(
                 "accumulation.input.numerator_gradients",
                 "input",
                 torch.stack(numerator_gradients),
+            ),
+            _tensor_record(
+                "accumulation.input.naive_microbatch_mean_anti_oracle",
+                "input",
+                naive_microbatch_mean,
             ),
             _tensor_record(
                 "accumulation.input.weights", "input", torch.stack(weights)
@@ -397,8 +648,12 @@ def _accumulation_case(
                 ),
             ),
             _tensor_record("accumulation.input.parameter", "input", initial),
-            _tensor_record("accumulation.output.effective_gradient", "expected", expected),
-            _tensor_record("accumulation.output.total_weight", "expected", total_weight),
+            _tensor_record(
+                "accumulation.output.effective_gradient", "expected", expected
+            ),
+            _tensor_record(
+                "accumulation.output.total_weight", "expected", total_weight
+            ),
             _tensor_record(
                 "accumulation.output.next_parameter",
                 "expected",
@@ -414,6 +669,11 @@ def _accumulation_case(
                 "expected",
                 accumulated_state["exp_avg_sq"],
             ),
+            _tensor_record(
+                "accumulation.output.contribution_count",
+                "expected",
+                torch.tensor([2], dtype=torch.int64),
+            ),
         ]
     )
     cases.append(
@@ -421,7 +681,9 @@ def _accumulation_case(
             "weighted_microbatch_accumulation",
             "optimizer.gradient.accumulate",
             [
+                "accumulation.input.contribution_ordinals",
                 "accumulation.input.group_options",
+                "accumulation.input.naive_microbatch_mean_anti_oracle",
                 "accumulation.input.numerator_gradients",
                 "accumulation.input.parameter",
                 "accumulation.input.weights",
@@ -436,6 +698,16 @@ def _accumulation_case(
             kind="repeated_input",
         )
     )
+    cases.append(
+        _case(
+            "weighted_microbatch_contribution_count",
+            "optimizer.gradient.accumulate.count",
+            ["accumulation.input.contribution_ordinals"],
+            ["accumulation.output.contribution_count"],
+            kind="repeated_input",
+            exact=True,
+        )
+    )
 
 
 def _linear_factor(n: int, warmup: int, total: int, minimum: float) -> float:
@@ -444,6 +716,16 @@ def _linear_factor(n: int, warmup: int, total: int, minimum: float) -> float:
     if n <= total:
         return 1.0 - (1.0 - minimum) * (n - warmup) / (total - warmup)
     return minimum
+
+
+def _scheduled_learning_rate(
+    base: float, n: int, warmup: int, total: int, minimum: float
+) -> float:
+    factor = torch.tensor(
+        _linear_factor(n, warmup=warmup, total=total, minimum=minimum),
+        dtype=torch.float32,
+    )
+    return float((torch.tensor(base, dtype=torch.float32) * factor).item())
 
 
 def _schedule_cases(
@@ -463,8 +745,46 @@ def _schedule_cases(
         dtype=torch.float32,
     )
     effective_lr = torch.tensor(base_learning_rate, dtype=torch.float32) * linear
+    attempted_outcomes = torch.tensor([1, 0, 0, 1, 1], dtype=torch.int64)
+    attempted_update_indices = torch.tensor([1, 2, 2, 2, 3], dtype=torch.int64)
+    attempted_factors = torch.tensor(
+        [
+            _linear_factor(
+                int(update), warmup=warmup, total=total, minimum=minimum
+            )
+            for update in attempted_update_indices
+        ],
+        dtype=torch.float32,
+    )
+    zero_warmup = 0
+    zero_total = 4
+    zero_minimum = _f32("3e800000")
+    zero_base_learning_rate = _f32("3ca3d70a")
+    zero_linear = torch.tensor(
+        [
+            _linear_factor(
+                n,
+                warmup=zero_warmup,
+                total=zero_total,
+                minimum=zero_minimum,
+            )
+            for n in range(1, 7)
+        ],
+        dtype=torch.float32,
+    )
+    zero_effective_lr = (
+        torch.tensor(zero_base_learning_rate, dtype=torch.float32) * zero_linear
+    )
     tensors.extend(
         [
+            _tensor_record(
+                "schedule.input.attempt_outcomes", "input", attempted_outcomes
+            ),
+            _tensor_record(
+                "schedule.input.attempted_update_indices",
+                "input",
+                attempted_update_indices,
+            ),
             _tensor_record("schedule.input.updates", "input", updates),
             _tensor_record(
                 "schedule.input.linear_definition",
@@ -477,8 +797,40 @@ def _schedule_cases(
                 torch.tensor([minimum, base_learning_rate], dtype=torch.float32),
             ),
             _tensor_record("schedule.output.constant_factors", "expected", constant),
+            _tensor_record(
+                "schedule.output.attempted_factors",
+                "expected",
+                attempted_factors,
+            ),
             _tensor_record("schedule.output.linear_factors", "expected", linear),
-            _tensor_record("schedule.output.linear_learning_rates", "expected", effective_lr),
+            _tensor_record(
+                "schedule.output.linear_learning_rates", "expected", effective_lr
+            ),
+            _tensor_record(
+                "schedule.zero_warmup.input.definition",
+                "input",
+                torch.tensor([zero_warmup, zero_total], dtype=torch.int64),
+            ),
+            _tensor_record(
+                "schedule.zero_warmup.input.scalars",
+                "input",
+                torch.tensor(
+                    [zero_minimum, zero_base_learning_rate], dtype=torch.float32
+                ),
+            ),
+            _tensor_record(
+                "schedule.zero_warmup.input.updates",
+                "input",
+                torch.arange(1, 7, dtype=torch.int64),
+            ),
+            _tensor_record(
+                "schedule.zero_warmup.output.factors", "expected", zero_linear
+            ),
+            _tensor_record(
+                "schedule.zero_warmup.output.learning_rates",
+                "expected",
+                zero_effective_lr,
+            ),
         ]
     )
     cases.extend(
@@ -488,6 +840,19 @@ def _schedule_cases(
                 "optimizer.schedule.constant",
                 ["schedule.input.updates"],
                 ["schedule.output.constant_factors"],
+                exact=True,
+            ),
+            _case(
+                "schedule_failed_attempt_does_not_advance",
+                "optimizer.schedule.linear",
+                [
+                    "schedule.input.attempt_outcomes",
+                    "schedule.input.attempted_update_indices",
+                    "schedule.input.linear_definition",
+                    "schedule.input.linear_scalars",
+                ],
+                ["schedule.output.attempted_factors"],
+                kind="boundary",
                 exact=True,
             ),
             _case(
@@ -505,7 +870,215 @@ def _schedule_cases(
                 kind="boundary",
                 exact=True,
             ),
+            _case(
+                "schedule_linear_zero_warmup",
+                "optimizer.schedule.linear",
+                [
+                    "schedule.zero_warmup.input.definition",
+                    "schedule.zero_warmup.input.scalars",
+                    "schedule.zero_warmup.input.updates",
+                ],
+                [
+                    "schedule.zero_warmup.output.factors",
+                    "schedule.zero_warmup.output.learning_rates",
+                ],
+                kind="boundary",
+                exact=True,
+            ),
         ]
+    )
+
+
+def _state_continuation_case(
+    tensors: list[dict[str, object]], cases: list[dict[str, object]]
+) -> None:
+    initial = torch.tensor([0.75, -1.5, 2.25], dtype=torch.float32)
+    gradients = torch.tensor(
+        [
+            [0.25, -0.5, 0.75],
+            [-0.125, 0.375, -0.625],
+            [0.5, 0.25, -0.25],
+            [-0.75, 0.125, 0.5],
+        ],
+        dtype=torch.float32,
+    )
+    base_learning_rate = _f32("3ca3d70a")
+    beta1 = _f32("3f666666")
+    beta2 = _f32("3f7fbe77")
+    epsilon = _f32("322bcc77")
+    weight_decay = _f32("3dcccccd")
+    warmup = 2
+    total = 6
+    minimum = _f32("3e4ccccd")
+
+    source_parameter = initial.clone().requires_grad_(True)
+    source_optimizer = _adamw(
+        [
+            {
+                "params": [source_parameter],
+                "lr": base_learning_rate,
+                "betas": (beta1, beta2),
+                "eps": epsilon,
+                "weight_decay": weight_decay,
+            }
+        ]
+    )
+    for update, gradient in enumerate(gradients[:3], start=1):
+        source_optimizer.param_groups[0]["lr"] = _scheduled_learning_rate(
+            base_learning_rate,
+            update,
+            warmup=warmup,
+            total=total,
+            minimum=minimum,
+        )
+        source_parameter.grad = gradient.clone()
+        source_optimizer.step()
+
+    snapshot_parameter = source_parameter.detach().clone()
+    source_state = source_optimizer.state[source_parameter]
+    snapshot_exp_avg = source_state["exp_avg"].detach().clone()
+    snapshot_exp_avg_sq = source_state["exp_avg_sq"].detach().clone()
+    snapshot = copy.deepcopy(source_optimizer.state_dict())
+
+    restored_parameter = snapshot_parameter.clone().requires_grad_(True)
+    restored_optimizer = _adamw(
+        [
+            {
+                "params": [restored_parameter],
+                "lr": base_learning_rate,
+                "betas": (beta1, beta2),
+                "eps": epsilon,
+                "weight_decay": weight_decay,
+            }
+        ]
+    )
+    restored_optimizer.load_state_dict(snapshot)
+    next_effective_lr = _scheduled_learning_rate(
+        base_learning_rate, 4, warmup=warmup, total=total, minimum=minimum
+    )
+    source_optimizer.param_groups[0]["lr"] = next_effective_lr
+    restored_optimizer.param_groups[0]["lr"] = next_effective_lr
+    source_parameter.grad = gradients[3].clone()
+    restored_parameter.grad = gradients[3].clone()
+    source_optimizer.step()
+    restored_optimizer.step()
+
+    source_state = source_optimizer.state[source_parameter]
+    restored_state = restored_optimizer.state[restored_parameter]
+    for left, right in (
+        (source_parameter, restored_parameter),
+        (source_state["exp_avg"], restored_state["exp_avg"]),
+        (source_state["exp_avg_sq"], restored_state["exp_avg_sq"]),
+    ):
+        if not torch.equal(left, right):
+            raise RuntimeError("loaded optimizer state does not continue identically")
+
+    tensors.extend(
+        [
+            _tensor_record(
+                "continuation.input.base_group_options",
+                "input",
+                torch.tensor(
+                    [base_learning_rate, beta1, beta2, epsilon, weight_decay],
+                    dtype=torch.float32,
+                ),
+            ),
+            _tensor_record(
+                "continuation.input.commit_count",
+                "input",
+                torch.tensor([1], dtype=torch.int64),
+            ),
+            _tensor_record(
+                "continuation.input.completed_updates",
+                "input",
+                torch.tensor([3], dtype=torch.int64),
+            ),
+            _tensor_record("continuation.input.exp_avg", "input", snapshot_exp_avg),
+            _tensor_record(
+                "continuation.input.exp_avg_sq", "input", snapshot_exp_avg_sq
+            ),
+            _tensor_record(
+                "continuation.input.next_gradient", "input", gradients[3]
+            ),
+            _tensor_record(
+                "continuation.input.next_update_index",
+                "input",
+                torch.tensor([4], dtype=torch.int64),
+            ),
+            _tensor_record(
+                "continuation.input.parameter", "input", snapshot_parameter
+            ),
+            _tensor_record(
+                "continuation.input.schedule_definition",
+                "input",
+                torch.tensor([warmup, total], dtype=torch.int64),
+            ),
+            _tensor_record(
+                "continuation.input.schedule_minimum",
+                "input",
+                torch.tensor([minimum], dtype=torch.float32),
+            ),
+            _tensor_record(
+                "continuation.output.effective_learning_rate",
+                "expected",
+                torch.tensor([next_effective_lr], dtype=torch.float32),
+            ),
+            _tensor_record(
+                "continuation.output.source.exp_avg",
+                "expected",
+                source_state["exp_avg"],
+            ),
+            _tensor_record(
+                "continuation.output.source.exp_avg_sq",
+                "expected",
+                source_state["exp_avg_sq"],
+            ),
+            _tensor_record(
+                "continuation.output.source.parameter", "expected", source_parameter
+            ),
+            _tensor_record(
+                "continuation.output.restored.exp_avg",
+                "expected",
+                restored_state["exp_avg"],
+            ),
+            _tensor_record(
+                "continuation.output.restored.exp_avg_sq",
+                "expected",
+                restored_state["exp_avg_sq"],
+            ),
+            _tensor_record(
+                "continuation.output.restored.parameter",
+                "expected",
+                restored_parameter,
+            ),
+        ]
+    )
+    cases.append(
+        _case(
+            "optimizer_state_continuation_identical_next_update",
+            "optimizer.state.continue",
+            [
+                "continuation.input.base_group_options",
+                "continuation.input.commit_count",
+                "continuation.input.completed_updates",
+                "continuation.input.exp_avg",
+                "continuation.input.exp_avg_sq",
+                "continuation.input.next_gradient",
+                "continuation.input.next_update_index",
+                "continuation.input.parameter",
+                "continuation.input.schedule_definition",
+                "continuation.input.schedule_minimum",
+            ],
+            [
+                "continuation.output.effective_learning_rate",
+                "continuation.output.restored.exp_avg",
+                "continuation.output.restored.exp_avg_sq",
+                "continuation.output.restored.parameter",
+                "continuation.output.source.exp_avg",
+                "continuation.output.source.exp_avg_sq",
+                "continuation.output.source.parameter",
+            ],
+        )
     )
 
 
@@ -521,10 +1094,13 @@ def build_payload() -> dict[str, object]:
     tensors: list[dict[str, object]] = []
     cases: list[dict[str, object]] = []
     _single_parameter_case(tensors, cases)
+    _later_bias_correction_case(tensors, cases)
+    _present_zero_gradient_case(tensors, cases)
     _multiple_group_case(tensors, cases)
     _clipping_cases(tensors, cases)
     _accumulation_case(tensors, cases)
     _schedule_cases(tensors, cases)
+    _state_continuation_case(tensors, cases)
     tensors.sort(key=lambda tensor: str(tensor["name"]))
     cases.sort(key=lambda case: str(case["name"]))
 
