@@ -1458,3 +1458,95 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   the complete affected repository test/smoke/benchmark gates, new supported Ubuntu
   22.04 / LLVM-Clang 21.1.8 exact-head CI, and a separate bounded L2-R integration-
   delta review are required. PR #56 remains open and must not be merged here.
+
+## 2026-09-03 — N2 / issue #47
+
+- **Decision:** frozen for review with the three binding clarifications below after
+  I2 PR #53 exact approved head `c4522b2e5473ac46d5d45e889755076ffdb89cfa`
+  merged into main as `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. N2 is
+  `review`; no Wave-2 provider aggregate is claimed.
+- **Contract frozen:** one registry-free deterministic CPU-f32 provider archive,
+  `build/n2/libeshkol_transformer_n2.a`, contains only
+  `n2_primitives_provider.o` and exposes only
+  `et_n2_kernel_provider_v1` through
+  `include/eshkol_transformer/n2_primitives_abi.h`. It defines no canonical K1
+  symbol and no A0 Eshkol name. Whole-capability ownership is unique: a future
+  single registry-owning Wave-2 aggregate rejects duplicate capability names and
+  forwards unchanged K1 calls, tensor descriptors, and storage identities to one
+  accessor-selected owner.
+
+  The exact capabilities are distinct `kernel.embedding-forward` and
+  backward-only `kernel.embedding-backward`, plus `kernel.matmul`, `kernel.norm`,
+  `kernel.activation`, `kernel.dropout`, and `kernel.residual`. Every advertised
+  K1 row is min=max and every operation/row Cartesian combination must execute in
+  the focused gate; zero and absent rows remain unsupported. Exact ordered tensor
+  schemas, unnormalized analytic VJPs, input-alias rules, serial binary32 reduction
+  order, two-pass biased LayerNorm, exact-erf GELU, positive-zero ReLU kink policy,
+  failure-atomic dry preflight, and residual per-edge/I2 accumulation semantics are
+  fixed by the accepted corrected proposal.
+
+  Dropout uses a self-contained signed-`i64[4]` Philox4x32-10 state with numeric
+  version `+1`, exact signed/unsigned mappings, published constants/equations/lane
+  order, overflow-safe block counting, tail discard, and an exhausted maximum
+  counter sentinel. Train backward receives the original state, regenerates the
+  mask, and emits no successor. Both signed p zeros and eval are byte-copy paths
+  with no RNG work. Positive-p inverted scaling is explicitly binary32. The
+  supported environment is RNE, no contraction/excess precision, and FTZ/DAZ off;
+  dry preflight restores the complete incoming FP exception status.
+
+  Every embedding ID is signed exact i64 and must satisfy numeric `0<=id<V`;
+  negative and `id>=V` values reject as `invalid-argument` before row access.
+  LayerNorm epsilon must be finite and numerically `>0.0f`; both signed zeros,
+  negatives, infinities, and NaN reject before evaluation or mutation.
+  Provider input/input overlap rejects with `ET_KERNEL_ERROR_INVALID_ARGUMENT` and
+  `ET_KERNEL_CODE_PROVIDER_REJECTED`, never K1's `ALIASING_OUTPUT`, which remains
+  reserved for K1-detected output overlap.
+- **Carrier-neutral evidence to date:** exact-pin compiled probes show that generic
+  Eshkol tensors retain f64-distinguishing values, tensor/LayerNorm reverse AD is rejected or
+  wrong, built-in dropout has hidden/global divergent RNG behavior, and malformed
+  reshape/broadcast/dimension operations may return garbage, crash, or accept
+  invalid input. These observations reject generic tensor, compiler-AD, and built-in
+  dropout paths; they do not establish production f32/device/ownership support.
+  The carrier-neutral Q0 fixture contains 26 cases and 82 tensors against exact
+  PyTorch `2.13.0+cpu`; all 31 reference, Philox, fixture-integrity, and independent
+  numerical-gradient tests pass under that pin. Under the system interpreter all
+  17 runnable tests pass and the 14 PyTorch-bound tests skip explicitly. The review
+  provider passes 1,892 optimized and ASan/UBSan/LSan native checks, including
+  direct scaled central differences over all 79 differentiable input/parameter
+  coordinates, plus 59,161 all-operation descriptor, alias, domain, Philox
+  multi-block overflow, failure-atomicity, and independent x87/MXCSR status checks
+  in both builds. A separate 449-check optimized and sanitized integration harness
+  dispatches every primitive through real I2 f32 and I1 exact-i64 borrows, proves
+  active-borrow mutation/destruction blocking and release, and binds backward
+  contributions to I2 gradient metadata and atomic plans. The gate binds all 32
+  bits of three official Random123 vectors to the native implementation through a
+  19-check test-only hook, passes 76 separate exact-bit/hash checks across every
+  primitive and VJP output, rejects 14 compiled source mutations through the bit
+  and frozen suites, and verifies exact archive/symbol/source/IR isolation, the
+  unchanged K1 baseline, deterministic fresh builds, and all 68 operation/row
+  combinations.
+  The negative harness exposed separate x87/MXCSR exception-status contamination
+  in the initial `fexcept_t` restoration; complete `fenv_t` snapshot/restore fixes
+  it without changing arithmetic. A fixed private transport compiles with
+  the pinned Eshkol compiler and produces byte-identical binaries and output across
+  two runs; its native bridge is also covered by ASan/UBSan/LSan. These are local
+  implementation results on the explicitly unsupported CachyOS/LLVM 22
+  compatibility host, not published production capability evidence. N2 exact-head
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI and independent N2-R review remain pending.
+- **Dependencies / retest:** merged I2 supplies physical owned dense zero-offset
+  CPU f32 storage, synchronous K1 borrows, exact P1 handle/tie identity, gradient
+  metadata, and atomic plans without an N2-facing contract deviation. Accepted I1
+  supplies exact i64 views for embedding IDs and dropout state. N2's focused gate
+  must retain I1/I2 borrow/lifetime, gradient-plan, K1/Q0 regression, and sanitizer
+  evidence at every review head. RMSNorm and SwiGLU remain MOD5.
+- **Reference:** [issue #47](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/47);
+  [change-required decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5526909956);
+  [corrected integration proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5527059596);
+  [corrected issue proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/47#issuecomment-5527059832);
+  [accepted contract and binding clarifications](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5527945682);
+  [I2 PR #53](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53);
+  [I2-R exact-head approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53#issuecomment-5556348520);
+  [I2 supported CI run 33988137736](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33988137736);
+  [I2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53#issuecomment-5526955464);
+  [I2 supported CI run 33711937185](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33711937185);
+  [upstream LayerNorm AD evidence](https://github.com/tsotchke/eshkol/issues/551#issuecomment-5526758405).
