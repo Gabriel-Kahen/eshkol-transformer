@@ -1,0 +1,585 @@
+;;; Canonical O2 successor aggregate root. Never install this source. It loads
+;;; I2 source so P1, provider 2.0, I2 carriers, and O2 share one identity world.
+
+(load "i2_wave2_root.esk")
+
+(extern i64 o2-native-last-error-category
+        :real et_o2_private_last_error_category_v1)
+(extern ptr o2-native-builder-create i64 i64 i64 i64 i64 i64 i64
+        :real et_o2_private_builder_create_v1)
+(extern i64 o2-native-builder-set ptr i64 ptr ptr i64 i64 i64 i64 i64
+        :real et_o2_private_builder_set_v1)
+(extern ptr o2-native-builder-finish ptr
+        :real et_o2_private_builder_finish_v1)
+(extern i64 o2-native-builder-abort ptr
+        :real et_o2_private_builder_abort_v1)
+(extern i64 o2-native-optimizer-step ptr
+        :real et_o2_private_optimizer_step_v1)
+(extern i64 o2-native-optimizer-zero-grad ptr
+        :real et_o2_private_optimizer_zero_grad_v1)
+(extern i64 o2-native-optimizer-completed-updates ptr
+        :real et_o2_private_optimizer_completed_updates_v1)
+(extern i64 o2-native-optimizer-schedule-factor-bits ptr
+        :real et_o2_private_optimizer_schedule_factor_bits_v1)
+(extern ptr o2-native-optimizer-state-snapshot ptr
+        :real et_o2_private_optimizer_state_snapshot_v1)
+(extern i64 o2-native-optimizer-load-state ptr ptr
+        :real et_o2_private_optimizer_load_state_v1)
+(extern i64 o2-native-optimizer-state-release ptr
+        :real et_o2_private_optimizer_state_release_v1)
+
+(define o2-provider-name 'i2-dense-cpu-f32-v1)
+(define o2-provider-identity
+  '(transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1))
+(define o2-config-tag 'transformer-optimizer-config)
+(define o2-max-data-depth 16)
+(define o2-max-data-nodes 65536)
+(define o2-max-config-bytes 16777216)
+(define o2-max-groups 1365)
+(define o2-max-parameters 1365)
+(define o2-i64-max 9223372036854775807)
+(define o2-optimizers '())
+(define o2-states '())
+
+(define (o2-fail-raw category operation message)
+  (let ((unreachable
+          (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax o2-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (o2-fail-raw category operation message))) result))))
+
+(define (o2-native-fail-raw operation)
+  (let ((category (o2-native-last-error-category)))
+    (o2-fail
+      (cond ((= category 1) 'invalid-argument)
+            ((= category 2) 'shape-mismatch)
+            ((= category 3) 'dtype-mismatch)
+            ((= category 4) 'device-mismatch)
+            ((= category 5) 'noncontiguous)
+            ((= category 6) 'unsupported)
+            ((= category 7) 'invalid-state)
+            ((= category 8) 'version-mismatch)
+            ((= category 10) 'corrupt-data)
+            (else 'internal))
+      operation "O2 native optimizer rejected the request")))
+
+(define-syntax o2-native-fail
+  (syntax-rules ()
+    ((_ operation)
+     (let ((result (o2-native-fail-raw operation))) result))))
+
+(define (o2-exact-nonnegative-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value 0) (<= value o2-i64-max)))
+
+(define (o2-member-identity? value values)
+  (cond ((null? values) #f)
+        ((eq? value (car values)) #t)
+        (else (o2-member-identity? value (cdr values)))))
+
+(define (o2-find-identity value values)
+  (cond ((null? values) #f)
+        ((eq? value (vector-ref (car values) 0)) (car values))
+        (else (o2-find-identity value (cdr values)))))
+
+(define (o2-make-identity message)
+  (guard (raised (#t raised)) (error message)))
+
+(define (o2-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (o2-list-ref values index)
+  (if (= index 0) (car values)
+      (o2-list-ref (cdr values) (- index 1))))
+
+(define (o2-segment<? left right)
+  (let ((left-bytes (string->utf8 left))
+        (right-bytes (string->utf8 right)))
+    (let loop ((index 0))
+      (cond
+        ((= index (bytevector-length left-bytes))
+         (< index (bytevector-length right-bytes)))
+        ((= index (bytevector-length right-bytes)) #f)
+        ((< (bytevector-u8-ref left-bytes index)
+            (bytevector-u8-ref right-bytes index)) #t)
+        ((> (bytevector-u8-ref left-bytes index)
+            (bytevector-u8-ref right-bytes index)) #f)
+        (else (loop (+ index 1)))))))
+
+(define (o2-path<? left right)
+  (cond ((null? left) (not (null? right)))
+        ((null? right) #f)
+        ((o2-segment<? (car left) (car right)) #t)
+        ((o2-segment<? (car right) (car left)) #f)
+        (else (o2-path<? (cdr left) (cdr right)))))
+
+(define (o2-valid-path? path)
+  (let ((length (i2-bounded-list-length path 65)))
+    (and length (> length 0) (<= length 64)
+         (let loop ((remaining path))
+           (if (null? remaining)
+               #t
+               (let ((segment (car remaining)))
+                 (and (string? segment)
+                      (> (string-byte-length segment) 0)
+                      (<= (string-byte-length segment) 65536)
+                      (string=? segment (utf8->string (string->utf8 segment)))
+                      (loop (cdr remaining)))))))))
+
+(define (o2-copy-path path)
+  (let loop ((remaining path) (result '()))
+    (if (null? remaining) (o2-reverse result)
+        (loop (cdr remaining) (cons (string-copy (car remaining)) result)))))
+
+(define (o2-copy-paths paths)
+  (let loop ((remaining paths) (result '()))
+    (if (null? remaining) (o2-reverse result)
+        (loop (cdr remaining) (cons (o2-copy-path (car remaining)) result)))))
+
+(define (o2-copy-aliases groups)
+  (let loop ((remaining groups) (result '()))
+    (if (null? remaining) (o2-reverse result)
+        (loop (cdr remaining)
+              (cons (o2-copy-paths (car remaining)) result)))))
+
+(define (o2-path-member? path paths)
+  (cond ((null? paths) #f)
+        ((equal? path (car paths)) #t)
+        (else (o2-path-member? path (cdr paths)))))
+
+(define (o2-tree-paths operation tree)
+  (guard (caught
+           (#t
+             (o2-fail 'invalid-state operation
+                      "expected a live same-aggregate P1 parameter tree")))
+    (let ((result (parameter-tree-paths tree))) result)))
+
+(define (o2-copy-data-walk operation value depth ancestors nodes bytes)
+  (cond
+    ((pair? value)
+     (if (or (> depth o2-max-data-depth)
+             (not (i2-bounded-list-length value (+ o2-max-data-nodes 1)))
+             (o2-member-identity? value ancestors))
+         (o2-fail 'invalid-argument operation
+                  "optimizer config is cyclic or exceeds structural bounds"))
+     (let loop ((remaining value) (result '()))
+       (cond
+         ((null? remaining) (o2-reverse result))
+         ((not (pair? remaining))
+          (o2-fail 'invalid-argument operation
+                   "optimizer config contains an improper list"))
+         (else
+          (vector-set! nodes 0 (+ (vector-ref nodes 0) 1))
+          (if (> (vector-ref nodes 0) o2-max-data-nodes)
+              (o2-fail 'invalid-argument operation
+                       "optimizer config exceeds its node budget"))
+          (loop (cdr remaining)
+                (cons (o2-copy-data-walk
+                        operation (car remaining) (+ depth 1)
+                        (cons value ancestors) nodes bytes)
+                      result))))))
+    ((string? value)
+     (let ((length (string-byte-length value)))
+       (vector-set! nodes 0 (+ (vector-ref nodes 0) 1))
+       (vector-set! bytes 0 (+ (vector-ref bytes 0) length))
+       (if (or (> (vector-ref nodes 0) o2-max-data-nodes)
+               (> (vector-ref bytes 0) o2-max-config-bytes))
+           (o2-fail 'invalid-argument operation
+                    "optimizer config exceeds its data budget"))
+       (string-copy value)))
+    ((or (symbol? value) (number? value) (boolean? value) (null? value))
+     (vector-set! nodes 0 (+ (vector-ref nodes 0) 1))
+     (if (> (vector-ref nodes 0) o2-max-data-nodes)
+         (o2-fail 'invalid-argument operation
+                  "optimizer config exceeds its node budget"))
+     value)
+    (else
+     (o2-fail 'invalid-argument operation
+              "optimizer config must contain only data values"))))
+
+(define (o2-copy-config-data operation value)
+  (let ((result
+          (o2-copy-data-walk operation value 0 '() (vector 0) (vector 0))))
+    result))
+
+(define (o2-hex-digit character)
+  (let ((code (char->integer character)))
+    (cond ((and (>= code 48) (<= code 57)) (- code 48))
+          ((and (>= code 97) (<= code 102)) (+ 10 (- code 97)))
+          (else -1))))
+
+(define (o2-binary32-bits operation spelling)
+  (if (or (not (string? spelling)) (not (= (string-length spelling) 8)))
+      (o2-fail 'invalid-argument operation
+               "binary32 values require eight lowercase hexadecimal digits"))
+  (let loop ((index 0) (bits 0))
+    (if (= index 8)
+        bits
+        (let ((digit (o2-hex-digit (string-ref spelling index))))
+          (if (< digit 0)
+              (o2-fail 'invalid-argument operation
+                       "binary32 values require lowercase hexadecimal digits"))
+          (loop (+ index 1) (+ (* bits 16) digit))))))
+
+(define (o2-finite-nonnegative? bits)
+  (and (< bits 2147483648)
+       (not (= (bitwise-and bits 2139095040) 2139095040))))
+
+(define (o2-positive-finite? bits)
+  (and (o2-finite-nonnegative? bits) (> bits 0)))
+
+(define (o2-ratio-less-one? bits)
+  (and (o2-finite-nonnegative? bits) (< bits 1065353216)))
+
+(define (o2-ratio-at-most-one? bits)
+  (and (o2-finite-nonnegative? bits) (<= bits 1065353216)))
+
+(define (o2-parse-clip operation value)
+  (let ((length (i2-bounded-list-length value 3)))
+    (cond
+      ((and length (= length 1) (eq? (car value) 'none))
+       (vector 0 0))
+      ((and length (= length 2) (eq? (car value) 'global-l2))
+       (let ((bits (o2-binary32-bits operation (car (cdr value)))))
+         (if (not (o2-positive-finite? bits))
+             (o2-fail 'invalid-argument operation
+                      "global L2 maximum must be finite and positive"))
+         (vector 1 bits)))
+      (else
+       (o2-fail 'invalid-argument operation "malformed optimizer clip rule")))))
+
+(define (o2-parse-schedule operation value)
+  (let ((length (i2-bounded-list-length value 5)))
+    (cond
+      ((and length (= length 1) (eq? (car value) 'constant))
+       (vector 0 0 0 1065353216))
+      ((and length (= length 4) (eq? (car value) 'linear))
+       (let ((warmup (o2-list-ref value 1))
+             (total (o2-list-ref value 2))
+             (ratio (o2-binary32-bits operation (o2-list-ref value 3))))
+         (if (or (not (o2-exact-nonnegative-i64? warmup))
+                 (not (o2-exact-nonnegative-i64? total))
+                 (= total 0) (>= warmup total)
+                 (not (o2-ratio-at-most-one? ratio)))
+             (o2-fail 'invalid-argument operation
+                      "malformed linear successful-update schedule"))
+         (vector 1 warmup total ratio)))
+      (else
+       (o2-fail 'invalid-argument operation
+                "unsupported or malformed optimizer schedule")))))
+
+(define (o2-parse-group operation value previous-first)
+  (let ((length (i2-bounded-list-length value 8)))
+    (if (or (not length) (not (= length 7))
+            (not (eq? (car value) 'group)))
+        (o2-fail 'invalid-argument operation "malformed optimizer group"))
+    (let* ((paths (o2-list-ref value 1))
+           (count (i2-bounded-list-length paths (+ o2-max-parameters 1))))
+      (if (or (not count) (= count 0) (> count o2-max-parameters))
+          (o2-fail 'invalid-argument operation
+                   "optimizer group paths must be a bounded nonempty list"))
+      (let validate-paths ((remaining paths) (previous #f))
+        (if (not (null? remaining))
+            (begin
+              (if (or (not (o2-valid-path? (car remaining)))
+                      (and previous (not (o2-path<? previous (car remaining)))))
+                  (o2-fail 'invalid-argument operation
+                           "optimizer group paths are not canonical and ordered"))
+              (validate-paths (cdr remaining) (car remaining)))))
+      (if (and previous-first (not (o2-path<? previous-first (car paths))))
+          (o2-fail 'invalid-argument operation
+                   "optimizer groups are not ordered by first path"))
+      (let ((learning-rate
+              (o2-binary32-bits operation (o2-list-ref value 2)))
+            (beta1 (o2-binary32-bits operation (o2-list-ref value 3)))
+            (beta2 (o2-binary32-bits operation (o2-list-ref value 4)))
+            (epsilon (o2-binary32-bits operation (o2-list-ref value 5)))
+            (weight-decay
+              (o2-binary32-bits operation (o2-list-ref value 6))))
+        (if (or (not (o2-finite-nonnegative? learning-rate))
+                (not (o2-ratio-less-one? beta1))
+                (not (o2-ratio-less-one? beta2))
+                (not (o2-positive-finite? epsilon))
+                (not (o2-finite-nonnegative? weight-decay)))
+            (o2-fail 'invalid-argument operation
+                     "optimizer group option is outside its binary32 domain"))
+        (vector paths learning-rate beta1 beta2 epsilon weight-decay)))))
+
+(define (o2-parse-config operation borrowed)
+  (let* ((config (o2-copy-config-data operation borrowed))
+         (length (i2-bounded-list-length config 11)))
+    (if (or (not length) (not (= length 10))
+            (not (eq? (o2-list-ref config 0) o2-config-tag))
+            (not (equal? (o2-list-ref config 1) 1))
+            (not (equal? (o2-list-ref config 2) 0))
+            (not (null? (o2-list-ref config 3))))
+        (o2-fail 'invalid-argument operation
+                 "malformed optimizer configuration version envelope"))
+    (if (or (not (eq? (o2-list-ref config 4) 'adamw))
+            (not (eq? (o2-list-ref config 5) 'f32))
+            (not (eq? (o2-list-ref config 6) 'cpu)))
+        (o2-fail 'unsupported operation
+                 "only AdamW dense CPU f32 is supported"))
+    (let* ((clip (o2-parse-clip operation (o2-list-ref config 7)))
+           (schedule (o2-parse-schedule operation (o2-list-ref config 8)))
+           (raw-groups (o2-list-ref config 9))
+           (count (i2-bounded-list-length raw-groups (+ o2-max-groups 1))))
+      (if (or (not count) (= count 0) (> count o2-max-groups))
+          (o2-fail 'invalid-argument operation
+                   "optimizer requires one to 1365 groups"))
+      (let loop ((remaining raw-groups) (previous-first #f)
+                 (groups '()) (path-count 0))
+        (if (null? remaining)
+            (vector config clip schedule (o2-reverse groups) path-count)
+            (let* ((group
+                     (o2-parse-group operation (car remaining) previous-first))
+                   (paths (vector-ref group 0))
+                   (next-count
+                     (+ path-count
+                        (i2-bounded-list-length
+                          paths (+ o2-max-parameters 1)))))
+              (if (> next-count o2-max-parameters)
+                  (o2-fail 'invalid-argument operation
+                           "optimizer config exceeds 1365 parameter paths"))
+              (loop (cdr remaining) (car paths) (cons group groups)
+                    next-count)))))))
+
+(define (o2-unique-handles operation tree paths)
+  (let ((paths paths))
+    (let loop ((remaining paths) (handles '()) (canonical '()))
+      (if (null? remaining)
+          (vector (o2-reverse handles) (o2-reverse canonical))
+          (let* ((path (car remaining))
+                 (handle (parameter-tree-handle tree path)))
+            (if (o2-member-identity? handle handles)
+                (loop (cdr remaining) handles canonical)
+                (let ((canonical-path (parameter-handle-path handle)))
+                  (if (not (equal? canonical-path path))
+                      (o2-fail 'invalid-state operation
+                               "P1 canonical handle order is inconsistent"))
+                  (if (not (eq? (parameter-handle-dtype handle) 'f32))
+                      (o2-fail 'dtype-mismatch operation
+                               "optimizer parameter must be f32"))
+                  (if (not (eq? (parameter-handle-device handle) 'cpu))
+                      (o2-fail 'device-mismatch operation
+                               "optimizer parameter must be on CPU"))
+                  (loop (cdr remaining) (cons handle handles)
+                        (cons canonical-path canonical)))))))))
+
+(define (o2-group-assignments operation parsed tree tree-paths)
+  (let ((groups (vector-ref parsed 3)))
+    (let group-loop ((remaining groups) (seen '()) (assignments '()))
+      (if (null? remaining)
+          (o2-reverse assignments)
+          (let ((group (car remaining)))
+            (let path-loop ((paths (vector-ref group 0))
+                            (next-seen seen) (next assignments))
+              (if (null? paths)
+                  (group-loop (cdr remaining) next-seen next)
+                  (let* ((path (car paths))
+                         (known
+                           (if (o2-path-member? path tree-paths)
+                               #t
+                               (o2-fail 'invalid-argument operation
+                                        "optimizer group names an unknown path")))
+                         (handle (parameter-tree-handle tree path)))
+                    (if (not (equal? path (parameter-handle-path handle)))
+                        (o2-fail 'invalid-argument operation
+                                 "optimizer groups may use canonical paths only"))
+                    (if (o2-member-identity? handle next-seen)
+                        (o2-fail 'invalid-argument operation
+                                 "optimizer groups duplicate one parameter"))
+                    (path-loop
+                      (cdr paths) (cons handle next-seen)
+                      (cons (vector handle group) next))))))))))
+
+(define (o2-assignment-for-handle handle assignments)
+  (cond ((null? assignments) #f)
+        ((eq? handle (vector-ref (car assignments) 0)) (car assignments))
+        (else (o2-assignment-for-handle handle (cdr assignments)))))
+
+(define (o2-require-optimizer operation value)
+  (let ((optimizer (o2-find-identity value o2-optimizers)))
+    (if optimizer optimizer
+        (o2-fail 'invalid-argument operation "expected an O2 optimizer"))))
+
+(define (o2-require-live-state operation value)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (not state)
+        (o2-fail 'invalid-argument operation
+                 "expected an exact registered O2 optimizer state"))
+    (if (not (eq? (vector-ref state 6) 'live))
+        (o2-fail 'invalid-state operation "optimizer state is released"))
+    state))
+
+(define (o2-public-optimizer-create config tree)
+  (let* ((operation 'optimizer-create)
+         (parsed (o2-parse-config operation config))
+         (tree-paths (o2-tree-paths operation tree))
+         (unique (o2-unique-handles operation tree tree-paths))
+         (handles (vector-ref unique 0))
+         (paths (vector-ref unique 1))
+         (handle-count (i2-bounded-list-length handles (+ o2-max-parameters 1)))
+         (assignments
+           (o2-group-assignments operation parsed tree tree-paths)))
+    (if (or (not handle-count) (= handle-count 0)
+            (not (= handle-count (vector-ref parsed 4)))
+            (not (= handle-count
+                    (i2-bounded-list-length assignments (+ o2-max-parameters 1)))))
+        (o2-fail 'shape-mismatch operation
+                 "optimizer groups must cover every unique parameter once"))
+    (tensor-provider-preflight-internal o2-provider-name 2 0)
+    (let* ((clip (vector-ref parsed 1))
+           (schedule (vector-ref parsed 2))
+           (builder
+             (o2-native-builder-create
+               handle-count (vector-ref clip 0) (vector-ref clip 1)
+               (vector-ref schedule 0) (vector-ref schedule 1)
+               (vector-ref schedule 2) (vector-ref schedule 3))))
+      (if (null? builder) (o2-native-fail operation))
+      (guard (caught
+               (#t
+                 (o2-native-builder-abort builder)
+                 (raise caught)))
+        (let fill ((remaining handles) (index 0))
+          (if (null? remaining)
+              (let* ((shell (o2-make-identity "transformer.optimizer:v1"))
+                     (optimizer
+                       (vector shell #f (vector-ref parsed 0)
+                               paths (parameter-tree-tie-groups tree) handles))
+                     (next-registry (cons optimizer o2-optimizers))
+                     (native (o2-native-builder-finish builder)))
+                (if (null? native) (o2-native-fail operation))
+                (vector-set! optimizer 1 native)
+                (set! o2-optimizers next-registry)
+                shell)
+              (let* ((handle (car remaining))
+                     (assignment
+                       (o2-assignment-for-handle handle assignments)))
+                (if (not assignment)
+                    (o2-fail 'shape-mismatch operation
+                             "optimizer group omits a unique parameter"))
+                (let* ((group (vector-ref assignment 1))
+                       (carrier (parameter-handle-tensor-internal handle))
+                       (validated
+                         (i2-carrier-preflight carrier 'parameter operation)))
+                  (if (not (=
+                        (o2-native-builder-set
+                          builder index (vector-ref validated 2) handle
+                          (vector-ref group 1) (vector-ref group 2)
+                          (vector-ref group 3) (vector-ref group 4)
+                          (vector-ref group 5))
+                        0))
+                      (o2-native-fail operation))
+                  (fill (cdr remaining) (+ index 1))))))))))
+
+(define (o2-public-optimizer-step! value)
+  (let* ((operation 'optimizer-step!)
+         (optimizer (o2-require-optimizer operation value)))
+    (if (not (= (o2-native-optimizer-step (vector-ref optimizer 1)) 0))
+        (o2-native-fail operation))
+    #t))
+
+(define (o2-public-optimizer-zero-grad! value)
+  (let* ((operation 'optimizer-zero-grad!)
+         (optimizer (o2-require-optimizer operation value)))
+    (if (not (= (o2-native-optimizer-zero-grad (vector-ref optimizer 1)) 0))
+        (o2-native-fail operation))
+    #t))
+
+(define (o2-public-optimizer-state value)
+  (let* ((operation 'optimizer-state)
+         (optimizer (o2-require-optimizer operation value))
+         (completed
+           (o2-native-optimizer-completed-updates (vector-ref optimizer 1))))
+    (if (< completed 0) (o2-native-fail operation))
+    ;; Allocate the complete publication envelope before native clone ownership.
+    (let* ((shell (o2-make-identity "transformer.optimizer-state:v1"))
+           (state
+             (vector shell #f
+                     (o2-copy-config-data operation (vector-ref optimizer 2))
+                     (o2-copy-paths (vector-ref optimizer 3))
+                     (o2-copy-aliases (vector-ref optimizer 4))
+                     completed 'constructing))
+           (next-registry (cons state o2-states))
+           (native
+             (o2-native-optimizer-state-snapshot (vector-ref optimizer 1))))
+      (if (null? native) (o2-native-fail operation))
+      (vector-set! state 1 native)
+      (vector-set! state 6 'live)
+      (set! o2-states next-registry)
+      shell)))
+
+(define (o2-public-optimizer-load-state! optimizer-value state-value)
+  (let* ((operation 'optimizer-load-state!)
+         (optimizer (o2-require-optimizer operation optimizer-value))
+         (state (o2-require-live-state operation state-value))
+         (next-config
+           (o2-copy-config-data operation (vector-ref state 2))))
+    (if (or (not (equal? (vector-ref optimizer 3) (vector-ref state 3)))
+            (not (equal? (vector-ref optimizer 4) (vector-ref state 4))))
+        (o2-fail 'shape-mismatch operation
+                 "optimizer state topology differs from receiver"))
+    (if (not (= (o2-native-optimizer-load-state
+                  (vector-ref optimizer 1) (vector-ref state 1)) 0))
+        (o2-native-fail operation))
+    ;; Native load is atomic; publish the prevalidated logical config after it.
+    (vector-set! optimizer 2 next-config)
+    #t))
+
+(define (o2-public-optimizer-state-release! value)
+  (let ((operation 'optimizer-state-release!))
+    (let ((state (o2-find-identity value o2-states)))
+      (if (not state)
+          (o2-fail 'invalid-argument operation
+                   "expected an exact registered O2 optimizer state"))
+      (if (eq? (vector-ref state 6) 'dead)
+          #t
+          (begin
+            (if (not (eq? (vector-ref state 6) 'live))
+                (o2-fail 'invalid-state operation
+                         "optimizer state is busy or releasing"))
+            (vector-set! state 6 'releasing)
+            (let ((status
+                    (o2-native-optimizer-state-release
+                      (vector-ref state 1))))
+              (cond
+                ((= status -1)
+                 (vector-set! state 6 'live)
+                 (o2-native-fail operation))
+                ((or (= status 0) (= status -2))
+                 (vector-set! state 1 'released)
+                 (vector-set! state 2 'released)
+                 (vector-set! state 3 'released)
+                 (vector-set! state 4 'released)
+                 (vector-set! state 6 'dead)
+                 (if (= status -2) (o2-native-fail operation) #t))
+                (else
+                 (o2-fail 'internal operation
+                          "optimizer state release lifecycle is indeterminate")))))))))
+
+;;; Localized evidence helpers. These are not installed or publicly wrapped.
+(define (o2-optimizer-completed-updates-internal optimizer)
+  (let ((count
+          (o2-native-optimizer-completed-updates
+            (vector-ref (o2-require-optimizer
+                          'o2-optimizer-completed-updates-internal optimizer)
+                        1))))
+    (if (< count 0)
+        (o2-native-fail 'o2-optimizer-completed-updates-internal)
+        count)))
+
+(define (o2-optimizer-schedule-factor-bits-internal optimizer)
+  (let ((bits
+          (o2-native-optimizer-schedule-factor-bits
+            (vector-ref (o2-require-optimizer
+                          'o2-optimizer-schedule-factor-bits-internal optimizer)
+                        1))))
+    (if (< bits 0)
+        (o2-native-fail 'o2-optimizer-schedule-factor-bits-internal)
+        bits)))

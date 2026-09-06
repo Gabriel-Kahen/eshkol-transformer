@@ -75,16 +75,22 @@ Version fields and schedule counters are exact nonnegative signed-i64 values.
 Version 1.0 requires an empty feature list. A linear schedule requires
 `total-updates > 0` and `warmup-updates < total-updates`.
 
+Version 1 admits at most 1,365 unique live parameter allocations because one atomic
+AdamW step stages exactly three destinations per unique parameter (parameter,
+`exp-avg`, and `exp-avg-sq`) under I2's fixed 4,096-assignment transaction ceiling.
+Aliases do not consume another O2 entry. A 1,366th unique allocation or nonempty
+group is `invalid-argument` before provider lookup, native allocation, or mutation.
+
 Raw validation is iterative and stops before traversing beyond depth 16 or 65,536
 total data nodes. Every list spine is bounded by that same node budget. A config has
-at most 4,096 groups, 4,096 total canonical paths, 4,096 paths in any group, and the
+at most 1,365 groups, 1,365 total canonical paths, 1,365 paths in any group, and the
 P1 bounds of 64 segments per path and 1..65,536 UTF-8 bytes per segment. The complete
 config has an additional 16,777,216-byte aggregate UTF-8 budget. These are
 pre-provider traversal bounds; an over-bound, improper, cyclic, malformed,
 unordered, or range-invalid config is `invalid-argument` before P1 lookup or
 allocation.
 
-There are 1..4096 groups. Every group is nonempty. Paths within a group are in P1
+There are 1..1365 groups. Every group is nonempty. Paths within a group are in P1
 UTF-8 byte order, and groups are ordered by their first path. Each path must be the
 canonical path of one unique handle in the supplied P1 tree. Every unique handle
 appears exactly once. Alias paths, duplicate handles or paths, missing handles,
@@ -244,8 +250,8 @@ acquire O2 state-borrow authority, resolve non-owning moment handles synchronous
 end every I2/K1 borrow in a guaranteed tail, and retain no raw storage or carrier.
 
 Release validates the exact registered O2 receiver, complete ownership ledger,
-liveness, serialization/nonreentrancy, zero active borrows, and the future exact I2
-provider identity established by independent review and merge before mutation. It then
+liveness, serialization/nonreentrancy, zero active borrows, and exact provider 2.0
+identity `i2-dense-cpu-f32-v1` before mutation. It then
 atomically closes all state/handle resolution by entering an internal releasing state
 before the first callback. The fixed provider-2.0 exact-once tail is
 nonallocating/nonraising; it publishes dead only after all moment clones are released.
@@ -265,13 +271,11 @@ P1 `state-dict-release!`, P1 state tokens, and P1 state-backed handles remain
 P1-specific and grant no O2 release authority. Process-lifetime tensor retention,
 hidden finalizers, equality-triggered freeing, generic release dispatch, and a
 second registry are forbidden. The only admitted release seam is a fixed O2-specific
-private wrapper in the single trusted aggregate, statically bound to the future exact
-I2 provider identity established by independent review and merge and the exact O2
+private wrapper in the single trusted aggregate, statically bound to exact provider
+2.0 identity `i2-dense-cpu-f32-v1` and the exact O2
 ownership-ledger entry. It exposes no callback token and accepts no caller-selected
 provider, P1 state, live optimizer moment, parameter, or gradient. No private symbol,
-token code, request layout, or structure ABI is frozen by this document; those
-decisions require independently approved and merged I2, compiled-path probes, and
-issue #1 coordination.
+token code, request layout, or structure ABI is public or caller-selectable.
 
 Parameter values are P1 model state and never occur in optimizer state. Schedule
 values are derived rather than redundantly stored. The logical state contains no
@@ -281,8 +285,11 @@ path/operation, or C1/C2 container decision.
 
 Version 1 optimizer snapshots are update-boundary snapshots. Every I2 gradient slot
 must be absent and its accumulation metadata empty; otherwise `optimizer-state`
-raises `invalid-state`. Snapshot, load, and release additionally require that the
-optimizer is not mutating and no moment/state borrow is live. Mid-accumulation
+raises `invalid-state`. Snapshot and load additionally require that the optimizer is
+not mutating and no moment/state borrow is live. Release is detached from its source
+optimizer: it validates only the exact state/provider/ledger owner and requires no
+active state borrow, so it remains valid if the source optimizer later accumulates
+gradients or steps. Mid-accumulation
 checkpointing is not represented by O2 1.0 and remains a later TR3/C2 contract
 decision. This update-boundary call-phase rule grants the detached snapshot no live
 optimizer/handle backreference or authority; implementation must enforce it through
@@ -292,7 +299,7 @@ the accepted caller/aggregate orchestration boundary or return to integration.
 identity, configuration, bound paths/aliases, counter, entry uniqueness,
 metadata, tensor independence, finite moment values, and I2 capability before
 mutation. State metadata has depth at most 32, at most 2,097,152 data nodes, at most
-4,096 parameter entries, the P1 64-segment/per-segment UTF-8 bounds, and a
+1,365 parameter entries, the P1 64-segment/per-segment UTF-8 bounds, and a
 67,108,864-byte aggregate UTF-8 budget. The create-time projection counts every
 logical occurrence in the embedded config, canonical path list, alias graph, and
 parameter entries; tensor elements/bytes remain parameter-bound and await I2's

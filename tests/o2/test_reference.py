@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -225,7 +224,20 @@ class O2ReferenceTests(unittest.TestCase):
         )
 
     def test_generation_is_byte_identical_in_fresh_processes(self) -> None:
-        python = os.environ.get("O2_ORACLE_PYTHON", sys.executable)
+        python = os.environ.get("O2_ORACLE_PYTHON")
+        if python is None:
+            self.skipTest("O2_ORACLE_PYTHON pinned PyTorch environment not supplied")
+        self.assertTrue(Path(python).is_file())
+        self.assertTrue(os.access(python, os.X_OK))
+        version = subprocess.run(
+            [python, "-c", "import torch; print(torch.__version__)"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(version.stdout.strip(), "2.13.0+cpu")
         with tempfile.TemporaryDirectory() as temporary:
             first = Path(temporary) / "first.json"
             second = Path(temporary) / "second.json"

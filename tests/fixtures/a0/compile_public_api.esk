@@ -32,7 +32,7 @@
         state-dict-alias-groups state-dict-release!
         model-forward model-output-logits model-output-loss model-output-rng
         optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
-        optimizer-load-state!
+        optimizer-load-state! optimizer-state-release!
         trainer-create trainer-step! trainer-stop-policy trainer-train!
         trainer-evaluate!
         trainer-state trainer-load-state! metrics-ref

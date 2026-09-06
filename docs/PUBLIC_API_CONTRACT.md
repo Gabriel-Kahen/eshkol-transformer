@@ -429,6 +429,7 @@ reference is not a reclamation guarantee.
 | `optimizer-zero-grad! optimizer` | Clear gradients of bound unique parameters once. | Mutates gradient slots; `invalid-state`; no gradient. |
 | `optimizer-state optimizer` | Deep snapshot keyed by stable parameter paths, including groups, step counters, schedules, and precision policy. | New owned state; `invalid-state`; no graph. |
 | `optimizer-load-state! optimizer state` | Strict atomic load against bound paths/aliases/shapes/dtypes/devices. | Mutates optimizer state, not parameter values; mismatch/version/corruption errors; no graph. |
+| `optimizer-state-release! state` | Release the exact registered, detached O2 snapshot and invalidate its state-backed moment handles. | Idempotent arity-1 mutation for the exact dead token; release has no source-optimizer backreference and remains valid after that source later accumulates or steps; malformed, forged, copied, unregistered, or cross-aggregate values are `invalid-argument`; recognized busy or releasing state is `invalid-state`. |
 
 O2 owns algorithms and state schema. Mixed precision is optional Wave 4 behavior and
 must raise `unsupported` in the first release unless separately verified.
