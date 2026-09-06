@@ -1,4 +1,4 @@
-;;; Public D1 surface. Dataset, batch, shuffle, packing, and cursor behavior remain D2.
+;;; Public D1 corpus and D2 dataset/batch surface.
 
 (require transformer.error_consumer)
 
@@ -9,7 +9,18 @@
          token-corpus-summary-vocab-size
          token-corpus-summary-shard-token-limit
          token-corpus-summary-tokenizer-fingerprint
-         token-corpus-summary-total-shard-bytes)
+         token-corpus-summary-total-shard-bytes
+         token-dataset-open
+         token-dataset-next-batch
+         token-dataset-cursor
+         token-dataset-end?
+         token-dataset-seek!
+         token-dataset-close!
+         token-batch-inputs
+         token-batch-targets
+         token-batch-loss-mask
+         token-batch-validate
+         token-batch-release!)
 
 (define e1b-safe-d1-token-corpus-write-call
   (let ()
@@ -118,3 +129,81 @@
 
 (define (token-corpus-summary-total-shard-bytes summary)
   (e1b-safe-d1-token-corpus-summary-total-shard-bytes-call summary))
+
+(define-syntax d2-safe-unary-call
+  (syntax-rules ()
+    ((_ binding native-name)
+     (define binding
+       (let ()
+         (extern void native-call ptr ptr :real native-name)
+         (lambda (value)
+           (let ((output (vector #f)))
+             (native-call (vector value) output)
+             (vector-ref output 0))))))))
+
+(define-syntax d2-safe-binary-call
+  (syntax-rules ()
+    ((_ binding native-name)
+     (define binding
+       (let ()
+         (extern void native-call ptr ptr ptr :real native-name)
+         (lambda (left right)
+           (let ((output (vector #f)))
+             (native-call (vector left) (vector right) output)
+             (vector-ref output 0))))))))
+
+(d2-safe-binary-call e1b-safe-d2-token-dataset-open-call
+                     et_e1b_public_d2_token_dataset_open_v1)
+(d2-safe-unary-call e1b-safe-d2-token-dataset-next-batch-call
+                    et_e1b_public_d2_token_dataset_next_batch_v1)
+(d2-safe-unary-call e1b-safe-d2-token-dataset-cursor-call
+                    et_e1b_public_d2_token_dataset_cursor_v1)
+(d2-safe-unary-call e1b-safe-d2-token-dataset-end-call
+                    et_e1b_public_d2_token_dataset_end_v1)
+(d2-safe-binary-call e1b-safe-d2-token-dataset-seek-call
+                     et_e1b_public_d2_token_dataset_seek_v1)
+(d2-safe-unary-call e1b-safe-d2-token-dataset-close-call
+                    et_e1b_public_d2_token_dataset_close_v1)
+(d2-safe-unary-call e1b-safe-d2-token-batch-inputs-call
+                    et_e1b_public_d2_token_batch_inputs_v1)
+(d2-safe-unary-call e1b-safe-d2-token-batch-targets-call
+                    et_e1b_public_d2_token_batch_targets_v1)
+(d2-safe-unary-call e1b-safe-d2-token-batch-loss-mask-call
+                    et_e1b_public_d2_token_batch_loss_mask_v1)
+(d2-safe-unary-call e1b-safe-d2-token-batch-validate-call
+                    et_e1b_public_d2_token_batch_validate_v1)
+(d2-safe-unary-call e1b-safe-d2-token-batch-release-call
+                    et_e1b_public_d2_token_batch_release_v1)
+
+(define (token-dataset-open config tokenizer)
+  (e1b-safe-d2-token-dataset-open-call config tokenizer))
+
+(define (token-dataset-next-batch dataset)
+  (e1b-safe-d2-token-dataset-next-batch-call dataset))
+
+(define (token-dataset-cursor dataset)
+  (e1b-safe-d2-token-dataset-cursor-call dataset))
+
+(define (token-dataset-end? value)
+  (e1b-safe-d2-token-dataset-end-call value))
+
+(define (token-dataset-seek! dataset cursor)
+  (e1b-safe-d2-token-dataset-seek-call dataset cursor))
+
+(define (token-dataset-close! dataset)
+  (e1b-safe-d2-token-dataset-close-call dataset))
+
+(define (token-batch-inputs batch)
+  (e1b-safe-d2-token-batch-inputs-call batch))
+
+(define (token-batch-targets batch)
+  (e1b-safe-d2-token-batch-targets-call batch))
+
+(define (token-batch-loss-mask batch)
+  (e1b-safe-d2-token-batch-loss-mask-call batch))
+
+(define (token-batch-validate batch)
+  (e1b-safe-d2-token-batch-validate-call batch))
+
+(define (token-batch-release! batch)
+  (e1b-safe-d2-token-batch-release-call batch))

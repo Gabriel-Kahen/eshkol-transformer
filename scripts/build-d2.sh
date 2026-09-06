@@ -39,9 +39,41 @@ esac
 ar rcsD "${temporary_dir}/libeshkol_transformer_d2_private.a" \
   "${temporary_dir}/d2_native.o"
 
+if [[ "${mode}" == normal ]]; then
+  E1B_COMPILER_TIMEOUT_SECONDS="${D2_COMPILER_TIMEOUT_SECONDS:-600}" \
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${PROJECT_ROOT}/native/d2_wave2_root.esk" \
+    "${PROJECT_ROOT}/native/d2_wave2_package_bridge.c" \
+    "${PROJECT_ROOT}/native/d2_wave2_private_renames.txt" \
+    "${PROJECT_ROOT}/native/d2_wave2_public_exports.txt" \
+    "${temporary_dir}/d2_wave2.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/src"
+  cmp "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt" \
+    "${temporary_dir}/d2_wave2.o.evidence/global-defined.txt"
+  ar rcsD "${temporary_dir}/libeshkol_transformer_wave2.a" \
+    "${temporary_dir}/d2_wave2.o"
+fi
+
 mkdir -p "${artifact_dir}"
 mv -f "${temporary_dir}/d2_native.o" "${artifact_dir}/d2_native.o"
 mv -f "${temporary_dir}/libeshkol_transformer_d2_private.a" \
   "${artifact_dir}/libeshkol_transformer_d2_private.a"
+if [[ "${mode}" == normal ]]; then
+  rm -rf -- "${artifact_dir}/d2_wave2.o.evidence"
+  mv "${temporary_dir}/d2_wave2.o.evidence" \
+    "${artifact_dir}/d2_wave2.o.evidence"
+  mv -f "${temporary_dir}/d2_wave2.o" "${artifact_dir}/d2_wave2.o"
+  mv -f "${temporary_dir}/libeshkol_transformer_wave2.a" \
+    "${artifact_dir}/libeshkol_transformer_wave2.a"
+fi
 printf 'built D2 private carrier candidate: %s\n' \
   "${artifact_dir}/libeshkol_transformer_d2_private.a"
+if [[ "${mode}" == normal ]]; then
+  printf 'built canonical D2 review aggregate: %s\n' \
+    "${artifact_dir}/libeshkol_transformer_wave2.a"
+fi

@@ -23,7 +23,14 @@
           ':maximum-total-tokens ':maximum-batch-bytes ':shuffle-seed
           ':shuffle-window-rows ':packing?))
 
-(define (d2-core-fail message) (raise message))
+(define (d2-core-fail-raw message) (raise message))
+
+;;; The shared-library compiler cannot tail-transfer to a localized helper.
+;;; Keep failures observably identical while forcing an ordinary private call.
+(define-syntax d2-core-fail
+  (syntax-rules ()
+    ((_ message)
+     (let ((result (d2-core-fail-raw message))) result))))
 
 (define (d2-core-raise category operation message)
   (raise (vector d2-core-error-tag category operation message)))
@@ -255,9 +262,16 @@
     (d2-core-copy-into! result (bytevector-length left) right)
     result))
 
+(define (d2-core-unsigned-field-limit width)
+  (cond ((= width 1) 256)
+        ((= width 2) 65536)
+        ((= width 4) 4294967296)
+        ((= width 8) 18446744073709551616)
+        (else (d2-core-fail "D2 little-endian field width is unsupported"))))
+
 (define (d2-core-store-unsigned-le! bytes offset width value)
   (if (or (not (d2-core-exact-integer? value)) (< value 0)
-          (>= value (expt 2 (* width 8))))
+          (>= value (d2-core-unsigned-field-limit width)))
       (d2-core-fail "D2 little-endian value is outside its field"))
   (let loop ((index 0) (remaining value))
     (if (< index width)
@@ -295,7 +309,7 @@
          (material (d2-core-concat material (d2-core-u64-le window-index)))
          (material (d2-core-concat material (d2-core-u64-le draw-counter)))
          (digest (c1-sha256 material)))
-    (d2-core-load-unsigned-le digest 0 8)))
+    (let ((result (d2-core-load-unsigned-le digest 0 8))) result)))
 
 (define (d2-core-shard-total shard-lengths)
   (if (not (vector? shard-lengths))
@@ -318,8 +332,10 @@
       (+ 1 (quotient (- length 2) sequence-length))))
 
 (define (d2-core-packed-row-count shard-lengths sequence-length)
-  (d2-core-length-row-count
-   (d2-core-shard-total shard-lengths) sequence-length))
+  (let ((result
+         (d2-core-length-row-count
+          (d2-core-shard-total shard-lengths) sequence-length)))
+    result))
 
 (define (d2-core-unpacked-row-count shard-lengths sequence-length)
   (d2-core-shard-total shard-lengths)
@@ -337,8 +353,10 @@
   (if (not (boolean? packing?))
       (d2-core-fail "D2 packing flag must be boolean"))
   (if packing?
-      (d2-core-packed-row-count shard-lengths sequence-length)
-      (d2-core-unpacked-row-count shard-lengths sequence-length)))
+      (let ((result
+             (d2-core-packed-row-count shard-lengths sequence-length))) result)
+      (let ((result
+             (d2-core-unpacked-row-count shard-lengths sequence-length))) result)))
 
 ;;; Row plan layout:
 ;;; [tag packing? row-ordinal shard-or-#f start-offset true-loss-count T]
@@ -392,7 +410,7 @@
       (d2-core-fail "D2 target selector must be boolean"))
   (let ((offset (+ (vector-ref plan 4) position (if target? 1 0))))
     (if (vector-ref plan 1)
-        (d2-core-locate-global shard-lengths offset)
+        (let ((result (d2-core-locate-global shard-lengths offset))) result)
         (vector (vector-ref plan 3) offset))))
 
 ;;; Return [bounded-value next-draw-counter].  Rejected words consume counters.
@@ -430,8 +448,10 @@
                 (retry (+ counter 1))))))))
 
 (define (d2-core-unbiased-draw range seed window-index draw-counter)
-  (d2-core-unbiased-draw-with-source
-   range seed window-index draw-counter d2-core-sha256-word))
+  (let ((result
+         (d2-core-unbiased-draw-with-source
+          range seed window-index draw-counter d2-core-sha256-word)))
+    result))
 
 ;;; Fill BUFFER with one canonical descending Fisher-Yates window and return its
 ;;; active length.  BUFFER may have the full min(B,M) capacity for reuse across
@@ -493,8 +513,10 @@
       buffer)))
 
 (define (d2-core-window-permutation total-rows window-rows seed window-index)
-  (d2-core-window-permutation-with-source
-   total-rows window-rows seed window-index d2-core-sha256-word))
+  (let ((result
+         (d2-core-window-permutation-with-source
+          total-rows window-rows seed window-index d2-core-sha256-word)))
+    result))
 
 ;;; Production loaders use this bytevector form so shuffle storage is exactly one
 ;;; u64-le slot per admitted row, not a boxed-vector representation.
@@ -516,13 +538,14 @@
           (>= index active-length)
           (> (* active-length 8) (bytevector-length buffer)))
       (d2-core-fail "D2 shuffle bytevector index is outside its active window"))
-  (d2-core-load-unsigned-le buffer (* index 8) 8))
+  (let ((result (d2-core-load-unsigned-le buffer (* index 8) 8))) result))
 
 (define (d2-core-shuffle-bytevector-set! buffer active-length index value)
   (if (not (d2-core-nonnegative-i64? value))
       (d2-core-fail "D2 shuffle ordinal must be a nonnegative i64"))
   (d2-core-shuffle-bytevector-ref buffer active-length index)
-  (d2-core-store-unsigned-le! buffer (* index 8) 8 value))
+  (let ((result
+         (d2-core-store-unsigned-le! buffer (* index 8) 8 value))) result))
 
 (define (d2-core-fill-window-bytevector-with-source!
          buffer total-rows window-rows seed window-index word-source)
@@ -566,8 +589,11 @@
 
 (define (d2-core-fill-window-bytevector!
          buffer total-rows window-rows seed window-index)
-  (d2-core-fill-window-bytevector-with-source!
-   buffer total-rows window-rows seed window-index d2-core-sha256-word))
+  (let ((result
+         (d2-core-fill-window-bytevector-with-source!
+          buffer total-rows window-rows seed window-index
+          d2-core-sha256-word)))
+    result))
 
 (define (d2-core-permute-ordinal-in-bytevector-with-source!
          buffer total-rows window-rows seed ordinal word-source)
@@ -583,13 +609,17 @@
          (window-length
           (d2-core-fill-window-bytevector-with-source!
            buffer total-rows window-rows seed window-index word-source)))
-    (d2-core-shuffle-bytevector-ref
-     buffer window-length (- ordinal window-start))))
+    (let ((result
+           (d2-core-shuffle-bytevector-ref
+            buffer window-length (- ordinal window-start))))
+      result)))
 
 (define (d2-core-permute-ordinal-in-bytevector!
          buffer total-rows window-rows seed ordinal)
-  (d2-core-permute-ordinal-in-bytevector-with-source!
-   buffer total-rows window-rows seed ordinal d2-core-sha256-word))
+  (let ((result
+         (d2-core-permute-ordinal-in-bytevector-with-source!
+          buffer total-rows window-rows seed ordinal d2-core-sha256-word)))
+    result))
 
 (define (d2-core-permute-ordinal-with-source
          total-rows window-rows seed ordinal word-source)
@@ -607,8 +637,10 @@
     (vector-ref permutation (- ordinal window-start))))
 
 (define (d2-core-permute-ordinal total-rows window-rows seed ordinal)
-  (d2-core-permute-ordinal-with-source
-   total-rows window-rows seed ordinal d2-core-sha256-word))
+  (let ((result
+         (d2-core-permute-ordinal-with-source
+          total-rows window-rows seed ordinal d2-core-sha256-word)))
+    result))
 
 (define (d2-core-batch-payload-bytes batch-size sequence-length maximum-batch-bytes)
   (if (or (not (d2-core-positive-i64? batch-size))
@@ -717,12 +749,14 @@
                                            config total-rows)
   (if (not (d2-core-config-valid? config))
       (d2-core-fail "D2 normalized dataset config is malformed"))
-  (d2-core-state-create
-   manifest-sha256 tokenizer-fingerprint vocab-size
-   (vector-ref config 2) (vector-ref config 3) (vector-ref config 4)
-   (vector-ref config 5) (vector-ref config 6) (vector-ref config 7)
-   (vector-ref config 8) (vector-ref config 9) (vector-ref config 10)
-   total-rows))
+  (let ((result
+         (d2-core-state-create
+          manifest-sha256 tokenizer-fingerprint vocab-size
+          (vector-ref config 2) (vector-ref config 3) (vector-ref config 4)
+          (vector-ref config 5) (vector-ref config 6) (vector-ref config 7)
+          (vector-ref config 8) (vector-ref config 9) (vector-ref config 10)
+          total-rows)))
+    result))
 
 (define (d2-core-state-next-ordinal state)
   (if (not (d2-core-state-valid? state 'd2-dataset-state))
@@ -771,7 +805,8 @@
       (d2-core-copy-into! bytes header-bytes digest))
     bytes))
 
-(define (d2-core-cursor-snapshot state) (d2-core-cursor-encode state))
+(define (d2-core-cursor-snapshot state)
+  (let ((result (d2-core-cursor-encode state))) result))
 
 (define (d2-core-cursor-decode bytes)
   (if (not (bytevector? bytes))
@@ -952,5 +987,7 @@
           (vector range rows)))))
 
 (define (d2-core-plan-next-batch state shard-lengths)
-  (d2-core-plan-next-batch-with-source
-   state shard-lengths d2-core-sha256-word))
+  (let ((result
+         (d2-core-plan-next-batch-with-source
+          state shard-lengths d2-core-sha256-word)))
+    result))

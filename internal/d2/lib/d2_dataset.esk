@@ -1,0 +1,714 @@
+;;; Trusted D2 dataset/batch implementation for the one localized review aggregate.
+
+(extern i64 d2-native-dataset-open ptr :real et_d2_dataset_open_v1)
+(extern i64 d2-native-dataset-close ptr :real et_d2_dataset_close_v1)
+(extern i64 d2-native-batch-create ptr i64 i64 i64
+        :real et_d2_batch_create_v1)
+(extern i64 d2-native-last-status :real et_d2_batch_last_status_v1)
+(extern i64 d2-native-batch-write-source ptr i64 i64 ptr i64 i64 ptr i64 i64 i64
+        :real et_d2_batch_write_pair_i64le_source_span_v1)
+(extern i64 d2-native-batch-seal ptr i64 :real et_d2_batch_seal_v1)
+(extern i64 d2-native-borrow-begin ptr i64
+        :real et_d2_batch_borrow_begin_v1)
+(extern ptr d2-native-borrow-inputs ptr i64 i64
+        :real et_d2_batch_borrow_inputs_v1)
+(extern ptr d2-native-borrow-targets ptr i64 i64
+        :real et_d2_batch_borrow_targets_v1)
+(extern ptr d2-native-borrow-loss-mask ptr i64 i64
+        :real et_d2_batch_borrow_loss_mask_v1)
+(extern i64 d2-native-borrow-end ptr i64 i64
+        :real et_d2_batch_borrow_end_v1)
+(extern i64 d2-native-batch-release-preflight ptr i64
+        :real et_d2_batch_release_preflight_v1)
+(extern i64 d2-native-batch-release ptr i64 :real et_d2_batch_release_v1)
+
+(define d2-dataset-query (vector 'd2-dataset-query-v1))
+(define d2-batch-query (vector 'd2-batch-query-v1))
+(define d2-dataset-state-tag (vector 'd2-dataset-state-v1))
+(define d2-batch-capability-tag (vector 'd2-batch-capability-v1))
+(define d2-eos-sentinel
+  (guard (raised (#t raised)) (error "transformer.data.end:v1")))
+
+(define (et-d1-private-token-corpus-validate-metadata
+         directory maximum-manifest-bytes maximum-shard-bytes
+         maximum-total-tokens)
+  ((vector-ref d1-compiled-public-operations 8)
+   directory maximum-manifest-bytes maximum-shard-bytes maximum-total-tokens))
+
+(define (et-d1-private-token-shard-validate-bytes
+         path index token-count file-bytes digest fingerprint vocab-size
+         maximum-shard-bytes)
+  ((vector-ref d1-compiled-public-operations 9)
+   path index token-count file-bytes digest fingerprint vocab-size
+   maximum-shard-bytes))
+
+(define (d2-fail-raw category operation message)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax d2-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (d2-fail-raw category operation message))) result))))
+
+(define (d2-with-core-errors-raw thunk)
+  (guard
+   (caught
+    ((d2-core-error? caught)
+     (d2-fail (d2-core-error-category caught)
+              (d2-core-error-operation caught)
+              (d2-core-error-message caught)))
+    (else (raise caught)))
+   (thunk)))
+
+(define-syntax d2-with-core-errors
+  (syntax-rules ()
+    ((_ thunk)
+     (let ((result (d2-with-core-errors-raw thunk))) result))))
+
+(define (d2-remap-structured-error caught operation)
+  (let ((unreachable
+         (et-e1b-private-raise
+          (transformer-error-category caught) operation
+          (transformer-error-message caught) (transformer-error-details caught)
+          (transformer-error-cause caught))))
+    unreachable))
+
+(define (d2-with-structured-operation-errors operation thunk)
+  (guard
+   (caught
+    ((transformer-error? caught)
+     (d2-remap-structured-error caught operation))
+    (else (raise caught)))
+   (thunk)))
+
+(define (d2-native-fail-raw operation status)
+  (if (= status 4)
+      (let ((unreachable
+             (et-e1b-private-raise
+              'internal operation "D2 native allocation failed"
+              (list (list 'source-domain 'd2-private-carrier)
+                    (list 'source-code 'allocation-failed)
+                    (list 'source-message "admitted allocation failed"))
+              #f)))
+        unreachable)
+      (d2-fail
+       (cond ((= status 1) 'invalid-argument)
+             ((= status 2) 'invalid-state)
+             ((= status 3) 'invalid-argument)
+             ((= status 6) 'unsupported)
+             (else 'internal))
+       operation "D2 native carrier rejected the request")))
+
+(define-syntax d2-native-fail
+  (syntax-rules ()
+    ((_ operation status)
+     (let ((result (d2-native-fail-raw operation status))) result))))
+
+(define (d2-make-dataset-shell state)
+  (lambda (query)
+    (if (eq? query d2-dataset-query) state
+        (error "transformer.data.dataset:v1"))))
+
+(define (d2-make-batch-shell capability)
+  (lambda (query)
+    (if (eq? query d2-batch-query) capability
+        (error "transformer.data.batch:v1"))))
+
+(define (d2-dataset-state value operation)
+  (if (not (procedure? value))
+      (d2-fail 'invalid-argument operation "expected a D2 dataset"))
+  (let ((state
+         (guard (caught (#t (d2-fail 'invalid-argument operation
+                                     "expected a D2 dataset")))
+           (value d2-dataset-query))))
+    (if (and (vector? state) (= (vector-length state) 19)
+             (eq? (vector-ref state 0) d2-dataset-state-tag)
+             (eq? (vector-ref state 1) value))
+        state
+        (d2-fail 'invalid-argument operation "expected a D2 dataset"))))
+
+(define (d2-open-dataset-state value operation)
+  (let ((state (d2-dataset-state value operation)))
+    (if (not (vector-ref state 2))
+        (d2-fail 'invalid-state operation "dataset is closed"))
+    state))
+
+(define (d2-batch-capability value operation)
+  (if (not (procedure? value))
+      (d2-fail 'invalid-argument operation "expected a D2 batch"))
+  (let ((capability
+         (guard (caught (#t (d2-fail 'invalid-argument operation
+                                     "expected a D2 batch")))
+           (value d2-batch-query))))
+    (if (and (vector? capability) (= (vector-length capability) 5)
+             (eq? (vector-ref capability 0) d2-batch-capability-tag)
+             (procedure? (vector-ref capability 1))
+             (d2-core-positive-i64? (vector-ref capability 2)))
+        capability
+        (d2-fail 'invalid-argument operation "expected a D2 batch"))))
+
+(define (d2-current-capability value kind operation released-ok?)
+  (let* ((capability (d2-batch-capability value operation))
+         (state (d2-dataset-state (vector-ref capability 1) operation)))
+    ;; A live authentic shell of the wrong accepted kind is a type error.  Only
+    ;; a same-kind authority whose generation is no longer current is stale.
+    (if (not (eq? kind (vector-ref capability 4)))
+        (d2-fail 'invalid-argument operation "D2 batch shell has the wrong kind"))
+    (if (and (not (vector-ref state 2))
+             (not (and released-ok?
+                       (eq? (vector-ref state 10) 'closed)
+                       (= (vector-ref capability 2) (vector-ref state 8))
+                       (eq? (vector-ref capability 3) (vector-ref state 9)))))
+        (d2-fail 'invalid-state operation "batch dataset is closed"))
+    (if (or (not (= (vector-ref capability 2) (vector-ref state 8)))
+            (not (eq? (vector-ref capability 3) (vector-ref state 9)))
+            (not (or (eq? (vector-ref state 10) 'live)
+                     (and released-ok?
+                          (or (eq? (vector-ref state 10) 'released)
+                              (eq? (vector-ref state 10) 'closed))))))
+        (d2-fail 'invalid-state operation "batch generation is stale"))
+    (vector capability state)))
+
+(define (d2-current-tensor-capability value operation)
+  (let ((capability (d2-batch-capability value operation)))
+    (if (not (or (eq? (vector-ref capability 4) 'inputs)
+                 (eq? (vector-ref capability 4) 'targets)
+                 (eq? (vector-ref capability 4) 'loss-mask)))
+        (d2-fail 'invalid-argument operation "expected a D2 tensor shell"))
+    (let ((result
+           (d2-current-capability
+            value (vector-ref capability 4) operation #f)))
+      result)))
+
+(define (d2-decimal-pad16 value)
+  (let* ((digits (number->string value))
+         (count (string-length digits)))
+    (let loop ((remaining (- 16 count)) (result ""))
+      (if (= remaining 0) (string-append result digits)
+          (loop (- remaining 1) (string-append result "0"))))))
+
+(define (d2-shard-path directory index)
+  (string-append directory "/shard-" (d2-decimal-pad16 index) ".ets"))
+
+(define (d2-manifest-header-bytes manifest)
+  (let ((result (d2-core-load-unsigned-le manifest 12 4))) result))
+
+(define (d2-manifest-shard-count manifest)
+  (let ((result (d2-core-load-unsigned-le manifest 32 8))) result))
+
+(define (d2-manifest-record-offset manifest index)
+  (+ (d2-manifest-header-bytes manifest) (* index 56)))
+
+(define (d2-manifest-record-count manifest index)
+  (let ((result
+         (d2-core-load-unsigned-le
+          manifest (+ (d2-manifest-record-offset manifest index) 8) 8)))
+    result))
+
+(define (d2-manifest-record-file-bytes manifest index)
+  (let ((result
+         (d2-core-load-unsigned-le
+          manifest (+ (d2-manifest-record-offset manifest index) 16) 8)))
+    result))
+
+(define (d2-manifest-record-digest manifest index)
+  (let ((offset (+ (d2-manifest-record-offset manifest index) 24)))
+    (bytevector-copy manifest offset (+ offset 32))))
+
+(define (d2-unpacked-row-count manifest sequence-length)
+  (let ((count (d2-manifest-shard-count manifest)))
+    (let loop ((index 0) (rows 0))
+      (if (= index count) rows
+          (let ((next (d2-core-length-row-count
+                       (d2-manifest-record-count manifest index)
+                       sequence-length)))
+            (if (> next (- d2-core-i64-max rows))
+                (d2-fail 'corrupt-data 'token-dataset-open
+                         "dataset row count exceeds signed i64"))
+            (loop (+ index 1) (+ rows next)))))))
+
+(define (d2-dataset-row-count metadata manifest config)
+  (if (d2-core-config-ref config ':packing?)
+      (let ((result
+             (d2-core-length-row-count
+              (vector-ref metadata 1)
+              (d2-core-config-ref config ':sequence-length)))) result)
+      (let ((result
+             (d2-unpacked-row-count
+              manifest (d2-core-config-ref config ':sequence-length))))
+        result)))
+
+(define (d2-locate-global manifest offset)
+  (let ((count (d2-manifest-shard-count manifest)))
+    (let loop ((index 0) (remaining offset))
+      (if (= index count)
+          (d2-fail 'internal 'token-dataset-next-batch
+                   "global token offset escaped validated corpus")
+          (let ((length (d2-manifest-record-count manifest index)))
+            (if (< remaining length) (vector index remaining)
+                (loop (+ index 1) (- remaining length))))))))
+
+(define (d2-locate-unpacked-row manifest sequence-length ordinal)
+  (let ((count (d2-manifest-shard-count manifest)))
+    (let loop ((index 0) (remaining ordinal))
+      (if (= index count)
+          (d2-fail 'internal 'token-dataset-next-batch
+                   "unpacked row escaped validated corpus")
+          (let ((rows (d2-core-length-row-count
+                       (d2-manifest-record-count manifest index)
+                       sequence-length)))
+            (if (< remaining rows) (vector index (* remaining sequence-length))
+                (loop (+ index 1) (- remaining rows))))))))
+
+(define (d2-load-shard state index)
+  (let* ((config (vector-ref state 3))
+         (metadata (vector-ref state 4))
+         (manifest (vector-ref state 5))
+         (path (d2-shard-path (d2-core-config-ref config ':directory) index)))
+    (let ((result
+           (d2-with-structured-operation-errors
+            'token-dataset-next-batch
+            (lambda ()
+              (et-d1-private-token-shard-validate-bytes
+               path index (d2-manifest-record-count manifest index)
+               (d2-manifest-record-file-bytes manifest index)
+               (d2-manifest-record-digest manifest index)
+               (vector-ref metadata 4) (vector-ref metadata 2)
+               (d2-core-config-ref config ':maximum-shard-bytes))))))
+      result)))
+
+(define (d2-cache-shard! state cache index)
+  (if (and (not (eq? (vector-ref cache 0) #f))
+           (= (vector-ref cache 0) index))
+      (vector-ref cache 1)
+      (let ((bytes (d2-load-shard state index)))
+        (vector-set! cache 0 index)
+        (vector-set! cache 1 bytes)
+        bytes)))
+
+(define (d2-shuffle-ref! state ordinal)
+  (let* ((config (vector-ref state 3))
+         (seed (d2-core-config-ref config ':shuffle-seed)))
+    (if (eq? seed #f) ordinal
+        (let* ((window-rows (d2-core-config-ref config ':shuffle-window-rows))
+               (window-index (quotient ordinal window-rows))
+               (window-offset (modulo ordinal window-rows))
+               (buffer (vector-ref state 7)))
+          (if (or (eq? (vector-ref state 16) #f)
+                  (not (= (vector-ref state 16) window-index)))
+              (begin
+                (d2-core-fill-window-bytevector!
+                 buffer (vector-ref state 17) window-rows seed window-index)
+                (vector-set! state 16 window-index)))
+          (let ((result
+                 (d2-core-load-unsigned-le buffer (* window-offset 8) 8)))
+            result)))))
+
+(define (d2-native-write-source-span state generation destination
+                                     input-bytes input-offset
+                                     target-bytes target-offset count)
+  (let ((status
+         (d2-native-batch-write-source
+          (vector-ref state 1) generation destination
+          input-bytes (bytevector-length input-bytes) input-offset
+          target-bytes (bytevector-length target-bytes) target-offset count)))
+    (if (not (= status 0))
+        (d2-fail 'internal 'token-dataset-next-batch
+                 "trusted D2 source span violated its carrier invariant"))))
+
+(define (d2-copy-boundary-input! state cache location staging)
+  ;; Copy the one cross-shard input token, then drop the cache authority before
+  ;; allocating/validating the following shard.  Thus even a boundary pair has
+  ;; only one full shard reachable at either bounded read.
+  (let* ((shard (vector-ref location 0))
+         (local (vector-ref location 1))
+         (bytes (d2-cache-shard! state cache shard))
+         (header (d2-core-load-unsigned-le bytes 12 4)))
+    (d2-core-store-unsigned-le!
+     staging 0 8 (d2-core-load-unsigned-le bytes (+ header (* local 8)) 8))
+    (vector-set! cache 0 #f)
+    (vector-set! cache 1 #f)
+    #t))
+
+(define (d2-fill-packed-row! state generation batch-row row-ordinal cache
+                             boundary-input)
+  (let* ((config (vector-ref state 3))
+         (manifest (vector-ref state 5))
+         (sequence-length (d2-core-config-ref config ':sequence-length))
+         (start (* row-ordinal sequence-length))
+         (total (vector-ref (vector-ref state 4) 1))
+         (true-count (min sequence-length (- total 1 start))))
+    (let loop ((global start) (position 0) (remaining true-count))
+      (if (> remaining 0)
+          (let* ((location (d2-locate-global manifest global))
+                 (shard (vector-ref location 0))
+                 (local (vector-ref location 1))
+                 (shard-count (d2-manifest-record-count manifest shard))
+                 (same-shard-count (min remaining (- shard-count local 1)))
+                 (destination (+ (* batch-row sequence-length) position)))
+            (if (> same-shard-count 0)
+                (let* ((bytes (d2-cache-shard! state cache shard))
+                       (header (d2-core-load-unsigned-le bytes 12 4))
+                       (input-offset (+ header (* local 8))))
+                  (d2-native-write-source-span
+                   state generation destination bytes input-offset
+                   bytes (+ input-offset 8) same-shard-count)
+                  (loop (+ global same-shard-count)
+                        (+ position same-shard-count)
+                        (- remaining same-shard-count)))
+                (begin
+                  (d2-copy-boundary-input! state cache location boundary-input)
+                  (let* ((target-location
+                          (d2-locate-global manifest (+ global 1)))
+                         (target-shard (vector-ref target-location 0))
+                         (target-local (vector-ref target-location 1))
+                         (target-bytes
+                          (d2-cache-shard! state cache target-shard))
+                         (target-header
+                          (d2-core-load-unsigned-le target-bytes 12 4)))
+                    (d2-native-write-source-span
+                     state generation destination boundary-input 0 target-bytes
+                     (+ target-header (* target-local 8)) 1))
+                  (loop (+ global 1) (+ position 1) (- remaining 1)))))))))
+
+(define (d2-fill-unpacked-row! state generation batch-row row-ordinal cache)
+  (let* ((config (vector-ref state 3))
+         (manifest (vector-ref state 5))
+         (sequence-length (d2-core-config-ref config ':sequence-length))
+         (located (d2-locate-unpacked-row manifest sequence-length row-ordinal))
+         (shard (vector-ref located 0))
+         (start (vector-ref located 1))
+         (length (d2-manifest-record-count manifest shard))
+         (true-count (min sequence-length (- length 1 start)))
+         (bytes (d2-cache-shard! state cache shard))
+         (header (d2-core-load-unsigned-le bytes 12 4))
+         (input-offset (+ header (* start 8))))
+    (let ((result
+           (d2-native-write-source-span
+            state generation (* batch-row sequence-length) bytes input-offset
+            bytes (+ input-offset 8) true-count)))
+      result)))
+
+(define (d2-fill-row! state generation batch-row row-ordinal cache
+                      boundary-input)
+  (if (d2-core-config-ref (vector-ref state 3) ':packing?)
+      (let ((result
+             (d2-fill-packed-row! state generation batch-row row-ordinal cache
+                                  boundary-input))) result)
+      (let ((result
+             (d2-fill-unpacked-row!
+              state generation batch-row row-ordinal cache))) result)))
+
+(define (d2-tokenizer-identity tokenizer)
+  ;; T2 accessors intentionally name their own operations.  D2 remaps a forged
+  ;; or wrong-aggregate tokenizer at its public boundary without leaking those
+  ;; lower-layer operation names.
+  (guard
+   (caught
+    ((transformer-error? caught)
+     (d2-fail 'invalid-argument 'token-dataset-open
+              "expected a same-aggregate tokenizer"))
+    (else (raise caught)))
+   (vector (t2-private-tokenizer-fingerprint tokenizer)
+           (t2-private-tokenizer-vocab-size tokenizer))))
+
+(define (d2-token-dataset-open config tokenizer)
+  (d2-with-core-errors
+   (lambda ()
+     (let ((result
+            (d2-with-structured-operation-errors
+             'token-dataset-open
+             (lambda ()
+        (let* ((normalized (d2-core-normalize-config config))
+               (tokenizer-identity (d2-tokenizer-identity tokenizer))
+               (fingerprint (vector-ref tokenizer-identity 0))
+               (vocab-size (vector-ref tokenizer-identity 1))
+               (metadata
+                (et-d1-private-token-corpus-validate-metadata
+                 (d2-core-config-ref normalized ':directory)
+                 (d2-core-config-ref normalized ':maximum-manifest-bytes)
+                 (d2-core-config-ref normalized ':maximum-shard-bytes)
+                 (d2-core-config-ref normalized ':maximum-total-tokens)))
+               (manifest (vector-ref metadata 6)))
+          (if (or (not (= vocab-size (vector-ref metadata 2)))
+                  (not (string=? fingerprint (vector-ref metadata 4))))
+              (d2-fail 'invalid-argument 'token-dataset-open
+                       "tokenizer does not match the token corpus"))
+          (let* ((rows (d2-dataset-row-count metadata manifest normalized))
+                 (shuffle-count
+                  (min (d2-core-config-ref normalized ':shuffle-window-rows) rows))
+                 (working-bytes
+                  (d2-core-working-payload-bytes
+                   (d2-core-config-ref normalized ':maximum-manifest-bytes)
+                   (d2-core-config-ref normalized ':maximum-shard-bytes)
+                   (d2-core-config-ref normalized ':batch-size)
+                   (d2-core-config-ref normalized ':sequence-length)
+                   (d2-core-config-ref normalized ':maximum-batch-bytes)
+                   (d2-core-config-ref normalized ':shuffle-window-rows) rows))
+                 (shuffle-buffer (make-bytevector (* 8 shuffle-count) 0))
+                 (digest
+                  (bytevector-copy manifest (- (bytevector-length manifest) 32)
+                                   (bytevector-length manifest)))
+                 (cursor-state
+                  (d2-core-state-create-from-config
+                   digest (utf8->string (string->utf8 fingerprint)) vocab-size
+                   normalized rows))
+                 (state (make-vector 19 #f))
+                 (shell (d2-make-dataset-shell state)))
+            (vector-set! state 0 d2-dataset-state-tag)
+            (vector-set! state 1 shell)
+            (vector-set! state 2 #t)
+            (vector-set! state 3 normalized)
+            (vector-set! state 4 metadata)
+            (vector-set! state 5 manifest)
+            (vector-set! state 6 cursor-state)
+            (vector-set! state 7 shuffle-buffer)
+            (vector-set! state 8 0)
+            (vector-set! state 9 #f)
+            (vector-set! state 10 'none)
+            (vector-set! state 15 0)
+            (vector-set! state 16 #f)
+            (vector-set! state 17 rows)
+            (vector-set! state 18 working-bytes)
+            (let ((status (d2-native-dataset-open shell)))
+              (if (not (= status 0))
+                  (d2-native-fail 'token-dataset-open status)))
+            shell))))))
+       result))))
+
+(define (d2-token-dataset-next-batch dataset)
+  (d2-with-core-errors
+   (lambda ()
+     (let ((state (d2-open-dataset-state dataset 'token-dataset-next-batch)))
+       (if (eq? (vector-ref state 10) 'live)
+           (d2-fail 'invalid-state 'token-dataset-next-batch
+                    "dataset already owns a live batch"))
+       (let ((range (d2-core-next-batch-range (vector-ref state 6))))
+         (if (eq? range #f) d2-eos-sentinel
+             (let* ((config (vector-ref state 3))
+                    (batch-size (d2-core-config-ref config ':batch-size))
+                    (sequence-length
+                     (d2-core-config-ref config ':sequence-length))
+                    (maximum-batch
+                     (d2-core-config-ref config ':maximum-batch-bytes))
+                    (auth (vector 'd2-batch-generation-auth-v1))
+                    (batch-cap (vector d2-batch-capability-tag dataset 1 auth
+                                       'batch))
+                    (input-cap (vector d2-batch-capability-tag dataset 1 auth
+                                       'inputs))
+                    (target-cap (vector d2-batch-capability-tag dataset 1 auth
+                                        'targets))
+                    (mask-cap (vector d2-batch-capability-tag dataset 1 auth
+                                      'loss-mask))
+                    (batch-shell (d2-make-batch-shell batch-cap))
+                    (input-shell (d2-make-batch-shell input-cap))
+                    (target-shell (d2-make-batch-shell target-cap))
+                    (mask-shell (d2-make-batch-shell mask-cap))
+                    (cache (vector #f #f))
+                    (boundary-input (make-bytevector 8 0))
+                    (generation
+                     (d2-native-batch-create dataset batch-size sequence-length
+                                             maximum-batch)))
+               (if (= generation 0)
+                   (d2-native-fail 'token-dataset-next-batch
+                                   (d2-native-last-status)))
+               (vector-set! batch-cap 2 generation)
+               (vector-set! input-cap 2 generation)
+               (vector-set! target-cap 2 generation)
+               (vector-set! mask-cap 2 generation)
+               (guard
+                (caught
+                 (#t
+                  (let ((cleanup
+                         (d2-native-batch-release dataset generation)))
+                    (if (not (= cleanup 0))
+                        (d2-fail
+                         'internal 'token-dataset-next-batch
+                         "unpublished D2 batch cleanup invariant failed")))
+                  (raise caught)))
+                (let fill ((batch-row 0))
+                  (if (< batch-row (vector-ref range 1))
+                      (begin
+                        (d2-fill-row!
+                         state generation batch-row
+                         (d2-shuffle-ref! state
+                                          (+ (vector-ref range 0) batch-row))
+                         cache boundary-input)
+                        (fill (+ batch-row 1)))))
+                (let ((status (d2-native-batch-seal dataset generation)))
+                  (if (not (= status 0))
+                      (d2-fail 'internal 'token-dataset-next-batch
+                               "trusted D2 seal violated its carrier invariant")))
+                ;; The staged range is already canonical and its end is in
+                ;; bounds.  This one vector write is the no-allocation commit;
+                ;; every later publication operation is nonraising.
+                (vector-set! (vector-ref state 6) 15 (vector-ref range 2)))
+               (vector-set! state 8 generation)
+               (vector-set! state 9 auth)
+               (vector-set! state 10 'live)
+               (vector-set! state 11 batch-shell)
+               (vector-set! state 12 input-shell)
+               (vector-set! state 13 target-shell)
+               (vector-set! state 14 mask-shell)
+               batch-shell)))))))
+
+(define (d2-token-dataset-cursor dataset)
+  (d2-with-core-errors
+   (lambda ()
+     (let ((state (d2-open-dataset-state dataset 'token-dataset-cursor)))
+       (d2-core-cursor-snapshot (vector-ref state 6))))))
+
+(define (d2-token-dataset-end? value)
+  (eq? value d2-eos-sentinel))
+
+(define (d2-token-dataset-seek! dataset cursor)
+  (d2-with-core-errors
+   (lambda ()
+     (let ((state (d2-open-dataset-state dataset 'token-dataset-seek!)))
+       (if (eq? (vector-ref state 10) 'live)
+           (d2-fail 'invalid-state 'token-dataset-seek!
+                    "cannot seek while a batch is live"))
+       (d2-core-seek! (vector-ref state 6) cursor)
+       (vector-set! state 8 0)
+       (vector-set! state 9 #f)
+       (vector-set! state 10 'none)
+       (vector-set! state 16 #f)
+       #t))))
+
+(define (d2-token-batch-inputs batch)
+  (let* ((checked
+          (d2-current-capability batch 'batch 'token-batch-inputs #f))
+         (state (vector-ref checked 1)))
+    (vector-ref state 12)))
+
+(define (d2-token-batch-targets batch)
+  (let* ((checked
+          (d2-current-capability batch 'batch 'token-batch-targets #f))
+         (state (vector-ref checked 1)))
+    (vector-ref state 13)))
+
+(define (d2-token-batch-loss-mask batch)
+  (let* ((checked
+          (d2-current-capability batch 'batch 'token-batch-loss-mask #f))
+         (state (vector-ref checked 1)))
+    (vector-ref state 14)))
+
+(define (d2-token-batch-validate batch)
+  (d2-current-capability batch 'batch 'token-batch-validate #f)
+  #t)
+
+(define (d2-borrow-view state capability lease operation)
+  (let* ((owner (vector-ref state 1))
+         (generation (vector-ref capability 2))
+         (kind (vector-ref capability 4))
+         (view
+          (cond ((eq? kind 'inputs)
+                 (d2-native-borrow-inputs owner generation lease))
+                ((eq? kind 'targets)
+                 (d2-native-borrow-targets owner generation lease))
+                (else
+                 (d2-native-borrow-loss-mask owner generation lease)))))
+    ;; After a successful begin this accessor cannot fail in serialized trusted
+    ;; code.  Consult status so a native invariant defect never reaches consumer.
+    (if (not (= (d2-native-last-status) 0))
+        (d2-fail 'internal operation "D2 native borrow view disappeared"))
+    view))
+
+(define (d2-borrow-end! state generation lease operation)
+  (let ((status
+         (d2-native-borrow-end (vector-ref state 1) generation lease)))
+    (vector-set! state 15 0)
+    (if (not (= status 0))
+        (d2-fail 'internal operation "D2 native borrow end invariant failed"))
+    #t))
+
+;;; Private reviewed same-aggregate seam.  The raw K1 view exists only during
+;;; this synchronous call and is never placed in a public shell or registry.
+(define (d2-token-tensor-with-view-internal tensor consumer)
+  (let ((operation 'd2-token-tensor-with-view-internal))
+    (if (not (procedure? consumer))
+        (d2-fail 'invalid-argument operation "expected a trusted view consumer"))
+    (let* ((checked (d2-current-tensor-capability tensor operation))
+           (capability (vector-ref checked 0))
+           (state (vector-ref checked 1))
+           (generation (vector-ref capability 2)))
+      (if (> (vector-ref state 15) 0)
+          (d2-fail 'invalid-state operation "batch already has an active borrow"))
+      (let ((lease (d2-native-borrow-begin (vector-ref state 1) generation)))
+        (if (= lease 0)
+            (let ((status (d2-native-last-status)))
+              (if (= status 6)
+                  (d2-native-fail operation status)
+                  (d2-fail 'internal operation
+                           "trusted D2 borrow admission invariant failed"))))
+        (vector-set! state 15 1)
+        (guard
+         (caught
+          (#t
+           (d2-borrow-end! state generation lease operation)
+           (raise caught)))
+         (let ((result
+                (consumer (d2-borrow-view state capability lease operation))))
+           (d2-borrow-end! state generation lease operation)
+           result))))))
+
+(define (d2-release-current! state operation)
+  (if (> (vector-ref state 15) 0)
+      (d2-fail 'invalid-state operation "batch has an active trusted borrow"))
+  (let ((generation (vector-ref state 8)))
+    (let ((preflight
+           (d2-native-batch-release-preflight
+            (vector-ref state 1) generation)))
+      (if (not (= preflight 0)) (d2-native-fail operation preflight)))
+    ;; Invalidate every Eshkol authority before the native destruction tail.
+    (vector-set! state 10 'released)
+    (vector-set! state 11 #f)
+    (vector-set! state 12 #f)
+    (vector-set! state 13 #f)
+    (vector-set! state 14 #f)
+    (let ((status (d2-native-batch-release (vector-ref state 1) generation)))
+      (if (not (= status 0))
+          (d2-fail 'internal operation
+                   "prepared D2 release tail violated its invariant")))
+    #t))
+
+(define (d2-token-batch-release! batch)
+  (let* ((checked
+          (d2-current-capability batch 'batch 'token-batch-release! #t))
+         (state (vector-ref checked 1)))
+    (if (or (eq? (vector-ref state 10) 'released)
+            (eq? (vector-ref state 10) 'closed))
+        #t
+        (let ((result
+               (d2-release-current! state 'token-batch-release!))) result))))
+
+(define (d2-token-dataset-close! dataset)
+  (let ((state (d2-dataset-state dataset 'token-dataset-close!)))
+    (if (not (vector-ref state 2)) #t
+        (begin
+          (if (eq? (vector-ref state 10) 'live)
+              (d2-release-current! state 'token-dataset-close!))
+          (if (> (vector-ref state 15) 0)
+              (d2-fail 'invalid-state 'token-dataset-close!
+                       "dataset has an active trusted borrow"))
+          ;; The shell remains an idempotent closed capability but retains no
+          ;; config, tokenizer, manifest, cursor, shuffle, batch, view, or data.
+          (vector-set! state 2 #f)
+          (vector-set! state 3 #f)
+          (vector-set! state 4 #f)
+          (vector-set! state 5 #f)
+          (vector-set! state 6 #f)
+          (vector-set! state 7 #f)
+          ;; Preserve only the one current generation/auth marker so authentic
+          ;; aliases retain exact release idempotence after close.
+          (vector-set! state 10 'closed)
+          (vector-set! state 16 #f)
+          (vector-set! state 17 0)
+          (vector-set! state 18 0)
+          (let ((status (d2-native-dataset-close dataset)))
+            (if (not (= status 0))
+                (d2-fail 'internal 'token-dataset-close!
+                         "prepared D2 close tail violated its invariant")))
+          #t))))
