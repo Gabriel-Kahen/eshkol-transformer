@@ -65,15 +65,23 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows, int64_t columns,
 int64_t et_d2_batch_last_status_v1(void);
 
 /*
- * Both inputs are tagged Eshkol bytevectors containing exactly 8*count i64-le
- * bytes. A validated bounded span writes both planes and sets the identical
- * bool mask span true. Unwritten calloc-zeroed positions remain masked filler.
- * Token/range/duplicate-write semantics remain trusted Eshkol responsibilities.
+ * The legacy entry accepts tagged Eshkol bytevectors containing exactly 8*count
+ * i64-le bytes. The source-span entry accepts larger tagged bytevectors and
+ * selects 8*count bytes at each nonnegative payload-relative byte offset. Both
+ * fully validate owner/state, destination, source subtraction bounds, and both
+ * bytevectors before writing either plane or mask. Unwritten calloc-zeroed
+ * positions remain masked filler. Token/range/duplicate-write semantics remain
+ * trusted Eshkol responsibilities.
  */
 int64_t et_d2_batch_write_pair_i64le_span_v1(
     const void *owner, int64_t batch_generation, int64_t destination,
     const void *inputs_header, int64_t input_bytes, const void *targets_header,
     int64_t target_bytes, int64_t count);
+int64_t et_d2_batch_write_pair_i64le_source_span_v1(
+    const void *owner, int64_t batch_generation, int64_t destination,
+    const void *inputs_header, int64_t input_bytes, int64_t input_offset,
+    const void *targets_header, int64_t target_bytes, int64_t target_offset,
+    int64_t count);
 int64_t et_d2_batch_seal_v1(const void *owner, int64_t batch_generation);
 
 /*
@@ -96,11 +104,18 @@ int64_t et_d2_batch_borrow_end_v1(const void *owner, int64_t batch_generation,
                                   int64_t lease_generation);
 
 /*
- * The public wrapper invalidates the dataset's current generation before this
- * exact release. Authentic caller-retained shell aliases remain ordinary GC
- * values; wrapper validation makes their repeated release idempotent and rejects
- * every other stale use before this native boundary.
+ * Preflight rejects a missing generation or active scoped borrow without receiver
+ * mutation. After it succeeds, serialized Eshkol code invalidates the current
+ * generation and all three shells, then calls release as the fixed, nonallocating
+ * destruction tail. Release is also valid for a freshly created unpublished
+ * batch known by its trusted owner to have no borrow; violating either admission
+ * rule is an internal invariant failure, not a recoverable release result.
+ * Authentic caller-retained shell aliases remain ordinary GC values; wrapper
+ * validation makes their repeated release idempotent and rejects every other
+ * stale use before this native boundary.
  */
+int64_t et_d2_batch_release_preflight_v1(const void *owner,
+                                         int64_t batch_generation);
 int64_t et_d2_batch_release_v1(const void *owner, int64_t batch_generation);
 
 enum {

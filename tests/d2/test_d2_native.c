@@ -246,6 +246,8 @@ static void test_i1_allocation_failures(void) {
     et_i64_tensor_test_fail_alloc_after_v1(allowed);
     generation = et_d2_batch_create_v1(&owners[allowed], 2, 3, 102);
     if (generation != 0) {
+      CHECK(et_d2_batch_release_preflight_v1(&owners[allowed], generation) ==
+            0);
       CHECK(et_d2_batch_release_v1(&owners[allowed], generation) == 0);
     } else {
       CHECK(et_d2_batch_last_status_v1() ==
@@ -281,6 +283,12 @@ static void test_dataset_lifetime(void) {
   CHECK(et_d2_dataset_open_v1(&owner) == ET_D2_NATIVE_STATUS_INVALID_STATE);
   CHECK(et_d2_batch_create_v1(&foreign_owner, 1, 1, 17) == 0);
   CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_batch_write_pair_i64le_span_v1(
+            &foreign_owner, 1, -1, NULL, -1, NULL, -1, 0) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_batch_write_pair_i64le_source_span_v1(
+            &foreign_owner, 1, -1, NULL, -1, -1, NULL, -1, -1, 0) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
 
   et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_CONTROL);
   CHECK(et_d2_batch_create_v1(&owner, 1, 1, 17) == 0);
@@ -316,14 +324,16 @@ static void test_batch_lifetime(void) {
   const et_kernel_tensor_view_v1 *inputs;
   const et_kernel_tensor_view_v1 *targets;
   const et_kernel_tensor_view_v1 *mask;
-  const int64_t input_a[] = {INT64_MIN, -1};
-  const int64_t target_a[] = {INT64_MAX, 17};
+  const int64_t input_source[] = {0, INT64_MIN, -1};
+  const int64_t target_source[] = {0, INT64_MAX, 17};
   const int64_t input_b[] = {17, INT64_MAX};
   const int64_t target_b[] = {-1, INT64_MIN};
   const int64_t expected_inputs[] = {INT64_MIN, -1, 0, 0, 17, INT64_MAX};
   const int64_t expected_targets[] = {INT64_MAX, 17, 0, 0, -1, INT64_MIN};
   const uint8_t expected_mask[] = {1u, 1u, 0u, 0u, 1u, 1u};
   bytevector_fixture one;
+  bytevector_fixture input_source_vector;
+  bytevector_fixture target_source_vector;
   const int64_t zero = 0;
 
   open_dataset(&owner);
@@ -360,11 +370,24 @@ static void test_batch_lifetime(void) {
   CHECK(et_d2_batch_write_pair_i64le_span_v1(&owner, generation, 0, NULL, 8,
                                              &one, 8, 1) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
-  write_span(&owner, generation, 0, input_a, target_a, 2u);
+  encode_i64le(&input_source_vector, input_source, 3u);
+  encode_i64le(&target_source_vector, target_source, 3u);
+  CHECK(et_d2_batch_write_pair_i64le_source_span_v1(
+            &owner, generation, 0, &input_source_vector, 24, 8,
+            &target_source_vector, 24, 8, 2) == 0);
+  CHECK(et_d2_batch_write_pair_i64le_source_span_v1(
+            &owner, generation, 0, &input_source_vector, 24, 16,
+            &target_source_vector, 24, 8, 2) == ET_D2_NATIVE_STATUS_RANGE);
+  CHECK(et_d2_batch_write_pair_i64le_source_span_v1(
+            &owner, generation, 0, &input_source_vector, 24, INT64_MAX,
+            &target_source_vector, 24, 8, 1) == ET_D2_NATIVE_STATUS_RANGE);
   write_span(&owner, generation, 4, input_b, target_b, 2u);
   CHECK(et_d2_batch_seal_v1(&owner, generation) == 0);
   CHECK(et_d2_batch_write_pair_i64le_span_v1(&owner, generation, 0, &one, 8,
                                              &one, 8, 1) ==
+        ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_batch_write_pair_i64le_source_span_v1(
+            &owner, generation, -1, NULL, -1, -1, NULL, -1, -1, 0) ==
         ET_D2_NATIVE_STATUS_INVALID_STATE);
 
   lease = et_d2_batch_borrow_begin_v1(&owner, generation);
@@ -383,8 +406,9 @@ static void test_batch_lifetime(void) {
   CHECK(memcmp(inputs->data, expected_inputs, sizeof(expected_inputs)) == 0);
   CHECK(memcmp(targets->data, expected_targets, sizeof(expected_targets)) == 0);
   CHECK(memcmp(mask->data, expected_mask, sizeof(expected_mask)) == 0);
-  CHECK(et_d2_batch_release_v1(&owner, generation) ==
+  CHECK(et_d2_batch_release_preflight_v1(&owner, generation) ==
         ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_batch_test_live_count_v1() == 1);
 
   stale_lease = lease;
   CHECK(et_d2_batch_borrow_end_v1(&owner, generation, lease) == 0);
@@ -394,8 +418,10 @@ static void test_batch_lifetime(void) {
   CHECK(et_d2_batch_borrow_inputs_v1(&owner, generation, stale_lease) == NULL);
   CHECK(et_d2_batch_borrow_end_v1(&owner, generation, new_lease) == 0);
   stale_generation = generation;
+  CHECK(et_d2_batch_release_preflight_v1(&owner, generation) == 0);
+  CHECK(et_d2_batch_test_live_count_v1() == 1);
   CHECK(et_d2_batch_release_v1(&owner, generation) == 0);
-  CHECK(et_d2_batch_release_v1(&owner, generation) ==
+  CHECK(et_d2_batch_release_preflight_v1(&owner, generation) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   CHECK(et_d2_batch_seal_v1(&owner, stale_generation) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
@@ -431,8 +457,11 @@ static void test_live_storage_rejection(void) {
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   CHECK(read_stage(et_d2_exact_read_v1("/dev/zero", 10, 0, view->data, 8)) ==
         ET_D2_EXACT_READ_ARGUMENT);
+  CHECK(et_d2_batch_release_preflight_v1(&second_owner, second_generation) ==
+        0);
   CHECK(et_d2_batch_release_v1(&second_owner, second_generation) == 0);
   CHECK(et_d2_batch_borrow_end_v1(&first_owner, first_generation, lease) == 0);
+  CHECK(et_d2_batch_release_preflight_v1(&first_owner, first_generation) == 0);
   CHECK(et_d2_batch_release_v1(&first_owner, first_generation) == 0);
   close_dataset(&second_owner);
   close_dataset(&first_owner);
@@ -465,6 +494,7 @@ static void test_long_generation_loop(void) {
     CHECK(et_d2_batch_borrow_end_v1(&owner, generation, lease) == 0);
     stale_generation = generation;
     stale_lease = lease;
+    CHECK(et_d2_batch_release_preflight_v1(&owner, generation) == 0);
     CHECK(et_d2_batch_release_v1(&owner, generation) == 0);
   }
   CHECK(et_d2_batch_test_live_count_v1() == 0);
@@ -485,6 +515,7 @@ static void test_generation_exhaustion(void) {
   et_d2_batch_test_exhaust_generations_v1();
   CHECK(et_d2_batch_borrow_begin_v1(&owner, generation) == 0);
   CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_UNSUPPORTED);
+  CHECK(et_d2_batch_release_preflight_v1(&owner, generation) == 0);
   CHECK(et_d2_batch_release_v1(&owner, generation) == 0);
   CHECK(et_d2_batch_create_v1(&owner, 1, 1, 17) == 0);
   CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_UNSUPPORTED);

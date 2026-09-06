@@ -597,16 +597,19 @@ static int64_t decode_i64_le(const uint8_t *source) {
   return value;
 }
 
-int64_t et_d2_batch_write_pair_i64le_span_v1(
+int64_t et_d2_batch_write_pair_i64le_source_span_v1(
     const void *owner, int64_t generation, int64_t destination_value,
-    const void *inputs_header, int64_t input_bytes, const void *targets_header,
-    int64_t target_bytes, int64_t count_value) {
+    const void *inputs_header, int64_t input_bytes, int64_t input_offset_value,
+    const void *targets_header, int64_t target_bytes, int64_t target_offset_value,
+    int64_t count_value) {
   et_d2_batch_control *batch = find_batch(owner, generation);
   const uint8_t *inputs;
   const uint8_t *targets;
   size_t destination;
   size_t count;
-  size_t expected_bytes;
+  size_t source_bytes;
+  size_t input_offset;
+  size_t target_offset;
   size_t index;
   if (batch == NULL) {
     return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
@@ -614,24 +617,33 @@ int64_t et_d2_batch_write_pair_i64le_span_v1(
   if (batch->sealed || batch->active_lease_generation != 0) {
     return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
   }
-  if (destination_value < 0 || count_value <= 0 ||
+  if (destination_value < 0 || count_value <= 0 || input_bytes < 0 ||
+      target_bytes < 0 || input_offset_value < 0 || target_offset_value < 0 ||
       (uint64_t)destination_value > SIZE_MAX ||
-      (uint64_t)count_value > SIZE_MAX) {
+      (uint64_t)count_value > SIZE_MAX ||
+      (uint64_t)input_bytes > SIZE_MAX || (uint64_t)target_bytes > SIZE_MAX ||
+      (uint64_t)input_offset_value > SIZE_MAX ||
+      (uint64_t)target_offset_value > SIZE_MAX) {
     return status(ET_D2_NATIVE_STATUS_RANGE);
   }
   destination = (size_t)destination_value;
   count = (size_t)count_value;
+  input_offset = (size_t)input_offset_value;
+  target_offset = (size_t)target_offset_value;
   if (destination > batch->elements || count > batch->elements - destination ||
-      !multiply_size(count, sizeof(int64_t), &expected_bytes) ||
-      input_bytes < 0 || target_bytes < 0 ||
-      (uint64_t)input_bytes != expected_bytes ||
-      (uint64_t)target_bytes != expected_bytes) {
+      !multiply_size(count, sizeof(int64_t), &source_bytes) ||
+      input_offset > (size_t)input_bytes ||
+      source_bytes > (size_t)input_bytes - input_offset ||
+      target_offset > (size_t)target_bytes ||
+      source_bytes > (size_t)target_bytes - target_offset) {
     return status(ET_D2_NATIVE_STATUS_RANGE);
   }
   if (!bytevector_payload(inputs_header, input_bytes, &inputs) ||
       !bytevector_payload(targets_header, target_bytes, &targets)) {
     return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   }
+  inputs += input_offset;
+  targets += target_offset;
   for (index = 0u; index < count; index++) {
     ((int64_t *)batch->input_view->data)[destination + index] =
         decode_i64_le(inputs + 8u * index);
@@ -641,6 +653,30 @@ int64_t et_d2_batch_write_pair_i64le_span_v1(
   }
   batch->wrote_any = 1;
   return status(ET_D2_NATIVE_STATUS_OK);
+}
+
+int64_t et_d2_batch_write_pair_i64le_span_v1(
+    const void *owner, int64_t generation, int64_t destination_value,
+    const void *inputs_header, int64_t input_bytes, const void *targets_header,
+    int64_t target_bytes, int64_t count_value) {
+  et_d2_batch_control *batch = find_batch(owner, generation);
+  size_t expected_bytes;
+  if (batch == NULL) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  if (batch->sealed || batch->active_lease_generation != 0) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
+  }
+  if (count_value <= 0 || (uint64_t)count_value > SIZE_MAX ||
+      !multiply_size((size_t)count_value, sizeof(int64_t), &expected_bytes) ||
+      input_bytes < 0 || target_bytes < 0 ||
+      (uint64_t)input_bytes != expected_bytes ||
+      (uint64_t)target_bytes != expected_bytes) {
+    return status(ET_D2_NATIVE_STATUS_RANGE);
+  }
+  return et_d2_batch_write_pair_i64le_source_span_v1(
+      owner, generation, destination_value, inputs_header, input_bytes, 0,
+      targets_header, target_bytes, 0, count_value);
 }
 
 int64_t et_d2_batch_seal_v1(const void *owner, int64_t generation) {
@@ -732,8 +768,8 @@ int64_t et_d2_batch_borrow_end_v1(const void *owner, int64_t generation,
   return status(ET_D2_NATIVE_STATUS_OK);
 }
 
-int64_t et_d2_batch_release_v1(const void *owner, int64_t generation) {
-  et_d2_dataset_control *dataset = find_dataset(owner);
+int64_t et_d2_batch_release_preflight_v1(const void *owner,
+                                         int64_t generation) {
   et_d2_batch_control *batch = find_batch(owner, generation);
   if (batch == NULL) {
     return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
@@ -741,7 +777,14 @@ int64_t et_d2_batch_release_v1(const void *owner, int64_t generation) {
   if (batch->active_lease_generation != 0) {
     return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
   }
-  if (dataset == NULL) {
+  return status(ET_D2_NATIVE_STATUS_OK);
+}
+
+int64_t et_d2_batch_release_v1(const void *owner, int64_t generation) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
+  et_d2_batch_control *batch = find_batch(owner, generation);
+  if (dataset == NULL || batch == NULL ||
+      batch->active_lease_generation != 0) {
     abort();
   }
   dataset->current_batch = NULL;
