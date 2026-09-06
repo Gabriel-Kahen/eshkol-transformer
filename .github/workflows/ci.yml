@@ -17,7 +17,7 @@ jobs:
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
       CC: clang-21
       CXX: clang++-21
@@ -28,6 +28,7 @@ jobs:
       P1_LSAN: '1'
       C1_LSAN: '1'
       I2_ASAN_DETECT_LEAKS: '1'
+      N2_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -46,6 +47,20 @@ jobs:
             ripgrep
           test "$(llvm-config-21 --version)" = '21.1.8'
 
+      - name: Select pinned N2 oracle Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14.6'
+
+      - name: Install pinned N2 development oracle
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/n2-oracle"
+          "$RUNNER_TEMP/n2-oracle/bin/python" -m pip install \
+            --disable-pip-version-check \
+            -r tests/n2/requirements-reference.lock
+          echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/n2-oracle/bin/python" >> "$GITHUB_ENV"
+
       - name: Build pinned Eshkol toolchain
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make toolchain'
@@ -58,7 +73,7 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make build'
 
-      - name: Test (F0/A0/A2/B0/C1/D1/E1/E1B/I1/I2/K1/L2/P1/Q0/T1/T2/X1)
+      - name: Test (F0/A0/A2/B0/C1/D1/E1/E1B/I1/I2/K1/L2/N2/P1/Q0/T1/T2/X1)
         shell: /usr/bin/bash -euo pipefail {0}
         run: /usr/bin/bash -c 'make test'
 
