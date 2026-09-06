@@ -11,14 +11,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#define ET_D2_BATCH_MAGIC UINT64_C(0x4554443242415443)
-
 typedef struct et_d2_batch_control et_d2_batch_control;
+typedef struct et_d2_dataset_control et_d2_dataset_control;
 
 struct et_d2_batch_control {
-  uint64_t magic;
-  et_d2_batch_control *registry_next;
-  const void *owner;
   int64_t generation;
   int64_t active_lease_generation;
   size_t rows;
@@ -37,12 +33,21 @@ struct et_d2_batch_control {
   int sealed;
 };
 
-static et_d2_batch_control *live_batches;
-static uint64_t next_generation = 1u;
+struct et_d2_dataset_control {
+  et_d2_dataset_control *registry_next;
+  const void *owner;
+  uint64_t next_batch_generation;
+  uint64_t next_lease_generation;
+  et_d2_batch_control *current_batch;
+};
+
+static et_d2_dataset_control *live_datasets;
 static int64_t last_status;
 
 #ifdef ET_D2_NATIVE_TESTING
 static int64_t fail_stage;
+static int64_t read_fail_stage;
+static int64_t owned_allocations;
 #endif
 
 /* Exclusive span ends must be representable, matching accepted I1 policy. */
@@ -79,32 +84,39 @@ static int64_t status(int64_t value) {
 }
 
 int64_t et_d2_batch_last_status_v1(void) { return last_status; }
+static int should_fail(int64_t stage);
 
-/* Owner/generation are compared; owner is never dereferenced. */
-static et_d2_batch_control *find_batch(const void *owner, int64_t generation) {
-  et_d2_batch_control *entry;
-  for (entry = live_batches; entry != NULL; entry = entry->registry_next) {
-    if (entry->owner == owner && entry->generation == generation) {
+/* Owner is compared but never dereferenced. */
+static et_d2_dataset_control *find_dataset(const void *owner) {
+  et_d2_dataset_control *entry;
+  for (entry = live_datasets; entry != NULL; entry = entry->registry_next) {
+    if (entry->owner == owner) {
       return entry;
     }
   }
   return NULL;
 }
 
-static int owner_has_batch(const void *owner) {
-  const et_d2_batch_control *entry;
-  for (entry = live_batches; entry != NULL; entry = entry->registry_next) {
-    if (entry->owner == owner) {
-      return 1;
-    }
+static et_d2_batch_control *find_batch(const void *owner, int64_t generation) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
+  et_d2_batch_control *batch =
+      dataset == NULL ? NULL : dataset->current_batch;
+  if (batch == NULL || generation <= 0 || batch->generation != generation) {
+    return NULL;
   }
-  return 0;
+  return batch;
 }
 
 static int live_storage_overlap(const void *pointer, size_t bytes) {
-  const et_d2_batch_control *batch;
-  for (batch = live_batches; batch != NULL; batch = batch->registry_next) {
-    if (overlaps(pointer, bytes, batch, sizeof(*batch)) ||
+  const et_d2_dataset_control *dataset;
+  for (dataset = live_datasets; dataset != NULL;
+       dataset = dataset->registry_next) {
+    const et_d2_batch_control *batch = dataset->current_batch;
+    if (overlaps(pointer, bytes, dataset, sizeof(*dataset))) {
+      return 1;
+    }
+    if (batch != NULL &&
+        (overlaps(pointer, bytes, batch, sizeof(*batch)) ||
         overlaps(pointer, bytes, batch->mask_data, batch->elements) ||
         overlaps(pointer, bytes, batch->input_view,
                  sizeof(*batch->input_view)) ||
@@ -117,24 +129,23 @@ static int live_storage_overlap(const void *pointer, size_t bytes) {
         overlaps(pointer, bytes, batch->input_view->data,
                  batch->input_view->byte_length) ||
         overlaps(pointer, bytes, batch->target_view->data,
-                 batch->target_view->byte_length)) {
+                 batch->target_view->byte_length))) {
       return 1;
     }
   }
   return 0;
 }
 
-static int reserve_generation(int64_t *generation) {
+static int peek_generation(uint64_t next_generation, int64_t *generation) {
   if (next_generation == 0u || next_generation > (uint64_t)INT64_MAX) {
     return 0;
   }
   *generation = (int64_t)next_generation;
-  next_generation++;
   return 1;
 }
 
-static void unlink_batch(et_d2_batch_control *target) {
-  et_d2_batch_control **link = &live_batches;
+static void unlink_dataset(et_d2_dataset_control *target) {
+  et_d2_dataset_control **link = &live_datasets;
   while (*link != NULL) {
     if (*link == target) {
       *link = target->registry_next;
@@ -171,7 +182,6 @@ static void cleanup_control(et_d2_batch_control *batch) {
   if (batch == NULL) {
     return;
   }
-  free(batch->mask_data);
   if (batch->target_storage_borrow != NULL) {
     require_i1_cleanup(
         et_i64_tensor_borrow_end_v1(&batch->target_storage_borrow, &error));
@@ -189,19 +199,97 @@ static void cleanup_control(et_d2_batch_control *batch) {
     et_i64_tensor_error_clear_v1(&error);
     require_i1_cleanup(et_i64_tensor_destroy_v1(&batch->input_tensor, &error));
   }
-  batch->magic = 0u;
+  if (batch->mask_data != NULL) {
+    free(batch->mask_data);
+#ifdef ET_D2_NATIVE_TESTING
+    owned_allocations--;
+#endif
+  }
   free(batch);
+#ifdef ET_D2_NATIVE_TESTING
+  owned_allocations--;
+#endif
+}
+
+int64_t et_d2_dataset_open_v1(const void *owner) {
+  et_d2_dataset_control *dataset;
+  if (owner == NULL || !span_fits(owner, 1u) ||
+      live_storage_overlap(owner, 1u)) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  if (find_dataset(owner) != NULL) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
+  }
+  if (should_fail(ET_D2_TEST_FAIL_DATASET)) {
+    return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+  }
+  dataset = (et_d2_dataset_control *)calloc(1u, sizeof(*dataset));
+  if (dataset == NULL) {
+    return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+  }
+#ifdef ET_D2_NATIVE_TESTING
+  owned_allocations++;
+#endif
+  dataset->owner = owner;
+  dataset->next_batch_generation = 1u;
+  dataset->next_lease_generation = 1u;
+  dataset->registry_next = live_datasets;
+  live_datasets = dataset;
+  return status(ET_D2_NATIVE_STATUS_OK);
+}
+
+int64_t et_d2_dataset_close_v1(const void *owner) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
+  et_d2_batch_control *batch;
+  if (dataset == NULL) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  if (dataset->current_batch != NULL &&
+      dataset->current_batch->active_lease_generation != 0) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
+  }
+  /* Native authority is revoked before the fixed destruction tail. */
+  unlink_dataset(dataset);
+  batch = dataset->current_batch;
+  dataset->current_batch = NULL;
+  if (batch != NULL) {
+    cleanup_control(batch);
+  }
+  free(dataset);
+#ifdef ET_D2_NATIVE_TESTING
+  owned_allocations--;
+#endif
+  return status(ET_D2_NATIVE_STATUS_OK);
 }
 
 #ifdef ET_D2_NATIVE_TESTING
 void et_d2_batch_test_fail_stage_v1(int64_t stage) { fail_stage = stage; }
 
+void et_d2_exact_read_test_fail_stage_v1(int64_t stage) {
+  read_fail_stage = stage;
+}
+
 static int should_fail(int64_t stage) { return fail_stage == stage; }
+
+static int should_fail_read(int64_t stage) {
+  return read_fail_stage == stage;
+}
 
 int64_t et_d2_batch_test_live_count_v1(void) {
   int64_t count = 0;
-  const et_d2_batch_control *entry;
-  for (entry = live_batches; entry != NULL; entry = entry->registry_next) {
+  const et_d2_dataset_control *entry;
+  for (entry = live_datasets; entry != NULL; entry = entry->registry_next) {
+    if (entry->current_batch != NULL) {
+      count++;
+    }
+  }
+  return count;
+}
+
+int64_t et_d2_dataset_test_live_count_v1(void) {
+  int64_t count = 0;
+  const et_d2_dataset_control *entry;
+  for (entry = live_datasets; entry != NULL; entry = entry->registry_next) {
     count++;
   }
   return count;
@@ -209,13 +297,22 @@ int64_t et_d2_batch_test_live_count_v1(void) {
 
 int64_t et_d2_batch_test_borrow_count_v1(void) {
   int64_t count = 0;
-  const et_d2_batch_control *entry;
-  for (entry = live_batches; entry != NULL; entry = entry->registry_next) {
-    if (entry->active_lease_generation != 0) {
+  const et_d2_dataset_control *entry;
+  for (entry = live_datasets; entry != NULL; entry = entry->registry_next) {
+    if (entry->current_batch != NULL &&
+        entry->current_batch->active_lease_generation != 0) {
       count++;
     }
   }
   return count;
+}
+
+int64_t et_d2_test_owned_allocation_count_v1(void) {
+  return owned_allocations;
+}
+
+size_t et_d2_dataset_test_control_bytes_v1(void) {
+  return sizeof(et_d2_dataset_control);
 }
 
 size_t et_d2_batch_test_control_bytes_v1(void) {
@@ -235,10 +332,19 @@ size_t et_d2_batch_test_payload_bytes_v1(const void *owner,
 }
 
 void et_d2_batch_test_exhaust_generations_v1(void) {
-  next_generation = (uint64_t)INT64_MAX + 1u;
+  et_d2_dataset_control *entry;
+  for (entry = live_datasets; entry != NULL; entry = entry->registry_next) {
+    entry->next_batch_generation = (uint64_t)INT64_MAX + 1u;
+    entry->next_lease_generation = (uint64_t)INT64_MAX + 1u;
+  }
 }
 #else
 static int should_fail(int64_t stage) {
+  (void)stage;
+  return 0;
+}
+
+static int should_fail_read(int64_t stage) {
   (void)stage;
   return 0;
 }
@@ -306,7 +412,12 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes_value,
   while (remaining != 0u) {
     size_t request =
         remaining > (size_t)SSIZE_MAX ? (size_t)SSIZE_MAX : remaining;
-    ssize_t received = pread(descriptor, next, request, (off_t)current);
+    ssize_t received;
+    if (should_fail_read(ET_D2_TEST_READ_FAIL_READ)) {
+      (void)close(descriptor);
+      return read_status(ET_D2_EXACT_READ_READ, EIO);
+    }
+    received = pread(descriptor, next, request, (off_t)current);
     if (received < 0) {
       if (errno == EINTR) {
         continue;
@@ -325,6 +436,9 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes_value,
   }
   if (close(descriptor) != 0) {
     return read_status(ET_D2_EXACT_READ_CLOSE, errno);
+  }
+  if (should_fail_read(ET_D2_TEST_READ_FAIL_CLOSE)) {
+    return read_status(ET_D2_EXACT_READ_CLOSE, EIO);
   }
   return 0;
 }
@@ -362,6 +476,7 @@ static int64_t create_i64_storage(const uint64_t shape[2],
 
 int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
                               int64_t columns_value, int64_t max_payload) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
   et_d2_batch_control *batch = NULL;
   uint64_t shape[2];
   int64_t generation;
@@ -369,7 +484,7 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
   size_t payload_bytes;
   int64_t result;
 
-  if (owner == NULL) {
+  if (owner == NULL || dataset == NULL) {
     (void)status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
     return 0;
   }
@@ -381,12 +496,12 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_RANGE);
     return 0;
   }
-  if (owner_has_batch(owner)) {
+  if (dataset->current_batch != NULL) {
     (void)status(ET_D2_NATIVE_STATUS_INVALID_STATE);
     return 0;
   }
-  if (!reserve_generation(&generation)) {
-    (void)status(ET_D2_NATIVE_STATUS_RANGE);
+  if (!peek_generation(dataset->next_batch_generation, &generation)) {
+    (void)status(ET_D2_NATIVE_STATUS_UNSUPPORTED);
     return 0;
   }
   if (should_fail(ET_D2_TEST_FAIL_CONTROL)) {
@@ -398,7 +513,9 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
   }
-  batch->owner = owner;
+#ifdef ET_D2_NATIVE_TESTING
+  owned_allocations++;
+#endif
   batch->generation = generation;
   batch->rows = (size_t)rows_value;
   batch->columns = (size_t)columns_value;
@@ -443,6 +560,9 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
   }
+#ifdef ET_D2_NATIVE_TESTING
+  owned_allocations++;
+#endif
   batch->mask_shape[0] = shape[0];
   batch->mask_shape[1] = shape[1];
   batch->mask_view =
@@ -460,9 +580,8 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
   }
-  batch->magic = ET_D2_BATCH_MAGIC;
-  batch->registry_next = live_batches;
-  live_batches = batch;
+  dataset->current_batch = batch;
+  dataset->next_batch_generation++;
   (void)status(ET_D2_NATIVE_STATUS_OK);
   return generation;
 }
@@ -538,6 +657,7 @@ int64_t et_d2_batch_seal_v1(const void *owner, int64_t generation) {
 }
 
 int64_t et_d2_batch_borrow_begin_v1(const void *owner, int64_t generation) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
   et_d2_batch_control *batch = find_batch(owner, generation);
   int64_t lease;
   if (batch == NULL) {
@@ -548,11 +668,13 @@ int64_t et_d2_batch_borrow_begin_v1(const void *owner, int64_t generation) {
     (void)status(ET_D2_NATIVE_STATUS_INVALID_STATE);
     return 0;
   }
-  if (!reserve_generation(&lease)) {
-    (void)status(ET_D2_NATIVE_STATUS_RANGE);
+  if (dataset == NULL ||
+      !peek_generation(dataset->next_lease_generation, &lease)) {
+    (void)status(ET_D2_NATIVE_STATUS_UNSUPPORTED);
     return 0;
   }
   batch->active_lease_generation = lease;
+  dataset->next_lease_generation++;
   (void)status(ET_D2_NATIVE_STATUS_OK);
   return lease;
 }
@@ -611,6 +733,7 @@ int64_t et_d2_batch_borrow_end_v1(const void *owner, int64_t generation,
 }
 
 int64_t et_d2_batch_release_v1(const void *owner, int64_t generation) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
   et_d2_batch_control *batch = find_batch(owner, generation);
   if (batch == NULL) {
     return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
@@ -618,8 +741,10 @@ int64_t et_d2_batch_release_v1(const void *owner, int64_t generation) {
   if (batch->active_lease_generation != 0) {
     return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
   }
-  unlink_batch(batch);
-  batch->magic = 0u;
+  if (dataset == NULL) {
+    abort();
+  }
+  dataset->current_batch = NULL;
   cleanup_control(batch);
   return status(ET_D2_NATIVE_STATUS_OK);
 }

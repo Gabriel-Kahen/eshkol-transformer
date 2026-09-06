@@ -62,6 +62,14 @@ static size_t open_fd_count(void) {
   return count;
 }
 
+static void open_dataset(const void *owner) {
+  CHECK(et_d2_dataset_open_v1(owner) == ET_D2_NATIVE_STATUS_OK);
+}
+
+static void close_dataset(const void *owner) {
+  CHECK(et_d2_dataset_close_v1(owner) == ET_D2_NATIVE_STATUS_OK);
+}
+
 static void test_exact_read(void) {
   char path[] = "/tmp/et-d2-exact-read-XXXXXX";
   uint8_t contents[16];
@@ -143,6 +151,19 @@ static void test_exact_read(void) {
   after_fds = open_fd_count();
   CHECK(before_fds != SIZE_MAX && after_fds == before_fds);
 
+  init_bytevector(&vector, 5);
+  et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_READ);
+  result = et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 5);
+  CHECK(read_stage(result) == ET_D2_EXACT_READ_READ);
+  CHECK(read_errno(result) == EIO);
+  CHECK(open_fd_count() == before_fds);
+  et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_CLOSE);
+  result = et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 5);
+  CHECK(read_stage(result) == ET_D2_EXACT_READ_CLOSE);
+  CHECK(read_errno(result) == EIO);
+  CHECK(open_fd_count() == before_fds);
+  et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_NONE);
+
   CHECK(unlink(path) == 0);
   init_bytevector(&vector, 1);
   result = et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 1);
@@ -202,12 +223,16 @@ static void test_unpublished_cleanup(void) {
   int64_t stage;
   for (stage = ET_D2_TEST_FAIL_CONTROL; stage <= ET_D2_TEST_FAIL_BEFORE_PUBLISH;
        stage++) {
+    open_dataset(&owners[stage]);
     et_d2_batch_test_fail_stage_v1(stage);
     CHECK(et_d2_batch_create_v1(&owners[stage], 2, 3, 102) == 0);
     CHECK(et_d2_batch_last_status_v1() ==
           ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     CHECK(et_d2_batch_test_live_count_v1() == 0);
     CHECK(et_d2_batch_test_borrow_count_v1() == 0);
+    CHECK(et_d2_dataset_test_live_count_v1() == 1);
+    close_dataset(&owners[stage]);
+    CHECK(et_d2_test_owned_allocation_count_v1() == 0);
   }
   et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_NONE);
 }
@@ -217,6 +242,7 @@ static void test_i1_allocation_failures(void) {
   size_t allowed;
   for (allowed = 0u; allowed < 16u; allowed++) {
     int64_t generation;
+    open_dataset(&owners[allowed]);
     et_i64_tensor_test_fail_alloc_after_v1(allowed);
     generation = et_d2_batch_create_v1(&owners[allowed], 2, 3, 102);
     if (generation != 0) {
@@ -227,8 +253,57 @@ static void test_i1_allocation_failures(void) {
             et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_INTERNAL);
     }
     CHECK(et_d2_batch_test_live_count_v1() == 0);
+    close_dataset(&owners[allowed]);
+    CHECK(et_d2_test_owned_allocation_count_v1() == 0);
   }
   et_i64_tensor_test_reset_allocator_v1();
+}
+
+static void test_dataset_lifetime(void) {
+  int owner = 0;
+  int foreign_owner = 0;
+  int64_t generation;
+  int64_t lease;
+  const int64_t value = 1;
+
+  CHECK(et_d2_dataset_open_v1(NULL) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_DATASET);
+  CHECK(et_d2_dataset_open_v1(&owner) ==
+        ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+  CHECK(et_d2_dataset_test_live_count_v1() == 0);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
+  et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_NONE);
+
+  open_dataset(&owner);
+  CHECK(et_d2_dataset_test_live_count_v1() == 1);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 1);
+  CHECK(et_d2_dataset_open_v1(&owner) == ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_batch_create_v1(&foreign_owner, 1, 1, 17) == 0);
+  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+
+  et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_CONTROL);
+  CHECK(et_d2_batch_create_v1(&owner, 1, 1, 17) == 0);
+  CHECK(et_d2_batch_last_status_v1() ==
+        ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+  et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_NONE);
+  generation = et_d2_batch_create_v1(&owner, 1, 1, 17);
+  CHECK(generation == 1);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 3);
+  write_span(&owner, generation, 0, &value, &value, 1u);
+  CHECK(et_d2_batch_seal_v1(&owner, generation) == 0);
+  lease = et_d2_batch_borrow_begin_v1(&owner, generation);
+  CHECK(lease > 0);
+  CHECK(et_d2_dataset_close_v1(&owner) == ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_dataset_test_live_count_v1() == 1);
+  CHECK(et_d2_batch_test_live_count_v1() == 1);
+  CHECK(et_d2_batch_borrow_end_v1(&owner, generation, lease) == 0);
+  close_dataset(&owner);
+  CHECK(et_d2_dataset_test_live_count_v1() == 0);
+  CHECK(et_d2_batch_test_live_count_v1() == 0);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
+  CHECK(et_d2_dataset_close_v1(&owner) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
 }
 
 static void test_batch_lifetime(void) {
@@ -251,6 +326,7 @@ static void test_batch_lifetime(void) {
   bytevector_fixture one;
   const int64_t zero = 0;
 
+  open_dataset(&owner);
   CHECK(et_d2_batch_create_v1(&owner, 2, 3, 101) == 0);
   CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_RANGE);
   CHECK(et_d2_batch_create_v1(&owner, 0, 3, 102) == 0);
@@ -298,6 +374,9 @@ static void test_batch_lifetime(void) {
   inputs = et_d2_batch_borrow_inputs_v1(&owner, generation, lease);
   targets = et_d2_batch_borrow_targets_v1(&owner, generation, lease);
   mask = et_d2_batch_borrow_loss_mask_v1(&owner, generation, lease);
+  CHECK(et_d2_batch_borrow_inputs_v1(&owner, generation, lease) == inputs);
+  CHECK(et_d2_batch_borrow_targets_v1(&owner, generation, lease) == targets);
+  CHECK(et_d2_batch_borrow_loss_mask_v1(&owner, generation, lease) == mask);
   check_view(inputs, "i64", 6u * sizeof(int64_t));
   check_view(targets, "i64", 6u * sizeof(int64_t));
   check_view(mask, "bool", 6u);
@@ -321,6 +400,8 @@ static void test_batch_lifetime(void) {
   CHECK(et_d2_batch_seal_v1(&owner, stale_generation) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   CHECK(et_d2_batch_test_payload_bytes_v1(&owner, stale_generation) == 0u);
+  close_dataset(&owner);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
 }
 
 static void test_live_storage_rejection(void) {
@@ -333,12 +414,17 @@ static void test_live_storage_rejection(void) {
   const int64_t values[] = {8, 1};
   bytevector_fixture vector;
 
+  open_dataset(&first_owner);
+  open_dataset(&second_owner);
   first_generation = et_d2_batch_create_v1(&first_owner, 1, 2, 34);
   write_span(&first_owner, first_generation, 0, values, values, 2u);
   CHECK(et_d2_batch_seal_v1(&first_owner, first_generation) == 0);
   lease = et_d2_batch_borrow_begin_v1(&first_owner, first_generation);
   view = et_d2_batch_borrow_inputs_v1(&first_owner, first_generation, lease);
+  CHECK(et_d2_dataset_open_v1(view->data) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   second_generation = et_d2_batch_create_v1(&second_owner, 1, 1, 17);
+  CHECK(first_generation == 1 && second_generation == 1);
   encode_i64le(&vector, values, 1u);
   CHECK(et_d2_batch_write_pair_i64le_span_v1(&second_owner, second_generation,
                                              0, view->data, 8, &vector, 8, 1) ==
@@ -348,6 +434,9 @@ static void test_live_storage_rejection(void) {
   CHECK(et_d2_batch_release_v1(&second_owner, second_generation) == 0);
   CHECK(et_d2_batch_borrow_end_v1(&first_owner, first_generation, lease) == 0);
   CHECK(et_d2_batch_release_v1(&first_owner, first_generation) == 0);
+  close_dataset(&second_owner);
+  close_dataset(&first_owner);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
 }
 
 static void test_long_generation_loop(void) {
@@ -356,6 +445,7 @@ static void test_long_generation_loop(void) {
   int64_t stale_generation = 0;
   int64_t stale_lease = 0;
   size_t iteration;
+  open_dataset(&owner);
   for (iteration = 0u; iteration < 2048u; iteration++) {
     int64_t generation = et_d2_batch_create_v1(&owner, 1, 1, 17);
     int64_t lease;
@@ -379,27 +469,34 @@ static void test_long_generation_loop(void) {
   }
   CHECK(et_d2_batch_test_live_count_v1() == 0);
   CHECK(et_d2_batch_test_borrow_count_v1() == 0);
+  CHECK(et_d2_dataset_test_live_count_v1() == 1);
+  close_dataset(&owner);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
 }
 
 static void test_generation_exhaustion(void) {
   int owner = 0;
   int64_t generation;
   const int64_t value = 1;
+  open_dataset(&owner);
   generation = et_d2_batch_create_v1(&owner, 1, 1, 17);
   write_span(&owner, generation, 0, &value, &value, 1u);
   CHECK(et_d2_batch_seal_v1(&owner, generation) == 0);
   et_d2_batch_test_exhaust_generations_v1();
   CHECK(et_d2_batch_borrow_begin_v1(&owner, generation) == 0);
-  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_RANGE);
+  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_UNSUPPORTED);
   CHECK(et_d2_batch_release_v1(&owner, generation) == 0);
   CHECK(et_d2_batch_create_v1(&owner, 1, 1, 17) == 0);
-  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_RANGE);
+  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_UNSUPPORTED);
+  close_dataset(&owner);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
 }
 
 int main(void) {
   test_exact_read();
   test_unpublished_cleanup();
   test_i1_allocation_failures();
+  test_dataset_lifetime();
   test_batch_lifetime();
   test_live_storage_rejection();
   test_long_generation_loop();
@@ -410,8 +507,10 @@ int main(void) {
     return 1;
   }
   (void)printf(
-      "D2 native bytes: control=%zu dynamic-borrow=%zu view-metadata=%zu "
+      "D2 native bytes: dataset-control=%zu batch-control=%zu "
+      "dynamic-borrow=%zu view-metadata=%zu "
       "payload[2,3]=102\n",
+      et_d2_dataset_test_control_bytes_v1(),
       et_d2_batch_test_control_bytes_v1(), et_d2_batch_test_borrow_bytes_v1(),
       et_d2_batch_test_view_metadata_bytes_v1());
   (void)printf("D2 native PASS: %d exact-range, carrier, and lifetime checks\n",

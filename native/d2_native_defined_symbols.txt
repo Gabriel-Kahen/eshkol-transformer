@@ -8,4 +8,6 @@ et_d2_batch_last_status_v1
 et_d2_batch_release_v1
 et_d2_batch_seal_v1
 et_d2_batch_write_pair_i64le_span_v1
+et_d2_dataset_close_v1
+et_d2_dataset_open_v1
 et_d2_exact_read_v1

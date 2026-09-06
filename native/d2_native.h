@@ -17,7 +17,8 @@ enum {
   ET_D2_NATIVE_STATUS_INVALID_STATE = 2,
   ET_D2_NATIVE_STATUS_RANGE = 3,
   ET_D2_NATIVE_STATUS_ALLOCATION_FAILED = 4,
-  ET_D2_NATIVE_STATUS_INTERNAL = 5
+  ET_D2_NATIVE_STATUS_INTERNAL = 5,
+  ET_D2_NATIVE_STATUS_UNSUPPORTED = 6
 };
 
 enum {
@@ -25,6 +26,12 @@ enum {
   ET_D2_EXACT_READ_OPEN = 2,
   ET_D2_EXACT_READ_READ = 3,
   ET_D2_EXACT_READ_CLOSE = 4
+};
+
+enum {
+  ET_D2_TEST_READ_FAIL_NONE = 0,
+  ET_D2_TEST_READ_FAIL_READ = 1,
+  ET_D2_TEST_READ_FAIL_CLOSE = 2
 };
 
 /*
@@ -37,8 +44,19 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes,
                             int64_t expected_length);
 
 /*
+ * Open is called only after the Eshkol loader has completely validated its
+ * configuration, manifest, and every shard. It publishes one native registry
+ * entry for owner. Close rejects before mutation during an active scoped borrow;
+ * otherwise it unregisters that entry before destroying its current carrier and
+ * is a nonallocating, nonrecoverable tail after admission. Public idempotence and
+ * exact shell authentication remain Eshkol duties.
+ */
+int64_t et_d2_dataset_open_v1(const void *owner);
+int64_t et_d2_dataset_close_v1(const void *owner);
+
+/*
  * owner is a stable Eshkol dataset identity, compared but never dereferenced.
- * Create returns a positive, process-unique generation or zero on failure.
+ * Create returns a positive, owner-qualified generation or zero on failure.
  * Every later operation requires owner plus generation, preventing allocator
  * address ABA while retaining no released native control/tombstone.
  */
@@ -77,7 +95,11 @@ et_d2_batch_borrow_loss_mask_v1(const void *owner, int64_t batch_generation,
 int64_t et_d2_batch_borrow_end_v1(const void *owner, int64_t batch_generation,
                                   int64_t lease_generation);
 
-/* Public-wrapper idempotence clears its Eshkol token after this exact release.
+/*
+ * The public wrapper invalidates the dataset's current generation before this
+ * exact release. Authentic caller-retained shell aliases remain ordinary GC
+ * values; wrapper validation makes their repeated release idempotent and rejects
+ * every other stale use before this native boundary.
  */
 int64_t et_d2_batch_release_v1(const void *owner, int64_t batch_generation);
 
@@ -89,13 +111,18 @@ enum {
   ET_D2_TEST_FAIL_AFTER_TARGET_TENSOR = 4,
   ET_D2_TEST_FAIL_AFTER_TARGET_BORROW = 5,
   ET_D2_TEST_FAIL_MASK = 6,
-  ET_D2_TEST_FAIL_BEFORE_PUBLISH = 7
+  ET_D2_TEST_FAIL_BEFORE_PUBLISH = 7,
+  ET_D2_TEST_FAIL_DATASET = 8
 };
 
 #ifdef ET_D2_NATIVE_TESTING
 void et_d2_batch_test_fail_stage_v1(int64_t stage);
+void et_d2_exact_read_test_fail_stage_v1(int64_t stage);
+int64_t et_d2_dataset_test_live_count_v1(void);
 int64_t et_d2_batch_test_live_count_v1(void);
 int64_t et_d2_batch_test_borrow_count_v1(void);
+int64_t et_d2_test_owned_allocation_count_v1(void);
+size_t et_d2_dataset_test_control_bytes_v1(void);
 size_t et_d2_batch_test_control_bytes_v1(void);
 size_t et_d2_batch_test_borrow_bytes_v1(void);
 size_t et_d2_batch_test_view_metadata_bytes_v1(void);
