@@ -32,7 +32,7 @@
          parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
          parameter-handle-path parameter-handle-shape parameter-handle-dtype
          parameter-handle-device state-dict-paths state-dict-tensor
-         state-dict-alias-groups
+         state-dict-alias-groups state-dict-release!
          model-forward model-output-logits model-output-loss model-output-rng
          optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
          optimizer-load-state!
@@ -133,6 +133,7 @@
 (define (state-dict-paths state) (a0-declaration-only 'state-dict-paths))
 (define (state-dict-tensor state path) (a0-declaration-only 'state-dict-tensor))
 (define (state-dict-alias-groups state) (a0-declaration-only 'state-dict-alias-groups))
+(define (state-dict-release! state) (a0-declaration-only 'state-dict-release!))
 (define (model-forward model input-ids . opts) (a0-declaration-only 'model-forward))
 (define (model-output-logits output) (a0-declaration-only 'model-output-logits))
 (define (model-output-loss output) (a0-declaration-only 'model-output-loss))

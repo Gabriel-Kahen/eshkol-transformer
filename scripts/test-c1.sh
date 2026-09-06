@@ -3,7 +3,8 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-for command in ar awk cmp env nm python3 readelf rg sha256sum strings timeout; do
+for command in ar awk cmp env grep nm python3 readelf rg sed sha256sum \
+    strings timeout tr; do
   require_command "${command}"
 done
 verify_toolchain
@@ -15,6 +16,9 @@ c1_cxx="$(tsv_value "${c1_provenance}" cxx_path)"
 c1_timeout="${C1_COMPILER_TIMEOUT_SECONDS:-480}"
 [[ "${c1_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "C1_COMPILER_TIMEOUT_SECONDS must be a positive integer"
+c1_lsan="${C1_LSAN:-0}"
+[[ "${c1_lsan}" == 0 || "${c1_lsan}" == 1 ]] || \
+  die "C1_LSAN must be 0 or 1"
 
 c1_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c1.XXXXXX")"
 c1_cleanup() {
@@ -67,7 +71,8 @@ fi
   "${PROJECT_ROOT}/native/checkpoint_io.c" \
   "${PROJECT_ROOT}/tests/c1/test_checkpoint_io.c" \
   -o "${c1_tmp}/native-sanitized"
-ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 \
+ASAN_OPTIONS="detect_leaks=${c1_lsan}:halt_on_error=1" \
+  UBSAN_OPTIONS=halt_on_error=1 \
   "${c1_tmp}/native-sanitized" >"${c1_tmp}/native-sanitized.stdout"
 cmp "${PROJECT_ROOT}/tests/expected/c1-native.stdout" \
     "${c1_tmp}/native-sanitized.stdout"
@@ -147,6 +152,22 @@ compile_c1_production_object "${c1_tmp}/cache-production-b" \
   "${c1_tmp}/production-c1-b.log"
 cmp "${c1_tmp}/production-a/c1.o" "${c1_tmp}/production-b/c1.o" || \
   die "C1 production Eshkol object is not deterministic"
+canonicalize_c1_depfile() {
+  local depfile=$1 output=$2
+  sed -e 's/^[^:]*://' -e 's/\\//g' "${depfile}" | \
+    tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+    sed "s#^${PROJECT_ROOT}/##" >"${output}"
+}
+canonicalize_c1_depfile "${c1_tmp}/production-a/c1.d" \
+  "${c1_tmp}/production-a/source-closure.txt"
+canonicalize_c1_depfile "${c1_tmp}/production-b/c1.d" \
+  "${c1_tmp}/production-b/source-closure.txt"
+cmp "${c1_tmp}/production-a/source-closure.txt" \
+  "${c1_tmp}/production-b/source-closure.txt" || \
+  die "C1 production depfile closure is not byte-deterministic"
+cmp "${PROJECT_ROOT}/native/c1_checkpoint_source_closure.txt" \
+  "${c1_tmp}/production-a/source-closure.txt" || \
+  die "C1 production source closure drifted"
 for required_source in \
   "${PROJECT_ROOT}/internal/c1/lib/transformer/checkpoint_internal.esk" \
   "${PROJECT_ROOT}/internal/c1/lib/c1_sha256.esk" \

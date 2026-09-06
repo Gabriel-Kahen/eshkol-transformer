@@ -7,5 +7,4 @@
           state-entry-shape-internal
           state-entry-dtype-internal
           state-entry-device-internal
-          state-entry-layout-internal
-          state-entry-tensor-internal))
+          state-entry-layout-internal))

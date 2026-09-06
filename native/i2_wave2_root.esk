@@ -1,0 +1,732 @@
+;;; Canonical Wave 2 I2/P1 trusted compilation root. Never install this source.
+;;; It extends the accepted Wave 1 source aggregate, preserving the exact
+;;; E1/X1/P1/D1/C1/T1 surface while adding only localized I2 capability.
+
+(load "t1_wave1_root.esk")
+(require transformer.checkpoint_internal)
+
+(extern i64 i2-last-error-category
+        :real et_i2_private_last_error_category_v1)
+(extern i64 i2-last-error-code
+        :real et_i2_private_last_error_code_v1)
+(extern ptr i2-native-tensor-create-uniform i64 i64
+        :real et_i2_private_tensor_create_uniform_v1)
+(extern i64 i2-native-tensor-destroy ptr
+        :real et_i2_private_tensor_destroy_v1)
+(extern ptr i2-native-parameter-create ptr
+        :real et_i2_private_parameter_create_v1)
+(extern i64 i2-native-parameter-bind ptr ptr
+        :real et_i2_private_parameter_bind_v1)
+(extern i64 i2-native-parameter-admission-live ptr
+        :real et_i2_private_parameter_admission_live_v1)
+(extern i64 i2-native-carrier-live ptr i64 ptr
+        :real et_i2_private_carrier_live_v1)
+(extern i64 i2-native-rank ptr i64 ptr
+        :real et_i2_private_tensor_rank_v1)
+(extern i64 i2-native-extent ptr i64 ptr i64
+        :real et_i2_private_tensor_extent_v1)
+(extern ptr i2-native-owned-clone ptr i64 ptr
+        :real et_i2_private_owned_clone_v1)
+(extern i64 i2-native-owned-release ptr
+        :real et_i2_private_owned_release_v1)
+(extern i64 i2-native-owned-clone-live-count
+        :real et_i2_private_owned_clone_live_count_v1)
+(extern i64 i2-native-storage-identical ptr i64 ptr ptr i64 ptr
+        :real et_i2_private_storage_identical_v1)
+(extern i64 i2-native-value-equal ptr i64 ptr ptr i64 ptr
+        :real et_i2_private_value_equal_v1)
+(extern i64 i2-native-borrow-checksum ptr i64 ptr
+        :real et_i2_private_borrow_checksum_v1)
+(extern ptr i2-native-copy-builder-create i64
+        :real et_i2_private_copy_builder_create_v1)
+(extern i64 i2-native-copy-builder-set ptr i64 ptr i64 ptr ptr i64 ptr
+        :real et_i2_private_copy_builder_set_v1)
+(extern i64 i2-native-copy-builder-prepare ptr
+        :real et_i2_private_copy_builder_prepare_v1)
+(extern i64 i2-native-copy-builder-commit ptr
+        :real et_i2_private_copy_builder_commit_v1)
+(extern i64 i2-native-copy-builder-abort ptr
+        :real et_i2_private_copy_builder_abort_v1)
+(extern ptr i2-native-reset-builder-create i64
+        :real et_i2_private_reset_builder_create_v1)
+(extern i64 i2-native-reset-builder-set ptr i64 ptr
+        :real et_i2_private_reset_builder_set_v1)
+(extern i64 i2-native-reset-builder-prepare ptr
+        :real et_i2_private_reset_builder_prepare_v1)
+(extern i64 i2-native-reset-builder-commit ptr
+        :real et_i2_private_reset_builder_commit_v1)
+(extern i64 i2-native-reset-builder-abort ptr
+        :real et_i2_private_reset_builder_abort_v1)
+(extern i64 i2-native-parameter-accumulate-uniform ptr ptr i64 i64 i64
+        :real et_i2_private_parameter_accumulate_uniform_v1)
+(extern i64 i2-native-gradient-state ptr ptr
+        :real et_i2_private_parameter_gradient_state_v1)
+(extern i64 i2-native-gradient-count ptr ptr
+        :real et_i2_private_parameter_gradient_count_v1)
+(extern i64 i2-native-byte-length ptr i64 ptr
+        :real et_i2_private_tensor_byte_length_v1)
+(extern i64 i2-native-copy-bytes ptr i64 ptr ptr i64
+        :real et_i2_private_tensor_copy_bytes_v1)
+(extern ptr i2-native-decode-builder-create i64 ptr i64
+        :real et_i2_private_decode_builder_create_v1)
+(extern i64 i2-native-decode-builder-set ptr i64 i64
+        :real et_i2_private_decode_builder_set_v1)
+(extern ptr i2-native-decode-builder-finish ptr
+        :real et_i2_private_decode_builder_finish_v1)
+(extern i64 i2-native-decode-builder-abort ptr
+        :real et_i2_private_decode_builder_abort_v1)
+
+(define i2-provider-name 'i2-dense-cpu-f32-v1)
+(define i2-carrier-tag (vector 'i2-private-carrier-v1))
+(define i2-plan-tag (vector 'i2-private-copy-plan-v1))
+(define i2-parameter-admission-carrier #f)
+(define i2-max-batch 4096)
+(define i2-modules '())
+(define i2-module-count 0)
+
+(define (i2-fail-raw category operation message)
+  (let ((unreachable
+          (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax i2-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (i2-fail-raw category operation message))) result))))
+
+(define (i2-native-fail-raw operation)
+  (let ((category (i2-last-error-category)))
+    (let ((result
+            (i2-fail
+              (cond ((= category 1) 'invalid-argument)
+                    ((= category 2) 'shape-mismatch)
+                    ((= category 3) 'noncontiguous)
+                    ((= category 4) 'invalid-state)
+                    ((= category 5) 'version-mismatch)
+                    (else 'internal))
+              operation "I2 dense CPU-f32 carrier rejected the request")))
+      result)))
+
+(define-syntax i2-native-fail
+  (syntax-rules ()
+    ((_ operation)
+     (let ((result (i2-native-fail-raw operation))) result))))
+
+(define (i2-role-code role)
+  (cond ((eq? role 'parameter) 1)
+        ((eq? role 'tensor) 2)
+        ((eq? role 'owned-clone) 3)
+        (else 0)))
+
+(define (i2-native-role carrier)
+  (if (and (eq? (vector-ref carrier 1) 'parameter)
+           (eq? carrier i2-parameter-admission-carrier))
+      4
+      (let ((result (i2-role-code (vector-ref carrier 1)))) result)))
+
+(define (i2-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining)
+        result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (i2-carrier role native kind)
+  ;; Slot 3 is the exact P1 handle shell for parameters. It remains null only
+  ;; during the fixed registration wrapper's bounded admission phase.
+  (vector i2-carrier-tag role native '() kind))
+
+(define (i2-carrier-shape? value)
+  (and (vector? value) (= (vector-length value) 5)
+       (eq? (vector-ref value 0) i2-carrier-tag)
+       (not (null? (vector-ref value 2)))
+       (let ((role (vector-ref value 1))
+             (handle (vector-ref value 3))
+             (kind (vector-ref value 4)))
+         (cond ((eq? role 'parameter) (eq? kind 'parameter))
+               ((eq? role 'tensor)
+                (and (eq? kind 'buffer) (null? handle)))
+               ((eq? role 'owned-clone)
+                (and (or (eq? kind 'parameter) (eq? kind 'buffer))
+                     (null? handle)))
+               (else #f)))))
+
+(define (i2-carrier-preflight value kind operation)
+  (if (not (i2-carrier-shape? value))
+      (i2-fail 'invalid-argument operation "expected an I2 carrier"))
+  (let ((role (vector-ref value 1))
+        (native (vector-ref value 2)))
+    (if (or (not (eq? kind (vector-ref value 4)))
+            (and (eq? kind 'parameter)
+                 (not (or (eq? role 'parameter)
+                          (eq? role 'owned-clone))))
+            (and (eq? kind 'buffer)
+                 (not (or (eq? role 'tensor)
+                          (eq? role 'owned-clone)))))
+        (i2-fail 'dtype-mismatch operation
+                 "I2 carrier role does not match its retained P1 kind"))
+    (if (and (eq? role 'parameter)
+             (not (eq? value i2-parameter-admission-carrier))
+             (or (null? (vector-ref value 3))
+                 (not (eq? value
+                           (parameter-handle-tensor-identity-internal
+                             (vector-ref value 3))))))
+        (i2-fail 'invalid-argument operation
+                 "I2 carrier does not match its exact P1 handle identity"))
+    (if (and (eq? role 'parameter)
+             (eq? value i2-parameter-admission-carrier))
+        (if (= (i2-native-parameter-admission-live native) 1)
+            value
+            (i2-native-fail operation))
+        (if (= (i2-native-carrier-live native (i2-role-code role)
+                                       (vector-ref value 3)) 1)
+            value
+            (i2-native-fail operation)))))
+
+(define (i2-storage-carrier-preflight value kind operation)
+  ;; P1 has already run describe (including the two-way registry check) before
+  ;; entering its protected comparator. This local phase must not reenter P1.
+  (if (not (i2-carrier-shape? value))
+      (i2-fail 'invalid-argument operation "expected an I2 carrier"))
+  (let ((role (vector-ref value 1)))
+    (if (or (not (eq? kind (vector-ref value 4)))
+            (and (eq? kind 'parameter)
+                 (not (or (eq? role 'parameter)
+                          (eq? role 'owned-clone))))
+            (and (eq? kind 'buffer)
+                 (not (or (eq? role 'tensor)
+                          (eq? role 'owned-clone))))
+            (and (eq? role 'parameter)
+                 (not (eq? value i2-parameter-admission-carrier))
+                 (null? (vector-ref value 3))))
+        (i2-fail 'invalid-argument operation
+                 "I2 protected storage carrier is malformed"))
+    value))
+
+(define (i2-shape value kind operation)
+  (let* ((carrier (i2-carrier-preflight value kind operation))
+         (role (i2-native-role carrier))
+         (native (vector-ref carrier 2))
+         (rank (i2-native-rank native role (vector-ref carrier 3))))
+    (if (< rank 0) (i2-native-fail operation))
+    (let loop ((dimension 0) (result '()))
+      (if (= dimension rank)
+          (i2-reverse result)
+          (let ((extent
+                  (i2-native-extent native role
+                                    (vector-ref carrier 3) dimension)))
+            (if (< extent 0) (i2-native-fail operation))
+            (loop (+ dimension 1) (cons extent result)))))))
+
+(define (i2-describe (request : vector)) : vector
+  (if (not (and (vector? request) (= (vector-length request) 3)
+                (or (eq? (vector-ref request 1) 'parameter)
+                    (eq? (vector-ref request 1) 'buffer))
+                (symbol? (vector-ref request 2))))
+      (i2-fail 'invalid-argument 'i2-describe
+               "malformed I2 metadata request"))
+  (vector (i2-shape (vector-ref request 0) (vector-ref request 1)
+                    (vector-ref request 2))
+          'f32 'cpu 'dense-row-major-contiguous))
+
+(define (i2-clone (request : vector)) : vector
+  (if (not (and (vector? request) (= (vector-length request) 4)
+                (or (eq? (vector-ref request 1) 'parameter)
+                    (eq? (vector-ref request 1) 'buffer))
+                (symbol? (vector-ref request 2))
+                (eq? (vector-ref request 3) #f)))
+      (i2-fail 'invalid-argument 'i2-clone "malformed I2 clone request"))
+  (let* ((operation (vector-ref request 2))
+         ;; Allocate every Eshkol retention edge before native publication.
+         (owned (i2-carrier 'owned-clone '() (vector-ref request 1)))
+         (carrier
+           (i2-carrier-preflight (vector-ref request 0)
+                                 (vector-ref request 1) operation))
+         (native
+           (i2-native-owned-clone
+             (vector-ref carrier 2)
+             (i2-native-role carrier) (vector-ref carrier 3))))
+    (if (null? native) (i2-native-fail operation))
+    (vector-set! owned 2 native)
+    (vector-set! request 3 owned)
+    request))
+
+(define (i2-storage-identical? (request : vector)) : boolean
+  (if (not (and (vector? request) (= (vector-length request) 5)
+                (or (eq? (vector-ref request 2) 'parameter)
+                    (eq? (vector-ref request 2) 'buffer))
+                (or (eq? (vector-ref request 3) 'parameter)
+                    (eq? (vector-ref request 3) 'buffer))
+                (symbol? (vector-ref request 4))))
+      (i2-fail 'invalid-argument 'i2-storage-identical?
+               "malformed I2 storage comparison request"))
+  (let* ((left
+           (i2-storage-carrier-preflight (vector-ref request 0)
+                                         (vector-ref request 2)
+                                         (vector-ref request 4)))
+         (right
+           (i2-storage-carrier-preflight (vector-ref request 1)
+                                         (vector-ref request 3)
+                                         (vector-ref request 4)))
+         (result
+           (i2-native-storage-identical
+             (vector-ref left 2) (i2-native-role left)
+             (vector-ref left 3)
+             (vector-ref right 2) (i2-native-role right)
+             (vector-ref right 3))))
+    (if (< result 0)
+        (i2-fail 'invalid-argument (vector-ref request 4)
+                 "I2 protected storage owner is stale or foreign"))
+    (= result 1)))
+
+(define (i2-value-equal? (request : vector)) : boolean
+  (if (not (and (vector? request) (= (vector-length request) 4)
+                (or (eq? (vector-ref request 2) 'parameter)
+                    (eq? (vector-ref request 2) 'buffer))
+                (symbol? (vector-ref request 3))))
+      (i2-fail 'invalid-argument 'i2-value-equal?
+               "malformed I2 value comparison request"))
+  (let* ((left
+           (i2-carrier-preflight (vector-ref request 0)
+                                 (vector-ref request 2)
+                                 (vector-ref request 3)))
+         (right
+           (i2-carrier-preflight (vector-ref request 1)
+                                 (vector-ref request 2)
+                                 (vector-ref request 3)))
+         (result
+           (i2-native-value-equal
+             (vector-ref left 2) (i2-native-role left)
+             (vector-ref left 3)
+             (vector-ref right 2) (i2-native-role right)
+             (vector-ref right 3))))
+    (if (< result 0) (i2-native-fail (vector-ref request 3)))
+    (= result 1)))
+
+(define (i2-device-equal? (request : vector)) : boolean
+  (if (not (and (vector? request) (= (vector-length request) 3)
+                (symbol? (vector-ref request 2))))
+      (i2-fail 'invalid-argument 'i2-device-equal?
+               "malformed I2 device comparison request"))
+  (and (eq? (vector-ref request 0) 'cpu)
+       (eq? (vector-ref request 1) 'cpu)))
+
+(define (i2-bounded-list-length values limit)
+  (let loop ((remaining values) (count 0))
+    (cond ((null? remaining) count)
+          ((or (not (pair? remaining)) (>= count limit)) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+
+(define (i2-prepare-load-guarded request)
+  (if (not (and (vector? request) (= (vector-length request) 2)
+                (symbol? (vector-ref request 1))))
+      (i2-fail 'invalid-argument 'i2-prepare-load
+               "malformed I2 copy-plan request"))
+  (let* ((assignments (vector-ref request 0))
+         (operation (vector-ref request 1))
+         (count (i2-bounded-list-length assignments i2-max-batch)))
+    (if (or (not count) (= count 0))
+        (i2-fail 'invalid-argument operation
+                 "I2 copy plan requires a bounded nonempty assignment list"))
+    (let ((native-plan (i2-native-copy-builder-create count)))
+      (if (null? native-plan) (i2-native-fail operation))
+      (guard (caught
+               (#t
+                 (i2-native-copy-builder-abort native-plan)
+                 (raise caught)))
+        (let loop ((remaining assignments) (index 0))
+          (if (null? remaining)
+              (let ((status (i2-native-copy-builder-prepare native-plan)))
+                (if (not (= status 0)) (i2-native-fail operation))
+                (vector (vector i2-plan-tag native-plan #f)))
+              (let ((assignment (car remaining)))
+                (if (not (and (vector? assignment)
+                              (= (vector-length assignment) 3)
+                              (or (eq? (vector-ref assignment 2) 'parameter)
+                                  (eq? (vector-ref assignment 2) 'buffer))))
+                    (i2-fail 'invalid-argument operation
+                             "malformed I2 copy assignment"))
+                (let* ((kind (vector-ref assignment 2))
+                       (destination
+                         (i2-carrier-preflight
+                           (vector-ref assignment 0) kind operation))
+                       (source
+                         (i2-carrier-preflight
+                           (vector-ref assignment 1) kind operation))
+                       (status
+                         (i2-native-copy-builder-set
+                           native-plan index
+                           (vector-ref destination 2)
+                           (i2-native-role destination)
+                           (vector-ref destination 3)
+                           (vector-ref source 2)
+                           (i2-native-role source)
+                           (vector-ref source 3))))
+                  (if (not (= status 0)) (i2-native-fail operation))
+                  (loop (cdr remaining) (+ index 1))))))))))
+
+(define (i2-prepare-load (request : vector)) : vector
+  (let ((result (i2-prepare-load-guarded request)))
+    (if (vector? result)
+        result
+        (i2-fail 'internal 'i2-prepare-load
+                 "I2 prepare returned a non-vector plan"))))
+
+(define (i2-commit-load! (plan : vector)) : vector
+  (if (not (and (vector? plan) (= (vector-length plan) 3)
+                (eq? (vector-ref plan 0) i2-plan-tag)
+                (not (null? (vector-ref plan 1)))
+                (eq? (vector-ref plan 2) #f)))
+      (i2-fail 'invalid-state 'module-load-state-dict!
+               "invalid or consumed I2 copy plan"))
+  ;; A successfully prepared native plan has an allocation-free, nonraising,
+  ;; full-write commit. A nonzero status here is a native contract defect.
+  (let ((status (i2-native-copy-builder-commit (vector-ref plan 1))))
+    (if (not (= status 0))
+        (i2-fail 'internal 'module-load-state-dict!
+                 "prepared I2 copy plan violated infallible commit"))
+    (vector-set! plan 1 '())
+    (vector-set! plan 2 #t)
+    plan))
+
+(define (i2-release-owned! (request : vector)) : vector
+  (if (not (and (vector? request) (= (vector-length request) 4)
+                (or (eq? (vector-ref request 1) 'parameter)
+                    (eq? (vector-ref request 1) 'buffer))
+                (symbol? (vector-ref request 2))
+                (eq? (vector-ref request 3) #f)))
+      (i2-fail 'invalid-argument 'i2-release-owned!
+               "malformed I2 owned release request"))
+  (let ((carrier (vector-ref request 0))
+        (operation (vector-ref request 2)))
+    (if (not (and (i2-carrier-shape? carrier)
+                  (eq? (vector-ref carrier 1) 'owned-clone)
+                  (eq? (vector-ref carrier 4) (vector-ref request 1))))
+        (i2-fail 'invalid-argument operation
+                 "I2 release accepts only an owned clone"))
+    (if (not (= (i2-native-owned-release (vector-ref carrier 2)) 0))
+        (i2-native-fail operation))
+    (vector-set! carrier 2 '())
+    (vector-set! request 3 #t)
+    request))
+
+(define i2-provider
+  (tensor-provider-create-internal
+    i2-provider-name i2-describe i2-clone i2-storage-identical?
+    i2-value-equal? i2-device-equal? i2-prepare-load i2-commit-load!
+    i2-release-owned!))
+
+(define (i2-destroy-evidence! evidence)
+  (let loop ((remaining evidence))
+    (if (null? remaining)
+        #t
+        (let ((assignment (car remaining)))
+          (let release ((index 0))
+            (if (= index 2)
+                (loop (cdr remaining))
+                (let ((carrier (vector-ref assignment index)))
+                  (if (and (i2-carrier-shape? carrier)
+                           (eq? (vector-ref carrier 1) 'tensor)
+                           (not (null? (vector-ref carrier 2))))
+                      (begin
+                        (i2-native-tensor-destroy (vector-ref carrier 2))
+                        (vector-set! carrier 2 '()))
+                      #t)
+                  (release (+ index 1)))))))))
+
+(define (i2-admission-create! carrier count bits)
+  (let ((native (i2-native-tensor-create-uniform count bits)))
+    (if (null? native) (i2-native-fail 'tensor-provider-register-internal!))
+    (vector-set! carrier 2 native)
+    carrier))
+
+(define (i2-register-provider!)
+  (let* ((destination-a (i2-carrier 'tensor '() 'buffer))
+         (source-a (i2-carrier 'tensor '() 'buffer))
+         (destination-b (i2-carrier 'tensor '() 'buffer))
+         (source-b (i2-carrier 'tensor '() 'buffer))
+         (assignment-a (vector destination-a source-a 'buffer))
+         (assignment-b (vector destination-b source-b 'buffer))
+         (evidence (list assignment-a assignment-b)))
+    (guard (caught
+             (#t
+               (i2-destroy-evidence! evidence)
+               (raise caught)))
+      (i2-admission-create! destination-a 2 0)
+      (i2-admission-create! source-a 2 1065353216)
+      (i2-admission-create! destination-b 2 1073741824)
+      (i2-admission-create! source-b 2 1077936128)
+      (let ((registered
+              (tensor-provider-register-internal! i2-provider evidence)))
+        (i2-destroy-evidence! evidence)
+        registered))))
+
+(define i2-registered-provider (i2-register-provider!))
+
+(define (i2-checkpoint-encode (request : vector)) : bytevector
+  (if (not (and (= (vector-length request) 7)
+                (or (eq? (vector-ref request 1) 'parameter)
+                    (eq? (vector-ref request 1) 'buffer))
+                (list? (vector-ref request 2))
+                (eq? (vector-ref request 3) 'f32)
+                (eq? (vector-ref request 4) 'cpu)
+                (eq? (vector-ref request 5) 'dense-row-major-contiguous)
+                (symbol? (vector-ref request 6))))
+      (i2-fail 'invalid-argument 'i2-checkpoint-encode
+               "malformed I2 checkpoint encode request"))
+  (let* ((operation (vector-ref request 6))
+         (carrier
+           (i2-carrier-preflight (vector-ref request 0)
+                                 (vector-ref request 1) operation))
+         (bytes
+           (i2-native-byte-length
+             (vector-ref carrier 2) (i2-native-role carrier)
+             (vector-ref carrier 3))))
+    (if (< bytes 0) (i2-native-fail operation))
+    (let ((payload (make-bytevector bytes 0)))
+      (if (not (= (i2-native-copy-bytes
+                    (vector-ref carrier 2) (i2-native-role carrier)
+                    (vector-ref carrier 3) payload bytes) 0))
+          (i2-native-fail operation))
+      payload)))
+
+(define (i2-checkpoint-decode-guarded request)
+  (if (not (and (vector? request) (= (vector-length request) 8)
+                (bytevector? (vector-ref request 0))
+                (or (eq? (vector-ref request 1) 'parameter)
+                    (eq? (vector-ref request 1) 'buffer))
+                (list? (vector-ref request 2))
+                (eq? (vector-ref request 3) 'f32)
+                (eq? (vector-ref request 4) 'cpu)
+                (eq? (vector-ref request 5) 'dense-row-major-contiguous)
+                (symbol? (vector-ref request 6))
+                (eq? (vector-ref request 7) #f)))
+      (i2-fail 'invalid-argument 'i2-checkpoint-decode
+               "malformed I2 checkpoint decode request"))
+  (let* ((payload (vector-ref request 0))
+         (kind (vector-ref request 1))
+         (shape (vector-ref request 2))
+         (operation (vector-ref request 6))
+         (rank (i2-bounded-list-length shape 64))
+         (owned (i2-carrier 'owned-clone '() kind)))
+    (if (not rank)
+        (i2-fail 'invalid-argument operation
+                 "I2 checkpoint rank exceeds 64"))
+    (let ((builder
+            (i2-native-decode-builder-create
+              rank payload (bytevector-length payload))))
+      (if (null? builder) (i2-native-fail operation))
+      (guard (caught
+               (#t
+                 (i2-native-decode-builder-abort builder)
+                 (raise caught)))
+        (let fill ((remaining shape) (index 0))
+          (if (null? remaining)
+              (let ((native (i2-native-decode-builder-finish builder)))
+                (if (null? native) (i2-native-fail operation))
+                (vector-set! owned 2 native)
+                (vector-set! request 7 owned)
+                request)
+              (let ((extent (car remaining)))
+                (if (not (and (integer? extent) (exact? extent)
+                              (>= extent 0)
+                              (<= extent 9223372036854775807)))
+                    (i2-fail 'invalid-argument operation
+                             "I2 checkpoint shape extent is invalid"))
+                (if (not (= (i2-native-decode-builder-set
+                              builder index extent) 0))
+                    (i2-native-fail operation))
+                (fill (cdr remaining) (+ index 1)))))))))
+
+(define (i2-checkpoint-decode (request : vector)) : vector
+  (let ((result (i2-checkpoint-decode-guarded request)))
+    (if (vector? result)
+        result
+        (i2-fail 'internal 'i2-checkpoint-decode
+                 "I2 decoder returned a non-vector request"))))
+
+(define i2-checkpoint-codec-internal
+  (c1-checkpoint-codec-internal
+    i2-provider-name i2-checkpoint-encode i2-checkpoint-decode))
+
+;;; Fixed-purpose trusted construction seams for later source-composed Wave 2
+;;; consumers and direct integration tests. None is an application export.
+(define (i2-module-create-internal)
+  ;; Preallocate the aggregate membership ledger before P1 publishes a module.
+  (if (>= i2-module-count 4096)
+      (i2-fail 'invalid-state 'i2-module-create-internal
+               "I2 aggregate module provenance limit reached"))
+  (let* ((admission (vector #f))
+         (next-modules (cons admission i2-modules))
+         (result (module-create-with-provider-internal i2-provider-name)))
+    (vector-set! admission 0 result)
+    (set! i2-modules next-modules)
+    (set! i2-module-count (+ i2-module-count 1))
+    result))
+
+(define (i2-parameter-create-uniform-internal count bits)
+  (let ((initial-holder (i2-carrier 'tensor '() 'buffer))
+        (parameter-holder (i2-carrier 'parameter '() 'parameter)))
+    (let ((initial (i2-native-tensor-create-uniform count bits)))
+      (if (null? initial)
+          (i2-native-fail 'i2-parameter-create-uniform-internal))
+      (vector-set! initial-holder 2 initial)
+      (guard (caught
+               (#t
+                 (i2-native-tensor-destroy initial)
+                 (vector-set! initial-holder 2 '())
+                 (raise caught)))
+        (let ((parameter (i2-native-parameter-create initial)))
+          (if (null? parameter)
+              (i2-native-fail 'i2-parameter-create-uniform-internal))
+          (vector-set! parameter-holder 2 parameter)
+          (i2-native-tensor-destroy initial)
+          (vector-set! initial-holder 2 '())
+          parameter-holder)))))
+
+(define (i2-module-register-parameter-internal! module name carrier)
+  (if (not (and (i2-carrier-shape? carrier)
+                (eq? (vector-ref carrier 1) 'parameter)
+                (eq? (vector-ref carrier 4) 'parameter)
+                (null? (vector-ref carrier 3))))
+      (i2-fail 'invalid-argument 'i2-module-register-parameter-internal!
+               "expected a fresh I2 parameter carrier"))
+  (if i2-parameter-admission-carrier
+      (i2-fail 'invalid-state 'i2-module-register-parameter-internal!
+               "nested I2 parameter admission is forbidden"))
+  (set! i2-parameter-admission-carrier carrier)
+  (guard (caught
+           (#t
+             (set! i2-parameter-admission-carrier #f)
+             (raise caught)))
+    (let ((handle
+            (module-register-parameter-internal! module name carrier)))
+      (set! i2-parameter-admission-carrier #f)
+      (vector-set! carrier 3 handle)
+      (if (not (= (i2-native-parameter-bind
+                    (vector-ref carrier 2) handle) 0))
+          (i2-fail 'internal 'i2-module-register-parameter-internal!
+                   "admitted I2 parameter identity binding failed"))
+      handle)))
+
+(define (i2-module-register-tied-parameter-internal! module name handle)
+  (let ((result
+          (module-register-tied-parameter-internal! module name handle)))
+    result))
+
+(define (i2-storage-identical-request-internal request)
+  (let ((result (i2-storage-identical? request))) result))
+
+(define (i2-parameter-accumulate-uniform-internal!
+          carrier bits expected-ordinal normalization-weight-bits)
+  (let ((validated
+          (i2-carrier-preflight carrier 'parameter
+                                'i2-parameter-accumulate-uniform-internal!)))
+    (if (not (= (i2-native-parameter-accumulate-uniform
+                  (vector-ref validated 2) (vector-ref validated 3)
+                  bits expected-ordinal normalization-weight-bits) 0))
+        (i2-native-fail 'i2-parameter-accumulate-uniform-internal!))
+    #t))
+
+(define (i2-parameter-gradient-metadata-internal carrier)
+  (let* ((validated
+           (i2-carrier-preflight carrier 'parameter
+                                 'i2-parameter-gradient-metadata-internal))
+         (state
+           (i2-native-gradient-state
+             (vector-ref validated 2) (vector-ref validated 3)))
+         (count
+           (i2-native-gradient-count
+             (vector-ref validated 2) (vector-ref validated 3))))
+    (if (or (< state 0) (< count 0))
+        (i2-native-fail 'i2-parameter-gradient-metadata-internal))
+    (vector state count)))
+
+(define (i2-owned-clone-live-count-internal)
+  (let ((count (i2-native-owned-clone-live-count)))
+    (if (< count 0)
+        (i2-fail 'internal 'i2-owned-clone-live-count-internal
+                 "I2 owned-clone count exceeds the Eshkol integer boundary")
+        count)))
+
+(define (i2-state-tensor-checksum-internal state tensor kind)
+  ;; P1 pins the state owner across the complete native borrow/view/end call.
+  (let ((carrier (state-dict-tensor-borrow-begin-internal state tensor)))
+    (guard (caught
+             (#t
+               (state-dict-tensor-borrow-end-internal state tensor)
+               (raise caught)))
+      (let* ((validated (i2-carrier-preflight carrier kind
+                                              'i2-state-tensor-checksum-internal))
+             (checksum
+               (i2-native-borrow-checksum
+                 (vector-ref validated 2) (i2-native-role validated)
+                 (vector-ref validated 3))))
+        (if (< checksum 0)
+            (i2-native-fail 'i2-state-tensor-checksum-internal))
+        (state-dict-tensor-borrow-end-internal state tensor)
+        checksum))))
+
+(define (i2-module? module)
+  (let loop ((remaining i2-modules))
+    (cond ((null? remaining) #f)
+          ((eq? module (vector-ref (car remaining) 0)) #t)
+          (else (loop (cdr remaining))))))
+
+(define (i2-identity-member? value values)
+  (cond ((null? values) #f)
+        ((eq? value (car values)) #t)
+        (else (i2-identity-member? value (cdr values)))))
+
+(define (i2-unique-parameter-carriers tree paths)
+  (let loop ((remaining paths) (seen '()) (carriers '()))
+    (if (null? remaining)
+        (i2-reverse carriers)
+        (let ((handle (parameter-tree-handle tree (car remaining))))
+          (if (i2-identity-member? handle seen)
+              (loop (cdr remaining) seen carriers)
+              (let ((carrier (parameter-handle-tensor-internal handle)))
+                (i2-carrier-preflight carrier 'parameter 'module-zero-grad!)
+                (loop (cdr remaining) (cons handle seen)
+                      (cons carrier carriers))))))))
+
+(define (i2-reset-carriers! carriers)
+  (let ((count (i2-bounded-list-length carriers i2-max-batch)))
+    (if (not count)
+        (i2-fail 'invalid-state 'module-zero-grad!
+                 "I2 module exceeds the bounded unique-parameter limit"))
+    (if (= count 0)
+        #t
+        (let ((builder (i2-native-reset-builder-create count)))
+          (if (null? builder) (i2-native-fail 'module-zero-grad!))
+          (guard (caught
+                   (#t
+                     (i2-native-reset-builder-abort builder)
+                     (raise caught)))
+            (let fill ((remaining carriers) (index 0))
+              (if (null? remaining)
+                  (begin
+                    (if (not (= (i2-native-reset-builder-prepare builder) 0))
+                        (i2-native-fail 'module-zero-grad!))
+                    ;; Native reset commit is one-shot/nonallocating/nonraising.
+                    (if (not (= (i2-native-reset-builder-commit builder) 0))
+                        (i2-fail 'internal 'module-zero-grad!
+                                 "prepared I2 reset violated infallible commit"))
+                    #t)
+                  (begin
+                    (if (not (= (i2-native-reset-builder-set
+                                  builder index
+                                  (vector-ref (car remaining) 2)) 0))
+                        (i2-native-fail 'module-zero-grad!))
+                    (fill (cdr remaining) (+ index 1))))))))))
+
+;;; This one localized replacement backs the accepted public arity-1 name.
+;;; Standalone P1 retains its original unsupported implementation.
+(define (i2-public-module-zero-grad! module)
+  (if (not (i2-module? module))
+      (i2-fail 'unsupported 'module-zero-grad!
+               "module tensor provider does not expose gradient reset"))
+  (let* ((tree (module-parameters module))
+         (paths (parameter-tree-paths tree))
+         (carriers (i2-unique-parameter-carriers tree paths))
+         (result (i2-reset-carriers! carriers)))
+    result))

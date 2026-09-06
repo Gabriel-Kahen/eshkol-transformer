@@ -204,8 +204,8 @@ claimed.
 ## Wave-1 aggregate and I1 lifetime
 
 One canonical aggregate is compiled from trusted E1, P1, D1, X1, C1, and T1 sources
-and localized exactly once. It exports exactly 46 reviewed globals: six E1
-accessors, seventeen P1 wrappers, eight D1 wrappers, six X1 wrappers, one policy
+and localized exactly once. It exports exactly 47 reviewed globals: six E1
+accessors, eighteen P1 wrappers, eight D1 wrappers, six X1 wrappers, one policy
 wrapper, and eight T1 wrappers. Module source surfaces remain narrow. All constructors,
 raise/dispatch seams, registries, trusted helpers, generated companions, C1/T1
 internals, P1 privilege, D1 private operations, raw I1 calls, and C1 I/O calls are

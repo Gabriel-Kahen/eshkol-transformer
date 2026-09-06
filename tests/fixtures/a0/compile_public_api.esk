@@ -29,7 +29,7 @@
         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
         parameter-handle-path parameter-handle-shape parameter-handle-dtype
         parameter-handle-device state-dict-paths state-dict-tensor
-        state-dict-alias-groups
+        state-dict-alias-groups state-dict-release!
         model-forward model-output-logits model-output-loss model-output-rng
         optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
         optimizer-load-state!

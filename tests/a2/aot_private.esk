@@ -1,0 +1,18 @@
+;;; Test-only AOT orchestration. Native fixed buffers carry every tensor.
+(extern i64 a2-test-provider
+        :real et_a2_test_provider_transport_v1)
+(extern i64 a2-test-cache
+        :real et_a2_test_cache_transport_v1)
+
+(define provider-result (a2-test-provider))
+(define cache-result (a2-test-cache))
+
+(if (and (= provider-result 1) (= cache-result 1))
+    (begin
+      (display "A2 PRIVATE AOT PASS: attention/RoPE forward/backward and KV cache")
+      (newline)
+      (exit 0))
+    (begin
+      (display "A2 PRIVATE AOT FAIL")
+      (newline)
+      (exit 1)))

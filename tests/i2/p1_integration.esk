@@ -1,0 +1,194 @@
+(load "i2_wave2_root.esk")
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "I2/P1 FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (expect-error label category thunk)
+  (let ((caught
+          (guard (value
+                   (#t
+                     (and (transformer-error? value)
+                          (eq? category
+                               (transformer-error-category value)))))
+            (thunk)
+            #f)))
+    (check label caught)))
+
+(define source (i2-module-create-internal))
+(define source-weight (i2-parameter-create-uniform-internal 4 1065353216))
+(define source-bias (i2-parameter-create-uniform-internal 2 1073741824))
+(define source-weight-handle
+  (i2-module-register-parameter-internal! source "weight" source-weight))
+(define source-bias-handle
+  (i2-module-register-parameter-internal! source "bias" source-bias))
+(i2-module-register-tied-parameter-internal!
+  source "weight_tied" source-weight-handle)
+
+(define source-tree (module-parameters source))
+(check "provider-backed lexical paths"
+       (equal? (parameter-tree-paths source-tree)
+               '(("bias") ("weight") ("weight_tied"))))
+(check "tied P1 handle identity preserved"
+       (eq? (parameter-tree-handle source-tree '("weight"))
+            (parameter-tree-handle source-tree '("weight_tied"))))
+(check "independent P1 handles remain distinct"
+       (not (eq? source-weight-handle source-bias-handle)))
+(check "parameter metadata is exact CPU f32"
+       (and (equal? (parameter-handle-shape source-weight-handle) '(4))
+            (eq? (parameter-handle-dtype source-weight-handle) 'f32)
+            (eq? (parameter-handle-device source-weight-handle) 'cpu)))
+
+(let* ((copy
+         (vector (vector-ref source-weight 0)
+                 (vector-ref source-weight 1)
+                 (vector-ref source-weight 2)
+                 (vector-ref source-weight 3)
+                 (vector-ref source-weight 4)))
+       (same-request
+         (vector source-weight copy 'parameter 'parameter
+                 'i2-test-storage-identical)))
+  (check "distinct wrappers over one protected owner compare identical"
+         (i2-storage-identical-request-internal same-request)))
+
+(define zero-module (i2-module-create-internal))
+(define zero-a (i2-parameter-create-uniform-internal 0 0))
+(define zero-b (i2-parameter-create-uniform-internal 0 0))
+(i2-module-register-parameter-internal! zero-module "a" zero-a)
+(i2-module-register-parameter-internal! zero-module "b" zero-b)
+(check "zero-element owner is reflexive"
+       (i2-storage-identical-request-internal
+         (vector zero-a zero-a 'parameter 'parameter 'i2-zero-self)))
+(check "distinct zero-element owners are disjoint"
+       (not (i2-storage-identical-request-internal
+              (vector zero-a zero-b 'parameter 'parameter
+                      'i2-zero-distinct))))
+
+(define target (i2-module-create-internal))
+(define target-weight (i2-parameter-create-uniform-internal 4 0))
+(define target-bias (i2-parameter-create-uniform-internal 2 0))
+(define target-weight-handle
+  (i2-module-register-parameter-internal! target "weight" target-weight))
+(i2-module-register-parameter-internal! target "bias" target-bias)
+(i2-module-register-tied-parameter-internal!
+  target "weight_tied" target-weight-handle)
+
+(define snapshot (module-state-dict source))
+(define source-weight-state (state-dict-tensor snapshot '("weight")))
+(define source-checksum
+  (i2-state-tensor-checksum-internal
+    snapshot source-weight-state 'parameter))
+(check "state-backed borrow checksum is deterministic"
+       (= source-checksum
+          (i2-state-tensor-checksum-internal
+            snapshot source-weight-state 'parameter)))
+(define policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+(let ((active-carrier
+        (state-dict-tensor-borrow-begin-internal
+          snapshot source-weight-state)))
+  ;; The raw carrier is intentionally scoped to the synchronous begin/use/end
+  ;; interval and is never retained after the matching end.
+  (expect-error "active I2 state borrow blocks state release" 'invalid-state
+    (lambda () (state-dict-release! snapshot)))
+  (check "active I2 state borrow ends exactly once"
+         (state-dict-tensor-borrow-end-internal
+           snapshot source-weight-state)))
+(check "failed release during borrow preserves the live state"
+       (= source-checksum
+          (i2-state-tensor-checksum-internal
+            snapshot source-weight-state 'parameter)))
+(define encoded
+  (c1-checkpoint-encode-state-internal
+    snapshot policy i2-checkpoint-codec-internal))
+(define decoded
+  (c1-checkpoint-decode-state-internal
+    encoded policy i2-checkpoint-codec-internal i2-provider-name))
+(define decoded-weight-state (state-dict-tensor decoded '("weight")))
+(check "production C1 codec preserves exact I2 f32 bytes"
+       (= source-checksum
+          (i2-state-tensor-checksum-internal
+            decoded decoded-weight-state 'parameter)))
+(check "production C1 decoder adopts tied I2 state once"
+       (equal? (state-dict-alias-groups decoded)
+               '((("weight") ("weight_tied")))))
+(define rollback-calls 0)
+(define rollback-codec
+  (c1-checkpoint-codec-internal
+    i2-provider-name
+    (vector-ref i2-checkpoint-codec-internal 2)
+    (lambda (request)
+      (set! rollback-calls (+ rollback-calls 1))
+      (if (= rollback-calls 2)
+          (transformer-error-raise
+            'internal 'i2-checkpoint-rollback
+            "injected decoder rollback" '() #f)
+          ((vector-ref i2-checkpoint-codec-internal 3) request)))))
+(define rollback-live-before (i2-owned-clone-live-count-internal))
+(expect-error "C1 decoder failure rolls back published I2 owners" 'internal
+  (lambda ()
+    (c1-checkpoint-decode-state-internal
+      encoded policy rollback-codec i2-provider-name)))
+(check "C1 rollback stops at the injected second decoder call"
+       (= rollback-calls 2))
+(check "C1 rollback restores the I2 native owned-clone baseline"
+       (= rollback-live-before (i2-owned-clone-live-count-internal)))
+(module-load-state-dict! target snapshot)
+(define loaded (module-state-dict target))
+(define loaded-weight-state (state-dict-tensor loaded '("weight")))
+(check "production P1 state load round trip preserves exact f32 bytes"
+       (= source-checksum
+          (i2-state-tensor-checksum-internal
+            loaded loaded-weight-state 'parameter)))
+(check "state alias group preserves tied identity"
+       (equal? (state-dict-alias-groups loaded)
+               '((("weight") ("weight_tied")))))
+(check "snapshot release succeeds" (state-dict-release! snapshot))
+(check "loaded snapshot release succeeds" (state-dict-release! loaded))
+(check "decoded checkpoint release succeeds" (state-dict-release! decoded))
+(check "released states restore the I2 owned-clone baseline"
+       (= (i2-owned-clone-live-count-internal) 0))
+
+(define duplicate-root (i2-module-create-internal))
+(expect-error "same carrier cannot bind a second P1 handle" 'invalid-argument
+  (lambda ()
+    (i2-module-register-parameter-internal!
+      duplicate-root "duplicate" source-weight)))
+
+(i2-parameter-accumulate-uniform-internal!
+  source-weight 0 0 1065353216)
+(check "present all-zero gradient remains distinct from absent"
+       (equal? (i2-parameter-gradient-metadata-internal source-weight)
+               (vector 1 1)))
+(check "I2 zero-grad succeeds"
+       (i2-public-module-zero-grad! source))
+(check "zero-grad clears retained metadata to absent"
+       (equal? (i2-parameter-gradient-metadata-internal source-weight)
+               (vector 0 0)))
+(check "I2 zero-grad is idempotent"
+       (i2-public-module-zero-grad! source))
+(define empty-i2 (i2-module-create-internal))
+(check "empty I2 module zero-grad succeeds"
+       (i2-public-module-zero-grad! empty-i2))
+(define untracked-i2
+  (module-create-with-provider-internal i2-provider-name))
+(expect-error "untracked/non-I2 provenance remains unsupported" 'unsupported
+  (lambda () (i2-public-module-zero-grad! untracked-i2)))
+
+(expect-error "malformed storage candidate rejects structurally"
+              'invalid-argument
+  (lambda ()
+    (i2-storage-identical-request-internal
+      (vector (vector 'forged) source-weight
+              'parameter 'parameter 'i2-forged-storage))))
+
+(display "I2/P1 integration PASS: ")
+(display checks)
+(display " checks\n")

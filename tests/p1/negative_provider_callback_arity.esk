@@ -8,4 +8,4 @@
 
 (tensor-provider-create-internal
   'invalid-provider bad-describe unary-vector unary-boolean unary-boolean
-  unary-boolean unary-vector unary-vector)
+  unary-boolean unary-vector unary-vector unary-vector)

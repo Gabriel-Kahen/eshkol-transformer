@@ -928,3 +928,480 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [final independent review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/40#issuecomment-5486249037);
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
+
+## 2026-08-31 — L2 proposed contract / issue #44
+
+- **Status:** proposed before implementation; no A0 public name, arity, or
+  persistent format changes.
+- **Native ABI direction:** L2 will provide an isolated version-1.0 native
+  implementation of the existing `kernel.indexed-cross-entropy` capability with
+  exact deterministic CPU-`f32` operations
+  `indexed-cross-entropy.forward` and `indexed-cross-entropy.backward`. Requests
+  have shape `[N,T,V]` with all extents positive. Forward consumes borrowed dense
+  `f32[N,T,V]` logits and `i64[N,T]` targets and writes disjoint caller-owned
+  `f32[N,T]` per-token losses. Backward additionally consumes borrowed
+  `f32[N,T]` upstream gradients and writes disjoint caller-owned
+  `f32[N,T,V]` logit gradients. L2 defines no mask or reduction; later model and
+  trainer composition owns A0's weighted mean.
+- **Numerical/error contract:** forward uses max-subtracted log-sum-exp in fixed
+  row-major vocabulary order. Backward directly computes
+  `upstream * (softmax - one_hot(target))` without allocating one-hot storage,
+  invoking runtime autodiff, or using finite differences. Negative or
+  out-of-range targets are `shape-mismatch`; zero extents are rejected. NaN/Inf
+  operands and finite inputs whose forward result is not finite `f32` reject
+  during validation before commit. There is no allocation, cast, copy, transfer,
+  device substitution, hidden precision, scalar fallback, approximate gradient,
+  or recoverable commit failure. Inputs and outputs remain byte-identical after a
+  validation failure.
+- **Discovery and Eshkol boundary:** a versioned L2 accessor supplies the provider
+  descriptor only to an explicit caller-owned K1 resolver. L2 will not define the
+  global `eshkol_transformer_kernel_provider_v1` symbol, search/load providers,
+  or modify the provider-free K1 baseline. A private fixed-arity opaque transport
+  context will prove real Eshkol AOT calls into the same provider; it is not an A0
+  tensor API, owned f32 carrier, autodiff object, parameter store, or downstream
+  training contract.
+- **Cross-workstream coordination:** A2 requested the L2 ownership/ABI proposal.
+  L2 will remain carrier-neutral and consume only accepted K1 borrowed tensor
+  views; A2/N2 must not depend on the private L2 proof shell. K1 v1 permits one
+  provider callback pair, so a unified N2/A2/L2 provider plus an owned f32/autodiff
+  carrier remains an explicit composition decision before M3 rather than an API
+  any Wave-2 primitive may invent independently.
+  Integration subsequently created the shared I2 substrate at issue #49. L2 sent
+  I2 its exact natural-alignment, immutable-borrow, pairwise-disjoint-input,
+  caller-owned-output, two-phase-lifetime, and accessor-only provider-composition
+  requirements. L2 will remain interoperable with accepted I2 dense f32 K1 views
+  but does not treat I2 as an accepted dependency or production carrier until I2
+  review and integration complete.
+- **Planned evidence:** frozen Q0/PyTorch forward and direct-backward parity,
+  development-only central finite differences, extreme finite logits, exhaustive
+  schema/target/zero/nonfinite/alias/failure-atomicity negatives, repeated
+  deterministic AOT, canonical capability report, sanitizers, production Python
+  isolation, full repository gates, independent reviews, and supported exact-head
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI.
+- **Reference:** [issue #44](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/44);
+  [issue #1 proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487177062);
+  [I2 coordination update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487282264).
+
+## 2026-08-31 — T2 / issue #43
+
+- **Decision:** proposed for integration-owner review; a local implementation
+  candidate now exercises the contract but remains unfrozen and unaccepted.
+- **Contract proposal:** preserve the accepted T1 `eshkol-byte-tokenizer` 1.x byte
+  grammar, fingerprint domain, eight public names/arities, C1 policy mapping, exact
+  I1 result carrier, and process-lifetime rules byte-for-byte. Add a distinct
+  `eshkol-bpe-tokenizer` 1.0 data format and
+  `sha256:eshkol-bpe-tokenizer-v1:<digest>` identity domain rather than treating BPE
+  semantics as an inert T1 minor extension. Byte IDs remain `0..255`. Learned merge
+  IDs are contiguous from 256 in rank order; configured special IDs follow the
+  merge range contiguously. Each merge references only earlier IDs. Training chooses
+  the greatest adjacent-pair count, breaks ties by ascending `(left-id,right-id)`,
+  applies the chosen pair left-to-right without overlap inside each document, never
+  crosses an explicit document boundary, and stops when the requested merge bound is
+  reached or no pair meets the minimum frequency. Admitted document order and chunk
+  partition within a document do not affect learned bytes.
+
+  The proposed v1 operational ceilings are 1,048,576 artifact/payload bytes under
+  the existing lowering persistence policy, 256 learned merges, 256 decoded bytes
+  per learned token, 4,096 specials, 4,096 prefix entries, 4,096 suffix entries,
+  65,536 aggregate training bytes, 4,096 documents, 4,096 training chunks, and
+  65,536 bytes per encode/decode stream and 73,728 decoder token IDs (589,824
+  i64-le staging bytes), closing the maximum 65,536 byte tokens plus 4,096 prefix
+  and 4,096 suffix insertions under round trip. Exact ceilings and one-over rejection are
+  part of the compiled gate; RSS/time thresholds are evidence budgets, not hidden
+  lower admission limits.
+
+  T2 adds no installed public procedure. Existing `tokenizer-load`,
+  `tokenizer-save!`, encode/decode, vocabulary, fingerprint, and special lookup
+  wrappers operate on either accepted T1 byte artifacts or validated T2 BPE
+  artifacts without changing their contracts. BPE training and stateful streaming
+  encode/decode are fixed-arity build-only Eshkol contracts for trusted later CLI/data
+  composition. Streaming uses private i64-le staging chunks and a pipeline of one
+  left-to-right transducer per merge rank, with at most one pending token per rank;
+  it does not publish one retained T1 I1 shell per input chunk. Prefix and suffix
+  specials are applied once per logical stream. No new native ABI,
+  tensor carrier, dtype/device conversion, callback selected by data, or fallback is
+  proposed.
+
+  A canonical Wave-2 successor aggregate is rebuilt from the accepted trusted
+  E1/P1/D1/X1/C1/T1 sources plus T2 and localized once. It retains the accepted
+  upstream public surface and cannot be combined with the already-localized Wave-1 aggregate.
+  The Wave-1 archive and all focused T1 evidence remain independently reproducible.
+  To prove D1 round trips without changing D1 v1 bytes or its eight-name facade, the
+  Wave-2 trusted closure adds a bounded internal corpus-token read operation. After
+  accepted P1L integration, the successor aggregate carries its public unary
+  `state-dict-release!` unchanged: production is exactly 47 globals/41 non-E1
+  wrappers and the D1-test-only aggregate is exactly 48/42. T2 itself still adds no
+  installed public procedure or native ABI. It
+  fully validates the manifest and shards, then compares the supplied tokenizer
+  fingerprint and vocabulary before returning any tokens; a self-consistent corpus
+  paired with the wrong tokenizer is `invalid-argument`, not `corrupt-data`.
+- **Status / evidence:** local candidate implementation. The distinct v1 artifact,
+  Eshkol trainer, rank-stage whole/stream runtime, strict/raw policy, D1 bridge,
+  unchanged T2 API with a 47-global production aggregate and 48-global test-only
+  aggregate, frozen
+  Python oracle, deterministic fixture generators, exact-limit/adversarial AOTs,
+  and production-oracle isolation gates are checked in for review. After the
+  independent T2-R request-changes review, decoder push now validates and sizes its
+  current chunk before state mutation and allocates exactly the current decoded-byte
+  count rather than the remaining 65,536-byte budget. The compiled gate exercises
+  the exact maximum partition of 73,728 one-ID omit chunks and the single-chunk
+  equivalent. Compiled public AOT coverage now includes 22 frozen parser rejection
+  checks and four D1 seam negatives; malformed, truncated, and checksum-corrupt D1
+  shards retain `corrupt-data/token-corpus-validate`, while vocabulary-only mismatch
+  is `invalid-argument/t2-token-corpus-read`. Strict UTF-8 evidence uses a real
+  four-byte scalar at every split and pins F0/F4 lower/upper boundary cases.
+
+  Local compiled evidence includes 91 training/stream checks, 6 core checks, 17
+  delivered-public checks, 6 D1-runtime checks, 22 parser negatives, 4 D1 negatives,
+  60 UTF-8 split/boundary checks, and 25 Python oracle tests. Two fresh-cache
+  training/stream runs measured 142,816 and 142,932 KiB peak RSS; the 73,728 one-ID
+  decoder runs measured 10,632 and 10,580 KiB; UTF-8 runs measured 9,144 and 8,564
+  KiB; two public-runtime runs measured 54,984 and 7,832 KiB; the parser-negative,
+  D1 setup, and D1-negative runs measured 57,256, 10,352, and 9,368 KiB. Every
+  bounded process completed within 60 seconds, below 524,288 KiB, with no
+  heap-pressure warning. The T2-specific boundary suite independently retained and
+  byte-compared two localized production and D1-test objects, archives, evidence
+  directories, and public-caller AOT binaries. After merging accepted main
+  `b72b9fa58042304a71e801415e53f280262edae2`, the complete compatibility gate
+  passed with exact 47/41 production and 48/42 D1-test surfaces, exact public-string
+  and public-source manifests, inherited P1L private-capability negatives, hostile
+  path/tuple rejection, private/native localization and archive index closure,
+  crafted-link isolation, and the Wave1+Wave2 duplicate-E1 rejection. The two
+  training/stream runs measured 142,936 and 144,936 KiB; the exact 73,728 one-ID
+  partitions measured 10,576 and 12,620 KiB; UTF-8 measured 8,972 and 5,824 KiB;
+  public runtime measured 9,540 and 10,564 KiB; parser negatives measured 65,192
+  KiB; D1 setup and negatives measured 2,532 and 3,760 KiB. Supported Ubuntu 22.04
+  / LLVM-Clang 21.1.8 run 33697384015 then passed Build, the full Test matrix, and
+  Smoke, but its benchmark was cancelled when the job reached the exact 150-minute
+  outer ceiling. The measured run spent 14m02s in Build, 1h55m34s in Test, and
+  13m40s in Smoke before the benchmark received only 3m38s. The workflow outer
+  ceiling therefore rises narrowly from 150 to 180 minutes; no compiler timeout,
+  test, sanitizer, Smoke assertion, or benchmark sample is removed. A new supported
+  exact-head run, exact-head T2-R rereview, and the unmerged PR remain required. T2 stays no
+  further than `review` until independent acceptance, merge, merged-main retest, and
+  acceptance-document follow-up.
+
+  A subsequent authoritative T2-R rereview of exact head
+  `e667523adfcde28b88f3238ff336824c04ad166e` accepted the decoder, D1, package,
+  UTF-8, API, format, aggregate, and supported-run evidence but required exhaustive
+  production-linked coverage for every frozen parser invariant. The bounded repair
+  expands deterministic generated evidence from 32 to 365 artifacts: 360
+  byte-distinct malformed models, four valid exact-count-ceiling models, and the
+  retained alternate D1 model.
+  The public Eshkol AOT asserts 362 exact rejection category/operation tuples including
+  two lowered-policy cases, performs a frozen-identity valid load after every failure,
+  admits exact 613-byte/295-byte policy and merge/special/prefix/suffix count ceilings,
+  and performs a canonical post-matrix save, for 730 checks per repetition. The new
+  topology cases exposed boolean-valued one-over field counts escaping through numeric
+  `=`; all parser record-shape guards now use a bounded boolean-safe predicate and map
+  malformed records to the promised structured `corrupt-data/tokenizer-load` result.
+  Python remains a deterministic byte generator only. Focused, full, supported, and
+  independent exact-head evidence remain required for this repair; T2 remains `review`.
+- **Dependencies / retest:** any accepted change to the aggregate source closure or
+  D1 trusted internals requires complete T1 and D1 regression/boundary gates. Any
+  public name, native ABI, T1 grammar/fingerprint, D1 byte-format, I1 lifetime, or
+  persistence-policy change requires a new issue #1 decision and affected downstream
+  retests.
+- **Measured limitation:** the inherited D1 summary registry retains every
+  successfully validated internal corpus summary until process exit, even if the
+  later tokenizer identity comparison fails. T2 private cores/states are uniquely
+  owned trusted-build values and are not safe for arbitrary representation mutation;
+  registry operations are serialized.
+- **Reference:** [issue #43](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/43);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [T2-R request changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/54#issuecomment-5514480850).
+
+## 2026-09-01 — P1L / issue #51
+
+- **Decision:** proposed; implementation and independent exact-head re-review are in
+  progress. PR #55 remains open, and `docs/ROADMAP.md` remains at `review`. Nothing
+  in this entry accepts, merges, or authorizes downstream integration of P1L.
+- **Contract under review:** the P1 provider interface advances to 2.0 with exactly
+  eight unary callbacks. The eighth, `release-owned!`, consumes one P1-owned carrier
+  through a preallocated request envelope, is admitted only after validation as
+  nonallocating/nonraising/semantically infallible, and acknowledges by returning
+  that exact envelope identity. Under a conforming admitted provider, every clone
+  has exactly one owner and is either transferred into one live state dictionary or
+  released exactly once. Provider
+  identity is inert `(transformer-tensor-provider 2 0 provider-id)` data; no
+  serialized name selects code or upgrades a 1.x provider.
+
+  `transformer.module` adds only public unary `state-dict-release!`, for 18 public P1
+  operations total. Exact registered dead-state release is idempotent. Every other
+  recognized dead-state or dead state-backed-handle operation fails `invalid-state`
+  before native dereference; malformed, forged, copied, unregistered, and wrong-kind
+  inputs remain `invalid-argument`. `state-dict-tensor` returns a cached read-only
+  state-backed identity, not a fresh native clone. Trusted consumers may resolve and
+  borrow its carrier only synchronously inside one serialized call and retain no raw
+  pointer. Release rejects while such a call is active, invalidates the state and
+  dependent handles before carrier destruction, and may retain only inert identity
+  tombstones without tensor storage or released lifecycle graphs. Native identity
+  ABI 1.1 preserves existing record sizes and offsets. No generic dispatcher,
+  caller-selected provider, second registry, finalizer assumption, numerical
+  provider, module release, or O2 public release operation is added.
+
+  The existing unary `storage-identical?` callback is the authoritative same-
+  provider physical-storage equivalence relation, not wrapper or raw data-pointer
+  equality. After carrier/provider/liveness prevalidation it is total,
+  deterministic, nonallocating, nonraising, nonretaining, side-effect-free, and
+  semantically infallible; true means release through either carrier invalidates the
+  other, false means disjoint releasable allocations, and the relation is reflexive,
+  symmetric, and stable for the serialized call. It grants no release authority.
+  P1 disarms candidate envelopes before comparison and restores only proved-
+  independent owners. Callback raise, mutation, malformed result, or semantic lie
+  fails closed without releasing the ambiguous carrier. Therefore exact cleanup and
+  baseline restoration are claims only for a conforming provider, never for a
+  trusted provider that violates this obligation.
+
+  C1 container format remains 1.0 because its canonical schema already carries the
+  provider interface major/minor; the proposed implementation admits only provider
+  2.0 before callback use. The single Wave-1 aggregate remains one registry-owning
+  object with 47 global definitions and 41 non-E1 exports. P1 is one
+  24-definition/18-export package. Exact checked-in P1, C1, and T1 trusted source
+  closures and public/symbol/string/undefined/rename manifests gate these boundaries.
+- **Evidence to date:** reviewed PR head
+  `d0afa985d4390cc79895e4e8eb4f3a34af84094f` reported 303 P1 structural checks,
+  405 P1 native checks, 138 P1 registry-atomicity checks, 202 C1 logical checks,
+  1,012 C1 adversarial cases, and exact 24/18 P1 plus 47/41 T1 boundaries. Supported
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 run 33554345381 passed build, the full test matrix,
+  smoke, and benchmark for that exact head/base tree. That green run is not
+  acceptance evidence: independent P1L-R requested changes for protected-storage
+  aliasing, supported C1 leak detection, missing callback-defect combinations,
+  retained entry owner graphs, and the absent exact P1 source-closure manifest.
+  The repaired implementation has local compatibility-lane passing evidence for 419 P1
+  structural checks, 405 P1 native checks, and 169 registry checks including the
+  bounded eight-shell released-owner-graph probe and protected/ordinary comparator
+  reentrancy attacks against state release and parameter/buffer registration. C1
+  passes 245 logical checks plus 1,012 adversarial cases, and the exact T1 47-global
+  aggregate/boundary gate passes.
+  The current bounded repair passes the complete P1, C1, and T1 focused gates on
+  CachyOS/LLVM 22. Before this test-and-documentation-only correction, the unchanged
+  production implementation also passed `make build`, `make test`, `make smoke`, and
+  `make benchmark` on that host; the benchmark truthfully reports
+  `compatibility-only`. The repair also adds the exact four-source P1 trusted closure
+  manifest and enables `P1_LSAN=1` plus `C1_LSAN=1` on the supported job.
+
+  Two supported-run time-budget failures produced two explicit, bounded budget
+  relaxations. Run 33597586986 showed that the larger repaired P1 trusted package no
+  longer fit the generic E1B builder's 120-second inner compile limit; the successful
+  supported invocation later needed about 176.7 seconds. Commit
+  `d5f77fa5bf29d1f1a80c1111fda2b758aea17a14` therefore gives only the P1 package
+  wrapper the already validated `P1_COMPILER_TIMEOUT_SECONDS` default of 360 seconds.
+  The generic E1B default remains 120 seconds. Run 33601354539 then completed Build
+  and the entire Test step, including supported P1/C1 leak detection, but the
+  90-minute outer job budget cancelled Smoke and skipped the benchmark. Commit
+  `937dc5b12962415413dfb0ce7ae2e16909ffa4f1` raises that bounded outer budget to 120
+  minutes.
+
+  Integration admits these bounded build-budget relaxations: one P1-specific inner
+  compile ceiling rises from 120 to 360 seconds and the workflow's outer ceiling
+  rises from 90 to 120 minutes. This disposition neither accepts P1L nor removes a
+  compiler invocation, correctness assertion, test or sanitizer selection, Smoke,
+  or the reproducible benchmark. On prior repair head
+  `937dc5b12962415413dfb0ce7ae2e16909ffa4f1`, supported Ubuntu 22.04 / LLVM-Clang
+  21.1.8 run 33609401595 completed Build, the full test/sanitizer aggregate, Smoke,
+  and benchmark in 1h43m03s with `P1_LSAN=1` and `C1_LSAN=1`; it validates both
+  admitted budgets but predates the exhaustive eight-position callback-allocation
+  evidence. New exact-head supported CI and independent approval remain pending
+  after the bounded findings in review comment 5508808267. The P1L decision remains
+  proposed.
+- **Measured limitations / unsupported:** pinned Eshkol has no proved finalizer, and
+  the local ptrace-restricted compatibility executor cannot supply authoritative
+  LeakSanitizer evidence. The repository ships no production numerical tensor
+  provider or codec, so fixture callbacks prove control flow and ownership only.
+  Concurrency and reentrancy remain unsupported except for the explicit rejection
+  paths under test. Checkpoint format 1.0 is unchanged; C1 still does not expose the
+  later complete trainer-state API.
+- **Dependencies / retest:** I2 may implement only against the proposed provider-2.0
+  and ABI-1.1 shape after P1L independent approval and merge. I2 has independently
+  confirmed that it can canonicalize wrappers to the live owning `et_f32_tensor`
+  resource, including keeping distinct zero-element owners disjoint despite null
+  data pointers, but has made no runtime change, rebase, or integration. That design
+  compatibility is not P1L acceptance. O2 may later reuse only
+  the narrow trusted exact-one-carrier release mechanism behind its own separately
+  reviewed owner ledger; P1L adds no optimizer public operation or generic release
+  authority. N2, O2, C1, T1, C2, and the complete Wave-1 aggregate remain blocked on
+  the repaired exact-head P1/C1/T1 gates, supported CI, and independent P1L-R
+  approval.
+- **Reference:** [issue #51](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51);
+  [integration issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1);
+  [PR #55](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55);
+  [P1L-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55#issuecomment-5501171044);
+  [frozen storage-equivalence decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502247288);
+  [I2 compatibility confirmation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5502269486);
+  [issue #51 downstream disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5502293490);
+  [integration issue #1 disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5502293552);
+  [timeout-evidence review correction](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55#issuecomment-5508808267);
+  [inner-timeout run 33597586986](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33597586986);
+  [outer-budget run 33601354539](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33601354539);
+  prior-head supported [CI run 33609401595](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33609401595).
+## 2026-08-31 — A2 / issue #45
+
+- **Decision:** accepted for implementation with required cache-view corrections in
+  integration comment `5487284582`; independent exact-head review, supported CI,
+  merge, local retest, and acceptance follow-up remain pending.
+- **Contract:** A2 changes no A0 public name or arity. It proposes a
+  carrier-neutral deterministic CPU-f32 K1 provider obtained only through the
+  versioned `et_a2_kernel_provider_v1` accessor, plus a separate fixed-capacity KV
+  cache ABI 1.0 and a private Eshkol AOT transport. The provider does not export the
+  generic K1 resolver symbol or alter provider-free baseline discovery.
+
+  `kernel.causal-attention` exposes explicit forward and analytic-backward
+  operations with semantic request shape `[N,Hq,Hkv,Tq,Tk,Dh]`. K1 v1 range
+  records are disjunctive, so the one uniquely named capability advertises only
+  ten exact min=max rows: `[1,2,2,1,1,1]`, `[1,2,2,2,2,1]`,
+  `[1,2,2,1,2,1]`, `[1,2,2,1,2,2]`, `[1,2,2,2,2,2]`,
+  `[1,4,2,1,1,2]`, `[1,4,2,3,3,2]`, `[2,4,2,2,3,4]`,
+  `[2,4,2,3,3,2]`, and `[2,4,2,1,3,2]`. Broader shapes admitted by the
+  defensive provider validator are unverified and rejected by K1 capability
+  resolution. Q is
+  `f32[N,Hq,Tq,Dh]`; K and V are distinct `f32[N,Hkv,Tk,Dh]`; query and key
+  positions are `i64[N,Tq]` and `i64[N,Tk]`; the exact nonbroadcast keep mask is
+  `bool[N,Tq,Tk]`; and the output/upstream is `f32[N,Hq,Tq,Dh]`. Query head `h`
+  maps to KV head `floor(h/(Hq/Hkv))`, with exact divisibility. Version 1 admits
+  proved MHA and GQA with `Hkv >= 2`; MQA remains MOD5 scope. Admission requires a
+  true keep-mask element and `key-position <= query-position`. Stable f32 softmax
+  serially accumulates the dot product, computes `root=sqrtf((float)Dh)`, then
+  `scale=1.0f/root`, and multiplies the completed sum by that scale. A fully masked
+  row returns positive-zero output and zero
+  adjoints. Floating operands are finite; positions are nonnegative, strictly
+  increasing per row, and at most `16777215`. Masks and positions have no gradient.
+
+  `kernel.rope` exposes forward and analytic backward over
+  `f32[N,H,T,Dh]`, exact `i64[N,T]` positions, and positive finite
+  `inv-freq f32[Dh/2]`, with exact even `Dh >= 2`. Its one capability advertises
+  only `[1,1,1,2]`, `[1,1,2,2]`, `[1,1,2,4]`, `[2,2,3,4]`,
+  `[2,4,3,2]`, and `[2,2,3,2]`. Adjacent pairs rotate by
+  `position * inv-freq[i]`; backward applies the inverse rotation. The inv-frequency
+  input avoids freezing an unaccepted model-level base or scaling policy.
+
+  The opaque cache owns distinct, finite-zero-initialized preallocated keys and values
+  `[L,N,Hkv,C,Dh]` and shared exact `i64[N]` logical lengths. Capacity and storage
+  identities are fixed. Append width `A` is positive. A transaction validates
+  `0 <= count[i] <= A`, requires at least one positive count, and proves
+  `length[i] + count[i] <= C` without overflow before it stages each
+  layer exactly once outside committed logical lengths, exposes only a
+  transaction-scoped full-capacity dense `[N,Hkv,C,Dh]` K/V view plus immutable
+  effective `i64[N]` lengths and a dense bool `[N,C]` mask whose bytes are one
+  below each effective length and zero otherwise for a staged layer, and
+  advances shared lengths only after every layer is staged. Abort or precommit
+  failure preserves every observable prefix, length, identity, and source; tail
+  bytes outside logical lengths are deterministically positive zero and excluded
+  by the canonical mask. One live
+  nested layer view may begin only after that layer is staged; while live it blocks
+  stage, commit, abort, and destruction and must be explicitly ended. Commit requires
+  all layers staged and no live view. A caller must use the immutable effective
+  lengths and the exact false-outside-length mask; A2 never exposes a shorter
+  `Tk < C` canonical dense view over capacity-strided storage. Registry admission
+  precedes native-handle dereference.
+
+  K1 validation performs every fallible schema, alias, range, finite-value, and
+  numerical check without mutation. Invoke allocates nothing, cannot fail, and
+  fully writes disjoint caller-owned outputs in a fixed order using explicit serial
+  CPU-f32 arithmetic with contraction disabled. This is a reviewed baseline native
+  kernel, not an accelerated, fused, compiler-reverse-AD, P1, or general tensor
+  capability. There is no core, scalar, dtype, device, cast, transfer, allocation,
+  precision, or cache fallback.
+- **Exact-head review corrections:** Independent A2-R review of
+  `f85a05de077092dcb29bebdbbdb3d9ff81cde111` requested corrections. The repair
+  leaves K1 v1 unchanged and narrows capability metadata to the exact disjunctive
+  rows above; it adds K1 require negatives for `Hq < Hkv`, nondivisible heads,
+  odd RoPE `Dh`, and otherwise valid shapes outside the published rows. The
+  supported-platform arithmetic regression distinguishes reciprocal-then-multiply
+  from divide-after-sum, while the frozen PyTorch fixture remains a tolerance-based
+  mathematical oracle and regenerates byte-identically.
+
+  KV-cache ABI 1.0 now maps a wrong major to
+  `ABI_MAJOR_MISMATCH` and a too-new minimum minor to
+  `UNKNOWN_REQUIRED_FEATURE`. Every creator or descriptor output slot must be
+  pointer-aligned, disjoint (including from logical dtype/device text spans), and
+  NULL on entry; destructive handle slots are nulled only on success;
+  every output remains unchanged on failure. All caller-declared spans require a
+  representable exclusive end before dereference. The entire staged physical
+  `[N,Hkv,A,Dh]` K/V source, including unused padding, must be finite; unused values
+  are validated but not copied or exposed. New high-address, output-slot,
+  finiteness, failpoint-continuation, and two-batch numerical tests close those
+  review findings without changing the accepted full-capacity cache-view contract.
+- **Evidence:** Initial canonical-pin AOT probes prove only narrow scalar/vector
+  gradient behavior. A separate built-in attention probe is noncausal without an
+  explicit mask and compiler/source inspection finds double scalar loops and
+  incomplete fallback/backward behavior, so pinned-core attention/RoPE are rejected.
+  K1 continues to report f32, reverse AD, matmul, and causal attention unverified.
+  Independent contract/capability, implementation/test-design, documentation/
+  packaging, and adversarial/numerical reviews approve the narrow provider/cache
+  boundary after their findings were resolved. The focused gate compile-checks the
+  ABI and passes 348 attention/RoPE provider checks, 780 cache checks, and 407
+  cached-attention integration checks in both optimized and ASan/UBSan builds.
+  It also verifies frozen Q0/PyTorch forward and gradient bits, direct finite
+  differences, MHA/GQA admission, causal and fully-masked boundaries, RoPE boundary
+  positions, transactional failure atomicity and failpoints, archive manifests,
+  provider-free K1 baseline preservation, deterministic repeatability, and a
+  private Eshkol AOT forward/backward/cache path. The private transport remains test
+  evidence only. The complete local repository test gate also passes on the
+  documented unsupported CachyOS/LLVM 22 compatibility host. Supported Ubuntu
+  22.04/LLVM 21 exact-head CI remains pending. The corrected local focused gate
+  passes 721 provider, 961 cache, and 677 cached-attention checks in deterministic
+  optimized and ASan/UBSan runs, all four frozen-oracle tests, and the private AOT
+  path on the explicitly unsupported compatibility host. A subsequent exact-head
+  review found that the `N=2` finite-difference and cached incremental/full checks
+  were correlated with the provider and therefore did not independently prove
+  batch indexing. The corrected frozen PyTorch fixture now adds full `N=2`
+  attention output and dQ/dK/dV with distinguishable batch values, positions, and
+  masks, plus RoPE output/dX and all cached incremental outputs with distinguishable
+  batch values and positions. The header checksum binds the complete fixture; every
+  frozen expected output/gradient word is copied into the C header and compared
+  elementwise. The focused gate now passes
+  1,041 provider, 961 cache, and 869 cached-attention checks plus five oracle-format
+  checks, and it compiles and rejects the reviewer-specified Q/K/V batch-zero and
+  RoPE position-batch-zero source mutations at independent reference assertions.
+- **Dependencies / retest:** M3/G3 cannot treat the private A2 transport as a shared
+  tensor API. They remain blocked on a separately accepted f32 carrier, P1 provider,
+  provider aggregation, and production Eshkol ownership/lifetime boundary. N2 and
+  L2 currently define no shared carrier. Any public attention module, P1 binding,
+  general tensor shell, configurable RoPE, MQA, additive mask, accelerator, or cache
+  serialization requires a new issue-#1 decision and affected retests.
+- **Reference:** [issue #45](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/45);
+  [integration proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487219486);
+  integration verdict `5487284582` on issue #1 and issue #45;
+  [A2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494434343);
+  [correction direction](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/52#issuecomment-5494455136);
+  [cache-bound ledger correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5494455138).
+
+## 2026-09-04 — L2 current-main integration / PR #56
+
+- **Decision:** merge accepted-main parent
+  `b72b9fa58042304a71e801415e53f280262edae2` into reviewed L2 parent
+  `264cfa7f3d6e33d140f264f2077b91d8ff66f9b6` without rewriting either history.
+  The five shared-file conflicts are resolved as a strict union: A2 and L2 remain
+  separately built and tested, both isolated provider/archive contracts remain
+  documented, P1L dependency edges are retained, and A2, P1L, and L2 remain at
+  `review`.
+- **Boundary:** no L2 implementation, ABI header, export manifest, focused test,
+  fixture, oracle generator, or private AOT proof source changes in this integration.
+  No A2 or P1L implementation tree from the accepted-main parent is modified. L2
+  still supplies only its versioned explicit provider accessor and does not define
+  K1's canonical provider symbol, a registry, an owned carrier, or a shared private
+  AOT transport.
+- **Required evidence:** byte-for-byte parent comparisons, focused L2/K1/A2/P1
+  gates, full repository test/smoke/benchmark gates, supported Ubuntu 22.04 / LLVM
+  21 exact-head CI, and a separate independent exact-head L2-R review are required
+  before integration acceptance. PR #56 remains open and must not be merged here.
+
+## 2026-09-04 — L2/T2 current-main refresh / PR #56
+
+- **Decision:** merge accepted T2 main
+  `3006c5c90d1ee40647cababac004f2c75d46fa65` into independently reviewed L2
+  integration head `cab8b790ec8b98a47b064a37c16893979622a265` without rewriting either
+  history. The three content conflicts are strict registry unions: the CI test label
+  names both L2 and T2, the Makefile retains both focused gates, and this log retains
+  both complete workstream records. T2's 180-minute supported-job budget is
+  unchanged. L2 and T2 remain at `review`.
+- **Boundary:** no L2 implementation, ABI, export manifest, focused evidence, oracle,
+  fixture, or private AOT source changes. No accepted T2 implementation, format,
+  aggregate, fixture, oracle, build/test script, or boundary evidence changes. T2
+  adds no tensor/provider contract and L2 adds no tokenizer/aggregate contract; the
+  workstreams interact only through explicit build/test orchestration.
+- **Required evidence:** exact parent byte/mode comparisons, focused L2 and T2 gates,
+  the complete affected repository test/smoke/benchmark gates, new supported Ubuntu
+  22.04 / LLVM-Clang 21.1.8 exact-head CI, and a separate bounded L2-R integration-
+  delta review are required. PR #56 remains open and must not be merged here.

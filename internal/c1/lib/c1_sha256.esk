@@ -21,13 +21,21 @@
    1955562222 2024104815 2227730452 2361852424
    2428436474 2756734187 3204031479 3329325298))
 
-(define (c1-u32 value) (bitwise-and value c1-sha256-u32-mask))
+(define (c1-u32-raw value)
+  (let ((result (bitwise-and value c1-sha256-u32-mask))) result))
+(define-syntax c1-u32
+  (syntax-rules () ((_ value)
+    (let ((result (c1-u32-raw value))) result))))
 (define (c1-shr value count)
   (arithmetic-shift (c1-u32 value) (- count)))
 (define (c1-rotr value count)
   (c1-u32 (bitwise-or (c1-shr value count)
                       (arithmetic-shift (c1-u32 value) (- 32 count)))))
-(define (c1-xor3 a b c) (bitwise-xor (bitwise-xor a b) c))
+(define (c1-xor3-raw a b c)
+  (let ((result (bitwise-xor (bitwise-xor a b) c))) result))
+(define-syntax c1-xor3
+  (syntax-rules () ((_ a b c)
+    (let ((result (c1-xor3-raw a b c))) result))))
 (define (c1-choice x y z)
   (c1-u32 (bitwise-xor (bitwise-and x y)
                        (bitwise-and (bitwise-not x) z))))
@@ -122,7 +130,7 @@
                       (arithmetic-shift word (- (* (- 3 bi) 8))) 255))
                     (bytes (+ bi 1)))))
             (words (+ wi 1)))))
-    digest))
+    (let ((result digest)) result)))
 
 (define (c1-sha256 bytes)
   (if (not (bytevector? bytes))
@@ -139,4 +147,4 @@
             (c1-expand! words padded offset)
             (c1-compress! state words)
             (blocks (+ offset 64)))))
-    (c1-state-bytes state)))
+    (let ((result (c1-state-bytes state))) result)))

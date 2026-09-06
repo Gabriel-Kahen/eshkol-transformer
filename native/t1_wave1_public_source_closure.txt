@@ -1,0 +1,8 @@
+tests/t1/import_reverse.esk
+lib/transformer/error_public.esk
+lib/transformer/error_consumer.esk
+lib/transformer/tokenizer.esk
+lib/transformer/persistence.esk
+lib/transformer/data.esk
+lib/transformer/module.esk
+lib/transformer/config.esk
