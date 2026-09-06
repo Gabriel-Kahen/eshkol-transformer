@@ -64,7 +64,7 @@
 (define args (command-line))
 (define tokenizer-path (car (cdr args)))
 (define root (car (cdr (cdr args))))
-(define policy (c1-persistence-policy-internal 1048576 1048576 1048576 1 'cpu))
+(define policy (c1-wave2-persistence-policy 1048576 1048576 1048576 1 'cpu))
 (stage "tokenizer")
 (define tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
 (check "native D2 baseline is empty"
