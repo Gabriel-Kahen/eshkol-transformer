@@ -283,10 +283,16 @@
   (if (and (not (eq? (vector-ref cache 0) #f))
            (= (vector-ref cache 0) index))
       (vector-ref cache 1)
-      (let ((bytes (d2-load-shard state index)))
+      (begin
+        ;; Drop the previous owned shard before the next bounded read.  A load
+        ;; failure therefore leaves an empty cache instead of transiently
+        ;; retaining two maximum-sized shards.
+        (vector-set! cache 0 #f)
+        (vector-set! cache 1 #f)
+        (let ((bytes (d2-load-shard state index)))
         (vector-set! cache 0 index)
         (vector-set! cache 1 bytes)
-        bytes)))
+          bytes))))
 
 (define (d2-shuffle-ref! state ordinal)
   (let* ((config (vector-ref state 3))

@@ -130,50 +130,104 @@
 (define (token-corpus-summary-total-shard-bytes summary)
   (e1b-safe-d1-token-corpus-summary-total-shard-bytes-call summary))
 
-(define-syntax d2-safe-unary-call
-  (syntax-rules ()
-    ((_ binding native-name)
-     (define binding
-       (let ()
-         (extern void native-call ptr ptr :real native-name)
-         (lambda (value)
-           (let ((output (vector #f)))
-             (native-call (vector value) output)
-             (vector-ref output 0))))))))
+(define e1b-safe-d2-token-dataset-open-call
+  (let ()
+    (extern void e1b-d2-token-dataset-open ptr ptr ptr
+            :real et_e1b_public_d2_token_dataset_open_v1)
+    (lambda (config tokenizer)
+      (let ((output (vector #f)))
+        (e1b-d2-token-dataset-open (vector config) (vector tokenizer) output)
+        (vector-ref output 0)))))
 
-(define-syntax d2-safe-binary-call
-  (syntax-rules ()
-    ((_ binding native-name)
-     (define binding
-       (let ()
-         (extern void native-call ptr ptr ptr :real native-name)
-         (lambda (left right)
-           (let ((output (vector #f)))
-             (native-call (vector left) (vector right) output)
-             (vector-ref output 0))))))))
+(define e1b-safe-d2-token-dataset-next-batch-call
+  (let ()
+    (extern void e1b-d2-token-dataset-next-batch ptr ptr
+            :real et_e1b_public_d2_token_dataset_next_batch_v1)
+    (lambda (dataset)
+      (let ((output (vector #f)))
+        (e1b-d2-token-dataset-next-batch (vector dataset) output)
+        (vector-ref output 0)))))
 
-(d2-safe-binary-call e1b-safe-d2-token-dataset-open-call
-                     et_e1b_public_d2_token_dataset_open_v1)
-(d2-safe-unary-call e1b-safe-d2-token-dataset-next-batch-call
-                    et_e1b_public_d2_token_dataset_next_batch_v1)
-(d2-safe-unary-call e1b-safe-d2-token-dataset-cursor-call
-                    et_e1b_public_d2_token_dataset_cursor_v1)
-(d2-safe-unary-call e1b-safe-d2-token-dataset-end-call
-                    et_e1b_public_d2_token_dataset_end_v1)
-(d2-safe-binary-call e1b-safe-d2-token-dataset-seek-call
-                     et_e1b_public_d2_token_dataset_seek_v1)
-(d2-safe-unary-call e1b-safe-d2-token-dataset-close-call
-                    et_e1b_public_d2_token_dataset_close_v1)
-(d2-safe-unary-call e1b-safe-d2-token-batch-inputs-call
-                    et_e1b_public_d2_token_batch_inputs_v1)
-(d2-safe-unary-call e1b-safe-d2-token-batch-targets-call
-                    et_e1b_public_d2_token_batch_targets_v1)
-(d2-safe-unary-call e1b-safe-d2-token-batch-loss-mask-call
-                    et_e1b_public_d2_token_batch_loss_mask_v1)
-(d2-safe-unary-call e1b-safe-d2-token-batch-validate-call
-                    et_e1b_public_d2_token_batch_validate_v1)
-(d2-safe-unary-call e1b-safe-d2-token-batch-release-call
-                    et_e1b_public_d2_token_batch_release_v1)
+(define e1b-safe-d2-token-dataset-cursor-call
+  (let ()
+    (extern void e1b-d2-token-dataset-cursor ptr ptr
+            :real et_e1b_public_d2_token_dataset_cursor_v1)
+    (lambda (dataset)
+      (let ((output (vector #f)))
+        (e1b-d2-token-dataset-cursor (vector dataset) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-dataset-end-call
+  (let ()
+    (extern void e1b-d2-token-dataset-end ptr ptr
+            :real et_e1b_public_d2_token_dataset_end_v1)
+    (lambda (value)
+      (let ((output (vector #f)))
+        (e1b-d2-token-dataset-end (vector value) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-dataset-seek-call
+  (let ()
+    (extern void e1b-d2-token-dataset-seek ptr ptr ptr
+            :real et_e1b_public_d2_token_dataset_seek_v1)
+    (lambda (dataset cursor)
+      (let ((output (vector #f)))
+        (e1b-d2-token-dataset-seek (vector dataset) (vector cursor) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-dataset-close-call
+  (let ()
+    (extern void e1b-d2-token-dataset-close ptr ptr
+            :real et_e1b_public_d2_token_dataset_close_v1)
+    (lambda (dataset)
+      (let ((output (vector #f)))
+        (e1b-d2-token-dataset-close (vector dataset) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-batch-inputs-call
+  (let ()
+    (extern void e1b-d2-token-batch-inputs ptr ptr
+            :real et_e1b_public_d2_token_batch_inputs_v1)
+    (lambda (batch)
+      (let ((output (vector #f)))
+        (e1b-d2-token-batch-inputs (vector batch) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-batch-targets-call
+  (let ()
+    (extern void e1b-d2-token-batch-targets ptr ptr
+            :real et_e1b_public_d2_token_batch_targets_v1)
+    (lambda (batch)
+      (let ((output (vector #f)))
+        (e1b-d2-token-batch-targets (vector batch) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-batch-loss-mask-call
+  (let ()
+    (extern void e1b-d2-token-batch-loss-mask ptr ptr
+            :real et_e1b_public_d2_token_batch_loss_mask_v1)
+    (lambda (batch)
+      (let ((output (vector #f)))
+        (e1b-d2-token-batch-loss-mask (vector batch) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-batch-validate-call
+  (let ()
+    (extern void e1b-d2-token-batch-validate ptr ptr
+            :real et_e1b_public_d2_token_batch_validate_v1)
+    (lambda (batch)
+      (let ((output (vector #f)))
+        (e1b-d2-token-batch-validate (vector batch) output)
+        (vector-ref output 0)))))
+
+(define e1b-safe-d2-token-batch-release-call
+  (let ()
+    (extern void e1b-d2-token-batch-release ptr ptr
+            :real et_e1b_public_d2_token_batch_release_v1)
+    (lambda (batch)
+      (let ((output (vector #f)))
+        (e1b-d2-token-batch-release (vector batch) output)
+        (vector-ref output 0)))))
 
 (define (token-dataset-open config tokenizer)
   (e1b-safe-d2-token-dataset-open-call config tokenizer))
