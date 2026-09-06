@@ -428,6 +428,17 @@
              'token-dataset-open
              (lambda ()
         (let* ((normalized (d2-core-normalize-config config))
+               ;; Admit the manifest/shard/batch portion before tokenizer or
+               ;; filesystem work.  The post-manifest check below adds the
+               ;; row-count-dependent bounded shuffle window.
+               (base-working-bytes
+                (d2-core-working-payload-bytes
+                 (d2-core-config-ref normalized ':maximum-manifest-bytes)
+                 (d2-core-config-ref normalized ':maximum-shard-bytes)
+                 (d2-core-config-ref normalized ':batch-size)
+                 (d2-core-config-ref normalized ':sequence-length)
+                 (d2-core-config-ref normalized ':maximum-batch-bytes)
+                 (d2-core-config-ref normalized ':shuffle-window-rows) 0))
                (tokenizer-identity (d2-tokenizer-identity tokenizer))
                (fingerprint (vector-ref tokenizer-identity 0))
                (vocab-size (vector-ref tokenizer-identity 1))
@@ -463,6 +474,9 @@
                    normalized rows))
                  (state (make-vector 19 #f))
                  (shell (d2-make-dataset-shell state)))
+            (if (> base-working-bytes working-bytes)
+                (d2-fail 'internal 'token-dataset-open
+                         "D2 working payload preflight invariant failed"))
             (vector-set! state 0 d2-dataset-state-tag)
             (vector-set! state 1 shell)
             (vector-set! state 2 #t)
