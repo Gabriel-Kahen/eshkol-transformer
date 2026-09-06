@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <xmmintrin.h>
 
 static int checks;
 static int failures;
@@ -86,6 +87,22 @@ static void read_parameter_bits(et_f32_parameter *parameter, uint32_t *bits,
   CHECK(et_f32_parameter_value_snapshot_v1(parameter, &snapshot, &error) == 0);
   CHECK(et_f32_tensor_copy_bits_to_v1(snapshot, bits, count, &error) == 0);
   destroy_tensor(&snapshot);
+}
+
+static void check_gradient_bits(et_f32_parameter *parameter,
+                                const uint32_t *expected, size_t count) {
+  et_f32_tensor_error error;
+  et_f32_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  CHECK(et_f32_parameter_gradient_borrow_begin_v1(parameter, &borrow, &error) ==
+        0);
+  CHECK(borrow != NULL);
+  CHECK(et_f32_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  CHECK(view != NULL);
+  CHECK(view->byte_length == count * sizeof(*expected));
+  CHECK(memcmp(view->data, expected, count * sizeof(*expected)) == 0);
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  CHECK(borrow == NULL);
 }
 
 static et_f32_gradient_metadata_v1 gradient_metadata(
@@ -496,6 +513,120 @@ static void test_global_norm_exact_boundary(void) {
     destroy_tensor(&unclipped);
     destroy_tensor(&boundary);
   }
+}
+
+static void test_global_norm_above_multi_tensor_frozen_parity(void) {
+  static int identities[2];
+  const uint32_t one = UINT32_C(0x3f800000);
+  const uint32_t initial0[] = {one, one};
+  const uint32_t initial1[] = {one, one, one};
+  const uint32_t gradient0[] = {UINT32_C(0x40400000),
+                                UINT32_C(0x40800000)};
+  const uint32_t gradient1[] = {0u, UINT32_C(0x41400000),
+                                UINT32_C(0x80000000)};
+  const uint32_t expected_parameter0[] = {UINT32_C(0x3f400000),
+                                          UINT32_C(0x3f400000)};
+  const uint32_t expected_parameter1[] = {one, UINT32_C(0x3f400000), one};
+  const uint32_t expected_avg0[] = {UINT32_C(0x3fc00000),
+                                    UINT32_C(0x40000000)};
+  const uint32_t expected_avg1[] = {0u, UINT32_C(0x40c00000), 0u};
+  const uint32_t expected_avg_sq0[] = {UINT32_C(0x40100000),
+                                       UINT32_C(0x40800000)};
+  const uint32_t expected_avg_sq1[] = {0u, UINT32_C(0x42100000), 0u};
+  et_f32_tensor_error tensor_error;
+  et_o2_error_v1 error;
+  et_f32_tensor *initial_tensor0 = make_tensor(initial0, 2u);
+  et_f32_tensor *initial_tensor1 = make_tensor(initial1, 3u);
+  et_f32_parameter *parameters[2] = {NULL, NULL};
+  et_o2_optimizer_builder *builder = NULL;
+  et_o2_optimizer *optimizer = NULL;
+  uint32_t actual[3];
+
+  CHECK(et_f32_parameter_create_v1(initial_tensor0, &parameters[0],
+                                   &tensor_error) == 0);
+  CHECK(et_f32_parameter_create_v1(initial_tensor1, &parameters[1],
+                                   &tensor_error) == 0);
+  CHECK(et_f32_parameter_bind_identity_v1(parameters[0], &identities[0],
+                                          &tensor_error) == 0);
+  CHECK(et_f32_parameter_bind_identity_v1(parameters[1], &identities[1],
+                                          &tensor_error) == 0);
+  destroy_tensor(&initial_tensor0);
+  destroy_tensor(&initial_tensor1);
+  CHECK(et_o2_optimizer_builder_create_v1(
+            2u, ET_O2_CLIP_GLOBAL_L2, UINT32_C(0x40d00000),
+            ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one, &builder, &error) == 0);
+  CHECK(et_o2_optimizer_builder_set_v1(
+            builder, 0u, parameters[0], &identities[0],
+            UINT32_C(0x3e800000), 0u, 0u, 1u, 0u, &error) == 0);
+  CHECK(et_o2_optimizer_builder_set_v1(
+            builder, 1u, parameters[1], &identities[1],
+            UINT32_C(0x3e800000), 0u, 0u, 1u, 0u, &error) == 0);
+  CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &error) == 0);
+  set_gradient(parameters[0], gradient0, 2u, 7u, one);
+  set_gradient(parameters[1], gradient1, 3u, 7u, one);
+
+  /* The unique-tensor norm is 13, so max=6.5 scales every gradient by 0.5. */
+  CHECK(et_o2_optimizer_step_v1(optimizer, &error) == 0);
+  CHECK(completed_updates(optimizer) == 1u);
+  check_parameter_bits(parameters[0], expected_parameter0, 2u);
+  check_parameter_bits(parameters[1], expected_parameter1, 3u);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            optimizer, 0u, ET_O2_MOMENT_EXP_AVG, actual, 2u, &error) == 0);
+  CHECK(memcmp(actual, expected_avg0, sizeof(expected_avg0)) == 0);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            optimizer, 0u, ET_O2_MOMENT_EXP_AVG_SQ, actual, 2u, &error) == 0);
+  CHECK(memcmp(actual, expected_avg_sq0, sizeof(expected_avg_sq0)) == 0);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            optimizer, 1u, ET_O2_MOMENT_EXP_AVG, actual, 3u, &error) == 0);
+  CHECK(memcmp(actual, expected_avg1, sizeof(expected_avg1)) == 0);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            optimizer, 1u, ET_O2_MOMENT_EXP_AVG_SQ, actual, 3u, &error) == 0);
+  CHECK(memcmp(actual, expected_avg_sq1, sizeof(expected_avg_sq1)) == 0);
+  check_gradient_bits(parameters[0], gradient0, 2u);
+  check_gradient_bits(parameters[1], gradient1, 3u);
+  check_gradient_metadata(parameters[0], ET_F32_GRADIENT_PRESENT, 7u, one);
+  check_gradient_metadata(parameters[1], ET_F32_GRADIENT_PRESENT, 7u, one);
+}
+
+static void test_global_norm_scaled_accumulation_avoids_sum_overflow(void) {
+  static int identity;
+  const uint32_t one = UINT32_C(0x3f800000);
+  const uint32_t initial[] = {one, one};
+  const uint32_t gradient[] = {UINT32_C(0x5f502ab5),
+                               UINT32_C(0x5f502ab5)};
+  const uint32_t expected_avg[] = {UINT32_C(0x5ed02ab5),
+                                   UINT32_C(0x5ed02ab5)};
+  et_f32_tensor_error tensor_error;
+  et_o2_error_v1 error;
+  et_f32_tensor *initial_tensor = make_tensor(initial, 2u);
+  et_f32_parameter *parameter = NULL;
+  et_o2_optimizer_builder *builder = NULL;
+  et_o2_optimizer *optimizer = NULL;
+  uint32_t actual[2];
+
+  CHECK(et_f32_parameter_create_v1(initial_tensor, &parameter,
+                                   &tensor_error) == 0);
+  CHECK(et_f32_parameter_bind_identity_v1(parameter, &identity,
+                                          &tensor_error) == 0);
+  destroy_tensor(&initial_tensor);
+  CHECK(et_o2_optimizer_builder_create_v1(
+            1u, ET_O2_CLIP_GLOBAL_L2, UINT32_C(0x7f7fffff),
+            ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one, &builder, &error) == 0);
+  CHECK(et_o2_optimizer_builder_set_v1(
+            builder, 0u, parameter, &identity, 1u, UINT32_C(0x3f000000),
+            UINT32_C(0x3f000000), one, 0u, &error) == 0);
+  CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &error) == 0);
+  set_gradient(parameter, gradient, 2u, 1u, one);
+
+  /* Each square is finite but their naive binary32 sum overflows. */
+  CHECK(et_o2_optimizer_step_v1(optimizer, &error) == 0);
+  CHECK(completed_updates(optimizer) == 1u);
+  check_parameter_bits(parameter, initial, 2u);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            optimizer, 0u, ET_O2_MOMENT_EXP_AVG, actual, 2u, &error) == 0);
+  CHECK(memcmp(actual, expected_avg, sizeof(expected_avg)) == 0);
+  check_gradient_bits(parameter, gradient, 2u);
+  check_gradient_metadata(parameter, ET_F32_GRADIENT_PRESENT, 1u, one);
 }
 
 static void test_distinct_parameter_groups_frozen_parity(void) {
@@ -925,6 +1056,94 @@ static void test_state_round_trip_and_release(void) {
   CHECK(completed_updates(target.optimizer) == 3u);
 }
 
+static void test_state_load_restores_schedule_clip_and_next_update(void) {
+  const uint32_t one = UINT32_C(0x3f800000);
+  const uint32_t first_gradient = UINT32_C(0x3f000000);
+  const uint32_t second_gradient = UINT32_C(0xbf400000);
+  const uint32_t next_gradient = one;
+  et_o2_error_v1 error;
+  fixture source = make_fixture(
+      one, UINT32_C(0x3c23d70a), UINT32_C(0x3f666666),
+      UINT32_C(0x3f7fbe77), UINT32_C(0x322bcc77),
+      UINT32_C(0x3dcccccd), ET_O2_CLIP_GLOBAL_L2, UINT32_C(0x3e800000),
+      ET_O2_SCHEDULE_LINEAR, 2u, 6u, UINT32_C(0x3dcccccd));
+  fixture target;
+  et_o2_optimizer_state *state = NULL;
+  uint32_t boundary_parameter;
+  uint32_t before_load_parameter;
+  uint32_t after_load_parameter;
+  uint32_t source_parameter;
+  uint32_t target_parameter;
+  uint32_t source_m;
+  uint32_t target_m;
+  uint32_t source_v;
+  uint32_t target_v;
+
+  set_gradient(source.parameter, &first_gradient, 1u, 1u, one);
+  CHECK(et_o2_optimizer_step_v1(source.optimizer, &error) == 0);
+  CHECK(et_o2_optimizer_zero_grad_v1(source.optimizer, &error) == 0);
+  set_gradient(source.parameter, &second_gradient, 1u, 1u, one);
+  CHECK(et_o2_optimizer_step_v1(source.optimizer, &error) == 0);
+  CHECK(et_o2_optimizer_zero_grad_v1(source.optimizer, &error) == 0);
+  CHECK(completed_updates(source.optimizer) == 2u);
+  CHECK(schedule_factor(source.optimizer) == UINT32_C(0x3f466666));
+  read_parameter_bits(source.parameter, &boundary_parameter, 1u);
+
+  target = make_fixture(
+      boundary_parameter, UINT32_C(0x3e4ccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3dcccccd), 0u, ET_O2_CLIP_NONE,
+      0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one);
+  set_gradient(target.parameter, &next_gradient, 1u, 9u,
+               UINT32_C(0x40000000));
+  CHECK(et_o2_optimizer_zero_grad_v1(target.optimizer, &error) == 0);
+  check_gradient_metadata(target.parameter, ET_F32_GRADIENT_ABSENT, 0u, 0u);
+  read_parameter_bits(target.parameter, &before_load_parameter, 1u);
+
+  CHECK(et_o2_optimizer_state_snapshot_v1(source.optimizer, &state, &error) ==
+        0);
+  CHECK(et_o2_optimizer_load_state_v1(target.optimizer, state, &error) == 0);
+  read_parameter_bits(target.parameter, &after_load_parameter, 1u);
+  CHECK(after_load_parameter == before_load_parameter);
+  check_gradient_metadata(target.parameter, ET_F32_GRADIENT_ABSENT, 0u, 0u);
+  CHECK(completed_updates(target.optimizer) == 2u);
+  CHECK(schedule_factor(target.optimizer) == UINT32_C(0x3f466666));
+
+  set_gradient(source.parameter, &next_gradient, 1u, 3u,
+               UINT32_C(0x40000000));
+  set_gradient(target.parameter, &next_gradient, 1u, 3u,
+               UINT32_C(0x40000000));
+  CHECK(et_o2_optimizer_step_v1(source.optimizer, &error) == 0);
+  CHECK(et_o2_optimizer_step_v1(target.optimizer, &error) == 0);
+  CHECK(completed_updates(source.optimizer) == 3u);
+  CHECK(completed_updates(target.optimizer) == 3u);
+  CHECK(schedule_factor(source.optimizer) == UINT32_C(0x3f0ccccd));
+  CHECK(schedule_factor(target.optimizer) == UINT32_C(0x3f0ccccd));
+  read_parameter_bits(source.parameter, &source_parameter, 1u);
+  read_parameter_bits(target.parameter, &target_parameter, 1u);
+  CHECK(source_parameter == target_parameter);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            source.optimizer, 0u, ET_O2_MOMENT_EXP_AVG, &source_m, 1u,
+            &error) == 0);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            target.optimizer, 0u, ET_O2_MOMENT_EXP_AVG, &target_m, 1u,
+            &error) == 0);
+  CHECK(source_m == target_m);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            source.optimizer, 0u, ET_O2_MOMENT_EXP_AVG_SQ, &source_v, 1u,
+            &error) == 0);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            target.optimizer, 0u, ET_O2_MOMENT_EXP_AVG_SQ, &target_v, 1u,
+            &error) == 0);
+  CHECK(source_v == target_v);
+  check_gradient_bits(source.parameter, &next_gradient, 1u);
+  check_gradient_bits(target.parameter, &next_gradient, 1u);
+  check_gradient_metadata(source.parameter, ET_F32_GRADIENT_PRESENT, 3u,
+                          UINT32_C(0x40000000));
+  check_gradient_metadata(target.parameter, ET_F32_GRADIENT_PRESENT, 3u,
+                          UINT32_C(0x40000000));
+  CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
+}
+
 static void test_cross_owner_handle_and_snapshot_failpoints(void) {
   const uint32_t one = UINT32_C(0x3f800000);
   et_o2_error_v1 error;
@@ -1154,6 +1373,42 @@ static void test_protected_state_metadata_load_validation(void) {
   CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
 }
 
+static void test_load_requires_absent_destination_before_state_borrow(void) {
+  const uint32_t one = UINT32_C(0x3f800000);
+  et_o2_error_v1 error;
+  fixture source = make_fixture(
+      one, UINT32_C(0x3dcccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3a83126f), 0u, ET_O2_CLIP_NONE,
+      0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one);
+  fixture target = make_fixture(
+      one, UINT32_C(0x3dcccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3a83126f), 0u, ET_O2_CLIP_NONE,
+      0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one);
+  et_o2_optimizer_state *state = NULL;
+
+  CHECK(et_o2_optimizer_state_snapshot_v1(source.optimizer, &state, &error) ==
+        0);
+  CHECK(et_o2_test_state_set_config_v1(
+            state, 99u, 0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one) == 0);
+  set_gradient(target.parameter, &one, 1u, 5u, one);
+  expect_o2_error(et_o2_optimizer_load_state_v1(target.optimizer, state,
+                                                &error),
+                  &error, ET_O2_STATUS_INVALID_STATE,
+                  ET_O2_CODE_GRADIENT_METADATA);
+  check_gradient_bits(target.parameter, &one, 1u);
+  check_gradient_metadata(target.parameter, ET_F32_GRADIENT_PRESENT, 5u, one);
+  CHECK(et_o2_optimizer_zero_grad_v1(target.optimizer, &error) == 0);
+  expect_o2_error(et_o2_optimizer_load_state_v1(target.optimizer, state,
+                                                &error),
+                  &error, ET_O2_STATUS_CORRUPT_DATA,
+                  ET_O2_CODE_INVALID_OPTION);
+  CHECK(et_o2_test_state_set_config_v1(
+            state, ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u,
+            one) == 0);
+  CHECK(et_o2_optimizer_load_state_v1(target.optimizer, state, &error) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
+}
+
 static void test_release_defect_finishes_exact_once_tail(void) {
   const uint32_t one = UINT32_C(0x3f800000);
   et_o2_error_v1 error;
@@ -1280,24 +1535,50 @@ static void test_release_first_middle_last_defects(void) {
   }
 }
 
+static void test_noncanonical_float_environment_category(void) {
+  const uint32_t one = UINT32_C(0x3f800000);
+  et_o2_error_v1 error;
+  uint32_t factor = 0u;
+  const uint32_t saved_mxcsr = _mm_getcsr();
+  fixture item = make_fixture(
+      one, UINT32_C(0x3dcccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3a83126f), 0u, ET_O2_CLIP_NONE,
+      0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one);
+
+  _mm_setcsr(saved_mxcsr | UINT32_C(0x00008000));
+  expect_o2_error(et_o2_optimizer_schedule_factor_bits_v1(
+                      item.optimizer, &factor, &error),
+                  &error, ET_O2_STATUS_DETERMINISM_UNAVAILABLE,
+                  ET_O2_CODE_FLOAT_ENVIRONMENT);
+  _mm_setcsr(saved_mxcsr);
+  CHECK(et_o2_optimizer_schedule_factor_bits_v1(
+            item.optimizer, &factor, &error) == 0);
+  CHECK(factor == one);
+}
+
 int main(void) {
   test_builder_rejections();
   test_exact_parameter_ceiling();
   test_step_metadata_atomicity_and_zero();
   test_present_zero_decay_and_linear_schedule();
   test_global_norm_exact_boundary();
+  test_global_norm_above_multi_tensor_frozen_parity();
+  test_global_norm_scaled_accumulation_avoids_sum_overflow();
   test_distinct_parameter_groups_frozen_parity();
   test_unequal_weight_accumulation_frozen_parity();
   test_allocation_failures_are_atomic();
   test_i2_step_allocation_failures_are_atomic();
   test_counter_overflow_is_atomic();
   test_state_round_trip_and_release();
+  test_state_load_restores_schedule_clip_and_next_update();
   test_cross_owner_handle_and_snapshot_failpoints();
   test_nonfinite_snapshot_load_rejected_atomically();
   test_protected_state_metadata_load_validation();
+  test_load_requires_absent_destination_before_state_borrow();
   test_release_defect_finishes_exact_once_tail();
   test_release_admission_corruption_is_nonmutating();
   test_release_first_middle_last_defects();
+  test_noncanonical_float_environment_category();
   if (failures != 0) {
     (void)fprintf(stderr, "O2 native adversarial FAIL: %d/%d checks failed\n",
                   failures, checks);

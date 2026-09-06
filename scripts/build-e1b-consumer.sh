@@ -76,6 +76,7 @@ o2_package_renames="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_private_renam
 o2_public_exports="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_public_exports.txt")"
 o2_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_undefined_symbols.txt")"
 o2_public_strings="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_public_strings.txt")"
+o2_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_native_source_closure.txt")"
 t2_private_root="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_root.esk")"
 t2_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_package_bridge.c")"
 t2_package_renames="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_private_renames.txt")"
@@ -95,6 +96,7 @@ package_native_source=
 package_native_sources=()
 package_native_define=
 package_public_strings=
+package_native_source_closure=
 if [[ "${private_root}" == "${o2_private_root}" ]]; then
     [[ "${package_bridge}" == "${o2_package_bridge}" ]] || \
       die "O2 aggregate policy requires the exact repository bridge"
@@ -111,6 +113,7 @@ if [[ "${private_root}" == "${o2_private_root}" ]]; then
     package_policy=o2-wave2-aggregate
     undefined_symbols="${o2_undefined_symbols}"
     package_public_strings="${o2_public_strings}"
+    package_native_source_closure="${o2_native_source_closure}"
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
       "${PROJECT_ROOT}/native/checkpoint_io.c"
@@ -454,15 +457,18 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
+  -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
   -o "${e1b_tmp}/bridge.o"
 
 "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
+  -MMD -MF "${e1b_tmp}/package-bridge.d" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
 package_native_objects=()
+package_native_depfiles=("${e1b_tmp}/bridge.d" "${e1b_tmp}/package-bridge.d")
 if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   package_native_cflags=(
     -std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
@@ -481,11 +487,31 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
+    package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     "${e1b_cc}" "${package_native_cflags[@]}" \
+      -MMD -MF "${package_native_depfile}" \
       -c "${package_native_source}" -o "${package_native_object}"
     package_native_objects+=("${package_native_object}")
+    package_native_depfiles+=("${package_native_depfile}")
     native_index=$((native_index + 1))
   done
+fi
+
+if [[ -n "${package_native_source_closure}" ]]; then
+  {
+    for native_depfile in "${package_native_depfiles[@]}"; do
+      sed -e 's/^[^:]*://' -e 's/\\//g' "${native_depfile}" | \
+        tr -s '[:space:]' '\n'
+    done
+  } | awk -v root="${PROJECT_ROOT}/" '
+      index($0, root) == 1 {
+        path = substr($0, length(root) + 1)
+        if (!seen[path]++) print path
+      }
+    ' >"${e1b_tmp}/native-source-closure.txt"
+  cmp -s "${package_native_source_closure}" \
+    "${e1b_tmp}/native-source-closure.txt" || \
+    die "${package_policy} trusted native source closure drifted"
 fi
 
 "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
@@ -616,6 +642,10 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+if [[ -n "${package_native_source_closure}" ]]; then
+  cp "${e1b_tmp}/native-source-closure.txt" \
+    "${evidence_dir}.tmp.$$/native-source-closure.txt"
+fi
 {
   printf 'package_policy\t%s\n' "${package_policy}"
   printf 'allowlist\t%s\n' "$(basename -- "${undefined_symbols}")"

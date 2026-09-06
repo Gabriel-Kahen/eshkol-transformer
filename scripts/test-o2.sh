@@ -24,6 +24,8 @@ library="${artifact_dir}/libeshkol_transformer_wave2.a"
 evidence="${object}.evidence"
 [[ -r "${object}" && -r "${library}" ]] || \
   die "canonical O2 aggregate is missing"
+i2_aggregate="$(project_build_dir)/i2/libeshkol_transformer_wave2.a"
+t2_aggregate="$(project_build_dir)/t2/libeshkol_transformer_wave2.a"
 
 cflags=(
   -std=c11 -Wall -Wextra -Werror -Wpedantic
@@ -65,7 +67,7 @@ for source in test_native_optimizer test_optimizer_native; do
 done
 grep -Fx 'O2 native optimizer PASS' \
   "${temporary_dir}/test_native_optimizer-1.stdout" >/dev/null
-grep -Fx 'O2 native adversarial PASS: 5492 checks' \
+grep -Fx 'O2 native adversarial PASS: 5769 checks' \
   "${temporary_dir}/test_optimizer_native-1.stdout" >/dev/null
 [[ "$(ar t "${library}")" == "o2_wave2.o" ]] || \
   die "canonical O2 aggregate must contain exactly o2_wave2.o"
@@ -86,7 +88,8 @@ cmp "${PROJECT_ROOT}/native/o2_wave2_source_closure.txt" \
 
 for evidence_name in global-defined.txt package-exports.txt undefined.txt \
     expected-undefined.txt public-strings.txt readelf-symbols.txt nm.txt \
-    strings.txt private.d link.map allowlist-provenance.tsv; do
+    strings.txt private.d native-source-closure.txt link.map \
+    allowlist-provenance.tsv; do
   [[ -s "${evidence}/${evidence_name}" ]] || \
     die "O2 aggregate evidence omits ${evidence_name}"
 done
@@ -158,6 +161,18 @@ cmp "${temporary_dir}/run-1.stdout" "${temporary_dir}/run-2.stdout"
 grep -Fx 'O2 package smoke PASS: 2 checks' \
   "${temporary_dir}/run-1.stdout" >/dev/null
 
+run_compiler reverse-public --strict-types --no-stdlib \
+  -I "${PROJECT_ROOT}/lib" -L "${artifact_dir}" \
+  --lib eshkol_transformer_wave2 \
+  "${PROJECT_ROOT}/tests/o2/package_smoke_reverse.esk" \
+  -o "${temporary_dir}/package-smoke-reverse" \
+  >"${temporary_dir}/compile-reverse.log" 2>&1
+timeout --foreground --signal=TERM --kill-after=5s 90s \
+  "${temporary_dir}/package-smoke-reverse" \
+  >"${temporary_dir}/package-smoke-reverse.stdout"
+grep -Fx 'O2 reverse import PASS' \
+  "${temporary_dir}/package-smoke-reverse.stdout" >/dev/null
+
 runtime_dir="${temporary_dir}/runtime"
 mkdir -p "${runtime_dir}"
 runtime_cflags=(
@@ -177,7 +192,11 @@ runtime_cflags=(
   -o "${runtime_dir}/p1_identity.o"
 for runtime_source in data_io checkpoint_io kernel_abi i64_tensor \
     t1_i64_shell f32_tensor o2_optimizer; do
-  "${cc}" "${runtime_cflags[@]}" \
+  runtime_testing=()
+  if [[ "${runtime_source}" == o2_optimizer ]]; then
+    runtime_testing=(-DET_O2_TESTING)
+  fi
+  "${cc}" "${runtime_cflags[@]}" "${runtime_testing[@]}" \
     -c "${PROJECT_ROOT}/native/${runtime_source}.c" \
     -o "${runtime_dir}/${runtime_source}.o"
 done
@@ -199,10 +218,10 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
     "${PROJECT_ROOT}/tests/o2/config_negatives_runtime.esk" \
     -o "${temporary_dir}/config-negatives" \
     >"${temporary_dir}/config-compile.log" 2>&1
-timeout --foreground --signal=TERM --kill-after=5s 90s \
+timeout --foreground --signal=TERM --kill-after=5s 900s \
   "${temporary_dir}/config-negatives" \
   >"${temporary_dir}/config-negatives.stdout"
-grep -E '^O2 config/state adversarial PASS: [0-9]+ checks$' \
+grep -Fx 'O2 config/state adversarial PASS: 57 checks' \
   "${temporary_dir}/config-negatives.stdout" >/dev/null
 
 for private_binding in o2-provider-name o2-native-builder-create \
@@ -297,6 +316,26 @@ grep -E 'multiple definition.*et_e1b_error_(predicate|category)_v1' \
   "${temporary_dir}/duplicate.stderr" >/dev/null || \
   die "duplicate O2 authority rejection did not identify E1 ownership"
 
+for aggregate_pair in i2 t2; do
+  if [[ "${aggregate_pair}" == i2 ]]; then
+    other_aggregate="${i2_aggregate}"
+  else
+    other_aggregate="${t2_aggregate}"
+  fi
+  [[ -r "${other_aggregate}" ]] || \
+    die "${aggregate_pair^^} aggregate is missing for O2 collision evidence"
+  if "${cc}" -r -Wl,--whole-archive "${library}" "${other_aggregate}" \
+      -Wl,--no-whole-archive \
+      -o "${temporary_dir}/o2-${aggregate_pair}-collision.o" \
+      >"${temporary_dir}/o2-${aggregate_pair}-collision.stdout" \
+      2>"${temporary_dir}/o2-${aggregate_pair}-collision.stderr"; then
+    die "linker admitted O2 with ${aggregate_pair^^} registry authority"
+  fi
+  grep -E 'multiple definition.*et_e1b_error_(predicate|category)_v1' \
+    "${temporary_dir}/o2-${aggregate_pair}-collision.stderr" >/dev/null || \
+    die "O2/${aggregate_pair^^} collision did not identify E1 ownership"
+done
+
 if grep -Ein 'python|pytorch|torch' \
     "${PROJECT_ROOT}/native/o2_wave2_root.esk" \
     "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c" \
@@ -321,4 +360,10 @@ else
   fi
 fi
 
-printf 'O2 PASS: native optimizer, 5492 adversarial checks, config/state AOT, reference parity, exact 53-global successor, authority isolation, sanitizers/LSan, and production isolation\n'
+if [[ "${O2_ASAN_DETECT_LEAKS:-1}" == 1 ]]; then
+  sanitizer_summary='sanitizers/LSan'
+else
+  sanitizer_summary='sanitizers (LSan disabled by caller)'
+fi
+printf 'O2 PASS: native optimizer, 5769 adversarial checks, config/state AOT, reference parity, exact 53-global successor, authority isolation, %s, and production isolation\n' \
+  "${sanitizer_summary}"

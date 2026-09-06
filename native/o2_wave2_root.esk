@@ -17,6 +17,8 @@
         :real et_o2_private_optimizer_step_v1)
 (extern i64 o2-native-optimizer-zero-grad ptr
         :real et_o2_private_optimizer_zero_grad_v1)
+(extern i64 o2-native-optimizer-require-absent-gradients ptr
+        :real et_o2_private_optimizer_require_absent_gradients_v1)
 (extern i64 o2-native-optimizer-completed-updates ptr
         :real et_o2_private_optimizer_completed_updates_v1)
 (extern i64 o2-native-optimizer-schedule-factor-bits ptr
@@ -35,6 +37,9 @@
 (define o2-max-data-depth 16)
 (define o2-max-data-nodes 65536)
 (define o2-max-config-bytes 16777216)
+(define o2-state-max-data-depth 32)
+(define o2-state-max-data-nodes 2097152)
+(define o2-state-max-data-bytes 67108864)
 (define o2-max-groups 1365)
 (define o2-max-parameters 1365)
 (define o2-i64-max 9223372036854775807)
@@ -63,6 +68,7 @@
             ((= category 7) 'invalid-state)
             ((= category 8) 'version-mismatch)
             ((= category 10) 'corrupt-data)
+            ((= category 11) 'determinism-unavailable)
             (else 'internal))
       operation "O2 native optimizer rejected the request")))
 
@@ -207,6 +213,66 @@
           (o2-copy-data-walk operation value 0 '() (vector 0) (vector 0))))
     result))
 
+(define (o2-budget-data-walk operation value depth ancestors nodes bytes
+                             max-depth max-nodes max-bytes)
+  (cond
+    ((pair? value)
+     (if (or (> depth max-depth)
+             (not (i2-bounded-list-length value (+ max-nodes 1)))
+             (o2-member-identity? value ancestors))
+         (o2-fail 'invalid-argument operation
+                  "optimizer state projection is cyclic or exceeds structural bounds"))
+     (let loop ((remaining value))
+       (if (not (null? remaining))
+           (begin
+             (vector-set! nodes 0 (+ (vector-ref nodes 0) 1))
+             (if (> (vector-ref nodes 0) max-nodes)
+                 (o2-fail 'invalid-argument operation
+                          "optimizer state projection exceeds its node budget"))
+             (o2-budget-data-walk
+               operation (car remaining) (+ depth 1) (cons value ancestors)
+               nodes bytes max-depth max-nodes max-bytes)
+             (loop (cdr remaining))))))
+    ((string? value)
+     (vector-set! nodes 0 (+ (vector-ref nodes 0) 1))
+     (vector-set! bytes 0 (+ (vector-ref bytes 0)
+                             (string-byte-length value)))
+     (if (or (> (vector-ref nodes 0) max-nodes)
+             (> (vector-ref bytes 0) max-bytes))
+         (o2-fail 'invalid-argument operation
+                  "optimizer state projection exceeds its data budget")))
+    ((or (symbol? value) (number? value) (boolean? value) (null? value))
+     (vector-set! nodes 0 (+ (vector-ref nodes 0) 1))
+     (if (> (vector-ref nodes 0) max-nodes)
+         (o2-fail 'invalid-argument operation
+                  "optimizer state projection exceeds its node budget")))
+    (else
+     (o2-fail 'invalid-argument operation
+              "optimizer state projection must contain only data values"))))
+
+(define (o2-state-projection-budget! operation config paths aliases handles)
+  (let build ((remaining-handles handles)
+              (remaining-paths paths)
+              (entries '()))
+    (if (null? remaining-handles)
+        (let ((projection
+                (list 'transformer-optimizer-state 1 0 '()
+                      'adamw 'f32 'cpu o2-provider-identity
+                      config paths aliases 0 (o2-reverse entries) 'none)))
+          (o2-budget-data-walk
+            operation projection 0 '() (vector 0) (vector 0)
+            o2-state-max-data-depth o2-state-max-data-nodes
+            o2-state-max-data-bytes)
+          #t)
+        (let ((entry
+                (list 'parameter-state (car remaining-paths)
+                      (parameter-handle-shape (car remaining-handles))
+                      'f32 'cpu 'row-major
+                      'owned-exp-avg-f32-tensor
+                      'owned-exp-avg-sq-f32-tensor)))
+          (build (cdr remaining-handles) (cdr remaining-paths)
+                 (cons entry entries))))))
+
 (define (o2-hex-digit character)
   (let ((code (char->integer character)))
     (cond ((and (>= code 48) (<= code 57)) (- code 48))
@@ -310,7 +376,19 @@
                      "optimizer group option is outside its binary32 domain"))
         (vector paths learning-rate beta1 beta2 epsilon weight-decay)))))
 
+(define (o2-preflight-raw-group-ceiling! operation borrowed)
+  (let ((envelope-length (i2-bounded-list-length borrowed 11)))
+    (if (and envelope-length (= envelope-length 10))
+        (let ((count
+                (i2-bounded-list-length
+                  (o2-list-ref borrowed 9) (+ o2-max-groups 1))))
+          (if (or (not count) (> count o2-max-groups))
+              (o2-fail 'invalid-argument operation
+                       "optimizer config exceeds 1365 groups")))))
+  #t)
+
 (define (o2-parse-config operation borrowed)
+  (o2-preflight-raw-group-ceiling! operation borrowed)
   (let* ((config (o2-copy-config-data operation borrowed))
          (length (i2-bounded-list-length config 11)))
     (if (or (not length) (not (= length 10))
@@ -351,14 +429,17 @@
 
 (define (o2-unique-handles operation tree paths)
   (let ((paths paths))
-    (let loop ((remaining paths) (handles '()) (canonical '()))
+    (let loop ((remaining paths) (handles '()) (canonical '()) (count 0))
       (if (null? remaining)
           (vector (o2-reverse handles) (o2-reverse canonical))
           (let* ((path (car remaining))
                  (handle (parameter-tree-handle tree path)))
             (if (o2-member-identity? handle handles)
-                (loop (cdr remaining) handles canonical)
+                (loop (cdr remaining) handles canonical count)
                 (let ((canonical-path (parameter-handle-path handle)))
+                  (if (= count o2-max-parameters)
+                      (o2-fail 'invalid-argument operation
+                               "parameter tree exceeds 1365 unique allocations"))
                   (if (not (equal? canonical-path path))
                       (o2-fail 'invalid-state operation
                                "P1 canonical handle order is inconsistent"))
@@ -369,7 +450,7 @@
                       (o2-fail 'device-mismatch operation
                                "optimizer parameter must be on CPU"))
                   (loop (cdr remaining) (cons handle handles)
-                        (cons canonical-path canonical)))))))))
+                        (cons canonical-path canonical) (+ count 1)))))))))
 
 (define (o2-group-assignments operation parsed tree tree-paths)
   (let ((groups (vector-ref parsed 3)))
@@ -425,6 +506,7 @@
          (handles (vector-ref unique 0))
          (paths (vector-ref unique 1))
          (handle-count (i2-bounded-list-length handles (+ o2-max-parameters 1)))
+         (aliases (parameter-tree-tie-groups tree))
          (assignments
            (o2-group-assignments operation parsed tree tree-paths)))
     (if (or (not handle-count) (= handle-count 0)
@@ -433,6 +515,8 @@
                     (i2-bounded-list-length assignments (+ o2-max-parameters 1)))))
         (o2-fail 'shape-mismatch operation
                  "optimizer groups must cover every unique parameter once"))
+    (o2-state-projection-budget!
+      operation (vector-ref parsed 0) paths aliases handles)
     (tensor-provider-preflight-internal o2-provider-name 2 0)
     (let* ((clip (vector-ref parsed 1))
            (schedule (vector-ref parsed 2))
@@ -451,7 +535,7 @@
               (let* ((shell (o2-make-identity "transformer.optimizer:v1"))
                      (optimizer
                        (vector shell #f (vector-ref parsed 0)
-                               paths (parameter-tree-tie-groups tree) handles))
+                               paths aliases handles))
                      (next-registry (cons optimizer o2-optimizers))
                      (native (o2-native-builder-finish builder)))
                 (if (null? native) (o2-native-fail operation))
@@ -518,19 +602,23 @@
 (define (o2-public-optimizer-load-state! optimizer-value state-value)
   (let* ((operation 'optimizer-load-state!)
          (optimizer (o2-require-optimizer operation optimizer-value))
-         (state (o2-require-live-state operation state-value))
-         (next-config
-           (o2-copy-config-data operation (vector-ref state 2))))
-    (if (or (not (equal? (vector-ref optimizer 3) (vector-ref state 3)))
-            (not (equal? (vector-ref optimizer 4) (vector-ref state 4))))
-        (o2-fail 'shape-mismatch operation
-                 "optimizer state topology differs from receiver"))
-    (if (not (= (o2-native-optimizer-load-state
-                  (vector-ref optimizer 1) (vector-ref state 1)) 0))
+         (state (o2-require-live-state operation state-value)))
+    ;; Binding requires destination absence before state borrow or staging.
+    (if (not (= (o2-native-optimizer-require-absent-gradients
+                  (vector-ref optimizer 1)) 0))
         (o2-native-fail operation))
-    ;; Native load is atomic; publish the prevalidated logical config after it.
-    (vector-set! optimizer 2 next-config)
-    #t))
+    (let ((next-config
+           (o2-copy-config-data operation (vector-ref state 2))))
+      (if (or (not (equal? (vector-ref optimizer 3) (vector-ref state 3)))
+            (not (equal? (vector-ref optimizer 4) (vector-ref state 4))))
+          (o2-fail 'shape-mismatch operation
+                   "optimizer state topology differs from receiver"))
+      (if (not (= (o2-native-optimizer-load-state
+                    (vector-ref optimizer 1) (vector-ref state 1)) 0))
+          (o2-native-fail operation))
+      ;; Native load is atomic; publish the prevalidated logical config after it.
+      (vector-set! optimizer 2 next-config)
+      #t)))
 
 (define (o2-public-optimizer-state-release! value)
   (let ((operation 'optimizer-state-release!))

@@ -910,6 +910,17 @@ static int32_t et_o2_validate_absent_gradients(et_o2_optimizer *optimizer,
   return ET_O2_STATUS_OK;
 }
 
+int32_t et_o2_optimizer_require_absent_gradients_v1(
+    et_o2_optimizer *optimizer, et_o2_error_v1 *error) {
+  int32_t result = et_o2_require_optimizer(
+      optimizer, "optimizer-load-state!", error);
+  if (result != 0) {
+    return result;
+  }
+  return et_o2_validate_absent_gradients(
+      optimizer, "optimizer-load-state!", error);
+}
+
 static int32_t et_o2_schedule_factor(const et_o2_config *config,
                                      uint64_t update, uint32_t *factor,
                                      et_o2_error_v1 *error) {
@@ -918,7 +929,7 @@ static int32_t et_o2_schedule_factor(const et_o2_config *config,
   et_o2_u256 denominator;
   uint32_t result;
   if (!et_o2_float_environment()) {
-    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+    return et_o2_fail(error, ET_O2_STATUS_DETERMINISM_UNAVAILABLE,
                       ET_O2_CODE_FLOAT_ENVIRONMENT, "optimizer-step!",
                       "binary32 environment is unsupported");
   }
@@ -1356,7 +1367,7 @@ int32_t et_o2_optimizer_step_v1(et_o2_optimizer *candidate,
                       "completed-update counter would overflow");
   }
   if (!et_o2_float_environment()) {
-    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+    return et_o2_fail(error, ET_O2_STATUS_DETERMINISM_UNAVAILABLE,
                       ET_O2_CODE_FLOAT_ENVIRONMENT, "optimizer-step!",
                       "binary32 environment is unsupported");
   }
@@ -1741,6 +1752,10 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
                       ET_O2_CODE_ACTIVE_BORROW, "optimizer-load-state!",
                       "optimizer state has an active borrow");
   }
+  if ((result = et_o2_validate_absent_gradients(
+           optimizer, "optimizer-load-state!", error)) != 0) {
+    return result;
+  }
   optimizer->busy = 1u;
   state->active_borrows++;
   if ((result = et_o2_validate_state_for_load(state, error)) != 0) {
@@ -1750,10 +1765,6 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
     result = et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
                         ET_O2_CODE_INVALID_HANDLE, "optimizer-load-state!",
                         "optimizer state parameter count differs");
-    goto cleanup;
-  }
-  if ((result = et_o2_validate_absent_gradients(
-           optimizer, "optimizer-load-state!", error)) != 0) {
     goto cleanup;
   }
   assignments = (et_f32_tensor_copy_assignment_v1 *)et_o2_calloc(

@@ -85,6 +85,11 @@ int64_t et_o2_private_optimizer_zero_grad_v1(void *optimizer) {
       (et_o2_optimizer *)optimizer, &et_o2_bridge_error);
 }
 
+int64_t et_o2_private_optimizer_require_absent_gradients_v1(void *optimizer) {
+  return (int64_t)et_o2_optimizer_require_absent_gradients_v1(
+      (et_o2_optimizer *)optimizer, &et_o2_bridge_error);
+}
+
 int64_t et_o2_private_optimizer_completed_updates_v1(void *optimizer) {
   uint64_t count = 0u;
   if (et_o2_optimizer_completed_updates_v1(

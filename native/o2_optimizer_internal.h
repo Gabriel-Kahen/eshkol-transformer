@@ -26,7 +26,8 @@ enum {
   ET_O2_STATUS_INVALID_STATE = 7,
   ET_O2_STATUS_VERSION_MISMATCH = 8,
   ET_O2_STATUS_INTERNAL = 9,
-  ET_O2_STATUS_CORRUPT_DATA = 10
+  ET_O2_STATUS_CORRUPT_DATA = 10,
+  ET_O2_STATUS_DETERMINISM_UNAVAILABLE = 11
 };
 
 enum {
@@ -113,6 +114,8 @@ int32_t et_o2_optimizer_step_v1(et_o2_optimizer *optimizer,
                                 et_o2_error_v1 *error);
 int32_t et_o2_optimizer_zero_grad_v1(et_o2_optimizer *optimizer,
                                      et_o2_error_v1 *error);
+int32_t et_o2_optimizer_require_absent_gradients_v1(
+    et_o2_optimizer *optimizer, et_o2_error_v1 *error);
 int32_t et_o2_optimizer_completed_updates_v1(const et_o2_optimizer *optimizer,
                                              uint64_t *completed_updates,
                                              et_o2_error_v1 *error);
