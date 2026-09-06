@@ -188,5 +188,9 @@ D2 is CPU-only, serialized, nonreentrant, finite, and loss-mask-only. It does no
 claim GPU or alternate dtype support, causal/document-boundary masks, global-uniform
 shuffle, epochs, C2/O2 behavior, a public C ABI, or power-loss durability. D1's
 trusted-directory, symlink, and concurrent namespace mutation limitations remain.
+The accepted config has no separate directory-byte ceiling: successful Linux paths
+are bounded by the host pathname/syscall limits, while an overlong rejected caller
+string incurs one transient normalized copy but publishes no dataset or native
+registry entry.
 Python references and fixture generators are development-only and are absent from
 the delivered runtime and training path.
