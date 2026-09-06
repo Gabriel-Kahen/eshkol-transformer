@@ -42,10 +42,12 @@ Run the focused T2 deterministic BPE and streaming gate with:
 /usr/bin/bash -c 'make test-t2'
 ```
 
-D2's memory-bounded loader contract remains proposed on integration issue #1. Its
-carrier-neutral semantics, stdlib-only frozen Q0 fixture, private native candidate,
-and resource gates run with `make test-d2`; no D2 public wrapper or successor
-aggregate is frozen while that decision is pending. See
+D2's accepted memory-bounded loader contract provides the ten A0 dataset/batch
+operations plus explicit `token-batch-release!`, the canonical `ESHKDCU1` cursor,
+and a source-composed 58-global/52-export review aggregate. Its compiled public,
+carrier, exact-resume, corruption, resource, sanitizer, and frozen-Q0 gates run with
+`make test-d2`. D2 remains in review rather than complete until independent D2-R,
+supported CI, merge, and merge-head retest. See
 [docs/D2_SHARD_LOADER.md](docs/D2_SHARD_LOADER.md).
 
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:

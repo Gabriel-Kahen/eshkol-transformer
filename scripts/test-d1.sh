@@ -233,13 +233,27 @@ D1_PUBLIC_NAMES=(
   token-corpus-summary-tokenizer-fingerprint
   token-corpus-summary-total-shard-bytes
 )
+D2_PUBLIC_NAMES=(
+  token-dataset-open
+  token-dataset-next-batch
+  token-dataset-cursor
+  token-dataset-end?
+  token-dataset-seek!
+  token-dataset-close!
+  token-batch-inputs
+  token-batch-targets
+  token-batch-loss-mask
+  token-batch-validate
+  token-batch-release!
+)
 mapfile -t D1_DECLARED_NAMES < <(
   sed -n '/^(provide /,/)/p' "${PROJECT_ROOT}/lib/transformer/data.esk" |
     tr '()' '  ' | tr -s '[:space:]' '\n' |
     grep -v -e '^provide$' -e '^$'
 )
-[[ "${D1_DECLARED_NAMES[*]}" == "${D1_PUBLIC_NAMES[*]}" ]] || \
-  die "transformer.data must provide exactly the eight accepted D1 names"
+EXPECTED_DATA_NAMES=("${D1_PUBLIC_NAMES[@]}" "${D2_PUBLIC_NAMES[@]}")
+[[ "${D1_DECLARED_NAMES[*]}" == "${EXPECTED_DATA_NAMES[*]}" ]] || \
+  die "transformer.data must provide the exact accepted D1 and D2 names"
 
 LC_ALL=C sort -cu "${D1_PUBLIC_EXPORTS}" || \
   die "D1 public native export manifest is not C-sorted unique text"
