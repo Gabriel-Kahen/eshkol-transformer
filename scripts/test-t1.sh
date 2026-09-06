@@ -75,8 +75,8 @@ t1_archive="$(project_build_dir)/t1/libeshkol_transformer_wave1.a"
 t1_object="$(project_build_dir)/t1/wave1.o"
 [[ -r "${t1_archive}" && -r "${t1_object}" ]] || \
   die "T1 Wave 1 aggregate was not published"
-[[ "$(nm -g --defined-only --format=posix "${t1_object}" | wc -l)" == 46 ]] || \
-  die "T1 Wave 1 aggregate does not expose exactly 46 globals"
+[[ "$(nm -g --defined-only --format=posix "${t1_object}" | wc -l)" == 47 ]] || \
+  die "T1 Wave 1 aggregate does not expose exactly 47 globals"
 if nm -a "${t1_object}" | \
     grep -E 'et_t1_test_io_|T1_SAVE_FAILPOINT_TEST_ONLY' >/dev/null; then
   die "production T1 aggregate contains a test-only save failpoint"
@@ -373,4 +373,4 @@ cmp "${t1_tmp}/registry-growth-1.stdout" \
 
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-t1-boundary.sh"
 
-printf 'T1 PASS: development oracle, native exact-i64 shell/sanitizers/C++, frozen and adversarial format, 46-global aggregate, public exact-byte/UTF-8 runtime, persistence, and deterministic AOT\n'
+printf 'T1 PASS: development oracle, native exact-i64 shell/sanitizers/C++, frozen and adversarial format, 47-global aggregate, public exact-byte/UTF-8 runtime, persistence, and deterministic AOT\n'

@@ -1,0 +1,30 @@
+format	eshkol-bpe-tokenizer
+version	1	0
+required-features	0
+limit-file-bytes	1048576
+limit-merges	256
+limit-token-bytes	256
+limit-specials	4096
+limit-name-bytes	64
+limit-prefix	4096
+limit-suffix	4096
+payload-bytes	295
+kind	byte-bpe
+normalization	none
+utf8-policy	raw
+byte-ids	0	255
+merge-count	4
+merge	0	256	97	110
+merge	1	257	98	256
+merge	2	258	256	97
+merge	3	259	257	258
+special-count	3
+special	260	bos	omit
+special	261	eos	omit
+special	262	invalid	error
+prefix-count	1
+prefix	0	260
+suffix-count	1
+suffix	0	261
+checksum-algorithm	sha256
+checksum	b1e418717897cd9635146d42a67cf82e5c5ea6372c40c2bbbe7859a1e3e7ee63

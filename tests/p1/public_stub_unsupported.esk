@@ -49,6 +49,8 @@
                  (lambda () (state-dict-tensor #f '())))
 (expect-p1-error 'state-dict-alias-groups
                  (lambda () (state-dict-alias-groups #f)))
+(expect-p1-error 'state-dict-release!
+                 (lambda () (state-dict-release! #f)))
 
 (define copied-message (transformer-error-message first-error))
 (string-set! copied-message 0 #\X)
@@ -57,6 +59,6 @@
     (set! checks (+ checks 1))
     (exit 1))
 
-(if (= checks 18)
+(if (= checks 19)
     (begin (display "p1-e1b-import-error-first:v1") (newline))
     (exit 1))

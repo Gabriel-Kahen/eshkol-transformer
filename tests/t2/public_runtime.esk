@@ -1,0 +1,121 @@
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(define passed 0)
+(define failed 0)
+(define (check name condition)
+  (if condition (set! passed (+ passed 1))
+      (begin (set! failed (+ failed 1))
+             (display "FAIL: ") (display name) (newline))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (structured-error? category operation thunk)
+  (guard (caught
+          (#t (and (transformer-error? caught)
+                   (eq? (transformer-error-category caught) category)
+                   (eq? (transformer-error-operation caught) operation))))
+    (thunk) #f))
+
+(define arguments (cdr (command-line)))
+(define fixture (car arguments))
+(define saved (car (cdr arguments)))
+(define truncated (car (cdr (cdr arguments))))
+(define bad-checksum (car (cdr (cdr (cdr arguments)))))
+(define unsupported-algorithm
+  (car (cdr (cdr (cdr (cdr arguments))))))
+(define oversized
+  (car (cdr (cdr (cdr (cdr (cdr arguments)))))))
+(define forward-reference
+  (car (cdr (cdr (cdr (cdr (cdr (cdr arguments))))))))
+(define rank-gap
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr arguments)))))))))
+(define merge-count-mismatch
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr arguments))))))))))
+(define special-id-collision
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr arguments)))))))))))
+(define noncanonical-version
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr arguments))))))))))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (tokenizer-load fixture policy))
+
+(check "BPE vocabulary" (= (tokenizer-vocab-size tokenizer) 263))
+(check "BPE fingerprint"
+       (string=?
+        (tokenizer-fingerprint tokenizer)
+        "sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72"))
+(check "BPE special IDs"
+       (and (= (tokenizer-special-token-id tokenizer "bos") 260)
+            (= (tokenizer-special-token-id tokenizer "eos") 261)
+            (= (tokenizer-special-token-id tokenizer "invalid") 262)))
+(define encoded (tokenizer-encode tokenizer (bytevector 98 97 110 97 110 97)))
+(check "BPE encode/decode"
+       (bytes=? (tokenizer-decode tokenizer encoded)
+                (bytevector 98 97 110 97 110 97)))
+(define all-bytes (make-bytevector 256 0))
+(let fill ((index 0))
+  (if (< index 256)
+      (begin (bytevector-u8-set! all-bytes index index)
+             (fill (+ index 1)))))
+(check "BPE total byte fallback"
+       (bytes=? (tokenizer-decode
+                 tokenizer (tokenizer-encode tokenizer all-bytes))
+                all-bytes))
+(define special-spellings
+  (bytevector 98 111 115 32 101 111 115 32 105 110 118 97 108 105 100))
+(check "special spellings are ordinary bytes"
+       (bytes=?
+        (tokenizer-decode
+         tokenizer (tokenizer-encode tokenizer special-spellings))
+        special-spellings))
+(check "BPE canonical save" (tokenizer-save! tokenizer saved policy))
+(check "BPE malformed carrier remains explicit"
+       (structured-error?
+        'invalid-argument 'tokenizer-decode
+        (lambda () (tokenizer-decode tokenizer '(259)))))
+(check "truncated BPE artifact rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load truncated policy))))
+(check "bad BPE checksum rejects"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load bad-checksum policy))))
+(check "unsupported BPE checksum algorithm is explicit"
+       (structured-error?
+        'unsupported 'tokenizer-load
+        (lambda () (tokenizer-load unsupported-algorithm policy))))
+(check "oversized BPE artifact rejects before parse allocation"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load oversized policy))))
+(check "forward merge reference rejects after valid checksum"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load forward-reference policy))))
+(check "merge rank gap rejects after valid checksum"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load rank-gap policy))))
+(check "merge count mismatch rejects after valid checksum"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load merge-count-mismatch policy))))
+(check "special ID collision rejects after valid checksum"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load special-id-collision policy))))
+(check "noncanonical version rejects after valid checksum"
+       (structured-error?
+        'corrupt-data 'tokenizer-load
+        (lambda () (tokenizer-load noncanonical-version policy))))
+
+(if (= failed 0)
+    (begin (display "T2 PUBLIC PASS: ") (display passed)
+           (display " BPE aggregate checks") (newline))
+    (exit 1))

@@ -1,0 +1,12 @@
+calloc
+cosf
+et_kernel_error_clear
+expf
+free
+memcpy
+memset
+sinf
+snprintf
+sqrtf
+strcmp
+strlen

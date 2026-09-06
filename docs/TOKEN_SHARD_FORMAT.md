@@ -1,7 +1,7 @@
 # D1 token corpus format
 
-Status: **D1 v1.0 direction accepted with conditions through issues #1 and #18;
-implementation under review**.
+Status: **accepted**. D1 v1.0 passed independent exact-head review, supported CI,
+merge, and merged-main retest; see `docs/INTEGRATION_LOG.md`.
 
 ## Scope
 

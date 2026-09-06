@@ -123,7 +123,7 @@ def parse_golden(raw: bytes, expected_provider: bytes | None = b"fixture-v1") ->
         raise FormatError("fixed header")
     if u64(raw, 32) != 0 or any(raw[100:128]):
         raise FormatError("features or reserved")
-    if (u16(raw, 92), u16(raw, 94), u16(raw, 96), u16(raw, 98)) != (1, 0, 1, 0):
+    if (u16(raw, 92), u16(raw, 94), u16(raw, 96), u16(raw, 98)) != (1, 0, 2, 0):
         raise FormatError("P1 versions")
 
     file_bytes = u64(raw, 40)
@@ -349,7 +349,7 @@ def build_container(
     put32(header, 84, len(aliases))
     put32(header, 88, len(provider))
     put16(header, 92, 1)
-    put16(header, 96, 1)
+    put16(header, 96, 2)
     unsigned = bytes(header) + metadata + payload
     return unsigned + hashlib.sha256(CONTAINER_DOMAIN + unsigned).digest()
 
@@ -413,7 +413,7 @@ def mutated_category(data: bytes | bytearray) -> str:
         return "corrupt-data"
     if any(data[100:128]):
         return "corrupt-data"
-    if (u16(data, 92), u16(data, 94), u16(data, 96), u16(data, 98)) != (1, 0, 1, 0):
+    if (u16(data, 92), u16(data, 94), u16(data, 96), u16(data, 98)) != (1, 0, 2, 0):
         return "version-mismatch"
     return "corrupt-data"
 

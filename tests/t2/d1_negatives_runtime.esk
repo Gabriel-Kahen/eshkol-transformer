@@ -1,0 +1,92 @@
+(require transformer.data)
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.error_public)
+
+(extern void t2-test-token-corpus-read ptr ptr ptr ptr ptr ptr
+        :real et_e1b_public_t2_test_token_corpus_read_v1)
+
+(define (test-read tokenizer directory)
+  (let ((output (vector #f)))
+    (t2-test-token-corpus-read
+     (vector tokenizer) (vector directory) (vector 1048576)
+     (vector 1048576) (vector 65536) output)
+    (vector-ref output 0)))
+
+(define (structured-error? category operation thunk)
+  (guard
+   (caught
+    (#t
+     (let ((matches
+            (and (transformer-error? caught)
+                 (eq? (transformer-error-category caught) category)
+                 (eq? (transformer-error-operation caught) operation))))
+       (if (not matches)
+           (begin
+             (display "unexpected D1 error category=")
+             (if (transformer-error? caught)
+                 (display (transformer-error-category caught))
+                 (display "non-transformer-error"))
+             (display " operation=")
+             (if (transformer-error? caught)
+                 (display (transformer-error-operation caught))
+                 (display "unknown"))
+             (newline)))
+       matches)))
+   (thunk)
+   #f))
+
+(define arguments (cdr (command-line)))
+(define mode (car arguments))
+(define bpe-path (car (cdr arguments)))
+(define vocab-directory (car (cdr (cdr arguments))))
+(define template-directory (car (cdr (cdr (cdr arguments)))))
+(define malformed-directory (car (cdr (cdr (cdr (cdr arguments))))))
+(define truncated-directory (car (cdr (cdr (cdr (cdr (cdr arguments)))))))
+(define checksum-directory
+  (car (cdr (cdr (cdr (cdr (cdr (cdr arguments))))))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define bpe (tokenizer-load bpe-path policy))
+(define fingerprint (tokenizer-fingerprint bpe))
+(define vocabulary (tokenizer-vocab-size bpe))
+(define ids '(260 259 32 257 100 258 261))
+
+(if (string=? mode "setup")
+    (begin
+      ;; The first corpus differs only in vocabulary. The remaining corpus is
+      ;; copied and corrupted by the deterministic test-only fixture mutator.
+      (token-corpus-write! vocab-directory fingerprint (+ vocabulary 1) 3 ids)
+      (token-corpus-write! template-directory fingerprint vocabulary 3 ids)
+      (display "T2 D1 NEGATIVE SETUP PASS")
+      (newline))
+    (if (string=? mode "check")
+        (let ((passed 0))
+          (define (check name condition)
+            (if condition
+                (set! passed (+ passed 1))
+                (begin
+                  (display "FAIL: ") (display name) (newline) (exit 1))))
+          (check "D1 vocabulary-only mismatch"
+                 (structured-error?
+                  'invalid-argument 't2-token-corpus-read
+                  (lambda () (test-read bpe vocab-directory))))
+          (check "D1 malformed shard propagation"
+                 (structured-error?
+                  'corrupt-data 'token-corpus-validate
+                  (lambda () (test-read bpe malformed-directory))))
+          (check "D1 truncated shard propagation"
+                 (structured-error?
+                  'corrupt-data 'token-corpus-validate
+                  (lambda () (test-read bpe truncated-directory))))
+          (check "D1 checksum-corrupt shard propagation"
+                 (structured-error?
+                  'corrupt-data 'token-corpus-validate
+                  (lambda () (test-read bpe checksum-directory))))
+          (display "T2 D1 NEGATIVES PASS: ")
+          (display passed)
+          (display " compiled seam checks")
+          (newline))
+        (begin
+          (display "unknown mode")
+          (newline)
+          (exit 1))))

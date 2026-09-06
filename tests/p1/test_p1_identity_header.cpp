@@ -37,6 +37,8 @@ CHECK_SIGNATURE(et_p1_private_parameter_tree_create_v1,
                 int64_t (*)(void *));
 CHECK_SIGNATURE(et_p1_private_state_dict_create_v1, int64_t (*)(void *));
 CHECK_SIGNATURE(et_p1_private_state_entry_create_v1, int64_t (*)(void *));
+CHECK_SIGNATURE(et_p1_private_state_entry_create_for_state_v1,
+                int64_t (*)(void *, void *));
 CHECK_SIGNATURE(et_p1_private_callback_identity_create_v1,
                 int64_t (*)(void *));
 CHECK_SIGNATURE(et_p1_private_callback_identity_revoke_v1,
@@ -45,10 +47,18 @@ CHECK_SIGNATURE(et_p1_private_callback_identity_revoke_v1,
 CHECK_SIGNATURE(et_p1_private_provider_seal_v1,
                 int64_t (*)(void *, void *, void *, void *, void *, void *,
                             void *, void *, void *));
+CHECK_SIGNATURE(et_p1_private_provider_seal_release_v1,
+                int64_t (*)(void *, void *, void *, void *, void *, void *,
+                            void *, void *, void *, void *));
 CHECK_SIGNATURE(
     et_p1_private_provider_snapshot_matches_v1,
     int64_t (*)(void *, const void *, const void *, const void *, const void *,
                 const void *, const void *, const void *, const void *));
+CHECK_SIGNATURE(
+    et_p1_private_provider_snapshot_matches_release_v1,
+    int64_t (*)(void *, const void *, const void *, const void *, const void *,
+                const void *, const void *, const void *, const void *,
+                const void *));
 CHECK_SIGNATURE(et_p1_private_state_bind_v1,
                 int64_t (*)(void *, void *, const void *));
 CHECK_SIGNATURE(et_p1_private_state_provider_v1,
@@ -56,6 +66,12 @@ CHECK_SIGNATURE(et_p1_private_state_provider_v1,
 CHECK_SIGNATURE(et_p1_private_state_unbind_v1,
                 int64_t (*)(void *, void *));
 CHECK_SIGNATURE(et_p1_private_state_revoke_v1,
+                int64_t (*)(void *, void *));
+CHECK_SIGNATURE(et_p1_private_state_tensor_create_v1,
+                int64_t (*)(void *, void *));
+CHECK_SIGNATURE(et_p1_private_state_tensor_validate_v1,
+                int64_t (*)(void *, const void *, const void *));
+CHECK_SIGNATURE(et_p1_private_state_release_begin_v1,
                 int64_t (*)(void *, void *));
 CHECK_SIGNATURE(et_p1_private_live_entry_count_v1, int64_t (*)(void *));
 CHECK_SIGNATURE(et_p1_private_tombstone_count_v1, int64_t (*)(void *));

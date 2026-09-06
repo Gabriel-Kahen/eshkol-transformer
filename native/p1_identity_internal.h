@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define ET_P1_IDENTITY_ABI_MAJOR UINT32_C(1)
-#define ET_P1_IDENTITY_ABI_MINOR UINT32_C(0)
+#define ET_P1_IDENTITY_ABI_MINOR UINT32_C(1)
 #define ET_P1_IDENTITY_ERROR_OPERATION_CAPACITY 64u
 #define ET_P1_IDENTITY_ERROR_MESSAGE_CAPACITY 192u
 #define ET_P1_IDENTITY_PROVIDER_CALLBACK_COUNT 7u
@@ -24,7 +24,8 @@ enum {
   ET_P1_TOKEN_PARAMETER_TREE = 4,
   ET_P1_TOKEN_STATE_DICT = 5,
   ET_P1_TOKEN_STATE_ENTRY = 6,
-  ET_P1_TOKEN_CALLBACK_IDENTITY = 7
+  ET_P1_TOKEN_CALLBACK_IDENTITY = 7,
+  ET_P1_TOKEN_STATE_TENSOR = 8
 };
 
 enum {
@@ -53,7 +54,8 @@ enum {
   ET_P1_CODE_CAPACITY_EXCEEDED = 14,
   ET_P1_CODE_FORKED_PROCESS = 15,
   ET_P1_CODE_TOKEN_INTEGRITY = 16,
-  ET_P1_CODE_INVALID_TEXT = 17
+  ET_P1_CODE_INVALID_TEXT = 17,
+  ET_P1_CODE_CROSS_STATE = 18
 };
 
 typedef struct et_p1_identity_error_v1 {
@@ -101,6 +103,8 @@ int64_t et_p1_private_parameter_handle_create_v1(void *context);
 int64_t et_p1_private_parameter_tree_create_v1(void *context);
 int64_t et_p1_private_state_dict_create_v1(void *context);
 int64_t et_p1_private_state_entry_create_v1(void *context);
+int64_t et_p1_private_state_entry_create_for_state_v1(void *context,
+                                                       void *state);
 int64_t et_p1_private_callback_identity_create_v1(void *context);
 int64_t et_p1_private_callback_identity_revoke_v1(void *context,
                                                    void *identity);
@@ -113,14 +117,31 @@ int64_t et_p1_private_provider_snapshot_matches_v1(
     void *context, const void *provider, const void *describe,
     const void *clone, const void *storage_identical, const void *value_equal,
     const void *device_equal, const void *prepare, const void *commit);
+int64_t et_p1_private_provider_seal_release_v1(
+    void *context, void *provider, void *describe, void *clone,
+    void *storage_identical, void *value_equal, void *device_equal,
+    void *prepare, void *commit, void *release_owned);
+int64_t et_p1_private_provider_snapshot_matches_release_v1(
+    void *context, const void *provider, const void *describe,
+    const void *clone, const void *storage_identical, const void *value_equal,
+    const void *device_equal, const void *prepare, const void *commit,
+    const void *release_owned);
 
 int64_t et_p1_private_state_bind_v1(void *context, void *state,
                                     const void *provider);
 int64_t et_p1_private_state_provider_v1(void *context, const void *state);
 int64_t et_p1_private_state_unbind_v1(void *context, void *state);
 int64_t et_p1_private_state_revoke_v1(void *context, void *state);
+int64_t et_p1_private_state_tensor_create_v1(void *context, void *state);
+int64_t et_p1_private_state_tensor_validate_v1(void *context,
+                                                const void *state,
+                                                const void *tensor);
+int64_t et_p1_private_state_release_begin_v1(void *context, void *state);
 int64_t et_p1_private_live_entry_count_v1(void *context);
 int64_t et_p1_private_tombstone_count_v1(void *context);
+#if defined(ET_P1_TEST_HOOKS)
+int64_t et_p1_test_state_bind_fail_next_v1(void);
+#endif
 #endif
 
 #ifdef __cplusplus
