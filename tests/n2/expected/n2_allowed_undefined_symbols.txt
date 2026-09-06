@@ -1,0 +1,11 @@
+__stack_chk_fail
+erff
+et_kernel_error_clear
+expf
+fegetenv
+fegetround
+fesetenv
+memcpy
+snprintf
+sqrtf
+strcmp
