@@ -327,13 +327,15 @@ small_rss="$(<"${d2_tmp}/resource-small.rss")"
 large_rss="$(<"${d2_tmp}/resource-large.rss")"
 [[ "${small_rss}" =~ ^[0-9]+$ && "${large_rss}" =~ ^[0-9]+$ ]] || \
   die "D2 resource RSS measurements are not integer KiB values"
-(( small_rss <= 262144 && large_rss <= 262144 )) || \
-  die "D2 resource probe exceeded the fixed 256 MiB RSS test ceiling"
-rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_rss ))
-(( rss_delta <= 65536 )) || \
-  die "D2 RSS changed by more than 64 MiB when corpus grew to 8193 tokens"
 small_fds="$(<"${d2_tmp}/resource-small.fds")"
 large_fds="$(<"${d2_tmp}/resource-large.fds")"
+rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_rss ))
+printf 'D2 RESOURCE MEASURED: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
+  "${small_rss}" "${small_fds}" "${large_rss}" "${large_fds}" "${rss_delta}"
+(( small_rss <= 262144 && large_rss <= 262144 )) || \
+  die "D2 resource probe exceeded the fixed 256 MiB RSS test ceiling"
+(( rss_delta <= 65536 )) || \
+  die "D2 RSS changed by more than 64 MiB when corpus grew to 8193 tokens"
 (( small_fds <= 8 && large_fds <= 8 )) || \
   die "D2 resource probe exceeded the fixed eight-descriptor process ceiling"
 printf 'D2 RESOURCE BOUNDS PASS: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
