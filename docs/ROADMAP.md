@@ -42,7 +42,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | N2 | Embedding, linear, normalization, activations, dropout, residuals | P1L, K1, Q0, I2 | Forward and gradient parity for every operation | planned |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | review |
 | L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | review |
-| O2 | AdamW, parameter groups, clipping, accumulation and schedules | P1L, Q0, I2 | Reference update parity and serializable-state tests | planned |
+| O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; sanitizers, isolation, full gates, independent review, and supported CI | review |
 | C2 | Full training-state checkpoint schema | C1, D2, O2, X1 | Model/optimizer/scheduler/RNG/cursor exact-resume test | planned |
 
 ## Wave 3 — first complete language model

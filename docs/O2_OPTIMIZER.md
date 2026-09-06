@@ -1,18 +1,16 @@
-# O2 optimizer logical contract (proposed)
+# O2 optimizer and logical-state contract
 
 ## Status and dependency boundary
 
-This is a pre-implementation proposal for O2. It freezes no native ABI, provider
-identifier, archive topology, or serialized bytes. P1L (issue #51) was independently
-approved and merged as `b72b9fa58042304a71e801415e53f280262edae2`. I2 issue #49
-is integrating that accepted provider-2.0/lifetime contract, and remains the
-binding prerequisite for O2. A production optimizer and review-ready O2 pull request
-remain blocked until I2 is independently approved and merged. This O2 branch has not
-rebased onto or integrated P1L.
+Status: **review**. P1L issue #51 was independently approved and merged as
+`b72b9fa58042304a71e801415e53f280262edae2`; I2 issue #49 was independently approved
+and merged as `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. O2 is implemented against that
+exact provider-2.0/I2 ownership and mutation seam. The logical configuration/state
+formats below are versioned and byte-independent; O2 defines no C2 encoding or
+checkpoint bytes.
 
 The accepted O2 public optimizer surface preserves the five existing A0 names and
-adds one exact arity-1 lifecycle operation when the post-P1L/I2 runtime is
-implemented:
+adds one exact arity-1 lifecycle operation:
 
 ```scheme
 (optimizer-create config parameter-tree)
@@ -23,17 +21,22 @@ implemented:
 (optimizer-state-release! state)
 ```
 
-Integration accepted `optimizer-state-release!` with conditions in
-[issue #1 comment 5493412398](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398).
-This accepts the logical public name, arity, ownership, and error contract only. It
-does not freeze a runtime/private ABI or authorize implementation before I2 is
-independently approved and merged.
+Integration accepted the six-operation surface and exact 53-global/six-wrapper
+successor boundary in
+[comment 5557203111](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557203111),
+the 1,365-entry ceiling in
+[comment 5557364807](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557364807),
+and detached release without an origin-optimizer backreference in
+[comment 5557373020](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557373020).
+The one-member aggregate is `build/o2/libeshkol_transformer_wave2.a`; it contains
+`o2_wave2.o`, preserves the 47 inherited I2 globals, and adds only the six wrappers
+above. It must not be linked with another E1/P1 registry-owning aggregate.
 
 O2 does not change X1 schema 1.0. The `config` argument is the O2-specific data-only
 logical value below. I2 owns the physical dense CPU f32 carrier, stable P1-handle
 value/gradient identities, accumulated-contribution metadata, detached tensor
-cloning, and whole-batch mutation transaction. O2 does not reinterpret or freeze
-that boundary.
+cloning, and whole-batch mutation transaction. O2 fixes optimizer semantics while
+retaining I2's accepted ownership and mutation boundary unchanged.
 
 ## Binary32 scalar spelling
 
@@ -109,8 +112,8 @@ The only admitted algorithm is AdamW on dense, zero-offset, contiguous CPU f32
 parameters and gradients. Sparse gradients, f64/f16/bf16 parameters, mixed or
 master precision, accelerators, AMSGrad, maximize mode, fused/foreach variants,
 loss scaling, token-based schedules, and every unlisted schedule are `unsupported`.
-There is no scalar, cast, transfer, precision, device, finite-difference, or Python
-fallback.
+There is no cast, transfer, precision, device, finite-difference, Eshkol-scalar, or
+Python fallback. The reviewed O2 native CPU-f32 kernel is the only numerical path.
 
 ## Successful-update schedule semantics
 
@@ -160,7 +163,7 @@ once through their canonical handle.
 
 Clipping is disabled by `(none)`. `(global-l2 M)` computes one global L2 norm over
 all elements of all unique effective gradients in canonical parameter-path and
-row-major element order. I2 must use a reviewed scaled sum-of-squares implementation
+row-major element order. O2 uses a scaled sum-of-squares binary32 implementation
 that detects nonfinite input and unrepresentable output without avoidable overflow.
 If `norm <= M`, gradients are unchanged, including at the exact boundary. If
 `norm > M`, every effective gradient is multiplied once by `M / norm`. Clipping
@@ -186,13 +189,24 @@ Weight decay is decoupled. A present zero gradient still initializes/advances th
 moments, applies decoupled decay, and commits the successful-update counter. O2
 creates no gradient graph.
 
-Each previously unseen moment tensor is mathematically initialized to positive-zero
-f32 with the parameter shape before the first prepared update. The equations above
-define reference mathematics, not a frozen Eshkol evaluation order: binary32
-operation grouping, power, square-root, norm accumulation, and rounding points will
-be specified only after merged I2 exposes the real tensor path and compiled Eshkol
-probes validate it. Until then the PyTorch fixture is tolerance-based development
-parity, not bit-determinism evidence.
+Each moment tensor is initialized to positive-zero f32 with the parameter shape
+before optimizer publication. On the supported x86-64 lane, O2 requires the default
+MXCSR numerical mode: round-to-nearest-even, masked exceptions, gradual underflow,
+and neither flush-to-zero nor denormals-are-zero. A request under another mode raises
+`determinism-unavailable` before mutation.
+
+Every add, subtract, multiply, divide, and square root below is one scalar SSE
+binary32 operation rounded before its result is reused; contraction is disabled.
+Bias powers use exponentiation by squaring in binary32. The linear schedule factor is
+computed as an exact bounded integer rational and rounded once to nearest-even
+binary32; the effective learning rate is then one binary32 multiplication. Norming
+visits canonical unique parameters and row-major elements in order, divides each
+stored numerator by the common I2 normalization weight once, and applies the scaled
+sum-of-squares recurrence in binary32. When clipping is required, `M / norm` is one
+binary32 division. AdamW then follows the parenthesization displayed above, with each
+operator rounded before the next. These rules, rather than PyTorch evaluation order,
+define bitwise O2 continuation. The frozen PyTorch fixture remains an independent
+tolerance-based development oracle.
 
 Before the first write, O2 and I2 must validate every gradient and prepared
 parameter/moment value, counter increment, alias relation, storage identity, and
@@ -210,14 +224,17 @@ Repeated zeroing is idempotent.
 
 ## Logical optimizer state 1.0
 
-`optimizer-state` returns a deep-owned, data-only opaque value with this exact
-logical field order (the angle-bracketed tensors are owned logical dense-tensor
-values, not a frozen carrier or serialization):
+`optimizer-state` returns an opaque, explicitly releasable identity representing the
+following exact byte-independent logical projection. The public value is not this
+list and exposes none of its private carriers. A future trusted C2 adapter may borrow
+the owner synchronously and encode this projection, but O2 does not implement that
+adapter or freeze serialized bytes. The angle-bracketed tensors below are owned
+logical dense-tensor values, not a serialized carrier:
 
 ```text
 (transformer-optimizer-state 1 0 ()
   adamw f32 cpu
-  <inert-p1-provider-identity>
+  (transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1)
   <transformer-optimizer-config-1.0>
   (<canonical-path> ...)
   (<canonical-p1-alias-group> ...)
@@ -232,7 +249,8 @@ The outer identity, version `(1 0)`, and empty required-feature list are exact. 
 contains:
 
 - algorithm `adamw`, precision `f32`, and device `cpu`;
-- inert P1 tensor-provider identity;
+- inert exact I2 tensor-provider identity
+  `(transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1)`;
 - the complete copied optimizer configuration, canonical P1 path set, and alias
   graph;
 - nonnegative signed-i64 `completed-updates`;
@@ -268,9 +286,10 @@ admission before exposing the owned carrier. The handle can never release, trans
 or consume ownership. Provider metadata is inert and never selects executable code.
 
 P1 `state-dict-release!`, P1 state tokens, and P1 state-backed handles remain
-P1-specific and grant no O2 release authority. Process-lifetime tensor retention,
-hidden finalizers, equality-triggered freeing, generic release dispatch, and a
-second registry are forbidden. The only admitted release seam is a fixed O2-specific
+P1-specific and grant no O2 release authority. Process-lifetime retention of
+detached snapshot tensor carriers, hidden finalizers, equality-triggered freeing,
+generic release dispatch, and a second registry are forbidden. The only admitted
+release seam is a fixed O2-specific
 private wrapper in the single trusted aggregate, statically bound to exact provider
 2.0 identity `i2-dense-cpu-f32-v1` and the exact O2
 ownership-ledger entry. It exposes no callback token and accepts no caller-selected
@@ -295,10 +314,12 @@ decision. This update-boundary call-phase rule grants the detached snapshot no l
 optimizer/handle backreference or authority; implementation must enforce it through
 the accepted caller/aggregate orchestration boundary or return to integration.
 
-`optimizer-load-state!` validates the complete raw state, version/features, provider
-identity, configuration, bound paths/aliases, counter, entry uniqueness,
-metadata, tensor independence, finite moment values, and I2 capability before
-mutation. State metadata has depth at most 32, at most 2,097,152 data nodes, at most
+`optimizer-load-state!` accepts an exact registered live O2 owner and validates its
+complete protected logical state: version/features, provider identity, configuration,
+bound paths/aliases, counter, entry uniqueness, metadata, tensor independence, finite
+moment values, and I2 capability before mutation. A future C2 reconstruction seam
+must perform the same validation before publishing a registered owner. State metadata
+has depth at most 32, at most 2,097,152 data nodes, at most
 1,365 parameter entries, the P1 64-segment/per-segment UTF-8 bounds, and a
 67,108,864-byte aggregate UTF-8 budget. The create-time projection counts every
 logical occurrence in the embedded config, canonical path list, alias graph, and
@@ -336,14 +357,18 @@ is `unsupported`.
   `invalid-state`; tensor metadata maps to `shape-mismatch`, `dtype-mismatch`,
   `device-mismatch`, or `noncontiguous`; unavailable provider, algorithm, precision,
   device, layout, or verified I2 capability is `unsupported`.
-- `optimizer-step!`: missing/stale gradients, nonfinite gradients or prepared
-  results, nonpositive/nonfinite accumulated total weight, and update-counter
-  overflow are `invalid-state`; gradient metadata uses the four matching tensor
-  categories; unavailable I2 operations are `unsupported`; inability to satisfy a
-  requested deterministic contract is `determinism-unavailable`.
-- `optimizer-zero-grad!`: stale/foreign/closed optimizer or slots are
-  `invalid-state`; an unavailable exact I2 clear operation is `unsupported`.
-- `optimizer-state`: a stale/foreign/closed optimizer or any present/pending gradient
+- `optimizer-step!`: malformed, forged, or unregistered optimizer receivers are
+  `invalid-argument`; missing/stale gradients, nonfinite gradients or prepared
+  results, nonpositive/nonfinite accumulated total weight, a recognized busy
+  optimizer, and update-counter overflow are `invalid-state`; gradient metadata uses
+  the four matching tensor categories; unavailable I2 operations are `unsupported`;
+  inability to satisfy the required binary32 execution contract is
+  `determinism-unavailable`.
+- `optimizer-zero-grad!`: malformed, forged, or unregistered optimizer receivers are
+  `invalid-argument`; a recognized busy optimizer or stale slots are `invalid-state`;
+  an unavailable exact I2 clear operation is `unsupported`.
+- `optimizer-state`: malformed, forged, or unregistered optimizer receivers are
+  `invalid-argument`; a recognized busy optimizer or any present/pending gradient
   state is `invalid-state`; unavailable detached clone/state capability is
   `unsupported`.
 - `optimizer-load-state!`: malformed, over-bound, duplicate, nonfinite, or
@@ -351,9 +376,10 @@ is `unsupported`.
   otherwise invalid state group assignment, is `corrupt-data`; unsupported versions
   or required features are `version-mismatch`; receiver path/alias/shape mismatches
   are `shape-mismatch`; a different valid receiver group partition is accepted and
-  replaced; tensor dtype/device/layout use the matching categories; a stale receiver
-  is `invalid-state`; an unavailable or mismatched provider/capability is
-  `unsupported`.
+  replaced; tensor dtype/device/layout use the matching categories; a malformed,
+  forged, or unregistered optimizer receiver is `invalid-argument` and a recognized
+  busy receiver is `invalid-state`; an unavailable admitted provider/capability is
+  `unsupported`, while a post-admission provider invariant defect is `internal`.
 - `optimizer-state-release!`: malformed, non-state, wrong-kind, forged, copied-token,
   unregistered, or cross-aggregate receivers are `invalid-argument`; a recognized
   live owner that is busy, reentrant, releasing, or has an owner-state conflict is
@@ -374,6 +400,24 @@ Future C2 serialization and trusted inspection acquire and end every state/I2/K1
 borrow on every path and release every temporary optimizer-state owner they create.
 They never serialize process-local owner tokens, callback identities, provider
 authority, or capability evidence.
+
+## Explicit runtime and lifecycle limitations
+
+O2 v1 is serialized, process-local, dense CPU f32 only. The arithmetic contract is
+supported only on the reviewed x86-64 binary32/SSE environment above. There is no
+thread-safety, concurrent mutation, performance, mixed-precision, accelerator,
+mid-accumulation snapshot, token-schedule, or C2-byte claim.
+
+The six-operation A0 surface has no optimizer-destroy operation. Each successful
+optimizer therefore retains its receiver, stable P1 handles, and two live moment
+tensors per canonical unique parameter until process exit. Successful state release
+does reclaim every detached snapshot moment carrier exactly once, but its dead owner
+identity and invalidated state-handle identities remain as storage-free tombstones so
+exact-dead release and use-after-release can be recognized. Ended native borrow
+shells are likewise retained as tombstones. Native and Eshkol identity lookup is
+linear and these receiver/tombstone costs are cumulative. Applications should create
+and reuse a bounded number of optimizers, explicitly release every snapshot, serialize
+calls, and use a bounded worker process when process-exit reclamation is required.
 
 ## Required continuation evidence
 

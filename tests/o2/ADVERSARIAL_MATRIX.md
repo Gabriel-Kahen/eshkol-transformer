@@ -65,11 +65,11 @@ Current focused mappings:
 
 - zero-grad clears each tied unique slot once and is idempotent; it changes no
   parameter, moment, group, schedule, or completed-update value;
-- snapshot, load, and release are each exercised while the optimizer mutates, while
-  a moment/state borrow is live, and with first/middle/last canonical gradient or
-  contribution metadata present. Each is `invalid-state`, performs zero
-  cleanup/commit, preserves a live/resolvable state and all values/counts, then
-  succeeds after the exact busy cause is cleared;
+- snapshot and load require an idle optimizer with every canonical gradient absent;
+  present first/middle/last gradient or contribution metadata is `invalid-state` and
+  performs no cleanup or commit. Release is detached from the source optimizer and
+  remains valid after that optimizer accumulates gradients or steps; only an active
+  borrow or invalid exact state/provider/ledger lifecycle can block release;
 - detached repeated snapshots and caller-mutation probes for every list/string/tensor;
 - wrong format/version/features/algorithm/precision/device/provider, duplicate/
   missing/unexpected/alias paths, invalid/incomplete/duplicate state groups, receiver
@@ -83,10 +83,10 @@ Current focused mappings:
 - incomplete, duplicate, wrong-owner, wrong-path, and wrong-provider ledger entries
   reject during release admission with the accepted category before cleanup starts;
   every carrier/borrow/plan/owner count and all values remain unchanged;
-- release admission requires an idle update boundary, absent canonical gradient
-  slots, and zero moment/state borrows; it atomically closes resolution with
-  `live -> releasing`, executes the nonallocating/nonraising exact-once tail, then
-  publishes `dead`;
+- release admission requires an exact live state/provider/ledger owner and zero
+  active state borrows. It has no source-optimizer backreference, does not inspect
+  source gradients, and atomically closes resolution with `live -> releasing` before
+  executing the nonallocating/nonraising exact-once tail and publishing `dead`;
 - first/middle/last release-tail provider-invariant injections prove that resolution
   stays closed, cleanup continues without rollback, aliases do not multiply releases,
   exactly `2 * unique-parameter-count` clones are released once, `dead` publishes
@@ -99,12 +99,12 @@ Current focused mappings:
 - a dead state used by `optimizer-load-state!`, trusted inspection, C2 serialization,
   or any state-backed moment handle is `invalid-state` before I2/K1 dereference; only
   exact-token release succeeds, and values/counts remain unchanged;
-- C2 failpoints at temporary-state construction, borrow begin, every handle resolve,
-  every I2/K1 borrow, validation, and encode end every acquired borrow, release every
-  temporary owner, leave caller-owned state live/unconsumed, and return counts to
-  baseline. Serialized output is scanned to exclude owner tokens, callback identity,
-  provider authority (not the required inert provider identity), and capability
-  evidence;
+- future C2 must add failpoints at temporary-state construction, borrow begin, every
+  handle resolve, every I2/K1 borrow, validation, and encode; end every acquired
+  borrow, release every temporary owner, leave caller-owned state live/unconsumed,
+  and return counts to baseline. Serialized output must exclude owner tokens,
+  callback identity, executable provider authority (not the required inert provider
+  identity), and capability evidence;
 - live carrier/borrow/plan/owner counts return to baseline after repeated release,
   every clone failpoint, rejected/successful load, exact-dead repeat, busy release,
   use-after-release, and C2 borrow loops;
@@ -127,7 +127,8 @@ Current focused mappings:
 
 ## Packaging and isolation
 
-- exact post-I2 aggregate defined/undefined symbol manifests and private localization;
+- exact post-I2 53-global/47-export aggregate manifests, the six-wrapper delta,
+  defined/undefined symbols, and private localization;
 - fixed O2-specific release wrapper accepts only the exact accepted I2 provider and
   exact O2 ledger entry; guessed callback tokens, caller-selected providers, P1
   state, live optimizer moments, parameters, and gradients are authority negatives;
@@ -136,10 +137,11 @@ Current focused mappings:
 - fresh-cache strict-source, object, and AOT authority negatives reject guessed O2
   release names, copied tokens, wrong aggregates/providers/ledgers, and private
   wrapper access without producing residual artifacts;
-- hostile `ESHKOL_PATH`, `ESHKOL_LIB_DIR`, `ESHKOL_JIT_CACHE_DIR`, `XDG_CACHE_HOME`,
-  `PATH`, locale, working directory, and Python environment do not change compiled
-  output;
-- production depfiles, symbols, strings, dynamic dependencies, and source closure
-  exclude Python, PyTorch, fixtures, oracle readers, test providers, and failpoints;
+- a hostile `ESHKOL_PATH`/`ESHKOL_LIB_DIR` source shadow does not change compiled
+  output; public AOT compilation disables the JIT cache and uses an isolated
+  `XDG_CACHE_HOME`;
+- production Eshkol and native depfiles, symbols, strings, and source-closure
+  manifests exclude Python, PyTorch, fixtures, oracle readers, test providers, and
+  failpoints;
 - ASan/UBSan and LSan where supported cover every native malformed handle, alias,
   borrow, plan, ownership, release, and failpoint case admitted by I2/P1L.

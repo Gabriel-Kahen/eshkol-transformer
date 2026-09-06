@@ -75,8 +75,8 @@ The build also leaves I1's separate exact signed-i64 CPU container archive at
 bounded deterministic `tensor.i64` / `storage.copy` requests; see
 [docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
 
-I2 is integrating the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed
-K1 views, and P1-bound value/accumulated-gradient substrate required by N2 and O2.
+I2 supplies the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed K1
+views, and P1-bound value/accumulated-gradient substrate required by N2 and O2.
 Its explicit provider accessor verifies only bounded deterministic `tensor.f32` /
 `storage.copy` and never defines K1's canonical provider symbol. The native archive
 is `build/i2/libeshkol_transformer_f32.a`; the one-member localized P1L/C1
@@ -84,6 +84,18 @@ integration aggregate is `build/i2/libeshkol_transformer_wave2.a`. The aggregate
 retains the existing E1/X1/P1/D1/C1/T1 public surface and localizes every I2 seam.
 Run the focused gate with `make test-i2`; see
 [docs/I2_F32_TENSOR.md](docs/I2_F32_TENSOR.md).
+
+O2 adds Eshkol-native dense CPU-f32 AdamW, canonical parameter groups, optional
+global-L2 clipping, I2 accumulation consumption, constant/linear successful-update
+schedules, and explicit optimizer-snapshot release. Its successor aggregate is the
+one-member `build/o2/libeshkol_transformer_wave2.a`. It exposes exactly 53 globals:
+the inherited 47-global I2 boundary plus six fixed optimizer wrappers with arities
+2/1/1/1/2/1. Applications link this aggregate instead of, never together with, an
+I2, T1, T2, or other registry-owning aggregate. Run `make test-o2`; see
+[docs/O2_OPTIMIZER.md](docs/O2_OPTIMIZER.md). O2 optimizer snapshots release their
+owned moment carriers explicitly. Live optimizer receivers and their moments have no
+v1 destroy operation and remain process-local until exit; identity tombstones are
+cumulative and registry lookup is linear.
 
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
@@ -166,6 +178,7 @@ See:
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Dense CPU-f32 tensor and parameter-gradient substrate](docs/I2_F32_TENSOR.md)
+- [AdamW optimizer, schedules, and logical state](docs/O2_OPTIMIZER.md)
 - [Fused indexed token cross-entropy](docs/L2_INDEXED_CROSS_ENTROPY.md)
 - [Causal attention, RoPE, and KV-cache substrate](docs/A2_ATTENTION.md)
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)
