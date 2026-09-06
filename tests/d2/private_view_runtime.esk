@@ -29,6 +29,9 @@
                      (bytevector-u8-ref right index))
                   (loop (+ index 1)))))))
 (define (path root name) (string-append root "/" name))
+(define (list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
 (define (config directory batch-size sequence-length packing?)
   (list ':directory directory ':batch-size batch-size
         ':sequence-length sequence-length
@@ -38,14 +41,14 @@
         ':maximum-batch-bytes (* 17 batch-size sequence-length)
         ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
 (define (i64-bytes values)
-  (let ((result (make-bytevector (* 8 (length values)) 0)))
+  (let ((result (make-bytevector (* 8 (list-length values)) 0)))
     (let loop ((remaining values) (offset 0))
       (if (null? remaining) result
           (begin
             (d2-core-store-unsigned-le! result offset 8 (car remaining))
             (loop (cdr remaining) (+ offset 8)))))))
 (define (bool-bytes values)
-  (let ((result (make-bytevector (length values) 0)))
+  (let ((result (make-bytevector (list-length values) 0)))
     (let loop ((remaining values) (offset 0))
       (if (null? remaining) result
           (begin (bytevector-u8-set! result offset (car remaining))
