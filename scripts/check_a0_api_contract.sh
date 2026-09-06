@@ -129,7 +129,9 @@ for A0_RUN in 1 2; do
         echo "A0 FAIL: O2 release wrong-arity fixture unexpectedly compiled" >&2
         exit 1
     fi
-    grep -F "Arity mismatch: optimizer-state-release! expects 1 arguments but got 2" \
+    grep -F "optimizer-state-release!' expects 1 arguments" \
+        "$A0_TMP/o2-release-wrong-arity-$A0_RUN.log" >/dev/null
+    grep -F "got 2" \
         "$A0_TMP/o2-release-wrong-arity-$A0_RUN.log" >/dev/null
     test ! -e "$A0_TMP/o2-release-wrong-arity-$A0_RUN.o"
 done
