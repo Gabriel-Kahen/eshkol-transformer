@@ -406,7 +406,7 @@ done
 nm -u --format=posix "${t2_boundary_tmp}/caller-1.o" | \
   awk '{ print $1 }' | grep '^et_e1b_' | LC_ALL=C sort -u \
   >"${t2_boundary_tmp}/caller-wrapper-refs.txt"
-cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
+cmp "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt" \
   "${t2_boundary_tmp}/caller-wrapper-refs.txt"
 if ldd "${t2_boundary_tmp}/caller-1" | grep -Eiq 'python|torch'; then
   die "Wave 2 public caller links a Python or Torch runtime"
