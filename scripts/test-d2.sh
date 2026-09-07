@@ -337,13 +337,17 @@ rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_
 printf 'D2 RESOURCE RSS/FD: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
   "${small_rss}" "${small_fds}" "${large_rss}" "${large_fds}" "${rss_delta}"
 
-for horizon in medium large; do
+for horizon in short long; do
+  mode=consume-short
   expected_batches=1024
-  [[ "${horizon}" == large ]] && expected_batches=8192
+  if [[ "${horizon}" == long ]]; then
+    mode=consume
+    expected_batches=8192
+  fi
   ESHKOL_ARENA_REPORT=1 \
     timeout --foreground --signal=TERM --kill-after=5s 300s \
     "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
-    "${d2_tmp}/public-resources-1/${horizon}" consume \
+    "${d2_tmp}/public-resources-1/large" "${mode}" \
     >"${d2_tmp}/arena-${horizon}.stdout" \
     2>"${d2_tmp}/arena-${horizon}.stderr"
   grep -Fx "D2 RESOURCE CONSUME PASS: ${expected_batches} batches" \
@@ -354,12 +358,12 @@ for horizon in medium large; do
     die "D2 ${horizon} run omitted the exact Eshkol arena retention counter"
   printf '%s\n' "${arena_bytes}" >"${d2_tmp}/arena-${horizon}.bytes"
 done
-medium_arena="$(<"${d2_tmp}/arena-medium.bytes")"
-large_arena="$(<"${d2_tmp}/arena-large.bytes")"
-[[ "${medium_arena}" == "${large_arena}" ]] || \
+short_arena="$(<"${d2_tmp}/arena-short.bytes")"
+long_arena="$(<"${d2_tmp}/arena-long.bytes")"
+[[ "${short_arena}" == "${long_arena}" ]] || \
   die "D2 optimized retained arena bytes grew from 1024 to 8192 batches"
 printf 'D2 RESOURCE ARENA PASS: 1024=%s bytes 8192=%s bytes slope=0\n' \
-  "${medium_arena}" "${large_arena}"
+  "${short_arena}" "${long_arena}"
 timeout --foreground --signal=TERM --kill-after=5s 180s \
   "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
   "${d2_tmp}/public-resources-1/small" reopen \
