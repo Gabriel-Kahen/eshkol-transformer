@@ -22,6 +22,9 @@
          token-batch-validate
          token-batch-release!)
 
+;;; The D1 isolation gate extracts this exact production wrapper component when
+;;; linking the standalone D1 archives.
+;;; D1 facade component begin.
 (define e1b-safe-d1-token-corpus-write-call
   (let ()
     (extern void e1b-d1-token-corpus-write ptr ptr ptr ptr ptr ptr
@@ -129,6 +132,7 @@
 
 (define (token-corpus-summary-total-shard-bytes summary)
   (e1b-safe-d1-token-corpus-summary-total-shard-bytes-call summary))
+;;; D1 facade component end.
 
 (define e1b-safe-d2-token-dataset-open-call
   (let ()
