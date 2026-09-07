@@ -127,9 +127,9 @@ int64_t et_d2_batch_borrow_end_v1(const void *owner, int64_t batch_generation,
  * destruction tail. Release is also valid for a freshly created unpublished
  * batch known by its trusted owner to have no borrow; violating either admission
  * rule is an internal invariant failure, not a recoverable release result.
- * Authentic caller-retained shell aliases remain ordinary GC values; wrapper
- * validation makes their repeated release idempotent and rejects every other
- * stale use before this native boundary.
+ * Authentic caller-retained shell aliases remain caller-region-managed Eshkol
+ * values; wrapper validation makes their repeated release idempotent and
+ * rejects every other stale use before this native boundary.
  */
 int64_t et_d2_batch_release_preflight_v1(const void *owner,
                                          int64_t batch_generation);
