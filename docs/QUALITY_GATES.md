@@ -51,6 +51,14 @@
   admission. Report semantic payload, peak RSS, and file-descriptor deltas separately;
   the bound must be independent of total corpus size and no smaller hidden limit or
   allocation fallback may be used.
+- The optimized-AOT long loop must put each next/validate/use/release interval in one
+  lexical `with-region`, compare the exact retained Eshkol arena byte counter after
+  1,024 and 8,192 batches on the same admitted corpus, and require byte equality.
+  Native carrier/live counts must return to baseline. Report RSS separately as an
+  advisory host/runtime measurement. A shell deliberately retained or promoted
+  across the region is caller-owned and must be separately accounted. This gate is
+  the implementation requirement described by the pending lifetime clarification in
+  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
 - D1 manifest-last publication and corrupt/missing/mismatched tokenizer/shard
   negatives, on-demand revalidation after namespace mutation, cursor failure
   atomicity, invalid-config-before-I/O precedence, final-live-batch-before-EOS, and
@@ -58,6 +66,9 @@
 - Exact `ESHKDCU1` 1.0 `208+F` physical/canonical/error-precedence matrices, exact
   58-global/52-export source-composed aggregate manifests, trusted-root uniqueness,
   hostile include/link/privacy negatives, and affected A0/D1/T1/T2/I2/N2/Q0 gates.
+  The private boundary must admit exactly the dataset and batch compiled-constructor
+  code identities, retain no shell/environment pointer, and reject treating that
+  per-process mechanism as a public, serialized, or cross-aggregate ABI.
 - Supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 CI at the proposed exact head,
   followed by independent D2-R. ROADMAP may remain only `review` until approval,
   merge, merge-head retest, and acceptance-document follow-up.

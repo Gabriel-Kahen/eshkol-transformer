@@ -106,8 +106,10 @@ reported losses and metrics accumulate and return `f32` in the first release.
 
 ## 4. Ownership, lifetime, mutation, and aliases
 
-- Configuration values, tokenizer values, capability reports, cursors, error values,
-  and persistence metadata are immutable snapshots owned by the caller.
+- Configuration values, tokenizer values, capability reports, error values, and
+  persistence metadata are immutable snapshots owned by the caller. Cursors are
+  immutable snapshots except for D2's explicitly detached, newly owned mutable
+  canonical bytevector.
 - A dataset, module/model, optimizer, trainer, generator, and cache is an opaque,
   exclusively mutable object. It is not safe for concurrent mutation.
 - Ordinary tensor inputs are borrowed for the duration of a call. Returned tensors
@@ -126,8 +128,11 @@ reported losses and metrics accumulate and return `f32` in the first release.
   while retaining every logical path and tie relationship. `module-buffers` snapshots
   non-trainable tensors in the same path order using the state-dict accessors below. Optimizer
   parameter groups refer to stable parameter paths, not raw addresses.
-- Dataset and generator calls invalidate only their receiver's previous transient
-  iteration result; returned batches/tensors remain owned by the caller.
+- A D2 dataset owns at most one live native batch carrier. Returned batch and tensor
+  shells are authenticated caller-region-managed aliases to that generation, not
+  independently owned carrier clones. `token-batch-release!` invalidates them and
+  frees the native carrier; shell-region storage remains caller-owned. Other dataset
+  and generator lifetime rules remain operation-specific.
 - `token-dataset-close!` is idempotent. Other dataset operations after close raise
   `invalid-state`. Checkpoint writes retain no caller-owned state after return.
 - `trainer-create` takes an exclusive lease on its dataset, model, and optimizer until
@@ -336,7 +341,7 @@ bytevector storage rather than an immutable registry object.
 | `token-batch-targets batch` | Return the batch's stable read-only state-backed opaque `i64[N,T]` identity. | CPU dense row-major; zero offset; natural alignment; no allocation/copy or gradient. |
 | `token-batch-loss-mask batch` | Return the batch's stable read-only state-backed opaque one-byte `bool[N,T]` identity. | CPU dense row-major; zero offset; no f32 alternative, allocation/copy, or gradient. |
 | `token-batch-validate batch` | Validate the current authenticated live generation and its fixed carrier invariants. | Returns `#t`; forged/wrong-kind is `invalid-argument`, stale is `invalid-state`; no gradient. |
-| `token-batch-release! batch` | Invalidate the batch generation and all three tensor identities before the fixed destruction tail. | Exact authentic generation aliases release idempotently; no per-generation tombstone or fallback; active borrow is `invalid-state`. |
+| `token-batch-release! batch` | Invalidate the batch generation and all three tensor identities before the fixed destruction tail, end its native borrow lifetime, and free the exact native `17*N*T` carrier. | Exact authentic generation aliases release idempotently; no per-generation tombstone or fallback; active borrow is `invalid-state`. Caller-region shell storage is not individually reclaimed. |
 
 No batch dimension, sequence dimension, or mask broadcasting is permitted. A batch
 owns exactly two CPU dense i64 planes and one CPU dense one-byte bool plane with
@@ -352,6 +357,22 @@ close reject before mutation while that borrow is active. `token-dataset-close!`
 always leaves the dataset closed after its nonrecoverable release tail. After EOS,
 repeated next calls return the same sentinel without changing state until seek or
 close. D2 is serialized and makes no concurrent or reentrant mutation claim.
+
+The pinned Eshkol runtime has no tracing garbage collector. In the current D2 review
+implementation, every long-running Eshkol loop must enclose each next/validate/use/
+release interval in one lexical `with-region`. Batch and tensor shells must not cross
+that boundary unless the caller deliberately retains or promotes them and accounts
+for their caller-owned closure/environment/capability storage. The dataset retains
+only current generation/status, not any shell, per-generation authenticator, or
+tombstone. This caller-region interpretation is a proposed clarification pending
+integration-owner disposition in
+[issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950);
+it changes no public name, arity, carrier, cursor, or format.
+
+The review aggregate authenticates shells using the compiled code identities of two
+fixed private constructors, dataset and batch. Native state stores only those two
+per-process code addresses. This is neither a public or serialized ABI nor a portable
+closure-layout or cross-aggregate identity contract.
 
 ## 10. Modules and models
 

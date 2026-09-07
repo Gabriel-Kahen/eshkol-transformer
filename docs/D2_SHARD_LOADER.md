@@ -4,6 +4,10 @@ Status: **accepted contract; implementation in review**. The binding decision is
 [integration issue #1 comment 5562461427](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5562461427),
 mirrored on [D2 issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42#issuecomment-5562461448).
 This status does not claim independent D2-R approval or merge.
+The caller-region lifetime clarification in
+[issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950)
+is proposed and pending; its current implementation discipline and measured basis
+are recorded below without presenting the proposal as accepted.
 
 ## Public surface and configuration
 
@@ -86,12 +90,33 @@ failure still ends the borrow.
 
 One dataset owns at most one live batch. Batch and tensor shell copies are aliases
 to the current authenticated generation. First release invalidates the batch and all
-three tensor identities before the fixed nonrecoverable native destruction tail.
+three tensor identities before the fixed nonrecoverable native destruction tail and
+frees the exact native `17*N*T` carrier. `token-batch-release!` ends the native
+carrier and borrow lifetime only; it does not individually reclaim Eshkol closure,
+environment, or capability-vector allocations from the caller's region.
 Exact already-released authentic generation aliases release idempotently; other
 stale use is `invalid-state`. Forged and wrong-kind values are `invalid-argument`.
 No native or Eshkol per-generation tombstone or carrier data remains. Generation
 exhaustion is `unsupported` before publication and never wraps. Calls are serialized
 and nonreentrant.
+
+The pinned Eshkol runtime has no tracing garbage collector. A long-running Eshkol
+caller must place each `token-dataset-next-batch` through validate/access/use/
+`token-batch-release!` interval in one lexical `with-region`. No batch or tensor
+shell may cross that region unless the caller deliberately retains or promotes it;
+such aliases and their closure/environment/capability storage are caller-owned and
+must be included in the caller's resource accounting. D2 state retains only current
+generation/status, never a shell, per-generation authenticator, or tombstone. This
+lexical-scope rule is the subject of the pending clarification linked above; the
+review implementation requires it to meet the long-horizon memory bound.
+
+Authenticity is enforced by registering the generated-code identities of exactly
+two fixed private compiled shell constructors, one dataset constructor and one batch
+constructor. Native state retains those two code addresses only, never a shell or
+environment pointer. This is a pinned, per-process private implementation ABI used
+inside the one source-composed aggregate. It is not a public C ABI, a serializable
+identity, a portable Eshkol closure-layout promise, or authority transferable to a
+different process or independently compiled aggregate.
 
 The final batch may commit the cursor ordinal to `M` while live. Another next call
 is still `invalid-state`; stable EOS begins only after release. Close best-effort
@@ -161,6 +186,13 @@ shuffle window; cache replacement drops the old shard before loading the next.
 It retains no whole corpus, token list, row table, or unbounded record table.
 Allocator/runtime RSS, stacks, shared libraries, directory/config bytes, and fixed
 control/view/hash state are measured separately from semantic payload.
+The review resource gate uses optimized AOT and one lexical batch `with-region`,
+requires exact equality of the Eshkol retained-arena byte counter at 1,024 and 8,192
+batches on the same admitted corpus, and requires native carrier/live counts to
+return to baseline. RSS and file-descriptor peaks remain separately reported; RSS is
+advisory because host allocator and shared-library behavior is outside the semantic
+payload bound. Unregioned or deliberately promoted shell aliases are caller-owned,
+not hidden native/D2 retention.
 
 Missing or unreadable manifest/shard data is `io`; malformed, noncanonical,
 truncated, trailing, digest-corrupt, record-inconsistent, out-of-range-token, or D1

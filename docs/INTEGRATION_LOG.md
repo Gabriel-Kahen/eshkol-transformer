@@ -4,6 +4,42 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-06 — D2 caller-region lifetime clarification (proposed)
+
+- **Decision:** proposed and pending integration-owner disposition in
+  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+  This entry does not amend the accepted D2 contract unless that proposal is
+  explicitly accepted.
+- **Proposed lifetime clarification:** replace references to GC-managed generation
+  capabilities with caller-region-managed Eshkol capabilities. The pinned runtime
+  has no tracing collector. `token-batch-release!` invalidates the current generation
+  and ends the native borrow/carrier lifetime, freeing the exact native `17*N*T`
+  carrier; it does not individually reclaim the batch/tensor closure, environment,
+  or capability-vector objects allocated in the caller's Eshkol region. A
+  long-running caller must put each `token-dataset-next-batch` through
+  `token-batch-release!` interval in one lexical `with-region`. No batch or tensor
+  shell may cross that boundary unless the caller deliberately retains or promotes
+  it and accounts for the resulting caller-owned storage. C2/TR3 must preserve this
+  lexical batch scope.
+- **Authentication boundary:** D2 retains no batch/tensor shell and no
+  per-generation authentication object or tombstone. The compiled aggregate
+  registers the generated-code identities of exactly two fixed private shell
+  constructors, dataset and batch, and native code retains only those two code
+  addresses. This is a pinned, per-process private implementation ABI: it is not a
+  public C ABI, serialized identity, portable closure-layout contract, or authority
+  valid across a process or independently compiled aggregate.
+- **Evidence:** optimized AOT without a lexical batch region retained 35,782,656
+  arena bytes after 1,024 batches and 254,345,216 bytes after 8,192 batches. The same
+  binary shape and admitted corpus, with one lexical batch `with-region`, retained
+  exactly 4,849,664 bytes at both horizons, an exact zero-byte slope. The proposed
+  review gate therefore compares the exact Eshkol arena counter at both horizons;
+  native live counts must return to baseline and RSS remains separately reported and
+  advisory.
+- **Compatibility:** no public name/arity, carrier, cursor/format, shuffle, aggregate
+  count, or native data ABI changes. `ESHKDCU1` remains version 1.0 and the aggregate
+  remains exactly 58 globals/52 exports. Independent D2-R, supported CI, merge, and
+  merge-head retest remain pending; ROADMAP stays `review`.
+
 ## 2026-09-06 — D2 / issue #42 accepted current-main contract
 
 - **Decision:** accepted in
