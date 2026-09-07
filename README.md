@@ -200,6 +200,6 @@ See:
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
 - [Deterministic BPE tokenizer and streaming contract](docs/BPE_TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
-- [D2 memory-bounded shard-loader candidate](docs/D2_SHARD_LOADER.md)
+- [D2 memory-bounded shard-loader contract](docs/D2_SHARD_LOADER.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)
