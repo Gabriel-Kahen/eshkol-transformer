@@ -21,19 +21,28 @@
 (define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
 (define tokenizer (tokenizer-load tokenizer-path policy))
 
-(if (string=? mode "consume")
+(if (or (string=? mode "consume") (string=? mode "consume-short"))
     (let ((dataset (token-dataset-open (config directory) tokenizer)))
       (let loop ((batches 0))
-        (let ((batch (token-dataset-next-batch dataset)))
-          (if (token-dataset-end? batch)
+        ;; Public shells are caller-owned Eshkol values. Explicit native batch
+        ;; release ends their borrow/storage lifetime; this explicit iteration
+        ;; region ends their Eshkol allocation lifetime after the last use.
+        (let ((finished?
+               (if (and (string=? mode "consume-short") (= batches 1024))
+                   #t
+                   (with-region ('d2-batch-iteration 65536)
+                     (let ((batch (token-dataset-next-batch dataset)))
+                       (if (token-dataset-end? batch) #t
+                           (begin
+                             (token-batch-validate batch)
+                             (token-batch-release! batch)
+                             #f)))))))
+          (if finished?
               (begin
                 (token-dataset-close! dataset)
                 (display "D2 RESOURCE CONSUME PASS: ")
                 (display batches) (display " batches") (newline))
-              (begin
-                (token-batch-validate batch)
-                (token-batch-release! batch)
-                (loop (+ batches 1)))))))
+              (loop (+ batches 1))))))
     (if (string=? mode "reopen")
         (let loop ((iteration 0))
           (if (= iteration 256)

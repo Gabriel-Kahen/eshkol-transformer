@@ -22,6 +22,22 @@ enum {
 };
 
 enum {
+  ET_D2_SHELL_FACTORY_DATASET = 1,
+  ET_D2_SHELL_FACTORY_BATCH = 2
+};
+
+/*
+ * Register and validate the generated-code identity of the two private D2
+ * shell constructors. Eshkol checks procedure? before either call. The native
+ * side retains only two code addresses, never a shell/environment pointer, so
+ * this authentication does not extend any per-dataset or per-batch lifetime.
+ */
+int64_t et_d2_shell_factory_register_v1(const void *closure,
+                                        int64_t factory_kind);
+int64_t et_d2_shell_factory_validate_v1(const void *closure,
+                                        int64_t factory_kind);
+
+enum {
   ET_D2_EXACT_READ_ARGUMENT = 1,
   ET_D2_EXACT_READ_OPEN = 2,
   ET_D2_EXACT_READ_READ = 3,
@@ -48,8 +64,9 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes,
  * configuration, manifest, and every shard. It publishes one native registry
  * entry for owner. Close rejects before mutation during an active scoped borrow;
  * otherwise it unregisters that entry before destroying its current carrier and
- * is a nonallocating, nonrecoverable tail after admission. Public idempotence and
- * exact shell authentication remain Eshkol duties.
+ * is a nonallocating, nonrecoverable tail after admission. Public idempotence
+ * remains an Eshkol duty; shell constructor identity is admitted above before
+ * Eshkol discloses a private query token.
  */
 int64_t et_d2_dataset_open_v1(const void *owner);
 int64_t et_d2_dataset_close_v1(const void *owner);

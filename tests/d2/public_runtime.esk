@@ -107,6 +107,28 @@
        (and (eq? first-inputs (token-batch-inputs first))
             (eq? first-targets (token-batch-targets first))
             (eq? first-mask (token-batch-loss-mask first))))
+(define captured-query #f)
+(define query-capture
+  (lambda (query)
+    (set! captured-query query)
+    #f))
+(check "foreign procedure rejects before private query disclosure"
+       (structured-error? 'invalid-argument 'token-batch-validate
+                          (lambda () (token-batch-validate query-capture))))
+(check "foreign procedure never receives private query"
+       (eq? captured-query #f))
+(define relay-invoked? #f)
+(define nested-relay
+  (lambda (query)
+    (set! relay-invoked? #t)
+    ((lambda (authentic) (authentic query)) first)))
+(check "nested forwarding proxy is invalid-argument"
+       (structured-error? 'invalid-argument 'token-batch-validate
+                          (lambda () (token-batch-validate nested-relay))))
+(check "nested forwarding proxy rejects before invocation"
+       (not relay-invoked?))
+(check "forgery rejection preserves authentic batch"
+       (token-batch-validate first))
 (check "live batch blocks next"
        (structured-error? 'invalid-state 'token-dataset-next-batch
                           (lambda () (token-dataset-next-batch dataset))))

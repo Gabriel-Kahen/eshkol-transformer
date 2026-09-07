@@ -31,6 +31,44 @@ typedef union bytevector_fixture {
   uint8_t bytes[256];
 } bytevector_fixture;
 
+typedef struct closure_header_fixture {
+  uint8_t subtype;
+  uint8_t flags;
+  uint16_t ref_count;
+  uint32_t size;
+} closure_header_fixture;
+
+typedef struct closure_env_fixture {
+  size_t packed;
+} closure_env_fixture;
+
+typedef struct closure_body_fixture {
+  uint64_t func_ptr;
+  closure_env_fixture *env;
+  uint64_t sexpr_ptr;
+  const char *name;
+  uint8_t return_type;
+  uint8_t input_arity;
+  uint8_t flags;
+  uint8_t reserved;
+  uint32_t hott_type_id;
+} closure_body_fixture;
+
+typedef struct closure_fixture {
+  closure_header_fixture header;
+  closure_body_fixture body;
+  closure_env_fixture env;
+} closure_fixture;
+
+static void init_closure(closure_fixture *fixture, uint64_t function) {
+  memset(fixture, 0, sizeof(*fixture));
+  fixture->header.size = 40u;
+  fixture->body.func_ptr = function;
+  fixture->body.env = &fixture->env;
+  fixture->body.input_arity = 1u;
+  fixture->env.packed = 1u | ((size_t)1u << 16);
+}
+
 static int read_stage(int64_t result) { return (int)((uint64_t)result >> 32); }
 
 static int read_errno(int64_t result) {
@@ -68,6 +106,95 @@ static void open_dataset(const void *owner) {
 
 static void close_dataset(const void *owner) {
   CHECK(et_d2_dataset_close_v1(owner) == ET_D2_NATIVE_STATUS_OK);
+}
+
+static void test_shell_factory_identity(void) {
+  closure_fixture dataset_a;
+  closure_fixture dataset_b;
+  closure_fixture batch;
+  closure_fixture foreign;
+  closure_fixture malformed;
+
+  init_closure(&dataset_a, UINT64_C(0x1020304050607080));
+  init_closure(&dataset_b, UINT64_C(0x1020304050607080));
+  init_closure(&batch, UINT64_C(0x8070605040302010));
+  init_closure(&foreign, UINT64_C(0x1111111111111111));
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+
+  CHECK(et_d2_shell_factory_validate_v1(
+            &dataset_a.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_shell_factory_register_v1(
+            NULL, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  malformed.body.func_ptr = 0u;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.header.subtype = 1u;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.header.size = 39u;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.body.env = NULL;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.body.input_arity = 2u;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.body.flags = 1u;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.env.packed = 2u | ((size_t)1u << 16);
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.env.packed = 1u | ((size_t)2u << 16);
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.env.packed |= (size_t)1u << 63;
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_shell_factory_register_v1(&dataset_a.body, 99) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_shell_factory_register_v1(
+            &dataset_a.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shell_factory_validate_v1(
+            &dataset_b.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shell_factory_validate_v1(
+            &foreign.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_shell_factory_register_v1(
+            &foreign.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_shell_factory_register_v1(
+            &dataset_a.body, ET_D2_SHELL_FACTORY_BATCH) ==
+        ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_shell_factory_register_v1(
+            &batch.body, ET_D2_SHELL_FACTORY_BATCH) == ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shell_factory_validate_v1(
+            &batch.body, ET_D2_SHELL_FACTORY_BATCH) == ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shell_factory_validate_v1(
+            &dataset_a.body, ET_D2_SHELL_FACTORY_BATCH) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
 }
 
 static void test_exact_read(void) {
@@ -524,6 +651,7 @@ static void test_generation_exhaustion(void) {
 }
 
 int main(void) {
+  test_shell_factory_identity();
   test_exact_read();
   test_unpublished_cleanup();
   test_i1_allocation_failures();

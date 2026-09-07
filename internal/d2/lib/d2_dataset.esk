@@ -21,9 +21,13 @@
 (extern i64 d2-native-batch-release-preflight ptr i64
         :real et_d2_batch_release_preflight_v1)
 (extern i64 d2-native-batch-release ptr i64 :real et_d2_batch_release_v1)
+(extern i64 d2-native-shell-factory-register ptr i64
+        :real et_d2_shell_factory_register_v1)
+(extern i64 d2-native-shell-factory-validate ptr i64
+        :real et_d2_shell_factory_validate_v1)
 
-(define d2-dataset-query (vector 'd2-dataset-query-v1))
-(define d2-batch-query (vector 'd2-batch-query-v1))
+(define d2-dataset-query (vector 'd2-dataset-query-v1 #f))
+(define d2-batch-query (vector 'd2-batch-query-v1 #f))
 (define d2-dataset-state-tag (vector 'd2-dataset-state-v1))
 (define d2-batch-capability-tag (vector 'd2-batch-capability-v1))
 (define d2-eos-sentinel
@@ -106,18 +110,33 @@
     ((_ operation status)
      (let ((result (d2-native-fail-raw operation status))) result))))
 
+(define (d2-register-shell-factory! shell registry kind operation)
+  (if (not (vector-ref registry 1))
+      (let ((status (d2-native-shell-factory-register shell kind)))
+        (if (not (= status 0))
+            (d2-fail 'internal operation
+                     "D2 shell factory registration failed"))
+        (vector-set! registry 1 #t))))
+
 (define (d2-make-dataset-shell state)
-  (lambda (query)
-    (if (eq? query d2-dataset-query) state
-        (error "transformer.data.dataset:v1"))))
+  (let ((shell
+         (lambda (query)
+           (if (eq? query (vector-ref state 9)) state
+               (error "transformer.data.dataset:v1")))))
+    shell))
 
 (define (d2-make-batch-shell capability)
-  (lambda (query)
-    (if (eq? query d2-batch-query) capability
-        (error "transformer.data.batch:v1"))))
+  (let ((shell
+         (lambda (query)
+           (if (eq? query (vector-ref capability 3)) capability
+               (error "transformer.data.batch:v1")))))
+    shell))
 
 (define (d2-dataset-state value operation)
   (if (not (procedure? value))
+      (d2-fail 'invalid-argument operation "expected a D2 dataset"))
+  ;; Reject foreign code identity before disclosing the private query token.
+  (if (not (= (d2-native-shell-factory-validate value 1) 0))
       (d2-fail 'invalid-argument operation "expected a D2 dataset"))
   (let ((state
          (guard (caught (#t (d2-fail 'invalid-argument operation
@@ -138,14 +157,26 @@
 (define (d2-batch-capability value operation)
   (if (not (procedure? value))
       (d2-fail 'invalid-argument operation "expected a D2 batch"))
+  ;; This precheck makes the private query/capability exchange unreachable to
+  ;; query-capturing and relay procedures from another lambda factory.
+  (if (not (= (d2-native-shell-factory-validate value 2) 0))
+      (d2-fail 'invalid-argument operation "expected a D2 batch"))
   (let ((capability
          (guard (caught (#t (d2-fail 'invalid-argument operation
                                      "expected a D2 batch")))
            (value d2-batch-query))))
-    (if (and (vector? capability) (= (vector-length capability) 5)
+    (if (and (vector? capability)
+             (or (= (vector-length capability) 5)
+                 (= (vector-length capability) 8))
              (eq? (vector-ref capability 0) d2-batch-capability-tag)
              (procedure? (vector-ref capability 1))
-             (d2-core-positive-i64? (vector-ref capability 2)))
+             (d2-core-positive-i64? (vector-ref capability 2))
+             (or (and (= (vector-length capability) 8)
+                      (eq? (vector-ref capability 4) 'batch))
+                 (and (= (vector-length capability) 5)
+                      (or (eq? (vector-ref capability 4) 'inputs)
+                          (eq? (vector-ref capability 4) 'targets)
+                          (eq? (vector-ref capability 4) 'loss-mask)))))
         capability
         (d2-fail 'invalid-argument operation "expected a D2 batch"))))
 
@@ -159,11 +190,9 @@
     (if (and (not (vector-ref state 2))
              (not (and released-ok?
                        (eq? (vector-ref state 10) 'closed)
-                       (= (vector-ref capability 2) (vector-ref state 8))
-                       (eq? (vector-ref capability 3) (vector-ref state 9)))))
+                       (= (vector-ref capability 2) (vector-ref state 8)))))
         (d2-fail 'invalid-state operation "batch dataset is closed"))
     (if (or (not (= (vector-ref capability 2) (vector-ref state 8)))
-            (not (eq? (vector-ref capability 3) (vector-ref state 9)))
             (not (or (eq? (vector-ref state 10) 'live)
                      (and released-ok?
                           (or (eq? (vector-ref state 10) 'released)
@@ -486,12 +515,22 @@
             (vector-set! state 6 cursor-state)
             (vector-set! state 7 shuffle-buffer)
             (vector-set! state 8 0)
-            (vector-set! state 9 #f)
+            ;; Fixed private singleton, not a per-generation authority.
+            (vector-set! state 9 d2-dataset-query)
             (vector-set! state 10 'none)
             (vector-set! state 15 0)
             (vector-set! state 16 #f)
             (vector-set! state 17 rows)
             (vector-set! state 18 working-bytes)
+            ;; Register each private lambda AST site once, outside the batch
+            ;; hot path. Native retains only code addresses; the batch probe
+            ;; and its placeholder capture remain ordinary temporary values.
+            (d2-register-shell-factory!
+             shell d2-dataset-query 1 'token-dataset-open)
+            (if (not (vector-ref d2-batch-query 1))
+                (let ((probe (d2-make-batch-shell #f)))
+                  (d2-register-shell-factory!
+                   probe d2-batch-query 2 'token-dataset-open)))
             (let ((status (d2-native-dataset-open shell)))
               (if (not (= status 0))
                   (d2-native-fail 'token-dataset-open status)))
@@ -513,14 +552,21 @@
                      (d2-core-config-ref config ':sequence-length))
                     (maximum-batch
                      (d2-core-config-ref config ':maximum-batch-bytes))
-                    (auth (vector 'd2-batch-generation-auth-v1))
-                    (batch-cap (vector d2-batch-capability-tag dataset 1 auth
-                                       'batch))
-                    (input-cap (vector d2-batch-capability-tag dataset 1 auth
+                    ;; The batch capability owns the three stable tensor
+                    ;; identities.  The persistent dataset state retains only
+                    ;; native generation/status, so released per-batch shells
+                    ;; do not escape into dataset-lifetime arena storage.
+                    (batch-cap (vector d2-batch-capability-tag dataset 1
+                                       d2-batch-query
+                                       'batch #f #f #f))
+                    (input-cap (vector d2-batch-capability-tag dataset 1
+                                       d2-batch-query
                                        'inputs))
-                    (target-cap (vector d2-batch-capability-tag dataset 1 auth
+                    (target-cap (vector d2-batch-capability-tag dataset 1
+                                        d2-batch-query
                                         'targets))
-                    (mask-cap (vector d2-batch-capability-tag dataset 1 auth
+                    (mask-cap (vector d2-batch-capability-tag dataset 1
+                                      d2-batch-query
                                       'loss-mask))
                     (batch-shell (d2-make-batch-shell batch-cap))
                     (input-shell (d2-make-batch-shell input-cap))
@@ -538,6 +584,9 @@
                (vector-set! input-cap 2 generation)
                (vector-set! target-cap 2 generation)
                (vector-set! mask-cap 2 generation)
+               (vector-set! batch-cap 5 input-shell)
+               (vector-set! batch-cap 6 target-shell)
+               (vector-set! batch-cap 7 mask-shell)
                (guard
                 (caught
                  (#t
@@ -566,12 +615,7 @@
                 ;; every later publication operation is nonraising.
                 (vector-set! (vector-ref state 6) 15 (vector-ref range 2)))
                (vector-set! state 8 generation)
-               (vector-set! state 9 auth)
                (vector-set! state 10 'live)
-               (vector-set! state 11 batch-shell)
-               (vector-set! state 12 input-shell)
-               (vector-set! state 13 target-shell)
-               (vector-set! state 14 mask-shell)
                batch-shell)))))))
 
 (define (d2-token-dataset-cursor dataset)
@@ -592,7 +636,6 @@
                     "cannot seek while a batch is live"))
        (d2-core-seek! (vector-ref state 6) cursor)
        (vector-set! state 8 0)
-       (vector-set! state 9 #f)
        (vector-set! state 10 'none)
        (vector-set! state 16 #f)
        #t))))
@@ -600,20 +643,20 @@
 (define (d2-token-batch-inputs batch)
   (let* ((checked
           (d2-current-capability batch 'batch 'token-batch-inputs #f))
-         (state (vector-ref checked 1)))
-    (vector-ref state 12)))
+         (capability (vector-ref checked 0)))
+    (vector-ref capability 5)))
 
 (define (d2-token-batch-targets batch)
   (let* ((checked
           (d2-current-capability batch 'batch 'token-batch-targets #f))
-         (state (vector-ref checked 1)))
-    (vector-ref state 13)))
+         (capability (vector-ref checked 0)))
+    (vector-ref capability 6)))
 
 (define (d2-token-batch-loss-mask batch)
   (let* ((checked
           (d2-current-capability batch 'batch 'token-batch-loss-mask #f))
-         (state (vector-ref checked 1)))
-    (vector-ref state 14)))
+         (capability (vector-ref checked 0)))
+    (vector-ref capability 7)))
 
 (define (d2-token-batch-validate batch)
   (d2-current-capability batch 'batch 'token-batch-validate #f)
@@ -683,11 +726,9 @@
             (vector-ref state 1) generation)))
       (if (not (= preflight 0)) (d2-native-fail operation preflight)))
     ;; Invalidate every Eshkol authority before the native destruction tail.
+    ;; The dataset owns no batch or tensor shell; caller-held capabilities
+    ;; become stale solely through this status/generation transition.
     (vector-set! state 10 'released)
-    (vector-set! state 11 #f)
-    (vector-set! state 12 #f)
-    (vector-set! state 13 #f)
-    (vector-set! state 14 #f)
     (let ((status (d2-native-batch-release (vector-ref state 1) generation)))
       (if (not (= status 0))
           (d2-fail 'internal operation
@@ -721,8 +762,8 @@
           (vector-set! state 5 #f)
           (vector-set! state 6 #f)
           (vector-set! state 7 #f)
-          ;; Preserve only the one current generation/auth marker so authentic
-          ;; aliases retain exact release idempotence after close.
+          ;; Preserve only the current generation/status so authentic aliases
+          ;; retain exact release idempotence after close.
           (vector-set! state 10 'closed)
           (vector-set! state 16 #f)
           (vector-set! state 17 0)

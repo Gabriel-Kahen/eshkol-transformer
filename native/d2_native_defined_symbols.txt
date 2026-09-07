@@ -13,3 +13,5 @@ et_d2_batch_write_pair_i64le_span_v1
 et_d2_dataset_close_v1
 et_d2_dataset_open_v1
 et_d2_exact_read_v1
+et_d2_shell_factory_register_v1
+et_d2_shell_factory_validate_v1

@@ -43,6 +43,41 @@ struct et_d2_dataset_control {
 
 static et_d2_dataset_control *live_datasets;
 static int64_t last_status;
+static uint64_t dataset_shell_factory;
+static uint64_t batch_shell_factory;
+
+/* Exact pinned Eshkol CALLABLE/CLOSURE ABI used only for shell admission. */
+typedef struct et_d2_eshkol_object_header {
+  uint8_t subtype;
+  uint8_t flags;
+  uint16_t ref_count;
+  uint32_t size;
+} et_d2_eshkol_object_header;
+
+typedef struct et_d2_eshkol_closure_env {
+  size_t packed;
+} et_d2_eshkol_closure_env;
+
+typedef struct et_d2_eshkol_closure {
+  uint64_t func_ptr;
+  et_d2_eshkol_closure_env *env;
+  uint64_t sexpr_ptr;
+  const char *name;
+  uint8_t return_type;
+  uint8_t input_arity;
+  uint8_t flags;
+  uint8_t reserved;
+  uint32_t hott_type_id;
+} et_d2_eshkol_closure;
+
+_Static_assert(sizeof(et_d2_eshkol_object_header) == 8u,
+               "pinned Eshkol object header ABI changed");
+_Static_assert(sizeof(et_d2_eshkol_closure_env) == sizeof(size_t),
+               "pinned Eshkol closure environment ABI changed");
+_Static_assert(sizeof(et_d2_eshkol_closure) == 40u,
+               "pinned Eshkol closure ABI changed");
+_Static_assert(offsetof(et_d2_eshkol_closure, func_ptr) == 0u,
+               "pinned Eshkol closure function offset changed");
 
 #ifdef ET_D2_NATIVE_TESTING
 static int64_t fail_stage;
@@ -85,6 +120,81 @@ static int64_t status(int64_t value) {
 
 int64_t et_d2_batch_last_status_v1(void) { return last_status; }
 static int should_fail(int64_t stage);
+
+/*
+ * Verified against the pinned Eshkol runtime: a compiled closure's first
+ * payload word is its generated lambda function pointer.  The Eshkol caller
+ * admits only procedure? values before crossing this private boundary.
+ */
+static int closure_factory(const void *closure, uint64_t *factory) {
+  et_d2_eshkol_object_header header;
+  et_d2_eshkol_closure body;
+  et_d2_eshkol_closure_env environment;
+  const uint8_t *raw = (const uint8_t *)closure;
+  if (closure == NULL || factory == NULL ||
+      !span_fits(closure, sizeof(body)) ||
+      (uintptr_t)closure < sizeof(header)) {
+    return 0;
+  }
+  memcpy(&header, raw - sizeof(header), sizeof(header));
+  memcpy(&body, closure, sizeof(body));
+  if (header.subtype != 0u || header.size != sizeof(body) ||
+      body.func_ptr == 0u || body.env == NULL || body.input_arity != 1u ||
+      (body.flags & 1u) != 0u ||
+      !span_fits(body.env, sizeof(environment))) {
+    return 0;
+  }
+  memcpy(&environment, body.env, sizeof(environment));
+  if ((environment.packed & UINT64_C(0xffff)) != 1u ||
+      ((environment.packed >> 16) & UINT64_C(0xffff)) != 1u ||
+      ((environment.packed >> 63) & UINT64_C(1)) != 0u) {
+    return 0;
+  }
+  *factory = body.func_ptr;
+  return 1;
+}
+
+static uint64_t *shell_factory_slot(int64_t factory_kind) {
+  if (factory_kind == ET_D2_SHELL_FACTORY_DATASET) {
+    return &dataset_shell_factory;
+  }
+  if (factory_kind == ET_D2_SHELL_FACTORY_BATCH) {
+    return &batch_shell_factory;
+  }
+  return NULL;
+}
+
+int64_t et_d2_shell_factory_register_v1(const void *closure,
+                                        int64_t factory_kind) {
+  uint64_t factory;
+  uint64_t *slot = shell_factory_slot(factory_kind);
+  if (slot == NULL || !closure_factory(closure, &factory)) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  if (*slot == 0u) {
+    if ((factory_kind == ET_D2_SHELL_FACTORY_DATASET &&
+         batch_shell_factory == factory) ||
+        (factory_kind == ET_D2_SHELL_FACTORY_BATCH &&
+         dataset_shell_factory == factory)) {
+      return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
+    }
+    *slot = factory;
+    return status(ET_D2_NATIVE_STATUS_OK);
+  }
+  return status(*slot == factory ? ET_D2_NATIVE_STATUS_OK
+                                 : ET_D2_NATIVE_STATUS_INVALID_STATE);
+}
+
+int64_t et_d2_shell_factory_validate_v1(const void *closure,
+                                        int64_t factory_kind) {
+  uint64_t factory;
+  uint64_t *slot = shell_factory_slot(factory_kind);
+  if (slot == NULL || *slot == 0u || !closure_factory(closure, &factory) ||
+      *slot != factory) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  return status(ET_D2_NATIVE_STATUS_OK);
+}
 
 /* Owner is compared but never dereferenced. */
 static et_d2_dataset_control *find_dataset(const void *owner) {
