@@ -1,0 +1,3 @@
+;;; Expected compile rejection: T1's actual native read binding stays private.
+(require transformer.tokenizer)
+(t1-shell-read #f 0)

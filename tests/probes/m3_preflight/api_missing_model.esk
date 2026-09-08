@@ -1,0 +1,3 @@
+;;; Expected compile rejection: A0's model module is a declaration fixture only.
+(require transformer.model)
+(model-forward #f #f)

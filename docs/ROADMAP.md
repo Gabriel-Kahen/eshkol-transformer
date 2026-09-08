@@ -49,7 +49,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| M3 | Decoder-only GPT configuration, blocks and tied LM head | N2, A2, P1 | Full forward/gradient oracle parity | planned |
+| M3 | Decoder-only GPT configuration, blocks and tied LM head | N2, A2, P1 | Full forward/gradient oracle parity; [fresh preflight audit and proposed prerequisites](M3_PREFLIGHT.md) in [#65](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/65), awaiting integration decision | planned |
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | Seeded sampling and cache/no-cache parity | planned |
 | TR3 | Trainer state machine and exact resume | M3, L2, O2, D2, C2, E3 | One-batch overfit and interrupted/resumed equivalence | planned |

@@ -1,0 +1,11 @@
+;;; Diagnostic: the installed P1 facade is callable, but supplies no constructor.
+(require transformer.error_public)
+(require transformer.module)
+(guard (caught
+         (#t
+           (if (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) 'invalid-argument))
+               (begin (display "M3 API PUBLIC PASS: P1 invalid receiver") (newline))
+               (exit 1))))
+  (module-parameters #f)
+  (exit 1))

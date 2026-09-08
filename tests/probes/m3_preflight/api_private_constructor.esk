@@ -1,0 +1,3 @@
+;;; Expected compile rejection: source-composed I2 constructors are not exports.
+(require transformer.module)
+(i2-module-create-internal)
