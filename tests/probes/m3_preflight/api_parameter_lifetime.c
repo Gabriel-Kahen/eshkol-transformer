@@ -18,6 +18,8 @@ int main(void) {
   et_f32_tensor *initial = NULL, *replacement = NULL, *snapshot = NULL;
   et_f32_parameter *parameter = NULL;
   et_f32_tensor_borrow *borrow = NULL, *second = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  const void *original_data = NULL;
   et_f32_tensor_copy_plan *plan = NULL;
   const et_f32_tensor *value = NULL, *after = NULL;
   uint64_t shape[] = {2};
@@ -33,6 +35,8 @@ int main(void) {
   CHECK(et_f32_parameter_value_tensor_v1(parameter, &value, &error) == 0);
   CHECK(et_f32_parameter_value_snapshot_v1(parameter, &snapshot, &error) == 0);
   CHECK(et_f32_parameter_value_borrow_begin_v1(parameter, &borrow, &error) == 0);
+  CHECK(et_f32_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  original_data = view->data;
   CHECK(et_f32_parameter_value_borrow_begin_v1(parameter, &second, &error) != 0);
   CHECK(error.code == ET_F32_TENSOR_CODE_ACTIVE_BORROW && second == NULL);
   et_f32_tensor_copy_assignment_v1 assignment = {
@@ -54,6 +58,11 @@ int main(void) {
   CHECK(bits[0] == twos[0] && bits[1] == twos[1]);
   CHECK(et_f32_tensor_copy_bits_to_v1(snapshot, bits, 2, &error) == 0);
   CHECK(bits[0] == ones[0] && bits[1] == ones[1]);
+  CHECK(et_f32_parameter_value_borrow_begin_v1(parameter, &borrow, &error) == 0);
+  view = NULL;
+  CHECK(et_f32_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  CHECK(original_data == view->data);
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
   CHECK(et_f32_tensor_destroy_v1(&snapshot, &error) == 0);
   CHECK(et_f32_parameter_destroy_v1(&parameter, &error) == 0);
   CHECK(et_f32_tensor_destroy_v1(&initial, &error) == 0);
