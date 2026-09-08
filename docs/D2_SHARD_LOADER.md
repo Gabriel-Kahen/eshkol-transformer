@@ -94,8 +94,9 @@ three tensor identities before the fixed nonrecoverable native destruction tail 
 frees the exact native `17*N*T` carrier. `token-batch-release!` ends the native
 carrier and borrow lifetime only; it does not individually reclaim Eshkol closure,
 environment, or capability-vector allocations from the caller's region.
-Exact already-released authentic generation aliases release idempotently; other
-stale use is `invalid-state`. Forged and wrong-kind values are `invalid-argument`.
+Every exact authentic generation already issued by the dataset releases
+idempotently, including after a successor, seek, or close; other stale use is
+`invalid-state`. Forged and wrong-kind values are `invalid-argument`.
 No native or Eshkol per-generation tombstone or carrier data remains. Generation
 exhaustion is `unsupported` before publication and never wraps. Calls are serialized
 and nonreentrant.
@@ -105,8 +106,9 @@ caller must place each `token-dataset-next-batch` through validate/access/use/
 `token-batch-release!` interval in one lexical `with-region`. No batch or tensor
 shell may cross that region unless the caller deliberately retains or promotes it;
 such aliases and their closure/environment/capability storage are caller-owned and
-must be included in the caller's resource accounting. D2 state retains only current
-generation/status, never a shell, per-generation authenticator, or tombstone. This
+must be included in the caller's resource accounting. D2 state retains only the
+last-issued generation and current status, never a shell, per-generation
+authenticator, or tombstone. This
 lexical-scope rule is the subject of the pending clarification linked above; the
 review implementation requires it to meet the long-horizon memory bound.
 
@@ -225,4 +227,4 @@ are bounded by the host pathname/syscall limits, while an overlong rejected call
 string incurs one transient normalized copy but publishes no dataset or native
 registry entry.
 Python references and fixture generators are development-only and are absent from
-the delivered runtime and training path.
+the D2 production aggregate and runtime.

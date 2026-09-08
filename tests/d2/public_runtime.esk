@@ -151,6 +151,10 @@
 (define after-second (token-dataset-cursor dataset))
 (check "second batch advances exact ordinal"
        (= (u64-le after-second 120) 4))
+(check "released predecessor stays idempotent while successor is live"
+       (token-batch-release! first))
+(check "predecessor release does not invalidate live successor"
+       (token-batch-validate second))
 (token-batch-release! second)
 (define final (token-dataset-next-batch dataset))
 (define final-cursor (token-dataset-cursor dataset))
@@ -167,8 +171,12 @@
             (not (token-dataset-end? #f))))
 
 (check "seek start replays after EOS" (token-dataset-seek! dataset start))
+(check "released predecessor stays idempotent after seek"
+       (token-batch-release! first))
 (define replay (token-dataset-next-batch dataset))
 (check "seek start resets continuation" (= (u64-le (token-dataset-cursor dataset) 120) 2))
+(check "older release does not invalidate replay generation"
+       (and (token-batch-release! final) (token-batch-validate replay)))
 (token-batch-release! replay)
 (check "seek batch boundary restores exact continuation"
        (token-dataset-seek! dataset after-second))
@@ -291,6 +299,8 @@
 (check "close-released authentic alias remains idempotent"
        (token-batch-release! close-batch))
 (check "primary dataset closes" (token-dataset-close! dataset))
+(check "old authentic release remains idempotent after close"
+       (token-batch-release! first))
 
 (if (= failed 0)
     (begin

@@ -200,15 +200,27 @@ for repetition in a b; do
   resource_index=1
   [[ "${repetition}" == b ]] && resource_index=2
   mkdir -p "${d2_tmp}/public-write-${repetition}"
-  "${d2_tmp}/public-${repetition}-public_runtime/public_runtime" \
-    "${d2_fixture}" \
-    "${d2_tmp}/t2-adversarial-${resource_index}/alternate-same-vocab.tsv" \
-    "${d2_tmp}/public-write-${repetition}" \
-    "${d2_tmp}/missing-${repetition}" \
-    >"${d2_tmp}/public-runtime-${repetition}.stdout"
-  "${d2_tmp}/public-${repetition}-public_errors_runtime/public_errors_runtime" \
-    "${d2_fixture}" "${d2_tmp}/public-resources-${resource_index}" \
-    >"${d2_tmp}/public-errors-${repetition}.stdout"
+  if ! "${d2_tmp}/public-${repetition}-public_runtime/public_runtime" \
+      "${d2_fixture}" \
+      "${d2_tmp}/t2-adversarial-${resource_index}/alternate-same-vocab.tsv" \
+      "${d2_tmp}/public-write-${repetition}" \
+      "${d2_tmp}/missing-${repetition}" \
+      >"${d2_tmp}/public-runtime-${repetition}.stdout" \
+      2>"${d2_tmp}/public-runtime-${repetition}.stderr"; then
+    sed -n '1,260p' "${d2_tmp}/public-runtime-${repetition}.stdout" >&2
+    sed -n '1,260p' "${d2_tmp}/public-runtime-${repetition}.stderr" >&2
+    die "D2 public runtime failed"
+  fi
+  test ! -s "${d2_tmp}/public-runtime-${repetition}.stderr"
+  if ! "${d2_tmp}/public-${repetition}-public_errors_runtime/public_errors_runtime" \
+      "${d2_fixture}" "${d2_tmp}/public-resources-${resource_index}" \
+      >"${d2_tmp}/public-errors-${repetition}.stdout" \
+      2>"${d2_tmp}/public-errors-${repetition}.stderr"; then
+    sed -n '1,260p' "${d2_tmp}/public-errors-${repetition}.stdout" >&2
+    sed -n '1,260p' "${d2_tmp}/public-errors-${repetition}.stderr" >&2
+    die "D2 public errors runtime failed"
+  fi
+  test ! -s "${d2_tmp}/public-errors-${repetition}.stderr"
 done
 cmp "${d2_tmp}/public-runtime-a.stdout" "${d2_tmp}/public-runtime-b.stdout"
 cmp "${d2_tmp}/public-errors-a.stdout" "${d2_tmp}/public-errors-b.stdout"
@@ -364,6 +376,40 @@ long_arena="$(<"${d2_tmp}/arena-long.bytes")"
   die "D2 optimized retained arena bytes grew from 1024 to 8192 batches"
 printf 'D2 RESOURCE ARENA PASS: 1024=%s bytes 8192=%s bytes slope=0\n' \
   "${short_arena}" "${long_arena}"
+
+declare -A topology_open topology_packed
+for topology in one-shards many-shard; do
+  for probe in open packed; do
+    timeout --foreground --signal=TERM --kill-after=5s 300s \
+      "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+      "${d2_tmp}/public-resources-1/${topology}" "arena-${probe}" \
+      >"${d2_tmp}/arena-${topology}-${probe}.stdout" \
+      2>"${d2_tmp}/arena-${topology}-${probe}.stderr"
+    test ! -s "${d2_tmp}/arena-${topology}-${probe}.stderr"
+    measured="$(awk '/^D2 RESOURCE ARENA (OPEN|PACKED): [0-9]+ bytes$/ {print $5}' \
+      "${d2_tmp}/arena-${topology}-${probe}.stdout")"
+    [[ "${measured}" =~ ^[0-9]+$ ]] || \
+      die "D2 ${topology} arena-${probe} omitted an exact byte count"
+    if [[ "${probe}" == open ]]; then
+      topology_open["${topology}"]="${measured}"
+    else
+      topology_packed["${topology}"]="${measured}"
+    fi
+  done
+done
+one_open="${topology_open[one-shards]}"
+many_open="${topology_open[many-shard]}"
+open_retained_delta=$(( many_open > one_open \
+  ? many_open - one_open : one_open - many_open ))
+printf 'D2 RESOURCE SHARD ARENA MEASURED: open one=%s/many=%s bytes retained-delta=%s packed one=%s/many=%s bytes\n' \
+  "${topology_open[one-shards]}" "${topology_open[many-shard]}" \
+  "${open_retained_delta}" "${topology_packed[one-shards]}" \
+  "${topology_packed[many-shard]}"
+(( open_retained_delta <= 83365 )) || \
+  die "D2 equal-token open retention exceeded one admitted working payload"
+[[ "${topology_packed[one-shards]}" == "${topology_packed[many-shard]}" ]] || \
+  die "D2 equal-token packed traversal retained shard-topology-dependent arena bytes"
+
 timeout --foreground --signal=TERM --kill-after=5s 180s \
   "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
   "${d2_tmp}/public-resources-1/small" reopen \
@@ -376,6 +422,12 @@ wave2_evidence="${d2_dir}/d2_wave2.o.evidence"
   die "D2 aggregate must have exactly 58 globals"
 [[ "$(wc -l <"${wave2_evidence}/package-exports.txt")" == 52 ]] || \
   die "D2 aggregate must have exactly 52 exports"
+sed -e 's/^[^:]*://' -e 's/\\//g' "${wave2_evidence}/private.d" | \
+  tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+  sed "s#^${PROJECT_ROOT}/##" >"${d2_tmp}/wave2-source-closure.txt"
+cmp "${PROJECT_ROOT}/native/d2_wave2_source_closure.txt" \
+  "${d2_tmp}/wave2-source-closure.txt" || \
+  die "D2 aggregate trusted source closure drifted"
 for private_binding in d2-token-dataset-open d2-token-tensor-with-view-internal \
     d2-core-normalize-config d1-sha256-prefix; do
   if env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -397,7 +449,10 @@ if rg -n -i '\b(import|from) (torch|pytorch|python)|python\.h|py_' \
   die "D2 production candidate references a Python runtime"
 fi
 for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
-    "${d2_tmp}/a/d2-semantic"; do
+    "${d2_tmp}/a/d2-semantic" \
+    "${d2_tmp}/public-a-public_runtime/public_runtime" \
+    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime"; do
   if strings -a "${delivered}" | \
       grep -E 'tests/d2/(reference|generate)|torch' >/dev/null || \
       nm -a "${delivered}" | grep -E '(^|[[:space:]])Py_|libpython' >/dev/null || \

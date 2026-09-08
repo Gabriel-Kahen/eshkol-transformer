@@ -341,7 +341,7 @@ bytevector storage rather than an immutable registry object.
 | `token-batch-targets batch` | Return the batch's stable read-only state-backed opaque `i64[N,T]` identity. | CPU dense row-major; zero offset; natural alignment; no allocation/copy or gradient. |
 | `token-batch-loss-mask batch` | Return the batch's stable read-only state-backed opaque one-byte `bool[N,T]` identity. | CPU dense row-major; zero offset; no f32 alternative, allocation/copy, or gradient. |
 | `token-batch-validate batch` | Validate the current authenticated live generation and its fixed carrier invariants. | Returns `#t`; forged/wrong-kind is `invalid-argument`, stale is `invalid-state`; no gradient. |
-| `token-batch-release! batch` | Invalidate the batch generation and all three tensor identities before the fixed destruction tail, end its native borrow lifetime, and free the exact native `17*N*T` carrier. | Exact authentic generation aliases release idempotently; no per-generation tombstone or fallback; active borrow is `invalid-state`. Caller-region shell storage is not individually reclaimed. |
+| `token-batch-release! batch` | Invalidate the batch generation and all three tensor identities before the fixed destruction tail, end its native borrow lifetime, and free the exact native `17*N*T` carrier. | Every exact authentic already-issued generation releases idempotently, including after successor, seek, or close; no per-generation tombstone or fallback; active borrow is `invalid-state`. Caller-region shell storage is not individually reclaimed. |
 
 No batch dimension, sequence dimension, or mask broadcasting is permitted. A batch
 owns exactly two CPU dense i64 planes and one CPU dense one-byte bool plane with
@@ -363,7 +363,7 @@ implementation, every long-running Eshkol loop must enclose each next/validate/u
 release interval in one lexical `with-region`. Batch and tensor shells must not cross
 that boundary unless the caller deliberately retains or promotes them and accounts
 for their caller-owned closure/environment/capability storage. The dataset retains
-only current generation/status, not any shell, per-generation authenticator, or
+only the last-issued generation and current status, not any shell, per-generation authenticator, or
 tombstone. This caller-region interpretation is a proposed clarification pending
 integration-owner disposition in
 [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950);

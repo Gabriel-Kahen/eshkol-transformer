@@ -266,6 +266,69 @@
                       message)))
            #f)))
 
+    (define d1-token-region-close-failure-marker
+      (list 'd1-token-region-close-failure))
+    (define d1-token-region-exception-marker
+      (list 'd1-token-region-exception))
+
+    (define (d1-token-region-open operation)
+      (guard
+       (caught
+        (#t
+         (d1-token-reraise-or-wrap
+          'internal operation "shard validation region open failed"
+          (if (and (error-object? caught)
+                   (string=? (error-object-message caught)
+                             "region-open: failed to create region"))
+              'allocation-failed
+              'region-open-failed)
+          caught)))
+       (region-open 'd1-shard-validation 4096)))
+
+    (define (d1-token-region-close-fail operation)
+      (et-e1b-private-raise
+       'internal operation "shard validation region close failed"
+       (list (list 'source-domain 'eshkol-runtime)
+             (list 'source-code 'region-close-failed)
+             (list 'source-message "region handle close failed"))
+       #f))
+
+    (define-syntax d1-token-with-shard-region
+      (syntax-rules ()
+        ((_ operation escape body ...)
+         ;; The handler is installed after region-open. Conditions allocated by
+         ;; shard validation are explicitly promoted before the region closes.
+         (let ((region (d1-token-region-open operation)))
+           (let ((result
+                  (guard
+                   (caught
+                    (#t
+                     (guard
+                      (close-error
+                       (#t d1-token-region-close-failure-marker))
+                      (let ((promoted (region-close region caught)))
+                        (vector-set! escape 0 promoted)
+                        d1-token-region-exception-marker))))
+                   (begin body ...))))
+             (cond
+              ((eq? result d1-token-region-exception-marker)
+               (raise (vector-ref escape 0)))
+              ((eq? result d1-token-region-close-failure-marker)
+               ;; A keep-promotion failure leaves the region live. A no-keep
+               ;; close reclaims it before the parent-owned error is created.
+               (guard (ignored (#t #f)) (region-close region))
+               (d1-token-region-close-fail operation))
+              (else
+               (let ((closed
+                      (guard
+                       (close-error
+                        (#t d1-token-region-close-failure-marker))
+                       (region-close region)
+                       #t)))
+                 (if (eq? closed d1-token-region-close-failure-marker)
+                     (d1-token-region-close-fail operation)
+                     result)))))))))
+
     (define (d1-token-valid-nonnegative-integer? value)
       (and (integer? value) (exact? value)
            (>= value 0) (<= value d1-token-max-i64)))
@@ -812,7 +875,11 @@
                   (let ((token (d1-token-read-u64-le bytes (+ header-bytes (* offset 8)))))
                     (if (< token vocab-size)
                         (token-loop (+ offset 1))
-                        (d1-token-fail 'corrupt-data operation "token outside [0,vocab-size)")))))))))
+                        (let ((unreachable
+                               (d1-token-fail
+                                'corrupt-data operation
+                                "token outside [0,vocab-size)")))
+                          unreachable)))))))))
 
     (define (d1-token-corpus-validate-impl make-summary directory
                                            maximum-manifest-bytes maximum-shard-bytes
@@ -868,45 +935,97 @@
                    (d1-token-fingerprint-from bytes d1-token-manifest-fixed-header-bytes
                                               fingerprint-bytes operation)))
               (d1-token-validate-digest bytes operation)
-              (let record-loop ((index 0) (count-sum 0) (byte-sum 0))
-                (if (= index shard-count)
-                    (begin
-                      (if (or (not (= count-sum total-tokens))
-                              (not (= byte-sum total-shard-bytes)))
-                          (d1-token-fail 'corrupt-data operation "manifest totals do not match records")
-                          #t)
-                      (make-summary shard-count total-tokens vocab-size
-                                    shard-token-limit fingerprint
-                                    total-shard-bytes bytes))
-                    (let* ((offset (+ header-bytes (* index record-bytes)))
-                           (record-index (d1-token-read-u64-le bytes offset))
-                           (record-count (d1-token-read-u64-le bytes (+ offset 8)))
-                           (record-file-bytes (d1-token-read-u64-le bytes (+ offset 16)))
-                           (record-digest (bytevector-copy bytes (+ offset 24) (+ offset 56)))
-                           (last? (= index (- shard-count 1))))
-                      (if (or (not (= record-index index))
-                              (not (d1-token-valid-nonnegative-integer? record-index))
-                              (not (d1-token-valid-nonnegative-integer? record-count))
-                              (> record-count d1-token-max-encoded-tokens)
-                              (not (d1-token-valid-nonnegative-integer? record-file-bytes))
-                              (> record-file-bytes
-                                 (+ d1-token-max-sha-covered-bytes
-                                    d1-token-checksum-bytes))
-                              (= record-count 0)
-                              (> record-count shard-token-limit)
-                              (> record-count (- d1-token-max-i64 count-sum))
-                              (> record-file-bytes
-                                 (- d1-token-max-i64 byte-sum))
-                              (and (not last?) (not (= record-count shard-token-limit))))
-                          (d1-token-fail 'corrupt-data operation
-                                         "duplicate, noncontiguous, or noncanonical shard record")
-                          #t)
-                      (d1-token-validate-shard
-                       (d1-token-shard-path directory index) index record-count
-                       record-file-bytes record-digest fingerprint vocab-size
-                       maximum-shard-bytes)
-                      (record-loop (+ index 1) (+ count-sum record-count)
-                                   (+ byte-sum record-file-bytes))))))))))
+              ;; Fixed parent-owned mutable state prevents boxed loop indices
+              ;; and totals from accumulating in the manifest's arena. All
+              ;; changing record arithmetic and shard bytes live in one checked
+              ;; nested region and are reclaimed before the next record.
+              (let ((counters (make-bytevector 24 0))
+                    (escape (vector #f)))
+                (let ((validated
+                       (if (= shard-count 0)
+                           #t
+                           (let record-loop ()
+                             (let ((continue?
+                                    (d1-token-with-shard-region
+                                     operation escape
+                                     (let* ((index
+                                             (d1-token-read-u64-le counters 0))
+                                            (count-sum
+                                             (d1-token-read-u64-le counters 8))
+                                            (byte-sum
+                                             (d1-token-read-u64-le counters 16))
+                                            (offset
+                                             (+ header-bytes
+                                                (* index record-bytes)))
+                                            (record-index
+                                             (d1-token-read-u64-le bytes offset))
+                                            (record-count
+                                             (d1-token-read-u64-le
+                                              bytes (+ offset 8)))
+                                            (record-file-bytes
+                                             (d1-token-read-u64-le
+                                              bytes (+ offset 16)))
+                                            (last? (= index (- shard-count 1))))
+                                       (if (or
+                                            (not (= record-index index))
+                                            (not
+                                             (d1-token-valid-nonnegative-integer?
+                                              record-index))
+                                            (not
+                                             (d1-token-valid-nonnegative-integer?
+                                              record-count))
+                                            (> record-count
+                                               d1-token-max-encoded-tokens)
+                                            (not
+                                             (d1-token-valid-nonnegative-integer?
+                                              record-file-bytes))
+                                            (> record-file-bytes
+                                               (+ d1-token-max-sha-covered-bytes
+                                                  d1-token-checksum-bytes))
+                                            (= record-count 0)
+                                            (> record-count shard-token-limit)
+                                            (> record-count
+                                               (- d1-token-max-i64 count-sum))
+                                            (> record-file-bytes
+                                               (- d1-token-max-i64 byte-sum))
+                                            (and (not last?)
+                                                 (not (= record-count
+                                                         shard-token-limit))))
+                                           (d1-token-fail
+                                            'corrupt-data operation
+                                            "duplicate, noncontiguous, or noncanonical shard record")
+                                           #t)
+                                       (let ((record-digest
+                                              (bytevector-copy
+                                               bytes (+ offset 24)
+                                               (+ offset 56))))
+                                         (d1-token-validate-shard
+                                          (d1-token-shard-path directory index)
+                                          index record-count record-file-bytes
+                                          record-digest fingerprint vocab-size
+                                          maximum-shard-bytes))
+                                       (d1-token-write-u64-le!
+                                        counters 0 (+ index 1))
+                                       (d1-token-write-u64-le!
+                                        counters 8 (+ count-sum record-count))
+                                       (d1-token-write-u64-le!
+                                        counters 16 (+ byte-sum record-file-bytes))
+                                       (not last?)))))
+                               (if continue? (record-loop) #t))))))
+                  ;; Totals and the authoritative summary are evaluated once,
+                  ;; after the final region is closed. No terminal region open
+                  ;; can precede the accepted totals mismatch error.
+                  (let ((count-sum (d1-token-read-u64-le counters 8))
+                        (byte-sum (d1-token-read-u64-le counters 16)))
+                    (if (or (not (= count-sum total-tokens))
+                            (not (= byte-sum total-shard-bytes)))
+                        (d1-token-fail
+                         'corrupt-data operation
+                         "manifest totals do not match records")
+                        #t)
+                    (make-summary shard-count total-tokens vocab-size
+                                  shard-token-limit fingerprint
+                                  total-shard-bytes bytes)))))))))))
 
     (define registry '())
     (define (entry-ref entry wanted)

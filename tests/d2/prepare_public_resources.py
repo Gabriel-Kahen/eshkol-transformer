@@ -72,6 +72,30 @@ def build(output: Path) -> None:
     )
     write_d1_resource(large, shards, fingerprint=FINGERPRINT, vocab=VOCAB)
 
+    # Equal-token corpora whose only material difference is shard topology.
+    # Equal-length leaf names keep path allocation from biasing the retained
+    # arena comparison.
+    arena_one = output / "one-shards"
+    arena_one.mkdir()
+    write_d1_resource(
+        arena_one, (tuple(index % VOCAB for index in range(1024)),),
+        fingerprint=FINGERPRINT, vocab=VOCAB,
+    )
+    arena_many = output / "many-shard"
+    arena_many.mkdir()
+    write_d1_resource(
+        arena_many, tuple((index % VOCAB,) for index in range(1024)),
+        fingerprint=FINGERPRINT, vocab=VOCAB,
+    )
+    if (arena_one / "manifest.etm").stat().st_size != 279:
+        raise AssertionError("D2 one-shard arena manifest size drifted")
+    if (arena_many / "manifest.etm").stat().st_size != 57_567:
+        raise AssertionError("D2 many-shard arena manifest size drifted")
+    if (arena_one / "shard-0000000000000000.ets").stat().st_size != 8_399:
+        raise AssertionError("D2 one-shard arena fixture size drifted")
+    if (arena_many / "shard-0000000000000000.ets").stat().st_size != 215:
+        raise AssertionError("D2 many-shard arena fixture size drifted")
+
     missing_manifest = output / "missing-manifest"
     missing_manifest.mkdir()
     shutil.copy2(small / "shard-0000000000000000.ets", missing_manifest)

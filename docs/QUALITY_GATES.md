@@ -59,16 +59,23 @@
   across the region is caller-owned and must be separately accounted. This gate is
   the implementation requirement described by the pending lifetime clarification in
   [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+- Equal-token one-shard and many-shard corpora must prove that optimized-AOT open
+  retention differs by no more than one exact admitted working payload and that a
+  packed batch crossing the same tokens retains exactly equal arena bytes. Exact
+  limit admission must pass and one-over must fail.
 - D1 manifest-last publication and corrupt/missing/mismatched tokenizer/shard
   negatives, on-demand revalidation after namespace mutation, cursor failure
   atomicity, invalid-config-before-I/O precedence, final-live-batch-before-EOS, and
-  release-after-close idempotence.
+  idempotent release of every authentic already-issued generation after successor,
+  seek, and close.
 - Exact `ESHKDCU1` 1.0 `208+F` physical/canonical/error-precedence matrices, exact
   58-global/52-export source-composed aggregate manifests, trusted-root uniqueness,
   hostile include/link/privacy negatives, and affected A0/D1/T1/T2/I2/N2/Q0 gates.
   The private boundary must admit exactly the dataset and batch compiled-constructor
   code identities, retain no shell/environment pointer, and reject treating that
   per-process mechanism as a public, serialized, or cross-aggregate ABI.
+- The exact generated source closure and every public AOT executable must be scanned
+  for production-language and dependency isolation.
 - Supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 CI at the proposed exact head,
   followed by independent D2-R. ROADMAP may remain only `review` until approval,
   merge, merge-head retest, and acceptance-document follow-up.

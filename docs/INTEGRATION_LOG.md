@@ -12,7 +12,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   explicitly accepted.
 - **Proposed lifetime clarification:** replace references to GC-managed generation
   capabilities with caller-region-managed Eshkol capabilities. The pinned runtime
-  has no tracing collector. `token-batch-release!` invalidates the current generation
+  has no tracing collector. `token-batch-release!` invalidates the live generation
   and ends the native borrow/carrier lifetime, freeing the exact native `17*N*T`
   carrier; it does not individually reclaim the batch/tensor closure, environment,
   or capability-vector objects allocated in the caller's Eshkol region. A
@@ -52,8 +52,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `231f9354f14389db15faac7820ef23dc038ae941`; independent approval and merge remain
   pending.
 - **Public contract and A0 amendments:** the delta is exactly the ten existing A0
-  dataset/batch operations plus unary `token-batch-release!`. The three batch
-  accessors return stable read-only state-backed opaque tensor identities, not newly
+  dataset/batch operations plus unary `token-batch-release!`. Every exact authentic
+  generation already issued by a dataset remains an idempotent release authority,
+  including after a successor, seek, or close; all other stale access remains
+  `invalid-state`. The three batch accessors return stable read-only state-backed
+  opaque tensor identities, not newly
   owned clones. `token-dataset-cursor` returns newly owned detached mutable canonical
   bytevector storage, not an immutable registry object. The dataset config is the
   exact ten-key acyclic flat list specified in [D2_SHARD_LOADER.md](D2_SHARD_LOADER.md),
@@ -66,7 +69,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   `bool[N,T]` loss-mask plane, payload `17*N*T`. One dataset has one current native
   registry entry and at most one live batch. Authenticated shell copies alias that
   generation. Release invalidates the batch and three tensor identities before the
-  fixed destruction tail, is idempotent only for the exact already-released current
+  fixed destruction tail, is idempotent for every exact authentic already-issued
   generation, and retains no per-generation carrier/tombstone. Scoped K1 views
   cannot escape; active borrow blocks release/close before mutation. Generation
   exhaustion never wraps.
