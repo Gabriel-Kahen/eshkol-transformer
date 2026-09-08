@@ -49,6 +49,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
+| N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | Exact contract proposal #66/#1 awaiting acceptance; independent numerical/oracle and ownership/packaging review; native and supported gates pending | active |
 | M3 | Decoder-only GPT configuration, blocks and tied LM head | N2, A2, P1 | Full forward/gradient oracle parity | planned |
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | Seeded sampling and cache/no-cache parity | planned |

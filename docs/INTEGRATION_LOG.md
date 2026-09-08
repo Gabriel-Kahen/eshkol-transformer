@@ -1451,3 +1451,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [I2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53#issuecomment-5526955464);
   [I2 supported CI run 33711937185](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33711937185);
   [upstream LayerNorm AD evidence](https://github.com/tsotchke/eshkol/issues/551#issuecomment-5526758405).
+
+## N3K — bounded diagnostic numerical provider (proposal)
+
+- **Status:** active proposal, not accepted or frozen. Tracking [#66](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/66), parent #1; base `231f9354f14389db15faac7820ef23dc038ae941`.
+- **Direction:** [accepted bounded profile/prerequisite split](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584217290), based on #65 audit `a97c1095b542f1f86f3273139d39af2d8ae47e93` read as evidence only.
+- **Proposed contract:** [exact provider/schema/RNG proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584346444), recorded in `docs/N3K_PRIMITIVES.md`. Integration acceptance is required before native interface freeze. Existing N2/A2/K1 artifacts remain immutable; public model/lifecycle/transport, ingress, loss reduction, D2/O2, checkpoints and composition are excluded.
+- **Independent preparation:** Astra-high reviews for numerical semantics/oracles, composition/initializer bits/errors, and ownership/fenv/packaging. Development-only reference tests cover every new mathematical row, fixed edge order and initializer bits/continuation/unique-storage reference schedule. This is not native execution or supported-lane evidence.
