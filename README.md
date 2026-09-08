@@ -95,6 +95,15 @@ exercises those kernels through accepted I2 f32 and I1 exact-i64 borrows. N2 add
 no carrier, canonical K1 resolver, compiler-autodiff claim, accelerator, mixed
 precision, or fallback.
 
+N3K adds a separate explicit ABI 1.0 provider for the accepted two-token diagnostic
+profile at `build/n3k/libeshkol_transformer_n3k.a`, discovered only through
+`et_n3k_kernel_provider_v1`. Its exact embedding, bias-free linear, GELU, residual,
+layout/VJP, ordered-sum, and explicit-state matrix-initializer contracts are in
+[docs/N3K_PRIMITIVES.md](docs/N3K_PRIMITIVES.md). Run `make test-n3k` for independent
+numerical/gradient references, owned I1/I2 borrows, native failure atomicity,
+private pinned-Eshkol AOT, sanitizers, and package isolation. This provider adds no
+public model, RNG transport, initializer registry, or provider composition.
+
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
 `include/eshkol_transformer/indexed_cross_entropy.h`. It exposes only explicit K1
