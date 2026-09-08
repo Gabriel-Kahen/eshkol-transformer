@@ -116,6 +116,10 @@ class InitializerReferenceTests(unittest.TestCase):
             numeric = ((lane >> 8) * 2.**-24 - 0.5) * 2.**-4
             self.assertEqual(weight_bits(lane), struct.unpack("<I", struct.pack("<f", numeric))[0])
             self.assertEqual(weight_bits(lane), weight_bits(lane & 0xffffff00))
+        counter = 0x2841331e2da21113bbb7d390f60f4efa
+        self.assertEqual(philox(counter, 0), (0, 0xffffffff, 0x80000000, 0x7fffffff))
+        words, _ = initialize((2, 4), (1, 0, signed(counter & U64), signed(counter >> 64)))
+        self.assertEqual(words[:4], [0xbd000000, 0x3cfffffe, 0, 0xb1800000])
 
     def test_every_exact_row_whole_tensor_and_continuation(self) -> None:
         for shape in MATRIX_SHAPES:
@@ -148,6 +152,14 @@ class InitializerReferenceTests(unittest.TestCase):
         for state in (exhausted, (1, 7, -2, -1)):
             with self.assertRaises(OverflowError):
                 initialize(shape, state)
+
+    def test_full_seed_word_signed_encoding(self) -> None:
+        for seed in (0, 1729, (1 << 63) - 1, -(1 << 63), -1):
+            words, next_state = initialize((2, 4), (1, seed, 0, 0))
+            expected = [weight_bits(lane) for counter in range(2)
+                        for lane in philox(counter, seed & U64)]
+            self.assertEqual(words, expected)
+            self.assertEqual(next_state, (1, seed, 2, 0))
 
     def test_unique_storage_order_is_input_order_invariant_and_draws_once(self) -> None:
         entries = [("z.token", "tied", (256, 4)), ("b.position", "position", (2, 4)),

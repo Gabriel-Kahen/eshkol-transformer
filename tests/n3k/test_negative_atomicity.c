@@ -51,6 +51,31 @@ static void all_rows(et_kernel_runtime *rt) {
         }
       }
       setup(f,&caps[ci],oi,ri);
+      if(strstr(f->r.operation,"embedding")) {
+        const int64_t bad[]={-1,(int64_t)f->row[2],INT64_MIN,INT64_MAX};
+        for(size_t bi=0;bi<COUNT(bad);++bi) for(size_t token=0;token<2;++token) {
+          f->ib[0].i[token]=bad[bi];
+          unchanged_reject(rt,f,ET_KERNEL_ERROR_INVALID_ARGUMENT,ET_KERNEL_CODE_PROVIDER_REJECTED);
+          f->ib[0].i[token]=0;
+        }
+        if(strstr(f->r.operation,"backward")) {
+          f->ib[1].f[3]=FLT_MAX;f->ib[1].f[7]=FLT_MAX;
+          unchanged_reject(rt,f,ET_KERNEL_ERROR_INVALID_ARGUMENT,ET_KERNEL_CODE_PROVIDER_REJECTED);
+          f->ib[1].f[3]=f->ib[1].f[7]=0.125f;
+        }
+      }
+      const int ordinary=strstr(f->r.operation,"embedding") ||
+        strstr(f->r.operation,"linear") || strstr(f->r.operation,"gelu");
+      for(size_t i=0;i<ni;++i) for(size_t j=i+1;j<ni;++j) {
+        void *saved=f->in[j].data;
+        if(ordinary) {
+          f->in[j].data=f->in[i].data;
+          unchanged_reject(rt,f,ET_KERNEL_ERROR_INVALID_ARGUMENT,ET_KERNEL_CODE_PROVIDER_REJECTED);
+        }
+        f->in[j].data=(unsigned char *)f->in[i].data+8;
+        unchanged_reject(rt,f,ET_KERNEL_ERROR_INVALID_ARGUMENT,ET_KERNEL_CODE_PROVIDER_REJECTED);
+        f->in[j].data=saved;
+      }
       for(size_t o=0;o<no;++o) for(size_t i=0;i<ni;++i) {
         void *saved=f->out[o].data;f->out[o].data=f->in[i].data;
         unchanged_reject(rt,f,ET_KERNEL_ERROR_INVALID_ARGUMENT,ET_KERNEL_CODE_ALIASING_OUTPUT);f->out[o].data=saved;

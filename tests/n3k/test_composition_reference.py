@@ -105,6 +105,8 @@ class CompositionReferenceTests(unittest.TestCase):
         self.assertNotEqual(ordered_sum(q, v, k), expected)
         for operands in ((q, k), (q, v), (k, v), (q, k, k), (q, q, v)):
             self.assertNotEqual(ordered_sum(*operands), expected)
+        self.assertEqual(ordered_sum([1.], [16777216.], [-16777216.]), [0.])
+        self.assertEqual(ordered_sum([1.], ordered_sum([16777216.], [-16777216.])), [1.])
 
     def test_sum_analytic_vjp_all_edges(self) -> None:
         upstream = [0.125 * (i - 2) for i in range(8)]
