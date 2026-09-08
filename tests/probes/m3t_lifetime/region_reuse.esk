@@ -1,0 +1,15 @@
+;;; Development-only probe of one outer value and reclaimed transient vectors.
+;;; This is not a public aggregate or flat-RSS claim.
+(define state (vector 0))
+(define (tick i)
+  (if (= i 30000)
+      #t
+      (begin
+        (with-region 'm3t-probe
+          (let ((scratch (make-vector 128 i)))
+            (vector-set! state 0 (+ (vector-ref state 0) 1))
+            (if (not (= (vector-ref scratch 127) i)) (exit 1))))
+        (tick (+ i 1)))))
+(tick 0)
+(display (vector-ref state 0))
+(newline)
