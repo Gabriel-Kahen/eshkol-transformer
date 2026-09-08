@@ -1,15 +1,16 @@
-# N3K bounded diagnostic primitives — contract proposal
+# N3K bounded diagnostic primitives
 
-Status: **proposed; awaiting explicit integration acceptance**. Tracking #66,
+Status: **active implementation; contract accepted with corrections**.
+Acceptance: https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584383610. Tracking #66,
 parent #1, prerequisite audit #65 at `a97c1095b542f1f86f3273139d39af2d8ae47e93`.
 Base is merged main `231f9354f14389db15faac7820ef23dc038ae941`.
 The profile direction is accepted at
 https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584217290;
-that does not accept the specific boundary proposed here.
+The specific boundary below incorporates the subsequent acceptance corrections.
 
 ## Provider identity and immutable predecessors
 
-Proposed C11/C++ header `include/eshkol_transformer/n3k_primitives_abi.h`, macros
+C11/C++ header `include/eshkol_transformer/n3k_primitives_abi.h`, macros
 `ET_N3K_PRIMITIVES_ABI_MAJOR=1u`, `ET_N3K_PRIMITIVES_ABI_MINOR=0u`, sole accessor
 `const et_kernel_provider_v1 *et_n3k_kernel_provider_v1(void);`.
 Archive `build/n3k/libeshkol_transformer_n3k.a`, one object
@@ -28,7 +29,8 @@ No provider composition is implemented or inferred.
 ## Exact K1 rows and ordered operands
 
 Every row has min=max for every dimension. Only request compute dtype `f32`, device
-`cpu`, deterministic true are advertised. Every listed operation/row Cartesian
+`cpu`, deterministic true are advertised. A request with deterministic=0 merely
+does not require determinism and remains admitted; execution remains deterministic. Every listed operation/row Cartesian
 combination is implemented. Zero, neighboring extents, missing rank/row, bias,
 ReLU, normalization, dropout, and unlisted operations are unsupported.
 
@@ -94,7 +96,10 @@ composition must combine all edges before one canonical I2 contribution.
 ## Initializer algorithm and caller draw schedule
 
 Algorithm identity is `n3k.philox4x32-10.uniform-f32.v1`; state belongs to this
-algorithm, distinct from N2 dropout despite the compatible integer encoding.
+algorithm, distinct from N2 dropout despite the compatible integer encoding. This numeric
+encoding neither authenticates algorithm identity nor separates streams: equal
+key/counter inputs share Philox words. Future typed transport/composition must
+carry and validate algorithm identity; no such transport or checkpoint is added here.
 State `i64[4]` is numeric version +1, full 64-bit seed/key, low and high words of a
 128-bit block counter. Unsigned words above INT64_MAX encode as numeric `u-2^64`;
 decode modulo 2^64 without implementation-defined out-of-range casts. Diagnostic
@@ -144,11 +149,13 @@ naturally aligned, exact dtype, dense row-major, zero-offset CPU with K1-checked
 spans. Outputs are fully overwritten on success, mutually disjoint and disjoint
 from all inputs; K1 alias failures use INVALID_ARGUMENT/ALIASING_OUTPUT. Input
 ranges must be pairwise disjoint except residual/sum forward allows equal complete
-descriptors/storage for per-edge reuse; partial overlaps always reject with
+semantic views/storage for per-edge reuse (equal data range, dtype, device,
+layout, offset, rank and extents; descriptor/shape-array pointer identity is not required); partial overlaps always reject with
 INVALID_ARGUMENT/PROVIDER_REJECTED. Other input overlaps reject identically.
 Caller keeps request/view metadata/storage stable through validate/invoke and
-serializes FP controls; no storage is retained. Direct invoke requires successful
-validation and stable inputs, as K1 specifies.
+serializes FP controls; no storage is retained. Direct invoke requires successful full K1 generic checks plus provider
+validation and stable inputs, as K1 specifies; the provider callback alone does not
+replace K1 output-alias, reserved-field, or generic descriptor admission.
 
 Requires x86-64 IEEE binary32, eight-bit bytes, FLT_EVAL_METHOD=0; compile without
 fast-math/contraction/excess precision. Validate both x87 and MXCSR round-to-nearest
@@ -172,11 +179,17 @@ SHAPE_MISMATCH/INVALID_SHAPE; dtype mismatch DTYPE_MISMATCH/INVALID_TEXT;
 operand/request device mismatch DEVICE_MISMATCH/INVALID_BUFFER through K1;
 noncontiguity/offset NONCONTIGUOUS/INVALID_BUFFER; truncated prefix/stride
 VERSION_MISMATCH/INVALID_STRUCT_SIZE; malformed count/alignment/span
-INVALID_ARGUMENT/INVALID_BUFFER (K1 INTEGER_OVERFLOW for count/span arithmetic);
+INVALID_ARGUMENT/INVALID_BUFFER (K1 INTEGER_OVERFLOW for tensor-table count/span arithmetic);
+tensor shape-product overflow SHAPE_MISMATCH/INTEGER_OVERFLOW; tensor-data address
+overflow INVALID_ARGUMENT/ALIASING_OUTPUT through K1 and
+INVALID_ARGUMENT/PROVIDER_REJECTED directly;
 view byte length mismatch SHAPE_MISMATCH/INVALID_BUFFER through K1; admitted data
 alignment INVALID_ARGUMENT/PROVIDER_REJECTED; nonfinite input/intermediate/result,
 invalid ID and forbidden input overlap INVALID_ARGUMENT/PROVIDER_REJECTED;
-unsupported FP control UNSUPPORTED/PROVIDER_REJECTED. No allocations, casting,
+unsupported FP control UNSUPPORTED/PROVIDER_REJECTED. Direct provider view-device
+failures use DEVICE_MISMATCH/INVALID_TEXT and view-byte/data-span failures use
+INVALID_ARGUMENT/PROVIDER_REJECTED, matching N2; public K1 categories above remain
+authoritative for dispatch. No allocations, casting,
 broadcasting, fallback, device transfer, generic fill, general bool/i64 ingress,
 loss reduction, compiler AD, optimizer/model lifecycle or public Eshkol transport.
 
