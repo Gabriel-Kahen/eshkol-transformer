@@ -87,6 +87,8 @@ struct et_o2_optimizer_state {
   et_o2_config config;
   et_o2_state_entry *entries;
   et_o2_optimizer_state_handle **handles;
+  et_f32_tensor **owned_clones;
+  size_t owned_clone_ledger_count;
   uint64_t completed_updates;
   uint64_t owned_clone_count;
   uint32_t provider_major;
@@ -1022,6 +1024,50 @@ cleanup:
   return result;
 }
 
+static et_f32_tensor *et_o2_state_resolution_moment(
+    const et_o2_optimizer_state *state, size_t ledger_index) {
+  return (ledger_index % 2u) == 0u
+             ? state->entries[ledger_index / 2u].exp_avg
+             : state->entries[ledger_index / 2u].exp_avg_sq;
+}
+
+static int32_t et_o2_validate_state_owner_ledger(
+    et_o2_optimizer_state *state, uint32_t category, const char *operation,
+    et_o2_error_v1 *error) {
+  size_t expected_count;
+  size_t index;
+  if (state->count == 0u || state->count > ET_O2_MAX_PARAMETERS ||
+      state->entries == NULL || state->handles == NULL ||
+      state->owned_clones == NULL) {
+    return et_o2_fail(error, category, ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer state owner ledger is missing");
+  }
+  expected_count = state->count * 2u;
+  if (state->owned_clone_ledger_count != expected_count ||
+      state->owned_clone_count != (uint64_t)expected_count ||
+      state->owned_clone_count > (uint64_t)et_o2_owned_state_clones) {
+    return et_o2_fail(error, category, ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer state ownership metadata is inconsistent");
+  }
+  for (index = 0u; index < expected_count; ++index) {
+    et_f32_tensor *owned = state->owned_clones[index];
+    size_t other;
+    if (owned == NULL || et_o2_state_resolution_moment(state, index) != owned ||
+        et_f32_tensor_is_live_v1(owned) != 1) {
+      return et_o2_fail(error, category, ET_O2_CODE_OWNER_CONFLICT, operation,
+                        "optimizer state moment is not its exact owned clone");
+    }
+    for (other = index + 1u; other < expected_count; ++other) {
+      if (owned == state->owned_clones[other]) {
+        return et_o2_fail(error, category, ET_O2_CODE_OWNER_CONFLICT,
+                          operation,
+                          "optimizer state owner ledger contains a duplicate");
+      }
+    }
+  }
+  return ET_O2_STATUS_OK;
+}
+
 static int32_t et_o2_validate_state_for_load(et_o2_optimizer_state *state,
                                              et_o2_error_v1 *error) {
   size_t entry_count;
@@ -1032,13 +1078,10 @@ static int32_t et_o2_validate_state_for_load(et_o2_optimizer_state *state,
                       ET_O2_CODE_PROVIDER_MISMATCH, "optimizer-load-state!",
                       "optimizer state provider invariant is broken");
   }
-  if (state->count == 0u || state->count > ET_O2_MAX_PARAMETERS ||
-      state->entries == NULL || state->handles == NULL ||
-      state->owned_clone_count != (uint64_t)(state->count * 2u) ||
-      state->owned_clone_count > (uint64_t)et_o2_owned_state_clones) {
-    return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
-                      ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
-                      "optimizer state ownership metadata is inconsistent");
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_CORRUPT_DATA, "optimizer-load-state!", error) !=
+      0) {
+    return ET_O2_STATUS_CORRUPT_DATA;
   }
   if (!et_o2_config_valid(&state->config)) {
     return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
@@ -1069,12 +1112,6 @@ static int32_t et_o2_validate_state_for_load(et_o2_optimizer_state *state,
     }
   }
   for (index = 0u; index < state->count; ++index) {
-    if (et_f32_tensor_is_live_v1(state->entries[index].exp_avg) != 1 ||
-        et_f32_tensor_is_live_v1(state->entries[index].exp_avg_sq) != 1) {
-      return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
-                        ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
-                        "optimizer state moment owner is invalid");
-    }
     result =
         et_o2_validate_state_moment(state->entries[index].exp_avg, 0, error);
     if (result != 0) {
@@ -1084,23 +1121,6 @@ static int32_t et_o2_validate_state_for_load(et_o2_optimizer_state *state,
         et_o2_validate_state_moment(state->entries[index].exp_avg_sq, 1, error);
     if (result != 0) {
       return result;
-    }
-  }
-  for (index = 0u; index < entry_count; ++index) {
-    const et_f32_tensor *left = (index % 2u) == 0u
-                                    ? state->entries[index / 2u].exp_avg
-                                    : state->entries[index / 2u].exp_avg_sq;
-    size_t right_index;
-    for (right_index = index + 1u; right_index < entry_count; ++right_index) {
-      const et_f32_tensor *right =
-          (right_index % 2u) == 0u
-              ? state->entries[right_index / 2u].exp_avg
-              : state->entries[right_index / 2u].exp_avg_sq;
-      if (left == right) {
-        return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
-                          ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
-                          "optimizer state moments are not independent");
-      }
     }
   }
   return ET_O2_STATUS_OK;
@@ -1426,7 +1446,7 @@ int32_t et_o2_optimizer_step_v1(et_o2_optimizer *candidate,
       et_o2_float_from_bits(norm) >
           et_o2_float_from_bits(optimizer->config.clip_max_bits)) {
     clip_factor = et_o2_div(optimizer->config.clip_max_bits, norm);
-    if (!et_o2_bits_positive_finite(clip_factor)) {
+    if (!et_o2_bits_nonnegative_finite(clip_factor)) {
       result =
           et_o2_fail(error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_NONFINITE,
                      "optimizer-step!", "gradient clip factor is invalid");
@@ -1599,19 +1619,12 @@ et_o2_optimizer_schedule_factor_bits_v1(const et_o2_optimizer *candidate,
   return et_o2_success(error);
 }
 
-static void et_o2_release_owned_state_prefix(et_o2_optimizer_state *state,
-                                             size_t entry_count) {
+static void et_o2_release_owned_state_prefix(et_o2_optimizer_state *state) {
   size_t index;
-  for (index = 0u; index < entry_count; ++index) {
-    if (state->entries[index].exp_avg_sq != NULL) {
-      (void)et_f32_owned_tensor_release_v1(state->entries[index].exp_avg_sq,
-                                           NULL);
-      state->entries[index].exp_avg_sq = NULL;
-      et_o2_owned_state_clones--;
-    }
-    if (state->entries[index].exp_avg != NULL) {
-      (void)et_f32_owned_tensor_release_v1(state->entries[index].exp_avg, NULL);
-      state->entries[index].exp_avg = NULL;
+  for (index = 0u; index < state->owned_clone_ledger_count; ++index) {
+    if (state->owned_clones[index] != NULL) {
+      (void)et_f32_owned_tensor_release_v1(state->owned_clones[index], NULL);
+      state->owned_clones[index] = NULL;
       et_o2_owned_state_clones--;
     }
   }
@@ -1647,14 +1660,18 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
                                                        sizeof(*state->entries));
     state->handles = (et_o2_optimizer_state_handle **)et_o2_calloc(
         optimizer->count * 2u, sizeof(*state->handles));
+    state->owned_clones = (et_f32_tensor **)et_o2_calloc(
+        optimizer->count * 2u, sizeof(*state->owned_clones));
   }
-  if (state == NULL || state->entries == NULL || state->handles == NULL) {
+  if (state == NULL || state->entries == NULL || state->handles == NULL ||
+      state->owned_clones == NULL) {
     result =
         et_o2_fail(error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_ALLOCATION_FAILED,
                    "optimizer-state", "cannot allocate optimizer state owner");
     goto cleanup;
   }
   state->count = optimizer->count;
+  state->owned_clone_ledger_count = optimizer->count * 2u;
   state->config = optimizer->config;
   state->completed_updates = optimizer->completed_updates;
   state->provider_major = ET_O2_PROVIDER_ABI_MAJOR;
@@ -1664,7 +1681,7 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     state->entries[index].options = optimizer->entries[index].options;
     memset(&i2_error, 0, sizeof(i2_error));
     if (et_f32_owned_tensor_clone_v1(optimizer->entries[index].exp_avg,
-                                     &state->entries[index].exp_avg,
+                                     &state->owned_clones[index * 2u],
                                      &i2_error) != 0) {
       result = et_o2_from_i2(&i2_error, error, "optimizer-state",
                              ET_O2_STATUS_INTERNAL);
@@ -1672,8 +1689,9 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     }
     state->owned_clone_count++;
     et_o2_owned_state_clones++;
+    state->entries[index].exp_avg = state->owned_clones[index * 2u];
     if (et_f32_owned_tensor_clone_v1(optimizer->entries[index].exp_avg_sq,
-                                     &state->entries[index].exp_avg_sq,
+                                     &state->owned_clones[index * 2u + 1u],
                                      &i2_error) != 0) {
       result = et_o2_from_i2(&i2_error, error, "optimizer-state",
                              ET_O2_STATUS_INTERNAL);
@@ -1681,6 +1699,7 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     }
     state->owned_clone_count++;
     et_o2_owned_state_clones++;
+    state->entries[index].exp_avg_sq = state->owned_clones[index * 2u + 1u];
   }
   for (handle_index = 0u; handle_index < optimizer->count * 2u;
        ++handle_index) {
@@ -1720,9 +1739,10 @@ cleanup:
         free(state->handles[handle_index]);
       }
     }
-    if (state->entries != NULL) {
-      et_o2_release_owned_state_prefix(state, optimizer->count);
+    if (state->owned_clones != NULL) {
+      et_o2_release_owned_state_prefix(state);
     }
+    free(state->owned_clones);
     free(state->handles);
     free(state->entries);
     free(state);
@@ -1936,6 +1956,11 @@ int32_t et_o2_optimizer_state_borrow_begin_v1(
                       ET_O2_CODE_INVALID_HANDLE, "optimizer-state-borrow",
                       "state-backed moment handle does not match its owner");
   }
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_INVALID_STATE, "optimizer-state-borrow",
+          error) != 0) {
+    return ET_O2_STATUS_INVALID_STATE;
+  }
   borrow = (et_o2_optimizer_state_borrow *)et_o2_calloc(1u, sizeof(*borrow));
   if (borrow == NULL) {
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
@@ -2047,13 +2072,10 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
                       ET_O2_CODE_PROVIDER_MISMATCH, "optimizer-state-release!",
                       "optimizer state provider invariant is broken");
   }
-  if (state->count == 0u || state->count > ET_O2_MAX_PARAMETERS ||
-      state->entries == NULL || state->handles == NULL ||
-      state->owned_clone_count != (uint64_t)(state->count * 2u) ||
-      state->owned_clone_count > (uint64_t)et_o2_owned_state_clones) {
-    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
-                      ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
-                      "optimizer state ownership ledger is invalid");
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_INVALID_STATE, "optimizer-state-release!",
+          error) != 0) {
+    return ET_O2_STATUS_INVALID_STATE;
   }
   entry_count = state->count * 2u;
   for (index = 0u; index < entry_count; ++index) {
@@ -2066,63 +2088,39 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
                         "state-backed handle ledger is invalid");
     }
   }
-  for (index = 0u; index < state->count; ++index) {
-    if (et_f32_tensor_is_live_v1(state->entries[index].exp_avg) != 1 ||
-        et_f32_tensor_is_live_v1(state->entries[index].exp_avg_sq) != 1 ||
-        state->entries[index].exp_avg == state->entries[index].exp_avg_sq) {
-      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
-                        ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
-                        "owned moment ledger is invalid");
-    }
-  }
-  for (index = 0u; index < entry_count; ++index) {
-    const et_f32_tensor *left = (index % 2u) == 0u
-                                    ? state->entries[index / 2u].exp_avg
-                                    : state->entries[index / 2u].exp_avg_sq;
-    size_t right_index;
-    for (right_index = index + 1u; right_index < entry_count; ++right_index) {
-      const et_f32_tensor *right =
-          (right_index % 2u) == 0u
-              ? state->entries[right_index / 2u].exp_avg
-              : state->entries[right_index / 2u].exp_avg_sq;
-      if (left == right) {
-        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
-                          ET_O2_CODE_OWNER_CONFLICT, "optimizer-state-release!",
-                          "owned moment ledger contains a duplicate owner");
-      }
-    }
-  }
   state->lifecycle = ET_O2_OPTIMIZER_STATE_RELEASING;
   for (index = 0u; index < entry_count; ++index) {
     state->handles[index]->live = 0u;
   }
-  for (index = 0u; index < state->count; ++index) {
-    et_f32_tensor *owned[2] = {state->entries[index].exp_avg,
-                               state->entries[index].exp_avg_sq};
-    size_t moment;
-    for (moment = 0u; moment < 2u; ++moment) {
-      int32_t status = et_f32_owned_tensor_release_v1(owned[moment], NULL);
+  for (index = 0u; index < entry_count; ++index) {
+    int32_t status =
+        et_f32_owned_tensor_release_v1(state->owned_clones[index], NULL);
 #ifdef ET_O2_TESTING
-      if (et_o2_successful_releases >= et_o2_release_limit) {
-        provider_defect = 1;
-      } else {
-        et_o2_successful_releases++;
-      }
-#endif
-      if (status != 0) {
-        provider_defect = 1;
-      }
-      et_o2_owned_state_clones--;
-      state->owned_clone_count--;
+    if (et_o2_successful_releases >= et_o2_release_limit) {
+      provider_defect = 1;
+    } else {
+      et_o2_successful_releases++;
     }
+#endif
+    if (status != 0) {
+      provider_defect = 1;
+    }
+    et_o2_owned_state_clones--;
+    state->owned_clone_count--;
+    state->owned_clones[index] = NULL;
+  }
+  for (index = 0u; index < state->count; ++index) {
     state->entries[index].exp_avg = NULL;
     state->entries[index].exp_avg_sq = NULL;
   }
   for (index = 0u; index < entry_count; ++index) {
     state->handles[index]->owner = NULL;
   }
+  free(state->owned_clones);
   free(state->handles);
   free(state->entries);
+  state->owned_clones = NULL;
+  state->owned_clone_ledger_count = 0u;
   state->handles = NULL;
   state->entries = NULL;
   state->count = 0u;
@@ -2231,6 +2229,65 @@ et_o2_test_state_set_owned_clone_count_v1(et_o2_optimizer_state *candidate,
     return -1;
   }
   state->owned_clone_count = owned_clone_count;
+  return 0;
+}
+
+int32_t et_o2_test_state_set_resolution_from_state_v1(
+    et_o2_optimizer_state *target_candidate, size_t target_index,
+    uint32_t target_moment_kind, et_o2_optimizer_state *source_candidate,
+    size_t source_index, uint32_t source_moment_kind) {
+  et_o2_optimizer_state *target = et_o2_find_state(target_candidate);
+  et_o2_optimizer_state *source = et_o2_find_state(source_candidate);
+  et_f32_tensor *owned;
+  if (target == NULL || source == NULL ||
+      target->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+      source->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+      target->active_borrows != 0u || source->active_borrows != 0u ||
+      target_index >= target->count || source_index >= source->count ||
+      target_moment_kind > ET_O2_MOMENT_EXP_AVG_SQ ||
+      source_moment_kind > ET_O2_MOMENT_EXP_AVG_SQ ||
+      source->owned_clones == NULL ||
+      source->owned_clone_ledger_count != source->count * 2u) {
+    return -1;
+  }
+  owned = source->owned_clones[source_index * 2u + source_moment_kind];
+  if (owned == NULL) {
+    return -1;
+  }
+  if (target_moment_kind == ET_O2_MOMENT_EXP_AVG) {
+    target->entries[target_index].exp_avg = owned;
+  } else {
+    target->entries[target_index].exp_avg_sq = owned;
+  }
+  return 0;
+}
+
+int32_t et_o2_test_state_set_resolution_from_optimizer_v1(
+    et_o2_optimizer_state *target_candidate, size_t target_index,
+    uint32_t target_moment_kind, et_o2_optimizer *source_candidate,
+    size_t source_index, uint32_t source_moment_kind) {
+  et_o2_optimizer_state *target = et_o2_find_state(target_candidate);
+  et_o2_optimizer *source = et_o2_find_optimizer(source_candidate);
+  et_f32_tensor *moment;
+  if (target == NULL || source == NULL ||
+      target->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+      target->active_borrows != 0u || source->busy != 0u ||
+      target_index >= target->count || source_index >= source->count ||
+      target_moment_kind > ET_O2_MOMENT_EXP_AVG_SQ ||
+      source_moment_kind > ET_O2_MOMENT_EXP_AVG_SQ) {
+    return -1;
+  }
+  moment = source_moment_kind == ET_O2_MOMENT_EXP_AVG
+               ? source->entries[source_index].exp_avg
+               : source->entries[source_index].exp_avg_sq;
+  if (moment == NULL || et_f32_tensor_is_live_v1(moment) != 1) {
+    return -1;
+  }
+  if (target_moment_kind == ET_O2_MOMENT_EXP_AVG) {
+    target->entries[target_index].exp_avg = moment;
+  } else {
+    target->entries[target_index].exp_avg_sq = moment;
+  }
   return 0;
 }
 

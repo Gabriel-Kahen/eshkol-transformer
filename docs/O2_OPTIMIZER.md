@@ -204,7 +204,10 @@ binary32; the effective learning rate is then one binary32 multiplication. Normi
 visits canonical unique parameters and row-major elements in order, divides each
 stored numerator by the common I2 normalization weight once, and applies the scaled
 sum-of-squares recurrence in binary32. When clipping is required, `M / norm` is one
-binary32 division. AdamW then follows the parenthesization displayed above, with each
+binary32 division. Its finite nonnegative result is admitted, including positive-zero
+when a positive finite ratio gradually underflows under round-to-nearest-even; that
+zero clipped gradient still advances moments, decay, and the successful-update
+counter. AdamW then follows the parenthesization displayed above, with each
 operator rounded before the next. These rules, rather than PyTorch evaluation order,
 define bitwise O2 continuation. The frozen PyTorch fixture remains an independent
 tolerance-based development oracle.
@@ -268,7 +271,8 @@ transfers the complete ledger once on publication. Load and future C2 use first
 acquire O2 state-borrow authority, resolve non-owning moment handles synchronously,
 end every I2/K1 borrow in a guaranteed tail, and retain no raw storage or carrier.
 
-Release validates the exact registered O2 receiver, complete ownership ledger,
+Release validates the exact registered O2 receiver, complete immutable ownership
+ledger distinct from mutable resolution pointers,
 liveness, serialization/nonreentrancy, zero active borrows, and exact provider 2.0
 identity `i2-dense-cpu-f32-v1` before mutation. It then
 atomically closes all state/handle resolution by entering an internal releasing state

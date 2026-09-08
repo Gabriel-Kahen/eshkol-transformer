@@ -214,6 +214,29 @@ static void check_gradient_metadata(et_f32_parameter *parameter,
   CHECK(actual.normalization_weight_bits == weight_bits);
 }
 
+static void check_o2_live_counts_equal(const et_o2_test_live_counts_v1 *actual,
+                                       const et_o2_test_live_counts_v1 *expected) {
+  CHECK(actual->builders == expected->builders);
+  CHECK(actual->optimizers == expected->optimizers);
+  CHECK(actual->live_states == expected->live_states);
+  CHECK(actual->dead_states == expected->dead_states);
+  CHECK(actual->live_state_handles == expected->live_state_handles);
+  CHECK(actual->dead_state_handles == expected->dead_state_handles);
+  CHECK(actual->state_borrows == expected->state_borrows);
+  CHECK(actual->owned_state_clones == expected->owned_state_clones);
+}
+
+static void check_i2_live_counts_equal(const et_f32_test_live_counts_v1 *actual,
+                                       const et_f32_test_live_counts_v1 *expected) {
+  CHECK(actual->tensors == expected->tensors);
+  CHECK(actual->parameters == expected->parameters);
+  CHECK(actual->borrows == expected->borrows);
+  CHECK(actual->copy_plans == expected->copy_plans);
+  CHECK(actual->gradient_plans == expected->gradient_plans);
+  CHECK(actual->reset_plans == expected->reset_plans);
+  CHECK(actual->owned_clones == expected->owned_clones);
+}
+
 static void test_builder_rejections(void) {
   const uint32_t one = UINT32_C(0x3f800000);
   et_f32_tensor_error tensor_error;
@@ -513,6 +536,37 @@ static void test_global_norm_exact_boundary(void) {
     destroy_tensor(&unclipped);
     destroy_tensor(&boundary);
   }
+}
+
+static void test_clip_ratio_gradual_underflow_to_positive_zero(void) {
+  const uint32_t one = UINT32_C(0x3f800000);
+  const uint32_t two = UINT32_C(0x40000000);
+  const uint32_t half = UINT32_C(0x3f000000);
+  const uint32_t minimum_subnormal = UINT32_C(0x00000001);
+  const uint32_t maximum_finite = UINT32_C(0x7f7fffff);
+  const uint32_t expected_parameter = UINT32_C(0x3fc00000);
+  const uint32_t positive_zero = 0u;
+  et_o2_error_v1 error;
+  fixture item = make_fixture(
+      two, half, half, half, one, half, ET_O2_CLIP_GLOBAL_L2,
+      minimum_subnormal, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one);
+  uint32_t moment = UINT32_MAX;
+
+  set_gradient(item.parameter, &maximum_finite, 1u, 1u, one);
+  CHECK(et_o2_optimizer_step_v1(item.optimizer, &error) == 0);
+  CHECK(completed_updates(item.optimizer) == 1u);
+  CHECK(schedule_factor(item.optimizer) == one);
+  check_parameter_bits(item.parameter, &expected_parameter, 1u);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            item.optimizer, 0u, ET_O2_MOMENT_EXP_AVG, &moment, 1u, &error) ==
+        0);
+  CHECK(moment == positive_zero);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            item.optimizer, 0u, ET_O2_MOMENT_EXP_AVG_SQ, &moment, 1u,
+            &error) == 0);
+  CHECK(moment == positive_zero);
+  check_gradient_bits(item.parameter, &maximum_finite, 1u);
+  check_gradient_metadata(item.parameter, ET_F32_GRADIENT_PRESENT, 1u, one);
 }
 
 static void test_global_norm_above_multi_tensor_frozen_parity(void) {
@@ -1480,6 +1534,138 @@ static void test_release_admission_corruption_is_nonmutating(void) {
   CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
 }
 
+static void test_release_exact_owner_ledger_is_nonmutating(void) {
+  const uint32_t one = UINT32_C(0x3f800000);
+  const uint32_t first_gradient = UINT32_C(0x3f000000);
+  const uint32_t next_gradient = UINT32_C(0xbf000000);
+  et_o2_error_v1 error;
+  fixture item = make_fixture(
+      one, UINT32_C(0x3dcccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3a83126f), 0u, ET_O2_CLIP_NONE,
+      0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u, one);
+  et_o2_optimizer_state *left = NULL;
+  et_o2_optimizer_state *right = NULL;
+  et_o2_test_live_counts_v1 o2_before = {.struct_size = sizeof(o2_before)};
+  et_o2_test_live_counts_v1 o2_snapshots = {
+      .struct_size = sizeof(o2_snapshots)};
+  et_o2_test_live_counts_v1 o2_live = {.struct_size = sizeof(o2_live)};
+  et_o2_test_live_counts_v1 o2_after = {.struct_size = sizeof(o2_after)};
+  et_f32_test_live_counts_v1 i2_before = {.struct_size = sizeof(i2_before)};
+  et_f32_test_live_counts_v1 i2_snapshots = {
+      .struct_size = sizeof(i2_snapshots)};
+  et_f32_test_live_counts_v1 i2_live = {.struct_size = sizeof(i2_live)};
+  et_f32_test_live_counts_v1 i2_after = {.struct_size = sizeof(i2_after)};
+  uint32_t parameter_before;
+  uint32_t optimizer_moment_before;
+  uint32_t left_moment;
+  uint32_t right_moment;
+  uint32_t lifecycle = 0u;
+
+  set_gradient(item.parameter, &first_gradient, 1u, 1u, one);
+  CHECK(et_o2_optimizer_step_v1(item.optimizer, &error) == 0);
+  CHECK(et_o2_optimizer_zero_grad_v1(item.optimizer, &error) == 0);
+  et_o2_test_live_counts_snapshot_v1(&o2_before);
+  et_f32_test_live_counts_snapshot_v1(&i2_before);
+  CHECK(et_o2_optimizer_state_snapshot_v1(item.optimizer, &left, &error) == 0);
+  CHECK(et_o2_optimizer_state_snapshot_v1(item.optimizer, &right, &error) ==
+        0);
+  et_o2_test_live_counts_snapshot_v1(&o2_snapshots);
+  et_f32_test_live_counts_snapshot_v1(&i2_snapshots);
+  CHECK(o2_snapshots.builders == o2_before.builders);
+  CHECK(o2_snapshots.optimizers == o2_before.optimizers);
+  CHECK(o2_snapshots.live_states == o2_before.live_states + 2u);
+  CHECK(o2_snapshots.dead_states == o2_before.dead_states);
+  CHECK(o2_snapshots.live_state_handles ==
+        o2_before.live_state_handles + 4u);
+  CHECK(o2_snapshots.dead_state_handles == o2_before.dead_state_handles);
+  CHECK(o2_snapshots.state_borrows == o2_before.state_borrows);
+  CHECK(o2_snapshots.owned_state_clones ==
+        o2_before.owned_state_clones + 4u);
+  CHECK(i2_snapshots.tensors == i2_before.tensors + 4u);
+  CHECK(i2_snapshots.parameters == i2_before.parameters);
+  CHECK(i2_snapshots.borrows == i2_before.borrows);
+  CHECK(i2_snapshots.copy_plans == i2_before.copy_plans);
+  CHECK(i2_snapshots.gradient_plans == i2_before.gradient_plans);
+  CHECK(i2_snapshots.reset_plans == i2_before.reset_plans);
+  CHECK(i2_snapshots.owned_clones == i2_before.owned_clones + 4u);
+
+  left_moment = state_moment_bits(left, 0u, ET_O2_MOMENT_EXP_AVG);
+  right_moment = state_moment_bits(right, 0u, ET_O2_MOMENT_EXP_AVG);
+  CHECK(left_moment == right_moment);
+  set_gradient(item.parameter, &next_gradient, 1u, 3u,
+               UINT32_C(0x40000000));
+  read_parameter_bits(item.parameter, &parameter_before, 1u);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            item.optimizer, 0u, ET_O2_MOMENT_EXP_AVG,
+            &optimizer_moment_before, 1u, &error) == 0);
+  et_o2_test_live_counts_snapshot_v1(&o2_live);
+  et_f32_test_live_counts_snapshot_v1(&i2_live);
+
+  et_o2_test_fail_release_after_v1(0u);
+  CHECK(et_o2_test_state_set_resolution_from_state_v1(
+            left, 0u, ET_O2_MOMENT_EXP_AVG, right, 0u,
+            ET_O2_MOMENT_EXP_AVG) == 0);
+  expect_o2_error(et_o2_optimizer_state_release_v1(left, &error), &error,
+                  ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_o2_optimizer_state_lifecycle_v1(left, &lifecycle, &error) == 0);
+  CHECK(lifecycle == ET_O2_OPTIMIZER_STATE_LIVE);
+  et_o2_test_live_counts_snapshot_v1(&o2_after);
+  et_f32_test_live_counts_snapshot_v1(&i2_after);
+  check_o2_live_counts_equal(&o2_after, &o2_live);
+  check_i2_live_counts_equal(&i2_after, &i2_live);
+  CHECK(state_moment_bits(right, 0u, ET_O2_MOMENT_EXP_AVG) == right_moment);
+  CHECK(et_o2_test_state_set_resolution_from_state_v1(
+            left, 0u, ET_O2_MOMENT_EXP_AVG, left, 0u,
+            ET_O2_MOMENT_EXP_AVG) == 0);
+  CHECK(state_moment_bits(left, 0u, ET_O2_MOMENT_EXP_AVG) == left_moment);
+
+  CHECK(et_o2_test_state_set_resolution_from_optimizer_v1(
+            left, 0u, ET_O2_MOMENT_EXP_AVG, item.optimizer, 0u,
+            ET_O2_MOMENT_EXP_AVG) == 0);
+  expect_o2_error(et_o2_optimizer_state_release_v1(left, &error), &error,
+                  ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_o2_optimizer_state_lifecycle_v1(left, &lifecycle, &error) == 0);
+  CHECK(lifecycle == ET_O2_OPTIMIZER_STATE_LIVE);
+  et_o2_test_live_counts_snapshot_v1(&o2_after);
+  et_f32_test_live_counts_snapshot_v1(&i2_after);
+  check_o2_live_counts_equal(&o2_after, &o2_live);
+  check_i2_live_counts_equal(&i2_after, &i2_live);
+  check_parameter_bits(item.parameter, &parameter_before, 1u);
+  check_gradient_bits(item.parameter, &next_gradient, 1u);
+  check_gradient_metadata(item.parameter, ET_F32_GRADIENT_PRESENT, 3u,
+                          UINT32_C(0x40000000));
+  CHECK(completed_updates(item.optimizer) == 1u);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(
+            item.optimizer, 0u, ET_O2_MOMENT_EXP_AVG, &left_moment, 1u,
+            &error) == 0);
+  CHECK(left_moment == optimizer_moment_before);
+  CHECK(et_o2_test_state_set_resolution_from_state_v1(
+            left, 0u, ET_O2_MOMENT_EXP_AVG, left, 0u,
+            ET_O2_MOMENT_EXP_AVG) == 0);
+  CHECK(state_moment_bits(left, 0u, ET_O2_MOMENT_EXP_AVG) == right_moment);
+
+  et_o2_test_reset_failpoints_v1();
+  CHECK(et_o2_optimizer_state_release_v1(left, &error) == 0);
+  CHECK(state_moment_bits(right, 0u, ET_O2_MOMENT_EXP_AVG) == right_moment);
+  CHECK(et_o2_optimizer_state_release_v1(right, &error) == 0);
+  et_o2_test_live_counts_snapshot_v1(&o2_after);
+  et_f32_test_live_counts_snapshot_v1(&i2_after);
+  CHECK(o2_after.live_states == o2_before.live_states);
+  CHECK(o2_after.dead_states == o2_before.dead_states + 2u);
+  CHECK(o2_after.live_state_handles == o2_before.live_state_handles);
+  CHECK(o2_after.dead_state_handles == o2_before.dead_state_handles + 4u);
+  CHECK(o2_after.owned_state_clones == o2_before.owned_state_clones);
+  CHECK(i2_after.tensors == i2_before.tensors);
+  CHECK(i2_after.parameters == i2_before.parameters);
+  CHECK(i2_after.borrows == i2_before.borrows);
+  CHECK(i2_after.copy_plans == i2_before.copy_plans);
+  CHECK(i2_after.gradient_plans == i2_before.gradient_plans);
+  CHECK(i2_after.reset_plans == i2_before.reset_plans);
+  CHECK(i2_after.owned_clones == i2_before.owned_clones);
+  CHECK(et_o2_optimizer_step_v1(item.optimizer, &error) == 0);
+  CHECK(completed_updates(item.optimizer) == 2u);
+}
+
 static void test_release_first_middle_last_defects(void) {
   static int identities[2];
   const uint32_t one = UINT32_C(0x3f800000);
@@ -1562,6 +1748,7 @@ int main(void) {
   test_step_metadata_atomicity_and_zero();
   test_present_zero_decay_and_linear_schedule();
   test_global_norm_exact_boundary();
+  test_clip_ratio_gradual_underflow_to_positive_zero();
   test_global_norm_above_multi_tensor_frozen_parity();
   test_global_norm_scaled_accumulation_avoids_sum_overflow();
   test_distinct_parameter_groups_frozen_parity();
@@ -1577,6 +1764,7 @@ int main(void) {
   test_load_requires_absent_destination_before_state_borrow();
   test_release_defect_finishes_exact_once_tail();
   test_release_admission_corruption_is_nonmutating();
+  test_release_exact_owner_ledger_is_nonmutating();
   test_release_first_middle_last_defects();
   test_noncanonical_float_environment_category();
   if (failures != 0) {

@@ -185,6 +185,14 @@ int32_t et_o2_test_state_set_provider_version_v1(et_o2_optimizer_state *state,
                                                  uint32_t minor);
 int32_t et_o2_test_state_set_owned_clone_count_v1(et_o2_optimizer_state *state,
                                                   uint64_t owned_clone_count);
+int32_t et_o2_test_state_set_resolution_from_state_v1(
+    et_o2_optimizer_state *target, size_t target_index,
+    uint32_t target_moment_kind, et_o2_optimizer_state *source,
+    size_t source_index, uint32_t source_moment_kind);
+int32_t et_o2_test_state_set_resolution_from_optimizer_v1(
+    et_o2_optimizer_state *target, size_t target_index,
+    uint32_t target_moment_kind, et_o2_optimizer *source, size_t source_index,
+    uint32_t source_moment_kind);
 int32_t
 et_o2_test_state_set_config_v1(et_o2_optimizer_state *state, uint32_t clip_kind,
                                uint32_t clip_max_bits, uint32_t schedule_kind,
