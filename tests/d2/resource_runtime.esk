@@ -35,58 +35,59 @@
 (define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
 (define tokenizer (tokenizer-load tokenizer-path policy))
 
-(if (string=? mode "arena-open")
-    (let* ((before (__arena-used))
-           (dataset (token-dataset-open (arena-config directory) tokenizer))
-           (after (__arena-used)))
+(cond
+ ((string=? mode "arena-open")
+  (let* ((before (__arena-used))
+         (dataset (token-dataset-open (arena-config directory) tokenizer))
+         (after (__arena-used)))
+    (token-dataset-close! dataset)
+    (display "D2 RESOURCE ARENA OPEN: ")
+    (display (- after before)) (display " bytes") (newline)))
+ ((string=? mode "arena-packed")
+  (let* ((dataset (token-dataset-open (arena-config directory) tokenizer))
+         (before (__arena-used))
+         (batch (token-dataset-next-batch dataset)))
+    (if (token-dataset-end? batch)
+        (begin (display "unexpected D2 arena EOS") (newline) (exit 65))
+        (begin
+          (token-batch-validate batch)
+          (token-batch-release! batch)))
+    (let ((after (__arena-used)))
       (token-dataset-close! dataset)
-      (display "D2 RESOURCE ARENA OPEN: ")
-      (display (- after before)) (display " bytes") (newline))
-    (if (string=? mode "arena-packed")
-        (let* ((dataset
-                (token-dataset-open (arena-config directory) tokenizer))
-               (before (__arena-used))
-               (batch (token-dataset-next-batch dataset)))
-          (if (token-dataset-end? batch)
-              (begin (display "unexpected D2 arena EOS") (newline) (exit 65))
-              (begin
-                (token-batch-validate batch)
+      (display "D2 RESOURCE ARENA PACKED: ")
+      (display (- after before)) (display " bytes") (newline))))
+ ((or (string=? mode "consume") (string=? mode "consume-short"))
+  (let ((dataset (token-dataset-open (config directory) tokenizer)))
+    (let loop ((batches 0))
+      ;; Public shells are caller-owned Eshkol values. Explicit native batch
+      ;; release ends their borrow/storage lifetime; this explicit iteration
+      ;; region ends their Eshkol allocation lifetime after the last use.
+      (let ((finished?
+             (if (and (string=? mode "consume-short") (= batches 1024))
+                 #t
+                 (with-region ('d2-batch-iteration 65536)
+                   (let ((batch (token-dataset-next-batch dataset)))
+                     (if (token-dataset-end? batch) #t
+                         (begin
+                           (token-batch-validate batch)
+                           (token-batch-release! batch)
+                           #f)))))))
+        (if finished?
+            (begin
+              (token-dataset-close! dataset)
+              (display "D2 RESOURCE CONSUME PASS: ")
+              (display batches) (display " batches") (newline))
+            (loop (+ batches 1)))))))
+ ((string=? mode "reopen")
+  (let loop ((iteration 0))
+    (if (= iteration 256)
+        (begin
+          (display "D2 RESOURCE REOPEN PASS: 256 datasets") (newline))
+        (let ((dataset (token-dataset-open (config directory) tokenizer)))
+          (let ((batch (token-dataset-next-batch dataset)))
+            (if (token-dataset-end? batch) #t
                 (token-batch-release! batch)))
-          (let ((after (__arena-used)))
-            (token-dataset-close! dataset)
-            (display "D2 RESOURCE ARENA PACKED: ")
-            (display (- after before)) (display " bytes") (newline)))
-        (if (or (string=? mode "consume") (string=? mode "consume-short"))
-    (let ((dataset (token-dataset-open (config directory) tokenizer)))
-      (let loop ((batches 0))
-        ;; Public shells are caller-owned Eshkol values. Explicit native batch
-        ;; release ends their borrow/storage lifetime; this explicit iteration
-        ;; region ends their Eshkol allocation lifetime after the last use.
-        (let ((finished?
-               (if (and (string=? mode "consume-short") (= batches 1024))
-                   #t
-                   (with-region ('d2-batch-iteration 65536)
-                     (let ((batch (token-dataset-next-batch dataset)))
-                       (if (token-dataset-end? batch) #t
-                           (begin
-                             (token-batch-validate batch)
-                             (token-batch-release! batch)
-                             #f)))))))
-          (if finished?
-              (begin
-                (token-dataset-close! dataset)
-                (display "D2 RESOURCE CONSUME PASS: ")
-                (display batches) (display " batches") (newline))
-              (loop (+ batches 1))))))
-    (if (string=? mode "reopen")
-        (let loop ((iteration 0))
-          (if (= iteration 256)
-              (begin
-                (display "D2 RESOURCE REOPEN PASS: 256 datasets") (newline))
-              (let ((dataset (token-dataset-open (config directory) tokenizer)))
-                (let ((batch (token-dataset-next-batch dataset)))
-                  (if (token-dataset-end? batch) #t
-                      (token-batch-release! batch)))
-                (token-dataset-close! dataset)
-                (loop (+ iteration 1)))))
-        (begin (display "unknown D2 resource mode") (newline) (exit 64)))))
+          (token-dataset-close! dataset)
+          (loop (+ iteration 1))))))
+ (else
+  (display "unknown D2 resource mode") (newline) (exit 64)))
