@@ -1,6 +1,6 @@
 # N3K bounded diagnostic primitives
 
-Status: **active implementation; contract accepted with corrections**.
+Status: **review; contract accepted with corrections**.
 Acceptance: https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584383610. Tracking #66,
 parent #1, prerequisite audit #65 at `a97c1095b542f1f86f3273139d39af2d8ae47e93`.
 Base is merged main `231f9354f14389db15faac7820ef23dc038ae941`.
@@ -21,9 +21,9 @@ allocation, retained view, registry, public Eshkol name or serialized format.
 
 All capability and operation names below are N3K-specific, avoiding whole-capability
 ownership collisions with N2. Existing N2/A2/K1 source, headers, schema, metadata,
-versions and artifacts remain unchanged. Copy only necessary reviewed N2 numerical
-helpers with explicit provenance into the private N3K implementation; no N2 refactor
-or private accessor call. This avoids changing frozen source closure/object bytes.
+versions and artifacts remain unchanged. The implementation copies only necessary
+reviewed N2 numerical helpers with explicit provenance into private N3K code;
+there is no N2 refactor or private accessor call. This avoids changing frozen source closure/object bytes.
 No provider composition is implemented or inferred.
 
 ## Exact K1 rows and ordered operands
@@ -193,7 +193,7 @@ authoritative for dispatch. No allocations, casting,
 broadcasting, fallback, device transfer, generic fill, general bool/i64 ingress,
 loss reduction, compiler AD, optimizer/model lifecycle or public Eshkol transport.
 
-## Planned acceptance evidence
+## Acceptance coverage
 
 Every exact operation/row: independent forward and analytic-VJP reference plus
 scaled central differences, repeated/boundary IDs, marked layout/inverse tests,
@@ -207,3 +207,68 @@ meaningful affected gates and supported Ubuntu22/LLVM21 CI. Private AOT does not
 claim a public model. Independent Astra-high reviews cover numerical operations,
 composition/initializer tests, and ownership/fenv/packaging. No performance, GPU,
 training, model quality, full M3, JIT or resume claim follows from N3K.
+
+
+## Executed evidence and limits
+
+The focused gate is `make test-n3k`. The implementation was locally validated on
+explicitly unsupported CachyOS x86-64 / Clang-LLVM 22.1.6 with a freshly built,
+fully revalidated pinned Eshkol `90cbd7130f47b8184bcc77b8d5c1b0026da980de`,
+version `1.3.4-evolve`. The supported Ubuntu 22.04 / LLVM-Clang 21.1.8 run and
+exact PR head are recorded in tracking issue #66 and the integration handoff;
+local compatibility evidence is not a substitute for that required lane.
+
+All shell execution uses `/usr/bin/bash` without login initialization. Reproduce
+from a clean supported checkout with `make toolchain`, `make configure`,
+`make build`, then `N3K_ASAN_DETECT_LEAKS=1 make test-n3k`.
+The executed local compatibility commands were:
+
+```sh
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  CC=/usr/bin/clang CXX=/usr/bin/clang++ ESHKOL_JOBS=4 \
+  /usr/bin/bash scripts/bootstrap-eshkol.sh
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  /usr/bin/bash scripts/configure.sh
+# Build each required canonical archive once, including I2's existing aggregate.
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  /usr/bin/bash scripts/build-k1.sh
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  /usr/bin/bash scripts/build-i1.sh
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  /usr/bin/bash scripts/build-i2.sh
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  /usr/bin/bash scripts/build-n3k.sh
+ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config \
+  N3K_ASAN_DETECT_LEAKS=1 /usr/bin/bash scripts/test-n3k.sh
+```
+
+| Gate | Result |
+|---|---|
+| All advertised rows | 31 operation/row pairs across nine exact capabilities; metadata, dtype/device/rank/neighbor rejections pass |
+| Independent mathematical oracles | 23 Python tests; 20 primitive reference cases and 31 initializer vector cases, generated deterministically without tracked large fixtures |
+| Primitive native suite | 15,227 checks and 3,248 actual-native central derivatives; maximum reference absolute error `7.62939453e-06` |
+| Composition/initializer native suite | 12,944 checks; materialized marked layouts and inverse VJPs, all sum edges, exact matrix bits/endpoints, signed seeds, continuation/carry/exhaustion, eight-unique reference schedule |
+| Negative native suite | 8,328 checks; every operation/row, malformed prefixes/descriptors, both boundary-invalid ID positions, forbidden exact/partial aliases, nonfinite/intermediate overflow, complete output preservation, independent x87/MXCSR flags/controls |
+| I1/I2 native integration | 31,458 checks; all 31 rows through owned borrows, active-borrow mutation/destruction blocking, release and unchanged I2 resource counts, one summed tied contribution with duplicate destination rejection |
+| Sanitizers | All four suites (67,957 checks) and private bridge pass ASan/UBSan with LSan `detect_leaks=1`; no diagnostics |
+| Packaging/AOT | Exact one-member/one-accessor archive, compiler-derived three-file input closure, reviewed undefined symbols, no FMA/binary64/allocator/loader/test/global-resolver leaks, C11/C++17, frozen predecessor hashes and K1 baseline, identical fresh objects/archives and two fresh private AOT binaries/stdout |
+
+Three independent Astra-high reviews cover numerical operation/schema/oracle
+correctness, permutation/sum/initializer bits/errors, and native ownership/fenv/
+packaging. Numerical and packaging review found no implementation defect. The
+negative-suite review identified missing invalid-ID and ordinary-input alias cases;
+these were added with repeated-ID scatter overflow and independently rerun under
+ASan/UBSan/LSan. No unresolved review blocker remains in this task; integration
+still owns the separate integration review and merge decision.
+
+Native carrier comparison uses the same provider with raw and owned views;
+independent mathematical parity is established by the separate primitive and
+composition suites. Eight-matrix sequence fixtures prove numerical continuation
+and a reference schedule, not production model tie/path enforcement. Equal T/H
+makes the layout permutation self-inverse, so direction rank contracts are tested
+separately. Sum3 reassociation and omitted/duplicated edges are observable; swapping
+the two operands of a finite binary sum is commutative and is not a proven caller
+wiring distinction. No native row exercises discarded partial Philox blocks.
+There is no general arbitrary-shape, accelerated, mixed-precision, cross-libm bit,
+public-model, model-quality, whole-model atomicity, flat-RSS training, JIT, optimizer,
+checkpoint, or resume claim.
