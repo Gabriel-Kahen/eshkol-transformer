@@ -189,6 +189,10 @@ frame; repeated writes, missing source readiness, wrong phase and unavailable
 selectors reject before dispatch. Thus callers cannot overwrite an ancestor while
 retaining silently stale descendants. Future M3 writes the forward and reverse
 ordering in Eshkol and proves full-model numerical parity.
+Test-only public callers may spell out the literal transport order needed to admit
+logits copying and VJP (21 forward calls; a 12-call reverse prefix reaches all
+three providers). Such witnesses supply no production schedule or independent
+full-model numerical claim. They avoid adding a privileged seeding/self-test API.
 
 The following internal slot labels make the role wiring exact. They are not public
 tensor names or a lookup API. Forward values are `et,ep,x,n1,qt,kt,vt,qh,kh,vh,ah,at,
@@ -326,6 +330,44 @@ sealed constructions. Seal validates/finalizes the full tree before its infallib
 publication tail. Seal/abort clear the active scope. This is not a general module
 destructor or public builder.
 
+A fifth trusted operation, `module-construction-parameters-internal` (arity 1),
+returns detached `#(rows ties)`. Each path-sorted row is
+`#(path exact-enrolled-P1-handle shape dtype device)`; all logical paths are included
+and ties repeat the same handle. It reuses nonpublishing P1 traversal/validation
+without constructing a public parameter-tree shell or finalizing observation.
+Public observation remains forbidden. This is data, not seal authority: final seal
+recomputes and compares the actual collection against the initialization schedule.
+Mutating returned path/shape/tie data cannot change construction state.
+
+The private native construction extension v1 consists of exactly these signatures,
+using existing P1 context error/result slots (begin returns a ledger through the
+result slot; scoped creates return existing module/handle token kinds):
+
+```c
+int64_t et_p1_private_construction_begin_v1(void *context);
+int64_t et_p1_private_construction_module_create_v1(void *context, void *construction);
+int64_t et_p1_private_construction_handle_create_v1(void *context, void *construction);
+int64_t et_p1_private_construction_seal_v1(void *context, void *construction);
+int64_t et_p1_private_construction_abort_v1(void *context, void *construction);
+```
+
+This is a source-only private addition: the existing P1 identity ABI 1.1 record
+layout, public four-function inspection product, existing signatures and token
+kinds remain unchanged. A private registry admits the construction ledger before
+dereference. Begin preallocates its bounded enrollment array; scoped creates
+preflight capacity, create a token and enroll it without another failure. Abort
+validates all enrolled records before a nonfailing transition marking exactly those
+native records dead. It also clears Eshkol authority as described above. Simply
+clearing Eshkol metadata is insufficient: native live-token counts would otherwise
+grow toward the existing 65,536 limit. There is no generic token revoker.
+The coordinated seal preflights every participant while abort remains possible;
+its native seal call is used only in the already-proved nonfailing tail.
+
+Implement these changes in the canonical P1 root template and regenerate the trusted
+root. Its private surface count changes from 31 to 36; the installed 18-name P1
+facade remains byte-identical. Update exact trusted native/surface manifests to
+admit the five new native and five new Eshkol entries; all remain localized in M3T.
+
 The I2 wrapper operations are `i2-construction-begin-internal` (arity 0 → owner
 ledger plus P1 construction), `i2-construction-seal-internal!` (arity 1), and
 `i2-construction-abort-internal!` (arity 1). They hard-code the existing I2 provider,
@@ -453,6 +495,15 @@ archive manifests. Preserve numerical compile flags and unchanged provider-owned
 source/artifact contracts. Integration source lives under src so it does not widen
 the N2/N3K provider-owned native/include inventory. No tests, oracle, Python, private
 bitcode or unlocalized object enters the public artifact.
+
+The tuple uses `native/m3t_package_private_renames.txt`,
+`native/m3t_package_public_exports.txt`, and ordered includes `internal/p1/lib`,
+`internal/c1/lib`, `internal/t1/lib`, `src`. Its package-export input has 79 names;
+E1B adds six error accessors to produce 85 globals. Preserve I2's special P1 rename
+map and its zero-grad replacement. The M3T bridge includes I2's bridge once, which
+already nests the other package bridges/P1 identity; do not add them again.
+Prefer the ordinarily built reviewed N2/N3K/A2 attention objects before the one
+localization step, with exact native depfile/object manifests. A2 cache is unused.
 
 ## Evidence and acceptance gates
 
