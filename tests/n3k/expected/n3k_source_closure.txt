@@ -1,0 +1,2 @@
+include/eshkol_transformer/n3k_primitives_abi.h
+native/n3k_primitives_provider.c
