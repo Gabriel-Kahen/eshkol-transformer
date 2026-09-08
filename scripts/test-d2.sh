@@ -212,7 +212,8 @@ for repetition in a b; do
     die "D2 public runtime failed"
   fi
   test ! -s "${d2_tmp}/public-runtime-${repetition}.stderr"
-  if ! "${d2_tmp}/public-${repetition}-public_errors_runtime/public_errors_runtime" \
+  if ! ESHKOL_ARENA_POISON=1 \
+      "${d2_tmp}/public-${repetition}-public_errors_runtime/public_errors_runtime" \
       "${d2_fixture}" "${d2_tmp}/public-resources-${resource_index}" \
       >"${d2_tmp}/public-errors-${repetition}.stdout" \
       2>"${d2_tmp}/public-errors-${repetition}.stderr"; then
@@ -416,18 +417,176 @@ timeout --foreground --signal=TERM --kill-after=5s 180s \
   >"${d2_tmp}/resource-reopen.stdout"
 grep -Fx 'D2 RESOURCE REOPEN PASS: 256 datasets' \
   "${d2_tmp}/resource-reopen.stdout" >/dev/null
+timeout --foreground --signal=TERM --kill-after=5s 180s \
+  "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+  "${d2_tmp}/public-resources-1/small" accessors \
+  >"${d2_tmp}/resource-accessors.stdout"
+grep -Fx 'D2 RESOURCE ACCESSORS PASS: live=0 bytes released=0 bytes' \
+  "${d2_tmp}/resource-accessors.stdout" >/dev/null
 
 wave2_evidence="${d2_dir}/d2_wave2.o.evidence"
 [[ "$(wc -l <"${wave2_evidence}/global-defined.txt")" == 58 ]] || \
   die "D2 aggregate must have exactly 58 globals"
 [[ "$(wc -l <"${wave2_evidence}/package-exports.txt")" == 52 ]] || \
   die "D2 aggregate must have exactly 52 exports"
+[[ "$(ar t "${d2_wave2_library}")" == "d2_wave2.o" ]] || \
+  die "D2 aggregate archive must contain only d2_wave2.o"
 sed -e 's/^[^:]*://' -e 's/\\//g' "${wave2_evidence}/private.d" | \
   tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
   sed "s#^${PROJECT_ROOT}/##" >"${d2_tmp}/wave2-source-closure.txt"
 cmp "${PROJECT_ROOT}/native/d2_wave2_source_closure.txt" \
   "${d2_tmp}/wave2-source-closure.txt" || \
   die "D2 aggregate trusted source closure drifted"
+mapfile -t d2_production_sources \
+  <"${PROJECT_ROOT}/native/d2_wave2_source_closure.txt"
+(( ${#d2_production_sources[@]} == 18 )) || \
+  die "D2 production source closure must contain exactly 18 files"
+for d2_source_index in "${!d2_production_sources[@]}"; do
+  d2_production_sources[${d2_source_index}]="${PROJECT_ROOT}/${d2_production_sources[${d2_source_index}]}"
+done
+
+for evidence_name in global-defined.txt package-exports.txt undefined.txt \
+    expected-undefined.txt public-strings.txt readelf-symbols.txt nm.txt \
+    strings.txt private.d link.map allowlist-provenance.tsv; do
+  [[ -s "${wave2_evidence}/${evidence_name}" ]] || \
+    die "D2 aggregate evidence omits ${evidence_name}"
+done
+nm -s "${d2_wave2_library}" | \
+  awk '/^Archive index:$/ { active = 1; next }
+       active && /^$/ { active = 0; next }
+       active {
+         if (NF != 3 || $2 != "in" || $3 != "d2_wave2.o") exit 2
+         print $1
+       }' | LC_ALL=C sort >"${d2_tmp}/wave2-archive-index.txt" || \
+  die "D2 aggregate archive index has an unexpected member or shape"
+cmp "${wave2_evidence}/global-defined.txt" \
+  "${d2_tmp}/wave2-archive-index.txt" || \
+  die "D2 aggregate archive index differs from the exact 58-symbol manifest"
+if grep -E 'et_(e1b_private|d2_|i2_|f32_|p1_private_)|d2-(native|dataset|batch|core)' \
+    "${d2_tmp}/wave2-archive-index.txt" >/dev/null; then
+  die "D2 aggregate archive index exposes a localized authority"
+fi
+
+mkdir -p "${d2_tmp}/shadow/transformer"
+printf '(error "hostile D2 private root loaded")\n' \
+  >"${d2_tmp}/shadow/d2_wave2_root.esk"
+printf '(error "hostile D2 dataset implementation loaded")\n' \
+  >"${d2_tmp}/shadow/d2_dataset.esk"
+ESHKOL_PATH="${d2_tmp}/shadow" ESHKOL_LIB_DIR="${d2_tmp}/shadow" \
+D2_COMPILER_TIMEOUT_SECONDS="${d2_timeout}" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-d2.sh" \
+    "${d2_tmp}/hostile-build"
+cmp "${d2_dir}/d2_wave2.o" "${d2_tmp}/hostile-build/d2_wave2.o"
+for deterministic_evidence in global-defined.txt package-exports.txt \
+    undefined.txt expected-undefined.txt public-strings.txt private.d link.map; do
+  cmp "${wave2_evidence}/${deterministic_evidence}" \
+    "${d2_tmp}/hostile-build/d2_wave2.o.evidence/${deterministic_evidence}"
+done
+if grep -F "${d2_tmp}/shadow" \
+    "${d2_tmp}/hostile-build/d2_wave2.o.evidence/private.d" >/dev/null; then
+  die "D2 build admitted a hostile module path"
+fi
+
+reject_d2_builder_input() {
+  local label=$1 expected=$2
+  shift 2
+  if E1B_COMPILER_TIMEOUT_SECONDS="${d2_timeout}" \
+      "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" "$@" \
+      >"${d2_tmp}/${label}.stdout" 2>"${d2_tmp}/${label}.stderr"; then
+    die "D2 builder admitted ${label}"
+  fi
+  grep -F "${expected}" "${d2_tmp}/${label}.stderr" >/dev/null || \
+    die "D2 ${label} rejection reported the wrong reason"
+}
+cp "${PROJECT_ROOT}/native/d2_wave2_root.esk" \
+  "${d2_tmp}/copied-d2-root.esk"
+for rejected_root in "${d2_tmp}/copied-d2-root.esk" \
+    "${d2_dir}/d2_wave2.o"; do
+  label="rejected-root-$(basename -- "${rejected_root}")"
+  reject_d2_builder_input "${label}" \
+    'repository package components require their exact repository-owned private root' \
+    "${rejected_root}" \
+    "${PROJECT_ROOT}/native/d2_wave2_package_bridge.c" \
+    "${PROJECT_ROOT}/native/d2_wave2_private_renames.txt" \
+    "${PROJECT_ROOT}/native/d2_wave2_public_exports.txt" \
+    "${d2_tmp}/${label}.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/src"
+  [[ ! -e "${d2_tmp}/${label}.o" && \
+     ! -e "${d2_tmp}/${label}.o.evidence" ]] || \
+    die "rejected D2 builder input published an artifact"
+done
+for copied_component in bridge renames exports; do
+  case "${copied_component}" in
+    bridge)
+      source_component="${PROJECT_ROOT}/native/d2_wave2_package_bridge.c"
+      expected_component='D2 aggregate policy requires the exact repository bridge'
+      ;;
+    renames)
+      source_component="${PROJECT_ROOT}/native/d2_wave2_private_renames.txt"
+      expected_component='D2 aggregate policy requires the exact repository rename map'
+      ;;
+    exports)
+      source_component="${PROJECT_ROOT}/native/d2_wave2_public_exports.txt"
+      expected_component='D2 aggregate policy requires the exact repository export list'
+      ;;
+  esac
+  copied_path="${d2_tmp}/copied-$(basename -- "${source_component}")"
+  cp "${source_component}" "${copied_path}"
+  bridge="${PROJECT_ROOT}/native/d2_wave2_package_bridge.c"
+  renames="${PROJECT_ROOT}/native/d2_wave2_private_renames.txt"
+  exports="${PROJECT_ROOT}/native/d2_wave2_public_exports.txt"
+  case "${copied_component}" in
+    bridge) bridge="${copied_path}" ;;
+    renames) renames="${copied_path}" ;;
+    exports) exports="${copied_path}" ;;
+  esac
+  reject_d2_builder_input "rejected-copied-${copied_component}" \
+    "${expected_component}" \
+    "${PROJECT_ROOT}/native/d2_wave2_root.esk" \
+    "${bridge}" "${renames}" "${exports}" \
+    "${d2_tmp}/rejected-copied-${copied_component}.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/src"
+  [[ ! -e "${d2_tmp}/rejected-copied-${copied_component}.o" && \
+     ! -e "${d2_tmp}/rejected-copied-${copied_component}.o.evidence" ]] || \
+    die "rejected copied D2 ${copied_component} published an artifact"
+done
+reject_d2_builder_input hostile-include \
+  'D2 aggregate policy requires exact ordered trusted include roots' \
+  "${PROJECT_ROOT}/native/d2_wave2_root.esk" \
+  "${PROJECT_ROOT}/native/d2_wave2_package_bridge.c" \
+  "${PROJECT_ROOT}/native/d2_wave2_private_renames.txt" \
+  "${PROJECT_ROOT}/native/d2_wave2_public_exports.txt" \
+  "${d2_tmp}/hostile-include.o" \
+  "${PROJECT_ROOT}/internal/p1/lib" \
+  "${PROJECT_ROOT}/internal/c1/lib" \
+  "${PROJECT_ROOT}/internal/t2/lib" \
+  "${PROJECT_ROOT}/internal/t1/lib" \
+  "${PROJECT_ROOT}/internal/d2/lib" \
+  "${PROJECT_ROOT}/src" "${d2_tmp}/shadow"
+[[ ! -e "${d2_tmp}/hostile-include.o" && \
+   ! -e "${d2_tmp}/hostile-include.o.evidence" ]] || \
+  die "rejected hostile D2 include published an artifact"
+
+if "${d2_cc}" -r -Wl,--whole-archive \
+    "${d2_wave2_library}" "${d2_wave2_library}" \
+    -Wl,--no-whole-archive -o "${d2_tmp}/duplicate-authority.o" \
+    >"${d2_tmp}/duplicate-authority.stdout" \
+    2>"${d2_tmp}/duplicate-authority.stderr"; then
+  die "linker admitted duplicate D2 aggregate authority"
+fi
+grep -E 'multiple definition.*et_e1b_error_(predicate|category)_v1' \
+  "${d2_tmp}/duplicate-authority.stderr" >/dev/null || \
+  die "duplicate D2 authority rejection did not identify E1 ownership"
 for private_binding in d2-token-dataset-open d2-token-tensor-with-view-internal \
     d2-core-normalize-config d1-sha256-prefix; do
   if env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -442,21 +601,29 @@ for private_binding in d2-token-dataset-open d2-token-tensor-with-view-internal 
   fi
 done
 
-if rg -n -i '\b(import|from) (torch|pytorch|python)|python\.h|py_' \
-    "${PROJECT_ROOT}/internal/d2" \
+if rg -ni 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' \
+    "${d2_production_sources[@]}" \
+    "${PROJECT_ROOT}/lib/transformer/data.esk" \
     "${PROJECT_ROOT}/native/d2_native.c" \
     "${PROJECT_ROOT}/native/d2_native.h" >/dev/null; then
   die "D2 production candidate references a Python runtime"
 fi
 for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
-    "${d2_tmp}/a/d2-semantic" \
+    "${d2_tmp}/a/d2-semantic" "${d2_tmp}/b/d2-semantic" \
     "${d2_tmp}/public-a-public_runtime/public_runtime" \
+    "${d2_tmp}/public-b-public_runtime/public_runtime" \
     "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime"; do
+    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
+    "${d2_tmp}/public-b-resource_runtime/resource_runtime" \
+    "${d2_tmp}/private-a/private-view" \
+    "${d2_tmp}/private-b/private-view"; do
   if strings -a "${delivered}" | \
-      grep -E 'tests/d2/(reference|generate)|torch' >/dev/null || \
-      nm -a "${delivered}" | grep -E '(^|[[:space:]])Py_|libpython' >/dev/null || \
-      ldd "${delivered}" 2>/dev/null | grep -Ei 'python|torch' >/dev/null; then
+      grep -Ei 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' >/dev/null || \
+      nm -a "${delivered}" | \
+        grep -Ei 'python|pytorch|torch|libpython|(^|[[:space:]])Py_' >/dev/null || \
+      ldd "${delivered}" 2>/dev/null | \
+        grep -Ei 'python|pytorch|torch|libpython' >/dev/null; then
     die "D2 delivered candidate contains a development-oracle dependency"
   fi
 done

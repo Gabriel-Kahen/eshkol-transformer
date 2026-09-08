@@ -35,6 +35,10 @@
 (define (path name) (string-append root "/" name))
 (define valid (path "small"))
 
+(let ((dataset (token-dataset-open (config (path "café-corpus") #t) tokenizer)))
+  (check "valid UTF-8 directory uses its exact native byte length"
+         (token-dataset-close! dataset)))
+
 (define (rejects-and-recovers name directory category packing?)
   (check name
          (structured-error?

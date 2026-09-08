@@ -189,49 +189,69 @@
         (vector-ref output 0)))))
 
 (define e1b-safe-d2-token-batch-inputs-call
-  (let ()
+  (let ((output (vector #f)))
     (extern void e1b-d2-token-batch-inputs ptr ptr
             :real et_e1b_public_d2_token_batch_inputs_v1)
+    (extern void e1b-d2-token-batch-invalid ptr i64 ptr
+            :real et_e1b_public_d2_token_batch_validate_v1)
     (lambda (batch)
-      (let ((output (vector #f)))
-        (e1b-d2-token-batch-inputs (vector batch) output)
-        (vector-ref output 0)))))
+      (if (procedure? batch)
+          (begin (e1b-d2-token-batch-inputs batch output) #t)
+          (begin (e1b-d2-token-batch-invalid (vector batch) 1 output) #t))
+      (let ((result (vector-ref output 0)))
+        (vector-set! output 0 #f)
+        result))))
 
 (define e1b-safe-d2-token-batch-targets-call
-  (let ()
+  (let ((output (vector #f)))
     (extern void e1b-d2-token-batch-targets ptr ptr
             :real et_e1b_public_d2_token_batch_targets_v1)
+    (extern void e1b-d2-token-batch-invalid ptr i64 ptr
+            :real et_e1b_public_d2_token_batch_validate_v1)
     (lambda (batch)
-      (let ((output (vector #f)))
-        (e1b-d2-token-batch-targets (vector batch) output)
-        (vector-ref output 0)))))
+      (if (procedure? batch)
+          (begin (e1b-d2-token-batch-targets batch output) #t)
+          (begin (e1b-d2-token-batch-invalid (vector batch) 2 output) #t))
+      (let ((result (vector-ref output 0)))
+        (vector-set! output 0 #f)
+        result))))
 
 (define e1b-safe-d2-token-batch-loss-mask-call
-  (let ()
+  (let ((output (vector #f)))
     (extern void e1b-d2-token-batch-loss-mask ptr ptr
             :real et_e1b_public_d2_token_batch_loss_mask_v1)
+    (extern void e1b-d2-token-batch-invalid ptr i64 ptr
+            :real et_e1b_public_d2_token_batch_validate_v1)
     (lambda (batch)
-      (let ((output (vector #f)))
-        (e1b-d2-token-batch-loss-mask (vector batch) output)
-        (vector-ref output 0)))))
+      (if (procedure? batch)
+          (begin (e1b-d2-token-batch-loss-mask batch output) #t)
+          (begin (e1b-d2-token-batch-invalid (vector batch) 3 output) #t))
+      (let ((result (vector-ref output 0)))
+        (vector-set! output 0 #f)
+        result))))
 
 (define e1b-safe-d2-token-batch-validate-call
   (let ()
-    (extern void e1b-d2-token-batch-validate ptr ptr
+    (extern void e1b-d2-token-batch-validate ptr i64 ptr
             :real et_e1b_public_d2_token_batch_validate_v1)
     (lambda (batch)
       (let ((output (vector #f)))
-        (e1b-d2-token-batch-validate (vector batch) output)
+        (e1b-d2-token-batch-validate (vector batch) 0 output)
         (vector-ref output 0)))))
 
 (define e1b-safe-d2-token-batch-release-call
-  (let ()
+  (let ((output (vector #f)))
     (extern void e1b-d2-token-batch-release ptr ptr
             :real et_e1b_public_d2_token_batch_release_v1)
+    (extern void e1b-d2-token-batch-invalid ptr i64 ptr
+            :real et_e1b_public_d2_token_batch_validate_v1)
     (lambda (batch)
-      (let ((output (vector #f)))
-        (e1b-d2-token-batch-release (vector batch) output)
-        (vector-ref output 0)))))
+      (if (procedure? batch)
+          (begin (e1b-d2-token-batch-release batch output) #t)
+          (begin (e1b-d2-token-batch-invalid (vector batch) 4 output) #t))
+      (let ((result (vector-ref output 0)))
+        (vector-set! output 0 #f)
+        result))))
 
 (define (token-dataset-open config tokenizer)
   (e1b-safe-d2-token-dataset-open-call config tokenizer))

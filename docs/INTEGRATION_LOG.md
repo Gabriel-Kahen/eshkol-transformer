@@ -89,6 +89,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   T2/I2 base to exactly 58 globals/52 package exports, composes shared trusted roots
   once, and does not link localized I2/T2/O2 aggregates. N2 adds no wrapper/count.
   Exact error categories and precedence are specified in the D2 document.
+  The implementation routes D2 manifest/shard reads through the reviewed exact-range
+  descriptor primitive, while preserving Eshkol-native parsing, SHA-256, and errors;
+  it therefore retains no process-lifetime hosted-port entries. The private dataset
+  control owns exactly `min(B,M)` checked i64 shuffle slots, with Eshkol retaining the
+  accepted unbiased Fisher-Yates algorithm. This is an internal storage/lifetime
+  decision only: it changes no public operation, carrier, cursor/format, aggregate
+  count, or public ABI.
 - **Dependencies / retest:** affected A0, D1, T1, T2, I2, N2, and Q0 gates; public
   compiled content/lifetime/resource/corruption evidence; deterministic AOT and
   sanitizers; full supported Ubuntu 22.04/LLVM 21 CI; and independent D2-R are

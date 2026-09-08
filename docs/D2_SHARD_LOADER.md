@@ -88,6 +88,14 @@ during one synchronous begin/use/end call. The raw view and pointer cannot escap
 Release or close rejects before mutation while that borrow is active, and callback
 failure still ends the borrow.
 
+The pinned aggregate's internal package bridge preserves that no-allocation path by
+passing an already-proved callable pointer to the private operation and reconstructing
+its tag on the C stack. Its one reusable result box is cleared before return and
+never receives a caller batch/tensor as input. The existing validate package export
+also dispatches wrong-kind accessor/release values with an internal selector so E1
+keeps the exact public operation name. This changes no public Eshkol name or arity,
+adds no aggregate export, and is not a public C ABI.
+
 One dataset owns at most one live batch. Batch and tensor shell copies are aliases
 to the current authenticated generation. First release invalidates the batch and all
 three tensor identities before the fixed nonrecoverable native destruction tail and
@@ -186,6 +194,15 @@ Arithmetic is checked before the corresponding read or allocation. The runtime
 retains at most one bounded manifest, one bounded shard, one batch, and one bounded
 shuffle window; cache replacement drops the old shard before loading the next.
 It retains no whole corpus, token list, row table, or unbounded record table.
+The D2-only read path uses the reviewed fixed-arity exact-range native reader into
+one caller-owned Eshkol bytevector, so each descriptor is closed on success, short
+read, read fault, and close fault; it does not use the pinned hosted-port registry.
+All D1 parsing, header checks, SHA-256, token validation, canonical path derivation,
+and error construction remain Eshkol-native. The native dataset control owns exactly
+`min(B,M)` signed-i64 shuffle slots and exposes only bounds-checked private load/store
+operations; Eshkol still owns the accepted SHA-256 draws, rejection sampling, and
+descending Fisher-Yates order. Shuffle allocation is failure-atomic, returns
+`internal` with `allocation-failed` detail, and never retries a smaller window.
 Allocator/runtime RSS, stacks, shared libraries, directory/config bytes, and fixed
 control/view/hash state are measured separately from semantic payload.
 The review resource gate uses optimized AOT and one lexical batch `with-region`,
@@ -228,3 +245,15 @@ string incurs one transient normalized copy but publishes no dataset or native
 registry entry.
 Python references and fixture generators are development-only and are absent from
 the D2 production aggregate and runtime.
+
+At the current review head the private native dataset control is 56 bytes, the
+batch control is 192 bytes, fixed view metadata is 264 bytes, and the semantic
+carrier remains exactly `17*N*T`. Local optimized-AOT evidence measured equal-token
+open retention at 31,616 bytes for one shard and 88,904 bytes for 1,024 shards
+(57,288-byte delta, below the exact 83,365-byte admitted payload); packed traversal
+retained exactly 16,448 bytes in both layouts. The 1,024- and 8,192-batch retained
+arena totals were both exactly 4,521,984 bytes, even though every iteration called
+all three public accessors before release. A separate 4,096-call probe measured
+zero retained-arena bytes for live accessors and exact repeated release. These local
+measurements are on an unsupported CachyOS/LLVM 22 probe and do not replace
+supported Ubuntu 22.04/LLVM 21.1.8 CI.

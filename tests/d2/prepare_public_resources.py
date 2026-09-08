@@ -59,10 +59,16 @@ def build(output: Path) -> None:
         ("exact", ((1, 2, 3, 4),)),
         ("padded", ((1, 2, 3),)),
         ("cross-shard", ((10, 11), (12, 13))),
+        ("shuffle-cross", tuple((value, value + 1) for value in range(0, 20, 2))),
     ):
         destination = output / name
         destination.mkdir()
         write_d1_resource(destination, shards, fingerprint=FINGERPRINT, vocab=VOCAB)
+
+    # The native exact-read seam receives a UTF-8 byte count, not a Scheme
+    # character count. Keep this fixture non-ASCII so the compiled path is
+    # exercised on every focused run.
+    clone(small, output / "café-corpus")
 
     large = output / "large"
     large.mkdir()

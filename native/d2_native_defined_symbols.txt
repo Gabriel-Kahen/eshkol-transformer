@@ -15,3 +15,5 @@ et_d2_dataset_open_v1
 et_d2_exact_read_v1
 et_d2_shell_factory_register_v1
 et_d2_shell_factory_validate_v1
+et_d2_shuffle_window_load_v1
+et_d2_shuffle_window_store_v1

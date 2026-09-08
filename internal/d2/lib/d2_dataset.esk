@@ -1,7 +1,13 @@
 ;;; Trusted D2 dataset/batch implementation for the one localized review aggregate.
 
-(extern i64 d2-native-dataset-open ptr :real et_d2_dataset_open_v1)
+(extern i64 d2-native-dataset-open ptr i64 :real et_d2_dataset_open_v1)
 (extern i64 d2-native-dataset-close ptr :real et_d2_dataset_close_v1)
+(extern i64 d2-native-shuffle-store ptr i64 i64
+        :real et_d2_shuffle_window_store_v1)
+(extern i64 d2-native-shuffle-load ptr i64
+        :real et_d2_shuffle_window_load_v1)
+(extern i64 d2-native-exact-read ptr i64 i64 ptr i64
+        :real et_d2_exact_read_v1)
 (extern i64 d2-native-batch-create ptr i64 i64 i64
         :real et_d2_batch_create_v1)
 (extern i64 d2-native-last-status :real et_d2_batch_last_status_v1)
@@ -33,17 +39,62 @@
 (define d2-eos-sentinel
   (guard (raised (#t raised)) (error "transformer.data.end:v1")))
 
+(define (d2-exact-read-fail operation status)
+  (let* ((stage (quotient status 4294967296))
+         (error-number (modulo status 4294967296))
+         (category (if (= stage 1) 'internal 'io))
+         (code (cond ((= stage 1) 'argument-invalid)
+                     ((= stage 2) 'file-open)
+                     ((= stage 3) 'binary-read)
+                     ((= stage 4) 'file-close)
+                     (else 'unknown-read-failure))))
+    (let ((unreachable
+           (et-e1b-private-raise
+            category operation "checked exact file read failed"
+            (list (list 'source-domain 'd2-exact-read)
+                  (list 'source-code code)
+                  (list 'source-message (number->string error-number)))
+            #f)))
+      unreachable)))
+
+(define (d2-exact-file-bytes path maximum operation)
+  (if (not (file-exists? path))
+      (d2-fail-raw 'io operation "required file is missing"))
+  (guard
+   (caught
+    (#t
+     (if (transformer-error? caught)
+         (raise caught)
+         (d2-fail-raw 'io operation "file size query failed"))))
+   (let ((size (file-size path)))
+     (if (or (not (integer? size)) (not (exact? size)) (< size 0))
+         (d2-fail-raw 'io operation "cannot determine file size"))
+     (if (> size maximum)
+         (d2-fail-raw 'corrupt-data operation "file size exceeds policy"))
+     ;; D1's ESHKTCM1/ESHKTSH1 SHA-256 length ceiling, including trailer.
+     (if (> size 2305843009213693983)
+         (d2-fail-raw 'corrupt-data operation
+                      "file exceeds the SHA-256 message-length limit"))
+     (let* ((path-bytes (+ (bytevector-length (string->utf8 path)) 1))
+            (bytes (make-bytevector size 0))
+            (status
+             (d2-native-exact-read path path-bytes 0 bytes size)))
+       (if (= status 0) bytes
+           (let ((unreachable (d2-exact-read-fail operation status)))
+             unreachable))))))
+
 (define (et-d1-private-token-corpus-validate-metadata
          directory maximum-manifest-bytes maximum-shard-bytes
          maximum-total-tokens)
   ((vector-ref d1-compiled-public-operations 8)
-   directory maximum-manifest-bytes maximum-shard-bytes maximum-total-tokens))
+   d2-exact-file-bytes directory maximum-manifest-bytes maximum-shard-bytes
+   maximum-total-tokens))
 
 (define (et-d1-private-token-shard-validate-bytes
          path index token-count file-bytes digest fingerprint vocab-size
          maximum-shard-bytes)
   ((vector-ref d1-compiled-public-operations 9)
-   path index token-count file-bytes digest fingerprint vocab-size
+   d2-exact-file-bytes path index token-count file-bytes digest fingerprint vocab-size
    maximum-shard-bytes))
 
 (define (d2-fail-raw category operation message)
@@ -220,7 +271,7 @@
     (if (or (not (= (vector-ref capability 2) (vector-ref state 8)))
             (not (eq? (vector-ref state 10) 'live)))
         (d2-fail 'invalid-state operation "batch generation is stale"))
-    (vector capability state)))
+    capability))
 
 (define (d2-release-capability value operation)
   (let* ((capability (d2-batch-capability value operation))
@@ -232,7 +283,7 @@
     ;; authority, while a forged future generation remains stale.
     (if (> (vector-ref capability 2) (vector-ref state 8))
         (d2-fail 'invalid-state operation "batch generation is stale"))
-    (vector capability state)))
+    capability))
 
 (define (d2-current-tensor-capability value operation)
   (let ((capability (d2-batch-capability value operation)))
@@ -406,17 +457,59 @@
     (if (eq? seed #f) ordinal
         (let* ((window-rows (d2-core-config-ref config ':shuffle-window-rows))
                (window-index (quotient ordinal window-rows))
-               (window-offset (modulo ordinal window-rows))
-               (buffer (vector-ref state 7)))
+               (window-offset (modulo ordinal window-rows)))
           (if (or (eq? (vector-ref state 16) #f)
                   (not (= (vector-ref state 16) window-index)))
               (begin
-                (d2-core-fill-window-bytevector!
-                 buffer (vector-ref state 17) window-rows seed window-index)
+                (d2-fill-native-shuffle-window! state window-index)
                 (vector-set! state 16 window-index)))
-          (let ((result
-                 (d2-core-load-unsigned-le buffer (* window-offset 8) 8)))
+          (let ((result (d2-native-shuffle-ref state window-offset)))
             result)))))
+
+(define (d2-native-shuffle-set! state index value)
+  (let ((status
+         (d2-native-shuffle-store (vector-ref state 1) index value)))
+    (if (not (= status 0))
+        (d2-fail 'internal 'token-dataset-next-batch
+                 "D2 native shuffle store invariant failed"))
+    #t))
+
+(define (d2-native-shuffle-ref state index)
+  (let ((value
+         (d2-native-shuffle-load (vector-ref state 1) index)))
+    (if (not (= (d2-native-last-status) 0))
+        (d2-fail 'internal 'token-dataset-next-batch
+                 "D2 native shuffle load invariant failed"))
+    value))
+
+(define (d2-fill-native-shuffle-window! state window-index)
+  (let* ((config (vector-ref state 3))
+         (total-rows (vector-ref state 17))
+         (window-rows (d2-core-config-ref config ':shuffle-window-rows))
+         (seed (d2-core-config-ref config ':shuffle-seed))
+         (window-start
+          (d2-core-checked-nonnegative-product
+           window-index window-rows
+           "D2 shuffle window start exceeds signed i64"))
+         (window-length (min window-rows (- total-rows window-start))))
+    (let fill ((index 0))
+      (if (< index window-length)
+          (begin
+            (d2-native-shuffle-set! state index (+ window-start index))
+            (fill (+ index 1)))))
+    (let shuffle ((index (- window-length 1)) (counter 0))
+      (if (> index 0)
+          (let* ((draw
+                  (d2-core-unbiased-draw
+                   (+ index 1) seed window-index counter))
+                 (selected (vector-ref draw 0))
+                 (next-counter (vector-ref draw 1))
+                 (saved (d2-native-shuffle-ref state index))
+                 (replacement (d2-native-shuffle-ref state selected)))
+            (d2-native-shuffle-set! state index replacement)
+            (d2-native-shuffle-set! state selected saved)
+            (shuffle (- index 1) next-counter))))
+    window-length))
 
 (define (d2-native-write-source-span state generation destination
                                      input-bytes input-offset
@@ -604,7 +697,6 @@
                    (d2-core-config-ref normalized ':sequence-length)
                    (d2-core-config-ref normalized ':maximum-batch-bytes)
                    (d2-core-config-ref normalized ':shuffle-window-rows) rows))
-                 (shuffle-buffer (make-bytevector (* 8 shuffle-count) 0))
                  (digest
                   (bytevector-copy manifest (- (bytevector-length manifest) 32)
                                    (bytevector-length manifest)))
@@ -624,7 +716,8 @@
             (vector-set! state 4 metadata)
             (vector-set! state 5 manifest)
             (vector-set! state 6 cursor-state)
-            (vector-set! state 7 shuffle-buffer)
+            ;; Native dataset control owns exactly shuffle-count i64 slots.
+            (vector-set! state 7 shuffle-count)
             (vector-set! state 8 0)
             ;; Fixed private singleton, not a per-generation authority.
             (vector-set! state 9 d2-dataset-query)
@@ -645,7 +738,7 @@
                 (let ((probe (d2-make-batch-shell #f)))
                   (d2-register-shell-factory!
                    probe d2-batch-query 2 'token-dataset-open)))
-            (let ((status (d2-native-dataset-open shell)))
+            (let ((status (d2-native-dataset-open shell shuffle-count)))
               (if (not (= status 0))
                   (d2-native-fail 'token-dataset-open status)))
             shell))))))
@@ -756,21 +849,18 @@
        #t))))
 
 (define (d2-token-batch-inputs batch)
-  (let* ((checked
-          (d2-current-capability batch 'batch 'token-batch-inputs))
-         (capability (vector-ref checked 0)))
+  (let ((capability
+         (d2-current-capability batch 'batch 'token-batch-inputs)))
     (vector-ref capability 5)))
 
 (define (d2-token-batch-targets batch)
-  (let* ((checked
-          (d2-current-capability batch 'batch 'token-batch-targets))
-         (capability (vector-ref checked 0)))
+  (let ((capability
+         (d2-current-capability batch 'batch 'token-batch-targets)))
     (vector-ref capability 6)))
 
 (define (d2-token-batch-loss-mask batch)
-  (let* ((checked
-          (d2-current-capability batch 'batch 'token-batch-loss-mask))
-         (capability (vector-ref checked 0)))
+  (let ((capability
+         (d2-current-capability batch 'batch 'token-batch-loss-mask)))
     (vector-ref capability 7)))
 
 (define (d2-token-batch-validate batch)
@@ -808,9 +898,9 @@
   (let ((operation 'd2-token-tensor-with-view-internal))
     (if (not (procedure? consumer))
         (d2-fail 'invalid-argument operation "expected a trusted view consumer"))
-    (let* ((checked (d2-current-tensor-capability tensor operation))
-           (capability (vector-ref checked 0))
-           (state (vector-ref checked 1))
+    (let* ((capability (d2-current-tensor-capability tensor operation))
+           (state
+            (d2-dataset-state (vector-ref capability 1) operation))
            (generation (vector-ref capability 2)))
       (if (> (vector-ref state 15) 0)
           (d2-fail 'invalid-state operation "batch already has an active borrow"))
@@ -851,10 +941,11 @@
     #t))
 
 (define (d2-token-batch-release! batch)
-  (let* ((checked
+  (let* ((capability
           (d2-release-capability batch 'token-batch-release!))
-         (capability (vector-ref checked 0))
-         (state (vector-ref checked 1)))
+         (state
+          (d2-dataset-state
+           (vector-ref capability 1) 'token-batch-release!)))
     (if (or (not (vector-ref state 2))
             (not (= (vector-ref capability 2) (vector-ref state 8)))
             (not (eq? (vector-ref state 10) 'live)))

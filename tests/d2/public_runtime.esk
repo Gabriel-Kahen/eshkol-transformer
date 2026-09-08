@@ -129,6 +129,18 @@
        (not relay-invoked?))
 (check "forgery rejection preserves authentic batch"
        (token-batch-validate first))
+(check "nonprocedure inputs accessor preserves operation"
+       (structured-error? 'invalid-argument 'token-batch-inputs
+                          (lambda () (token-batch-inputs #f))))
+(check "nonprocedure targets accessor preserves operation"
+       (structured-error? 'invalid-argument 'token-batch-targets
+                          (lambda () (token-batch-targets #f))))
+(check "nonprocedure mask accessor preserves operation"
+       (structured-error? 'invalid-argument 'token-batch-loss-mask
+                          (lambda () (token-batch-loss-mask #f))))
+(check "nonprocedure release preserves operation"
+       (structured-error? 'invalid-argument 'token-batch-release!
+                          (lambda () (token-batch-release! #f))))
 (check "live batch blocks next"
        (structured-error? 'invalid-state 'token-dataset-next-batch
                           (lambda () (token-dataset-next-batch dataset))))

@@ -6,6 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "internal" / "d2" / "lib" / "d2_semantic_core.esk"
+DATASET = ROOT / "internal" / "d2" / "lib" / "d2_dataset.esk"
 
 
 class D2ScopeTests(unittest.TestCase):
@@ -38,6 +39,15 @@ class D2ScopeTests(unittest.TestCase):
             "d2-core-commit-batch!",
         ):
             self.assertIn(required, source)
+
+    def test_production_io_and_shuffle_storage_are_bounded_private_seams(self) -> None:
+        source = DATASET.read_text(encoding="utf-8")
+        self.assertIn("et_d2_exact_read_v1", source)
+        self.assertIn("d2-exact-file-bytes", source)
+        self.assertNotIn("open-binary-input-file", source)
+        self.assertIn("et_d2_shuffle_window_store_v1", source)
+        self.assertIn("et_d2_shuffle_window_load_v1", source)
+        self.assertNotIn("shuffle-buffer (make-bytevector", source)
 
 
 if __name__ == "__main__":

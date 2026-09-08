@@ -61,15 +61,26 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes,
 
 /*
  * Open is called only after the Eshkol loader has completely validated its
- * configuration, manifest, and every shard. It publishes one native registry
- * entry for owner. Close rejects before mutation during an active scoped borrow;
- * otherwise it unregisters that entry before destroying its current carrier and
- * is a nonallocating, nonrecoverable tail after admission. Public idempotence
- * remains an Eshkol duty; shell constructor identity is admitted above before
- * Eshkol discloses a private query token.
+ * configuration, manifest, and every shard. shuffle_slots is the already
+ * admitted exact min(B,M) count of signed-i64 permutation ordinals. Open first
+ * allocates an unpublished control and then exactly shuffle_slots native i64
+ * slots; either allocation failure publishes nothing. On success the dataset
+ * registry owns both allocations until close. Store/load are allocation-free,
+ * require the exact live owner and an index in [0, shuffle_slots), and never
+ * disclose the backing pointer. Load reports failure through
+ * et_d2_batch_last_status_v1 and returns zero only as a non-authoritative value.
+ *
+ * Close rejects before mutation during an active scoped borrow; otherwise it
+ * unregisters that entry before destroying its shuffle storage and current
+ * carrier and is a nonallocating, nonrecoverable tail after admission. Public
+ * idempotence remains an Eshkol duty; shell constructor identity is admitted
+ * above before Eshkol discloses a private query token.
  */
-int64_t et_d2_dataset_open_v1(const void *owner);
+int64_t et_d2_dataset_open_v1(const void *owner, int64_t shuffle_slots);
 int64_t et_d2_dataset_close_v1(const void *owner);
+int64_t et_d2_shuffle_window_store_v1(const void *owner, int64_t index,
+                                      int64_t value);
+int64_t et_d2_shuffle_window_load_v1(const void *owner, int64_t index);
 
 /*
  * owner is a stable Eshkol dataset identity, compared but never dereferenced.
@@ -144,7 +155,8 @@ enum {
   ET_D2_TEST_FAIL_AFTER_TARGET_BORROW = 5,
   ET_D2_TEST_FAIL_MASK = 6,
   ET_D2_TEST_FAIL_BEFORE_PUBLISH = 7,
-  ET_D2_TEST_FAIL_DATASET = 8
+  ET_D2_TEST_FAIL_DATASET = 8,
+  ET_D2_TEST_FAIL_SHUFFLE = 9
 };
 
 #ifdef ET_D2_NATIVE_TESTING

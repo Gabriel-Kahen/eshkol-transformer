@@ -14,34 +14,16 @@
 ;; public runtime binding or dependency.
 (define-syntax d1-token-with-shard-region
   (syntax-rules ()
-    ((_ operation escape open-region close-fail close-marker exception-marker
-        body ...)
-     (let ((region (open-region operation)))
-       (let ((result
-              (guard
-               (caught
-                (#t
-                 (guard
-                  (close-error (#t close-marker))
-                  (let ((promoted (region-close region caught)))
-                    (vector-set! escape 0 promoted)
-                    exception-marker))))
-               (begin body ...))))
-         (cond
-          ((eq? result exception-marker)
-           (raise (vector-ref escape 0)))
-          ((eq? result close-marker)
-           (guard (ignored (#t #f)) (region-close region))
-           (let ((unreachable (close-fail operation))) unreachable))
-          (else
-           (let ((closed
-                  (guard
-                   (close-error (#t close-marker))
-                   (region-close region)
-                   #t)))
-             (if (eq? closed close-marker)
-                 (let ((unreachable (close-fail operation))) unreachable)
-                 result)))))))))
+    ((_ body ...)
+     ;; Keep the checked handle builtins direct and return only an immediate
+     ;; boolean. Verified AOT lowering allocates no root-arena state at the
+     ;; record-loop backedge or region-open call.
+     (let ((region (region-open 'd1-shard-validation 4096)))
+       (let ((result (begin body ...)))
+         ;; The result is a scalar boolean. Any raised value unwinds the child
+         ;; automatically to the single enclosing validation guard.
+         (region-close region)
+         result)))))
 
 (define d1-compiled-public-operations
   (let ()
@@ -300,32 +282,29 @@
                       message)))
            #f)))
 
-    (define d1-token-region-close-failure-marker
-      (list 'd1-token-region-close-failure))
-    (define d1-token-region-exception-marker
-      (list 'd1-token-region-exception))
-
-    (define (d1-token-region-open operation)
-      (guard
-       (caught
-        (#t
-         (d1-token-reraise-or-wrap
-          'internal operation "shard validation region open failed"
-          (if (and (error-object? caught)
-                   (string=? (error-object-message caught)
-                             "region-open: failed to create region"))
-              'allocation-failed
-              'region-open-failed)
-          caught)))
-       (region-open 'd1-shard-validation 4096)))
-
-    (define (d1-token-region-close-fail operation)
-      (et-e1b-private-raise
-       'internal operation "shard validation region close failed"
-       (list (list 'source-domain 'eshkol-runtime)
-             (list 'source-code 'region-close-failed)
-             (list 'source-message "region handle close failed"))
-       #f))
+    (define (d1-token-region-reraise operation caught)
+      (if (transformer-error? caught)
+          (raise caught)
+          (let ((unreachable
+                 (d1-token-reraise-or-wrap
+                  'internal operation "shard validation region failed"
+                  (if (and (error-object? caught)
+                           (string=?
+                            (error-object-message caught)
+                            "region-open: failed to create region"))
+                      'allocation-failed
+                      (if (and (error-object? caught)
+                               (or
+                                (string=?
+                                 (error-object-message caught)
+                                 "region-close: invalid or already-closed region handle")
+                                (string=?
+                                 (error-object-message caught)
+                                 "region-close: region handle no longer names a live region")))
+                          'region-close-failed
+                          'region-open-failed))
+                  caught)))
+            unreachable)))
 
     (define (d1-token-valid-nonnegative-integer? value)
       (and (integer? value) (exact? value)
@@ -817,11 +796,11 @@
             actual
             (d1-token-fail 'corrupt-data operation "SHA-256 mismatch"))))
 
-    (define (d1-token-validate-shard path expected-index expected-count expected-bytes
+    (define (d1-token-validate-shard file-reader path expected-index expected-count expected-bytes
                                      expected-digest expected-fingerprint expected-vocab
                                      maximum-shard-bytes)
       (let* ((operation 'token-corpus-validate)
-             (bytes (d1-token-file-bytes path maximum-shard-bytes operation)))
+             (bytes (file-reader path maximum-shard-bytes operation)))
         (if (not (= (bytevector-length bytes) expected-bytes))
             (d1-token-fail 'corrupt-data operation "shard byte size differs from manifest")
             #t)
@@ -879,7 +858,7 @@
                                 "token outside [0,vocab-size)")))
                           unreachable)))))))))
 
-    (define (d1-token-corpus-validate-impl make-summary directory
+    (define (d1-token-corpus-validate-impl make-summary file-reader directory
                                            maximum-manifest-bytes maximum-shard-bytes
                                            maximum-total-tokens)
       (let ((operation 'token-corpus-validate))
@@ -893,7 +872,7 @@
         (d1-token-require-nonnegative maximum-total-tokens operation
                                       "maximum-total-tokens must be nonnegative")
         (let* ((manifest-path (d1-token-manifest-path directory))
-               (bytes (d1-token-file-bytes manifest-path maximum-manifest-bytes operation)))
+               (bytes (file-reader manifest-path maximum-manifest-bytes operation)))
           (d1-token-validate-header-common bytes d1-token-manifest-magic
                                            d1-token-manifest-fixed-header-bytes operation)
           (let* ((header-bytes (d1-token-read-u32-le bytes 12))
@@ -932,24 +911,36 @@
             (let ((fingerprint
                    (d1-token-fingerprint-from bytes d1-token-manifest-fixed-header-bytes
                                               fingerprint-bytes operation)))
-              (d1-token-validate-digest bytes operation)
+              ;; SHA-256 compression allocates a work vector per block. Keep
+              ;; the complete manifest digest pass in one checked child region
+              ;; and return only an immediate boolean across its close.
+              (guard
+               (caught
+                (#t
+                 (let ((unreachable
+                        (d1-token-region-reraise operation caught)))
+                   unreachable)))
+               (d1-token-with-shard-region
+                (d1-token-validate-digest bytes operation)
+                #t))
               ;; Fixed parent-owned mutable state prevents boxed loop indices
               ;; and totals from accumulating in the manifest's arena. All
               ;; changing record arithmetic and shard bytes live in one checked
               ;; nested region and are reclaimed before the next record.
-              (let ((counters (make-bytevector 24 0))
-                    (escape (vector #f)))
+              (let ((counters (make-bytevector 24 0)))
                 (let ((validated
                        (if (= shard-count 0)
                            #t
-                           (let record-loop ()
-                             (let ((continue?
-                                    (d1-token-with-shard-region
-                                     operation escape
-                                     d1-token-region-open
-                                     d1-token-region-close-fail
-                                     d1-token-region-close-failure-marker
-                                     d1-token-region-exception-marker
+                           (guard
+                            (caught
+                             (#t
+                              (let ((unreachable
+                                     (d1-token-region-reraise
+                                      operation caught)))
+                                unreachable)))
+                            (let record-loop ()
+                              (let ((continue?
+                                     (d1-token-with-shard-region
                                      (let* ((index
                                              (d1-token-read-u64-le counters 0))
                                             (count-sum
@@ -1002,6 +993,7 @@
                                                bytes (+ offset 24)
                                                (+ offset 56))))
                                          (d1-token-validate-shard
+                                          file-reader
                                           (d1-token-shard-path directory index)
                                           index record-count record-file-bytes
                                           record-digest fingerprint vocab-size
@@ -1013,7 +1005,7 @@
                                        (d1-token-write-u64-le!
                                         counters 16 (+ byte-sum record-file-bytes))
                                        (not last?)))))
-                               (if continue? (record-loop) #t))))))
+                                (if continue? (record-loop) #t)))))))
                   ;; Totals and the authoritative summary are evaluated once,
                   ;; after the final region is closed. No terminal region open
                   ;; can precede the accepted totals mismatch error.
@@ -1094,7 +1086,7 @@
                                    shard-token-limit tokens))
      (lambda (directory maximum-manifest-bytes maximum-shard-bytes
                         maximum-total-tokens)
-       (d1-token-corpus-validate-impl make-summary directory
+       (d1-token-corpus-validate-impl make-summary d1-token-file-bytes directory
                                       maximum-manifest-bytes maximum-shard-bytes
                                       maximum-total-tokens))
      (lambda (summary)
@@ -1119,7 +1111,7 @@
      (lambda (summary)
        (entry-ref
         (require-entry summary 'token-corpus-summary-total-shard-bytes) 6))
-     (lambda (directory maximum-manifest-bytes maximum-shard-bytes
+     (lambda (file-reader directory maximum-manifest-bytes maximum-shard-bytes
                         maximum-total-tokens)
        (d1-token-corpus-validate-impl
         (lambda (shard-count total-tokens vocab-size shard-token-limit
@@ -1127,11 +1119,11 @@
           (vector shard-count total-tokens vocab-size shard-token-limit
                   (utf8->string (string->utf8 fingerprint))
                   total-shard-bytes manifest))
-        directory maximum-manifest-bytes maximum-shard-bytes
+        file-reader directory maximum-manifest-bytes maximum-shard-bytes
         maximum-total-tokens))
-     (lambda (path index token-count file-bytes digest fingerprint vocab-size
+     (lambda (file-reader path index token-count file-bytes digest fingerprint vocab-size
                    maximum-shard-bytes)
-       (d1-token-validate-shard path index token-count file-bytes digest
+       (d1-token-validate-shard file-reader path index token-count file-bytes digest
                                 fingerprint vocab-size
                                 maximum-shard-bytes)))))
 

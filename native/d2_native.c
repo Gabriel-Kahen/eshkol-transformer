@@ -39,6 +39,8 @@ struct et_d2_dataset_control {
   uint64_t next_batch_generation;
   uint64_t next_lease_generation;
   et_d2_batch_control *current_batch;
+  int64_t *shuffle_window;
+  size_t shuffle_slots;
 };
 
 static et_d2_dataset_control *live_datasets;
@@ -222,7 +224,9 @@ static int live_storage_overlap(const void *pointer, size_t bytes) {
   for (dataset = live_datasets; dataset != NULL;
        dataset = dataset->registry_next) {
     const et_d2_batch_control *batch = dataset->current_batch;
-    if (overlaps(pointer, bytes, dataset, sizeof(*dataset))) {
+    if (overlaps(pointer, bytes, dataset, sizeof(*dataset)) ||
+        overlaps(pointer, bytes, dataset->shuffle_window,
+                 dataset->shuffle_slots * sizeof(*dataset->shuffle_window))) {
       return 1;
     }
     if (batch != NULL &&
@@ -321,12 +325,16 @@ static void cleanup_control(et_d2_batch_control *batch) {
 #endif
 }
 
-int64_t et_d2_dataset_open_v1(const void *owner) {
+int64_t et_d2_dataset_open_v1(const void *owner, int64_t shuffle_slots_value) {
   et_d2_dataset_control *dataset;
-  if (owner == NULL || !span_fits(owner, 1u) ||
+  size_t shuffle_slots;
+  if (owner == NULL || shuffle_slots_value < 0 ||
+      (uint64_t)shuffle_slots_value > SIZE_MAX / sizeof(int64_t) ||
+      !span_fits(owner, 1u) ||
       live_storage_overlap(owner, 1u)) {
     return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   }
+  shuffle_slots = (size_t)shuffle_slots_value;
   if (find_dataset(owner) != NULL) {
     return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
   }
@@ -340,7 +348,29 @@ int64_t et_d2_dataset_open_v1(const void *owner) {
 #ifdef ET_D2_NATIVE_TESTING
   owned_allocations++;
 #endif
+  if (shuffle_slots != 0u) {
+    if (should_fail(ET_D2_TEST_FAIL_SHUFFLE)) {
+      free(dataset);
+#ifdef ET_D2_NATIVE_TESTING
+      owned_allocations--;
+#endif
+      return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+    }
+    dataset->shuffle_window =
+        (int64_t *)calloc(shuffle_slots, sizeof(*dataset->shuffle_window));
+    if (dataset->shuffle_window == NULL) {
+      free(dataset);
+#ifdef ET_D2_NATIVE_TESTING
+      owned_allocations--;
+#endif
+      return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+    }
+#ifdef ET_D2_NATIVE_TESTING
+    owned_allocations++;
+#endif
+  }
   dataset->owner = owner;
+  dataset->shuffle_slots = shuffle_slots;
   dataset->next_batch_generation = 1u;
   dataset->next_lease_generation = 1u;
   dataset->registry_next = live_datasets;
@@ -365,11 +395,39 @@ int64_t et_d2_dataset_close_v1(const void *owner) {
   if (batch != NULL) {
     cleanup_control(batch);
   }
+  free(dataset->shuffle_window);
+#ifdef ET_D2_NATIVE_TESTING
+  if (dataset->shuffle_window != NULL) {
+    owned_allocations--;
+  }
+#endif
   free(dataset);
 #ifdef ET_D2_NATIVE_TESTING
   owned_allocations--;
 #endif
   return status(ET_D2_NATIVE_STATUS_OK);
+}
+
+int64_t et_d2_shuffle_window_store_v1(const void *owner, int64_t index,
+                                      int64_t value) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
+  if (dataset == NULL || index < 0 || value < 0 ||
+      (uint64_t)index >= dataset->shuffle_slots) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  dataset->shuffle_window[(size_t)index] = value;
+  return status(ET_D2_NATIVE_STATUS_OK);
+}
+
+int64_t et_d2_shuffle_window_load_v1(const void *owner, int64_t index) {
+  et_d2_dataset_control *dataset = find_dataset(owner);
+  if (dataset == NULL || index < 0 ||
+      (uint64_t)index >= dataset->shuffle_slots) {
+    (void)status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+    return 0;
+  }
+  (void)status(ET_D2_NATIVE_STATUS_OK);
+  return dataset->shuffle_window[(size_t)index];
 }
 
 #ifdef ET_D2_NATIVE_TESTING

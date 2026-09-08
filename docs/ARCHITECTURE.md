@@ -62,7 +62,10 @@ shuffle window. Its carrier is two dense CPU i64 `[N,T]` planes and one dense CP
 one-byte bool `[N,T]` plane. Public tensor identities are stable state-backed
 capabilities; reviewed consumers borrow unchanged K1 views only synchronously.
 Explicit batch release invalidates authority before storage destruction. The
-detached `ESHKDCU1` cursor is D2's only downstream C2 state contract.
+detached `ESHKDCU1` cursor is D2's only downstream C2 state contract. D2 exact-range
+native I/O owns descriptor lifetime only; Eshkol owns parsing and validation. The
+dataset's private native control owns the admitted fixed shuffle slots while the
+shuffle algorithm and cursor remain Eshkol-native.
 
 ## Native boundary
 

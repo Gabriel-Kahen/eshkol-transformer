@@ -101,7 +101,7 @@ static size_t open_fd_count(void) {
 }
 
 static void open_dataset(const void *owner) {
-  CHECK(et_d2_dataset_open_v1(owner) == ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_dataset_open_v1(owner, 0) == ET_D2_NATIVE_STATUS_OK);
 }
 
 static void close_dataset(const void *owner) {
@@ -395,19 +395,46 @@ static void test_dataset_lifetime(void) {
   int64_t lease;
   const int64_t value = 1;
 
-  CHECK(et_d2_dataset_open_v1(NULL) ==
+  CHECK(et_d2_dataset_open_v1(NULL, 0) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_dataset_open_v1(&owner, -1) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_DATASET);
-  CHECK(et_d2_dataset_open_v1(&owner) ==
+  CHECK(et_d2_dataset_open_v1(&owner, 0) ==
         ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
   CHECK(et_d2_dataset_test_live_count_v1() == 0);
   CHECK(et_d2_test_owned_allocation_count_v1() == 0);
   et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_NONE);
 
+  et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_SHUFFLE);
+  CHECK(et_d2_dataset_open_v1(&owner, 4) ==
+        ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+  CHECK(et_d2_dataset_test_live_count_v1() == 0);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
+  et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_NONE);
+
+  CHECK(et_d2_dataset_open_v1(&owner, 4) == ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 2);
+  CHECK(et_d2_shuffle_window_store_v1(&owner, 0, 17) ==
+        ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shuffle_window_store_v1(&owner, 3, 23) ==
+        ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shuffle_window_load_v1(&owner, 0) == 17);
+  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_OK);
+  CHECK(et_d2_shuffle_window_load_v1(&owner, 3) == 23);
+  CHECK(et_d2_shuffle_window_store_v1(&owner, 4, 1) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_shuffle_window_store_v1(&owner, 0, -1) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  CHECK(et_d2_shuffle_window_load_v1(&owner, 4) == 0);
+  CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  close_dataset(&owner);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
+
   open_dataset(&owner);
   CHECK(et_d2_dataset_test_live_count_v1() == 1);
   CHECK(et_d2_test_owned_allocation_count_v1() == 1);
-  CHECK(et_d2_dataset_open_v1(&owner) == ET_D2_NATIVE_STATUS_INVALID_STATE);
+  CHECK(et_d2_dataset_open_v1(&owner, 0) == ET_D2_NATIVE_STATUS_INVALID_STATE);
   CHECK(et_d2_batch_create_v1(&foreign_owner, 1, 1, 17) == 0);
   CHECK(et_d2_batch_last_status_v1() == ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   CHECK(et_d2_batch_write_pair_i64le_span_v1(
@@ -574,7 +601,7 @@ static void test_live_storage_rejection(void) {
   CHECK(et_d2_batch_seal_v1(&first_owner, first_generation) == 0);
   lease = et_d2_batch_borrow_begin_v1(&first_owner, first_generation);
   view = et_d2_batch_borrow_inputs_v1(&first_owner, first_generation, lease);
-  CHECK(et_d2_dataset_open_v1(view->data) ==
+  CHECK(et_d2_dataset_open_v1(view->data, 0) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   second_generation = et_d2_batch_create_v1(&second_owner, 1, 1, 17);
   CHECK(first_generation == 1 && second_generation == 1);
