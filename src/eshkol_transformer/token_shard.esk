@@ -9,6 +9,40 @@
 (extern i64 d1-token-checked-write-new ptr ptr i64
         :real et_d1_checked_write_new_v1)
 
+;; This macro must be top-level for the pinned compiler to expand it. Runtime
+;; helpers and private markers are explicit use-site arguments, so it creates no
+;; public runtime binding or dependency.
+(define-syntax d1-token-with-shard-region
+  (syntax-rules ()
+    ((_ operation escape open-region close-fail close-marker exception-marker
+        body ...)
+     (let ((region (open-region operation)))
+       (let ((result
+              (guard
+               (caught
+                (#t
+                 (guard
+                  (close-error (#t close-marker))
+                  (let ((promoted (region-close region caught)))
+                    (vector-set! escape 0 promoted)
+                    exception-marker))))
+               (begin body ...))))
+         (cond
+          ((eq? result exception-marker)
+           (raise (vector-ref escape 0)))
+          ((eq? result close-marker)
+           (guard (ignored (#t #f)) (region-close region))
+           (let ((unreachable (close-fail operation))) unreachable))
+          (else
+           (let ((closed
+                  (guard
+                   (close-error (#t close-marker))
+                   (region-close region)
+                   #t)))
+             (if (eq? closed close-marker)
+                 (let ((unreachable (close-fail operation))) unreachable)
+                 result)))))))))
+
 (define d1-compiled-public-operations
   (let ()
     ;; Internal D1 SHA-256. Input is a bytevector; output is a fresh 32-byte
@@ -292,42 +326,6 @@
              (list 'source-code 'region-close-failed)
              (list 'source-message "region handle close failed"))
        #f))
-
-    (define-syntax d1-token-with-shard-region
-      (syntax-rules ()
-        ((_ operation escape body ...)
-         ;; The handler is installed after region-open. Conditions allocated by
-         ;; shard validation are explicitly promoted before the region closes.
-         (let ((region (d1-token-region-open operation)))
-           (let ((result
-                  (guard
-                   (caught
-                    (#t
-                     (guard
-                      (close-error
-                       (#t d1-token-region-close-failure-marker))
-                      (let ((promoted (region-close region caught)))
-                        (vector-set! escape 0 promoted)
-                        d1-token-region-exception-marker))))
-                   (begin body ...))))
-             (cond
-              ((eq? result d1-token-region-exception-marker)
-               (raise (vector-ref escape 0)))
-              ((eq? result d1-token-region-close-failure-marker)
-               ;; A keep-promotion failure leaves the region live. A no-keep
-               ;; close reclaims it before the parent-owned error is created.
-               (guard (ignored (#t #f)) (region-close region))
-               (d1-token-region-close-fail operation))
-              (else
-               (let ((closed
-                      (guard
-                       (close-error
-                        (#t d1-token-region-close-failure-marker))
-                       (region-close region)
-                       #t)))
-                 (if (eq? closed d1-token-region-close-failure-marker)
-                     (d1-token-region-close-fail operation)
-                     result)))))))))
 
     (define (d1-token-valid-nonnegative-integer? value)
       (and (integer? value) (exact? value)
@@ -948,6 +946,10 @@
                              (let ((continue?
                                     (d1-token-with-shard-region
                                      operation escape
+                                     d1-token-region-open
+                                     d1-token-region-close-fail
+                                     d1-token-region-close-failure-marker
+                                     d1-token-region-exception-marker
                                      (let* ((index
                                              (d1-token-read-u64-le counters 0))
                                             (count-sum
@@ -1025,7 +1027,7 @@
                         #t)
                     (make-summary shard-count total-tokens vocab-size
                                   shard-token-limit fingerprint
-                                  total-shard-bytes bytes)))))))))))
+                                  total-shard-bytes bytes)))))))))
 
     (define registry '())
     (define (entry-ref entry wanted)

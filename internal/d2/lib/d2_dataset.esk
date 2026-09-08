@@ -124,7 +124,8 @@
   (if (and (error-object? caught)
            (string=? (error-object-message caught)
                      "region-open: failed to create region"))
-      (d2-region-allocation-fail operation)
+      (let ((unreachable (d2-region-allocation-fail operation)))
+        unreachable)
       (let ((unreachable
              (et-e1b-private-raise
               'internal operation "D2 shard region open failed"
@@ -386,7 +387,8 @@
            (raise (vector-ref escape 0)))
           ((eq? result d2-region-close-failure-marker)
            (guard (ignored (#t #f)) (region-close region))
-           (d2-region-close-fail operation))
+           (let ((unreachable (d2-region-close-fail operation)))
+             unreachable))
           (else
            (let ((closed
                   (guard
@@ -394,7 +396,8 @@
                    (region-close region)
                    #t)))
              (if (eq? closed d2-region-close-failure-marker)
-                 (d2-region-close-fail operation)
+                 (let ((unreachable (d2-region-close-fail operation)))
+                   unreachable)
                  result)))))))))
 
 (define (d2-shuffle-ref! state ordinal)
