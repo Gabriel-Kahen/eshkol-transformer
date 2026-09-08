@@ -1,0 +1,11 @@
+;;; Private fixed-native-buffer diagnostic; this is not public model transport.
+(extern i64 n3k-test-provider :real et_n3k_test_provider_transport_v1)
+(if (= (n3k-test-provider) 1)
+    (begin
+      (display "N3K PRIVATE AOT PASS: fixed native forward/VJP and initialization")
+      (newline)
+      (exit 0))
+    (begin
+      (display "N3K PRIVATE AOT FAIL")
+      (newline)
+      (exit 1)))
