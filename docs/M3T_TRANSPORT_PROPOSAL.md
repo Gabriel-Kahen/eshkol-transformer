@@ -133,12 +133,14 @@ positive-zero bits in all 512 elements.
 Exact ingress is explicit and bounded: input copy validates a proper acyclic list
 of length exactly two and representation-real exact signed-i64 values before any
 native conversion, then validates both IDs in [0,256), stages, and commits both.
-The tokenizer adapter validates the sealed T1 owner and exact rank-one length two,
-then synchronously copies its two exact words into distinct owned rank-two I1
+The tokenizer adapter validates the sealed T1 owner, exact rank-one length two and
+both IDs in [0,256), then synchronously copies its two exact words into distinct owned rank-two I1
 storage. It retains no T1 pointer. These are declared conversions, not implicit
 reshapes or a general integer tensor adapter. Positions are owned exact I1[1,2]
 constants [0,1]; attention keep storage is exactly four owned canonical bool bytes
 [1,1,1,1] with shape [1,2,2]. Neither is an application-selected numeric mask.
+Configured T1 special IDs outside the byte range reject with shape-mismatch before
+any destination mutation.
 
 Logits byte ingress/egress uses four little-endian bytes per row-major IEEE-754
 binary32 element. It preserves every f32 bit pattern without numerical conversion; provider
@@ -301,6 +303,9 @@ implementation in a private integration translation unit and add these scoped
 helpers there. That leaves the standalone I2 public object/header/symbol manifest
 unchanged; the new private symbols are declared in M3T's exact manifests and
 localized. It does not alter the standalone borrow ABI or retired-shell rules.
+The aggregate replaces its ordinary I2 translation unit with that integration unit;
+it never also links another f32 implementation/object/archive. Repeated I1 position
+owners in A2's query/key tables likewise acquire one lease per distinct owner.
 
 P1 proposed trusted-only construction boundary: `module-construction-begin-internal`
 (arity 1, admitted provider → construction), `module-construction-root-internal`
@@ -332,6 +337,10 @@ may leave authority-free identity
 tombstones, but no live parameter/tensor payload or dangling actionable carrier.
 These are proposed changes to P1/I2 private lifetime assumptions and require
 explicit integration acceptance; source inspection alone does not authorize them.
+One seal coordinator completes P1 construction, native owner and successor-state
+preflight while every participant remains abortable, then publishes all through
+one nonfailing tail. An irreversible seal followed by another fallible seal is
+forbidden.
 
 ### Private Eshkol/native transport names
 
@@ -369,7 +378,7 @@ source. Native status is i64 at Eshkol externs; native i32 statuses widen exactl
 | gelu / heads_merge / attention | workspace, reverse bool encoded 0/1 | status |
 | sum | workspace, closed edge-group index | status |
 | workspace_gradient | workspace, canonical unique index 0..13 | private ready contribution tensor pointer |
-| last_error_category / last_error_code | no arguments | exact bounded i64 |
+| last_error_domain / last_error_category / last_error_code | no arguments | exact bounded i64 |
 
 The role indices follow each public selector list in table order, starting at zero;
 unique indices follow the canonical unique-path table. Native code independently
@@ -378,6 +387,10 @@ arbitrary native operation. Native creation output is null on failure; status ca
 preserve their documented data outputs on rejection and use a fixed private error
 record. No error-message pointer crosses Eshkol; source maps numeric diagnostics to
 bounded fixed strings. Constructor abort consumes unpublished ownership only.
+Error domains are 0=M3T, 1=K1, 2=I1, 3=I2; source maps them to the fixed symbols
+`m3t-transport`, `kernel-abi`, `i64-tensor`, `f32-tensor` and applies that domain's
+reviewed category/code mapping. Unknown domains are internal defects. Cleanup
+cannot overwrite the captured domain/category/code triple.
 
 The only future contribution handoff is trusted Eshkol
 `m3t-workspace-contributions-internal` (arity 1): require all 14 final VJP slots
