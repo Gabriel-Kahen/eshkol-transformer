@@ -39,6 +39,11 @@ expected_suites = [
     ("parameter-state", "build-ci-parameters", "test-ci-parameters-after-build"),
     ("byte-tokenizer", "build-ci-tokenizer-byte", "test-ci-tokenizer-byte-after-build"),
     ("bpe-tokenizer", "build-ci-tokenizer-bpe", "test-ci-tokenizer-bpe-after-build"),
+    (
+        "bpe-boundary",
+        "build-ci-tokenizer-bpe-boundary",
+        "test-ci-tokenizer-bpe-boundary-after-build",
+    ),
     ("shard-loader", "build-ci-dataset", "test-ci-dataset-after-build"),
 ]
 actual_suites = re.findall(
@@ -52,6 +57,11 @@ targets = recipes(makefile)
 for _, build_target, test_target in expected_suites:
     assert build_target in targets, build_target
     assert test_target in targets, test_target
+    build_header = re.search(
+        rf"^{re.escape(build_target)}:(.*)$", makefile, re.MULTILINE
+    )
+    assert build_header is not None, build_target
+    assert build_header.group(1).strip() == "configure", build_target
     header = re.search(rf"^{re.escape(test_target)}:(.*)$", makefile, re.MULTILINE)
     assert header is not None and not header.group(1).strip(), test_target
 
@@ -74,8 +84,11 @@ expected_ci_build_commands = {
     },
     "build-ci-checkpoint": {"/usr/bin/bash scripts/build-c1.sh"},
     "build-ci-parameters": set(),
-    "build-ci-tokenizer-byte": set(),
+    "build-ci-tokenizer-byte": {"/usr/bin/bash scripts/build-d2.sh"},
     "build-ci-tokenizer-bpe": set(),
+    "build-ci-tokenizer-bpe-boundary": {
+        "/usr/bin/bash scripts/build-d2.sh",
+    },
     "build-ci-dataset": {
         "/usr/bin/bash scripts/build-k1.sh",
         "/usr/bin/bash scripts/build-i1.sh",
@@ -84,6 +97,20 @@ expected_ci_build_commands = {
 }
 for target, expected in expected_ci_build_commands.items():
     assert set(targets[target]) == expected, (target, targets[target], expected)
+
+required_build_commands_by_test = {
+    "/usr/bin/bash scripts/test-t1.sh": {
+        "/usr/bin/bash scripts/build-d2.sh",
+    },
+    "/usr/bin/bash scripts/test-t2-boundary.sh": {
+        "/usr/bin/bash scripts/build-d2.sh",
+    },
+}
+for _, build_target, test_target in expected_suites:
+    for test_command in targets[test_target]:
+        required = required_build_commands_by_test.get(test_command, set())
+        missing = required - set(targets[build_target])
+        assert not missing, (test_command, build_target, missing)
 
 full_commands = targets["test-after-build"]
 sharded_commands = [

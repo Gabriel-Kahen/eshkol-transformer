@@ -19,13 +19,38 @@ jobs:
     name: CI topology
     runs-on: ubuntu-22.04
     timeout-minutes: 2
+    outputs:
+      run_full: ${{ steps.changes.outputs.run_full }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
       - run: make test-ci-topology
+      - name: Test change selection
+        run: python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
+      - name: Select required suites
+        id: changes
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.sha }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          run_full=true
+          if [[ "$CI_EVENT" == pull_request ]]; then
+            run_full=$(python3 scripts/ci_changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
+          fi
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          if [[ "$run_full" == false ]]; then
+            echo 'Documentation-only PR: compiler suites are not required.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Full compiler and acceptance suites are required.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   blocking:
     name: Blocking CI / ${{ matrix.suite }}
     needs: topology
+    if: needs.topology.outputs.run_full == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 75
     strategy:
@@ -50,6 +75,9 @@ jobs:
           - suite: bpe-tokenizer
             build_target: build-ci-tokenizer-bpe
             test_target: test-ci-tokenizer-bpe-after-build
+          - suite: bpe-boundary
+            build_target: build-ci-tokenizer-bpe-boundary
+            test_target: test-ci-tokenizer-bpe-boundary-after-build
           - suite: shard-loader
             build_target: build-ci-dataset
             test_target: test-ci-dataset-after-build
@@ -135,8 +163,15 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 2
     steps:
-      - name: Require topology and every blocking suite
+      - name: Require successful checks for the selected scope
         env:
           TOPOLOGY_RESULT: ${{ needs.topology.result }}
           BLOCKING_RESULT: ${{ needs.blocking.result }}
-        run: test "${TOPOLOGY_RESULT}" = success && test "${BLOCKING_RESULT}" = success
+          RUN_FULL: ${{ needs.topology.outputs.run_full }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          test "$TOPOLOGY_RESULT" = success
+          case "$RUN_FULL:$BLOCKING_RESULT" in
+            true:success|false:skipped) ;;
+            *) exit 1 ;;
+          esac
