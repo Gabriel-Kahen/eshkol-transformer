@@ -67,7 +67,7 @@ for source in test_native_optimizer test_optimizer_native; do
 done
 grep -Fx 'O2 native optimizer PASS' \
   "${temporary_dir}/test_native_optimizer-1.stdout" >/dev/null
-grep -Fx 'O2 native adversarial PASS: 5994 checks' \
+grep -Fx 'O2 native adversarial PASS: 6201 checks' \
   "${temporary_dir}/test_optimizer_native-1.stdout" >/dev/null
 [[ "$(ar t "${library}")" == "o2_wave2.o" ]] || \
   die "canonical O2 aggregate must contain exactly o2_wave2.o"
@@ -365,5 +365,5 @@ if [[ "${O2_ASAN_DETECT_LEAKS:-1}" == 1 ]]; then
 else
   sanitizer_summary='sanitizers (LSan disabled by caller)'
 fi
-printf 'O2 PASS: native optimizer, 5994 adversarial checks, config/state AOT, reference parity, exact 53-global successor, authority isolation, %s, and production isolation\n' \
+printf 'O2 PASS: native optimizer, 6201 adversarial checks, config/state AOT, reference parity, exact 53-global successor, authority isolation, %s, and production isolation\n' \
   "${sanitizer_summary}"

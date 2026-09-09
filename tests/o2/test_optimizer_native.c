@@ -1212,11 +1212,30 @@ static void test_cross_owner_handle_and_snapshot_failpoints(void) {
   const et_kernel_tensor_view_v1 *view = NULL;
   et_o2_test_live_counts_v1 baseline = {.struct_size = sizeof(baseline)};
   et_o2_test_live_counts_v1 current = {.struct_size = sizeof(current)};
+  et_f32_test_live_counts_v1 i2_baseline = {
+      .struct_size = sizeof(i2_baseline)};
+  et_f32_test_live_counts_v1 i2_current = {
+      .struct_size = sizeof(i2_current)};
   size_t allowed;
   int saw_failure = 0;
   int saw_success = 0;
 
   et_o2_test_live_counts_snapshot_v1(&baseline);
+  et_f32_test_live_counts_snapshot_v1(&i2_baseline);
+
+  /* Four O2 owner allocations succeed, both I2 clones are made, and the
+     first state-handle allocation fails before publication. */
+  et_o2_test_fail_alloc_after_v1(4u);
+  expect_o2_error(
+      et_o2_optimizer_state_snapshot_v1(item.optimizer, &left, &error), &error,
+      ET_O2_STATUS_INTERNAL, ET_O2_CODE_ALLOCATION_FAILED);
+  et_o2_test_reset_failpoints_v1();
+  CHECK(left == NULL);
+  et_o2_test_live_counts_snapshot_v1(&current);
+  et_f32_test_live_counts_snapshot_v1(&i2_current);
+  check_o2_live_counts_equal(&current, &baseline);
+  check_i2_live_counts_equal(&i2_current, &i2_baseline);
+
   for (allowed = 0u; allowed < 128u; allowed++) {
     et_o2_optimizer_state *attempt = NULL;
     int32_t result;
@@ -1234,10 +1253,10 @@ static void test_cross_owner_handle_and_snapshot_failpoints(void) {
                     ET_O2_CODE_ALLOCATION_FAILED);
     CHECK(attempt == NULL);
     et_o2_test_live_counts_snapshot_v1(&current);
-    CHECK(current.live_states == baseline.live_states);
-    CHECK(current.live_state_handles == baseline.live_state_handles);
-    CHECK(current.state_borrows == baseline.state_borrows);
-    CHECK(current.owned_state_clones == baseline.owned_state_clones);
+    check_o2_live_counts_equal(&current, &baseline);
+    i2_current.struct_size = sizeof(i2_current);
+    et_f32_test_live_counts_snapshot_v1(&i2_current);
+    check_i2_live_counts_equal(&i2_current, &i2_baseline);
   }
   CHECK(saw_failure != 0);
   CHECK(saw_success != 0);
@@ -1245,6 +1264,8 @@ static void test_cross_owner_handle_and_snapshot_failpoints(void) {
   left = NULL;
   baseline.struct_size = sizeof(baseline);
   et_o2_test_live_counts_snapshot_v1(&baseline);
+  i2_baseline.struct_size = sizeof(i2_baseline);
+  et_f32_test_live_counts_snapshot_v1(&i2_baseline);
   saw_failure = 0;
   saw_success = 0;
   for (allowed = 0u; allowed < 128u; allowed++) {
@@ -1260,14 +1281,15 @@ static void test_cross_owner_handle_and_snapshot_failpoints(void) {
       break;
     }
     saw_failure = 1;
-    CHECK(error.category == ET_O2_STATUS_INTERNAL);
+    expect_o2_error(result, &error, ET_O2_STATUS_INTERNAL,
+                    ET_O2_CODE_ALLOCATION_FAILED);
     CHECK(attempt == NULL);
     current.struct_size = sizeof(current);
     et_o2_test_live_counts_snapshot_v1(&current);
-    CHECK(current.live_states == baseline.live_states);
-    CHECK(current.live_state_handles == baseline.live_state_handles);
-    CHECK(current.state_borrows == baseline.state_borrows);
-    CHECK(current.owned_state_clones == baseline.owned_state_clones);
+    check_o2_live_counts_equal(&current, &baseline);
+    i2_current.struct_size = sizeof(i2_current);
+    et_f32_test_live_counts_snapshot_v1(&i2_current);
+    check_i2_live_counts_equal(&i2_current, &i2_baseline);
   }
   CHECK(saw_failure != 0);
   CHECK(saw_success != 0);
