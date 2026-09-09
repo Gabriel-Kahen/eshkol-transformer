@@ -1,9 +1,16 @@
 # D2 memory-bounded shard loader
 
-Status: **accepted contract; implementation in review**. The binding decision is
+Status: **accepted and complete**. The binding decision is
 [integration issue #1 comment 5562461427](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5562461427),
 mirrored on [D2 issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42#issuecomment-5562461448).
-This status does not claim independent D2-R approval or merge.
+The exact implementation head `8bdca978abcd4f53f0c94cb2f4562fb576e736b2`
+received [independent D2-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50#issuecomment-5604709742),
+passed [supported Ubuntu 22.04 / LLVM 21 CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34301118384/job/102308027982),
+and was merged by [PR #50](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50)
+as `d805024764a8661815be3b2c3036695195b7075f`. The supported synthetic
+merge and actual merge have the identical tree
+`69eca436397cfe8a2ff9cd3e2c8f2764af2d4f35`; the focused merged-main D2 gate
+also passed.
 The caller-region lifetime clarification in
 [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950)
 is proposed and pending; its current implementation discipline and measured basis
@@ -118,7 +125,7 @@ must be included in the caller's resource accounting. D2 state retains only the
 last-issued generation and current status, never a shell, per-generation
 authenticator, or tombstone. This
 lexical-scope rule is the subject of the pending clarification linked above; the
-review implementation requires it to meet the long-horizon memory bound.
+accepted implementation requires it to meet the long-horizon memory bound.
 
 Authenticity is enforced by registering the generated-code identities of exactly
 two fixed private compiled shell constructors, one dataset constructor and one batch
@@ -205,7 +212,7 @@ descending Fisher-Yates order. Shuffle allocation is failure-atomic, returns
 `internal` with `allocation-failed` detail, and never retries a smaller window.
 Allocator/runtime RSS, stacks, shared libraries, directory/config bytes, and fixed
 control/view/hash state are measured separately from semantic payload.
-The review resource gate uses optimized AOT and one lexical batch `with-region`,
+The acceptance resource gate uses optimized AOT and one lexical batch `with-region`,
 requires exact equality of the Eshkol retained-arena byte counter at 1,024 and 8,192
 batches on the same admitted corpus, and requires native carrier/live counts to
 return to baseline. RSS and file-descriptor peaks remain separately reported; RSS is
@@ -229,7 +236,7 @@ leaves the cursor unchanged.
 
 ## Packaging and limitations
 
-The review aggregate source-composes the T2 and I2 trusted closures with their
+The canonical aggregate source-composes the T2 and I2 trusted closures with their
 shared E1/P1L/D1/X1/C1/T1 roots exactly once. It exports exactly 58 globals and 52
 package operations: the accepted 47/41 base plus D2's eleven operations. It does not
 link localized T2/I2/O2 archives, add a K1 provider, or authorize future C2/TR3
@@ -246,14 +253,27 @@ registry entry.
 Python references and fixture generators are development-only and are absent from
 the D2 production aggregate and runtime.
 
-At the current review head the private native dataset control is 56 bytes, the
+At the accepted head the private native dataset control is 56 bytes, the
 batch control is 192 bytes, fixed view metadata is 264 bytes, and the semantic
-carrier remains exactly `17*N*T`. Local optimized-AOT evidence measured equal-token
-open retention at 31,616 bytes for one shard and 88,904 bytes for 1,024 shards
-(57,288-byte delta, below the exact 83,365-byte admitted payload); packed traversal
-retained exactly 16,448 bytes in both layouts. The 1,024- and 8,192-batch retained
-arena totals were both exactly 4,521,984 bytes, even though every iteration called
-all three public accessors before release. A separate 4,096-call probe measured
-zero retained-arena bytes for live accessors and exact repeated release. These local
-measurements are on an unsupported CachyOS/LLVM 22 probe and do not replace
-supported Ubuntu 22.04/LLVM 21.1.8 CI.
+carrier remains exactly `17*N*T`. Supported Ubuntu 22.04 / LLVM 21 optimized-AOT
+evidence measured equal-token open retention at 31,616 bytes for one shard and
+88,904 bytes for 1,024 shards (57,288-byte delta, below the exact 83,365-byte
+admitted payload); packed traversal retained exactly 16,448 bytes in both layouts.
+The 1,024- and 8,192-batch retained arena totals were both exactly 4,521,984 bytes,
+even though every iteration called all three public accessors before release. At
+both horizons native lifecycle counts moved from baseline `0/0/0/0` through open
+`1/0/0/2`, live `1/1/0/4`, and released `1/0/0/2`, then returned post-close to
+`0/0/0/0`; exact-read descriptor count was baseline/peak/post-close `0/1/0` with
+final delta zero. Supported process-wide advisory measurements were 93,672 KiB and
+5 descriptors for the one-batch small corpus versus 94,252 KiB and 6 descriptors
+for the 8,192-batch large corpus, a 580 KiB RSS delta. A separate 4,096-call probe
+measured zero retained arena bytes for live accessors and exact repeated release.
+
+The focused merged-main rerun used the same optimized path on unsupported CachyOS /
+LLVM 22.1.6 and reproduced the exact arena, native lifecycle, descriptor, and
+one/many-shard retention results above. Its process-wide advisory values were
+82,052 KiB/3 descriptors for the one-batch small corpus and 92,680 KiB/4
+descriptors for the 8,192-batch large corpus; allocator-dependent RSS is not the
+semantic bound. The unchanged raw
+production-language/dependency string, symbol, and link scans passed on that rerun.
+Supported-lane evidence remains authoritative.
