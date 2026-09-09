@@ -358,7 +358,7 @@ always leaves the dataset closed after its nonrecoverable release tail. After EO
 repeated next calls return the same sentinel without changing state until seek or
 close. D2 is serialized and makes no concurrent or reentrant mutation claim.
 
-The pinned Eshkol runtime has no tracing garbage collector. In the current D2 review
+The pinned Eshkol runtime has no tracing garbage collector. In the accepted D2
 implementation, every long-running Eshkol loop must enclose each next/validate/use/
 release interval in one lexical `with-region`. Batch and tensor shells must not cross
 that boundary unless the caller deliberately retains or promotes them and accounts
@@ -369,10 +369,10 @@ integration-owner disposition in
 [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950);
 it changes no public name, arity, carrier, cursor, or format.
 
-The review aggregate authenticates shells using the compiled code identities of two
-fixed private constructors, dataset and batch. Native state stores only those two
-per-process code addresses. This is neither a public or serialized ABI nor a portable
-closure-layout or cross-aggregate identity contract.
+The canonical D2 aggregate authenticates shells using the compiled code identities
+of two fixed private constructors, dataset and batch. Native state stores only those
+two per-process code addresses. This is neither a public or serialized ABI nor a
+portable closure-layout or cross-aggregate identity contract.
 
 ## 10. Modules and models
 
