@@ -58,6 +58,7 @@ eshkol_rational_compare_tagged_ptr
 eshkol_rational_create
 eshkol_rational_to_double
 eshkol_region_unwind_for_continuation
+eshkol_region_write_barrier_into
 eshkol_reroot_dynamic_wind
 eshkol_set_error_location
 eshkol_set_raised_value

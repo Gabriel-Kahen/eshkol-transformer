@@ -26,16 +26,26 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make toolchain'
 /usr/bin/bash -c 'make clean && make configure'
 /usr/bin/bash -c 'make build'
-/usr/bin/bash -c 'make test'
-/usr/bin/bash -c 'make smoke'
+/usr/bin/bash -c 'python3.14 -m venv "$(pwd)/.tmp/q0-venv"'
+/usr/bin/bash -c '"$(pwd)/.tmp/q0-venv/bin/python" -m pip install -r tests/q0/requirements-oracle.lock'
+/usr/bin/bash -c 'Q0_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" N2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" A2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" ESHKOL_RUN="$(pwd)/.deps/eshkol-build/eshkol-run" make test-after-build'
+/usr/bin/bash -c 'make smoke-after-build'
 ```
 
-Pull requests and pushes to `main` use four parallel fast suites with a 15-minute
-wall-clock target. They retain the compiler smoke, public contracts, native numerical
-and ownership tests, sanitizers, format oracles, D1, and C1. The full repeated-AOT,
-hostile-path, maximum-size, and aggregate-boundary suite runs nightly and through the
-`Exhaustive acceptance` workflow's manual dispatch. Run that same full lane locally
-with `make build && make test-after-build`.
+Pull requests and pushes to `main` partition the complete test command set across
+seven parallel blocking suites. Full P1, T1, T2, D2, C1, native-numerics/Q0, and
+contract/data gates run independently, while suite-specific build targets avoid
+outer builds whose artifacts the full scripts immediately rebuild. The serial
+`Exhaustive acceptance` workflow also runs nightly and through manual dispatch;
+after one clean build it uses no-rebuild test, smoke, and benchmark entry points.
+
+[Supported run 34373099684](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34373099684)
+took 3h59m10s including queue and spent about 72 minutes in redundant full builds.
+The earlier reduced run 34057603751 took 11m55s but did not carry the same coverage.
+The new full-coverage critical path is estimated at 45–55 minutes and remains to be
+measured on a hosted runner. The pinned oracle environment requires Python 3.14.6.
+Run the serial test phase locally after a build with the same four absolute oracle
+variables shown above and `make test-after-build`.
 
 Run the focused T1 tokenizer gate with:
 
@@ -48,6 +58,23 @@ Run the focused T2 deterministic BPE and streaming gate with:
 ```bash
 /usr/bin/bash -c 'make test-t2'
 ```
+
+D2's accepted memory-bounded loader contract provides the ten A0 dataset/batch
+operations plus explicit `token-batch-release!`, the canonical `ESHKDCU1` cursor,
+and a source-composed 58-global/52-export review aggregate. Its compiled public,
+carrier, exact-resume, corruption, resource, sanitizer, and frozen-Q0 gates run with
+`make test-d2`. `token-batch-release!` deterministically invalidates the generation
+and frees its native `17*N*T` carrier; the pinned runtime does not individually
+reclaim caller Eshkol shell allocations. Long-running callers must therefore keep
+each next/use/release interval in one lexical `with-region`, unless they deliberately
+retain/promote aliases and account for that caller-owned storage. This lifetime
+clarification is
+[proposed and pending](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+Shell authentication uses two fixed compiled-constructor code identities as a
+per-process private implementation ABI; it is neither public nor serializable.
+D2 remains in review rather than complete until independent D2-R, supported CI,
+merge, and merge-head retest. See
+[docs/D2_SHARD_LOADER.md](docs/D2_SHARD_LOADER.md).
 
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
 
@@ -91,6 +118,25 @@ integration aggregate is `build/i2/libeshkol_transformer_wave2.a`. The aggregate
 retains the existing E1/X1/P1/D1/C1/T1 public surface and localizes every I2 seam.
 Run the focused gate with `make test-i2`; see
 [docs/I2_F32_TENSOR.md](docs/I2_F32_TENSOR.md).
+
+N2's ABI 1.0 deterministic serial CPU-f32 primitive provider is
+`build/n2/libeshkol_transformer_n2.a`; its only public symbol is the explicit
+`et_n2_kernel_provider_v1` accessor declared in
+`include/eshkol_transformer/n2_primitives_abi.h`. It implements only the exact
+embedding, linear, LayerNorm, GELU, ReLU, dropout, and residual rows documented in
+[docs/N2_PRIMITIVES.md](docs/N2_PRIMITIVES.md). The focused `make test-n2` gate
+exercises those kernels through accepted I2 f32 and I1 exact-i64 borrows. N2 adds
+no carrier, canonical K1 resolver, compiler-autodiff claim, accelerator, mixed
+precision, or fallback.
+
+N3K adds a separate explicit ABI 1.0 provider for the accepted two-token diagnostic
+profile at `build/n3k/libeshkol_transformer_n3k.a`, discovered only through
+`et_n3k_kernel_provider_v1`. Its exact embedding, bias-free linear, GELU, residual,
+layout/VJP, ordered-sum, and explicit-state matrix-initializer contracts are in
+[docs/N3K_PRIMITIVES.md](docs/N3K_PRIMITIVES.md). Run `make test-n3k` for independent
+numerical/gradient references, owned I1/I2 borrows, native failure atomicity,
+private pinned-Eshkol AOT, sanitizers, and package isolation. This provider adds no
+public model, RNG transport, initializer registry, or provider composition.
 
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
@@ -180,5 +226,6 @@ See:
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
 - [Deterministic BPE tokenizer and streaming contract](docs/BPE_TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
+- [D2 memory-bounded shard-loader contract](docs/D2_SHARD_LOADER.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

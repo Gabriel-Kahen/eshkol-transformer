@@ -1,14 +1,18 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: toolchain configure build build-fast-core build-fast-contracts \
-	build-fast-checkpoint build-fast-state \
-	test test-after-build test-fast-core-after-build \
-	test-fast-contracts-after-build test-fast-checkpoint-after-build \
-	test-fast-state-after-build \
-	test-a0 test-a2 test-b0 test-c1 test-d1 test-e1 test-e1b test-i1 \
-	test-i2 test-i2-native test-k1 test-l2 test-p1 test-p1-native \
-	test-python-isolation test-reference-formats test-t1 test-t2 test-x1 \
+.PHONY: toolchain configure build \
+	build-ci-core build-ci-contracts build-ci-checkpoint build-ci-parameters \
+	build-ci-tokenizer-byte build-ci-tokenizer-bpe build-ci-dataset \
+	test test-after-build test-ci-core-after-build \
+	test-ci-contracts-after-build test-ci-checkpoint-after-build \
+	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
+	test-ci-tokenizer-bpe-after-build test-ci-dataset-after-build \
+	test-ci-topology \
+	test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b \
+	test-i1 test-i2 test-i2-native test-k1 test-l2 test-n2 test-n3k \
+	test-p1 test-p1-native test-python-isolation test-q0 \
+	test-reference-formats test-t1 test-t2 test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
 
 toolchain:
@@ -26,8 +30,9 @@ build: configure
 	/usr/bin/bash scripts/build-c1.sh
 	/usr/bin/bash scripts/build-t1.sh
 	/usr/bin/bash scripts/build-t2.sh
+	/usr/bin/bash scripts/build-d2.sh
 
-build-fast-core: configure
+build-ci-core: configure
 	/usr/bin/bash scripts/generate-p1-roots.sh --check
 	/usr/bin/bash scripts/compile-smoke.sh "$${BUILD_DIR:-$$(pwd)/build}"
 	/usr/bin/bash scripts/build-k1.sh
@@ -35,17 +40,27 @@ build-fast-core: configure
 	/usr/bin/bash scripts/build-i1.sh
 	/usr/bin/bash scripts/build-a2.sh
 	/usr/bin/bash scripts/build-i2.sh
+	/usr/bin/bash scripts/build-n2.sh
+	/usr/bin/bash scripts/build-n3k.sh
 	/usr/bin/bash scripts/build-p1-package.sh
 
-build-fast-contracts: configure
+build-ci-contracts: configure
+	/usr/bin/bash scripts/build-x1.sh
 	/usr/bin/bash scripts/build-d1.sh
 
-build-fast-checkpoint: configure
+build-ci-checkpoint: configure
 	/usr/bin/bash scripts/build-c1.sh
 
-build-fast-state: configure
-	/usr/bin/bash scripts/build-t1.sh
-	/usr/bin/bash scripts/build-t2.sh
+build-ci-parameters: configure
+
+build-ci-tokenizer-byte: configure
+
+build-ci-tokenizer-bpe: configure
+
+build-ci-dataset: configure
+	/usr/bin/bash scripts/build-k1.sh
+	/usr/bin/bash scripts/build-i1.sh
+	/usr/bin/bash scripts/build-d2.sh
 
 test: build
 	$(MAKE) test-after-build
@@ -60,36 +75,52 @@ test-after-build:
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
 	/usr/bin/bash scripts/test-i2.sh
+	/usr/bin/bash scripts/test-n2.sh
+	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
+	/usr/bin/bash scripts/test-d2.sh
 	/usr/bin/bash scripts/test-c1.sh
 	/usr/bin/bash scripts/test-t1.sh
 	/usr/bin/bash scripts/test-t2.sh
-	python3 -m unittest -v tests.q0.test_python_isolation
+	/usr/bin/bash scripts/test-q0.sh
 
-test-fast-core-after-build:
+test-ci-core-after-build:
 	/usr/bin/bash scripts/test.sh
 	/usr/bin/bash scripts/test-k1.sh
 	/usr/bin/bash scripts/test-a2.sh
 	/usr/bin/bash scripts/test-l2.sh
 	/usr/bin/bash scripts/test-i1.sh
-	/usr/bin/bash scripts/test-i2-native.sh
+	/usr/bin/bash scripts/test-i2.sh
+	/usr/bin/bash scripts/test-n2.sh
+	/usr/bin/bash scripts/test-n3k.sh
+	/usr/bin/bash scripts/test-q0.sh
 
-test-fast-contracts-after-build:
+test-ci-contracts-after-build:
 	/usr/bin/bash scripts/check_a0_api_contract.sh
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-d1.sh
 
-test-fast-checkpoint-after-build:
+test-ci-checkpoint-after-build:
 	/usr/bin/bash scripts/test-c1.sh
 
-test-fast-state-after-build:
-	/usr/bin/bash scripts/test-p1-native.sh
-	$(MAKE) test-reference-formats
-	$(MAKE) test-python-isolation
+test-ci-parameters-after-build:
+	/usr/bin/bash scripts/test-p1.sh
+
+test-ci-tokenizer-byte-after-build:
+	/usr/bin/bash scripts/test-t1.sh
+
+test-ci-tokenizer-bpe-after-build:
+	/usr/bin/bash scripts/test-t2.sh
+
+test-ci-dataset-after-build:
+	/usr/bin/bash scripts/test-d2.sh
+
+test-ci-topology:
+	/usr/bin/bash scripts/check-ci-topology.sh
 
 test-a0: build
 	/usr/bin/bash scripts/check_a0_api_contract.sh
@@ -118,8 +149,14 @@ test-i1: build
 test-i2: build
 	/usr/bin/bash scripts/test-i2.sh
 
-test-i2-native: build-fast-core
+test-i2-native: build-ci-core
 	/usr/bin/bash scripts/test-i2-native.sh
+
+test-n2: build
+	/usr/bin/bash scripts/test-n2.sh
+
+test-n3k: build
+	/usr/bin/bash scripts/test-n3k.sh
 
 test-x1: configure
 	/usr/bin/bash scripts/test-x1.sh
@@ -133,6 +170,9 @@ test-p1-native: configure
 test-d1: build
 	/usr/bin/bash scripts/test-d1.sh
 
+test-d2: build
+	/usr/bin/bash scripts/test-d2.sh
+
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
 
@@ -141,6 +181,9 @@ test-t1: build
 
 test-t2: build
 	/usr/bin/bash scripts/test-t2.sh
+
+test-q0: build
+	/usr/bin/bash scripts/test-q0.sh
 
 test-python-isolation:
 	python3 -m unittest -v tests.q0.test_python_isolation

@@ -4,6 +4,106 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-06 — D2 caller-region lifetime clarification (proposed)
+
+- **Decision:** proposed and pending integration-owner disposition in
+  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+  This entry does not amend the accepted D2 contract unless that proposal is
+  explicitly accepted.
+- **Proposed lifetime clarification:** replace references to GC-managed generation
+  capabilities with caller-region-managed Eshkol capabilities. The pinned runtime
+  has no tracing collector. `token-batch-release!` invalidates the live generation
+  and ends the native borrow/carrier lifetime, freeing the exact native `17*N*T`
+  carrier; it does not individually reclaim the batch/tensor closure, environment,
+  or capability-vector objects allocated in the caller's Eshkol region. A
+  long-running caller must put each `token-dataset-next-batch` through
+  `token-batch-release!` interval in one lexical `with-region`. No batch or tensor
+  shell may cross that boundary unless the caller deliberately retains or promotes
+  it and accounts for the resulting caller-owned storage. C2/TR3 must preserve this
+  lexical batch scope.
+- **Authentication boundary:** D2 retains no batch/tensor shell and no
+  per-generation authentication object or tombstone. The compiled aggregate
+  registers the generated-code identities of exactly two fixed private shell
+  constructors, dataset and batch, and native code retains only those two code
+  addresses. This is a pinned, per-process private implementation ABI: it is not a
+  public C ABI, serialized identity, portable closure-layout contract, or authority
+  valid across a process or independently compiled aggregate.
+- **Evidence:** optimized AOT without a lexical batch region retained 35,782,656
+  arena bytes after 1,024 batches and 254,345,216 bytes after 8,192 batches. The same
+  binary shape and admitted corpus, with one lexical batch `with-region`, retained
+  exactly 4,849,664 bytes at both horizons, an exact zero-byte slope. The proposed
+  review gate therefore compares the exact Eshkol arena counter at both horizons;
+  native live counts must return to baseline and RSS remains separately reported and
+  advisory.
+- **Compatibility:** no public name/arity, carrier, cursor/format, shuffle, aggregate
+  count, or native data ABI changes. `ESHKDCU1` remains version 1.0 and the aggregate
+  remains exactly 58 globals/52 exports. Independent D2-R, supported CI, merge, and
+  merge-head retest remain pending; ROADMAP stays `review`.
+
+## 2026-09-06 — D2 / issue #42 accepted current-main contract
+
+- **Decision:** accepted in
+  [integration issue #1 comment 5562461427](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5562461427)
+  and mirrored in
+  [issue #42 comment 5562461448](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42#issuecomment-5562461448).
+  It accepts the superseding exact proposal and canonical/adversarial corrections in
+  [comment 5557201280](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557201280).
+  Implementation is reconciled with merged main
+  `231f9354f14389db15faac7820ef23dc038ae941`; independent approval and merge remain
+  pending.
+- **Public contract and A0 amendments:** the delta is exactly the ten existing A0
+  dataset/batch operations plus unary `token-batch-release!`. Every exact authentic
+  generation already issued by a dataset remains an idempotent release authority,
+  including after a successor, seek, or close; all other stale access remains
+  `invalid-state`. The three batch accessors return stable read-only state-backed
+  opaque tensor identities, not newly
+  owned clones. `token-dataset-cursor` returns newly owned detached mutable canonical
+  bytevector storage, not an immutable registry object. The dataset config is the
+  exact ten-key acyclic flat list specified in [D2_SHARD_LOADER.md](D2_SHARD_LOADER.md),
+  not X1. Open normalizes and deep-copies it, retains neither caller carriers nor the
+  tokenizer, rejects NUL paths, and validates every shard before publication.
+- **Rows, carrier, and lifetime:** packed rows may cross D1 shards; unpacked rows do
+  not, and no shard/document equivalence is claimed. Inputs and targets are the exact
+  one-token shift, with zero only at false-mask positions and in unused final rows.
+  The carrier is exactly two CPU dense `i64[N,T]` planes and one CPU dense one-byte
+  `bool[N,T]` loss-mask plane, payload `17*N*T`. One dataset has one current native
+  registry entry and at most one live batch. Authenticated shell copies alias that
+  generation. Release invalidates the batch and three tensor identities before the
+  fixed destruction tail, is idempotent for every exact authentic already-issued
+  generation, and retains no per-generation carrier/tombstone. Scoped K1 views
+  cannot escape; active borrow blocks release/close before mutation. Generation
+  exhaustion never wraps.
+- **Ordering and cursor:** consecutive bounded windows use descending Fisher-Yates
+  with domain-separated SHA-256 u64-le draws and rejection sampling. The algorithm
+  removes modulo bias within a window conditional on the digest stream but is not a
+  global-uniform claim. `ESHKDCU1` version 1.0 is the accepted, exact `208+F`-byte
+  C2-facing state. Seek validates physical structure, canonical encoding, version/
+  features/algorithm, checksum, dataset/options identity, recomputed row count, and
+  ordinal before one receiver commit. It defines no C2 container or epoch state.
+- **Resources, errors, and packaging:** the semantic working-set admission is exactly
+  `maximum_manifest_bytes + maximum_shard_bytes + 17*N*T + 8*min(B,M)`, plus
+  separately measured fixed control/view/hash state. Checked exact ceilings admit;
+  one-over rejects before the associated read/allocation. At most one manifest, one
+  shard, one batch, and one shuffle window are retained; there is no whole-corpus or
+  unbounded row/record table. The source-composed review aggregate extends the 47/41
+  T2/I2 base to exactly 58 globals/52 package exports, composes shared trusted roots
+  once, and does not link localized I2/T2/O2 aggregates. N2 adds no wrapper/count.
+  Exact error categories and precedence are specified in the D2 document.
+  The implementation routes D2 manifest/shard reads through the reviewed exact-range
+  descriptor primitive, while preserving Eshkol-native parsing, SHA-256, and errors;
+  it therefore retains no process-lifetime hosted-port entries. The private dataset
+  control owns exactly `min(B,M)` checked i64 shuffle slots, with Eshkol retaining the
+  accepted unbiased Fisher-Yates algorithm. This is an internal storage/lifetime
+  decision only: it changes no public operation, carrier, cursor/format, aggregate
+  count, or public ABI.
+- **Dependencies / retest:** affected A0, D1, T1, T2, I2, N2, and Q0 gates; public
+  compiled content/lifetime/resource/corruption evidence; deterministic AOT and
+  sanitizers; full supported Ubuntu 22.04/LLVM 21 CI; and independent D2-R are
+  required. ROADMAP may remain only `review` until approval, merge, merge-head
+  retest, and acceptance-document follow-up.
+- **Reference:** [issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42);
+  [PR #50](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50).
+
 ## Schema
 
 | Field | Content |
@@ -1359,3 +1459,106 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   the complete affected repository test/smoke/benchmark gates, new supported Ubuntu
   22.04 / LLVM-Clang 21.1.8 exact-head CI, and a separate bounded L2-R integration-
   delta review are required. PR #56 remains open and must not be merged here.
+
+## 2026-09-03 — N2 / issue #47
+
+- **Decision:** frozen for review with the three binding clarifications below after
+  I2 PR #53 exact approved head `c4522b2e5473ac46d5d45e889755076ffdb89cfa`
+  merged into main as `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. N2 is
+  `review`; no Wave-2 provider aggregate is claimed.
+- **Contract frozen:** one registry-free deterministic CPU-f32 provider archive,
+  `build/n2/libeshkol_transformer_n2.a`, contains only
+  `n2_primitives_provider.o` and exposes only
+  `et_n2_kernel_provider_v1` through
+  `include/eshkol_transformer/n2_primitives_abi.h`. It defines no canonical K1
+  symbol and no A0 Eshkol name. Whole-capability ownership is unique: a future
+  single registry-owning Wave-2 aggregate rejects duplicate capability names and
+  forwards unchanged K1 calls, tensor descriptors, and storage identities to one
+  accessor-selected owner.
+
+  The exact capabilities are distinct `kernel.embedding-forward` and
+  backward-only `kernel.embedding-backward`, plus `kernel.matmul`, `kernel.norm`,
+  `kernel.activation`, `kernel.dropout`, and `kernel.residual`. Every advertised
+  K1 row is min=max and every operation/row Cartesian combination must execute in
+  the focused gate; zero and absent rows remain unsupported. Exact ordered tensor
+  schemas, unnormalized analytic VJPs, input-alias rules, serial binary32 reduction
+  order, two-pass biased LayerNorm, exact-erf GELU, positive-zero ReLU kink policy,
+  failure-atomic dry preflight, and residual per-edge/I2 accumulation semantics are
+  fixed by the accepted corrected proposal.
+
+  Dropout uses a self-contained signed-`i64[4]` Philox4x32-10 state with numeric
+  version `+1`, exact signed/unsigned mappings, published constants/equations/lane
+  order, overflow-safe block counting, tail discard, and an exhausted maximum
+  counter sentinel. Train backward receives the original state, regenerates the
+  mask, and emits no successor. Both signed p zeros and eval are byte-copy paths
+  with no RNG work. Positive-p inverted scaling is explicitly binary32. The
+  supported environment is RNE, no contraction/excess precision, and FTZ/DAZ off;
+  dry preflight restores the complete incoming FP exception status.
+
+  Every embedding ID is signed exact i64 and must satisfy numeric `0<=id<V`;
+  negative and `id>=V` values reject as `invalid-argument` before row access.
+  LayerNorm epsilon must be finite and numerically `>0.0f`; both signed zeros,
+  negatives, infinities, and NaN reject before evaluation or mutation.
+  Provider input/input overlap rejects with `ET_KERNEL_ERROR_INVALID_ARGUMENT` and
+  `ET_KERNEL_CODE_PROVIDER_REJECTED`, never K1's `ALIASING_OUTPUT`, which remains
+  reserved for K1-detected output overlap.
+- **Carrier-neutral evidence to date:** exact-pin compiled probes show that generic
+  Eshkol tensors retain f64-distinguishing values, tensor/LayerNorm reverse AD is rejected or
+  wrong, built-in dropout has hidden/global divergent RNG behavior, and malformed
+  reshape/broadcast/dimension operations may return garbage, crash, or accept
+  invalid input. These observations reject generic tensor, compiler-AD, and built-in
+  dropout paths; they do not establish production f32/device/ownership support.
+  The carrier-neutral Q0 fixture contains 26 cases and 82 tensors against exact
+  PyTorch `2.13.0+cpu`; all 31 reference, Philox, fixture-integrity, and independent
+  numerical-gradient tests pass under that pin. Under the system interpreter all
+  17 runnable tests pass and the 14 PyTorch-bound tests skip explicitly. The review
+  provider passes 1,892 optimized and ASan/UBSan/LSan native checks, including
+  direct scaled central differences over all 79 differentiable input/parameter
+  coordinates, plus 59,161 all-operation descriptor, alias, domain, Philox
+  multi-block overflow, failure-atomicity, and independent x87/MXCSR status checks
+  in both builds. A separate 449-check optimized and sanitized integration harness
+  dispatches every primitive through real I2 f32 and I1 exact-i64 borrows, proves
+  active-borrow mutation/destruction blocking and release, and binds backward
+  contributions to I2 gradient metadata and atomic plans. The gate binds all 32
+  bits of three official Random123 vectors to the native implementation through a
+  19-check test-only hook, passes 76 separate exact-bit/hash checks across every
+  primitive and VJP output, rejects 14 compiled source mutations through the bit
+  and frozen suites, and verifies exact archive/symbol/source/IR isolation, the
+  unchanged K1 baseline, deterministic fresh builds, and all 68 operation/row
+  combinations.
+  The negative harness exposed separate x87/MXCSR exception-status contamination
+  in the initial `fexcept_t` restoration; complete `fenv_t` snapshot/restore fixes
+  it without changing arithmetic. A fixed private transport compiles with
+  the pinned Eshkol compiler and produces byte-identical binaries and output across
+  two runs; its native bridge is also covered by ASan/UBSan/LSan. These are local
+  implementation results on the explicitly unsupported CachyOS/LLVM 22
+  compatibility host, not published production capability evidence. N2 exact-head
+  Ubuntu 22.04 / LLVM-Clang 21.1.8 CI and independent N2-R review remain pending.
+- **Dependencies / retest:** merged I2 supplies physical owned dense zero-offset
+  CPU f32 storage, synchronous K1 borrows, exact P1 handle/tie identity, gradient
+  metadata, and atomic plans without an N2-facing contract deviation. Accepted I1
+  supplies exact i64 views for embedding IDs and dropout state. N2's focused gate
+  must retain I1/I2 borrow/lifetime, gradient-plan, K1/Q0 regression, and sanitizer
+  evidence at every review head. RMSNorm and SwiGLU remain MOD5.
+- **Reference:** [issue #47](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/47);
+  [change-required decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5526909956);
+  [corrected integration proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5527059596);
+  [corrected issue proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/47#issuecomment-5527059832);
+  [accepted contract and binding clarifications](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5527945682);
+  [I2 PR #53](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53);
+  [I2-R exact-head approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53#issuecomment-5556348520);
+  [I2 supported CI run 33988137736](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33988137736);
+  [I2-R requested changes](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/53#issuecomment-5526955464);
+  [I2 supported CI run 33711937185](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33711937185);
+  [upstream LayerNorm AD evidence](https://github.com/tsotchke/eshkol/issues/551#issuecomment-5526758405).
+
+## N3K — bounded diagnostic numerical provider
+
+- **Status:** accepted and complete for the bounded N3K workstream. Tracking [#66](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/66), parent #1; implementation base `231f9354f14389db15faac7820ef23dc038ae941`.
+- **Direction and contract:** [accepted profile/prerequisite split](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584217290), [exact proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584346444), [clarifications](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584381218), and [explicit acceptance/corrections](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584383610). Audit #65 at `a97c1095b542f1f86f3273139d39af2d8ae47e93` was fetched read-only, not merged. `docs/N3K_PRIMITIVES.md` records the exact accepted interface and reproduction commands.
+- **Scope:** sole `et_n3k_kernel_provider_v1`, ABI 1.0, one-member explicitly selected archive, nine distinct capabilities and 31 exact operation/row pairs. Includes bounded embeddings, four bias-free linears, GELU, residuals, materialized layouts/inverse VJPs, ordered sums, and per-matrix Philox uniform initialization. Existing N2/A2/K1 source/header/schema/evidence and artifacts remain unchanged. No D2/O2 APIs, public model/lifecycle/transport, ingress, scalar reduction, checkpoint/trainer, upstream compiler changes, or provider composition.
+- **Validation:** full focused gate passes 23 Python oracles, 15,227 primitive checks/3,248 actual-native central derivatives, 12,944 composition/initializer checks, 8,328 negative/atomicity checks, and 31,458 owned I1/I2 integration checks. All 67,957 native checks plus the private bridge pass ASan/UBSan/LSan with `detect_leaks=1`. Actual compiler dependency closure, exact symbols/archive, immutable predecessor hashes/K1 baseline, fresh artifact determinism, C/C++ ABI and two fresh pinned-Eshkol private AOT binaries/stdout pass.
+- **Independent review:** three Astra-high reviewers found no unresolved numerical/schema, initializer/composition, or ownership/fenv/packaging blocker. Added invalid-ID, ordinary-input-alias, and repeated-scatter overflow tests in response to negative-review findings; independently sanitized again. Maximum primitive reference absolute error was `7.62939453e-06` on the local compatibility host.
+- **Integration acceptance (2026-09-08):** [N3K-R approved](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67#issuecomment-5587426332) exact head `39a79d2d6a87f9759b828082ac86fd66c67e2cf0` after primary and three independent Astra-high reviews. [Supported run 34222643674](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34222643674) passed the full matrix, build, smoke and benchmark. CI checked out synthetic merge `b8c1768b75f54b4ac399d1d4cef0e05f68ae9f73`; its exact base/head parents and tree were verified. [PR #67](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67) merged as `15ab04d4be6df11ca279c3eeb50b582e8163d535`. Reviewed head, CI checkout and actual merge all have tree `07cf8f8c3d9529a4df4c2f4a81e649fcc9e4bc49`.
+- **Merged-main retest:** integration revalidated pinned Eshkol, configured and rebuilt K1/I1/I2/N3K, then ran `N3K_ASAN_DETECT_LEAKS=1 scripts/test-n3k.sh` with explicit non-login `/usr/bin/bash`: PASS. The 23 oracle tests, 67,957 native assertions, 3,248 primitive central derivatives, reference error `7.62939453e-06`, owned carrier checks, fresh private AOT, predecessor/ABI/source/archive isolation and ASan/UBSan/LSan match the approved evidence. This retest used explicit CachyOS/LLVM22 compatibility settings and the revalidated compiler under the `41a1` worktree; supported Ubuntu22/LLVM21 evidence is supplied by the CI run above.
+- **Limits and downstream obligations:** private AOT establishes no public Eshkol model. Numeric RNG words neither authenticate initializer identity nor domain-separate streams; typed transport must validate identity. Reference unique-storage/path scheduling is test-only; production caller enforcement, whole-model publication, model wiring, and training remain downstream. No first-release, performance, GPU, general AD, JIT, or resume claim.

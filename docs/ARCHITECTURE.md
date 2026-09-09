@@ -43,8 +43,8 @@ public contracts are versioned independently of implementations.
 - Hidden states are floating tensors shaped `[batch, sequence, hidden]`.
 - Attention projections explicitly document head and grouped-query layouts.
 - Logits are `[batch, sequence, vocabulary]`.
-- Indexed LM targets are `[batch, sequence]`; padding/document exclusions are carried
-  by a boolean or numeric loss mask of the same leading shape.
+- Indexed LM targets are `[batch, sequence]`; D2 batches carry a one-byte boolean
+  loss mask of exactly the same shape. D2 shards do not imply document boundaries.
 - Every operation declares accepted dtypes, devices, contiguity, broadcasting, and
   gradient support.
 
@@ -55,6 +55,17 @@ preserving ties through the merged release-capable P1L provider interface. Exact
 and bool operands remain separate carrier contracts; no numeric vector, cast,
 transfer, or fallback may impersonate them. I2 is a prerequisite of N2 and O2, but
 owns neither numerical layer kernels nor an optimizer algorithm.
+
+D2 owns the finite memory-bounded D1-shard-to-batch path. One dataset retains one
+bounded manifest, at most one bounded shard, one fixed-shape batch, and one bounded
+shuffle window. Its carrier is two dense CPU i64 `[N,T]` planes and one dense CPU
+one-byte bool `[N,T]` plane. Public tensor identities are stable state-backed
+capabilities; reviewed consumers borrow unchanged K1 views only synchronously.
+Explicit batch release invalidates authority before storage destruction. The
+detached `ESHKDCU1` cursor is D2's only downstream C2 state contract. D2 exact-range
+native I/O owns descriptor lifetime only; Eshkol owns parsing and validation. The
+dataset's private native control owns the admitted fixed shuffle slots while the
+shuffle algorithm and cursor remain Eshkol-native.
 
 ## Native boundary
 

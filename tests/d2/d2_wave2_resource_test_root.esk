@@ -1,0 +1,2 @@
+;;; Test-only D2 aggregate root for public resource accounting evidence.
+(load "d2_wave2_root.esk")

@@ -27,6 +27,9 @@ jobs:
       P1_LSAN: '1'
       C1_LSAN: '1'
       I2_ASAN_DETECT_LEAKS: '1'
+      D2_ASAN_DETECT_LEAKS: '1'
+      N2_ASAN_DETECT_LEAKS: '1'
+      N3K_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -49,7 +52,26 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: .deps
-          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh') }}
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+
+      - name: Select pinned oracle Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14.6'
+
+      - name: Install pinned development oracle
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/development-oracle"
+          "$RUNNER_TEMP/development-oracle/bin/python" -m pip install \
+            --disable-pip-version-check \
+            -r tests/n2/requirements-reference.lock
+          {
+            echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "A2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "Q0_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "ESHKOL_RUN=$GITHUB_WORKSPACE/.deps/eshkol-build/eshkol-run"
+          } >> "$GITHUB_ENV"
 
       - name: Verify pinned Eshkol toolchain
         shell: /usr/bin/bash -euo pipefail {0}
