@@ -42,6 +42,23 @@ Run the focused T2 deterministic BPE and streaming gate with:
 /usr/bin/bash -c 'make test-t2'
 ```
 
+D2's accepted memory-bounded loader contract provides the ten A0 dataset/batch
+operations plus explicit `token-batch-release!`, the canonical `ESHKDCU1` cursor,
+and a source-composed 58-global/52-export review aggregate. Its compiled public,
+carrier, exact-resume, corruption, resource, sanitizer, and frozen-Q0 gates run with
+`make test-d2`. `token-batch-release!` deterministically invalidates the generation
+and frees its native `17*N*T` carrier; the pinned runtime does not individually
+reclaim caller Eshkol shell allocations. Long-running callers must therefore keep
+each next/use/release interval in one lexical `with-region`, unless they deliberately
+retain/promote aliases and account for that caller-owned storage. This lifetime
+clarification is
+[proposed and pending](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+Shell authentication uses two fixed compiled-constructor code identities as a
+per-process private implementation ABI; it is neither public nor serializable.
+D2 remains in review rather than complete until independent D2-R, supported CI,
+merge, and merge-head retest. See
+[docs/D2_SHARD_LOADER.md](docs/D2_SHARD_LOADER.md).
+
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
 
 ```bash
@@ -192,5 +209,6 @@ See:
 - [Byte tokenizer format and runtime contract](docs/TOKENIZER_FORMAT.md)
 - [Deterministic BPE tokenizer and streaming contract](docs/BPE_TOKENIZER_FORMAT.md)
 - [Token corpus format](docs/TOKEN_SHARD_FORMAT.md)
+- [D2 memory-bounded shard-loader contract](docs/D2_SHARD_LOADER.md)
 - [Integration log](docs/INTEGRATION_LOG.md)
 - [Contributing](CONTRIBUTING.md)

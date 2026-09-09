@@ -338,8 +338,12 @@ for repetition in 1 2; do
     --compile-only -I "${PROJECT_ROOT}/lib" \
     --emit-depfile "${t2_boundary_tmp}/caller.d" "${caller_source}" \
     -o "${t2_boundary_tmp}/caller.o"
+  # The historical T2 aggregate remains checked above at its accepted 47/41
+  # boundary.  The installed public facade now also declares D2 operations, so
+  # the all-module reverse-import executable must link through the current
+  # 58/52 successor rather than leaving those accepted wrappers unresolved.
   run_compiler "caller-link-${repetition}" --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" -L "${production_one}" \
+    -I "${PROJECT_ROOT}/lib" -L "$(project_build_dir)/d2" \
     --lib eshkol_transformer_wave2 "${caller_source}" \
     -o "${t2_boundary_tmp}/caller"
   timeout --foreground --signal=TERM --kill-after=5s 60s \
@@ -402,7 +406,7 @@ done
 nm -u --format=posix "${t2_boundary_tmp}/caller-1.o" | \
   awk '{ print $1 }' | grep '^et_e1b_' | LC_ALL=C sort -u \
   >"${t2_boundary_tmp}/caller-wrapper-refs.txt"
-cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
+cmp "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt" \
   "${t2_boundary_tmp}/caller-wrapper-refs.txt"
 if ldd "${t2_boundary_tmp}/caller-1" | grep -Eiq 'python|torch'; then
   die "Wave 2 public caller links a Python or Torch runtime"
