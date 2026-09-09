@@ -49,7 +49,7 @@ public contracts are versioned independently of implementations.
   gradient support.
 
 I2 supplies the carrier-local boundary for the first shared owned dense CPU-f32
-storage. Its active P1 integration binds stable live parameter value storage and
+storage. Its accepted P1 integration binds stable live parameter value storage and
 explicit accumulated-gradient slots to P1's canonical unique handles while
 preserving ties through the merged release-capable P1L provider interface. Exact i64
 and bool operands remain separate carrier contracts; no numeric vector, cast,

@@ -4,12 +4,48 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
-## 2026-09-06 — D2 caller-region lifetime clarification (proposed)
+## 2026-09-09 — Wave 2 merged-primitive acceptance closeout
 
-- **Decision:** proposed and pending integration-owner disposition in
+- **Decision:** accepted and complete for the bounded A2, T2, L2, I2, and N2
+  workstreams. Their earlier active/proposed/review entries remain historical and
+  are superseded in status only.
+- **Evidence:** [Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md)
+  records each exact-head independent approval, implementation merge, supported
+  PR CI, and post-merge supported test run. A separate read-only Sol/high audit
+  reconciled review comments, merge/head/CI tree identity, and actual workflow
+  steps; it did not infer completion merely from merge status.
+- **N2 qualification:** immediate post-merge run 34062447715 failed on fresh-oracle
+  byte identity for an unproved cause. The later supported run 34301118384 passed
+  all 31 pinned N2 oracle tests without skips, including fresh regeneration, and
+  the full N2/integration/smoke/benchmark gates. Its tree equals merged main
+  `d805024`; all 27 N2-owned paths equal the N2 implementation merge. Integration
+  accepts this explicitly superseding retest, without erasing the earlier failure.
+- **Scope:** documentation/status correction only; no API, ABI, numerical domain,
+  lifetime, format, or required-gate changes. This does not close D2/O2/C2, mark
+  all of Wave 2 complete, or claim a complete language model or training runtime.
+
+## 2026-09-09 — D2 caller-region clarification accepted with amendment
+
+- **Decision:** [amend and accept](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148)
+  proposal 5563425950. Native release does not reclaim caller-region Eshkol shells;
+  bounded batch loops require one lexical next/use/release region.
+- **Live-allocation condition:** authentic stale/idempotent-alias guarantees apply
+  only while the shell allocation is live. Accessing an unretained shell after
+  region exit has no safety or structured-error guarantee. Deliberately preserved
+  live aliases remain caller-owned and accounted separately; a raw reference alone
+  is not allocation retention. C2/TR3 must preserve these scopes.
+- **Evidence:** final merged public-loop measurements are 4,521,984 arena bytes at
+  both 1,024 and 8,192 batches, native lifecycle baseline return, and exact-read FD
+  baseline/peak/post-close 0/1/0 with final delta zero. The older proposal's
+  4,849,664-byte totals are historical measurements of another tree, not the final
+  totals. No API, cursor, carrier, aggregate count, or native ABI changes.
+
+## 2026-09-06 — D2 caller-region lifetime clarification (historical proposal)
+
+- **Historical decision:** proposed and pending integration-owner disposition in
   [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
-  This entry does not amend the accepted D2 contract unless that proposal is
-  explicitly accepted.
+  This original proposal is superseded by the amended acceptance above; its
+  measurements and original wording remain chronological evidence.
 - **Proposed lifetime clarification:** replace references to GC-managed generation
   capabilities with caller-region-managed Eshkol capabilities. The pinned runtime
   has no tracing collector. `token-batch-release!` invalidates the live generation

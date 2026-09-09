@@ -1,5 +1,9 @@
 # A2 causal attention, RoPE, and KV-cache contract
 
+Status: **accepted and complete** within the bounded A2 contract. Independent
+approval, merge, supported CI, and post-merge evidence are recorded in
+[Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md).
+
 ## Evidence boundary
 
 A2 is a carrier-neutral numerical and cache substrate. It adds no A0 public Eshkol

@@ -1,9 +1,10 @@
 # I2 dense CPU-f32 tensor and parameter-gradient substrate
 
-Status: **active**. I2 is a shared prerequisite of N2 and O2. The merged P1L
-contract now permits integration of the versioned carrier-local native storage,
-gradient, atomic-plan, P1 state-lifetime, and C1 codec boundaries. Review status
-still requires the complete focused gate and supported-CI evidence. I2 adds no new
+Status: **accepted and complete** within the bounded I2 contract. Independent
+approval, merge, supported CI, and post-merge evidence are recorded in
+[Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md). I2 supplies the
+carrier-local native storage, gradient, atomic-plan, P1 state-lifetime, and C1
+codec boundaries. I2 adds no new
 A0 public Eshkol name or arity, numerical layer, optimizer
 algorithm, checkpoint format, mixed-precision policy, accelerator support, or
 fallback.
@@ -295,5 +296,5 @@ LeakSanitizer. It compiles two fresh-cache strict AOT integration executables,
 requires byte-identical programs and
 stdout, exercises real P1/C1/I2 state ownership, and rejects the canonical K1
 provider symbol and production Python/PyTorch references. Supported Ubuntu 22.04
-x86-64 with LLVM-Clang 21.1.8 is required at the exact final PR head before I2 can
-move from active to review or complete.
+x86-64 with LLVM-Clang 21.1.8 remains required for reviewed changes; the completed
+implementation's exact-head and post-merge evidence is linked above.

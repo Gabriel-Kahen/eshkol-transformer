@@ -92,7 +92,7 @@ The build also leaves I1's separate exact signed-i64 CPU container archive at
 bounded deterministic `tensor.i64` / `storage.copy` requests; see
 [docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
 
-I2 is integrating the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed
+I2 provides the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed
 K1 views, and P1-bound value/accumulated-gradient substrate required by N2 and O2.
 Its explicit provider accessor verifies only bounded deterministic `tensor.f32` /
 `storage.copy` and never defines K1's canonical provider symbol. The native archive
