@@ -164,18 +164,140 @@ diff -ru "${d2_tmp}/public-resources-1" "${d2_tmp}/public-resources-2"
 cmp "${d2_tmp}/t2-adversarial-1/alternate-same-vocab.tsv" \
   "${d2_tmp}/t2-adversarial-2/alternate-same-vocab.tsv"
 
+# Build a temporary copy of the exact D2 aggregate with native counters
+# enabled. The canonical production object remains byte-for-byte untouched;
+# only the optimized public resource executable links this test artifact.
+d2_resource_runtime_dir="${d2_tmp}/resource-test-runtime"
+mkdir -p "${d2_resource_runtime_dir}"
+E1B_COMPILER_TIMEOUT_SECONDS="${d2_timeout}" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_root.esk" \
+    "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_bridge.c" \
+    "${PROJECT_ROOT}/native/d2_wave2_private_renames.txt" \
+    "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_exports.txt" \
+    "${d2_resource_runtime_dir}/d2_wave2_test.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/src"
+d2_resource_runtime_dir_b="${d2_tmp}/resource-test-runtime-b"
+mkdir -p "${d2_resource_runtime_dir_b}"
+E1B_COMPILER_TIMEOUT_SECONDS="${d2_timeout}" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_root.esk" \
+    "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_bridge.c" \
+    "${PROJECT_ROOT}/native/d2_wave2_private_renames.txt" \
+    "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_exports.txt" \
+    "${d2_resource_runtime_dir_b}/d2_wave2_test.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/src"
+cmp "${d2_resource_runtime_dir}/d2_wave2_test.o" \
+  "${d2_resource_runtime_dir_b}/d2_wave2_test.o"
+for test_evidence in global-defined.txt package-exports.txt undefined.txt \
+    expected-undefined.txt public-strings.txt private.d link.map; do
+  cmp "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/${test_evidence}" \
+    "${d2_resource_runtime_dir_b}/d2_wave2_test.o.evidence/${test_evidence}"
+done
+ar rcsD "${d2_resource_runtime_dir}/libeshkol_transformer_wave2_test.a" \
+  "${d2_resource_runtime_dir}/d2_wave2_test.o"
+
+mapfile -t d2_test_counter_symbols < <(
+  printf '%s\n' \
+    et_d2_batch_test_borrow_count_v1 \
+    et_d2_batch_test_live_count_v1 \
+    et_d2_dataset_test_live_count_v1 \
+    et_d2_test_owned_allocation_count_v1 \
+    et_d2_exact_read_test_fd_live_count_v1 \
+    et_d2_exact_read_test_fd_peak_count_v1
+)
+for test_counter_symbol in "${d2_test_counter_symbols[@]}"; do
+  nm -a "${d2_resource_runtime_dir}/d2_wave2_test.o" | \
+    grep -E "[[:space:]][a-z] ${test_counter_symbol}$" >/dev/null || \
+    die "D2 temporary aggregate did not localize ${test_counter_symbol}"
+  if nm -a "${d2_dir}/d2_wave2.o" | \
+      grep -E "[[:space:]]${test_counter_symbol}$" >/dev/null; then
+    die "D2 production aggregate contains test hook ${test_counter_symbol}"
+  fi
+done
+grep -E '[[:space:]]T et_e1b_public_d2_test_resource_count_v1$' \
+  "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/nm.txt" >/dev/null || \
+  die "D2 temporary aggregate omits its sole public test selector"
+[[ "$(wc -l <"${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/global-defined.txt")" == 59 ]] || \
+  die "D2 temporary instrumented aggregate must have exactly 59 globals"
+[[ "$(wc -l <"${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/package-exports.txt")" == 53 ]] || \
+  die "D2 temporary instrumented aggregate must have exactly 53 exports"
+cmp "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_exports.txt" \
+  "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/package-exports.txt"
+cmp "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_public_strings.txt" \
+  "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/public-strings.txt"
+cmp "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_public_strings.txt" \
+  "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/global-defined.txt"
+cmp "${PROJECT_ROOT}/native/d2_wave2_undefined_symbols.txt" \
+  "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/undefined.txt"
+[[ "$(ar t "${d2_resource_runtime_dir}/libeshkol_transformer_wave2_test.a")" == \
+   "d2_wave2_test.o" ]] || \
+  die "D2 temporary instrumented archive has an unexpected member"
+forbidden_test_object="${d2_dir}/d2_wave2_resource_test_forbidden.o"
+if E1B_COMPILER_TIMEOUT_SECONDS="${d2_timeout}" \
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+      "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_root.esk" \
+      "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_bridge.c" \
+      "${PROJECT_ROOT}/native/d2_wave2_private_renames.txt" \
+      "${PROJECT_ROOT}/tests/d2/d2_wave2_resource_test_exports.txt" \
+      "${forbidden_test_object}" \
+      "${PROJECT_ROOT}/internal/p1/lib" \
+      "${PROJECT_ROOT}/internal/c1/lib" \
+      "${PROJECT_ROOT}/internal/t2/lib" \
+      "${PROJECT_ROOT}/internal/t1/lib" \
+      "${PROJECT_ROOT}/internal/d2/lib" \
+      "${PROJECT_ROOT}/src" \
+      >"${d2_tmp}/forbidden-test-output.stdout" \
+      2>"${d2_tmp}/forbidden-test-output.stderr"; then
+  die "D2 resource-test aggregate admitted canonical production output"
+fi
+grep -F 'D2 resource-test object cannot target the canonical production directory' \
+  "${d2_tmp}/forbidden-test-output.stderr" >/dev/null || \
+  die "D2 canonical test-output rejection reported the wrong reason"
+[[ ! -e "${forbidden_test_object}" && \
+   ! -e "${forbidden_test_object}.evidence" ]] || \
+  die "rejected D2 resource-test output published a canonical artifact"
+sed -e 's/^[^:]*://' -e 's/\\//g' \
+    "${d2_resource_runtime_dir}/d2_wave2_test.o.evidence/private.d" | \
+  tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+  sed "s#^${PROJECT_ROOT}/##" >"${d2_tmp}/resource-test-source-closure.txt"
+{
+  printf '%s\n' tests/d2/d2_wave2_resource_test_root.esk
+  cat "${PROJECT_ROOT}/native/d2_wave2_source_closure.txt"
+} >"${d2_tmp}/resource-test-source-closure.expected"
+cmp "${d2_tmp}/resource-test-source-closure.expected" \
+  "${d2_tmp}/resource-test-source-closure.txt" || \
+  die "D2 temporary instrumented aggregate source closure drifted"
+
 compile_public_d2() {
   local source=$1 label=$2
   local optimize_args=(--optimize 0)
-  [[ "${source}" == resource_runtime ]] && optimize_args=()
+  local library_dir="${d2_dir}"
+  local library_name=eshkol_transformer_wave2
+  [[ "${source}" == resource_runtime || \
+     "${source}" == resource_instrumented_runtime ]] && optimize_args=()
+  if [[ "${source}" == resource_instrumented_runtime ]]; then
+    library_dir="${d2_resource_runtime_dir}"
+    library_name=eshkol_transformer_wave2_test
+  fi
   mkdir -p "${d2_tmp}/${label}" "${d2_tmp}/cache-${label}"
   if ! env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
       ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${d2_tmp}/cache-${label}" \
       ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${d2_cxx}" \
       timeout --foreground --signal=TERM --kill-after=5s "${d2_timeout}s" \
       "${d2_runner}" --strict-types "${optimize_args[@]}" --no-stdlib \
-      -I "${PROJECT_ROOT}/lib" -L "${d2_dir}" \
-      --lib eshkol_transformer_wave2 \
+      -I "${PROJECT_ROOT}/lib" -L "${library_dir}" \
+      --lib "${library_name}" \
       "${PROJECT_ROOT}/tests/d2/${source}.esk" \
       -o "${d2_tmp}/${label}/${source}" \
       >"${d2_tmp}/${label}/compile.stdout" \
@@ -189,11 +311,25 @@ compile_public_d2() {
     die "D2 public ${source} compiler reported ERROR while returning success"
 }
 
-for public_source in public_runtime public_errors_runtime resource_runtime; do
+for public_source in public_runtime public_errors_runtime resource_runtime \
+    resource_instrumented_runtime; do
   compile_public_d2 "${public_source}" "public-a-${public_source}"
   compile_public_d2 "${public_source}" "public-b-${public_source}"
   cmp "${d2_tmp}/public-a-${public_source}/${public_source}" \
     "${d2_tmp}/public-b-${public_source}/${public_source}"
+done
+for production_public_aot in \
+    "${d2_tmp}/public-a-public_runtime/public_runtime" \
+    "${d2_tmp}/public-b-public_runtime/public_runtime" \
+    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
+    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
+    "${d2_tmp}/public-b-resource_runtime/resource_runtime"; do
+  if nm -a "${production_public_aot}" | \
+      grep -E 'et_d2_.*test|et_d2_test_owned|et_e1b_public_d2_test' \
+        >/dev/null; then
+    die "D2 production public AOT contains test instrumentation"
+  fi
 done
 
 for repetition in a b; do
@@ -308,7 +444,8 @@ grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
   local pid rss=0 rss_max=0 fd_count=0 fd_max=0 started=$SECONDS
-  "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+  "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
+    "${d2_fixture}" \
     "${directory}" consume >"${d2_tmp}/resource-${label}.stdout" &
   pid=$!
   while kill -0 "${pid}" 2>/dev/null; do
@@ -333,11 +470,21 @@ run_resource_probe() {
   fi
   grep -Fx "D2 RESOURCE CONSUME PASS: ${expected} batches" \
     "${d2_tmp}/resource-${label}.stdout" >/dev/null
+  grep -Fx 'D2 RESOURCE NATIVE COUNTERS: baseline=0/0/0/0 open-delta=1/0/0/2 live-delta=1/1/0/4 released-delta=1/0/0/2 post-close=0/0/0/0' \
+    "${d2_tmp}/resource-${label}.stdout" >/dev/null || \
+    die "D2 ${label} resource probe omitted exact native counter evidence"
+  grep -Fx 'D2 RESOURCE NATIVE FD: baseline=0 peak=1 post-close=0 baseline-to-peak=1 final-delta=0' \
+    "${d2_tmp}/resource-${label}.stdout" >/dev/null || \
+    die "D2 ${label} resource probe omitted exact native FD evidence"
   printf '%s\n' "${rss_max}" >"${d2_tmp}/resource-${label}.rss"
   printf '%s\n' "${fd_max}" >"${d2_tmp}/resource-${label}.fds"
 }
 run_resource_probe small "${d2_tmp}/public-resources-1/small" 1
 run_resource_probe large "${d2_tmp}/public-resources-1/large" 8192
+run_resource_probe topology-one \
+  "${d2_tmp}/public-resources-1/one-shards" 1023
+run_resource_probe topology-many \
+  "${d2_tmp}/public-resources-1/many-shard" 1023
 small_rss="$(<"${d2_tmp}/resource-small.rss")"
 large_rss="$(<"${d2_tmp}/resource-large.rss")"
 [[ "${small_rss}" =~ ^[0-9]+$ && "${large_rss}" =~ ^[0-9]+$ ]] || \
@@ -349,6 +496,12 @@ rss_delta=$(( large_rss > small_rss ? large_rss - small_rss : small_rss - large_
   die "D2 resource probe exceeded the fixed eight-descriptor process ceiling"
 printf 'D2 RESOURCE RSS/FD: small=%s KiB/%s fd large=%s KiB/%s fd delta=%s KiB\n' \
   "${small_rss}" "${small_fds}" "${large_rss}" "${large_fds}" "${rss_delta}"
+topology_one_fds="$(<"${d2_tmp}/resource-topology-one.fds")"
+topology_many_fds="$(<"${d2_tmp}/resource-topology-many.fds")"
+(( topology_one_fds <= 8 && topology_many_fds <= 8 )) || \
+  die "D2 topology resource probe exceeded the fixed descriptor ceiling"
+printf 'D2 RESOURCE SHARD FD MEASURED: one baseline=0/native-peak=1/post-close=0/process-peak=%s many baseline=0/native-peak=1/post-close=0/process-peak=%s final-delta=0\n' \
+  "${topology_one_fds}" "${topology_many_fds}"
 
 for horizon in short long; do
   mode=consume-short
@@ -359,12 +512,19 @@ for horizon in short long; do
   fi
   ESHKOL_ARENA_REPORT=1 \
     timeout --foreground --signal=TERM --kill-after=5s 300s \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" "${d2_fixture}" \
+    "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
+    "${d2_fixture}" \
     "${d2_tmp}/public-resources-1/large" "${mode}" \
     >"${d2_tmp}/arena-${horizon}.stdout" \
     2>"${d2_tmp}/arena-${horizon}.stderr"
   grep -Fx "D2 RESOURCE CONSUME PASS: ${expected_batches} batches" \
     "${d2_tmp}/arena-${horizon}.stdout" >/dev/null
+  grep -Fx 'D2 RESOURCE NATIVE COUNTERS: baseline=0/0/0/0 open-delta=1/0/0/2 live-delta=1/1/0/4 released-delta=1/0/0/2 post-close=0/0/0/0' \
+    "${d2_tmp}/arena-${horizon}.stdout" >/dev/null || \
+    die "D2 ${horizon} arena run omitted exact native counter evidence"
+  grep -Fx 'D2 RESOURCE NATIVE FD: baseline=0 peak=1 post-close=0 baseline-to-peak=1 final-delta=0' \
+    "${d2_tmp}/arena-${horizon}.stdout" >/dev/null || \
+    die "D2 ${horizon} arena run omitted exact native FD evidence"
   arena_bytes="$(awk -F= '/global_total_allocated_bytes=/{print $2}' \
     "${d2_tmp}/arena-${horizon}.stderr" | tail -1)"
   [[ "${arena_bytes}" =~ ^[0-9]+$ ]] || \
@@ -377,6 +537,9 @@ long_arena="$(<"${d2_tmp}/arena-long.bytes")"
   die "D2 optimized retained arena bytes grew from 1024 to 8192 batches"
 printf 'D2 RESOURCE ARENA PASS: 1024=%s bytes 8192=%s bytes slope=0\n' \
   "${short_arena}" "${long_arena}"
+printf '%s\n' \
+  'D2 RESOURCE NATIVE COUNTERS PASS: 1024 baseline=0/0/0/0 open=1/0/0/2 live=1/1/0/4 released=1/0/0/2 post-close=0/0/0/0; 8192 baseline=0/0/0/0 open=1/0/0/2 live=1/1/0/4 released=1/0/0/2 post-close=0/0/0/0' \
+  'D2 RESOURCE NATIVE FD PASS: 1024 baseline=0 peak=1 post-close=0 baseline-to-peak=1 final-delta=0; 8192 baseline=0 peak=1 post-close=0 baseline-to-peak=1 final-delta=0'
 
 declare -A topology_open topology_packed
 for topology in one-shards many-shard; do
@@ -616,6 +779,9 @@ for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
     "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
     "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
     "${d2_tmp}/public-b-resource_runtime/resource_runtime" \
+    "${d2_resource_runtime_dir}/d2_wave2_test.o" \
+    "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
+    "${d2_tmp}/public-b-resource_instrumented_runtime/resource_instrumented_runtime" \
     "${d2_tmp}/private-a/private-view" \
     "${d2_tmp}/private-b/private-view"; do
   if strings -a "${delivered}" | \

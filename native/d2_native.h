@@ -166,6 +166,8 @@ int64_t et_d2_dataset_test_live_count_v1(void);
 int64_t et_d2_batch_test_live_count_v1(void);
 int64_t et_d2_batch_test_borrow_count_v1(void);
 int64_t et_d2_test_owned_allocation_count_v1(void);
+int64_t et_d2_exact_read_test_fd_live_count_v1(void);
+int64_t et_d2_exact_read_test_fd_peak_count_v1(void);
 size_t et_d2_dataset_test_control_bytes_v1(void);
 size_t et_d2_batch_test_control_bytes_v1(void);
 size_t et_d2_batch_test_borrow_bytes_v1(void);

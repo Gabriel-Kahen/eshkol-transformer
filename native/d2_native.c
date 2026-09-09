@@ -85,6 +85,22 @@ _Static_assert(offsetof(et_d2_eshkol_closure, func_ptr) == 0u,
 static int64_t fail_stage;
 static int64_t read_fail_stage;
 static int64_t owned_allocations;
+static int64_t exact_read_fd_live;
+static int64_t exact_read_fd_peak;
+#define ET_D2_TEST_FD_OPENED()                                             \
+  do {                                                                     \
+    exact_read_fd_live++;                                                  \
+    if (exact_read_fd_live > exact_read_fd_peak) {                         \
+      exact_read_fd_peak = exact_read_fd_live;                             \
+    }                                                                      \
+  } while (0)
+#define ET_D2_TEST_FD_CLOSED()                                             \
+  do {                                                                     \
+    exact_read_fd_live--;                                                  \
+  } while (0)
+#else
+#define ET_D2_TEST_FD_OPENED() ((void)0)
+#define ET_D2_TEST_FD_CLOSED() ((void)0)
 #endif
 
 /* Exclusive span ends must be representable, matching accepted I1 policy. */
@@ -479,6 +495,14 @@ int64_t et_d2_test_owned_allocation_count_v1(void) {
   return owned_allocations;
 }
 
+int64_t et_d2_exact_read_test_fd_live_count_v1(void) {
+  return exact_read_fd_live;
+}
+
+int64_t et_d2_exact_read_test_fd_peak_count_v1(void) {
+  return exact_read_fd_peak;
+}
+
 size_t et_d2_dataset_test_control_bytes_v1(void) {
   return sizeof(et_d2_dataset_control);
 }
@@ -577,12 +601,14 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes_value,
   if (descriptor < 0) {
     return read_status(ET_D2_EXACT_READ_OPEN, errno);
   }
+  ET_D2_TEST_FD_OPENED();
   while (remaining != 0u) {
     size_t request =
         remaining > (size_t)SSIZE_MAX ? (size_t)SSIZE_MAX : remaining;
     ssize_t received;
     if (should_fail_read(ET_D2_TEST_READ_FAIL_READ)) {
       (void)close(descriptor);
+      ET_D2_TEST_FD_CLOSED();
       return read_status(ET_D2_EXACT_READ_READ, EIO);
     }
     received = pread(descriptor, next, request, (off_t)current);
@@ -592,10 +618,12 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes_value,
       }
       saved_error = errno;
       (void)close(descriptor);
+      ET_D2_TEST_FD_CLOSED();
       return read_status(ET_D2_EXACT_READ_READ, saved_error);
     }
     if (received == 0) {
       (void)close(descriptor);
+      ET_D2_TEST_FD_CLOSED();
       return read_status(ET_D2_EXACT_READ_READ, EIO);
     }
     next += (size_t)received;
@@ -603,8 +631,10 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes_value,
     current += (uint64_t)received;
   }
   if (close(descriptor) != 0) {
+    ET_D2_TEST_FD_CLOSED();
     return read_status(ET_D2_EXACT_READ_CLOSE, errno);
   }
+  ET_D2_TEST_FD_CLOSED();
   if (should_fail_read(ET_D2_TEST_READ_FAIL_CLOSE)) {
     return read_status(ET_D2_EXACT_READ_CLOSE, EIO);
   }

@@ -208,6 +208,9 @@ static void test_exact_read(void) {
   size_t after_fds;
   size_t index;
 
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
+  CHECK(et_d2_exact_read_test_fd_peak_count_v1() == 0);
+
   for (index = 0u; index < sizeof(contents); index++) {
     contents[index] = (uint8_t)(index + 11u);
   }
@@ -222,6 +225,8 @@ static void test_exact_read(void) {
 
   init_bytevector(&vector, 5);
   CHECK(et_d2_exact_read_v1(path, (int64_t)sizeof(path), 3, &vector, 5) == 0);
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
+  CHECK(et_d2_exact_read_test_fd_peak_count_v1() == 1);
   CHECK(memcmp(payload(&vector), contents + 3u, 5u) == 0);
   memcpy(&header, vector.bytes, sizeof(header));
   CHECK(header == 5);
@@ -277,6 +282,8 @@ static void test_exact_read(void) {
   }
   after_fds = open_fd_count();
   CHECK(before_fds != SIZE_MAX && after_fds == before_fds);
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
+  CHECK(et_d2_exact_read_test_fd_peak_count_v1() == 1);
 
   init_bytevector(&vector, 5);
   et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_READ);
@@ -284,11 +291,13 @@ static void test_exact_read(void) {
   CHECK(read_stage(result) == ET_D2_EXACT_READ_READ);
   CHECK(read_errno(result) == EIO);
   CHECK(open_fd_count() == before_fds);
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
   et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_CLOSE);
   result = et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 5);
   CHECK(read_stage(result) == ET_D2_EXACT_READ_CLOSE);
   CHECK(read_errno(result) == EIO);
   CHECK(open_fd_count() == before_fds);
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
   et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_NONE);
 
   CHECK(unlink(path) == 0);
@@ -296,6 +305,8 @@ static void test_exact_read(void) {
   result = et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 1);
   CHECK(read_stage(result) == ET_D2_EXACT_READ_OPEN);
   CHECK(read_errno(result) == ENOENT);
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
+  CHECK(et_d2_exact_read_test_fd_peak_count_v1() == 1);
 }
 
 static void encode_i64le(bytevector_fixture *fixture, const int64_t *values,
