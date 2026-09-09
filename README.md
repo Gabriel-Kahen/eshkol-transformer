@@ -44,7 +44,7 @@ Run the focused T2 deterministic BPE and streaming gate with:
 
 D2's accepted memory-bounded loader contract provides the ten A0 dataset/batch
 operations plus explicit `token-batch-release!`, the canonical `ESHKDCU1` cursor,
-and a source-composed 58-global/52-export review aggregate. Its compiled public,
+and a source-composed 58-global/52-export canonical aggregate. Its compiled public,
 carrier, exact-resume, corruption, resource, sanitizer, and frozen-Q0 gates run with
 `make test-d2`. `token-batch-release!` deterministically invalidates the generation
 and frees its native `17*N*T` carrier; the pinned runtime does not individually
@@ -55,8 +55,8 @@ clarification is
 [proposed and pending](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
 Shell authentication uses two fixed compiled-constructor code identities as a
 per-process private implementation ABI; it is neither public nor serializable.
-D2 remains in review rather than complete until independent D2-R, supported CI,
-merge, and merge-head retest. See
+D2 is complete after independent D2-R approval, supported CI, merge, and a focused
+merged-main retest. See
 [docs/D2_SHARD_LOADER.md](docs/D2_SHARD_LOADER.md).
 
 Run the focused A2 causal-attention, RoPE, and transactional KV-cache gate with:
