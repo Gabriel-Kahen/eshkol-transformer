@@ -115,9 +115,10 @@ before merge.
   per-process mechanism as a public, serialized, or cross-aggregate ABI.
 - The exact generated source closure and every public AOT executable must be scanned
   for production-language and dependency isolation.
-- Supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 CI at the proposed exact head,
-  followed by independent D2-R. ROADMAP may remain only `review` until approval,
-  merge, merge-head retest, and acceptance-document follow-up.
+- Supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 CI at the reviewed exact head,
+  followed by independent D2-R, merge, merge-head retest, and acceptance-document
+  follow-up. ROADMAP may move from `review` to `complete` only after all are
+  satisfied.
 
 ## Required configuration gates
 

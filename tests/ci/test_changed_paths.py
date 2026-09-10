@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import ci_changed_paths
+from tests.ci import changed_paths as ci_changed_paths
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SELECTOR = PROJECT_ROOT / "scripts" / "ci_changed_paths.py"
+SELECTOR = PROJECT_ROOT / "tests" / "ci" / "changed_paths.py"
 
 
 class ChangedPathSelectorTests(unittest.TestCase):

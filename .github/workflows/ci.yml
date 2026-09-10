@@ -27,7 +27,9 @@ jobs:
           fetch-depth: 0
       - run: make test-ci-topology
       - name: Test change selection
-        run: python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
+        run: |
+          python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
+          python3 -m unittest -v tests.q0.test_python_isolation
       - name: Select required suites
         id: changes
         env:
@@ -38,7 +40,7 @@ jobs:
         run: |
           run_full=true
           if [[ "$CI_EVENT" == pull_request ]]; then
-            run_full=$(python3 scripts/ci_changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
+            run_full=$(python3 tests/ci/changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
           fi
           echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
           if [[ "$run_full" == false ]]; then
