@@ -1,0 +1,7 @@
+;;; Canonical D2 review aggregate root. Never install this trusted source.
+;;; T2 owns the one E1/P1L/D1/X1/C1/T1 identity universe; I2 and D2 extend it.
+
+(load "t2_wave2_root.esk")
+(load "i2_wave2_extension.esk")
+(load "d2_semantic_core.esk")
+(load "d2_dataset.esk")

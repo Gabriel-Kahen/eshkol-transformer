@@ -106,8 +106,10 @@ reported losses and metrics accumulate and return `f32` in the first release.
 
 ## 4. Ownership, lifetime, mutation, and aliases
 
-- Configuration values, tokenizer values, capability reports, cursors, error values,
-  and persistence metadata are immutable snapshots owned by the caller.
+- Configuration values, tokenizer values, capability reports, error values, and
+  persistence metadata are immutable snapshots owned by the caller. Cursors are
+  immutable snapshots except for D2's explicitly detached, newly owned mutable
+  canonical bytevector.
 - A dataset, module/model, optimizer, trainer, generator, and cache is an opaque,
   exclusively mutable object. It is not safe for concurrent mutation.
 - Ordinary tensor inputs are borrowed for the duration of a call. Returned tensors
@@ -126,8 +128,11 @@ reported losses and metrics accumulate and return `f32` in the first release.
   while retaining every logical path and tie relationship. `module-buffers` snapshots
   non-trainable tensors in the same path order using the state-dict accessors below. Optimizer
   parameter groups refer to stable parameter paths, not raw addresses.
-- Dataset and generator calls invalidate only their receiver's previous transient
-  iteration result; returned batches/tensors remain owned by the caller.
+- A D2 dataset owns at most one live native batch carrier. Returned batch and tensor
+  shells are authenticated caller-region-managed aliases to that generation, not
+  independently owned carrier clones. `token-batch-release!` invalidates them and
+  frees the native carrier; shell-region storage remains caller-owned. Other dataset
+  and generator lifetime rules remain operation-specific.
 - `token-dataset-close!` is idempotent. Other dataset operations after close raise
   `invalid-state`. Checkpoint writes retain no caller-owned state after return.
 - `trainer-create` takes an exclusive lease on its dataset, model, and optimizer until
@@ -319,28 +324,55 @@ Whole-directory atomicity, `fsync`, and power-loss durability are not claimed.
 Deterministic I/O faults exist only in a separately linked test archive; production
 contains no fault-injection branch or write fallback.
 
+The accepted D2 decision explicitly amends A0 ownership: the three batch accessors
+below return stable read-only state-backed identities rather than newly owned tensor
+clones, and `token-dataset-cursor` returns newly owned detached mutable canonical
+bytevector storage rather than an immutable registry object.
+
 | Operation | Shapes and semantics | Dtype/device/ownership/errors/gradient |
 |---|---|---|
-| `token-dataset-open config tokenizer` | Open a deterministic, finite or explicitly streaming token source. Tokenizer fingerprint must match source metadata. | New mutable receiver; CPU control plane; config/I/O/version/checksum/unsupported errors; no gradient. |
-| `token-dataset-next-batch dataset` | Return end-of-stream or an immutable batch with `input-ids i64[N,T]`, `targets i64[N,T]`, `loss-mask bool[N,T]` or `f32[N,T]`. Targets are the declared next-token shift; all IDs are in `[0,V)`. | New contiguous tensors on configured verified device; no implicit copy/fallback; errors above plus `invalid-state`; no gradient. |
-| `token-dataset-end? value` | True only for the unique immutable end-of-stream sentinel returned by `token-dataset-next-batch`. | CPU; no mutation or gradient. |
-| `token-dataset-cursor dataset` | Snapshot all ordering/shuffle/packing/shard offsets needed to reproduce the next batch exactly. | New immutable CPU value; `invalid-state`; no gradient. |
-| `token-dataset-seek! dataset cursor` | Validate identity/version/checksum then make the next batch identical to the captured continuation. | Atomic receiver mutation; `invalid-argument`, `version-mismatch`, `corrupt-data`, `invalid-state`; no gradient. |
-| `token-dataset-close! dataset` | Release resources; idempotent. | Mutates receiver only; `io`; no gradient. |
-| `token-batch-inputs batch` | Return newly owned `i64[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-targets batch` | Return newly owned `i64[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-loss-mask batch` | Return newly owned `bool[N,T]` or nonnegative finite `f32[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-validate batch` | Check ranks/extents/dtypes/device/contiguity/ranges and require positive total mask weight. | Returns `#t`; structured errors; no gradient. |
+| `token-dataset-open config tokenizer` | Open the accepted finite D1 source from the exact ten-key flat D2 option list. Deep-copy options, bind tokenizer/corpus identity, and validate every bounded shard before publication. | New mutable CPU receiver; retains neither caller config nor tokenizer; config/I/O/version/corruption/unsupported errors; no gradient. |
+| `token-dataset-next-batch dataset` | Return the stable EOS sentinel or one fixed `[N,T]` shifted batch. Packed rows may cross D1 shards; unpacked rows do not. | Dataset owns at most one live batch; no implicit copy/fallback; late failure is cursor-atomic; no gradient. |
+| `token-dataset-end? value` | True only for the unique immutable EOS sentinel returned after the final live batch is released. | CPU; no mutation or gradient. |
+| `token-dataset-cursor dataset` | Snapshot the exact next ordinal and bound identity/options in canonical `ESHKDCU1` 1.0 bytes. | Newly owned detached mutable bytevector of exactly `208+F` bytes; no native registry/storage; no gradient. |
+| `token-dataset-seek! dataset cursor` | Fully validate canonical bytes, checksum, identity/options, recomputed row count, and ordinal before restoring the next batch. | One atomic receiver commit; `invalid-argument`, `version-mismatch`, `unsupported`, `corrupt-data`, `invalid-state`; no gradient. |
+| `token-dataset-close! dataset` | Best-effort release the live batch, unregister resources, and close. | Idempotent receiver mutation; dependent shells become stale; no gradient. |
+| `token-batch-inputs batch` | Return the batch's stable read-only state-backed opaque `i64[N,T]` identity. | CPU dense row-major; zero offset; natural alignment; no allocation/copy or gradient. |
+| `token-batch-targets batch` | Return the batch's stable read-only state-backed opaque `i64[N,T]` identity. | CPU dense row-major; zero offset; natural alignment; no allocation/copy or gradient. |
+| `token-batch-loss-mask batch` | Return the batch's stable read-only state-backed opaque one-byte `bool[N,T]` identity. | CPU dense row-major; zero offset; no f32 alternative, allocation/copy, or gradient. |
+| `token-batch-validate batch` | Validate the current authenticated live generation and its fixed carrier invariants. | Returns `#t`; forged/wrong-kind is `invalid-argument`, stale is `invalid-state`; no gradient. |
+| `token-batch-release! batch` | Invalidate the batch generation and all three tensor identities before the fixed destruction tail, end its native borrow lifetime, and free the exact native `17*N*T` carrier. | Every exact authentic already-issued generation releases idempotently, including after successor, seek, or close; no per-generation tombstone or fallback; active borrow is `invalid-state`. Caller-region shell storage is not individually reclaimed. |
 
-No batch dimension, sequence dimension, or mask broadcasting is permitted. D1/D2 own
-the shard and cursor formats.
+No batch dimension, sequence dimension, or mask broadcasting is permitted. A batch
+owns exactly two CPU dense i64 planes and one CPU dense one-byte bool plane with
+semantic payload `17*N*T`. There is no causal mask, alternate dtype/device, cast,
+transfer, scalar, or allocation fallback. D1 owns shard bytes; D2 owns the
+`ESHKDCU1` cursor specified in [D2_SHARD_LOADER.md](D2_SHARD_LOADER.md).
 
 `token-dataset-seek!` commits only after complete cursor validation. A failed
-`token-dataset-next-batch` does not advance the cursor. `token-dataset-close!` always
-transitions to closed after best-effort release; an I/O release failure is reported,
-but later calls still observe closed.
-After end-of-stream, repeated `token-dataset-next-batch` calls return the same sentinel
-without changing state until seek or close.
+`token-dataset-next-batch` does not advance the cursor. A reviewed same-aggregate
+consumer may resolve a tensor identity to its unchanged K1 view only within one
+synchronous begin/use/end call; raw views and pointers cannot escape. Release and
+close reject before mutation while that borrow is active. `token-dataset-close!`
+always leaves the dataset closed after its nonrecoverable release tail. After EOS,
+repeated next calls return the same sentinel without changing state until seek or
+close. D2 is serialized and makes no concurrent or reentrant mutation claim.
+
+The pinned Eshkol runtime has no tracing garbage collector. In the accepted D2
+implementation, every long-running Eshkol loop must enclose each next/validate/use/
+release interval in one lexical `with-region`. Batch and tensor shells must not cross
+that boundary unless the caller deliberately retains or promotes them and accounts
+for their caller-owned closure/environment/capability storage. The dataset retains
+only the last-issued generation and current status, not any shell, per-generation authenticator, or
+tombstone. This caller-region interpretation is a proposed clarification pending
+integration-owner disposition in
+[issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950);
+it changes no public name, arity, carrier, cursor, or format.
+
+The canonical D2 aggregate authenticates shells using the compiled code identities
+of two fixed private constructors, dataset and batch. Native state stores only those
+two per-process code addresses. This is neither a public or serialized ABI nor a
+portable closure-layout or cross-aggregate identity contract.
 
 ## 10. Modules and models
 

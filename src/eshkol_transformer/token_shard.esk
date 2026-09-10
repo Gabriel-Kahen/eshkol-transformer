@@ -9,6 +9,22 @@
 (extern i64 d1-token-checked-write-new ptr ptr i64
         :real et_d1_checked_write_new_v1)
 
+;; This macro must be top-level for the pinned compiler to expand it. Runtime
+;; helpers and private markers are explicit use-site arguments, so it creates no
+;; public runtime binding or dependency.
+(define-syntax d1-token-with-shard-region
+  (syntax-rules ()
+    ((_ body ...)
+     ;; Keep the checked handle builtins direct and return only an immediate
+     ;; boolean. Verified AOT lowering allocates no root-arena state at the
+     ;; record-loop backedge or region-open call.
+     (let ((region (region-open 'd1-shard-validation 4096)))
+       (let ((result (begin body ...)))
+         ;; The result is a scalar boolean. Any raised value unwinds the child
+         ;; automatically to the single enclosing validation guard.
+         (region-close region)
+         result)))))
+
 (define d1-compiled-public-operations
   (let ()
     ;; Internal D1 SHA-256. Input is a bytevector; output is a fresh 32-byte
@@ -143,23 +159,6 @@
                                  (vector-ref work index))))
                 (add-state (+ index 1)))))))
 
-    (define (d1-sha256-pad bytes)
-      (let* ((length (bytevector-length bytes))
-             (padded-length (* (quotient (+ length 72) 64) 64))
-             (padded (make-bytevector padded-length 0))
-             (bit-length (* length 8)))
-        (bytevector-copy! padded 0 bytes 0 length)
-        (bytevector-u8-set! padded length 128)
-        (let encode-length ((index 0))
-          (if (< index 8)
-              (begin
-                (bytevector-u8-set!
-                 padded (+ (- padded-length 8) index)
-                 (bitwise-and
-                  (arithmetic-shift bit-length (- (* (- 7 index) 8))) 255))
-                (encode-length (+ index 1)))))
-        padded))
-
     (define (d1-sha256-state->bytes state)
       (let ((digest (make-bytevector 32 0)))
         (let words ((word-index 0))
@@ -176,23 +175,52 @@
                 (words (+ word-index 1)))))
         digest))
 
-    (define (d1-sha256 bytes)
-      (if (not (bytevector? bytes))
-          (raise "d1-sha256: expected a bytevector"))
-      (if (> (bytevector-length bytes) 2305843009213693951)
-          (raise "d1-sha256: input is too long for the SHA-256 length field"))
-      (let* ((padded (d1-sha256-pad bytes))
-             (state (vector 1779033703 3144134277 1013904242 2773480762
+    (define (d1-sha256-prefix bytes length)
+      (if (or (not (bytevector? bytes))
+              (not (integer? length)) (not (exact? length))
+              (< length 0) (> length (bytevector-length bytes)))
+          (raise "d1-sha256-prefix: expected a bounded bytevector prefix"))
+      (if (or (> length 2305843009213693951)
+              (> (bytevector-length bytes) 2305843009213693951))
+          (raise "d1-sha256-prefix: input is too long for the SHA-256 length field"))
+      (let* ((state (vector 1779033703 3144134277 1013904242 2773480762
                             1359893119 2600822924 528734635 1541459225))
              (words (make-vector 64 0))
-             (length (bytevector-length padded)))
+             (full-end (* (quotient length 64) 64)))
+        ;; Full blocks are processed directly from the one owned source buffer.
         (let blocks ((offset 0))
-          (if (< offset length)
+          (if (< offset full-end)
               (begin
-                (d1-sha256-expand! words padded offset)
+                (d1-sha256-expand! words bytes offset)
                 (d1-sha256-compress! state words)
                 (blocks (+ offset 64)))))
+        ;; Only the final 0..63 source bytes are copied.  SHA padding therefore
+        ;; has an exact fixed 64/128-byte bound independent of input length.
+        (let* ((remainder (- length full-end))
+               (tail-length (if (<= remainder 55) 64 128))
+               (tail (make-bytevector tail-length 0))
+               (bit-length (* length 8)))
+          (bytevector-copy! tail 0 bytes full-end length)
+          (bytevector-u8-set! tail remainder 128)
+          (let encode-length ((index 0))
+            (if (< index 8)
+                (begin
+                  (bytevector-u8-set!
+                   tail (+ (- tail-length 8) index)
+                   (bitwise-and
+                    (arithmetic-shift bit-length (- (* (- 7 index) 8))) 255))
+                  (encode-length (+ index 1)))))
+          (let tail-blocks ((offset 0))
+            (if (< offset tail-length)
+                (begin
+                  (d1-sha256-expand! words tail offset)
+                  (d1-sha256-compress! state words)
+                  (tail-blocks (+ offset 64))))))
         (d1-sha256-state->bytes state)))
+
+    (define (d1-sha256 bytes)
+      (let ((result (d1-sha256-prefix bytes (bytevector-length bytes))))
+        result))
 
     (define d1-token-corpus-major 1)
     (define d1-token-corpus-minor 0)
@@ -253,6 +281,30 @@
                       (error-object-message caught)
                       message)))
            #f)))
+
+    (define (d1-token-region-reraise operation caught)
+      (if (transformer-error? caught)
+          (raise caught)
+          (let ((unreachable
+                 (d1-token-reraise-or-wrap
+                  'internal operation "shard validation region failed"
+                  (if (and (error-object? caught)
+                           (string=?
+                            (error-object-message caught)
+                            "region-open: failed to create region"))
+                      'allocation-failed
+                      (if (and (error-object? caught)
+                               (or
+                                (string=?
+                                 (error-object-message caught)
+                                 "region-close: invalid or already-closed region handle")
+                                (string=?
+                                 (error-object-message caught)
+                                 "region-close: region handle no longer names a live region")))
+                          'region-close-failed
+                          'region-open-failed))
+                  caught)))
+            unreachable)))
 
     (define (d1-token-valid-nonnegative-integer? value)
       (and (integer? value) (exact? value)
@@ -536,8 +588,7 @@
                 (let loop ((offset 0) (remaining tokens))
                   (if (= offset count) remaining
                       (loop (+ offset 1) (cdr remaining)))))
-               (covered (bytevector-copy result 0 unsigned-bytes))
-               (digest (d1-sha256 covered)))
+               (digest (d1-sha256-prefix result unsigned-bytes)))
           (d1-token-copy-into! result unsigned-bytes digest)
           (vector result digest file-bytes count next-tokens))))
 
@@ -577,7 +628,7 @@
                 (d1-token-copy-into! result (+ offset 24) (vector-ref record 1))
                 (loop (+ index 1)))))
         (d1-token-copy-into! result unsigned-bytes
-                             (d1-sha256 (bytevector-copy result 0 unsigned-bytes)))
+                             (d1-sha256-prefix result unsigned-bytes))
         result))
 
     (define (d1-token-corpus-write-impl make-summary directory fingerprint vocab-size
@@ -668,7 +719,7 @@
                              (summary
                               (make-summary shard-count token-count vocab-size
                                             shard-token-limit fingerprint
-                                            total-shard-bytes)))
+                                            total-shard-bytes manifest)))
                         ;; A complete manifest temporary becomes the exclusion claim
                         ;; before releasing the directory lock. Thus even an empty
                         ;; corpus has no unlocked pre-commit writer window.
@@ -740,16 +791,16 @@
       (let* ((length (bytevector-length bytes))
              (covered (- length d1-token-checksum-bytes))
              (expected (bytevector-copy bytes covered length))
-             (actual (d1-sha256 (bytevector-copy bytes 0 covered))))
+             (actual (d1-sha256-prefix bytes covered)))
         (if (d1-token-bytevector=? expected actual)
             actual
             (d1-token-fail 'corrupt-data operation "SHA-256 mismatch"))))
 
-    (define (d1-token-validate-shard path expected-index expected-count expected-bytes
+    (define (d1-token-validate-shard file-reader path expected-index expected-count expected-bytes
                                      expected-digest expected-fingerprint expected-vocab
                                      maximum-shard-bytes)
       (let* ((operation 'token-corpus-validate)
-             (bytes (d1-token-file-bytes path maximum-shard-bytes operation)))
+             (bytes (file-reader path maximum-shard-bytes operation)))
         (if (not (= (bytevector-length bytes) expected-bytes))
             (d1-token-fail 'corrupt-data operation "shard byte size differs from manifest")
             #t)
@@ -797,13 +848,17 @@
                 #t)
             (let token-loop ((offset 0))
               (if (= offset token-count)
-                  #t
+                  bytes
                   (let ((token (d1-token-read-u64-le bytes (+ header-bytes (* offset 8)))))
                     (if (< token vocab-size)
                         (token-loop (+ offset 1))
-                        (d1-token-fail 'corrupt-data operation "token outside [0,vocab-size)")))))))))
+                        (let ((unreachable
+                               (d1-token-fail
+                                'corrupt-data operation
+                                "token outside [0,vocab-size)")))
+                          unreachable)))))))))
 
-    (define (d1-token-corpus-validate-impl make-summary directory
+    (define (d1-token-corpus-validate-impl make-summary file-reader directory
                                            maximum-manifest-bytes maximum-shard-bytes
                                            maximum-total-tokens)
       (let ((operation 'token-corpus-validate))
@@ -817,7 +872,7 @@
         (d1-token-require-nonnegative maximum-total-tokens operation
                                       "maximum-total-tokens must be nonnegative")
         (let* ((manifest-path (d1-token-manifest-path directory))
-               (bytes (d1-token-file-bytes manifest-path maximum-manifest-bytes operation)))
+               (bytes (file-reader manifest-path maximum-manifest-bytes operation)))
           (d1-token-validate-header-common bytes d1-token-manifest-magic
                                            d1-token-manifest-fixed-header-bytes operation)
           (let* ((header-bytes (d1-token-read-u32-le bytes 12))
@@ -856,46 +911,115 @@
             (let ((fingerprint
                    (d1-token-fingerprint-from bytes d1-token-manifest-fixed-header-bytes
                                               fingerprint-bytes operation)))
-              (d1-token-validate-digest bytes operation)
-              (let record-loop ((index 0) (count-sum 0) (byte-sum 0))
-                (if (= index shard-count)
-                    (begin
-                      (if (or (not (= count-sum total-tokens))
-                              (not (= byte-sum total-shard-bytes)))
-                          (d1-token-fail 'corrupt-data operation "manifest totals do not match records")
-                          #t)
-                      (make-summary shard-count total-tokens vocab-size
-                                    shard-token-limit fingerprint
-                                    total-shard-bytes))
-                    (let* ((offset (+ header-bytes (* index record-bytes)))
-                           (record-index (d1-token-read-u64-le bytes offset))
-                           (record-count (d1-token-read-u64-le bytes (+ offset 8)))
-                           (record-file-bytes (d1-token-read-u64-le bytes (+ offset 16)))
-                           (record-digest (bytevector-copy bytes (+ offset 24) (+ offset 56)))
-                           (last? (= index (- shard-count 1))))
-                      (if (or (not (= record-index index))
-                              (not (d1-token-valid-nonnegative-integer? record-index))
-                              (not (d1-token-valid-nonnegative-integer? record-count))
-                              (> record-count d1-token-max-encoded-tokens)
-                              (not (d1-token-valid-nonnegative-integer? record-file-bytes))
-                              (> record-file-bytes
-                                 (+ d1-token-max-sha-covered-bytes
-                                    d1-token-checksum-bytes))
-                              (= record-count 0)
-                              (> record-count shard-token-limit)
-                              (> record-count (- d1-token-max-i64 count-sum))
-                              (> record-file-bytes
-                                 (- d1-token-max-i64 byte-sum))
-                              (and (not last?) (not (= record-count shard-token-limit))))
-                          (d1-token-fail 'corrupt-data operation
-                                         "duplicate, noncontiguous, or noncanonical shard record")
-                          #t)
-                      (d1-token-validate-shard
-                       (d1-token-shard-path directory index) index record-count
-                       record-file-bytes record-digest fingerprint vocab-size
-                       maximum-shard-bytes)
-                      (record-loop (+ index 1) (+ count-sum record-count)
-                                   (+ byte-sum record-file-bytes))))))))))
+              ;; SHA-256 compression allocates a work vector per block. Keep
+              ;; the complete manifest digest pass in one checked child region
+              ;; and return only an immediate boolean across its close.
+              (guard
+               (caught
+                (#t
+                 (let ((unreachable
+                        (d1-token-region-reraise operation caught)))
+                   unreachable)))
+               (d1-token-with-shard-region
+                (d1-token-validate-digest bytes operation)
+                #t))
+              ;; Fixed parent-owned mutable state prevents boxed loop indices
+              ;; and totals from accumulating in the manifest's arena. All
+              ;; changing record arithmetic and shard bytes live in one checked
+              ;; nested region and are reclaimed before the next record.
+              (let ((counters (make-bytevector 24 0)))
+                (let ((validated
+                       (if (= shard-count 0)
+                           #t
+                           (guard
+                            (caught
+                             (#t
+                              (let ((unreachable
+                                     (d1-token-region-reraise
+                                      operation caught)))
+                                unreachable)))
+                            (let record-loop ()
+                              (let ((continue?
+                                     (d1-token-with-shard-region
+                                     (let* ((index
+                                             (d1-token-read-u64-le counters 0))
+                                            (count-sum
+                                             (d1-token-read-u64-le counters 8))
+                                            (byte-sum
+                                             (d1-token-read-u64-le counters 16))
+                                            (offset
+                                             (+ header-bytes
+                                                (* index record-bytes)))
+                                            (record-index
+                                             (d1-token-read-u64-le bytes offset))
+                                            (record-count
+                                             (d1-token-read-u64-le
+                                              bytes (+ offset 8)))
+                                            (record-file-bytes
+                                             (d1-token-read-u64-le
+                                              bytes (+ offset 16)))
+                                            (last? (= index (- shard-count 1))))
+                                       (if (or
+                                            (not (= record-index index))
+                                            (not
+                                             (d1-token-valid-nonnegative-integer?
+                                              record-index))
+                                            (not
+                                             (d1-token-valid-nonnegative-integer?
+                                              record-count))
+                                            (> record-count
+                                               d1-token-max-encoded-tokens)
+                                            (not
+                                             (d1-token-valid-nonnegative-integer?
+                                              record-file-bytes))
+                                            (> record-file-bytes
+                                               (+ d1-token-max-sha-covered-bytes
+                                                  d1-token-checksum-bytes))
+                                            (= record-count 0)
+                                            (> record-count shard-token-limit)
+                                            (> record-count
+                                               (- d1-token-max-i64 count-sum))
+                                            (> record-file-bytes
+                                               (- d1-token-max-i64 byte-sum))
+                                            (and (not last?)
+                                                 (not (= record-count
+                                                         shard-token-limit))))
+                                           (d1-token-fail
+                                            'corrupt-data operation
+                                            "duplicate, noncontiguous, or noncanonical shard record")
+                                           #t)
+                                       (let ((record-digest
+                                              (bytevector-copy
+                                               bytes (+ offset 24)
+                                               (+ offset 56))))
+                                         (d1-token-validate-shard
+                                          file-reader
+                                          (d1-token-shard-path directory index)
+                                          index record-count record-file-bytes
+                                          record-digest fingerprint vocab-size
+                                          maximum-shard-bytes))
+                                       (d1-token-write-u64-le!
+                                        counters 0 (+ index 1))
+                                       (d1-token-write-u64-le!
+                                        counters 8 (+ count-sum record-count))
+                                       (d1-token-write-u64-le!
+                                        counters 16 (+ byte-sum record-file-bytes))
+                                       (not last?)))))
+                                (if continue? (record-loop) #t)))))))
+                  ;; Totals and the authoritative summary are evaluated once,
+                  ;; after the final region is closed. No terminal region open
+                  ;; can precede the accepted totals mismatch error.
+                  (let ((count-sum (d1-token-read-u64-le counters 8))
+                        (byte-sum (d1-token-read-u64-le counters 16)))
+                    (if (or (not (= count-sum total-tokens))
+                            (not (= byte-sum total-shard-bytes)))
+                        (d1-token-fail
+                         'corrupt-data operation
+                         "manifest totals do not match records")
+                        #t)
+                    (make-summary shard-count total-tokens vocab-size
+                                  shard-token-limit fingerprint
+                                  total-shard-bytes bytes)))))))))
 
     (define registry '())
     (define (entry-ref entry wanted)
@@ -916,7 +1040,7 @@
         (error "transformer.data.summary:v1")))
 
     (define (make-summary shard-count total-tokens vocab-size shard-token-limit
-                          fingerprint total-shard-bytes)
+                          fingerprint total-shard-bytes ignored-manifest)
       ;; Validate and deep-copy all authoritative metadata before the single
       ;; registry commit. The returned condition identity contains no fields.
       (if (and (d1-token-valid-nonnegative-integer? shard-count)
@@ -953,15 +1077,16 @@
             (d1-token-fail 'invalid-argument operation
                            "expected token corpus summary"))))
 
-    ;; Only the eight public procedures escape this lexical scope. The registry,
-    ;; constructor, brand creation, and authoritative metadata never do.
+    ;; The first eight procedures are the fixed public implementation set. The
+    ;; final two are trusted same-aggregate D2 seams: one bypasses the append-only
+    ;; public summary registry and one returns one exactly validated shard buffer.
     (vector
      (lambda (directory fingerprint vocab-size shard-token-limit tokens)
        (d1-token-corpus-write-impl make-summary directory fingerprint vocab-size
                                    shard-token-limit tokens))
      (lambda (directory maximum-manifest-bytes maximum-shard-bytes
                         maximum-total-tokens)
-       (d1-token-corpus-validate-impl make-summary directory
+       (d1-token-corpus-validate-impl make-summary d1-token-file-bytes directory
                                       maximum-manifest-bytes maximum-shard-bytes
                                       maximum-total-tokens))
      (lambda (summary)
@@ -985,7 +1110,22 @@
          (utf8->string (string->utf8 value))))
      (lambda (summary)
        (entry-ref
-        (require-entry summary 'token-corpus-summary-total-shard-bytes) 6)))))
+        (require-entry summary 'token-corpus-summary-total-shard-bytes) 6))
+     (lambda (file-reader directory maximum-manifest-bytes maximum-shard-bytes
+                        maximum-total-tokens)
+       (d1-token-corpus-validate-impl
+        (lambda (shard-count total-tokens vocab-size shard-token-limit
+                             fingerprint total-shard-bytes manifest)
+          (vector shard-count total-tokens vocab-size shard-token-limit
+                  (utf8->string (string->utf8 fingerprint))
+                  total-shard-bytes manifest))
+        file-reader directory maximum-manifest-bytes maximum-shard-bytes
+        maximum-total-tokens))
+     (lambda (file-reader path index token-count file-bytes digest fingerprint vocab-size
+                   maximum-shard-bytes)
+       (d1-token-validate-shard file-reader path index token-count file-bytes digest
+                                fingerprint vocab-size
+                                maximum-shard-bytes)))))
 
 ;;; These fixed-arity package thunks are renamed to private C-ABI symbols before
 ;;; the completed object is localized.

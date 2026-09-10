@@ -11,7 +11,11 @@
          e1-internal-dispatch)
 
 (define e1-internal-dispatch
-  (let ((registry '())
+  ;; The box is allocated before any caller region. vector-set! applies the
+  ;; pinned runtime's deep write barrier, so registering an error while a
+  ;; checked child region is active cannot leave the private registry pointing
+  ;; into reclaimed storage.
+  (let ((registry-box (vector '()))
         (max-message-bytes 4096)
         (max-details-bytes 16384)
         (max-details-depth 16)
@@ -73,7 +77,7 @@
         (error "transformer.error_internal:v1")))
 
     (define (find-entry value)
-      (let loop ((rest registry))
+      (let loop ((rest (vector-ref registry-box 0)))
         (cond ((null? rest) #f)
               ((eq? value (car (car rest))) (car rest))
               (else (loop (cdr rest))))))
@@ -82,7 +86,8 @@
       (let* ((shell (make-shell))
              (entry (list shell category operation message details cause)))
         ;;; Validation and all copying precede this single representation commit.
-        (set! registry (cons entry registry))
+        (vector-set! registry-box 0
+                     (cons entry (vector-ref registry-box 0)))
         shell))
 
     ;;; Bootstrap failures bypass ordinary input validation but still use the same

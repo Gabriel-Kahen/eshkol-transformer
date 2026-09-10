@@ -1,7 +1,7 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: toolchain configure build test test-a0 test-a2 test-b0 test-c1 test-d1 test-e1 test-e1b test-i1 test-i2 test-k1 test-l2 test-n2 test-n3k test-o2 test-p1 test-python-isolation test-t1 test-t2 test-x1 smoke benchmark clean
+.PHONY: toolchain configure build test test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b test-i1 test-i2 test-k1 test-l2 test-n2 test-n3k test-o2 test-p1 test-python-isolation test-t1 test-t2 test-x1 smoke benchmark clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -18,6 +18,7 @@ build: configure
 	/usr/bin/bash scripts/build-c1.sh
 	/usr/bin/bash scripts/build-t1.sh
 	/usr/bin/bash scripts/build-t2.sh
+	/usr/bin/bash scripts/build-d2.sh
 
 test: build
 	/usr/bin/bash scripts/test.sh
@@ -35,6 +36,7 @@ test: build
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
+	/usr/bin/bash scripts/test-d2.sh
 	/usr/bin/bash scripts/test-c1.sh
 	/usr/bin/bash scripts/test-t1.sh
 	/usr/bin/bash scripts/test-t2.sh
@@ -84,6 +86,9 @@ test-p1: configure
 
 test-d1: build
 	/usr/bin/bash scripts/test-d1.sh
+
+test-d2: build
+	/usr/bin/bash scripts/test-d2.sh
 
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh

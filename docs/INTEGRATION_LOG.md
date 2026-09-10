@@ -4,6 +4,168 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-09 — D2 / issue #42 accepted implementation complete
+
+- **Decision:** accepted and complete against the binding contract in
+  [issue #1 comment 5562461427](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5562461427).
+  The exact implementation head
+  `8bdca978abcd4f53f0c94cb2f4562fb576e736b2` received
+  [independent D2-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50#issuecomment-5604709742)
+  with no actionable findings. [PR #50](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50)
+  merged as `d805024764a8661815be3b2c3036695195b7075f`.
+- **Supported provenance:** [CI run 34301118384, job 102308027982](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34301118384/job/102308027982)
+  passed on Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 for build; the complete
+  F0/A0/A2/B0/C1/D1/D2/E1/E1B/I1/I2/K1/L2/N2/N3K/P1/Q0/T1/T2/X1 matrix;
+  smoke; and the reproducible benchmark. CI metadata names exact PR head
+  `8bdca978abcd4f53f0c94cb2f4562fb576e736b2`; Actions checked synthetic merge
+  `58ec324e9fc983f20bea9e0094eff1367dcbeff7`. Its tree and the actual merge tree
+  are exactly `69eca436397cfe8a2ff9cd3e2c8f2764af2d4f35`; `git diff --exit-code`
+  between those two commits passed. CI did not run the later-named merge commit.
+- **Supported D2 evidence:** 25 deterministic reference/resource/scope tests;
+  warning-clean native replay; sanitizers; two fresh deterministic strict AOTs;
+  frozen Q0 fixtures; exact cursor, error, and admission matrices; smoke; and
+  benchmark all passed. The optimized public loop retained exactly 4,521,984 arena
+  bytes at both 1,024 and 8,192 batches. At both horizons native
+  dataset/batch/borrow/D2-allocation counts were baseline `0/0/0/0`, open
+  `1/0/0/2`, live `1/1/0/4`, released `1/0/0/2`, and post-close `0/0/0/0`;
+  exact-read descriptors were baseline/peak/post-close `0/1/0` with final delta
+  zero. One-shard/1,024-shard open retention was 31,616/88,904 bytes and packed
+  retention was exactly 16,448/16,448 bytes. Process-wide advisory evidence was
+  93,672 KiB/5 descriptors for the one-batch small corpus and 94,252 KiB/6
+  descriptors for the 8,192-batch large corpus, a 580 KiB RSS delta.
+- **Merged-main retest:** from exact merge `d805024764a8661815be3b2c3036695195b7075f`,
+  `/usr/bin/bash -c 'ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make test-d2'`
+  passed on the explicitly unsupported CachyOS / LLVM 22.1.6 compatibility host.
+  It reproduced 25/25 tests, sanitizers, deterministic AOT, exact 4,521,984-byte
+  arena equality, all lifecycle and native descriptor transitions above,
+  one/many-shard 31,616/88,904-byte open and 16,448/16,448-byte packed retention,
+  production isolation, and final `D2 PASS`. Local process-wide advisory values
+  were 82,052 KiB/3 descriptors for the one-batch small corpus and 92,680 KiB/4
+  descriptors for the 8,192-batch large corpus, a 10,628 KiB RSS delta; topology
+  process peaks were 3/3 with native peak 1/1 and final delta zero.
+- **Packaging:** the canonical aggregate remains one member, exact 18-source
+  closure, 58 globals, and 52 package exports. The temporary test aggregate is
+  isolated at 59/53, deterministic across two builds, and absent from production
+  outputs; production objects and AOTs contain no test hook or Python/PyTorch
+  runtime dependency. The unchanged raw `strings -a` heuristic passed the
+  merged-main rerun. A prior unsupported LLVM 22 exact-head replay rendered
+  instruction bytes as the false-positive text `=Py_`; independent source, symbol,
+  link, and disassembly checks proved no dependency, and the supported LLVM 21 lane
+  passed the identical scan. This layout-sensitive unsupported-host heuristic is a
+  nonblocking test-harness hardening caveat, not runtime evidence.
+- **Limitations / downstream:** D2 remains CPU-only with fixed dense i64/i64/bool
+  storage, serialized and nonreentrant finite traversal, bounded-window rather than
+  global shuffle, and no epoch, causal/document mask, alternate dtype/device,
+  public C ABI, C2/O2/TR3 behavior, or power-loss claim. D1 trusted-directory,
+  symlink, and concurrent-mutation limits remain. Deliberately retained/promoted
+  caller shells remain caller-owned. The lexical `with-region` requirement is the
+  accepted implementation and resource-gate discipline, but
+  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950)
+  remains proposed and nonbinding; this completion does not accept it or amend the
+  public D2/C2/TR3 contract.
+- **Reference:** [issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42);
+  [PR #50](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50).
+
+## 2026-09-06 — D2 caller-region lifetime clarification (proposed)
+
+- **Decision:** proposed and pending integration-owner disposition in
+  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+  This entry does not amend the accepted D2 contract unless that proposal is
+  explicitly accepted.
+- **Proposed lifetime clarification:** replace references to GC-managed generation
+  capabilities with caller-region-managed Eshkol capabilities. The pinned runtime
+  has no tracing collector. `token-batch-release!` invalidates the live generation
+  and ends the native borrow/carrier lifetime, freeing the exact native `17*N*T`
+  carrier; it does not individually reclaim the batch/tensor closure, environment,
+  or capability-vector objects allocated in the caller's Eshkol region. A
+  long-running caller must put each `token-dataset-next-batch` through
+  `token-batch-release!` interval in one lexical `with-region`. No batch or tensor
+  shell may cross that boundary unless the caller deliberately retains or promotes
+  it and accounts for the resulting caller-owned storage. C2/TR3 must preserve this
+  lexical batch scope.
+- **Authentication boundary:** D2 retains no batch/tensor shell and no
+  per-generation authentication object or tombstone. The compiled aggregate
+  registers the generated-code identities of exactly two fixed private shell
+  constructors, dataset and batch, and native code retains only those two code
+  addresses. This is a pinned, per-process private implementation ABI: it is not a
+  public C ABI, serialized identity, portable closure-layout contract, or authority
+  valid across a process or independently compiled aggregate.
+- **Evidence:** optimized AOT without a lexical batch region retained 35,782,656
+  arena bytes after 1,024 batches and 254,345,216 bytes after 8,192 batches. The same
+  binary shape and admitted corpus, with one lexical batch `with-region`, retained
+  exactly 4,849,664 bytes at both horizons, an exact zero-byte slope. The proposed
+  review gate therefore compares the exact Eshkol arena counter at both horizons;
+  native live counts must return to baseline and RSS remains separately reported and
+  advisory.
+- **Compatibility:** no public name/arity, carrier, cursor/format, shuffle, aggregate
+  count, or native data ABI changes. `ESHKDCU1` remains version 1.0 and the aggregate
+  remains exactly 58 globals/52 exports. Independent D2-R, supported CI, merge, and
+  merge-head retest remain pending; ROADMAP stays `review`.
+
+## 2026-09-06 — D2 / issue #42 accepted current-main contract
+
+- **Decision:** accepted in
+  [integration issue #1 comment 5562461427](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5562461427)
+  and mirrored in
+  [issue #42 comment 5562461448](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42#issuecomment-5562461448).
+  It accepts the superseding exact proposal and canonical/adversarial corrections in
+  [comment 5557201280](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557201280).
+  Implementation is reconciled with merged main
+  `231f9354f14389db15faac7820ef23dc038ae941`; independent approval and merge remain
+  pending.
+- **Public contract and A0 amendments:** the delta is exactly the ten existing A0
+  dataset/batch operations plus unary `token-batch-release!`. Every exact authentic
+  generation already issued by a dataset remains an idempotent release authority,
+  including after a successor, seek, or close; all other stale access remains
+  `invalid-state`. The three batch accessors return stable read-only state-backed
+  opaque tensor identities, not newly
+  owned clones. `token-dataset-cursor` returns newly owned detached mutable canonical
+  bytevector storage, not an immutable registry object. The dataset config is the
+  exact ten-key acyclic flat list specified in [D2_SHARD_LOADER.md](D2_SHARD_LOADER.md),
+  not X1. Open normalizes and deep-copies it, retains neither caller carriers nor the
+  tokenizer, rejects NUL paths, and validates every shard before publication.
+- **Rows, carrier, and lifetime:** packed rows may cross D1 shards; unpacked rows do
+  not, and no shard/document equivalence is claimed. Inputs and targets are the exact
+  one-token shift, with zero only at false-mask positions and in unused final rows.
+  The carrier is exactly two CPU dense `i64[N,T]` planes and one CPU dense one-byte
+  `bool[N,T]` loss-mask plane, payload `17*N*T`. One dataset has one current native
+  registry entry and at most one live batch. Authenticated shell copies alias that
+  generation. Release invalidates the batch and three tensor identities before the
+  fixed destruction tail, is idempotent for every exact authentic already-issued
+  generation, and retains no per-generation carrier/tombstone. Scoped K1 views
+  cannot escape; active borrow blocks release/close before mutation. Generation
+  exhaustion never wraps.
+- **Ordering and cursor:** consecutive bounded windows use descending Fisher-Yates
+  with domain-separated SHA-256 u64-le draws and rejection sampling. The algorithm
+  removes modulo bias within a window conditional on the digest stream but is not a
+  global-uniform claim. `ESHKDCU1` version 1.0 is the accepted, exact `208+F`-byte
+  C2-facing state. Seek validates physical structure, canonical encoding, version/
+  features/algorithm, checksum, dataset/options identity, recomputed row count, and
+  ordinal before one receiver commit. It defines no C2 container or epoch state.
+- **Resources, errors, and packaging:** the semantic working-set admission is exactly
+  `maximum_manifest_bytes + maximum_shard_bytes + 17*N*T + 8*min(B,M)`, plus
+  separately measured fixed control/view/hash state. Checked exact ceilings admit;
+  one-over rejects before the associated read/allocation. At most one manifest, one
+  shard, one batch, and one shuffle window are retained; there is no whole-corpus or
+  unbounded row/record table. The source-composed review aggregate extends the 47/41
+  T2/I2 base to exactly 58 globals/52 package exports, composes shared trusted roots
+  once, and does not link localized I2/T2/O2 aggregates. N2 adds no wrapper/count.
+  Exact error categories and precedence are specified in the D2 document.
+  The implementation routes D2 manifest/shard reads through the reviewed exact-range
+  descriptor primitive, while preserving Eshkol-native parsing, SHA-256, and errors;
+  it therefore retains no process-lifetime hosted-port entries. The private dataset
+  control owns exactly `min(B,M)` checked i64 shuffle slots, with Eshkol retaining the
+  accepted unbiased Fisher-Yates algorithm. This is an internal storage/lifetime
+  decision only: it changes no public operation, carrier, cursor/format, aggregate
+  count, or public ABI.
+- **Dependencies / retest:** affected A0, D1, T1, T2, I2, N2, and Q0 gates; public
+  compiled content/lifetime/resource/corruption evidence; deterministic AOT and
+  sanitizers; full supported Ubuntu 22.04/LLVM 21 CI; and independent D2-R are
+  required. ROADMAP may remain only `review` until approval, merge, merge-head
+  retest, and acceptance-document follow-up.
+- **Reference:** [issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42);
+  [PR #50](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50).
+
 ## Schema
 
 | Field | Content |

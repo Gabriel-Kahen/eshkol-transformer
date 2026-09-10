@@ -27,6 +27,7 @@
          token-dataset-end?
          token-dataset-seek! token-dataset-close! token-batch-inputs
          token-batch-targets token-batch-loss-mask token-batch-validate
+         token-batch-release!
          module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
          parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
@@ -115,6 +116,7 @@
 (define (token-batch-targets batch) (a0-declaration-only 'token-batch-targets))
 (define (token-batch-loss-mask batch) (a0-declaration-only 'token-batch-loss-mask))
 (define (token-batch-validate batch) (a0-declaration-only 'token-batch-validate))
+(define (token-batch-release! batch) (a0-declaration-only 'token-batch-release!))
 
 (define (module-parameters module) (a0-declaration-only 'module-parameters))
 (define (module-buffers module) (a0-declaration-only 'module-buffers))

@@ -24,6 +24,7 @@
         token-dataset-end?
         token-dataset-seek! token-dataset-close! token-batch-inputs
         token-batch-targets token-batch-loss-mask token-batch-validate
+        token-batch-release!
         module-parameters module-buffers module-state-dict
         module-load-state-dict! module-train! module-eval! module-zero-grad!
         parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups

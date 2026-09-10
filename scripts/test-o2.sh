@@ -26,6 +26,7 @@ evidence="${object}.evidence"
   die "canonical O2 aggregate is missing"
 i2_aggregate="$(project_build_dir)/i2/libeshkol_transformer_wave2.a"
 t2_aggregate="$(project_build_dir)/t2/libeshkol_transformer_wave2.a"
+d2_aggregate="$(project_build_dir)/d2/libeshkol_transformer_wave2.a"
 
 cflags=(
   -std=c11 -Wall -Wextra -Werror -Wpedantic
@@ -316,11 +317,13 @@ grep -E 'multiple definition.*et_e1b_error_(predicate|category)_v1' \
   "${temporary_dir}/duplicate.stderr" >/dev/null || \
   die "duplicate O2 authority rejection did not identify E1 ownership"
 
-for aggregate_pair in i2 t2; do
+for aggregate_pair in i2 t2 d2; do
   if [[ "${aggregate_pair}" == i2 ]]; then
     other_aggregate="${i2_aggregate}"
-  else
+  elif [[ "${aggregate_pair}" == t2 ]]; then
     other_aggregate="${t2_aggregate}"
+  else
+    other_aggregate="${d2_aggregate}"
   fi
   [[ -r "${other_aggregate}" ]] || \
     die "${aggregate_pair^^} aggregate is missing for O2 collision evidence"
