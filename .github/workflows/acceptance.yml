@@ -63,15 +63,22 @@ jobs:
       - name: Install pinned development oracle
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
+          oracle_python="$RUNNER_TEMP/development-oracle/bin/python"
+          n2_oracle_python="$RUNNER_TEMP/n2-oracle-python"
           python3 -m venv "$RUNNER_TEMP/development-oracle"
-          "$RUNNER_TEMP/development-oracle/bin/python" -m pip install \
+          "$oracle_python" -m pip install \
             --disable-pip-version-check \
             -r tests/n2/requirements-reference.lock
+          printf '#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexec "%s" "$@"\n' \
+            "$oracle_python" > "$n2_oracle_python"
+          chmod 0500 "$n2_oracle_python"
+          "$n2_oracle_python" -c \
+            'import torch; assert torch.backends.cpu.get_cpu_capability() == "DEFAULT"'
           {
-            echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
-            echo "O2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
-            echo "A2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
-            echo "Q0_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "N2_ORACLE_PYTHON=$n2_oracle_python"
+            echo "O2_ORACLE_PYTHON=$oracle_python"
+            echo "A2_ORACLE_PYTHON=$oracle_python"
+            echo "Q0_PYTHON=$oracle_python"
             echo "ESHKOL_RUN=$GITHUB_WORKSPACE/.deps/eshkol-build/eshkol-run"
           } >> "$GITHUB_ENV"
 

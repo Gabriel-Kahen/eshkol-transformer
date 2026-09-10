@@ -153,7 +153,12 @@ assert "scripts/build-o2.sh" in build_driver
 
 for workflow in (ci, acceptance):
     assert "O2_ASAN_DETECT_LEAKS: '1'" in workflow
-    assert "O2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python" in workflow
+    assert "ATEN_CPU_CAPABILITY=default" in workflow
+    assert 'torch.backends.cpu.get_cpu_capability() == "DEFAULT"' in workflow
+    assert "N2_ORACLE_PYTHON=$n2_oracle_python" in workflow
+    assert "O2_ORACLE_PYTHON=$oracle_python" in workflow
+    assert "A2_ORACLE_PYTHON=$oracle_python" in workflow
+    assert "Q0_PYTHON=$oracle_python" in workflow
 assert "timeout-minutes: 240" in acceptance
 
 for command in (

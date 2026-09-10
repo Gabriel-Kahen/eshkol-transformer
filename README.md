@@ -28,7 +28,8 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make build'
 /usr/bin/bash -c 'python3.14 -m venv "$(pwd)/.tmp/q0-venv"'
 /usr/bin/bash -c '"$(pwd)/.tmp/q0-venv/bin/python" -m pip install -r tests/q0/requirements-oracle.lock'
-/usr/bin/bash -c 'Q0_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" N2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" A2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" ESHKOL_RUN="$(pwd)/.deps/eshkol-build/eshkol-run" make test-after-build'
+/usr/bin/bash -c 'printf '\''#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexec "%s" "$@"\n'\'' "$(pwd)/.tmp/q0-venv/bin/python" > "$(pwd)/.tmp/n2-oracle-python" && chmod 0500 "$(pwd)/.tmp/n2-oracle-python"'
+/usr/bin/bash -c 'Q0_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" N2_ORACLE_PYTHON="$(pwd)/.tmp/n2-oracle-python" O2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" A2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" ESHKOL_RUN="$(pwd)/.deps/eshkol-build/eshkol-run" make test-after-build'
 /usr/bin/bash -c 'make smoke-after-build'
 ```
 

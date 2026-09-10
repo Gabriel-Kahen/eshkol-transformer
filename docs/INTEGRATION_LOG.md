@@ -1723,3 +1723,26 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Integration acceptance (2026-09-08):** [N3K-R approved](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67#issuecomment-5587426332) exact head `39a79d2d6a87f9759b828082ac86fd66c67e2cf0` after primary and three independent Astra-high reviews. [Supported run 34222643674](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34222643674) passed the full matrix, build, smoke and benchmark. CI checked out synthetic merge `b8c1768b75f54b4ac399d1d4cef0e05f68ae9f73`; its exact base/head parents and tree were verified. [PR #67](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67) merged as `15ab04d4be6df11ca279c3eeb50b582e8163d535`. Reviewed head, CI checkout and actual merge all have tree `07cf8f8c3d9529a4df4c2f4a81e649fcc9e4bc49`.
 - **Merged-main retest:** integration revalidated pinned Eshkol, configured and rebuilt K1/I1/I2/N3K, then ran `N3K_ASAN_DETECT_LEAKS=1 scripts/test-n3k.sh` with explicit non-login `/usr/bin/bash`: PASS. The 23 oracle tests, 67,957 native assertions, 3,248 primitive central derivatives, reference error `7.62939453e-06`, owned carrier checks, fresh private AOT, predecessor/ABI/source/archive isolation and ASan/UBSan/LSan match the approved evidence. This retest used explicit CachyOS/LLVM22 compatibility settings and the revalidated compiler under the `41a1` worktree; supported Ubuntu22/LLVM21 evidence is supplied by the CI run above.
 - **Limits and downstream obligations:** private AOT establishes no public Eshkol model. Numeric RNG words neither authenticate initializer identity nor domain-separate streams; typed transport must validate identity. Reference unique-storage/path scheduling is test-only; production caller enforcement, whole-model publication, model wiring, and training remain downstream. No first-release, performance, GPU, general AD, JIT, or resume claim.
+
+## 2026-09-10 — O2 current-main CI-topology refresh / PR #58
+
+- **Decision:** merge current main `db70fe9c9bbbc6fbe221d65e5737b7486a75d77c`
+  into the preserved O2 parent without rewriting either history. Accepted O2, N2,
+  I2, T2, L2, and D2 implementation/evidence trees remain byte-identical to their
+  respective parents. Shared build and CI metadata is a strict union: O2 remains in
+  the native-numerics shard with its exact I2/T2/D2 aggregate prerequisites, all
+  eight blocking suites and every full test command remain, and exhaustive
+  acceptance retains the 240-minute outer timeout.
+- **Oracle-host correction:** the first exact-head exhaustive attempt exposed a
+  development-only N2 frozen-byte mismatch on a newer hosted runner image although
+  the N2 source, fixture, lock, native checks, and independent numerical-gradient
+  checks were unchanged. PyTorch 2.13 CPU capability dispatch is therefore pinned
+  to `DEFAULT` only through an ephemeral N2 oracle-interpreter wrapper. O2, A2, and
+  Q0 retain the direct pinned interpreter; no accepted N2 path, frozen byte, native
+  runtime, ABI, provider, or gate is changed or skipped. CI verifies the wrapper's
+  effective capability before running the unchanged byte-equality assertion.
+- **Required evidence:** exact-head native-numerics and 240-minute exhaustive runs
+  must both pass on Ubuntu 22.04 / LLVM-Clang 21.1.8, including unskipped N2 and O2
+  oracle regeneration, O2's 6,201 adversarial checks, sanitizers/LSan, full smoke,
+  and benchmark. A new independent O2-R exact-head review is required after green
+  evidence. O2 and the F0 topology remain `review`; PR #58 must not be merged here.
