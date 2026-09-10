@@ -3,6 +3,26 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+p1_phase=all
+if (( $# != 0 )); then
+  if (( $# != 2 )) || [[ "$1" != --phase ]]; then
+    die "usage: scripts/test-p1.sh [--phase all|public|state|registry]"
+  fi
+  p1_phase=$2
+fi
+case "${p1_phase}" in
+  all|public|state|registry) ;;
+  *) die "unknown P1 phase: ${p1_phase}" ;;
+esac
+
+p1_phase_enabled() {
+  [[ "${p1_phase}" == all || "${p1_phase}" == "$1" ]]
+}
+
+p1_phase_mark() {
+  printf 'P1 PHASE %s: %s (elapsed=%ss)\n' "$2" "$1" "${SECONDS}"
+}
+
 require_command ar
 require_command cmp
 require_command env
@@ -112,6 +132,8 @@ compile_trusted_aot() {
   [[ -x "${output}" ]] || die "P1 trusted AOT executable is missing"
 }
 
+if p1_phase_enabled public; then
+p1_phase_mark BEGIN public-package
 "${PROJECT_ROOT}/scripts/generate-p1-roots.sh" --check
 "${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
   "${p1_tmp}/identity-a" normal all
@@ -283,7 +305,10 @@ trusted_private_count="$(readelf -Ws \
        END { print n + 0 }')" || die "P1 private symbol visibility changed"
 [[ "${trusted_private_count}" == 31 ]] || \
   die "P1 trusted ABI symbol count changed: ${trusted_private_count}"
+p1_phase_mark PASS public-package
+fi
 
+p1_phase_mark BEGIN shared
 p1_public_cflags=(
   -std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion
   -Wsign-conversion -Wshadow
@@ -297,9 +322,11 @@ mkdir -p "${p1_test_trusted_link}"
   -o "${p1_test_trusted_link}/p1_identity.o"
 ar rcsD "${p1_test_trusted_archive}" \
   "${p1_test_trusted_link}/p1_identity.o"
+if p1_phase_enabled public; then
 if nm -a "${p1_public_archive}" "${p1_trusted_archive}" | \
     rg 'et_p1_test_' >/dev/null; then
   die "P1 production identity archives contain a test hook"
+fi
 fi
 {
   cat "${PROJECT_ROOT}/native/p1_identity_trusted_symbols.txt"
@@ -319,6 +346,10 @@ test_hook_count="$(readelf -Ws "${p1_test_trusted_link}/p1_identity.o" | \
        END { print n + 0 }')" || die "P1 test-hook visibility changed"
 [[ "${test_hook_count}" == 4 ]] || \
   die "P1 test-only hook count changed: ${test_hook_count}"
+p1_phase_mark PASS shared
+
+if p1_phase_enabled public; then
+p1_phase_mark BEGIN public-identity
 "${p1_cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/native" \
   "${PROJECT_ROOT}/tests/p1/test_p1_identity_header.cpp" \
@@ -387,8 +418,20 @@ UBSAN_OPTIONS=halt_on_error=1 \
 ASAN_OPTIONS="detect_leaks=${p1_lsan}:halt_on_error=1" \
 UBSAN_OPTIONS=halt_on_error=1 \
   "${p1_tmp}/test-p1-failpoints-sanitized" >/dev/null
+p1_phase_mark PASS public-identity
+fi
 
+if p1_phase_enabled public; then
+  p1_phase_mark BEGIN public-runtime
+fi
+if p1_phase_enabled state; then
+  p1_phase_mark BEGIN state
+fi
+if p1_phase_enabled registry; then
+  p1_phase_mark BEGIN registry
+fi
 for run in 1 2; do
+  if p1_phase_enabled public; then
   compile_public_object "${p1_public_source}" "${p1_tmp}/module-${run}.o" \
     "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.log"
   compile_public_object "${p1_example_source}" "${p1_tmp}/example-${run}.o" \
@@ -401,9 +444,13 @@ for run in 1 2; do
     "${p1_tmp}/public-reverse-${run}.o" \
     "${p1_tmp}/public-reverse-${run}.d" \
     "${p1_tmp}/public-reverse-${run}.log"
+  fi
+  if p1_phase_enabled state; then
   compile_trusted_object "${p1_test_source}" "${p1_tmp}/test-${run}.o" \
     "${p1_tmp}/test-${run}.d" "${p1_tmp}/test-${run}.log"
+  fi
 
+  if p1_phase_enabled public; then
   compile_public_aot "${p1_example_source}" "${p1_tmp}/example-${run}" \
     "${p1_tmp}/example-${run}.aot.log"
   timeout --foreground --signal=TERM --kill-after=2s 20s \
@@ -425,22 +472,28 @@ for run in 1 2; do
     "${p1_tmp}/public-reverse-${run}" \
     >"${p1_tmp}/public-reverse-${run}.stdout" \
     2>"${p1_tmp}/public-reverse-${run}.stderr"
+  fi
 
+  if p1_phase_enabled state; then
   compile_trusted_aot "${p1_test_source}" "${p1_tmp}/test-${run}" \
     "${p1_tmp}/test-${run}.aot.log" "${p1_test_trusted_link}"
   timeout --foreground --signal=TERM --kill-after=2s 30s \
     "${p1_tmp}/test-${run}" >"${p1_tmp}/test-${run}.stdout" \
     2>"${p1_tmp}/test-${run}.stderr"
+  fi
 
+  if p1_phase_enabled registry; then
   compile_trusted_aot "${p1_registry_test_source}" \
     "${p1_tmp}/registry-${run}" "${p1_tmp}/registry-${run}.aot.log" \
     "${p1_test_trusted_link}"
   timeout --foreground --signal=TERM --kill-after=2s 30s \
     "${p1_tmp}/registry-${run}" >"${p1_tmp}/registry-${run}.stdout" \
     2>"${p1_tmp}/registry-${run}.stderr"
+  fi
 done
 
 for run in 1 2; do
+  if p1_phase_enabled public; then
   for stem in module example public-stubs public-reverse; do
     depfile="${p1_tmp}/${stem}-${run}.d"
     grep -F "${p1_public_source}" "${depfile}" >/dev/null || \
@@ -466,6 +519,8 @@ for run in 1 2; do
       fi
     done
   done
+  fi
+  if p1_phase_enabled state; then
   grep -F "${p1_trusted_source}" "${p1_tmp}/test-${run}.d" >/dev/null || \
     die "P1 trusted depfile omits its alternative transformer.module root"
   if grep -F "${p1_public_source}" "${p1_tmp}/test-${run}.d" >/dev/null; then
@@ -476,47 +531,85 @@ for run in 1 2; do
   nm -u "${p1_tmp}/test-${run}.o" | \
     rg 'et_p1_private_provider_seal_release_v1' >/dev/null || \
     die "P1 trusted object omits its explicit private bridge reference"
+  fi
 done
 
-for stem in module example public-stubs public-reverse test; do
+if p1_phase_enabled public; then
+for stem in module example public-stubs public-reverse; do
   cmp "${p1_tmp}/${stem}-1.o" "${p1_tmp}/${stem}-2.o"
   cmp "${p1_tmp}/${stem}-1.log" "${p1_tmp}/${stem}-2.log"
 done
+fi
+if p1_phase_enabled state; then
+cmp "${p1_tmp}/test-1.o" "${p1_tmp}/test-2.o"
+cmp "${p1_tmp}/test-1.log" "${p1_tmp}/test-2.log"
+fi
+if p1_phase_enabled public; then
 cmp "${p1_tmp}/example-1.aot.log" "${p1_tmp}/example-2.aot.log"
 cmp "${p1_tmp}/public-stubs-1.aot.log" \
   "${p1_tmp}/public-stubs-2.aot.log"
 cmp "${p1_tmp}/public-reverse-1.aot.log" \
   "${p1_tmp}/public-reverse-2.aot.log"
+fi
+if p1_phase_enabled state; then
 cmp "${p1_tmp}/test-1.aot.log" "${p1_tmp}/test-2.aot.log"
+fi
+if p1_phase_enabled registry; then
 cmp "${p1_tmp}/registry-1.aot.log" "${p1_tmp}/registry-2.aot.log"
+fi
+if p1_phase_enabled public; then
 cmp "${p1_tmp}/example-1.stdout" "${p1_tmp}/example-2.stdout"
 cmp "${p1_tmp}/public-stubs-1.stdout" \
   "${p1_tmp}/public-stubs-2.stdout"
 cmp "${p1_tmp}/public-reverse-1.stdout" \
   "${p1_tmp}/public-reverse-2.stdout"
+fi
+if p1_phase_enabled state; then
 cmp "${p1_tmp}/test-1.stdout" "${p1_tmp}/test-2.stdout"
+fi
+if p1_phase_enabled registry; then
 cmp "${p1_tmp}/registry-1.stdout" "${p1_tmp}/registry-2.stdout"
+fi
+if p1_phase_enabled public; then
 cmp "${PROJECT_ROOT}/tests/expected/p1-example.stdout" \
   "${p1_tmp}/example-1.stdout"
 cmp "${PROJECT_ROOT}/tests/expected/p1-public-stubs.stdout" \
   "${p1_tmp}/public-stubs-1.stdout"
 cmp "${PROJECT_ROOT}/tests/expected/p1-public-import-reverse.stdout" \
   "${p1_tmp}/public-reverse-1.stdout"
+fi
+if p1_phase_enabled state; then
 cmp "${PROJECT_ROOT}/tests/expected/p1.stdout" "${p1_tmp}/test-1.stdout"
+fi
+if p1_phase_enabled registry; then
 cmp "${PROJECT_ROOT}/tests/expected/p1-registry-atomicity.stdout" \
   "${p1_tmp}/registry-1.stdout"
+fi
+if p1_phase_enabled public; then
 [[ ! -s "${p1_tmp}/example-1.stderr" && \
    ! -s "${p1_tmp}/example-2.stderr" && \
    ! -s "${p1_tmp}/public-stubs-1.stderr" && \
    ! -s "${p1_tmp}/public-stubs-2.stderr" && \
    ! -s "${p1_tmp}/public-reverse-1.stderr" && \
-   ! -s "${p1_tmp}/public-reverse-2.stderr" && \
-   ! -s "${p1_tmp}/test-1.stderr" && \
-   ! -s "${p1_tmp}/test-2.stderr" && \
-   ! -s "${p1_tmp}/registry-1.stderr" && \
+   ! -s "${p1_tmp}/public-reverse-2.stderr" ]] || \
+  die "P1 public runtime gate wrote stderr"
+p1_phase_mark PASS public-runtime
+fi
+if p1_phase_enabled state; then
+[[ ! -s "${p1_tmp}/test-1.stderr" && \
+   ! -s "${p1_tmp}/test-2.stderr" ]] || \
+  die "P1 state runtime gate wrote stderr"
+p1_phase_mark PASS state
+fi
+if p1_phase_enabled registry; then
+[[ ! -s "${p1_tmp}/registry-1.stderr" && \
    ! -s "${p1_tmp}/registry-2.stderr" ]] || \
-  die "P1 runtime gate wrote stderr"
+  die "P1 registry runtime gate wrote stderr"
+p1_phase_mark PASS registry
+fi
 
+if p1_phase_enabled public; then
+p1_phase_mark BEGIN public-boundary
 negative_sources=(
   negative_public_provider_internal
   negative_public_module_internal
@@ -672,5 +765,10 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
     rg 'state-from-flat|state-provider-bind!|p1-native-state-create' >/dev/null; then
   die "P1 strict load creates or binds a temporary expected state"
 fi
+p1_phase_mark PASS public-boundary
+p1_phase_mark PASS public
+fi
 
-printf 'P1 PASS: E1B-integrated public/private packaging, 419 structural checks, 405 native checks, 169 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+if [[ "${p1_phase}" == all ]]; then
+  printf 'P1 PASS: E1B-integrated public/private packaging, 419 structural checks, 405 native checks, 169 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+fi

@@ -10,6 +10,13 @@ SHELL := /usr/bin/bash
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
+	test-ci-parameters-public-after-build test-ci-parameters-state-after-build \
+	test-ci-parameters-registry-after-build test-ci-dataset-semantics-after-build \
+	test-ci-dataset-resources-after-build test-ci-dataset-packaging-after-build \
+	build-ci-tokenizer-bpe-boundary-production build-ci-tokenizer-bpe-boundary-d1-test \
+	test-ci-tokenizer-bpe-boundary-production-after-build \
+	test-ci-tokenizer-bpe-boundary-d1-test-after-build \
+	test-ci-tokenizer-bpe-boundary-public-caller-after-build \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-l2 test-n2 test-n3k \
@@ -62,6 +69,10 @@ build-ci-tokenizer-bpe: configure
 
 build-ci-tokenizer-bpe-boundary: configure
 	/usr/bin/bash scripts/build-d2.sh
+
+build-ci-tokenizer-bpe-boundary-production: configure
+
+build-ci-tokenizer-bpe-boundary-d1-test: configure
 
 build-ci-dataset: configure
 	/usr/bin/bash scripts/build-k1.sh
@@ -117,6 +128,15 @@ test-ci-checkpoint-after-build:
 test-ci-parameters-after-build:
 	/usr/bin/bash scripts/test-p1.sh
 
+test-ci-parameters-public-after-build:
+	/usr/bin/bash scripts/test-p1.sh --phase public
+
+test-ci-parameters-state-after-build:
+	/usr/bin/bash scripts/test-p1.sh --phase state
+
+test-ci-parameters-registry-after-build:
+	/usr/bin/bash scripts/test-p1.sh --phase registry
+
 test-ci-tokenizer-byte-after-build:
 	/usr/bin/bash scripts/test-t1.sh
 
@@ -126,8 +146,26 @@ test-ci-tokenizer-bpe-after-build:
 test-ci-tokenizer-bpe-boundary-after-build:
 	/usr/bin/bash scripts/test-t2-boundary.sh
 
+test-ci-tokenizer-bpe-boundary-production-after-build:
+	/usr/bin/bash scripts/test-t2-boundary.sh --phase production
+
+test-ci-tokenizer-bpe-boundary-d1-test-after-build:
+	/usr/bin/bash scripts/test-t2-boundary.sh --phase d1-test
+
+test-ci-tokenizer-bpe-boundary-public-caller-after-build:
+	/usr/bin/bash scripts/test-t2-boundary.sh --phase public-caller
+
 test-ci-dataset-after-build:
 	/usr/bin/bash scripts/test-d2.sh
+
+test-ci-dataset-semantics-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase semantics
+
+test-ci-dataset-resources-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase resources
+
+test-ci-dataset-packaging-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase packaging
 
 test-ci-topology:
 	/usr/bin/bash scripts/check-ci-topology.sh

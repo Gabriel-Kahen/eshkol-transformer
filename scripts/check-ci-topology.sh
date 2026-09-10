@@ -36,15 +36,29 @@ expected_suites = [
     ("native-numerics", "build-ci-core", "test-ci-core-after-build"),
     ("contracts-data", "build-ci-contracts", "test-ci-contracts-after-build"),
     ("checkpoint-io", "build-ci-checkpoint", "test-ci-checkpoint-after-build"),
-    ("parameter-state", "build-ci-parameters", "test-ci-parameters-after-build"),
+    ("parameter-state-public", "build-ci-parameters", "test-ci-parameters-public-after-build"),
+    ("parameter-state-state", "build-ci-parameters", "test-ci-parameters-state-after-build"),
+    ("parameter-state-registry", "build-ci-parameters", "test-ci-parameters-registry-after-build"),
     ("byte-tokenizer", "build-ci-tokenizer-byte", "test-ci-tokenizer-byte-after-build"),
     ("bpe-tokenizer", "build-ci-tokenizer-bpe", "test-ci-tokenizer-bpe-after-build"),
     (
-        "bpe-boundary",
-        "build-ci-tokenizer-bpe-boundary",
-        "test-ci-tokenizer-bpe-boundary-after-build",
+        "bpe-boundary-production",
+        "build-ci-tokenizer-bpe-boundary-production",
+        "test-ci-tokenizer-bpe-boundary-production-after-build",
     ),
-    ("shard-loader", "build-ci-dataset", "test-ci-dataset-after-build"),
+    (
+        "bpe-boundary-d1-test",
+        "build-ci-tokenizer-bpe-boundary-d1-test",
+        "test-ci-tokenizer-bpe-boundary-d1-test-after-build",
+    ),
+    (
+        "bpe-boundary-public-caller",
+        "build-ci-tokenizer-bpe-boundary",
+        "test-ci-tokenizer-bpe-boundary-public-caller-after-build",
+    ),
+    ("shard-loader-semantics", "build-ci-dataset", "test-ci-dataset-semantics-after-build"),
+    ("shard-loader-resources", "build-ci-dataset", "test-ci-dataset-resources-after-build"),
+    ("shard-loader-packaging", "build-ci-dataset", "test-ci-dataset-packaging-after-build"),
 ]
 actual_suites = re.findall(
     r"- suite: ([a-z0-9-]+)\n\s+build_target: ([a-z0-9-]+)\n"
@@ -89,6 +103,8 @@ expected_ci_build_commands = {
     "build-ci-tokenizer-bpe-boundary": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
+    "build-ci-tokenizer-bpe-boundary-production": set(),
+    "build-ci-tokenizer-bpe-boundary-d1-test": set(),
     "build-ci-dataset": {
         "/usr/bin/bash scripts/build-k1.sh",
         "/usr/bin/bash scripts/build-i1.sh",
@@ -102,7 +118,7 @@ required_build_commands_by_test = {
     "/usr/bin/bash scripts/test-t1.sh": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
-    "/usr/bin/bash scripts/test-t2-boundary.sh": {
+    "/usr/bin/bash scripts/test-t2-boundary.sh --phase public-caller": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
 }
@@ -112,7 +128,29 @@ for _, build_target, test_target in expected_suites:
         missing = required - set(targets[build_target])
         assert not missing, (test_command, build_target, missing)
 
-full_commands = targets["test-after-build"]
+# Full local/acceptance scripts prepare shared artifacts once. CI runs their
+# complete phase union independently; phase-dispatch tests enforce that contract.
+phase_commands = {
+    "/usr/bin/bash scripts/test-t2-boundary.sh": [
+        f"/usr/bin/bash scripts/test-t2-boundary.sh --phase {phase}"
+        for phase in ("production", "d1-test", "public-caller")
+    ],
+    "/usr/bin/bash scripts/test-p1.sh": [
+        f"/usr/bin/bash scripts/test-p1.sh --phase {phase}"
+        for phase in ("public", "state", "registry")
+    ],
+    "/usr/bin/bash scripts/test-d2.sh": [
+        f"/usr/bin/bash scripts/test-d2.sh --phase {phase}"
+        for phase in ("semantics", "resources", "packaging")
+    ],
+}
+for command in phase_commands:
+    assert targets["test-after-build"].count(command) == 1, command
+full_commands = [
+    phase
+    for command in targets["test-after-build"]
+    for phase in phase_commands.get(command, [command])
+]
 sharded_commands = [
     command
     for _, _, test_target in expected_suites
@@ -149,6 +187,6 @@ for command in (
 
 print(
     f"CI TOPOLOGY PASS: {len(expected_suites)} blocking suites cover "
-    f"all {len(full_commands)} full test commands exactly once"
+    f"all {len(full_commands)} test phases exactly once"
 )
 PY

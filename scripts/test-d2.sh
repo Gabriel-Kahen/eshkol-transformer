@@ -3,6 +3,55 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+d2_phase=all
+if (( $# != 0 )); then
+  if (( $# != 2 )) || [[ "$1" != --phase ]]; then
+    printf 'usage: %s [--phase all|semantics|resources|packaging]\n' "$0" >&2
+    exit 2
+  fi
+  d2_phase=$2
+fi
+case "${d2_phase}" in
+  all|semantics|resources|packaging) ;;
+  *)
+    printf 'usage: %s [--phase all|semantics|resources|packaging]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
+d2_phase_enabled() {
+  [[ "${d2_phase}" == all || "${d2_phase}" == "$1" ]]
+}
+
+declare -A d2_phase_elapsed d2_phase_running d2_phase_started
+d2_phase_begin() {
+  local phase=$1
+  d2_phase_elapsed["${phase}"]=0
+  d2_phase_running["${phase}"]=1
+  d2_phase_started["${phase}"]=${SECONDS}
+  printf 'D2 PHASE START: %s\n' "${phase}"
+}
+d2_phase_pause() {
+  local phase=$1
+  if [[ "${d2_phase_running[${phase}]:-0}" == 1 ]]; then
+    d2_phase_elapsed["${phase}"]=$((
+      d2_phase_elapsed[${phase}] + SECONDS - d2_phase_started[${phase}]
+    ))
+    d2_phase_running["${phase}"]=0
+  fi
+}
+d2_phase_resume() {
+  local phase=$1
+  d2_phase_running["${phase}"]=1
+  d2_phase_started["${phase}"]=${SECONDS}
+}
+d2_phase_end() {
+  local phase=$1
+  d2_phase_pause "${phase}"
+  printf 'D2 PHASE PASS: %s elapsed=%ss\n' \
+    "${phase}" "${d2_phase_elapsed[${phase}]}"
+}
+
 verify_toolchain
 for command in ar awk cmp find grep ldd nm python3 rg sha256sum sleep strings timeout; do
   require_command "${command}"
@@ -44,6 +93,14 @@ cmp "${PROJECT_ROOT}/native/d2_native_defined_symbols.txt" \
   "${d2_tmp}/d2-defined.txt"
 cmp "${PROJECT_ROOT}/native/d2_native_undefined_symbols.txt" \
   "${d2_tmp}/d2-undefined.txt"
+
+d2_delivered_candidates=(
+  "${d2_dir}/d2_native.o"
+  "${d2_dir}/d2_wave2.o"
+)
+
+if d2_phase_enabled semantics; then
+  d2_phase_begin semantics
 
 (
   cd -- "${PROJECT_ROOT}"
@@ -148,8 +205,17 @@ grep -E '^D2 native PASS: [0-9]+ ' "${d2_tmp}/native-1.stdout" >/dev/null
 ASAN_OPTIONS=detect_leaks="${D2_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 90s \
-  "${d2_tmp}/test-d2-native-sanitized" >/dev/null
+    "${d2_tmp}/test-d2-native-sanitized" >/dev/null
+d2_phase_pause semantics
+fi
 
+if d2_phase_enabled resources; then
+  d2_phase_begin resources
+fi
+if d2_phase_enabled semantics; then
+  d2_phase_resume semantics
+fi
+if d2_phase_enabled semantics || d2_phase_enabled resources; then
 (
   cd -- "${PROJECT_ROOT}"
   for repetition in 1 2; do
@@ -163,10 +229,19 @@ UBSAN_OPTIONS=halt_on_error=1 \
 diff -ru "${d2_tmp}/public-resources-1" "${d2_tmp}/public-resources-2"
 cmp "${d2_tmp}/t2-adversarial-1/alternate-same-vocab.tsv" \
   "${d2_tmp}/t2-adversarial-2/alternate-same-vocab.tsv"
+fi
+if d2_phase_enabled semantics; then
+  d2_phase_pause semantics
+fi
+if d2_phase_enabled resources; then
+  d2_phase_pause resources
+fi
 
 # Build a temporary copy of the exact D2 aggregate with native counters
 # enabled. The canonical production object remains byte-for-byte untouched;
 # only the optimized public resource executable links this test artifact.
+if d2_phase_enabled resources; then
+d2_phase_resume resources
 d2_resource_runtime_dir="${d2_tmp}/resource-test-runtime"
 mkdir -p "${d2_resource_runtime_dir}"
 E1B_COMPILER_TIMEOUT_SECONDS="${d2_timeout}" \
@@ -278,6 +353,8 @@ sed -e 's/^[^:]*://' -e 's/\\//g' \
 cmp "${d2_tmp}/resource-test-source-closure.expected" \
   "${d2_tmp}/resource-test-source-closure.txt" || \
   die "D2 temporary instrumented aggregate source closure drifted"
+d2_phase_pause resources
+fi
 
 compile_public_d2() {
   local source=$1 label=$2
@@ -311,20 +388,43 @@ compile_public_d2() {
     die "D2 public ${source} compiler reported ERROR while returning success"
 }
 
-for public_source in public_runtime public_errors_runtime resource_runtime \
-    resource_instrumented_runtime; do
+d2_public_sources=()
+if d2_phase_enabled semantics; then
+  d2_public_sources+=(public_runtime public_errors_runtime)
+fi
+if d2_phase_enabled resources; then
+  d2_public_sources+=(resource_runtime resource_instrumented_runtime)
+fi
+for public_source in "${d2_public_sources[@]}"; do
+  if [[ "${public_source}" == public_runtime || \
+        "${public_source}" == public_errors_runtime ]]; then
+    public_source_phase=semantics
+  else
+    public_source_phase=resources
+  fi
+  d2_phase_resume "${public_source_phase}"
   compile_public_d2 "${public_source}" "public-a-${public_source}"
   compile_public_d2 "${public_source}" "public-b-${public_source}"
   cmp "${d2_tmp}/public-a-${public_source}/${public_source}" \
     "${d2_tmp}/public-b-${public_source}/${public_source}"
+  d2_phase_pause "${public_source_phase}"
 done
-for production_public_aot in \
-    "${d2_tmp}/public-a-public_runtime/public_runtime" \
-    "${d2_tmp}/public-b-public_runtime/public_runtime" \
-    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
-    "${d2_tmp}/public-b-resource_runtime/resource_runtime"; do
+d2_production_public_aots=()
+if d2_phase_enabled semantics; then
+  d2_production_public_aots+=(
+    "${d2_tmp}/public-a-public_runtime/public_runtime"
+    "${d2_tmp}/public-b-public_runtime/public_runtime"
+    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime"
+    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime"
+  )
+fi
+if d2_phase_enabled resources; then
+  d2_production_public_aots+=(
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime"
+    "${d2_tmp}/public-b-resource_runtime/resource_runtime"
+  )
+fi
+for production_public_aot in "${d2_production_public_aots[@]}"; do
   if nm -a "${production_public_aot}" | \
       grep -E 'et_d2_.*test|et_d2_test_owned|et_e1b_public_d2_test' \
         >/dev/null; then
@@ -332,6 +432,8 @@ for production_public_aot in \
   fi
 done
 
+if d2_phase_enabled semantics; then
+d2_phase_resume semantics
 for repetition in a b; do
   resource_index=1
   [[ "${repetition}" == b ]] && resource_index=2
@@ -440,7 +542,11 @@ done
 cmp "${d2_tmp}/private-view-a.stdout" "${d2_tmp}/private-view-b.stdout"
 grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
   "${d2_tmp}/private-view-a.stdout" >/dev/null
+d2_phase_pause semantics
+fi
 
+if d2_phase_enabled resources; then
+d2_phase_resume resources
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
   local pid rss=0 rss_max=0 fd_count=0 fd_max=0 started=$SECONDS
@@ -586,7 +692,11 @@ timeout --foreground --signal=TERM --kill-after=5s 180s \
   >"${d2_tmp}/resource-accessors.stdout"
 grep -Fx 'D2 RESOURCE ACCESSORS PASS: live=0 bytes released=0 bytes' \
   "${d2_tmp}/resource-accessors.stdout" >/dev/null
+d2_phase_pause resources
+fi
 
+if d2_phase_enabled packaging; then
+  d2_phase_begin packaging
 wave2_evidence="${d2_dir}/d2_wave2.o.evidence"
 [[ "$(wc -l <"${wave2_evidence}/global-defined.txt")" == 58 ]] || \
   die "D2 aggregate must have exactly 58 globals"
@@ -771,19 +881,35 @@ if rg -ni 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' \
     "${PROJECT_ROOT}/native/d2_native.h" >/dev/null; then
   die "D2 production candidate references a Python runtime"
 fi
-for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
-    "${d2_tmp}/a/d2-semantic" "${d2_tmp}/b/d2-semantic" \
-    "${d2_tmp}/public-a-public_runtime/public_runtime" \
-    "${d2_tmp}/public-b-public_runtime/public_runtime" \
-    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
-    "${d2_tmp}/public-b-resource_runtime/resource_runtime" \
-    "${d2_resource_runtime_dir}/d2_wave2_test.o" \
-    "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
-    "${d2_tmp}/public-b-resource_instrumented_runtime/resource_instrumented_runtime" \
-    "${d2_tmp}/private-a/private-view" \
-    "${d2_tmp}/private-b/private-view"; do
+d2_phase_pause packaging
+fi
+
+if d2_phase_enabled semantics; then
+  d2_delivered_candidates+=(
+    "${d2_tmp}/a/d2-semantic"
+    "${d2_tmp}/b/d2-semantic"
+    "${d2_tmp}/public-a-public_runtime/public_runtime"
+    "${d2_tmp}/public-b-public_runtime/public_runtime"
+    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime"
+    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime"
+  )
+fi
+if d2_phase_enabled resources; then
+  d2_delivered_candidates+=(
+    "${d2_tmp}/public-a-resource_runtime/resource_runtime"
+    "${d2_tmp}/public-b-resource_runtime/resource_runtime"
+    "${d2_resource_runtime_dir}/d2_wave2_test.o"
+    "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime"
+    "${d2_tmp}/public-b-resource_instrumented_runtime/resource_instrumented_runtime"
+  )
+fi
+if d2_phase_enabled semantics; then
+  d2_delivered_candidates+=(
+    "${d2_tmp}/private-a/private-view"
+    "${d2_tmp}/private-b/private-view"
+  )
+fi
+for delivered in "${d2_delivered_candidates[@]}"; do
   if strings -a "${delivered}" | \
       grep -Ei 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' >/dev/null || \
       nm -a "${delivered}" | \
@@ -794,4 +920,15 @@ for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
   fi
 done
 
-printf 'D2 PASS: carrier-neutral shift/shuffle/cursor semantics, frozen Q0 fixture, private carrier lifetime, determinism, resource, sanitizer, and isolation gates\n'
+if d2_phase_enabled semantics; then
+  d2_phase_end semantics
+fi
+if d2_phase_enabled resources; then
+  d2_phase_end resources
+fi
+if d2_phase_enabled packaging; then
+  d2_phase_end packaging
+fi
+if [[ "${d2_phase}" == all ]]; then
+  printf 'D2 PASS: carrier-neutral shift/shuffle/cursor semantics, frozen Q0 fixture, private carrier lifetime, determinism, resource, sanitizer, and isolation gates\n'
+fi

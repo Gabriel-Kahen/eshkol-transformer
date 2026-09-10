@@ -33,22 +33,24 @@ From a clean checkout on the supported lane, run:
 ```
 
 Code pull requests, pushes to `main`, and merge-queue runs partition the complete
-test command set across eight parallel blocking suites. Full P1, T1, D2, C1,
-native-numerics/Q0, contract/data, T2 runtime, and T2 boundary gates run independently,
-while suite-specific build targets avoid
-outer builds whose artifacts the full scripts immediately rebuild. The serial
-`Exhaustive acceptance` workflow also runs nightly and through manual dispatch;
-after one clean build it uses no-rebuild test, smoke, and benchmark entry points.
+test command set across fourteen parallel blocking suites. P1 public, state, and
+registry checks run separately, as do D2 semantics, resources, and packaging.
+T2 boundary checks run as production, D1-test, and public-caller phases. T1, C1,
+native numerics/Q0, contracts/data, and T2 runtime retain their own jobs. Every assertion,
+repeated fresh-cache build, sanitizer, and resource limit
+remains required. Resource measurements have a dedicated runner. Default local P1, D2,
+and T2 boundary commands still execute their full suites with shared setup once; the serial
+`Exhaustive acceptance` workflow runs nightly and through manual dispatch after one
+clean outer build.
 
-[Supported run 34373099684](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34373099684)
-took 3h59m10s including queue and spent about 72 minutes in redundant full builds.
-The earlier reduced run 34057603751 took 11m55s but did not carry the same coverage.
-[The first parallel run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34400156724)
-passed five suites (native numerics 21m16s, parameters 31m35s, loader 29m39s,
-contracts 12m04s, checkpoint 6m45s), but both tokenizer jobs lacked the D2 aggregate
-needed by their reverse-import checks. The revised prerequisites and separate T2
-runtime/boundary jobs still need hosted validation; that failed run does not establish
-a successful full-suite duration.
+[The original supported run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34373099684)
+took 3h59m10s including queue, with about 72 minutes in redundant full builds.
+[The successful eight-suite run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34516213267)
+took 32m37s with full coverage. Parameters (32m17s) and loader checks (30m47s)
+were the longest jobs. The fourteen-suite phase split targets these bottlenecks and
+the sequential T2 boundary builds; see [PR #72](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/72)
+for hosted acceptance and measured duration. Independent phase setup can increase
+runner minutes even when elapsed time falls.
 
 PRs changing only `README.md`, `CONTRIBUTING.md`, or Markdown under `docs/` run the
 CI topology and selector checks without launching compiler suites. `AGENTS.md`,

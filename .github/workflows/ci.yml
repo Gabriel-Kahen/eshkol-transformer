@@ -68,21 +68,39 @@ jobs:
           - suite: checkpoint-io
             build_target: build-ci-checkpoint
             test_target: test-ci-checkpoint-after-build
-          - suite: parameter-state
+          - suite: parameter-state-public
             build_target: build-ci-parameters
-            test_target: test-ci-parameters-after-build
+            test_target: test-ci-parameters-public-after-build
+          - suite: parameter-state-state
+            build_target: build-ci-parameters
+            test_target: test-ci-parameters-state-after-build
+          - suite: parameter-state-registry
+            build_target: build-ci-parameters
+            test_target: test-ci-parameters-registry-after-build
           - suite: byte-tokenizer
             build_target: build-ci-tokenizer-byte
             test_target: test-ci-tokenizer-byte-after-build
           - suite: bpe-tokenizer
             build_target: build-ci-tokenizer-bpe
             test_target: test-ci-tokenizer-bpe-after-build
-          - suite: bpe-boundary
+          - suite: bpe-boundary-production
+            build_target: build-ci-tokenizer-bpe-boundary-production
+            test_target: test-ci-tokenizer-bpe-boundary-production-after-build
+          - suite: bpe-boundary-d1-test
+            build_target: build-ci-tokenizer-bpe-boundary-d1-test
+            test_target: test-ci-tokenizer-bpe-boundary-d1-test-after-build
+          - suite: bpe-boundary-public-caller
             build_target: build-ci-tokenizer-bpe-boundary
-            test_target: test-ci-tokenizer-bpe-boundary-after-build
-          - suite: shard-loader
+            test_target: test-ci-tokenizer-bpe-boundary-public-caller-after-build
+          - suite: shard-loader-semantics
             build_target: build-ci-dataset
-            test_target: test-ci-dataset-after-build
+            test_target: test-ci-dataset-semantics-after-build
+          - suite: shard-loader-resources
+            build_target: build-ci-dataset
+            test_target: test-ci-dataset-resources-after-build
+          - suite: shard-loader-packaging
+            build_target: build-ci-dataset
+            test_target: test-ci-dataset-packaging-after-build
     env:
       CC: clang-21
       CXX: clang++-21

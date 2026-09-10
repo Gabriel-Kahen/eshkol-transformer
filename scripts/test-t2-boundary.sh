@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+t2_boundary_phase=all
+if (( $# > 0 )); then
+  if (( $# != 2 )) || [[ "$1" != --phase ]]; then
+    printf 'usage: %s [--phase all|production|d1-test|public-caller]\n' "$0" >&2
+    exit 2
+  fi
+  t2_boundary_phase=$2
+fi
+case "${t2_boundary_phase}" in
+  all|production|d1-test|public-caller) ;;
+  *)
+    printf 'usage: %s [--phase all|production|d1-test|public-caller]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
+t2_boundary_phase_enabled() {
+  [[ "${t2_boundary_phase}" == all || "${t2_boundary_phase}" == "$1" ]]
+}
+
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
@@ -63,74 +84,101 @@ mkdir -p "${working_dir}/production" "${working_dir}/d1"
 for repetition in 1 2; do
   repetition_dir="${t2_boundary_tmp}/repeat-${repetition}"
   mkdir -p "${repetition_dir}/production" "${repetition_dir}/d1"
+  if t2_boundary_phase_enabled production; then
   ESHKOL_PATH="${t2_boundary_tmp}/shadow" \
   ESHKOL_LIB_DIR="${t2_boundary_tmp}/shadow" \
     E1B_COMPILER_TIMEOUT_SECONDS="${t2_boundary_timeout}" \
     /usr/bin/bash "${PROJECT_ROOT}/scripts/build-t2.sh" \
       "${working_dir}/production"
+  fi
+  if t2_boundary_phase_enabled d1-test; then
   ESHKOL_PATH="${t2_boundary_tmp}/shadow" \
   ESHKOL_LIB_DIR="${t2_boundary_tmp}/shadow" \
     build_d1_test "${working_dir}/d1/wave2-d1-test.o"
+  fi
+  if t2_boundary_phase_enabled production; then
   cp "${working_dir}/production/wave2.o" \
     "${repetition_dir}/production/wave2.o"
   cp "${working_dir}/production/libeshkol_transformer_wave2.a" \
     "${repetition_dir}/production/libeshkol_transformer_wave2.a"
   cp -a "${working_dir}/production/wave2.o.evidence" \
     "${repetition_dir}/production/wave2.o.evidence"
+  fi
+  if t2_boundary_phase_enabled d1-test; then
   cp "${working_dir}/d1/wave2-d1-test.o" \
     "${repetition_dir}/d1/wave2-d1-test.o"
   cp "${working_dir}/d1/libeshkol_transformer_wave2_d1_test.a" \
     "${repetition_dir}/d1/libeshkol_transformer_wave2_d1_test.a"
   cp -a "${working_dir}/d1/wave2-d1-test.o.evidence" \
     "${repetition_dir}/d1/wave2-d1-test.o.evidence"
+  fi
 done
 
+if t2_boundary_phase_enabled production; then
 production_one="${t2_boundary_tmp}/repeat-1/production"
 production_two="${t2_boundary_tmp}/repeat-2/production"
-d1_one="${t2_boundary_tmp}/repeat-1/d1"
-d1_two="${t2_boundary_tmp}/repeat-2/d1"
 cmp "${production_one}/wave2.o" "${production_two}/wave2.o"
 cmp "${production_one}/libeshkol_transformer_wave2.a" \
   "${production_two}/libeshkol_transformer_wave2.a"
 diff -ru "${production_one}/wave2.o.evidence" \
   "${production_two}/wave2.o.evidence"
+production_object="${production_one}/wave2.o"
+production_archive="${production_one}/libeshkol_transformer_wave2.a"
+production_evidence="${production_object}.evidence"
+fi
+if t2_boundary_phase_enabled d1-test; then
+d1_one="${t2_boundary_tmp}/repeat-1/d1"
+d1_two="${t2_boundary_tmp}/repeat-2/d1"
 cmp "${d1_one}/wave2-d1-test.o" "${d1_two}/wave2-d1-test.o"
 cmp "${d1_one}/libeshkol_transformer_wave2_d1_test.a" \
   "${d1_two}/libeshkol_transformer_wave2_d1_test.a"
 diff -ru "${d1_one}/wave2-d1-test.o.evidence" \
   "${d1_two}/wave2-d1-test.o.evidence"
-
-production_object="${production_one}/wave2.o"
-production_archive="${production_one}/libeshkol_transformer_wave2.a"
-production_evidence="${production_object}.evidence"
 d1_object="${d1_one}/wave2-d1-test.o"
 d1_archive="${d1_one}/libeshkol_transformer_wave2_d1_test.a"
 d1_evidence="${d1_object}.evidence"
+fi
 
+if t2_boundary_phase_enabled production; then
 [[ "$(wc -l <"${production_evidence}/global-defined.txt")" == 47 ]] || \
   die "Wave 2 production aggregate must expose exactly 47 globals"
 [[ "$(wc -l <"${production_evidence}/package-exports.txt")" == 41 ]] || \
   die "Wave 2 production package must expose exactly 41 wrappers"
+fi
+if t2_boundary_phase_enabled d1-test; then
 [[ "$(wc -l <"${d1_evidence}/global-defined.txt")" == 48 ]] || \
   die "Wave 2 D1 test aggregate must expose exactly 48 globals"
 [[ "$(wc -l <"${d1_evidence}/package-exports.txt")" == 42 ]] || \
   die "Wave 2 D1 test package must expose exactly 42 wrappers"
+fi
+if t2_boundary_phase_enabled production; then
 cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
   "${production_evidence}/global-defined.txt"
 cmp "${PROJECT_ROOT}/native/t2_wave2_public_exports.txt" \
   "${production_evidence}/package-exports.txt"
+fi
+if t2_boundary_phase_enabled d1-test; then
 cmp "${PROJECT_ROOT}/native/t2_wave2_d1_test_defined_symbols.txt" \
   "${d1_evidence}/global-defined.txt"
 cmp "${PROJECT_ROOT}/native/t2_wave2_d1_test_public_exports.txt" \
   "${d1_evidence}/package-exports.txt"
+fi
+if t2_boundary_phase_enabled production; then
 cmp "${PROJECT_ROOT}/native/t1_wave1_public_strings.txt" \
   "${production_evidence}/public-strings.txt"
+fi
+if t2_boundary_phase_enabled d1-test; then
 cmp "${PROJECT_ROOT}/native/t2_wave2_d1_test_public_strings.txt" \
   "${d1_evidence}/public-strings.txt"
+fi
+if t2_boundary_phase_enabled production; then
 [[ "$(ar t "${production_archive}")" == wave2.o ]] || \
   die "Wave 2 archive must contain exactly its once-localized aggregate"
+fi
+if t2_boundary_phase_enabled d1-test; then
 [[ "$(ar t "${d1_archive}")" == wave2-d1-test.o ]] || \
   die "Wave 2 D1 test archive must contain exactly its localized aggregate"
+fi
 
 check_source_closure() {
   local depfile=$1 expected=$2 actual=$3
@@ -142,12 +190,16 @@ check_source_closure() {
     die "Wave 2 source closure admitted a hostile include root"
   fi
 }
+if t2_boundary_phase_enabled production; then
 check_source_closure "${production_evidence}/private.d" \
   "${PROJECT_ROOT}/native/t2_wave2_source_closure.txt" \
   "${t2_boundary_tmp}/production-source-closure.txt"
+fi
+if t2_boundary_phase_enabled d1-test; then
 check_source_closure "${d1_evidence}/private.d" \
   "${PROJECT_ROOT}/native/t2_wave2_d1_test_source_closure.txt" \
   "${t2_boundary_tmp}/d1-source-closure.txt"
+fi
 
 check_localized_archive() {
   local object=$1 archive=$2 evidence=$3
@@ -192,10 +244,14 @@ common_rename_manifests=(
   "${PROJECT_ROOT}/native/p1_package_renames.txt"
   "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt"
 )
+if t2_boundary_phase_enabled production; then
 check_localized_archive "${production_object}" "${production_archive}" \
   "${production_evidence}" "${common_rename_manifests[@]}" "${t2_renames}"
+fi
+if t2_boundary_phase_enabled d1-test; then
 check_localized_archive "${d1_object}" "${d1_archive}" "${d1_evidence}" \
   "${common_rename_manifests[@]}" "${t2_d1_renames}"
+fi
 
 reject_builder_input() {
   local label=$1 expected=$2
@@ -212,10 +268,15 @@ reject_builder_input() {
     die "rejected Wave 2 input published ${label} output"
 }
 
+if t2_boundary_phase_enabled production; then
 cp "${t2_root}" "${t2_boundary_tmp}/copied-root.esk"
 cp "${t2_bridge}" "${t2_boundary_tmp}/copied-bridge.c"
+fi
+if t2_boundary_phase_enabled d1-test; then
 cp "${t2_d1_root}" "${t2_boundary_tmp}/copied-d1-root.esk"
+fi
 repository_root_error='repository package components require their exact repository-owned private root'
+if t2_boundary_phase_enabled production; then
 reject_builder_input copied-root "${repository_root_error}" \
   "${t2_boundary_tmp}/copied-root.esk" "${t2_bridge}" "${t2_renames}" \
   "${t2_exports}" "${t2_boundary_tmp}/copied-root.o" "${t2_includes[@]}"
@@ -231,10 +292,14 @@ for standalone_root in \
     "${standalone_root}" "${t2_bridge}" "${t2_renames}" "${t2_exports}" \
     "${t2_boundary_tmp}/${label}.o" "${t2_includes[@]}"
 done
+fi
+if t2_boundary_phase_enabled d1-test; then
 reject_builder_input copied-d1-root "${repository_root_error}" \
   "${t2_boundary_tmp}/copied-d1-root.esk" "${t2_d1_bridge}" \
   "${t2_d1_renames}" "${t2_d1_exports}" \
   "${t2_boundary_tmp}/copied-d1-root.o" "${t2_includes[@]}"
+fi
+if t2_boundary_phase_enabled production; then
 reject_builder_input copied-bridge \
   'T2 aggregate policy requires the exact repository bridge' \
   "${t2_root}" "${t2_boundary_tmp}/copied-bridge.c" "${t2_renames}" \
@@ -251,10 +316,14 @@ reject_builder_input mismatched-exports \
   'T2 aggregate policy requires the exact repository export list' \
   "${t2_root}" "${t2_bridge}" "${t2_renames}" "${t2_d1_exports}" \
   "${t2_boundary_tmp}/mismatched-exports.o" "${t2_includes[@]}"
+fi
+if t2_boundary_phase_enabled d1-test; then
 reject_builder_input mismatched-d1-bridge \
   'T2 D1 test aggregate policy requires the exact repository bridge' \
   "${t2_d1_root}" "${t2_bridge}" "${t2_d1_renames}" "${t2_d1_exports}" \
   "${t2_boundary_tmp}/mismatched-d1-bridge.o" "${t2_includes[@]}"
+fi
+if t2_boundary_phase_enabled production; then
 reject_builder_input wrong-include-order \
   'T2 aggregate policy requires exact ordered trusted include roots' \
   "${t2_root}" "${t2_bridge}" "${t2_renames}" "${t2_exports}" \
@@ -265,6 +334,7 @@ reject_builder_input hostile-include \
   "${t2_root}" "${t2_bridge}" "${t2_renames}" "${t2_exports}" \
   "${t2_boundary_tmp}/hostile-include.o" "${t2_boundary_tmp}/shadow" \
   "${t2_includes[@]}"
+fi
 
 run_compiler() {
   local cache_name=$1
@@ -279,6 +349,7 @@ run_compiler() {
       "${t2_boundary_timeout}s" "${t2_boundary_runner}" "$@"
 }
 
+if t2_boundary_phase_enabled production; then
 private_source_bindings=(
   t2-private-tokenizer-parse t2-private-tokenizer-serialize
   t2-bpe-train-core t2-stream-encoder-open t2-stream-decoder-push!
@@ -329,7 +400,9 @@ for guessed_symbol in "${guessed_symbols[@]}"; do
     grep -Fx "${guessed_symbol}" >/dev/null || \
     die "crafted native reference resolved from Wave 2: ${guessed_symbol}"
 done
+fi
 
+if t2_boundary_phase_enabled public-caller; then
 # A public caller is compiled twice through fresh caches at the same output
 # path; retained objects and linked binaries must be byte-identical.
 caller_source="${PROJECT_ROOT}/tests/t1/import_reverse.esk"
@@ -411,7 +484,9 @@ cmp "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt" \
 if ldd "${t2_boundary_tmp}/caller-1" | grep -Eiq 'python|torch'; then
   die "Wave 2 public caller links a Python or Torch runtime"
 fi
+fi
 
+if t2_boundary_phase_enabled production; then
 # Independent Wave 1 and Wave 2 packages must not be combined: each owns the
 # same E1 registry and public wrappers.
 E1B_COMPILER_TIMEOUT_SECONDS="${t2_boundary_timeout}" \
@@ -428,5 +503,19 @@ fi
 grep -E 'multiple definition.*et_e1b_error_(predicate|category)_v1' \
   "${t2_boundary_tmp}/wave1-wave2.stderr" >/dev/null || \
   die "Wave 1 plus Wave 2 rejection did not identify duplicate E1 ownership"
+fi
 
-printf 'T2 BOUNDARY PASS: exact 47/41 production and 48/42 D1-test surfaces, deterministic localized objects/archives/evidence/AOT, hostile-path and tuple rejection, localization, crafted-link isolation, public closure, and Wave1+Wave2 E1 collision\n'
+case "${t2_boundary_phase}" in
+  all)
+    printf 'T2 BOUNDARY PASS: exact 47/41 production and 48/42 D1-test surfaces, deterministic localized objects/archives/evidence/AOT, hostile-path and tuple rejection, localization, crafted-link isolation, public closure, and Wave1+Wave2 E1 collision\n'
+    ;;
+  production)
+    printf 'T2 BOUNDARY PRODUCTION PASS: exact 47/41 surface, deterministic localized objects/archives/evidence, tuple rejection, private-binding isolation, crafted-link isolation, and Wave1+Wave2 E1 collision\n'
+    ;;
+  d1-test)
+    printf 'T2 BOUNDARY D1-TEST PASS: exact 48/42 surface, deterministic localized objects/archives/evidence, and D1-test tuple rejection\n'
+    ;;
+  public-caller)
+    printf 'T2 BOUNDARY PUBLIC-CALLER PASS: deterministic AOT execution, exact public closure, wrapper references, and runtime isolation\n'
+    ;;
+esac
