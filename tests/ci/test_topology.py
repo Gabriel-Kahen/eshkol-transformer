@@ -40,10 +40,10 @@ class TopologyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_missing_duplicate_and_full_script_phase_regressions_fail(self):
-        command = "\t/usr/bin/bash scripts/test-p1.sh --phase identity\n"
+        command = "\t/usr/bin/bash scripts/test-p1.sh --phase public\n"
         for replacement in (
             "",
-            "\t/usr/bin/bash scripts/test-p1.sh --phase runtime\n",
+            "\t/usr/bin/bash scripts/test-p1.sh --phase state\n",
             "\t/usr/bin/bash scripts/test-p1.sh\n",
         ):
             with self.subTest(replacement=replacement):

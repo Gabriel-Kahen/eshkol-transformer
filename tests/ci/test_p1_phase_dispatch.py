@@ -29,7 +29,7 @@ class P1PhaseDispatchTests(unittest.TestCase):
         )
         self.assertEqual(replacements, 1)
         harness = preflight + """
-for candidate in identity runtime boundary; do
+for candidate in public state registry; do
   if p1_phase_enabled "${candidate}"; then
     printf '%s\\n' "${candidate}"
   fi
@@ -48,59 +48,95 @@ done
             )
 
     def test_zero_args_and_explicit_all_select_every_phase(self) -> None:
-        expected = "identity\nruntime\nboundary\n"
+        expected = "public\nstate\nregistry\n"
         for arguments in ((), ("--phase", "all")):
             with self.subTest(arguments=arguments):
                 result = self._run_dispatch(*arguments)
                 self.assertEqual((result.returncode, result.stdout), (0, expected))
 
     def test_each_explicit_phase_selects_only_itself(self) -> None:
-        for phase in ("identity", "runtime", "boundary"):
+        for phase in ("public", "state", "registry"):
             with self.subTest(phase=phase):
                 result = self._run_dispatch("--phase", phase)
                 self.assertEqual((result.returncode, result.stdout), (0, f"{phase}\n"))
 
     def test_unknown_or_malformed_arguments_fail(self) -> None:
         cases = (
-            ("identity",),
+            ("public",),
             ("--phase",),
             ("--phase", "unknown"),
-            ("--phase", "runtime", "extra"),
-            ("--wrong", "runtime"),
+            ("--phase", "state", "extra"),
+            ("--wrong", "registry"),
         )
         for arguments in cases:
             with self.subTest(arguments=arguments):
                 result = self._run_dispatch(*arguments)
                 self.assertNotEqual(result.returncode, 0)
 
-    def test_full_gate_assigns_each_contiguous_body_once(self) -> None:
-        identity_guard = "if p1_phase_enabled identity; then"
-        runtime_guard = "if p1_phase_enabled runtime; then"
-        boundary_guard = "if p1_phase_enabled boundary; then"
-        for guard in (identity_guard, runtime_guard, boundary_guard):
-            self.assertEqual(self.script.count(guard), 1)
-
-        shared, remainder = self.script.split(identity_guard, 1)
-        identity, remainder = remainder.split(runtime_guard, 1)
-        runtime, boundary = remainder.split(boundary_guard, 1)
-
-        self.assertEqual(shared.count('"${PROJECT_ROOT}/scripts/build-p1-identity.sh"'), 2)
-        self.assertEqual(shared.count('"${PROJECT_ROOT}/scripts/build-p1-package.sh"'), 2)
+    def test_full_gate_preserves_each_artifact_family(self) -> None:
+        self.assertIn(
+            "if p1_phase_enabled public; then\n"
+            "p1_phase_mark BEGIN public-package",
+            self.script,
+        )
+        production = self.script.split("p1_phase_mark BEGIN public-package", 1)[1]
+        production, shared_and_remainder = production.split(
+            "p1_phase_mark PASS public-package", 1
+        )
+        shared, remainder = shared_and_remainder.split(
+            "p1_phase_mark PASS shared", 1
+        )
+        self.assertEqual(
+            production.count('"${PROJECT_ROOT}/scripts/build-p1-identity.sh"'), 2
+        )
+        self.assertEqual(
+            production.count('"${PROJECT_ROOT}/scripts/build-p1-package.sh"'), 2
+        )
         self.assertIn("test-trusted-symbols.actual", shared)
+        self.assertNotIn("build-p1-package.sh", shared)
+        self.assertIn(
+            "if p1_phase_enabled public; then\n"
+            'if nm -a "${p1_public_archive}" "${p1_trusted_archive}"',
+            shared,
+        )
 
+        identity = remainder.split("p1_phase_mark PASS public-identity", 1)[0]
+        self.assertIn("if p1_phase_enabled public; then", identity)
         self.assertIn("test-p1-identity-cxx-public", identity)
         self.assertIn("test-p1-failpoints-sanitized", identity)
-        self.assertEqual(identity.count("for run in 1 2; do"), 0)
 
-        self.assertIn('compile_public_object "${p1_public_source}"', runtime)
-        self.assertIn('compile_trusted_aot "${p1_registry_test_source}"', runtime)
-        self.assertIn("P1 runtime gate wrote stderr", runtime)
-        self.assertEqual(runtime.count("for run in 1 2; do"), 2)
+        runtime, boundary = remainder.split(
+            "p1_phase_mark BEGIN public-boundary", 1
+        )
+        self.assertIn(
+            'if p1_phase_enabled public; then\n'
+            '  compile_public_object "${p1_public_source}"',
+            runtime,
+        )
+        self.assertIn(
+            'if p1_phase_enabled state; then\n'
+            '  compile_trusted_object "${p1_test_source}"',
+            runtime,
+        )
+        self.assertIn(
+            'if p1_phase_enabled registry; then\n'
+            '  compile_trusted_aot "${p1_registry_test_source}"',
+            runtime,
+        )
+        self.assertIn("P1 public runtime gate wrote stderr", runtime)
+        self.assertIn("P1 state runtime gate wrote stderr", runtime)
+        self.assertIn("P1 registry runtime gate wrote stderr", runtime)
 
         self.assertIn("negative_sources=(", boundary)
         self.assertIn("negative_guessed_private_native.esk", boundary)
         self.assertIn("P1 production Eshkol roots contain a forbidden", boundary)
-        self.assertEqual(boundary.count("for run in 1 2; do"), 3)
+        self.assertIn("p1_phase_mark PASS public", boundary)
+
+        self.assertEqual(self.script.count("for run in 1 2; do"), 5)
+        self.assertEqual(self.script.count("compile_public_object "), 4)
+        self.assertEqual(self.script.count("compile_trusted_object "), 1)
+        self.assertEqual(self.script.count("compile_public_aot "), 3)
+        self.assertEqual(self.script.count("compile_trusted_aot "), 2)
         self.assertEqual(self.script.count("P1 PASS: E1B-integrated"), 1)
         self.assertIn('if [[ "${p1_phase}" == all ]]; then', boundary)
 

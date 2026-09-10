@@ -68,15 +68,15 @@ jobs:
           - suite: checkpoint-io
             build_target: build-ci-checkpoint
             test_target: test-ci-checkpoint-after-build
-          - suite: parameter-state-identity
+          - suite: parameter-state-public
             build_target: build-ci-parameters
-            test_target: test-ci-parameters-identity-after-build
-          - suite: parameter-state-runtime
+            test_target: test-ci-parameters-public-after-build
+          - suite: parameter-state-state
             build_target: build-ci-parameters
-            test_target: test-ci-parameters-runtime-after-build
-          - suite: parameter-state-boundary
+            test_target: test-ci-parameters-state-after-build
+          - suite: parameter-state-registry
             build_target: build-ci-parameters
-            test_target: test-ci-parameters-boundary-after-build
+            test_target: test-ci-parameters-registry-after-build
           - suite: byte-tokenizer
             build_target: build-ci-tokenizer-byte
             test_target: test-ci-tokenizer-byte-after-build

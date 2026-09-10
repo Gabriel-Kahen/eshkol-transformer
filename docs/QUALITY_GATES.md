@@ -4,7 +4,7 @@
 
 Blocking code pull-request CI partitions the complete test command set across twelve
 parallel suites: native numerics, contracts/data, checkpoint I/O, three parameter
-phases (identity, runtime, boundary), byte tokenization, BPE runtime, BPE boundary,
+phases (public, state, registry), byte tokenization, BPE runtime, BPE boundary,
 and three loader phases (semantics, resources, packaging). P1 and D2 accept
 `--phase` selectors; zero arguments and `--phase all` retain the complete suite and
 original assertion order with shared setup once. The CI topology gate checks that
@@ -14,7 +14,9 @@ T2's full local command continues to run both runtime and boundary checks.
 All repeated fresh-cache AOT builds, aggregate-boundary, sanitizer, malformed-input,
 and maximum/resource cases remain required for code changes. Loader resource tests
 run alone on a dedicated hosted runner so concurrent test compilation cannot distort
-RSS or elapsed-time limits. Each phase independently prepares its dependencies;
+RSS or elapsed-time limits. P1 state and registry phases prepare only their test-hook archive; production
+package construction and all of its determinism proofs remain in the required public
+phase. Each phase independently prepares its dependencies;
 no artifact produced by another job substitutes for a determinism rebuild.
 Suite-specific build targets create only canonical artifacts consumed by the tests.
 

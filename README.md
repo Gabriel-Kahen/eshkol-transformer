@@ -33,8 +33,8 @@ From a clean checkout on the supported lane, run:
 ```
 
 Code pull requests, pushes to `main`, and merge-queue runs partition the complete
-test command set across twelve parallel blocking suites. P1 identity, runtime, and
-boundary checks run separately, as do D2 semantics, resources, and packaging.
+test command set across twelve parallel blocking suites. P1 public, state, and
+registry checks run separately, as do D2 semantics, resources, and packaging.
 T1, C1, native numerics/Q0, contracts/data, T2 runtime, and T2 boundary retain their
 own jobs. Every assertion, repeated fresh-cache build, sanitizer, and resource limit
 remains required. Resource measurements have a dedicated runner. Default local P1

@@ -36,9 +36,9 @@ expected_suites = [
     ("native-numerics", "build-ci-core", "test-ci-core-after-build"),
     ("contracts-data", "build-ci-contracts", "test-ci-contracts-after-build"),
     ("checkpoint-io", "build-ci-checkpoint", "test-ci-checkpoint-after-build"),
-    ("parameter-state-identity", "build-ci-parameters", "test-ci-parameters-identity-after-build"),
-    ("parameter-state-runtime", "build-ci-parameters", "test-ci-parameters-runtime-after-build"),
-    ("parameter-state-boundary", "build-ci-parameters", "test-ci-parameters-boundary-after-build"),
+    ("parameter-state-public", "build-ci-parameters", "test-ci-parameters-public-after-build"),
+    ("parameter-state-state", "build-ci-parameters", "test-ci-parameters-state-after-build"),
+    ("parameter-state-registry", "build-ci-parameters", "test-ci-parameters-registry-after-build"),
     ("byte-tokenizer", "build-ci-tokenizer-byte", "test-ci-tokenizer-byte-after-build"),
     ("bpe-tokenizer", "build-ci-tokenizer-bpe", "test-ci-tokenizer-bpe-after-build"),
     (
@@ -121,7 +121,7 @@ for _, build_target, test_target in expected_suites:
 phase_commands = {
     "/usr/bin/bash scripts/test-p1.sh": [
         f"/usr/bin/bash scripts/test-p1.sh --phase {phase}"
-        for phase in ("identity", "runtime", "boundary")
+        for phase in ("public", "state", "registry")
     ],
     "/usr/bin/bash scripts/test-d2.sh": [
         f"/usr/bin/bash scripts/test-d2.sh --phase {phase}"
