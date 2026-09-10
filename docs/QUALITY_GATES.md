@@ -2,23 +2,29 @@
 
 ## CI tiers
 
-Blocking code pull-request CI partitions the complete test command set across eight
-parallel suites: native numerics, contracts/data, checkpoint I/O, parameter state,
-byte tokenization, BPE runtime, BPE boundary, and shard loading. T2's runtime and
-existing standalone boundary script run separately; the full local T2 command still
-runs both. All repeated AOT, aggregate-boundary, sanitizer, malformed-input,
-and maximum/resource cases remain required for code changes. The suite-specific build targets create only canonical
-artifacts consumed before the test script; tests that construct their own canonical
-and repeated artifacts do not receive an unused outer full build.
+Blocking code pull-request CI partitions the complete test command set across twelve
+parallel suites: native numerics, contracts/data, checkpoint I/O, three parameter
+phases (identity, runtime, boundary), byte tokenization, BPE runtime, BPE boundary,
+and three loader phases (semantics, resources, packaging). P1 and D2 accept
+`--phase` selectors; zero arguments and `--phase all` retain the complete suite and
+original assertion order with shared setup once. The CI topology gate checks that
+all phase commands occur exactly once, and dispatcher tests protect the full union.
+T2's full local command continues to run both runtime and boundary checks.
 
-The previous single-job supported run 34373099684 took 3h59m10s including queue and
-invoked the full build four times across build, test, smoke, and benchmark entry
-points. About 72 minutes were redundant builds. The earlier reduced four-suite run
-34057603751 took 11m55s but omitted expensive full gates and is not a coverage-equal
-baseline. The first parallel run 34400156724 passed five suites, but exposed missing
-D2 aggregate prerequisites in both tokenizer jobs. Those prerequisites are now
-explicit; the BPE runtime and boundary phases are separate jobs. A successful
-full-coverage duration remains unverified, with a 75-minute per-suite timeout.
+All repeated fresh-cache AOT builds, aggregate-boundary, sanitizer, malformed-input,
+and maximum/resource cases remain required for code changes. Loader resource tests
+run alone on a dedicated hosted runner so concurrent test compilation cannot distort
+RSS or elapsed-time limits. Each phase independently prepares its dependencies;
+no artifact produced by another job substitutes for a determinism rebuild.
+Suite-specific build targets create only canonical artifacts consumed by the tests.
+
+The original supported run 34373099684 took 3h59m10s including queue and repeated
+about 72 minutes of full builds. The full-coverage eight-suite run 34516213267 passed
+in 32m37s; parameter state took 32m17s and shard loading 30m47s. The twelve-suite
+split targets those two bottlenecks without reducing checks. Its supported hosted
+duration remains pending validation, with a 75-minute per-suite timeout. Duplicated
+phase setup can increase total runner minutes. The earlier reduced four-suite run
+34057603751 took 11m55s but omitted full gates and is not a coverage-equal baseline.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
 `docs/**/*.md`, excluding `AGENTS.md`) run CI topology and change-selection tests.

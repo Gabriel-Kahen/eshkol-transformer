@@ -10,6 +10,9 @@ SHELL := /usr/bin/bash
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
+	test-ci-parameters-identity-after-build test-ci-parameters-runtime-after-build \
+	test-ci-parameters-boundary-after-build test-ci-dataset-semantics-after-build \
+	test-ci-dataset-resources-after-build test-ci-dataset-packaging-after-build \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-l2 test-n2 test-n3k \
@@ -117,6 +120,15 @@ test-ci-checkpoint-after-build:
 test-ci-parameters-after-build:
 	/usr/bin/bash scripts/test-p1.sh
 
+test-ci-parameters-identity-after-build:
+	/usr/bin/bash scripts/test-p1.sh --phase identity
+
+test-ci-parameters-runtime-after-build:
+	/usr/bin/bash scripts/test-p1.sh --phase runtime
+
+test-ci-parameters-boundary-after-build:
+	/usr/bin/bash scripts/test-p1.sh --phase boundary
+
 test-ci-tokenizer-byte-after-build:
 	/usr/bin/bash scripts/test-t1.sh
 
@@ -128,6 +140,15 @@ test-ci-tokenizer-bpe-boundary-after-build:
 
 test-ci-dataset-after-build:
 	/usr/bin/bash scripts/test-d2.sh
+
+test-ci-dataset-semantics-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase semantics
+
+test-ci-dataset-resources-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase resources
+
+test-ci-dataset-packaging-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase packaging
 
 test-ci-topology:
 	/usr/bin/bash scripts/check-ci-topology.sh

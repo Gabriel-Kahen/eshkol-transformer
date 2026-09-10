@@ -3,6 +3,26 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+p1_phase=all
+if (( $# != 0 )); then
+  if (( $# != 2 )) || [[ "$1" != --phase ]]; then
+    die "usage: scripts/test-p1.sh [--phase all|identity|runtime|boundary]"
+  fi
+  p1_phase=$2
+fi
+case "${p1_phase}" in
+  all|identity|runtime|boundary) ;;
+  *) die "unknown P1 phase: ${p1_phase}" ;;
+esac
+
+p1_phase_enabled() {
+  [[ "${p1_phase}" == all || "${p1_phase}" == "$1" ]]
+}
+
+p1_phase_mark() {
+  printf 'P1 PHASE %s: %s (elapsed=%ss)\n' "$2" "$1" "${SECONDS}"
+}
+
 require_command ar
 require_command cmp
 require_command env
@@ -112,6 +132,7 @@ compile_trusted_aot() {
   [[ -x "${output}" ]] || die "P1 trusted AOT executable is missing"
 }
 
+p1_phase_mark BEGIN shared
 "${PROJECT_ROOT}/scripts/generate-p1-roots.sh" --check
 "${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
   "${p1_tmp}/identity-a" normal all
@@ -319,6 +340,10 @@ test_hook_count="$(readelf -Ws "${p1_test_trusted_link}/p1_identity.o" | \
        END { print n + 0 }')" || die "P1 test-hook visibility changed"
 [[ "${test_hook_count}" == 4 ]] || \
   die "P1 test-only hook count changed: ${test_hook_count}"
+p1_phase_mark PASS shared
+
+if p1_phase_enabled identity; then
+p1_phase_mark BEGIN identity
 "${p1_cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/native" \
   "${PROJECT_ROOT}/tests/p1/test_p1_identity_header.cpp" \
@@ -387,7 +412,11 @@ UBSAN_OPTIONS=halt_on_error=1 \
 ASAN_OPTIONS="detect_leaks=${p1_lsan}:halt_on_error=1" \
 UBSAN_OPTIONS=halt_on_error=1 \
   "${p1_tmp}/test-p1-failpoints-sanitized" >/dev/null
+p1_phase_mark PASS identity
+fi
 
+if p1_phase_enabled runtime; then
+p1_phase_mark BEGIN runtime
 for run in 1 2; do
   compile_public_object "${p1_public_source}" "${p1_tmp}/module-${run}.o" \
     "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.log"
@@ -516,7 +545,11 @@ cmp "${PROJECT_ROOT}/tests/expected/p1-registry-atomicity.stdout" \
    ! -s "${p1_tmp}/registry-1.stderr" && \
    ! -s "${p1_tmp}/registry-2.stderr" ]] || \
   die "P1 runtime gate wrote stderr"
+p1_phase_mark PASS runtime
+fi
 
+if p1_phase_enabled boundary; then
+p1_phase_mark BEGIN boundary
 negative_sources=(
   negative_public_provider_internal
   negative_public_module_internal
@@ -672,5 +705,9 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
     rg 'state-from-flat|state-provider-bind!|p1-native-state-create' >/dev/null; then
   die "P1 strict load creates or binds a temporary expected state"
 fi
+p1_phase_mark PASS boundary
+fi
 
-printf 'P1 PASS: E1B-integrated public/private packaging, 419 structural checks, 405 native checks, 169 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+if [[ "${p1_phase}" == all ]]; then
+  printf 'P1 PASS: E1B-integrated public/private packaging, 419 structural checks, 405 native checks, 169 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+fi
