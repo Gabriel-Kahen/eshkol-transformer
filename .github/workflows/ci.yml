@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
 
 permissions:
   contents: read
@@ -14,10 +15,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  f0-linux:
-    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
+  topology:
+    name: CI topology
     runs-on: ubuntu-22.04
-    timeout-minutes: 240
+    timeout-minutes: 2
+    outputs:
+      run_full: ${{ steps.changes.outputs.run_full }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - run: make test-ci-topology
+      - name: Test change selection
+        run: |
+          python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
+          python3 -m unittest -v tests.q0.test_python_isolation
+      - name: Select required suites
+        id: changes
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.sha }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          run_full=true
+          if [[ "$CI_EVENT" == pull_request ]]; then
+            run_full=$(python3 tests/ci/changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
+          fi
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          if [[ "$run_full" == false ]]; then
+            echo 'Documentation-only PR: compiler suites are not required.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Full compiler and acceptance suites are required.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  blocking:
+    name: Blocking CI / ${{ matrix.suite }}
+    needs: topology
+    if: needs.topology.outputs.run_full == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: native-numerics
+            build_target: build-ci-core
+            test_target: test-ci-core-after-build
+          - suite: contracts-data
+            build_target: build-ci-contracts
+            test_target: test-ci-contracts-after-build
+          - suite: checkpoint-io
+            build_target: build-ci-checkpoint
+            test_target: test-ci-checkpoint-after-build
+          - suite: parameter-state
+            build_target: build-ci-parameters
+            test_target: test-ci-parameters-after-build
+          - suite: byte-tokenizer
+            build_target: build-ci-tokenizer-byte
+            test_target: test-ci-tokenizer-byte-after-build
+          - suite: bpe-tokenizer
+            build_target: build-ci-tokenizer-bpe
+            test_target: test-ci-tokenizer-bpe-after-build
+          - suite: bpe-boundary
+            build_target: build-ci-tokenizer-bpe-boundary
+            test_target: test-ci-tokenizer-bpe-boundary-after-build
+          - suite: shard-loader
+            build_target: build-ci-dataset
+            test_target: test-ci-dataset-after-build
     env:
       CC: clang-21
       CXX: clang++-21
@@ -49,40 +114,66 @@ jobs:
             ripgrep
           test "$(llvm-config-21 --version)" = '21.1.8'
 
-      - name: Select pinned N2 oracle Python
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+
+      - name: Select pinned oracle Python
+        if: matrix.suite == 'native-numerics'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.14.6'
 
-      - name: Install pinned N2 development oracle
+      - name: Install pinned development oracle
+        if: matrix.suite == 'native-numerics'
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
-          python3 -m venv "$RUNNER_TEMP/n2-oracle"
-          "$RUNNER_TEMP/n2-oracle/bin/python" -m pip install \
+          python3 -m venv "$RUNNER_TEMP/development-oracle"
+          "$RUNNER_TEMP/development-oracle/bin/python" -m pip install \
             --disable-pip-version-check \
             -r tests/n2/requirements-reference.lock
-          echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/n2-oracle/bin/python" >> "$GITHUB_ENV"
+          {
+            echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "A2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "Q0_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "ESHKOL_RUN=$GITHUB_WORKSPACE/.deps/eshkol-build/eshkol-run"
+          } >> "$GITHUB_ENV"
 
-      - name: Build pinned Eshkol toolchain
+      - name: Verify pinned Eshkol toolchain
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make toolchain'
+        run: make toolchain
 
-      - name: Fresh configure
+      - name: Build suite prerequisites
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make clean && make configure'
+        run: make clean && make "${{ matrix.build_target }}"
 
-      - name: Build
+      - name: Run full suite
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make build'
+        run: make "${{ matrix.test_target }}"
 
-      - name: Test (F0/A0/A2/B0/C1/D1/D2/E1/E1B/I1/I2/K1/L2/N2/N3K/P1/Q0/T1/T2/X1)
+      - name: Smoke and benchmark
+        if: matrix.suite == 'native-numerics'
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make test'
+        run: make smoke-after-build benchmark-after-build
 
-      - name: Smoke
+  f0-linux:
+    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
+    if: ${{ always() }}
+    needs: [topology, blocking]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Require successful checks for the selected scope
+        env:
+          TOPOLOGY_RESULT: ${{ needs.topology.result }}
+          BLOCKING_RESULT: ${{ needs.blocking.result }}
+          RUN_FULL: ${{ needs.topology.outputs.run_full }}
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make smoke'
-
-      - name: Reproducible smoke benchmark
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make benchmark'
+        run: |
+          test "$TOPOLOGY_RESULT" = success
+          case "$RUN_FULL:$BLOCKING_RESULT" in
+            true:success|false:skipped) ;;
+            *) exit 1 ;;
+          esac

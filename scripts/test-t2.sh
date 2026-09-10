@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+runtime_only=0
+case "$#" in
+  0) ;;
+  1)
+    if [[ "$1" != --runtime-only ]]; then
+      printf 'usage: %s [--runtime-only]\n' "$0" >&2
+      exit 2
+    fi
+    runtime_only=1
+    ;;
+  *)
+    printf 'usage: %s [--runtime-only]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
@@ -312,7 +328,10 @@ for delivered in "${t2_object}" "${t2_tmp}/public-runtime-1"; do
   fi
 done
 
-T2_COMPILER_TIMEOUT_SECONDS="${T2_COMPILER_TIMEOUT_SECONDS:-300}" \
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/test-t2-boundary.sh"
-
-printf 'T2 PASS: deterministic BPE training, artifact, whole/stream runtime, T1 compatibility, and isolation gates\n'
+if [[ "${runtime_only}" == 0 ]]; then
+  T2_COMPILER_TIMEOUT_SECONDS="${T2_COMPILER_TIMEOUT_SECONDS:-300}" \
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/test-t2-boundary.sh"
+  printf 'T2 PASS: deterministic BPE training, artifact, whole/stream runtime, T1 compatibility, and isolation gates\n'
+else
+  printf 'T2 RUNTIME PASS: deterministic BPE training, artifact, whole/stream runtime, and T1 compatibility\n'
+fi
