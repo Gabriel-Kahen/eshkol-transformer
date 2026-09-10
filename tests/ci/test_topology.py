@@ -68,6 +68,26 @@ class TopologyTests(unittest.TestCase):
             0,
         )
 
+    def test_boundary_phase_cannot_be_omitted_or_replaced_with_full_script(self):
+        command = "\t/usr/bin/bash scripts/test-t2-boundary.sh --phase d1-test\n"
+        for replacement in ("", "\t/usr/bin/bash scripts/test-t2-boundary.sh\n"):
+            with self.subTest(replacement=replacement):
+                self.assertNotEqual(
+                    self.check_topology("Makefile", command, replacement).returncode, 0
+                )
+
+    def test_boundary_caller_requires_canonical_d2(self):
+        before = (
+            "build-ci-tokenizer-bpe-boundary: configure\n"
+            "\t/usr/bin/bash scripts/build-d2.sh\n"
+        )
+        self.assertNotEqual(
+            self.check_topology(
+                "Makefile", before, "build-ci-tokenizer-bpe-boundary: configure\n"
+            ).returncode,
+            0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

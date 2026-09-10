@@ -33,12 +33,13 @@ From a clean checkout on the supported lane, run:
 ```
 
 Code pull requests, pushes to `main`, and merge-queue runs partition the complete
-test command set across twelve parallel blocking suites. P1 public, state, and
+test command set across fourteen parallel blocking suites. P1 public, state, and
 registry checks run separately, as do D2 semantics, resources, and packaging.
-T1, C1, native numerics/Q0, contracts/data, T2 runtime, and T2 boundary retain their
-own jobs. Every assertion, repeated fresh-cache build, sanitizer, and resource limit
-remains required. Resource measurements have a dedicated runner. Default local P1
-and D2 commands still execute their full suites with shared setup once; the serial
+T2 boundary checks run as production, D1-test, and public-caller phases. T1, C1,
+native numerics/Q0, contracts/data, and T2 runtime retain their own jobs. Every assertion,
+repeated fresh-cache build, sanitizer, and resource limit
+remains required. Resource measurements have a dedicated runner. Default local P1, D2,
+and T2 boundary commands still execute their full suites with shared setup once; the serial
 `Exhaustive acceptance` workflow runs nightly and through manual dispatch after one
 clean outer build.
 
@@ -46,8 +47,9 @@ clean outer build.
 took 3h59m10s including queue, with about 72 minutes in redundant full builds.
 [The successful eight-suite run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34516213267)
 took 32m37s with full coverage. Parameters (32m17s) and loader checks (30m47s)
-were the longest jobs. The twelve-suite phase split targets these bottlenecks;
-its hosted duration is pending validation. Independent phase setup can increase
+were the longest jobs. The fourteen-suite phase split targets these bottlenecks and
+the sequential T2 boundary builds; see [PR #72](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/72)
+for hosted acceptance and measured duration. Independent phase setup can increase
 runner minutes even when elapsed time falls.
 
 PRs changing only `README.md`, `CONTRIBUTING.md`, or Markdown under `docs/` run the

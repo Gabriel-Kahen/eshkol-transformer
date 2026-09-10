@@ -83,9 +83,15 @@ jobs:
           - suite: bpe-tokenizer
             build_target: build-ci-tokenizer-bpe
             test_target: test-ci-tokenizer-bpe-after-build
-          - suite: bpe-boundary
+          - suite: bpe-boundary-production
+            build_target: build-ci-tokenizer-bpe-boundary-production
+            test_target: test-ci-tokenizer-bpe-boundary-production-after-build
+          - suite: bpe-boundary-d1-test
+            build_target: build-ci-tokenizer-bpe-boundary-d1-test
+            test_target: test-ci-tokenizer-bpe-boundary-d1-test-after-build
+          - suite: bpe-boundary-public-caller
             build_target: build-ci-tokenizer-bpe-boundary
-            test_target: test-ci-tokenizer-bpe-boundary-after-build
+            test_target: test-ci-tokenizer-bpe-boundary-public-caller-after-build
           - suite: shard-loader-semantics
             build_target: build-ci-dataset
             test_target: test-ci-dataset-semantics-after-build

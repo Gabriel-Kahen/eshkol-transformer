@@ -2,10 +2,11 @@
 
 ## CI tiers
 
-Blocking code pull-request CI partitions the complete test command set across twelve
+Blocking code pull-request CI partitions the complete test command set across fourteen
 parallel suites: native numerics, contracts/data, checkpoint I/O, three parameter
-phases (public, state, registry), byte tokenization, BPE runtime, BPE boundary,
-and three loader phases (semantics, resources, packaging). P1 and D2 accept
+phases (public, state, registry), byte tokenization, BPE runtime, three BPE boundary
+phases (production, D1-test, public-caller), and three loader phases (semantics, resources, packaging). P1, D2, and the T2 boundary
+script accept
 `--phase` selectors; zero arguments and `--phase all` retain the complete suite and
 original assertion order with shared setup once. The CI topology gate checks that
 all phase commands occur exactly once, and dispatcher tests protect the full union.
@@ -14,18 +15,22 @@ T2's full local command continues to run both runtime and boundary checks.
 All repeated fresh-cache AOT builds, aggregate-boundary, sanitizer, malformed-input,
 and maximum/resource cases remain required for code changes. Loader resource tests
 run alone on a dedicated hosted runner so concurrent test compilation cannot distort
-RSS or elapsed-time limits. P1 state and registry phases prepare only their test-hook archive; production
+RSS or elapsed-time limits. P1 state and registry phases prepare only their test-hook
+archive; production
 package construction and all of its determinism proofs remain in the required public
 phase. Each phase independently prepares its dependencies;
-no artifact produced by another job substitutes for a determinism rebuild.
+no artifact produced by another job substitutes for a determinism rebuild. T2 boundary
+production and D1-test jobs build their own repeated aggregates with configure-only
+prerequisites; only the public-caller phase requires the canonical D2 aggregate.
 Suite-specific build targets create only canonical artifacts consumed by the tests.
 
 The original supported run 34373099684 took 3h59m10s including queue and repeated
 about 72 minutes of full builds. The full-coverage eight-suite run 34516213267 passed
-in 32m37s; parameter state took 32m17s and shard loading 30m47s. The twelve-suite
-split targets those two bottlenecks without reducing checks. Its supported hosted
-duration remains pending validation, with a 75-minute per-suite timeout. Duplicated
-phase setup can increase total runner minutes. The earlier reduced four-suite run
+in 32m37s; parameter state took 32m17s and shard loading 30m47s. The fourteen-suite
+split targets those two bottlenecks and sequential T2 boundary builds without reducing
+checks. See [PR #72](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/72) for
+supported hosted acceptance and measured duration; the per-suite timeout is 75 minutes.
+Duplicated phase setup can increase total runner minutes. The earlier reduced four-suite run
 34057603751 took 11m55s but omitted full gates and is not a coverage-equal baseline.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and

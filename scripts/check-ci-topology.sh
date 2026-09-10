@@ -42,9 +42,19 @@ expected_suites = [
     ("byte-tokenizer", "build-ci-tokenizer-byte", "test-ci-tokenizer-byte-after-build"),
     ("bpe-tokenizer", "build-ci-tokenizer-bpe", "test-ci-tokenizer-bpe-after-build"),
     (
-        "bpe-boundary",
+        "bpe-boundary-production",
+        "build-ci-tokenizer-bpe-boundary-production",
+        "test-ci-tokenizer-bpe-boundary-production-after-build",
+    ),
+    (
+        "bpe-boundary-d1-test",
+        "build-ci-tokenizer-bpe-boundary-d1-test",
+        "test-ci-tokenizer-bpe-boundary-d1-test-after-build",
+    ),
+    (
+        "bpe-boundary-public-caller",
         "build-ci-tokenizer-bpe-boundary",
-        "test-ci-tokenizer-bpe-boundary-after-build",
+        "test-ci-tokenizer-bpe-boundary-public-caller-after-build",
     ),
     ("shard-loader-semantics", "build-ci-dataset", "test-ci-dataset-semantics-after-build"),
     ("shard-loader-resources", "build-ci-dataset", "test-ci-dataset-resources-after-build"),
@@ -93,6 +103,8 @@ expected_ci_build_commands = {
     "build-ci-tokenizer-bpe-boundary": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
+    "build-ci-tokenizer-bpe-boundary-production": set(),
+    "build-ci-tokenizer-bpe-boundary-d1-test": set(),
     "build-ci-dataset": {
         "/usr/bin/bash scripts/build-k1.sh",
         "/usr/bin/bash scripts/build-i1.sh",
@@ -106,7 +118,7 @@ required_build_commands_by_test = {
     "/usr/bin/bash scripts/test-t1.sh": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
-    "/usr/bin/bash scripts/test-t2-boundary.sh": {
+    "/usr/bin/bash scripts/test-t2-boundary.sh --phase public-caller": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
 }
@@ -119,6 +131,10 @@ for _, build_target, test_target in expected_suites:
 # Full local/acceptance scripts prepare shared artifacts once. CI runs their
 # complete phase union independently; phase-dispatch tests enforce that contract.
 phase_commands = {
+    "/usr/bin/bash scripts/test-t2-boundary.sh": [
+        f"/usr/bin/bash scripts/test-t2-boundary.sh --phase {phase}"
+        for phase in ("production", "d1-test", "public-caller")
+    ],
     "/usr/bin/bash scripts/test-p1.sh": [
         f"/usr/bin/bash scripts/test-p1.sh --phase {phase}"
         for phase in ("public", "state", "registry")

@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | Full-coverage eight-suite hosted run 34516213267 passed in 32m37s (PR #59 merged); twelve-suite P1/D2 phase split preserves all checks and isolated resource measurements, hosted validation pending; serial nightly/manual acceptance retains full default scripts | review |
+| F0 | Package layout, build/test entry points, CI matrix | — | Full-coverage eight-suite hosted run 34516213267 passed in 32m37s (PR #59 merged); fourteen-suite P1/D2/T2 boundary phase split preserves all checks and isolated resource measurements, hosted validation tracked in PR #72; serial nightly/manual acceptance retains full default scripts | review |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
