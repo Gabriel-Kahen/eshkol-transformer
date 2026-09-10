@@ -26,9 +26,40 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make toolchain'
 /usr/bin/bash -c 'make clean && make configure'
 /usr/bin/bash -c 'make build'
-/usr/bin/bash -c 'make test'
-/usr/bin/bash -c 'make smoke'
+/usr/bin/bash -c 'python3.14 -m venv "$(pwd)/.tmp/q0-venv"'
+/usr/bin/bash -c '"$(pwd)/.tmp/q0-venv/bin/python" -m pip install -r tests/q0/requirements-oracle.lock'
+/usr/bin/bash -c 'Q0_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" N2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" A2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" ESHKOL_RUN="$(pwd)/.deps/eshkol-build/eshkol-run" make test-after-build'
+/usr/bin/bash -c 'make smoke-after-build'
 ```
+
+Code pull requests, pushes to `main`, and merge-queue runs partition the complete
+test command set across eight parallel blocking suites. Full P1, T1, D2, C1,
+native-numerics including N2/O2/Q0, contract/data, T2 runtime, and T2 boundary gates run independently,
+while suite-specific build targets avoid
+outer builds whose artifacts the full scripts immediately rebuild. The serial
+`Exhaustive acceptance` workflow also runs nightly and through manual dispatch;
+after one clean build it uses no-rebuild test, smoke, and benchmark entry points.
+
+[Supported run 34373099684](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34373099684)
+took 3h59m10s including queue and spent about 72 minutes in redundant full builds.
+The earlier reduced run 34057603751 took 11m55s but did not carry the same coverage.
+[The first parallel run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34400156724)
+passed five suites (native numerics 21m16s, parameters 31m35s, loader 29m39s,
+contracts 12m04s, checkpoint 6m45s), but both tokenizer jobs lacked the D2 aggregate
+needed by their reverse-import checks. The revised prerequisites and separate T2
+runtime/boundary jobs still need hosted validation; that failed run does not establish
+a successful full-suite duration.
+
+PRs changing only `README.md`, `CONTRIBUTING.md`, or Markdown under `docs/` run the
+CI topology and selector checks without launching compiler suites. `AGENTS.md`,
+unknown paths, mixed changes, empty diffs, or unavailable history require full CI.
+Renames are checked as both a deletion and an addition. Every push to `main` and
+merge-queue run still requires all suites, and the final status check accepts a
+skipped matrix only for an explicitly selected documentation-only PR.
+
+The pinned oracle environment requires Python 3.14.6.
+Run the serial test phase locally after a build with the same four absolute oracle
+variables shown above and `make test-after-build`.
 
 Run the focused T1 tokenizer gate with:
 

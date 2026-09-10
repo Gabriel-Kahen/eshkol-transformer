@@ -1,5 +1,46 @@
 # Quality gates
 
+## CI tiers
+
+Blocking code pull-request CI partitions the complete test command set across eight
+parallel suites: native numerics, contracts/data, checkpoint I/O, parameter state,
+byte tokenization, BPE runtime, BPE boundary, and shard loading. T2's runtime and
+existing standalone boundary script run separately; the full local T2 command still
+runs both. Native numerics includes the combined N2/O2 provider, numerical,
+atomicity, ownership, and lifetime gates. All repeated AOT, aggregate-boundary, sanitizer, malformed-input,
+and maximum/resource cases remain required for code changes. The suite-specific build targets create only canonical
+artifacts consumed before the test script; tests that construct their own canonical
+and repeated artifacts do not receive an unused outer full build.
+
+The previous single-job supported run 34373099684 took 3h59m10s including queue and
+invoked the full build four times across build, test, smoke, and benchmark entry
+points. About 72 minutes were redundant builds. The earlier reduced four-suite run
+34057603751 took 11m55s but omitted expensive full gates and is not a coverage-equal
+baseline. The first parallel run 34400156724 passed five suites, but exposed missing
+D2 aggregate prerequisites in both tokenizer jobs. Those prerequisites are now
+explicit; the BPE runtime and boundary phases are separate jobs. A successful
+full-coverage duration remains unverified, with a 75-minute per-suite timeout.
+
+PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
+`docs/**/*.md`, excluding `AGENTS.md`) run CI topology and change-selection tests.
+The selector compares the PR base to the tested merge commit, including both sides
+of renames. Mixed/unknown paths, empty diffs, or unavailable history require the full
+matrix. Pushes to main and merge-queue runs always run the full matrix. The final
+status check fails for unsuccessful topology checks, failed/cancelled suites, or
+missing selection output; it permits skipped suites only for an explicit prose-only
+selection.
+
+Exhaustive acceptance runs nightly and on manual dispatch. It repeats the complete
+suite serially in one supported environment while retaining every repeated
+fresh-cache compilation, hostile-path and symbol-isolation proof, maximum-size and
+resource-bound case, sanitizer gate, and compiled corruption matrix described below.
+It builds once, then uses the no-rebuild test, smoke, and benchmark entry points
+under the 240-minute outer timeout.
+A failing exhaustive run is a main-branch health blocker and must be resolved before
+a release or a workstream is declared accepted. Risky changes to packaging,
+persistence, tokenizer limits, or compiler boundaries should manually dispatch it
+before merge.
+
 ## Required on every numerical component
 
 - Shape, dtype, device, and error-contract tests.
@@ -126,6 +167,8 @@ accelerated until execution on that device is directly observed and tested.
 ## Merge policy
 
 - No red required gates.
+- No unresolved red exhaustive-acceptance run on the candidate revision for a release
+  or workstream acceptance.
 - No undocumented fallback or unsupported case.
 - No public format change without a version/migration decision.
 - No performance rewrite without correctness parity.
