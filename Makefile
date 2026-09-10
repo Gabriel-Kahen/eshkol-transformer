@@ -44,6 +44,8 @@ build-ci-core: configure
 	/usr/bin/bash scripts/build-i2.sh
 	/usr/bin/bash scripts/build-n2.sh
 	/usr/bin/bash scripts/build-n3k.sh
+	/usr/bin/bash scripts/build-t2.sh
+	/usr/bin/bash scripts/build-d2.sh
 	/usr/bin/bash scripts/build-o2.sh
 	/usr/bin/bash scripts/build-p1-package.sh
 

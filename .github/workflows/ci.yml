@@ -137,6 +137,7 @@ jobs:
             -r tests/n2/requirements-reference.lock
           {
             echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
+            echo "O2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
             echo "A2_ORACLE_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
             echo "Q0_PYTHON=$RUNNER_TEMP/development-oracle/bin/python"
             echo "ESHKOL_RUN=$GITHUB_WORKSPACE/.deps/eshkol-build/eshkol-run"
