@@ -1,0 +1,58 @@
+;;; Private C2 X1 projection seam. Its trusted caller must already load E1B.
+
+(extern i64 c2-x1-native-inspect ptr ptr ptr
+        :real et_c2_private_x1_canonical_inspect_bytevectors_v1)
+
+(define (c2-x1-fail-raw category message)
+  (let ((unreachable
+          (et-e1b-private-raise category 'x1-canonical-inspect-internal
+                                message '() #f)))
+    unreachable))
+
+(define-syntax c2-x1-fail
+  (syntax-rules () ((_ category message)
+    (let ((result (c2-x1-fail-raw category message))) result))))
+
+(define (c2-x1-u64 bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256) (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (x1-canonical-inspect-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 4))
+          (not (bytevector? (vector-ref request 0)))
+          (not (string? (vector-ref request 1)))
+          (not (symbol? (vector-ref request 2)))
+          (not (eq? (vector-ref request 3) #f)))
+      (c2-x1-fail 'invalid-argument "X1 inspection request is malformed"))
+  (let* ((canonical (vector-ref request 0))
+         (fingerprint (string->utf8 (vector-ref request 1)))
+         (projection (make-bytevector 72 0)))
+    (if (> (bytevector-length canonical) 16384)
+        (c2-x1-fail 'invalid-argument "X1 canonical bytes exceed 16384"))
+    (let ((status (c2-x1-native-inspect canonical fingerprint projection)))
+      (if (not (= status 0))
+          (c2-x1-fail
+            (cond ((= status 1) 'invalid-argument)
+                  ((= status 3) 'version-mismatch)
+                  ((= status 4) 'unsupported)
+                  ((= status 6) 'shape-mismatch)
+                  ((= status 7) 'dtype-mismatch)
+                  ((= status 8) 'device-mismatch)
+                  (else 'corrupt-data))
+            "X1 canonical manifest validation failed")))
+    (let ((result
+            (vector 'eshkol-resolved-run 1 0
+                    (c2-x1-u64 projection 0)
+                    (c2-x1-u64 projection 8)
+                    (c2-x1-u64 projection 16)
+                    (c2-x1-u64 projection 24)
+                    (c2-x1-u64 projection 32)
+                    (c2-x1-u64 projection 40)
+                    (c2-x1-u64 projection 48)
+                    'f32 'cpu #t
+                    (c2-x1-u64 projection 56)
+                    (c2-x1-u64 projection 64))))
+      (vector-set! request 3 result)
+      request)))
