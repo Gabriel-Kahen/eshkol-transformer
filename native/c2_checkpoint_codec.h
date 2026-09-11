@@ -30,7 +30,7 @@ typedef struct et_c2_checkpoint_encode_request_v1 {
   uint64_t rng_counter_high_bits;
 } et_c2_checkpoint_encode_request_v1;
 
-#define ET_C2_CHECKPOINT_ENCODE_REQUEST_V1_SIZE \
+#define ET_C2_CHECKPOINT_ENCODE_REQUEST_V1_SIZE                                \
   ((size_t)sizeof(et_c2_checkpoint_encode_request_v1))
 
 /*
@@ -48,10 +48,12 @@ int32_t et_c2_checkpoint_encode_measure_v1(
     const et_c2_checkpoint_encode_request_v1 *request, size_t *file_bytes,
     et_c2_checkpoint_format_error_v1 *error);
 
-/* destination_bytes must equal the measured size. Any failure leaves it intact. */
-int32_t et_c2_checkpoint_encode_v1(
-    const et_c2_checkpoint_encode_request_v1 *request, uint8_t *destination,
-    size_t destination_bytes, et_c2_checkpoint_format_error_v1 *error);
+/* destination_bytes must equal the measured size. Any failure leaves it intact.
+ */
+int32_t
+et_c2_checkpoint_encode_v1(const et_c2_checkpoint_encode_request_v1 *request,
+                           uint8_t *destination, size_t destination_bytes,
+                           et_c2_checkpoint_format_error_v1 *error);
 
 #ifdef __cplusplus
 }
