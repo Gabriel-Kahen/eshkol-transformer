@@ -70,6 +70,13 @@ i2_include_c1="$(realpath -- "${PROJECT_ROOT}/internal/c1/lib")"
 i2_include_t1="$(realpath -- "${PROJECT_ROOT}/internal/t1/lib")"
 i2_include_src="$(realpath -- "${PROJECT_ROOT}/src")"
 i2_p1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/i2_wave2_p1_renames.txt")"
+o2_private_root="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_root.esk")"
+o2_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c")"
+o2_package_renames="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_private_renames.txt")"
+o2_public_exports="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_public_exports.txt")"
+o2_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_undefined_symbols.txt")"
+o2_public_strings="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_public_strings.txt")"
+o2_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_native_source_closure.txt")"
 t2_private_root="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_root.esk")"
 t2_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_package_bridge.c")"
 t2_package_renames="$(realpath -- "${PROJECT_ROOT}/native/t2_wave2_private_renames.txt")"
@@ -100,7 +107,34 @@ package_native_source=
 package_native_sources=()
 package_native_define=
 package_public_strings=
-if [[ "${private_root}" == "${d2_private_root}" ]]; then
+package_native_source_closure=
+if [[ "${private_root}" == "${o2_private_root}" ]]; then
+    [[ "${package_bridge}" == "${o2_package_bridge}" ]] || \
+      die "O2 aggregate policy requires the exact repository bridge"
+    [[ "${package_renames}" == "${o2_package_renames}" ]] || \
+      die "O2 aggregate policy requires the exact repository rename map"
+    [[ "${public_exports}" == "${o2_public_exports}" ]] || \
+      die "O2 aggregate policy requires the exact repository export list"
+    [[ "${#canonical_include_dirs[@]}" == 4 && \
+       "${canonical_include_dirs[0]}" == "${i2_include_p1}" && \
+       "${canonical_include_dirs[1]}" == "${i2_include_c1}" && \
+       "${canonical_include_dirs[2]}" == "${i2_include_t1}" && \
+       "${canonical_include_dirs[3]}" == "${i2_include_src}" ]] || \
+      die "O2 aggregate policy requires exact ordered Wave 2 trusted roots"
+    package_policy=o2-wave2-aggregate
+    undefined_symbols="${o2_undefined_symbols}"
+    package_public_strings="${o2_public_strings}"
+    package_native_source_closure="${o2_native_source_closure}"
+    package_native_sources=(
+      "${PROJECT_ROOT}/native/data_io.c"
+      "${PROJECT_ROOT}/native/checkpoint_io.c"
+      "${PROJECT_ROOT}/native/kernel_abi.c"
+      "${PROJECT_ROOT}/native/i64_tensor.c"
+      "${PROJECT_ROOT}/native/t1_i64_shell.c"
+      "${PROJECT_ROOT}/native/f32_tensor.c"
+      "${PROJECT_ROOT}/native/o2_optimizer.c"
+    )
+elif [[ "${private_root}" == "${d2_private_root}" ]]; then
     [[ "${package_bridge}" == "${d2_package_bridge}" ]] || \
       die "D2 aggregate policy requires the exact repository bridge"
     [[ "${package_renames}" == "${d2_package_renames}" ]] || \
@@ -311,6 +345,7 @@ else
       "${x1_package_bridge}" "${x1_package_renames}" "${x1_public_exports}" \
       "${p1_package_bridge}" "${p1_package_renames}" "${p1_public_exports}" \
       "${i2_package_bridge}" "${i2_package_renames}" "${i2_public_exports}" \
+      "${o2_package_bridge}" "${o2_package_renames}" "${o2_public_exports}" \
       "${t1_package_bridge}" "${t1_package_renames}" "${t1_public_exports}" \
       "${t2_package_bridge}" "${t2_package_renames}" "${t2_public_exports}" \
       "${t2_d1_test_package_bridge}" "${t2_d1_test_package_renames}" \
@@ -432,6 +467,7 @@ run_compiler() {
 
 if [[ "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
+      "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-test-d1 || \
       "${package_policy}" == d2-wave2-aggregate || \
@@ -445,6 +481,7 @@ for include_dir in "${canonical_include_dirs[@]}"; do
 done
 if [[ "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
+      "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-test-d1 || \
       "${package_policy}" == d2-wave2-aggregate || \
@@ -480,12 +517,14 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   cat "${PROJECT_ROOT}/native/e1b_private_renames.txt"
   if [[ "${package_policy}" == t1-wave1-aggregate || \
         "${package_policy}" == i2-wave2-aggregate || \
+        "${package_policy}" == o2-wave2-aggregate || \
         "${package_policy}" == t2-wave2-aggregate || \
         "${package_policy}" == t2-wave2-test-d1 || \
         "${package_policy}" == d2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-test-resource ]]; then
     cat "${PROJECT_ROOT}/native/x1_config_private_renames.txt"
     if [[ "${package_policy}" == i2-wave2-aggregate || \
+          "${package_policy}" == o2-wave2-aggregate || \
           "${package_policy}" == d2-wave2-aggregate || \
           "${package_policy}" == d2-wave2-test-resource ]]; then
       cat "${i2_p1_package_renames}"
@@ -493,13 +532,17 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
       cat "${PROJECT_ROOT}/native/p1_package_renames.txt"
     fi
     cat "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt"
-    if [[ "${package_policy}" == i2-wave2-aggregate ]]; then
+    if [[ "${package_policy}" == i2-wave2-aggregate || \
+          "${package_policy}" == o2-wave2-aggregate ]]; then
       cat "${PROJECT_ROOT}/native/t1_wave1_private_renames.txt"
     elif [[ "${package_policy}" == d2-wave2-aggregate || \
             "${package_policy}" == d2-wave2-test-resource ]]; then
       cat "${PROJECT_ROOT}/native/t2_wave2_private_renames.txt"
       cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
     fi
+  fi
+  if [[ "${package_policy}" == o2-wave2-aggregate ]]; then
+    cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
   fi
   cat "${package_renames}"
 } >"${e1b_tmp}/renames.txt"
@@ -509,15 +552,18 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
+  -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
   -o "${e1b_tmp}/bridge.o"
 
 "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
+  -MMD -MF "${e1b_tmp}/package-bridge.d" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
 package_native_objects=()
+package_native_depfiles=("${e1b_tmp}/bridge.d" "${e1b_tmp}/package-bridge.d")
 if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   package_native_cflags=(
     -std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
@@ -525,6 +571,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
   )
   if [[ "${package_policy}" == i2-wave2-aggregate || \
+        "${package_policy}" == o2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-test-resource ]]; then
     package_native_cflags+=(
@@ -537,11 +584,31 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
+    package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     "${e1b_cc}" "${package_native_cflags[@]}" \
+      -MMD -MF "${package_native_depfile}" \
       -c "${package_native_source}" -o "${package_native_object}"
     package_native_objects+=("${package_native_object}")
+    package_native_depfiles+=("${package_native_depfile}")
     native_index=$((native_index + 1))
   done
+fi
+
+if [[ -n "${package_native_source_closure}" ]]; then
+  {
+    for native_depfile in "${package_native_depfiles[@]}"; do
+      sed -e 's/^[^:]*://' -e 's/\\//g' "${native_depfile}" | \
+        tr -s '[:space:]' '\n'
+    done
+  } | awk -v root="${PROJECT_ROOT}/" '
+      index($0, root) == 1 {
+        path = substr($0, length(root) + 1)
+        if (!seen[path]++) print path
+      }
+    ' >"${e1b_tmp}/native-source-closure.txt"
+  cmp -s "${package_native_source_closure}" \
+    "${e1b_tmp}/native-source-closure.txt" || \
+    die "${package_policy} trusted native source closure drifted"
 fi
 
 "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
@@ -585,6 +652,7 @@ if [[ "${package_policy}" == t1-wave1-aggregate || \
   die "tokenizer aggregate retains an unresolved trusted native reference"
 fi
 if [[ "${package_policy}" == i2-wave2-aggregate || \
+      "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-test-resource ]] && \
    grep -E '^et_(f32|p1|kernel)_' "${e1b_tmp}/undefined.txt" >/dev/null; then
@@ -635,6 +703,7 @@ if [[ "${package_policy}" == t1-wave1-aggregate || \
   done
 fi
 if [[ "${package_policy}" == i2-wave2-aggregate || \
+      "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-test-resource ]]; then
   for privileged in \
@@ -644,6 +713,18 @@ if [[ "${package_policy}" == i2-wave2-aggregate || \
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
       "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
       die "I2 aggregate required privileged definition is not local: ${privileged}"
+  done
+fi
+if [[ "${package_policy}" == o2-wave2-aggregate ]]; then
+  for privileged in \
+    et_o2_optimizer_step_v1 \
+    et_o2_optimizer_state_lifecycle_v1 \
+    et_o2_optimizer_state_release_v1 \
+    et_o2_private_optimizer_step_v1 \
+    et_o2_private_optimizer_state_release_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "O2 aggregate required privileged definition is not local: ${privileged}"
   done
 fi
 
@@ -666,6 +747,10 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+if [[ -n "${package_native_source_closure}" ]]; then
+  cp "${e1b_tmp}/native-source-closure.txt" \
+    "${evidence_dir}.tmp.$$/native-source-closure.txt"
+fi
 {
   printf 'package_policy\t%s\n' "${package_policy}"
   printf 'allowlist\t%s\n' "$(basename -- "${undefined_symbols}")"

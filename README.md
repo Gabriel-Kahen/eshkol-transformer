@@ -26,9 +26,41 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make toolchain'
 /usr/bin/bash -c 'make clean && make configure'
 /usr/bin/bash -c 'make build'
-/usr/bin/bash -c 'make test'
-/usr/bin/bash -c 'make smoke'
+/usr/bin/bash -c 'python3.14 -m venv "$(pwd)/.tmp/q0-venv"'
+/usr/bin/bash -c '"$(pwd)/.tmp/q0-venv/bin/python" -m pip install -r tests/q0/requirements-oracle.lock'
+/usr/bin/bash -c 'printf '\''#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexec "%s" "$@"\n'\'' "$(pwd)/.tmp/q0-venv/bin/python" > "$(pwd)/.tmp/n2-oracle-python" && chmod 0500 "$(pwd)/.tmp/n2-oracle-python"'
+/usr/bin/bash -c 'Q0_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" N2_ORACLE_PYTHON="$(pwd)/.tmp/n2-oracle-python" O2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" A2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" ESHKOL_RUN="$(pwd)/.deps/eshkol-build/eshkol-run" make test-after-build'
+/usr/bin/bash -c 'make smoke-after-build'
 ```
+
+Code pull requests, pushes to `main`, and merge-queue runs partition the complete
+test command set across eight parallel blocking suites. Full P1, T1, D2, C1,
+native-numerics including N2/O2/Q0, contract/data, T2 runtime, and T2 boundary gates run independently,
+while suite-specific build targets avoid
+outer builds whose artifacts the full scripts immediately rebuild. The serial
+`Exhaustive acceptance` workflow also runs nightly and through manual dispatch;
+after one clean build it uses no-rebuild test, smoke, and benchmark entry points.
+
+[Supported run 34373099684](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34373099684)
+took 3h59m10s including queue and spent about 72 minutes in redundant full builds.
+The earlier reduced run 34057603751 took 11m55s but did not carry the same coverage.
+[The first parallel run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34400156724)
+passed five suites (native numerics 21m16s, parameters 31m35s, loader 29m39s,
+contracts 12m04s, checkpoint 6m45s), but both tokenizer jobs lacked the D2 aggregate
+needed by their reverse-import checks. The revised prerequisites and separate T2
+runtime/boundary jobs still need hosted validation; that failed run does not establish
+a successful full-suite duration.
+
+PRs changing only `README.md`, `CONTRIBUTING.md`, or Markdown under `docs/` run the
+CI topology and selector checks without launching compiler suites. `AGENTS.md`,
+unknown paths, mixed changes, empty diffs, or unavailable history require full CI.
+Renames are checked as both a deletion and an addition. Every push to `main` and
+merge-queue run still requires all suites, and the final status check accepts a
+skipped matrix only for an explicitly selected documentation-only PR.
+
+The pinned oracle environment requires Python 3.14.6.
+Run the serial test phase locally after a build with the same four absolute oracle
+variables shown above and `make test-after-build`.
 
 Run the focused T1 tokenizer gate with:
 
@@ -52,7 +84,10 @@ reclaim caller Eshkol shell allocations. Long-running callers must therefore kee
 each next/use/release interval in one lexical `with-region`, unless they deliberately
 retain/promote aliases and account for that caller-owned storage. This lifetime
 clarification is
-[proposed and pending](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+[accepted with live-shell conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148).
+Stale/idempotent-alias guarantees require a live shell allocation; accessing freed
+lexical-region storage has no safety guarantee, and keeping a raw reference alone
+does not preserve that allocation's lifetime.
 Shell authentication uses two fixed compiled-constructor code identities as a
 per-process private implementation ABI; it is neither public nor serializable.
 D2 is complete after independent D2-R approval, supported CI, merge, and a focused
@@ -92,8 +127,8 @@ The build also leaves I1's separate exact signed-i64 CPU container archive at
 bounded deterministic `tensor.i64` / `storage.copy` requests; see
 [docs/I1_I64_TENSOR.md](docs/I1_I64_TENSOR.md).
 
-I2 provides the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed
-K1 views, and P1-bound value/accumulated-gradient substrate required by N2 and O2.
+I2 supplies the shared ABI 1.0 owned dense CPU-f32 carrier, explicit borrowed K1
+views, and P1-bound value/accumulated-gradient substrate required by N2 and O2.
 Its explicit provider accessor verifies only bounded deterministic `tensor.f32` /
 `storage.copy` and never defines K1's canonical provider symbol. The native archive
 is `build/i2/libeshkol_transformer_f32.a`; the one-member localized P1L/C1
@@ -111,6 +146,18 @@ embedding, linear, LayerNorm, GELU, ReLU, dropout, and residual rows documented 
 exercises those kernels through accepted I2 f32 and I1 exact-i64 borrows. N2 adds
 no carrier, canonical K1 resolver, compiler-autodiff claim, accelerator, mixed
 precision, or fallback.
+
+O2 adds Eshkol-native dense CPU-f32 AdamW, canonical parameter groups, optional
+global-L2 clipping, I2 accumulation consumption, constant/linear successful-update
+schedules, and explicit optimizer-snapshot release. Its successor aggregate is the
+one-member `build/o2/libeshkol_transformer_wave2.a`. It exposes exactly 53 globals:
+the inherited 47-global I2 boundary plus six fixed optimizer wrappers with arities
+2/1/1/1/2/1. Applications link this aggregate instead of, never together with, an
+I2, T1, T2, or other registry-owning aggregate. Run `make test-o2`; see
+[docs/O2_OPTIMIZER.md](docs/O2_OPTIMIZER.md). O2 optimizer snapshots release their
+owned moment carriers explicitly. Live optimizer receivers and their moments have no
+v1 destroy operation and remain process-local until exit; identity tombstones are
+cumulative and registry lookup is linear.
 
 N3K adds a separate explicit ABI 1.0 provider for the accepted two-token diagnostic
 profile at `build/n3k/libeshkol_transformer_n3k.a`, discovered only through
@@ -202,6 +249,7 @@ See:
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Dense CPU-f32 tensor and parameter-gradient substrate](docs/I2_F32_TENSOR.md)
+- [AdamW optimizer, schedules, and logical state](docs/O2_OPTIMIZER.md)
 - [Fused indexed token cross-entropy](docs/L2_INDEXED_CROSS_ENTROPY.md)
 - [Causal attention, RoPE, and KV-cache substrate](docs/A2_ATTENTION.md)
 - [Checkpoint container format and atomic I/O](docs/CHECKPOINT_FORMAT.md)

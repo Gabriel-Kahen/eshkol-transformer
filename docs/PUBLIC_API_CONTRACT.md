@@ -461,13 +461,20 @@ reference is not a reclamation guarantee.
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
 | `optimizer-create config parameter-tree` | Validate unique paths, groups, dtypes/devices, hyperparameters, alias graph, and stable module/handle identities. | New mutable receiver retaining parameter handles; mismatch/unsupported errors; no gradient. |
-| `optimizer-step! optimizer` | Require valid finite gradients as configured, compute one atomic update, and advance step/RNG/scheduler state only on success. | Mutates bound parameters and optimizer state; no implicit clipping, precision conversion, fallback, or approximate gradient. `invalid-state`, shape/dtype/device/unsupported/determinism errors. |
+| `optimizer-step! optimizer` | Require valid finite gradients as configured, compute one atomic update, and advance the completed-update counter and derived schedule only on success. O2 v1 has no RNG state. | Mutates bound parameters and optimizer state; no implicit gradient clearing, precision conversion, fallback, or approximate gradient. `invalid-state`, shape/dtype/device/unsupported/`determinism-unavailable` errors. |
 | `optimizer-zero-grad! optimizer` | Clear gradients of bound unique parameters once. | Mutates gradient slots; `invalid-state`; no gradient. |
 | `optimizer-state optimizer` | Deep snapshot keyed by stable parameter paths, including groups, step counters, schedules, and precision policy. | New owned state; `invalid-state`; no graph. |
 | `optimizer-load-state! optimizer state` | Strict atomic load against bound paths/aliases/shapes/dtypes/devices. | Mutates optimizer state, not parameter values; mismatch/version/corruption errors; no graph. |
+| `optimizer-state-release! state` | Release the exact registered, detached O2 snapshot and invalidate its state-backed moment handles. | Idempotent arity-1 mutation for the exact dead token; release has no source-optimizer backreference and remains valid after that source later accumulates or steps; malformed, forged, copied, unregistered, or cross-aggregate values are `invalid-argument`; recognized busy or releasing state is `invalid-state`. |
 
 O2 owns algorithms and state schema. Mixed precision is optional Wave 4 behavior and
 must raise `unsupported` in the first release unless separately verified.
+The public optimizer state is an opaque, explicitly releasable receiver representing
+O2's versioned byte-independent logical projection; it is not itself the future C2
+serialized list or bytes. O2 v1 defines no optimizer-destroy operation. A live
+optimizer and its two moment tensors per unique parameter remain process-local until
+exit, while released state moment carriers are reclaimed and only inert identity
+tombstones remain.
 
 ## 12. Trainer
 

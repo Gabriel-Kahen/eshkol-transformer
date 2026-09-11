@@ -1,0 +1,6 @@
+o2-public-optimizer-create et_e1b_private_o2_optimizer_create_cabi_v1
+o2-public-optimizer-load-state! et_e1b_private_o2_optimizer_load_state_cabi_v1
+o2-public-optimizer-state et_e1b_private_o2_optimizer_state_cabi_v1
+o2-public-optimizer-state-release! et_e1b_private_o2_optimizer_state_release_cabi_v1
+o2-public-optimizer-step! et_e1b_private_o2_optimizer_step_cabi_v1
+o2-public-optimizer-zero-grad! et_e1b_private_o2_optimizer_zero_grad_cabi_v1

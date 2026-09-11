@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | Clean configure plus smoke test on supported Linux environment | complete |
+| F0 | Package layout, build/test entry points, CI matrix | — | Eight full-coverage parallel suites, separate T2 runtime/boundary jobs, explicit tokenizer/D2 prerequisites, test-only prose selection, and early Python-isolation checks; corrected hosted run pending, serial nightly/manual exhaustive acceptance retains one outer build | review |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
@@ -42,7 +42,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | N2 | [Embedding, linear, normalization, activations, dropout, residuals](N2_PRIMITIVES.md) | P1L, K1, Q0, I1, I2 | Exact-row carrier-backed forward/VJP parity, scaled numerical gradients, Philox bit determinism, failure atomicity, native lifetime, private AOT, ABI/isolation manifests, sanitizers, independent review, and supported CI | complete |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | complete |
 | L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | complete |
-| O2 | AdamW, parameter groups, clipping, accumulation and schedules | P1L, Q0, I2 | Reference update parity and serializable-state tests | planned |
+| O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; sanitizers, isolation, full gates, independent review, and supported CI | review |
 | C2 | Full training-state checkpoint schema | C1, D2, O2, X1 | Model/optimizer/scheduler/RNG/cursor exact-resume test | planned |
 
 ## Wave 3 — first complete language model

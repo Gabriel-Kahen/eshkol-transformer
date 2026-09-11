@@ -1,0 +1,99 @@
+name: Exhaustive acceptance
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exhaustive-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  supported-linux:
+    name: Full Ubuntu 22.04 acceptance
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+      A0_COMPILER_TIMEOUT_SECONDS: '60'
+      P1_LSAN: '1'
+      C1_LSAN: '1'
+      I2_ASAN_DETECT_LEAKS: '1'
+      D2_ASAN_DETECT_LEAKS: '1'
+      N2_ASAN_DETECT_LEAKS: '1'
+      O2_ASAN_DETECT_LEAKS: '1'
+      N3K_ASAN_DETECT_LEAKS: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y \
+            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+            ripgrep
+          test "$(llvm-config-21 --version)" = '21.1.8'
+
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+
+      - name: Select pinned oracle Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14.6'
+
+      - name: Install pinned development oracle
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          oracle_python="$RUNNER_TEMP/development-oracle/bin/python"
+          n2_oracle_python="$RUNNER_TEMP/n2-oracle-python"
+          python3 -m venv "$RUNNER_TEMP/development-oracle"
+          "$oracle_python" -m pip install \
+            --disable-pip-version-check \
+            -r tests/n2/requirements-reference.lock
+          printf '#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexec "%s" "$@"\n' \
+            "$oracle_python" > "$n2_oracle_python"
+          chmod 0500 "$n2_oracle_python"
+          "$n2_oracle_python" -c \
+            'import torch; assert torch.backends.cpu.get_cpu_capability() == "DEFAULT"'
+          {
+            echo "N2_ORACLE_PYTHON=$n2_oracle_python"
+            echo "O2_ORACLE_PYTHON=$oracle_python"
+            echo "A2_ORACLE_PYTHON=$oracle_python"
+            echo "Q0_PYTHON=$oracle_python"
+            echo "ESHKOL_RUN=$GITHUB_WORKSPACE/.deps/eshkol-build/eshkol-run"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify pinned Eshkol toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: make toolchain
+
+      - name: Clean build
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: make clean && make build
+
+      - name: Full test suite
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: make test-after-build
+
+      - name: Smoke and reproducible benchmark
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: make smoke-after-build benchmark-after-build

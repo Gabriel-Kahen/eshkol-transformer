@@ -1,0 +1,16 @@
+(require transformer.error_consumer)
+(require transformer.optim)
+
+(define caught
+  (guard (value
+           (#t
+             (and (transformer-error? value)
+                  (eq? (transformer-error-category value) 'invalid-argument)
+                  (eq? (transformer-error-operation value)
+                       'optimizer-state-release!))))
+    (optimizer-state-release! '#(forged))
+    #f))
+
+(if caught
+    (display "O2 reverse import PASS\n")
+    (exit 1))

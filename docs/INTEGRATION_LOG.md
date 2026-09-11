@@ -86,6 +86,11 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Scope:** documentation/status correction only; no API, ABI, numerical domain,
   lifetime, format, or required-gate changes. This does not close D2/O2/C2, mark
   all of Wave 2 complete, or claim a complete language model or training runtime.
+- **Closeout repair:** the N3K predecessor manifest also pins the two A2/N2
+  contract documents. Update only those two document digests for the reviewed
+  acceptance-status text; every executable/header/fixture digest remains unchanged.
+  The complete predecessor checksum gate is still required. The README's stale
+  pending D2 wording is superseded by the same accepted live-shell amendment below.
 
 ## 2026-09-09 — D2 caller-region clarification accepted with amendment
 
@@ -1082,6 +1087,105 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   [supported CI run 33445639643](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/33445639643);
   merge commit `52ed785eabc7f1a6970fc5b42f1e98005ae0bcf7`.
 
+## 2026-09-01 — O2 / issue #46
+
+- **Decision:** review candidate. P1L issue #51 was independently approved and merged
+  as `b72b9fa58042304a71e801415e53f280262edae2`; I2 issue #49 was independently
+  approved and merged as `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. Integration
+  accepted O2's post-I2 contract with eight clarifications in issue #1 comment
+  5557203111, accepted the exact 1,365-entry ceiling in comment 5557364807, and chose
+  detached state release without an origin-optimizer backreference in comment
+  5557373020. O2 may advance only to `review`; independent O2-R approval, exact-head
+  supported CI, merge, merged-main retest, and acceptance-document follow-up remain
+  pending.
+- **Contract:** O2 preserves the five A0 optimizer names and adds only exact arity-1
+  `optimizer-state-release!`. The public arities are 2/1/1/1/2/1. The one-member
+  `build/o2/libeshkol_transformer_wave2.a` aggregate contains `o2_wave2.o`, preserves
+  I2's 47 globals, and adds the exact six O2 wrappers for 53 globals total. It owns the
+  single E1/P1/I2 registry universe and cannot be linked with another registry-owning
+  aggregate. The fixed private release wrapper accepts no caller-selected provider or
+  callback authority and is statically bound to provider
+  `(transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1)` plus the exact O2 ledger.
+  It cannot release P1 state, parameters, gradients, live optimizer moments, or
+  another owner.
+
+  O2 does not change X1 schema 1.0. `optimizer-create` accepts the strict data-only
+  `transformer-optimizer-config` 1.0 value in [O2_OPTIMIZER.md](O2_OPTIMIZER.md).
+  Version 1 admits dense CPU-f32 AdamW, complete canonical parameter groups, optional
+  global-L2 clipping, and constant or successful-update-indexed linear schedules.
+  One step reads I2's exact present numerator/contribution-count/normalization-weight
+  state, normalizes and clips once, and updates each unique protected storage identity
+  plus its two moments through one 3N-assignment I2 commit. Conflicting tied-group
+  assignments reject before mutation. Only a completed commit advances
+  `completed-updates`; step never clears gradients, and `optimizer-zero-grad!` is the
+  sole exact, idempotent clear operation.
+
+  Version 1 admits at most 1,365 unique live parameter allocations and at most 1,365
+  nonempty groups. Aliases do not count again and each unique allocation belongs to
+  exactly one group. The same ceiling and canonical ordering govern receiver and
+  logical-state validation. A 1,366th entry is `invalid-argument` before provider
+  work, retained native allocation, or mutation.
+
+  `transformer-optimizer-state` 1.0 is a byte-independent logical projection behind
+  an opaque registered public owner; it is not a C2 encoding or file format. Snapshot
+  and load require an idle optimizer and absent I2 gradients. Load validates the
+  complete protected state and all finite moments, borrows without adoption, commits
+  all destination moments once, and only then publishes configuration/counters; it
+  never changes parameters or gradients. Release depends only on exact state/provider/
+  ledger liveness and no active state borrow. It remains valid after the source
+  optimizer later accumulates or steps, closes handles with `live -> releasing`,
+  releases every clone exactly once, and publishes `dead`. Exact-dead repeat succeeds;
+  every other dead-state operation is `invalid-state`.
+- **Error and lifetime contract:** malformed/non-state/wrong-kind/forged/copied/
+  unregistered/cross-aggregate release inputs are `invalid-argument`; recognized
+  live busy/reentrant/releasing/owner-conflict is `invalid-state`; unavailable
+  capability is `unsupported` only before construction/load; a post-admission
+  provider defect is `internal`. An unavailable required binary32 execution mode is
+  `determinism-unavailable`. O2 v1 has no RNG and no optimizer-destroy operation.
+  Live optimizer receivers and their two moment tensors per unique parameter remain
+  process-local until exit. Released snapshots retain no moment carriers, but dead
+  state/handle and ended-borrow tombstones are cumulative; identity registries are
+  serialized and linear-time.
+- **Evidence:** The development-only PyTorch oracle contains 15 deterministic cases
+  and 99 tensors covering later-step bias correction, present-zero decay, multiple
+  groups, clipping, unequal-weight accumulation, schedules, explicit-only clearing,
+  and state continuation. Its canonical 27,774 bytes have SHA-256
+  `db075ceb47d121d4a13537cd2d0c2457f5596b4c4bb739766a9652b6bc66e561`.
+  Runtime implementation and focused native/Eshkol/package tests are present; final
+  consolidated exact-head local results, PR reference, supported Ubuntu 22.04 /
+  LLVM-Clang 21.1.8 CI URL, and independent O2-R disposition are pending.
+- **Dependencies / retest:** C2 may consume only the logical projection and scoped
+  synchronous state/I2/K1 borrows; it must not serialize owner tokens, callbacks,
+  executable provider authority, or capability evidence. C2 remains blocked on O2
+  acceptance and D2. TR3 owns when to step and all token counters/token schedules.
+  Before merge, rerun P1L/I2/O2/Q0 and repository gates, strict AOT, sanitizers/LSan,
+  smoke, benchmark, exact aggregate/authority/isolation checks, supported exact-head
+  CI, and independent O2-R. Do not merge from this workstream.
+- **Reference:** [issue #46](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46);
+  [I2 issue #49](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49);
+  [binding integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487253506);
+  [proposed logical contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5487546881);
+  [O2 evidence update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5487548739);
+  [I2 lifetime blocker](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/49#issuecomment-5487674367);
+  [binding P1L lifetime decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5487927479);
+  [O2 optimizer-state lifetime requirement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/51#issuecomment-5493245836);
+  [O2 dependency update](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493252239);
+  [proposed O2 release operation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493291780);
+  [independent-review addendum](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493340320);
+  [accepted lifecycle verdict](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493412398);
+  [O2/I2 shared-seam disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5493456203);
+  [dead-state category proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493503924);
+  [accepted dead-state taxonomy](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5493574404);
+  [P1L PR #55](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/55);
+  [accepted post-I2 freeze](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557203111);
+  [issue #46 post-I2 freeze record](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5557203114);
+  [accepted O2 limit](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557364807);
+  [issue #46 O2 limit record](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5557364804);
+  [accepted detached release](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5557373020);
+  [issue #46 detached-release record](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5557373040);
+  P1L merge commit `b72b9fa58042304a71e801415e53f280262edae2`;
+  I2 merge commit `309de7262ebe33120e782ffc1c12f8cc10cbe74b`.
+
 ## 2026-08-31 — L2 proposed contract / issue #44
 
 - **Status:** proposed before implementation; no A0 public name, arity, or
@@ -1661,3 +1765,26 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 - **Integration acceptance (2026-09-08):** [N3K-R approved](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67#issuecomment-5587426332) exact head `39a79d2d6a87f9759b828082ac86fd66c67e2cf0` after primary and three independent Astra-high reviews. [Supported run 34222643674](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34222643674) passed the full matrix, build, smoke and benchmark. CI checked out synthetic merge `b8c1768b75f54b4ac399d1d4cef0e05f68ae9f73`; its exact base/head parents and tree were verified. [PR #67](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67) merged as `15ab04d4be6df11ca279c3eeb50b582e8163d535`. Reviewed head, CI checkout and actual merge all have tree `07cf8f8c3d9529a4df4c2f4a81e649fcc9e4bc49`.
 - **Merged-main retest:** integration revalidated pinned Eshkol, configured and rebuilt K1/I1/I2/N3K, then ran `N3K_ASAN_DETECT_LEAKS=1 scripts/test-n3k.sh` with explicit non-login `/usr/bin/bash`: PASS. The 23 oracle tests, 67,957 native assertions, 3,248 primitive central derivatives, reference error `7.62939453e-06`, owned carrier checks, fresh private AOT, predecessor/ABI/source/archive isolation and ASan/UBSan/LSan match the approved evidence. This retest used explicit CachyOS/LLVM22 compatibility settings and the revalidated compiler under the `41a1` worktree; supported Ubuntu22/LLVM21 evidence is supplied by the CI run above.
 - **Limits and downstream obligations:** private AOT establishes no public Eshkol model. Numeric RNG words neither authenticate initializer identity nor domain-separate streams; typed transport must validate identity. Reference unique-storage/path scheduling is test-only; production caller enforcement, whole-model publication, model wiring, and training remain downstream. No first-release, performance, GPU, general AD, JIT, or resume claim.
+
+## 2026-09-10 — O2 current-main CI-topology refresh / PR #58
+
+- **Decision:** merge current main `db70fe9c9bbbc6fbe221d65e5737b7486a75d77c`
+  into the preserved O2 parent without rewriting either history. Accepted O2, N2,
+  I2, T2, L2, and D2 implementation/evidence trees remain byte-identical to their
+  respective parents. Shared build and CI metadata is a strict union: O2 remains in
+  the native-numerics shard with its exact I2/T2/D2 aggregate prerequisites, all
+  eight blocking suites and every full test command remain, and exhaustive
+  acceptance retains the 240-minute outer timeout.
+- **Oracle-host correction:** the first exact-head exhaustive attempt exposed a
+  development-only N2 frozen-byte mismatch on a newer hosted runner image although
+  the N2 source, fixture, lock, native checks, and independent numerical-gradient
+  checks were unchanged. PyTorch 2.13 CPU capability dispatch is therefore pinned
+  to `DEFAULT` only through an ephemeral N2 oracle-interpreter wrapper. O2, A2, and
+  Q0 retain the direct pinned interpreter; no accepted N2 path, frozen byte, native
+  runtime, ABI, provider, or gate is changed or skipped. CI verifies the wrapper's
+  effective capability before running the unchanged byte-equality assertion.
+- **Required evidence:** exact-head native-numerics and 240-minute exhaustive runs
+  must both pass on Ubuntu 22.04 / LLVM-Clang 21.1.8, including unskipped N2 and O2
+  oracle regeneration, O2's 6,201 adversarial checks, sanitizers/LSan, full smoke,
+  and benchmark. A new independent O2-R exact-head review is required after green
+  evidence. O2 and the F0 topology remain `review`; PR #58 must not be merged here.
