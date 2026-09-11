@@ -76,6 +76,9 @@ expected_ci_build_commands = {
         "/usr/bin/bash scripts/build-i2.sh",
         "/usr/bin/bash scripts/build-n2.sh",
         "/usr/bin/bash scripts/build-n3k.sh",
+        "/usr/bin/bash scripts/build-t2.sh",
+        "/usr/bin/bash scripts/build-d2.sh",
+        "/usr/bin/bash scripts/build-o2.sh",
         "/usr/bin/bash scripts/build-p1-package.sh",
     },
     "build-ci-contracts": {
@@ -99,6 +102,13 @@ for target, expected in expected_ci_build_commands.items():
     assert set(targets[target]) == expected, (target, targets[target], expected)
 
 required_build_commands_by_test = {
+    "/usr/bin/bash scripts/test-o2.sh": {
+        "/usr/bin/bash scripts/build-k1.sh",
+        "/usr/bin/bash scripts/build-i2.sh",
+        "/usr/bin/bash scripts/build-t2.sh",
+        "/usr/bin/bash scripts/build-d2.sh",
+        "/usr/bin/bash scripts/build-o2.sh",
+    },
     "/usr/bin/bash scripts/test-t1.sh": {
         "/usr/bin/bash scripts/build-d2.sh",
     },
@@ -139,6 +149,17 @@ assert required_build_commands.issubset(targets["build"])
 build_driver = (root / "scripts/build.sh").read_text(encoding="utf-8")
 assert "scripts/build-n2.sh" in build_driver
 assert "scripts/build-n3k.sh" in build_driver
+assert "scripts/build-o2.sh" in build_driver
+
+for workflow in (ci, acceptance):
+    assert "O2_ASAN_DETECT_LEAKS: '1'" in workflow
+    assert "ATEN_CPU_CAPABILITY=default" in workflow
+    assert 'torch.backends.cpu.get_cpu_capability() == "DEFAULT"' in workflow
+    assert "N2_ORACLE_PYTHON=$n2_oracle_python" in workflow
+    assert "O2_ORACLE_PYTHON=$oracle_python" in workflow
+    assert "A2_ORACLE_PYTHON=$oracle_python" in workflow
+    assert "Q0_PYTHON=$oracle_python" in workflow
+assert "timeout-minutes: 240" in acceptance
 
 for command in (
     "make clean && make build",

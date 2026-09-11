@@ -1,0 +1,386 @@
+(load "o2_wave2_root.esk")
+
+(extern void o2-test-fail-release-after i64
+        :real et_o2_test_fail_release_after_v1)
+(extern void o2-test-reset-failpoints
+        :real et_o2_test_reset_failpoints_v1)
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "O2 CONFIG/STATE FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (expect-error label category operation thunk)
+  (let ((caught
+          (guard (value
+                   (#t
+                     (and (transformer-error? value)
+                          (eq? category (transformer-error-category value))
+                          (eq? operation (transformer-error-operation value)))))
+            (thunk)
+            #f)))
+    (check label caught)))
+
+(define (stage label thunk)
+  (guard (value
+           (#t
+             (display "O2 CONFIG/STATE UNEXPECTED ERROR: ")
+             (display label)
+             (if (transformer-error? value)
+                 (begin
+                   (display " ")
+                   (display (transformer-error-category value))
+                   (display "/")
+                   (display (transformer-error-operation value))))
+             (newline)
+             (exit 1)))
+    (thunk)))
+
+(define (config clip schedule groups)
+  (list 'transformer-optimizer-config 1 0 '()
+        'adamw 'f32 'cpu clip schedule groups))
+
+(define (group paths lr beta1 beta2 epsilon decay)
+  (list 'group paths lr beta1 beta2 epsilon decay))
+
+(define valid-group
+  (group '( ("bias") ("weight") )
+         "3dcccccd" "3f666666" "3f7d70a4" "322bcc77" "00000000"))
+(define valid-config (config '(none) '(constant) (list valid-group)))
+
+(define (repeat-value count value)
+  (let loop ((remaining count) (result '()))
+    (if (= remaining 0) result
+        (loop (- remaining 1) (cons value result)))))
+
+(check "logical state projection bounds are frozen"
+       (and (= o2-state-max-data-depth 32)
+            (= o2-state-max-data-nodes 2097152)
+            (= o2-state-max-data-bytes 67108864)))
+(check "projection walker admits its exact local node boundary"
+       (begin
+         (o2-budget-data-walk 'optimizer-create '(a b) 0 '()
+                              (vector 0) (vector 0) 4 4 0)
+         #t))
+(expect-error "projection walker rejects one node beyond its boundary"
+              'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-budget-data-walk 'optimizer-create '(a b) 0 '()
+                         (vector 0) (vector 0) 4 3 0)))
+(expect-error "projection walker rejects one UTF-8 byte beyond its boundary"
+              'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-budget-data-walk 'optimizer-create "four" 0 '()
+                         (vector 0) (vector 0) 1 1 3)))
+(expect-error "1366 raw groups reject before parameter-tree validation"
+              'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant) (repeat-value 1366 valid-group)) #f)))
+
+(define module (i2-module-create-internal))
+(define weight (i2-parameter-create-uniform-internal 2 1065353216))
+(define bias (i2-parameter-create-uniform-internal 1 0))
+(define weight-handle
+  (i2-module-register-parameter-internal! module "weight" weight))
+(i2-module-register-parameter-internal! module "bias" bias)
+(i2-module-register-tied-parameter-internal!
+  module "weight_tied" weight-handle)
+(define tree (module-parameters module))
+
+(expect-error "malformed envelope" 'invalid-argument 'optimizer-create
+  (lambda () (o2-public-optimizer-create '(not-an-o2-config) tree)))
+(expect-error "nonempty feature set" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      '(transformer-optimizer-config 1 0 (future)
+         adamw f32 cpu (none) (constant) ())
+      tree)))
+(expect-error "unsupported algorithm" 'unsupported 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      '(transformer-optimizer-config 1 0 ()
+         sgd f32 cpu (none) (constant) ())
+      tree)))
+(expect-error "empty groups" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant) '()) tree)))
+(expect-error "empty group" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '() "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "duplicate path" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("weight") ("weight"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "unordered paths" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("weight") ("bias"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "alias path is not canonical" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("bias") ("weight_tied"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "missing unique parameter" 'shape-mismatch 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("weight"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "unknown parameter" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("bias") ("unknown"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "negative-zero learning rate" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("bias") ("weight"))
+                           "80000000" "3f666666" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "beta one" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("bias") ("weight"))
+                           "3dcccccd" "3f800000" "3f7d70a4"
+                           "322bcc77" "00000000")))
+      tree)))
+(expect-error "zero epsilon" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("bias") ("weight"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "00000000" "00000000")))
+      tree)))
+(expect-error "nonfinite decay" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(constant)
+              (list (group '(("bias") ("weight"))
+                           "3dcccccd" "3f666666" "3f7d70a4"
+                           "322bcc77" "7f800000")))
+      tree)))
+(expect-error "zero clip maximum" 'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(global-l2 "00000000") '(constant) (list valid-group))
+      tree)))
+(expect-error "linear warmup is not below total" 'invalid-argument
+              'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create
+      (config '(none) '(linear 2 2 "3f000000") (list valid-group))
+      tree)))
+
+(define optimizer (o2-public-optimizer-create valid-config tree))
+(check "optimizer receiver is an opaque condition shell"
+       (and (error-object? optimizer) (not (vector? optimizer))))
+(define forged-optimizer
+  (guard (value (#t value)) (error "transformer.optimizer:v1")))
+(expect-error "same-message optimizer shell cannot forge identity"
+              'invalid-argument 'optimizer-step!
+  (lambda () (o2-public-optimizer-step! forged-optimizer)))
+(expect-error "snapshot rejects present accumulation" 'invalid-state
+              'optimizer-state
+  (lambda ()
+    (i2-parameter-accumulate-uniform-internal! weight 0 0 1065353216)
+    (o2-public-optimizer-state optimizer)))
+(check "explicit zero clears the pending accumulation"
+       (o2-public-optimizer-zero-grad! optimizer))
+(i2-parameter-accumulate-uniform-internal!
+  bias 1065353216 0 1065353216)
+(i2-parameter-accumulate-uniform-internal!
+  weight 1065353216 0 1065353216)
+(check "compiled O2 step commits through live I2 carriers"
+       (o2-public-optimizer-step! optimizer))
+(check "compiled step advances completed updates exactly once"
+       (= (o2-optimizer-completed-updates-internal optimizer) 1))
+(check "successful compiled step retains bias gradient metadata"
+       (equal? (i2-parameter-gradient-metadata-internal bias) (vector 1 1)))
+(check "successful compiled step retains weight gradient metadata"
+       (equal? (i2-parameter-gradient-metadata-internal weight) (vector 1 1)))
+(check "tied P1 handle identity survives O2 commit"
+       (eq? (parameter-tree-handle tree '("weight"))
+            (parameter-tree-handle tree '("weight_tied"))))
+(check "explicit zero is the sole compiled gradient clearing operation"
+       (o2-public-optimizer-zero-grad! optimizer))
+(check "compiled zero clears both canonical slots"
+       (and (equal? (i2-parameter-gradient-metadata-internal bias) (vector 0 0))
+            (equal? (i2-parameter-gradient-metadata-internal weight)
+                    (vector 0 0))))
+(define state (o2-public-optimizer-state optimizer))
+(check "state receiver is an opaque condition shell"
+       (and (error-object? state) (not (vector? state))))
+(define forged-state
+  (guard (value (#t value)) (error "transformer.optimizer-state:v1")))
+(expect-error "same-message state shell cannot forge release identity"
+              'invalid-argument 'optimizer-state-release!
+  (lambda () (o2-public-optimizer-state-release! forged-state)))
+(expect-error "same-message state shell cannot forge load identity"
+              'invalid-argument 'optimizer-load-state!
+  (lambda () (o2-public-optimizer-load-state! optimizer forged-state)))
+(expect-error "copied vector cannot forge state identity"
+              'invalid-argument 'optimizer-load-state!
+  (lambda ()
+    (o2-public-optimizer-load-state!
+      optimizer (vector "transformer.optimizer-state:v1"))))
+(define load-target (o2-public-optimizer-create valid-config tree))
+(i2-parameter-accumulate-uniform-internal!
+  bias 1065353216 0 1065353216)
+(expect-error "public load rejects destination gradient before state staging"
+              'invalid-state 'optimizer-load-state!
+  (lambda ()
+    (o2-public-optimizer-load-state! load-target state)))
+(check "public load precedence failure leaves gradient metadata intact"
+       (equal? (i2-parameter-gradient-metadata-internal bias) (vector 1 1)))
+(check "public load target clears explicitly after precedence failure"
+       (o2-public-optimizer-zero-grad! load-target))
+(check "compiled public state load succeeds"
+       (o2-public-optimizer-load-state! load-target state))
+(check "compiled public state load restores the completed-update counter"
+       (= (o2-optimizer-completed-updates-internal load-target) 1))
+(define release-defect-state (o2-public-optimizer-state load-target))
+(o2-test-fail-release-after 0)
+(expect-error "post-admission release defect raises internal exactly once"
+              'internal 'optimizer-state-release!
+  (lambda ()
+    (o2-public-optimizer-state-release! release-defect-state)))
+(check "release-defect state is dead and repeat release calls no provider"
+       (o2-public-optimizer-state-release! release-defect-state))
+(o2-test-reset-failpoints)
+(i2-parameter-accumulate-uniform-internal!
+  bias 1065353216 0 1065353216)
+(check "state release succeeds" (o2-public-optimizer-state-release! state))
+(check "detached state release leaves later source accumulation intact"
+       (equal? (i2-parameter-gradient-metadata-internal bias) (vector 1 1)))
+(check "exact dead release is idempotent"
+       (o2-public-optimizer-state-release! state))
+(expect-error "dead state load rejects" 'invalid-state 'optimizer-load-state!
+  (lambda () (o2-public-optimizer-load-state! optimizer state)))
+(expect-error "forged release receiver rejects" 'invalid-argument
+              'optimizer-state-release!
+  (lambda () (o2-public-optimizer-state-release! (vector 'forged))))
+
+(define (ceiling-name prefix index)
+  (let ((digits (number->string index)))
+    (string-append
+      prefix (if (< index 10) "0" "")
+      digits)))
+
+(define (make-ceiling-fixture count)
+  (let ((root (i2-module-create-internal))
+        (groups '())
+        (parameters '()))
+    (let bucket-loop ((bucket-index 0) (global-index 0))
+      (if (= global-index count)
+          (vector root (o2-reverse groups) parameters)
+          (let* ((bucket-name (ceiling-name "b" bucket-index))
+                 (child (i2-module-create-internal))
+                 (next-index
+                   (let leaf-loop ((leaf-index 0) (index global-index))
+                     (if (or (= leaf-index 37) (= index count))
+                         index
+                         (let* ((leaf-name (ceiling-name "p" leaf-index))
+                                (parameter
+                                  (i2-parameter-create-uniform-internal
+                                    1 1065353216)))
+                           (i2-module-register-parameter-internal!
+                             child leaf-name parameter)
+                           (set! parameters (cons parameter parameters))
+                           (set! groups
+                             (cons
+                               (group (list (list bucket-name leaf-name))
+                                      "3dcccccd" "3f666666" "3f7d70a4"
+                                      "322bcc77" "00000000")
+                               groups))
+                           (leaf-loop (+ leaf-index 1) (+ index 1)))))))
+            (module-register-child-internal! root bucket-name child)
+            (bucket-loop (+ bucket-index 1) next-index))))))
+
+(define ceiling-fixture (make-ceiling-fixture 1365))
+(define ceiling-module (vector-ref ceiling-fixture 0))
+(define ceiling-groups (vector-ref ceiling-fixture 1))
+(define ceiling-parameters (vector-ref ceiling-fixture 2))
+(define ceiling-config (config '(none) '(constant) ceiling-groups))
+(define ceiling-tree (module-parameters ceiling-module))
+(define ceiling-optimizer
+  (stage "create exact-boundary optimizer"
+    (lambda ()
+      (o2-public-optimizer-create ceiling-config ceiling-tree))))
+(check "exact 1365-parameter and 1365-group public boundary succeeds"
+       (error-object? ceiling-optimizer))
+(let accumulate-ceiling ((remaining ceiling-parameters))
+  (if (not (null? remaining))
+      (begin
+        (stage "accumulate exact-boundary gradient"
+          (lambda ()
+            (i2-parameter-accumulate-uniform-internal!
+              (car remaining) 1065353216 0 1065353216)))
+        (accumulate-ceiling (cdr remaining)))))
+(check "exact-boundary public optimizer commits one full step"
+       (o2-public-optimizer-step! ceiling-optimizer))
+(check "exact-boundary completed-update counter advances once"
+       (= (o2-optimizer-completed-updates-internal ceiling-optimizer) 1))
+(check "exact-boundary explicit zero clears all accumulated slots"
+       (o2-public-optimizer-zero-grad! ceiling-optimizer))
+(define ceiling-state-before-rejection
+  (stage "snapshot exact-boundary optimizer"
+    (lambda () (o2-public-optimizer-state ceiling-optimizer))))
+(define ceiling-load-target
+  (stage "create exact-boundary load target"
+    (lambda ()
+      (o2-public-optimizer-create ceiling-config ceiling-tree))))
+(check "exact-boundary public load commits all moments and counter"
+       (and
+         (o2-public-optimizer-load-state!
+           ceiling-load-target ceiling-state-before-rejection)
+         (= (o2-optimizer-completed-updates-internal ceiling-load-target) 1)))
+(check "exact-boundary loaded snapshot releases"
+       (o2-public-optimizer-state-release! ceiling-state-before-rejection))
+(define over-ceiling-fixture (make-ceiling-fixture 1366))
+(define over-ceiling-tree
+  (module-parameters (vector-ref over-ceiling-fixture 0)))
+(expect-error "1366th unique public parameter rejects before provider work"
+              'invalid-argument 'optimizer-create
+  (lambda ()
+    (o2-public-optimizer-create ceiling-config over-ceiling-tree)))
+(check "exact-boundary optimizer remains usable after 1366 rejection"
+       (o2-public-optimizer-zero-grad! ceiling-optimizer))
+(define ceiling-state (o2-public-optimizer-state ceiling-optimizer))
+(check "exact-boundary snapshot releases after rejected construction"
+       (o2-public-optimizer-state-release! ceiling-state))
+
+(display "O2 config/state adversarial PASS: ")
+(display checks)
+(display " checks\n")

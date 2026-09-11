@@ -6,7 +6,8 @@ Blocking code pull-request CI partitions the complete test command set across ei
 parallel suites: native numerics, contracts/data, checkpoint I/O, parameter state,
 byte tokenization, BPE runtime, BPE boundary, and shard loading. T2's runtime and
 existing standalone boundary script run separately; the full local T2 command still
-runs both. All repeated AOT, aggregate-boundary, sanitizer, malformed-input,
+runs both. Native numerics includes the combined N2/O2 provider, numerical,
+atomicity, ownership, and lifetime gates. All repeated AOT, aggregate-boundary, sanitizer, malformed-input,
 and maximum/resource cases remain required for code changes. The suite-specific build targets create only canonical
 artifacts consumed before the test script; tests that construct their own canonical
 and repeated artifacts do not receive an unused outer full build.
@@ -33,7 +34,12 @@ Exhaustive acceptance runs nightly and on manual dispatch. It repeats the comple
 suite serially in one supported environment while retaining every repeated
 fresh-cache compilation, hostile-path and symbol-isolation proof, maximum-size and
 resource-bound case, sanitizer gate, and compiled corruption matrix described below.
-It builds once, then uses the no-rebuild test, smoke, and benchmark entry points.
+It builds once, then uses the no-rebuild test, smoke, and benchmark entry points
+under the 240-minute outer timeout.
+A pinned N2-only development-oracle wrapper selects PyTorch's baseline CPU dispatch
+before import so frozen reference bytes do not depend on the hosted runner's
+AVX2/AVX512 capability. O2, A2, and Q0 retain the direct pinned interpreter; the
+dispatch setting never enters an Eshkol-native runtime path.
 A failing exhaustive run is a main-branch health blocker and must be resolved before
 a release or a workstream is declared accepted. Risky changes to packaging,
 persistence, tokenizer limits, or compiler boundaries should manually dispatch it
