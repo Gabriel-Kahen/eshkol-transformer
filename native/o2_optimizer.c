@@ -1682,7 +1682,7 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
   et_o2_optimizer_state *state = NULL;
   size_t index;
   size_t handle_index;
-  int32_t result;
+  int32_t result = ET_O2_STATUS_INTERNAL;
   et_f32_tensor_error i2_error;
   if (output == NULL || *output != NULL ||
       (result = et_o2_require_optimizer(candidate, "optimizer-state", error)) !=
