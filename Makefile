@@ -11,7 +11,7 @@ SHELL := /usr/bin/bash
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
 	test-ci-topology \
-	test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b \
+	test-a0 test-a2 test-b0 test-c1 test-c2-format test-d1 test-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-l2 test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-x1 \
@@ -193,6 +193,9 @@ test-d2: build
 
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
+
+test-c2-format:
+	/usr/bin/bash scripts/test-c2-format.sh
 
 test-t1: build
 	/usr/bin/bash scripts/test-t1.sh
