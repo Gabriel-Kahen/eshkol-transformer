@@ -561,6 +561,7 @@ sampling and cache implementation.
 | `checkpoint-inspect path policy` | Validate envelope, policy bounds, versions, entry table, and checksums without constructing executable objects; return checkpoint metadata only. | New immutable CPU metadata; `io`, `corrupt-data`, `version-mismatch`, `unsupported`; no gradient. |
 | `checkpoint-load path policy capability-report` | Verify all bytes/checksums/limits before exposing a data-only state snapshot; reject code, callbacks, foreign paths, and unknown required features. Require verified tensor/device capabilities for the policy device. Return exactly a deep-owned trainer state accepted by `trainer-load-state!`. | New owned CPU control metadata plus tensors on exactly the policy device; no implicit conversion/transfer/fallback and no graph. |
 | `checkpoint-save! state path policy options` | Accept only a complete `trainer-state` result, validate it and policy limits, write a same-directory temporary file, flush as required, then atomically replace target. | State borrowed and unchanged; `io`, `invalid-state`, `unsupported`; no graph. |
+| `trainer-state-release! state` | Release the exact registered deep-owned detached trainer state. Exact dead release is idempotent; busy/releasing state rejects without a second cleanup. | Invalidates dependent handles, drains P1/O2 component owners exactly once, and returns no tensor; `invalid-argument`, `invalid-state`, or post-cleanup `internal`; no graph. |
 
 The only save options are `':overwrite? bool` and
 `':required-features symbol-list`. `checkpoint-metadata-ref metadata key` returns a
@@ -579,9 +580,10 @@ temporary may remain after I/O failure.
 Checkpoint, tokenizer, token-shard, cursor, resolved-config, and native ABI formats are
 separate version domains. This contract requires an envelope with a format identifier,
 major/minor version, required-feature list, declared size limits, checksum algorithm,
-and checksums. It deliberately commits to **no magic bytes, encoding, field numbers,
-container layout, tensor encoding, or migration algorithm**. T1/D1/C1/X1/K1 must
-propose those decisions through issue #1 before merging a public format or ABI.
+and checksums. The accepted C2 `eshkol-training-state` 1.0 encoding and detached-owner
+lifecycle are specified in [C2_TRAINING_STATE.md](C2_TRAINING_STATE.md); other formats
+do not inherit its bytes or migration policy. Every future public format or ABI change
+still requires an issue #1 version/migration decision.
 
 Data loaders must enforce configurable hard limits before allocation and must never
 evaluate code, resolve arbitrary object constructors, follow embedded paths, or load

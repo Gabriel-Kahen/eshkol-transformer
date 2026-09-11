@@ -96,3 +96,12 @@ Trusted consumers validate and borrow those handles synchronously, end the borro
 the same call, and retain no raw native pointer. Optimizer snapshots require their
 own versioned receiver ledger and release API; they cannot reuse P1's public state
 release as generic construction or destruction authority.
+
+[C2](C2_TRAINING_STATE.md) defines the accepted `eshkol-training-state` 1.0
+detached container around C1 model bytes, O2 state, typed N2 RNG words, two D2
+cursors, tokenizer/config identities, and counters. C2 validation is staged on one
+no-follow descriptor and completes all byte, checksum, identity, limit, and
+cross-component checks before codec work. C2 owns detached component continuation
+and explicit trainer-state release; TR3 retains the joint atomic live receiver
+transaction and full interrupted/resumed trajectory. Public C2 composition is
+dependency-gated on the merged K2 capability facade.

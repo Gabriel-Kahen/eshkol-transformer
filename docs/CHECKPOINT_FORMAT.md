@@ -326,3 +326,14 @@ supported Ubuntu 22.04 CI is still required. No power-loss experiment has been r
 It is not a universal
 power-loss, storage-hardware, NFS, FUSE, network-filesystem, concurrent-writer, or
 untrusted-parent-directory guarantee.
+
+## C2 successor container
+
+C1 remains the complete nested model-state container used by the accepted C2
+training-state format; C1 itself does not absorb optimizer, RNG, cursor, tokenizer,
+or resolved-configuration semantics. The C2 outer bytes, aggregate-vs-C1 policy
+accounting, same-fd staged-read rules, detached owner lifecycle, and allocation-flat
+model/moment copy seams are specified in
+[C2_TRAINING_STATE.md](C2_TRAINING_STATE.md). C2 source-composes C1 in one registry
+world and supplies C1 a private subpolicy; it never reopens an embedded path or lets
+serialized provider spelling select executable authority.

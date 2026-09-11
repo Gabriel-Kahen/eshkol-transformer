@@ -126,6 +126,31 @@ before merge.
   follow-up. ROADMAP may move from `review` to `complete` only after all are
   satisfied.
 
+## Required C2 checkpoint gates
+
+- Prove exact outer/C1 fixed-header staged admission on one `O_NOFOLLOW` regular-file
+  descriptor, retained-header byte equality, final same-fd size/EOF agreement, and
+  zero codec/publication calls for every unstable, corrupt, version, or limit failure.
+- Exercise the accepted C2 1.0 header, every checked sum/product/span, inert identity
+  grammar, X1 canonical projection, both real D2 cursor families/relations, complete
+  C1 and O2 metadata, per-tensor and whole digests, and all cross-component counts,
+  paths, shapes, aliases, seeds, vocabulary, and update counters.
+- Prove failure-atomic detached P1/O2 reconstruction and C2 publication at every
+  allocation/transfer/release boundary. Exact dead release is idempotent; forged,
+  copied, wrong-owner, busy, active-borrow, and provider-defect cases retain the
+  documented error and exact-once cleanup behavior.
+- Repeated model and moment saves use the direct exact-bit copy seams and leave all
+  live plus newly instrumented retired-control counts/bytes flat. Scratch remains
+  lexical-region bounded; no implicit promotion or finalizer is evidence.
+- The 16-MiB file, 512-KiB artifact metadata, 8-MiB tensor, and 64-tensor operational
+  tuple requires exact/one-over and jointly attainable pinned-runtime measurements,
+  bounded time, no heap warning, and peak plus retained RSS below 512 MiB. It is not
+  accepted merely because the wire parser declares those constants.
+- Public integration waits for merged K2 and then proves the actual source-composed
+  81/75 candidate counts, eleven truthful capability rows, hostile linkage/input
+  isolation, deterministic clean builds, full predecessor gates, supported blocking
+  CI, and independent exact-head review.
+
 ## Required configuration gates
 
 - Strict, bounded, non-executable parsing with duplicate and unknown keys rejected

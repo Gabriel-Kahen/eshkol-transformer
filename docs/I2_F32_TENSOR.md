@@ -270,6 +270,14 @@ error or output record.
   optimizer, clipping/norm algorithm, schedule, checkpoint format, performance, or
   accelerator evidence. Its C1 codec only transports exact I2 f32 state through the
   existing C1 container contract.
+- C2 may compile the guarded, localized
+  `et_c2_private_i2_state_owned_copy_bytes_v1` only inside its source-composed
+  artifact. C1's paired P1 state/tensor borrow and lexical I2 carrier preflight prove
+  the owned-clone authority; native code hardcodes that role and copies exact bits
+  with `et_f32_tensor_copy_bits_to_v1`. Standalone I2 does not define the symbol.
+  Test-only retired-control and borrow-event instrumentation proves repeated model
+  saves add no borrow/control shell; that instrumentation is absent from production
+  objects and manifests.
 - A successful optimizer step does not consume or clear accumulated gradients.
   Callers must reset them explicitly at the accepted module/optimizer boundary.
 - I2 supplies native clone/destroy mechanics but does not own O2 optimizer-state
