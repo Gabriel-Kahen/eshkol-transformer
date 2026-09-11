@@ -3,8 +3,9 @@
 Integration closeout, 2026-09-09. A2, T2, L2, I2, and N2 are accepted and
 complete within their documented bounded contracts. This supersedes their earlier
 active/proposed/review status, not their capability or lifetime limitations.
-D2, O2, C2, the complete model, and the first-release training gates have separate
-acceptance decisions; this closeout does not mark Wave 2 as a whole complete.
+D2 has a separate acceptance record. The O2 addendum below records its acceptance
+on 2026-09-10. C2 and its K2 prerequisite remain unfinished; the complete model and
+first-release training gates remain separate. This does not mark Wave 2 complete.
 
 ## Independent review and supported evidence
 
@@ -47,6 +48,50 @@ benchmark. An earlier intentional no-oracle isolation pass in the same job skipp
 14 development-oracle tests; it is not the successful pinned-oracle evidence.
 Integration accepts the later unchanged-owned-tree execution as the superseding
 supported post-merge retest, while retaining the historical failure above.
+
+## O2 merge and bounded post-merge retest
+
+O2 is accepted and complete within [its bounded contract](O2_OPTIMIZER.md).
+[PR #58](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/58) merged as
+`884a0744d5adc21f95577c1f8d6904c842a019cf` after
+[independent O2-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/58#issuecomment-5627783349),
+successful Ubuntu 22.04.5 / LLVM-Clang 21.1.8
+[blocking CI 34533652814](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34533652814),
+and [exhaustive acceptance 34533681600](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34533681600).
+Reviewed head `1a22fbd95e0644373d352b7f9f74715c12c2e836`, synthetic merge
+`1ac1815eecfe7406f48efac36283f02ce0a1dd00`, and the actual merge have identical tree
+`b84ff6b0c1f828600ab21f15483ece1f748cf56a`. Whole-tree comparisons were empty;
+the dedicated O2 path-manifest SHA-256 was
+`60769957a00f9b26ceaabf0268a661fc472a716a7294f959b1327489c5857e30` for all three.
+
+The [merged-main retest](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/46#issuecomment-5628426969)
+ran in a clean detached checkout of that actual merge using explicit non-login
+`/usr/bin/bash`. It passed:
+
+- `make test-ci-topology`: eight suites cover all 21 full-test commands exactly once.
+- `python3 -m unittest discover -v -s tests/ci -p 'test_*.py'`: 17/17.
+- `python3 -m unittest -v tests.q0.test_python_isolation`: 2/2.
+- `make test-o2` with explicit compatibility mode, LLVM/Clang paths,
+  `P1_LSAN=1`, `I2_ASAN_DETECT_LEAKS=1`, `O2_ASAN_DETECT_LEAKS=1`, and the pinned
+  O2 oracle interpreter: rebuilt shared prerequisites, native optimizer, exactly
+  6,201 adversarial checks, config/state AOT, PyTorch 2.13.0+cpu reference parity,
+  exact 53-global successor and authority isolation, ASan/UBSan/LSan, and production
+  isolation. The linked evidence preserves the complete absolute command.
+- `/usr/bin/bash scripts/smoke.sh`: exactly `eshkol-transformer-smoke:v1`.
+
+The local retest was on unsupported CachyOS / LLVM-Clang 22.1.6. Supported-host
+claims rely on the identical-tree CI runs above, not on that compatibility lane.
+This bounded post-merge retest does not claim a new full local repository test run.
+Final HEAD/tree and clean worktree were unchanged.
+
+O2 defines no C2 bytes, token-count schedule, trainer cadence, generic release
+authority, or live-optimizer destroy operation. Live optimizer receivers and their
+moments remain process-local until exit; snapshot release frees snapshot-owned
+moment storage, not live optimizer storage. Identity tombstones remain cumulative
+with linear lookup. C2 consumes the merged logical projection and scoped synchronous
+borrow/release contracts; TR3 retains cadence, token counters/schedules and
+mid-accumulation checkpoint policy. No full training trajectory or generation
+equivalence is claimed by this acceptance.
 
 ## Scope preserved
 

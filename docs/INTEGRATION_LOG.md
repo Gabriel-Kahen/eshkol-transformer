@@ -4,6 +4,25 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-10 — O2 merged implementation accepted; C2 prerequisites explicit
+
+- **Decision:** O2 is accepted and complete within its unchanged bounded contract.
+  The historical premerge entries below are superseded in status, not erased.
+- **Evidence:** [O2 acceptance and merged-main retest](WAVE2_PRIMITIVES_ACCEPTANCE.md#o2-merge-and-bounded-post-merge-retest)
+  records PR #58 merge `884a074`, approval comment 5627783349, supported blocking
+  run 34533652814 and exhaustive run 34533681600, exact reviewed/CI/merge tree
+  identity, and the compatibility-only merged-main retest with 6,201 adversarial
+  checks, AOT, reference parity, exact authority manifests, sanitizers/LSan,
+  topology, isolation, and smoke. No numerical/API/ABI/format change is made here.
+- **C2 coordination:** [amended architecture direction 5628231282](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5628231282)
+  and [required pre-freeze corrections 5628292779](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5628292779)
+  leave exact checkpoint bytes and callable seam contracts unfrozen. K2 issue #73
+  is a separate active production capability-facade prerequisite; C2 public
+  integration waits for its independent approval and merge. Neither task is
+  complete. Component-state continuation and atomic file publication belong to
+  C2; atomic live-trainer restore/full trajectory and generation proof remain
+  TR3/G3 first-release gates. This closeout does not declare Wave 2 complete.
+
 ## 2026-09-09 — D2 / issue #42 accepted implementation complete
 
 - **Decision:** accepted and complete against the binding contract in
