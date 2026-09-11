@@ -41,6 +41,17 @@ cmp "${K1_TMP}/test-1.stdout" "${K1_TMP}/test-2.stdout"
 grep -E '^K1 PASS: [0-9]+ ABI, discovery, report, and malformed-call checks$' \
   "${K1_TMP}/test-1.stdout" >/dev/null
 
+"${K1_CC}" "${K1_CFLAGS[@]}" \
+  "${PROJECT_ROOT}/tests/k1/test_kernel_abi_allocation.c" \
+  "${K1_LIBRARY}" \
+  -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
+  -o "${K1_TMP}/test-kernel-abi-allocation"
+timeout --foreground --signal=TERM --kill-after=5s 60s \
+  "${K1_TMP}/test-kernel-abi-allocation" \
+  >"${K1_TMP}/test-allocation.stdout"
+grep -E '^K1 allocation PASS: [0-9]+ sites, [0-9]+ checks$' \
+  "${K1_TMP}/test-allocation.stdout" >/dev/null
+
 "${K1_CXX}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/include" \
   "${PROJECT_ROOT}/tests/k1/header_cpp.cpp" \
@@ -110,4 +121,15 @@ UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 60s \
   "${K1_TMP}/test-kernel-abi-sanitized" >/dev/null
 
-printf 'K1 PASS: C/C++ ABI, compatible-minor discovery, canonical reports, negatives, sanitizers, and Eshkol AOT link\n'
+"${K1_CC}" "${K1_CFLAGS[@]}" -fsanitize=address,undefined \
+  -fno-omit-frame-pointer \
+  "${PROJECT_ROOT}/tests/k1/test_kernel_abi_allocation.c" \
+  "${K1_TMP}/sanitized/libeshkol_transformer_k1.a" \
+  -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
+  -o "${K1_TMP}/test-kernel-abi-allocation-sanitized"
+ASAN_OPTIONS=detect_leaks="${K1_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 60s \
+  "${K1_TMP}/test-kernel-abi-allocation-sanitized" >/dev/null
+
+printf 'K1 PASS: C/C++ ABI, allocation cleanup, compatible-minor discovery, canonical reports, negatives, sanitizers, and Eshkol AOT link\n'
