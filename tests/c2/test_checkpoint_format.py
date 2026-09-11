@@ -408,9 +408,29 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("driver", nargs="?", type=Path)
     parser.add_argument("--emit", type=Path)
+    parser.add_argument("--variant", choices=("base", "counter", "c1-header",
+                                                "profile-exact", "profile-one",
+                                                "profile-corrupt"),
+                        default="base")
     args = parser.parse_args()
     if args.emit:
-        args.emit.write_bytes(make_fixture()[0])
+        if args.variant == "profile-exact":
+            data, offsets = make_fixture(8 * 1024 * 1024)
+        elif args.variant in ("profile-one", "profile-corrupt"):
+            data, offsets = make_fixture(8 * 1024 * 1024 + 1)
+        else:
+            data, offsets = make_fixture()
+        if args.variant == "counter":
+            p64(data, 224, 1)
+            resign_outer(data)
+        elif args.variant == "c1-header":
+            data[offsets["model"] + 100] = 1
+            resign_c1(data, offsets["model"])
+            resign_outer(data)
+        elif args.variant == "profile-corrupt":
+            p32(data, offsets["o2_group"] + 40, 1)
+            resign_outer(data)
+        args.emit.write_bytes(data)
         return 0
     if args.driver is None:
         parser.error("driver is required unless --emit is used")
