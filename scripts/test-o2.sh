@@ -70,6 +70,35 @@ grep -Fx 'O2 native optimizer PASS' \
   "${temporary_dir}/test_native_optimizer-1.stdout" >/dev/null
 grep -Fx 'O2 native adversarial PASS: 6201 checks' \
   "${temporary_dir}/test_optimizer_native-1.stdout" >/dev/null
+
+"${cc}" "${cflags[@]}" -O2 -DET_O2_NATIVE_HELPERS_ONLY \
+  -DET_C2_O2_RECONSTRUCT_BRIDGE \
+  "${PROJECT_ROOT}/tests/o2/test_c2_reconstruct_bridge.c" \
+  "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c" \
+  "${PROJECT_ROOT}/native/f32_tensor.c" \
+  "${PROJECT_ROOT}/native/o2_optimizer.c" \
+  "${PROJECT_ROOT}/native/kernel_abi.c" -lm \
+  -o "${temporary_dir}/test-c2-reconstruct-bridge"
+timeout --foreground --signal=TERM --kill-after=5s 300s \
+  "${temporary_dir}/test-c2-reconstruct-bridge" \
+  >"${temporary_dir}/test-c2-reconstruct-bridge.stdout"
+grep -E '^C2 O2 reconstruction bridge PASS: [0-9]+ checks$' \
+  "${temporary_dir}/test-c2-reconstruct-bridge.stdout" >/dev/null
+
+"${cc}" "${cflags[@]}" -O1 -DET_O2_NATIVE_HELPERS_ONLY \
+  -DET_C2_O2_RECONSTRUCT_BRIDGE \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  "${PROJECT_ROOT}/tests/o2/test_c2_reconstruct_bridge.c" \
+  "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c" \
+  "${PROJECT_ROOT}/native/f32_tensor.c" \
+  "${PROJECT_ROOT}/native/o2_optimizer.c" \
+  "${PROJECT_ROOT}/native/kernel_abi.c" -lm \
+  -o "${temporary_dir}/test-c2-reconstruct-bridge-sanitized"
+ASAN_OPTIONS=detect_leaks="${O2_ASAN_DETECT_LEAKS:-1}":halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 300s \
+    "${temporary_dir}/test-c2-reconstruct-bridge-sanitized" \
+    >"${temporary_dir}/test-c2-reconstruct-bridge-sanitized.stdout"
 [[ "$(ar t "${library}")" == "o2_wave2.o" ]] || \
   die "canonical O2 aggregate must contain exactly o2_wave2.o"
 
@@ -183,6 +212,7 @@ runtime_cflags=(
   -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
 )
 "${cc}" "${runtime_cflags[@]}" -DET_O2_NATIVE_HELPERS_ONLY \
+  -DET_C2_O2_RECONSTRUCT_BRIDGE \
   -c "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c" \
   -o "${runtime_dir}/o2_bridge.o"
 "${cc}" "${runtime_cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
@@ -224,6 +254,39 @@ timeout --foreground --signal=TERM --kill-after=5s 900s \
   >"${temporary_dir}/config-negatives.stdout"
 grep -Fx 'O2 config/state adversarial PASS: 57 checks' \
   "${temporary_dir}/config-negatives.stdout" >/dev/null
+
+mkdir -p "${temporary_dir}/composition-cache"
+env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+  ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${temporary_dir}/composition-cache" \
+  ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${cxx}" \
+  timeout --foreground --signal=TERM --kill-after=5s \
+    "${compiler_timeout}s" "${runner}" --strict-types --optimize 0 --no-stdlib \
+    -I "${PROJECT_ROOT}/internal/p1/lib" \
+    -I "${PROJECT_ROOT}/internal/c1/lib" \
+    -I "${PROJECT_ROOT}/internal/t1/lib" \
+    -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
+    -I "${PROJECT_ROOT}/native" -L "${runtime_dir}" \
+    --lib eshkol_transformer_o2_runtime \
+    "${PROJECT_ROOT}/tests/o2/c2_o2_composition_runtime.esk" \
+    -o "${temporary_dir}/c2-o2-composition" \
+    >"${temporary_dir}/composition-compile.log" 2>&1
+timeout --foreground --signal=TERM --kill-after=5s 900s \
+  "${temporary_dir}/c2-o2-composition" \
+  >"${temporary_dir}/c2-o2-composition.stdout"
+grep -Fx 'C2 O2 composition PASS: 10 checks' \
+  "${temporary_dir}/c2-o2-composition.stdout" >/dev/null
+
+run_compiler c2-d2-composition --strict-types --optimize 0 --no-stdlib \
+  -I "${PROJECT_ROOT}/internal/p1/lib" \
+  -I "${PROJECT_ROOT}/internal/c1/lib" \
+  -I "${PROJECT_ROOT}/internal/t2/lib" \
+  -I "${PROJECT_ROOT}/internal/t1/lib" \
+  -I "${PROJECT_ROOT}/internal/d2/lib" \
+  -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
+  -I "${PROJECT_ROOT}/native" --compile-only \
+  "${PROJECT_ROOT}/tests/o2/c2_o2_d2_composition_compile.esk" \
+  -o "${temporary_dir}/c2-o2-d2-composition.o" \
+  >"${temporary_dir}/c2-o2-d2-composition.log" 2>&1
 
 for private_binding in o2-provider-name o2-native-builder-create \
     o2-native-optimizer-step o2-optimizer-tag o2-state-tag \
@@ -341,7 +404,10 @@ done
 
 if grep -Ein 'python|pytorch|torch' \
     "${PROJECT_ROOT}/native/o2_wave2_root.esk" \
+    "${PROJECT_ROOT}/native/o2_wave2_extension.esk" \
+    "${PROJECT_ROOT}/native/c2_o2_reconstruct_extension.esk" \
     "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c" \
+    "${PROJECT_ROOT}/native/o2_wave2_public_bridge_extension.c" \
     "${PROJECT_ROOT}/native/o2_optimizer.c" \
     "${PROJECT_ROOT}/native/o2_optimizer_internal.h" \
     "${PROJECT_ROOT}/lib/transformer/optim.esk"; then
