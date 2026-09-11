@@ -124,6 +124,48 @@ cmp "${temporary_dir}/test-wave2-bridge-1.stdout" \
 grep -Fx 'I2 Wave2 bridge PASS: 435 checks' \
   "${temporary_dir}/test-wave2-bridge-1.stdout" >/dev/null
 
+# Exercise the noninstallable C2 model-copy seam without changing the
+# standalone I2 helper object or archive.
+c2_copy_object="${i2_runtime_dir}/c2_i2_model_copy_bridge.o"
+"${cc}" "${runtime_cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+  -DET_C2_I2_MODEL_COPY -DET_F32_TENSOR_TESTING \
+  -MMD -MF "${c2_copy_object}.d" \
+  -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  -o "${c2_copy_object}"
+"${cc}" "${runtime_cflags[@]}" -DET_F32_TENSOR_TESTING \
+  -c "${PROJECT_ROOT}/native/f32_tensor.c" \
+  -o "${i2_runtime_dir}/c2_i2_model_copy_f32.o"
+nm -g --defined-only --format=posix "${c2_copy_object}" | \
+  awk '$1 ~ /^et_c2_/ { print $1 }' | LC_ALL=C sort \
+  >"${temporary_dir}/c2-i2-model-copy-defined.txt"
+cmp "${PROJECT_ROOT}/native/c2_i2_model_copy_defined_symbols.txt" \
+  "${temporary_dir}/c2-i2-model-copy-defined.txt"
+if nm -g --defined-only --format=posix \
+    "${i2_runtime_dir}/i2_wave2_native_bridge.o" | \
+    grep -E '^et_c2_[^[:space:]]+[[:space:]]'; then
+  die "standalone I2 helper object exposes the C2-only copy seam"
+fi
+sed -e 's/^[^:]*://' -e 's/\\//g' "${c2_copy_object}.d" | \
+  tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+  sed "s#^${PROJECT_ROOT}/##" \
+  >"${temporary_dir}/c2-i2-model-copy-source-closure.txt"
+cmp "${PROJECT_ROOT}/native/c2_i2_model_copy_source_closure.txt" \
+  "${temporary_dir}/c2-i2-model-copy-source-closure.txt"
+"${cc}" "${cflags[@]}" -DET_F32_TENSOR_TESTING \
+  "${PROJECT_ROOT}/tests/i2/test_c2_model_copy.c" \
+  "${c2_copy_object}" "${i2_runtime_dir}/c2_i2_model_copy_f32.o" \
+  "${i2_runtime_dir}/kernel_abi.o" \
+  -o "${temporary_dir}/test-c2-i2-model-copy"
+for run in 1 2; do
+  timeout --foreground --signal=TERM --kill-after=5s 90s \
+    "${temporary_dir}/test-c2-i2-model-copy" \
+    >"${temporary_dir}/test-c2-i2-model-copy-${run}.stdout"
+done
+cmp "${temporary_dir}/test-c2-i2-model-copy-1.stdout" \
+  "${temporary_dir}/test-c2-i2-model-copy-2.stdout"
+grep -Fx 'C2 I2 model copy PASS: 225 checks' \
+  "${temporary_dir}/test-c2-i2-model-copy-1.stdout" >/dev/null
+
 compile_i2_integration() {
   local cache=$1 output=$2 log=$3
   mkdir -p "${cache}"
@@ -333,7 +375,19 @@ done
 ASAN_OPTIONS=detect_leaks="${I2_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 90s \
-  "${temporary_dir}/test-wave2-bridge-sanitized" >/dev/null
+    "${temporary_dir}/test-wave2-bridge-sanitized" >/dev/null
+"${cc}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+  -DET_C2_I2_MODEL_COPY -DET_F32_TENSOR_TESTING \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  "${PROJECT_ROOT}/tests/i2/test_c2_model_copy.c" \
+  "${temporary_dir}/sanitized-i2/libeshkol_transformer_f32.a" \
+  "${temporary_dir}/sanitized-k1/libeshkol_transformer_k1.a" \
+  -o "${temporary_dir}/test-c2-i2-model-copy-sanitized"
+ASAN_OPTIONS=detect_leaks="${I2_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 90s \
+    "${temporary_dir}/test-c2-i2-model-copy-sanitized" >/dev/null
 
 if grep -Ein 'python|pytorch|torch' \
     "${PROJECT_ROOT}/native/f32_tensor.c" \

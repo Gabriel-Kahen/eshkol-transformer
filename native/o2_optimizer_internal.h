@@ -194,6 +194,8 @@ int32_t et_o2_optimizer_state_lifecycle_v1(const et_o2_optimizer_state *state,
 int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *state,
                                          et_o2_error_v1 *error);
 
+/* Localized same-artifact C2 reconstruction boundary. These declarations are
+ * not public O2 ABI and must never enter package exports or K1 discovery. */
 int32_t et_o2_optimizer_state_reconstruct_create_v1(
     const et_o2_state_reconstruct_config_v1 *config,
     et_o2_state_reconstruct_builder **builder, et_o2_error_v1 *error);

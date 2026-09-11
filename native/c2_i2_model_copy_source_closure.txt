@@ -1,0 +1,4 @@
+native/i2_wave2_package_bridge.c
+native/f32_parameter_internal.h
+include/eshkol_transformer/f32_tensor.h
+include/eshkol_transformer/kernel_abi.h

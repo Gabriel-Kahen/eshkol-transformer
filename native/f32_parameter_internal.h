@@ -117,6 +117,24 @@ typedef struct et_f32_test_live_counts_v1 {
   size_t owned_clones;
 } et_f32_test_live_counts_v1;
 
+typedef struct et_f32_test_retired_counts_v1 {
+  size_t struct_size;
+  size_t tensors;
+  size_t parameters;
+  size_t borrows;
+  size_t copy_plans;
+  size_t gradient_plans;
+  size_t reset_plans;
+  size_t retained_control_bytes;
+} et_f32_test_retired_counts_v1;
+
+typedef struct et_f32_test_borrow_event_counts_v1 {
+  size_t struct_size;
+  size_t begin_calls;
+  size_t view_calls;
+  size_t end_calls;
+} et_f32_test_borrow_event_counts_v1;
+
 void et_f32_parameter_test_set_metadata_v1(et_f32_parameter *parameter,
                                            uint32_t state,
                                            uint64_t contribution_count,
@@ -124,6 +142,10 @@ void et_f32_parameter_test_set_metadata_v1(et_f32_parameter *parameter,
 void et_f32_parameter_test_set_gradient_bits_v1(
     et_f32_parameter *parameter, const uint32_t *bits, size_t count);
 void et_f32_test_live_counts_snapshot_v1(et_f32_test_live_counts_v1 *counts);
+void et_f32_test_retired_counts_snapshot_v1(
+    et_f32_test_retired_counts_v1 *counts);
+void et_f32_test_borrow_event_counts_snapshot_v1(
+    et_f32_test_borrow_event_counts_v1 *counts);
 #endif
 
 #ifdef __cplusplus

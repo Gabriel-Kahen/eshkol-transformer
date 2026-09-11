@@ -114,6 +114,9 @@ _Static_assert(FLT_EVAL_METHOD == 0,
 #ifdef ET_F32_TENSOR_TESTING
 static size_t allocation_limit = SIZE_MAX;
 static size_t successful_allocations;
+static size_t borrow_begin_calls;
+static size_t borrow_view_calls;
+static size_t borrow_end_calls;
 
 void et_f32_tensor_test_fail_alloc_after_v1(size_t allowed) {
   allocation_limit = allowed;
@@ -2230,12 +2233,70 @@ void et_f32_test_live_counts_snapshot_v1(et_f32_test_live_counts_v1 *counts) {
   *counts = snapshot;
 }
 
+void et_f32_test_retired_counts_snapshot_v1(
+    et_f32_test_retired_counts_v1 *counts) {
+  et_f32_test_retired_counts_v1 snapshot = {
+      .struct_size = sizeof(snapshot),
+  };
+  if (counts == NULL || counts->struct_size != sizeof(*counts)) {
+    return;
+  }
+  for (const et_f32_tensor *item = retired_tensors; item != NULL;
+       item = item->registry_next) {
+    snapshot.tensors++;
+    snapshot.retained_control_bytes += sizeof(*item);
+  }
+  for (const et_f32_parameter *item = retired_parameters; item != NULL;
+       item = item->registry_next) {
+    snapshot.parameters++;
+    snapshot.retained_control_bytes += sizeof(*item);
+  }
+  for (const et_f32_tensor_borrow *item = retired_borrows; item != NULL;
+       item = item->registry_next) {
+    snapshot.borrows++;
+    snapshot.retained_control_bytes += sizeof(*item);
+  }
+  for (const et_f32_tensor_copy_plan *item = retired_copy_plans; item != NULL;
+       item = item->registry_next) {
+    snapshot.copy_plans++;
+    snapshot.retained_control_bytes += sizeof(*item);
+  }
+  for (const et_f32_gradient_plan *item = retired_gradient_plans;
+       item != NULL; item = item->registry_next) {
+    snapshot.gradient_plans++;
+    snapshot.retained_control_bytes += sizeof(*item);
+  }
+  for (const et_f32_gradient_reset_plan *item = retired_reset_plans;
+       item != NULL; item = item->registry_next) {
+    snapshot.reset_plans++;
+    snapshot.retained_control_bytes += sizeof(*item);
+  }
+  *counts = snapshot;
+}
+
+void et_f32_test_borrow_event_counts_snapshot_v1(
+    et_f32_test_borrow_event_counts_v1 *counts) {
+  et_f32_test_borrow_event_counts_v1 snapshot = {
+      .struct_size = sizeof(snapshot),
+      .begin_calls = borrow_begin_calls,
+      .view_calls = borrow_view_calls,
+      .end_calls = borrow_end_calls,
+  };
+  if (counts == NULL || counts->struct_size != sizeof(*counts)) {
+    return;
+  }
+  *counts = snapshot;
+}
+
 #endif
 
 int32_t et_f32_tensor_borrow_begin_v1(et_f32_tensor *tensor,
                                       et_f32_tensor_borrow **output,
                                       et_f32_tensor_error *error) {
   et_f32_tensor_borrow *borrow;
+#ifdef ET_F32_TENSOR_TESTING
+  borrow_begin_calls++;
+#endif
   int32_t result = preflight_output(
       output, output == NULL ? 0u : sizeof(*output), error,
       "f32-tensor-borrow-begin");
@@ -2295,6 +2356,9 @@ int32_t et_f32_tensor_borrow_begin_v1(et_f32_tensor *tensor,
 int32_t et_f32_tensor_borrow_view_v1(
     const et_f32_tensor_borrow *candidate,
     const et_kernel_tensor_view_v1 **view, et_f32_tensor_error *error) {
+#ifdef ET_F32_TENSOR_TESTING
+  borrow_view_calls++;
+#endif
   int32_t result = preflight_output(
       (void *)view, view == NULL ? 0u : sizeof(*view), error,
       "f32-tensor-borrow-view");
@@ -2325,6 +2389,9 @@ int32_t et_f32_tensor_borrow_view_v1(
 int32_t et_f32_tensor_borrow_end_v1(et_f32_tensor_borrow **slot,
                                     et_f32_tensor_error *error) {
   et_f32_tensor_borrow *borrow;
+#ifdef ET_F32_TENSOR_TESTING
+  borrow_end_calls++;
+#endif
   int32_t result = preflight_output(
       slot, slot == NULL ? 0u : sizeof(*slot), error,
       "f32-tensor-borrow-end");
