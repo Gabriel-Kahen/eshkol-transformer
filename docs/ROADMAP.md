@@ -43,7 +43,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | review |
 | L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | review |
 | O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; sanitizers, isolation, full gates, independent review, and supported CI | review |
-| C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted 1.0 schema/bytes; strict same-fd parser, model/O2 exact-bit codecs, deep-owner lifecycle, deterministic component continuation, flat retired controls, operational-limit evidence, exact K2-composed manifests, independent review, and supported CI | active |
+| C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted 1.0 schema/bytes; strict same-fd parser, private deterministic byte assembly, model/O2 exact-bit codecs, deep-owner lifecycle, deterministic component continuation, flat retired controls, operational-limit evidence, exact K2-composed manifests, independent review, and supported CI | active |
 
 ## Wave 3 — first complete language model
 
