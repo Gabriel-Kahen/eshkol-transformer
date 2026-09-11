@@ -76,6 +76,40 @@ typedef struct et_o2_optimizer et_o2_optimizer;
 typedef struct et_o2_optimizer_state et_o2_optimizer_state;
 typedef struct et_o2_optimizer_state_handle et_o2_optimizer_state_handle;
 typedef struct et_o2_optimizer_state_borrow et_o2_optimizer_state_borrow;
+typedef struct et_o2_state_reconstruct_builder
+    et_o2_state_reconstruct_builder;
+
+typedef struct et_o2_state_reconstruct_config_v1 {
+  size_t struct_size;
+  uint32_t clip_kind;
+  uint32_t clip_max_bits;
+  uint32_t schedule_kind;
+  uint32_t minimum_ratio_bits;
+  uint64_t warmup_updates;
+  uint64_t total_updates;
+  uint64_t completed_updates;
+  size_t parameter_count;
+} et_o2_state_reconstruct_config_v1;
+
+typedef struct et_o2_state_reconstruct_entry_v1 {
+  size_t struct_size;
+  size_t rank;
+  const uint64_t *shape;
+  const uint32_t *exp_avg_bits;
+  const uint32_t *exp_avg_sq_bits;
+  size_t element_count;
+  uint32_t learning_rate_bits;
+  uint32_t beta1_bits;
+  uint32_t beta2_bits;
+  uint32_t epsilon_bits;
+  uint32_t weight_decay_bits;
+  uint32_t reserved;
+} et_o2_state_reconstruct_entry_v1;
+
+#define ET_O2_STATE_RECONSTRUCT_CONFIG_V1_0_SIZE                            \
+  ((size_t)sizeof(et_o2_state_reconstruct_config_v1))
+#define ET_O2_STATE_RECONSTRUCT_ENTRY_V1_0_SIZE                             \
+  ((size_t)sizeof(et_o2_state_reconstruct_entry_v1))
 
 typedef struct et_o2_optimizer_error {
   uint32_t category;
@@ -160,6 +194,23 @@ int32_t et_o2_optimizer_state_lifecycle_v1(const et_o2_optimizer_state *state,
 int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *state,
                                          et_o2_error_v1 *error);
 
+int32_t et_o2_optimizer_state_reconstruct_create_v1(
+    const et_o2_state_reconstruct_config_v1 *config,
+    et_o2_state_reconstruct_builder **builder, et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_reconstruct_set_v1(
+    et_o2_state_reconstruct_builder *builder, size_t index,
+    const et_o2_state_reconstruct_entry_v1 *entry, et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_reconstruct_prepare_v1(
+    et_o2_state_reconstruct_builder *builder, et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_reconstruct_commit_v1(
+    et_o2_state_reconstruct_builder **builder, et_o2_optimizer_state **state,
+    et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_reconstruct_abort_v1(
+    et_o2_state_reconstruct_builder **builder, et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_copy_moment_bits_v1(
+    const et_o2_optimizer_state *state, size_t index, uint32_t moment_kind,
+    uint32_t *destination, size_t element_count, et_o2_error_v1 *error);
+
 #ifdef ET_O2_TESTING
 typedef struct et_o2_test_live_counts_v1 {
   size_t struct_size;
@@ -171,11 +222,13 @@ typedef struct et_o2_test_live_counts_v1 {
   size_t dead_state_handles;
   size_t state_borrows;
   size_t owned_state_clones;
+  size_t reconstruct_builders;
 } et_o2_test_live_counts_v1;
 
 void et_o2_test_fail_alloc_after_v1(size_t successful_allocations);
 void et_o2_test_fail_release_after_v1(size_t successful_releases);
 void et_o2_test_reset_failpoints_v1(void);
+void et_o2_test_fail_reconstruct_commit_v1(int enabled);
 void et_o2_test_live_counts_snapshot_v1(et_o2_test_live_counts_v1 *counts);
 int32_t
 et_o2_test_optimizer_set_completed_updates_v1(et_o2_optimizer *optimizer,
