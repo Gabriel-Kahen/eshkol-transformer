@@ -118,8 +118,8 @@ typedef struct et_c2_checkpoint_format_error_v1 {
   ((size_t)sizeof(et_c2_checkpoint_format_error_v1))
 
 /*
- * Validate one already-retained immutable byte image.  The function allocates,
- * frees, calls back, decodes, reconstructs, or performs filesystem I/O.
+ * Validate one already-retained immutable byte image.  The function does not
+ * allocate, free, call back, decode, reconstruct, or perform filesystem I/O.
  * Success covers the outer digest and identities, canonical X1 projection and
  * fingerprint, both D2 cursor checksums/continuation invariants, the complete
  * embedded C1 table/digests/alias topology, and O2 groups/records/moments.
