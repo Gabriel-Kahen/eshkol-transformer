@@ -1,0 +1,344 @@
+;;; Private C2 O2 wire-staging adapter. Never install independently. The
+;;; trusted source composition must load o2_wave2_root.esk and
+;;; c2_o2_reconstruct_extension.esk first.
+;;;
+;;; Request: [exact-live-O2-state, exact-live-P1-state, operation, #f-output].
+;;; Success writes [O2-metadata, moment-payload] to the output slot. Every
+;;; 32-byte moment-digest slot in metadata is intentionally zero: the private
+;;; et_c2_checkpoint_encode_v1 outer codec ignores and recomputes those slots.
+;;; Staging is not publishable before that codec and the complete C2 parser.
+
+(extern i64 c2-o2-native-state-preflight ptr i64 i64
+        :real et_c2_private_o2_state_preflight_transfer_v1)
+(extern i64 c2-o2-native-state-require-shape ptr i64 i64 ptr
+        :real et_c2_private_o2_state_require_shape_v1)
+
+(define c2-o2-wire-header-bytes 128)
+(define c2-o2-wire-config-prefix-bytes 64)
+(define c2-o2-wire-group-prefix-bytes 40)
+(define c2-o2-wire-record-prefix-bytes 120)
+(define c2-o2-wire-provider-bytes (string->utf8 "i2-dense-cpu-f32-v1"))
+(define c2-o2-wire-max-file-bytes 1099511627776)
+(define c2-o2-wire-max-metadata-bytes 268435456)
+(define c2-o2-wire-max-tensor-bytes 274877906944)
+(define c2-o2-wire-max-model-entries 4096)
+(define c2-o2-wire-max-total-tensors 6826)
+
+(define (c2-o2-wire-fail category operation message)
+  (let ((unreachable (o2-fail category operation message))) unreachable))
+
+(define (c2-o2-wire-secondary-alias? path aliases)
+  (let groups ((remaining aliases))
+    (cond
+      ((null? remaining) #f)
+      ((o2-path-member? path (cdr (car remaining))) #t)
+      (else (groups (cdr remaining))))))
+
+(define (c2-o2-wire-u32-index operation path descriptors)
+  (let loop ((remaining descriptors) (ordinal 0))
+    (cond
+      ((null? remaining)
+       (c2-o2-wire-fail 'shape-mismatch operation
+                        "optimizer group path is absent from P1 topology"))
+      ((equal? path (vector-ref (car remaining) 1)) ordinal)
+      (else (loop (cdr remaining) (+ ordinal 1))))))
+
+(define (c2-o2-wire-shape operation shape)
+  (let ((rank (c1-list-length-bounded shape 65)))
+    (if (not rank)
+        (c2-o2-wire-fail 'shape-mismatch operation
+                         "P1 parameter rank exceeds 64"))
+    (let ((elements (c1-shape-product shape operation))
+          (shape-bytes (make-bytevector (* rank 8) 0)))
+      (if (or (> elements (quotient o2-i64-max 4))
+              (> (* elements 4) c2-o2-wire-max-tensor-bytes))
+          (c2-o2-wire-fail 'invalid-state operation
+                           "O2 moment exceeds the C2 wire tensor limit"))
+      (let emit ((remaining shape) (offset 0))
+        (if (null? remaining)
+            (vector rank elements shape-bytes)
+            (begin
+              (c1-write-u64! shape-bytes offset (car remaining))
+              (emit (cdr remaining) (+ offset 8))))))))
+
+(define (c2-o2-wire-p1-descriptors operation p1 aliases o2-paths)
+  (let* ((entries (state-dict-entries-internal p1))
+         (entry-count
+           (c1-list-length-bounded
+             entries (+ c2-o2-wire-max-model-entries 1))))
+    (if (or (not entry-count) (= entry-count 0)
+            (> entry-count c2-o2-wire-max-model-entries))
+        (c2-o2-wire-fail 'shape-mismatch operation
+                         "P1 entry count is outside the C2 wire limit"))
+    (if (not (equal? aliases (state-dict-alias-groups p1)))
+        (c2-o2-wire-fail 'shape-mismatch operation
+                         "O2 and P1 alias topology differs"))
+    (let loop ((remaining entries) (model-index 0) (previous #f)
+               (descriptors '()) (paths '()))
+      (if (null? remaining)
+          (let ((ordered (o2-reverse descriptors))
+                (canonical (o2-reverse paths)))
+            (if (or (null? ordered) (not (equal? canonical o2-paths)))
+                (c2-o2-wire-fail 'shape-mismatch operation
+                                 "O2 and P1 canonical parameter paths differ"))
+            (vector ordered entry-count))
+          (let* ((entry (car remaining))
+                 (path (state-entry-path-internal entry))
+                 (kind (state-entry-kind-internal entry))
+                 (shape (state-entry-shape-internal entry)))
+            (if (or (not (c1-valid-path? path))
+                    (and previous (not (c1-path<? previous path))))
+                (c2-o2-wire-fail 'shape-mismatch operation
+                                 "P1 entries are not in canonical path order"))
+            (if (and (eq? kind 'parameter)
+                     (not (c2-o2-wire-secondary-alias? path aliases)))
+                (begin
+                  (if (or (not (eq? (state-entry-dtype-internal entry) 'f32))
+                          (not (eq? (state-entry-device-internal entry) 'cpu))
+                          (not (eq? (state-entry-layout-internal entry)
+                                    'dense-row-major-contiguous)))
+                      (c2-o2-wire-fail 'shape-mismatch operation
+                                       "P1 optimizer parameter metadata differs"))
+                  (let* ((shape-info (c2-o2-wire-shape operation shape))
+                         (path-info (c1-encode-path path))
+                         (path-bytes (vector-ref path-info 0))
+                         (rank (vector-ref shape-info 0))
+                         (record-bytes
+                           (+ c2-o2-wire-record-prefix-bytes (* rank 8)
+                              (bytevector-length path-bytes))))
+                    (loop
+                      (cdr remaining) (+ model-index 1) path
+                      (cons (vector model-index path shape rank
+                                    (vector-ref shape-info 1) path-bytes
+                                    record-bytes (vector-ref shape-info 2))
+                            descriptors)
+                      (cons path paths))))
+                (loop (cdr remaining) (+ model-index 1) path
+                      descriptors paths)))))))
+
+(define (c2-o2-wire-group-record operation group descriptors)
+  (let* ((paths (vector-ref group 0))
+         (count (c1-list-length-bounded paths (+ o2-max-parameters 1)))
+         (record (make-bytevector
+                   (+ c2-o2-wire-group-prefix-bytes (* count 4)) 0)))
+    (c1-write-u64! record 0 (bytevector-length record))
+    (c1-write-u32! record 8 count)
+    (c1-write-u32! record 16 (vector-ref group 1))
+    (c1-write-u32! record 20 (vector-ref group 2))
+    (c1-write-u32! record 24 (vector-ref group 3))
+    (c1-write-u32! record 28 (vector-ref group 4))
+    (c1-write-u32! record 32 (vector-ref group 5))
+    (let emit ((remaining paths) (offset c2-o2-wire-group-prefix-bytes))
+      (if (null? remaining)
+          record
+          (begin
+            (c1-write-u32!
+              record offset
+              (c2-o2-wire-u32-index operation (car remaining) descriptors))
+            (emit (cdr remaining) (+ offset 4)))))))
+
+(define (c2-o2-wire-groups operation parsed descriptors)
+  (let loop ((remaining (vector-ref parsed 3)) (records '()) (members 0))
+    (if (null? remaining)
+        (let ((bytes (c1-concat (o2-reverse records))))
+          (if (not (= members
+                      (c1-list-length-bounded
+                        descriptors (+ o2-max-parameters 1))))
+              (c2-o2-wire-fail 'shape-mismatch operation
+                               "optimizer groups do not exactly cover P1"))
+          bytes)
+        (let* ((group (car remaining))
+               (count (c1-list-length-bounded
+                        (vector-ref group 0) (+ o2-max-parameters 1))))
+          (loop (cdr remaining)
+                (cons (c2-o2-wire-group-record
+                        operation group descriptors)
+                      records)
+                (+ members count))))))
+
+(define (c2-o2-wire-config parsed group-bytes count)
+  (let* ((clip (vector-ref parsed 1))
+         (schedule (vector-ref parsed 2))
+         (groups (vector-ref parsed 3))
+         (group-count
+           (c1-list-length-bounded groups (+ o2-max-groups 1)))
+         (config
+           (make-bytevector
+             (+ c2-o2-wire-config-prefix-bytes
+                (bytevector-length group-bytes)) 0)))
+    (c1-write-u32! config 0 c2-o2-wire-config-prefix-bytes)
+    (c1-write-u32! config 4 (vector-ref clip 0))
+    (c1-write-u32! config 8 (vector-ref clip 1))
+    (c1-write-u32! config 12 (vector-ref schedule 0))
+    (c1-write-u32! config 16 (vector-ref schedule 3))
+    (c1-write-u64! config 24 (vector-ref schedule 1))
+    (c1-write-u64! config 32 (vector-ref schedule 2))
+    (c1-write-u32! config 40 group-count)
+    (c1-write-u32! config 44 count)
+    (c1-write-u64! config 48 (bytevector-length group-bytes))
+    (c1-copy-into! config c2-o2-wire-config-prefix-bytes group-bytes)
+    (vector config group-count)))
+
+(define (c2-o2-wire-record descriptor avg-offset sq-offset)
+  (let* ((record (make-bytevector (vector-ref descriptor 6) 0))
+         (path (vector-ref descriptor 1))
+         (shape (vector-ref descriptor 2))
+         (rank (vector-ref descriptor 3))
+         (elements (vector-ref descriptor 4))
+         (path-bytes (vector-ref descriptor 5)))
+    (c1-write-u64! record 0 (bytevector-length record))
+    (c1-write-u32! record 8 (vector-ref descriptor 0))
+    (c1-write-u32! record 12 (bytevector-length path-bytes))
+    (c1-write-u16! record 16
+                   (c1-list-length-bounded path (+ c1-max-path-segments 1)))
+    (c1-write-u16! record 18 rank)
+    (c1-write-u64! record 24 elements)
+    (c1-write-u64! record 32 (* elements 4))
+    (c1-write-u64! record 40 avg-offset)
+    (c1-write-u64! record 48 sq-offset)
+    ;; Bytes 56..119 stay zero. They are digest placeholders for the outer
+    ;; codec, not valid moment digests and not an independently parseable O2.
+    (let dims ((remaining shape) (offset c2-o2-wire-record-prefix-bytes))
+      (if (not (null? remaining))
+          (begin
+            (c1-write-u64! record offset (car remaining))
+            (dims (cdr remaining) (+ offset 8)))))
+    (c1-copy-into!
+      record (+ c2-o2-wire-record-prefix-bytes (* rank 8)) path-bytes)
+    record))
+
+(define (c2-o2-wire-records-and-payload
+          operation state-shell descriptors payload-bytes)
+  (let ((payload (make-bytevector payload-bytes 0)))
+    (let loop ((remaining descriptors) (index 0) (offset 0) (records '()))
+      (if (null? remaining)
+          (vector (c1-concat (o2-reverse records)) payload)
+          (let* ((descriptor (car remaining))
+                 (elements (vector-ref descriptor 4))
+                 (moment-bytes (* elements 4))
+                 (avg (make-bytevector moment-bytes 0))
+                 (sq (make-bytevector moment-bytes 0)))
+            (o2-state-copy-moment-bits-internal
+              (vector state-shell index 0 avg elements operation))
+            (o2-state-copy-moment-bits-internal
+              (vector state-shell index 1 sq elements operation))
+            (c1-copy-into! payload offset avg)
+            (c1-copy-into! payload (+ offset moment-bytes) sq)
+            (loop
+              (cdr remaining) (+ index 1) (+ offset (* moment-bytes 2))
+              (cons (c2-o2-wire-record
+                      descriptor offset (+ offset moment-bytes))
+                    records)))))))
+
+(define (c2-o2-encode-staging-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 4))
+          (not (symbol? (vector-ref request 2)))
+          (not (eq? (vector-ref request 3) #f)))
+      (c2-o2-wire-fail
+        'invalid-argument 'c2-o2-encode-staging-internal
+        "C2 O2 staging request must be [O2-state,P1-state,operation,#f]"))
+  (let* ((operation (vector-ref request 2))
+         (state-shell (vector-ref request 0))
+         (state (o2-require-live-state operation state-shell))
+         ;; These four immutable/deep-owned lexical fields were validated when
+         ;; the exact O2 state was created. Parsing config again protects the
+         ;; private source-composed boundary from malformed local composition.
+         (config (vector-ref state 2))
+         (paths (vector-ref state 3))
+         (aliases (vector-ref state 4))
+         (completed (vector-ref state 5))
+         (parsed (o2-parse-config operation config))
+         (p1-info
+           (c2-o2-wire-p1-descriptors
+             operation (vector-ref request 1) aliases paths))
+         (descriptors (vector-ref p1-info 0))
+         (model-count (vector-ref p1-info 1))
+         (count
+           (c1-list-length-bounded descriptors (+ o2-max-parameters 1))))
+    (if (or (not count) (= count 0) (> count o2-max-parameters)
+            (not (o2-exact-nonnegative-i64? completed))
+            (not (= count (vector-ref parsed 4)))
+            (> (+ model-count (* 2 count))
+               c2-o2-wire-max-total-tensors))
+        (c2-o2-wire-fail 'shape-mismatch operation
+                         "O2/P1 counts are outside the C2 wire topology"))
+    (if (not (= (c2-o2-native-state-preflight
+                  (vector-ref state 1) count completed)
+                0))
+        (o2-native-fail operation))
+    (let validate-shapes ((remaining descriptors) (index 0))
+      (if (not (null? remaining))
+          (begin
+            (if (not (=
+                       (c2-o2-native-state-require-shape
+                         (vector-ref state 1) index
+                         (vector-ref (car remaining) 3)
+                         (vector-ref (car remaining) 7))
+                       0))
+                (o2-native-fail operation))
+            (validate-shapes (cdr remaining) (+ index 1)))))
+    (let payload-size ((remaining descriptors) (bytes 0))
+      (if (null? remaining)
+          (let* ((groups
+                   (c2-o2-wire-groups operation parsed descriptors))
+                 (config-info (c2-o2-wire-config parsed groups count))
+                 (config-bytes (vector-ref config-info 0))
+                 (group-count (vector-ref config-info 1))
+                 (record-payload
+                   (c2-o2-wire-records-and-payload
+                     operation state-shell descriptors bytes))
+                 (records (vector-ref record-payload 0))
+                 (payload (vector-ref record-payload 1))
+                 (metadata-bytes
+                   (+ c2-o2-wire-header-bytes
+                      (bytevector-length c2-o2-wire-provider-bytes)
+                      (bytevector-length config-bytes)
+                      (bytevector-length records))))
+            (if (or (> metadata-bytes c2-o2-wire-max-metadata-bytes)
+                    (> (+ metadata-bytes bytes) c2-o2-wire-max-file-bytes))
+                (c2-o2-wire-fail 'invalid-state operation
+                                 "O2 staging exceeds C2 wire limits"))
+            (let* ((metadata (make-bytevector metadata-bytes 0))
+                   (config-offset
+                     (+ c2-o2-wire-header-bytes
+                        (bytevector-length c2-o2-wire-provider-bytes)))
+                   (record-offset
+                     (+ config-offset (bytevector-length config-bytes))))
+              (c1-copy-into! metadata 0 (string->utf8 "ESHKOPT1"))
+              (c1-write-u16! metadata 8 1)
+              (c1-write-u16! metadata 10 0)
+              (c1-write-u32! metadata 12 c2-o2-wire-header-bytes)
+              (c1-write-u32! metadata 24 1)
+              (c1-write-u32! metadata 28 3)
+              (c1-write-u32! metadata 32 1)
+              (c1-write-u32! metadata 36 1)
+              (c1-write-u16! metadata 40 2)
+              (c1-write-u16! metadata 42 0)
+              (c1-write-u32!
+                metadata 44 (bytevector-length c2-o2-wire-provider-bytes))
+              (c1-write-u32! metadata 48 group-count)
+              (c1-write-u32! metadata 52 count)
+              (c1-write-u32! metadata 56 (* 2 count))
+              (c1-write-u64! metadata 64 completed)
+              (c1-write-u64! metadata 72 (bytevector-length config-bytes))
+              (c1-write-u64! metadata 80 (bytevector-length records))
+              (c1-write-u64! metadata 88 bytes)
+              (c1-write-u64! metadata 96 config-offset)
+              (c1-write-u64! metadata 104 record-offset)
+              (c1-write-u64! metadata 112 metadata-bytes)
+              (c1-copy-into!
+                metadata c2-o2-wire-header-bytes
+                c2-o2-wire-provider-bytes)
+              (c1-copy-into! metadata config-offset config-bytes)
+              (c1-copy-into! metadata record-offset records)
+              ;; Publication is the only mutation of caller-visible state and
+              ;; occurs after every validation, allocation, and moment copy.
+              (vector-set! request 3 (vector metadata payload))
+              request))
+          (let* ((descriptor (car remaining))
+                 (moment-bytes (* 4 (vector-ref descriptor 4)))
+                 (next (+ bytes (* 2 moment-bytes))))
+            (if (> next c2-o2-wire-max-file-bytes)
+                (c2-o2-wire-fail 'invalid-state operation
+                                 "O2 moment payload exceeds C2 wire limits"))
+            (payload-size (cdr remaining) next))))))
