@@ -1,0 +1,6 @@
+(require transformer.persistence_policy_internal)
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_inspect_extension.esk")
+
+(define (c2-checkpoint-inspect-compile-probe path policy)
+  (c2-checkpoint-inspect-internal path policy))
