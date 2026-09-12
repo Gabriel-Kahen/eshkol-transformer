@@ -496,6 +496,26 @@
         (o2-fail 'invalid-state operation "optimizer state is released"))
     state))
 
+;;; C2-private claimed-state admission. Ordinary O2 entry points continue to
+;;; use o2-require-live-state and therefore cannot consume transferred state.
+(define (o2-require-c2-owned-state operation value access-token)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (not state)
+        (o2-fail 'invalid-argument operation
+                 "expected an exact registered O2 optimizer state"))
+    (let ((owner-token (vector-ref state 6)))
+    (if (or (not access-token)
+            (not (vector? owner-token))
+            (not (= (vector-length owner-token) 3))
+            (not (eq? (vector-ref state 7) access-token))
+            (not (vector? (vector-ref owner-token 2)))
+            (not (= (vector-length (vector-ref owner-token 2)) 6))
+            (not (eq? (vector-ref (vector-ref owner-token 2) 4)
+                      access-token)))
+        (o2-fail 'invalid-state operation
+                 "C2 owner token is copied, stale, or belongs elsewhere"))
+    state)))
+
 ;;; Same-aggregate C2 ownership transfer. These lexical helpers are never
 ;;; wrapped or installed. The claim token itself is preallocated by C2, so the
 ;;; claim/rollback boundary is assignment-only and transactionally reversible.
@@ -504,7 +524,8 @@
     (if (or (not owner-token) (not state))
         (o2-fail 'invalid-argument 'o2-state-claim-c2-internal!
                  "expected an exact live O2 state and owner token"))
-    (if (not (eq? (vector-ref state 6) 'live))
+    (if (or (not (eq? (vector-ref state 6) 'live))
+            (vector-ref state 7))
         (o2-fail 'invalid-state 'o2-state-claim-c2-internal!
                  "O2 state is not claimable at an update boundary"))
     (vector-set! state 6 owner-token)
@@ -515,7 +536,8 @@
     (if (not state)
         (o2-fail 'invalid-argument 'o2-state-claim-c2-rollback-internal!
                  "expected an exact claimed O2 state"))
-    (if (not (eq? (vector-ref state 6) owner-token))
+    (if (or (not (eq? (vector-ref state 6) owner-token))
+            (vector-ref state 7))
         (o2-fail 'invalid-state 'o2-state-claim-c2-rollback-internal!
                  "O2 state claim token differs"))
     (vector-set! state 6 'live)
@@ -529,7 +551,8 @@
     (if (eq? (vector-ref state 6) 'dead)
         #t
         (begin
-          (if (not (eq? (vector-ref state 6) owner-token))
+          (if (or (not (eq? (vector-ref state 6) owner-token))
+                  (vector-ref state 7))
               (o2-fail 'invalid-state 'o2-state-release-c2-owned-internal!
                        "O2 state claim token differs"))
           (let ((status
@@ -554,6 +577,40 @@
                (vector-set! state 6 'dead)
                (o2-fail 'internal 'o2-state-release-c2-owned-internal!
                         "optimizer state release lifecycle is indeterminate"))))))))
+
+(define (o2-state-c2-owned-borrow-activate-internal!
+          value owner-token access-token borrow operation)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (or (not (symbol? operation)) (not state)
+            (not (vector? owner-token))
+            (not (= (vector-length owner-token) 3))
+            (not access-token)
+            (not (vector? borrow)) (not (= (vector-length borrow) 6)))
+        (o2-fail 'invalid-argument operation
+                 "C2 owner token or borrow is malformed"))
+    (if (or (not (eq? (vector-ref state 6) owner-token))
+            (vector-ref state 7)
+            (not (eq? (vector-ref owner-token 2) borrow))
+            (not (eq? (vector-ref borrow 4) access-token)))
+        (o2-fail 'invalid-state operation
+                 "O2 C2 borrow activation differs or is busy"))
+    (vector-set! state 7 access-token)
+    #t))
+
+(define (o2-state-c2-owned-borrow-deactivate-internal!
+          value owner-token access-token borrow operation)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (or (not (symbol? operation)) (not state))
+        (o2-fail 'invalid-argument operation
+                 "expected an exact registered O2 optimizer state"))
+    (if (or (not (eq? (vector-ref state 6) owner-token))
+            (not (eq? (vector-ref state 7) access-token))
+            (not (eq? (vector-ref owner-token 2) borrow))
+            (not (eq? (vector-ref borrow 4) access-token)))
+        (o2-fail 'invalid-state operation
+                 "O2 C2 borrow deactivation is stale or forged"))
+    (vector-set! state 7 #f)
+    #t))
 
 (define (o2-public-optimizer-create config tree)
   (let* ((operation 'optimizer-create)
@@ -646,7 +703,7 @@
                      (o2-copy-config-data operation (vector-ref optimizer 2))
                      (o2-copy-paths (vector-ref optimizer 3))
                      (o2-copy-aliases (vector-ref optimizer 4))
-                     completed 'constructing))
+                     completed 'constructing #f))
            (next-registry (cons state o2-states))
            (native
              (o2-native-optimizer-state-snapshot (vector-ref optimizer 1))))

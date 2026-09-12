@@ -2,6 +2,8 @@
 (load "c2_d2_cursor_pair_extension.esk")
 (load "o2_wave2_extension.esk")
 (load "c2_o2_reconstruct_extension.esk")
+(load "c2_o2_encode_extension.esk")
+(load "c2_model_encode_extension.esk")
 (load "c2_x1_canonical_extension.esk")
 (load "c2_training_state_extension.esk")
 
@@ -46,6 +48,31 @@
                            #f))))
             (thunk) #f)))
     (check label matched)))
+(define (expect-raised-false label thunk)
+  (let ((caught? #f))
+    (guard (caught
+             (#t
+               (set! caught? (eq? caught #f))
+               #f))
+      (thunk))
+    (check label caught?)))
+(define (diagnose-unexpected label thunk)
+  (guard (raised
+           (#t
+             (display "C2 OWNER UNEXPECTED THROW: ")
+             (display label)
+             (if (transformer-error? raised)
+                 (begin
+                   (display " ")
+                   (display (transformer-error-category raised))
+                   (display "/")
+                   (display (transformer-error-operation raised))
+                   (display " ")
+                   (display (transformer-error-message raised)))
+                 #t)
+             (newline)
+             (raise raised)))
+    (thunk)))
 (define (c2-test-owner-counts)
   (let loop ((remaining c2-training-state-states)
              (live 0) (busy 0) (releasing 0) (dead 0) (live-controls 0))
@@ -278,8 +305,223 @@
 (bytevector-u8-set! (vector-ref (vector-ref borrowed-controls 2) 0) 0 0)
 (bytevector-u8-set! (vector-ref (vector-ref borrowed-controls 3) 0) 0 0)
 (vector-set! (vector-ref borrowed-controls 4) 0 0)
-(define borrow (c2-training-state-borrow-begin-internal owned 'checkpoint-save!))
+
+;;; The aggregate publishes its busy identity before P1 activation can enter a
+;;; trusted provider callback. Reentrant release therefore rejects without
+;;; consuming either claimed subowner.
+(define saved-p1-borrow-activate
+  c2-training-state-activate-p1-borrow!)
+(define activation-observed-busy #f)
+(define activation-release-rejected #f)
+(set! c2-training-state-activate-p1-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (set! activation-observed-busy
+      (eq? (vector-ref (c2-training-state-find owned) 7) candidate-borrow))
+    (set! activation-release-rejected
+      (guard (raised
+               (#t
+                 (and (transformer-error? raised)
+                      (eq? (transformer-error-category raised)
+                           'invalid-state)
+                      (eq? (transformer-error-operation raised)
+                           'trainer-state-release!))))
+        (c2-training-state-release-internal!
+          owned 'trainer-state-release!)
+        #f))
+    (saved-p1-borrow-activate
+      state owner-token access-token candidate-borrow operation)))
+(define activation-probe-borrow
+  (c2-training-state-borrow-begin-internal owned 'checkpoint-save!))
+(set! c2-training-state-activate-p1-borrow!
+  saved-p1-borrow-activate)
+(check "borrow is busy before fallible P1 activation"
+       activation-observed-busy)
+(check "P1 activation callback cannot reentrantly release owner"
+       activation-release-rejected)
+(check "activation probe borrow ends"
+       (c2-training-state-borrow-end-internal activation-probe-borrow))
+
+;;; Both activation failure boundaries restore the exact idle owner, including
+;;; when the thrown exception object itself is #f.
+(set! c2-training-state-activate-p1-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (raise #f)))
+(expect-raised-false "P1 activation preserves raised #f"
+  (lambda ()
+    (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)))
+(set! c2-training-state-activate-p1-borrow!
+  saved-p1-borrow-activate)
+(check "P1 activation failure restores idle C2 owner"
+       (eq? (vector-ref (c2-training-state-find owned) 7) 'live))
+(define saved-o2-borrow-activate
+  c2-training-state-activate-o2-borrow!)
+(set! c2-training-state-activate-o2-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (raise #f)))
+(expect-raised-false "O2 activation preserves raised #f after P1 rollback"
+  (lambda ()
+    (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)))
+(set! c2-training-state-activate-o2-borrow!
+  saved-o2-borrow-activate)
+(check "O2 activation failure restores idle C2 owner"
+       (eq? (vector-ref (c2-training-state-find owned) 7) 'live))
+(define borrow
+  (diagnose-unexpected
+    "borrow begin"
+    (lambda ()
+      (c2-training-state-borrow-begin-internal owned 'checkpoint-save!))))
 (define projection (c2-training-state-borrow-projection-internal borrow))
+(define owner-token
+  (c2-training-state-borrow-owner-token-internal
+    borrow 'checkpoint-save!))
+(define owned-model-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+(define owned-model-bytes
+  (diagnose-unexpected
+    "claimed model encode"
+    (lambda ()
+      (c2-model-encode-c2-owned-state-internal
+        owned-p1 owner-token owned-model-policy 'checkpoint-save!))))
+(check "claimed P1 model encoder emits exact C1 1.0 bytes"
+       (and (bytevector? owned-model-bytes)
+            (eq? (c1-checkpoint-metadata-ref-internal
+                   (c1-checkpoint-inspect-bytes-internal
+                     owned-model-bytes owned-model-policy)
+                   'format-id)
+                 'eshkol-checkpoint)))
+(define claimed-o2-request
+  (vector owned-o2 owned-p1 owner-token 'checkpoint-save! #f))
+(diagnose-unexpected
+  "claimed O2 staging"
+  (lambda ()
+    (c2-o2-encode-c2-owned-staging-internal claimed-o2-request)))
+(check "claimed P1/O2 staging publishes exact wire pair"
+       (let ((value (vector-ref claimed-o2-request 4)))
+         (and (vector? value) (= (vector-length value) 2)
+              (bytevector? (vector-ref value 0))
+              (bytevector? (vector-ref value 1)))))
+(define copied-owner-token
+  (guard (raised (#t raised))
+    (error "transformer.trainer-state-borrow-access:v1")))
+(expect-error "forged lookalike token cannot encode claimed P1" 'invalid-state
+              'checkpoint-save!
+  (lambda ()
+    (c2-model-encode-c2-owned-state-internal
+      owned-p1 copied-owner-token owned-model-policy 'checkpoint-save!)))
+(define copied-o2-request
+  (vector owned-o2 owned-p1 copied-owner-token 'checkpoint-save! #f))
+(expect-error "forged lookalike token cannot stage claimed O2" 'invalid-state
+              'checkpoint-save!
+  (lambda () (c2-o2-encode-c2-owned-staging-internal copied-o2-request)))
+(check "forged-token O2 failure publishes nothing"
+       (eq? (vector-ref copied-o2-request 4) #f))
+(define injected-codec
+  (c1-checkpoint-codec-internal
+    i2-provider-name
+    (lambda (request)
+      (c2-training-state-fail
+        'internal (vector-ref request 6) "injected model callback defect"))
+    (vector-ref i2-checkpoint-codec-internal 3)))
+(expect-error "claimed C1 callback defect preserves caller operation" 'internal
+              'checkpoint-save!
+  (lambda ()
+    (c1-checkpoint-encode-c2-owned-state-internal
+      owned-p1 owner-token owned-model-policy injected-codec
+      'checkpoint-save!)))
+(check "callback defect ended the exact nested P1 tensor pin"
+       (bytevector?
+         (diagnose-unexpected
+           "post-callback model encode"
+           (lambda ()
+             (c2-model-encode-c2-owned-state-internal
+               owned-p1 owner-token owned-model-policy
+               'checkpoint-save!)))))
+(define raised-false-codec
+  (c1-checkpoint-codec-internal
+    i2-provider-name
+    (lambda (request) (raise #f))
+    (vector-ref i2-checkpoint-codec-internal 3)))
+(expect-raised-false "claimed C1 raised #f callback is preserved"
+  (lambda ()
+    (c1-checkpoint-encode-c2-owned-state-internal
+      owned-p1 owner-token owned-model-policy raised-false-codec
+      'checkpoint-save!)))
+(check "raised #f ended the claimed paired P1 tensor pin"
+       (bytevector?
+         (diagnose-unexpected
+           "post-raised-false claimed model encode"
+           (lambda ()
+             (c2-model-encode-c2-owned-state-internal
+               owned-p1 owner-token owned-model-policy
+               'checkpoint-save!)))))
+(define claimed-i2-before (snapshot-i2-counts))
+(define claimed-o2-before (snapshot-o2-counts))
+(let repeat-claimed ((remaining 8))
+  (if (= remaining 0)
+      #t
+      (begin
+        (check "repeated claimed model bytes stay exact"
+               (c1-bytes=?
+                 owned-model-bytes
+                 (diagnose-unexpected
+                   "repeated claimed model encode"
+                   (lambda ()
+                     (c2-model-encode-c2-owned-state-internal
+                       owned-p1 owner-token owned-model-policy
+                       'checkpoint-save!)))))
+        (let ((request
+                (vector owned-o2 owned-p1 owner-token
+                        'checkpoint-save! #f)))
+          (diagnose-unexpected
+            "repeated claimed O2 staging"
+            (lambda ()
+              (c2-o2-encode-c2-owned-staging-internal request)))
+          (check "repeated claimed O2 staging succeeds"
+                 (vector? (vector-ref request 4))))
+        (check "claimed model/O2 native controls stay flat"
+               (and (equal? claimed-i2-before (snapshot-i2-counts))
+                    (equal? claimed-o2-before (snapshot-o2-counts))))
+        (repeat-claimed (- remaining 1)))))
+(define cross-p1 (make-p1-state "weight" '(4) #f))
+(define cross-o2 (make-o2-state '("weight") '(4) '() 17))
+(define cross-owner
+  (vector-ref
+    (diagnose-unexpected
+      "cross-owner compose"
+      (lambda () (compose cross-p1 cross-o2 (make-controls 17))))
+    5))
+(define cross-borrow
+  (diagnose-unexpected
+    "cross-owner borrow begin"
+    (lambda ()
+      (c2-training-state-borrow-begin-internal
+        cross-owner 'checkpoint-save!))))
+(define cross-token
+  (c2-training-state-borrow-owner-token-internal
+    cross-borrow 'checkpoint-save!))
+(expect-error "cross-owner token cannot encode another claimed P1"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-model-encode-c2-owned-state-internal
+      owned-p1 cross-token owned-model-policy 'checkpoint-save!)))
+(define cross-o2-request
+  (vector owned-o2 owned-p1 cross-token 'checkpoint-save! #f))
+(expect-error "cross-owner token cannot stage another claimed O2"
+              'invalid-state 'checkpoint-save!
+  (lambda () (c2-o2-encode-c2-owned-staging-internal cross-o2-request)))
+(check "cross-owner failure publishes nothing"
+       (eq? (vector-ref cross-o2-request 4) #f))
+(check "cross-owner borrow ends"
+       (diagnose-unexpected
+         "cross-owner borrow end"
+         (lambda ()
+           (c2-training-state-borrow-end-internal cross-borrow))))
+(check "cross-owner releases"
+       (diagnose-unexpected
+         "cross-owner release"
+         (lambda ()
+           (c2-training-state-release-internal!
+             cross-owner 'trainer-state-release!))))
 (define copied-controls (vector-ref projection 2))
 (check "controls are deeply detached"
        (and (= (bytevector-u8-ref (vector-ref (vector-ref copied-controls 2) 3) 0)
@@ -294,6 +536,18 @@
 (expect-error "stale borrow rejects" 'invalid-state
               'c2-training-state-borrow-projection-internal
   (lambda () (c2-training-state-borrow-projection-internal borrow)))
+(expect-error "stale exact owner token cannot encode claimed P1"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-model-encode-c2-owned-state-internal
+      owned-p1 owner-token owned-model-policy 'checkpoint-save!)))
+(define stale-o2-request
+  (vector owned-o2 owned-p1 owner-token 'checkpoint-save! #f))
+(expect-error "stale exact owner token cannot stage claimed O2"
+              'invalid-state 'checkpoint-save!
+  (lambda () (c2-o2-encode-c2-owned-staging-internal stale-o2-request)))
+(check "stale-token failure publishes nothing"
+       (eq? (vector-ref stale-o2-request 4) #f))
 (expect-error "P1 alias unusable after transfer" 'invalid-state 'state-dict-paths
   (lambda () (state-dict-paths owned-p1)))
 (expect-error "P1 release alias unusable after transfer"
@@ -457,6 +711,43 @@
                                             'trainer-state-release!))
 (check "dual consumed authorities never retry"
        (and (= dual-defect-p1-calls 1) (= dual-defect-o2-calls 1)))
+
+;;; #f is a valid raised exception object, not the absence of a cleanup error.
+;;; Both component authorities are still consumed exactly once and the C2
+;;; boundary normalizes the provider defect to its documented internal error.
+(define false-defect-p1 (make-p1-state "weight" '(4) #f))
+(define false-defect-o2 (make-o2-state '("weight") '(4) '() 17))
+(define false-defect-owner
+  (vector-ref
+    (compose false-defect-p1 false-defect-o2 (make-controls 17)) 5))
+(define false-defect-p1-calls 0)
+(define false-defect-o2-calls 0)
+(set! c2-training-state-release-p1-owned!
+  (lambda (state token)
+    (set! false-defect-p1-calls (+ false-defect-p1-calls 1))
+    (saved-p1-release state token)
+    (raise #f)))
+(set! c2-training-state-release-o2-owned!
+  (lambda (state token)
+    (set! false-defect-o2-calls (+ false-defect-o2-calls 1))
+    (saved-o2-release state token)))
+(expect-error "raised #f cleanup defect reports C2 internal" 'internal
+              'trainer-state-release!
+  (lambda ()
+    (c2-training-state-release-internal!
+      false-defect-owner 'trainer-state-release!)))
+(check "raised #f cleanup still drains both authorities"
+       (and (= false-defect-p1-calls 1) (= false-defect-o2-calls 1)
+            (state-dict-release! false-defect-p1)
+            (o2-public-optimizer-state-release! false-defect-o2)))
+(check "raised #f cleanup publishes exact dead owner"
+       (eq? (vector-ref (c2-training-state-find false-defect-owner) 7)
+            'dead))
+(check "raised #f consumed authorities never retry"
+       (and (c2-training-state-release-internal!
+              false-defect-owner 'trainer-state-release!)
+            (= false-defect-p1-calls 1)
+            (= false-defect-o2-calls 1)))
 (set! c2-training-state-release-p1-owned! saved-p1-release)
 (set! c2-training-state-release-o2-owned! saved-o2-release)
 (o2-test-reset-failpoints)

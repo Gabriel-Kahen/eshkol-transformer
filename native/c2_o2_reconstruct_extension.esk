@@ -238,7 +238,7 @@
           (let* ((shell (o2-make-identity "transformer.optimizer-state:v1"))
                  (state
                    (vector shell #f config paths aliases completed
-                           'constructing))
+                           'constructing #f))
                  (next-registry (cons state o2-states)))
             (if (not (= (o2-c2-native-reconstruct-prepare builder) 0))
                 (o2-native-fail operation))
@@ -250,10 +250,8 @@
               (vector-set! request 7 shell)
               request)))))))
 
-(define (o2-state-copy-moment-bits-internal request)
-  (if (or (not (vector? request)) (not (= (vector-length request) 6)))
-      (o2-fail 'invalid-argument 'o2-state-copy-moment-bits-internal
-               "moment-copy request must be an exact length-6 vector"))
+(define (o2-state-copy-moment-bits-core-internal
+          request state claimed? owner-token)
   (let* ((operation (vector-ref request 5))
          (index (vector-ref request 1))
          (kind (vector-ref request 2))
@@ -268,9 +266,32 @@
             (not (= (bytevector-length destination) (* elements 4))))
         (o2-fail 'invalid-argument 'o2-state-copy-moment-bits-internal
                  "moment-copy request fields are invalid"))
-    (let ((state (o2-require-live-state operation (vector-ref request 0))))
+    (let ((admitted
+            (if claimed?
+                (o2-require-c2-owned-state
+                  operation state owner-token)
+                (o2-require-live-state operation state))))
       (if (not (= (o2-c2-native-copy-moment-bits
-                    (vector-ref state 1) index kind destination elements)
+                    (vector-ref admitted 1) index kind destination elements)
                   0))
           (o2-native-fail operation))
       destination)))
+
+(define (o2-state-copy-moment-bits-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 6)))
+      (o2-fail 'invalid-argument 'o2-state-copy-moment-bits-internal
+               "moment-copy request must be an exact length-6 vector"))
+  (o2-state-copy-moment-bits-core-internal
+    request (vector-ref request 0) #f #f))
+
+(define (o2-state-copy-moment-bits-c2-owned-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 7))
+          (not (vector-ref request 5)))
+      (o2-fail 'invalid-argument
+               'o2-state-copy-moment-bits-c2-owned-internal
+               "claimed moment-copy request must be an exact length-7 vector"))
+  (o2-state-copy-moment-bits-core-internal
+    (vector (vector-ref request 0) (vector-ref request 1)
+            (vector-ref request 2) (vector-ref request 3)
+            (vector-ref request 4) (vector-ref request 6))
+    (vector-ref request 0) #t (vector-ref request 5)))

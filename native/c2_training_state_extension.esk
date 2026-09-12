@@ -21,6 +21,8 @@
   (vector 'c2-private-training-state-compose-v1))
 (define c2-training-state-borrow-tag
   (vector 'c2-private-training-state-borrow-v1))
+(define c2-training-state-owner-token-tag
+  (vector 'c2-private-subowner-token-v1))
 (define c2-training-state-states '())
 (define c2-training-state-i64-max 9223372036854775807)
 
@@ -218,6 +220,14 @@
     (state-dict-claim-c2-rollback-internal! state token)))
 (define c2-training-state-claim-o2!
   (lambda (state token) (o2-state-claim-c2-internal! state token)))
+(define c2-training-state-activate-p1-borrow!
+  (lambda (state owner-token access-token borrow operation)
+    (state-dict-c2-owned-borrow-activate-internal!
+      state owner-token access-token borrow operation)))
+(define c2-training-state-activate-o2-borrow!
+  (lambda (state owner-token access-token borrow operation)
+    (o2-state-c2-owned-borrow-activate-internal!
+      state owner-token access-token borrow operation)))
 
 (define (c2-training-state-compose-internal request)
   (if (or (not (vector? request)) (not (= (vector-length request) 6))
@@ -242,7 +252,12 @@
          ;; All allocation, validation and native preflight ends here.
          (shell (guard (raised (#t raised))
                   (error "transformer.trainer-state:v1")))
-         (owner-token (vector 'c2-private-subowner-token shell))
+         ;; The third slot is the sole active-borrow authority. It stays #f
+         ;; while the C2 owner is idle and is cleared before borrow end makes
+         ;; the owner live again. P1/O2 compare this exact capsule by identity;
+         ;; copying its fields never grants authority.
+         (owner-token
+           (vector c2-training-state-owner-token-tag shell #f))
          (state (vector shell p1 o2 controls topology o2-projection
                         owner-token 'constructing))
          (next-registry (cons state c2-training-state-states)))
@@ -268,19 +283,50 @@
     (if (not (eq? (vector-ref state 7) 'live))
         (c2-training-state-fail
           'invalid-state operation "C2 state is busy, releasing, or dead"))
-    (let ((borrow (vector c2-training-state-borrow-tag state operation)))
+    (let* ((owner-token (vector-ref state 6))
+           (access-token
+             (guard (raised (#t raised))
+               (error "transformer.trainer-state-borrow-access:v1")))
+           (borrow
+             (vector c2-training-state-borrow-tag state operation
+                     owner-token access-token #f)))
+      ;; Activation validates each exact claimed subowner and installs private
+      ;; access state under guarded rollback. Neither subowner ever transitions
+      ;; back to the ordinary live lifecycle.
+      ;; Publish the outer busy identity before P1 validation can invoke a
+      ;; trusted provider callback. A callback must not be able to release or
+      ;; recursively borrow this owner while activation is in flight.
       (vector-set! state 7 borrow)
+      (vector-set! owner-token 2 borrow)
+      (guard (caught
+               (#t
+                 (vector-set! owner-token 2 #f)
+                 (vector-set! state 7 'live)
+                 (raise caught)))
+        (c2-training-state-activate-p1-borrow!
+          (vector-ref state 1) owner-token access-token borrow operation))
+      (guard (caught
+               (#t
+                 (state-dict-c2-owned-borrow-deactivate-internal!
+                   (vector-ref state 1) owner-token access-token borrow operation)
+                 (vector-set! owner-token 2 #f)
+                 (vector-set! state 7 'live)
+                 (raise caught)))
+        (c2-training-state-activate-o2-borrow!
+          (vector-ref state 2) owner-token access-token borrow operation))
       borrow)))
 
 (define (c2-training-state-borrow-projection-internal borrow)
-  (if (or (not (vector? borrow)) (not (= (vector-length borrow) 3))
+  (if (or (not (vector? borrow)) (not (= (vector-length borrow) 6))
           (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
       (c2-training-state-fail
         'invalid-argument 'c2-training-state-borrow-projection-internal
         "expected an exact active C2 borrow"))
   (let ((state (vector-ref borrow 1)))
     (if (or (not (vector? state)) (not (= (vector-length state) 8))
-            (not (eq? (vector-ref state 7) borrow)))
+            (not (eq? (vector-ref state 7) borrow))
+            (not (eq? (vector-ref borrow 3) (vector-ref state 6)))
+            (not (eq? (vector-ref (vector-ref state 6) 2) borrow)))
         (c2-training-state-fail
           'invalid-state 'c2-training-state-borrow-projection-internal
           "C2 borrow is stale"))
@@ -288,20 +334,57 @@
             (vector-ref state 3) (vector-ref state 4)
             (vector-ref state 5))))
 
+(define (c2-training-state-borrow-owner-token-internal borrow operation)
+  (if (or (not (symbol? operation))
+          (not (vector? borrow)) (not (= (vector-length borrow) 6))
+          (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
+      (c2-training-state-fail
+        'invalid-argument operation "expected an exact active C2 borrow"))
+  (let ((state (vector-ref borrow 1))
+        (owner-token (vector-ref borrow 3)))
+    (if (or (not (vector? state)) (not (= (vector-length state) 8))
+            (not (eq? (vector-ref state 7) borrow))
+            (not (eq? (vector-ref state 6) owner-token))
+            (not (vector? owner-token))
+            (not (= (vector-length owner-token) 3))
+            (not (eq? (vector-ref owner-token 0)
+                      c2-training-state-owner-token-tag))
+            (not (eq? (vector-ref owner-token 1) (vector-ref state 0)))
+            (not (eq? (vector-ref owner-token 2) borrow)))
+        (c2-training-state-fail
+          'invalid-state operation "C2 borrow authority is stale or forged"))
+    (vector-ref borrow 4)))
+
 (define (c2-training-state-borrow-end-internal borrow)
-  (if (or (not (vector? borrow)) (not (= (vector-length borrow) 3))
+  (if (or (not (vector? borrow)) (not (= (vector-length borrow) 6))
           (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
       (c2-training-state-fail
         'invalid-argument 'c2-training-state-borrow-end-internal
         "expected an exact active C2 borrow"))
   (let ((state (vector-ref borrow 1)))
     (if (or (not (vector? state)) (not (= (vector-length state) 8))
-            (not (eq? (vector-ref state 7) borrow)))
+            (not (eq? (vector-ref state 7) borrow))
+            (not (eq? (vector-ref borrow 3) (vector-ref state 6)))
+            (not (eq? (vector-ref (vector-ref state 6) 2) borrow)))
         (c2-training-state-fail
           'invalid-state 'c2-training-state-borrow-end-internal
           "C2 borrow is stale"))
+    (if (vector-ref borrow 5)
+        (c2-training-state-fail
+          'invalid-state (vector-ref borrow 2)
+          "C2 borrow still has an active P1 tensor access"))
+    ;; Revoke subowner access before publishing the owner as live.
+    (state-dict-c2-owned-borrow-deactivate-internal!
+      (vector-ref state 1) (vector-ref state 6) (vector-ref borrow 4) borrow
+      (vector-ref borrow 2))
+    (o2-state-c2-owned-borrow-deactivate-internal!
+      (vector-ref state 2) (vector-ref state 6) (vector-ref borrow 4) borrow
+      (vector-ref borrow 2))
+    (vector-set! (vector-ref state 6) 2 #f)
     (vector-set! state 7 'live)
     (vector-set! borrow 1 #f)
+    (vector-set! borrow 3 #f)
+    (vector-set! borrow 4 #f)
     #t))
 
 ;;; These indirections are intentionally lexical and let the focused source
@@ -327,6 +410,7 @@
           (let ((p1 (vector-ref state 1))
                 (o2 (vector-ref state 2))
                 (token (vector-ref state 6))
+                (have-first-error? #f)
                 (first-error #f))
             ;; Invalidate dependents and consume both authorities before the
             ;; first fallible cleanup. Neither can ever be retried by C2.
@@ -337,15 +421,22 @@
             (vector-set! state 4 'released)
             (vector-set! state 5 'released)
             (vector-set! state 6 #f)
-            (guard (caught (#t (set! first-error caught) #f))
+            (guard (caught
+                     (#t
+                       (set! have-first-error? #t)
+                       (set! first-error caught)
+                       #f))
               (c2-training-state-release-p1-owned! p1 token))
             (guard (caught
                      (#t
-                       (if first-error #t (set! first-error caught))
+                       (if have-first-error? #t
+                           (begin
+                             (set! have-first-error? #t)
+                             (set! first-error caught)))
                        #f))
               (c2-training-state-release-o2-owned! o2 token))
             (vector-set! state 7 'dead)
-            (if first-error
+            (if have-first-error?
                 (c2-training-state-fail
                   'internal operation
                   "C2 component owner cleanup reported a provider defect")

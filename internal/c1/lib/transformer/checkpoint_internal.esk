@@ -13,6 +13,7 @@
 (provide c1-persistence-policy-internal
          c1-checkpoint-codec-internal
          c1-checkpoint-encode-state-internal
+         c1-checkpoint-encode-c2-owned-state-internal
          c1-checkpoint-decode-state-internal
          c1-checkpoint-save-state-internal!
          c1-checkpoint-load-state-internal
@@ -292,7 +293,7 @@
         (c1-fail 'unsupported operation
                  "checkpoint and trusted codec provider identities differ"))))
 
-(define (c1-entry-descriptor state entry codec payload-offset metadata-used
+(define (c1-entry-descriptor entry tensor-encoder payload-offset metadata-used
                              policy operation)
   (let* ((path (state-entry-path-internal entry))
          (kind (state-entry-kind-internal entry))
@@ -325,31 +326,9 @@
                    (vector-ref policy 1)))
             (c1-fail 'invalid-state operation
                      "checkpoint allocation would exceed persistence policy"))
-        (let* ((handle (state-dict-tensor state path))
-               (active? #f)
-               (payload
-                 (guard (caught
-                          (#t
-                            (if active?
-                                (begin
-                                  (set! active? #f)
-                                  (state-dict-tensor-borrow-end-internal
-                                    state handle))
-                                #t)
-                            (raise caught)))
-                   (let ((tensor
-                           (state-dict-tensor-borrow-begin-internal
-                             state handle)))
-                     (set! active? #t)
-                     (let ((result
-                             ((vector-ref codec 2)
-                              (vector tensor kind shape dtype device layout
-                                      operation))))
-                       ;; The raw carrier cannot escape this synchronous codec
-                       ;; call. Clear the guard before the infallible paired end.
-                       (set! active? #f)
-                       (state-dict-tensor-borrow-end-internal state handle)
-                       result)))))
+        (let* ((payload
+                 (tensor-encoder
+                   entry kind shape dtype device layout operation)))
           (if (or (not (bytevector? payload))
                   (not (= (bytevector-length payload) expected)))
               (c1-fail 'internal operation
@@ -478,22 +457,22 @@
                                (cons index next-seen)
                                (if first-payload first-payload payload)))))))))))
 
-(define (c1-checkpoint-encode-state-internal state policy codec)
-  (let* ((operation 'c1-checkpoint-encode-state-internal)
-         ;; This public P1 accessor validates the bound provider, every entry,
+(define c1-checkpoint-encode-projection-internal
+  (lambda (projection policy codec tensor-encoder operation)
+  (let* (;; Projection construction validates the bound provider, every entry,
          ;; storage disjointness, and the complete alias graph before a codec
          ;; callback can observe a tensor carrier.
-         (aliases (state-dict-alias-groups state))
+         (aliases (vector-ref projection 5))
          (checked-policy (c1-require-policy operation policy))
          (checked-codec (c1-require-codec operation codec))
          (alias-size (c1-alias-encoded-size aliases operation))
-         (format (state-dict-format-internal state))
-         (version (state-dict-version-internal state))
-         (features (state-dict-features-internal state))
+         (format (vector-ref projection 0))
+         (version (vector-ref projection 1))
+         (features (vector-ref projection 2))
          (provider-id (c1-adapter-provider-id
-                       (state-dict-adapter-internal state) operation))
+                       (vector-ref projection 3) operation))
          (provider-bytes (string->utf8 (symbol->string provider-id)))
-         (entries (state-dict-entries-internal state))
+         (entries (vector-ref projection 4))
          (entry-count (c1-list-length-bounded entries (+ c1-hard-tensors 1)))
          (initial-metadata (+ (bytevector-length provider-bytes) alias-size)))
     (if (or (not (eq? format 'transformer-state-dict))
@@ -565,7 +544,7 @@
                                          (list c1-container-domain unsigned)))))
                 (c1-concat (list unsigned digest)))))
           (let* ((descriptor (c1-entry-descriptor
-                              state (car remaining) checked-codec payload-offset
+                              (car remaining) tensor-encoder payload-offset
                               metadata-used checked-policy operation))
                  (path (vector-ref descriptor 0))
                  (payload-bytes (bytevector-length (vector-ref descriptor 8)))
@@ -575,7 +554,70 @@
                          "state entries are duplicate or noncanonical"))
             (describe (cdr remaining) (cons descriptor descriptors)
                       (+ payload-offset payload-bytes)
-                      (+ metadata-used record-size) path))))))
+                      (+ metadata-used record-size) path)))))))
+
+(define (c1-checkpoint-encode-state-internal state policy codec)
+  (let* ((operation 'c1-checkpoint-encode-state-internal)
+         (aliases (state-dict-alias-groups state)))
+    (c1-checkpoint-encode-projection-internal
+      (vector (state-dict-format-internal state)
+              (state-dict-version-internal state)
+              (state-dict-features-internal state)
+              (state-dict-adapter-internal state)
+              (state-dict-entries-internal state)
+              aliases)
+      policy codec
+      (lambda (entry kind shape dtype device layout callback-operation)
+        (let* ((path (state-entry-path-internal entry))
+               (handle (state-dict-tensor state path))
+               (tensor
+                 (state-dict-tensor-borrow-begin-internal state handle))
+               (outcome
+                 (guard (caught (#t (vector #f caught)))
+                   (vector
+                     #t
+                     ((vector-ref codec 2)
+                      (vector tensor kind shape dtype device layout
+                              callback-operation))))))
+          ;; Complete the exact paired pin outside callback unwinding, then
+          ;; preserve the callback's original exception value (including #f).
+          (state-dict-tensor-borrow-end-internal state handle)
+          (if (vector-ref outcome 0)
+              (vector-ref outcome 1)
+              (raise (vector-ref outcome 1)))))
+      operation)))
+
+(define (c1-checkpoint-encode-c2-owned-state-internal
+          state owner-token policy codec operation)
+  (if (not (symbol? operation))
+      (c1-fail 'invalid-argument
+               'c1-checkpoint-encode-c2-owned-state-internal
+               "C2 model encode operation must be a symbol"))
+  (let ((projection
+          (state-dict-c2-owned-projection-internal
+            state owner-token operation)))
+    (c1-checkpoint-encode-projection-internal
+      projection policy codec
+      (lambda (entry kind shape dtype device layout callback-operation)
+        (let* ((carrier
+                 (state-dict-c2-owned-tensor-borrow-begin-internal
+                   state owner-token entry callback-operation))
+               (outcome
+                 (guard (caught (#t (vector #f caught)))
+                   (vector
+                     #t
+                     ((vector-ref codec 2)
+                      (vector carrier kind shape dtype device layout
+                              callback-operation))))))
+          ;; The exception is captured as data so the exact paired end occurs
+          ;; outside callback unwinding and cannot be bypassed by a nonlocal
+          ;; provider failure.
+          (state-dict-c2-owned-tensor-borrow-end-internal
+            state owner-token entry callback-operation)
+          (if (vector-ref outcome 0)
+              (vector-ref outcome 1)
+              (raise (vector-ref outcome 1)))))
+      operation)))
 
 (define (c1-utf8-continuation? value)
   (and (>= value 128) (<= value 191)))

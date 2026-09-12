@@ -82,7 +82,12 @@
          state-dict-c2-parameter-topology-internal
          state-dict-claim-c2-internal!
          state-dict-claim-c2-rollback-internal!
-         state-dict-release-c2-owned-internal!)
+         state-dict-release-c2-owned-internal!
+         state-dict-c2-owned-projection-internal
+         state-dict-c2-owned-tensor-borrow-begin-internal
+         state-dict-c2-owned-tensor-borrow-end-internal
+         state-dict-c2-owned-borrow-activate-internal!
+         state-dict-c2-owned-borrow-deactivate-internal!)
 
 (define p1-trusted-surface
   (let ()
@@ -94,6 +99,7 @@
 (define state-entry-tag (vector 'transformer-state-entry))
 (define state-lifecycle-tag (vector 'transformer-state-lifecycle))
 (define state-borrow-access-tag (vector 'transformer-state-borrow-access))
+(define state-c2-borrow-access-tag (vector 'transformer-state-c2-borrow-access))
 (define state-tensor-tag (vector 'transformer-state-backed-tensor))
 (define tensor-provider-tag (vector 'transformer-tensor-provider))
 (define unsafe-entry-input-tag (vector 'transformer-unsafe-entry-input))
@@ -613,7 +619,7 @@
 (define (require-live-state operation value)
   (let* ((state (require-state operation value))
          (lifecycle (state-lifecycle state)))
-    (if (and (vector? lifecycle) (= (vector-length lifecycle) 7)
+    (if (and (vector? lifecycle) (= (vector-length lifecycle) 8)
              (eq? (vector-ref lifecycle 0) state-lifecycle-tag)
              (eq? (vector-ref lifecycle 1) 'live))
         state
@@ -663,18 +669,21 @@
   (list provider-identity-format provider-interface-major
         provider-interface-minor (tensor-provider-name provider)))
 
-(define (state-provider-binding-find state)
-  (require-live-state 'state-provider-binding-find state)
+(define (state-provider-binding-find-admitted operation state)
   (let* ((shell (shell-for-raw 'state state))
          (status (p1-native-state-provider native-context shell)))
     (if (= status 0)
-        (raw-for-shell 'state-provider-binding-find 'provider
+        (raw-for-shell operation 'provider
                        (p1-native-result-ptr native-context))
         (if (= (p1-native-error-code native-context) 11)
             #f
             (native-raise
-              'state-provider-binding-find status
+              operation status
               (p1-native-error-code native-context))))))
+
+(define (state-provider-binding-find state)
+  (require-live-state 'state-provider-binding-find state)
+  (state-provider-binding-find-admitted 'state-provider-binding-find state))
 
 (define (state-provider-bind! operation state provider)
   (let ((state-shell (shell-for-raw 'state state))
@@ -2576,7 +2585,7 @@
               (copy-data-for 'state-dict-create-unsafe-internal
                              'invalid-argument aliases)
               (vector state-lifecycle-tag 'live #f #f '()
-                      (vector '() (vector-ref entry-input 2)) #f))))
+                      (vector '() (vector-ref entry-input 2)) #f #f))))
 
 (define (state-dict-format-internal state)
   (vector-ref (require-live-state 'state-dict-format-internal state) 1))
@@ -2709,7 +2718,7 @@
                     (tensor-provider-identity provider) entries
                     (copy-data aliases)
                     (vector state-lifecycle-tag 'live #t provider '()
-                            ownership #f)))
+                            ownership #f #f)))
       ;; Capture publication so rollback can revoke a shell even when native
       ;; bind fails after shell creation.
       (set! state-shell (shell-for-raw 'state state))
@@ -2923,8 +2932,7 @@
                                             (if first-tensor first-tensor
                                                 (vector-ref entry 7))))))))))))))))
 
-(define (validate-state-envelope operation state)
-  (require-live-state operation state)
+(define (validate-state-envelope-admitted operation state)
   (if (not (symbol? (vector-ref state 1)))
       (fail 'corrupt-data operation "malformed state dictionary format" '())
       (if (not (eq? (vector-ref state 1) state-format))
@@ -2949,8 +2957,12 @@
                       (validate-provider-identity operation
                                                   (vector-ref state 5)))))))))
 
-(define (validate-state-with-provider operation state provider)
-  (let ((identity (validate-state-envelope operation state)))
+(define (validate-state-envelope operation state)
+  (require-live-state operation state)
+  (validate-state-envelope-admitted operation state))
+
+(define (validate-state-with-provider-admitted operation state provider)
+  (let ((identity (validate-state-envelope-admitted operation state)))
     (if (not (equal? identity (tensor-provider-identity provider)))
         (fail 'unsupported operation
               "state and destination tensor providers differ" '())
@@ -2960,11 +2972,20 @@
                                  (vector-ref state 6))
           provider))))
 
-(define (validate-bound-state operation state)
+(define (validate-state-with-provider operation state provider)
+  (require-live-state operation state)
+  (validate-state-with-provider-admitted operation state provider))
+
+(define (validate-bound-state-admitted operation state)
   (require-state operation state)
-  (let ((provider (require-provider operation
-                                    (state-provider-binding-find state))))
-    (validate-state-with-provider operation state provider)))
+  (let ((provider (require-provider
+                    operation
+                    (state-provider-binding-find-admitted operation state))))
+    (validate-state-with-provider-admitted operation state provider)))
+
+(define (validate-bound-state operation state)
+  (require-live-state operation state)
+  (validate-bound-state-admitted operation state))
 
 (define (unsafe-entry-copy-matches-source? copied source)
   (and (state-entry-value? copied) (state-entry-value? source)
@@ -3644,7 +3665,7 @@
                      (tensor-provider-identity provider) entries
                      (copy-data aliases)
                      (vector state-lifecycle-tag 'live #f #f '()
-                             adopted-ownership #f)))
+                             adopted-ownership #f #f)))
            (state-shell #f)
            (cleanup-failed? #f)
            (cleanup-error #f)
@@ -3928,6 +3949,38 @@
                               state-shell state (car remaining))
                             (car remaining))
                         result))))))
+
+;; A claimed P1 state remains c2-owned throughout an outer C2 borrow.  This
+;; private marker admits only the unforgeable access identity installed by
+;; that exact active borrow; ordinary live-state admission is untouched.
+(define (c2-owned-state-record operation state-shell)
+  (if (not (symbol? operation))
+      (fail 'invalid-argument 'state-dict-c2-owned-projection-internal
+            "C2 owner operation must be a symbol" '()))
+  (reject-protected-storage-comparison-reentry operation)
+  (let ((entry (shell-entry state-shell)))
+    (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+        (fail 'invalid-argument operation
+              "expected an exact registered P1 state" '()))
+    (let ((raw (vector-ref entry 2)))
+      (if (eq? raw dead-state-raw)
+          (fail 'invalid-state operation "P1 state is dead" '()))
+      raw)))
+
+(define (c2-owned-active-marker operation state-shell access-token)
+  (let* ((raw (c2-owned-state-record operation state-shell))
+         (lifecycle (state-lifecycle raw))
+         (marker (vector-ref lifecycle 7)))
+    (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+            (not (vector? marker)) (not (= (vector-length marker) 5))
+            (not (eq? (vector-ref marker 0) state-c2-borrow-access-tag))
+            (not (eq? (vector-ref marker 1) raw))
+            (not (eq? (vector-ref marker 2) (vector-ref lifecycle 6)))
+            (not (eq? (vector-ref marker 3) access-token))
+            (not (vector? (vector-ref marker 4))))
+        (fail 'invalid-state operation
+              "C2 P1 borrow authority is stale or forged" '()))
+    marker))
 
 (define (exposed-tensor-provider-create
           (name : symbol)
@@ -4219,118 +4272,157 @@
       (state-dict-adopt-owned-internal!
         records aliases provider-name major minor ownership)))
   (lambda (state operation)
-    (reject-protected-storage-comparison-reentry
-      operation)
-    (let ((entry (shell-entry state)))
-      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
-          (fail 'invalid-argument
-                operation
-                "expected an exact registered P1 state" '()))
-      (let ((raw (vector-ref entry 2)))
-        (if (eq? raw dead-state-raw)
-            (fail 'invalid-state
-                  operation
-                  "P1 state is dead" '()))
-        (let ((lifecycle (state-lifecycle raw)))
-          (if (or (not (eq? (vector-ref lifecycle 1) 'live))
-                  (vector-ref lifecycle 6))
-              (fail 'invalid-state
-                    operation
-                    "P1 state is busy or transferred" '()))
-          (validate-bound-state
-            operation raw)
-          (let ((aliases (copy-data (vector-ref raw 7))))
-            (let secondary? ((path #f) (groups aliases))
-              (if path
-                  (cond
-                    ((null? groups) #f)
+    (let* ((raw (c2-owned-state-record operation state))
+           (lifecycle (state-lifecycle raw)))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'live))
+              (vector-ref lifecycle 6) (vector-ref lifecycle 7))
+          (fail 'invalid-state operation
+                "P1 state is busy or transferred" '()))
+      (validate-bound-state-admitted operation raw)
+      (let ((aliases (copy-data (vector-ref raw 7))))
+        (let secondary? ((path #f) (groups aliases))
+          (if path
+              (cond ((null? groups) #f)
                     ((path-member? path (cdr (car groups))) #t)
                     (else (secondary? path (cdr groups))))
-                  (let collect ((entries (vector-ref raw 6))
-                                (paths '()) (shapes '()))
-                    (if (null? entries)
-                        (vector (list-reverse paths)
-                                (list-reverse shapes) aliases)
-                        (let ((item (car entries)))
-                          (if (and (eq? (vector-ref item 2) 'parameter)
-                                   (not (secondary? (vector-ref item 1)
-                                                    aliases)))
-                              (collect
-                                (cdr entries)
-                                (cons (copy-data (vector-ref item 1)) paths)
-                                (cons (copy-data (vector-ref item 3)) shapes))
-                              (collect (cdr entries) paths shapes))))))))))))
+              (let collect ((entries (vector-ref raw 6))
+                            (paths '()) (shapes '()))
+                (if (null? entries)
+                    (vector (list-reverse paths)
+                            (list-reverse shapes) aliases)
+                    (let ((item (car entries)))
+                      (if (and (eq? (vector-ref item 2) 'parameter)
+                               (not (secondary? (vector-ref item 1) aliases)))
+                          (collect (cdr entries)
+                                   (cons (copy-data (vector-ref item 1)) paths)
+                                   (cons (copy-data (vector-ref item 3)) shapes))
+                          (collect (cdr entries) paths shapes))))))))))
   (lambda (state owner-token)
-    (reject-protected-storage-comparison-reentry
-      'state-dict-claim-c2-internal!)
-    (let ((entry (shell-entry state)))
-      (if (or (not owner-token) (not entry)
-              (not (eq? (vector-ref entry 1) 'state)))
+    (let* ((raw
+             (c2-owned-state-record 'state-dict-claim-c2-internal! state))
+           (lifecycle (state-lifecycle raw)))
+      (if (not owner-token)
           (fail 'invalid-argument 'state-dict-claim-c2-internal!
-                "expected an exact live P1 state and owner token" '()))
-      (let* ((raw (vector-ref entry 2))
-             (lifecycle
-               (if (eq? raw dead-state-raw) #f (state-lifecycle raw))))
-        (if (or (not lifecycle)
-                (not (eq? (vector-ref lifecycle 1) 'live))
-                (vector-ref lifecycle 6))
-            (fail 'invalid-state 'state-dict-claim-c2-internal!
-                  "P1 state is not claimable at an update boundary" '()))
-        (vector-set! lifecycle 1 'c2-owned)
-        (vector-set! lifecycle 6 owner-token)
-        #t)))
+                "expected an owner token" '()))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'live))
+              (vector-ref lifecycle 6) (vector-ref lifecycle 7))
+          (fail 'invalid-state 'state-dict-claim-c2-internal!
+                "P1 state is not claimable at an update boundary" '()))
+      (vector-set! lifecycle 1 'c2-owned)
+      (vector-set! lifecycle 6 owner-token)
+      #t))
   (lambda (state owner-token)
-    (let ((entry (shell-entry state)))
-      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
-          (fail 'invalid-argument 'state-dict-claim-c2-rollback-internal!
-                "expected an exact claimed P1 state" '()))
-      (let* ((raw (vector-ref entry 2))
-             (lifecycle
-               (if (eq? raw dead-state-raw) #f (state-lifecycle raw))))
-        (if (or (not lifecycle)
-                (not (eq? (vector-ref lifecycle 1) 'c2-owned))
-                (not (eq? (vector-ref lifecycle 6) owner-token)))
-            (fail 'invalid-state 'state-dict-claim-c2-rollback-internal!
-                  "P1 state claim token differs" '()))
-        (vector-set! lifecycle 6 #f)
-        (vector-set! lifecycle 1 'live)
-        #t)))
+    (let* ((raw
+             (c2-owned-state-record
+               'state-dict-claim-c2-rollback-internal! state))
+           (lifecycle (state-lifecycle raw)))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+              (not (eq? (vector-ref lifecycle 6) owner-token))
+              (vector-ref lifecycle 7))
+          (fail 'invalid-state 'state-dict-claim-c2-rollback-internal!
+                "P1 state claim token differs" '()))
+      (vector-set! lifecycle 6 #f)
+      (vector-set! lifecycle 1 'live)
+      #t))
   (lambda (state owner-token)
     (reject-protected-storage-comparison-reentry
       'state-dict-release-c2-owned-internal!)
-    (let ((entry (shell-entry state)))
+    (let* ((operation 'state-dict-release-c2-owned-internal!)
+           (entry (shell-entry state)))
       (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
-          (fail 'invalid-argument 'state-dict-release-c2-owned-internal!
+          (fail 'invalid-argument operation
                 "expected an exact claimed P1 state" '()))
       (let ((raw (vector-ref entry 2)))
-        (if (eq? raw dead-state-raw)
-            #t
+        (if (eq? raw dead-state-raw) #t
             (let ((lifecycle (state-lifecycle raw)))
               (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
-                      (not (eq? (vector-ref lifecycle 6) owner-token)))
-                  (fail 'invalid-state
-                        'state-dict-release-c2-owned-internal!
-                        "P1 state claim token differs" '()))
-              (let* ((outcome (vector #f #f))
-                     (status
-                       (p1-native-state-release-begin native-context state)))
-                (native-check 'state-dict-release-c2-owned-internal! status)
-                (if (= (p1-native-result-i64 native-context) 0)
-                    #t
-                    (begin
-                      (compact-released-state-shells! raw)
-                      (vector-set! lifecycle 6 #f)
-                      (guard (caught
-                               (#t
-                                 (vector-set! outcome 0 #f)
-                                 (vector-set! outcome 1 caught)
-                                 outcome))
-                        (vector-set! outcome 0 #t)
-                        (vector-set! outcome 1
-                                     (state-dict-release-owned! raw)))
-                      (if (vector-ref outcome 0)
-                          (vector-ref outcome 1)
-                          (raise (vector-ref outcome 1)))))))))))
+                      (not (eq? (vector-ref lifecycle 6) owner-token))
+                      (vector-ref lifecycle 7))
+                  (fail 'invalid-state operation
+                        "P1 state claim token differs or is busy" '()))
+              (native-check operation
+                (p1-native-state-release-begin native-context state))
+              (if (= (p1-native-result-i64 native-context) 0) #t
+                  (begin
+                    (compact-released-state-shells! raw)
+                    (vector-set! lifecycle 6 #f)
+                    (state-dict-release-owned! raw))))))))
+  (lambda (state access-token operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (raw (vector-ref marker 1)))
+      (validate-bound-state-admitted operation raw)
+      (vector (vector-ref raw 1)
+              (list (vector-ref raw 2) (vector-ref raw 3))
+              (copy-data (vector-ref raw 4))
+              (copy-data (vector-ref raw 5))
+              (wrap-entry-items operation state raw (vector-ref raw 6))
+              (copy-data (vector-ref raw 7)))))
+  (lambda (state access-token entry operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (raw (vector-ref marker 1))
+           (borrow (vector-ref marker 4))
+           (raw-entry (raw-entry-for-trusted operation entry)))
+      (if (or (not (state-entry-identical-member? raw-entry (vector-ref raw 6)))
+              (vector-ref borrow 5))
+          (fail 'invalid-state operation
+                "C2 owner has a stale or active tensor access" '()))
+      (let* ((raw-tensor (state-tensor-for-entry raw raw-entry))
+             (tensor-shell (shell-for-raw 'state-tensor raw-tensor))
+             (access (vector state-c2-borrow-access-tag marker raw-entry
+                             tensor-shell borrow)))
+        (native-check operation
+          (p1-native-state-tensor-validate native-context state tensor-shell))
+        (vector-set! borrow 5 access)
+        (let ((carrier (vector-ref raw-entry 7)))
+          (if carrier carrier
+              (begin
+                (vector-set! borrow 5 #f)
+                (fail 'invalid-state operation
+                      "state-backed tensor is released" '())))))))
+  (lambda (state access-token entry operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (borrow (vector-ref marker 4))
+           (access (vector-ref borrow 5))
+           (raw-entry (raw-entry-for-trusted operation entry)))
+      (if (or (not (vector? access)) (not (= (vector-length access) 5))
+              (not (eq? (vector-ref access 0) state-c2-borrow-access-tag))
+              (not (eq? (vector-ref access 1) marker))
+              (not (eq? (vector-ref access 2) raw-entry))
+              (not (eq? (vector-ref access 4) borrow)))
+          (fail 'invalid-argument operation
+                "C2 tensor access handle differs" '()))
+      (native-check operation
+        (p1-native-state-tensor-validate
+          native-context state (vector-ref access 3)))
+      (vector-set! borrow 5 #f)
+      #t))
+  (lambda (state owner-token access-token borrow operation)
+    (let* ((raw (c2-owned-state-record operation state))
+           (lifecycle (state-lifecycle raw)))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+              (not (eq? (vector-ref lifecycle 6) owner-token))
+              (vector-ref lifecycle 7))
+          (fail 'invalid-state operation
+                "P1 state cannot activate this C2 borrow" '()))
+      (validate-bound-state-admitted operation raw)
+      (vector-set! lifecycle 7
+                   (vector state-c2-borrow-access-tag raw owner-token
+                           access-token borrow))
+      #t))
+  (lambda (state owner-token access-token borrow operation)
+    (let* ((raw (c2-owned-state-record operation state))
+           (lifecycle (state-lifecycle raw))
+           (marker (vector-ref lifecycle 7)))
+      (if (or (not (vector? marker)) (not (= (vector-length marker) 5))
+              (not (eq? (vector-ref marker 0) state-c2-borrow-access-tag))
+              (not (eq? (vector-ref marker 2) owner-token))
+              (not (eq? (vector-ref marker 3) access-token))
+              (not (eq? (vector-ref marker 4) borrow))
+              (vector-ref borrow 5))
+          (fail 'invalid-state operation
+                "P1 C2 borrow is stale or has active tensor access" '()))
+      (vector-set! lifecycle 7 #f)
+      #t))
   )))
 
 (define (module-parameters module)
@@ -4459,3 +4551,19 @@
   ((vector-ref p1-trusted-surface 51) state owner-token))
 (define (state-dict-release-c2-owned-internal! state owner-token)
   ((vector-ref p1-trusted-surface 52) state owner-token))
+(define (state-dict-c2-owned-projection-internal state access-token operation)
+  ((vector-ref p1-trusted-surface 53) state access-token operation))
+(define (state-dict-c2-owned-tensor-borrow-begin-internal
+          state access-token entry operation)
+  ((vector-ref p1-trusted-surface 54) state access-token entry operation))
+(define (state-dict-c2-owned-tensor-borrow-end-internal
+          state access-token entry operation)
+  ((vector-ref p1-trusted-surface 55) state access-token entry operation))
+(define (state-dict-c2-owned-borrow-activate-internal!
+          state owner-token access-token borrow operation)
+  ((vector-ref p1-trusted-surface 56)
+   state owner-token access-token borrow operation))
+(define (state-dict-c2-owned-borrow-deactivate-internal!
+          state owner-token access-token borrow operation)
+  ((vector-ref p1-trusted-surface 57)
+   state owner-token access-token borrow operation))

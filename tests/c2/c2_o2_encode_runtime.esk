@@ -76,6 +76,29 @@
     (i2-module-register-parameter-internal! module "c" c)
     (module-state-dict module)))
 
+(define (make-coverage-p1)
+  (let ((module (i2-module-create-internal)))
+    (i2-module-register-parameter-internal!
+      module "a" (i2-parameter-create-uniform-internal 1 0))
+    (i2-module-register-parameter-internal!
+      module "b" (i2-parameter-create-uniform-internal 1 0))
+    (i2-module-register-parameter-internal!
+      module "c" (i2-parameter-create-uniform-internal 1 0))
+    (i2-module-register-parameter-internal!
+      module "d" (i2-parameter-create-uniform-internal 1 0))
+    (module-state-dict module)))
+
+(define (coverage-config first second)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list
+          (list 'group first
+                "3a83126f" "3f666666" "3f7d70a4"
+                "322bcc77" "00000000")
+          (list 'group second
+                "3dcccccd" "3f000000" "3f000000"
+                "3a83126f" "00000000"))))
+
 (define (reconstruct config paths aliases completed entries)
   (let ((request
           (vector o2-c2-reconstruct-tag config paths aliases completed
@@ -159,6 +182,24 @@
 (expect-error "malformed request rejects" 'invalid-argument
               'c2-o2-encode-staging-internal
   (lambda () (c2-o2-encode-staging-internal (vector fixture-o2))))
+(define no-token-claimed-request
+  (vector fixture-o2 fixture-p1 #f 'claimed-no-token #f))
+(expect-error "claimed staging rejects #f authority on live inputs"
+              'invalid-argument 'c2-o2-encode-c2-owned-staging-internal
+  (lambda ()
+    (c2-o2-encode-c2-owned-staging-internal no-token-claimed-request)))
+(check "no-token claimed staging leaves output unpublished"
+       (eq? (vector-ref no-token-claimed-request 4) #f))
+(define no-token-moment-output (make-bytevector 8 0))
+(expect-error "claimed moment copy rejects #f authority on live input"
+              'invalid-argument
+              'o2-state-copy-moment-bits-c2-owned-internal
+  (lambda ()
+    (o2-state-copy-moment-bits-c2-owned-internal
+      (vector fixture-o2 0 0 no-token-moment-output 2 #f
+              'claimed-no-token))))
+(check "no-token claimed moment copy leaves destination unchanged"
+       (c1-bytes=? no-token-moment-output (make-bytevector 8 0)))
 (expect-error "nonempty output slot rejects" 'invalid-argument
               'c2-o2-encode-staging-internal
   (lambda ()
@@ -186,6 +227,33 @@
 (check "alias failure leaves output unpublished"
        (eq? (vector-ref wrong-alias-request 3) #f))
 
+;;; The factored metadata classifier preserves the accepted exact categories
+;;; and caller operation even though ordinary projection validation normally
+;;; rejects these hostile lexical mutations first.
+(expect-error "parameter dtype category and caller operation stay exact"
+              'dtype-mismatch 'metadata-category-probe
+  (lambda ()
+    (c2-o2-wire-require-parameter-metadata
+      'metadata-category-probe
+      (state-entry-internal
+        '("weight") 'parameter '(2) 'f16 'cpu
+        'dense-row-major-contiguous #f))))
+(expect-error "parameter device category and caller operation stay exact"
+              'device-mismatch 'metadata-category-probe
+  (lambda ()
+    (c2-o2-wire-require-parameter-metadata
+      'metadata-category-probe
+      (state-entry-internal
+        '("weight") 'parameter '(2) 'f32 'cuda
+        'dense-row-major-contiguous #f))))
+(expect-error "parameter layout category and caller operation stay exact"
+              'noncontiguous 'metadata-category-probe
+  (lambda ()
+    (c2-o2-wire-require-parameter-metadata
+      'metadata-category-probe
+      (state-entry-internal
+        '("weight") 'parameter '(2) 'f32 'cpu 'strided #f))))
+
 ;;; The logical config is private and immutable to consumers. This hostile
 ;;; same-source mutation proves the staging boundary still rejects bad options.
 (define fixture-state-record
@@ -205,6 +273,47 @@
 (check "option failure leaves output unpublished"
        (eq? (vector-ref bad-option-request 3) #f))
 (vector-set! fixture-state-record 2 saved-config)
+
+;;; Group cardinality alone is insufficient: [a,c]/[b,c] has four total
+;;; members but duplicates c and omits d from a four-parameter model.
+(define coverage-p1 (make-coverage-p1))
+(define coverage-o2
+  (reconstruct
+    (coverage-config (list '("a") '("b"))
+                     (list '("c") '("d")))
+    (list '("a") '("b") '("c") '("d")) '() 0
+    (vector
+      (vector '("a") '(1) (make-bytevector 4 0) (make-bytevector 4 0))
+      (vector '("b") '(1) (make-bytevector 4 0) (make-bytevector 4 0))
+      (vector '("c") '(1) (make-bytevector 4 0) (make-bytevector 4 0))
+      (vector '("d") '(1) (make-bytevector 4 0) (make-bytevector 4 0)))))
+(define coverage-state-record
+  (o2-require-live-state 'checkpoint-save! coverage-o2))
+(vector-set!
+  coverage-state-record 2
+  (coverage-config (list '("a") '("c"))
+                   (list '("b") '("c"))))
+(define duplicate-group-request
+  (vector coverage-o2 coverage-p1 'checkpoint-save! #f))
+(expect-error "duplicate-across-groups/omitted-path rejects atomically"
+              'shape-mismatch 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal duplicate-group-request)))
+(check "duplicate group failure leaves output unpublished"
+       (eq? (vector-ref duplicate-group-request 3) #f))
+
+;;; The Eshkol projection is not authoritative over the native owner ledger.
+(define rich-state-record
+  (o2-require-live-state 'checkpoint-save! rich-o2))
+(define saved-rich-completed (vector-ref rich-state-record 5))
+(vector-set! rich-state-record 5 (+ saved-rich-completed 1))
+(define divergent-completed-request
+  (vector rich-o2 rich-p1 'checkpoint-save! #f))
+(expect-error "lexical/native completed-update divergence rejects"
+              'shape-mismatch 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal divergent-completed-request)))
+(check "completed divergence leaves output unpublished"
+       (eq? (vector-ref divergent-completed-request 3) #f))
+(vector-set! rich-state-record 5 saved-rich-completed)
 
 ;;; Repeated staging and region-bounded scratch create/retire no O2 borrow
 ;;; shells and leave all I2/f32 live, retired, and event controls exactly flat.
@@ -244,10 +353,13 @@
 (check "wrong-alias P1 releases" (state-dict-release! wrong-alias-p1))
 (check "fixture P1 releases" (state-dict-release! fixture-p1))
 (check "rich P1 releases" (state-dict-release! rich-p1))
+(check "coverage P1 releases" (state-dict-release! coverage-p1))
 (check "wrong-shape O2 releases"
        (o2-public-optimizer-state-release! wrong-shape-o2))
 (check "fixture O2 releases" (o2-public-optimizer-state-release! fixture-o2))
 (check "rich O2 releases" (o2-public-optimizer-state-release! rich-o2))
+(check "coverage O2 releases"
+       (o2-public-optimizer-state-release! coverage-o2))
 
 (display "C2 O2 ENCODE PASS: ")
 (display checks)

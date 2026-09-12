@@ -19,5 +19,7 @@ internal/d2/lib/d2_dataset.esk
 native/c2_d2_cursor_pair_extension.esk
 native/o2_wave2_extension.esk
 native/c2_o2_reconstruct_extension.esk
+native/c2_o2_encode_extension.esk
+native/c2_model_encode_extension.esk
 native/c2_x1_canonical_extension.esk
 native/c2_training_state_extension.esk

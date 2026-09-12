@@ -1,3 +1,5 @@
+c2-o2-encode-c2-owned-staging-internal
+c2-o2-encode-staging-core-internal
 c2-o2-encode-staging-internal
 c2-o2-wire-config
 c2-o2-wire-config-prefix-bytes
@@ -16,6 +18,7 @@ c2-o2-wire-provider-bytes
 c2-o2-wire-record
 c2-o2-wire-record-prefix-bytes
 c2-o2-wire-records-and-payload
+c2-o2-wire-require-parameter-metadata
 c2-o2-wire-secondary-alias?
 c2-o2-wire-shape
 c2-o2-wire-u32-index

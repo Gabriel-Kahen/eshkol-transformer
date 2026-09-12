@@ -28,6 +28,7 @@ cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC -fvisibility=hidden
         -fno-common -fstack-protector-all -I "${PROJECT_ROOT}/include"
         -I "${PROJECT_ROOT}/native" -DET_F32_TENSOR_TESTING -DET_O2_TESTING)
 "${cc}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+  -DET_C2_I2_MODEL_COPY \
   -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
   -o "${runtime}/i2_wave2_native_bridge.o"
 "${cc}" "${cflags[@]}" -DET_O2_NATIVE_HELPERS_ONLY \
@@ -116,6 +117,7 @@ cmp "${PROJECT_ROOT}/native/c2_training_state_source_closure.txt" \
     native/i2_wave2_extension.esk internal/t2/lib/t2_bpe_core.esk \
     native/d2_semantic_core.esk internal/d2/lib/d2_dataset.esk \
     native/c2_d2_cursor_pair_extension.esk native/o2_wave2_extension.esk \
-    native/c2_o2_reconstruct_extension.esk native/c2_x1_canonical_extension.esk \
+    native/c2_o2_reconstruct_extension.esk native/c2_o2_encode_extension.esk \
+    native/c2_model_encode_extension.esk native/c2_x1_canonical_extension.esk \
     native/c2_training_state_extension.esk)
 printf 'C2 TRAINING STATE OWNER PASS: strict repeated AOT/runtime, ownership/failpoints/topology, deterministic fixtures, ASan/UBSan, source closure\n'

@@ -2,7 +2,9 @@
 ;;; trusted source composition must load o2_wave2_root.esk and
 ;;; c2_o2_reconstruct_extension.esk first.
 ;;;
-;;; Request: [exact-live-O2-state, exact-live-P1-state, operation, #f-output].
+;;; Ordinary request: [exact-live-O2-state, exact-live-P1-state, operation,
+;;; #f-output]. Claimed request: [O2-state,P1-state,exact-active-C2-owner-token,
+;;; operation,#f-output].
 ;;; Success writes [O2-metadata, moment-payload] to the output slot. Every
 ;;; 32-byte moment-digest slot in metadata is intentionally zero: the private
 ;;; et_c2_checkpoint_encode_v1 outer codec ignores and recomputes those slots.
@@ -61,8 +63,28 @@
               (c1-write-u64! shape-bytes offset (car remaining))
               (emit (cdr remaining) (+ offset 8))))))))
 
-(define (c2-o2-wire-p1-descriptors operation p1 aliases o2-paths)
-  (let* ((entries (state-dict-entries-internal p1))
+(define (c2-o2-wire-require-parameter-metadata operation entry)
+  (if (not (eq? (state-entry-dtype-internal entry) 'f32))
+      (c2-o2-wire-fail 'dtype-mismatch operation
+                       "P1 optimizer parameter dtype differs"))
+  (if (not (eq? (state-entry-device-internal entry) 'cpu))
+      (c2-o2-wire-fail 'device-mismatch operation
+                       "P1 optimizer parameter device differs"))
+  (if (not (eq? (state-entry-layout-internal entry)
+                'dense-row-major-contiguous))
+      (c2-o2-wire-fail 'noncontiguous operation
+                       "P1 optimizer parameter layout differs"))
+  #t)
+
+(define (c2-o2-wire-p1-descriptors operation p1 aliases o2-paths owner-token)
+  (let* ((projection
+           (if owner-token
+               (state-dict-c2-owned-projection-internal
+                 p1 owner-token operation)
+               #f))
+         (entries
+           (if projection (vector-ref projection 4)
+               (state-dict-entries-internal p1)))
          (entry-count
            (c1-list-length-bounded
              entries (+ c2-o2-wire-max-model-entries 1))))
@@ -70,7 +92,10 @@
             (> entry-count c2-o2-wire-max-model-entries))
         (c2-o2-wire-fail 'shape-mismatch operation
                          "P1 entry count is outside the C2 wire limit"))
-    (if (not (equal? aliases (state-dict-alias-groups p1)))
+    (if (not (equal?
+               aliases
+               (if projection (vector-ref projection 5)
+                   (state-dict-alias-groups p1))))
         (c2-o2-wire-fail 'shape-mismatch operation
                          "O2 and P1 alias topology differs"))
     (let loop ((remaining entries) (model-index 0) (previous #f)
@@ -93,12 +118,7 @@
             (if (and (eq? kind 'parameter)
                      (not (c2-o2-wire-secondary-alias? path aliases)))
                 (begin
-                  (if (or (not (eq? (state-entry-dtype-internal entry) 'f32))
-                          (not (eq? (state-entry-device-internal entry) 'cpu))
-                          (not (eq? (state-entry-layout-internal entry)
-                                    'dense-row-major-contiguous)))
-                      (c2-o2-wire-fail 'shape-mismatch operation
-                                       "P1 optimizer parameter metadata differs"))
+                  (c2-o2-wire-require-parameter-metadata operation entry)
                   (let* ((shape-info (c2-o2-wire-shape operation shape))
                          (path-info (c1-encode-path path))
                          (path-bytes (vector-ref path-info 0))
@@ -138,23 +158,37 @@
             (emit (cdr remaining) (+ offset 4)))))))
 
 (define (c2-o2-wire-groups operation parsed descriptors)
-  (let loop ((remaining (vector-ref parsed 3)) (records '()) (members 0))
+  (let loop ((remaining (vector-ref parsed 3)) (records '())
+             (members 0) (seen '()))
     (if (null? remaining)
         (let ((bytes (c1-concat (o2-reverse records))))
-          (if (not (= members
-                      (c1-list-length-bounded
-                        descriptors (+ o2-max-parameters 1))))
+          (if (or (not (= members
+                           (c1-list-length-bounded
+                             descriptors (+ o2-max-parameters 1))))
+                  (let covered? ((remaining descriptors))
+                    (if (null? remaining) #f
+                        (if (o2-path-member?
+                              (vector-ref (car remaining) 1) seen)
+                            (covered? (cdr remaining))
+                            #t))))
               (c2-o2-wire-fail 'shape-mismatch operation
                                "optimizer groups do not exactly cover P1"))
           bytes)
         (let* ((group (car remaining))
                (count (c1-list-length-bounded
                         (vector-ref group 0) (+ o2-max-parameters 1))))
-          (loop (cdr remaining)
-                (cons (c2-o2-wire-group-record
-                        operation group descriptors)
-                      records)
-                (+ members count))))))
+          (let add ((paths (vector-ref group 0)) (next-seen seen))
+            (if (null? paths)
+                (loop (cdr remaining)
+                      (cons (c2-o2-wire-group-record
+                              operation group descriptors)
+                            records)
+                      (+ members count) next-seen)
+                (if (o2-path-member? (car paths) next-seen)
+                    (c2-o2-wire-fail
+                      'shape-mismatch operation
+                      "optimizer groups duplicate a P1 parameter")
+                    (add (cdr paths) (cons (car paths) next-seen)))))))))
 
 (define (c2-o2-wire-config parsed group-bytes count)
   (let* ((clip (vector-ref parsed 1))
@@ -208,7 +242,7 @@
     record))
 
 (define (c2-o2-wire-records-and-payload
-          operation state-shell descriptors payload-bytes)
+          operation state-shell owner-token descriptors payload-bytes)
   (let ((payload (make-bytevector payload-bytes 0)))
     (let loop ((remaining descriptors) (index 0) (offset 0) (records '()))
       (if (null? remaining)
@@ -218,10 +252,19 @@
                  (moment-bytes (* elements 4))
                  (avg (make-bytevector moment-bytes 0))
                  (sq (make-bytevector moment-bytes 0)))
-            (o2-state-copy-moment-bits-internal
-              (vector state-shell index 0 avg elements operation))
-            (o2-state-copy-moment-bits-internal
-              (vector state-shell index 1 sq elements operation))
+            (if owner-token
+                (begin
+                  (o2-state-copy-moment-bits-c2-owned-internal
+                    (vector state-shell index 0 avg elements owner-token
+                            operation))
+                  (o2-state-copy-moment-bits-c2-owned-internal
+                    (vector state-shell index 1 sq elements owner-token
+                            operation)))
+                (begin
+                  (o2-state-copy-moment-bits-internal
+                    (vector state-shell index 0 avg elements operation))
+                  (o2-state-copy-moment-bits-internal
+                    (vector state-shell index 1 sq elements operation))))
             (c1-copy-into! payload offset avg)
             (c1-copy-into! payload (+ offset moment-bytes) sq)
             (loop
@@ -230,16 +273,15 @@
                       descriptor offset (+ offset moment-bytes))
                     records)))))))
 
-(define (c2-o2-encode-staging-internal request)
-  (if (or (not (vector? request)) (not (= (vector-length request) 4))
-          (not (symbol? (vector-ref request 2)))
-          (not (eq? (vector-ref request 3) #f)))
-      (c2-o2-wire-fail
-        'invalid-argument 'c2-o2-encode-staging-internal
-        "C2 O2 staging request must be [O2-state,P1-state,operation,#f]"))
-  (let* ((operation (vector-ref request 2))
+(define (c2-o2-encode-staging-core-internal
+          request claimed? owner-token operation output-index)
+  (let* (
          (state-shell (vector-ref request 0))
-         (state (o2-require-live-state operation state-shell))
+         (state
+           (if claimed?
+               (o2-require-c2-owned-state
+                 operation state-shell owner-token)
+               (o2-require-live-state operation state-shell)))
          ;; These four immutable/deep-owned lexical fields were validated when
          ;; the exact O2 state was created. Parsing config again protects the
          ;; private source-composed boundary from malformed local composition.
@@ -250,7 +292,7 @@
          (parsed (o2-parse-config operation config))
          (p1-info
            (c2-o2-wire-p1-descriptors
-             operation (vector-ref request 1) aliases paths))
+             operation (vector-ref request 1) aliases paths owner-token))
          (descriptors (vector-ref p1-info 0))
          (model-count (vector-ref p1-info 1))
          (count
@@ -286,7 +328,7 @@
                  (group-count (vector-ref config-info 1))
                  (record-payload
                    (c2-o2-wire-records-and-payload
-                     operation state-shell descriptors bytes))
+                     operation state-shell owner-token descriptors bytes))
                  (records (vector-ref record-payload 0))
                  (payload (vector-ref record-payload 1))
                  (metadata-bytes
@@ -333,7 +375,7 @@
               (c1-copy-into! metadata record-offset records)
               ;; Publication is the only mutation of caller-visible state and
               ;; occurs after every validation, allocation, and moment copy.
-              (vector-set! request 3 (vector metadata payload))
+              (vector-set! request output-index (vector metadata payload))
               request))
           (let* ((descriptor (car remaining))
                  (moment-bytes (* 4 (vector-ref descriptor 4)))
@@ -342,3 +384,24 @@
                 (c2-o2-wire-fail 'invalid-state operation
                                  "O2 moment payload exceeds C2 wire limits"))
             (payload-size (cdr remaining) next))))))
+
+(define (c2-o2-encode-staging-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 4))
+          (not (symbol? (vector-ref request 2)))
+          (not (eq? (vector-ref request 3) #f)))
+      (c2-o2-wire-fail
+        'invalid-argument 'c2-o2-encode-staging-internal
+        "C2 O2 staging request must be [O2-state,P1-state,operation,#f]"))
+  (c2-o2-encode-staging-core-internal
+    request #f #f (vector-ref request 2) 3))
+
+(define (c2-o2-encode-c2-owned-staging-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 5))
+          (not (symbol? (vector-ref request 3)))
+          (not (vector-ref request 2))
+          (not (eq? (vector-ref request 4) #f)))
+      (c2-o2-wire-fail
+        'invalid-argument 'c2-o2-encode-c2-owned-staging-internal
+        "claimed C2 O2 staging request must be [O2,P1,token,operation,#f]"))
+  (c2-o2-encode-staging-core-internal
+    request #t (vector-ref request 2) (vector-ref request 3) 4))
