@@ -13,6 +13,10 @@
         :real et_c2_test_i2_live_count_v1)
 (extern i64 c2-test-o2-count i64
         :real et_c2_test_o2_count_v1)
+(extern i64 c2-test-o2-borrow-begin ptr
+        :real et_c2_test_o2_borrow_begin_v1)
+(extern i64 c2-test-o2-borrow-end
+        :real et_c2_test_o2_borrow_end_v1)
 
 (define checks 0)
 (define (check label condition)
@@ -145,6 +149,60 @@
                   'checkpoint-load #f)))
     (c2-training-state-compose-internal request)
     request))
+
+;;; Component borrows reject composition with the caller operation, publish
+;;; nothing, and preserve both authorities for use after the borrow ends.
+(define busy-p1 (make-p1-state "weight" '(4) #f))
+(define busy-p1-o2 (make-o2-state '("weight") '(4) '() 17))
+(define busy-p1-tensor (state-dict-tensor busy-p1 '("weight")))
+(define busy-p1-carrier
+  (state-dict-tensor-borrow-begin-internal busy-p1 busy-p1-tensor))
+(define busy-p1-request
+  (vector c2-training-state-compose-tag busy-p1 busy-p1-o2
+          (make-controls 17) 'checkpoint-load #f))
+(expect-error "active P1 tensor borrow rejects compose" 'invalid-state
+              'checkpoint-load
+  (lambda () (c2-training-state-compose-internal busy-p1-request)))
+(check "active P1 borrow publishes nothing"
+       (and busy-p1-carrier
+            (eq? (vector-ref busy-p1-request 1) busy-p1)
+            (eq? (vector-ref busy-p1-request 2) busy-p1-o2)
+            (eq? (vector-ref busy-p1-request 5) #f)))
+(check "active P1 borrow ends"
+       (state-dict-tensor-borrow-end-internal busy-p1 busy-p1-tensor))
+(check "P1-busy compose leaves both owners usable and releasable"
+       (and (pair? (state-dict-paths busy-p1))
+            (vector? (o2-require-live-state 'checkpoint-load busy-p1-o2))
+            (state-dict-release! busy-p1)
+            (o2-public-optimizer-state-release! busy-p1-o2)))
+
+(define busy-o2-p1 (make-p1-state "weight" '(4) #f))
+(define busy-o2 (make-o2-state '("weight") '(4) '() 17))
+(define busy-o2-native (vector-ref (o2-require-live-state 'checkpoint-load
+                                                           busy-o2) 1))
+(define busy-o2-borrows-before (c2-test-o2-count 6))
+(check "O2 moment borrow begins"
+       (= (c2-test-o2-borrow-begin busy-o2-native) 0))
+(check "O2 moment borrow is exactly accounted"
+       (= (+ busy-o2-borrows-before 1) (c2-test-o2-count 6)))
+(define busy-o2-request
+  (vector c2-training-state-compose-tag busy-o2-p1 busy-o2
+          (make-controls 17) 'checkpoint-load #f))
+(expect-error "active O2 moment borrow rejects compose" 'invalid-state
+              'checkpoint-load
+  (lambda () (c2-training-state-compose-internal busy-o2-request)))
+(check "active O2 borrow publishes nothing"
+       (and (eq? (vector-ref busy-o2-request 1) busy-o2-p1)
+            (eq? (vector-ref busy-o2-request 2) busy-o2)
+            (eq? (vector-ref busy-o2-request 5) #f)))
+(check "O2 moment borrow ends and returns its live count"
+       (and (= (c2-test-o2-borrow-end) 0)
+            (= busy-o2-borrows-before (c2-test-o2-count 6))))
+(check "O2-busy compose leaves both owners usable and releasable"
+       (and (pair? (state-dict-paths busy-o2-p1))
+            (vector? (o2-require-live-state 'checkpoint-load busy-o2))
+            (state-dict-release! busy-o2-p1)
+            (o2-public-optimizer-state-release! busy-o2)))
 
 ;;; Exact completed-update and topology failures leave both authorities live.
 (define mismatch-p1 (make-p1-state "weight" '(4) #f))
@@ -321,11 +379,84 @@
        (and (= defect-p1-calls 1) (= defect-o2-calls 1)
             (state-dict-release! defect-p1)
             (o2-public-optimizer-state-release! defect-o2)))
-(check "defective release published dead"
+(check "P1-defective release published C2 dead"
+       (eq? (vector-ref (c2-training-state-find defect-owner) 7) 'dead))
+(check "P1-defective exact-dead release is idempotent"
        (c2-training-state-release-internal! defect-owner
                                             'trainer-state-release!))
 (check "consumed defective authorities never retry"
        (and (= defect-p1-calls 1) (= defect-o2-calls 1)))
+
+;;; An O2-only post-consumption defect still leaves both components drained.
+(define o2-defect-p1 (make-p1-state "weight" '(4) #f))
+(define o2-defect-o2 (make-o2-state '("weight") '(4) '() 17))
+(define o2-defect-owner
+  (vector-ref (compose o2-defect-p1 o2-defect-o2 (make-controls 17)) 5))
+(define o2-defect-p1-calls 0)
+(define o2-defect-o2-calls 0)
+(set! c2-training-state-release-p1-owned!
+  (lambda (state token)
+    (set! o2-defect-p1-calls (+ o2-defect-p1-calls 1))
+    (saved-p1-release state token)))
+(set! c2-training-state-release-o2-owned!
+  (lambda (state token)
+    (set! o2-defect-o2-calls (+ o2-defect-o2-calls 1))
+    (saved-o2-release state token)
+    (c2-training-state-fail 'unsupported 'injected-provider-release
+                            "injected consumed O2 provider defect")))
+(expect-error "O2-only cleanup defect reports C2 internal" 'internal
+              'trainer-state-release!
+  (lambda ()
+    (c2-training-state-release-internal! o2-defect-owner
+                                         'trainer-state-release!)))
+(check "O2-only defect drains both authorities"
+       (and (= o2-defect-p1-calls 1) (= o2-defect-o2-calls 1)
+            (state-dict-release! o2-defect-p1)
+            (o2-public-optimizer-state-release! o2-defect-o2)))
+(check "O2-only defective release published C2 dead"
+       (eq? (vector-ref (c2-training-state-find o2-defect-owner) 7) 'dead))
+(check "O2-only exact-dead release is idempotent"
+       (c2-training-state-release-internal! o2-defect-owner
+                                            'trainer-state-release!))
+(check "O2-only consumed authorities never retry"
+       (and (= o2-defect-p1-calls 1) (= o2-defect-o2-calls 1)))
+
+;;; With two defects, O2 cleanup still runs after P1 fails and only the first
+;;; defect is normalized at the C2 boundary.
+(define dual-defect-p1 (make-p1-state "weight" '(4) #f))
+(define dual-defect-o2 (make-o2-state '("weight") '(4) '() 17))
+(define dual-defect-owner
+  (vector-ref (compose dual-defect-p1 dual-defect-o2 (make-controls 17)) 5))
+(define dual-defect-p1-calls 0)
+(define dual-defect-o2-calls 0)
+(set! c2-training-state-release-p1-owned!
+  (lambda (state token)
+    (set! dual-defect-p1-calls (+ dual-defect-p1-calls 1))
+    (saved-p1-release state token)
+    (c2-training-state-fail 'unsupported 'injected-provider-release
+                            "injected consumed P1 provider defect")))
+(set! c2-training-state-release-o2-owned!
+  (lambda (state token)
+    (set! dual-defect-o2-calls (+ dual-defect-o2-calls 1))
+    (saved-o2-release state token)
+    (c2-training-state-fail 'corrupt-data 'injected-provider-release
+                            "injected consumed O2 provider defect")))
+(expect-error "dual cleanup defects report C2 internal" 'internal
+              'trainer-state-release!
+  (lambda ()
+    (c2-training-state-release-internal! dual-defect-owner
+                                         'trainer-state-release!)))
+(check "dual defects continue through O2 cleanup"
+       (and (= dual-defect-p1-calls 1) (= dual-defect-o2-calls 1)
+            (state-dict-release! dual-defect-p1)
+            (o2-public-optimizer-state-release! dual-defect-o2)))
+(check "dual-defective release published C2 dead"
+       (eq? (vector-ref (c2-training-state-find dual-defect-owner) 7) 'dead))
+(check "dual-defective exact-dead release is idempotent"
+       (c2-training-state-release-internal! dual-defect-owner
+                                            'trainer-state-release!))
+(check "dual consumed authorities never retry"
+       (and (= dual-defect-p1-calls 1) (= dual-defect-o2-calls 1)))
 (set! c2-training-state-release-p1-owned! saved-p1-release)
 (set! c2-training-state-release-o2-owned! saved-o2-release)
 (o2-test-reset-failpoints)

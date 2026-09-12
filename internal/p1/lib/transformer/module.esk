@@ -4218,27 +4218,27 @@
       'state
       (state-dict-adopt-owned-internal!
         records aliases provider-name major minor ownership)))
-  (lambda (state)
+  (lambda (state operation)
     (reject-protected-storage-comparison-reentry
-      'state-dict-c2-parameter-topology-internal)
+      operation)
     (let ((entry (shell-entry state)))
       (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
           (fail 'invalid-argument
-                'state-dict-c2-parameter-topology-internal
+                operation
                 "expected an exact registered P1 state" '()))
       (let ((raw (vector-ref entry 2)))
         (if (eq? raw dead-state-raw)
             (fail 'invalid-state
-                  'state-dict-c2-parameter-topology-internal
+                  operation
                   "P1 state is dead" '()))
         (let ((lifecycle (state-lifecycle raw)))
           (if (or (not (eq? (vector-ref lifecycle 1) 'live))
                   (vector-ref lifecycle 6))
               (fail 'invalid-state
-                    'state-dict-c2-parameter-topology-internal
+                    operation
                     "P1 state is busy or transferred" '()))
           (validate-bound-state
-            'state-dict-c2-parameter-topology-internal raw)
+            operation raw)
           (let ((aliases (copy-data (vector-ref raw 7))))
             (let secondary? ((path #f) (groups aliases))
               (if path
@@ -4451,8 +4451,8 @@
           records aliases provider-name major minor ownership)
   ((vector-ref p1-trusted-surface 48)
    records aliases provider-name major minor ownership))
-(define (state-dict-c2-parameter-topology-internal state)
-  ((vector-ref p1-trusted-surface 49) state))
+(define (state-dict-c2-parameter-topology-internal state operation)
+  ((vector-ref p1-trusted-surface 49) state operation))
 (define (state-dict-claim-c2-internal! state owner-token)
   ((vector-ref p1-trusted-surface 50) state owner-token))
 (define (state-dict-claim-c2-rollback-internal! state owner-token)

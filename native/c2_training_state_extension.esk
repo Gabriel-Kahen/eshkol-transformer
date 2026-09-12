@@ -234,7 +234,8 @@
          (completed (vector-ref (vector-ref controls 4) 1))
          (p1 (vector-ref request 1))
          (o2 (vector-ref request 2))
-         (topology (state-dict-c2-parameter-topology-internal p1))
+         (topology
+           (state-dict-c2-parameter-topology-internal p1 operation))
          (o2-projection
            (c2-training-state-o2-preflight
              o2 topology completed operation))
