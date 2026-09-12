@@ -1,0 +1,48 @@
+;;; Private C2 adapter for encoding the nested C1 1.0 model container. Never
+;;; install independently: the trusted caller must first load i2_wave2_root.esk.
+
+(extern i64 c2-model-native-state-owned-copy ptr ptr i64
+        :real et_c2_private_i2_state_owned_copy_bytes_v1)
+
+(define (c2-model-checkpoint-encode (request : vector)) : bytevector
+  (if (not (and (vector? request) (= (vector-length request) 7)
+                (or (eq? (vector-ref request 1) 'parameter)
+                    (eq? (vector-ref request 1) 'buffer))
+                (list? (vector-ref request 2))
+                (eq? (vector-ref request 3) 'f32)
+                (eq? (vector-ref request 4) 'cpu)
+                (eq? (vector-ref request 5) 'dense-row-major-contiguous)
+                (symbol? (vector-ref request 6))))
+      (i2-fail 'invalid-argument 'c2-model-checkpoint-encode
+               "malformed C2 model checkpoint encode request"))
+  (let* ((kind (vector-ref request 1))
+         (shape (vector-ref request 2))
+         (operation (vector-ref request 6))
+         (carrier (i2-carrier-preflight
+                    (vector-ref request 0) kind operation)))
+    ;; C1 invokes this callback only inside its P1 state/tensor pin. Requiring
+    ;; the provider-owned clone role excludes live module tensors and
+    ;; parameters from this private shortcut.
+    (if (not (eq? (vector-ref carrier 1) 'owned-clone))
+        (i2-fail 'invalid-state operation
+                 "C2 model encoding requires a pinned state-owned clone"))
+    (if (not (equal? shape (i2-shape carrier kind operation)))
+        (i2-fail 'shape-mismatch operation
+                 "C2 model metadata differs from the state-owned tensor"))
+    (let* ((bytes (* 4 (c1-shape-product shape operation)))
+           (payload (make-bytevector bytes 0)))
+      (if (not (= (c2-model-native-state-owned-copy
+                    (vector-ref carrier 2) payload bytes) 0))
+          (i2-native-fail operation))
+      payload)))
+
+(define c2-model-checkpoint-codec-internal
+  (c1-checkpoint-codec-internal
+    i2-provider-name c2-model-checkpoint-encode
+    (vector-ref i2-checkpoint-codec-internal 3)))
+
+(define (c2-model-encode-state-internal state policy)
+  (let ((result
+          (c1-checkpoint-encode-state-internal
+            state policy c2-model-checkpoint-codec-internal)))
+    result))
