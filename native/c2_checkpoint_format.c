@@ -1,4 +1,5 @@
 #include "c2_checkpoint_format.h"
+#include "c2_x1_canonical.h"
 
 #include <limits.h>
 #include <string.h>
@@ -259,23 +260,6 @@ static int digest_matches(const uint8_t *domain, size_t domain_bytes,
   sha256_update(&state, bytes, bytes_count);
   sha256_final(&state, digest);
   return memcmp(digest, expected, 32u) == 0;
-}
-
-static int config_fingerprint_matches(const uint8_t *fingerprint,
-                                      const uint8_t *canonical,
-                                      size_t canonical_bytes) {
-  static const uint8_t digits[] = "0123456789abcdef";
-  sha256_state state;
-  uint8_t digest[32];
-  size_t i;
-  sha256_init(&state);
-  sha256_update(&state, canonical, canonical_bytes);
-  sha256_final(&state, digest);
-  for (i = 0u; i < sizeof(digest); ++i) {
-    if (fingerprint[29u + 2u * i] != digits[digest[i] >> 4u] ||
-        fingerprint[30u + 2u * i] != digits[digest[i] & 15u]) return 0;
-  }
-  return 1;
 }
 
 typedef struct c1_record {
@@ -549,188 +533,22 @@ static int bits_positive(uint32_t bits) {
   return bits_nonnegative(bits) && (bits & 0x7fffffffu) != 0u;
 }
 
-typedef struct x1_info {
-  uint64_t vocabulary;
-  uint64_t seed;
-} x1_info;
-
-typedef struct text_cursor {
-  const uint8_t *at;
-  const uint8_t *end;
-} text_cursor;
-
-static int text_take(text_cursor *cursor, const char *literal) {
-  const size_t length = strlen(literal);
-  if ((size_t)(cursor->end - cursor->at) < length ||
-      memcmp(cursor->at, literal, length) != 0) return 0;
-  cursor->at += length;
-  return 1;
-}
-
-static int text_u64(text_cursor *cursor, uint64_t *value, int positive) {
-  uint64_t result = 0u;
-  const uint8_t *start = cursor->at;
-  if (start == cursor->end || *start < '0' || *start > '9') return 0;
-  if (*start == '0' && start + 1u < cursor->end && start[1] >= '0' && start[1] <= '9')
-    return 0;
-  while (cursor->at < cursor->end && *cursor->at >= '0' && *cursor->at <= '9') {
-    const uint32_t digit = (uint32_t)(*cursor->at - '0');
-    if (result > (I64_MAX_U - digit) / 10u) return 0;
-    result = result * 10u + digit;
-    ++cursor->at;
-  }
-  if ((positive && result == 0u) || cursor->at == start) return 0;
-  *value = result;
-  return 1;
-}
-
-enum provenance_value { PROV_DEFAULT = 1, PROV_DERIVED = 2, PROV_INPUT = 4,
-                        PROV_OVERRIDE = 8 };
-
-static int text_provenance(text_cursor *cursor, uint32_t allowed,
-                           uint32_t *value) {
-  struct candidate { const char *text; uint32_t bit; } candidates[] = {
-      {"\"default\"", PROV_DEFAULT}, {"\"derived\"", PROV_DERIVED},
-      {"\"input\"", PROV_INPUT}, {"\"override\"", PROV_OVERRIDE}};
-  size_t i;
-  for (i = 0u; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
-    text_cursor copy = *cursor;
-    if ((allowed & candidates[i].bit) != 0u && text_take(&copy, candidates[i].text)) {
-      *cursor = copy; *value = candidates[i].bit; return 1;
-    }
-  }
-  return 0;
-}
-
-static int x1_validate(const uint8_t *bytes, size_t length, x1_info *info) {
-  static const char prefix[] =
-      "{\"canonicalization\":\"eshkol-config-json-v1\",\"checksum-algorithm\":\"sha256\","
-      "\"checksum-coverage\":\"whole-document-including-final-lf\","
-      "\"config-schema-version\":[1,0],\"format\":\"eshkol-resolved-run\","
-      "\"format-version\":[1,0],\"limits\":{\"integer-digits\":19,"
-      "\"max-input-bytes\":16384,\"max-input-keys\":14,"
-      "\"max-input-nesting-depth\":1},\"provenance\":{";
-  static const char *keys[14] = {
-      "\"config-schema-major\":", "\"config-schema-minor\":",
-      "\"model.context-length\":", "\"model.device\":", "\"model.dtype\":",
-      "\"model.head-size\":", "\"model.hidden-size\":", "\"model.kv-head-count\":",
-      "\"model.layer-count\":", "\"model.query-head-count\":",
-      "\"model.vocabulary-size\":", "\"run.deterministic\":", "\"run.seed\":",
-      "\"training.accumulation-steps\":"};
-  static const uint32_t allowed[14] = {
-      PROV_INPUT, PROV_INPUT, PROV_INPUT | PROV_OVERRIDE,
-      PROV_DEFAULT | PROV_INPUT | PROV_OVERRIDE,
-      PROV_DEFAULT | PROV_INPUT | PROV_OVERRIDE, PROV_DERIVED | PROV_INPUT,
-      PROV_INPUT | PROV_OVERRIDE, PROV_DEFAULT | PROV_INPUT | PROV_OVERRIDE,
-      PROV_INPUT | PROV_OVERRIDE, PROV_INPUT | PROV_OVERRIDE,
-      PROV_INPUT | PROV_OVERRIDE, PROV_DEFAULT | PROV_INPUT | PROV_OVERRIDE,
-      PROV_INPUT | PROV_OVERRIDE, PROV_DEFAULT | PROV_INPUT | PROV_OVERRIDE};
-  static const char resolved_prefix[] =
-      "},\"required-features\":[],\"resolved\":{\"config-schema-major\":1,"
-      "\"config-schema-minor\":0,\"model.context-length\":";
-  text_cursor cursor = {bytes, bytes + length};
-  uint32_t provenance[14];
-  uint64_t context, hidden, layers, query, kv, head, vocab, seed, accumulation;
-  size_t i;
-  if (!text_take(&cursor, prefix)) return 0;
-  for (i = 0u; i < 14u; ++i) {
-    if (!text_take(&cursor, keys[i]) ||
-        !text_provenance(&cursor, allowed[i], &provenance[i]) ||
-        (i != 13u && !text_take(&cursor, ","))) return 0;
-  }
-  if (!text_take(&cursor, resolved_prefix) || !text_u64(&cursor, &context, 1) ||
-      !text_take(&cursor, ",\"model.device\":\"cpu\",\"model.dtype\":\"f32\","
-                         "\"model.head-size\":" ) || !text_u64(&cursor, &head, 1) ||
-      !text_take(&cursor, ",\"model.hidden-size\":" ) || !text_u64(&cursor, &hidden, 1) ||
-      !text_take(&cursor, ",\"model.kv-head-count\":" ) || !text_u64(&cursor, &kv, 1) ||
-      !text_take(&cursor, ",\"model.layer-count\":" ) || !text_u64(&cursor, &layers, 1) ||
-      !text_take(&cursor, ",\"model.query-head-count\":" ) || !text_u64(&cursor, &query, 1) ||
-      !text_take(&cursor, ",\"model.vocabulary-size\":" ) || !text_u64(&cursor, &vocab, 1) ||
-      !text_take(&cursor, ",\"run.deterministic\":true,\"run.seed\":" ) ||
-      !text_u64(&cursor, &seed, 0) ||
-      !text_take(&cursor, ",\"training.accumulation-steps\":" ) ||
-      !text_u64(&cursor, &accumulation, 1) || !text_take(&cursor, "}}\n") ||
-      cursor.at != cursor.end || query > UINT64_MAX / head || hidden != query * head ||
-      kv == 0u || query % kv != 0u)
-    return 0;
-  if ((provenance[7] == PROV_DEFAULT && kv != query) ||
-      (provenance[13] == PROV_DEFAULT && accumulation != 1u) ||
-      (provenance[5] == PROV_DERIVED && head != hidden / query)) return 0;
-  info->vocabulary = vocab; info->seed = seed;
-  (void)context; (void)layers;
-  return 1;
-}
-
-static const uint8_t *bytes_find(const uint8_t *bytes, size_t length,
-                                 const char *needle) {
-  const size_t needle_length = strlen(needle);
-  size_t i;
-  if (needle_length > length) return NULL;
-  for (i = 0u; i <= length - needle_length; ++i)
-    if (memcmp(bytes + i, needle, needle_length) == 0) return bytes + i;
-  return NULL;
-}
-
-static int x1_version_mismatch(const uint8_t *bytes, size_t length) {
-  static const char *version_keys[2] = {"\"config-schema-version\":",
-                                        "\"format-version\":"};
-  size_t i;
-  for (i = 0u; i < 2u; ++i) {
-    const uint8_t *found = bytes_find(bytes, length, version_keys[i]);
-    const size_t key_length = strlen(version_keys[i]);
-    if (found != NULL) {
-      text_cursor value = {found + key_length, bytes + length};
-      uint64_t major, minor;
-      if (text_take(&value, "[") && text_u64(&value, &major, 0) &&
-          text_take(&value, ",") && text_u64(&value, &minor, 0) &&
-          text_take(&value, "]") && (major != 1u || minor != 0u)) return 1;
-    }
-  }
-  { static const char key[] = "\"required-features\":";
-    const uint8_t *found = bytes_find(bytes, length, key);
-    const size_t key_length = sizeof(key) - 1u;
-    if (found != NULL && (size_t)(bytes + length - found) >= key_length + 4u &&
-        found[key_length] == '[' && found[key_length + 1u] == '"') {
-      const uint8_t *at = found + key_length + 2u;
-      while (at < bytes + length && *at >= 0x20u && *at <= 0x7eu &&
-             *at != '"' && *at != '\\') ++at;
-      if (at < bytes + length && *at == '"' && at + 1u < bytes + length &&
-          at[1] == ']') return 1;
-    }
-  }
-  return 0;
-}
-
-static uint32_t x1_domain_mismatch(const uint8_t *bytes, size_t length) {
-  const uint8_t *resolved = bytes_find(bytes, length, "\"resolved\":{");
-  const uint8_t *end = bytes + length;
-  const uint8_t *field;
-  if (resolved == NULL) return ET_C2_FORMAT_CORRUPT_DATA;
-  field = bytes_find(resolved, (size_t)(end - resolved), "\"model.device\":");
-  if (field != NULL) {
-    field += strlen("\"model.device\":");
-    if (field < end && *field == '"') {
-      const uint8_t *close = ++field;
-      while (close < end && *close >= 0x20u && *close <= 0x7eu &&
-             *close != '"' && *close != '\\') ++close;
-      if (close < end && *close == '"' &&
-          !((size_t)(close - field) == 3u && memcmp(field, "cpu", 3u) == 0))
-        return ET_C2_FORMAT_DEVICE_MISMATCH;
-    }
-  }
-  field = bytes_find(resolved, (size_t)(end - resolved), "\"model.dtype\":");
-  if (field != NULL) {
-    field += strlen("\"model.dtype\":");
-    if (field < end && *field == '"') {
-      const uint8_t *close = ++field;
-      while (close < end && *close >= 0x20u && *close <= 0x7eu &&
-             *close != '"' && *close != '\\') ++close;
-      if (close < end && *close == '"' &&
-          !((size_t)(close - field) == 3u && memcmp(field, "f32", 3u) == 0))
-        return ET_C2_FORMAT_DTYPE_MISMATCH;
-    }
-  }
-  return ET_C2_FORMAT_CORRUPT_DATA;
+static int32_t fail_x1(parser *p, const et_c2_x1_error_v1 *x1_error,
+                       uint64_t outer_offset) {
+  uint32_t category = ET_C2_FORMAT_CORRUPT_DATA;
+  uint32_t code = ET_C2_FORMAT_CODE_FIXED_FIELD;
+  if (x1_error->code == ET_C2_X1_CODE_UTF8)
+    code = ET_C2_FORMAT_CODE_UTF8;
+  else if (x1_error->code == ET_C2_X1_CODE_FINGERPRINT)
+    code = ET_C2_FORMAT_CODE_CHECKSUM;
+  else if (x1_error->category == ET_C2_X1_VERSION_MISMATCH) {
+    category = ET_C2_FORMAT_VERSION_MISMATCH;
+    code = ET_C2_FORMAT_CODE_VERSION;
+  } else if (x1_error->category == ET_C2_X1_DTYPE_MISMATCH)
+    category = ET_C2_FORMAT_DTYPE_MISMATCH;
+  else if (x1_error->category == ET_C2_X1_DEVICE_MISMATCH)
+    category = ET_C2_FORMAT_DEVICE_MISMATCH;
+  return fail(p, category, code, outer_offset);
 }
 
 static int options_valid(const uint8_t *p) {
@@ -1015,7 +833,8 @@ int32_t et_c2_checkpoint_parse_v1(
   parser p;
   et_c2_checkpoint_view_v1 result;
   c1_info c1;
-  x1_info x1;
+  et_c2_x1_projection_v1 x1 = {0};
+  et_c2_x1_error_v1 x1_error = {0};
   const uint8_t *h;
   uint64_t metadata_end, payload_end, unsigned_end, at, optimizer_metadata;
   uint32_t cursor_bytes, epoch_bytes, fp_bytes, groups;
@@ -1082,7 +901,8 @@ int32_t et_c2_checkpoint_parse_v1(
        (fp_bytes == 96u ? cursor_bytes != 304u : 1)) ||
       u32(h + 140u) != 93u || u32(h + 144u) != 19u ||
       u32(h + 148u) != 57u || u32(h + 152u) != 71u ||
-      result.x1_bytes > 16384u || result.total_tokens > I64_MAX_U ||
+      result.x1_bytes > ET_C2_X1_MAX_CANONICAL_BYTES ||
+      result.total_tokens > I64_MAX_U ||
       result.completed_updates > I64_MAX_U || result.epochs > I64_MAX_U ||
       u64(h + 208u) != 1u)
     return fail(&p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_SPAN, 40u);
@@ -1138,20 +958,15 @@ int32_t et_c2_checkpoint_parse_v1(
                                              ET_C2_FORMAT_UNSUPPORTED) :
                 ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_IDENTITY, at);
   at += 71u; result.x1_offset = at;
-  if (!span_fits(at, result.x1_bytes, metadata_end) ||
-      !utf8_valid(bytes + at, (size_t)result.x1_bytes))
+  if (!span_fits(at, result.x1_bytes, metadata_end))
     return fail(&p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_UTF8, at);
-  if (!config_fingerprint_matches(bytes + 256u + fp_bytes, bytes + at,
-                                  (size_t)result.x1_bytes))
-    return fail(&p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_CHECKSUM, at);
-  if (!x1_validate(bytes + at, (size_t)result.x1_bytes, &x1)) {
-    const int version_mismatch =
-        x1_version_mismatch(bytes + at, (size_t)result.x1_bytes);
-    const uint32_t category = version_mismatch ? ET_C2_FORMAT_VERSION_MISMATCH :
-        x1_domain_mismatch(bytes + at, (size_t)result.x1_bytes);
-    return fail(&p, category, version_mismatch ? ET_C2_FORMAT_CODE_VERSION :
-                                             ET_C2_FORMAT_CODE_FIXED_FIELD, at);
-  }
+  x1.struct_size = sizeof(x1);
+  x1_error.struct_size = sizeof(x1_error);
+  status = et_c2_private_x1_canonical_inspect_v1(
+      bytes + at, (size_t)result.x1_bytes, bytes + 256u + fp_bytes, 93u,
+      &x1, &x1_error);
+  if (status != ET_C2_X1_OK)
+    return fail_x1(&p, &x1_error, at);
   at += result.x1_bytes; result.current_cursor_offset = at;
   if (!span_fits(at, cursor_bytes, metadata_end))
     return fail(&p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_CURSOR, at);
@@ -1171,7 +986,8 @@ int32_t et_c2_checkpoint_parse_v1(
     if (memcmp(current, epoch, 120u) != 0 ||
         memcmp(current + 128u, epoch + 128u, 48u + fp_bytes) != 0 ||
         rows == 0u || epoch_at >= rows || epoch_at > current_at || current_at > rows ||
-        u64(current + 40u) != x1.vocabulary || result.rng_key_bits != x1.seed)
+        u64(current + 40u) != x1.vocabulary_size ||
+        result.rng_key_bits != x1.seed)
       return fail(&p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_CURSOR,
                   result.epoch_cursor_offset);
   }

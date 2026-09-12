@@ -23,6 +23,7 @@ sources=(
   "${PROJECT_ROOT}/native/c2_checkpoint_core.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_reader.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_format.c"
+  "${PROJECT_ROOT}/native/c2_x1_canonical.c"
   "${PROJECT_ROOT}/tests/c2/test_checkpoint_core.c"
 )
 cflags=(
@@ -74,6 +75,7 @@ cmp "${PROJECT_ROOT}/tests/c2/expected/checkpoint_core_symbols.txt" \
 "${clang_cc}" -std=c11 -I "${PROJECT_ROOT}/native" -MM \
   "${PROJECT_ROOT}/native/c2_checkpoint_core.c" \
   "${PROJECT_ROOT}/native/c2_checkpoint_format.c" \
+  "${PROJECT_ROOT}/native/c2_x1_canonical.c" \
   "${PROJECT_ROOT}/native/c2_checkpoint_reader.c" | \
   sed -e 's/^[^:]*://' -e 's/\\//g' | tr -s '[:space:]' '\n' | \
   sed "s#^${PROJECT_ROOT}/##" | rg '^native/' | sort -u \

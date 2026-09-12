@@ -290,7 +290,7 @@ def resign_config_fingerprint(data: bytearray, x1: int, config_fp: int) -> None:
 class ParserTests(unittest.TestCase):
     driver: Path
 
-    def invoke(self, data: bytes, *args: int) -> tuple[int, int, int]:
+    def invoke(self, data: bytes, *args: int) -> tuple[int, int, int, int]:
         with tempfile.NamedTemporaryFile() as f:
             f.write(data)
             f.flush()
@@ -299,7 +299,7 @@ class ParserTests(unittest.TestCase):
                                  stderr=subprocess.PIPE, check=False)
         fields = run.stdout.strip().split()
         self.assertGreaterEqual(len(fields), 3, run.stderr)
-        return int(fields[0]), int(fields[1]), run.returncode
+        return int(fields[0]), int(fields[1]), int(fields[2]), run.returncode
 
     def test_valid_and_limits(self) -> None:
         data, _ = make_fixture()
@@ -357,6 +357,39 @@ class ParserTests(unittest.TestCase):
         resign_cursor(item, off["current"]); resign_cursor(item, off["epoch"]); resign_outer(item)
         self.assertEqual(self.invoke(item)[0], 2)
 
+    def test_x1_classification_adapter(self) -> None:
+        data, off = make_fixture()
+
+        item = data.copy(); item[off["x1"]] ^= 1; resign_outer(item)
+        self.assertEqual(self.invoke(item)[:3], (2, 10, off["x1"]))
+
+        item = data.copy(); item[off["x1"]] = 0xff; resign_outer(item)
+        self.assertEqual(self.invoke(item)[:3], (2, 11, off["x1"]))
+
+        for marker, new, expected in (
+                (b'"model.device":"cpu"', b"gpu", (8, 5)),
+                (b'"model.dtype":"f32"', b"f64", (7, 5))):
+            item = data.copy(); start = item.index(marker, off["x1"]) + len(marker) - 4
+            item[start:start + 3] = new
+            resign_config_fingerprint(item, off["x1"], off["config_fp"])
+            resign_outer(item)
+            self.assertEqual(self.invoke(item)[:3], (*expected, off["x1"]))
+
+        item = data.copy(); version = item.index(b'"format-version":[1,0]', off["x1"])
+        item[version + 18] = ord("2")
+        resign_config_fingerprint(item, off["x1"], off["config_fp"]); resign_outer(item)
+        self.assertEqual(self.invoke(item)[:3], (3, 4, off["x1"]))
+
+        item = data.copy(); version = item.index(b'"format-version":[1,0]', off["x1"])
+        item[version + 17:version + 22] = b'"2.0"'
+        resign_config_fingerprint(item, off["x1"], off["config_fp"]); resign_outer(item)
+        self.assertEqual(self.invoke(item)[:3], (2, 5, off["x1"]))
+
+        item = data.copy(); hidden = item.index(b'"model.hidden-size":64', off["x1"])
+        item[hidden + 20:hidden + 22] = b"65"
+        resign_config_fingerprint(item, off["x1"], off["config_fp"]); resign_outer(item)
+        self.assertEqual(self.invoke(item)[:3], (2, 5, off["x1"]))
+
     def test_nested_and_optimizer_adversaries(self) -> None:
         data, off = make_fixture()
         item = data.copy(); item[off["c1_record"] + 36] = 1
@@ -400,7 +433,7 @@ class ParserTests(unittest.TestCase):
             for _ in range(randomizer.randrange(1, 5)):
                 position = randomizer.randrange(len(item))
                 item[position] ^= 1 << randomizer.randrange(8)
-            status, _, _ = self.invoke(item)
+            status, _, _, _ = self.invoke(item)
             self.assertIn(status, range(0, 10))
 
 
