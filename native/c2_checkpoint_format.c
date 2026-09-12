@@ -529,6 +529,10 @@ static int bits_finite(uint32_t bits) { return (bits & 0x7f800000u) != 0x7f80000
 static int bits_nonnegative(uint32_t bits) {
   return (bits & 0x80000000u) == 0u && bits_finite(bits);
 }
+static int bits_nonnegative_or_negative_zero(uint32_t bits) {
+  return bits_finite(bits) &&
+         ((bits & 0x80000000u) == 0u || (bits & 0x7fffffffu) == 0u);
+}
 static int bits_positive(uint32_t bits) {
   return bits_nonnegative(bits) && (bits & 0x7fffffffu) != 0u;
 }
@@ -787,7 +791,8 @@ static int32_t validate_optimizer(parser *p, uint64_t metadata,
                       at + (kind == 1u ? 56u : 88u));
         for (q = 0; q < moment_bytes; q += 4u) {
           uint32_t bits = u32(p->bytes + payload + relative + q);
-          if (!bits_finite(bits) || (kind == 2u && !bits_nonnegative(bits)))
+          if (!bits_finite(bits) ||
+              (kind == 2u && !bits_nonnegative_or_negative_zero(bits)))
             return fail(p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_MOMENT,
                         payload + relative + q);
         }
