@@ -1,0 +1,178 @@
+;;; Trusted-only identity/lifetime evidence. This fixture deliberately loads the
+;;; canonical private root and links only against a temporary ET_K2_TESTING
+;;; native archive; it is never installed or included in the public aggregate.
+(load "k2_wave2_root.esk")
+
+(extern void k2-test-runtime-drop :real et_k2_test_runtime_drop_v1)
+(extern i64 k2-test-fork :real et_k2_test_fork_v1)
+(extern i64 k2-test-wait-child i64 :real et_k2_test_wait_child_v1)
+(extern void k2-test-exit-child i64 :real et_k2_test_exit_child_v1)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard
+   (caught
+    (#t (and (transformer-error? caught)
+             (eq? (transformer-error-category caught) category)
+             (eq? (transformer-error-operation caught) operation))))
+   (thunk)
+   #f))
+
+(define (list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define report (k2-public-capability-discover))
+(define request
+  (k2-public-capability-request 'storage.copy 'f32 'cpu '() #t))
+(define entry (car (k2-public-capability-report-entries report)))
+(define report-alias report)
+(define request-alias request)
+(define entry-alias entry)
+
+(check "ordinary report alias remains authentic"
+       (= (list-length (k2-public-capability-report-entries report-alias)) 11))
+(check "ordinary request alias remains authentic"
+       (k2-public-capability-verified? report 'tensor.f32 request-alias))
+(check "ordinary entry alias remains authentic"
+       (eq? (k2-public-capability-entry-name entry-alias) 'autodiff.reverse))
+
+;;; The private test can name the hidden query solely to build adversarial
+;;; fixtures. Each foreign closure records invocation; successful rejection with
+;;; its flag still false proves factory authentication preceded hidden query use.
+(define copied-called #f)
+(define authentic-state (report k2-report-query))
+(define copied-state
+  (vector (vector-ref authentic-state 0) #f (vector-ref authentic-state 2)
+          (vector-ref authentic-state 3) (vector-ref authentic-state 4) 'live))
+(define copied-shell
+  (lambda (query) (set! copied-called #t) copied-state))
+(vector-set! copied-state 1 copied-shell)
+(check "copied state in a foreign shell rejects before query"
+       (and
+        (structured-error?
+         'invalid-argument 'capability-report-entries
+         (lambda () (k2-public-capability-report-entries copied-shell)))
+        (not copied-called)))
+
+(define forged-called #f)
+(define forged-shell
+  (lambda (query)
+    (set! forged-called #t)
+    (vector k2-report-tag forged-shell query
+            (k2-current-pid 'capability-report-entries)
+            (k2-current-generation 'capability-report-entries) 'live)))
+(check "forged shell rejects before query"
+       (and
+        (structured-error?
+         'invalid-argument 'capability-report-entries
+         (lambda () (k2-public-capability-report-entries forged-shell)))
+        (not forged-called)))
+
+(define relay-called #f)
+(define relay-shell
+  (lambda (query)
+    (set! relay-called #t)
+    (report query)))
+(check "relay shell rejects before query"
+       (and
+        (structured-error?
+         'invalid-argument 'capability-report-entries
+         (lambda () (k2-public-capability-report-entries relay-shell)))
+        (not relay-called)))
+
+(define captured-query #f)
+(define query-capture
+  (lambda (query) (set! captured-query query) #f))
+(check "query-capture shell rejects without disclosure"
+       (and
+        (structured-error?
+         'invalid-argument 'capability-report-entries
+         (lambda () (k2-public-capability-report-entries query-capture)))
+        (eq? captured-query #f)))
+
+(check "wrong-kind authentic shells reject"
+       (and
+        (= (k2-native-report-factory-authenticate request) 0)
+        (= (k2-native-entry-factory-authenticate report) 0)
+        (= (k2-native-request-factory-authenticate entry) 0)
+        (structured-error?
+         'invalid-argument 'capability-report-entries
+         (lambda () (k2-public-capability-report-entries request)))
+        (structured-error?
+         'invalid-argument 'capability-entry-name
+         (lambda () (k2-public-capability-entry-name report)))
+        (structured-error?
+         'invalid-argument 'capability-verified?
+         (lambda ()
+           (k2-public-capability-verified? report 'tensor.f32 entry)))))
+
+(define (k2-test-publish-report inject-publication-failure?)
+  (let* ((state
+          (vector k2-report-tag #f k2-report-query
+                  (k2-current-pid 'capability-discover)
+                  (k2-current-generation 'capability-discover) 'live))
+         (candidate (k2-make-report-shell state)))
+    (vector-set! state 1 candidate)
+    (if inject-publication-failure?
+        (begin
+          ;; The candidate never becomes the successful publication. The
+          ;; injected failure invalidates it before test-only exposure.
+          (vector-set! state 5 'dead)
+          candidate)
+        candidate)))
+
+(define failed-publication-report (k2-test-publish-report #t))
+(check "failed-publication candidate is invalidated as invalid-state"
+       (structured-error?
+        'invalid-state 'capability-report-entries
+        (lambda ()
+          (k2-public-capability-report-entries failed-publication-report))))
+
+(define stale-report (k2-public-capability-discover))
+(k2-test-runtime-drop)
+(define fresh-report (k2-public-capability-discover))
+(check "authentic prior-generation report rejects as invalid-state"
+       (structured-error?
+        'invalid-state 'capability-report-entries
+        (lambda () (k2-public-capability-report-entries stale-report))))
+(check "new generation rediscovery is usable"
+       (= (list-length (k2-public-capability-report-entries fresh-report)) 11))
+
+;;; Serialized fork: the child first proves rejection of the parent-origin
+;;; authentic shell, then performs and audits a fresh child-local discovery.
+(define parent-report fresh-report)
+(define child-pid (k2-test-fork))
+(if (= child-pid 0)
+    (let* ((parent-origin-rejected
+            (structured-error?
+             'invalid-state 'capability-report-entries
+             (lambda ()
+               (k2-public-capability-report-entries parent-report))))
+           (child-report (k2-public-capability-discover))
+           (child-audited
+            (= (list-length
+                (k2-public-capability-report-entries child-report)) 11)))
+      (k2-test-exit-child
+       (if (and parent-origin-rejected child-audited) 0 71)))
+    (check "fork rejects parent origin and permits audited child rediscovery"
+           (and (> child-pid 0) (= (k2-test-wait-child child-pid) 1))))
+
+(if (= failed 0)
+    (begin
+      (display "K2 PRIVATE IDENTITY PASS: ")
+      (display passed)
+      (display " checks")
+      (newline)
+      (exit 0))
+    (exit 1))

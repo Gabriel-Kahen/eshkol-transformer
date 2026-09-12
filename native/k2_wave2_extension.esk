@@ -1,0 +1,661 @@
+;;; Trusted K2 source-composable extension. Never install this source directly.
+;;; The enclosing aggregate supplies E1 and I2; this file adds only the twelve
+;;; A0 capability operations over the fixed private K1/I2 seam.
+
+(extern i64 k2-native-runtime-ensure ptr i64
+        :real et_k2_private_runtime_ensure_v1)
+(extern i64 k2-native-runtime-pid
+        :real et_k2_private_runtime_pid_v1)
+(extern i64 k2-native-runtime-generation
+        :real et_k2_private_runtime_generation_v1)
+(extern i64 k2-native-runtime-require
+        i64 i64 ptr i64 ptr i64 ptr i64 ptr i64 i64 i64 ptr i64
+        :real et_k2_private_runtime_require_v1)
+(extern i64 k2-native-report-factory-register ptr
+        :real et_k2_private_report_factory_register_v1)
+(extern i64 k2-native-report-factory-authenticate ptr
+        :real et_k2_private_report_factory_authenticate_v1)
+(extern i64 k2-native-request-factory-register ptr
+        :real et_k2_private_request_factory_register_v1)
+(extern i64 k2-native-request-factory-authenticate ptr
+        :real et_k2_private_request_factory_authenticate_v1)
+(extern i64 k2-native-entry-factory-register ptr
+        :real et_k2_private_entry_factory_register_v1)
+(extern i64 k2-native-entry-factory-authenticate ptr
+        :real et_k2_private_entry_factory_authenticate_v1)
+
+(define k2-diagnostic-bytes 264)
+(define k2-diagnostic-sentinel 165)
+(define k2-u64-maximum 18446744073709551615)
+(define k2-f32-rank1-maximum 4611686018427387903)
+(define k2-private-code-base 1261568001)
+(define k2-private-code-maximum 1261568010)
+
+(define k2-report-query (vector 'k2-report-query-v1))
+(define k2-request-query (vector 'k2-request-query-v1))
+(define k2-entry-query (vector 'k2-entry-query-v1))
+(define k2-report-tag (vector 'k2-report-state-v1))
+(define k2-request-tag (vector 'k2-request-state-v1))
+(define k2-entry-tag (vector 'k2-entry-state-v1))
+(define k2-factories-ready (vector #f))
+
+(define k2-entry-names
+  '(autodiff.reverse
+    kernel.activation
+    kernel.causal-attention
+    kernel.embedding-backward
+    kernel.indexed-cross-entropy
+    kernel.matmul
+    kernel.norm
+    tensor.bool
+    tensor.contiguous
+    tensor.f32
+    tensor.i64))
+
+(define (k2-fail-raw category operation message details)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message details #f)))
+    unreachable))
+
+(define-syntax k2-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (k2-fail-raw category operation message '()))) result))))
+
+(define (k2-status-category status)
+  (cond ((= status 1) 'invalid-argument)
+        ((= status 2) 'shape-mismatch)
+        ((= status 3) 'dtype-mismatch)
+        ((= status 4) 'device-mismatch)
+        ((= status 5) 'noncontiguous)
+        ((= status 6) 'unsupported)
+        ((= status 7) 'invalid-state)
+        ((= status 8) 'version-mismatch)
+        (else 'internal)))
+
+(define (k2-load-u32le bytes offset)
+  (+ (bytevector-u8-ref bytes offset)
+     (* 256 (bytevector-u8-ref bytes (+ offset 1)))
+     (* 65536 (bytevector-u8-ref bytes (+ offset 2)))
+     (* 16777216 (bytevector-u8-ref bytes (+ offset 3)))))
+
+(define (k2-bytevector-all? bytes expected start end)
+  (let loop ((index start))
+    (if (= index end) #t
+        (and (= (bytevector-u8-ref bytes index) expected)
+             (loop (+ index 1))))))
+
+(define (k2-bytevector-equal? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (k2-private-category-code? status code)
+  (cond ((= code k2-private-code-base) (= status 1))
+        ((= code (+ k2-private-code-base 1)) (= status 1))
+        ((= code (+ k2-private-code-base 2)) (= status 7))
+        ((= code (+ k2-private-code-base 3)) (= status 1))
+        ((= code (+ k2-private-code-base 4)) (= status 6))
+        ((= code (+ k2-private-code-base 5))
+         (or (= status 8) (= status 9)))
+        ((= code (+ k2-private-code-base 6)) (= status 9))
+        ((= code (+ k2-private-code-base 7)) (= status 9))
+        ((= code (+ k2-private-code-base 8)) (= status 9))
+        ((= code (+ k2-private-code-base 9)) (= status 9))
+        (else #f)))
+
+(define (k2-diagnostic-field bytes start end operation)
+  (let find ((index start))
+    (cond
+      ((= index end)
+       (k2-fail 'internal operation
+                "K2 native diagnostic lacks a bounded terminator"))
+      ((= (bytevector-u8-ref bytes index) 0)
+       (if (not (k2-bytevector-all? bytes 0 (+ index 1) end))
+           (k2-fail 'internal operation
+                    "K2 native diagnostic has a nonzero tail"))
+       (guard
+        (caught
+         (#t (k2-fail 'internal operation
+                      "K2 native diagnostic is not canonical UTF-8")))
+        (let* ((field (bytevector-copy bytes start index))
+               (text (utf8->string field)))
+          (if (not (k2-bytevector-equal? (string->utf8 text) field))
+              (k2-fail 'internal operation
+                       "K2 native diagnostic UTF-8 does not round trip"))
+          text)))
+      (else (find (+ index 1))))))
+
+(define (k2-diagnostic-result status bytes operation)
+  ;; A rejected diagnostic destination is deliberately left untouched. The
+  ;; facade owns this buffer, so this is a fixed private-boundary failure rather
+  ;; than permission to parse stale bytes.
+  (if (k2-bytevector-all? bytes k2-diagnostic-sentinel
+                          0 k2-diagnostic-bytes)
+      (k2-fail-raw
+       'invalid-argument operation "K2 diagnostic buffer was rejected"
+       (list (list 'source-domain 'k2-capability-facade)
+             (list 'source-code k2-private-code-base)
+             (list 'source-message "diagnostic buffer admission failed"))))
+  (if (= status 0)
+      (if (k2-bytevector-all? bytes 0 0 k2-diagnostic-bytes)
+          #f
+          (k2-fail 'internal operation
+                   "K2 success diagnostic is not all zero"))
+      (let* ((category-code (k2-load-u32le bytes 0))
+             (source-code (k2-load-u32le bytes 4))
+             (source-operation (k2-diagnostic-field bytes 8 72 operation))
+             (source-message (k2-diagnostic-field bytes 72 264 operation))
+             (source-domain
+              (if (and (>= source-code 1) (<= source-code 16))
+                  'kernel-abi
+                  'k2-capability-facade)))
+        (if (or (< status 1) (> status 9) (not (= category-code status))
+                (= (string-byte-length source-operation) 0)
+                (= (string-byte-length source-message) 0)
+                (and (eq? source-domain 'kernel-abi) (= status 7))
+                (and (eq? source-domain 'k2-capability-facade)
+                     (or (< source-code k2-private-code-base)
+                         (> source-code k2-private-code-maximum)
+                         (not (k2-private-category-code?
+                               status source-code)))))
+            (k2-fail 'internal operation
+                     "K2 native diagnostic category or code is malformed"))
+        (vector (k2-status-category status) source-code source-message
+                source-domain))))
+
+(define (k2-raise-diagnostic diagnostic operation)
+  (let ((unreachable
+         (k2-fail-raw
+          (vector-ref diagnostic 0) operation
+          "K2 native capability boundary rejected the request"
+          (list (list 'source-domain (vector-ref diagnostic 3))
+                (list 'source-code (vector-ref diagnostic 1))
+                (list 'source-message
+                      (string-copy (vector-ref diagnostic 2)))))))
+    unreachable))
+
+(define (k2-runtime-ensure! operation)
+  (let* ((diagnostic
+          (make-bytevector k2-diagnostic-bytes k2-diagnostic-sentinel))
+         (status (k2-native-runtime-ensure diagnostic k2-diagnostic-bytes))
+         (failure (k2-diagnostic-result status diagnostic operation)))
+    (if failure
+        (let ((unreachable (k2-raise-diagnostic failure operation)))
+          unreachable)
+        #t)))
+
+(define (k2-current-pid operation)
+  (let ((pid (k2-native-runtime-pid)))
+    (if (> pid 0) pid
+        (if (= pid -9)
+            (k2-fail 'internal operation "K2 runtime PID invariant failed")
+            (k2-fail 'internal operation "K2 runtime returned an invalid PID")))))
+
+(define (k2-current-generation operation)
+  (let ((generation (k2-native-runtime-generation)))
+    (cond ((> generation 0) generation)
+          ((= generation -7)
+           (k2-fail 'invalid-state operation
+                    "K2 runtime generation is unavailable or stale"))
+          (else
+           (k2-fail 'internal operation
+                    "K2 runtime generation invariant failed")))))
+
+(define (k2-make-report-shell state)
+  (lambda (query)
+    (if (eq? query (vector-ref state 2)) state
+        (error "transformer.capability-report:v1"))))
+
+(define (k2-make-request-shell state)
+  (lambda (query)
+    (if (eq? query (vector-ref state 2)) state
+        (error "transformer.capability-request:v1"))))
+
+(define (k2-make-entry-shell state)
+  (lambda (query)
+    (if (eq? query (vector-ref state 2)) state
+        (error "transformer.capability-entry:v1"))))
+
+(define (k2-register-factories! operation)
+  (if (not (vector-ref k2-factories-ready 0))
+      (let* ((report-probe
+              (k2-make-report-shell (vector #f #f k2-report-query)))
+             (request-probe
+              (k2-make-request-shell (vector #f #f k2-request-query)))
+             (entry-probe
+              (k2-make-entry-shell (vector #f #f k2-entry-query)))
+             (report-status
+              (k2-native-report-factory-register report-probe))
+             (request-status
+              (k2-native-request-factory-register request-probe))
+             (entry-status
+              (k2-native-entry-factory-register entry-probe)))
+        ;; Registration success is exactly 1. Malformed closures are -1;
+        ;; collision, different re-registration, and invariants are -9.
+        (if (or (= report-status -1)
+                (= request-status -1)
+                (= entry-status -1))
+            (k2-fail 'invalid-argument operation
+                     "K2 closure factory registration was malformed"))
+        (if (or (= report-status -9)
+                (= request-status -9)
+                (= entry-status -9))
+            (k2-fail 'internal operation
+                     "K2 closure factory registration conflicted"))
+        (if (not (and (= report-status 1)
+                      (= request-status 1)
+                      (= entry-status 1)))
+            (k2-fail 'internal operation
+                     "K2 closure factory returned an invalid status"))
+        (vector-set! k2-factories-ready 0 #t))))
+
+(define (k2-authentication-result status operation kind-name)
+  (cond ((= status 1) #t)
+        ((= status 0)
+         (k2-fail 'invalid-argument operation
+                  (string-append "expected a K2 " kind-name)))
+        ((= status -9)
+         (k2-fail 'internal operation
+                  "K2 closure factory authentication invariant failed"))
+        (else
+         (k2-fail 'internal operation
+                  "K2 closure factory returned an invalid status"))))
+
+(define (k2-authenticate-report value operation)
+  (if (not (procedure? value))
+      (k2-fail 'invalid-argument operation
+               "expected a K2 capability report"))
+  (let ((accepted
+         (k2-authentication-result
+          (k2-native-report-factory-authenticate value)
+          operation "capability report")))
+    accepted))
+
+(define (k2-authenticate-request value operation)
+  (if (not (procedure? value))
+      (k2-fail 'invalid-argument operation
+               "expected a K2 capability request"))
+  (let ((accepted
+         (k2-authentication-result
+          (k2-native-request-factory-authenticate value)
+          operation "capability request")))
+    accepted))
+
+(define (k2-authenticate-entry value operation)
+  (if (not (procedure? value))
+      (k2-fail 'invalid-argument operation
+               "expected a K2 capability entry"))
+  (let ((accepted
+         (k2-authentication-result
+          (k2-native-entry-factory-authenticate value)
+          operation "capability entry")))
+    accepted))
+
+(define (k2-state-after-auth value query tag expected-length operation kind-name)
+  (let ((current-pid (k2-current-pid operation)))
+    (let ((state
+           (guard
+            (caught
+             (#t (k2-fail 'invalid-argument operation
+                          (string-append "expected a K2 " kind-name))))
+            (value query))))
+      (if (not (and (vector? state) (= (vector-length state) expected-length)
+                    (eq? (vector-ref state 0) tag)
+                    (eq? (vector-ref state 1) value)
+                    (eq? (vector-ref state 2) query)
+                    (integer? (vector-ref state 3))
+                    (exact? (vector-ref state 3))
+                    (real? (vector-ref state 3))
+                    (integer? (vector-ref state 4))
+                    (exact? (vector-ref state 4))
+                    (real? (vector-ref state 4))))
+          (k2-fail 'invalid-argument operation
+                   (string-append "expected a K2 " kind-name)))
+      ;; No kind-specific payload field is read before origin admission.
+      (if (not (= (vector-ref state 3) current-pid))
+          (k2-fail 'invalid-state operation
+                   "K2 snapshot belongs to a stale process origin"))
+      (let ((current-generation (k2-current-generation operation)))
+        (if (not (= (vector-ref state 4) current-generation))
+            (k2-fail 'invalid-state operation
+                     "K2 snapshot belongs to a stale runtime generation")))
+      (if (not (eq? (vector-ref state 5) 'live))
+          (k2-fail 'invalid-state operation "K2 snapshot is invalidated"))
+      state)))
+
+(define (k2-report-state value operation)
+  (if (not (vector-ref k2-factories-ready 0))
+      (k2-fail 'invalid-argument operation
+               "expected a live K2 capability report"))
+  (k2-authenticate-report value operation)
+  (let ((state
+         (k2-state-after-auth value k2-report-query k2-report-tag 6 operation
+                              "capability report")))
+    state))
+
+(define (k2-request-state value operation)
+  (if (not (vector-ref k2-factories-ready 0))
+      (k2-fail 'invalid-argument operation
+               "expected a live K2 capability request"))
+  (k2-authenticate-request value operation)
+  (let ((state
+         (k2-state-after-auth value k2-request-query k2-request-tag 13 operation
+                              "capability request")))
+    (if (not (and (symbol? (vector-ref state 6))
+                  (symbol? (vector-ref state 7))
+                  (symbol? (vector-ref state 8))
+                  (list? (vector-ref state 9))
+                  (boolean? (vector-ref state 10))
+                  (boolean? (vector-ref state 11))
+                  (or (and (vector-ref state 11)
+                           (bytevector? (vector-ref state 12)))
+                      (and (not (vector-ref state 11))
+                           (eq? (vector-ref state 12) #f)))))
+        (k2-fail 'invalid-argument operation
+                 "K2 capability request payload is malformed"))
+    state))
+
+(define (k2-entry-state value operation)
+  (if (not (vector-ref k2-factories-ready 0))
+      (k2-fail 'invalid-argument operation
+               "expected a live K2 capability entry"))
+  (k2-authenticate-entry value operation)
+  (let ((state
+         (k2-state-after-auth value k2-entry-query k2-entry-tag 7 operation
+                              "capability entry")))
+    (if (not (and (integer? (vector-ref state 6))
+                  (exact? (vector-ref state 6))
+                  (real? (vector-ref state 6))
+                  (>= (vector-ref state 6) 0)
+                  (< (vector-ref state 6) 11)))
+        (k2-fail 'invalid-argument operation
+                 "K2 capability entry payload is malformed"))
+    state))
+
+(define (k2-make-report pid generation)
+  (let* ((state
+          (vector k2-report-tag #f k2-report-query pid generation 'live))
+         (shell (k2-make-report-shell state)))
+    (vector-set! state 1 shell)
+    shell))
+
+(define (k2-make-request pid generation operation dtype device shape
+                         deterministic? representable shape-bytes)
+  (let* ((state
+          (vector k2-request-tag #f k2-request-query pid generation 'live
+                  operation dtype device shape deterministic? representable
+                  shape-bytes))
+         (shell (k2-make-request-shell state)))
+    (vector-set! state 1 shell)
+    shell))
+
+(define (k2-make-entry pid generation index)
+  (let* ((state
+          (vector k2-entry-tag #f k2-entry-query pid generation 'live index))
+         (shell (k2-make-entry-shell state)))
+    (vector-set! state 1 shell)
+    shell))
+
+(define (k2-proper-acyclic-list? value)
+  (let loop ((slow value) (fast value))
+    (cond
+      ((null? fast) #t)
+      ((not (pair? fast)) #f)
+      (else
+       (let ((fast-one (cdr fast)))
+         (cond
+           ((null? fast-one) #t)
+           ((not (pair? fast-one)) #f)
+           (else
+            (let ((fast-two (cdr fast-one)))
+              (if (eq? slow fast-two) #f
+                  (loop (cdr slow) fast-two))))))))))
+
+(define (k2-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (k2-shape-copy shape operation)
+  (if (not (k2-proper-acyclic-list? shape))
+      (k2-fail 'invalid-argument operation
+               "capability request shape must be a proper acyclic list"))
+  (let loop ((remaining shape) (result '()))
+    (if (null? remaining)
+        (k2-reverse result)
+        (let ((extent (car remaining)))
+          (if (not (integer? extent))
+              (k2-fail 'invalid-argument operation
+                       "capability request extents must be integers"))
+          (if (not (exact? extent))
+              (k2-fail 'invalid-argument operation
+                       "capability request extents must be exact"))
+          (if (not (>= extent 0))
+              (k2-fail 'invalid-argument operation
+                       "capability request extents must be nonnegative"))
+          (loop (cdr remaining) (cons extent result))))))
+
+(define (k2-ascii-symbol-representable? value)
+  (if (not (symbol? value)) #f
+      (let* ((text (symbol->string value))
+             (bytes (string-byte-length text))
+             (characters (string-length text)))
+        (and (> bytes 0) (<= bytes 127) (= bytes characters)
+             (let loop ((index 0))
+               (if (= index characters) #t
+                   (let ((code (char->integer (string-ref text index))))
+                     (and
+                      (if (= index 0)
+                          (and (>= code 97) (<= code 122))
+                          (or (and (>= code 97) (<= code 122))
+                              (and (>= code 48) (<= code 57))
+                              (= code 46) (= code 95) (= code 45) (= code 58)))
+                      (loop (+ index 1))))))))))
+
+(define (k2-shape-representable? shape)
+  (let loop ((remaining shape) (rank 0))
+    (cond ((null? remaining) (<= rank 64))
+          ((>= rank 64) #f)
+          ((> (car remaining) k2-u64-maximum) #f)
+          (else (loop (cdr remaining) (+ rank 1))))))
+
+(define (k2-list-length values)
+  (let loop ((remaining values) (length 0))
+    (if (null? remaining) length
+        (loop (cdr remaining) (+ length 1)))))
+
+(define (k2-store-u64le! bytes offset value)
+  (let loop ((index 0) (remaining value))
+    (if (< index 8)
+        (begin
+          (bytevector-u8-set! bytes (+ offset index) (modulo remaining 256))
+          (loop (+ index 1) (quotient remaining 256))))))
+
+(define (k2-shape-u64le shape)
+  (let ((bytes (make-bytevector (* 8 (k2-list-length shape)) 0)))
+    (let loop ((remaining shape) (offset 0))
+      (if (null? remaining) bytes
+          (begin
+            (k2-store-u64le! bytes offset (car remaining))
+            (loop (cdr remaining) (+ offset 8)))))))
+
+(define (k2-list-ref values index)
+  (if (= index 0) (car values)
+      (k2-list-ref (cdr values) (- index 1))))
+
+(define (k2-entry-index capability)
+  (if (not (symbol? capability)) #f
+      (let ((spelling (symbol->string capability)))
+        (let loop ((remaining k2-entry-names) (index 0))
+          (cond ((null? remaining) #f)
+                ((string=? spelling (symbol->string (car remaining))) index)
+                (else (loop (cdr remaining) (+ index 1))))))))
+
+(define (k2-entry-constraints-copy index)
+  (if (= index 9)
+      (list (list 'devices (list 'cpu))
+            (list 'dtypes (list 'f32))
+            (list 'operations (list 'storage.copy))
+            (list 'shape-ranges
+                  (list '() (list (list 0 k2-f32-rank1-maximum)))))
+      (list (list 'devices '())
+            (list 'dtypes '())
+            (list 'operations '())
+            (list 'shape-ranges '()))))
+
+(define (k2-entry-list pid generation index)
+  (if (= index 11) '()
+      (cons (k2-make-entry pid generation index)
+            (k2-entry-list pid generation (+ index 1)))))
+
+(define (k2-native-match report-state request-state capability index operation)
+  (let* ((operation-bytes
+          (string->utf8 (symbol->string (vector-ref request-state 6))))
+         (dtype-bytes
+          (string->utf8 (symbol->string (vector-ref request-state 7))))
+         (device-bytes
+          (string->utf8 (symbol->string (vector-ref request-state 8))))
+         (shape-bytes (vector-ref request-state 12))
+         (diagnostic
+          (make-bytevector k2-diagnostic-bytes k2-diagnostic-sentinel))
+         (status
+          (k2-native-runtime-require
+           (vector-ref report-state 4) index
+           operation-bytes (bytevector-length operation-bytes)
+           dtype-bytes (bytevector-length dtype-bytes)
+           device-bytes (bytevector-length device-bytes)
+           shape-bytes (bytevector-length shape-bytes)
+           (k2-list-length (vector-ref request-state 9))
+           (if (vector-ref request-state 10) 1 0)
+           diagnostic k2-diagnostic-bytes))
+         (failure (k2-diagnostic-result status diagnostic operation)))
+    (cond ((not failure) #t)
+          ((and (= status 6)
+                (= (vector-ref failure 1) 15)
+                (eq? (vector-ref failure 3) 'kernel-abi))
+           #f)
+          (else
+           (let ((unreachable (k2-raise-diagnostic failure operation)))
+             unreachable)))))
+
+(define (k2-match-index report request capability operation)
+  (let ((report-state (k2-report-state report operation))
+        (request-state (k2-request-state request operation)))
+    (if (not (symbol? capability))
+        (k2-fail 'invalid-argument operation
+                 "capability selector must be a symbol"))
+    (let ((index (k2-entry-index capability)))
+      ;; All four symbol positions and the logical shape must fit K1 before the
+      ;; native query. A valid A0 snapshot outside that domain is not narrowed.
+      (if (or (not (k2-ascii-symbol-representable? capability))
+              (not (vector-ref request-state 11))
+              (not index))
+          #f
+          (if (k2-native-match report-state request-state capability index
+                               operation)
+              index
+              #f)))))
+
+(define (k2-public-capability-discover)
+  (let ((operation 'capability-discover))
+    (k2-runtime-ensure! operation)
+    (k2-register-factories! operation)
+    (let ((report
+           (k2-make-report (k2-current-pid operation)
+                           (k2-current-generation operation))))
+      report)))
+
+(define (k2-public-capability-request operation-name dtype device shape
+                                      deterministic?)
+  (let ((operation 'capability-request))
+    (if (not (symbol? operation-name))
+        (k2-fail 'invalid-argument operation
+                 "capability request operation must be a symbol"))
+    (if (not (symbol? dtype))
+        (k2-fail 'invalid-argument operation
+                 "capability request dtype must be a symbol"))
+    (if (not (symbol? device))
+        (k2-fail 'invalid-argument operation
+                 "capability request device must be a symbolic descriptor"))
+    (if (not (boolean? deterministic?))
+        (k2-fail 'invalid-argument operation
+                 "capability request determinism must be boolean"))
+    (let* ((shape-copy (k2-shape-copy shape operation))
+           (representable
+            (and (k2-ascii-symbol-representable? operation-name)
+                 (k2-ascii-symbol-representable? dtype)
+                 (k2-ascii-symbol-representable? device)
+                 (k2-shape-representable? shape-copy))))
+      (k2-runtime-ensure! operation)
+      (k2-register-factories! operation)
+      (let ((request
+             (k2-make-request
+              (k2-current-pid operation) (k2-current-generation operation)
+              operation-name dtype device shape-copy deterministic? representable
+              (if representable (k2-shape-u64le shape-copy) #f))))
+        request))))
+
+(define (k2-public-capability-verified? report capability request)
+  (if (k2-match-index report request capability 'capability-verified?) #t #f))
+
+(define (k2-public-capability-require report capability request)
+  (let ((index
+         (k2-match-index report request capability 'capability-require)))
+    (if index
+        (let ((state (k2-report-state report 'capability-require)))
+          (let ((entry
+                 (k2-make-entry
+                  (vector-ref state 3) (vector-ref state 4) index)))
+            entry))
+        (k2-fail 'unsupported 'capability-require
+                 "no verified capability matches the exact request"))))
+
+(define (k2-public-capability-report-entries report)
+  (let ((state (k2-report-state report 'capability-report-entries)))
+    (let ((entries
+           (k2-entry-list (vector-ref state 3) (vector-ref state 4) 0)))
+      entries)))
+
+(define (k2-public-capability-entry-name entry)
+  (let ((state (k2-entry-state entry 'capability-entry-name)))
+    (let ((name (k2-list-ref k2-entry-names (vector-ref state 6))))
+      name)))
+
+(define (k2-public-capability-entry-status entry)
+  (let ((index
+         (vector-ref (k2-entry-state entry 'capability-entry-status) 6)))
+    (if (= index 9) 'verified 'unverified)))
+
+(define (k2-public-capability-entry-implementation entry)
+  (let ((index
+         (vector-ref
+          (k2-entry-state entry 'capability-entry-implementation) 6)))
+    (if (= index 9) 'eshkol-transformer-f32 'eshkol-core)))
+
+(define (k2-public-capability-entry-version entry)
+  (let ((index
+         (vector-ref (k2-entry-state entry 'capability-entry-version) 6)))
+    (string-copy (if (= index 9) "1.0" "1.3.4-evolve"))))
+
+(define (k2-public-capability-entry-constraints entry)
+  (let ((index
+         (vector-ref (k2-entry-state entry 'capability-entry-constraints) 6)))
+    (let ((constraints (k2-entry-constraints-copy index)))
+      constraints)))
+
+(define (k2-public-capability-entry-deterministic? entry)
+  (= (vector-ref
+      (k2-entry-state entry 'capability-entry-deterministic?) 6)
+     9))
+
+(define (k2-public-capability-entry-evidence entry)
+  (let ((index
+         (vector-ref (k2-entry-state entry 'capability-entry-evidence) 6)))
+    (string-copy
+     (if (= index 9)
+         "I2:bounded-exact-f32-storage.copy-v1"
+         "R0-merged-through-PR15:untested-with-reason"))))

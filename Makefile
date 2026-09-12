@@ -12,7 +12,7 @@ SHELL := /usr/bin/bash
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b \
-	test-i1 test-i2 test-i2-native test-k1 test-l2 test-n2 test-n3k \
+	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
@@ -42,6 +42,7 @@ build-ci-core: configure
 	/usr/bin/bash scripts/build-i1.sh
 	/usr/bin/bash scripts/build-a2.sh
 	/usr/bin/bash scripts/build-i2.sh
+	/usr/bin/bash scripts/build-k2.sh
 	/usr/bin/bash scripts/build-n2.sh
 	/usr/bin/bash scripts/build-n3k.sh
 	/usr/bin/bash scripts/build-t2.sh
@@ -84,6 +85,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
 	/usr/bin/bash scripts/test-i2.sh
+	/usr/bin/bash scripts/test-k2.sh
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
@@ -104,6 +106,7 @@ test-ci-core-after-build:
 	/usr/bin/bash scripts/test-l2.sh
 	/usr/bin/bash scripts/test-i1.sh
 	/usr/bin/bash scripts/test-i2.sh
+	/usr/bin/bash scripts/test-k2.sh
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
@@ -166,6 +169,9 @@ test-i2: build
 
 test-i2-native: build-ci-core
 	/usr/bin/bash scripts/test-i2-native.sh
+
+test-k2: build
+	/usr/bin/bash scripts/test-k2.sh
 
 test-n2: build
 	/usr/bin/bash scripts/test-n2.sh

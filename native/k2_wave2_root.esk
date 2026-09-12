@@ -1,0 +1,5 @@
+;;; Canonical K2 successor root. Never install this trusted source.
+;;; The separate extension is reusable by C2 after another root supplies I2.
+
+(load "i2_wave2_root.esk")
+(load "k2_wave2_extension.esk")

@@ -1,0 +1,149 @@
+;;; Installed K2 capability facade. The completed source-composed aggregate owns
+;;; K1 discovery, snapshot identity, and E1 construction. This source exposes
+;;; only fixed-arity boxed calls and the six inherited error accessors.
+
+(require transformer.error_consumer)
+
+(provide transformer-error? transformer-error-category
+         transformer-error-operation transformer-error-message
+         transformer-error-details transformer-error-cause
+         capability-discover capability-request capability-verified?
+         capability-require capability-report-entries capability-entry-name
+         capability-entry-status capability-entry-implementation
+         capability-entry-version capability-entry-constraints
+         capability-entry-deterministic? capability-entry-evidence)
+
+(define k2-safe-capability-discover
+  (let ()
+    (extern void k2-public-capability-discover ptr
+            :real et_e1b_public_k2_capability_discover_v1)
+    (lambda ()
+      (let ((output (vector #f)))
+        (k2-public-capability-discover output)
+        (vector-ref output 0)))))
+(define (capability-discover) (k2-safe-capability-discover))
+
+(define k2-safe-capability-request
+  (let ()
+    (extern void k2-public-capability-request ptr ptr ptr ptr ptr ptr
+            :real et_e1b_public_k2_capability_request_v1)
+    (lambda (operation dtype device shape deterministic?)
+      (let ((output (vector #f)))
+        (k2-public-capability-request
+         (vector operation) (vector dtype) (vector device) (vector shape)
+         (vector deterministic?) output)
+        (vector-ref output 0)))))
+(define (capability-request operation dtype device shape deterministic?)
+  (k2-safe-capability-request operation dtype device shape deterministic?))
+
+(define k2-safe-capability-verified
+  (let ()
+    (extern void k2-public-capability-verified ptr ptr ptr ptr
+            :real et_e1b_public_k2_capability_verified_v1)
+    (lambda (report capability request)
+      (let ((output (vector #f)))
+        (k2-public-capability-verified
+         (vector report) (vector capability) (vector request) output)
+        (vector-ref output 0)))))
+(define (capability-verified? report capability request)
+  (k2-safe-capability-verified report capability request))
+
+(define k2-safe-capability-require
+  (let ()
+    (extern void k2-public-capability-require ptr ptr ptr ptr
+            :real et_e1b_public_k2_capability_require_v1)
+    (lambda (report capability request)
+      (let ((output (vector #f)))
+        (k2-public-capability-require
+         (vector report) (vector capability) (vector request) output)
+        (vector-ref output 0)))))
+(define (capability-require report capability request)
+  (k2-safe-capability-require report capability request))
+
+(define k2-safe-capability-report-entries
+  (let ()
+    (extern void k2-public-capability-report-entries ptr ptr
+            :real et_e1b_public_k2_capability_report_entries_v1)
+    (lambda (report)
+      (let ((output (vector #f)))
+        (k2-public-capability-report-entries (vector report) output)
+        (vector-ref output 0)))))
+(define (capability-report-entries report)
+  (k2-safe-capability-report-entries report))
+
+(define k2-safe-capability-entry-name
+  (let ()
+    (extern void k2-public-capability-entry-name ptr ptr
+            :real et_e1b_public_k2_capability_entry_name_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-name (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-name entry)
+  (k2-safe-capability-entry-name entry))
+
+(define k2-safe-capability-entry-status
+  (let ()
+    (extern void k2-public-capability-entry-status ptr ptr
+            :real et_e1b_public_k2_capability_entry_status_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-status (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-status entry)
+  (k2-safe-capability-entry-status entry))
+
+(define k2-safe-capability-entry-implementation
+  (let ()
+    (extern void k2-public-capability-entry-implementation ptr ptr
+            :real et_e1b_public_k2_capability_entry_implementation_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-implementation (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-implementation entry)
+  (k2-safe-capability-entry-implementation entry))
+
+(define k2-safe-capability-entry-version
+  (let ()
+    (extern void k2-public-capability-entry-version ptr ptr
+            :real et_e1b_public_k2_capability_entry_version_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-version (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-version entry)
+  (k2-safe-capability-entry-version entry))
+
+(define k2-safe-capability-entry-constraints
+  (let ()
+    (extern void k2-public-capability-entry-constraints ptr ptr
+            :real et_e1b_public_k2_capability_entry_constraints_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-constraints (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-constraints entry)
+  (k2-safe-capability-entry-constraints entry))
+
+(define k2-safe-capability-entry-deterministic
+  (let ()
+    (extern void k2-public-capability-entry-deterministic ptr ptr
+            :real et_e1b_public_k2_capability_entry_deterministic_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-deterministic (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-deterministic? entry)
+  (k2-safe-capability-entry-deterministic entry))
+
+(define k2-safe-capability-entry-evidence
+  (let ()
+    (extern void k2-public-capability-entry-evidence ptr ptr
+            :real et_e1b_public_k2_capability_entry_evidence_v1)
+    (lambda (entry)
+      (let ((output (vector #f)))
+        (k2-public-capability-entry-evidence (vector entry) output)
+        (vector-ref output 0)))))
+(define (capability-entry-evidence entry)
+  (k2-safe-capability-entry-evidence entry))
