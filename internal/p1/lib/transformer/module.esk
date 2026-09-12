@@ -78,7 +78,11 @@
          tensor-provider-preflight-internal
          tensor-provider-release-owned-internal!
          tensor-provider-admit-owned-internal!
-         state-dict-adopt-owned-internal!)
+         state-dict-adopt-owned-internal!
+         state-dict-c2-parameter-topology-internal
+         state-dict-claim-c2-internal!
+         state-dict-claim-c2-rollback-internal!
+         state-dict-release-c2-owned-internal!)
 
 (define p1-trusted-surface
   (let ()
@@ -4016,6 +4020,11 @@
                 "expected registered opaque value" '())
           (let ((raw (vector-ref entry 2)))
             (if (and (not (eq? raw dead-state-raw))
+                     (eq? (vector-ref (state-lifecycle raw) 1) 'c2-owned))
+                (fail 'invalid-state 'state-dict-release!
+                      "state dictionary ownership was transferred" '())
+                #t)
+            (if (and (not (eq? raw dead-state-raw))
                      (eq? (vector-ref (state-lifecycle raw) 1) 'live)
                      (vector-ref (state-lifecycle raw) 6))
                 (fail 'invalid-state 'state-dict-release!
@@ -4209,6 +4218,119 @@
       'state
       (state-dict-adopt-owned-internal!
         records aliases provider-name major minor ownership)))
+  (lambda (state)
+    (reject-protected-storage-comparison-reentry
+      'state-dict-c2-parameter-topology-internal)
+    (let ((entry (shell-entry state)))
+      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+          (fail 'invalid-argument
+                'state-dict-c2-parameter-topology-internal
+                "expected an exact registered P1 state" '()))
+      (let ((raw (vector-ref entry 2)))
+        (if (eq? raw dead-state-raw)
+            (fail 'invalid-state
+                  'state-dict-c2-parameter-topology-internal
+                  "P1 state is dead" '()))
+        (let ((lifecycle (state-lifecycle raw)))
+          (if (or (not (eq? (vector-ref lifecycle 1) 'live))
+                  (vector-ref lifecycle 6))
+              (fail 'invalid-state
+                    'state-dict-c2-parameter-topology-internal
+                    "P1 state is busy or transferred" '()))
+          (validate-bound-state
+            'state-dict-c2-parameter-topology-internal raw)
+          (let ((aliases (copy-data (vector-ref raw 7))))
+            (let secondary? ((path #f) (groups aliases))
+              (if path
+                  (cond
+                    ((null? groups) #f)
+                    ((path-member? path (cdr (car groups))) #t)
+                    (else (secondary? path (cdr groups))))
+                  (let collect ((entries (vector-ref raw 6))
+                                (paths '()) (shapes '()))
+                    (if (null? entries)
+                        (vector (list-reverse paths)
+                                (list-reverse shapes) aliases)
+                        (let ((item (car entries)))
+                          (if (and (eq? (vector-ref item 2) 'parameter)
+                                   (not (secondary? (vector-ref item 1)
+                                                    aliases)))
+                              (collect
+                                (cdr entries)
+                                (cons (copy-data (vector-ref item 1)) paths)
+                                (cons (copy-data (vector-ref item 3)) shapes))
+                              (collect (cdr entries) paths shapes))))))))))))
+  (lambda (state owner-token)
+    (reject-protected-storage-comparison-reentry
+      'state-dict-claim-c2-internal!)
+    (let ((entry (shell-entry state)))
+      (if (or (not owner-token) (not entry)
+              (not (eq? (vector-ref entry 1) 'state)))
+          (fail 'invalid-argument 'state-dict-claim-c2-internal!
+                "expected an exact live P1 state and owner token" '()))
+      (let* ((raw (vector-ref entry 2))
+             (lifecycle
+               (if (eq? raw dead-state-raw) #f (state-lifecycle raw))))
+        (if (or (not lifecycle)
+                (not (eq? (vector-ref lifecycle 1) 'live))
+                (vector-ref lifecycle 6))
+            (fail 'invalid-state 'state-dict-claim-c2-internal!
+                  "P1 state is not claimable at an update boundary" '()))
+        (vector-set! lifecycle 1 'c2-owned)
+        (vector-set! lifecycle 6 owner-token)
+        #t)))
+  (lambda (state owner-token)
+    (let ((entry (shell-entry state)))
+      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+          (fail 'invalid-argument 'state-dict-claim-c2-rollback-internal!
+                "expected an exact claimed P1 state" '()))
+      (let* ((raw (vector-ref entry 2))
+             (lifecycle
+               (if (eq? raw dead-state-raw) #f (state-lifecycle raw))))
+        (if (or (not lifecycle)
+                (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+                (not (eq? (vector-ref lifecycle 6) owner-token)))
+            (fail 'invalid-state 'state-dict-claim-c2-rollback-internal!
+                  "P1 state claim token differs" '()))
+        (vector-set! lifecycle 6 #f)
+        (vector-set! lifecycle 1 'live)
+        #t)))
+  (lambda (state owner-token)
+    (reject-protected-storage-comparison-reentry
+      'state-dict-release-c2-owned-internal!)
+    (let ((entry (shell-entry state)))
+      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+          (fail 'invalid-argument 'state-dict-release-c2-owned-internal!
+                "expected an exact claimed P1 state" '()))
+      (let ((raw (vector-ref entry 2)))
+        (if (eq? raw dead-state-raw)
+            #t
+            (let ((lifecycle (state-lifecycle raw)))
+              (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+                      (not (eq? (vector-ref lifecycle 6) owner-token)))
+                  (fail 'invalid-state
+                        'state-dict-release-c2-owned-internal!
+                        "P1 state claim token differs" '()))
+              (let* ((outcome (vector #f #f))
+                     (status
+                       (p1-native-state-release-begin native-context state)))
+                (native-check 'state-dict-release-c2-owned-internal! status)
+                (if (= (p1-native-result-i64 native-context) 0)
+                    #t
+                    (begin
+                      (compact-released-state-shells! raw)
+                      (vector-set! lifecycle 6 #f)
+                      (guard (caught
+                               (#t
+                                 (vector-set! outcome 0 #f)
+                                 (vector-set! outcome 1 caught)
+                                 outcome))
+                        (vector-set! outcome 0 #t)
+                        (vector-set! outcome 1
+                                     (state-dict-release-owned! raw)))
+                      (if (vector-ref outcome 0)
+                          (vector-ref outcome 1)
+                          (raise (vector-ref outcome 1)))))))))))
   )))
 
 (define (module-parameters module)
@@ -4329,3 +4451,11 @@
           records aliases provider-name major minor ownership)
   ((vector-ref p1-trusted-surface 48)
    records aliases provider-name major minor ownership))
+(define (state-dict-c2-parameter-topology-internal state)
+  ((vector-ref p1-trusted-surface 49) state))
+(define (state-dict-claim-c2-internal! state owner-token)
+  ((vector-ref p1-trusted-surface 50) state owner-token))
+(define (state-dict-claim-c2-rollback-internal! state owner-token)
+  ((vector-ref p1-trusted-surface 51) state owner-token))
+(define (state-dict-release-c2-owned-internal! state owner-token)
+  ((vector-ref p1-trusted-surface 52) state owner-token))

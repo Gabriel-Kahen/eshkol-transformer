@@ -212,6 +212,12 @@ int32_t et_o2_optimizer_state_reconstruct_abort_v1(
 int32_t et_o2_optimizer_state_copy_moment_bits_v1(
     const et_o2_optimizer_state *state, size_t index, uint32_t moment_kind,
     uint32_t *destination, size_t element_count, et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_preflight_c2_transfer_v1(
+    const et_o2_optimizer_state *state, size_t expected_count,
+    uint64_t expected_completed_updates, et_o2_error_v1 *error);
+int32_t et_o2_optimizer_state_require_shape_v1(
+    const et_o2_optimizer_state *state, size_t index, size_t rank,
+    const uint64_t *shape, et_o2_error_v1 *error);
 
 #ifdef ET_O2_TESTING
 typedef struct et_o2_test_live_counts_v1 {

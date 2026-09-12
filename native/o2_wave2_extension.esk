@@ -496,6 +496,65 @@
         (o2-fail 'invalid-state operation "optimizer state is released"))
     state))
 
+;;; Same-aggregate C2 ownership transfer. These lexical helpers are never
+;;; wrapped or installed. The claim token itself is preallocated by C2, so the
+;;; claim/rollback boundary is assignment-only and transactionally reversible.
+(define (o2-state-claim-c2-internal! value owner-token)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (or (not owner-token) (not state))
+        (o2-fail 'invalid-argument 'o2-state-claim-c2-internal!
+                 "expected an exact live O2 state and owner token"))
+    (if (not (eq? (vector-ref state 6) 'live))
+        (o2-fail 'invalid-state 'o2-state-claim-c2-internal!
+                 "O2 state is not claimable at an update boundary"))
+    (vector-set! state 6 owner-token)
+    #t))
+
+(define (o2-state-claim-c2-rollback-internal! value owner-token)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (not state)
+        (o2-fail 'invalid-argument 'o2-state-claim-c2-rollback-internal!
+                 "expected an exact claimed O2 state"))
+    (if (not (eq? (vector-ref state 6) owner-token))
+        (o2-fail 'invalid-state 'o2-state-claim-c2-rollback-internal!
+                 "O2 state claim token differs"))
+    (vector-set! state 6 'live)
+    #t))
+
+(define (o2-state-release-c2-owned-internal! value owner-token)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (not state)
+        (o2-fail 'invalid-argument 'o2-state-release-c2-owned-internal!
+                 "expected an exact claimed O2 state"))
+    (if (eq? (vector-ref state 6) 'dead)
+        #t
+        (begin
+          (if (not (eq? (vector-ref state 6) owner-token))
+              (o2-fail 'invalid-state 'o2-state-release-c2-owned-internal!
+                       "O2 state claim token differs"))
+          (let ((status
+                  (o2-native-optimizer-state-release (vector-ref state 1))))
+            (cond
+              ((= status -1) (o2-native-fail
+                               'o2-state-release-c2-owned-internal!))
+              ((or (= status 0) (= status -2))
+               (vector-set! state 1 'released)
+               (vector-set! state 2 'released)
+               (vector-set! state 3 'released)
+               (vector-set! state 4 'released)
+               (vector-set! state 6 'dead)
+               (if (= status -2)
+                   (o2-native-fail 'o2-state-release-c2-owned-internal!)
+                   #t))
+              (else
+               (vector-set! state 1 'released)
+               (vector-set! state 2 'released)
+               (vector-set! state 3 'released)
+               (vector-set! state 4 'released)
+               (vector-set! state 6 'dead)
+               (o2-fail 'internal 'o2-state-release-c2-owned-internal!
+                        "optimizer state release lifecycle is indeterminate"))))))))
+
 (define (o2-public-optimizer-create config tree)
   (let* ((operation 'optimizer-create)
          (parsed (o2-parse-config operation config))

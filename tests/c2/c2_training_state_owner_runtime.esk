@@ -1,0 +1,437 @@
+(load "d2_wave2_root.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_training_state_extension.esk")
+
+(extern void o2-test-fail-release-after i64
+        :real et_o2_test_fail_release_after_v1)
+(extern void o2-test-reset-failpoints
+        :real et_o2_test_reset_failpoints_v1)
+(extern i64 c2-test-i2-live-count i64
+        :real et_c2_test_i2_live_count_v1)
+(extern i64 c2-test-o2-count i64
+        :real et_c2_test_o2_count_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "C2 OWNER FAIL: ") (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (let ((matched
+          (guard (raised
+                   (#t
+                     (if (and (transformer-error? raised)
+                              (eq? category
+                                   (transformer-error-category raised))
+                              (eq? operation
+                                   (transformer-error-operation raised)))
+                         #t
+                         (begin
+                           (display "C2 OWNER UNEXPECTED ERROR: ")
+                           (display label) (display " ")
+                           (if (transformer-error? raised)
+                               (begin
+                                 (display (transformer-error-category raised))
+                                 (display "/")
+                                 (display (transformer-error-operation raised)))
+                               (display raised))
+                           (newline)
+                           #f))))
+            (thunk) #f)))
+    (check label matched)))
+(define (c2-test-owner-counts)
+  (let loop ((remaining c2-training-state-states)
+             (live 0) (busy 0) (releasing 0) (dead 0) (live-controls 0))
+    (if (null? remaining)
+        (vector live busy releasing dead live-controls)
+        (let* ((state (car remaining)) (status (vector-ref state 7)))
+          (loop (cdr remaining)
+                (+ live (if (eq? status 'live) 1 0))
+                (+ busy (if (vector? status) 1 0))
+                (+ releasing (if (eq? status 'releasing) 1 0))
+                (+ dead (if (eq? status 'dead) 1 0))
+                (+ live-controls (if (vector? (vector-ref state 3)) 1 0)))))))
+(define (snapshot-i2-counts)
+  (let ((result (make-vector 7 0)))
+    (let loop ((index 0))
+      (if (= index 7) result
+          (begin (vector-set! result index (c2-test-i2-live-count index))
+                 (loop (+ index 1)))))))
+(define (snapshot-o2-counts)
+  (let ((result (make-vector 9 0)))
+    (let loop ((index 0))
+      (if (= index 9) result
+          (begin (vector-set! result index (c2-test-o2-count index))
+                 (loop (+ index 1)))))))
+
+(define fingerprint
+  "sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72")
+(define config-fingerprint
+  "sha256:eshkol-config-json-v1:337a2ea0be86b3fccf13a90c895e8a5fe42f94a270395940ac90c41f7cc67ceb")
+(define canonical
+  (string->utf8
+    (string-append
+      "{\"canonicalization\":\"eshkol-config-json-v1\",\"checksum-algorithm\":\"sha256\",\"checksum-coverage\":\"whole-document-including-final-lf\",\"config-schema-version\":[1,0],\"format\":\"eshkol-resolved-run\",\"format-version\":[1,0],\"limits\":{\"integer-digits\":19,\"max-input-bytes\":16384,\"max-input-keys\":14,\"max-input-nesting-depth\":1},\"provenance\":{"
+      "\"config-schema-major\":\"input\",\"config-schema-minor\":\"input\",\"model.context-length\":\"input\",\"model.device\":\"default\",\"model.dtype\":\"default\",\"model.head-size\":\"derived\",\"model.hidden-size\":\"input\",\"model.kv-head-count\":\"default\",\"model.layer-count\":\"input\",\"model.query-head-count\":\"input\",\"model.vocabulary-size\":\"input\",\"run.deterministic\":\"default\",\"run.seed\":\"input\",\"training.accumulation-steps\":\"default\"},"
+      "\"required-features\":[],\"resolved\":{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.device\":\"cpu\",\"model.dtype\":\"f32\",\"model.head-size\":16,\"model.hidden-size\":64,\"model.kv-head-count\":4,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":263,\"run.deterministic\":true,\"run.seed\":1729,\"training.accumulation-steps\":1}}\n")))
+
+(define (config-for path)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (list path)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define (make-o2-state path shape aliases completed)
+  (let* ((elements
+           (let loop ((remaining shape) (product 1))
+             (if (null? remaining) product
+                 (loop (cdr remaining) (* product (car remaining))))))
+         (avg (make-bytevector (* elements 4) 0))
+         (sq (make-bytevector (* elements 4) 0))
+         (request
+           (vector o2-c2-reconstruct-tag (config-for path) (list path)
+                   aliases completed
+                   (vector (vector path shape avg sq))
+                   'checkpoint-load #f)))
+    (o2-state-reconstruct-internal request)
+    (vector-ref request 7)))
+(define (make-p1-state name shape tied-name)
+  (let* ((module (i2-module-create-internal))
+         (parameter
+           (i2-parameter-create-uniform-internal
+             (let loop ((remaining shape) (product 1))
+               (if (null? remaining) product
+                   (loop (cdr remaining) (* product (car remaining))))) 0))
+         (handle (i2-module-register-parameter-internal! module name parameter)))
+    (if tied-name
+        (i2-module-register-tied-parameter-internal! module tied-name handle)
+        #t)
+    (module-state-dict module)))
+
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define resource-root (car (cdr (cdr args))))
+(define policy (c1-wave2-persistence-policy 1048576 1048576 1048576 8 'cpu))
+(define tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
+(check "fixture fingerprint" (string=? fingerprint
+                                        (t2-private-tokenizer-fingerprint tokenizer)))
+(check "fixture vocabulary" (= 263 (t2-private-tokenizer-vocab-size tokenizer)))
+(define dataset
+  (d2-token-dataset-open
+    (list ':directory (string-append resource-root "/small")
+          ':batch-size 1 ':sequence-length 1
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536 ':maximum-batch-bytes 17
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f)
+    tokenizer))
+(define start (d2-token-dataset-cursor dataset))
+(d2-token-dataset-close! dataset)
+
+(define (make-controls completed)
+  (vector
+    (vector 'philox4x32-10 1 1729 -1 -9223372036854775808)
+    (vector (utf8->string (string->utf8 fingerprint)) 263)
+    (vector (bytevector-copy start 0 (bytevector-length start))
+            (bytevector-copy start 0 (bytevector-length start)))
+    (vector (bytevector-copy canonical 0 (bytevector-length canonical))
+            (utf8->string (string->utf8 config-fingerprint)))
+    (vector 99 completed 3)))
+(define (compose p1 o2 controls)
+  (let ((request
+          (vector c2-training-state-compose-tag p1 o2 controls
+                  'checkpoint-load #f)))
+    (c2-training-state-compose-internal request)
+    request))
+
+;;; Exact completed-update and topology failures leave both authorities live.
+(define mismatch-p1 (make-p1-state "weight" '(4) #f))
+(define mismatch-o2 (make-o2-state '("weight") '(4) '() 17))
+(define mismatch-request
+  (vector c2-training-state-compose-tag mismatch-p1 mismatch-o2
+          (make-controls 18) 'checkpoint-load #f))
+(expect-error "completed updates checked" 'shape-mismatch 'checkpoint-load
+  (lambda () (c2-training-state-compose-internal mismatch-request)))
+(check "counter mismatch publishes nothing"
+       (and (eq? (vector-ref mismatch-request 1) mismatch-p1)
+            (eq? (vector-ref mismatch-request 2) mismatch-o2)
+            (eq? (vector-ref mismatch-request 5) #f)))
+(check "counter mismatch leaves P1 live" (pair? (state-dict-paths mismatch-p1)))
+(check "counter mismatch P1 releases" (state-dict-release! mismatch-p1))
+(check "counter mismatch O2 releases"
+       (o2-public-optimizer-state-release! mismatch-o2))
+
+(define shape-p1 (make-p1-state "weight" '(4) #f))
+(define shape-o2 (make-o2-state '("weight") '(2 2) '() 17))
+(expect-error "moment/model rank checked" 'shape-mismatch 'checkpoint-load
+  (lambda () (compose shape-p1 shape-o2 (make-controls 17))))
+(check "shape mismatch leaves owners releasable"
+       (and (state-dict-release! shape-p1)
+            (o2-public-optimizer-state-release! shape-o2)))
+
+(define path-p1 (make-p1-state "weight" '(4) #f))
+(define path-o2 (make-o2-state '("wrong") '(4) '() 17))
+(expect-error "moment/model path checked" 'shape-mismatch 'checkpoint-load
+  (lambda () (compose path-p1 path-o2 (make-controls 17))))
+(check "path mismatch leaves owners releasable"
+       (and (state-dict-release! path-p1)
+            (o2-public-optimizer-state-release! path-o2)))
+
+(define alias-p1 (make-p1-state "weight" '(4) "weight_tied"))
+(define alias-o2 (make-o2-state '("weight") '(4) '() 17))
+(expect-error "moment/model alias topology checked" 'shape-mismatch 'checkpoint-load
+  (lambda () (compose alias-p1 alias-o2 (make-controls 17))))
+(check "alias mismatch leaves owners releasable"
+       (and (state-dict-release! alias-p1)
+            (o2-public-optimizer-state-release! alias-o2)))
+
+;;; The second claim is the only fallible operation after the first claim.
+(define rollback-p1 (make-p1-state "weight" '(4) #f))
+(define rollback-o2 (make-o2-state '("weight") '(4) '() 17))
+(define saved-o2-claim c2-training-state-claim-o2!)
+(set! c2-training-state-claim-o2!
+  (lambda (state token)
+    (c2-training-state-fail 'internal 'checkpoint-load
+                            "injected second-claim failure")))
+(expect-error "second claim rolls P1 back" 'internal 'checkpoint-load
+  (lambda () (compose rollback-p1 rollback-o2 (make-controls 17))))
+(set! c2-training-state-claim-o2! saved-o2-claim)
+(check "rolled-back P1 alias is usable" (pair? (state-dict-paths rollback-p1)))
+(check "rolled-back owners release normally"
+       (and (state-dict-release! rollback-p1)
+            (o2-public-optimizer-state-release! rollback-o2)))
+
+;;; Successful transfer deep-owns controls and consumes both request slots.
+(define owned-p1 (make-p1-state "weight" '(4) #f))
+(define owned-o2 (make-o2-state '("weight") '(4) '() 17))
+(define borrowed-controls (make-controls 17))
+(define original-cursor-first
+  (bytevector-u8-ref (vector-ref (vector-ref borrowed-controls 2) 0) 0))
+(define original-config-first
+  (bytevector-u8-ref (vector-ref (vector-ref borrowed-controls 3) 0) 0))
+(define owned-request (compose owned-p1 owned-o2 borrowed-controls))
+(define owned (vector-ref owned-request 5))
+(check "compose consumes component authority slots"
+       (and (eq? (vector-ref owned-request 1) #f)
+            (eq? (vector-ref owned-request 2) #f)
+            owned))
+(bytevector-u8-set! (vector-ref (vector-ref borrowed-controls 2) 0) 0 0)
+(bytevector-u8-set! (vector-ref (vector-ref borrowed-controls 3) 0) 0 0)
+(vector-set! (vector-ref borrowed-controls 4) 0 0)
+(define borrow (c2-training-state-borrow-begin-internal owned 'checkpoint-save!))
+(define projection (c2-training-state-borrow-projection-internal borrow))
+(define copied-controls (vector-ref projection 2))
+(check "controls are deeply detached"
+       (and (= (bytevector-u8-ref (vector-ref (vector-ref copied-controls 2) 3) 0)
+               original-cursor-first)
+            (= (bytevector-u8-ref (vector-ref (vector-ref copied-controls 3) 0) 0)
+               original-config-first)
+            (= (vector-ref (vector-ref copied-controls 4) 0) 99)))
+(expect-error "busy release rejects" 'invalid-state 'trainer-state-release!
+  (lambda ()
+    (c2-training-state-release-internal! owned 'trainer-state-release!)))
+(check "borrow ends" (c2-training-state-borrow-end-internal borrow))
+(expect-error "stale borrow rejects" 'invalid-state
+              'c2-training-state-borrow-projection-internal
+  (lambda () (c2-training-state-borrow-projection-internal borrow)))
+(expect-error "P1 alias unusable after transfer" 'invalid-state 'state-dict-paths
+  (lambda () (state-dict-paths owned-p1)))
+(expect-error "P1 release alias unusable after transfer"
+              'invalid-state 'state-dict-release!
+  (lambda () (state-dict-release! owned-p1)))
+(expect-error "O2 alias unusable after transfer"
+              'invalid-state 'optimizer-state-release!
+  (lambda () (o2-public-optimizer-state-release! owned-o2)))
+
+;;; Admission is exact and occurs before either cleanup indirection/native call.
+(define p1-release-calls 0)
+(define o2-release-calls 0)
+(define saved-p1-release c2-training-state-release-p1-owned!)
+(define saved-o2-release c2-training-state-release-o2-owned!)
+(set! c2-training-state-release-p1-owned!
+  (lambda (state token)
+    (set! p1-release-calls (+ p1-release-calls 1))
+    (saved-p1-release state token)))
+(set! c2-training-state-release-o2-owned!
+  (lambda (state token)
+    (set! o2-release-calls (+ o2-release-calls 1))
+    (saved-o2-release state token)))
+(define forged
+  (guard (raised (#t raised)) (error "transformer.trainer-state:v1")))
+(expect-error "forged shell rejected before cleanup" 'invalid-argument
+              'trainer-state-release!
+  (lambda () (c2-training-state-release-internal! forged
+                                                   'trainer-state-release!)))
+(expect-error "copied shell rejected before cleanup" 'invalid-argument
+              'trainer-state-release!
+  (lambda () (c2-training-state-release-internal! (vector owned)
+                                                   'trainer-state-release!)))
+(expect-error "wrong-kind shell rejected before cleanup" 'invalid-argument
+              'trainer-state-release!
+  (lambda () (c2-training-state-release-internal! owned-p1
+                                                   'trainer-state-release!)))
+(check "invalid receivers dereference no component"
+       (and (= p1-release-calls 0) (= o2-release-calls 0)))
+(check "live release drains both owners"
+       (c2-training-state-release-internal! owned 'trainer-state-release!))
+(check "each authority consumed once"
+       (and (= p1-release-calls 1) (= o2-release-calls 1)))
+(check "exact dead release is idempotent"
+       (c2-training-state-release-internal! owned 'trainer-state-release!))
+(check "dead release retries nothing"
+       (and (= p1-release-calls 1) (= o2-release-calls 1)))
+(expect-error "every other dead use rejects" 'invalid-state 'checkpoint-save!
+  (lambda () (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)))
+
+;;; A consumed P1 defect must not prevent O2 cleanup or permit later retry.
+(define defect-p1 (make-p1-state "weight" '(4) #f))
+(define defect-o2 (make-o2-state '("weight") '(4) '() 17))
+(define defect-owner (vector-ref (compose defect-p1 defect-o2
+                                          (make-controls 17)) 5))
+(define defect-p1-calls 0)
+(define defect-o2-calls 0)
+(define reentrant-rejected #f)
+(set! c2-training-state-release-p1-owned!
+  (lambda (state token)
+    (set! defect-p1-calls (+ defect-p1-calls 1))
+    (set! reentrant-rejected
+      (guard (raised
+               (#t (and (transformer-error? raised)
+                        (eq? 'invalid-state
+                             (transformer-error-category raised)))))
+        (c2-training-state-release-internal! defect-owner
+                                             'trainer-state-release!)
+        #f))
+    (saved-p1-release state token)
+    (c2-training-state-fail 'unsupported 'injected-provider-release
+                            "injected consumed P1 provider defect")))
+(set! c2-training-state-release-o2-owned!
+  (lambda (state token)
+    (set! defect-o2-calls (+ defect-o2-calls 1))
+    (saved-o2-release state token)))
+(expect-error "provider defect reports C2 internal" 'internal
+              'trainer-state-release!
+  (lambda ()
+    (c2-training-state-release-internal! defect-owner
+                                         'trainer-state-release!)))
+(check "releasing state rejects reentrancy" reentrant-rejected)
+(check "second owner drains despite first defect"
+       (and (= defect-p1-calls 1) (= defect-o2-calls 1)
+            (state-dict-release! defect-p1)
+            (o2-public-optimizer-state-release! defect-o2)))
+(check "defective release published dead"
+       (c2-training-state-release-internal! defect-owner
+                                            'trainer-state-release!))
+(check "consumed defective authorities never retry"
+       (and (= defect-p1-calls 1) (= defect-o2-calls 1)))
+(set! c2-training-state-release-p1-owned! saved-p1-release)
+(set! c2-training-state-release-o2-owned! saved-o2-release)
+(o2-test-reset-failpoints)
+
+;;; Forged projections and malformed controls fail before owner preflight.
+(define bad-p1 (make-p1-state "weight" '(4) #f))
+(define bad-o2 (make-o2-state '("weight") '(4) '() 17))
+(define bad-controls (make-controls 17))
+(bytevector-u8-set! (vector-ref (vector-ref bad-controls 2) 0) 40
+                    (modulo (+ 1 (bytevector-u8-ref
+                                   (vector-ref (vector-ref bad-controls 2) 0)
+                                   40)) 256))
+(expect-error "cursor projection cannot be forged" 'corrupt-data 'checkpoint-load
+  (lambda () (compose bad-p1 bad-o2 bad-controls)))
+(check "control rejection leaves owners live"
+       (and (state-dict-release! bad-p1)
+            (o2-public-optimizer-state-release! bad-o2)))
+
+;;; Direct control mismatches fail before either claim and preserve owners.
+(define rng-p1 (make-p1-state "weight" '(4) #f))
+(define rng-o2 (make-o2-state '("weight") '(4) '() 17))
+(define rng-controls (make-controls 17))
+(vector-set! (vector-ref rng-controls 0) 2 1730)
+(expect-error "RNG key/X1 seed mismatch" 'corrupt-data 'checkpoint-load
+  (lambda () (compose rng-p1 rng-o2 rng-controls)))
+(check "RNG mismatch leaves owners live"
+       (and (pair? (state-dict-paths rng-p1))
+            (state-dict-release! rng-p1)
+            (o2-public-optimizer-state-release! rng-o2)))
+(define vocab-p1 (make-p1-state "weight" '(4) #f))
+(define vocab-o2 (make-o2-state '("weight") '(4) '() 17))
+(define vocab-controls (make-controls 17))
+(vector-set! (vector-ref vocab-controls 1) 1 264)
+(expect-error "tokenizer vocabulary/X1 mismatch" 'corrupt-data 'checkpoint-load
+  (lambda () (compose vocab-p1 vocab-o2 vocab-controls)))
+(check "vocabulary mismatch leaves owners live"
+       (and (pair? (state-dict-paths vocab-p1))
+            (state-dict-release! vocab-p1)
+            (o2-public-optimizer-state-release! vocab-o2)))
+(define config-p1 (make-p1-state "weight" '(4) #f))
+(define config-o2 (make-o2-state '("weight") '(4) '() 17))
+(define config-controls (make-controls 17))
+(vector-set! (vector-ref config-controls 3) 1
+  "sha256:eshkol-config-json-v1:0000000000000000000000000000000000000000000000000000000000000000")
+(expect-error "config fingerprint mismatch" 'corrupt-data
+              'x1-canonical-inspect-internal
+  (lambda () (compose config-p1 config-o2 config-controls)))
+(check "config mismatch leaves owners live"
+       (and (pair? (state-dict-paths config-p1))
+            (state-dict-release! config-p1)
+            (o2-public-optimizer-state-release! config-o2)))
+
+;;; Repeated owners return every live native count to baseline. Native O2 and
+;;; C2 dead controls are retained by design and accounted separately.
+(define repeat-module (i2-module-create-internal))
+(define repeat-parameter (i2-parameter-create-uniform-internal 4 0))
+(i2-module-register-parameter-internal! repeat-module "weight" repeat-parameter)
+(define i2-before (snapshot-i2-counts))
+(define o2-before (snapshot-o2-counts))
+(define c2-before (c2-test-owner-counts))
+(define (repeat-owner-once)
+  (guard (raised
+           (#t
+             (display "C2 OWNER REPEAT ERROR: ")
+             (if (transformer-error? raised)
+                 (begin (display (transformer-error-category raised))
+                        (display "/")
+                        (display (transformer-error-operation raised)))
+                 (display raised))
+             (newline)
+             (exit 1)))
+    (let* ((p1 (module-state-dict repeat-module))
+           (o2 (make-o2-state '("weight") '(4) '() 17))
+           (owner (vector-ref (compose p1 o2 (make-controls 17)) 5))
+           (borrow
+             (c2-training-state-borrow-begin-internal
+               owner 'checkpoint-save!)))
+      (with-region ('c2-owner-borrow 65536)
+        (c2-training-state-borrow-projection-internal borrow))
+      (c2-training-state-borrow-end-internal borrow)
+      (c2-training-state-release-internal! owner 'trainer-state-release!))))
+(repeat-owner-once)
+(repeat-owner-once)
+(repeat-owner-once)
+(define i2-after (snapshot-i2-counts))
+(define o2-after (snapshot-o2-counts))
+(define c2-after (c2-test-owner-counts))
+(check "all seven I2 live counters return to baseline" (equal? i2-before i2-after))
+(check "O2 live states/handles/clones/builders return to baseline"
+       (and (= (vector-ref o2-before 0) (vector-ref o2-after 0))
+            (= (vector-ref o2-before 1) (vector-ref o2-after 1))
+            (= (vector-ref o2-before 2) (vector-ref o2-after 2))
+            (= (vector-ref o2-before 4) (vector-ref o2-after 4))
+            (= (vector-ref o2-before 6) (vector-ref o2-after 6))
+            (= (vector-ref o2-before 7) (vector-ref o2-after 7))
+            (= (vector-ref o2-before 8) (vector-ref o2-after 8))))
+(check "O2 dead state and handle controls are exactly accounted"
+       (and (= (+ (vector-ref o2-before 3) 3) (vector-ref o2-after 3))
+            (= (+ (vector-ref o2-before 5) 6) (vector-ref o2-after 5))))
+(check "C2 has no retained live/busy/releasing controls"
+       (and (= (vector-ref c2-before 0) (vector-ref c2-after 0))
+            (= (vector-ref c2-before 1) (vector-ref c2-after 1))
+            (= (vector-ref c2-before 2) (vector-ref c2-after 2))
+            (= (vector-ref c2-before 4) (vector-ref c2-after 4))))
+(check "C2 tombstones are exactly accounted"
+       (= (+ (vector-ref c2-before 3) 3) (vector-ref c2-after 3)))
+
+(display "C2 TRAINING STATE OWNER PASS: ")
+(display checks) (display " checks") (newline)

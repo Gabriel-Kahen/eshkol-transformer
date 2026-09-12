@@ -2616,6 +2616,99 @@ int32_t et_o2_optimizer_state_copy_moment_bits_v1(
   return et_o2_success(error);
 }
 
+int32_t et_o2_optimizer_state_preflight_c2_transfer_v1(
+    const et_o2_optimizer_state *candidate, size_t expected_count,
+    uint64_t expected_completed_updates, et_o2_error_v1 *error) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  int32_t result;
+  if ((result = et_o2_require_state_live(
+           candidate, "optimizer-state-c2-transfer", error)) != 0) {
+    return result;
+  }
+  if (state->active_borrows != 0u) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_ACTIVE_BORROW,
+                      "optimizer-state-c2-transfer",
+                      "optimizer state has an active moment borrow");
+  }
+  if (state->count != expected_count ||
+      state->completed_updates != expected_completed_updates) {
+    return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-c2-transfer",
+                      "optimizer state count or update counter differs");
+  }
+  return et_o2_validate_state_owner_ledger(
+      state, ET_O2_STATUS_INVALID_STATE, "optimizer-state-c2-transfer",
+      error);
+}
+
+int32_t et_o2_optimizer_state_require_shape_v1(
+    const et_o2_optimizer_state *candidate, size_t index, size_t rank,
+    const uint64_t *shape, et_o2_error_v1 *error) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  et_f32_tensor *moments[2];
+  et_f32_tensor_error tensor_error;
+  size_t moment_index;
+  size_t actual_rank = 0u;
+  size_t dimension;
+  int32_t result;
+  if ((result = et_o2_require_state_live(
+           candidate, "optimizer-state-c2-transfer", error)) != 0) {
+    return result;
+  }
+  if (state->active_borrows != 0u || index >= state->count ||
+      rank > ET_KERNEL_MAX_RANK || (rank != 0u && shape == NULL)) {
+    return et_o2_fail(error,
+                      state->active_borrows != 0u
+                          ? ET_O2_STATUS_INVALID_STATE
+                          : ET_O2_STATUS_INVALID_ARGUMENT,
+                      state->active_borrows != 0u ? ET_O2_CODE_ACTIVE_BORROW
+                                                  : ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-c2-transfer",
+                      "optimizer state shape operands are invalid");
+  }
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_INVALID_STATE,
+          "optimizer-state-c2-transfer", error) != 0) {
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  moments[0] = state->entries[index].exp_avg;
+  moments[1] = state->entries[index].exp_avg_sq;
+  for (moment_index = 0u; moment_index < 2u; ++moment_index) {
+    memset(&tensor_error, 0, sizeof(tensor_error));
+    if (et_f32_tensor_rank_v1(moments[moment_index], &actual_rank,
+                              &tensor_error) != 0) {
+      return et_o2_from_i2(&tensor_error, error,
+                           "optimizer-state-c2-transfer",
+                           ET_O2_STATUS_INVALID_STATE);
+    }
+    if (actual_rank != rank) {
+      return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                        ET_O2_CODE_INVALID_OPTION,
+                        "optimizer-state-c2-transfer",
+                        "optimizer moment rank differs from P1");
+    }
+    for (dimension = 0u; dimension < rank; ++dimension) {
+      uint64_t extent = 0u;
+      memset(&tensor_error, 0, sizeof(tensor_error));
+      if (et_f32_tensor_shape_at_v1(moments[moment_index], dimension,
+                                    &extent, &tensor_error) != 0) {
+        return et_o2_from_i2(&tensor_error, error,
+                             "optimizer-state-c2-transfer",
+                             ET_O2_STATUS_INVALID_STATE);
+      }
+      if (extent != shape[dimension]) {
+        return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                          ET_O2_CODE_INVALID_OPTION,
+                          "optimizer-state-c2-transfer",
+                          "optimizer moment shape differs from P1");
+      }
+    }
+  }
+  return et_o2_success(error);
+}
+
 #ifdef ET_O2_TESTING
 void et_o2_test_fail_alloc_after_v1(size_t allowed) {
   et_o2_allocation_limit = allowed;

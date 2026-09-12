@@ -1,0 +1,351 @@
+;;; Private C2 deep-owner ledger. Load only after one P1/I2/O2 identity
+;;; universe and o2_wave2_extension.esk. This file defines no public wrapper.
+;;;
+;;; Compose request (exact length 6):
+;;;   [c2-training-state-compose-tag, P1-owner, O2-owner,
+;;;    controls, operation-symbol, #f-output]
+;;; Successful transfer clears both component slots and writes one registered
+;;; opaque C2 shell to the output slot. Controls are the exact length-5 vector:
+;;;   [rng, tokenizer, D2-cursor-pair, resolved-config, counters]
+;;; rng=[philox4x32-10,1,key,low,high], tokenizer=[fingerprint,vocabulary],
+;;; dataset=[current-cursor-bytes,epoch-start-cursor-bytes],
+;;; resolved-config=[canonical-bytes,fingerprint], and
+;;; counters=[total-tokens,completed-updates,epochs].
+
+(extern i64 c2-owner-native-o2-state-preflight ptr i64 i64
+        :real et_c2_private_o2_state_preflight_transfer_v1)
+(extern i64 c2-owner-native-o2-state-require-shape ptr i64 i64 ptr
+        :real et_c2_private_o2_state_require_shape_v1)
+
+(define c2-training-state-compose-tag
+  (vector 'c2-private-training-state-compose-v1))
+(define c2-training-state-borrow-tag
+  (vector 'c2-private-training-state-borrow-v1))
+(define c2-training-state-states '())
+(define c2-training-state-i64-max 9223372036854775807)
+
+(define (c2-training-state-fail category operation message)
+  (let ((unreachable
+          (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define (c2-training-state-exact-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value (- 0 c2-training-state-i64-max 1))
+       (<= value c2-training-state-i64-max)))
+
+(define (c2-training-state-nonnegative-i64? value)
+  (and (c2-training-state-exact-i64? value) (>= value 0)))
+
+(define (c2-training-state-find value)
+  (let loop ((remaining c2-training-state-states))
+    (cond
+      ((null? remaining) #f)
+      ((eq? value (vector-ref (car remaining) 0)) (car remaining))
+      (else (loop (cdr remaining))))))
+
+(define (c2-training-state-prefix=? bytes prefix)
+  (and (>= (bytevector-length bytes) (bytevector-length prefix))
+       (let loop ((index 0))
+         (if (= index (bytevector-length prefix)) #t
+             (and (= (bytevector-u8-ref bytes index)
+                     (bytevector-u8-ref prefix index))
+                  (loop (+ index 1)))))))
+
+(define (c2-training-state-lower-hex? bytes start)
+  (let loop ((index start))
+    (if (= index (bytevector-length bytes)) #t
+        (let ((value (bytevector-u8-ref bytes index)))
+          (and (or (and (>= value 48) (<= value 57))
+                   (and (>= value 97) (<= value 102)))
+               (loop (+ index 1)))))))
+
+(define (c2-training-state-tokenizer-fingerprint? value)
+  (and (string? value)
+       (let* ((bytes (string->utf8 value))
+              (byte-prefix (string->utf8 "sha256:eshkol-byte-tokenizer-v1:"))
+              (bpe-prefix (string->utf8 "sha256:eshkol-bpe-tokenizer-v1:")))
+         (or (and (= (bytevector-length bytes) 96)
+                  (c2-training-state-prefix=? bytes byte-prefix)
+                  (c2-training-state-lower-hex? bytes 32))
+             (and (= (bytevector-length bytes) 95)
+                  (c2-training-state-prefix=? bytes bpe-prefix)
+                  (c2-training-state-lower-hex? bytes 31))))))
+
+(define (c2-training-state-shape-bytes shape)
+  (let* ((rank (i2-bounded-list-length shape 65))
+         (result (make-bytevector (* rank 8) 0)))
+    (let extent-loop ((remaining shape) (offset 0))
+      (if (null? remaining)
+          result
+          (let byte-loop ((byte 0) (value (car remaining)))
+            (if (= byte 8)
+                (extent-loop (cdr remaining) (+ offset 8))
+                (begin
+                  (bytevector-u8-set! result (+ offset byte)
+                                      (modulo value 256))
+                  (byte-loop (+ byte 1) (quotient value 256)))))))))
+
+(define (c2-training-state-o2-preflight
+          value p1-topology completed-updates operation)
+  (if (or (not (vector? p1-topology))
+          (not (= (vector-length p1-topology) 3))
+          (not (o2-exact-nonnegative-i64? completed-updates)))
+      (o2-fail 'invalid-argument operation
+               "C2 P1 topology or completed-update count is malformed"))
+  (let* ((state (o2-require-live-state operation value))
+         (paths (vector-ref p1-topology 0))
+         (shapes (vector-ref p1-topology 1))
+         (aliases (vector-ref p1-topology 2))
+         (count (i2-bounded-list-length paths (+ o2-max-parameters 1)))
+         (shape-count
+           (i2-bounded-list-length shapes (+ o2-max-parameters 1))))
+    (if (or (not count) (not shape-count) (= count 0)
+            (not (= count shape-count))
+            (not (= count
+                    (i2-bounded-list-length (vector-ref state 3)
+                                            (+ o2-max-parameters 1))))
+            (not (equal? paths (vector-ref state 3)))
+            (not (equal? aliases (vector-ref state 4))))
+        (o2-fail 'shape-mismatch operation
+                 "P1 and O2 parameter topology differs"))
+    (if (not (= (c2-owner-native-o2-state-preflight
+                  (vector-ref state 1) count completed-updates)
+                0))
+        (o2-native-fail operation))
+    (let shape-loop ((remaining shapes) (index 0))
+      (if (null? remaining)
+          (vector (o2-copy-config-data operation (vector-ref state 2))
+                  (o2-copy-paths (vector-ref state 3))
+                  (o2-copy-aliases (vector-ref state 4))
+                  (vector-ref state 5))
+          (let* ((shape (car remaining))
+                 (rank (i2-bounded-list-length shape 65)))
+            (if (not rank)
+                (o2-fail 'shape-mismatch operation
+                         "P1 parameter rank exceeds 64"))
+            (if (not (= (c2-owner-native-o2-state-require-shape
+                          (vector-ref state 1) index rank
+                          (c2-training-state-shape-bytes shape))
+                        0))
+                (o2-native-fail operation))
+            (shape-loop (cdr remaining) (+ index 1)))))))
+
+(define (c2-training-state-controls-copy operation controls)
+  (if (or (not (vector? controls)) (not (= (vector-length controls) 5)))
+      (c2-training-state-fail
+        'invalid-argument operation "C2 controls must be an exact length-5 vector"))
+  (let ((rng (vector-ref controls 0))
+        (tokenizer (vector-ref controls 1))
+        (dataset (vector-ref controls 2))
+        (resolved (vector-ref controls 3))
+        (counters (vector-ref controls 4)))
+    (if (or (not (vector? rng)) (not (= (vector-length rng) 5))
+            (not (eq? (vector-ref rng 0) 'philox4x32-10))
+            (not (= (vector-ref rng 1) 1))
+            (not (c2-training-state-exact-i64? (vector-ref rng 2)))
+            (not (c2-training-state-exact-i64? (vector-ref rng 3)))
+            (not (c2-training-state-exact-i64? (vector-ref rng 4))))
+        (c2-training-state-fail
+          'invalid-argument operation "C2 RNG state is malformed"))
+    (if (or (not (vector? tokenizer))
+            (not (= (vector-length tokenizer) 2))
+            (not (c2-training-state-tokenizer-fingerprint?
+                   (vector-ref tokenizer 0)))
+            (not (c2-training-state-nonnegative-i64?
+                   (vector-ref tokenizer 1))))
+        (c2-training-state-fail
+          'invalid-argument operation "C2 tokenizer state is malformed"))
+    (if (or (not (vector? dataset)) (not (= (vector-length dataset) 2))
+            (not (bytevector? (vector-ref dataset 0)))
+            (not (bytevector? (vector-ref dataset 1))))
+        (c2-training-state-fail
+          'invalid-argument operation "C2 cursor pair is malformed"))
+    (if (or (not (vector? resolved)) (not (= (vector-length resolved) 2))
+            (not (bytevector? (vector-ref resolved 0)))
+            (not (string? (vector-ref resolved 1))))
+        (c2-training-state-fail
+          'invalid-argument operation "C2 resolved configuration is malformed"))
+    ;; Serialized bytes are authoritative. Re-run both accepted validators;
+    ;; never trust a caller-constructible projection symbol/vector.
+    (let* ((dataset-request
+             (vector (vector-ref dataset 0) (vector-ref dataset 1)
+                     (vector-ref tokenizer 0) (vector-ref tokenizer 1)
+                     operation #f))
+           (resolved-request
+             (vector (vector-ref resolved 0) (vector-ref resolved 1)
+                     operation #f)))
+      (c2-d2-cursor-pair-internal dataset-request)
+      (x1-canonical-inspect-internal resolved-request)
+      (let ((projection (vector-ref resolved-request 3)))
+      (if (or (not (eq? (vector-ref projection 0) 'eshkol-resolved-run))
+              (not (= (vector-ref projection 1) 1))
+              (not (= (vector-ref projection 2) 0))
+              (not (= (vector-ref projection 3) (vector-ref tokenizer 1)))
+              (not (eq? (vector-ref projection 10) 'f32))
+              (not (eq? (vector-ref projection 11) 'cpu))
+              (not (eq? (vector-ref projection 12) #t))
+              (not (= (vector-ref projection 13) (vector-ref rng 2))))
+          (c2-training-state-fail
+            'corrupt-data operation
+            "C2 resolved configuration disagrees with tokenizer/provider/RNG"))
+    (if (or (not (vector? counters)) (not (= (vector-length counters) 3))
+            (not (c2-training-state-nonnegative-i64? (vector-ref counters 0)))
+            (not (c2-training-state-nonnegative-i64? (vector-ref counters 1)))
+            (not (c2-training-state-nonnegative-i64? (vector-ref counters 2))))
+        (c2-training-state-fail
+          'invalid-argument operation "C2 counters are malformed"))
+      ;; Exact-schema construction is bounded and nonrecursive. Every mutable
+      ;; leaf is copied exactly once before either component claim.
+      (vector
+        (vector 'philox4x32-10 1 (vector-ref rng 2)
+                (vector-ref rng 3) (vector-ref rng 4))
+        (vector (utf8->string (string->utf8 (vector-ref tokenizer 0)))
+                (vector-ref tokenizer 1))
+        (vector-ref dataset-request 5)
+        (vector
+          (bytevector-copy (vector-ref resolved 0) 0
+                           (bytevector-length (vector-ref resolved 0)))
+          (utf8->string (string->utf8 (vector-ref resolved 1)))
+          projection)
+        (vector (vector-ref counters 0) (vector-ref counters 1)
+                (vector-ref counters 2)))))))
+
+(define c2-training-state-claim-p1!
+  (lambda (state token) (state-dict-claim-c2-internal! state token)))
+(define c2-training-state-rollback-p1!
+  (lambda (state token)
+    (state-dict-claim-c2-rollback-internal! state token)))
+(define c2-training-state-claim-o2!
+  (lambda (state token) (o2-state-claim-c2-internal! state token)))
+
+(define (c2-training-state-compose-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 6))
+          (not (eq? (vector-ref request 0)
+                    c2-training-state-compose-tag))
+          (not (symbol? (vector-ref request 4)))
+          (not (eq? (vector-ref request 5) #f)))
+      (c2-training-state-fail
+        'invalid-argument 'c2-training-state-compose-internal
+        "C2 compose request identity, shape, operation, or output is invalid"))
+  (let* ((operation (vector-ref request 4))
+         (controls
+           (c2-training-state-controls-copy operation (vector-ref request 3)))
+         (completed (vector-ref (vector-ref controls 4) 1))
+         (p1 (vector-ref request 1))
+         (o2 (vector-ref request 2))
+         (topology (state-dict-c2-parameter-topology-internal p1))
+         (o2-projection
+           (c2-training-state-o2-preflight
+             o2 topology completed operation))
+         ;; All allocation, validation and native preflight ends here.
+         (shell (guard (raised (#t raised))
+                  (error "transformer.trainer-state:v1")))
+         (owner-token (vector 'c2-private-subowner-token shell))
+         (state (vector shell p1 o2 controls topology o2-projection
+                        owner-token 'constructing))
+         (next-registry (cons state c2-training-state-states)))
+    (c2-training-state-claim-p1! p1 owner-token)
+    (guard (caught
+             (#t
+               (c2-training-state-rollback-p1! p1 owner-token)
+               (raise caught)))
+      (c2-training-state-claim-o2! o2 owner-token))
+    ;; The transfer tail is assignment-only and non-failing.
+    (vector-set! state 7 'live)
+    (set! c2-training-state-states next-registry)
+    (vector-set! request 1 #f)
+    (vector-set! request 2 #f)
+    (vector-set! request 5 shell)
+    request))
+
+(define (c2-training-state-borrow-begin-internal value operation)
+  (let ((state (c2-training-state-find value)))
+    (if (or (not state) (not (symbol? operation)))
+        (c2-training-state-fail
+          'invalid-argument operation "expected an exact registered C2 state"))
+    (if (not (eq? (vector-ref state 7) 'live))
+        (c2-training-state-fail
+          'invalid-state operation "C2 state is busy, releasing, or dead"))
+    (let ((borrow (vector c2-training-state-borrow-tag state operation)))
+      (vector-set! state 7 borrow)
+      borrow)))
+
+(define (c2-training-state-borrow-projection-internal borrow)
+  (if (or (not (vector? borrow)) (not (= (vector-length borrow) 3))
+          (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
+      (c2-training-state-fail
+        'invalid-argument 'c2-training-state-borrow-projection-internal
+        "expected an exact active C2 borrow"))
+  (let ((state (vector-ref borrow 1)))
+    (if (or (not (vector? state)) (not (= (vector-length state) 8))
+            (not (eq? (vector-ref state 7) borrow)))
+        (c2-training-state-fail
+          'invalid-state 'c2-training-state-borrow-projection-internal
+          "C2 borrow is stale"))
+    (vector (vector-ref state 1) (vector-ref state 2)
+            (vector-ref state 3) (vector-ref state 4)
+            (vector-ref state 5))))
+
+(define (c2-training-state-borrow-end-internal borrow)
+  (if (or (not (vector? borrow)) (not (= (vector-length borrow) 3))
+          (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
+      (c2-training-state-fail
+        'invalid-argument 'c2-training-state-borrow-end-internal
+        "expected an exact active C2 borrow"))
+  (let ((state (vector-ref borrow 1)))
+    (if (or (not (vector? state)) (not (= (vector-length state) 8))
+            (not (eq? (vector-ref state 7) borrow)))
+        (c2-training-state-fail
+          'invalid-state 'c2-training-state-borrow-end-internal
+          "C2 borrow is stale"))
+    (vector-set! state 7 'live)
+    (vector-set! borrow 1 #f)
+    #t))
+
+;;; These indirections are intentionally lexical and let the focused source
+;;; test inject a post-consumption provider defect without changing production
+;;; P1/O2 artifacts.
+(define c2-training-state-release-p1-owned!
+  state-dict-release-c2-owned-internal!)
+(define c2-training-state-release-o2-owned!
+  o2-state-release-c2-owned-internal!)
+
+(define (c2-training-state-release-internal! value operation)
+  (let ((state (c2-training-state-find value)))
+    ;; Exact registry/kind admission precedes every component/native access.
+    (if (or (not state) (not (symbol? operation)))
+        (c2-training-state-fail
+          'invalid-argument operation "expected an exact registered C2 state"))
+    (if (eq? (vector-ref state 7) 'dead)
+        #t
+        (begin
+          (if (not (eq? (vector-ref state 7) 'live))
+              (c2-training-state-fail
+                'invalid-state operation "C2 state is busy or releasing"))
+          (let ((p1 (vector-ref state 1))
+                (o2 (vector-ref state 2))
+                (token (vector-ref state 6))
+                (first-error #f))
+            ;; Invalidate dependents and consume both authorities before the
+            ;; first fallible cleanup. Neither can ever be retried by C2.
+            (vector-set! state 7 'releasing)
+            (vector-set! state 1 #f)
+            (vector-set! state 2 #f)
+            (vector-set! state 3 'released)
+            (vector-set! state 4 'released)
+            (vector-set! state 5 'released)
+            (vector-set! state 6 #f)
+            (guard (caught (#t (set! first-error caught) #f))
+              (c2-training-state-release-p1-owned! p1 token))
+            (guard (caught
+                     (#t
+                       (if first-error #t (set! first-error caught))
+                       #f))
+              (c2-training-state-release-o2-owned! o2 token))
+            (vector-set! state 7 'dead)
+            (if first-error
+                (c2-training-state-fail
+                  'internal operation
+                  "C2 component owner cleanup reported a provider defect")
+                #t))))))

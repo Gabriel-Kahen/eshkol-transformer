@@ -375,6 +375,49 @@ int64_t et_c2_private_o2_state_reconstruct_abort_v1(void *opaque) {
       &builder, &et_o2_bridge_error);
 }
 
+int64_t et_c2_private_o2_state_preflight_transfer_v1(
+    void *state, int64_t expected_count, int64_t expected_completed_updates) {
+  if (state == NULL || expected_count < 0 ||
+      (uint64_t)expected_count > SIZE_MAX || expected_completed_updates < 0) {
+    return et_c2_o2_bridge_fail(
+        ET_O2_STATUS_INVALID_ARGUMENT, ET_O2_CODE_INVALID_OPTION,
+        "optimizer-state-c2-transfer", "transfer counters are invalid");
+  }
+  return (int64_t)et_o2_optimizer_state_preflight_c2_transfer_v1(
+      (const et_o2_optimizer_state *)state, (size_t)expected_count,
+      (uint64_t)expected_completed_updates, &et_o2_bridge_error);
+}
+
+int64_t et_c2_private_o2_state_require_shape_v1(
+    void *state, int64_t index, int64_t rank, void *shape_bytevector_header) {
+  uint64_t shape[ET_KERNEL_MAX_RANK];
+  unsigned char *shape_bytes;
+  size_t shape_size;
+  size_t dimension;
+  if (state == NULL || index < 0 || (uint64_t)index > SIZE_MAX || rank < 0 ||
+      (uint64_t)rank > ET_KERNEL_MAX_RANK ||
+      (uint64_t)rank > SIZE_MAX / sizeof(uint64_t)) {
+    return et_c2_o2_bridge_fail(
+        ET_O2_STATUS_INVALID_ARGUMENT, ET_O2_CODE_INVALID_OPTION,
+        "optimizer-state-c2-transfer", "transfer shape operands are invalid");
+  }
+  shape_size = (size_t)rank * sizeof(uint64_t);
+  shape_bytes =
+      et_c2_o2_bytevector_payload(shape_bytevector_header, shape_size, 1u);
+  if (shape_bytes == NULL) {
+    return et_c2_o2_bridge_fail(
+        ET_O2_STATUS_INVALID_ARGUMENT, ET_O2_CODE_INVALID_HANDLE,
+        "optimizer-state-c2-transfer", "transfer shape bytes are invalid");
+  }
+  for (dimension = 0u; dimension < (size_t)rank; ++dimension) {
+    shape[dimension] =
+        et_c2_o2_read_u64_le(shape_bytes + dimension * sizeof(uint64_t));
+  }
+  return (int64_t)et_o2_optimizer_state_require_shape_v1(
+      (const et_o2_optimizer_state *)state, (size_t)index, (size_t)rank,
+      shape, &et_o2_bridge_error);
+}
+
 int64_t et_c2_private_o2_state_copy_moment_bits_v1(
     void *state, int64_t index, int64_t moment_kind,
     void *destination_bytevector_header, int64_t element_count) {
