@@ -12,7 +12,8 @@ SHELL := /usr/bin/bash
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
-	test-c2-checkpoint-inspect test-c2-d2-cursor-pair test-c2-format \
+	test-c2-checkpoint-inspect test-c2-checkpoint-save \
+	test-c2-d2-cursor-pair test-c2-format \
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
 	test-c2-x1-canonical test-d1 test-d2 test-e1 test-e1b \
@@ -214,6 +215,9 @@ test-c2-core:
 
 test-c2-checkpoint-inspect:
 	/usr/bin/bash scripts/test-c2-checkpoint-inspect.sh
+
+test-c2-checkpoint-save:
+	/usr/bin/bash scripts/test-c2-checkpoint-save.sh
 
 test-c2-persistence-policy:
 	/usr/bin/bash scripts/test-c2-persistence-policy.sh
