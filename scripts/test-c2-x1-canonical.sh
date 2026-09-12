@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-for command in nm python3 timeout; do require_command "${command}"; done
+for command in cmp nm python3 timeout; do require_command "${command}"; done
 cc="${CC:-/usr/bin/clang}"; cxx="${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-x1.XXXXXX")"
@@ -32,4 +32,7 @@ cmp "${tmp}/expected-symbols" "${tmp}/symbols"
       -I "${PROJECT_ROOT}/native" -L "${tmp}" --lib c2_x1 \
       "${PROJECT_ROOT}/tests/c2/c2_x1_canonical_runtime.esk" -o "${tmp}/runtime")
 LD_LIBRARY_PATH="${tmp}" "${tmp}/runtime" | grep -Fx 'C2 X1 runtime PASS: 4 checks'
+cmp "${PROJECT_ROOT}/native/c2_x1_canonical_source_closure.txt" \
+  <(printf '%s\n' native/c2_x1_canonical.c native/c2_x1_canonical.h \
+    native/c2_x1_canonical_extension.esk)
 printf 'C2 X1 CANONICAL PASS: C/C++, 85 hostile checks, exact private symbols, Eshkol runtime, GCC/Clang, ASan/UBSan\n'

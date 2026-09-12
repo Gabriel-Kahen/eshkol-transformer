@@ -11,8 +11,11 @@ SHELL := /usr/bin/bash
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
 	test-ci-topology \
-	test-a0 test-a2 test-b0 test-c1 test-c2-codec test-c2-core test-c2-format \
-	test-c2-persistence-policy test-d1 test-d2 test-e1 test-e1b \
+	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
+	test-c2-checkpoint-inspect test-c2-d2-cursor-pair test-c2-format \
+	test-c2-model-encode test-c2-o2-encode \
+	test-c2-persistence-policy test-c2-training-state-owner \
+	test-c2-x1-canonical test-d1 test-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-l2 test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-x1 \
@@ -93,6 +96,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-d1.sh
 	/usr/bin/bash scripts/test-d2.sh
 	/usr/bin/bash scripts/test-c1.sh
+	/usr/bin/bash scripts/test-c2.sh
 	/usr/bin/bash scripts/test-t1.sh
 	/usr/bin/bash scripts/test-t2.sh --runtime-only
 	/usr/bin/bash scripts/test-t2-boundary.sh
@@ -119,6 +123,7 @@ test-ci-contracts-after-build:
 
 test-ci-checkpoint-after-build:
 	/usr/bin/bash scripts/test-c1.sh
+	/usr/bin/bash scripts/test-c2.sh
 
 test-ci-parameters-after-build:
 	/usr/bin/bash scripts/test-p1.sh
@@ -195,6 +200,9 @@ test-d2: build
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
 
+test-c2: configure
+	/usr/bin/bash scripts/test-c2.sh
+
 test-c2-format:
 	/usr/bin/bash scripts/test-c2-format.sh
 
@@ -204,8 +212,26 @@ test-c2-codec:
 test-c2-core:
 	/usr/bin/bash scripts/test-c2-core.sh
 
+test-c2-checkpoint-inspect:
+	/usr/bin/bash scripts/test-c2-checkpoint-inspect.sh
+
 test-c2-persistence-policy:
 	/usr/bin/bash scripts/test-c2-persistence-policy.sh
+
+test-c2-x1-canonical:
+	/usr/bin/bash scripts/test-c2-x1-canonical.sh
+
+test-c2-d2-cursor-pair:
+	/usr/bin/bash scripts/test-c2-d2-cursor-pair.sh
+
+test-c2-training-state-owner:
+	/usr/bin/bash scripts/test-c2-training-state-owner.sh
+
+test-c2-model-encode:
+	/usr/bin/bash scripts/test-c2-model-encode.sh
+
+test-c2-o2-encode:
+	/usr/bin/bash scripts/test-c2-o2-encode.sh
 
 test-t1: build
 	/usr/bin/bash scripts/test-t1.sh
