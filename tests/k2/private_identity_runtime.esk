@@ -7,6 +7,9 @@
 (extern i64 k2-test-fork :real et_k2_test_fork_v1)
 (extern i64 k2-test-wait-child i64 :real et_k2_test_wait_child_v1)
 (extern void k2-test-exit-child i64 :real et_k2_test_exit_child_v1)
+(extern void k2-test-factory-authenticate-override i64 i64 i64
+        :real et_k2_test_factory_authenticate_override_v1)
+(extern i64 k2-test-require-count :real et_k2_test_require_count_v1)
 
 (define passed 0)
 (define failed 0)
@@ -32,6 +35,34 @@
     (if (null? remaining) count
         (loop (cdr remaining) (+ count 1)))))
 
+(define factory-authentication-failure-cases
+  '((0 0) (0 -9) (1 0) (1 -9) (2 0) (2 -9)))
+
+(define (factory-authentication-failures-block? cases)
+  (if (null? cases) #t
+      (let ((kind (car (car cases)))
+            (status (car (cdr (car cases)))))
+        (vector-set! k2-factories-ready 0 #f)
+        (k2-test-factory-authenticate-override kind status 1)
+        (let ((first-rejected
+               (structured-error?
+                'internal 'capability-discover
+                (lambda () (k2-public-capability-discover))))
+              (retry-still-rejected
+               (structured-error?
+                'internal 'capability-discover
+                (lambda () (k2-public-capability-discover)))))
+          (k2-test-factory-authenticate-override kind status 0)
+          (let ((retry-report (k2-public-capability-discover)))
+            (and first-rejected retry-still-rejected
+                 (= (list-length
+                     (k2-public-capability-report-entries retry-report)) 11)
+                 (factory-authentication-failures-block? (cdr cases))))))))
+
+(check "every initial factory authentication failure blocks publication and retries"
+       (factory-authentication-failures-block?
+        factory-authentication-failure-cases))
+
 (define report (k2-public-capability-discover))
 (define request
   (k2-public-capability-request 'storage.copy 'f32 'cpu '() #t))
@@ -39,6 +70,72 @@
 (define report-alias report)
 (define request-alias request)
 (define entry-alias entry)
+
+(define symbol-boundary-nonrepresentable
+  (list (string->symbol "")
+        (string->symbol "1a")
+        (string->symbol "a?")
+        (string->symbol "aλ")
+        (string->symbol "A")
+        (string->symbol (make-string 128 #\a))))
+(define symbol-boundary-representable
+  (list (string->symbol "a")
+        (string->symbol "a0._-:")
+        (string->symbol (make-string 127 #\a))))
+
+(define (symbol-boundary-case-no-match? value)
+  (let ((operation-request
+         (k2-public-capability-request value 'f32 'cpu '() #t))
+        (dtype-request
+         (k2-public-capability-request 'storage.copy value 'cpu '() #t))
+        (device-request
+         (k2-public-capability-request 'storage.copy 'f32 value '() #t)))
+    (and
+     (not (k2-public-capability-verified? report value request))
+     (structured-error?
+      'unsupported 'capability-require
+      (lambda () (k2-public-capability-require report value request)))
+     (not (k2-public-capability-verified?
+           report 'tensor.f32 operation-request))
+     (structured-error?
+      'unsupported 'capability-require
+      (lambda ()
+        (k2-public-capability-require report 'tensor.f32 operation-request)))
+     (not (k2-public-capability-verified? report 'tensor.f32 dtype-request))
+     (structured-error?
+      'unsupported 'capability-require
+      (lambda ()
+        (k2-public-capability-require report 'tensor.f32 dtype-request)))
+     (not (k2-public-capability-verified? report 'tensor.f32 device-request))
+     (structured-error?
+      'unsupported 'capability-require
+      (lambda ()
+        (k2-public-capability-require report 'tensor.f32 device-request))))))
+
+(define (all-symbol-boundary-cases? cases)
+  (if (null? cases) #t
+      (and (symbol-boundary-case-no-match? (car cases))
+           (all-symbol-boundary-cases? (cdr cases)))))
+
+(define (all-symbol-representability? cases expected)
+  (if (null? cases) #t
+      (and (eq? (k2-ascii-symbol-representable? (car cases)) expected)
+           (all-symbol-representability? (cdr cases) expected))))
+
+(check "symbol grammar rejects before K1 and admits all valid boundaries/classes"
+       (let ((count-before (k2-test-require-count)))
+         (and
+          (all-symbol-representability? symbol-boundary-nonrepresentable #f)
+          (all-symbol-representability? symbol-boundary-representable #t)
+          (all-symbol-boundary-cases? symbol-boundary-nonrepresentable)
+          (= (k2-test-require-count) count-before)
+          (all-symbol-boundary-cases? symbol-boundary-representable)
+          (= (k2-test-require-count) (+ count-before 18))
+          (k2-public-capability-verified? report 'tensor.f32 request)
+          (eq? (k2-public-capability-entry-name
+                (k2-public-capability-require report 'tensor.f32 request))
+               'tensor.f32)
+          (= (k2-test-require-count) (+ count-before 20)))))
 
 (check "ordinary report alias remains authentic"
        (= (list-length (k2-public-capability-report-entries report-alias)) 11))

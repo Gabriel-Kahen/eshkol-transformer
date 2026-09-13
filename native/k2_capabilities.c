@@ -82,9 +82,12 @@ typedef struct et_k2_state {
   const et_kernel_provider_v1 *provider_override;
   int provider_override_enabled;
   int fail_stage;
+  int factory_auth_override_enabled[3];
+  int64_t factory_auth_override_status[3];
   uint64_t discovery_count;
   uint64_t destroy_count;
   uint64_t runtime_live_count;
+  uint64_t require_count;
 #endif
 } et_k2_state;
 
@@ -796,18 +799,11 @@ static int valid_symbol_bytes(const void *bytes, int64_t byte_count) {
   return 1;
 }
 
-static int input_carrier_overlaps_error(const void *error_header,
-                                        const void *input_header,
-                                        int64_t input_bytes) {
+static int carrier_length_overlaps_error(const void *error_header,
+                                         const void *input_header,
+                                         int64_t input_bytes) {
   size_t carrier_bytes;
-  if (input_header == NULL) {
-    return 0;
-  }
-  if (overlaps(error_header, ET_K2_ERROR_CARRIER_BYTES, input_header,
-               ET_K2_BYTEVECTOR_HEADER_BYTES)) {
-    return 1;
-  }
-  if (input_bytes < 0 ||
+  if (input_header == NULL || input_bytes < 0 ||
       (uint64_t)input_bytes >
           (uint64_t)(SIZE_MAX - ET_K2_BYTEVECTOR_HEADER_BYTES)) {
     return 0;
@@ -815,6 +811,32 @@ static int input_carrier_overlaps_error(const void *error_header,
   carrier_bytes = ET_K2_BYTEVECTOR_HEADER_BYTES + (size_t)input_bytes;
   return overlaps(error_header, ET_K2_ERROR_CARRIER_BYTES, input_header,
                   carrier_bytes);
+}
+
+static int input_carrier_overlaps_error(const void *error_header,
+                                        const void *input_header,
+                                        int64_t input_bytes) {
+  int64_t declared_length;
+  uintptr_t unused_begin;
+  uintptr_t unused_end;
+  if (input_header == NULL) {
+    return 0;
+  }
+  if (overlaps(error_header, ET_K2_ERROR_CARRIER_BYTES, input_header,
+               ET_K2_BYTEVECTOR_HEADER_BYTES) ||
+      carrier_length_overlaps_error(error_header, input_header, input_bytes)) {
+    return 1;
+  }
+  /* A malformed supplied count cannot hide output nested later in the
+   * carrier's declared payload. Read only the nonwrapping header here; full
+   * carrier admission and alignment remain bytevector_payload's job. */
+  if (!span(input_header, ET_K2_BYTEVECTOR_HEADER_BYTES, &unused_begin,
+            &unused_end)) {
+    return 0;
+  }
+  memcpy(&declared_length, input_header, sizeof(declared_length));
+  return carrier_length_overlaps_error(error_header, input_header,
+                                       declared_length);
 }
 
 static uint64_t decode_u64le(const unsigned char *bytes) {
@@ -926,6 +948,9 @@ int64_t et_k2_private_runtime_require_v1(
   request.deterministic = (uint8_t)deterministic;
   memset(&k1_error, 0, sizeof(k1_error));
   state.busy = 1;
+#ifdef ET_K2_TESTING
+  state.require_count++;
+#endif
   result = et_kernel_runtime_capability_require(
       state.runtime, expected_names[sorted_entry_index], &request, &entry,
       &k1_error);
@@ -1002,6 +1027,19 @@ static int64_t register_factory(const void *closure, uint64_t *slot,
 
 static int64_t authenticate_factory(const void *closure, const uint64_t *slot) {
   uint64_t code;
+#ifdef ET_K2_TESTING
+  size_t kind = 3u;
+  if (slot == &state.report_factory) {
+    kind = 0u;
+  } else if (slot == &state.request_factory) {
+    kind = 1u;
+  } else if (slot == &state.entry_factory) {
+    kind = 2u;
+  }
+  if (kind < 3u && state.factory_auth_override_enabled[kind]) {
+    return state.factory_auth_override_status[kind];
+  }
+#endif
   if (*slot == 0u) {
     return ET_K2_SCALAR_INTERNAL;
   }
@@ -1058,12 +1096,151 @@ void et_k2_test_provider_override_v1(const et_kernel_provider_v1 *provider,
 
 void et_k2_test_fail_stage_v1(int stage) { state.fail_stage = stage; }
 
+void et_k2_test_factory_authenticate_override_v1(int64_t kind, int64_t status,
+                                                 int enabled) {
+  if (kind < 0 || kind >= 3) {
+    return;
+  }
+  state.factory_auth_override_status[kind] = status;
+  state.factory_auth_override_enabled[kind] = enabled != 0;
+}
+
 uint64_t et_k2_test_discovery_count_v1(void) { return state.discovery_count; }
 
 uint64_t et_k2_test_destroy_count_v1(void) { return state.destroy_count; }
 
 uint64_t et_k2_test_runtime_live_count_v1(void) {
   return state.runtime_live_count;
+}
+
+uint64_t et_k2_test_require_count_v1(void) { return state.require_count; }
+
+static int test_protected_text(const char *text) {
+  return text == NULL || span_overlaps_protected(text, strlen(text) + 1u);
+}
+
+static int
+test_protected_capability_graph(const et_kernel_capability_v1 *entry) {
+  if (entry == NULL || !span_overlaps_protected(entry, sizeof(*entry)) ||
+      !test_protected_text(entry->name) ||
+      !test_protected_text(entry->implementation) ||
+      !test_protected_text(entry->version) ||
+      !test_protected_text(entry->evidence) ||
+      (entry->operation_count != 0u &&
+       !span_overlaps_protected(entry->operations,
+                                entry->operation_count *
+                                    sizeof(*entry->operations))) ||
+      (entry->dtype_count != 0u &&
+       !span_overlaps_protected(entry->dtypes,
+                                entry->dtype_count * sizeof(*entry->dtypes))) ||
+      (entry->device_count != 0u &&
+       !span_overlaps_protected(entry->devices, entry->device_count *
+                                                    sizeof(*entry->devices))) ||
+      (entry->shape_range_count != 0u &&
+       !span_overlaps_protected(entry->shape_ranges,
+                                entry->shape_range_count *
+                                    sizeof(*entry->shape_ranges)))) {
+    return 0;
+  }
+  for (size_t index = 0; index < entry->operation_count; index++) {
+    if (!test_protected_text(entry->operations[index])) {
+      return 0;
+    }
+  }
+  for (size_t index = 0; index < entry->dtype_count; index++) {
+    if (!test_protected_text(entry->dtypes[index])) {
+      return 0;
+    }
+  }
+  for (size_t index = 0; index < entry->device_count; index++) {
+    if (!test_protected_text(entry->devices[index])) {
+      return 0;
+    }
+  }
+  for (size_t index = 0; index < entry->shape_range_count; index++) {
+    const et_kernel_shape_range_v1 *range = &entry->shape_ranges[index];
+    if (range->rank != 0u &&
+        !span_overlaps_protected(range->dimensions,
+                                 range->rank * sizeof(*range->dimensions))) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static int
+test_protected_provider_graph(const et_kernel_provider_v1 *provider) {
+  if (provider == NULL ||
+      !span_overlaps_protected(provider, sizeof(*provider)) ||
+      !test_protected_text(provider->name) ||
+      !test_protected_text(provider->version) ||
+      !test_protected_text(provider->evidence) ||
+      (provider->capability_count != 0u &&
+       !span_overlaps_protected(provider->capabilities,
+                                provider->capability_bytes))) {
+    return 0;
+  }
+  for (size_t index = 0; index < provider->capability_count; index++) {
+    const et_kernel_capability_v1 *entry =
+        (const et_kernel_capability_v1 *)((const unsigned char *)
+                                              provider->capabilities +
+                                          index * provider->capability_stride);
+    if (!test_protected_capability_graph(entry)) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+uint32_t et_k2_test_protected_overlap_mask_v1(void) {
+  uint32_t mask = 0u;
+  unsigned char disjoint = 0u;
+  const et_kernel_provider_v1 *provider = et_f32_tensor_provider_v1();
+  if (span_overlaps_protected(&state, sizeof(state))) {
+    mask |= ET_K2_TEST_PROTECTED_STATE;
+  }
+  if (span_overlaps_protected(&resolver_context_sentinel,
+                              sizeof(resolver_context_sentinel))) {
+    mask |= ET_K2_TEST_PROTECTED_RESOLVER;
+  }
+  if (span_overlaps_protected(expected_names, sizeof(expected_names))) {
+    int all_names = 1;
+    for (size_t index = 0; index < ET_K2_ENTRY_COUNT; index++) {
+      all_names = all_names && test_protected_text(expected_names[index]);
+    }
+    if (all_names) {
+      mask |= ET_K2_TEST_PROTECTED_EXPECTED_NAMES;
+    }
+  }
+  if (test_protected_provider_graph(provider)) {
+    mask |= ET_K2_TEST_PROTECTED_PROVIDER;
+  }
+  if (state.runtime != NULL &&
+      span_overlaps_protected(state.runtime, ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
+    int all_capabilities = 1;
+    const size_t count = et_kernel_runtime_capability_count(state.runtime);
+    for (size_t index = 0; index < count; index++) {
+      all_capabilities =
+          all_capabilities &&
+          test_protected_capability_graph(
+              et_kernel_runtime_capability_at(state.runtime, index));
+    }
+    if (all_capabilities) {
+      mask |= ET_K2_TEST_PROTECTED_RUNTIME;
+    }
+  }
+  if (span_overlaps_protected(&state.report_factory,
+                              sizeof(state.report_factory)) &&
+      span_overlaps_protected(&state.request_factory,
+                              sizeof(state.request_factory)) &&
+      span_overlaps_protected(&state.entry_factory,
+                              sizeof(state.entry_factory))) {
+    mask |= ET_K2_TEST_PROTECTED_FACTORY;
+  }
+  if (!span_overlaps_protected(&disjoint, sizeof(disjoint))) {
+    mask |= ET_K2_TEST_PROTECTED_DISJOINT;
+  }
+  return mask;
 }
 
 int64_t et_k2_test_fork_v1(void) {

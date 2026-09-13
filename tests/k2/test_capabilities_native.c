@@ -48,10 +48,40 @@ typedef struct tagged_bytes {
   unsigned char payload[512];
 } tagged_bytes;
 
+typedef struct nested_input_error {
+  int64_t declared_length;
+  unsigned char prefix[120];
+  aligned_error diagnostic;
+  unsigned char tail[8];
+} nested_input_error;
+
+typedef struct payload_start_input_error {
+  int64_t declared_length;
+  aligned_error diagnostic;
+} payload_start_input_error;
+
+typedef struct guarded_error {
+  unsigned char leading[16];
+  aligned_error diagnostic;
+  unsigned char trailing[16];
+} guarded_error;
+
 _Static_assert(offsetof(aligned_error, bytes) == 8u,
                "test diagnostic payload must follow its i64 header");
 _Static_assert(sizeof(aligned_error) == 272u,
                "test diagnostic carrier layout changed");
+_Static_assert(offsetof(nested_input_error, diagnostic) == 128u,
+               "nested diagnostic must begin inside the input payload");
+_Static_assert(sizeof(nested_input_error) == 408u,
+               "nested input carrier layout changed");
+_Static_assert(offsetof(payload_start_input_error, diagnostic) == 8u,
+               "nested diagnostic must begin at the input payload");
+_Static_assert(sizeof(guarded_error) == 304u,
+               "guarded diagnostic layout changed");
+_Static_assert(offsetof(guarded_error, diagnostic) == 16u,
+               "guarded diagnostic leading canary changed");
+_Static_assert(offsetof(guarded_error, trailing) == 288u,
+               "guarded diagnostic trailing canary changed");
 
 static int failures;
 
@@ -292,6 +322,12 @@ static void test_factory_identity(void) {
 
 static void test_diagnostic_admission(void) {
   aligned_error diagnostic;
+  guarded_error guarded;
+  guarded_error guarded_original;
+  nested_input_error nested;
+  nested_input_error nested_original;
+  payload_start_input_error payload_start;
+  payload_start_input_error payload_start_original;
   tagged_bytes dtype;
   tagged_bytes device;
   tagged_bytes shape;
@@ -327,6 +363,21 @@ static void test_diagnostic_admission(void) {
   CHECK(diagnostic.declared_length == 264);
   CHECK(all_bytes(diagnostic.bytes, sizeof(diagnostic.bytes), 0u));
 
+  memset(&guarded, 0x6du, sizeof(guarded));
+  initialize_error(&guarded.diagnostic, 0x3cu);
+  CHECK(et_k2_private_runtime_ensure_v1(&guarded.diagnostic, 264) == 0);
+  CHECK(guarded.diagnostic.declared_length == 264);
+  CHECK(all_bytes(guarded.diagnostic.bytes, sizeof(guarded.diagnostic.bytes),
+                  0u));
+  CHECK(all_bytes(guarded.leading, sizeof(guarded.leading), 0x6du));
+  CHECK(all_bytes(guarded.trailing, sizeof(guarded.trailing), 0x6du));
+
+  memset(&guarded, 0x6du, sizeof(guarded));
+  initialize_error(&guarded.diagnostic, 0x3cu);
+  memcpy(&guarded_original, &guarded, sizeof(guarded));
+  CHECK(et_k2_private_runtime_ensure_v1(&guarded.diagnostic, 263) == 1);
+  CHECK(memcmp(&guarded, &guarded_original, sizeof(guarded)) == 0);
+
   initialize_error(&diagnostic, 0x3cu);
   memcpy(diagnostic.bytes, &nested_length, sizeof(nested_length));
   memcpy(diagnostic.bytes + sizeof(nested_length), "abcd", 4u);
@@ -350,6 +401,88 @@ static void test_diagnostic_admission(void) {
             0, 1, &diagnostic, 264) == ET_K2_STATUS_INVALID_ARGUMENT);
   CHECK(memcmp(&diagnostic, original, sizeof(original)) == 0);
 
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = 400;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, 1, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&payload_start, 0x5au, sizeof(payload_start));
+  payload_start.declared_length = 272;
+  initialize_error(&payload_start.diagnostic, 0x3cu);
+  memcpy(&payload_start_original, &payload_start, sizeof(payload_start));
+  CHECK(et_k2_private_runtime_require_v1(
+            1, 9, &payload_start, 272, &dtype, 3, &device, 3, &shape, 0, 0, 1,
+            &payload_start.diagnostic, 264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&payload_start, &payload_start_original,
+               sizeof(payload_start)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = 1;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, 400, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = 400;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, -1, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = -1;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, 400, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = 400;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(
+            1, 9, &nested, INT64_MAX, &dtype, 3, &device, 3, &shape, 0, 0, 1,
+            &nested.diagnostic, 264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = INT64_MAX;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, 400, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = 392;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, 1, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
+  memset(&nested, 0x5au, sizeof(nested));
+  nested.declared_length = 400;
+  initialize_error(&nested.diagnostic, 0x3cu);
+  memcpy(&nested_original, &nested, sizeof(nested));
+  CHECK(et_k2_private_runtime_require_v1(1, 9, &nested, 400, &dtype, 3, &device,
+                                         3, &shape, 0, 0, 1, &nested.diagnostic,
+                                         264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&nested, &nested_original, sizeof(nested)) == 0);
+
   initialize_error(&diagnostic, 0x3cu);
   initialize_bytes(&dtype, "f32", 3u);
   dtype.declared_length = 2;
@@ -358,6 +491,24 @@ static void test_diagnostic_admission(void) {
                                          264) == ET_K2_STATUS_INVALID_ARGUMENT);
   CHECK(diagnostic.declared_length == 264);
   CHECK(diagnostic.error.code == ET_K2_CODE_TRANSPORT);
+
+  memset(&guarded, 0x6du, sizeof(guarded));
+  initialize_error(&guarded.diagnostic, 0x3cu);
+  CHECK(et_k2_private_runtime_require_v1(
+            1, 9, &device, 3, &dtype, 3, &device, 3, &shape, 0, 0, 1,
+            &guarded.diagnostic, 264) == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(guarded.diagnostic.declared_length == 264);
+  CHECK(guarded.diagnostic.error.category == ET_K2_STATUS_INVALID_ARGUMENT);
+  CHECK(guarded.diagnostic.error.code == ET_K2_CODE_TRANSPORT);
+  CHECK(strcmp(guarded.diagnostic.error.operation, "capability-require") == 0);
+  CHECK(strcmp(guarded.diagnostic.error.message,
+               "K2 request transport is malformed") == 0);
+  CHECK(zero_after_nul(guarded.diagnostic.error.operation,
+                       sizeof(guarded.diagnostic.error.operation)));
+  CHECK(zero_after_nul(guarded.diagnostic.error.message,
+                       sizeof(guarded.diagnostic.error.message)));
+  CHECK(all_bytes(guarded.leading, sizeof(guarded.leading), 0x6du));
+  CHECK(all_bytes(guarded.trailing, sizeof(guarded.trailing), 0x6du));
 
   initialize_error(&diagnostic, 0x3cu);
   CHECK(et_k2_private_runtime_require_v1(
@@ -520,6 +671,7 @@ static void test_k1_category_code_pairs(void) {
 }
 
 static void test_discovery_and_matching(void) {
+  static const int64_t unverified_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10};
   aligned_error diagnostic;
   uint64_t rank1[1];
   uint64_t rank2[2] = {1u, 1u};
@@ -540,6 +692,7 @@ static void test_discovery_and_matching(void) {
   CHECK(generation > 0);
   CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
   CHECK(et_k2_test_discovery_count_v1() == 1u);
+  CHECK(et_k2_test_protected_overlap_mask_v1() == ET_K2_TEST_PROTECTED_ALL);
 
   register_factories();
   CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu", NULL, 0, 0,
@@ -566,8 +719,14 @@ static void test_discovery_and_matching(void) {
                         1, &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
   CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu", rank2, 2,
                         1, &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
-  CHECK(require_request(generation, 0, "storage.copy", "f32", "cpu", NULL, 0, 1,
-                        &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
+  for (size_t index = 0;
+       index < sizeof(unverified_indices) / sizeof(unverified_indices[0]);
+       index++) {
+    CHECK(require_request(generation, unverified_indices[index], "storage.copy",
+                          "f32", "cpu", NULL, 0, 1,
+                          &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
+    check_k1_no_match(&diagnostic);
+  }
 
   initialize_bytes(&operation_carrier, "Bad", 3u);
   initialize_bytes(&dtype_carrier, "f32", 3u);
@@ -823,6 +982,23 @@ static void test_every_k1_discovery_allocation(void) {
     CHECK(allocation_live_blocks == 0u);
     CHECK(allocation_live_bytes == 0u);
     CHECK(et_k2_private_runtime_generation_v1() == -7);
+
+    initialize_error(&diagnostic, 0xa5u);
+    allocation_begin(SIZE_MAX);
+    CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == ET_K2_STATUS_OK);
+    allocation_end();
+    CHECK(all_bytes(diagnostic.bytes, sizeof(diagnostic.bytes), 0u));
+    CHECK(allocation_calls == 58u);
+    CHECK(allocation_requested_bytes == 2487u);
+    CHECK(allocation_live_blocks == 54u);
+    CHECK(allocation_live_bytes == 2407u);
+    CHECK(allocation_peak_bytes == 2487u);
+    CHECK(et_k2_test_runtime_live_count_v1() == 1u);
+    CHECK(et_k2_private_runtime_generation_v1() == 1);
+    CHECK(et_k2_test_discovery_count_v1() == 2u);
+    et_k2_test_reset_v1();
+    CHECK(allocation_live_blocks == 0u);
+    CHECK(allocation_live_bytes == 0u);
   }
   CHECK(successful_fail_index != SIZE_MAX);
   CHECK(successful_fail_index == allocation_calls);

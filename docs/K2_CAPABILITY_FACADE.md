@@ -118,9 +118,12 @@ behavior from source syntax.
 Report, request, and entry values are opaque caller-region-owned closures created by
 three distinct private compiled factories. Native code registers and authenticates
 the exact three factory code addresses through separate kind-specific functions.
-The addresses must be pairwise distinct at runtime; same-address repeat registration
-is idempotent, while a collision or different re-registration fails before public
-publication. Repeated strict AOT evidence guards against compiler/linker folding.
+The three exact registration probes must all authenticate successfully before the
+bridge marks the factories ready or constructs any caller-visible shell. The
+addresses must be pairwise distinct at runtime; same-address repeat registration is
+idempotent, while a collision, different re-registration, or failed initial
+authentication leaves public publication unavailable. Repeated strict AOT evidence
+guards against compiler/linker folding.
 
 Validation checks `procedure?`, native factory identity, then uses a guarded hidden
 query and validates exact tag, self, kind, origin PID, generation, and lifecycle.
@@ -214,7 +217,8 @@ bytevector carrier on the supported little-endian x86-64 ABI:
 
 Capacity and the carrier header must both equal 264. The payload must be aligned to
 `_Alignof(et_kernel_error)`; the full carrier must be nonwrapping, writable, and
-disjoint from every borrowed input carrier and protected singleton/factory metadata.
+disjoint from every borrowed input carrier under both its declared and separately
+supplied payload lengths, and from protected singleton/factory metadata.
 NULL, short, oversized, misaligned, wrapping, or overlapping diagnostic storage
 returns invalid argument and leaves the entire 272-byte carrier byte-identical; the
 caller does not parse it. Header overlap is rejected even when an aliased input's

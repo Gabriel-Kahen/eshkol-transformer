@@ -138,7 +138,7 @@ cmp "${temporary_dir}/public-run-1/k2-public-runtime" \
   "${temporary_dir}/public-run-2/k2-public-runtime"
 cmp "${temporary_dir}/public-run-1.stdout" \
   "${temporary_dir}/public-run-2.stdout"
-grep -Fx 'k2-public-runtime:v1 45' \
+grep -Fx 'k2-public-runtime:v1 46' \
   "${temporary_dir}/public-run-1.stdout" >/dev/null
 ldd "${temporary_dir}/public-run-1/k2-public-runtime" \
   >"${temporary_dir}/public-runtime.ldd"
@@ -202,7 +202,9 @@ private_runtime_objects+=("${private_runtime_dir}/k2_capabilities.o")
 ar rcsD "${private_runtime_dir}/libeshkol_transformer_k2_private_test.a" \
   "${private_runtime_objects[@]}"
 for test_hook in et_k2_test_runtime_drop_v1 et_k2_test_fork_v1 \
-    et_k2_test_wait_child_v1 et_k2_test_exit_child_v1; do
+    et_k2_test_wait_child_v1 et_k2_test_exit_child_v1 \
+    et_k2_test_factory_authenticate_override_v1 \
+    et_k2_test_require_count_v1 et_k2_test_protected_overlap_mask_v1; do
   nm -g --defined-only "${private_runtime_dir}/libeshkol_transformer_k2_private_test.a" | \
     grep -E "[[:space:]]T ${test_hook}$" >/dev/null || \
     die "K2 private test archive omits ${test_hook}"
@@ -225,7 +227,7 @@ run_k2_compiler private-identity-aot \
 timeout --foreground --signal=TERM --kill-after=5s 90s \
   "${private_runtime_dir}/private-identity" \
   >"${private_runtime_dir}/run.stdout"
-grep -Fx 'K2 PRIVATE IDENTITY PASS: 12 checks' \
+grep -Fx 'K2 PRIVATE IDENTITY PASS: 14 checks' \
   "${private_runtime_dir}/run.stdout" >/dev/null
 
 mkdir -p "${temporary_dir}/arena-retention"

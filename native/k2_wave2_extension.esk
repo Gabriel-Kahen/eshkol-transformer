@@ -251,7 +251,20 @@
                       (= entry-status 1)))
             (k2-fail 'internal operation
                      "K2 closure factory returned an invalid status"))
-        (vector-set! k2-factories-ready 0 #t))))
+        ;; Prove that the exact registered probes authenticate before any
+        ;; caller-visible shell can be constructed or returned.
+        (let* ((report-auth-status
+                (k2-native-report-factory-authenticate report-probe))
+               (request-auth-status
+                (k2-native-request-factory-authenticate request-probe))
+               (entry-auth-status
+                (k2-native-entry-factory-authenticate entry-probe)))
+          (if (not (and (= report-auth-status 1)
+                        (= request-auth-status 1)
+                        (= entry-auth-status 1)))
+              (k2-fail 'internal operation
+                       "K2 closure factory authentication failed before publication"))
+          (vector-set! k2-factories-ready 0 #t)))))
 
 (define (k2-authentication-result status operation kind-name)
   (cond ((= status 1) #t)

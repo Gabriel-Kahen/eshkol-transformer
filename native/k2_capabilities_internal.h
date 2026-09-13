@@ -93,14 +93,29 @@ enum {
   ET_K2_TEST_FAIL_RUNTIME_AUDIT = 3
 };
 
+enum {
+  ET_K2_TEST_PROTECTED_STATE = 1u << 0,
+  ET_K2_TEST_PROTECTED_RESOLVER = 1u << 1,
+  ET_K2_TEST_PROTECTED_EXPECTED_NAMES = 1u << 2,
+  ET_K2_TEST_PROTECTED_PROVIDER = 1u << 3,
+  ET_K2_TEST_PROTECTED_RUNTIME = 1u << 4,
+  ET_K2_TEST_PROTECTED_FACTORY = 1u << 5,
+  ET_K2_TEST_PROTECTED_DISJOINT = 1u << 6,
+  ET_K2_TEST_PROTECTED_ALL = (1u << 7) - 1u
+};
+
 void et_k2_test_reset_v1(void);
 void et_k2_test_runtime_drop_v1(void);
 void et_k2_test_provider_override_v1(const et_kernel_provider_v1 *provider,
                                      int enabled);
 void et_k2_test_fail_stage_v1(int stage);
+void et_k2_test_factory_authenticate_override_v1(int64_t kind, int64_t status,
+                                                 int enabled);
 uint64_t et_k2_test_discovery_count_v1(void);
 uint64_t et_k2_test_destroy_count_v1(void);
 uint64_t et_k2_test_runtime_live_count_v1(void);
+uint64_t et_k2_test_require_count_v1(void);
+uint32_t et_k2_test_protected_overlap_mask_v1(void);
 int64_t et_k2_test_fork_v1(void);
 int64_t et_k2_test_wait_child_v1(int64_t child_pid);
 void et_k2_test_exit_child_v1(int64_t status);
