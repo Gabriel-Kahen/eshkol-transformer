@@ -547,6 +547,7 @@ failure:
 
 static int32_t create_baseline(et_kernel_runtime **output,
                                et_kernel_error *error) {
+  const size_t baseline_count = ET_ARRAY_COUNT(baseline_names);
   et_kernel_runtime *runtime = NULL;
   if (output == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
@@ -560,15 +561,15 @@ static int32_t create_baseline(et_kernel_runtime **output,
                      ET_KERNEL_CODE_ALLOCATION_FAILED, "capability-discover",
                      "cannot allocate capability runtime");
   }
-  runtime->capability_count = ET_ARRAY_COUNT(baseline_names);
   runtime->capabilities = (et_kernel_capability_v1 *)calloc(
-      runtime->capability_count, sizeof(*runtime->capabilities));
+      baseline_count, sizeof(*runtime->capabilities));
   if (runtime->capabilities == NULL) {
     et_kernel_runtime_destroy(runtime);
     return set_error(error, ET_KERNEL_ERROR_INTERNAL,
                      ET_KERNEL_CODE_ALLOCATION_FAILED, "capability-discover",
                      "cannot allocate baseline capabilities");
   }
+  runtime->capability_count = baseline_count;
   for (size_t index = 0; index < runtime->capability_count; index++) {
     et_kernel_capability_v1 source;
     int32_t result;
