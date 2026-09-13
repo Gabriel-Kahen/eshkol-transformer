@@ -364,10 +364,14 @@ release interval in one lexical `with-region`. Batch and tensor shells must not 
 that boundary unless the caller deliberately retains or promotes them and accounts
 for their caller-owned closure/environment/capability storage. The dataset retains
 only the last-issued generation and current status, not any shell, per-generation authenticator, or
-tombstone. This caller-region interpretation is a proposed clarification pending
-integration-owner disposition in
-[issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950);
-it changes no public name, arity, carrier, cursor, or format.
+tombstone. This caller-region interpretation is
+[accepted with live-shell conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148)
+and changes no public name, arity, carrier, cursor, or format. Authentic-alias stale
+and idempotent-release guarantees require a live Eshkol shell allocation. After
+region exit, an unretained/unpromoted shell is inaccessible; accessing freed region
+storage has no safety or structured-error guarantee. Merely keeping a raw reference
+does not preserve allocation lifetime. A genuinely retained/promoted live alias is
+caller-owned and keeps the accepted stale/idempotent semantics.
 
 The canonical D2 aggregate authenticates shells using the compiled code identities
 of two fixed private constructors, dataset and batch. Native state stores only those
