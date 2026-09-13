@@ -68,7 +68,7 @@ def cursor(ordinal: int) -> bytes:
     return bytes(result)
 
 
-def make_c1(buffer_bytes: int = 0) -> tuple[bytes, dict[str, int]]:
+def make_c1(buffer_bytes: int = 0, buffer_dtype: int = 1) -> tuple[bytes, dict[str, int]]:
     encoded_path = path(b"weight")
     record = bytearray(80 + 8 + len(encoded_path))
     payload = struct.pack("<II", 0x3F800000, 0x40000000)
@@ -85,6 +85,9 @@ def make_c1(buffer_bytes: int = 0) -> tuple[bytes, dict[str, int]]:
                                    record[80:] + payload).digest()
     records = bytes(record)
     if buffer_bytes:
+        width = 1 if buffer_dtype == 1 else (8 if buffer_dtype == 2 else 4)
+        if buffer_dtype not in (1, 2, 3) or buffer_bytes % width:
+            raise ValueError("buffer dtype/byte count is not canonical")
         buffer_path = path(b"zz-buffer")
         buffer_record = bytearray(80 + 8 + len(buffer_path))
         p64(buffer_record, 0, len(buffer_record))
@@ -93,9 +96,10 @@ def make_c1(buffer_bytes: int = 0) -> tuple[bytes, dict[str, int]]:
         p32(buffer_record, 24, len(buffer_path))
         p16(buffer_record, 28, 1)
         p16(buffer_record, 30, 1)
-        buffer_record[32:36] = bytes((2, 1, 1, 1))
-        p64(buffer_record, 40, buffer_bytes)
-        p64(buffer_record, 80, buffer_bytes)
+        buffer_record[32:36] = bytes((2, buffer_dtype, 1, 1))
+        elements = buffer_bytes // width
+        p64(buffer_record, 40, elements)
+        p64(buffer_record, 80, elements)
         buffer_record[88:] = buffer_path
         buffer_payload = b"\0" * buffer_bytes
         buffer_record[48:80] = hashlib.sha256(
@@ -185,8 +189,8 @@ def make_optimizer() -> tuple[bytes, bytes, dict[str, int]]:
     }
 
 
-def make_fixture(buffer_bytes: int = 0) -> tuple[bytearray, dict[str, int]]:
-    model, c1 = make_c1(buffer_bytes)
+def make_fixture(buffer_bytes: int = 0, buffer_dtype: int = 1) -> tuple[bytearray, dict[str, int]]:
+    model, c1 = make_c1(buffer_bytes, buffer_dtype)
     optimizer, moments, o2 = make_optimizer()
     x1 = X1
     current, epoch = cursor(1), cursor(0)
@@ -307,11 +311,11 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(self.invoke(data, 1, 0, 7)[0], 2)
         self.assertEqual(self.invoke(data, 1, 0, 8, 2)[0], 2)
         self.assertEqual(self.invoke(data, 1, 0, 8, 3, 100)[0], 2)
-        exact, _ = make_fixture(8 * 1024 * 1024)
+        exact, _ = make_fixture(8 * 1024 * 1024, 3)
         self.assertEqual(self.invoke(exact)[0], 0)
-        one_over, _ = make_fixture(8 * 1024 * 1024 + 1)
+        one_over, _ = make_fixture(8 * 1024 * 1024 + 4, 3)
         self.assertEqual(self.invoke(one_over)[0], 4)
-        one_over, one_over_off = make_fixture(8 * 1024 * 1024 + 1)
+        one_over, one_over_off = make_fixture(8 * 1024 * 1024 + 4, 3)
         p32(one_over, one_over_off["o2_group"] + 40, 1)
         resign_outer(one_over)
         self.assertEqual(self.invoke(one_over)[0], 2)
@@ -454,9 +458,9 @@ def main() -> int:
     args = parser.parse_args()
     if args.emit:
         if args.variant == "profile-exact":
-            data, offsets = make_fixture(8 * 1024 * 1024)
+            data, offsets = make_fixture(8 * 1024 * 1024, 3)
         elif args.variant in ("profile-one", "profile-corrupt"):
-            data, offsets = make_fixture(8 * 1024 * 1024 + 1)
+            data, offsets = make_fixture(8 * 1024 * 1024 + 4, 3)
         else:
             data, offsets = make_fixture()
         if args.variant == "counter":

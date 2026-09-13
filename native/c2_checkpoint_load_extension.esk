@@ -1,0 +1,595 @@
+;;; Private split C2 checkpoint LOAD staging and component reconstruction.
+;;; Source-compose only after the C2 policy, X1/D2 validators, fixed I2 codec,
+;;; O2 reconstruction transaction, and C2 owner. This file defines no public
+;;; checkpoint-load/3 and no K2 capability/report admission.
+;;;
+;;; A future public compositor must call c2-checkpoint-load-stage-internal,
+;;; perform the real K2 admission over its trusted report, and only then call
+;;; c2-checkpoint-load-reconstruct-internal. Focused private tests may exercise
+;;; both phases directly but do not establish public capability semantics.
+
+(extern i64 c2-load-native-measure ptr i64 i64 i64 i64 i64 ptr
+        :real et_c2_private_checkpoint_load_measure_v1)
+(extern i64 c2-load-native-stage
+        ptr i64 i64 i64 i64 i64 ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_c2_private_checkpoint_load_stage_v1)
+
+(define c2-load-result-bytes 192)
+(define c2-load-result-magic 4842016452657819952)
+(define c2-load-stage-tag (vector 'c2-private-checkpoint-load-stage-v1))
+(define c2-load-stages '())
+(define c2-load-u64-modulus 18446744073709551616)
+(define c2-load-i64-sign 9223372036854775808)
+
+(define (c2-load-fail-raw category operation message details)
+  (let ((unreachable
+          (et-e1b-private-raise category operation message details #f)))
+    unreachable))
+
+(define-syntax c2-load-fail
+  (syntax-rules ()
+    ((_ category operation message details)
+     (let ((result
+             (c2-load-fail-raw category operation message details))) result))))
+
+(define (c2-load-internal-after-validation phase caught)
+  (c2-load-fail
+    'internal 'checkpoint-load
+    "validated checkpoint staging or reconstruction failed internally"
+    (list (list 'source-domain 'c2-checkpoint-load)
+          (list 'source-code phase)
+          (list 'source-message
+                "validated checkpoint staging or reconstruction failed internally")
+          (list 'caught-transformer-error? (transformer-error? caught)))))
+
+(define (c2-load-u64 bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (c2-load-u32 bytes offset)
+  (c2-load-u64-width bytes offset 4))
+
+(define (c2-load-u16 bytes offset)
+  (c2-load-u64-width bytes offset 2))
+
+(define (c2-load-u64-width bytes offset width)
+  (let loop ((index (- width 1)) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (c2-load-signed-u64 value)
+  (if (>= value c2-load-i64-sign)
+      (- value c2-load-u64-modulus)
+      value))
+
+(define (c2-load-category status)
+  (cond ((= status 1) 'invalid-argument)
+        ((= status 2) 'corrupt-data)
+        ((= status 3) 'version-mismatch)
+        ((= status 4) 'unsupported)
+        ((= status 5) 'determinism-unavailable)
+        ((= status 6) 'shape-mismatch)
+        ((= status 7) 'dtype-mismatch)
+        ((= status 8) 'device-mismatch)
+        ((= status 9) 'noncontiguous)
+        ((= status 10) 'io)
+        (else 'internal)))
+
+(define (c2-load-native-fail status result)
+  (c2-load-fail
+    (c2-load-category status) 'checkpoint-load
+    "C2 checkpoint validation or staging failed"
+    (list (list 'source-domain 'c2-checkpoint-load)
+          (list 'source-code (c2-load-u64 result 144))
+          (list 'source-message
+                "C2 checkpoint validation or staging failed")
+          (list 'source-offset (c2-load-u64 result 152))
+          (list 'native-status (c2-load-u64 result 160))
+          (list 'format-category (c2-load-u64 result 168))
+          (list 'format-code (c2-load-u64 result 176))
+          (list 'format-offset (c2-load-u64 result 184)))))
+
+(define (c2-load-path-structural-valid? path)
+  (and (string? path) (> (string-length path) 0)
+       ;; UTF-8 cannot contain fewer bytes than source characters. This
+       ;; allocation-free ceiling rejects an impossible native path early;
+       ;; the exact byte ceiling is checked after the guarded conversion.
+       (<= (string-length path) 4096)
+       (let loop ((index 0))
+         (if (= index (string-length path)) #t
+             (and (not (char=? (string-ref path index) #\nul))
+                  (loop (+ index 1)))))))
+
+(define (c2-load-path-bytes-valid? bytes)
+  (and (bytevector? bytes)
+       (> (bytevector-length bytes) 0)
+       (<= (bytevector-length bytes) 4096)
+       (let loop ((index 0))
+         (if (= index (bytevector-length bytes)) #t
+             (and (not (= (bytevector-u8-ref bytes index) 0))
+                  (loop (+ index 1)))))))
+
+(define (c2-load-find-stage shell)
+  (let loop ((remaining c2-load-stages))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (c2-load-stage-counts-internal)
+  (let loop ((remaining c2-load-stages)
+             (live 0) (consuming 0) (dead 0) (large-references 0))
+    (if (null? remaining)
+        (vector live consuming dead large-references)
+        (let ((entry (car remaining)))
+          (loop
+            (cdr remaining)
+            (+ live (if (eq? (vector-ref entry 2) 'live) 1 0))
+            (+ consuming (if (eq? (vector-ref entry 2) 'consuming) 1 0))
+            (+ dead (if (eq? (vector-ref entry 2) 'dead) 1 0))
+            (+ large-references
+               (let refs ((index 3) (count 0))
+                 (if (= index 7) count
+                     (refs (+ index 1)
+                           (+ count (if (vector-ref entry index) 1 0)))))))))))
+
+(define (c2-load-stage-identity)
+  (guard (raised (#t raised))
+    (error "transformer.checkpoint-load-stage:c2-v1")))
+
+(define c2-load-allocate-bytevector-internal
+  (lambda (length) (make-bytevector length 0)))
+(define c2-load-string->utf8-internal
+  (lambda (value) (string->utf8 value)))
+
+(define (c2-load-managed-call phase thunk)
+  (let ((outcome (vector #f #f)))
+    (guard (caught
+             (#t
+               (vector-set! outcome 0 #f)
+               (vector-set! outcome 1 caught)
+               outcome))
+      (let ((value (thunk)))
+        (vector-set! outcome 0 #t)
+        (vector-set! outcome 1 value)))
+    (if (vector-ref outcome 0)
+        (vector-ref outcome 1)
+        (c2-load-internal-after-validation phase (vector-ref outcome 1)))))
+
+(define (c2-load-measure-allocations path)
+  (vector (c2-load-string->utf8-internal path)
+          (c2-load-allocate-bytevector-internal c2-load-result-bytes)))
+
+(define (c2-load-stage-allocations measure)
+  (vector
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 16))
+    (c2-load-allocate-bytevector-internal 93)
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 24))
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 32))
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 40))
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 48))
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 56))
+    (c2-load-allocate-bytevector-internal (c2-load-u64 measure 64))
+    (c2-load-allocate-bytevector-internal c2-load-result-bytes)))
+
+(define (c2-load-hex-digit value)
+  (string-ref "0123456789abcdef" value))
+
+(define (c2-load-binary32 bytes offset)
+  (let ((result (make-string 8 #\0))
+        (bits (c2-load-u32 bytes offset)))
+    (let loop ((index 7) (value bits))
+      (if (< index 0) result
+          (begin
+            (string-set! result index (c2-load-hex-digit (modulo value 16)))
+            (loop (- index 1) (quotient value 16)))))))
+
+(define (c2-load-copy-path bytes offset segment-count)
+  (let loop ((index 0) (at offset) (result '()))
+    (if (= index segment-count)
+        (vector (o2-reverse result) at)
+        (let* ((length (c2-load-u32 bytes at))
+               (start (+ at 4))
+               (end (+ start length))
+               (segment (utf8->string (bytevector-copy bytes start end))))
+          (loop (+ index 1) end (cons segment result))))))
+
+(define (c2-load-list-ref values index)
+  (if (= index 0) (car values)
+      (c2-load-list-ref (cdr values) (- index 1))))
+
+(define (c2-load-copy-shape bytes offset rank)
+  (let loop ((index 0) (result '()))
+    (if (= index rank) (o2-reverse result)
+        (loop (+ index 1)
+              (cons (c2-load-u64 bytes (+ offset (* index 8))) result)))))
+
+(define (c2-load-parse-o2-records metadata payload expected-count)
+  (let ((entries (make-vector expected-count #f))
+        (start (c2-load-u64 metadata 104)))
+    (let loop ((index 0) (at start) (paths '()))
+      (if (= index expected-count)
+          (vector (o2-reverse paths) entries at)
+          (let* ((record-bytes (c2-load-u64 metadata at))
+                 (path-bytes (c2-load-u32 metadata (+ at 12)))
+                 (segments (c2-load-u16 metadata (+ at 16)))
+                 (rank (c2-load-u16 metadata (+ at 18)))
+                 (elements (c2-load-u64 metadata (+ at 24)))
+                 (moment-bytes (c2-load-u64 metadata (+ at 32)))
+                 (avg-at (c2-load-u64 metadata (+ at 40)))
+                 (sq-at (c2-load-u64 metadata (+ at 48)))
+                 (shape (c2-load-copy-shape metadata (+ at 120) rank))
+                 (path-start (+ at 120 (* rank 8)))
+                 (path-info
+                   (c2-load-copy-path metadata path-start segments))
+                 (path (vector-ref path-info 0))
+                 (record-end (+ at record-bytes)))
+            ;; The native full parser proved every value. These checks protect
+            ;; this independent staging projection from implementation drift.
+            (if (or (not (= (vector-ref path-info 1)
+                            (+ path-start path-bytes)))
+                    (not (= record-end (+ path-start path-bytes)))
+                    (not (= moment-bytes (* elements 4))))
+                (c2-load-fail 'internal 'checkpoint-load
+                              "validated O2 record projection diverged" '()))
+            (let ((avg (bytevector-copy payload avg-at (+ avg-at moment-bytes)))
+                  (sq (bytevector-copy payload sq-at (+ sq-at moment-bytes))))
+              (vector-set! entries index (vector path shape avg sq))
+              (loop (+ index 1) record-end (cons path paths))))))))
+
+(define (c2-load-group-paths metadata offset count paths)
+  (let loop ((index 0) (result '()))
+    (if (= index count) (o2-reverse result)
+        (let ((ordinal (c2-load-u32 metadata (+ offset (* index 4)))))
+          (loop (+ index 1)
+                (cons (o2-copy-path (c2-load-list-ref paths ordinal))
+                      result))))))
+
+(define (c2-load-parse-o2-groups metadata group-count paths)
+  (let loop ((index 0) (at 211) (result '()))
+    (if (= index group-count)
+        (vector (o2-reverse result) at)
+        (let* ((record-bytes (c2-load-u64 metadata at))
+               (count (c2-load-u32 metadata (+ at 8)))
+               (members
+                 (c2-load-group-paths metadata (+ at 40) count paths))
+               (group
+                 (list 'group members
+                       (c2-load-binary32 metadata (+ at 16))
+                       (c2-load-binary32 metadata (+ at 20))
+                       (c2-load-binary32 metadata (+ at 24))
+                       (c2-load-binary32 metadata (+ at 28))
+                       (c2-load-binary32 metadata (+ at 32)))))
+          (loop (+ index 1) (+ at record-bytes) (cons group result))))))
+
+(define (c2-load-parse-o2 metadata payload expected-count expected-groups
+                           expected-completed)
+  (let* ((records
+           (c2-load-parse-o2-records metadata payload expected-count))
+         (paths (vector-ref records 0))
+         (entries (vector-ref records 1))
+         (groups-info
+           (c2-load-parse-o2-groups metadata expected-groups paths))
+         (groups (vector-ref groups-info 0))
+         (clip-code (c2-load-u32 metadata 151))
+         (schedule-code (c2-load-u32 metadata 159))
+         (clip
+           (if (= clip-code 0) '(none)
+               (list 'global-l2 (c2-load-binary32 metadata 155))))
+         (schedule
+           (if (= schedule-code 0) '(constant)
+               (list 'linear (c2-load-u64 metadata 171)
+                     (c2-load-u64 metadata 179)
+                     (c2-load-binary32 metadata 163))))
+         (config
+           (list 'transformer-optimizer-config 1 0 '()
+                 'adamw 'f32 'cpu clip schedule groups)))
+    (if (or (not (= (c2-load-u32 metadata 48) expected-groups))
+            (not (= (c2-load-u32 metadata 52) expected-count))
+            (not (= (c2-load-u64 metadata 64) expected-completed))
+            (not (= (vector-ref groups-info 1)
+                    (+ 147 (c2-load-u64 metadata 72))))
+            (not (= (vector-ref records 2)
+                    (bytevector-length metadata))))
+        (c2-load-fail 'internal 'checkpoint-load
+                      "validated O2 projection counts diverged" '()))
+    ;; Parse and budget the complete inert logical projection before any I2
+    ;; codec. This is intentionally redundant with the native hostile parser.
+    (o2-parse-config 'checkpoint-load config)
+    (vector config paths entries expected-completed)))
+
+(define (c2-load-controls tokenizer config-fingerprint x1 current epoch
+                          total completed epochs rng-key rng-low rng-high)
+  (let* ((tokenizer-string (utf8->string tokenizer))
+         (config-string (utf8->string config-fingerprint))
+         (resolved-request
+           (vector x1 config-string 'checkpoint-load #f)))
+    (x1-canonical-inspect-internal resolved-request)
+    (let* ((resolved-projection (vector-ref resolved-request 3))
+           (vocabulary (vector-ref resolved-projection 3))
+           (dataset-request
+             (vector current epoch tokenizer-string vocabulary
+                     'checkpoint-load #f)))
+      (c2-d2-cursor-pair-internal dataset-request)
+      ;; The eventual owner will validate these bytes again before claim.
+      (vector
+        (vector 'philox4x32-10 1 rng-key rng-low rng-high)
+        (vector tokenizer-string vocabulary)
+        (vector current epoch)
+        (vector x1 config-string)
+        (vector total completed epochs)))))
+
+;;; Lexical indirections are injection points for focused raised-#f and
+;;; allocation/projection rollback tests. They are not public capabilities.
+(define c2-load-parse-o2-internal c2-load-parse-o2)
+(define c2-load-controls-internal c2-load-controls)
+(define c2-load-decode-model-internal
+  (lambda (model subpolicy)
+    (c1-checkpoint-decode-state-internal
+      model subpolicy i2-checkpoint-codec-internal i2-provider-name)))
+(define c2-load-reconstruct-o2-internal o2-state-reconstruct-internal)
+(define c2-load-compose-owner-internal c2-training-state-compose-internal)
+
+(define (c2-load-build-stage-entry
+          optimizer-metadata optimizer-payload tokenizer config-fingerprint
+          x1 current epoch model stage-result subpolicy)
+  (let* ((completed (c2-load-u64 stage-result 80))
+         (o2
+           (c2-load-parse-o2-internal
+             optimizer-metadata optimizer-payload
+             (c2-load-u64 stage-result 120)
+             (c2-load-u64 stage-result 128) completed))
+         (controls
+           (c2-load-controls-internal
+             tokenizer config-fingerprint x1 current epoch
+             (c2-load-u64 stage-result 72) completed
+             (c2-load-u64 stage-result 88)
+             (c2-load-signed-u64 (c2-load-u64 stage-result 96))
+             (c2-load-signed-u64 (c2-load-u64 stage-result 104))
+             (c2-load-signed-u64 (c2-load-u64 stage-result 112))))
+         (shell (c2-load-stage-identity))
+         ;; [shell,tag,status,model,o2-projection,controls,C1-policy].
+         (entry
+           (vector shell c2-load-stage-tag 'live model o2 controls subpolicy))
+         (next (cons entry c2-load-stages)))
+    ;; All parsing, deep copies, validators, and registry allocation precede
+    ;; the single assignment-only staging publication.
+    (set! c2-load-stages next)
+    shell))
+
+(define (c2-checkpoint-load-stage-internal path policy)
+  (let* ((operation 'checkpoint-load)
+         (limits (c2-policy-limits-internal operation policy)))
+    (if (not (c2-load-path-structural-valid? path))
+        (c2-load-fail 'invalid-argument operation
+                      "checkpoint path is invalid" '()))
+    (let* ((measure-allocations
+             (c2-load-managed-call
+               'measure-allocation
+               (lambda () (c2-load-measure-allocations path))))
+           (path-bytes (vector-ref measure-allocations 0))
+           (measure (vector-ref measure-allocations 1))
+           (profile
+             (if (eq? (vector-ref limits 5) 'operational-target) 1 0))
+           (measure-status
+             (begin
+               (if (not (c2-load-path-bytes-valid? path-bytes))
+                   (c2-load-fail 'invalid-argument operation
+                                 "checkpoint path is invalid" '()))
+             (c2-load-native-measure
+               path-bytes (vector-ref limits 0) (vector-ref limits 1)
+               (vector-ref limits 2) (vector-ref limits 3) profile measure))))
+      (if (not (= measure-status 0))
+          (c2-load-native-fail measure-status measure))
+      (if (not (= (c2-load-u64 measure 0) c2-load-result-magic))
+          (c2-load-fail 'internal operation
+                        "checkpoint measure projection was not published" '()))
+      ;; Only exact allocation sizes survive the first read. The second load
+      ;; and its result are authoritative for every byte and scalar.
+      (let* ((stage-allocations
+               (c2-load-managed-call
+                 'stage-allocation
+                 (lambda () (c2-load-stage-allocations measure))))
+             (tokenizer (vector-ref stage-allocations 0))
+             (config-fingerprint (vector-ref stage-allocations 1))
+             (x1 (vector-ref stage-allocations 2))
+             (current (vector-ref stage-allocations 3))
+             (epoch (vector-ref stage-allocations 4))
+             (model (vector-ref stage-allocations 5))
+             (optimizer-metadata (vector-ref stage-allocations 6))
+             (optimizer-payload (vector-ref stage-allocations 7))
+             (stage-result (vector-ref stage-allocations 8))
+             (stage-status
+               (c2-load-native-stage
+                 path-bytes (vector-ref limits 0) (vector-ref limits 1)
+                 (vector-ref limits 2) (vector-ref limits 3) profile
+                 measure tokenizer config-fingerprint x1 current epoch model
+                 optimizer-metadata optimizer-payload stage-result)))
+        (if (not (= stage-status 0))
+            (c2-load-native-fail stage-status stage-result))
+        (if (or (not (= (c2-load-u64 stage-result 0)
+                        c2-load-result-magic))
+                (not (= (bytevector-length tokenizer)
+                        (c2-load-u64 stage-result 16)))
+                (not (= (bytevector-length x1)
+                        (c2-load-u64 stage-result 24)))
+                (not (= (bytevector-length current)
+                        (c2-load-u64 stage-result 32)))
+                (not (= (bytevector-length epoch)
+                        (c2-load-u64 stage-result 40)))
+                (not (= (bytevector-length model)
+                        (c2-load-u64 stage-result 48)))
+                (not (= (bytevector-length optimizer-metadata)
+                        (c2-load-u64 stage-result 56)))
+                (not (= (bytevector-length optimizer-payload)
+                        (c2-load-u64 stage-result 64))))
+            (c2-load-fail 'internal operation
+                          "authoritative stage projection differs from buffers"
+                          '()))
+        (let ((stage-outcome (vector #f #f))
+              (subpolicy
+                (c2-policy-c1-subpolicy-internal operation policy)))
+          (guard (caught
+                   (#t
+                     (vector-set! stage-outcome 0 #f)
+                     (vector-set! stage-outcome 1 caught)
+                     stage-outcome))
+            (let ((shell
+                    (c2-load-build-stage-entry
+                      optimizer-metadata optimizer-payload tokenizer
+                      config-fingerprint x1 current epoch model stage-result
+                      subpolicy)))
+              (vector-set! stage-outcome 0 #t)
+              (vector-set! stage-outcome 1 shell)))
+          (if (vector-ref stage-outcome 0)
+              (vector-ref stage-outcome 1)
+              (c2-load-internal-after-validation
+                'staging (vector-ref stage-outcome 1))))))))
+
+(define (c2-checkpoint-load-staging-release-internal! shell)
+  (let ((entry (c2-load-find-stage shell)))
+    (if (not entry)
+        (c2-load-fail 'invalid-argument 'checkpoint-load
+                      "expected exact private checkpoint staging" '()))
+    (if (eq? (vector-ref entry 2) 'dead) #t
+        (begin
+          (if (not (eq? (vector-ref entry 2) 'live))
+              (c2-load-fail 'invalid-state 'checkpoint-load
+                            "checkpoint staging is being consumed" '()))
+          (vector-set! entry 2 'dead)
+          (vector-set! entry 3 #f)
+          (vector-set! entry 4 #f)
+          (vector-set! entry 5 #f)
+          (vector-set! entry 6 #f)
+          #t))))
+
+(define (c2-load-cleanup-components!
+          p1-cell o2-cell c2-cell cleanup-outcome)
+  (let ((have-defect #f) (first-defect #f))
+    (let ((p1 (vector-ref p1-cell 0)))
+      (vector-set! p1-cell 0 #f)
+      (if p1
+          (guard (caught
+                   (#t
+                     (set! have-defect #t)
+                     (set! first-defect caught)
+                     #f))
+            (state-dict-release! p1))))
+    (let ((o2 (vector-ref o2-cell 0)))
+      (vector-set! o2-cell 0 #f)
+      (if o2
+          (guard (caught
+                   (#t
+                     (if have-defect #t
+                         (begin
+                           (set! have-defect #t)
+                           (set! first-defect caught)))
+                     #f))
+            (o2-public-optimizer-state-release! o2))))
+    (let ((c2 (vector-ref c2-cell 0)))
+      (vector-set! c2-cell 0 #f)
+      (if c2
+          (guard (caught
+                   (#t
+                     (if have-defect #t
+                         (begin
+                           (set! have-defect #t)
+                           (set! first-defect caught)))
+                     #f))
+            (c2-training-state-release-internal!
+              c2 'trainer-state-release!))))
+    (vector-set! cleanup-outcome 0 have-defect)
+    (vector-set! cleanup-outcome 1 first-defect)
+    have-defect))
+
+(define (c2-load-exact-live-owner? value)
+  (let ((state (c2-training-state-find value)))
+    (and state (eq? (vector-ref state 7) 'live))))
+
+(define (c2-checkpoint-load-reconstruct-internal shell operation)
+  (let ((entry (c2-load-find-stage shell)))
+    (if (or (not entry) (not (symbol? operation)))
+        (c2-load-fail 'invalid-argument operation
+                      "expected exact private checkpoint staging" '()))
+    (if (not (eq? (vector-ref entry 2) 'live))
+        (c2-load-fail 'invalid-state operation
+                      "checkpoint staging is consumed or busy" '()))
+    (let ((model (vector-ref entry 3))
+          (o2-projection (vector-ref entry 4))
+          (controls (vector-ref entry 5))
+          (subpolicy (vector-ref entry 6))
+          (p1-cell (vector #f))
+          (o2-cell (vector #f))
+          (c2-cell (vector #f))
+          (cleanup-outcome (vector #f #f))
+          (outcome (vector #f #f)))
+      (vector-set! entry 2 'consuming)
+      (guard (caught
+               (#t
+                 (vector-set! outcome 0 #f)
+                 (vector-set! outcome 1 caught)
+                 outcome))
+        (let ((p1 (c2-load-decode-model-internal model subpolicy)))
+          (vector-set! p1-cell 0 p1)
+          (let* ((aliases (state-dict-alias-groups p1))
+                 (o2-request
+                   (vector o2-c2-reconstruct-tag
+                           (vector-ref o2-projection 0)
+                           (vector-ref o2-projection 1) aliases
+                           (vector-ref o2-projection 3)
+                           (vector-ref o2-projection 2) operation #f)))
+            (c2-load-reconstruct-o2-internal o2-request)
+            (let ((o2 (vector-ref o2-request 7)))
+              (vector-set! o2-cell 0 o2)
+              (let ((compose
+                      (vector c2-training-state-compose-tag p1 o2 controls
+                              operation #f)))
+                (let ((returned (c2-load-compose-owner-internal compose))
+                      (published (vector-ref compose 5)))
+                  ;; Once the request proves real compose consumption, rollback
+                  ;; authority belongs to the C2 owner even if the injected
+                  ;; wrapper substitutes its return value afterward.
+                  (if (and (eq? (vector-ref compose 1) #f)
+                           (eq? (vector-ref compose 2) #f)
+                           published
+                           (c2-load-exact-live-owner? published))
+                      (begin
+                        (vector-set! p1-cell 0 #f)
+                        (vector-set! o2-cell 0 #f)
+                        (vector-set! c2-cell 0 published)))
+                  (if (or (not (eq? returned compose))
+                          (not (eq? (vector-ref compose 1) #f))
+                          (not (eq? (vector-ref compose 2) #f))
+                          (not published)
+                          (not (c2-load-exact-live-owner? published)))
+                      (c2-load-fail
+                        'internal operation
+                        "C2 owner composition postcondition failed" '()))
+                  ;; Exact live-owner admission proves compose consumed both
+                  ;; component authorities before rollback is disabled.
+                  (vector-set! c2-cell 0 #f)
+                  (vector-set! outcome 0 #t)
+                  (vector-set! outcome 1 published)))))))
+      ;; Staging is one-shot on both success and failure. Clear every large
+      ;; reference before a fallible provider cleanup callback.
+      (vector-set! entry 2 'dead)
+      (vector-set! entry 3 #f)
+      (vector-set! entry 4 #f)
+      (vector-set! entry 5 #f)
+      (vector-set! entry 6 #f)
+      (if (vector-ref outcome 0)
+          (vector-ref outcome 1)
+          (begin
+            (c2-load-cleanup-components!
+              p1-cell o2-cell c2-cell cleanup-outcome)
+            (if (vector-ref cleanup-outcome 0)
+                (c2-load-fail
+                  'internal operation
+                  "checkpoint reconstruction rollback reported a provider defect"
+                  '())
+                (c2-load-internal-after-validation
+                  'reconstruction (vector-ref outcome 1))))))))

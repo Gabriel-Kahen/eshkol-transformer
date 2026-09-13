@@ -415,7 +415,11 @@ static int32_t validate_c1(parser *p, uint64_t base, uint64_t declared_bytes,
     rec.start = at; rec.end = at + record_bytes; rec.payload_offset = u64(r + 8u);
     rec.payload_bytes = u64(r + 16u); rec.path_offset = at + 80u + shape_bytes;
     rec.kind = r[32]; rec.dtype = r[33]; rec.element_count = u64(r + 40u);
-    if (rec.dtype < 1u || rec.dtype > 3u || (rec.kind == 1u && rec.dtype != 3u))
+    /* C2 fixes one dense CPU f32 provider for the complete model state, not
+       merely parameters. C1 itself permits bool/i64 buffers, but admitting
+       them here would defer rejection until the fixed I2 decoder callback and
+       violate C2's zero-codec semantic-corruption boundary. */
+    if (rec.dtype != 3u)
       return fail(p, ET_C2_FORMAT_DTYPE_MISMATCH, ET_C2_FORMAT_CODE_FIXED_FIELD,
                   at + 33u);
     if (r[34] != 1u)

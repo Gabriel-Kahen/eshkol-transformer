@@ -30,7 +30,7 @@ def main() -> None:
     resign_outer(hostile)
     (root / "hostile.c2").write_bytes(hostile)
 
-    profile, _ = make_fixture(8_388_609)
+    profile, _ = make_fixture(8_388_612, 3)
     (root / "profile.c2").write_bytes(profile)
 
 
