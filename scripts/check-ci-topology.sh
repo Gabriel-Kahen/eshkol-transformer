@@ -74,6 +74,7 @@ expected_ci_build_commands = {
         "/usr/bin/bash scripts/build-i1.sh",
         "/usr/bin/bash scripts/build-a2.sh",
         "/usr/bin/bash scripts/build-i2.sh",
+        "/usr/bin/bash scripts/build-k2.sh",
         "/usr/bin/bash scripts/build-n2.sh",
         "/usr/bin/bash scripts/build-n3k.sh",
         "/usr/bin/bash scripts/build-t2.sh",
@@ -102,6 +103,11 @@ for target, expected in expected_ci_build_commands.items():
     assert set(targets[target]) == expected, (target, targets[target], expected)
 
 required_build_commands_by_test = {
+    "/usr/bin/bash scripts/test-k2.sh": {
+        "/usr/bin/bash scripts/build-k1.sh",
+        "/usr/bin/bash scripts/build-i2.sh",
+        "/usr/bin/bash scripts/build-k2.sh",
+    },
     "/usr/bin/bash scripts/test-o2.sh": {
         "/usr/bin/bash scripts/build-k1.sh",
         "/usr/bin/bash scripts/build-i2.sh",
@@ -150,9 +156,11 @@ build_driver = (root / "scripts/build.sh").read_text(encoding="utf-8")
 assert "scripts/build-n2.sh" in build_driver
 assert "scripts/build-n3k.sh" in build_driver
 assert "scripts/build-o2.sh" in build_driver
+assert "scripts/build-k2.sh" in build_driver
 
 for workflow in (ci, acceptance):
     assert "O2_ASAN_DETECT_LEAKS: '1'" in workflow
+    assert "K2_ASAN_DETECT_LEAKS: '1'" in workflow
     assert "ATEN_CPU_CAPABILITY=default" in workflow
     assert 'torch.backends.cpu.get_cpu_capability() == "DEFAULT"' in workflow
     assert "N2_ORACLE_PYTHON=$n2_oracle_python" in workflow

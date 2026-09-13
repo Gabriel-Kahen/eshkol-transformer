@@ -149,6 +149,36 @@ before merge.
   index leakage, deterministic localized objects/archives/evidence/AOT binaries,
   public-caller closure, and duplicate registry ownership rejection.
 
+## Required K2 capability-facade gates
+
+- Genuine fixed-I2 K1 discovery, exact descriptor/reserved/table/callback audit, and
+  exact sorted eleven-row report audit before publication; every allocation and
+  post-discovery audit failpoint cleans up and permits retry. Emit the genuine
+  K1/I2 report twice and assert byte equality, exactly 3,059 bytes, and SHA-256
+  `742800ea988627d9093f8fe394c8ad2be801e35413e20bbcad816f2431be86cb`.
+- Exact rank-zero/rank-one boundary matching with both boolean determinism values;
+  rank-two, one-over, wrong symbol and all ten unverified-row nonmatches; complete
+  logical-A0 versus K1-representability checks for all four symbol positions, rank,
+  and unsigned extents without truncation or contradictory native validation.
+- Three pairwise-distinct compiled closure factories, authentication before hidden
+  query, relay/query-capture/wrong-kind/forged/unregistered/stale-origin negatives,
+  private test-only injected failed-publication candidate invalidation, and ordinary
+  in-region alias success.
+- Exact 264-byte aligned little-endian private diagnostics, admission precedence,
+  full success/error writes, unchanged invalid buffers/tails, category/return/code
+  consistency, and separate K1 versus K2-private E1 source mapping.
+- Fresh-copy mutation isolation for every report, entry, constraint and request
+  carrier; optimized-AOT 1,024/8,192 lexical-region equality with native singleton
+  and caller-retained shells measured separately.
+- One completed aggregate per process, exact 59-global/53-export/59-public-string
+  manifests, source/native dependency closures, duplicate-aggregate and hostile
+  repository tuple rejection, strict fresh-cache AOT with every arity, deterministic
+  rebuilds, sanitizers, and production Python/PyTorch isolation.
+- Fork evidence is limited to serialized single-threaded fork with no K2 operation
+  in flight. Parent-origin shells reject before payload/provider use and only a newly
+  audited child runtime is eligible. No multithreaded-fork, reentrancy, signal, or
+  inherited non-K2 receiver claim is accepted.
+
 ## Performance evidence
 
 Benchmarks record commit, hardware, OS, compiler, backend, dtype, tensor shapes,

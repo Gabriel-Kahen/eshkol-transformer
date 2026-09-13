@@ -1,0 +1,277 @@
+(require transformer.capabilities)
+
+(define passed 0)
+(define failed 0)
+
+(define (check name condition)
+  (if condition
+      (set! passed (+ passed 1))
+      (begin
+        (set! failed (+ failed 1))
+        (display "FAIL: ") (display name) (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard
+   (caught
+    (#t (and (transformer-error? caught)
+             (eq? (transformer-error-category caught) category)
+             (eq? (transformer-error-operation caught) operation))))
+   (thunk)
+   #f))
+
+(define (list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (entry-with-name entries name)
+  (cond ((null? entries) #f)
+        ((eq? (capability-entry-name (car entries)) name) (car entries))
+        (else (entry-with-name (cdr entries) name))))
+
+(define (all-baseline-constraints? entries)
+  (cond
+   ((null? entries) #t)
+   ((eq? (capability-entry-name (car entries)) 'tensor.f32)
+    (all-baseline-constraints? (cdr entries)))
+   (else
+    (and
+     (equal? (capability-entry-constraints (car entries))
+             '((devices ()) (dtypes ()) (operations ()) (shape-ranges ())))
+     (all-baseline-constraints? (cdr entries))))))
+
+(define (repeat value count)
+  (let loop ((remaining count) (result '()))
+    (if (= remaining 0) result
+        (loop (- remaining 1) (cons value result)))))
+
+(define expected-names
+  '(autodiff.reverse kernel.activation kernel.causal-attention
+    kernel.embedding-backward kernel.indexed-cross-entropy kernel.matmul
+    kernel.norm tensor.bool tensor.contiguous tensor.f32 tensor.i64))
+
+(define report (capability-discover))
+(define entries (capability-report-entries report))
+(define entries-again (capability-report-entries report))
+(define f32-entry (entry-with-name entries 'tensor.f32))
+(define baseline-entry (entry-with-name entries 'tensor.i64))
+
+(check "exact eleven sorted rows"
+       (and (= (list-length entries) 11)
+            (equal? (map capability-entry-name entries) expected-names)))
+(check "entry snapshots are freshly constructed"
+       (and (not (eq? entries entries-again))
+            (not (eq? (car entries) (car entries-again)))
+            (equal? (map capability-entry-name entries)
+                    (map capability-entry-name entries-again))))
+(check "all baseline rows have a fresh four-key map"
+       (all-baseline-constraints? entries))
+(check "exact verified f32 metadata"
+       (and (eq? (capability-entry-status f32-entry) 'verified)
+            (eq? (capability-entry-implementation f32-entry)
+                 'eshkol-transformer-f32)
+            (string=? (capability-entry-version f32-entry) "1.0")
+            (capability-entry-deterministic? f32-entry)
+            (string=?
+             (capability-entry-evidence f32-entry)
+             "I2:bounded-exact-f32-storage.copy-v1")
+            (equal?
+             (capability-entry-constraints f32-entry)
+             '((devices (cpu))
+               (dtypes (f32))
+               (operations (storage.copy))
+               (shape-ranges (() ((0 4611686018427387903))))))))
+(check "exact baseline metadata"
+       (and (eq? (capability-entry-status baseline-entry) 'unverified)
+            (eq? (capability-entry-implementation baseline-entry) 'eshkol-core)
+            (string=? (capability-entry-version baseline-entry) "1.3.4-evolve")
+            (not (capability-entry-deterministic? baseline-entry))
+            (string=?
+             (capability-entry-evidence baseline-entry)
+             "R0-merged-through-PR15:untested-with-reason")))
+
+(define scalar-true
+  (capability-request 'storage.copy 'f32 'cpu '() #t))
+(define scalar-false
+  (capability-request 'storage.copy 'f32 'cpu '() #f))
+(define rank1-zero
+  (capability-request 'storage.copy 'f32 'cpu '(0) #t))
+(define rank1-max
+  (capability-request 'storage.copy 'f32 'cpu
+                      '(4611686018427387903) #f))
+(check "deterministic capability matches requested true"
+       (capability-verified? report 'tensor.f32 scalar-true))
+(check "deterministic capability matches requested false"
+       (capability-verified? report 'tensor.f32 scalar-false))
+(check "rank1 zero matches"
+       (capability-verified? report 'tensor.f32 rank1-zero))
+(check "rank1 maximum matches"
+       (capability-verified? report 'tensor.f32 rank1-max))
+(check "require returns a fresh exact entry"
+       (let ((required
+              (capability-require report 'tensor.f32 scalar-true)))
+         (and (not (eq? required f32-entry))
+              (eq? (capability-entry-name required) 'tensor.f32))))
+
+(define rank1-over
+  (capability-request 'storage.copy 'f32 'cpu
+                      '(4611686018427387904) #t))
+(define rank2
+  (capability-request 'storage.copy 'f32 'cpu '(1 1) #t))
+(check "rank1 provider one-over is unsupported"
+       (not (capability-verified? report 'tensor.f32 rank1-over)))
+(check "rank2 is a genuine K1 nonmatch"
+       (not (capability-verified? report 'tensor.f32 rank2)))
+(check "unverified i64 stays unsupported"
+       (not (capability-verified? report 'tensor.i64 scalar-true)))
+(check "unknown valid capability stays unsupported"
+       (not (capability-verified? report 'tensor.unknown scalar-true)))
+(check "require nonmatch raises unsupported"
+       (structured-error?
+        'unsupported 'capability-require
+        (lambda () (capability-require report 'tensor.f32 rank2))))
+
+;;; A0 construction is logical rather than narrowed to K1. These exact values
+;;; are directly reachable on the pinned runtime; K2 retains them and classifies
+;;; them before native query without claiming unlimited bignum support.
+(define u64-one-over
+  (capability-request 'storage.copy 'f32 'cpu
+                      (list 18446744073709551616) #t))
+(define rank65
+  (capability-request 'storage.copy 'f32 'cpu (repeat 1 65) #t))
+(define grammar-outside
+  (capability-request 'Storage.Copy 'f32 'cpu '() #t))
+(define long-symbol
+  (string->symbol (make-string 128 #\a)))
+(define length-outside
+  (capability-request long-symbol 'f32 'cpu '() #t))
+(define dtype-grammar-outside
+  (capability-request 'storage.copy 'F32 'cpu '() #t))
+(define dtype-length-outside
+  (capability-request 'storage.copy long-symbol 'cpu '() #t))
+(define device-grammar-outside
+  (capability-request 'storage.copy 'f32 'CPU '() #t))
+(define device-length-outside
+  (capability-request 'storage.copy 'f32 long-symbol '() #t))
+(check "u64 one-over constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 u64-one-over)))
+(check "rank65 constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 rank65)))
+(check "operation outside full K1 grammar constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 grammar-outside)))
+(check "operation over K1 byte bound constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 length-outside)))
+(check "capability selector outside K1 grammar does not match"
+       (not (capability-verified? report 'Tensor.f32 scalar-true)))
+(check "capability selector over K1 byte bound does not match"
+       (not (capability-verified? report long-symbol scalar-true)))
+(check "dtype outside full K1 grammar constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 dtype-grammar-outside)))
+(check "dtype over K1 byte bound constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 dtype-length-outside)))
+(check "device outside full K1 grammar constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 device-grammar-outside)))
+(check "device over K1 byte bound constructs but does not match"
+       (not (capability-verified? report 'tensor.f32 device-length-outside)))
+
+(define report-alias report)
+(define request-alias scalar-true)
+(define entry-alias f32-entry)
+(check "ordinary report alias stays authentic"
+       (= (list-length (capability-report-entries report-alias)) 11))
+(check "ordinary request alias stays authentic"
+       (capability-verified? report 'tensor.f32 request-alias))
+(check "ordinary entry alias stays authentic"
+       (eq? (capability-entry-name entry-alias) 'tensor.f32))
+
+(define mutable-shape (list 0))
+(define copied-request
+  (capability-request 'storage.copy 'f32 'cpu mutable-shape #t))
+(set-car! mutable-shape 4611686018427387904)
+(check "request deep-copies caller shape"
+       (capability-verified? report 'tensor.f32 copied-request))
+
+(define first-constraints (capability-entry-constraints f32-entry))
+(define second-constraints (capability-entry-constraints f32-entry))
+(set-car! first-constraints '(forged (value)))
+(check "constraint maps are detached fresh copies"
+       (and (not (eq? first-constraints second-constraints))
+            (equal? second-constraints
+                    (capability-entry-constraints f32-entry))))
+(define first-version (capability-entry-version f32-entry))
+(string-set! first-version 0 #\X)
+(check "version strings are detached fresh copies"
+       (string=? (capability-entry-version f32-entry) "1.0"))
+(define first-evidence (capability-entry-evidence f32-entry))
+(string-set! first-evidence 0 #\X)
+(check "evidence strings are detached fresh copies"
+       (string=? (capability-entry-evidence f32-entry)
+                 "I2:bounded-exact-f32-storage.copy-v1"))
+
+(define captured-query #f)
+(define query-capture
+  (lambda (query) (set! captured-query query) #f))
+(check "foreign report procedure rejects"
+       (structured-error?
+        'invalid-argument 'capability-report-entries
+        (lambda () (capability-report-entries query-capture))))
+(check "foreign procedure is rejected before private query disclosure"
+       (eq? captured-query #f))
+(check "wrong-kind request-as-report rejects"
+       (structured-error?
+        'invalid-argument 'capability-report-entries
+        (lambda () (capability-report-entries scalar-true))))
+(check "wrong-kind report-as-entry rejects"
+       (structured-error?
+        'invalid-argument 'capability-entry-name
+        (lambda () (capability-entry-name report))))
+(check "wrong-kind entry-as-request rejects"
+       (structured-error?
+        'invalid-argument 'capability-verified?
+        (lambda () (capability-verified? report 'tensor.f32 f32-entry))))
+(check "nonboolean determinism rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 'cpu '() 'true))))
+(check "negative extent rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 'cpu '(-1) #t))))
+(check "inexact extent rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 'cpu '(1.5) #t))))
+(check "noninteger extent rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 'cpu '(one) #t))))
+(check "improper shape rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 'cpu (cons 1 2) #t))))
+(define cyclic-shape (list 1))
+(set-cdr! cyclic-shape cyclic-shape)
+(check "cyclic shape rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 'cpu cyclic-shape #t))))
+(check "nonsymbol device descriptor rejects"
+       (structured-error?
+        'invalid-argument 'capability-request
+        (lambda ()
+          (capability-request 'storage.copy 'f32 (vector 'cpu) '() #t))))
+(check "nonsymbol capability selector rejects"
+       (structured-error?
+        'invalid-argument 'capability-verified?
+        (lambda () (capability-verified? report "tensor.f32" scalar-true))))
+
+(if (= failed 0)
+    (begin
+      (display "k2-public-runtime:v1 ") (display passed) (newline))
+    (exit 1))
