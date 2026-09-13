@@ -1,6 +1,9 @@
 # T2 deterministic BPE tokenizer contract
 
-Status: **proposed; implementation candidate under review**. This contract extends tokenizer capability without changing
+Status: **accepted and complete** within the bounded T2 contract. Independent
+approval, merge, supported CI, and post-merge evidence are recorded in
+[Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md).
+This contract extends tokenizer capability without changing
 the accepted T1 `eshkol-byte-tokenizer` format, its fingerprint domain, or any of
 the eight public tokenizer names/arities. The pre-freeze decision is coordinated in
 issue #1 and recorded in `docs/INTEGRATION_LOG.md`.

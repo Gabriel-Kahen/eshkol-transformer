@@ -2,7 +2,15 @@
 
 ## Status and dependency boundary
 
-Status: **review**. P1L issue #51 was independently approved and merged as
+Status: **accepted and complete** within this bounded contract. PR #58 merged as
+`884a0744d5adc21f95577c1f8d6904c842a019cf` after independent approval and supported
+blocking and exhaustive CI. The exact merged-main O2 gate, sanitizers, topology,
+isolation, and smoke retest also passed; its local host was compatibility-only.
+Full identity, command, and limitation provenance is recorded in
+[Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md#o2-merge-and-bounded-post-merge-retest).
+This status does not implement C2 checkpoint bytes or a trainer.
+
+P1L issue #51 was independently approved and merged as
 `b72b9fa58042304a71e801415e53f280262edae2`; I2 issue #49 was independently approved
 and merged as `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. O2 is implemented against that
 exact provider-2.0/I2 ownership and mutation seam. The logical configuration/state

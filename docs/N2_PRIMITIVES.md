@@ -1,6 +1,9 @@
 # N2 transformer primitives
 
-Status: **review**. The ABI and operation contract below are frozen from the
+Status: **accepted and complete** within the exact N2 domains. The historical
+post-merge oracle failure and superseding supported retest are recorded explicitly
+in [Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md). The ABI and
+operation contract below are frozen from the
 accepted integration decision after independently approved I2 PR #53 merged as
 `309de7262ebe33120e782ffc1c12f8cc10cbe74b`. N2 adds no A0 Eshkol name, tensor
 carrier, parameter registry, serialized format, or canonical K1 provider symbol.

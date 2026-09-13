@@ -102,8 +102,10 @@ before merge.
   Native carrier/live counts must return to baseline. Report RSS separately as an
   advisory host/runtime measurement. A shell deliberately retained or promoted
   across the region is caller-owned and must be separately accounted. This gate is
-  the implementation requirement described by the pending lifetime clarification in
-  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+  the implementation requirement described by the amended lifetime acceptance in
+  [issue #1 comment 5608140148](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148).
+  Stale/idempotent-alias guarantees require live shell allocations; accessing freed
+  lexical-region storage is outside those guarantees.
 - Equal-token one-shard and many-shard corpora must prove that optimized-AOT open
   retention differs by no more than one exact admitted working payload and that a
   packed batch crossing the same tokens retains exactly equal arena bytes. Exact

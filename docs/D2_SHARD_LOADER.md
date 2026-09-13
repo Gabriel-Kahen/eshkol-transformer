@@ -11,10 +11,9 @@ as `d805024764a8661815be3b2c3036695195b7075f`. The supported synthetic
 merge and actual merge have the identical tree
 `69eca436397cfe8a2ff9cd3e2c8f2764af2d4f35`; the focused merged-main D2 gate
 also passed.
-The caller-region lifetime clarification in
-[issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950)
-is proposed and pending; its current implementation discipline and measured basis
-are recorded below without presenting the proposal as accepted.
+The caller-region lifetime clarification is
+[accepted with explicit live-shell conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148),
+superseding proposal 5563425950. This changes no carrier, cursor, operation, or ABI.
 
 ## Public surface and configuration
 
@@ -123,9 +122,17 @@ shell may cross that region unless the caller deliberately retains or promotes i
 such aliases and their closure/environment/capability storage are caller-owned and
 must be included in the caller's resource accounting. D2 state retains only the
 last-issued generation and current status, never a shell, per-generation
-authenticator, or tombstone. This
-lexical-scope rule is the subject of the pending clarification linked above; the
-accepted implementation requires it to meet the long-horizon memory bound.
+authenticator, or tombstone. This accepted lexical-scope rule is required to meet
+the long-horizon memory bound.
+
+Authentic-alias stale and idempotent-release guarantees apply only while the
+alias's Eshkol shell allocation is live. After its lexical region ends, a shell
+whose allocation was not genuinely retained/promoted is inaccessible: validation,
+access, and release through freed region storage have no safety or structured-error
+guarantee. Keeping a raw reference alone does not preserve allocation lifetime.
+A deliberately retained/promoted live alias remains caller-owned and retains the
+accepted stale/idempotent semantics. C2/TR3 must preserve these lexical and
+synchronous-borrow lifetimes; no new promotion mechanism is introduced here.
 
 Authenticity is enforced by registering the generated-code identities of exactly
 two fixed private compiled shell constructors, one dataset constructor and one batch

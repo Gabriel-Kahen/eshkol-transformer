@@ -1,8 +1,9 @@
 # L2 fused indexed token cross-entropy
 
-Status: **review**. This document fixes the proposed L2 native ABI and numerical
-contract for review. It does not claim acceptance, merge, supported-host evidence,
-an A0 model graph, or an owned Eshkol tensor implementation.
+Status: **accepted and complete** within the bounded L2 native ABI and numerical
+contract. Independent approval, merge, supported CI, and post-merge evidence are in
+[Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md). This does not claim
+an A0 model graph or an owned Eshkol tensor implementation.
 
 ## Scope and dependency boundary
 
