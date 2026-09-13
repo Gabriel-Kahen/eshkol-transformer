@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
@@ -13,5 +13,6 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-c2-model-encode.sh"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-c2-o2-encode.sh"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-c2-checkpoint-save.sh"
+/usr/bin/bash "${PROJECT_ROOT}/scripts/test-c2-checkpoint-load.sh"
 
-printf 'C2 PRIVATE GATE PASS: parser, codec, same-fd load, inspect, X1, D2, policy, ownership, model encode, O2 encode, atomic full save\n'
+printf 'C2 PRIVATE GATE PASS: parser, codec, same-fd load, inspect, X1, D2, policy, ownership, model/O2 encode, atomic full save, K2-independent staged load/reconstruction\n'
