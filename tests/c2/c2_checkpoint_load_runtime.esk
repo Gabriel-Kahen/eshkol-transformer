@@ -1,0 +1,846 @@
+(load "d2_wave2_root.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_training_state_extension.esk")
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_load_extension.esk")
+
+(extern i64 c2-load-test-counter i64
+        :real et_c2_checkpoint_save_test_counter_v1)
+(extern void c2-load-test-native-reset
+        :real et_c2_checkpoint_load_test_reset_v1)
+(extern void c2-load-test-fail-after-validate i64
+        :real et_c2_checkpoint_load_test_fail_after_validate_v1)
+(extern i64 c2-load-test-copy-count
+        :real et_c2_checkpoint_load_test_copy_count_v1)
+(extern i64 c2-load-test-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 c2-load-test-live-readers
+        :real et_c2_checkpoint_reader_test_live_count_v1)
+(extern i64 c2-load-test-live-fds
+        :real et_c2_checkpoint_reader_test_fd_live_count_v1)
+(extern void c2-load-test-f32-fail-alloc i64
+        :real et_f32_tensor_test_fail_alloc_after_v1)
+(extern void c2-load-test-f32-reset
+        :real et_f32_tensor_test_reset_allocator_v1)
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "C2 LOAD FAIL: ") (display label) (newline) (exit 1))))
+
+(define (expect-error label category operation thunk)
+  (let ((caught? #f) (captured #f))
+    (guard (raised
+             (#t
+               (set! caught? #t)
+               (set! captured raised)
+               #f))
+      (thunk))
+    (check label
+      (and caught? (transformer-error? captured)
+           (eq? category (transformer-error-category captured))
+           (eq? operation (transformer-error-operation captured))))))
+
+(define (snapshot-counts)
+  (let ((result (make-vector 35 0)))
+    (let loop ((index 0))
+      (if (= index 35) result
+          (begin
+            (vector-set! result index (c2-load-test-counter index))
+            (loop (+ index 1)))))))
+
+(define (same-live-storage? left right)
+  (and
+    (= (vector-ref left 0) (vector-ref right 0))
+    (= (vector-ref left 1) (vector-ref right 1))
+    (= (vector-ref left 2) (vector-ref right 2))
+    (= (vector-ref left 3) (vector-ref right 3))
+    (= (vector-ref left 4) (vector-ref right 4))
+    (= (vector-ref left 5) (vector-ref right 5))
+    (= (vector-ref left 6) (vector-ref right 6))
+    (= (vector-ref left 17) (vector-ref right 17))
+    (= (vector-ref left 18) (vector-ref right 18))
+    (= (vector-ref left 19) (vector-ref right 19))
+    (= (vector-ref left 24) (vector-ref right 24))
+    (= (vector-ref left 25) (vector-ref right 25))
+    (= (vector-ref left 26) (vector-ref right 26))
+    (= (vector-ref left 28) (vector-ref right 28))
+    (= (vector-ref left 30) (vector-ref right 30))
+    (= (vector-ref left 31) (vector-ref right 31))
+    (= (vector-ref left 32) (vector-ref right 32))
+    (= (vector-ref left 33) (vector-ref right 33))))
+
+(define (native-staging-flat?)
+  (and (= (c2-load-test-live-images) 0)
+       (= (c2-load-test-live-readers) 0)
+       (= (c2-load-test-live-fds) 0)))
+
+(define (check-consumed-stage before shell)
+  (let ((after (c2-load-stage-counts-internal))
+        (entry (c2-load-find-stage shell)))
+    (check "consumed stage has exact live/consuming/dead/reference delta"
+      (and (= (vector-ref after 0) (- (vector-ref before 0) 1))
+           (= (vector-ref after 1) (vector-ref before 1))
+           (= (vector-ref after 2) (+ 1 (vector-ref before 2)))
+           (= (vector-ref after 3) (- (vector-ref before 3) 4))))
+    (check "consumed stage clears every retained field"
+      (and entry (eq? (vector-ref entry 2) 'dead)
+           (eq? (vector-ref entry 3) #f)
+           (eq? (vector-ref entry 4) #f)
+           (eq? (vector-ref entry 5) #f)
+           (eq? (vector-ref entry 6) #f)))))
+
+(define (run-reconstruction-failure label path)
+  (let* ((before (snapshot-counts))
+         (before-c2 (c2-load-owner-counts-internal))
+         (stage (c2-checkpoint-load-stage-internal path policy))
+         (staged (c2-load-stage-counts-internal)))
+    (expect-error label 'internal 'checkpoint-load
+      (lambda ()
+        (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load)))
+    (check-consumed-stage staged stage)
+    (vector before (snapshot-counts) before-c2
+            (c2-load-owner-counts-internal))))
+
+(define (check-failure-formula result tensors decoders p1-tombstones
+                               o2-states o2-handles c2-owners)
+  (let ((before (vector-ref result 0))
+        (after (vector-ref result 1))
+        (before-c2 (vector-ref result 2))
+        (after-c2 (vector-ref result 3)))
+    (check "failure restores exact storage live counts"
+      (same-live-storage? before after))
+    (check "failure has exact P1/I2/O2 retired deltas"
+      (and (= (vector-ref after 7) (+ tensors (vector-ref before 7)))
+           (= (vector-ref after 22) (+ decoders (vector-ref before 22)))
+           (= (vector-ref after 34)
+              (+ p1-tombstones (vector-ref before 34)))
+           (= (vector-ref after 27) (+ o2-states (vector-ref before 27)))
+           (= (vector-ref after 29) (+ o2-handles (vector-ref before 29)))
+           (= (vector-ref after 32) (vector-ref before 32))))
+    (check "failure has exact C2 live/dead delta"
+      (and (= (vector-ref after-c2 0) (vector-ref before-c2 0))
+           (= (vector-ref after-c2 1) (vector-ref before-c2 1))
+           (= (vector-ref after-c2 2) (vector-ref before-c2 2))
+           (= (vector-ref after-c2 3)
+              (+ c2-owners (vector-ref before-c2 3)))))))
+
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (bytes4 a b c d)
+  (let ((result (make-bytevector 4 0)))
+    (bytevector-u8-set! result 0 a)
+    (bytevector-u8-set! result 1 b)
+    (bytevector-u8-set! result 2 c)
+    (bytevector-u8-set! result 3 d)
+    result))
+
+(define (bytes8 a b c d e f g h)
+  (let ((result (make-bytevector 8 0)))
+    (bytevector-u8-set! result 0 a)
+    (bytevector-u8-set! result 1 b)
+    (bytevector-u8-set! result 2 c)
+    (bytevector-u8-set! result 3 d)
+    (bytevector-u8-set! result 4 e)
+    (bytevector-u8-set! result 5 f)
+    (bytevector-u8-set! result 6 g)
+    (bytevector-u8-set! result 7 h)
+    result))
+
+(define (entry-payload p1 access entry)
+  (let ((carrier
+          (state-dict-c2-owned-tensor-borrow-begin-internal
+            p1 access entry 'checkpoint-load)))
+    (let ((payload
+            (i2-checkpoint-encode
+              (vector carrier
+                      (state-entry-kind-internal entry)
+                      (state-entry-shape-internal entry)
+                      (state-entry-dtype-internal entry)
+                      (state-entry-device-internal entry)
+                      (state-entry-layout-internal entry)
+                      'checkpoint-load))))
+      (state-dict-c2-owned-tensor-borrow-end-internal
+        p1 access entry 'checkpoint-load)
+      payload)))
+
+(define (inspect-owner-exact owner checkpoint-path x1-path policy)
+  (let* ((borrow
+           (c2-training-state-borrow-begin-internal owner 'checkpoint-load))
+         (projection
+           (c2-training-state-borrow-projection-internal borrow))
+         (access
+           (c2-training-state-borrow-owner-token-internal
+             borrow 'checkpoint-load))
+         (p1 (vector-ref projection 0))
+         (o2 (vector-ref projection 1))
+         (controls (vector-ref projection 2))
+         (topology (vector-ref projection 3))
+         (o2-projection (vector-ref projection 4))
+         (p1-projection
+           (state-dict-c2-owned-projection-internal
+             p1 access 'checkpoint-load))
+         (entries (vector-ref p1-projection 4))
+         (parameter (car entries))
+         (buffer (car (cdr entries)))
+         (raw
+           (c1-read-file checkpoint-path
+             (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+             'checkpoint-load))
+         (expected-x1
+           (c1-read-file x1-path
+             (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+             'checkpoint-load))
+         (tokenizer-bytes (c1-read-u32 raw 136))
+         (x1-at (+ 256 tokenizer-bytes 93 19 57 71))
+         (current-at (+ x1-at (c1-read-u64 raw 120)))
+         (epoch-at (+ current-at (c1-read-u32 raw 128)))
+         (dataset (vector-ref controls 2))
+         (resolved (vector-ref controls 3))
+         (avg (make-bytevector 8 165))
+         (sq (make-bytevector 8 165)))
+    (check "exact P1 format/version/features/adapter"
+      (and (eq? (vector-ref p1-projection 0) 'transformer-state-dict)
+           (equal? (vector-ref p1-projection 1) '(1 0))
+           (equal? (vector-ref p1-projection 2) '())
+           (equal? (vector-ref p1-projection 3)
+                   '(transformer-tensor-provider 2 0
+                     i2-dense-cpu-f32-v1))))
+    (check "exact P1 entry count/order and aliases"
+      (and (= (i2-bounded-list-length entries 3) 2)
+           (equal? (vector-ref p1-projection 5) '())
+           (equal? (state-entry-path-internal parameter) '("weight"))
+           (eq? (state-entry-kind-internal parameter) 'parameter)
+           (equal? (state-entry-shape-internal parameter) '(2))
+           (equal? (state-entry-path-internal buffer) '("zz-buffer"))
+           (eq? (state-entry-kind-internal buffer) 'buffer)
+           (equal? (state-entry-shape-internal buffer) '(1))))
+    (check "exact P1 dtype/device/layout"
+      (and (eq? (state-entry-dtype-internal parameter) 'f32)
+           (eq? (state-entry-device-internal parameter) 'cpu)
+           (eq? (state-entry-layout-internal parameter)
+                'dense-row-major-contiguous)
+           (eq? (state-entry-dtype-internal buffer) 'f32)
+           (eq? (state-entry-device-internal buffer) 'cpu)
+           (eq? (state-entry-layout-internal buffer)
+                'dense-row-major-contiguous)))
+    (check "exact P1 parameter bits"
+      (bytes=? (entry-payload p1 access parameter)
+               (bytes8 0 0 128 63 0 0 0 64)))
+    (check "exact P1 negative-zero buffer bits"
+      (bytes=? (entry-payload p1 access buffer) (bytes4 0 0 0 128)))
+    (check "exact parameter topology and aliases"
+      (equal? topology (vector '(("weight")) '((2)) '())))
+    (check "exact O2 logical projection"
+      (and (equal? (vector-ref o2-projection 0)
+             '(transformer-optimizer-config 1 0 () adamw f32 cpu
+               (none) (constant)
+               ((group (("weight")) "3a83126f" "3f666666"
+                       "3f7d70a4" "322bcc77" "00000000"))))
+           (equal? (vector-ref o2-projection 1) '(("weight")))
+           (equal? (vector-ref o2-projection 2) '())
+           (= (vector-ref o2-projection 3) 0)))
+    (o2-state-copy-moment-bits-c2-owned-internal
+      (vector o2 0 0 avg 2 access 'checkpoint-load))
+    (o2-state-copy-moment-bits-c2-owned-internal
+      (vector o2 0 1 sq 2 access 'checkpoint-load))
+    (check "exact O2 avg/sq bits"
+      (and (bytes=? avg (make-bytevector 8 0))
+           (bytes=? sq (make-bytevector 8 0))))
+    (check "exact signed RNG words"
+      (equal? (vector-ref controls 0)
+              (vector 'philox4x32-10 1 1729 -1 -9223372036854775808)))
+    (check "exact tokenizer identity and vocabulary"
+      (and (string=? (vector-ref (vector-ref controls 1) 0)
+             "sha256:eshkol-byte-tokenizer-v1:0000000000000000000000000000000000000000000000000000000000000000")
+           (= (vector-ref (vector-ref controls 1) 1) 256)))
+    (check "exact current and epoch cursor bytes"
+      (and (bytes=? (vector-ref dataset 3)
+                    (bytevector-copy raw current-at
+                      (+ current-at (c1-read-u32 raw 128))))
+           (bytes=? (vector-ref dataset 4)
+                    (bytevector-copy raw epoch-at
+                      (+ epoch-at (c1-read-u32 raw 132))))
+           (= (vector-ref dataset 7) 2)
+           (= (vector-ref dataset 8) 1)
+           (= (vector-ref dataset 9) 0)))
+    (check "exact X1 canonical bytes and fingerprint"
+      (and (bytes=? (vector-ref resolved 0) expected-x1)
+           (string=? (vector-ref resolved 1)
+             (utf8->string
+               (bytevector-copy raw (+ 256 tokenizer-bytes)
+                 (+ 256 tokenizer-bytes 93))))))
+    (check "exact X1 resolved projection"
+      (equal? (vector-ref resolved 2)
+              (vector 'eshkol-resolved-run 1 0 256 128 64 2 4 4 16
+                      'f32 'cpu #t 1729 1)))
+    (check "exact training counters"
+      (equal? (vector-ref controls 4) (vector 2 0 0)))
+    (c2-training-state-borrow-end-internal borrow)))
+
+(define args (command-line))
+(define valid-path (car (cdr args)))
+(define exact-path (car (cdr (cdr args))))
+(define bool-path (car (cdr (cdr (cdr args)))))
+(define i64-path (car (cdr (cdr (cdr (cdr args))))))
+(define x1-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+
+;;; Stage authority is registry identity, never tag/shape/value resemblance.
+(define identity-source
+  (c2-checkpoint-load-stage-internal valid-path policy))
+(define identity-copy
+  (guard (raised (#t raised))
+    (error "transformer.checkpoint-load-stage:c2-v1")))
+(define identity-lookalike
+  (vector 'c2-private-checkpoint-load-stage-v1))
+(define identity-forgery
+  (vector c2-load-stage-tag 'live #f #f #f #f))
+(define identity-stage-counts (c2-load-stage-counts-internal))
+(define identity-native-counts (snapshot-counts))
+(define (check-fake-stage fake)
+  (expect-error "unregistered stage cannot release"
+                'invalid-argument 'checkpoint-load
+    (lambda () (c2-checkpoint-load-staging-release-internal! fake)))
+  (expect-error "unregistered stage cannot reconstruct"
+                'invalid-argument 'checkpoint-load
+    (lambda ()
+      (c2-checkpoint-load-reconstruct-internal fake 'checkpoint-load))))
+(check-fake-stage identity-copy)
+(check-fake-stage identity-lookalike)
+(check-fake-stage identity-forgery)
+(check "forged staging attempts preserve exact stage/native counts"
+  (and (equal? identity-stage-counts (c2-load-stage-counts-internal))
+       (equal? identity-native-counts (snapshot-counts))))
+(define before-identity-release (c2-load-stage-counts-internal))
+(check "real identity source releases"
+  (c2-checkpoint-load-staging-release-internal! identity-source))
+(check-consumed-stage before-identity-release identity-source)
+
+(define initial-stage-counts (c2-load-stage-counts-internal))
+(define initial-native-counts (snapshot-counts))
+(define released-stage (c2-checkpoint-load-stage-internal valid-path policy))
+(define staged-counts (c2-load-stage-counts-internal))
+(check "stage publishes one exact live staging owner"
+       (and (= (vector-ref staged-counts 0)
+               (+ 1 (vector-ref initial-stage-counts 0)))
+            (= (vector-ref staged-counts 1) 0)
+            (= (vector-ref staged-counts 2)
+               (vector-ref initial-stage-counts 2))
+            (= (vector-ref staged-counts 3) 4)))
+(check "staging invokes zero tensor codecs"
+       (= (vector-ref initial-native-counts 22)
+          (c2-load-test-counter 22)))
+(check "staging releases both native retained images and descriptors"
+       (native-staging-flat?))
+(check "explicit staging release succeeds"
+       (c2-checkpoint-load-staging-release-internal! released-stage))
+(check "exact dead staging release is idempotent"
+       (c2-checkpoint-load-staging-release-internal! released-stage))
+(define released-counts (c2-load-stage-counts-internal))
+(check "released staging is dead with no large references"
+       (and (= (vector-ref released-counts 0)
+               (vector-ref initial-stage-counts 0))
+            (= (vector-ref released-counts 2)
+               (+ 1 (vector-ref initial-stage-counts 2)))
+            (= (vector-ref released-counts 3) 0)))
+(expect-error "released staging cannot reconstruct"
+              'invalid-state 'checkpoint-load
+  (lambda ()
+    (c2-checkpoint-load-reconstruct-internal
+      released-stage 'checkpoint-load)))
+
+;;; Both validly rechecksummed non-f32 buffer types reject in the native full
+;;; parser before stage publication or the first I2 decoder builder.
+(define before-hostile-stage (c2-load-stage-counts-internal))
+(define before-hostile-native (snapshot-counts))
+(expect-error "bool nested buffer rejects before codec"
+              'dtype-mismatch 'checkpoint-load
+  (lambda () (c2-checkpoint-load-stage-internal bool-path policy)))
+(expect-error "i64 nested buffer rejects before codec"
+              'dtype-mismatch 'checkpoint-load
+  (lambda () (c2-checkpoint-load-stage-internal i64-path policy)))
+(check "semantic corruption publishes no staging owner"
+       (equal? before-hostile-stage (c2-load-stage-counts-internal)))
+(check "semantic corruption invokes zero codec/reconstruction events"
+       (equal? before-hostile-native (snapshot-counts)))
+(check "semantic corruption drains native reader/image resources"
+       (native-staging-flat?))
+
+;;; A native post-validation failure occurs before the first destination copy.
+(c2-load-test-native-reset)
+(c2-load-test-fail-after-validate 1)
+(define before-native-failure (snapshot-counts))
+(expect-error "native stage defect is internal"
+              'internal 'checkpoint-load
+  (lambda () (c2-checkpoint-load-stage-internal valid-path policy)))
+(check "native stage defect copies no component"
+       (= (c2-load-test-copy-count) 0))
+(check "native stage defect invokes no codec"
+       (equal? before-native-failure (snapshot-counts)))
+(check "native stage defect publishes no stage"
+       (equal? before-hostile-stage (c2-load-stage-counts-internal)))
+(check "native stage defect drains native resources" (native-staging-flat?))
+(c2-load-test-native-reset)
+
+;;; The UTF-8 conversion and each of the ten bytevector allocations have
+;;; independent raised-#f coverage. Every failure is internal/checkpoint-load,
+;;; publishes no stage, copies no component, and drains native resources.
+(define saved-utf8 c2-load-string->utf8-internal)
+(define before-utf8-stage (c2-load-stage-counts-internal))
+(define before-utf8-native (snapshot-counts))
+(set! c2-load-string->utf8-internal
+  (lambda (value) (raise #f)))
+(c2-load-test-native-reset)
+(expect-error "raised false during path UTF-8 conversion normalizes internal"
+              'internal 'checkpoint-load
+  (lambda () (c2-checkpoint-load-stage-internal valid-path policy)))
+(set! c2-load-string->utf8-internal saved-utf8)
+(check "path conversion failure is prepublication and zero-codec"
+  (and (equal? before-utf8-stage (c2-load-stage-counts-internal))
+       (equal? before-utf8-native (snapshot-counts))
+       (= (c2-load-test-copy-count) 0)
+       (native-staging-flat?)))
+
+(define saved-allocator c2-load-allocate-bytevector-internal)
+(define (check-allocation-failure fail-at)
+  (let ((calls 0)
+        (before-stage (c2-load-stage-counts-internal))
+        (before-native (snapshot-counts)))
+    (set! c2-load-allocate-bytevector-internal
+      (lambda (length)
+        (set! calls (+ calls 1))
+        (if (= calls fail-at) (raise #f)
+            (saved-allocator length))))
+    (c2-load-test-native-reset)
+    (expect-error "managed bytevector allocation failure normalizes internal"
+                  'internal 'checkpoint-load
+      (lambda () (c2-checkpoint-load-stage-internal valid-path policy)))
+    (set! c2-load-allocate-bytevector-internal saved-allocator)
+    (check "managed fail-at reaches the exact allocation call"
+      (= calls fail-at))
+    (check "managed allocation failure is atomic and zero-codec"
+      (and (equal? before-stage (c2-load-stage-counts-internal))
+           (equal? before-native (snapshot-counts))
+           (= (c2-load-test-copy-count) 0)
+           (native-staging-flat?)))))
+(let allocation-loop ((fail-at 1))
+  (if (> fail-at 10) #t
+      (begin
+        (check-allocation-failure fail-at)
+        (allocation-loop (+ fail-at 1)))))
+
+;;; Managed projection exceptions, including #f, normalize only after the
+;;; native full parser and publish no staging identity.
+(define saved-o2-parser c2-load-parse-o2-internal)
+(set! c2-load-parse-o2-internal
+  (lambda (metadata payload count groups completed) (raise #f)))
+(expect-error "raised false during inert projection normalizes internal"
+              'internal 'checkpoint-load
+  (lambda () (c2-checkpoint-load-stage-internal valid-path policy)))
+(set! c2-load-parse-o2-internal saved-o2-parser)
+(check "failed inert projection publishes no stage"
+       (equal? before-hostile-stage (c2-load-stage-counts-internal)))
+(check "failed inert projection invokes zero codec"
+       (= (vector-ref before-native-failure 22)
+          (c2-load-test-counter 22)))
+(define saved-controls c2-load-controls-internal)
+(set! c2-load-controls-internal
+  (lambda (tokenizer config x1 current epoch total completed epochs
+                     key low high)
+    (raise #f)))
+(expect-error "raised false during controls validation normalizes internal"
+              'internal 'checkpoint-load
+  (lambda () (c2-checkpoint-load-stage-internal valid-path policy)))
+(set! c2-load-controls-internal saved-controls)
+(check "failed controls validation publishes no stage or codec"
+  (and (equal? before-hostile-stage (c2-load-stage-counts-internal))
+       (= (vector-ref before-native-failure 22)
+          (c2-load-test-counter 22))
+       (native-staging-flat?)))
+
+;;; Successful component reconstruction publishes one exact C2 owner. The
+;;; stage becomes a cleared tombstone and its second consumption is rejected.
+(define before-success (snapshot-counts))
+(define before-success-c2 (c2-load-owner-counts-internal))
+(define success-stage (c2-checkpoint-load-stage-internal exact-path policy))
+(define owner
+  (c2-checkpoint-load-reconstruct-internal success-stage 'checkpoint-load))
+(check "reconstruction publishes an exact live C2 owner"
+       (c2-load-exact-live-owner? owner))
+(define after-success-stage (c2-load-stage-counts-internal))
+(check "successful reconstruction consumes and clears staging"
+       (and (= (vector-ref after-success-stage 0)
+               (vector-ref initial-stage-counts 0))
+            (= (vector-ref after-success-stage 1) 0)
+            (= (vector-ref after-success-stage 2)
+               (+ 2 (vector-ref initial-stage-counts 2)))
+            (= (vector-ref after-success-stage 3) 0)))
+(expect-error "successful staging is one-shot"
+              'invalid-state 'checkpoint-load
+  (lambda ()
+    (c2-checkpoint-load-reconstruct-internal success-stage 'checkpoint-load)))
+(define success-native (snapshot-counts))
+(check "two model decoder builders retire"
+       (= (vector-ref success-native 22)
+          (+ 2 (vector-ref before-success 22))))
+(check "two P1 plus two O2 storage owners are live"
+       (= (vector-ref success-native 6)
+          (+ 4 (vector-ref before-success 6))))
+(check "one O2 state and two moment handles are live"
+       (and (= (vector-ref success-native 26)
+               (+ 1 (vector-ref before-success 26)))
+            (= (vector-ref success-native 28)
+               (+ 2 (vector-ref before-success 28)))
+            (= (vector-ref success-native 31)
+               (+ 2 (vector-ref before-success 31)))))
+(check "one exact C2 owner is live and none are busy/releasing"
+  (let ((counts (c2-load-owner-counts-internal)))
+    (and (= (vector-ref counts 0) (+ 1 (vector-ref before-success-c2 0)))
+         (= (vector-ref counts 1) (vector-ref before-success-c2 1))
+         (= (vector-ref counts 2) (vector-ref before-success-c2 2))
+         (= (vector-ref counts 3) (vector-ref before-success-c2 3)))))
+(inspect-owner-exact owner exact-path x1-path policy)
+(check "successful C2 owner releases"
+       (c2-training-state-release-internal! owner 'trainer-state-release!))
+(define after-success-release (snapshot-counts))
+(check "successful release restores every storage-bearing live count"
+       (same-live-storage? before-success after-success-release))
+(check "successful release retires one O2 state and two handles"
+       (and (= (vector-ref after-success-release 27)
+               (+ 1 (vector-ref before-success 27)))
+            (= (vector-ref after-success-release 29)
+               (+ 2 (vector-ref before-success 29)))))
+(check "successful release retires the exact C2 owner"
+  (let ((counts (c2-load-owner-counts-internal)))
+    (and (= (vector-ref counts 0) (vector-ref before-success-c2 0))
+         (= (vector-ref counts 1) (vector-ref before-success-c2 1))
+         (= (vector-ref counts 2) (vector-ref before-success-c2 2))
+         (= (vector-ref counts 3) (+ 1 (vector-ref before-success-c2 3))))))
+
+;;; A second, uninspected E=2/P=1 load/release round isolates the exact
+;;; lifecycle formula from the content inspector's deliberate tensor borrows.
+(define clean-before (snapshot-counts))
+(define clean-before-c2 (c2-load-owner-counts-internal))
+(define clean-stage (c2-checkpoint-load-stage-internal exact-path policy))
+(define clean-staged-counts (c2-load-stage-counts-internal))
+(define clean-owner
+  (c2-checkpoint-load-reconstruct-internal clean-stage 'checkpoint-load))
+(check "repeated load creates distinct exact stage/owner identities"
+  (and (not (eq? clean-stage success-stage))
+       (not (eq? clean-owner owner))
+       (c2-load-exact-live-owner? clean-owner)))
+(check-consumed-stage clean-staged-counts clean-stage)
+(define clean-live (snapshot-counts))
+(check "clean E=2/P=1 reconstruction has exact live storage"
+  (and (= (vector-ref clean-live 0) (+ 4 (vector-ref clean-before 0)))
+       (= (vector-ref clean-live 6) (+ 4 (vector-ref clean-before 6)))
+       (= (vector-ref clean-live 26) (+ 1 (vector-ref clean-before 26)))
+       (= (vector-ref clean-live 28) (+ 2 (vector-ref clean-before 28)))
+       (= (vector-ref clean-live 31) (+ 2 (vector-ref clean-before 31)))
+       (= (vector-ref clean-live 22) (+ 2 (vector-ref clean-before 22)))
+       (= (vector-ref clean-live 32) (vector-ref clean-before 32))
+       (= (vector-ref clean-live 33) (+ 1 (vector-ref clean-before 33)))))
+(check "clean repeated C2 owner releases"
+  (c2-training-state-release-internal!
+    clean-owner 'trainer-state-release!))
+(define clean-after (snapshot-counts))
+(check "clean lifecycle restores every storage-bearing live count"
+  (same-live-storage? clean-before clean-after))
+(check "clean E=2/P=1 lifecycle has exact retired deltas"
+  (and (= (vector-ref clean-after 7) (+ 8 (vector-ref clean-before 7)))
+       (= (vector-ref clean-after 22) (+ 2 (vector-ref clean-before 22)))
+       (= (vector-ref clean-after 34) (+ 1 (vector-ref clean-before 34)))
+       (= (vector-ref clean-after 27) (+ 1 (vector-ref clean-before 27)))
+       (= (vector-ref clean-after 29) (+ 2 (vector-ref clean-before 29)))))
+(check "clean repeated lifecycle retires exactly one C2 owner"
+  (let ((counts (c2-load-owner-counts-internal)))
+    (and (= (vector-ref counts 0) (vector-ref clean-before-c2 0))
+         (= (vector-ref counts 1) (vector-ref clean-before-c2 1))
+         (= (vector-ref counts 2) (vector-ref clean-before-c2 2))
+         (= (vector-ref counts 3) (+ 1 (vector-ref clean-before-c2 3))))))
+
+;;; C1 pre-return failure creates no provider owner or tombstone.
+(define saved-decode c2-load-decode-model-internal)
+(set! c2-load-decode-model-internal
+  (lambda (model subpolicy) (raise #f)))
+(define decode-failure
+  (run-reconstruction-failure
+    "raised false during C1 decode normalizes internal" valid-path))
+(set! c2-load-decode-model-internal saved-decode)
+(check-failure-formula decode-failure 0 0 0 0 0 0)
+
+;;; A real E=2 decode that fails on the second tensor allocation drains the
+;;; completed first-entry prefix and the in-progress second decode builder.
+(c2-load-test-f32-fail-alloc 8)
+(define decode-prefix-failure
+  (run-reconstruction-failure
+    "partial C1 decoded prefix rolls back exactly" exact-path))
+(c2-load-test-f32-reset)
+(check-failure-formula decode-prefix-failure 2 2 0 0 0 0)
+
+;;; Exact O2 create/set/prepare/commit seams prove each abort boundary. The
+;;; E=1 C1 owner contributes +2 retired f32 tensors/+1 decoder/+1 P1 token;
+;;; real O2 set additionally contributes four moment tensor controls.
+(define saved-native-create o2-c2-native-reconstruct-create-internal)
+(define saved-native-set o2-c2-native-reconstruct-set-internal)
+(define saved-native-prepare o2-c2-native-reconstruct-prepare-internal)
+(define saved-native-commit o2-c2-native-reconstruct-commit-internal)
+
+(set! o2-c2-native-reconstruct-create-internal
+  (lambda (count clip clip-bits schedule warmup total ratio completed)
+    (raise #f)))
+(define o2-create-failure
+  (run-reconstruction-failure "O2 create failure aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-create-internal saved-native-create)
+(check-failure-formula o2-create-failure 2 1 1 0 0 0)
+
+(set! o2-c2-native-reconstruct-set-internal
+  (lambda (builder index rank shape elements avg sq lr b1 b2 eps wd)
+    (raise #f)))
+(define o2-set-failure
+  (run-reconstruction-failure "O2 set failure aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-set-internal saved-native-set)
+(check-failure-formula o2-set-failure 2 1 1 0 0 0)
+
+(set! o2-c2-native-reconstruct-prepare-internal
+  (lambda (builder) (raise #f)))
+(define o2-prepare-failure
+  (run-reconstruction-failure "O2 prepare failure aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-prepare-internal saved-native-prepare)
+(check-failure-formula o2-prepare-failure 6 1 1 0 0 0)
+
+(set! o2-c2-native-reconstruct-commit-internal
+  (lambda (builder) (raise #f)))
+(define o2-commit-failure
+  (run-reconstruction-failure "O2 commit failure aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-commit-internal saved-native-commit)
+(check-failure-formula o2-commit-failure 6 1 1 0 0 0)
+
+;;; Native result branches are distinct from exception normalization: each
+;;; wrapper returns the exact null/nonzero result consumed by production O2.
+(set! o2-c2-native-reconstruct-create-internal
+  (lambda (count clip clip-bits schedule warmup total ratio completed) '()))
+(define o2-create-null
+  (run-reconstruction-failure
+    "O2 create null result aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-create-internal saved-native-create)
+(check-failure-formula o2-create-null 2 1 1 0 0 0)
+
+(set! o2-c2-native-reconstruct-set-internal
+  (lambda (builder index rank shape elements avg sq lr b1 b2 eps wd) 9))
+(define o2-set-status
+  (run-reconstruction-failure
+    "O2 set nonzero result aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-set-internal saved-native-set)
+(check-failure-formula o2-set-status 2 1 1 0 0 0)
+
+(set! o2-c2-native-reconstruct-prepare-internal
+  (lambda (builder) 9))
+(define o2-prepare-status
+  (run-reconstruction-failure
+    "O2 prepare nonzero result aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-prepare-internal saved-native-prepare)
+(check-failure-formula o2-prepare-status 6 1 1 0 0 0)
+
+(set! o2-c2-native-reconstruct-commit-internal
+  (lambda (builder) '()))
+(define o2-commit-null
+  (run-reconstruction-failure
+    "O2 commit null result aborts exactly" valid-path))
+(set! o2-c2-native-reconstruct-commit-internal saved-native-commit)
+(check-failure-formula o2-commit-null 6 1 1 0 0 0)
+
+;;; A trusted O2 wrapper may commit into request[7] and then substitute a
+;;; return or throw. The loader recovers exact request publication authority.
+(define saved-o2-reconstruct c2-load-reconstruct-o2-internal)
+(set! c2-load-reconstruct-o2-internal
+  (lambda (request)
+    (saved-o2-reconstruct request)
+    (vector 'substituted-o2-return)))
+(define o2-substitution
+  (run-reconstruction-failure
+    "post-commit O2 substitution rolls back" valid-path))
+(set! c2-load-reconstruct-o2-internal saved-o2-reconstruct)
+(check-failure-formula o2-substitution 6 1 1 1 2 0)
+
+(set! c2-load-reconstruct-o2-internal
+  (lambda (request)
+    (saved-o2-reconstruct request)
+    (raise #f)))
+(define o2-post-commit-false
+  (run-reconstruction-failure
+    "post-commit O2 raised false rolls back" valid-path))
+(set! c2-load-reconstruct-o2-internal saved-o2-reconstruct)
+(check-failure-formula o2-post-commit-false 6 1 1 1 2 0)
+
+(set! c2-load-reconstruct-o2-internal
+  (lambda (request)
+    (saved-o2-reconstruct request)
+    (o2-fail 'internal 'checkpoint-load "injected post-commit defect")))
+(define o2-post-commit-structured
+  (run-reconstruction-failure
+    "post-commit O2 structured error rolls back" valid-path))
+(set! c2-load-reconstruct-o2-internal saved-o2-reconstruct)
+(check-failure-formula o2-post-commit-structured 6 1 1 1 2 0)
+
+;;; Compose failures before transfer retain ordinary P1/O2 rollback authority.
+(define saved-compose c2-load-compose-owner-internal)
+(set! c2-load-compose-owner-internal
+  (lambda (request) (raise #f)))
+(define compose-false
+  (run-reconstruction-failure
+    "pre-consumption compose raised false rolls back" valid-path))
+(set! c2-load-compose-owner-internal saved-compose)
+(check-failure-formula compose-false 6 1 1 1 2 0)
+
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (c2-load-fail 'internal 'checkpoint-load
+                  "injected compose defect" '())))
+(define compose-structured
+  (run-reconstruction-failure
+    "pre-consumption compose structured error rolls back" valid-path))
+(set! c2-load-compose-owner-internal saved-compose)
+(check-failure-formula compose-structured 6 1 1 1 2 0)
+
+;;; Post-consumption substitute/throw paths transfer rollback authority to the
+;;; exact request[5] C2 owner before normalizing the defect.
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (saved-compose request)
+    (vector 'substituted-compose-return)))
+(define compose-substitution
+  (run-reconstruction-failure
+    "post-consumption compose substitution rolls back" valid-path))
+(set! c2-load-compose-owner-internal saved-compose)
+(check-failure-formula compose-substitution 6 1 1 1 2 1)
+
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (saved-compose request)
+    (raise #f)))
+(define compose-post-false
+  (run-reconstruction-failure
+    "post-consumption compose raised false rolls back" valid-path))
+(set! c2-load-compose-owner-internal saved-compose)
+(check-failure-formula compose-post-false 6 1 1 1 2 1)
+
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (saved-compose request)
+    (c2-load-fail 'internal 'checkpoint-load
+                  "injected post-compose defect" '())))
+(define compose-post-structured
+  (run-reconstruction-failure
+    "post-consumption compose structured error rolls back" valid-path))
+(set! c2-load-compose-owner-internal saved-compose)
+(check-failure-formula compose-post-structured 6 1 1 1 2 1)
+
+;;; If post-consumption normalization itself observes a faulty C2 releaser,
+;;; cleanup still retires the exact published owner before reporting INTERNAL.
+(define saved-release-c2 c2-load-release-c2-internal)
+(define cleanup-c2-calls 0)
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (saved-compose request)
+    (raise #f)))
+(set! c2-load-release-c2-internal
+  (lambda (value operation)
+    (set! cleanup-c2-calls (+ cleanup-c2-calls 1))
+    (saved-release-c2 value operation)
+    (raise #f)))
+(define cleanup-c2-false
+  (run-reconstruction-failure
+    "post-consumption C2 cleanup defect retires owner" valid-path))
+(set! c2-load-release-c2-internal saved-release-c2)
+(set! c2-load-compose-owner-internal saved-compose)
+(check "post-consumption C2 cleanup is attempted exactly once"
+       (= cleanup-c2-calls 1))
+(check-failure-formula cleanup-c2-false 6 1 1 1 2 1)
+
+(set! cleanup-c2-calls 0)
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (saved-compose request)
+    (c2-load-fail 'internal 'checkpoint-load
+                  "injected post-compose defect" '())))
+(set! c2-load-release-c2-internal
+  (lambda (value operation)
+    (set! cleanup-c2-calls (+ cleanup-c2-calls 1))
+    (saved-release-c2 value operation)
+    (c2-load-fail 'internal operation "C2 cleanup defect" '())))
+(define cleanup-c2-structured
+  (run-reconstruction-failure
+    "structured post-consumption C2 cleanup defect retires owner" valid-path))
+(set! c2-load-release-c2-internal saved-release-c2)
+(set! c2-load-compose-owner-internal saved-compose)
+(check "structured post-consumption C2 cleanup is attempted exactly once"
+       (= cleanup-c2-calls 1))
+(check-failure-formula cleanup-c2-structured 6 1 1 1 2 1)
+
+;;; Cleanup catches both structured errors and #f while continuing through the
+;;; second component. Each injected wrapper releases its owner first, so the
+;;; provider reports a defect without manufacturing a storage leak.
+(define saved-release-p1 c2-load-release-p1-internal)
+(define saved-release-o2 c2-load-release-o2-internal)
+(define cleanup-p1-calls 0)
+(define cleanup-o2-calls 0)
+(set! c2-load-compose-owner-internal
+  (lambda (request) (raise #f)))
+(set! c2-load-release-p1-internal
+  (lambda (value)
+    (set! cleanup-p1-calls (+ cleanup-p1-calls 1))
+    (saved-release-p1 value)
+    (raise #f)))
+(set! c2-load-release-o2-internal
+  (lambda (value)
+    (set! cleanup-o2-calls (+ cleanup-o2-calls 1))
+    (saved-release-o2 value)
+    (raise #f)))
+(define cleanup-false
+  (run-reconstruction-failure
+    "raised false cleanup defects continue through both owners" valid-path))
+(set! c2-load-release-p1-internal saved-release-p1)
+(set! c2-load-release-o2-internal saved-release-o2)
+(check "raised false cleanup attempts both owners exactly once"
+  (and (= cleanup-p1-calls 1) (= cleanup-o2-calls 1)))
+(check-failure-formula cleanup-false 6 1 1 1 2 0)
+
+(set! cleanup-p1-calls 0)
+(set! cleanup-o2-calls 0)
+(set! c2-load-release-p1-internal
+  (lambda (value)
+    (set! cleanup-p1-calls (+ cleanup-p1-calls 1))
+    (saved-release-p1 value)
+    (c2-load-fail 'internal 'checkpoint-load "P1 cleanup defect" '())))
+(set! c2-load-release-o2-internal
+  (lambda (value)
+    (set! cleanup-o2-calls (+ cleanup-o2-calls 1))
+    (saved-release-o2 value)
+    (c2-load-fail 'internal 'checkpoint-load "O2 cleanup defect" '())))
+(define cleanup-structured
+  (run-reconstruction-failure
+    "structured cleanup defects continue through both owners" valid-path))
+(set! c2-load-release-p1-internal saved-release-p1)
+(set! c2-load-release-o2-internal saved-release-o2)
+(set! c2-load-compose-owner-internal saved-compose)
+(check "structured cleanup attempts both owners exactly once"
+  (and (= cleanup-p1-calls 1) (= cleanup-o2-calls 1)))
+(check-failure-formula cleanup-structured 6 1 1 1 2 0)
+
+(check "every native reader/image resource is flat at exit"
+       (native-staging-flat?))
+
+(display "C2 PRIVATE CHECKPOINT LOAD PASS: ")
+(display checks) (display " checks") (newline)

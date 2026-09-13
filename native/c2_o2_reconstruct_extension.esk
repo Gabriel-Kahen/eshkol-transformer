@@ -16,6 +16,29 @@
 (extern i64 o2-c2-native-copy-moment-bits ptr i64 i64 ptr i64
         :real et_c2_private_o2_state_copy_moment_bits_v1)
 
+;;; Mutable private seams let the C2 LOAD transaction prove each native O2
+;;; publication boundary without changing the native ABI or public surface.
+(define (o2-c2-create-call
+          count clip clip-bits schedule warmup total ratio completed)
+  (o2-c2-native-reconstruct-create
+    count clip clip-bits schedule warmup total ratio completed))
+
+(define (o2-c2-set-call
+          builder index rank shape elements avg sq lr b1 b2 eps wd)
+  (o2-c2-native-reconstruct-set
+    builder index rank shape elements avg sq lr b1 b2 eps wd))
+
+(define (o2-c2-prepare-call builder)
+  (o2-c2-native-reconstruct-prepare builder))
+
+(define (o2-c2-commit-call builder)
+  (o2-c2-native-reconstruct-commit builder))
+
+(define o2-c2-native-reconstruct-create-internal o2-c2-create-call)
+(define o2-c2-native-reconstruct-set-internal o2-c2-set-call)
+(define o2-c2-native-reconstruct-prepare-internal o2-c2-prepare-call)
+(define o2-c2-native-reconstruct-commit-internal o2-c2-commit-call)
+
 (define o2-c2-reconstruct-tag (vector 'c2-private-o2-reconstruct-v1))
 
 (define (o2-c2-copy-canonical-paths operation borrowed)
@@ -184,7 +207,7 @@
         (let* ((entry (vector-ref entries index))
                (shape (vector-ref entry 1))
                (group (vector-ref entry 6)))
-          (if (not (= (o2-c2-native-reconstruct-set
+          (if (not (= (o2-c2-native-reconstruct-set-internal
                         builder index
                         (i2-bounded-list-length shape 65)
                         (vector-ref entry 2) (vector-ref entry 5)
@@ -221,7 +244,7 @@
            (schedule (vector-ref parsed 2)))
       (o2-c2-state-projection-budget! operation config paths aliases entries)
       (let ((builder
-              (o2-c2-native-reconstruct-create
+              (o2-c2-native-reconstruct-create-internal
                 (vector-length entries) (vector-ref clip 0)
                 (vector-ref clip 1) (vector-ref schedule 0)
                 (vector-ref schedule 1) (vector-ref schedule 2)
@@ -240,9 +263,9 @@
                    (vector shell #f config paths aliases completed
                            'constructing #f))
                  (next-registry (cons state o2-states)))
-            (if (not (= (o2-c2-native-reconstruct-prepare builder) 0))
+            (if (not (= (o2-c2-native-reconstruct-prepare-internal builder) 0))
                 (o2-native-fail operation))
-            (let ((native (o2-c2-native-reconstruct-commit builder)))
+            (let ((native (o2-c2-native-reconstruct-commit-internal builder)))
               (if (null? native) (o2-native-fail operation))
               (vector-set! state 1 native)
               (vector-set! state 6 'live)

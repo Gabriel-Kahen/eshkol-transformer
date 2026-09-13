@@ -137,6 +137,18 @@
                      (refs (+ index 1)
                            (+ count (if (vector-ref entry index) 1 0)))))))))))
 
+(define (c2-load-owner-counts-internal)
+  (let loop ((remaining c2-training-state-states)
+             (live 0) (busy 0) (releasing 0) (dead 0))
+    (if (null? remaining)
+        (vector live busy releasing dead)
+        (let ((status (vector-ref (car remaining) 7)))
+          (loop (cdr remaining)
+                (+ live (if (eq? status 'live) 1 0))
+                (+ busy (if (and (not (symbol? status)) status) 1 0))
+                (+ releasing (if (eq? status 'releasing) 1 0))
+                (+ dead (if (eq? status 'dead) 1 0)))))))
+
 (define (c2-load-stage-identity)
   (guard (raised (#t raised))
     (error "transformer.checkpoint-load-stage:c2-v1")))
@@ -333,6 +345,9 @@
       model subpolicy i2-checkpoint-codec-internal i2-provider-name)))
 (define c2-load-reconstruct-o2-internal o2-state-reconstruct-internal)
 (define c2-load-compose-owner-internal c2-training-state-compose-internal)
+(define c2-load-release-p1-internal state-dict-release!)
+(define c2-load-release-o2-internal o2-public-optimizer-state-release!)
+(define c2-load-release-c2-internal c2-training-state-release-internal!)
 
 (define (c2-load-build-stage-entry
           optimizer-metadata optimizer-payload tokenizer config-fingerprint
@@ -478,7 +493,7 @@
                      (set! have-defect #t)
                      (set! first-defect caught)
                      #f))
-            (state-dict-release! p1))))
+            (c2-load-release-p1-internal p1))))
     (let ((o2 (vector-ref o2-cell 0)))
       (vector-set! o2-cell 0 #f)
       (if o2
@@ -489,7 +504,7 @@
                            (set! have-defect #t)
                            (set! first-defect caught)))
                      #f))
-            (o2-public-optimizer-state-release! o2))))
+            (c2-load-release-o2-internal o2))))
     (let ((c2 (vector-ref c2-cell 0)))
       (vector-set! c2-cell 0 #f)
       (if c2
@@ -500,7 +515,7 @@
                            (set! have-defect #t)
                            (set! first-defect caught)))
                      #f))
-            (c2-training-state-release-internal!
+            (c2-load-release-c2-internal
               c2 'trainer-state-release!))))
     (vector-set! cleanup-outcome 0 have-defect)
     (vector-set! cleanup-outcome 1 first-defect)
@@ -509,6 +524,24 @@
 (define (c2-load-exact-live-owner? value)
   (let ((state (c2-training-state-find value)))
     (and state (eq? (vector-ref state 7) 'live))))
+
+(define (c2-load-exact-live-o2? value)
+  (let ((state (o2-find-identity value o2-states)))
+    (and state (eq? (vector-ref state 6) 'live))))
+
+(define (c2-load-take-compose-authority!
+          compose p1-cell o2-cell c2-cell)
+  (let ((published (vector-ref compose 5)))
+    (if (and (eq? (vector-ref compose 1) #f)
+             (eq? (vector-ref compose 2) #f)
+             published
+             (c2-load-exact-live-owner? published))
+        (begin
+          (vector-set! p1-cell 0 #f)
+          (vector-set! o2-cell 0 #f)
+          (vector-set! c2-cell 0 published)
+          #t)
+        #f)))
 
 (define (c2-checkpoint-load-reconstruct-internal shell operation)
   (let ((entry (c2-load-find-stage shell)))
@@ -542,25 +575,42 @@
                            (vector-ref o2-projection 1) aliases
                            (vector-ref o2-projection 3)
                            (vector-ref o2-projection 2) operation #f)))
-            (c2-load-reconstruct-o2-internal o2-request)
+            (let ((o2-returned
+                    (guard (caught
+                             (#t
+                               (let ((published (vector-ref o2-request 7)))
+                                 (if (c2-load-exact-live-o2? published)
+                                     (vector-set! o2-cell 0 published)))
+                               (raise caught)))
+                      (c2-load-reconstruct-o2-internal o2-request))))
             (let ((o2 (vector-ref o2-request 7)))
+              ;; If the trusted wrapper substituted its return after commit,
+              ;; the request publication still supplies exact rollback
+              ;; authority before the postcondition failure is raised.
+              (if (c2-load-exact-live-o2? o2)
+                  (vector-set! o2-cell 0 o2))
+              (if (or (not (eq? o2-returned o2-request))
+                      (not (c2-load-exact-live-o2? o2)))
+                  (c2-load-fail
+                    'internal operation
+                    "O2 reconstruction postcondition failed" '()))
               (vector-set! o2-cell 0 o2)
               (let ((compose
                       (vector c2-training-state-compose-tag p1 o2 controls
                               operation #f)))
-                (let ((returned (c2-load-compose-owner-internal compose))
+                (let ((returned
+                        (guard (caught
+                                 (#t
+                                   (c2-load-take-compose-authority!
+                                     compose p1-cell o2-cell c2-cell)
+                                   (raise caught)))
+                          (c2-load-compose-owner-internal compose)))
                       (published (vector-ref compose 5)))
                   ;; Once the request proves real compose consumption, rollback
                   ;; authority belongs to the C2 owner even if the injected
                   ;; wrapper substitutes its return value afterward.
-                  (if (and (eq? (vector-ref compose 1) #f)
-                           (eq? (vector-ref compose 2) #f)
-                           published
-                           (c2-load-exact-live-owner? published))
-                      (begin
-                        (vector-set! p1-cell 0 #f)
-                        (vector-set! o2-cell 0 #f)
-                        (vector-set! c2-cell 0 published)))
+                  (c2-load-take-compose-authority!
+                    compose p1-cell o2-cell c2-cell)
                   (if (or (not (eq? returned compose))
                           (not (eq? (vector-ref compose 1) #f))
                           (not (eq? (vector-ref compose 2) #f))
@@ -573,7 +623,7 @@
                   ;; component authorities before rollback is disabled.
                   (vector-set! c2-cell 0 #f)
                   (vector-set! outcome 0 #t)
-                  (vector-set! outcome 1 published)))))))
+                  (vector-set! outcome 1 published))))))))
       ;; Staging is one-shot on both success and failure. Clear every large
       ;; reference before a fallible provider cleanup callback.
       (vector-set! entry 2 'dead)
