@@ -15,6 +15,42 @@ makefile = (root / "Makefile").read_text(encoding="utf-8")
 ci = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 acceptance = (root / ".github/workflows/acceptance.yml").read_text(encoding="utf-8")
 
+NATIVE_SUITE = "native-numerics"
+BLOCKING_TIMEOUT = "${{ matrix.suite == 'native-numerics' && 105 || 75 }}"
+
+
+def job_body(workflow: str, name: str, next_name: str | None = None) -> str:
+    end = rf"(?=^  {re.escape(next_name)}:|\Z)" if next_name else r"\Z"
+    match = re.search(
+        rf"^  {re.escape(name)}:\n(?P<body>.*?){end}",
+        workflow,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, name
+    return match.group("body")
+
+
+def job_timeout(body: str) -> str:
+    matches = re.findall(r"^    timeout-minutes: (.+)$", body, re.MULTILINE)
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def check_workflow_timeouts(workflow: str) -> None:
+    assert job_timeout(job_body(workflow, "topology", "blocking")) == "2"
+    assert job_timeout(job_body(workflow, "blocking", "f0-linux")) == BLOCKING_TIMEOUT
+    assert job_timeout(job_body(workflow, "f0-linux")) == "2"
+
+
+def assert_timeout_mutation_rejected(workflow: str, replacement: str) -> None:
+    mutated = workflow.replace(BLOCKING_TIMEOUT, replacement, 1)
+    assert mutated != workflow, replacement
+    try:
+        check_workflow_timeouts(mutated)
+    except AssertionError:
+        return
+    raise AssertionError(f"CI timeout mutation was admitted: {replacement}")
+
 
 def recipes(source: str) -> dict[str, list[str]]:
     parsed: dict[str, list[str]] = {}
@@ -52,6 +88,24 @@ actual_suites = re.findall(
     ci,
 )
 assert actual_suites == expected_suites, (actual_suites, expected_suites)
+
+check_workflow_timeouts(ci)
+assert ci.count(BLOCKING_TIMEOUT) == 1
+expected_suite_timeouts = {
+    suite: 105 if suite == NATIVE_SUITE else 75 for suite, _, _ in expected_suites
+}
+assert expected_suite_timeouts[NATIVE_SUITE] == 105
+assert all(
+    timeout == 75
+    for suite, timeout in expected_suite_timeouts.items()
+    if suite != NATIVE_SUITE
+)
+assert_timeout_mutation_rejected(
+    ci, "${{ matrix.suite == 'native-numerics' && 75 || 75 }}"
+)
+assert_timeout_mutation_rejected(
+    ci, "${{ matrix.suite == 'native-numerics' && 105 || 105 }}"
+)
 
 targets = recipes(makefile)
 for _, build_target, test_target in expected_suites:
@@ -168,6 +222,31 @@ for workflow in (ci, acceptance):
     assert "A2_ORACLE_PYTHON=$oracle_python" in workflow
     assert "Q0_PYTHON=$oracle_python" in workflow
 assert "timeout-minutes: 240" in acceptance
+assert job_timeout(job_body(acceptance, "supported-linux")) == "240"
+
+topology_job = job_body(ci, "topology", "blocking")
+blocking_job = job_body(ci, "blocking", "f0-linux")
+final_job = job_body(ci, "f0-linux")
+for command in (
+    "make test-ci-topology",
+    "python3 -m unittest discover -v -s tests/ci -p 'test_*.py'",
+    "python3 -m unittest -v tests.q0.test_python_isolation",
+):
+    assert command in topology_job, command
+for command in (
+    'make clean && make "${{ matrix.build_target }}"',
+    'make "${{ matrix.test_target }}"',
+    "make smoke-after-build benchmark-after-build",
+):
+    assert command in blocking_job, command
+for gate in (
+    "if: ${{ always() }}",
+    "needs: [topology, blocking]",
+    'test "$TOPOLOGY_RESULT" = success',
+    "true:success|false:skipped) ;;",
+    "*) exit 1 ;;",
+):
+    assert gate in final_job, gate
 
 for command in (
     "make clean && make build",
@@ -179,5 +258,9 @@ for command in (
 print(
     f"CI TOPOLOGY PASS: {len(expected_suites)} blocking suites cover "
     f"all {len(full_commands)} full test commands exactly once"
+)
+print(
+    "CI BUDGET PASS: native-numerics=105, other blocking suites=75, "
+    "control jobs=2, exhaustive=240; forbidden timeout mutations rejected"
 )
 PY

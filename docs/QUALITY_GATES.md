@@ -18,8 +18,18 @@ points. About 72 minutes were redundant builds. The earlier reduced four-suite r
 34057603751 took 11m55s but omitted expensive full gates and is not a coverage-equal
 baseline. The first parallel run 34400156724 passed five suites, but exposed missing
 D2 aggregate prerequisites in both tokenizer jobs. Those prerequisites are now
-explicit; the BPE runtime and boundary phases are separate jobs. A successful
-full-coverage duration remains unverified, with a 75-minute per-suite timeout.
+explicit; the BPE runtime and boundary phases are separate jobs.
+
+The outer job timeout is selected by suite identity: `native-numerics` receives 105
+minutes and every other blocking suite retains 75 minutes. Topology and final-status
+jobs retain two minutes, and exhaustive acceptance retains 240 minutes. This bounded
+exception followed two 75-minute cancellations of the native suite in
+[run 34788832457](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457)
+at exact K2 source head `2641c24b2c50939f300ae995c00d0337c01660a3`.
+Both attempts passed K2, N2, and N3K before cancellation during O2 without an
+assertion failure; neither reached smoke/benchmark and neither is passing evidence.
+No inner timeout, test, sanitizer, oracle, leak check, resource assertion, command,
+or failure-propagation gate changes with the outer scheduling budget.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
 `docs/**/*.md`, excluding `AGENTS.md`) run CI topology and change-selection tests.
