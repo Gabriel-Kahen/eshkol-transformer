@@ -28,7 +28,10 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   inner process/compiler timeout, smoke/benchmark command, or final failure and
   cancellation propagation is changed or skipped. Executable topology checks pin
   native=105, every other suite=75, both two-minute control jobs, exhaustive=240,
-  exact command coverage, and rejection of native=75 or non-native=105 mutations.
+  the 60-second A0 compiler timeout in both workflows, exact blocking/exhaustive
+  commands, all three native-only conditions, and the final failure gate. Negative
+  mutations prove that command failure masking, condition removal, final-gate
+  removal, A0 timeout inflation, native=75, and non-native=105 are rejected.
   The reviewed K2 production blobs remain outside this scheduling/test/docs delta;
   fresh supported blocking CI and independent K2-R review are still required.
 

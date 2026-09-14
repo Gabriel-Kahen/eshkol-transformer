@@ -29,7 +29,10 @@ at exact K2 source head `2641c24b2c50939f300ae995c00d0337c01660a3`.
 Both attempts passed K2, N2, and N3K before cancellation during O2 without an
 assertion failure; neither reached smoke/benchmark and neither is passing evidence.
 No inner timeout, test, sanitizer, oracle, leak check, resource assertion, command,
-or failure-propagation gate changes with the outer scheduling budget.
+or failure-propagation gate changes with the outer scheduling budget. The executable
+topology check pins the 60-second A0 compiler timeout in both workflows and rejects
+mutations that mask required blocking/exhaustive command failures, remove the final
+status assertion, or disable the native-only oracle and smoke conditions.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
 `docs/**/*.md`, excluding `AGENTS.md`) run CI topology and change-selection tests.

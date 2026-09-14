@@ -36,10 +36,118 @@ def job_timeout(body: str) -> str:
     return matches[0]
 
 
+def job_field(body: str, name: str) -> str:
+    matches = re.findall(
+        rf"^    {re.escape(name)}: (.+)$", body, re.MULTILINE
+    )
+    assert len(matches) == 1, (name, matches)
+    return matches[0]
+
+
+def job_env(body: str, name: str) -> str:
+    matches = re.findall(
+        rf"^      {re.escape(name)}: (.+)$", body, re.MULTILINE
+    )
+    assert len(matches) == 1, (name, matches)
+    return matches[0]
+
+
+def step_body(body: str, name: str) -> str:
+    match = re.search(
+        rf"^      - name: {re.escape(name)}\n(?P<body>.*?)(?=^      - |\Z)",
+        body,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, name
+    return match.group("body")
+
+
+def step_field(body: str, name: str) -> str:
+    matches = re.findall(
+        rf"^        {re.escape(name)}: (.+)$", body, re.MULTILINE
+    )
+    assert len(matches) == 1, (name, matches)
+    return matches[0]
+
+
+def step_run(body: str) -> list[str]:
+    scalar = re.findall(r"^        run: ([^|].*)$", body, re.MULTILINE)
+    block = re.search(
+        r"^        run: \|\n(?P<commands>(?:^          .*\n?)+)",
+        body,
+        re.MULTILINE,
+    )
+    assert len(scalar) + (block is not None) == 1, (scalar, block)
+    if scalar:
+        return scalar
+    assert block is not None
+    return [line[10:] for line in block.group("commands").splitlines()]
+
+
 def check_workflow_timeouts(workflow: str) -> None:
     assert job_timeout(job_body(workflow, "topology", "blocking")) == "2"
     assert job_timeout(job_body(workflow, "blocking", "f0-linux")) == BLOCKING_TIMEOUT
     assert job_timeout(job_body(workflow, "f0-linux")) == "2"
+
+
+def check_ci_workflow_contract(workflow: str) -> None:
+    check_workflow_timeouts(workflow)
+    topology = job_body(workflow, "topology", "blocking")
+    blocking = job_body(workflow, "blocking", "f0-linux")
+    final = job_body(workflow, "f0-linux")
+
+    assert re.findall(r"^      - run: (.+)$", topology, re.MULTILINE) == [
+        "make test-ci-topology"
+    ]
+    assert step_run(step_body(topology, "Test change selection")) == [
+        "python3 -m unittest discover -v -s tests/ci -p 'test_*.py'",
+        "python3 -m unittest -v tests.q0.test_python_isolation",
+    ]
+    assert job_env(blocking, "A0_COMPILER_TIMEOUT_SECONDS") == "'60'"
+    assert step_run(step_body(blocking, "Build suite prerequisites")) == [
+        'make clean && make "${{ matrix.build_target }}"'
+    ]
+    assert step_run(step_body(blocking, "Run full suite")) == [
+        'make "${{ matrix.test_target }}"'
+    ]
+    assert step_run(step_body(blocking, "Smoke and benchmark")) == [
+        "make smoke-after-build benchmark-after-build"
+    ]
+    for name in (
+        "Select pinned oracle Python",
+        "Install pinned development oracle",
+        "Smoke and benchmark",
+    ):
+        assert step_field(step_body(blocking, name), "if") == (
+            "matrix.suite == 'native-numerics'"
+        )
+
+    assert job_field(final, "if") == "${{ always() }}"
+    assert job_field(final, "needs") == "[topology, blocking]"
+    assert step_run(
+        step_body(final, "Require successful checks for the selected scope")
+    ) == [
+        'test "$TOPOLOGY_RESULT" = success',
+        'case "$RUN_FULL:$BLOCKING_RESULT" in',
+        "  true:success|false:skipped) ;;",
+        "  *) exit 1 ;;",
+        "esac",
+    ]
+
+
+def check_acceptance_workflow_contract(workflow: str) -> None:
+    supported = job_body(workflow, "supported-linux")
+    assert job_timeout(supported) == "240"
+    assert job_env(supported, "A0_COMPILER_TIMEOUT_SECONDS") == "'60'"
+    assert step_run(step_body(supported, "Clean build")) == [
+        "make clean && make build"
+    ]
+    assert step_run(step_body(supported, "Full test suite")) == [
+        "make test-after-build"
+    ]
+    assert step_run(step_body(supported, "Smoke and reproducible benchmark")) == [
+        "make smoke-after-build benchmark-after-build"
+    ]
 
 
 def assert_timeout_mutation_rejected(workflow: str, replacement: str) -> None:
@@ -50,6 +158,22 @@ def assert_timeout_mutation_rejected(workflow: str, replacement: str) -> None:
     except AssertionError:
         return
     raise AssertionError(f"CI timeout mutation was admitted: {replacement}")
+
+
+def assert_mutation_rejected(
+    workflow: str,
+    old: str,
+    new: str,
+    checker,
+    expected_count: int = 1,
+) -> None:
+    assert workflow.count(old) == expected_count, (old, workflow.count(old))
+    mutated = workflow.replace(old, new)
+    try:
+        checker(mutated)
+    except AssertionError:
+        return
+    raise AssertionError(f"workflow mutation was admitted: {old!r} -> {new!r}")
 
 
 def recipes(source: str) -> dict[str, list[str]]:
@@ -89,7 +213,8 @@ actual_suites = re.findall(
 )
 assert actual_suites == expected_suites, (actual_suites, expected_suites)
 
-check_workflow_timeouts(ci)
+check_ci_workflow_contract(ci)
+check_acceptance_workflow_contract(acceptance)
 assert ci.count(BLOCKING_TIMEOUT) == 1
 expected_suite_timeouts = {
     suite: 105 if suite == NATIVE_SUITE else 75 for suite, _, _ in expected_suites
@@ -105,6 +230,43 @@ assert_timeout_mutation_rejected(
 )
 assert_timeout_mutation_rejected(
     ci, "${{ matrix.suite == 'native-numerics' && 105 || 105 }}"
+)
+assert_mutation_rejected(
+    ci,
+    '        run: make "${{ matrix.test_target }}"',
+    '        run: make "${{ matrix.test_target }}" || true',
+    check_ci_workflow_contract,
+)
+assert_mutation_rejected(
+    ci,
+    '          test "$TOPOLOGY_RESULT" = success',
+    '          # test "$TOPOLOGY_RESULT" = success',
+    check_ci_workflow_contract,
+)
+assert_mutation_rejected(
+    ci,
+    "        if: matrix.suite == 'native-numerics'",
+    "        if: false",
+    check_ci_workflow_contract,
+    expected_count=3,
+)
+assert_mutation_rejected(
+    acceptance,
+    "        run: make test-after-build",
+    "        run: make test-after-build || true",
+    check_acceptance_workflow_contract,
+)
+assert_mutation_rejected(
+    ci,
+    "      A0_COMPILER_TIMEOUT_SECONDS: '60'",
+    "      A0_COMPILER_TIMEOUT_SECONDS: '600'",
+    check_ci_workflow_contract,
+)
+assert_mutation_rejected(
+    acceptance,
+    "      A0_COMPILER_TIMEOUT_SECONDS: '60'",
+    "      A0_COMPILER_TIMEOUT_SECONDS: '600'",
+    check_acceptance_workflow_contract,
 )
 
 targets = recipes(makefile)
@@ -221,39 +383,7 @@ for workflow in (ci, acceptance):
     assert "O2_ORACLE_PYTHON=$oracle_python" in workflow
     assert "A2_ORACLE_PYTHON=$oracle_python" in workflow
     assert "Q0_PYTHON=$oracle_python" in workflow
-assert "timeout-minutes: 240" in acceptance
 assert job_timeout(job_body(acceptance, "supported-linux")) == "240"
-
-topology_job = job_body(ci, "topology", "blocking")
-blocking_job = job_body(ci, "blocking", "f0-linux")
-final_job = job_body(ci, "f0-linux")
-for command in (
-    "make test-ci-topology",
-    "python3 -m unittest discover -v -s tests/ci -p 'test_*.py'",
-    "python3 -m unittest -v tests.q0.test_python_isolation",
-):
-    assert command in topology_job, command
-for command in (
-    'make clean && make "${{ matrix.build_target }}"',
-    'make "${{ matrix.test_target }}"',
-    "make smoke-after-build benchmark-after-build",
-):
-    assert command in blocking_job, command
-for gate in (
-    "if: ${{ always() }}",
-    "needs: [topology, blocking]",
-    'test "$TOPOLOGY_RESULT" = success',
-    "true:success|false:skipped) ;;",
-    "*) exit 1 ;;",
-):
-    assert gate in final_job, gate
-
-for command in (
-    "make clean && make build",
-    "make test-after-build",
-    "make smoke-after-build benchmark-after-build",
-):
-    assert command in acceptance, command
 
 print(
     f"CI TOPOLOGY PASS: {len(expected_suites)} blocking suites cover "
@@ -261,6 +391,7 @@ print(
 )
 print(
     "CI BUDGET PASS: native-numerics=105, other blocking suites=75, "
-    "control jobs=2, exhaustive=240; forbidden timeout mutations rejected"
+    "control jobs=2, exhaustive=240, A0 compiler timeout=60; "
+    "command, condition, gate, and timeout mutations rejected"
 )
 PY
