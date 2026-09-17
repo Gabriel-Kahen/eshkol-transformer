@@ -340,8 +340,8 @@ run_runtime() {
   fi
   awk '
     /^C2 OPERATIONAL RUNTIME PASS:/ {
-      for (index = 1; index <= NF; ++index) {
-        split($index, pair, "=")
+      for (field = 1; field <= NF; ++field) {
+        split($field, pair, "=")
         if (pair[1] == "baseline-kib" || pair[1] == "retained-kib" ||
             pair[1] == "peak-kib") {
           if (pair[2] <= 0 || pair[2] >= 524288) exit 1

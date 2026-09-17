@@ -422,6 +422,11 @@
 (define save-b (string-append output-root "/joint-b.c2"))
 (define joint-measure-current (make-vector 3 0))
 (define joint-measure-peak (make-vector 3 0))
+(define joint-borrow-arena (make-vector 3 0))
+(define joint-preflight-arena (make-vector 3 0))
+(define joint-measure-arena (make-vector 3 0))
+(define joint-encode-arena (make-vector 3 0))
+(define joint-publish-arena (make-vector 3 0))
 (define joint-encode-current (make-vector 3 0))
 (define joint-encode-peak (make-vector 3 0))
 (define joint-publish-current (make-vector 3 0))
@@ -429,9 +434,26 @@
 (define joint-measure-calls 0)
 (define joint-encode-calls 0)
 (define joint-publish-calls 0)
+(define joint-borrow-calls 0)
+(define joint-preflight-calls 0)
+(define saved-operational-borrow c2-save-borrow-begin-internal)
+(define saved-operational-preflight c2-save-o2-policy-preflight-internal)
 (define saved-operational-measure c2-save-measure-staged-internal)
 (define saved-operational-encode c2-save-encode-staged-into-internal!)
 (define saved-operational-publish c2-save-publish-internal)
+(set! c2-save-borrow-begin-internal
+  (lambda (state operation)
+    (let ((result (saved-operational-borrow state operation)))
+      (vector-set! joint-borrow-arena joint-borrow-calls (__arena-used))
+      (set! joint-borrow-calls (+ joint-borrow-calls 1))
+      result)))
+(set! c2-save-o2-policy-preflight-internal
+  (lambda (topology o2-projection limits)
+    (let ((result
+            (saved-operational-preflight topology o2-projection limits)))
+      (vector-set! joint-preflight-arena joint-preflight-calls (__arena-used))
+      (set! joint-preflight-calls (+ joint-preflight-calls 1))
+      result)))
 (set! c2-save-measure-staged-internal
   (lambda (staged limits)
     (let ((result (saved-operational-measure staged limits)))
@@ -439,6 +461,7 @@
                    (c2-operational-current-rss))
       (vector-set! joint-measure-peak joint-measure-calls
                    (c2-operational-peak-rss))
+      (vector-set! joint-measure-arena joint-measure-calls (__arena-used))
       (set! joint-measure-calls (+ joint-measure-calls 1))
       result)))
 (set! c2-save-encode-staged-into-internal!
@@ -450,6 +473,7 @@
                    (c2-operational-current-rss))
       (vector-set! joint-encode-peak joint-encode-calls
                    (c2-operational-peak-rss))
+      (vector-set! joint-encode-arena joint-encode-calls (__arena-used))
       (set! joint-encode-calls (+ joint-encode-calls 1))
       result)))
 (set! c2-save-publish-internal
@@ -459,6 +483,7 @@
                    (c2-operational-current-rss))
       (vector-set! joint-publish-peak joint-publish-calls
                    (c2-operational-peak-rss))
+      (vector-set! joint-publish-arena joint-publish-calls (__arena-used))
       (set! joint-publish-calls (+ joint-publish-calls 1))
       result)))
 (define first-save-counts (snapshot-counts))
@@ -482,7 +507,14 @@
         (>= second-save-arena-delta 32768))
     (begin
       (display "C2 OPERATIONAL DIAGNOSTIC: second-save-arena-delta=")
-      (display second-save-arena-delta) (newline)))
+      (display second-save-arena-delta)
+      (display " before=") (display second-save-arena-before)
+      (display " borrow=") (display (vector-ref joint-borrow-arena 1))
+      (display " preflight=") (display (vector-ref joint-preflight-arena 1))
+      (display " measure=") (display (vector-ref joint-measure-arena 1))
+      (display " encode=") (display (vector-ref joint-encode-arena 1))
+      (display " publish=") (display (vector-ref joint-publish-arena 1))
+      (display " after=") (display (__arena-used)) (newline)))
 (check "warmed second joint save retains under 32 KiB"
        (and (>= second-save-arena-delta 0)
             (< second-save-arena-delta 32768)))
@@ -500,7 +532,14 @@
         (>= overwrite-save-arena-delta 32768))
     (begin
       (display "C2 OPERATIONAL DIAGNOSTIC: overwrite-save-arena-delta=")
-      (display overwrite-save-arena-delta) (newline)))
+      (display overwrite-save-arena-delta)
+      (display " before=") (display overwrite-save-arena-before)
+      (display " borrow=") (display (vector-ref joint-borrow-arena 2))
+      (display " preflight=") (display (vector-ref joint-preflight-arena 2))
+      (display " measure=") (display (vector-ref joint-measure-arena 2))
+      (display " encode=") (display (vector-ref joint-encode-arena 2))
+      (display " publish=") (display (vector-ref joint-publish-arena 2))
+      (display " after=") (display (__arena-used)) (newline)))
 (check "warmed overwrite joint save retains under 32 KiB"
        (and (>= overwrite-save-arena-delta 0)
             (< overwrite-save-arena-delta 32768)))
@@ -511,8 +550,12 @@
 (set! c2-save-measure-staged-internal saved-operational-measure)
 (set! c2-save-encode-staged-into-internal! saved-operational-encode)
 (set! c2-save-publish-internal saved-operational-publish)
+(set! c2-save-o2-policy-preflight-internal saved-operational-preflight)
+(set! c2-save-borrow-begin-internal saved-operational-borrow)
 (check "joint phase probes observe exactly three complete saves"
-       (and (= joint-measure-calls 3)
+       (and (= joint-borrow-calls 3)
+            (= joint-preflight-calls 3)
+            (= joint-measure-calls 3)
             (= joint-encode-calls 3)
             (= joint-publish-calls 3)))
 

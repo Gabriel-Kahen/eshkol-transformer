@@ -9,7 +9,6 @@ c2-save-fail-raw
 c2-save-measure-staged
 c2-save-native-failure
 c2-save-o2-policy-preflight
-c2-save-o2-policy-preflight-internal
 c2-save-options
 c2-save-path-encoded-size
 c2-save-pre-touch-p1-identities

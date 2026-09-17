@@ -310,24 +310,40 @@
       ;; trusted provider callback. A callback must not be able to release or
       ;; recursively borrow this owner while activation is in flight.
       (vector-set! state 7 borrow)
-      (vector-set! owner-token 2 borrow)
-      (guard (caught
-               (#t
-                 (vector-set! owner-token 2 #f)
-                 (vector-set! state 7 'live)
-                 (raise caught)))
-        (c2-training-state-activate-p1-borrow!
-          (vector-ref state 1) owner-token access-token borrow operation))
-      (guard (caught
-               (#t
-                 (state-dict-c2-owned-borrow-deactivate-internal!
-                   (vector-ref state 1) owner-token access-token borrow operation)
-                 (vector-set! owner-token 2 #f)
-                 (vector-set! state 7 'live)
-                 (raise caught)))
-        (c2-training-state-activate-o2-borrow!
-          (vector-ref state 2) owner-token access-token borrow operation))
-      borrow)))
+      ;; A caller may already own a scratch region. The state-slot write
+      ;; barrier then promotes the complete borrow graph into owner lifetime.
+      ;; Read that canonical graph back and use only its linked authorities;
+      ;; the pre-barrier locals may still denote the regional originals.
+      (let* ((active-borrow (vector-ref state 7))
+             (active-owner-token (vector-ref active-borrow 3))
+             (active-access-token (vector-ref active-borrow 4)))
+        (vector-set! active-owner-token 2 active-borrow)
+        ;; Hosted exception handlers retain a large stack/handler graph. Keep
+        ;; both activation guards in scratch after every authority identity is
+        ;; allocated outer. P1's write barrier promotes only its tiny installed
+        ;; marker; success returns immediate #t and destroys all guard state.
+        (with-region ('c2-training-state-borrow-activation 65536)
+          (guard (caught
+                   (#t
+                     (vector-set! active-owner-token 2 #f)
+                     (vector-set! state 7 'live)
+                     (raise caught)))
+            (c2-training-state-activate-p1-borrow!
+              (vector-ref state 1) active-owner-token active-access-token
+              active-borrow operation))
+          (guard (caught
+                   (#t
+                     (state-dict-c2-owned-borrow-deactivate-internal!
+                       (vector-ref state 1) active-owner-token
+                       active-access-token active-borrow operation)
+                     (vector-set! active-owner-token 2 #f)
+                     (vector-set! state 7 'live)
+                     (raise caught)))
+            (c2-training-state-activate-o2-borrow!
+              (vector-ref state 2) active-owner-token active-access-token
+              active-borrow operation))
+          #t)
+        active-borrow))))
 
 (define (c2-training-state-borrow-projection-internal borrow)
   (if (or (not (vector? borrow)) (not (= (vector-length borrow) 6))

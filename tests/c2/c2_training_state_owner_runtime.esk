@@ -313,8 +313,12 @@
   c2-training-state-activate-p1-borrow!)
 (define activation-observed-busy #f)
 (define activation-release-rejected #f)
+(define activation-observed-borrow #f)
+(define activation-observed-access #f)
 (set! c2-training-state-activate-p1-borrow!
   (lambda (state owner-token access-token candidate-borrow operation)
+    (set! activation-observed-borrow candidate-borrow)
+    (set! activation-observed-access access-token)
     (set! activation-observed-busy
       (eq? (vector-ref (c2-training-state-find owned) 7) candidate-borrow))
     (set! activation-release-rejected
@@ -338,6 +342,12 @@
        activation-observed-busy)
 (check "P1 activation callback cannot reentrantly release owner"
        activation-release-rejected)
+(check "borrow return preserves the exact activated canonical identities"
+       (and (eq? activation-probe-borrow activation-observed-borrow)
+            (eq? (vector-ref activation-probe-borrow 4)
+                 activation-observed-access)
+            (eq? activation-probe-borrow
+                 (vector-ref (c2-training-state-find owned) 7))))
 (check "activation probe borrow ends"
        (c2-training-state-borrow-end-internal activation-probe-borrow))
 
@@ -353,6 +363,18 @@
   saved-p1-borrow-activate)
 (check "P1 activation failure restores idle C2 owner"
        (eq? (vector-ref (c2-training-state-find owned) 7) 'live))
+(set! c2-training-state-activate-p1-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (c2-training-state-fail
+      'unsupported 'injected-p1-activation "injected P1 activation failure")))
+(expect-error "P1 activation preserves a structured error"
+              'unsupported 'injected-p1-activation
+  (lambda ()
+    (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)))
+(set! c2-training-state-activate-p1-borrow!
+  saved-p1-borrow-activate)
+(check "structured P1 activation failure restores idle C2 owner"
+       (eq? (vector-ref (c2-training-state-find owned) 7) 'live))
 (define saved-o2-borrow-activate
   c2-training-state-activate-o2-borrow!)
 (set! c2-training-state-activate-o2-borrow!
@@ -364,6 +386,18 @@
 (set! c2-training-state-activate-o2-borrow!
   saved-o2-borrow-activate)
 (check "O2 activation failure restores idle C2 owner"
+       (eq? (vector-ref (c2-training-state-find owned) 7) 'live))
+(set! c2-training-state-activate-o2-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (c2-training-state-fail
+      'unsupported 'injected-o2-activation "injected O2 activation failure")))
+(expect-error "O2 activation preserves a structured error after P1 rollback"
+              'unsupported 'injected-o2-activation
+  (lambda ()
+    (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)))
+(set! c2-training-state-activate-o2-borrow!
+  saved-o2-borrow-activate)
+(check "structured O2 activation failure restores idle C2 owner"
        (eq? (vector-ref (c2-training-state-find owned) 7) 'live))
 (define borrow
   (diagnose-unexpected
@@ -661,6 +695,92 @@
            owned-p1 renewed-token 'checkpoint-save!)))
 (check "renewed borrow ends"
        (c2-training-state-borrow-end-internal renewed-borrow))
+(set! c2-training-state-activate-p1-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (raise #f)))
+(define enclosing-p1-false-preserved
+  (with-region ('c2-owner-enclosing-p1-failure 65536)
+    (guard (caught (#t (eq? caught #f)))
+      (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)
+      #f)))
+(set! c2-training-state-activate-p1-borrow!
+  saved-p1-borrow-activate)
+(check "enclosing-region P1 activation preserves raised #f"
+       enclosing-p1-false-preserved)
+(check "enclosing-region P1 failure clears all aggregate authority"
+       (and (eq? (vector-ref (c2-training-state-find owned) 7) 'live)
+            (eq? (vector-ref (vector-ref
+                               (c2-training-state-find owned) 6) 2) #f)))
+(set! c2-training-state-activate-o2-borrow!
+  (lambda (state owner-token access-token candidate-borrow operation)
+    (c2-training-state-fail
+      'unsupported 'injected-nested-o2-activation
+      "injected nested O2 activation failure")))
+(define enclosing-o2-error-preserved
+  (with-region ('c2-owner-enclosing-o2-failure 65536)
+    (guard (caught
+             (#t
+               (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) 'unsupported)
+                    (eq? (transformer-error-operation caught)
+                         'injected-nested-o2-activation))))
+      (c2-training-state-borrow-begin-internal owned 'checkpoint-save!)
+      #f)))
+(set! c2-training-state-activate-o2-borrow!
+  saved-o2-borrow-activate)
+(check "enclosing-region O2 activation preserves structured error"
+       enclosing-o2-error-preserved)
+(check "enclosing-region O2 failure rolls P1 back and clears authority"
+       (and (eq? (vector-ref (c2-training-state-find owned) 7) 'live)
+            (eq? (vector-ref (vector-ref
+                               (c2-training-state-find owned) 6) 2) #f)))
+(define enclosing-region-borrow #f)
+(define enclosing-region-token #f)
+(define enclosing-region-borrow-ended
+  (with-region ('c2-owner-enclosing-borrow 65536)
+    (let* ((regional-borrow
+             (c2-training-state-borrow-begin-internal
+               owned 'checkpoint-save!))
+           (regional-state (vector-ref regional-borrow 1))
+           (regional-token
+             (c2-training-state-borrow-owner-token-internal
+               regional-borrow 'checkpoint-save!)))
+      (set! enclosing-region-borrow regional-borrow)
+      (set! enclosing-region-token regional-token)
+      (check "enclosing-region borrow is the canonical owner-slot identity"
+             (eq? regional-borrow (vector-ref regional-state 7)))
+      (check "enclosing-region borrow keeps exact P1 authority usable"
+             (pair?
+               (state-dict-c2-owned-entry-shells-internal
+                 owned-p1 regional-token 'checkpoint-save!)))
+      (check "enclosing-region borrow projection remains authenticated"
+             (= (vector-length
+                  (c2-training-state-borrow-projection-internal regional-borrow))
+                5))
+      (c2-training-state-borrow-end-internal regional-borrow))))
+(check "enclosing-region canonical borrow ends before scratch destruction"
+       enclosing-region-borrow-ended)
+(expect-error "post-region canonical borrow remains stale"
+              'invalid-state 'c2-training-state-borrow-projection-internal
+  (lambda ()
+    (c2-training-state-borrow-projection-internal enclosing-region-borrow)))
+(expect-error "post-region canonical borrow cannot end twice"
+              'invalid-state 'c2-training-state-borrow-end-internal
+  (lambda ()
+    (c2-training-state-borrow-end-internal enclosing-region-borrow)))
+(expect-error "post-region canonical P1 token remains revoked"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-entry-shells-internal
+      owned-p1 enclosing-region-token 'checkpoint-save!)))
+(define enclosing-stale-o2-request
+  (vector owned-o2 owned-p1 enclosing-region-token 'checkpoint-save! #f))
+(expect-error "post-region canonical O2 token remains revoked"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-o2-encode-c2-owned-staging-internal enclosing-stale-o2-request)))
+(check "post-region stale O2 token publishes nothing"
+       (eq? (vector-ref enclosing-stale-o2-request 4) #f))
 (expect-error "P1 alias unusable after transfer" 'invalid-state 'state-dict-paths
   (lambda () (state-dict-paths owned-p1)))
 (expect-error "P1 release alias unusable after transfer"

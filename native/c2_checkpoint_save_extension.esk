@@ -402,8 +402,8 @@
 (define c2-save-stage-components-internal c2-save-stage-components-core)
 
 ;;; P1 entry/tensor shells are process-lifetime authenticated identities. Touch
-;;; each exact claimed entry before regional scratch so later C1 encoding only
-;;; reuses those outer identities; no tensor payload callback runs here.
+;;; each exact claimed entry before SAVE-owned scratch so later C1 encoding
+;;; only reuses the registry-retained identities; no payload callback runs here.
 (define c2-save-pre-touch-tensor-begin-internal
   state-dict-c2-owned-tensor-borrow-begin-internal)
 (define c2-save-pre-touch-tensor-end-internal
@@ -412,9 +412,9 @@
   state-dict-c2-owned-entry-shells-internal)
 
 (define (c2-save-pre-touch-p1-identities state access-token operation)
-  ;; This narrow trusted helper runs in the established owner-lifetime arena.
-  ;; It creates only the ordered exact entry shells/list, bounded by P1/wire
-  ;; hard E <= 4096; it neither deep-projects metadata nor clones payloads.
+  ;; This narrow trusted helper runs before SAVE-owned scratch. P1's registry
+  ;; retains the exact entry shells; the ordered list remains call-local and is
+  ;; bounded by P1/wire hard E <= 4096. No metadata or payload is cloned.
   ;; Caller/profile aggregate-count admission occurs later, during measurement.
   (let ((entries
           (c2-save-pre-touch-entry-shells-internal
@@ -448,14 +448,16 @@
           "atomic C2 checkpoint publication failed" status))))
 
 (define c2-save-publish-internal c2-save-publish-core)
+(define c2-save-borrow-begin-internal
+  c2-training-state-borrow-begin-internal)
 
 (define (c2-save-with-owner-borrow state limits subpolicy build publish)
-  ;; The authenticated borrow identity must be allocated in the owner's outer
-  ;; arena: allocating it regionally and storing it into older owner controls
-  ;; would promote a distinct identity. The guard encloses region establishment
-  ;; itself, so an arena setup failure still cannot strand the owner busy.
+  ;; Borrow-begin publishes through the owner state slot and reads back the
+  ;; canonical promoted graph before this operation creates any SAVE-owned
+  ;; scratch. The guard encloses region establishment itself, so an arena setup
+  ;; failure still cannot strand the owner busy.
   (let* ((borrow
-           (c2-training-state-borrow-begin-internal
+           (c2-save-borrow-begin-internal
              state 'checkpoint-save!))
          ;; This single outer transaction record survives scratch teardown:
          ;; [borrow-ended?, failed?, caught-value]. Success crosses as the

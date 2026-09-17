@@ -329,6 +329,9 @@ write_development_manifest() {
 write_lifetime_witness() {
   local ir="${tmp}/clang-a/save.ll"
   local pre_touch_ir="${tmp}/clang-a/pre-touch.ll"
+  local borrow_ir="${tmp}/clang-a/borrow-begin.ll"
+  local state_barrier_line active_borrow_line active_owner_line
+  local active_access_line owner_barrier_line region_line region_block return_line
   test -s "${ir}"
   sed -n '/^define .*@c2-save-pre-touch-p1-identities(/,/^}/p' \
     "${ir}" >"${pre_touch_ir}"
@@ -337,10 +340,63 @@ write_lifetime_witness() {
      rg -F 'call void @eshkol_region_unwind_to' "${pre_touch_ir}" >/dev/null; then
     die "compiled P1 identity preparation entered a temporary region"
   fi
+  sed -n '/^define .*@c2-training-state-borrow-begin-internal(/,/^}/p' \
+    "${ir}" >"${borrow_ir}"
+  test -s "${borrow_ir}"
+  state_barrier_line="$(rg -n -m1 -F \
+    'call void @eshkol_region_write_barrier_into' "${borrow_ir}")"
+  state_barrier_line="${state_barrier_line%%:*}"
+  active_borrow_line="$(rg -n -m1 -F \
+    '%active-borrow = alloca' "${borrow_ir}")"
+  active_borrow_line="${active_borrow_line%%:*}"
+  active_owner_line="$(rg -n -m1 -F \
+    '%active-owner-token = alloca' "${borrow_ir}")"
+  active_owner_line="${active_owner_line%%:*}"
+  active_access_line="$(rg -n -m1 -F \
+    '%active-access-token = alloca' "${borrow_ir}")"
+  active_access_line="${active_access_line%%:*}"
+  owner_barrier_line="$(rg -n -F \
+    'call void @eshkol_region_write_barrier_into' "${borrow_ir}" | \
+    sed -n '2{s/:.*//;p;}')"
+  region_line="$(rg -n -m1 -F \
+    '%region_mark = call i64 @eshkol_region_mark()' "${borrow_ir}")"
+  region_line="${region_line%%:*}"
+  region_block="$(sed -n "1,${region_line}p" "${borrow_ir}" | awk '
+    /^[[:alnum:]_.-]+:/ { block = $1; sub(/:$/, "", block) }
+    END { print block }
+  ')"
+  return_line="$(rg -n -m1 -F \
+    'ret %eshkol_tagged_value %active-borrow.load' "${borrow_ir}")"
+  return_line="${return_line%%:*}"
+  (( state_barrier_line < active_borrow_line &&
+     active_borrow_line < active_owner_line &&
+     active_owner_line < active_access_line &&
+     active_access_line < owner_barrier_line &&
+     active_access_line < region_line && region_line < return_line )) || \
+    die "compiled borrow lifetime ordering is not canonical"
+  sed -n "${owner_barrier_line},$((owner_barrier_line + 6))p" \
+    "${borrow_ir}" | rg -F "br label %${region_block}" >/dev/null || \
+    die "compiled owner-link barrier does not precede activation scratch"
+  rg -F 'store %eshkol_tagged_value { i8 3, i8 0, i16 0, i32 0, i64 1 }, ptr %region_result_slot' \
+    "${borrow_ir}" >/dev/null
+  rg -F 'call void @eshkol_region_unwind_to' "${borrow_ir}" >/dev/null
+  if sed -n "$((state_barrier_line + 1)),\$p" "${borrow_ir}" | \
+       rg -F -e '%borrow.load' -e '%owner-token.load' \
+         -e '%access-token.load' -e '%tensor-access.load' >/dev/null; then
+    die "compiled borrow path reused a pre-barrier regional identity"
+  fi
   {
     printf 'pre-touch-temporary-region=false\n'
     printf 'source-helper=state-dict-c2-owned-entry-shells-internal/3\n'
-    sha256sum "${ir}" "${pre_touch_ir}" "${tmp}/pre-touch-source.esk"
+    printf 'borrow-state-slot-write-barrier-line=%s\n' "${state_barrier_line}"
+    printf 'borrow-canonical-readback-line=%s\n' "${active_borrow_line}"
+    printf 'borrow-owner-link-write-barrier-line=%s\n' "${owner_barrier_line}"
+    printf 'borrow-activation-region-line=%s\n' "${region_line}"
+    printf 'borrow-canonical-return-line=%s\n' "${return_line}"
+    printf 'borrow-post-barrier-original-use=false\n'
+    printf 'borrow-region-escape=immediate-true\n'
+    sha256sum "${ir}" "${pre_touch_ir}" "${borrow_ir}" \
+      "${tmp}/pre-touch-source.esk"
   } >"${tmp}/lifetime-witness.txt"
 }
 

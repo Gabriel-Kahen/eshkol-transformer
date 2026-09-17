@@ -1,12 +1,14 @@
 # C2 detached training-state checkpoints
 
-Status: **implementation / dependency-gated**. Integration accepted the C2 1.0
+Status: **implementation / integration-gated**. Integration accepted the C2 1.0
 logical schema and wire format in issue #1 comment `5628609463`, with the final
 nonallocating model-copy seam accepted in comment `5628659732`. Separable
-parser, codec, and ownership work may proceed. The public source-composed C2
-artifact, capability-facing `checkpoint-load/3`, and provisional 81-global /
-75-export boundary must not be published until K2 issue #73 is independently
-approved and merged.
+parser, codec, and ownership work proceeded privately. K2 issue #73 is now
+independently accepted and merged through PR #76 at `36a9231`. The private
+LOAD/SAVE ownership and operational gates pass, but the public source-composed
+C2 artifact, capability-facing `checkpoint-load/3`, and provisional 81-global /
+75-export boundary remain unpublished until real K2 facade composition,
+supported-host CI, and final independent acceptance complete.
 
 ## Scope
 
@@ -145,7 +147,10 @@ The initial operational target is 16 MiB file bytes, 512 KiB artifact-wide
 metadata, 8 MiB per tensor, and 64 total tensors. This tuple is not a wire
 property and is not considered supported until exact/one-over, jointly
 attainable, repeated-save, memory, timing, and no-warning probes pass on the
-pinned toolchain. It must not be silently lowered.
+pinned toolchain. The private gates now demonstrate that tuple on the current
+CachyOS/Clang 22 development host without lowering it; the support claim still
+requires the project-supported Ubuntu 22.04/LLVM 21 CI environment. It must not
+be silently lowered.
 
 Input uses one `O_NOFOLLOW` regular-file descriptor. C2 probes the outer and
 nested C1 fixed headers, applies size/metadata/count checks before allocating
