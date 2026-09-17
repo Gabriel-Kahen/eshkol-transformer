@@ -22,4 +22,5 @@
           state-dict-c2-owned-tensor-borrow-begin-internal
           state-dict-c2-owned-tensor-borrow-end-internal
           state-dict-c2-owned-borrow-activate-internal!
-          state-dict-c2-owned-borrow-deactivate-internal!))
+          state-dict-c2-owned-borrow-deactivate-internal!
+          state-dict-c2-owned-entry-shells-internal))

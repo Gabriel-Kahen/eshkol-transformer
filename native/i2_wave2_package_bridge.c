@@ -148,6 +148,10 @@ void et_i2_test_retired_builder_counts_v1(size_t *copy_count,
                               decodes * sizeof(*decode);
   }
 }
+
+size_t et_i2_test_decode_builder_control_bytes_v1(void) {
+  return sizeof(et_i2_decode_builder);
+}
 #endif
 
 static void *et_i2_system_calloc(size_t count, size_t size) {

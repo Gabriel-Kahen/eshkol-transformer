@@ -18,6 +18,7 @@
         :real et_checkpoint_io_test_fail_v1)
 (extern i64 c2-save-io-event-count
         :real et_checkpoint_io_test_event_count_v1)
+(extern i64 c2-save-region-depth :real eshkol_region_mark)
 
 (define checks 0)
 (define (check label condition)
@@ -66,6 +67,13 @@
           (begin
             (vector-set! result index (c2-save-test-counter index))
             (loop (+ index 1)))))))
+(define (same-except-delta? before after changed delta)
+  (let loop ((index 0))
+    (if (= index 35) #t
+        (and (= (vector-ref after index)
+                (+ (vector-ref before index)
+                   (if (= index changed) delta 0)))
+             (loop (+ index 1))))))
 
 (define fingerprint
   "sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72")
@@ -234,8 +242,8 @@
 (check "operational tensor boundary save succeeds"
        (c2-checkpoint-save-internal!
          owner profile-path profile-policy '(:overwrite? #t)))
-(check "operational boundary invokes model callback once"
-       (= profile-model-calls 1))
+(check "operational boundary invokes model callback in both passes"
+       (= profile-model-calls 2))
 (check "model callback receives effective operational tensor cap"
        (= profile-model-tensor-cap 16))
 (set! c2-save-model-encode-internal saved-save-model-encoder)
@@ -265,7 +273,205 @@
                          'durability)))
 
 ;;; Any build exception, including #f, ends both claimed subowner accesses.
+(define identity-owner (make-owner))
+(define (owner-identities-ready? value)
+  (let* ((candidate
+           (c2-training-state-borrow-begin-internal
+             value 'checkpoint-save!))
+         (ready
+           (c2-training-state-borrow-p1-identities-ready-internal?
+             candidate 'checkpoint-save!)))
+    (c2-training-state-borrow-end-internal candidate)
+    ready))
+(check "fresh owner has no pre-touched P1 identities"
+       (not (owner-identities-ready? identity-owner)))
+(define identity-first-touch-before (snapshot-counts))
+(define saved-pre-touch c2-save-pre-touch-p1-identities-internal)
+(define saved-pre-touch-begin c2-save-pre-touch-tensor-begin-internal)
+(define saved-pre-touch-end c2-save-pre-touch-tensor-end-internal)
+(define saved-pre-touch-entry-shells
+  c2-save-pre-touch-entry-shells-internal)
+(define pre-touch-entry-region-depth -1)
+(define evacuated-entry #f)
+(define evacuated-entry-stable? #t)
+(set! c2-save-pre-touch-entry-shells-internal
+  (lambda (state access-token operation)
+    (set! pre-touch-entry-region-depth (c2-save-region-depth))
+    (saved-pre-touch-entry-shells state access-token operation)))
+(set! c2-save-pre-touch-tensor-begin-internal
+  (lambda (state access-token entry operation)
+    (if evacuated-entry
+        (if (not (eq? evacuated-entry entry))
+            (set! evacuated-entry-stable? #f))
+        (set! evacuated-entry entry))
+    (saved-pre-touch-begin state access-token entry operation)))
+(c2-save-io-reset)
+(set! c2-save-pre-touch-tensor-end-internal
+  (lambda (state access-token entry operation)
+    (saved-pre-touch-end state access-token entry operation)
+    (raise #f)))
+(expect-raised-false "post-end pre-touch failure escapes after access retirement"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      identity-owner fail-path policy '(:overwrite? #t))))
+(check "post-end pre-touch failure performed zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+(check "post-end failure leaves the exact owner reusable"
+       (not (owner-identities-ready? identity-owner)))
+(check "entry shells materialize in the outer owner-lifetime context"
+       (= pre-touch-entry-region-depth 0))
+(define identity-first-touch-after (snapshot-counts))
+(check "first touch publishes exactly one entry and one tensor identity"
+       (same-except-delta?
+         identity-first-touch-before identity-first-touch-after 33 2))
+(set! c2-save-pre-touch-tensor-end-internal saved-pre-touch-end)
+(set! c2-save-pre-touch-p1-identities-internal
+  (lambda (state access-token operation)
+    (saved-pre-touch state access-token operation)
+    (raise #f)))
+(expect-raised-false "pre-touch raised false escapes after exact borrow end"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      identity-owner fail-path policy '(:overwrite? #t))))
+(check "pre-touch raised false performed zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+(check "post-touch exception leaves owner readiness false"
+       (not (owner-identities-ready? identity-owner)))
+(set! c2-save-pre-touch-p1-identities-internal
+  (lambda (state access-token operation)
+    (c2-save-fail 'internal "injected pre-touch failure" '() #f)))
+(expect-error "pre-touch structured failure remains internal"
+              'internal 'checkpoint-save!
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      identity-owner fail-path policy '(:overwrite? #t))))
+(check "pre-touch structured failure performed zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+(check "pre-entry exception leaves owner readiness false"
+       (not (owner-identities-ready? identity-owner)))
+(check "failed retries reuse exact P1 identities without tombstones"
+       (equal? identity-first-touch-after (snapshot-counts)))
+(set! c2-save-pre-touch-p1-identities-internal saved-pre-touch)
+(check "owner is reusable after both pre-touch failures"
+       (c2-checkpoint-save-internal!
+         identity-owner path-a policy '(:overwrite? #t)))
+(check "outer-owned entry identity is exact and stable on retry"
+       (and evacuated-entry evacuated-entry-stable?))
+(check "successful retry reuses exact P1 identities"
+       (equal? identity-first-touch-after (snapshot-counts)))
+(set! c2-save-pre-touch-tensor-begin-internal saved-pre-touch-begin)
+(check "complete pre-touch marks exact owner ready"
+       (owner-identities-ready? identity-owner))
+(define skipped-pre-touch-calls 0)
+(set! c2-save-pre-touch-p1-identities-internal
+  (lambda (state access-token operation)
+    (set! skipped-pre-touch-calls (+ skipped-pre-touch-calls 1))
+    (raise #f)))
+(check "ready owner skips pre-touch on later save"
+       (c2-checkpoint-save-internal!
+         identity-owner path-a policy '(:overwrite? #t)))
+(check "ready owner invoked no later pre-touch callback"
+       (= skipped-pre-touch-calls 0))
+(set! c2-save-pre-touch-p1-identities-internal saved-pre-touch)
+(set! c2-save-pre-touch-entry-shells-internal saved-pre-touch-entry-shells)
+(define identity-release-before (snapshot-counts))
+(check "identity readiness test owner releases"
+       (c2-training-state-release-internal!
+         identity-owner 'trainer-state-release!))
+(define identity-release-after (snapshot-counts))
+(check "identity owner release retires state and both dependents"
+       (and (= (vector-ref identity-release-after 33)
+               (- (vector-ref identity-release-before 33) 3))
+            (= (vector-ref identity-release-after 34)
+               (+ (vector-ref identity-release-before 34) 3))))
+
+;;; A complete pre-touch becomes durable even when the following regional
+;;; build fails. Retry must skip pre-touch because the authenticated P1 shells
+;;; already exist in the same immutable C2-owned state.
+(define transition-owner (make-owner))
+(define transition-builder c2-save-stage-components-internal)
+(set! c2-save-stage-components-internal
+  (lambda (projection owner-token limits subpolicy) (raise #f)))
+(expect-raised-false "post-pre-touch build failure escapes"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      transition-owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-stage-components-internal transition-builder)
+(check "completed pre-touch remains ready after build failure"
+       (owner-identities-ready? transition-owner))
+(define transition-skip-calls 0)
+(set! c2-save-pre-touch-p1-identities-internal
+  (lambda (state access-token operation)
+    (set! transition-skip-calls (+ transition-skip-calls 1))
+    (raise #f)))
+(check "post-build-failure retry succeeds with ready identities"
+       (c2-checkpoint-save-internal!
+         transition-owner path-a policy '(:overwrite? #t)))
+(check "post-build-failure retry skipped pre-touch"
+       (= transition-skip-calls 0))
+(set! c2-save-pre-touch-p1-identities-internal saved-pre-touch)
+(check "transition owner releases"
+       (c2-training-state-release-internal!
+         transition-owner 'trainer-state-release!))
+
+;;; The readiness bit is authority-bearing even though it is private. Copies,
+;;; stale borrows, and dead-owner forgeries must neither observe nor mutate it.
+(define readiness-owner (make-owner))
+(define readiness-borrow
+  (c2-training-state-borrow-begin-internal
+    readiness-owner 'checkpoint-save!))
+(define readiness-state (vector-ref readiness-borrow 1))
+(define readiness-owner-token (vector-ref readiness-borrow 3))
+(define readiness-access-token (vector-ref readiness-borrow 4))
+(define readiness-copy
+  (vector c2-training-state-borrow-tag readiness-state 'checkpoint-save!
+          readiness-owner-token readiness-access-token #f))
+(expect-error "copied borrow cannot query identity readiness"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-training-state-borrow-p1-identities-ready-internal?
+      readiness-copy 'checkpoint-save!)))
+(expect-error "copied borrow cannot mark identity readiness"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-training-state-borrow-mark-p1-identities-ready-internal!
+      readiness-copy 'checkpoint-save!)))
+(check "readiness negative borrow ends"
+       (c2-training-state-borrow-end-internal readiness-borrow))
+(expect-error "stale borrow cannot query identity readiness"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-training-state-borrow-p1-identities-ready-internal?
+      readiness-borrow 'checkpoint-save!)))
+(expect-error "stale borrow cannot mark identity readiness"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-training-state-borrow-mark-p1-identities-ready-internal!
+      readiness-borrow 'checkpoint-save!)))
+(define dead-readiness-copy
+  (vector c2-training-state-borrow-tag readiness-state 'checkpoint-save!
+          readiness-owner-token readiness-access-token #f))
+(check "readiness negative owner releases"
+       (c2-training-state-release-internal!
+         readiness-owner 'trainer-state-release!))
+(expect-error "dead owner forgery cannot query identity readiness"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-training-state-borrow-p1-identities-ready-internal?
+      dead-readiness-copy 'checkpoint-save!)))
+(expect-error "dead owner forgery cannot mark identity readiness"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-training-state-borrow-mark-p1-identities-ready-internal!
+      dead-readiness-copy 'checkpoint-save!)))
+
+;;; Any regional build exception, including #f, ends both claimed accesses.
 (define saved-builder c2-save-stage-components-internal)
+(define ready-build-pre-touch-calls 0)
+(set! c2-save-pre-touch-p1-identities-internal
+  (lambda (state access-token operation)
+    (set! ready-build-pre-touch-calls (+ ready-build-pre-touch-calls 1))
+    (raise #f)))
 (c2-save-io-reset)
 (set! c2-save-stage-components-internal
   (lambda (projection owner-token limits subpolicy) (raise #f)))
@@ -274,6 +480,9 @@
     (c2-checkpoint-save-internal!
       owner fail-path policy '(:overwrite? #t))))
 (set! c2-save-stage-components-internal saved-builder)
+(set! c2-save-pre-touch-p1-identities-internal saved-pre-touch)
+(check "ready owner skips pre-touch before later build failure"
+       (= ready-build-pre-touch-calls 0))
 (check "raised false performed zero atomic I/O"
        (= (c2-save-io-event-count) 0))
 (check "owner is reusable after raised false"
@@ -322,6 +531,137 @@
        (c2-checkpoint-save-internal!
          owner path-a policy '(:overwrite? #t)))
 
+;;; The memory-bounded SAVE transaction rebuilds components in two independent
+;;; child regions. Only the measured size and immediate encode success cross
+;;; those boundaries; no writer callback begins until both builds completed.
+(define saved-measure-staged c2-save-measure-staged-internal)
+(define saved-encode-staged c2-save-encode-staged-into-internal!)
+(define saved-destination-allocate c2-save-destination-allocate-internal)
+(define saved-publish c2-save-publish-internal)
+(define two-pass-builder c2-save-stage-components-internal)
+(define two-pass-build-calls 0)
+(define two-pass-encode-active? #f)
+(define two-pass-publish-calls 0)
+(set! c2-save-stage-components-internal
+  (lambda (projection owner-token limits subpolicy)
+    (set! two-pass-build-calls (+ two-pass-build-calls 1))
+    (two-pass-builder projection owner-token limits subpolicy)))
+(set! c2-save-encode-staged-into-internal!
+  (lambda (staged limits destination file-bytes)
+    (set! two-pass-encode-active? #t)
+    (saved-encode-staged staged limits destination file-bytes)
+    (set! two-pass-encode-active? #f)
+    #t))
+(set! c2-save-publish-internal
+  (lambda (path bytes overwrite)
+    (check "writer follows exactly two component builds"
+           (= two-pass-build-calls 2))
+    (check "writer follows completed encode child callback"
+           (not two-pass-encode-active?))
+    (set! two-pass-publish-calls (+ two-pass-publish-calls 1))
+    (saved-publish path bytes overwrite)))
+(check "two-pass save succeeds"
+       (c2-checkpoint-save-internal!
+         owner path-a policy '(:overwrite? #t)))
+(check "two-pass save publishes exactly once"
+       (= two-pass-publish-calls 1))
+(set! c2-save-publish-internal saved-publish)
+(set! c2-save-encode-staged-into-internal! saved-encode-staged)
+(set! c2-save-stage-components-internal two-pass-builder)
+
+;;; Every child-phase failure ends the outer borrow exactly once and performs
+;;; zero writer I/O. A later ordinary save proves the exact owner stayed live.
+(c2-save-io-reset)
+(set! c2-save-measure-staged-internal
+  (lambda (staged limits)
+    (saved-measure-staged staged limits)
+    (c2-save-fail 'internal "injected post-measure failure" '() #f)))
+(expect-error "post-measure structured failure stays internal"
+              'internal 'checkpoint-save!
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-measure-staged-internal saved-measure-staged)
+(check "post-measure failure performs zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+
+(set! c2-save-destination-allocate-internal
+  (lambda (file-bytes) (raise #f)))
+(expect-raised-false "destination allocation raised false escapes"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-destination-allocate-internal saved-destination-allocate)
+(check "destination allocation failure performs zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+
+(set! c2-save-measure-staged-internal
+  (lambda (staged limits)
+    (+ 4 (saved-measure-staged staged limits))))
+(expect-error "measure/encode destination mismatch is internal"
+              'internal 'checkpoint-save!
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-measure-staged-internal saved-measure-staged)
+(check "measure mismatch performs zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+
+(define second-build-calls 0)
+(set! c2-save-stage-components-internal
+  (lambda (projection owner-token limits subpolicy)
+    (set! second-build-calls (+ second-build-calls 1))
+    (if (= second-build-calls 2) (raise #f)
+        (two-pass-builder projection owner-token limits subpolicy))))
+(expect-raised-false "second component build raised false escapes"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(check "second-build false reached the independent encode pass"
+       (= second-build-calls 2))
+(set! second-build-calls 0)
+(set! c2-save-stage-components-internal
+  (lambda (projection owner-token limits subpolicy)
+    (set! second-build-calls (+ second-build-calls 1))
+    (if (= second-build-calls 2)
+        (c2-save-fail 'internal "injected second-build failure" '() #f)
+        (two-pass-builder projection owner-token limits subpolicy))))
+(expect-error "second component build structured failure stays internal"
+              'internal 'checkpoint-save!
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-stage-components-internal two-pass-builder)
+(check "second-build failures perform zero atomic I/O"
+       (= (c2-save-io-event-count) 0))
+(check "owner reusable after every two-pass failure"
+       (c2-checkpoint-save-internal!
+         owner path-a policy '(:overwrite? #t)))
+
+;;; Publication runs after the borrow end but before regional image teardown.
+;;; A callback that publishes and then throws must not trigger a second end.
+(set! c2-save-publish-internal
+  (lambda (path bytes overwrite)
+    (saved-publish path bytes overwrite)
+    (raise #f)))
+(expect-raised-false "post-publication raised false does not double-end"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-publish-internal
+  (lambda (path bytes overwrite)
+    (saved-publish path bytes overwrite)
+    (c2-save-fail 'internal "post-publication injected failure" '() #f)))
+(expect-error "post-publication structured failure stays internal"
+              'internal 'checkpoint-save!
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-publish-internal saved-publish)
+(check "owner is reusable after post-publication exceptions"
+       (c2-checkpoint-save-internal!
+         owner path-a policy '(:overwrite? #t)))
+
 ;;; Existing C1 atomic writer is the only filesystem boundary.
 (c2-save-io-reset)
 (c2-save-io-fail 11 1 5)
@@ -363,7 +703,7 @@
   (c1-read-file path-b
     (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)
     'checkpoint-save!))
-(check "promoted deterministic images are byte-identical"
+(check "independent deterministic images are byte-identical"
        (c1-bytes=? raw raw-b))
 (define model-at (c1-read-u64 raw 64))
 (define exact-metadata (+ (c1-read-u64 raw 56)
@@ -434,15 +774,23 @@
 ;;; Repeated regional saves allocate no I2/O2 borrow shell or retained native
 ;;; control and preserve P1 live/tombstone identity counts.
 (define counts-before (snapshot-counts))
+(define warmed-save-max-arena-delta 0)
 (let repeat ((remaining 12))
   (if (= remaining 0) #t
-      (begin
+      (let ((arena-before (__arena-used)))
         (check "repeated save succeeds"
                (c2-checkpoint-save-internal!
                  owner path-a policy '(:overwrite? #t)))
+        (let ((arena-delta (- (__arena-used) arena-before)))
+          (if (> arena-delta warmed-save-max-arena-delta)
+              (set! warmed-save-max-arena-delta arena-delta))
+          (check "warmed save retains under 32 KiB of outer arena"
+                 (and (>= arena-delta 0) (< arena-delta 32768))))
         (check "all live/retired counters remain flat"
                (equal? counts-before (snapshot-counts)))
         (repeat (- remaining 1)))))
+(check "all warmed saves stay below the fixed outer-arena bound"
+       (< warmed-save-max-arena-delta 32768))
 (check "all seven I2 live counts remain flat"
        (let loop ((index 0) (now (snapshot-counts)))
          (if (= index 7) #t

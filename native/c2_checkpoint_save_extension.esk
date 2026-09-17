@@ -275,15 +275,19 @@
 (define c2-save-o2-stage-internal
   c2-o2-encode-c2-owned-staging-internal)
 
-(define (c2-save-assemble tokenizer x1 current epoch model optimizer-metadata
-                          optimizer-payload counters rng limits)
+(define (c2-save-measure-staged staged limits)
   (let* ((result (make-bytevector c2-save-result-bytes 0))
          (status
            (c2-save-native-measure
-             tokenizer x1 current epoch model optimizer-metadata
-             optimizer-payload (vector-ref counters 0)
-             (vector-ref counters 2) (vector-ref rng 2)
-             (vector-ref rng 3) (vector-ref rng 4)
+             (vector-ref staged 0) (vector-ref staged 1)
+             (vector-ref staged 2) (vector-ref staged 3)
+             (vector-ref staged 4) (vector-ref staged 5)
+             (vector-ref staged 6)
+             (vector-ref (vector-ref staged 7) 0)
+             (vector-ref (vector-ref staged 7) 2)
+             (vector-ref (vector-ref staged 8) 2)
+             (vector-ref (vector-ref staged 8) 3)
+             (vector-ref (vector-ref staged 8) 4)
              (vector-ref limits 0) (vector-ref limits 1)
              (vector-ref limits 2) (vector-ref limits 3)
              (if (eq? (vector-ref limits 5) 'operational-target) 1 0)
@@ -296,24 +300,55 @@
           (c2-save-fail 'invalid-state
                         "checkpoint state exceeds the persistence policy"
                         '() #f))
-      (let* ((destination (make-bytevector file-bytes 0))
-             (validation (make-bytevector c2-save-result-bytes 0))
-             (validated
-               (c2-save-native-encode-validate
-                 tokenizer x1 current epoch model optimizer-metadata
-                 optimizer-payload (vector-ref counters 0)
-                 (vector-ref counters 2) (vector-ref rng 2)
-                 (vector-ref rng 3) (vector-ref rng 4)
-                 (vector-ref limits 0) (vector-ref limits 1)
-                 (vector-ref limits 2) (vector-ref limits 3)
-                 (if (eq? (vector-ref limits 5) 'operational-target) 1 0)
-                 destination validation)))
-        (c2-save-require-native-success validated validation)
-        (if (not (= (c2-save-u64 validation 8) file-bytes))
-            (c2-save-fail
-              'internal "C2 checkpoint encoder size postcondition failed"
-              '() #f))
-        destination))))
+      file-bytes)))
+
+(define (c2-save-encode-staged-into! staged limits destination file-bytes)
+  (if (or (not (bytevector? destination))
+          (not (= (bytevector-length destination) file-bytes)))
+      (c2-save-fail
+        'internal "C2 checkpoint destination size postcondition failed"
+        '() #f))
+  (let* ((validation (make-bytevector c2-save-result-bytes 0))
+         (validated
+           (c2-save-native-encode-validate
+             (vector-ref staged 0) (vector-ref staged 1)
+             (vector-ref staged 2) (vector-ref staged 3)
+             (vector-ref staged 4) (vector-ref staged 5)
+             (vector-ref staged 6)
+             (vector-ref (vector-ref staged 7) 0)
+             (vector-ref (vector-ref staged 7) 2)
+             (vector-ref (vector-ref staged 8) 2)
+             (vector-ref (vector-ref staged 8) 3)
+             (vector-ref (vector-ref staged 8) 4)
+             (vector-ref limits 0) (vector-ref limits 1)
+             (vector-ref limits 2) (vector-ref limits 3)
+             (if (eq? (vector-ref limits 5) 'operational-target) 1 0)
+             destination validation)))
+    (c2-save-require-native-success validated validation)
+    (if (not (= (c2-save-u64 validation 8) file-bytes))
+        (c2-save-fail
+          'internal "C2 checkpoint encoder size postcondition failed"
+          '() #f))
+    #t))
+
+(define c2-save-measure-staged-internal c2-save-measure-staged)
+(define c2-save-encode-staged-into-internal! c2-save-encode-staged-into!)
+(define c2-save-destination-allocate-internal
+  (lambda (file-bytes) (make-bytevector file-bytes 0)))
+
+;;; Compatibility helper retained for the focused definition closure. The
+;;; owner SAVE path below uses two independent component builds so staging can
+;;; die before the unchanged atomic writer allocates its input snapshot.
+(define (c2-save-assemble tokenizer x1 current epoch model optimizer-metadata
+                          optimizer-payload counters rng limits)
+  (let* ((staged
+           (vector tokenizer x1 current epoch model optimizer-metadata
+                   optimizer-payload counters rng))
+         (file-bytes (c2-save-measure-staged staged limits))
+         (destination (make-bytevector file-bytes 0)))
+    (c2-save-encode-staged-into!
+      staged limits destination file-bytes)
+    destination))
 
 (define (c2-save-stage-components-core
           projection owner-token limits subpolicy)
@@ -359,6 +394,54 @@
 ;;; arbitrary exception, including (raise #f), still ends the outer borrow.
 (define c2-save-stage-components-internal c2-save-stage-components-core)
 
+;;; P1 entry/tensor shells are process-lifetime authenticated identities. Touch
+;;; each exact claimed entry before regional scratch so later C1 encoding only
+;;; reuses those outer identities; no tensor payload callback runs here.
+(define c2-save-pre-touch-tensor-begin-internal
+  state-dict-c2-owned-tensor-borrow-begin-internal)
+(define c2-save-pre-touch-tensor-end-internal
+  state-dict-c2-owned-tensor-borrow-end-internal)
+(define c2-save-pre-touch-entry-shells-internal
+  state-dict-c2-owned-entry-shells-internal)
+
+(define (c2-save-pre-touch-p1-identities state access-token operation)
+  ;; This narrow trusted helper runs in the established owner-lifetime arena.
+  ;; It creates only the ordered exact entry shells/list, bounded by P1/wire
+  ;; hard E <= 4096; it neither deep-projects metadata nor clones payloads.
+  ;; Caller/profile aggregate-count admission occurs later, during measurement.
+  (let ((entries
+          (c2-save-pre-touch-entry-shells-internal
+            state access-token operation)))
+    (let loop ((remaining entries))
+      (if (null? remaining) #t
+          (let ((entry (car remaining)))
+            (c2-save-pre-touch-tensor-begin-internal
+              state access-token entry operation)
+            ;; No fallible call may intervene after begin: exact paired end
+            ;; clears the active access before tail recursion or unwinding.
+            (c2-save-pre-touch-tensor-end-internal
+              state access-token entry operation)
+            (loop (cdr remaining)))))))
+
+;;; Focused tests replace only this private phase boundary. Production uses the
+;;; exact pre-touch above; no symbol or public install surface is introduced.
+(define c2-save-pre-touch-p1-identities-internal
+  c2-save-pre-touch-p1-identities)
+
+;;; Synchronous publication consumes the regional image before returning.
+;;; Tests replace this lexical boundary to prove post-publication exceptions
+;;; cannot re-end an already inactive owner borrow.
+(define (c2-save-publish-core path bytes overwrite)
+  (let ((status
+          (c1-native-atomic-write
+            path bytes (bytevector-length bytes) overwrite)))
+    (if (= status 0) #t
+        (c1-native-fail
+          'checkpoint-save!
+          "atomic C2 checkpoint publication failed" status))))
+
+(define c2-save-publish-internal c2-save-publish-core)
+
 (define (c2-save-with-owner-borrow state limits subpolicy build publish)
   ;; The authenticated borrow identity must be allocated in the owner's outer
   ;; arena: allocating it regionally and storing it into older owner controls
@@ -367,39 +450,119 @@
   (let* ((borrow
            (c2-training-state-borrow-begin-internal
              state 'checkpoint-save!))
+         ;; This single outer transaction record survives scratch teardown:
+         ;; [borrow-ended?, failed?, caught-value]. Success crosses as the
+         ;; immediate #t; an explicit failure bit preserves (raise #f).
+         (transaction (vector #f #f #f))
          (outcome
-           (guard (caught (#t (vector #f caught)))
-             ;; Project both outer-owned authorities before entering scratch.
-             ;; Claimed component staging may refer to them, but never stores a
-             ;; regional identity back into either owner.
-             (let ((projection
-                     (c2-training-state-borrow-projection-internal borrow))
-                   (access-token
+           (guard (caught
+                    (#t
+                      (vector-set! transaction 1 #t)
+                      (vector-set! transaction 2 caught)
+                      #f))
+             (let ((access-token
                      (c2-training-state-borrow-owner-token-internal
                        borrow 'checkpoint-save!)))
-               ;; Serialized bytes remain authoritative. Revalidate X1 and
-               ;; both D2 cursors and detach every mutable control leaf while
-               ;; the exact borrow is active, before regional bulk staging.
-               (vector-set!
-                 projection 2
-                 (c2-save-controls-copy (vector-ref projection 2)))
-               (vector #t
-                 (let ((staged
-                         (build projection access-token limits subpolicy)))
-                   (with-region ('c2-checkpoint-save-scratch 65536)
-                     (c2-save-assemble
-                       (vector-ref staged 0) (vector-ref staged 1)
-                       (vector-ref staged 2) (vector-ref staged 3)
-                       (vector-ref staged 4) (vector-ref staged 5)
-                       (vector-ref staged 6) (vector-ref staged 7)
-                       (vector-ref staged 8) limits))))))))
-    ;; End outside callback unwinding so even a false exception value cannot
-    ;; bypass deactivation. On success the complete byte image was promoted out
-    ;; of scratch, and the borrow ends before any filesystem publication.
-    (c2-training-state-borrow-end-internal borrow)
-    (if (vector-ref outcome 0)
-        (publish (vector-ref outcome 1))
-        (raise (vector-ref outcome 1)))))
+               (let ((identities-ready?
+                       (c2-training-state-borrow-p1-identities-ready-internal?
+                         borrow 'checkpoint-save!)))
+               (if (not identities-ready?)
+                   (let ((p1
+                           ;; Admission and the full C2 projection are
+                           ;; no-escape regional work. Only the already-outer
+                           ;; exact P1 owner reference crosses for pre-touch.
+                           (with-region
+                             ('c2-checkpoint-save-preflight 65536)
+                             (let ((projection
+                                     (c2-training-state-borrow-projection-internal
+                                       borrow)))
+                     ;; Preserve accepted first-touch order without retaining
+                     ;; detached controls in the outer arena. Nothing created
+                     ;; by this validation-only region escapes it.
+                               (c2-save-controls-copy
+                                 (vector-ref projection 2))
+                               (c2-save-o2-policy-preflight
+                                 (vector-ref projection 3)
+                                 (vector-ref projection 4) limits)
+                               (vector-ref projection 0)))))
+                     ;; Authenticated P1 shells are intentionally outer
+                     ;; identities; materialize them only after both preflights.
+                     (c2-save-pre-touch-p1-identities-internal
+                       p1 access-token
+                       'checkpoint-save!)
+                     ;; Assignment-only after the complete traversal. Partial
+                     ;; or exceptional pre-touch leaves readiness false; once
+                     ;; true it remains valid across later build/writer errors.
+                     (c2-training-state-borrow-mark-p1-identities-ready-internal!
+                       borrow 'checkpoint-save!)))
+               (with-region ('c2-checkpoint-save-scratch 65536)
+                 ;; Measure and encode use independent child regions. Each
+                 ;; child reconstructs the complete detached component stage;
+                 ;; only an exact scalar size or immediate #t crosses back.
+                 ;; This prevents the writer's native image snapshot from
+                 ;; coexisting with either component stage.
+                 (let* ((file-bytes
+                          (with-region ('c2-checkpoint-save-measure-pass 65536)
+                            (let* ((projection
+                                     ;; Once identities are ready, every SAVE
+                                     ;; projection is child-regional and cannot
+                                     ;; retain even bounded wrapper controls in
+                                     ;; the process arena.
+                                     (c2-training-state-borrow-projection-internal
+                                       borrow))
+                                   (detached-controls
+                                     (c2-save-controls-copy
+                                       (vector-ref projection 2)))
+                                   (regional-projection
+                                     (vector
+                                       (vector-ref projection 0)
+                                       (vector-ref projection 1)
+                                       detached-controls
+                                       (vector-ref projection 3)
+                                       (vector-ref projection 4)))
+                                   (staged
+                                     (build regional-projection access-token
+                                            limits subpolicy)))
+                              (c2-save-measure-staged-internal
+                                staged limits))))
+                        ;; The destination belongs to the parent scratch. A
+                        ;; child encode may mutate its raw bytes, but cannot
+                        ;; store an arena pointer in the bytevector.
+                        (destination
+                          (c2-save-destination-allocate-internal file-bytes)))
+                   (with-region ('c2-checkpoint-save-encode-pass 65536)
+                     (let* ((projection
+                              (c2-training-state-borrow-projection-internal
+                                borrow))
+                            (detached-controls
+                              (c2-save-controls-copy
+                                (vector-ref projection 2)))
+                            (regional-projection
+                              (vector
+                                (vector-ref projection 0)
+                                (vector-ref projection 1)
+                                detached-controls
+                                (vector-ref projection 3)
+                                (vector-ref projection 4)))
+                            (staged
+                              (build regional-projection access-token
+                                     limits subpolicy)))
+                       (c2-save-encode-staged-into-internal!
+                         staged limits destination file-bytes)))
+                   ;; Both child stages are gone before borrow end and the
+                   ;; first filesystem action. Publication consumes the parent
+                   ;; destination synchronously while its scratch is live.
+                   (c2-training-state-borrow-end-internal borrow)
+                   (vector-set! transaction 0 #t)
+                   (publish destination))))))))
+    ;; Build/region exceptions, including #f, arrive with an active borrow.
+    ;; Writer exceptions arrive after borrow-ended was set and must not cause a
+    ;; second end attempt.
+    (if (not (vector-ref transaction 0))
+        (c2-training-state-borrow-end-internal borrow))
+    (if (vector-ref transaction 1)
+        (raise (vector-ref transaction 2))
+        outcome)))
 
 (define (c2-checkpoint-save-internal! state path policy options)
   ;; Observable admission order: option/version, path, policy, exact state;
@@ -419,13 +582,5 @@
         state limits (c2-save-effective-model-policy limits subpolicy)
         c2-save-stage-components-internal
         (lambda (bytes)
-          ;; Publication consumes the regional byte image synchronously; it
-          ;; cannot escape past this scratch lifetime.
-          (let ((status
-                  (c1-native-atomic-write
-                    path bytes (bytevector-length bytes)
-                    (if (vector-ref parsed-options 0) 1 0))))
-            (if (= status 0) #t
-                (c1-native-fail
-                  'checkpoint-save!
-                  "atomic C2 checkpoint publication failed" status))))))))
+          (c2-save-publish-internal
+            path bytes (if (vector-ref parsed-options 0) 1 0)))))))

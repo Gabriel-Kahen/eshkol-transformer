@@ -374,6 +374,90 @@
 (define owner-token
   (c2-training-state-borrow-owner-token-internal
     borrow 'checkpoint-save!))
+(check "borrow access authority is a fresh private exact identity"
+       (and (vector? owner-token) (= (vector-length owner-token) 1)
+            (eq? (vector-ref owner-token 0)
+                 c2-training-state-borrow-access-token-tag)))
+(check "fresh C2 borrow has canonical inactive tensor access"
+       (equal? (vector-ref borrow 5) (vector #f #f #f #f #f)))
+(define copied-borrow
+  (vector c2-training-state-borrow-tag (vector-ref borrow 1)
+          (vector-ref borrow 2) (vector-ref borrow 3)
+          (vector-ref borrow 4) (vector-ref borrow 5)))
+(expect-error "copied C2 borrow cannot consume inactive tensor cache"
+              'invalid-state 'c2-training-state-borrow-end-internal
+  (lambda () (c2-training-state-borrow-end-internal copied-borrow)))
+(expect-error "copied C2 borrow cannot activate aliased tensor cache"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-borrow-activate-internal!
+      owned-p1 (vector-ref borrow 3) (vector-ref borrow 4)
+      copied-borrow 'checkpoint-save!)))
+(check "copied C2 borrow leaves exact cache canonical and inactive"
+       (equal? (vector-ref borrow 5) (vector #f #f #f #f #f)))
+(define p1-owned-entry-shells-a
+  (state-dict-c2-owned-entry-shells-internal
+    owned-p1 owner-token 'checkpoint-save!))
+(define p1-owned-entry-shells-b
+  (state-dict-c2-owned-entry-shells-internal
+    owned-p1 owner-token 'checkpoint-save!))
+(check "claimed entry helper returns the exact ordered bounded shell list"
+       (and (pair? p1-owned-entry-shells-a)
+            (null? (cdr p1-owned-entry-shells-a))))
+(check "repeated claimed entry preparation reuses exact shell identity"
+       (and (not (eq? p1-owned-entry-shells-a p1-owned-entry-shells-b))
+            (eq? (car p1-owned-entry-shells-a)
+                 (car p1-owned-entry-shells-b))))
+(check "claimed entry preparation leaves tensor cache inactive"
+       (equal? (vector-ref borrow 5) (vector #f #f #f #f #f)))
+(define wrong-access-token
+  (vector (vector-ref owner-token 0)))
+(check "same-tag access-token lookalike has distinct identity"
+       (not (eq? wrong-access-token owner-token)))
+(expect-error "same-tag access-token lookalike cannot prepare claimed entries"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-entry-shells-internal
+      owned-p1 wrong-access-token 'checkpoint-save!)))
+(expect-error "forged state cannot prepare claimed entries"
+              'invalid-argument 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-entry-shells-internal
+      (vector owned-p1) owner-token 'checkpoint-save!)))
+(define p1-owned-projection
+  (state-dict-c2-owned-projection-internal
+    owned-p1 owner-token 'checkpoint-save!))
+(define p1-owned-entry (car (vector-ref p1-owned-projection 4)))
+(define direct-claimed-carrier
+  (state-dict-c2-owned-tensor-borrow-begin-internal
+    owned-p1 owner-token p1-owned-entry 'checkpoint-save!))
+(check "direct claimed tensor begin returns a carrier"
+       direct-claimed-carrier)
+(expect-error "nested claimed tensor begin rejects while cache is active"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-tensor-borrow-begin-internal
+      owned-p1 owner-token p1-owned-entry 'checkpoint-save!)))
+(expect-error "wrong token cannot end active claimed tensor access"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-tensor-borrow-end-internal
+      owned-p1 wrong-access-token p1-owned-entry 'checkpoint-save!)))
+(expect-error "wrong entry cannot end active claimed tensor access"
+              'invalid-argument 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-tensor-borrow-end-internal
+      owned-p1 owner-token (vector p1-owned-entry) 'checkpoint-save!)))
+(expect-error "wrong-token end leaves claimed tensor access active"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-tensor-borrow-begin-internal
+      owned-p1 owner-token p1-owned-entry 'checkpoint-save!)))
+(check "exact token ends direct claimed tensor access"
+       (state-dict-c2-owned-tensor-borrow-end-internal
+         owned-p1 owner-token p1-owned-entry 'checkpoint-save!))
+(check "claimed tensor end restores canonical inactive cache"
+       (equal? (vector-ref borrow 5) (vector #f #f #f #f #f)))
 (define owned-model-policy
   (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
 (define owned-model-bytes
@@ -401,8 +485,9 @@
               (bytevector? (vector-ref value 0))
               (bytevector? (vector-ref value 1)))))
 (define copied-owner-token
-  (guard (raised (#t raised))
-    (error "transformer.trainer-state-borrow-access:v1")))
+  (vector (vector-ref owner-token 0)))
+(check "second same-tag token lookalike has distinct identity"
+       (not (eq? copied-owner-token owner-token)))
 (expect-error "forged lookalike token cannot encode claimed P1" 'invalid-state
               'checkpoint-save!
   (lambda ()
@@ -454,6 +539,8 @@
              (c2-model-encode-c2-owned-state-internal
                owned-p1 owner-token owned-model-policy
                'checkpoint-save!)))))
+(check "raised #f restored canonical inactive tensor cache"
+       (equal? (vector-ref borrow 5) (vector #f #f #f #f #f)))
 (define claimed-i2-before (snapshot-i2-counts))
 (define claimed-o2-before (snapshot-o2-counts))
 (let repeat-claimed ((remaining 8))
@@ -533,9 +620,17 @@
   (lambda ()
     (c2-training-state-release-internal! owned 'trainer-state-release!)))
 (check "borrow ends" (c2-training-state-borrow-end-internal borrow))
+(expect-error "stale C2 borrow cannot reuse retired tensor cache"
+              'invalid-state 'c2-training-state-borrow-end-internal
+  (lambda () (c2-training-state-borrow-end-internal borrow)))
 (expect-error "stale borrow rejects" 'invalid-state
               'c2-training-state-borrow-projection-internal
   (lambda () (c2-training-state-borrow-projection-internal borrow)))
+(expect-error "stale access token cannot prepare claimed entries"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-entry-shells-internal
+      owned-p1 owner-token 'checkpoint-save!)))
 (expect-error "stale exact owner token cannot encode claimed P1"
               'invalid-state 'checkpoint-save!
   (lambda ()
@@ -548,6 +643,24 @@
   (lambda () (c2-o2-encode-c2-owned-staging-internal stale-o2-request)))
 (check "stale-token failure publishes nothing"
        (eq? (vector-ref stale-o2-request 4) #f))
+(define renewed-borrow
+  (c2-training-state-borrow-begin-internal owned 'checkpoint-save!))
+(define renewed-token
+  (c2-training-state-borrow-owner-token-internal
+    renewed-borrow 'checkpoint-save!))
+(check "serial borrow receives a distinct exact access identity"
+       (not (eq? owner-token renewed-token)))
+(expect-error "prior token stays stale during a later active borrow"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-entry-shells-internal
+      owned-p1 owner-token 'checkpoint-save!)))
+(check "renewed exact token prepares claimed entries"
+       (pair?
+         (state-dict-c2-owned-entry-shells-internal
+           owned-p1 renewed-token 'checkpoint-save!)))
+(check "renewed borrow ends"
+       (c2-training-state-borrow-end-internal renewed-borrow))
 (expect-error "P1 alias unusable after transfer" 'invalid-state 'state-dict-paths
   (lambda () (state-dict-paths owned-p1)))
 (expect-error "P1 release alias unusable after transfer"
@@ -588,6 +701,11 @@
        (and (= p1-release-calls 0) (= o2-release-calls 0)))
 (check "live release drains both owners"
        (c2-training-state-release-internal! owned 'trainer-state-release!))
+(expect-error "dead claimed state cannot prepare entries"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (state-dict-c2-owned-entry-shells-internal
+      owned-p1 owner-token 'checkpoint-save!)))
 (check "each authority consumed once"
        (and (= p1-release-calls 1) (= o2-release-calls 1)))
 (check "exact dead release is idempotent"

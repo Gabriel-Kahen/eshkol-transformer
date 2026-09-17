@@ -87,7 +87,8 @@
          state-dict-c2-owned-tensor-borrow-begin-internal
          state-dict-c2-owned-tensor-borrow-end-internal
          state-dict-c2-owned-borrow-activate-internal!
-         state-dict-c2-owned-borrow-deactivate-internal!)
+         state-dict-c2-owned-borrow-deactivate-internal!
+         state-dict-c2-owned-entry-shells-internal)
 
 (define p1-trusted-surface
   (let ()
@@ -4361,24 +4362,31 @@
     (let* ((marker (c2-owned-active-marker operation state access-token))
            (raw (vector-ref marker 1))
            (borrow (vector-ref marker 4))
+           (access (vector-ref borrow 5))
            (raw-entry (raw-entry-for-trusted operation entry)))
       (if (or (not (state-entry-identical-member? raw-entry (vector-ref raw 6)))
-              (vector-ref borrow 5))
+              (not (vector? access)) (not (= (vector-length access) 5))
+              (vector-ref access 0) (vector-ref access 1)
+              (vector-ref access 2) (vector-ref access 3)
+              (vector-ref access 4))
           (fail 'invalid-state operation
                 "C2 owner has a stale or active tensor access" '()))
       (let* ((raw-tensor (state-tensor-for-entry raw raw-entry))
              (tensor-shell (shell-for-raw 'state-tensor raw-tensor))
-             (access (vector state-c2-borrow-access-tag marker raw-entry
-                             tensor-shell borrow)))
+             (carrier (vector-ref raw-entry 7)))
         (native-check operation
           (p1-native-state-tensor-validate native-context state tensor-shell))
-        (vector-set! borrow 5 access)
-        (let ((carrier (vector-ref raw-entry 7)))
-          (if carrier carrier
-              (begin
-                (vector-set! borrow 5 #f)
-                (fail 'invalid-state operation
-                      "state-backed tensor is released" '())))))))
+        (if (not carrier)
+            (fail 'invalid-state operation
+                  "state-backed tensor is released" '()))
+        ;; Reuse the one outer record allocated with the C2 borrow. Regional
+        ;; callers never publish a short-lived access vector into outer state.
+        (vector-set! access 0 state-c2-borrow-access-tag)
+        (vector-set! access 1 marker)
+        (vector-set! access 2 raw-entry)
+        (vector-set! access 3 tensor-shell)
+        (vector-set! access 4 borrow)
+        carrier)))
   (lambda (state access-token entry operation)
     (let* ((marker (c2-owned-active-marker operation state access-token))
            (borrow (vector-ref marker 4))
@@ -4391,11 +4399,18 @@
               (not (eq? (vector-ref access 4) borrow)))
           (fail 'invalid-argument operation
                 "C2 tensor access handle differs" '()))
-      (native-check operation
-        (p1-native-state-tensor-validate
-          native-context state (vector-ref access 3)))
-      (vector-set! borrow 5 #f)
-      #t))
+      (let ((tensor-shell (vector-ref access 3)))
+        ;; Retire the exact access before the fallible native validation. A
+        ;; provider/native defect must not strand the enclosing C2 owner busy.
+        (vector-set! access 0 #f)
+        (vector-set! access 1 #f)
+        (vector-set! access 2 #f)
+        (vector-set! access 3 #f)
+        (vector-set! access 4 #f)
+        (native-check operation
+          (p1-native-state-tensor-validate
+            native-context state tensor-shell))
+        #t)))
   (lambda (state owner-token access-token borrow operation)
     (let* ((raw (c2-owned-state-record operation state))
            (lifecycle (state-lifecycle raw)))
@@ -4412,17 +4427,28 @@
   (lambda (state owner-token access-token borrow operation)
     (let* ((raw (c2-owned-state-record operation state))
            (lifecycle (state-lifecycle raw))
-           (marker (vector-ref lifecycle 7)))
+           (marker (vector-ref lifecycle 7))
+           (access (vector-ref borrow 5)))
       (if (or (not (vector? marker)) (not (= (vector-length marker) 5))
               (not (eq? (vector-ref marker 0) state-c2-borrow-access-tag))
               (not (eq? (vector-ref marker 2) owner-token))
               (not (eq? (vector-ref marker 3) access-token))
               (not (eq? (vector-ref marker 4) borrow))
-              (vector-ref borrow 5))
+              (not (vector? access)) (not (= (vector-length access) 5))
+              (vector-ref access 0) (vector-ref access 1)
+              (vector-ref access 2) (vector-ref access 3)
+              (vector-ref access 4))
           (fail 'invalid-state operation
                 "P1 C2 borrow is stale or has active tensor access" '()))
       (vector-set! lifecycle 7 #f)
       #t))
+  ;; Append-only trusted slot 58. Materialize only exact entry shells in the
+  ;; caller's current owner-lifetime arena; do not project metadata or payloads.
+  (lambda (state access-token operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (raw (vector-ref marker 1)))
+      (validate-bound-state-admitted operation raw)
+      (wrap-entry-items operation state raw (vector-ref raw 6))))
   )))
 
 (define (module-parameters module)
@@ -4567,3 +4593,6 @@
           state owner-token access-token borrow operation)
   ((vector-ref p1-trusted-surface 57)
    state owner-token access-token borrow operation))
+(define (state-dict-c2-owned-entry-shells-internal
+          state access-token operation)
+  ((vector-ref p1-trusted-surface 58) state access-token operation))

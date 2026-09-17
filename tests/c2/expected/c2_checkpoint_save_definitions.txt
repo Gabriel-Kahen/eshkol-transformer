@@ -4,12 +4,16 @@ c2-save-component-policy-preflight
 c2-save-controls-copy
 c2-save-effective-limit
 c2-save-effective-model-policy
+c2-save-encode-staged-into!
 c2-save-fail-raw
+c2-save-measure-staged
 c2-save-native-failure
 c2-save-o2-policy-preflight
 c2-save-options
 c2-save-path-encoded-size
+c2-save-pre-touch-p1-identities
 c2-save-proper-symbol-list?
+c2-save-publish-core
 c2-save-require-native-success
 c2-save-stage-components-core
 c2-save-u64

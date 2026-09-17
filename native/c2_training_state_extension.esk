@@ -21,6 +21,8 @@
   (vector 'c2-private-training-state-compose-v1))
 (define c2-training-state-borrow-tag
   (vector 'c2-private-training-state-borrow-v1))
+(define c2-training-state-borrow-access-token-tag
+  (vector 'c2-private-training-state-borrow-access-token-v1))
 (define c2-training-state-owner-token-tag
   (vector 'c2-private-subowner-token-v1))
 (define c2-training-state-states '())
@@ -258,8 +260,11 @@
          ;; copying its fields never grants authority.
          (owner-token
            (vector c2-training-state-owner-token-tag shell #f))
+         ;; Slot 8 records whether SAVE has materialized every lazy P1
+         ;; entry/tensor identity in this owner's outer arena. It is private,
+         ;; monotonic while live, and never appears in the borrow projection.
          (state (vector shell p1 o2 controls topology o2-projection
-                        owner-token 'constructing))
+                        owner-token 'constructing #f))
          (next-registry (cons state c2-training-state-states)))
     (c2-training-state-claim-p1! p1 owner-token)
     (guard (caught
@@ -284,12 +289,20 @@
         (c2-training-state-fail
           'invalid-state operation "C2 state is busy, releasing, or dead"))
     (let* ((owner-token (vector-ref state 6))
+           ;; Exact identity is the authority contract. A fresh private vector
+           ;; is unforgeable by copied fields just like the former caught-error
+           ;; shell, without allocating a multi-megabyte exception graph for
+           ;; every serial SAVE borrow.
            (access-token
-             (guard (raised (#t raised))
-               (error "transformer.trainer-state-borrow-access:v1")))
+             (vector c2-training-state-borrow-access-token-tag))
+           ;; One outer access record is reused for every serial P1 tensor
+           ;; borrow. Regional encoders fill/clear it but never install a
+           ;; regional identity into the outer C2 borrow.
+           (tensor-access
+             (vector #f #f #f #f #f))
            (borrow
              (vector c2-training-state-borrow-tag state operation
-                     owner-token access-token #f)))
+                     owner-token access-token tensor-access)))
       ;; Activation validates each exact claimed subowner and installs private
       ;; access state under guarded rollback. Neither subowner ever transitions
       ;; back to the ordinary live lifecycle.
@@ -323,7 +336,7 @@
         'invalid-argument 'c2-training-state-borrow-projection-internal
         "expected an exact active C2 borrow"))
   (let ((state (vector-ref borrow 1)))
-    (if (or (not (vector? state)) (not (= (vector-length state) 8))
+    (if (or (not (vector? state)) (not (= (vector-length state) 9))
             (not (eq? (vector-ref state 7) borrow))
             (not (eq? (vector-ref borrow 3) (vector-ref state 6)))
             (not (eq? (vector-ref (vector-ref state 6) 2) borrow)))
@@ -342,7 +355,7 @@
         'invalid-argument operation "expected an exact active C2 borrow"))
   (let ((state (vector-ref borrow 1))
         (owner-token (vector-ref borrow 3)))
-    (if (or (not (vector? state)) (not (= (vector-length state) 8))
+    (if (or (not (vector? state)) (not (= (vector-length state) 9))
             (not (eq? (vector-ref state 7) borrow))
             (not (eq? (vector-ref state 6) owner-token))
             (not (vector? owner-token))
@@ -355,6 +368,37 @@
           'invalid-state operation "C2 borrow authority is stale or forged"))
     (vector-ref borrow 4)))
 
+;;; SAVE-private monotonic identity readiness. Both operations require the
+;;; exact active borrow, so copied/forged/stale shells cannot observe or mutate
+;;; owner state. A completed pre-touch may remain ready across later failures:
+;;; P1 is immutable while C2-owned and the authenticated shells are permanent.
+(define (c2-training-state-borrow-p1-identities-ready-internal? borrow operation)
+  (if (or (not (symbol? operation))
+          (not (vector? borrow)) (not (= (vector-length borrow) 6))
+          (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
+      (c2-training-state-fail
+        'invalid-argument operation "expected an exact active C2 borrow"))
+  (let ((state (vector-ref borrow 1))
+        (owner-token (vector-ref borrow 3)))
+    (if (or (not (vector? state)) (not (= (vector-length state) 9))
+            (not (eq? (vector-ref state 7) borrow))
+            (not (vector? owner-token))
+            (not (= (vector-length owner-token) 3))
+            (not (eq? owner-token (vector-ref state 6)))
+            (not (eq? (vector-ref owner-token 2) borrow))
+            (not (or (eq? (vector-ref state 8) #f)
+                     (eq? (vector-ref state 8) #t))))
+        (c2-training-state-fail
+          'invalid-state operation "C2 borrow is stale"))
+    (vector-ref state 8)))
+
+(define (c2-training-state-borrow-mark-p1-identities-ready-internal!
+          borrow operation)
+  ;; Reuse the exact admission above before the assignment-only transition.
+  (c2-training-state-borrow-p1-identities-ready-internal? borrow operation)
+  (vector-set! (vector-ref borrow 1) 8 #t)
+  #t)
+
 (define (c2-training-state-borrow-end-internal borrow)
   (if (or (not (vector? borrow)) (not (= (vector-length borrow) 6))
           (not (eq? (vector-ref borrow 0) c2-training-state-borrow-tag)))
@@ -362,17 +406,21 @@
         'invalid-argument 'c2-training-state-borrow-end-internal
         "expected an exact active C2 borrow"))
   (let ((state (vector-ref borrow 1)))
-    (if (or (not (vector? state)) (not (= (vector-length state) 8))
+    (if (or (not (vector? state)) (not (= (vector-length state) 9))
             (not (eq? (vector-ref state 7) borrow))
             (not (eq? (vector-ref borrow 3) (vector-ref state 6)))
             (not (eq? (vector-ref (vector-ref state 6) 2) borrow)))
         (c2-training-state-fail
           'invalid-state 'c2-training-state-borrow-end-internal
           "C2 borrow is stale"))
-    (if (vector-ref borrow 5)
+    (let ((access (vector-ref borrow 5)))
+    (if (or (not (vector? access)) (not (= (vector-length access) 5))
+            (vector-ref access 0) (vector-ref access 1)
+            (vector-ref access 2) (vector-ref access 3)
+            (vector-ref access 4))
         (c2-training-state-fail
           'invalid-state (vector-ref borrow 2)
-          "C2 borrow still has an active P1 tensor access"))
+          "C2 borrow has a malformed or active P1 tensor access")))
     ;; Revoke subowner access before publishing the owner as live.
     (state-dict-c2-owned-borrow-deactivate-internal!
       (vector-ref state 1) (vector-ref state 6) (vector-ref borrow 4) borrow
@@ -385,6 +433,7 @@
     (vector-set! borrow 1 #f)
     (vector-set! borrow 3 #f)
     (vector-set! borrow 4 #f)
+    (vector-set! borrow 5 #f)
     #t))
 
 ;;; These indirections are intentionally lexical and let the focused source
@@ -421,6 +470,7 @@
             (vector-set! state 4 'released)
             (vector-set! state 5 'released)
             (vector-set! state 6 #f)
+            (vector-set! state 8 #f)
             (guard (caught
                      (#t
                        (set! have-first-error? #t)
