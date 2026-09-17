@@ -4,6 +4,37 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-14 — K2 native-numerics CI scheduling budget / PR #75
+
+- **Decision:** retain the eight-suite blocking topology and select the outer job
+  timeout by suite identity: `native-numerics` receives 105 minutes and every other
+  blocking suite remains at 75 minutes. The topology and final-status jobs remain at
+  two minutes, and exhaustive acceptance remains at 240 minutes. This is a bounded
+  scheduling allowance, not a performance claim or acceptance evidence. K2 remains
+  `review`.
+- **Cancelled evidence:** [blocking run 34788832457 attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457/attempts/1)
+  tested exact K2 source head
+  `2641c24b2c50939f300ae995c00d0337c01660a3`. All seven other suites passed, while
+  native-numerics ran for 75m16s and was cancelled by the outer job limit during
+  `scripts/test-o2.sh`; its 26m50s prerequisite build and the preceding K2, N2, and
+  N3K gates passed. Smoke and benchmark were skipped, and the required final status
+  correctly failed. [Attempt 2](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457/attempts/2)
+  reran only the failed native lane and final status. Its prerequisite build passed
+  in 27m08s; K2, N2, and N3K passed again, then the job was cancelled after 75m15s,
+  18m56s into O2. Smoke and benchmark were again skipped and final status failed.
+  Neither cancellation contained an assertion failure, and neither is a green run.
+- **Invariant boundary:** no full-suite command, build prerequisite, sanitizer/LSan
+  setting, oracle pin, fresh-cache repeat, malformed-input or resource assertion,
+  inner process/compiler timeout, smoke/benchmark command, or final failure and
+  cancellation propagation is changed or skipped. Executable topology checks pin
+  native=105, every other suite=75, both two-minute control jobs, exhaustive=240,
+  the 60-second A0 compiler timeout in both workflows, exact blocking/exhaustive
+  commands, all three native-only conditions, and the final failure gate. Negative
+  mutations prove that command failure masking, condition removal, final-gate
+  removal, A0 timeout inflation, native=75, and non-native=105 are rejected.
+  The reviewed K2 production blobs remain outside this scheduling/test/docs delta;
+  fresh supported blocking CI and independent K2-R review are still required.
+
 ## 2026-09-10 — O2 merged implementation accepted; C2 prerequisites explicit
 
 - **Decision:** O2 is accepted and complete within its unchanged bounded contract.

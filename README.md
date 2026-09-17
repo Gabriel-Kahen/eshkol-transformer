@@ -247,6 +247,7 @@ See:
 - [Quality gates](docs/QUALITY_GATES.md)
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
+- [Process-local capability facade](docs/K2_CAPABILITY_FACADE.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Dense CPU-f32 tensor and parameter-gradient substrate](docs/I2_F32_TENSOR.md)
 - [AdamW optimizer, schedules, and logical state](docs/O2_OPTIMIZER.md)

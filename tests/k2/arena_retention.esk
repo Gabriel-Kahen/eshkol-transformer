@@ -1,0 +1,39 @@
+(require transformer.capabilities)
+
+(define args (command-line))
+(define horizon (car (cdr args)))
+(define limit
+  (cond ((string=? horizon "1024") 1024)
+        ((string=? horizon "8192") 8192)
+        (else
+         (begin
+           (display "K2 arena horizon must be 1024 or 8192") (newline)
+           (exit 64)))))
+
+(define (list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(let loop ((iteration 0))
+  (if (= iteration limit)
+      (begin
+        (display "K2 ARENA RETENTION PASS: ")
+        (display limit)
+        (display " lexical-region iterations")
+        (newline))
+      (begin
+        (with-region ('k2-capability-iteration 65536)
+          (let* ((report (capability-discover))
+                 (request
+                  (capability-request 'storage.copy 'f32 'cpu '(0) #t))
+                 (entry (capability-require report 'tensor.f32 request))
+                 (entries (capability-report-entries report)))
+            (if (not
+                 (and (capability-verified? report 'tensor.f32 request)
+                      (eq? (capability-entry-name entry) 'tensor.f32)
+                      (= (list-length entries) 11)))
+                (begin
+                  (display "K2 arena retention validation failed") (newline)
+                  (exit 65)))))
+        (loop (+ iteration 1)))))
