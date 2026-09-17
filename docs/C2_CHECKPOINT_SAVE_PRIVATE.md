@@ -5,8 +5,9 @@ not an A0/K2 API and provides no load, reconstruction, or capability surface.
 
 The operation admits options, required features, path, policy, and the exact C2
 owner before filesystem work. It borrows that owner synchronously, revalidates
-and detaches its inert controls, uses the committed claimed-owner C1 model and
-O2 staging seams, then assembles with `et_c2_checkpoint_encode_v1`. The native
+its deep-owned inert controls in a discard-only preflight region, uses the
+committed claimed-owner C1 model and O2 staging seams, then assembles with
+`et_c2_checkpoint_encode_v1`. The native
 bridge recomputes outer and moment digests and requires a complete
 `et_c2_checkpoint_parse_v1` load-mode parse before returning the image. The C2
 borrow ends before the existing C1 atomic writer publishes it. Atomic writer
@@ -25,15 +26,23 @@ identity as its access token. Authentication compares that exact identity; a
 copied, foreign, prior-borrow, or post-release token remains invalid without
 constructing and retaining a runtime exception graph on every SAVE.
 
-Each SAVE then performs two independent regional component builds. The first
-returns only the measured file size; after it is destroyed, the parent scratch
-allocates the destination bytevector. The second rebuilds and encodes into that
-destination, and is destroyed before the C2 borrow ends. The existing atomic
-writer consumes the parent-regional destination synchronously, so its native
-snapshot may coexist with one destination image but not with either component
-stage. Scratch teardown is explicit region destruction; correctness assumes no
-garbage collection or finalizer. Repeated-save and operational tests must prove
-identity/counter stability, byte identity, and the fixed memory limits; this
-private design alone does not establish the 16 MiB / 512 KiB / 8 MiB / 64
-operational target. Physical payload section bytes and file bytes remain
-separate internal quantities.
+Each SAVE first revalidates and recopies its authoritative serialized controls
+inside one sibling preflight region, then discards that copy. The owner already
+holds the only deep-owned, application-inaccessible control set. Private
+set!-replaceable SAVE test seams are trusted and contractually read-only; the
+ordinary vector/bytevector representation does not physically prevent a
+defective trusted replacement from mutating it. Under that private contract,
+the following stages read the exact owner controls without retaining a second
+resolved-configuration/cursor image. SAVE then
+performs two independent regional component builds. The first returns only the
+measured file size; after it is destroyed, the parent scratch allocates the
+destination bytevector. The second rebuilds and encodes into that destination,
+and is destroyed before the C2 borrow ends. The existing atomic writer consumes
+the parent-regional destination synchronously, so its native snapshot may
+coexist with one destination image but not with either component stage or the
+control-validation copy. Scratch teardown is explicit region destruction;
+correctness assumes no garbage collection or finalizer. Repeated-save and
+operational tests must prove identity/counter stability, byte identity, and the
+fixed memory limits; this private design alone does not establish the 16 MiB /
+512 KiB / 8 MiB / 64 operational target. Physical payload section bytes and
+file bytes remain separate internal quantities.

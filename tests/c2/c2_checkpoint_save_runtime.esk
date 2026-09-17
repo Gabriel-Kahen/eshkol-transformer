@@ -272,6 +272,98 @@
             (details-ref (transformer-error-details existing-error)
                          'durability)))
 
+;;; Controls are deep-owned by C2 and application-inaccessible, but the private
+;;; replaceable SAVE seams receive their exact identity under a read-only trust
+;;; contract. Revalidation must precede O2/build/pre-touch/I/O, and every
+;;; ordinary/failing trusted seam below must preserve the deep snapshot.
+(define owner-controls-borrow
+  (c2-training-state-borrow-begin-internal owner 'checkpoint-save!))
+(define owner-controls
+  (vector-ref
+    (c2-training-state-borrow-projection-internal owner-controls-borrow) 2))
+(check "control-inspection borrow ends"
+       (c2-training-state-borrow-end-internal owner-controls-borrow))
+(define owner-controls-snapshot (c2-save-controls-copy owner-controls))
+(define (owner-controls-same? left right)
+  (let ((left-dataset (vector-ref left 2))
+        (right-dataset (vector-ref right 2))
+        (left-resolved (vector-ref left 3))
+        (right-resolved (vector-ref right 3)))
+    (and (equal? (vector-ref left 0) (vector-ref right 0))
+         (string=? (vector-ref (vector-ref left 1) 0)
+                   (vector-ref (vector-ref right 1) 0))
+         (= (vector-ref (vector-ref left 1) 1)
+            (vector-ref (vector-ref right 1) 1))
+         (equal? (vector-ref left-dataset 0)
+                 (vector-ref right-dataset 0))
+         (= (vector-ref left-dataset 1) (vector-ref right-dataset 1))
+         (= (vector-ref left-dataset 2) (vector-ref right-dataset 2))
+         (c1-bytes=? (vector-ref left-dataset 3)
+                     (vector-ref right-dataset 3))
+         (c1-bytes=? (vector-ref left-dataset 4)
+                     (vector-ref right-dataset 4))
+         (string=? (vector-ref left-dataset 5)
+                   (vector-ref right-dataset 5))
+         (= (vector-ref left-dataset 6) (vector-ref right-dataset 6))
+         (= (vector-ref left-dataset 7) (vector-ref right-dataset 7))
+         (= (vector-ref left-dataset 8) (vector-ref right-dataset 8))
+         (= (vector-ref left-dataset 9) (vector-ref right-dataset 9))
+         (c1-bytes=? (vector-ref left-resolved 0)
+                     (vector-ref right-resolved 0))
+         (string=? (vector-ref left-resolved 1)
+                   (vector-ref right-resolved 1))
+         (equal? (vector-ref left-resolved 2)
+                 (vector-ref right-resolved 2))
+         (equal? (vector-ref left 4) (vector-ref right 4)))))
+(define saved-control-builder c2-save-stage-components-internal)
+(define saved-control-pre-touch c2-save-pre-touch-p1-identities-internal)
+(define saved-control-o2-policy c2-save-o2-policy-preflight-internal)
+(define control-builder-calls 0)
+(define control-pre-touch-calls 0)
+(define control-o2-calls 0)
+(set! c2-save-stage-components-internal
+  (lambda (projection owner-token limits subpolicy)
+    (set! control-builder-calls (+ control-builder-calls 1))
+    (saved-control-builder projection owner-token limits subpolicy)))
+(set! c2-save-pre-touch-p1-identities-internal
+  (lambda (state access-token operation)
+    (set! control-pre-touch-calls (+ control-pre-touch-calls 1))
+    (saved-control-pre-touch state access-token operation)))
+(set! c2-save-o2-policy-preflight-internal
+  (lambda (topology o2-projection limits)
+    (set! control-o2-calls (+ control-o2-calls 1))
+    (saved-control-o2-policy topology o2-projection limits)))
+(define owner-config-bytes (vector-ref (vector-ref owner-controls 3) 0))
+(define owner-config-first (bytevector-u8-ref owner-config-bytes 0))
+(bytevector-u8-set! owner-config-bytes 0 0)
+(c2-save-io-reset)
+(expect-error "malformed owned controls reject in sibling preflight"
+              'corrupt-data 'x1-canonical-inspect-internal
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(bytevector-u8-set! owner-config-bytes 0 owner-config-first)
+(check "control validation precedes O2, pre-touch, build, and writer"
+       (and (= control-o2-calls 0) (= control-pre-touch-calls 0)
+            (= control-builder-calls 0) (= (c2-save-io-event-count) 0)))
+(set! c2-save-o2-policy-preflight-internal
+  (lambda (topology o2-projection limits)
+    (set! control-o2-calls (+ control-o2-calls 1))
+    (c2-save-fail 'internal "injected O2 policy failure" '() #f)))
+(expect-error "O2 preflight failure precedes build"
+              'internal 'checkpoint-save!
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(check "O2 failure invokes no pre-touch, build, or writer"
+       (and (= control-o2-calls 1) (= control-pre-touch-calls 0)
+            (= control-builder-calls 0) (= (c2-save-io-event-count) 0)))
+(set! c2-save-o2-policy-preflight-internal saved-control-o2-policy)
+(set! c2-save-pre-touch-p1-identities-internal saved-control-pre-touch)
+(set! c2-save-stage-components-internal saved-control-builder)
+(check "preflight failures preserve exact owner controls"
+       (owner-controls-same? owner-controls owner-controls-snapshot))
+
 ;;; Any build exception, including #f, ends both claimed subowner accesses.
 (define identity-owner (make-owner))
 (define (owner-identities-ready? value)
@@ -542,9 +634,12 @@
 (define two-pass-build-calls 0)
 (define two-pass-encode-active? #f)
 (define two-pass-publish-calls 0)
+(define two-pass-owner-controls-exact? #t)
 (set! c2-save-stage-components-internal
   (lambda (projection owner-token limits subpolicy)
     (set! two-pass-build-calls (+ two-pass-build-calls 1))
+    (if (not (eq? (vector-ref projection 2) owner-controls))
+        (set! two-pass-owner-controls-exact? #f))
     (two-pass-builder projection owner-token limits subpolicy)))
 (set! c2-save-encode-staged-into-internal!
   (lambda (staged limits destination file-bytes)
@@ -565,6 +660,10 @@
          owner path-a policy '(:overwrite? #t)))
 (check "two-pass save publishes exactly once"
        (= two-pass-publish-calls 1))
+(check "both build passes read the exact owner-control identity"
+       (and (= two-pass-build-calls 2) two-pass-owner-controls-exact?))
+(check "successful read-only passes preserve owner controls"
+       (owner-controls-same? owner-controls owner-controls-snapshot))
 (set! c2-save-publish-internal saved-publish)
 (set! c2-save-encode-staged-into-internal! saved-encode-staged)
 (set! c2-save-stage-components-internal two-pass-builder)
@@ -584,6 +683,30 @@
 (set! c2-save-measure-staged-internal saved-measure-staged)
 (check "post-measure failure performs zero atomic I/O"
        (= (c2-save-io-event-count) 0))
+(check "post-measure failure preserves owner controls"
+       (owner-controls-same? owner-controls owner-controls-snapshot))
+
+(set! c2-save-measure-staged-internal
+  (lambda (staged limits)
+    (saved-measure-staged staged limits)
+    (raise #f)))
+(expect-raised-false "post-measure raised false escapes"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-measure-staged-internal saved-measure-staged)
+(check "post-measure false preserves owner controls"
+       (owner-controls-same? owner-controls owner-controls-snapshot))
+
+(set! c2-save-encode-staged-into-internal!
+  (lambda (staged limits destination file-bytes) (raise #f)))
+(expect-raised-false "encode raised false escapes"
+  (lambda ()
+    (c2-checkpoint-save-internal!
+      owner fail-path policy '(:overwrite? #t))))
+(set! c2-save-encode-staged-into-internal! saved-encode-staged)
+(check "encode failure preserves owner controls"
+       (owner-controls-same? owner-controls owner-controls-snapshot))
 
 (set! c2-save-destination-allocate-internal
   (lambda (file-bytes) (raise #f)))

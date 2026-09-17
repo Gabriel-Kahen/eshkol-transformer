@@ -268,6 +268,12 @@
           'invalid-state "checkpoint components exceed the persistence policy"
           '() #f))))
 
+;;; Test-only read-only preflight seam. Production delegates to the exact
+;;; policy validator above; replacements may observe/fail but must not mutate
+;;; topology, O2 projection, or limits.
+(define c2-save-o2-policy-preflight-internal
+  c2-save-o2-policy-preflight)
+
 ;;; Private lexical indirections let the focused gate observe the exact
 ;;; component-staging boundary without weakening either claimed codec.
 (define c2-save-model-encode-internal
@@ -354,8 +360,9 @@
           projection owner-token limits subpolicy)
   (let* ((p1 (vector-ref projection 0))
          (o2 (vector-ref projection 1))
-         ;; The borrow wrapper revalidated and detached these controls before
-         ;; scratch entry; no regional identity is stored into the owner.
+         ;; The borrow wrapper revalidated these deep-owned controls in a
+         ;; sibling region. This private trusted seam is read-only: no stage
+         ;; may mutate the owner controls or retain them after returning.
          (controls (vector-ref projection 2))
          (rng (vector-ref controls 0))
          (tokenizer-control (vector-ref controls 1))
@@ -381,8 +388,8 @@
             (vector o2 p1 owner-token 'checkpoint-save! #f)))
       (c2-save-o2-stage-internal optimizer-request)
       (let ((optimizer (vector-ref optimizer-request 4)))
-        ;; Only inert, detached byte images and scalar controls may cross into
-        ;; outer assembly scratch. No authenticated P1/O2 access occurs there.
+        ;; Byte images are detached. Owner counters/RNG remain read-only inputs
+        ;; within this child call and never cross its region boundary.
         (vector
           (string->utf8 (vector-ref tokenizer-control 0))
           (vector-ref resolved-control 0)
@@ -466,25 +473,29 @@
                (let ((identities-ready?
                        (c2-training-state-borrow-p1-identities-ready-internal?
                          borrow 'checkpoint-save!)))
+               (let ((p1
+                       ;; Revalidate/copy authoritative serialized controls in
+                       ;; one sibling region per SAVE. The copy is intentionally
+                       ;; discarded before either component stage; the owner
+                       ;; already holds the only deep-owned controls, which all
+                       ;; private SAVE replacement seams must treat as read-only.
+                       ;; Only the exact P1 owner reference may escape, and only
+                       ;; on the first lazy-identity touch.
+                       (with-region
+                         ('c2-checkpoint-save-preflight 65536)
+                         (let ((projection
+                                 (c2-training-state-borrow-projection-internal
+                                   borrow)))
+                           (c2-save-controls-copy
+                             (vector-ref projection 2))
+                           (c2-save-o2-policy-preflight-internal
+                             (vector-ref projection 3)
+                             (vector-ref projection 4) limits)
+                           (if identities-ready?
+                               #f
+                               (vector-ref projection 0))))))
                (if (not identities-ready?)
-                   (let ((p1
-                           ;; Admission and the full C2 projection are
-                           ;; no-escape regional work. Only the already-outer
-                           ;; exact P1 owner reference crosses for pre-touch.
-                           (with-region
-                             ('c2-checkpoint-save-preflight 65536)
-                             (let ((projection
-                                     (c2-training-state-borrow-projection-internal
-                                       borrow)))
-                     ;; Preserve accepted first-touch order without retaining
-                     ;; detached controls in the outer arena. Nothing created
-                     ;; by this validation-only region escapes it.
-                               (c2-save-controls-copy
-                                 (vector-ref projection 2))
-                               (c2-save-o2-policy-preflight
-                                 (vector-ref projection 3)
-                                 (vector-ref projection 4) limits)
-                               (vector-ref projection 0)))))
+                   (begin
                      ;; Authenticated P1 shells are intentionally outer
                      ;; identities; materialize them only after both preflights.
                      (c2-save-pre-touch-p1-identities-internal
@@ -497,7 +508,7 @@
                        borrow 'checkpoint-save!)))
                (with-region ('c2-checkpoint-save-scratch 65536)
                  ;; Measure and encode use independent child regions. Each
-                 ;; child reconstructs the complete detached component stage;
+                 ;; child reconstructs the complete component stage;
                  ;; only an exact scalar size or immediate #t crosses back.
                  ;; This prevents the writer's native image snapshot from
                  ;; coexisting with either component stage.
@@ -510,14 +521,15 @@
                                      ;; the process arena.
                                      (c2-training-state-borrow-projection-internal
                                        borrow))
-                                   (detached-controls
-                                     (c2-save-controls-copy
-                                       (vector-ref projection 2)))
                                    (regional-projection
                                      (vector
                                        (vector-ref projection 0)
                                        (vector-ref projection 1)
-                                       detached-controls
+                                       ;; The exact owner controls were
+                                       ;; revalidated in the sibling preflight
+                                       ;; and are application-inaccessible;
+                                       ;; trusted SAVE seams treat them read-only.
+                                       (vector-ref projection 2)
                                        (vector-ref projection 3)
                                        (vector-ref projection 4)))
                                    (staged
@@ -534,14 +546,11 @@
                      (let* ((projection
                               (c2-training-state-borrow-projection-internal
                                 borrow))
-                            (detached-controls
-                              (c2-save-controls-copy
-                                (vector-ref projection 2)))
                             (regional-projection
                               (vector
                                 (vector-ref projection 0)
                                 (vector-ref projection 1)
-                                detached-controls
+                                (vector-ref projection 2)
                                 (vector-ref projection 3)
                                 (vector-ref projection 4)))
                             (staged
@@ -554,7 +563,7 @@
                    ;; destination synchronously while its scratch is live.
                    (c2-training-state-borrow-end-internal borrow)
                    (vector-set! transaction 0 #t)
-                   (publish destination))))))))
+                   (publish destination)))))))))
     ;; Build/region exceptions, including #f, arrive with an active borrow.
     ;; Writer exceptions arrive after borrow-ended was set and must not cause a
     ;; second end attempt.

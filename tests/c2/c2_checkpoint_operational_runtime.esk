@@ -478,6 +478,11 @@
 (check "second joint operational save succeeds"
        (c2-checkpoint-save-internal! owner save-b target-policy '()))
 (define second-save-arena-delta (- (__arena-used) second-save-arena-before))
+(if (or (< second-save-arena-delta 0)
+        (>= second-save-arena-delta 32768))
+    (begin
+      (display "C2 OPERATIONAL DIAGNOSTIC: second-save-arena-delta=")
+      (display second-save-arena-delta) (newline)))
 (check "warmed second joint save retains under 32 KiB"
        (and (>= second-save-arena-delta 0)
             (< second-save-arena-delta 32768)))
@@ -491,6 +496,11 @@
          owner save-a target-policy '(:overwrite? #t)))
 (define overwrite-save-arena-delta
   (- (__arena-used) overwrite-save-arena-before))
+(if (or (< overwrite-save-arena-delta 0)
+        (>= overwrite-save-arena-delta 32768))
+    (begin
+      (display "C2 OPERATIONAL DIAGNOSTIC: overwrite-save-arena-delta=")
+      (display overwrite-save-arena-delta) (newline)))
 (check "warmed overwrite joint save retains under 32 KiB"
        (and (>= overwrite-save-arena-delta 0)
             (< overwrite-save-arena-delta 32768)))
