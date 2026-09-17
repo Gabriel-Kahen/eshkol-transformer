@@ -1,0 +1,16 @@
+(require transformer.capabilities)
+
+;;; Compile every fixed public arity without executing a capability operation.
+(define (k2-compile-public report request entry)
+  (list (capability-discover)
+        (capability-request 'storage.copy 'f32 'cpu '() #t)
+        (capability-verified? report 'tensor.f32 request)
+        (capability-require report 'tensor.f32 request)
+        (capability-report-entries report)
+        (capability-entry-name entry)
+        (capability-entry-status entry)
+        (capability-entry-implementation entry)
+        (capability-entry-version entry)
+        (capability-entry-constraints entry)
+        (capability-entry-deterministic? entry)
+        (capability-entry-evidence entry)))

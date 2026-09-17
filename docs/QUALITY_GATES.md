@@ -18,8 +18,21 @@ points. About 72 minutes were redundant builds. The earlier reduced four-suite r
 34057603751 took 11m55s but omitted expensive full gates and is not a coverage-equal
 baseline. The first parallel run 34400156724 passed five suites, but exposed missing
 D2 aggregate prerequisites in both tokenizer jobs. Those prerequisites are now
-explicit; the BPE runtime and boundary phases are separate jobs. A successful
-full-coverage duration remains unverified, with a 75-minute per-suite timeout.
+explicit; the BPE runtime and boundary phases are separate jobs.
+
+The outer job timeout is selected by suite identity: `native-numerics` receives 105
+minutes and every other blocking suite retains 75 minutes. Topology and final-status
+jobs retain two minutes, and exhaustive acceptance retains 240 minutes. This bounded
+exception followed two 75-minute cancellations of the native suite in
+[run 34788832457](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457)
+at exact K2 source head `2641c24b2c50939f300ae995c00d0337c01660a3`.
+Both attempts passed K2, N2, and N3K before cancellation during O2 without an
+assertion failure; neither reached smoke/benchmark and neither is passing evidence.
+No inner timeout, test, sanitizer, oracle, leak check, resource assertion, command,
+or failure-propagation gate changes with the outer scheduling budget. The executable
+topology check pins the 60-second A0 compiler timeout in both workflows and rejects
+mutations that mask required blocking/exhaustive command failures, remove the final
+status assertion, or disable the native-only oracle and smoke conditions.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
 `docs/**/*.md`, excluding `AGENTS.md`) run CI topology and change-selection tests.
@@ -102,8 +115,10 @@ before merge.
   Native carrier/live counts must return to baseline. Report RSS separately as an
   advisory host/runtime measurement. A shell deliberately retained or promoted
   across the region is caller-owned and must be separately accounted. This gate is
-  the implementation requirement described by the pending lifetime clarification in
-  [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+  the implementation requirement described by the amended lifetime acceptance in
+  [issue #1 comment 5608140148](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148).
+  Stale/idempotent-alias guarantees require live shell allocations; accessing freed
+  lexical-region storage is outside those guarantees.
 - Equal-token one-shard and many-shard corpora must prove that optimized-AOT open
   retention differs by no more than one exact admitted working payload and that a
   packed batch crossing the same tokens retains exactly equal arena bytes. Exact
@@ -171,6 +186,36 @@ before merge.
   exact repository tuple admission, localized private/native symbols, no archive
   index leakage, deterministic localized objects/archives/evidence/AOT binaries,
   public-caller closure, and duplicate registry ownership rejection.
+
+## Required K2 capability-facade gates
+
+- Genuine fixed-I2 K1 discovery, exact descriptor/reserved/table/callback audit, and
+  exact sorted eleven-row report audit before publication; every allocation and
+  post-discovery audit failpoint cleans up and permits retry. Emit the genuine
+  K1/I2 report twice and assert byte equality, exactly 3,059 bytes, and SHA-256
+  `742800ea988627d9093f8fe394c8ad2be801e35413e20bbcad816f2431be86cb`.
+- Exact rank-zero/rank-one boundary matching with both boolean determinism values;
+  rank-two, one-over, wrong symbol and all ten unverified-row nonmatches; complete
+  logical-A0 versus K1-representability checks for all four symbol positions, rank,
+  and unsigned extents without truncation or contradictory native validation.
+- Three pairwise-distinct compiled closure factories, authentication before hidden
+  query, relay/query-capture/wrong-kind/forged/unregistered/stale-origin negatives,
+  private test-only injected failed-publication candidate invalidation, and ordinary
+  in-region alias success.
+- Exact 264-byte aligned little-endian private diagnostics, admission precedence,
+  full success/error writes, unchanged invalid buffers/tails, category/return/code
+  consistency, and separate K1 versus K2-private E1 source mapping.
+- Fresh-copy mutation isolation for every report, entry, constraint and request
+  carrier; optimized-AOT 1,024/8,192 lexical-region equality with native singleton
+  and caller-retained shells measured separately.
+- One completed aggregate per process, exact 59-global/53-export/59-public-string
+  manifests, source/native dependency closures, duplicate-aggregate and hostile
+  repository tuple rejection, strict fresh-cache AOT with every arity, deterministic
+  rebuilds, sanitizers, and production Python/PyTorch isolation.
+- Fork evidence is limited to serialized single-threaded fork with no K2 operation
+  in flight. Parent-origin shells reject before payload/provider use and only a newly
+  audited child runtime is eligible. No multithreaded-fork, reentrancy, signal, or
+  inherited non-K2 receiver claim is accepted.
 
 ## Performance evidence
 

@@ -7,6 +7,56 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
   "usage: $0 TRUSTED_PRIVATE_ROOT.esk PACKAGE_BRIDGE.c PACKAGE_RENAMES.txt PUBLIC_EXPORTS.txt OUTPUT.o [INCLUDE_DIR ...]"
 
 require_command realpath
+raw_private_root=$1
+raw_package_bridge=$2
+raw_package_renames=$3
+raw_public_exports=$4
+raw_include_dirs=("${@:6}")
+k2_lexical_root="${PROJECT_ROOT}/native/k2_wave2_root.esk"
+k2_lexical_bridge="${PROJECT_ROOT}/native/k2_wave2_package_bridge.c"
+k2_lexical_renames="${PROJECT_ROOT}/native/k2_wave2_private_renames.txt"
+k2_lexical_exports="${PROJECT_ROOT}/native/k2_wave2_public_exports.txt"
+k2_tuple_requested=0
+for raw_k2_input in \
+    "${raw_private_root}" "${raw_package_bridge}" \
+    "${raw_package_renames}" "${raw_public_exports}"; do
+  case "${raw_k2_input}" in
+    "${k2_lexical_root}"|native/k2_wave2_root.esk|\
+    "${k2_lexical_bridge}"|native/k2_wave2_package_bridge.c|\
+    "${k2_lexical_renames}"|native/k2_wave2_private_renames.txt|\
+    "${k2_lexical_exports}"|native/k2_wave2_public_exports.txt)
+      k2_tuple_requested=1
+      ;;
+  esac
+done
+if [[ "${k2_tuple_requested}" == 1 ]]; then
+  for raw_k2_input in \
+      "${raw_private_root}" "${raw_package_bridge}" \
+      "${raw_package_renames}" "${raw_public_exports}" \
+      "${raw_include_dirs[@]}" \
+      "${PROJECT_ROOT}/native/k2_wave2_public_strings.txt" \
+      "${PROJECT_ROOT}/native/k2_wave2_source_closure.txt" \
+      "${PROJECT_ROOT}/native/k2_wave2_native_source_closure.txt" \
+      "${PROJECT_ROOT}/native/k2_wave2_undefined_symbols.txt" \
+      "${PROJECT_ROOT}/native/k2_wave2_extension.esk" \
+      "${PROJECT_ROOT}/native/k2_wave2_public_wrappers.inc" \
+      "${PROJECT_ROOT}/native/k2_capabilities.c" \
+      "${PROJECT_ROOT}/native/k2_capabilities_internal.h"; do
+    [[ ! -L "${raw_k2_input}" ]] || \
+      die "K2 aggregate policy rejects symlinked repository inputs before canonicalization"
+  done
+  [[ "${raw_private_root}" == "${k2_lexical_root}" && \
+     "${raw_package_bridge}" == "${k2_lexical_bridge}" && \
+     "${raw_package_renames}" == "${k2_lexical_renames}" && \
+     "${raw_public_exports}" == "${k2_lexical_exports}" ]] || \
+    die "K2 aggregate policy requires exact lexical repository inputs"
+  [[ "${#raw_include_dirs[@]}" == 4 && \
+     "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+     "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+     "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+     "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/src" ]] || \
+    die "K2 aggregate policy requires exact lexical ordered trusted roots"
+fi
 private_root="$(realpath -- "$1")"
 package_bridge="$(realpath -- "$2")"
 package_renames="$(realpath -- "$3")"
@@ -70,6 +120,14 @@ i2_include_c1="$(realpath -- "${PROJECT_ROOT}/internal/c1/lib")"
 i2_include_t1="$(realpath -- "${PROJECT_ROOT}/internal/t1/lib")"
 i2_include_src="$(realpath -- "${PROJECT_ROOT}/src")"
 i2_p1_package_renames="$(realpath -- "${PROJECT_ROOT}/native/i2_wave2_p1_renames.txt")"
+k2_private_root="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_root.esk")"
+k2_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_package_bridge.c")"
+k2_package_renames="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_private_renames.txt")"
+k2_public_exports="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_public_exports.txt")"
+k2_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_undefined_symbols.txt")"
+k2_public_strings="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_public_strings.txt")"
+k2_source_closure="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_source_closure.txt")"
+k2_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/k2_wave2_native_source_closure.txt")"
 o2_private_root="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_root.esk")"
 o2_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_package_bridge.c")"
 o2_package_renames="$(realpath -- "${PROJECT_ROOT}/native/o2_wave2_private_renames.txt")"
@@ -107,8 +165,43 @@ package_native_source=
 package_native_sources=()
 package_native_define=
 package_public_strings=
+package_source_closure=
 package_native_source_closure=
-if [[ "${private_root}" == "${o2_private_root}" ]]; then
+if [[ "${private_root}" == "${k2_private_root}" ]]; then
+    for raw_k2_input in \
+        "${raw_private_root}" "${raw_package_bridge}" \
+        "${raw_package_renames}" "${raw_public_exports}" \
+        "${raw_include_dirs[@]}"; do
+      [[ ! -L "${raw_k2_input}" ]] || \
+        die "K2 aggregate policy rejects symlinked repository inputs"
+    done
+    [[ "${package_bridge}" == "${k2_package_bridge}" ]] || \
+      die "K2 aggregate policy requires the exact repository bridge"
+    [[ "${package_renames}" == "${k2_package_renames}" ]] || \
+      die "K2 aggregate policy requires the exact repository rename map"
+    [[ "${public_exports}" == "${k2_public_exports}" ]] || \
+      die "K2 aggregate policy requires the exact repository export list"
+    [[ "${#canonical_include_dirs[@]}" == 4 && \
+       "${canonical_include_dirs[0]}" == "${i2_include_p1}" && \
+       "${canonical_include_dirs[1]}" == "${i2_include_c1}" && \
+       "${canonical_include_dirs[2]}" == "${i2_include_t1}" && \
+       "${canonical_include_dirs[3]}" == "${i2_include_src}" ]] || \
+      die "K2 aggregate policy requires exact ordered Wave 2 trusted roots"
+    package_policy=k2-wave2-aggregate
+    undefined_symbols="${k2_undefined_symbols}"
+    package_public_strings="${k2_public_strings}"
+    package_source_closure="${k2_source_closure}"
+    package_native_source_closure="${k2_native_source_closure}"
+    package_native_sources=(
+      "${PROJECT_ROOT}/native/data_io.c"
+      "${PROJECT_ROOT}/native/checkpoint_io.c"
+      "${PROJECT_ROOT}/native/kernel_abi.c"
+      "${PROJECT_ROOT}/native/i64_tensor.c"
+      "${PROJECT_ROOT}/native/t1_i64_shell.c"
+      "${PROJECT_ROOT}/native/f32_tensor.c"
+      "${PROJECT_ROOT}/native/k2_capabilities.c"
+    )
+elif [[ "${private_root}" == "${o2_private_root}" ]]; then
     [[ "${package_bridge}" == "${o2_package_bridge}" ]] || \
       die "O2 aggregate policy requires the exact repository bridge"
     [[ "${package_renames}" == "${o2_package_renames}" ]] || \
@@ -344,6 +437,7 @@ else
       "${d1_package_bridge}" "${d1_package_renames}" "${d1_public_exports}" \
       "${x1_package_bridge}" "${x1_package_renames}" "${x1_public_exports}" \
       "${p1_package_bridge}" "${p1_package_renames}" "${p1_public_exports}" \
+      "${k2_package_bridge}" "${k2_package_renames}" "${k2_public_exports}" \
       "${i2_package_bridge}" "${i2_package_renames}" "${i2_public_exports}" \
       "${o2_package_bridge}" "${o2_package_renames}" "${o2_public_exports}" \
       "${t1_package_bridge}" "${t1_package_renames}" "${t1_public_exports}" \
@@ -466,6 +560,7 @@ run_compiler() {
 }
 
 if [[ "${package_policy}" == t1-wave1-aggregate || \
+      "${package_policy}" == k2-wave2-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
@@ -480,6 +575,7 @@ for include_dir in "${canonical_include_dirs[@]}"; do
   include_args+=(-I "${include_dir}")
 done
 if [[ "${package_policy}" == t1-wave1-aggregate || \
+      "${package_policy}" == k2-wave2-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
@@ -497,6 +593,13 @@ fi
     -o private
 )
 [[ -f "${e1b_tmp}/private.ll" ]] || die "E1B private IR was not emitted"
+if [[ -n "${package_source_closure}" ]]; then
+  sed -e 's/^[^:]*://' -e 's/\\//g' "${e1b_tmp}/private.d" | \
+    tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+    sed "s#^${PROJECT_ROOT}/##" >"${e1b_tmp}/source-closure.txt"
+  cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
+    die "${package_policy} trusted Eshkol source closure drifted"
+fi
 e1b_raise_attribute="$(
   awk '
     /^define .*@et-e1b-private-raise__eshkol_internal_abi/ {
@@ -516,6 +619,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
 {
   cat "${PROJECT_ROOT}/native/e1b_private_renames.txt"
   if [[ "${package_policy}" == t1-wave1-aggregate || \
+        "${package_policy}" == k2-wave2-aggregate || \
         "${package_policy}" == i2-wave2-aggregate || \
         "${package_policy}" == o2-wave2-aggregate || \
         "${package_policy}" == t2-wave2-aggregate || \
@@ -523,7 +627,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
         "${package_policy}" == d2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-test-resource ]]; then
     cat "${PROJECT_ROOT}/native/x1_config_private_renames.txt"
-    if [[ "${package_policy}" == i2-wave2-aggregate || \
+    if [[ "${package_policy}" == k2-wave2-aggregate || \
+          "${package_policy}" == i2-wave2-aggregate || \
           "${package_policy}" == o2-wave2-aggregate || \
           "${package_policy}" == d2-wave2-aggregate || \
           "${package_policy}" == d2-wave2-test-resource ]]; then
@@ -532,7 +637,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
       cat "${PROJECT_ROOT}/native/p1_package_renames.txt"
     fi
     cat "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt"
-    if [[ "${package_policy}" == i2-wave2-aggregate || \
+    if [[ "${package_policy}" == k2-wave2-aggregate || \
+          "${package_policy}" == i2-wave2-aggregate || \
           "${package_policy}" == o2-wave2-aggregate ]]; then
       cat "${PROJECT_ROOT}/native/t1_wave1_private_renames.txt"
     elif [[ "${package_policy}" == d2-wave2-aggregate || \
@@ -541,7 +647,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
       cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
     fi
   fi
-  if [[ "${package_policy}" == o2-wave2-aggregate ]]; then
+  if [[ "${package_policy}" == k2-wave2-aggregate || \
+        "${package_policy}" == o2-wave2-aggregate ]]; then
     cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
   fi
   cat "${package_renames}"
@@ -570,7 +677,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -fPIC -fvisibility=hidden -fno-common
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
   )
-  if [[ "${package_policy}" == i2-wave2-aggregate || \
+  if [[ "${package_policy}" == k2-wave2-aggregate || \
+        "${package_policy}" == i2-wave2-aggregate || \
         "${package_policy}" == o2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-test-resource ]]; then
@@ -651,12 +759,13 @@ if [[ "${package_policy}" == t1-wave1-aggregate || \
      "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "tokenizer aggregate retains an unresolved trusted native reference"
 fi
-if [[ "${package_policy}" == i2-wave2-aggregate || \
+if [[ "${package_policy}" == k2-wave2-aggregate || \
+      "${package_policy}" == i2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-test-resource ]] && \
-   grep -E '^et_(f32|p1|kernel)_' "${e1b_tmp}/undefined.txt" >/dev/null; then
-  die "I2 aggregate retains an unresolved trusted native reference"
+   grep -E '^et_(k2|f32|p1|kernel)_' "${e1b_tmp}/undefined.txt" >/dev/null; then
+  die "Wave 2 aggregate retains an unresolved trusted native reference"
 fi
 
 readelf --wide --syms "${e1b_tmp}/combined.o" \
@@ -702,7 +811,8 @@ if [[ "${package_policy}" == t1-wave1-aggregate || \
       die "tokenizer aggregate required privileged definition is not local: ${privileged}"
   done
 fi
-if [[ "${package_policy}" == i2-wave2-aggregate || \
+if [[ "${package_policy}" == k2-wave2-aggregate || \
+      "${package_policy}" == i2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-test-resource ]]; then
@@ -727,6 +837,23 @@ if [[ "${package_policy}" == o2-wave2-aggregate ]]; then
       die "O2 aggregate required privileged definition is not local: ${privileged}"
   done
 fi
+if [[ "${package_policy}" == k2-wave2-aggregate ]]; then
+  for privileged in \
+    et_k2_private_runtime_ensure_v1 \
+    et_k2_private_runtime_pid_v1 \
+    et_k2_private_runtime_generation_v1 \
+    et_k2_private_runtime_require_v1 \
+    et_k2_private_report_factory_register_v1 \
+    et_k2_private_report_factory_authenticate_v1 \
+    et_k2_private_request_factory_register_v1 \
+    et_k2_private_request_factory_authenticate_v1 \
+    et_k2_private_entry_factory_register_v1 \
+    et_k2_private_entry_factory_authenticate_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "K2 aggregate required privileged definition is not local: ${privileged}"
+  done
+fi
 
 evidence_dir="${output_object}.evidence"
 temporary_output="${output_object}.tmp.$$"
@@ -747,6 +874,10 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+if [[ -n "${package_source_closure}" ]]; then
+  cp "${e1b_tmp}/source-closure.txt" \
+    "${evidence_dir}.tmp.$$/source-closure.txt"
+fi
 if [[ -n "${package_native_source_closure}" ]]; then
   cp "${e1b_tmp}/native-source-closure.txt" \
     "${evidence_dir}.tmp.$$/native-source-closure.txt"

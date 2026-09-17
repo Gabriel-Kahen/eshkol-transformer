@@ -1,0 +1,2 @@
+(require transformer.capabilities)
+(capability-require 'report 'tensor.f32)

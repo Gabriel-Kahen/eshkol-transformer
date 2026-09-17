@@ -49,7 +49,7 @@ public contracts are versioned independently of implementations.
   gradient support.
 
 I2 supplies the carrier-local boundary for the first shared owned dense CPU-f32
-storage. Its active P1 integration binds stable live parameter value storage and
+storage. Its accepted P1 integration binds stable live parameter value storage and
 explicit accumulated-gradient slots to P1's canonical unique handles while
 preserving ties through the merged release-capable P1L provider interface. Exact i64
 and bool operands remain separate carrier contracts; no numeric vector, cast,
@@ -80,6 +80,14 @@ duplicate capability/operation ownership and routes unchanged borrowed views to 
 provider. The storage owner keeps the data and metadata stable for the complete
 two-phase validate/invoke call; operation providers retain no ordinary view after
 dispatch.
+
+K2 is the process-local control-plane facade for the accepted A0 capability API. Its
+production resolver is fixed to the explicit I2 accessor, and it publishes a report
+only after genuine K1 discovery plus exact descriptor and eleven-row audits. K2
+matches through K1 but never dispatches the storage operation. Reports, requests,
+and entries are caller-region-owned authenticated snapshots; the one bounded native
+runtime retains no shell identity, resolver authority, serialized proof, or generic
+provider registry. Later provider composition requires a separate accepted contract.
 
 ## Persistence
 

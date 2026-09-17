@@ -84,7 +84,10 @@ reclaim caller Eshkol shell allocations. Long-running callers must therefore kee
 each next/use/release interval in one lexical `with-region`, unless they deliberately
 retain/promote aliases and account for that caller-owned storage. This lifetime
 clarification is
-[proposed and pending](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
+[accepted with live-shell conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148).
+Stale/idempotent-alias guarantees require a live shell allocation; accessing freed
+lexical-region storage has no safety guarantee, and keeping a raw reference alone
+does not preserve that allocation's lifetime.
 Shell authentication uses two fixed compiled-constructor code identities as a
 per-process private implementation ABI; it is neither public nor serializable.
 D2 is complete after independent D2-R approval, supported CI, merge, and a focused
@@ -244,6 +247,7 @@ See:
 - [Quality gates](docs/QUALITY_GATES.md)
 - [Benchmark format](docs/BENCHMARK_FORMAT.md)
 - [Native-kernel ABI and capability report](docs/K1_KERNEL_ABI.md)
+- [Process-local capability facade](docs/K2_CAPABILITY_FACADE.md)
 - [Exact signed-i64 tensor container](docs/I1_I64_TENSOR.md)
 - [Dense CPU-f32 tensor and parameter-gradient substrate](docs/I2_F32_TENSOR.md)
 - [AdamW optimizer, schedules, and logical state](docs/O2_OPTIMIZER.md)

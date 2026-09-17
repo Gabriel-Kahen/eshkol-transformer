@@ -4,6 +4,88 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-17 — K2 accepted; C2 dependency hold lifted
+
+- **Decision:** K2 is accepted and complete within its bounded capability contract.
+  [Independent approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/75#issuecomment-5656625278)
+  covers exact head `619b8d8c5bdca9c49ebac3101523bee2acbd0809`.
+  PR #75 merged as `1cfc3a6d512fc9f679913714accab0aabeb08314`; the reviewed head,
+  supported merge checkout and actual merge have identical tree
+  `c8bd4d34a084e5829fe3a42de67df586fed54ab2`.
+- **Supported evidence:** [blocking run 34797907807](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34797907807)
+  attempt 3 and [exhaustive run 34797918372](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34797918372)
+  passed on Ubuntu 22.04 / LLVM-Clang 21.1.8. Blocking attempt 1's unchanged P1
+  compiler hit its 360-second timeout; attempt 2 was cancelled for the user's
+  pause. The resumed failed-job-only attempt 3 passed without source or gate
+  changes. Successful same-head jobs and exhaustive evidence were reused, not
+  rerun or represented as new measurements.
+- **Merged-main evidence:** a clean-tree, explicit non-login `/usr/bin/bash`
+  focused retest passed canonical K2 build, six emitted manifest comparisons,
+  repeated public API/AOT/runtime (46 checks), the 3,059-byte report golden,
+  C++ header, repeated native/allocator checks and ASan/UBSan, CI topology and
+  rebuilt smoke. This is unsupported CachyOS/LLVM 22 compatibility evidence,
+  not a full local K2 or repository run, and local LSan was not enabled.
+  Private identity/fork/retention, complete packaging and repository regressions
+  remain supported-CI evidence. Reproduction driver and logs were retained at
+  `/tmp/k2-merge-retest.sh`, `/tmp/k2-merge-retest.log` and
+  `/tmp/k2-merge-retest.B8O7gA` on the integration host.
+- **C2:** the dependency hold is lifted and private implementation remains active,
+  not accepted. The [narrow private entry-preparation correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5717501458)
+  still requires compiled lifetime proof and the unchanged joint memory ceiling;
+  public composition, full gates and independent C2 acceptance remain outstanding.
+  No C2/TR3/G3 behavior or Wave 2 completion is implied. Historical entries below
+  are preserved and superseded only in current status.
+
+## 2026-09-14 — K2 native-numerics CI scheduling budget / PR #75
+
+- **Decision:** retain the eight-suite blocking topology and select the outer job
+  timeout by suite identity: `native-numerics` receives 105 minutes and every other
+  blocking suite remains at 75 minutes. The topology and final-status jobs remain at
+  two minutes, and exhaustive acceptance remains at 240 minutes. This is a bounded
+  scheduling allowance, not a performance claim or acceptance evidence. K2 remains
+  `review`.
+- **Cancelled evidence:** [blocking run 34788832457 attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457/attempts/1)
+  tested exact K2 source head
+  `2641c24b2c50939f300ae995c00d0337c01660a3`. All seven other suites passed, while
+  native-numerics ran for 75m16s and was cancelled by the outer job limit during
+  `scripts/test-o2.sh`; its 26m50s prerequisite build and the preceding K2, N2, and
+  N3K gates passed. Smoke and benchmark were skipped, and the required final status
+  correctly failed. [Attempt 2](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457/attempts/2)
+  reran only the failed native lane and final status. Its prerequisite build passed
+  in 27m08s; K2, N2, and N3K passed again, then the job was cancelled after 75m15s,
+  18m56s into O2. Smoke and benchmark were again skipped and final status failed.
+  Neither cancellation contained an assertion failure, and neither is a green run.
+- **Invariant boundary:** no full-suite command, build prerequisite, sanitizer/LSan
+  setting, oracle pin, fresh-cache repeat, malformed-input or resource assertion,
+  inner process/compiler timeout, smoke/benchmark command, or final failure and
+  cancellation propagation is changed or skipped. Executable topology checks pin
+  native=105, every other suite=75, both two-minute control jobs, exhaustive=240,
+  the 60-second A0 compiler timeout in both workflows, exact blocking/exhaustive
+  commands, all three native-only conditions, and the final failure gate. Negative
+  mutations prove that command failure masking, condition removal, final-gate
+  removal, A0 timeout inflation, native=75, and non-native=105 are rejected.
+  The reviewed K2 production blobs remain outside this scheduling/test/docs delta;
+  fresh supported blocking CI and independent K2-R review are still required.
+
+## 2026-09-10 — O2 merged implementation accepted; C2 prerequisites explicit
+
+- **Decision:** O2 is accepted and complete within its unchanged bounded contract.
+  The historical premerge entries below are superseded in status, not erased.
+- **Evidence:** [O2 acceptance and merged-main retest](WAVE2_PRIMITIVES_ACCEPTANCE.md#o2-merge-and-bounded-post-merge-retest)
+  records PR #58 merge `884a074`, approval comment 5627783349, supported blocking
+  run 34533652814 and exhaustive run 34533681600, exact reviewed/CI/merge tree
+  identity, and the compatibility-only merged-main retest with 6,201 adversarial
+  checks, AOT, reference parity, exact authority manifests, sanitizers/LSan,
+  topology, isolation, and smoke. No numerical/API/ABI/format change is made here.
+- **C2 coordination:** [amended architecture direction 5628231282](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5628231282)
+  and [required pre-freeze corrections 5628292779](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5628292779)
+  leave exact checkpoint bytes and callable seam contracts unfrozen. K2 issue #73
+  is a separate active production capability-facade prerequisite; C2 public
+  integration waits for its independent approval and merge. Neither task is
+  complete. Component-state continuation and atomic file publication belong to
+  C2; atomic live-trainer restore/full trajectory and generation proof remain
+  TR3/G3 first-release gates. This closeout does not declare Wave 2 complete.
+
 ## 2026-09-09 — D2 / issue #42 accepted implementation complete
 
 - **Decision:** accepted and complete against the binding contract in
@@ -61,17 +143,59 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   caller shells remain caller-owned. The lexical `with-region` requirement is the
   accepted implementation and resource-gate discipline, but
   [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950)
-  remains proposed and nonbinding; this completion does not accept it or amend the
-  public D2/C2/TR3 contract.
+  was proposed and nonbinding when this closeout was reviewed. This entry itself
+  did not accept it; the later amended acceptance recorded below supersedes that
+  pending status with explicit live-shell conditions.
 - **Reference:** [issue #42](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/42);
   [PR #50](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/50).
 
-## 2026-09-06 — D2 caller-region lifetime clarification (proposed)
+## 2026-09-09 — Wave 2 merged-primitive acceptance closeout
 
-- **Decision:** proposed and pending integration-owner disposition in
+- **Decision:** accepted and complete for the bounded A2, T2, L2, I2, and N2
+  workstreams. Their earlier active/proposed/review entries remain historical and
+  are superseded in status only.
+- **Evidence:** [Wave 2 primitive acceptance](WAVE2_PRIMITIVES_ACCEPTANCE.md)
+  records each exact-head independent approval, implementation merge, supported
+  PR CI, and post-merge supported test run. A separate read-only Sol/high audit
+  reconciled review comments, merge/head/CI tree identity, and actual workflow
+  steps; it did not infer completion merely from merge status.
+- **N2 qualification:** immediate post-merge run 34062447715 failed on fresh-oracle
+  byte identity for an unproved cause. The later supported run 34301118384 passed
+  all 31 pinned N2 oracle tests without skips, including fresh regeneration, and
+  the full N2/integration/smoke/benchmark gates. Its tree equals merged main
+  `d805024`; all 27 N2-owned paths equal the N2 implementation merge. Integration
+  accepts this explicitly superseding retest, without erasing the earlier failure.
+- **Scope:** documentation/status correction only; no API, ABI, numerical domain,
+  lifetime, format, or required-gate changes. This does not close D2/O2/C2, mark
+  all of Wave 2 complete, or claim a complete language model or training runtime.
+- **Closeout repair:** the N3K predecessor manifest also pins the two A2/N2
+  contract documents. Update only those two document digests for the reviewed
+  acceptance-status text; every executable/header/fixture digest remains unchanged.
+  The complete predecessor checksum gate is still required. The README's stale
+  pending D2 wording is superseded by the same accepted live-shell amendment below.
+
+## 2026-09-09 — D2 caller-region clarification accepted with amendment
+
+- **Decision:** [amend and accept](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148)
+  proposal 5563425950. Native release does not reclaim caller-region Eshkol shells;
+  bounded batch loops require one lexical next/use/release region.
+- **Live-allocation condition:** authentic stale/idempotent-alias guarantees apply
+  only while the shell allocation is live. Accessing an unretained shell after
+  region exit has no safety or structured-error guarantee. Deliberately preserved
+  live aliases remain caller-owned and accounted separately; a raw reference alone
+  is not allocation retention. C2/TR3 must preserve these scopes.
+- **Evidence:** final merged public-loop measurements are 4,521,984 arena bytes at
+  both 1,024 and 8,192 batches, native lifecycle baseline return, and exact-read FD
+  baseline/peak/post-close 0/1/0 with final delta zero. The older proposal's
+  4,849,664-byte totals are historical measurements of another tree, not the final
+  totals. No API, cursor, carrier, aggregate count, or native ABI changes.
+
+## 2026-09-06 — D2 caller-region lifetime clarification (historical proposal)
+
+- **Historical decision:** proposed and pending integration-owner disposition in
   [issue #1 comment 5563425950](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5563425950).
-  This entry does not amend the accepted D2 contract unless that proposal is
-  explicitly accepted.
+  This original proposal is superseded by the amended acceptance above; its
+  measurements and original wording remain chronological evidence.
 - **Proposed lifetime clarification:** replace references to GC-managed generation
   capabilities with caller-region-managed Eshkol capabilities. The pinned runtime
   has no tracing collector. `token-batch-release!` invalidates the live generation
