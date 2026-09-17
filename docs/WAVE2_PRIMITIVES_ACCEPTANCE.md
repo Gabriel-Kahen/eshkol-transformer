@@ -4,7 +4,8 @@ Integration closeout, 2026-09-09. A2, T2, L2, I2, and N2 are accepted and
 complete within their documented bounded contracts. This supersedes their earlier
 active/proposed/review status, not their capability or lifetime limitations.
 D2 has a separate acceptance record. The O2 addendum below records its acceptance
-on 2026-09-10. C2 and its K2 prerequisite remain unfinished; the complete model and
+on 2026-09-10. [K2 was accepted on 2026-09-17](K2_CAPABILITY_FACADE.md#verification).
+C2 remains unfinished; the complete model and
 first-release training gates remain separate. This does not mark Wave 2 complete.
 
 ## Independent review and supported evidence
