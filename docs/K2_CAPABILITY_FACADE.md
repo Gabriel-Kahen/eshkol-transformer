@@ -1,6 +1,6 @@
 # K2 process-local capability facade
 
-Status: **active**. K2 implements the twelve existing A0 capability operations as
+Status: **accepted and complete** within this bounded contract. K2 implements the twelve existing A0 capability operations as
 an E1B-compatible production facade. It does not add or rename an A0 operation,
 execute a kernel, compose arbitrary providers, widen K1/I2 evidence, define the K1
 canonical provider symbol, or add a serialization format.
@@ -286,7 +286,7 @@ are reusable by a later C2 bridge without linking the completed K2 archive.
 It has exactly 59 global definitions, 53 package exports, and 59 public name strings:
 the accepted I2 47/41/47 boundary plus twelve K2 wrappers. It still reports eleven
 capabilities. C2's 81/75 count is conditional on its remaining proposed surface and
-separate acceptance after K2 merges.
+its own separate acceptance.
 
 There is no canonical provider symbol, generic dispatcher, raw/private helper
 export, Python/PyTorch runtime dependency, cast, copy, transfer, numerical fallback,
@@ -302,6 +302,20 @@ strict fresh-cache AOT and all arities, 1,024/8,192 region retention, determinis
 rebuilds, exact symbol/string/source/dependency manifests, hostile package inputs,
 aggregate collision rejection, sanitizers, and production Python isolation.
 
-All affected aggregate gates and the complete repository suite remain required. A
-supported Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8 blocking run is required before
-acceptance. Local LLVM 22 results are compatibility evidence only.
+All affected aggregate gates and the complete repository suite remain required.
+[Independent K2-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/75#issuecomment-5656625278)
+accepted head `619b8d8c5bdca9c49ebac3101523bee2acbd0809` after supported
+Ubuntu 22.04 x86-64 / LLVM-Clang 21.1.8
+[blocking run 34797907807, attempt 3](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34797907807)
+and [exhaustive run 34797918372](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34797918372)
+passed. PR #75 merged as `1cfc3a6d512fc9f679913714accab0aabeb08314`;
+reviewed head, CI merge checkout, and actual merge share tree
+`c8bd4d34a084e5829fe3a42de67df586fed54ab2`.
+
+The 2026-09-17 merged-main focused retest passed the canonical build, six emitted
+manifest comparisons, repeated public compile/AOT/runtime (46 checks), exact report
+golden, C++ header, repeated native and allocation tests with ASan/UBSan, topology,
+and rebuilt smoke. This was CachyOS/LLVM 22 compatibility evidence, not a repeat of
+the full K2 or repository gate; local leak detection was not enabled. The full
+private identity, fork, retention, packaging and regression evidence remains in
+the supported runs above. No checkpoint or training completion is implied.

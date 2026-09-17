@@ -4,6 +4,38 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-17 — K2 accepted; C2 dependency hold lifted
+
+- **Decision:** K2 is accepted and complete within its bounded capability contract.
+  [Independent approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/75#issuecomment-5656625278)
+  covers exact head `619b8d8c5bdca9c49ebac3101523bee2acbd0809`.
+  PR #75 merged as `1cfc3a6d512fc9f679913714accab0aabeb08314`; the reviewed head,
+  supported merge checkout and actual merge have identical tree
+  `c8bd4d34a084e5829fe3a42de67df586fed54ab2`.
+- **Supported evidence:** [blocking run 34797907807](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34797907807)
+  attempt 3 and [exhaustive run 34797918372](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34797918372)
+  passed on Ubuntu 22.04 / LLVM-Clang 21.1.8. Blocking attempt 1's unchanged P1
+  compiler hit its 360-second timeout; attempt 2 was cancelled for the user's
+  pause. The resumed failed-job-only attempt 3 passed without source or gate
+  changes. Successful same-head jobs and exhaustive evidence were reused, not
+  rerun or represented as new measurements.
+- **Merged-main evidence:** a clean-tree, explicit non-login `/usr/bin/bash`
+  focused retest passed canonical K2 build, six emitted manifest comparisons,
+  repeated public API/AOT/runtime (46 checks), the 3,059-byte report golden,
+  C++ header, repeated native/allocator checks and ASan/UBSan, CI topology and
+  rebuilt smoke. This is unsupported CachyOS/LLVM 22 compatibility evidence,
+  not a full local K2 or repository run, and local LSan was not enabled.
+  Private identity/fork/retention, complete packaging and repository regressions
+  remain supported-CI evidence. Reproduction driver and logs were retained at
+  `/tmp/k2-merge-retest.sh`, `/tmp/k2-merge-retest.log` and
+  `/tmp/k2-merge-retest.B8O7gA` on the integration host.
+- **C2:** the dependency hold is lifted and private implementation remains active,
+  not accepted. The [narrow private entry-preparation correction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5717501458)
+  still requires compiled lifetime proof and the unchanged joint memory ceiling;
+  public composition, full gates and independent C2 acceptance remain outstanding.
+  No C2/TR3/G3 behavior or Wave 2 completion is implied. Historical entries below
+  are preserved and superseded only in current status.
+
 ## 2026-09-14 — K2 native-numerics CI scheduling budget / PR #75
 
 - **Decision:** retain the eight-suite blocking topology and select the outer job
