@@ -323,7 +323,14 @@
 (define tensor-provider-admission-active-shell #f)
 (define protected-storage-comparison-active? #f)
 (define protected-storage-comparison-request (vector #f #f #f #f #f))
-(define shell-registry '())
+;;; The holder is allocated during aggregate initialization in the root arena.
+;;; Publishing a newly allocated registry graph through vector-set! invokes the
+;;; region write barrier; every read then starts from the canonical promoted
+;;; graph stored back into this holder.
+(define shell-registry-root (vector '()))
+
+(define (shell-registry-current)
+  (vector-ref shell-registry-root 0))
 (define dead-state-raw (vector 'released-state-raw))
 (define dead-state-tensor-raw (vector 'released-state-tensor-raw))
 (define dead-state-entry-raw (vector 'released-state-entry-raw))
@@ -466,7 +473,7 @@
   (p1-native-result-ptr native-context))
 
 (define (shell-entry value)
-  (let loop ((entries shell-registry))
+  (let loop ((entries (shell-registry-current)))
     (cond
       ((null? entries) #f)
       ((eq? value (vector-ref (car entries) 0)) (car entries))
@@ -478,15 +485,16 @@
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'shell-for-raw
             "released registry marker cannot be published" '())
-      (let find ((entries shell-registry))
+      (let find ((entries (shell-registry-current)))
         (cond
       ((null? entries)
        (let* ((entry (vector #f kind raw))
-              (next-registry (cons entry shell-registry))
+              (next-registry (cons entry (shell-registry-current)))
               (shell (native-create-shell kind raw)))
          (vector-set! entry 0 shell)
-         (set! shell-registry next-registry)
-         shell))
+         (vector-set! shell-registry-root 0 next-registry)
+         ;; Return only the canonical post-barrier identity.
+         (vector-ref (car (shell-registry-current)) 0)))
       ((and (eq? kind (vector-ref (car entries) 1))
             (eq? raw (vector-ref (car entries) 2)))
        (vector-ref (car entries) 0))
@@ -500,19 +508,20 @@
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'state-entry-shell-for-raw
             "released registry marker cannot be published" '())
-      (let find ((records shell-registry))
+      (let find ((records (shell-registry-current)))
         (cond
           ((null? records)
            (let* ((record (vector #f 'entry raw state))
-                  (next-registry (cons record shell-registry)))
+                  (next-registry (cons record (shell-registry-current))))
              (require-native-context 'state-entry-shell-for-raw)
              (native-check
                'state-entry-shell-for-raw
                (p1-native-state-entry-create native-context state-shell))
              (let ((shell (p1-native-result-ptr native-context)))
                (vector-set! record 0 shell)
-               (set! shell-registry next-registry)
-               shell)))
+               (vector-set! shell-registry-root 0 next-registry)
+               ;; Return only the canonical post-barrier identity.
+               (vector-ref (car (shell-registry-current)) 0))))
           ((and (eq? (vector-ref (car records) 1) 'entry)
                 (= (vector-length (car records)) 4)
                 (eq? (vector-ref (car records) 2) raw)
@@ -550,7 +559,7 @@
   ;; Replace all registry edges into the released raw graph with shared small
   ;; markers. Markers retain neither state, entry, carrier, path, nor aliases.
   (let ((entries (vector-ref state 6)))
-    (let scan ((remaining shell-registry))
+    (let scan ((remaining (shell-registry-current)))
       (if (null? remaining)
           #t
           (let* ((record (car remaining))
@@ -920,7 +929,7 @@
           (vector-ref provider 8) (vector-ref provider 9) #f))
 
 (define (replace-shell-raw! operation kind old-raw new-raw)
-  (let find ((entries shell-registry))
+  (let find ((entries (shell-registry-current)))
     (cond
       ((null? entries)
        (fail 'internal operation "opaque identity registry entry is missing" '()))
@@ -1074,9 +1083,10 @@
                                       'tensor-provider-register-internal!))
                        (tombstones-before (native-tombstone-count
                                             'tensor-provider-register-internal!))
-                       (registration
-                         (vector (tensor-provider-name admitted)
-                                 shell admitted))
+                       ;; Allocate the later publication spine before sealing;
+                       ;; its identity fields are filled only from canonical
+                       ;; registry readback after admission succeeds.
+                       (registration (vector #f shell #f))
                        (next-providers (cons registration tensor-providers))
                        (callbacks #f)
                        (outcome (vector #f #f))
@@ -1119,8 +1129,18 @@
                         ;; sealing. These writes are bounded and nonraising.
                         (vector-set! admitted 10 callbacks)
                         (vector-set! shell-record 2 admitted)
-                        (set! tensor-providers next-providers)
-                        admitted)
+                        ;; The registry write barrier may promote the admitted
+                        ;; provider. Build every later publication from the
+                        ;; canonical registry readback, then return only the
+                        ;; provider read back from the promoted provider list.
+                        (let* ((canonical-record (shell-entry shell))
+                               (canonical-admitted
+                                 (vector-ref canonical-record 2)))
+                          (vector-set! registration 0
+                                       (tensor-provider-name canonical-admitted))
+                          (vector-set! registration 2 canonical-admitted)
+                          (set! tensor-providers next-providers)
+                          (vector-ref (car tensor-providers) 2)))
                       (begin
                         (set! tensor-provider-admission-active-shell #f)
                         (guard (caught
@@ -1536,7 +1556,7 @@
   ;; Exact identity protection does not invoke a provider. After trusted
   ;; provider preflight, the same scan may use that provider's admitted
   ;; storage-identity callback to reject a distinct wrapper over live storage.
-  (let scan-states ((records shell-registry))
+  (let scan-states ((records (shell-registry-current)))
     (if (null? records)
         #f
         (let* ((record (car records))
@@ -1602,7 +1622,7 @@
   (if (carrier-owned-by-live-state?
         operation provider carrier carrier-kind compare-storage?)
       #t
-      (let scan-modules ((records shell-registry))
+      (let scan-modules ((records (shell-registry-current)))
         (if (null? records)
             #f
             (let* ((record (car records))
@@ -2929,6 +2949,13 @@
       ;; Capture publication so rollback can revoke a shell even when native
       ;; bind fails after shell creation.
       (set! state-shell (shell-for-raw 'state state))
+      ;; A nested caller region promotes the published graph into the root
+      ;; registry. Continue only with that canonical post-barrier raw state;
+      ;; otherwise a later lookup would publish a second native identity for
+      ;; the stale regional object.
+      (set! state (raw-for-shell operation 'state state-shell))
+      (set! entries (vector-ref state 6))
+      (set! ownership (vector-ref (state-lifecycle state) 5))
       (vector-set! outcome 0 #t)
       (vector-set! outcome 1
                    (state-provider-bind! operation state provider)))
@@ -3331,7 +3358,7 @@
   ;; This snapshot is allocated before native bind. After bind succeeds the
   ;; bounded tail only mutates these already-existing registry records, so a
   ;; shell published for a pre-clone entry cannot retain borrowed storage.
-  (let scan ((records shell-registry) (result '()))
+  (let scan ((records (shell-registry-current)) (result '()))
     (if (null? records)
         result
         (let ((record (car records)))
@@ -3887,6 +3914,12 @@
                  outcome))
         (validate-state-with-provider operation state provider)
         (set! state-shell (shell-for-raw 'state state))
+        ;; `shell-for-raw` may promote a regional state graph. Bind and return
+        ;; the canonical registry-owned raw state, never the stale regional
+        ;; source used to construct it.
+        (set! state (raw-for-shell operation 'state state-shell))
+        (set! entries (vector-ref state 6))
+        (set! adopted-ownership (vector-ref (state-lifecycle state) 5))
         (state-provider-bind! operation state provider)
         ;; No fallible operation follows transfer into the live state.
         (vector-set! (state-lifecycle state) 2 #t)
@@ -4102,7 +4135,7 @@
   (if (not (= (vector-length entry-record) 4))
       #f
       (let ((owner-state (vector-ref entry-record 3)))
-  (let scan ((records shell-registry))
+  (let scan ((records (shell-registry-current)))
     (if (null? records)
         #f
         (let* ((record (car records))
@@ -4347,7 +4380,14 @@
                    (vector-ref (vector-ref plan 1) 7)
                    (vector-ref plan 5))
                  (raise caught)))
-        (let ((shell (shell-for-raw 'handle (vector-ref plan 1))))
+        (let* ((shell (shell-for-raw 'handle (vector-ref plan 1)))
+               (canonical-handle
+                 (raw-for-shell 'module-register-parameter-internal!
+                                'handle shell)))
+          ;; The registry publication above may promote the handle. Replace
+          ;; both pending plan edges before the module itself is published.
+          (vector-set! plan 1 canonical-handle)
+          (vector-set! (car (vector-ref plan 2)) 2 canonical-handle)
           (commit-parameter-registration! plan)
           shell))))
   (lambda (module name handle)
