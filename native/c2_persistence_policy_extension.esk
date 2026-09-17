@@ -2,8 +2,13 @@
 ;;; transformer.persistence_policy_internal in the eventual C2 aggregate.
 ;;; It is intentionally absent from every installed/public facade.
 
+(extern i64 c2-policy-factory-register ptr
+        :real et_c2_private_policy_factory_register_v1)
+(extern i64 c2-policy-factory-authenticate ptr
+        :real et_c2_private_policy_factory_authenticate_v1)
+
 (define c2-policy-tag (vector 'c2-persistence-policy))
-(define c2-policy-registry '())
+(define c2-policy-query (vector 'c2-persistence-policy-query))
 
 (define c2-policy-hard-file-bytes 1099511627776)
 (define c2-policy-hard-metadata-bytes 268435456)
@@ -52,15 +57,39 @@
   (if (< max-tensors c2-policy-c1-hard-tensors)
       max-tensors c2-policy-c1-hard-tensors))
 
-(define (c2-policy-make-identity)
-  (guard (raised (#t raised))
-    (error "transformer.persistence.policy:c2-v1")))
+(define (c2-policy-make-identity entry)
+  (let ((state (vector entry c2-policy-query)))
+    (lambda (query)
+      (if (eq? query (vector-ref state 1)) (vector-ref state 0)
+          (error "transformer.persistence.policy:c2-v1")))))
+
+(define (c2-policy-ensure-factory! operation)
+  (let* ((probe (c2-policy-make-identity (vector #f)))
+         (registered (c2-policy-factory-register probe)))
+    (if (= registered -1)
+        (c2-policy-fail 'internal operation
+                        "C2 policy closure factory is malformed"))
+    (if (= registered -9)
+        (c2-policy-fail 'internal operation
+                        "C2 policy closure factory conflicts"))
+    (if (not (= registered 1))
+        (c2-policy-fail 'internal operation
+                        "C2 policy closure factory returned an invalid status"))
+    (if (not (= (c2-policy-factory-authenticate probe) 1))
+        (c2-policy-fail 'internal operation
+                        "C2 policy closure factory failed authentication"))
+    #t))
 
 (define (c2-policy-find shell)
-  (let loop ((remaining c2-policy-registry))
-    (cond ((null? remaining) #f)
-          ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
-          (else (loop (cdr remaining))))))
+  (c2-policy-ensure-factory! 'persistence-policy)
+  (if (or (not (procedure? shell))
+          (not (= (c2-policy-factory-authenticate shell) 1)))
+      #f
+      (guard (raised (#t #f))
+        (let ((entry (shell c2-policy-query)))
+          (if (and (vector? entry) (= (vector-length entry) 9)
+                   (eq? (vector-ref entry 0) shell))
+              entry #f)))))
 
 ;;; Entry layout is private and source-local:
 ;;; [shell,tag,file,metadata,tensor,aggregate-tensors,device,mode,C1-subpolicy].
@@ -98,14 +127,15 @@
       (c2-policy-fail
         'invalid-argument 'persistence-policy
         "invalid or unsupported C2 checkpoint persistence policy"))
+  (c2-policy-ensure-factory! 'persistence-policy)
   (let* ((subpolicy
            (c1-persistence-policy-internal
              max-file max-metadata max-tensor
              (c2-policy-c1-tensors max-tensors) device))
-         (shell (c2-policy-make-identity))
-         (entry (vector shell c2-policy-tag max-file max-metadata max-tensor
-                        max-tensors device mode subpolicy)))
-    (set! c2-policy-registry (cons entry c2-policy-registry))
+         (entry (vector #f c2-policy-tag max-file max-metadata max-tensor
+                        max-tensors device mode subpolicy))
+         (shell (c2-policy-make-identity entry)))
+    (vector-set! entry 0 shell)
     shell))
 
 ;;; Eventual five-argument C2 persistence-policy wrapper uses this constructor.
@@ -114,8 +144,10 @@
 ;;; so the C2 reader can apply and classify both limit families independently.
 (define (c2-persistence-policy-internal
           max-file max-metadata max-tensor max-tensors device)
-  (c2-persistence-policy-mode-internal
-    max-file max-metadata max-tensor max-tensors device 'wire))
+  (let ((result
+          (c2-persistence-policy-mode-internal
+            max-file max-metadata max-tensor max-tensors device 'wire)))
+    result))
 
 (define (c2-policy-limits-internal operation policy)
   (let ((entry (c2-require-policy operation policy)))
@@ -126,6 +158,12 @@
 (define (c2-policy-c1-subpolicy-internal operation policy)
   (let ((entry (c2-require-policy operation policy)))
     (vector-ref entry 8)))
+
+;;; The inherited tokenizer surface consumes only the exact C1 projection of
+;;; an authenticated C2 policy, never the wider aggregate tensor count.
+(define (c2-policy-t2-entry-internal policy operation)
+  (let ((result (c2-policy-c1-subpolicy-internal operation policy)))
+    result))
 
 (define (c2-policy-operational-target-internal)
   (vector c2-policy-operational-file-bytes

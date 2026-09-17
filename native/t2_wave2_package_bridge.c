@@ -24,7 +24,12 @@ ET_T1_DECLARE_UNARY(et_e1b_private_t1_tokenizer_vocab_size_cabi_v1);
 ET_T1_DECLARE_UNARY(et_e1b_private_t1_tokenizer_fingerprint_cabi_v1);
 ET_T1_DECLARE_BINARY(et_e1b_private_t1_tokenizer_special_token_id_cabi_v1);
 
-extern eshkol_tagged_value_t et_e1b_private_c1_persistence_policy_cabi_v1(
+#ifndef ET_E1B_PERSISTENCE_POLICY_PRIVATE_TARGET
+#define ET_E1B_PERSISTENCE_POLICY_PRIVATE_TARGET \
+  et_e1b_private_c1_persistence_policy_cabi_v1
+#endif
+
+extern eshkol_tagged_value_t ET_E1B_PERSISTENCE_POLICY_PRIVATE_TARGET(
     eshkol_tagged_value_t max_file, eshkol_tagged_value_t max_metadata,
     eshkol_tagged_value_t max_tensor, eshkol_tagged_value_t max_tensors,
     eshkol_tagged_value_t device);
@@ -69,7 +74,7 @@ void et_e1b_public_c1_persistence_policy_v1(
     void *max_file, void *max_metadata, void *max_tensor, void *max_tensors,
     void *device, void *output) {
   et_e1b_ensure_private_initialized_v1();
-  *et_e1b_box_value_v1(output) = et_e1b_private_c1_persistence_policy_cabi_v1(
+  *et_e1b_box_value_v1(output) = ET_E1B_PERSISTENCE_POLICY_PRIVATE_TARGET(
       *et_e1b_box_value_v1(max_file), *et_e1b_box_value_v1(max_metadata),
       *et_e1b_box_value_v1(max_tensor), *et_e1b_box_value_v1(max_tensors),
       *et_e1b_box_value_v1(device));

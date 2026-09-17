@@ -97,7 +97,7 @@
 (define (c2-save-require-native-success status result)
   (if (or (not (= status 0))
           (not (= (c2-save-u64 result 0) c2-save-result-magic)))
-      (c2-save-native-failure result)))
+      (let ((unreachable (c2-save-native-failure result))) unreachable)))
 
 (define (c2-save-effective-limit limits index operational)
   (let ((caller (vector-ref limits index))
@@ -110,12 +110,14 @@
   (if (not (eq? (vector-ref limits 5) 'operational-target))
       subpolicy
       (let ((operational (c2-policy-operational-target-internal)))
-        (c1-persistence-policy-internal
-          (c2-save-effective-limit limits 0 operational)
-          (c2-save-effective-limit limits 1 operational)
-          (c2-save-effective-limit limits 2 operational)
-          (c2-save-effective-limit limits 3 operational)
-          'cpu))))
+        (let ((result
+                (c1-persistence-policy-internal
+                  (c2-save-effective-limit limits 0 operational)
+                  (c2-save-effective-limit limits 1 operational)
+                  (c2-save-effective-limit limits 2 operational)
+                  (c2-save-effective-limit limits 3 operational)
+                  'cpu)))
+          result))))
 
 ;;; The owner stores already-validated inert projections, not its original
 ;;; constructor input. Re-form only the serialized authoritative leaves and
@@ -130,13 +132,15 @@
                     '() #f))
   (let ((dataset (vector-ref controls 2))
         (resolved (vector-ref controls 3)))
-    (c2-training-state-controls-copy
-      'checkpoint-save!
-      (vector
-        (vector-ref controls 0) (vector-ref controls 1)
-        (vector (vector-ref dataset 3) (vector-ref dataset 4))
-        (vector (vector-ref resolved 0) (vector-ref resolved 1))
-        (vector-ref controls 4)))))
+    (let ((result
+            (c2-training-state-controls-copy
+              'checkpoint-save!
+              (vector
+                (vector-ref controls 0) (vector-ref controls 1)
+                (vector (vector-ref dataset 3) (vector-ref dataset 4))
+                (vector (vector-ref resolved 0) (vector-ref resolved 1))
+                (vector-ref controls 4)))))
+      result)))
 
 (define (c2-save-path-encoded-size path limit)
   (let loop ((remaining path) (total 0))
@@ -589,9 +593,11 @@
             (c2-policy-limits-internal 'checkpoint-save! policy))
           (subpolicy
             (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)))
-      (c2-save-with-owner-borrow
-        state limits (c2-save-effective-model-policy limits subpolicy)
-        c2-save-stage-components-internal
-        (lambda (bytes)
-          (c2-save-publish-internal
-            path bytes (if (vector-ref parsed-options 0) 1 0)))))))
+      (let ((result
+              (c2-save-with-owner-borrow
+                state limits (c2-save-effective-model-policy limits subpolicy)
+                c2-save-stage-components-internal
+                (lambda (bytes)
+                  (c2-save-publish-internal
+                    path bytes (if (vector-ref parsed-options 0) 1 0))))))
+        result))))

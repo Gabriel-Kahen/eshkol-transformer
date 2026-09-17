@@ -49,5 +49,8 @@
 
 (define (c2-model-encode-c2-owned-state-internal
           state owner-token policy operation)
-  (c1-checkpoint-encode-c2-owned-state-internal
-    state owner-token policy c2-model-checkpoint-codec-internal operation))
+  (let ((result
+          (c1-checkpoint-encode-c2-owned-state-internal
+            state owner-token policy c2-model-checkpoint-codec-internal
+            operation)))
+    result))

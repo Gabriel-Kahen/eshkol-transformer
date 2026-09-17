@@ -204,7 +204,7 @@ compile_runtime() {
       "${PROJECT_ROOT}/tests/x1/fixtures/resolved_minimal_v1.json" \
       >"${tmp}/${label}/run.stdout" 2>"${tmp}/${label}/run.stderr"
   test ! -s "${tmp}/${label}/run.stderr"
-  rg -x 'C2 PRIVATE CHECKPOINT LOAD PASS: 234 checks' \
+  rg -x 'C2 PRIVATE CHECKPOINT LOAD PASS: 236 checks' \
     "${tmp}/${label}/run.stdout" >/dev/null
 }
 compile_runtime clang-a "${cxx}"

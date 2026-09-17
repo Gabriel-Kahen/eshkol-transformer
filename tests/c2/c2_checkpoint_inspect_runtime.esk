@@ -88,6 +88,24 @@
 (check-error "copied shell rejected"
   (capture (lambda () (c2-checkpoint-metadata-ref-internal copied 'format-id)))
   'invalid-argument 'checkpoint-metadata-ref)
+(define metadata-relay-called? #f)
+(define metadata-relay #f)
+(set! metadata-relay
+  (lambda (query)
+    (set! metadata-relay-called? #t)
+    (let ((entry (metadata query)))
+      (vector-set! entry 0 metadata-relay)
+      entry)))
+(check-error "relay shell rejected before private query"
+  (capture
+    (lambda ()
+      (c2-checkpoint-metadata-ref-internal metadata-relay 'format-id)))
+  'invalid-argument 'checkpoint-metadata-ref)
+(check "relay rejection preserves original metadata without invocation"
+       (and (not metadata-relay-called?)
+            (= 3
+               (c2-checkpoint-metadata-ref-internal
+                 metadata 'tensor-count))))
 (check-error "forged shell rejected before key"
   (capture (lambda ()
     (c2-checkpoint-metadata-ref-internal

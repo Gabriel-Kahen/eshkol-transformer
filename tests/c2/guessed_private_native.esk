@@ -1,0 +1,4 @@
+(extern i64 guessed-c2-stage
+        :real et_c2_private_checkpoint_load_stage_v1)
+
+(guessed-c2-stage)

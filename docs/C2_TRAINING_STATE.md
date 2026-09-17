@@ -5,10 +5,15 @@ logical schema and wire format in issue #1 comment `5628609463`, with the final
 nonallocating model-copy seam accepted in comment `5628659732`. Separable
 parser, codec, and ownership work proceeded privately. K2 issue #73 is now
 independently accepted and merged through PR #76 at `36a9231`. The private
-LOAD/SAVE ownership and operational gates pass, but the public source-composed
-C2 artifact, capability-facing `checkpoint-load/3`, and provisional 81-global /
-75-export boundary remain unpublished until real K2 facade composition,
-supported-host CI, and final independent acceptance complete.
+LOAD/SAVE ownership gates pass. A local source-composed candidate now exposes
+the capability-facing `checkpoint-load/3` through the caller's exact K2 report,
+with an exact 81-global / 75-export / 81-public-string boundary and one archive
+member. Its fresh-cache public lifecycle, hostile-linkage, deterministic-build,
+and root-retention gates pass on the unsupported development host. The private
+stage/reconstruct operational path passes the fixed ceiling, but the same
+64-tensor measurement through public `checkpoint-load/3` and counted K2
+admission/failure injection remain open. Publication also waits for Ubuntu
+22.04/LLVM 21.1.8 CI and final independent integration acceptance.
 
 ## Scope
 

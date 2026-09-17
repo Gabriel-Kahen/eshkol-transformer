@@ -13,7 +13,10 @@
 
 (define (c2-d2-prefix=? bytes prefix)
   (and (>= (bytevector-length bytes) (bytevector-length prefix))
-       (c2-d2-range=? bytes prefix 0 (bytevector-length prefix))))
+       (let ((result
+               (c2-d2-range=?
+                 bytes prefix 0 (bytevector-length prefix))))
+         result)))
 
 (define (c2-d2-lower-hex? bytes start)
   (let loop ((index start))

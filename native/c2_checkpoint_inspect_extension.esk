@@ -3,11 +3,15 @@
 
 (extern i64 c2-inspect-native ptr i64 i64 i64 i64 i64 ptr
         :real et_c2_private_checkpoint_inspect_bridge_v1)
+(extern i64 c2-metadata-factory-register ptr
+        :real et_c2_private_metadata_factory_register_v1)
+(extern i64 c2-metadata-factory-authenticate ptr
+        :real et_c2_private_metadata_factory_authenticate_v1)
 
 (define c2-inspect-result-bytes 320)
 (define c2-inspect-result-magic 4842013150130745648)
 (define c2-inspect-metadata-tag (vector 'c2-checkpoint-metadata))
-(define c2-inspect-metadata-registry '())
+(define c2-inspect-metadata-query (vector 'c2-checkpoint-metadata-query))
 
 (define (c2-inspect-u64 bytes offset)
   (let loop ((index 7) (value 0))
@@ -59,15 +63,41 @@
             (list 'format-code format-code)
             (list 'format-offset format-offset)))))
 
-(define (c2-inspect-make-identity)
-  (guard (raised (#t raised))
-    (error "transformer.checkpoint.metadata:c2-v1")))
+(define (c2-inspect-make-identity entry)
+  (let ((state (vector entry c2-inspect-metadata-query)))
+    (lambda (query)
+      (if (eq? query (vector-ref state 1)) (vector-ref state 0)
+          (error "transformer.checkpoint.metadata:c2-v1")))))
+
+(define (c2-inspect-ensure-factory! operation)
+  (let* ((probe (c2-inspect-make-identity (vector #f)))
+         (registered (c2-metadata-factory-register probe)))
+    (if (= registered -1)
+        (c2-inspect-fail 'internal operation
+                         "C2 metadata closure factory is malformed" '()))
+    (if (= registered -9)
+        (c2-inspect-fail 'internal operation
+                         "C2 metadata closure factory conflicts" '()))
+    (if (not (= registered 1))
+        (c2-inspect-fail
+          'internal operation
+          "C2 metadata closure factory returned an invalid status" '()))
+    (if (not (= (c2-metadata-factory-authenticate probe) 1))
+        (c2-inspect-fail
+          'internal operation
+          "C2 metadata closure factory failed authentication" '()))
+    #t))
 
 (define (c2-inspect-find shell)
-  (let loop ((remaining c2-inspect-metadata-registry))
-    (cond ((null? remaining) #f)
-          ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
-          (else (loop (cdr remaining))))))
+  (c2-inspect-ensure-factory! 'checkpoint-metadata-ref)
+  (if (or (not (procedure? shell))
+          (not (= (c2-metadata-factory-authenticate shell) 1)))
+      #f
+      (guard (raised (#t #f))
+        (let ((entry (shell c2-inspect-metadata-query)))
+          (if (and (vector? entry) (= (vector-length entry) 8)
+                   (eq? (vector-ref entry 0) shell))
+              entry #f)))))
 
 (define (c2-inspect-path-string-valid? path)
   (and (string? path) (> (string-length path) 0)
@@ -94,6 +124,7 @@
 ;;; configuration fingerprint, tensor count, payload bytes, file bytes.
 (define (c2-checkpoint-inspect-internal path policy)
   (let* ((limits (c2-policy-limits-internal 'checkpoint-inspect policy)))
+    (c2-inspect-ensure-factory! 'checkpoint-inspect)
     (if (not (c2-inspect-path-string-valid? path))
         (c2-inspect-fail 'invalid-argument 'checkpoint-inspect
                          "checkpoint path is invalid" '()))
@@ -122,14 +153,13 @@
                  (utf8->string
                    (bytevector-copy result 112 (+ 112 tokenizer-bytes))))
                (config (utf8->string (bytevector-copy result 208 301)))
-               (shell (c2-inspect-make-identity))
                (entry
-                 (vector shell c2-inspect-metadata-tag api tokenizer config
+                 (vector #f c2-inspect-metadata-tag api tokenizer config
                          (c2-inspect-u64 result 80)
                          (c2-inspect-u64 result 72)
-                         (c2-inspect-u64 result 64))))
-          (set! c2-inspect-metadata-registry
-                (cons entry c2-inspect-metadata-registry))
+                         (c2-inspect-u64 result 64)))
+               (shell (c2-inspect-make-identity entry)))
+          (vector-set! entry 0 shell)
           shell)))))
 
 (define (c2-checkpoint-metadata-ref-internal metadata key)

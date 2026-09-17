@@ -304,8 +304,10 @@
   (if (or (not (vector? request)) (not (= (vector-length request) 6)))
       (o2-fail 'invalid-argument 'o2-state-copy-moment-bits-internal
                "moment-copy request must be an exact length-6 vector"))
-  (o2-state-copy-moment-bits-core-internal
-    request (vector-ref request 0) #f #f))
+  (let ((result
+          (o2-state-copy-moment-bits-core-internal
+            request (vector-ref request 0) #f #f)))
+    result))
 
 (define (o2-state-copy-moment-bits-c2-owned-internal request)
   (if (or (not (vector? request)) (not (= (vector-length request) 7))
@@ -313,8 +315,10 @@
       (o2-fail 'invalid-argument
                'o2-state-copy-moment-bits-c2-owned-internal
                "claimed moment-copy request must be an exact length-7 vector"))
-  (o2-state-copy-moment-bits-core-internal
-    (vector (vector-ref request 0) (vector-ref request 1)
-            (vector-ref request 2) (vector-ref request 3)
-            (vector-ref request 4) (vector-ref request 6))
-    (vector-ref request 0) #t (vector-ref request 5)))
+  (let ((result
+          (o2-state-copy-moment-bits-core-internal
+            (vector (vector-ref request 0) (vector-ref request 1)
+                    (vector-ref request 2) (vector-ref request 3)
+                    (vector-ref request 4) (vector-ref request 6))
+            (vector-ref request 0) #t (vector-ref request 5))))
+    result))

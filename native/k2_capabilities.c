@@ -78,6 +78,10 @@ typedef struct et_k2_state {
   uint64_t report_factory;
   uint64_t request_factory;
   uint64_t entry_factory;
+#ifdef ET_C2_CARRIER_FACTORIES
+  uint64_t c2_policy_factory;
+  uint64_t c2_metadata_factory;
+#endif
 #ifdef ET_K2_TESTING
   const et_kernel_provider_v1 *provider_override;
   int provider_override_enabled;
@@ -1072,6 +1076,43 @@ int64_t et_k2_private_request_factory_authenticate_v1(const void *closure) {
 int64_t et_k2_private_entry_factory_authenticate_v1(const void *closure) {
   return authenticate_factory(closure, &state.entry_factory);
 }
+
+#ifdef ET_C2_CARRIER_FACTORIES
+static int64_t register_c2_factory(const void *closure, uint64_t *slot,
+                                   const uint64_t *other) {
+  uint64_t code;
+  if (!closure_code(closure, &code)) {
+    return ET_K2_SCALAR_INVALID_ARGUMENT;
+  }
+  if (*slot == code) {
+    return 1;
+  }
+  if (*slot != 0u || *other == code || state.report_factory == code ||
+      state.request_factory == code || state.entry_factory == code) {
+    return ET_K2_SCALAR_INTERNAL;
+  }
+  *slot = code;
+  return 1;
+}
+
+int64_t et_c2_private_policy_factory_register_v1(const void *closure) {
+  return register_c2_factory(closure, &state.c2_policy_factory,
+                             &state.c2_metadata_factory);
+}
+
+int64_t et_c2_private_policy_factory_authenticate_v1(const void *closure) {
+  return authenticate_factory(closure, &state.c2_policy_factory);
+}
+
+int64_t et_c2_private_metadata_factory_register_v1(const void *closure) {
+  return register_c2_factory(closure, &state.c2_metadata_factory,
+                             &state.c2_policy_factory);
+}
+
+int64_t et_c2_private_metadata_factory_authenticate_v1(const void *closure) {
+  return authenticate_factory(closure, &state.c2_metadata_factory);
+}
+#endif
 
 #ifdef ET_K2_TESTING
 void et_k2_test_reset_v1(void) {

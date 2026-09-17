@@ -302,7 +302,10 @@ expected_ci_build_commands = {
         "/usr/bin/bash scripts/build-x1.sh",
         "/usr/bin/bash scripts/build-d1.sh",
     },
-    "build-ci-checkpoint": {"/usr/bin/bash scripts/build-c1.sh"},
+    "build-ci-checkpoint": {
+        "/usr/bin/bash scripts/build-c1.sh",
+        "/usr/bin/bash scripts/build-c2.sh",
+    },
     "build-ci-parameters": set(),
     "build-ci-tokenizer-byte": {"/usr/bin/bash scripts/build-d2.sh"},
     "build-ci-tokenizer-bpe": set(),
@@ -330,6 +333,10 @@ required_build_commands_by_test = {
         "/usr/bin/bash scripts/build-t2.sh",
         "/usr/bin/bash scripts/build-d2.sh",
         "/usr/bin/bash scripts/build-o2.sh",
+    },
+    "/usr/bin/bash scripts/test-c2.sh": {
+        "/usr/bin/bash scripts/build-c1.sh",
+        "/usr/bin/bash scripts/build-c2.sh",
     },
     "/usr/bin/bash scripts/test-t1.sh": {
         "/usr/bin/bash scripts/build-d2.sh",
@@ -366,6 +373,7 @@ required_build_commands = {
     "/usr/bin/bash scripts/build-t1.sh",
     "/usr/bin/bash scripts/build-t2.sh",
     "/usr/bin/bash scripts/build-d2.sh",
+    "/usr/bin/bash scripts/build-c2.sh",
 }
 assert required_build_commands.issubset(targets["build"])
 build_driver = (root / "scripts/build.sh").read_text(encoding="utf-8")

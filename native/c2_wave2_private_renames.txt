@@ -1,0 +1,6 @@
+c2-public-checkpoint-inspect et_e1b_private_c2_checkpoint_inspect_cabi_v1
+c2-public-checkpoint-load et_e1b_private_c2_checkpoint_load_cabi_v1
+c2-public-checkpoint-metadata-ref et_e1b_private_c2_checkpoint_metadata_ref_cabi_v1
+c2-public-checkpoint-save! et_e1b_private_c2_checkpoint_save_cabi_v1
+c2-public-persistence-policy et_e1b_private_c2_persistence_policy_cabi_v1
+c2-public-trainer-state-release! et_e1b_private_c2_trainer_state_release_cabi_v1

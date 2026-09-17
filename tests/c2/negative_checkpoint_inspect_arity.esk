@@ -1,0 +1,2 @@
+(require transformer.persistence)
+(checkpoint-inspect 'path)

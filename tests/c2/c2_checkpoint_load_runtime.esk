@@ -341,6 +341,19 @@
 (check "staging invokes zero tensor codecs"
        (= (vector-ref initial-native-counts 22)
           (c2-load-test-counter 22)))
+(define staged-capability-descriptors
+  (c2-checkpoint-load-capability-descriptors-internal
+    released-stage 'checkpoint-load))
+(check "capability projection covers model plus both optimizer moments"
+       (= (i2-bounded-list-length staged-capability-descriptors 4) 3))
+(check "capability projection preserves every exact f32 CPU rank-one shape"
+       (let loop ((remaining staged-capability-descriptors))
+         (if (null? remaining) #t
+             (let ((descriptor (car remaining)))
+               (and (eq? (vector-ref descriptor 0) 'f32)
+                    (eq? (vector-ref descriptor 1) 'cpu)
+                    (equal? (vector-ref descriptor 2) '(2))
+                    (loop (cdr remaining)))))))
 (check "staging releases both native retained images and descriptors"
        (native-staging-flat?))
 (check "explicit staging release succeeds"

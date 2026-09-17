@@ -28,10 +28,17 @@
 (define c2-training-state-states '())
 (define c2-training-state-i64-max 9223372036854775807)
 
-(define (c2-training-state-fail category operation message)
+(define (c2-training-state-fail-raw category operation message)
   (let ((unreachable
           (et-e1b-private-raise category operation message '() #f)))
     unreachable))
+
+(define-syntax c2-training-state-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result
+             (c2-training-state-fail-raw category operation message)))
+       result))))
 
 (define (c2-training-state-exact-i64? value)
   (and (integer? value) (exact? value) (real? value)
@@ -71,10 +78,12 @@
               (bpe-prefix (string->utf8 "sha256:eshkol-bpe-tokenizer-v1:")))
          (or (and (= (bytevector-length bytes) 96)
                   (c2-training-state-prefix=? bytes byte-prefix)
-                  (c2-training-state-lower-hex? bytes 32))
+                  (let ((result
+                          (c2-training-state-lower-hex? bytes 32))) result))
              (and (= (bytevector-length bytes) 95)
                   (c2-training-state-prefix=? bytes bpe-prefix)
-                  (c2-training-state-lower-hex? bytes 31))))))
+                  (let ((result
+                          (c2-training-state-lower-hex? bytes 31))) result))))))
 
 (define (c2-training-state-shape-bytes shape)
   (let* ((rank (i2-bounded-list-length shape 65))

@@ -33,14 +33,17 @@
              (c2-load-fail-raw category operation message details))) result))))
 
 (define (c2-load-internal-after-validation phase caught)
-  (c2-load-fail
-    'internal 'checkpoint-load
-    "validated checkpoint staging or reconstruction failed internally"
-    (list (list 'source-domain 'c2-checkpoint-load)
-          (list 'source-code phase)
-          (list 'source-message
-                "validated checkpoint staging or reconstruction failed internally")
-          (list 'caught-transformer-error? (transformer-error? caught)))))
+  (let ((unreachable
+          (c2-load-fail
+            'internal 'checkpoint-load
+            "validated checkpoint staging or reconstruction failed internally"
+            (list (list 'source-domain 'c2-checkpoint-load)
+                  (list 'source-code phase)
+                  (list 'source-message
+                        "validated checkpoint staging or reconstruction failed internally")
+                  (list 'caught-transformer-error?
+                        (transformer-error? caught))))))
+    unreachable))
 
 (define (c2-load-u64 bytes offset)
   (let loop ((index 7) (value 0))
@@ -50,10 +53,10 @@
                  (bytevector-u8-ref bytes (+ offset index)))))))
 
 (define (c2-load-u32 bytes offset)
-  (c2-load-u64-width bytes offset 4))
+  (let ((result (c2-load-u64-width bytes offset 4))) result))
 
 (define (c2-load-u16 bytes offset)
-  (c2-load-u64-width bytes offset 2))
+  (let ((result (c2-load-u64-width bytes offset 2))) result))
 
 (define (c2-load-u64-width bytes offset width)
   (let loop ((index (- width 1)) (value 0))
@@ -170,7 +173,10 @@
         (vector-set! outcome 1 value)))
     (if (vector-ref outcome 0)
         (vector-ref outcome 1)
-        (c2-load-internal-after-validation phase (vector-ref outcome 1)))))
+        (let ((unreachable
+                (c2-load-internal-after-validation
+                  phase (vector-ref outcome 1))))
+          unreachable))))
 
 (define (c2-load-measure-allocations path)
   (vector (c2-load-string->utf8-internal path)
@@ -349,6 +355,62 @@
 (define c2-load-release-o2-internal o2-public-optimizer-state-release!)
 (define c2-load-release-c2-internal c2-training-state-release-internal!)
 
+;;; Extract only dtype/device/shape authorization descriptors from an exact
+;;; live stage. The model payload is never copied or exposed. Native staging
+;;; has already fully authenticated these inert bytes; the bounds checks here
+;;; protect the independent projection from implementation drift.
+(define (c2-load-model-capability-descriptors model operation)
+  (let ((entry-count (c2-load-u32 model 80))
+        (metadata-end (c2-load-u64 model 64))
+        (provider-bytes (c2-load-u32 model 88)))
+    (let loop ((index 0) (at (+ 128 provider-bytes)) (result '()))
+      (if (= index entry-count)
+          (o2-reverse result)
+          (let* ((record-bytes (c2-load-u64 model at))
+                 (rank (c2-load-u16 model (+ at 30)))
+                 (dtype-code (bytevector-u8-ref model (+ at 33)))
+                 (device-code (bytevector-u8-ref model (+ at 34)))
+                 (shape (c2-load-copy-shape model (+ at 80) rank))
+                 (next (+ at record-bytes)))
+            (if (or (> next metadata-end) (not (= dtype-code 3))
+                    (not (= device-code 1)))
+                (c2-load-fail
+                  'internal operation
+                  "validated model capability projection diverged" '()))
+            (loop (+ index 1) next
+                  (cons (vector 'f32 'cpu shape) result)))))))
+
+(define (c2-load-o2-capability-descriptors projection)
+  (let ((entries (vector-ref projection 2)))
+    (let loop ((index 0) (result '()))
+      (if (= index (vector-length entries))
+          (o2-reverse result)
+          (let ((shape (vector-ref (vector-ref entries index) 1)))
+            ;; AdamW owns two canonical f32 moment tensors per parameter.
+            (loop (+ index 1)
+                  (cons (vector 'f32 'cpu shape)
+                        (cons (vector 'f32 'cpu shape) result))))))))
+
+(define (c2-load-list-append left right)
+  (if (null? left) right
+      (let ((tail (c2-load-list-append (cdr left) right)))
+        (cons (car left) tail))))
+
+(define (c2-checkpoint-load-capability-descriptors-internal shell operation)
+  (let ((entry (c2-load-find-stage shell)))
+    (if (or (not entry) (not (symbol? operation)))
+        (c2-load-fail 'invalid-argument operation
+                      "expected exact private checkpoint staging" '()))
+    (if (not (eq? (vector-ref entry 2) 'live))
+        (c2-load-fail 'invalid-state operation
+                      "checkpoint staging is consumed or busy" '()))
+    (let ((result
+            (c2-load-list-append
+              (c2-load-model-capability-descriptors
+                (vector-ref entry 3) operation)
+              (c2-load-o2-capability-descriptors (vector-ref entry 4)))))
+      result)))
+
 (define (c2-load-build-stage-entry
           optimizer-metadata optimizer-payload tokenizer config-fingerprint
           x1 current epoch model stage-result subpolicy)
@@ -462,8 +524,10 @@
               (vector-set! stage-outcome 1 shell)))
           (if (vector-ref stage-outcome 0)
               (vector-ref stage-outcome 1)
-              (c2-load-internal-after-validation
-                'staging (vector-ref stage-outcome 1))))))))
+              (let ((unreachable
+                      (c2-load-internal-after-validation
+                        'staging (vector-ref stage-outcome 1))))
+                unreachable)))))))
 
 (define (c2-checkpoint-load-staging-release-internal! shell)
   (let ((entry (c2-load-find-stage shell)))
@@ -641,5 +705,7 @@
                   'internal operation
                   "checkpoint reconstruction rollback reported a provider defect"
                   '())
-                (c2-load-internal-after-validation
-                  'reconstruction (vector-ref outcome 1))))))))
+                (let ((unreachable
+                        (c2-load-internal-after-validation
+                          'reconstruction (vector-ref outcome 1))))
+                  unreachable)))))))

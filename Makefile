@@ -13,7 +13,7 @@ SHELL := /usr/bin/bash
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
 	test-c2-checkpoint-inspect test-c2-checkpoint-load test-c2-checkpoint-save \
-	test-c2-checkpoint-operational \
+	test-c2-checkpoint-operational test-c2-public \
 	test-c2-d2-cursor-pair test-c2-format \
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
@@ -39,6 +39,7 @@ build: configure
 	/usr/bin/bash scripts/build-t1.sh
 	/usr/bin/bash scripts/build-t2.sh
 	/usr/bin/bash scripts/build-d2.sh
+	/usr/bin/bash scripts/build-c2.sh
 
 build-ci-core: configure
 	/usr/bin/bash scripts/generate-p1-roots.sh --check
@@ -62,6 +63,7 @@ build-ci-contracts: configure
 
 build-ci-checkpoint: configure
 	/usr/bin/bash scripts/build-c1.sh
+	/usr/bin/bash scripts/build-c2.sh
 
 build-ci-parameters: configure
 
@@ -231,6 +233,9 @@ test-c2-checkpoint-save:
 
 test-c2-checkpoint-operational:
 	/usr/bin/bash scripts/test-c2-checkpoint-operational.sh
+
+test-c2-public:
+	/usr/bin/bash scripts/test-c2-public.sh
 
 test-c2-persistence-policy:
 	/usr/bin/bash scripts/test-c2-persistence-policy.sh

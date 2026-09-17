@@ -392,8 +392,10 @@
       (c2-o2-wire-fail
         'invalid-argument 'c2-o2-encode-staging-internal
         "C2 O2 staging request must be [O2-state,P1-state,operation,#f]"))
-  (c2-o2-encode-staging-core-internal
-    request #f #f (vector-ref request 2) 3))
+  (let ((result
+          (c2-o2-encode-staging-core-internal
+            request #f #f (vector-ref request 2) 3)))
+    result))
 
 (define (c2-o2-encode-c2-owned-staging-internal request)
   (if (or (not (vector? request)) (not (= (vector-length request) 5))
@@ -403,5 +405,7 @@
       (c2-o2-wire-fail
         'invalid-argument 'c2-o2-encode-c2-owned-staging-internal
         "claimed C2 O2 staging request must be [O2,P1,token,operation,#f]"))
-  (c2-o2-encode-staging-core-internal
-    request #t (vector-ref request 2) (vector-ref request 3) 4))
+  (let ((result
+          (c2-o2-encode-staging-core-internal
+            request #t (vector-ref request 2) (vector-ref request 3) 4)))
+    result))

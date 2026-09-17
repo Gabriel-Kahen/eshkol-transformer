@@ -1,0 +1,86 @@
+;;; Trusted C2 public compositor. Never install this source directly.
+
+;;; The hook cell is allocated by T2 during aggregate initialization. C2
+;;; installs only its authenticated C1 projection, preserving one policy ABI.
+(vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+
+(define (c2-public-capability-admit-one report descriptor)
+  (guard (caught
+           (#t
+             (if (transformer-error? caught)
+                 (let ((unreachable
+                         (et-e1b-private-raise
+                           (transformer-error-category caught)
+                           'checkpoint-load
+                           "checkpoint capability admission failed"
+                           (transformer-error-details caught) caught)))
+                   unreachable)
+                 (let ((unreachable
+                         (et-e1b-private-raise
+                           'internal 'checkpoint-load
+                           "checkpoint capability admission raised a foreign value"
+                           '() caught)))
+                   unreachable))))
+    (let* ((dtype (vector-ref descriptor 0))
+           (device (vector-ref descriptor 1))
+           (shape (vector-ref descriptor 2))
+           (request
+             (k2-public-capability-request
+               'storage.copy dtype device shape #t))
+           (entry
+             (k2-public-capability-require
+               report 'tensor.f32 request)))
+      ;; `capability-require` authenticates the report/request pair and returns
+      ;; only a fresh entry from the verified row. No report-shape inspection
+      ;; or substitute validator is accepted here.
+      (if entry #t
+          (let ((unreachable
+                  (et-e1b-private-raise
+                    'internal 'checkpoint-load
+                    "K2 admitted no capability entry" '() #f)))
+            unreachable)))))
+
+(define (c2-public-capability-admit-all report descriptors)
+  (if (null? descriptors) #t
+      (begin
+        (c2-public-capability-admit-one report (car descriptors))
+        (c2-public-capability-admit-all report (cdr descriptors)))))
+
+(define (c2-public-persistence-policy
+          max-file max-metadata max-tensor max-tensors device)
+  (let ((result
+          (c2-persistence-policy-internal
+            max-file max-metadata max-tensor max-tensors device)))
+    result))
+
+(define (c2-public-checkpoint-inspect path policy)
+  (let ((result (c2-checkpoint-inspect-internal path policy))) result))
+
+(define (c2-public-checkpoint-metadata-ref metadata key)
+  (let ((result (c2-checkpoint-metadata-ref-internal metadata key))) result))
+
+(define (c2-public-checkpoint-load path policy report)
+  ;; Byte/semantic staging is complete before any K2 operation. Reconstruction
+  ;; starts only after the caller's exact report authenticates the verified
+  ;; tensor.f32 storage.copy row for the policy device.
+  (let ((stage (c2-checkpoint-load-stage-internal path policy)))
+    (guard (caught
+             (#t
+               (c2-checkpoint-load-staging-release-internal! stage)
+               (raise caught)))
+      (let ((descriptors
+              (c2-checkpoint-load-capability-descriptors-internal
+                stage 'checkpoint-load)))
+        (c2-public-capability-admit-all report descriptors)
+        (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load)))))
+
+(define (c2-public-checkpoint-save! state path policy options)
+  (let ((result
+          (c2-checkpoint-save-internal! state path policy options)))
+    result))
+
+(define (c2-public-trainer-state-release! state)
+  (let ((result
+          (c2-training-state-release-internal!
+            state 'trainer-state-release!)))
+    result))

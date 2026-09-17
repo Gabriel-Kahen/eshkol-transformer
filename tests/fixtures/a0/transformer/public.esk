@@ -39,7 +39,7 @@
          optimizer-load-state! optimizer-state-release!
          trainer-create trainer-step! trainer-stop-policy trainer-train!
          trainer-evaluate!
-         trainer-state trainer-load-state! metrics-ref
+         trainer-state trainer-load-state! trainer-state-release! metrics-ref
          generator-create generator-prefill! generator-decode-step!
          generator-generate! generation-output-ids generation-output-lengths
          generation-output-text generation-output-rng
@@ -158,6 +158,8 @@
 (define (trainer-evaluate! trainer dataset) (a0-declaration-only 'trainer-evaluate!))
 (define (trainer-state trainer) (a0-declaration-only 'trainer-state))
 (define (trainer-load-state! trainer state) (a0-declaration-only 'trainer-load-state!))
+(define (trainer-state-release! state)
+  (a0-declaration-only 'trainer-state-release!))
 (define (metrics-ref metrics key) (a0-declaration-only 'metrics-ref))
 
 (define (generator-create model tokenizer config) (a0-declaration-only 'generator-create))

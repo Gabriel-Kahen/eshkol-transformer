@@ -51,7 +51,7 @@
     optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
     optimizer-load-state! optimizer-state-release!
     trainer-create trainer-step! trainer-stop-policy trainer-train! trainer-evaluate!
-    trainer-state trainer-load-state! metrics-ref
+    trainer-state trainer-load-state! trainer-state-release! metrics-ref
     generator-create generator-prefill! generator-decode-step!
     generator-generate! generation-output-ids generation-output-lengths
     generation-output-text generation-output-rng generation-output-cache-lengths

@@ -161,10 +161,11 @@ before merge.
   tuple requires exact/one-over and jointly attainable pinned-runtime measurements,
   bounded time, no heap warning, and peak plus retained RSS below 512 MiB. It is not
   accepted merely because the wire parser declares those constants.
-- Public integration waits for merged K2 and then proves the actual source-composed
-  81/75 candidate counts, eleven truthful capability rows, hostile linkage/input
-  isolation, deterministic clean builds, full predecessor gates, supported blocking
-  CI, and independent exact-head review.
+- Public integration proves the actual source-composed 81/75 candidate counts,
+  81 public-name strings, eleven truthful capability rows, exact supplied-report
+  admission for every staged tensor, hostile linkage/input isolation, deterministic
+  clean builds, flat 1,024/8,192-iteration root retention, full predecessor gates,
+  supported blocking CI, and independent exact-head review.
 
 ## Required configuration gates
 

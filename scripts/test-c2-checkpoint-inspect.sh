@@ -38,7 +38,8 @@ sources=(
   "${PROJECT_ROOT}/tests/c2/test_checkpoint_inspect_bridge.c"
 )
 cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
-        -fno-common -fvisibility=hidden -I "${PROJECT_ROOT}/native"
+        -fno-common -fvisibility=hidden -I "${PROJECT_ROOT}/include"
+        -I "${PROJECT_ROOT}/native"
         -DET_C2_CHECKPOINT_CORE_TESTING -DET_C2_CHECKPOINT_READER_TESTING
         -DET_C2_CHECKPOINT_INSPECT_TESTING)
 arguments=("${tmp}/fixtures-a/valid.c2" "${tmp}/fixtures-a/compiler.c2"
@@ -106,7 +107,12 @@ compile_probe() {
   test ! -s "${tmp}/probe-${label}/compile.stderr"
   nm -u --format=posix "${tmp}/probe-${label}/inspect.o" | awk '{print $1}' | \
     rg '^et_c2_' | sort -u >"${tmp}/probe-${label}/c2-undefined"
-  cmp <(printf '%s\n' et_c2_private_checkpoint_inspect_bridge_v1) \
+  cmp <(printf '%s\n' \
+      et_c2_private_checkpoint_inspect_bridge_v1 \
+      et_c2_private_metadata_factory_authenticate_v1 \
+      et_c2_private_metadata_factory_register_v1 \
+      et_c2_private_policy_factory_authenticate_v1 \
+      et_c2_private_policy_factory_register_v1) \
     "${tmp}/probe-${label}/c2-undefined"
   sed -e 's/^[^:]*://' -e 's/\\//g' \
     "${tmp}/probe-${label}/inspect.d" | tr -s '[:space:]' '\n' | \
@@ -125,10 +131,13 @@ runtime="${tmp}/runtime"
 mkdir -p "${runtime}"
 for source in c2_checkpoint_inspect_bridge c2_checkpoint_core \
               c2_checkpoint_reader c2_checkpoint_format c2_x1_canonical \
-              checkpoint_io; do
+              checkpoint_io kernel_abi f32_tensor; do
   "${clang_cc}" "${cflags[@]}" -fPIC -c \
     "${PROJECT_ROOT}/native/${source}.c" -o "${runtime}/${source}.o"
 done
+"${clang_cc}" "${cflags[@]}" -fPIC -DET_C2_CARRIER_FACTORIES -c \
+  "${PROJECT_ROOT}/native/k2_capabilities.c" \
+  -o "${runtime}/k2_capabilities.o"
 ar rcsD "${runtime}/libeshkol_transformer_c2_inspect.a" "${runtime}"/*.o
 
 compile_aot() {
@@ -158,7 +167,7 @@ for label in a b; do
     "${tmp}/fixtures-a/link.c2" >"${tmp}/${label}/run.stdout" \
     2>"${tmp}/${label}/run.stderr"
   test ! -s "${tmp}/${label}/run.stderr"
-  rg -x 'C2 CHECKPOINT INSPECT PASS: 53 checks' \
+  rg -x 'C2 CHECKPOINT INSPECT PASS: 55 checks' \
     "${tmp}/${label}/run.stdout" >/dev/null
 done
 cmp "${tmp}/a/run.stdout" "${tmp}/b/run.stdout"

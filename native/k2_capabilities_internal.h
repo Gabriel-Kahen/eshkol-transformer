@@ -83,6 +83,13 @@ int64_t et_k2_private_report_factory_authenticate_v1(const void *closure);
 int64_t et_k2_private_request_factory_authenticate_v1(const void *closure);
 int64_t et_k2_private_entry_factory_authenticate_v1(const void *closure);
 
+#ifdef ET_C2_CARRIER_FACTORIES
+int64_t et_c2_private_policy_factory_register_v1(const void *closure);
+int64_t et_c2_private_policy_factory_authenticate_v1(const void *closure);
+int64_t et_c2_private_metadata_factory_register_v1(const void *closure);
+int64_t et_c2_private_metadata_factory_authenticate_v1(const void *closure);
+#endif
+
 #ifdef ET_K2_TESTING
 #include "eshkol_transformer/kernel_abi.h"
 

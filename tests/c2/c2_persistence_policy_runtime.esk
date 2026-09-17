@@ -159,6 +159,22 @@
 (define copied-hard (make-lookalike-shell))
 (expect-error "copied C2 shell rejected" 'invalid-argument 'checkpoint-load
   (lambda () (c2-policy-limits-internal 'checkpoint-load copied-hard)))
+(define policy-relay-called? #f)
+(define policy-relay #f)
+(set! policy-relay
+  (lambda (query)
+    (set! policy-relay-called? #t)
+    (let ((entry (hard query)))
+      (vector-set! entry 0 policy-relay)
+      entry)))
+(expect-error "relay C2 shell rejected before private query"
+  'invalid-argument 'checkpoint-load
+  (lambda () (c2-policy-limits-internal 'checkpoint-load policy-relay)))
+(check "relay rejection preserves original policy without invocation"
+       (and (not policy-relay-called?)
+            (= 1099511627776
+               (vector-ref
+                 (c2-policy-limits-internal 'checkpoint-load hard) 0))))
 (expect-error "forged C2 shell rejected" 'invalid-argument 'checkpoint-load
   (lambda ()
     (c2-policy-limits-internal
