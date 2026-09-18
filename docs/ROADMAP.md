@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | Eight full-coverage parallel suites, separate T2 runtime/boundary jobs, explicit tokenizer/D2 prerequisites, test-only prose selection, and early Python-isolation checks; blocking timeout evidence is documented, and nightly/manual exhaustive acceptance uses isolated 300-minute predecessor and 240-minute C2 jobs whose command union exactly equals the full suite | review |
+| F0 | Package layout, build/test entry points, CI matrix | — | [CI-E full-coverage efficiency candidate](CI_EFFICIENCY.md): shared 15-job engine, six disjoint C2 groups, exact leaf-coverage/negative tests, minimal prerequisite plans and strict same-tree CI evidence reuse; supported measurement and final independent acceptance pending | review |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |

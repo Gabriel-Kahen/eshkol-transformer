@@ -1,0 +1,164 @@
+name: Full coverage engine
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  suites:
+    name: Supported suite / ${{ matrix.suite }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: canonical-build
+            test_target: test-ci-clean-build-after-build
+            timeout: 75
+          - suite: native-numerics
+            test_target: test-ci-core-after-build
+            timeout: 105
+          - suite: contracts-data
+            test_target: test-ci-contracts-after-build
+            timeout: 75
+          - suite: checkpoint-io
+            test_target: test-ci-checkpoint-after-build
+            timeout: 75
+          - suite: parameter-state
+            test_target: test-ci-parameters-after-build
+            timeout: 75
+          - suite: byte-tokenizer
+            test_target: test-ci-tokenizer-byte-after-build
+            timeout: 75
+          - suite: bpe-tokenizer
+            test_target: test-ci-tokenizer-bpe-after-build
+            timeout: 75
+          - suite: bpe-boundary
+            test_target: test-ci-tokenizer-bpe-boundary-after-build
+            timeout: 75
+          - suite: shard-loader
+            test_target: test-ci-dataset-after-build
+            timeout: 75
+          - suite: c2-format
+            test_target: test-ci-c2-format-after-build
+            timeout: 240
+          - suite: c2-state
+            test_target: test-ci-c2-state-after-build
+            timeout: 240
+          - suite: c2-save
+            test_target: test-ci-c2-save-after-build
+            timeout: 240
+          - suite: c2-load
+            test_target: test-ci-c2-load-after-build
+            timeout: 240
+          - suite: c2-public
+            test_target: test-ci-c2-public-after-build
+            timeout: 240
+          - suite: c2-operational
+            test_target: test-ci-c2-operational-after-build
+            timeout: 240
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+      A0_COMPILER_TIMEOUT_SECONDS: '60'
+      P1_LSAN: '1'
+      C1_LSAN: '1'
+      I2_ASAN_DETECT_LEAKS: '1'
+      K2_ASAN_DETECT_LEAKS: '1'
+      D2_ASAN_DETECT_LEAKS: '1'
+      N2_ASAN_DETECT_LEAKS: '1'
+      O2_ASAN_DETECT_LEAKS: '1'
+      N3K_ASAN_DETECT_LEAKS: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y \
+            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+            ripgrep
+          test "$(llvm-config-21 --version)" = '21.1.8'
+
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+
+      - name: Select pinned oracle Python
+        if: matrix.suite == 'native-numerics'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14.6'
+
+      - name: Install pinned development oracle
+        if: matrix.suite == 'native-numerics'
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          oracle_python="$RUNNER_TEMP/development-oracle/bin/python"
+          n2_oracle_python="$RUNNER_TEMP/n2-oracle-python"
+          python3 -m venv "$RUNNER_TEMP/development-oracle"
+          "$oracle_python" -m pip install \
+            --disable-pip-version-check \
+            -r tests/n2/requirements-reference.lock
+          printf '#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexport MKL_CBWR=COMPATIBLE\nexec "%s" "$@"\n' \
+            "$oracle_python" > "$n2_oracle_python"
+          chmod 0500 "$n2_oracle_python"
+          "$n2_oracle_python" -c \
+            'import os, torch; assert os.environ.get("ATEN_CPU_CAPABILITY") == "default"; assert os.environ.get("MKL_CBWR") == "COMPATIBLE"; assert torch.backends.cpu.get_cpu_capability() == "DEFAULT"'
+          {
+            echo "N2_ORACLE_PYTHON=$n2_oracle_python"
+            echo "O2_ORACLE_PYTHON=$oracle_python"
+            echo "A2_ORACLE_PYTHON=$oracle_python"
+            echo "Q0_PYTHON=$oracle_python"
+            echo "ESHKOL_RUN=$GITHUB_WORKSPACE/.deps/eshkol-build/eshkol-run"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify pinned Eshkol toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: make toolchain
+
+      - name: Build suite prerequisites
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          started=$SECONDS
+          if [[ "${{ matrix.suite }}" == canonical-build ]]; then
+            make clean && make build
+          else
+            /usr/bin/bash scripts/ci-build-prerequisites.sh "${{ matrix.suite }}"
+          fi
+          echo "prerequisite_seconds=$((SECONDS - started))" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run full suite
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          started=$SECONDS
+          make "${{ matrix.test_target }}"
+          echo "suite_seconds=$((SECONDS - started))" >> "$GITHUB_STEP_SUMMARY"
+
+  evidence:
+    name: Suite evidence
+    needs: suites
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Require complete coverage and record tested tree
+        env:
+          SUITES_RESULT: ${{ needs.suites.result }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          test "$SUITES_RESULT" = success
+          python3 tests/ci/evidence.py emit

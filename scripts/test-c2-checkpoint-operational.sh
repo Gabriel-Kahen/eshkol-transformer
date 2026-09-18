@@ -2,6 +2,23 @@
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+
+operational_only=0
+case "$#" in
+  0) ;;
+  1)
+    if [[ "$1" != --operational-only ]]; then
+      printf 'usage: %s [--operational-only]\n' "$0" >&2
+      exit 2
+    fi
+    operational_only=1
+    ;;
+  *)
+    printf 'usage: %s [--operational-only]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
 for command in ar awk cmp diff find nm python3 rg sed sha256sum sort tee timeout \
                tr xargs; do
   require_command "${command}"
@@ -422,10 +439,17 @@ if [[ -x /usr/bin/g++ ]]; then
   compile_runtime gcc /usr/bin/g++
 fi
 
-for gate in test-c2-format.sh test-c2-core.sh test-c2-checkpoint-save.sh \
-            test-c2-checkpoint-load.sh; do
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/${gate}"
-done
+if [[ "${operational_only}" == 0 ]]; then
+  for gate in test-c2-format.sh test-c2-core.sh test-c2-checkpoint-save.sh \
+              test-c2-checkpoint-load.sh; do
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/${gate}"
+  done
+fi
 
-printf '%s\n' \
-  'C2 CHECKPOINT OPERATIONAL EVIDENCE PASS: public 64-tensor K2 LOAD/SAVE/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure, affected regressions'
+if [[ "${operational_only}" == 0 ]]; then
+  printf '%s\n' \
+    'C2 CHECKPOINT OPERATIONAL EVIDENCE PASS: public 64-tensor K2 LOAD/SAVE/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure, affected regressions'
+else
+  printf '%s\n' \
+    'C2 CHECKPOINT OPERATIONAL EVIDENCE FOCUSED PASS: public 64-tensor K2 LOAD/SAVE/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure'
+fi
