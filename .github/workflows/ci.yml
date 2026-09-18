@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [1, 2, 3]
+        sample: [1, 2, 3, 4, 5, 6]
     env:
       ATEN_CPU_CAPABILITY: default
       PYTHONDONTWRITEBYTECODE: "1"
@@ -27,27 +27,48 @@ jobs:
           cache-dependency-path: tests/n2/requirements-reference.lock
       - name: Install exact reference dependencies
         run: python -m pip install --requirement tests/n2/requirements-reference.lock
-      - name: Run paired fresh-process oracle experiments
+      - name: Compare baseline and MKL compatible controls
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           evidence_root="$RUNNER_TEMP/n2-oracle-diagnostic"
           mkdir -p "$evidence_root"
           overall=0
-          printf 'probe_order\trepetition\texit_code\n' > "$evidence_root/results.tsv"
-          for probe_order in before after; do
-            for repetition in 1 2 3 4 5 6 7 8; do
-              output_dir="$evidence_root/$probe_order/run-$repetition"
-              if python tests/ci/diagnose_n2_oracle.py \
-                  --probe-order "$probe_order" --output-dir "$output_dir"; then
+          baseline_failures=0
+          compatible_failures=0
+          printf 'control\tmkl_cbwr\tprobe_order\trepetition\texit_code\trequired\n' \
+            > "$evidence_root/results.tsv"
+          for control in baseline compatible; do
+            for repetition in 1 2; do
+              output_dir="$evidence_root/$control/run-$repetition"
+              if [[ "$control" == baseline ]]; then
+                mkl_cbwr=unset
+                required=false
+                command=(env -u MKL_CBWR python tests/ci/diagnose_n2_oracle.py)
+              else
+                mkl_cbwr=COMPATIBLE
+                required=true
+                command=(env MKL_CBWR=COMPATIBLE python tests/ci/diagnose_n2_oracle.py)
+              fi
+              if "${command[@]}" --probe-order after --output-dir "$output_dir"; then
                 result=0
               else
                 result=$?
-                overall=1
+                if [[ "$control" == baseline ]]; then
+                  baseline_failures=$((baseline_failures + 1))
+                else
+                  compatible_failures=$((compatible_failures + 1))
+                  overall=1
+                fi
               fi
-              printf '%s\t%s\t%s\n' "$probe_order" "$repetition" "$result" \
+              printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$control" "$mkl_cbwr" after "$repetition" "$result" "$required" \
                 >> "$evidence_root/results.tsv"
             done
           done
+          {
+            echo "baseline_failures=$baseline_failures/2 (evidence only)"
+            echo "compatible_failures=$compatible_failures/2 (required exact matches)"
+          } >> "$GITHUB_STEP_SUMMARY"
           exit "$overall"
       - name: Upload diagnostic evidence
         if: always()
