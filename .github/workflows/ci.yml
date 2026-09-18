@@ -1,79 +1,26 @@
-name: N2 oracle diagnostic
-
+name: CI evidence selector diagnostic
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
+  actions: read
 jobs:
-  oracle-diagnostic:
-    name: N2 oracle diagnostic / sample-${{ matrix.sample }}
+  selector:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        sample: [1, 2, 3, 4, 5, 6]
-    env:
-      ATEN_CPU_CAPABILITY: default
-      PYTHONDONTWRITEBYTECODE: "1"
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version: 3.14.6
-          cache: pip
-          cache-dependency-path: tests/n2/requirements-reference.lock
-      - name: Install exact reference dependencies
-        run: python -m pip install --requirement tests/n2/requirements-reference.lock
-      - name: Compare baseline and MKL compatible controls
-        shell: /usr/bin/bash -euo pipefail {0}
+      - name: Inspect hosted exact-tree selection without launching suites
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          evidence_root="$RUNNER_TEMP/n2-oracle-diagnostic"
-          mkdir -p "$evidence_root"
-          overall=0
-          baseline_failures=0
-          compatible_failures=0
-          printf 'control\tmkl_cbwr\tprobe_order\trepetition\texit_code\trequired\n' \
-            > "$evidence_root/results.tsv"
-          for control in baseline compatible; do
-            for repetition in 1 2; do
-              output_dir="$evidence_root/$control/run-$repetition"
-              if [[ "$control" == baseline ]]; then
-                mkl_cbwr=unset
-                required=false
-                command=(env -u MKL_CBWR python tests/ci/diagnose_n2_oracle.py)
-              else
-                mkl_cbwr=COMPATIBLE
-                required=true
-                command=(env MKL_CBWR=COMPATIBLE python tests/ci/diagnose_n2_oracle.py)
-              fi
-              if "${command[@]}" --probe-order after --output-dir "$output_dir"; then
-                result=0
-              else
-                result=$?
-                if [[ "$control" == baseline ]]; then
-                  baseline_failures=$((baseline_failures + 1))
-                else
-                  compatible_failures=$((compatible_failures + 1))
-                  overall=1
-                fi
-              fi
-              printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-                "$control" "$mkl_cbwr" after "$repetition" "$result" "$required" \
-                >> "$evidence_root/results.tsv"
-            done
-          done
-          {
-            echo "baseline_failures=$baseline_failures/2 (evidence only)"
-            echo "compatible_failures=$compatible_failures/2 (required exact matches)"
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit "$overall"
-      - name: Upload diagnostic evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: n2-oracle-diagnostic-${{ matrix.sample }}
-          path: ${{ runner.temp }}/n2-oracle-diagnostic
-          if-no-files-found: error
+          gh --version
+          python3 - <<'PY'
+          from tests.ci.evidence import select_reuse
+          result = select_reuse(
+              "workflow_dispatch", "Gabriel-Kahen/eshkol-transformer",
+              "aec841ba08c7e36cb4f3007708f22d347c935fb5",
+              "2940b3052d7c6cf3ef7781fa30abcd9c733886c6")
+          print(result)
+          assert result.reused, result.reason
+          PY
