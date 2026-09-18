@@ -162,4 +162,3 @@ jobs:
         run: |
           test "$SUITES_RESULT" = success
           python3 tests/ci/evidence.py emit
-

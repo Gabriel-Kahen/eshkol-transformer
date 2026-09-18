@@ -77,4 +77,3 @@ resource bound. Higher job concurrency reduces the critical path only if runner
 capacity is available; total billed compute is a separate measurement. Do not
 claim the removed wrapper invocation count equals an identical percentage runtime
 saving. Current running PR #77 checks are left untouched.
-
