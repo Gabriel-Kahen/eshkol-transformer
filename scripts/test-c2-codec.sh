@@ -4,7 +4,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c2-codec.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all -fno-common -I "${PROJECT_ROOT}/native")

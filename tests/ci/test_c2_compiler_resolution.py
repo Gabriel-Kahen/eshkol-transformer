@@ -27,8 +27,10 @@ class C2CompilerResolutionTests(unittest.TestCase):
             if "\t" in line
         )
         self.version = lock["clang_version"]
-        self.cc = self._write_compiler("clang-21")
-        self.cxx = self._write_compiler("clang++-21")
+        self.supported_cc = lock["supported_cc"]
+        self.supported_cxx = lock["supported_cxx"]
+        self.cc = self._write_compiler(self.supported_cc)
+        self.cxx = self._write_compiler(self.supported_cxx)
         (self.build / "eshkol-transformer-provenance.tsv").write_text(
             f"cc_path\t{self.cc}\n"
             f"cc_version\t{self.version}\n"
@@ -48,23 +50,29 @@ class C2CompilerResolutionTests(unittest.TestCase):
         return path.resolve()
 
     def _resolve(
-        self, cc: str = "clang-21", cxx: str = "clang++-21"
+        self, cc: str | None = None, cxx: str | None = None
     ) -> subprocess.CompletedProcess[str]:
         command = f"""
 source {COMMON!s}
 cc=
 cxx=
-resolve_provenance_compilers cc cxx "$CC" "$CXX"
+resolve_provenance_compilers cc cxx \
+  "${{CC:-$(lock_value supported_cc)}}" \
+  "${{CXX:-$(lock_value supported_cxx)}}"
 printf '%s\\n%s\\n' "$cc" "$cxx"
 """
         environment = {
             **os.environ,
-            "CC": cc,
-            "CXX": cxx,
             "ESHKOL_BUILD_DIR": str(self.build),
             "PATH": f"{self.bin}:/usr/bin:/bin",
         }
+        environment.pop("CC", None)
+        environment.pop("CXX", None)
         environment.pop("ESHKOL_ALLOW_UNSUPPORTED_HOST", None)
+        if cc is not None:
+            environment["CC"] = cc
+        if cxx is not None:
+            environment["CXX"] = cxx
         return subprocess.run(
             ["/usr/bin/bash", "-c", command],
             cwd=PROJECT_ROOT,
@@ -88,7 +96,7 @@ printf '%s\\n%s\\n' "$cc" "$cxx"
 
     def test_rejects_same_version_compiler_outside_provenance(self) -> None:
         other = self._write_compiler("other-clang-21")
-        result = self._resolve(other.name)
+        result = self._resolve(other.name, self.supported_cxx)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not match Eshkol provenance", result.stderr)
 

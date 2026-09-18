@@ -9,7 +9,7 @@ done
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_SAVE_DEVELOPMENT_RUNTIME_ONLY:-0}"
 if [[ "${development}" != 0 && "${development}" != 1 ]]; then

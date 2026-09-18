@@ -5,7 +5,7 @@ for command in cmp nm python3 timeout; do require_command "${command}"; done
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-x1.XXXXXX")"
 trap 'rm -rf -- "${tmp}"' EXIT
@@ -30,6 +30,7 @@ sort "${PROJECT_ROOT}/tests/c2/expected/c2_x1_canonical_symbols.txt" >"${tmp}/ex
 cmp "${tmp}/expected-symbols" "${tmp}/symbols"
 (cd "${tmp}" && \
   ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${tmp}/cache" ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+    ESHKOL_CXX_COMPILER="${cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 180s "${runner}" \
       --strict-types --optimize 0 --no-stdlib -I "${PROJECT_ROOT}/lib" \
       -I "${PROJECT_ROOT}/native" -L "${tmp}" --lib c2_x1 \

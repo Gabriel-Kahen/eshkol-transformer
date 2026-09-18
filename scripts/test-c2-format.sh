@@ -10,7 +10,7 @@ done
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c2-format.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 

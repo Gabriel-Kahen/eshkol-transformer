@@ -9,7 +9,7 @@ done
 clang_cc=
 clang_cxx=
 resolve_provenance_compilers clang_cc clang_cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-inspect.XXXXXX")"
 cleanup() {

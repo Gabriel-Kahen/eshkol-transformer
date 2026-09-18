@@ -8,7 +8,7 @@ for command in ar cmp env rg timeout; do require_command "${command}"; done
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-policy.XXXXXX")"
 cleanup() {
@@ -42,6 +42,7 @@ compile_policy() {
   mkdir -p "${tmp}/${label}"
   env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
     ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${tmp}/cache-${label}" \
+    ESHKOL_CXX_COMPILER="${cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 180s \
       "${runner}" --strict-types --optimize 0 --no-stdlib \
       -I "${PROJECT_ROOT}/internal/c1/lib" \

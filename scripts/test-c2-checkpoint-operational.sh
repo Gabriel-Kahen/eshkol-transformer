@@ -10,7 +10,7 @@ done
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \
-  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY:-0}"
 read -r -a development_modes <<< \
