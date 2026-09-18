@@ -22,8 +22,9 @@ explicit; the BPE runtime and boundary phases are separate jobs.
 
 The outer job timeout is selected by suite identity: `checkpoint-io` receives 240
 minutes, `native-numerics` receives 105 minutes, and every other blocking suite
-retains 75 minutes. Topology and final-status jobs retain two minutes, and each
-exhaustive-acceptance partition retains 240 minutes. The native exception followed
+retains 75 minutes. Topology and final-status jobs retain two minutes. Exhaustive
+acceptance gives the predecessor partition 300 minutes and the C2 partition 240
+minutes. The native exception followed
 two 75-minute cancellations of the native suite in
 [run 34788832457](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457)
 at exact K2 source head `2641c24b2c50939f300ae995c00d0337c01660a3`.
@@ -63,8 +64,13 @@ build and the unchanged aggregate C2 command. Their command multisets must equal
 local no-rebuild suite exactly, so each command runs once while every repeated
 fresh-cache compilation, hostile-path and symbol-isolation proof, maximum-size and
 resource-bound case, sanitizer gate, and compiled corruption matrix inside those
-commands remains intact. Each independent partition retains the 240-minute outer
-timeout; no runtime state or artifact crosses between jobs.
+commands remains intact. No runtime state or artifact crosses between jobs. The
+first [partitioned run 35350092230](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35350092230)
+proved the C2 partition complete in 3h40m43s. Its predecessor job 105615898035
+reached the 240-minute outer ceiling during the unchanged
+T2 boundary after all preceding commands had passed; Q0, smoke, and benchmark had
+not run. The predecessor-only 300-minute budget retains the same commands and inner
+bounds while covering that measured remainder; C2 remains at 240 minutes.
 A pinned N2-only development-oracle wrapper selects PyTorch's baseline CPU dispatch
 before import so frozen reference bytes do not depend on the hosted runner's
 AVX2/AVX512 capability. O2, A2, and Q0 retain the direct pinned interpreter; the

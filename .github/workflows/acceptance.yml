@@ -16,7 +16,7 @@ jobs:
   supported-linux:
     name: Full Ubuntu 22.04 acceptance / ${{ matrix.suite }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 240
+    timeout-minutes: ${{ matrix.suite == 'predecessors' && 300 || 240 }}
     strategy:
       fail-fast: false
       matrix:

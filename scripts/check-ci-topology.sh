@@ -18,6 +18,7 @@ acceptance = (root / ".github/workflows/acceptance.yml").read_text(encoding="utf
 CHECKPOINT_SUITE = "checkpoint-io"
 NATIVE_SUITE = "native-numerics"
 BLOCKING_TIMEOUT = "${{ matrix.suite == 'checkpoint-io' && 240 || matrix.suite == 'native-numerics' && 105 || 75 }}"
+ACCEPTANCE_TIMEOUT = "${{ matrix.suite == 'predecessors' && 300 || 240 }}"
 
 
 def job_body(workflow: str, name: str, next_name: str | None = None) -> str:
@@ -139,7 +140,7 @@ def check_ci_workflow_contract(workflow: str) -> None:
 def check_acceptance_workflow_contract(workflow: str) -> None:
     supported = job_body(workflow, "supported-linux")
     assert job_field(supported, "runs-on") == "ubuntu-22.04"
-    assert job_timeout(supported) == "240"
+    assert job_timeout(supported) == ACCEPTANCE_TIMEOUT
     assert job_env(supported, "CC") == "clang-21"
     assert job_env(supported, "CXX") == "clang++-21"
     assert job_env(supported, "LLVM_CONFIG_EXECUTABLE") == "llvm-config-21"
@@ -165,6 +166,11 @@ def check_acceptance_workflow_contract(workflow: str) -> None:
         actual_partitions,
         expected_partitions,
     )
+    expected_timeouts = {"predecessors": 300, "c2-checkpoint": 240}
+    assert expected_timeouts == {
+        suite: 300 if suite == "predecessors" else 240
+        for suite, _, _ in actual_partitions
+    }
     assert supported.count("      fail-fast: false") == 1
     assert step_run(step_body(supported, "Clean canonical build")) == [
         'make clean && make "${{ matrix.build_target }}"'
@@ -287,6 +293,18 @@ assert_mutation_rejected(
     "        if: false",
     check_ci_workflow_contract,
     expected_count=3,
+)
+assert_mutation_rejected(
+    acceptance,
+    ACCEPTANCE_TIMEOUT,
+    "${{ matrix.suite == 'predecessors' && 240 || 240 }}",
+    check_acceptance_workflow_contract,
+)
+assert_mutation_rejected(
+    acceptance,
+    ACCEPTANCE_TIMEOUT,
+    "${{ matrix.suite == 'predecessors' && 300 || 300 }}",
+    check_acceptance_workflow_contract,
 )
 assert_mutation_rejected(
     acceptance,
@@ -454,7 +472,7 @@ for workflow in (ci, acceptance):
     assert "O2_ORACLE_PYTHON=$oracle_python" in workflow
     assert "A2_ORACLE_PYTHON=$oracle_python" in workflow
     assert "Q0_PYTHON=$oracle_python" in workflow
-assert job_timeout(job_body(acceptance, "supported-linux")) == "240"
+assert job_timeout(job_body(acceptance, "supported-linux")) == ACCEPTANCE_TIMEOUT
 
 print(
     f"CI TOPOLOGY PASS: {len(expected_suites)} blocking suites cover "
@@ -463,7 +481,8 @@ print(
 print(
     "CI BUDGET PASS: checkpoint-io=240, native-numerics=105, "
     "other blocking suites=75, "
-    "control jobs=2, exhaustive partitions=2x240, A0 compiler timeout=60; "
+    "control jobs=2, exhaustive predecessors=300/C2=240, "
+    "A0 compiler timeout=60; "
     "command, condition, gate, and timeout mutations rejected"
 )
 PY
