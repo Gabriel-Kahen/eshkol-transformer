@@ -3,6 +3,22 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+core_only=0
+case "$#" in
+  0) ;;
+  1)
+    if [[ "$1" != --core-only ]]; then
+      printf 'usage: %s [--core-only]\n' "$0" >&2
+      exit 2
+    fi
+    core_only=1
+    ;;
+  *)
+    printf 'usage: %s [--core-only]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
 for command in awk cmp gcc g++ nm python3 rg sed sort timeout tr; do
   require_command "${command}"
 done
@@ -92,6 +108,8 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
 
 CC="${clang_cc}" CXX="${clang_cxx}" \
   /usr/bin/bash "${PROJECT_ROOT}/tests/c2/test_checkpoint_reader.sh" >/dev/null
-/usr/bin/bash "${PROJECT_ROOT}/scripts/test-c2-format.sh" >/dev/null
+if [[ "${core_only}" == 0 ]]; then
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/test-c2-format.sh" >/dev/null
+fi
 
 printf 'C2 CORE PASS: same-fd probes, retained validation, hostile mutation, C/C++, symbols, source closure, and sanitizers\n'

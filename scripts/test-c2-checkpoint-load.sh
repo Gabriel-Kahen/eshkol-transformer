@@ -2,6 +2,23 @@
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+
+load_only=0
+case "$#" in
+  0) ;;
+  1)
+    if [[ "$1" != --load-only ]]; then
+      printf 'usage: %s [--load-only]\n' "$0" >&2
+      exit 2
+    fi
+    load_only=1
+    ;;
+  *)
+    printf 'usage: %s [--load-only]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
 for command in ar awk cmp diff nm python3 rg sed sort timeout tr; do
   require_command "${command}"
 done
@@ -230,10 +247,17 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
     "${tmp}/bridge-san" "${fixture_args[@]}" >"${tmp}/bridge-san.stdout"
 cmp "${tmp}/bridge-clang.stdout" "${tmp}/bridge-san.stdout"
 
-for gate in test-c2-format.sh test-c2-core.sh test-c2-checkpoint-inspect.sh \
-            test-c2-o2-encode.sh test-c2-training-state-owner.sh; do
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/${gate}"
-done
+if [[ "${load_only}" == 0 ]]; then
+  for gate in test-c2-format.sh test-c2-core.sh test-c2-checkpoint-inspect.sh \
+              test-c2-o2-encode.sh test-c2-training-state-owner.sh; do
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/${gate}"
+  done
+fi
 
-printf '%s\n' \
-  'C2 PRIVATE CHECKPOINT LOAD PASS: strict Clang/GCC/C++, deterministic AOT/runtime, exact reconstruction/rollback, parser/reader failpoints, sanitizers, source/symbol closure, affected regressions'
+if [[ "${load_only}" == 0 ]]; then
+  printf '%s\n' \
+    'C2 PRIVATE CHECKPOINT LOAD PASS: strict Clang/GCC/C++, deterministic AOT/runtime, exact reconstruction/rollback, parser/reader failpoints, sanitizers, source/symbol closure, affected regressions'
+else
+  printf '%s\n' \
+    'C2 PRIVATE CHECKPOINT LOAD FOCUSED PASS: strict Clang/GCC/C++, deterministic AOT/runtime, exact reconstruction/rollback, parser/reader failpoints, sanitizers, source/symbol closure'
+fi
