@@ -83,6 +83,13 @@ int64_t et_k2_private_report_factory_authenticate_v1(const void *closure);
 int64_t et_k2_private_request_factory_authenticate_v1(const void *closure);
 int64_t et_k2_private_entry_factory_authenticate_v1(const void *closure);
 
+#ifdef ET_C2_CARRIER_FACTORIES
+int64_t et_c2_private_policy_factory_register_v1(const void *closure);
+int64_t et_c2_private_policy_factory_authenticate_v1(const void *closure);
+int64_t et_c2_private_metadata_factory_register_v1(const void *closure);
+int64_t et_c2_private_metadata_factory_authenticate_v1(const void *closure);
+#endif
+
 #ifdef ET_K2_TESTING
 #include "eshkol_transformer/kernel_abi.h"
 
@@ -115,6 +122,7 @@ uint64_t et_k2_test_discovery_count_v1(void);
 uint64_t et_k2_test_destroy_count_v1(void);
 uint64_t et_k2_test_runtime_live_count_v1(void);
 uint64_t et_k2_test_require_count_v1(void);
+void et_k2_test_fail_require_at_v1(uint64_t ordinal);
 uint32_t et_k2_test_protected_overlap_mask_v1(void);
 int64_t et_k2_test_fork_v1(void);
 int64_t et_k2_test_wait_child_v1(int64_t child_pid);

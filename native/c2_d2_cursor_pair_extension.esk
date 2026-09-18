@@ -1,0 +1,131 @@
+;;; Private C2 composition seam over the accepted D2 cursor decoder. Never
+;;; install independently: the trusted caller must first load d2_wave2_root.esk.
+
+(define c2-d2-byte-prefix (string->utf8 "sha256:eshkol-byte-tokenizer-v1:"))
+(define c2-d2-bpe-prefix (string->utf8 "sha256:eshkol-bpe-tokenizer-v1:"))
+
+(define (c2-d2-range=? left right start end)
+  (let loop ((index start))
+    (if (= index end) #t
+        (and (= (bytevector-u8-ref left index)
+                (bytevector-u8-ref right index))
+             (loop (+ index 1))))))
+
+(define (c2-d2-prefix=? bytes prefix)
+  (and (>= (bytevector-length bytes) (bytevector-length prefix))
+       (let ((result
+               (c2-d2-range=?
+                 bytes prefix 0 (bytevector-length prefix))))
+         result)))
+
+(define (c2-d2-lower-hex? bytes start)
+  (let loop ((index start))
+    (if (= index (bytevector-length bytes)) #t
+        (let ((value (bytevector-u8-ref bytes index)))
+          (and (or (and (>= value 48) (<= value 57))
+                   (and (>= value 97) (<= value 102)))
+               (loop (+ index 1)))))))
+
+(define (c2-d2-fingerprint-family value)
+  (and (string? value)
+       (let ((bytes (string->utf8 value)))
+         (cond ((and (= (bytevector-length bytes) 96)
+                     (c2-d2-prefix=? bytes c2-d2-byte-prefix)
+                     (c2-d2-lower-hex? bytes 32))
+                't1-byte)
+               ((and (= (bytevector-length bytes) 95)
+                     (c2-d2-prefix=? bytes c2-d2-bpe-prefix)
+                     (c2-d2-lower-hex? bytes 31))
+                't2-bpe)
+               (else #f)))))
+
+(define (c2-d2-vocabulary-in-family? family vocabulary)
+  (and (d2-core-positive-i64? vocabulary)
+       (>= vocabulary 256)
+       (cond ((eq? family 't1-byte) (<= vocabulary 4352))
+             ((eq? family 't2-bpe) (<= vocabulary 4608))
+             (else #f))))
+
+(define (c2-d2-continuation-state-category operation)
+  ;; A decoded file claiming to be C2 state is corrupt. The same independently
+  ;; valid D2 empty/EOS cursor pair is invalid-state only while composing a
+  ;; live in-memory trainer snapshot.
+  (if (or (eq? operation 'checkpoint-load)
+          (eq? operation 'checkpoint-inspect))
+      'corrupt-data
+      'invalid-state))
+
+(define (c2-d2-decode cursor operation)
+  (guard
+   (caught
+    ((d2-core-error? caught)
+     (d2-fail (d2-core-error-category caught) operation
+              (d2-core-error-message caught)))
+    (else (raise caught)))
+   (d2-core-cursor-decode cursor)))
+
+(define (c2-d2-cursor-pair-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 6))
+          (not (bytevector? (vector-ref request 0)))
+          (not (bytevector? (vector-ref request 1)))
+          (not (string? (vector-ref request 2)))
+          (not (d2-core-positive-i64? (vector-ref request 3)))
+          (not (symbol? (vector-ref request 4)))
+          (not (eq? (vector-ref request 5) #f)))
+      (d2-fail 'invalid-argument 'c2-d2-cursor-pair-internal
+               "C2 cursor-pair request is malformed"))
+  (let* ((operation (vector-ref request 4))
+         (current-input (vector-ref request 0))
+         (epoch-input (vector-ref request 1))
+         (current-bytes (bytevector-length current-input))
+         (epoch-bytes (bytevector-length epoch-input)))
+    (if (or (< current-bytes 209) (> current-bytes 400)
+            (< epoch-bytes 209) (> epoch-bytes 400))
+        (d2-fail 'corrupt-data operation
+                 "C2 cursor physical length is noncanonical"))
+    (let* ((current (bytevector-copy current-input 0 current-bytes))
+           (epoch (bytevector-copy epoch-input 0 epoch-bytes))
+           (current-decoded (c2-d2-decode current operation))
+           (epoch-decoded (c2-d2-decode epoch operation))
+           (expected-fingerprint (vector-ref request 2))
+           (expected-vocabulary (vector-ref request 3))
+           (fingerprint-family
+             (c2-d2-fingerprint-family expected-fingerprint)))
+      (if (not fingerprint-family)
+          (d2-fail 'corrupt-data operation
+                   "C2 tokenizer fingerprint is noncanonical"))
+      (if (not (c2-d2-vocabulary-in-family?
+                 fingerprint-family expected-vocabulary))
+          (d2-fail 'corrupt-data operation
+                   "C2 tokenizer vocabulary is outside its exact family"))
+      ;; Canonical D2 bytes make these the exhaustive invariant ranges:
+      ;; [0,120) and [128,176+F). Only next-ordinal [120,128) and the
+      ;; derivative checksum [176+F,208+F) may differ.
+      (if (or (not (= current-bytes epoch-bytes))
+              (not (c2-d2-range=? current epoch 0 120))
+              (not (c2-d2-range=? current epoch 128
+                                  (- current-bytes 32)))
+              (not (string=? (vector-ref current-decoded 2)
+                             expected-fingerprint))
+              (not (string=? (vector-ref epoch-decoded 2)
+                             expected-fingerprint))
+              (not (= (vector-ref current-decoded 3) expected-vocabulary))
+              (not (= (vector-ref epoch-decoded 3) expected-vocabulary)))
+          (d2-fail 'corrupt-data operation
+                   "C2 cursor pair identity is inconsistent"))
+      (let ((total (vector-ref current-decoded 14))
+            (current-ordinal (vector-ref current-decoded 15))
+            (epoch-ordinal (vector-ref epoch-decoded 15)))
+        (if (or (not (= total (vector-ref epoch-decoded 14)))
+                (= total 0) (= epoch-ordinal total))
+            (d2-fail (c2-d2-continuation-state-category operation) operation
+                     "C2 cursor pair has no resumable epoch interval"))
+        (if (or (> epoch-ordinal current-ordinal) (> current-ordinal total))
+            (d2-fail 'corrupt-data operation
+                     "C2 cursor continuation ordinals are inconsistent"))
+        (let ((projection
+                (vector 'c2-dataset-cursor-pair 1 0 current epoch
+                        (utf8->string (string->utf8 expected-fingerprint))
+                        expected-vocabulary total current-ordinal epoch-ordinal)))
+          (vector-set! request 5 projection)
+          request)))))

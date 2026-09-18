@@ -1,0 +1,2 @@
+(require transformer.public)
+(trainer-state-release! 'state 'extra)

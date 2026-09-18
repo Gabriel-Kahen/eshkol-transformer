@@ -13,4 +13,14 @@
           tensor-provider-preflight-internal
           tensor-provider-release-owned-internal!
           tensor-provider-admit-owned-internal!
-          state-dict-adopt-owned-internal!))
+          state-dict-adopt-owned-internal!
+          state-dict-c2-parameter-topology-internal
+          state-dict-claim-c2-internal!
+          state-dict-claim-c2-rollback-internal!
+          state-dict-release-c2-owned-internal!
+          state-dict-c2-owned-projection-internal
+          state-dict-c2-owned-tensor-borrow-begin-internal
+          state-dict-c2-owned-tensor-borrow-end-internal
+          state-dict-c2-owned-borrow-activate-internal!
+          state-dict-c2-owned-borrow-deactivate-internal!
+          state-dict-c2-owned-entry-shells-internal))

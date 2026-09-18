@@ -363,6 +363,19 @@ device, and noncontiguous categories. An unavailable required provider capabilit
 before construction/load is `unsupported`; a provider mismatch or defect after
 admission is `internal`.
 
+The C2 implementation adds localized, nonpublic reconstruction builder operations
+to this native implementation. Create/set/prepare construct fresh builder-owned I2
+moment clones; a failed slot remains unset and the builder remains abortable. Prepare
+allocates every native state and handle control. Commit has one testable pre-transfer
+failure boundary and no allocation, callback, or recoverable failure after its first
+clone transfer. Abort consumes the builder and drains every owned prefix exactly
+once. A separate same-owner moment-copy operation validates the live state ledger and
+calls `et_f32_tensor_copy_bits_to_v1` directly, so repeated C2 saves allocate or retire
+no O2/I2 borrow shell. These operations are localized C2 composition authority: they
+do not alter the six public O2 operations, 53-global/47-export standalone boundary,
+logical state format, or K1 rows. The Eshkol C2 wrapper must deep-own and preallocate
+its config/path/alias identity and publication envelope before native commit.
+
 ## Exact public error mapping
 
 - `optimizer-create`: malformed/boundedness/range/order failures, duplicate or alias

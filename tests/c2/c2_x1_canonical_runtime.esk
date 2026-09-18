@@ -1,0 +1,33 @@
+(require transformer.error_internal)
+(load "e1b_error_consumer_private.esk")
+(load "c2_x1_canonical_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "C2 X1 RUNTIME FAIL: ") (display label) (newline) (exit 1))))
+
+(define canonical
+  (string->utf8
+    (string-append
+      "{\"canonicalization\":\"eshkol-config-json-v1\",\"checksum-algorithm\":\"sha256\",\"checksum-coverage\":\"whole-document-including-final-lf\",\"config-schema-version\":[1,0],\"format\":\"eshkol-resolved-run\",\"format-version\":[1,0],\"limits\":{\"integer-digits\":19,\"max-input-bytes\":16384,\"max-input-keys\":14,\"max-input-nesting-depth\":1},\"provenance\":{"
+      "\"config-schema-major\":\"input\",\"config-schema-minor\":\"input\",\"model.context-length\":\"input\",\"model.device\":\"default\",\"model.dtype\":\"default\",\"model.head-size\":\"derived\",\"model.hidden-size\":\"input\",\"model.kv-head-count\":\"default\",\"model.layer-count\":\"input\",\"model.query-head-count\":\"input\",\"model.vocabulary-size\":\"input\",\"run.deterministic\":\"default\",\"run.seed\":\"input\",\"training.accumulation-steps\":\"default\"},"
+      "\"required-features\":[],\"resolved\":{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":128,\"model.device\":\"cpu\",\"model.dtype\":\"f32\",\"model.head-size\":16,\"model.hidden-size\":64,\"model.kv-head-count\":4,\"model.layer-count\":2,\"model.query-head-count\":4,\"model.vocabulary-size\":256,\"run.deterministic\":true,\"run.seed\":1729,\"training.accumulation-steps\":1}}\n")))
+(define fingerprint "sha256:eshkol-config-json-v1:a27ed00686df9879a06d4cb177c65807b3443a41463e8a397f8f1672562242b0")
+(define request (vector canonical fingerprint 'checkpoint-load #f))
+(define returned (x1-canonical-inspect-internal request))
+(define result (vector-ref request 3))
+(check "request/output contract" (and (eq? returned request)
+       (vector? result) (= (vector-length result) 15) (not (eq? result request))))
+(check "exact projection"
+  (equal? result (vector 'eshkol-resolved-run 1 0 256 128 64 2 4 4 16
+                         'f32 'cpu #t 1729 1)))
+(bytevector-u8-set! canonical 0 0)
+(check "detached from canonical bytes" (eq? (vector-ref result 0) 'eshkol-resolved-run))
+(define bad (vector (make-bytevector 0 0) fingerprint 'checkpoint-load #f))
+(check "failure preserves output and taxonomy"
+  (guard (raised (#t (and (transformer-error? raised)
+                          (eq? (transformer-error-category raised) 'corrupt-data)
+                          (eq? (vector-ref bad 3) #f))))
+    (x1-canonical-inspect-internal bad) #f))
+(display "C2 X1 runtime PASS: ") (display checks) (display " checks") (newline)

@@ -1,0 +1,324 @@
+;;; C2-only O2 reconstruction/publication extension. Never install or load this
+;;; without first loading one compatible I2/D2 base and o2_wave2_extension.esk.
+
+(extern ptr o2-c2-native-reconstruct-create
+        i64 i64 i64 i64 i64 i64 i64 i64
+        :real et_c2_private_o2_state_reconstruct_create_v1)
+(extern i64 o2-c2-native-reconstruct-set
+        ptr i64 i64 ptr i64 ptr ptr i64 i64 i64 i64 i64
+        :real et_c2_private_o2_state_reconstruct_set_v1)
+(extern i64 o2-c2-native-reconstruct-prepare ptr
+        :real et_c2_private_o2_state_reconstruct_prepare_v1)
+(extern ptr o2-c2-native-reconstruct-commit ptr
+        :real et_c2_private_o2_state_reconstruct_commit_v1)
+(extern i64 o2-c2-native-reconstruct-abort ptr
+        :real et_c2_private_o2_state_reconstruct_abort_v1)
+(extern i64 o2-c2-native-copy-moment-bits ptr i64 i64 ptr i64
+        :real et_c2_private_o2_state_copy_moment_bits_v1)
+
+;;; Mutable private seams let the C2 LOAD transaction prove each native O2
+;;; publication boundary without changing the native ABI or public surface.
+(define (o2-c2-create-call
+          count clip clip-bits schedule warmup total ratio completed)
+  (o2-c2-native-reconstruct-create
+    count clip clip-bits schedule warmup total ratio completed))
+
+(define (o2-c2-set-call
+          builder index rank shape elements avg sq lr b1 b2 eps wd)
+  (o2-c2-native-reconstruct-set
+    builder index rank shape elements avg sq lr b1 b2 eps wd))
+
+(define (o2-c2-prepare-call builder)
+  (o2-c2-native-reconstruct-prepare builder))
+
+(define (o2-c2-commit-call builder)
+  (o2-c2-native-reconstruct-commit builder))
+
+(define o2-c2-native-reconstruct-create-internal o2-c2-create-call)
+(define o2-c2-native-reconstruct-set-internal o2-c2-set-call)
+(define o2-c2-native-reconstruct-prepare-internal o2-c2-prepare-call)
+(define o2-c2-native-reconstruct-commit-internal o2-c2-commit-call)
+
+(define o2-c2-reconstruct-tag (vector 'c2-private-o2-reconstruct-v1))
+
+(define (o2-c2-copy-canonical-paths operation borrowed)
+  (let ((count (i2-bounded-list-length borrowed (+ o2-max-parameters 1))))
+    (if (or (not count) (= count 0) (> count o2-max-parameters))
+        (o2-fail 'invalid-argument operation
+                 "reconstruction paths must be a bounded nonempty list"))
+    (let loop ((remaining borrowed) (previous #f) (result '()))
+      (if (null? remaining)
+          (o2-reverse result)
+          (let ((path (car remaining)))
+            (if (or (not (o2-valid-path? path))
+                    (and previous (not (o2-path<? previous path))))
+                (o2-fail 'invalid-argument operation
+                         "reconstruction paths are not canonical and ordered"))
+            (loop (cdr remaining) path (cons (o2-copy-path path) result)))))))
+
+(define (o2-c2-copy-aliases operation borrowed canonical-paths)
+  (let ((count (i2-bounded-list-length borrowed (+ o2-max-parameters 1))))
+    (if (or (not count) (> count o2-max-parameters))
+        (o2-fail 'invalid-argument operation
+                 "reconstruction aliases exceed their group bound"))
+    (let group-loop ((remaining borrowed) (previous-first #f)
+                     (seen '()) (result '()))
+      (if (null? remaining)
+          (o2-reverse result)
+          (let* ((members (car remaining))
+                 (member-count
+                   (i2-bounded-list-length members (+ o2-max-parameters 1))))
+            (if (or (not member-count) (< member-count 2)
+                    (> member-count o2-max-parameters)
+                    (not (o2-valid-path? (car members)))
+                    (not (o2-path-member? (car members) canonical-paths))
+                    (and previous-first
+                         (not (o2-path<? previous-first (car members)))))
+                (o2-fail 'invalid-argument operation
+                         "reconstruction alias group is malformed"))
+            (let member-loop ((left members) (previous #f)
+                              (next-seen seen) (copied '()))
+              (if (null? left)
+                  (group-loop (cdr remaining) (car members) next-seen
+                              (cons (o2-reverse copied) result))
+                  (let ((path (car left)))
+                    (if (or (not (o2-valid-path? path))
+                            (and previous (not (o2-path<? previous path)))
+                            (and previous
+                                 (o2-path-member? path canonical-paths))
+                            (o2-path-member? path next-seen))
+                        (o2-fail 'invalid-argument operation
+                                 "reconstruction aliases are not canonical"))
+                    (member-loop (cdr left) path (cons path next-seen)
+                                 (cons (o2-copy-path path) copied))))))))))
+
+(define (o2-c2-option-group operation parsed path)
+  (let group-loop ((groups (vector-ref parsed 3)))
+    (if (null? groups)
+        (o2-fail 'shape-mismatch operation
+                 "optimizer config does not cover every reconstructed path")
+        (let path-loop ((paths (vector-ref (car groups) 0)))
+          (cond ((null? paths) (group-loop (cdr groups)))
+                ((equal? path (car paths)) (car groups))
+                (else (path-loop (cdr paths))))))))
+
+(define (o2-c2-copy-shape operation borrowed)
+  (let ((rank (i2-bounded-list-length borrowed 65)))
+    (if (or (not rank) (> rank 64))
+        (o2-fail 'shape-mismatch operation
+                 "reconstruction shape rank exceeds 64"))
+    (let loop ((remaining borrowed) (product 1) (result '()))
+      (if (null? remaining)
+          (vector (o2-reverse result) product)
+          (let ((extent (car remaining)))
+            (if (not (o2-exact-nonnegative-i64? extent))
+                (o2-fail 'shape-mismatch operation
+                         "reconstruction extent is not an exact nonnegative i64"))
+            (if (and (> product 0) (> extent 0)
+                     (> product (quotient o2-i64-max extent)))
+                (o2-fail 'shape-mismatch operation
+                         "reconstruction shape product overflows"))
+            (loop (cdr remaining)
+                  (if (or (= product 0) (= extent 0)) 0 (* product extent))
+                  (cons extent result)))))))
+
+(define (o2-c2-shape-bytevector shape)
+  (let* ((rank (i2-bounded-list-length shape 65))
+         (result (make-bytevector (* rank 8) 0)))
+    (let extent-loop ((remaining shape) (offset 0))
+      (if (null? remaining)
+          result
+          (let byte-loop ((byte 0) (value (car remaining)))
+            (if (= byte 8)
+                (extent-loop (cdr remaining) (+ offset 8))
+                (begin
+                  (bytevector-u8-set! result (+ offset byte)
+                                      (modulo value 256))
+                  (byte-loop (+ byte 1) (quotient value 256)))))))))
+
+(define (o2-c2-copy-entry operation borrowed expected-path option-group)
+  (if (or (not (vector? borrowed)) (not (= (vector-length borrowed) 4))
+          (not (equal? (vector-ref borrowed 0) expected-path)))
+      (o2-fail 'shape-mismatch operation
+               "reconstruction entry path/order is inconsistent"))
+  (let* ((shape-info (o2-c2-copy-shape operation (vector-ref borrowed 1)))
+         (shape (vector-ref shape-info 0))
+         (elements (vector-ref shape-info 1))
+         (avg (vector-ref borrowed 2))
+         (sq (vector-ref borrowed 3)))
+    (if (or (> elements (quotient o2-i64-max 4))
+            (not (bytevector? avg)) (not (bytevector? sq))
+            (not (= (bytevector-length avg) (* elements 4)))
+            (not (= (bytevector-length sq) (* elements 4))))
+        (o2-fail 'shape-mismatch operation
+                 "reconstruction moment bytes do not match the shape"))
+    (vector (o2-copy-path expected-path) shape
+            (o2-c2-shape-bytevector shape)
+            (bytevector-copy avg 0 (bytevector-length avg))
+            (bytevector-copy sq 0 (bytevector-length sq))
+            elements option-group)))
+
+(define (o2-c2-copy-entries operation borrowed paths parsed)
+  (if (or (not (vector? borrowed))
+          (not (= (vector-length borrowed)
+                  (i2-bounded-list-length paths (+ o2-max-parameters 1))))
+          (not (= (vector-length borrowed) (vector-ref parsed 4))))
+      (o2-fail 'shape-mismatch operation
+               "reconstruction entry/config/path counts differ"))
+  (let* ((count (vector-length borrowed))
+         (result (make-vector count #f)))
+    (let loop ((index 0) (remaining paths))
+      (if (= index count)
+          result
+          (let* ((path (car remaining))
+                 (group (o2-c2-option-group operation parsed path))
+                 (entry
+                   (o2-c2-copy-entry operation (vector-ref borrowed index)
+                                              path group)))
+            (vector-set! result index entry)
+            (loop (+ index 1) (cdr remaining)))))))
+
+(define (o2-c2-entry-projection entries)
+  (let loop ((index 0) (result '()))
+    (if (= index (vector-length entries))
+        (o2-reverse result)
+        (let ((entry (vector-ref entries index)))
+          (loop (+ index 1)
+                (cons (list 'parameter-state (vector-ref entry 0)
+                            (vector-ref entry 1) 'f32 'cpu 'row-major
+                            'owned-exp-avg-f32-tensor
+                            'owned-exp-avg-sq-f32-tensor)
+                      result))))))
+
+(define (o2-c2-state-projection-budget! operation config paths aliases entries)
+  (let ((projection
+          (list 'transformer-optimizer-state 1 0 '()
+                'adamw 'f32 'cpu o2-provider-identity
+                config paths aliases 0 (o2-c2-entry-projection entries) 'none)))
+    (o2-budget-data-walk operation projection 0 '() (vector 0) (vector 0)
+                         o2-state-max-data-depth o2-state-max-data-nodes
+                         o2-state-max-data-bytes)
+    #t))
+
+(define (o2-c2-native-fill! operation builder entries)
+  (let loop ((index 0))
+    (if (= index (vector-length entries))
+        #t
+        (let* ((entry (vector-ref entries index))
+               (shape (vector-ref entry 1))
+               (group (vector-ref entry 6)))
+          (if (not (= (o2-c2-native-reconstruct-set-internal
+                        builder index
+                        (i2-bounded-list-length shape 65)
+                        (vector-ref entry 2) (vector-ref entry 5)
+                        (vector-ref entry 3) (vector-ref entry 4)
+                        (vector-ref group 1) (vector-ref group 2)
+                        (vector-ref group 3) (vector-ref group 4)
+                        (vector-ref group 5))
+                      0))
+              (o2-native-fail operation))
+          (loop (+ index 1))))))
+
+(define (o2-state-reconstruct-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 8)))
+      (o2-fail 'invalid-argument 'o2-state-reconstruct-internal
+               "reconstruction request must be an exact length-8 vector"))
+  (let ((operation (vector-ref request 6)))
+    (if (or (not (eq? (vector-ref request 0) o2-c2-reconstruct-tag))
+            (not (symbol? operation))
+            (not (eq? (vector-ref request 7) #f))
+            (not (o2-exact-nonnegative-i64? (vector-ref request 4))))
+        (o2-fail 'invalid-argument 'o2-state-reconstruct-internal
+                 "reconstruction request identity or output is invalid"))
+    (let* ((parsed (o2-parse-config operation (vector-ref request 1)))
+           (config (vector-ref parsed 0))
+           (paths
+             (o2-c2-copy-canonical-paths operation (vector-ref request 2)))
+           (aliases
+             (o2-c2-copy-aliases operation (vector-ref request 3) paths))
+           (completed (vector-ref request 4))
+           (entries
+             (o2-c2-copy-entries operation (vector-ref request 5)
+                                  paths parsed))
+           (clip (vector-ref parsed 1))
+           (schedule (vector-ref parsed 2)))
+      (o2-c2-state-projection-budget! operation config paths aliases entries)
+      (let ((builder
+              (o2-c2-native-reconstruct-create-internal
+                (vector-length entries) (vector-ref clip 0)
+                (vector-ref clip 1) (vector-ref schedule 0)
+                (vector-ref schedule 1) (vector-ref schedule 2)
+                (vector-ref schedule 3) completed)))
+        (if (null? builder) (o2-native-fail operation))
+        (guard (caught
+                 (#t
+                   (if (not (= (o2-c2-native-reconstruct-abort builder) 0))
+                       (o2-native-fail operation))
+                   (raise caught)))
+          (o2-c2-native-fill! operation builder entries)
+          ;; Every Eshkol allocation and every native owner/handle allocation
+          ;; precedes the non-failing native transfer and assignment-only tail.
+          (let* ((shell (o2-make-identity "transformer.optimizer-state:v1"))
+                 (state
+                   (vector shell #f config paths aliases completed
+                           'constructing #f))
+                 (next-registry (cons state o2-states)))
+            (if (not (= (o2-c2-native-reconstruct-prepare-internal builder) 0))
+                (o2-native-fail operation))
+            (let ((native (o2-c2-native-reconstruct-commit-internal builder)))
+              (if (null? native) (o2-native-fail operation))
+              (vector-set! state 1 native)
+              (vector-set! state 6 'live)
+              (set! o2-states next-registry)
+              (vector-set! request 7 shell)
+              request)))))))
+
+(define (o2-state-copy-moment-bits-core-internal
+          request state claimed? owner-token)
+  (let* ((operation (vector-ref request 5))
+         (index (vector-ref request 1))
+         (kind (vector-ref request 2))
+         (destination (vector-ref request 3))
+         (elements (vector-ref request 4)))
+    (if (or (not (symbol? operation))
+            (not (o2-exact-nonnegative-i64? index))
+            (not (or (equal? kind 0) (equal? kind 1)))
+            (not (bytevector? destination))
+            (not (o2-exact-nonnegative-i64? elements))
+            (> elements (quotient o2-i64-max 4))
+            (not (= (bytevector-length destination) (* elements 4))))
+        (o2-fail 'invalid-argument 'o2-state-copy-moment-bits-internal
+                 "moment-copy request fields are invalid"))
+    (let ((admitted
+            (if claimed?
+                (o2-require-c2-owned-state
+                  operation state owner-token)
+                (o2-require-live-state operation state))))
+      (if (not (= (o2-c2-native-copy-moment-bits
+                    (vector-ref admitted 1) index kind destination elements)
+                  0))
+          (o2-native-fail operation))
+      destination)))
+
+(define (o2-state-copy-moment-bits-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 6)))
+      (o2-fail 'invalid-argument 'o2-state-copy-moment-bits-internal
+               "moment-copy request must be an exact length-6 vector"))
+  (let ((result
+          (o2-state-copy-moment-bits-core-internal
+            request (vector-ref request 0) #f #f)))
+    result))
+
+(define (o2-state-copy-moment-bits-c2-owned-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 7))
+          (not (vector-ref request 5)))
+      (o2-fail 'invalid-argument
+               'o2-state-copy-moment-bits-c2-owned-internal
+               "claimed moment-copy request must be an exact length-7 vector"))
+  (let ((result
+          (o2-state-copy-moment-bits-core-internal
+            (vector (vector-ref request 0) (vector-ref request 1)
+                    (vector-ref request 2) (vector-ref request 3)
+                    (vector-ref request 4) (vector-ref request 6))
+            (vector-ref request 0) #t (vector-ref request 5))))
+    result))

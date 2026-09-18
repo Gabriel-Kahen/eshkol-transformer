@@ -98,6 +98,18 @@ run_k2_compiler() {
       "${k2_compiler_timeout}s" "${k2_runner}" "$@"
 }
 
+dump_k2_log() {
+  local label=$1
+  local path=$2
+  local line
+
+  [[ -s "${path}" ]] || return 0
+  printf '%s\n' "K2 ${label} log (${path}):" >&2
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    printf '%s\n' "${line}" >&2
+  done <"${path}"
+}
+
 for repetition in 1 2; do
   mkdir -p "${temporary_dir}/public-contract-${repetition}"
   run_k2_compiler "public-contract-${repetition}" \
@@ -204,7 +216,8 @@ ar rcsD "${private_runtime_dir}/libeshkol_transformer_k2_private_test.a" \
 for test_hook in et_k2_test_runtime_drop_v1 et_k2_test_fork_v1 \
     et_k2_test_wait_child_v1 et_k2_test_exit_child_v1 \
     et_k2_test_factory_authenticate_override_v1 \
-    et_k2_test_require_count_v1 et_k2_test_protected_overlap_mask_v1; do
+    et_k2_test_require_count_v1 et_k2_test_fail_require_at_v1 \
+    et_k2_test_protected_overlap_mask_v1; do
   nm -g --defined-only "${private_runtime_dir}/libeshkol_transformer_k2_private_test.a" | \
     grep -E "[[:space:]]T ${test_hook}$" >/dev/null || \
     die "K2 private test archive omits ${test_hook}"
@@ -212,39 +225,101 @@ for test_hook in et_k2_test_runtime_drop_v1 et_k2_test_fork_v1 \
     die "K2 production aggregate contains private test hook ${test_hook}"
   fi
 done
-run_k2_compiler private-identity-aot \
-  --strict-types --optimize 0 --no-stdlib \
-  -I "${PROJECT_ROOT}/native" \
-  -I "${PROJECT_ROOT}/internal/p1/lib" \
-  -I "${PROJECT_ROOT}/internal/c1/lib" \
-  -I "${PROJECT_ROOT}/internal/t1/lib" \
-  -I "${PROJECT_ROOT}/src" \
-  -L "${private_runtime_dir}" --lib eshkol_transformer_k2_private_test \
-  "${PROJECT_ROOT}/tests/k2/private_identity_runtime.esk" \
-  -o "${private_runtime_dir}/private-identity" \
-  >"${private_runtime_dir}/compile.stdout" \
-  2>"${private_runtime_dir}/compile.stderr"
-timeout --foreground --signal=TERM --kill-after=5s 90s \
-  "${private_runtime_dir}/private-identity" \
-  >"${private_runtime_dir}/run.stdout"
-grep -Fx 'K2 PRIVATE IDENTITY PASS: 14 checks' \
-  "${private_runtime_dir}/run.stdout" >/dev/null
+printf '%s\n' 'K2 PRIVATE IDENTITY BUILD: START'
+if run_k2_compiler private-identity-aot \
+    --strict-types --optimize 0 --no-stdlib \
+    -I "${PROJECT_ROOT}/native" \
+    -I "${PROJECT_ROOT}/internal/p1/lib" \
+    -I "${PROJECT_ROOT}/internal/c1/lib" \
+    -I "${PROJECT_ROOT}/internal/t1/lib" \
+    -I "${PROJECT_ROOT}/src" \
+    -L "${private_runtime_dir}" --lib eshkol_transformer_k2_private_test \
+    "${PROJECT_ROOT}/tests/k2/private_identity_runtime.esk" \
+    -o "${private_runtime_dir}/private-identity" \
+    >"${private_runtime_dir}/compile.stdout" \
+    2>"${private_runtime_dir}/compile.stderr"; then
+  printf '%s\n' 'K2 PRIVATE IDENTITY BUILD: PASS'
+else
+  private_compile_status=$?
+  dump_k2_log 'private identity compile stdout' \
+    "${private_runtime_dir}/compile.stdout"
+  dump_k2_log 'private identity compile stderr' \
+    "${private_runtime_dir}/compile.stderr"
+  printf 'error: K2 private identity AOT compile failed with status %s\n' \
+    "${private_compile_status}" >&2
+  exit "${private_compile_status}"
+fi
+printf '%s\n' 'K2 PRIVATE IDENTITY RUN: START'
+if timeout --foreground --signal=TERM --kill-after=5s 90s \
+    "${private_runtime_dir}/private-identity" \
+    >"${private_runtime_dir}/run.stdout" \
+    2>"${private_runtime_dir}/run.stderr"; then
+  :
+else
+  private_run_status=$?
+  dump_k2_log 'private identity runtime stdout' \
+    "${private_runtime_dir}/run.stdout"
+  dump_k2_log 'private identity runtime stderr' \
+    "${private_runtime_dir}/run.stderr"
+  printf 'error: K2 private identity runtime failed with status %s\n' \
+    "${private_run_status}" >&2
+  exit "${private_run_status}"
+fi
+if ! grep -Fx 'K2 PRIVATE IDENTITY PASS: 15 checks' \
+    "${private_runtime_dir}/run.stdout" >/dev/null; then
+  dump_k2_log 'private identity runtime stdout' \
+    "${private_runtime_dir}/run.stdout"
+  dump_k2_log 'private identity runtime stderr' \
+    "${private_runtime_dir}/run.stderr"
+  die 'K2 private identity runtime success marker drifted'
+fi
+printf '%s\n' 'K2 PRIVATE IDENTITY RUN: PASS'
 
 mkdir -p "${temporary_dir}/arena-retention"
-run_k2_compiler "arena-retention-aot" \
-  --strict-types --no-stdlib -O 2 -I "${PROJECT_ROOT}/lib" \
-  -L "${artifact_dir}" --lib eshkol_transformer_wave2 \
-  "${PROJECT_ROOT}/tests/k2/arena_retention.esk" \
-  -o "${temporary_dir}/arena-retention/k2-arena-retention" \
-  >"${temporary_dir}/arena-retention/compile.log" 2>&1
+printf '%s\n' 'K2 ARENA RETENTION BUILD: START'
+if run_k2_compiler "arena-retention-aot" \
+    --strict-types --no-stdlib -O 2 -I "${PROJECT_ROOT}/lib" \
+    -L "${artifact_dir}" --lib eshkol_transformer_wave2 \
+    "${PROJECT_ROOT}/tests/k2/arena_retention.esk" \
+    -o "${temporary_dir}/arena-retention/k2-arena-retention" \
+    >"${temporary_dir}/arena-retention/compile.log" 2>&1; then
+  printf '%s\n' 'K2 ARENA RETENTION BUILD: PASS'
+else
+  arena_compile_status=$?
+  dump_k2_log 'arena retention compile' \
+    "${temporary_dir}/arena-retention/compile.log"
+  printf 'error: K2 arena retention AOT compile failed with status %s\n' \
+    "${arena_compile_status}" >&2
+  exit "${arena_compile_status}"
+fi
 for horizon in 1024 8192; do
-  ESHKOL_ARENA_REPORT=1 \
-    timeout --foreground --signal=TERM --kill-after=5s 180s \
-    "${temporary_dir}/arena-retention/k2-arena-retention" "${horizon}" \
-    >"${temporary_dir}/arena-retention/${horizon}.stdout" \
-    2>"${temporary_dir}/arena-retention/${horizon}.stderr"
-  grep -Fx "K2 ARENA RETENTION PASS: ${horizon} lexical-region iterations" \
-    "${temporary_dir}/arena-retention/${horizon}.stdout" >/dev/null
+  printf 'K2 ARENA RETENTION RUN %s: START\n' "${horizon}"
+  if ESHKOL_ARENA_REPORT=1 \
+      timeout --foreground --signal=TERM --kill-after=5s 180s \
+      "${temporary_dir}/arena-retention/k2-arena-retention" "${horizon}" \
+      >"${temporary_dir}/arena-retention/${horizon}.stdout" \
+      2>"${temporary_dir}/arena-retention/${horizon}.stderr"; then
+    :
+  else
+    arena_run_status=$?
+    dump_k2_log "arena retention ${horizon} stdout" \
+      "${temporary_dir}/arena-retention/${horizon}.stdout"
+    dump_k2_log "arena retention ${horizon} stderr" \
+      "${temporary_dir}/arena-retention/${horizon}.stderr"
+    printf 'error: K2 arena retention %s run failed with status %s\n' \
+      "${horizon}" "${arena_run_status}" >&2
+    exit "${arena_run_status}"
+  fi
+  if ! grep -Fx \
+      "K2 ARENA RETENTION PASS: ${horizon} lexical-region iterations" \
+      "${temporary_dir}/arena-retention/${horizon}.stdout" >/dev/null; then
+    dump_k2_log "arena retention ${horizon} stdout" \
+      "${temporary_dir}/arena-retention/${horizon}.stdout"
+    dump_k2_log "arena retention ${horizon} stderr" \
+      "${temporary_dir}/arena-retention/${horizon}.stderr"
+    die "K2 arena retention ${horizon} success marker drifted"
+  fi
+  printf 'K2 ARENA RETENTION RUN %s: PASS\n' "${horizon}"
   retained_bytes="$(awk -F= '/global_total_allocated_bytes=/{print $2}' \
     "${temporary_dir}/arena-retention/${horizon}.stderr" | tail -1)"
   [[ "${retained_bytes}" =~ ^[0-9]+$ ]] || \

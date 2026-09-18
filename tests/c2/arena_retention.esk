@@ -1,0 +1,34 @@
+(require transformer.persistence)
+
+(define args (command-line))
+(define horizon-text (car (cdr args)))
+(define path (car (cdr (cdr args))))
+(define limit
+  (cond ((string=? horizon-text "1024") 1024)
+        ((string=? horizon-text "8192") 8192)
+        (else
+          (begin
+            (display "C2 arena horizon must be 1024 or 8192") (newline)
+            (exit 64)))))
+
+(let loop ((iteration 0))
+  (if (= iteration limit)
+      (begin
+        (display "C2 ARENA RETENTION PASS: ")
+        (display limit)
+        (display " policy/metadata iterations")
+        (newline))
+      (begin
+        (with-region ('c2-policy-metadata-iteration 65536)
+          (let* ((policy
+                   (persistence-policy 16777216 524288 8388608 64 'cpu))
+                 (metadata (checkpoint-inspect path policy)))
+            (if (not
+                  (and
+                    (eq? (checkpoint-metadata-ref metadata 'format-id)
+                         'eshkol-training-state)
+                    (= (checkpoint-metadata-ref metadata 'tensor-count) 3)))
+                (begin
+                  (display "C2 arena retention validation failed") (newline)
+                  (exit 65)))))
+        (loop (+ iteration 1)))))

@@ -110,6 +110,48 @@ void et_i2_test_live_builder_counts_v1(size_t *copy_count,
     *decode_count = decodes;
   }
 }
+
+void et_i2_test_retired_builder_counts_v1(size_t *copy_count,
+                                           size_t *reset_count,
+                                           size_t *decode_count,
+                                           size_t *retained_control_bytes) {
+  size_t copies = 0u;
+  size_t resets = 0u;
+  size_t decodes = 0u;
+  const et_i2_copy_builder *copy;
+  const et_i2_reset_builder *reset;
+  const et_i2_decode_builder *decode;
+  for (copy = et_i2_retired_copy_builders; copy != NULL;
+       copy = copy->registry_next) {
+    copies++;
+  }
+  for (reset = et_i2_retired_reset_builders; reset != NULL;
+       reset = reset->registry_next) {
+    resets++;
+  }
+  for (decode = et_i2_retired_decode_builders; decode != NULL;
+       decode = decode->registry_next) {
+    decodes++;
+  }
+  if (copy_count != NULL) {
+    *copy_count = copies;
+  }
+  if (reset_count != NULL) {
+    *reset_count = resets;
+  }
+  if (decode_count != NULL) {
+    *decode_count = decodes;
+  }
+  if (retained_control_bytes != NULL) {
+    *retained_control_bytes = copies * sizeof(*copy) +
+                              resets * sizeof(*reset) +
+                              decodes * sizeof(*decode);
+  }
+}
+
+size_t et_i2_test_decode_builder_control_bytes_v1(void) {
+  return sizeof(et_i2_decode_builder);
+}
 #endif
 
 static void *et_i2_system_calloc(size_t count, size_t size) {
@@ -602,6 +644,52 @@ done:
   }
   return status;
 }
+
+#ifdef ET_C2_I2_MODEL_COPY
+/* C2 calls this only after its lexical I2 carrier preflight has authenticated
+ * the owned-clone role under the enclosing P1 state/tensor pin. */
+int64_t et_c2_private_i2_state_owned_copy_bytes_v1(
+    void *owned_carrier, void *destination_bytevector_header,
+    int64_t exact_byte_count) {
+  const et_f32_tensor *tensor;
+  unsigned char *payload;
+  size_t tensor_bytes = 0u;
+  size_t requested_bytes;
+
+  et_i2_clear_error();
+  if (exact_byte_count < 0 ||
+      (uint64_t)exact_byte_count > (uint64_t)SIZE_MAX ||
+      (uint64_t)exact_byte_count % sizeof(uint32_t) != 0u) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_BUFFER);
+    return -1;
+  }
+  requested_bytes = (size_t)exact_byte_count;
+  tensor = et_i2_const_tensor(owned_carrier, ET_I2_CARRIER_OWNED_CLONE, NULL);
+  if (tensor == NULL ||
+      et_f32_tensor_byte_length_v1(tensor, &tensor_bytes,
+                                   &et_i2_last_error) != 0) {
+    return -1;
+  }
+  if (tensor_bytes != requested_bytes) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_SHAPE_MISMATCH,
+                           ET_F32_TENSOR_CODE_BUFFER_SIZE_MISMATCH);
+    return -1;
+  }
+  payload = et_i2_bytevector_payload(destination_bytevector_header,
+                                     requested_bytes);
+  if (payload == NULL) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_BUFFER);
+    return -1;
+  }
+  return et_f32_tensor_copy_bits_to_v1(
+             tensor, (uint32_t *)payload,
+             requested_bytes / sizeof(uint32_t), &et_i2_last_error) == 0
+             ? 0
+             : -1;
+}
+#endif
 
 void *et_i2_private_decode_builder_create_v1(int64_t rank, void *payload,
                                               int64_t payload_size) {

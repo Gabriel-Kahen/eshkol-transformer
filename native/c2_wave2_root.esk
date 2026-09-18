@@ -1,0 +1,17 @@
+;;; Canonical C2 successor root. Never install this trusted source.
+;;; One source-composed aggregate owns the D2, O2, K2, and C2 identities.
+
+(load "d2_wave2_root.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "o2_wave2_extension.esk")
+(load "k2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_o2_encode_extension.esk")
+(load "c2_model_encode_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_training_state_extension.esk")
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_inspect_extension.esk")
+(load "c2_checkpoint_save_extension.esk")
+(load "c2_checkpoint_load_extension.esk")
+(load "c2_public_extension.esk")

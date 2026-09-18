@@ -1,0 +1,367 @@
+(load "o2_wave2_root.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_o2_encode_extension.esk")
+
+(extern i64 c2-o2-encode-test-counter i64
+        :real et_c2_o2_encode_test_counter_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C2 O2 ENCODE FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (expect-error label category operation thunk)
+  (let ((matched
+          (guard (raised
+                   (#t
+                     (and (transformer-error? raised)
+                          (eq? category (transformer-error-category raised))
+                          (eq? operation (transformer-error-operation raised)))))
+            (thunk)
+            #f)))
+    (check label matched)))
+
+(define (snapshot-counts)
+  (let ((result (make-vector 33 0)))
+    (let loop ((index 0))
+      (if (= index 33)
+          result
+          (let ((value (c2-o2-encode-test-counter index)))
+            (check "native counter fits Eshkol i64" (>= value 0))
+            (vector-set! result index value)
+            (loop (+ index 1)))))))
+
+(define (bits value)
+  (let ((result (make-bytevector 4 0)))
+    (c1-write-u32! result 0 value)
+    result))
+
+(define (fixture-config path)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (list path)
+                    "3a83126f" "3f666666" "3f7d70a4"
+                    "322bcc77" "00000000"))))
+
+(define (rich-config)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(global-l2 "3f800000") '(linear 2 10 "3f000000")
+        (list
+          (list 'group (list '("a"))
+                "3a83126f" "3f666666" "3f7d70a4"
+                "322bcc77" "00000000")
+          (list 'group (list '("c"))
+                "3dcccccd" "3f000000" "3f000000"
+                "3a83126f" "00000000"))))
+
+(define (make-single-p1 shape)
+  (let* ((module (i2-module-create-internal))
+         (parameter
+           (i2-parameter-create-uniform-internal
+             (c1-shape-product shape 'checkpoint-save!) 0)))
+    (i2-module-register-parameter-internal! module "weight" parameter)
+    (module-state-dict module)))
+
+(define (make-rich-p1)
+  (let* ((module (i2-module-create-internal))
+         (a (i2-parameter-create-uniform-internal 1 0))
+         (c (i2-parameter-create-uniform-internal 1 0))
+         (a-handle (i2-module-register-parameter-internal! module "a" a)))
+    (i2-module-register-tied-parameter-internal! module "b" a-handle)
+    (i2-module-register-parameter-internal! module "c" c)
+    (module-state-dict module)))
+
+(define (make-coverage-p1)
+  (let ((module (i2-module-create-internal)))
+    (i2-module-register-parameter-internal!
+      module "a" (i2-parameter-create-uniform-internal 1 0))
+    (i2-module-register-parameter-internal!
+      module "b" (i2-parameter-create-uniform-internal 1 0))
+    (i2-module-register-parameter-internal!
+      module "c" (i2-parameter-create-uniform-internal 1 0))
+    (i2-module-register-parameter-internal!
+      module "d" (i2-parameter-create-uniform-internal 1 0))
+    (module-state-dict module)))
+
+(define (coverage-config first second)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list
+          (list 'group first
+                "3a83126f" "3f666666" "3f7d70a4"
+                "322bcc77" "00000000")
+          (list 'group second
+                "3dcccccd" "3f000000" "3f000000"
+                "3a83126f" "00000000"))))
+
+(define (reconstruct config paths aliases completed entries)
+  (let ((request
+          (vector o2-c2-reconstruct-tag config paths aliases completed
+                  entries 'checkpoint-load #f)))
+    (o2-state-reconstruct-internal request)
+    (vector-ref request 7)))
+
+(define (stage o2 p1 operation)
+  (let ((request (vector o2 p1 operation #f)))
+    (c2-o2-encode-staging-internal request)
+    (vector-ref request 3)))
+
+;;; Exact Python fixture: one shape-[2] parameter, one group, zero moments.
+(define fixture-p1 (make-single-p1 '(2)))
+(define fixture-o2
+  (reconstruct
+    (fixture-config '("weight")) (list '("weight")) '() 0
+    (vector
+      (vector '("weight") '(2) (make-bytevector 8 0)
+              (make-bytevector 8 0)))))
+(define fixture-stage (stage fixture-o2 fixture-p1 'checkpoint-save!))
+(define fixture-metadata (vector-ref fixture-stage 0))
+(define fixture-payload (vector-ref fixture-stage 1))
+(check "fixture metadata has canonical byte count"
+       (= (bytevector-length fixture-metadata) 393))
+(check "fixture payload has exact two-moment byte count"
+       (= (bytevector-length fixture-payload) 16))
+(check "fixture metadata magic and counts"
+       (and (= (c1-read-u32 fixture-metadata 48) 1)
+            (= (c1-read-u32 fixture-metadata 52) 1)
+            (= (c1-read-u32 fixture-metadata 56) 2)
+            (= (c1-read-u64 fixture-metadata 64) 0)))
+(let ((record (c1-read-u64 fixture-metadata 104)))
+  (check "both pre-codec digest slots are explicit zero placeholders"
+         (let scan ((index 56))
+           (if (= index 120) #t
+               (and (= (bytevector-u8-ref fixture-metadata
+                                          (+ record index)) 0)
+                    (scan (+ index 1)))))))
+
+;;; Export only test artifacts. The shell gate compares these against the
+;;; independent Python reference before feeding them to the native outer codec.
+(define args (command-line))
+(check "fixture metadata writes"
+       (= (c1-native-atomic-write
+            (car (cdr args)) fixture-metadata
+            (bytevector-length fixture-metadata) 0) 0))
+(check "fixture payload writes"
+       (= (c1-native-atomic-write
+            (car (cdr (cdr args))) fixture-payload
+            (bytevector-length fixture-payload) 0) 0))
+
+;;; Aliases affect the full C1 model ordinal: canonical unique records are 0
+;;; and 2, not 0 and 1. Multiple groups and linear/clip config stay canonical.
+(define rich-p1 (make-rich-p1))
+(define rich-o2
+  (reconstruct
+    (rich-config) (list '("a") '("c")) (list (list '("a") '("b"))) 7
+    (vector
+      (vector '("a") '(1) (bits 1065353216) (bits 2147483648))
+      (vector '("c") '(1) (bits 1073741824) (bits 1077936128)))))
+(define rich-stage (stage rich-o2 rich-p1 'checkpoint-save!))
+(define rich-metadata (vector-ref rich-stage 0))
+(define rich-payload (vector-ref rich-stage 1))
+(define rich-record-0 (c1-read-u64 rich-metadata 104))
+(define rich-record-1 (+ rich-record-0 (c1-read-u64 rich-metadata rich-record-0)))
+(check "alias-aware canonical full-model indices are exact"
+       (and (= (c1-read-u32 rich-metadata (+ rich-record-0 8)) 0)
+            (= (c1-read-u32 rich-metadata (+ rich-record-1 8)) 2)))
+(check "two optimizer groups and completed projection are exact"
+       (and (= (c1-read-u32 rich-metadata 48) 2)
+            (= (c1-read-u64 rich-metadata 64) 7)))
+(check "IEEE negative-zero second moment bits are preserved"
+       (= (c1-read-u32 rich-payload 4) 2147483648))
+(check "payload order is avg/sq for each canonical unique parameter"
+       (and (= (c1-read-u32 rich-payload 0) 1065353216)
+            (= (c1-read-u32 rich-payload 8) 1073741824)
+            (= (c1-read-u32 rich-payload 12) 1077936128)))
+
+;;; Exact request and topology failures publish no staging output.
+(expect-error "malformed request rejects" 'invalid-argument
+              'c2-o2-encode-staging-internal
+  (lambda () (c2-o2-encode-staging-internal (vector fixture-o2))))
+(define no-token-claimed-request
+  (vector fixture-o2 fixture-p1 #f 'claimed-no-token #f))
+(expect-error "claimed staging rejects #f authority on live inputs"
+              'invalid-argument 'c2-o2-encode-c2-owned-staging-internal
+  (lambda ()
+    (c2-o2-encode-c2-owned-staging-internal no-token-claimed-request)))
+(check "no-token claimed staging leaves output unpublished"
+       (eq? (vector-ref no-token-claimed-request 4) #f))
+(define no-token-moment-output (make-bytevector 8 0))
+(expect-error "claimed moment copy rejects #f authority on live input"
+              'invalid-argument
+              'o2-state-copy-moment-bits-c2-owned-internal
+  (lambda ()
+    (o2-state-copy-moment-bits-c2-owned-internal
+      (vector fixture-o2 0 0 no-token-moment-output 2 #f
+              'claimed-no-token))))
+(check "no-token claimed moment copy leaves destination unchanged"
+       (c1-bytes=? no-token-moment-output (make-bytevector 8 0)))
+(expect-error "nonempty output slot rejects" 'invalid-argument
+              'c2-o2-encode-staging-internal
+  (lambda ()
+    (c2-o2-encode-staging-internal
+      (vector fixture-o2 fixture-p1 'checkpoint-save! rich-stage))))
+(define wrong-shape-o2
+  (reconstruct
+    (fixture-config '("weight")) (list '("weight")) '() 0
+    (vector
+      (vector '("weight") '(1 2) (make-bytevector 8 0)
+              (make-bytevector 8 0)))))
+(define wrong-shape-request
+  (vector wrong-shape-o2 fixture-p1 'checkpoint-save! #f))
+(expect-error "same-elements wrong-rank P1 shape rejects atomically"
+              'shape-mismatch 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal wrong-shape-request)))
+(check "shape failure leaves output unpublished"
+       (eq? (vector-ref wrong-shape-request 3) #f))
+(define wrong-alias-p1 (make-rich-p1))
+(define wrong-alias-request
+  (vector fixture-o2 wrong-alias-p1 'checkpoint-save! #f))
+(expect-error "P1/O2 alias and count mismatch rejects atomically"
+              'shape-mismatch 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal wrong-alias-request)))
+(check "alias failure leaves output unpublished"
+       (eq? (vector-ref wrong-alias-request 3) #f))
+
+;;; The factored metadata classifier preserves the accepted exact categories
+;;; and caller operation even though ordinary projection validation normally
+;;; rejects these hostile lexical mutations first.
+(expect-error "parameter dtype category and caller operation stay exact"
+              'dtype-mismatch 'metadata-category-probe
+  (lambda ()
+    (c2-o2-wire-require-parameter-metadata
+      'metadata-category-probe
+      (state-entry-internal
+        '("weight") 'parameter '(2) 'f16 'cpu
+        'dense-row-major-contiguous #f))))
+(expect-error "parameter device category and caller operation stay exact"
+              'device-mismatch 'metadata-category-probe
+  (lambda ()
+    (c2-o2-wire-require-parameter-metadata
+      'metadata-category-probe
+      (state-entry-internal
+        '("weight") 'parameter '(2) 'f32 'cuda
+        'dense-row-major-contiguous #f))))
+(expect-error "parameter layout category and caller operation stay exact"
+              'noncontiguous 'metadata-category-probe
+  (lambda ()
+    (c2-o2-wire-require-parameter-metadata
+      'metadata-category-probe
+      (state-entry-internal
+        '("weight") 'parameter '(2) 'f32 'cpu 'strided #f))))
+
+;;; The logical config is private and immutable to consumers. This hostile
+;;; same-source mutation proves the staging boundary still rejects bad options.
+(define fixture-state-record
+  (o2-require-live-state 'checkpoint-save! fixture-o2))
+(define saved-config (vector-ref fixture-state-record 2))
+(vector-set!
+  fixture-state-record 2
+  '(transformer-optimizer-config 1 0 () adamw f32 cpu
+    (none) (constant)
+    ((group (("weight")) "7fc00000" "3f666666" "3f7d70a4"
+            "322bcc77" "00000000"))))
+(define bad-option-request
+  (vector fixture-o2 fixture-p1 'checkpoint-save! #f))
+(expect-error "malformed private option projection rejects atomically"
+              'invalid-argument 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal bad-option-request)))
+(check "option failure leaves output unpublished"
+       (eq? (vector-ref bad-option-request 3) #f))
+(vector-set! fixture-state-record 2 saved-config)
+
+;;; Group cardinality alone is insufficient: [a,c]/[b,c] has four total
+;;; members but duplicates c and omits d from a four-parameter model.
+(define coverage-p1 (make-coverage-p1))
+(define coverage-o2
+  (reconstruct
+    (coverage-config (list '("a") '("b"))
+                     (list '("c") '("d")))
+    (list '("a") '("b") '("c") '("d")) '() 0
+    (vector
+      (vector '("a") '(1) (make-bytevector 4 0) (make-bytevector 4 0))
+      (vector '("b") '(1) (make-bytevector 4 0) (make-bytevector 4 0))
+      (vector '("c") '(1) (make-bytevector 4 0) (make-bytevector 4 0))
+      (vector '("d") '(1) (make-bytevector 4 0) (make-bytevector 4 0)))))
+(define coverage-state-record
+  (o2-require-live-state 'checkpoint-save! coverage-o2))
+(vector-set!
+  coverage-state-record 2
+  (coverage-config (list '("a") '("c"))
+                   (list '("b") '("c"))))
+(define duplicate-group-request
+  (vector coverage-o2 coverage-p1 'checkpoint-save! #f))
+(expect-error "duplicate-across-groups/omitted-path rejects atomically"
+              'shape-mismatch 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal duplicate-group-request)))
+(check "duplicate group failure leaves output unpublished"
+       (eq? (vector-ref duplicate-group-request 3) #f))
+
+;;; The Eshkol projection is not authoritative over the native owner ledger.
+(define rich-state-record
+  (o2-require-live-state 'checkpoint-save! rich-o2))
+(define saved-rich-completed (vector-ref rich-state-record 5))
+(vector-set! rich-state-record 5 (+ saved-rich-completed 1))
+(define divergent-completed-request
+  (vector rich-o2 rich-p1 'checkpoint-save! #f))
+(expect-error "lexical/native completed-update divergence rejects"
+              'shape-mismatch 'checkpoint-save!
+  (lambda () (c2-o2-encode-staging-internal divergent-completed-request)))
+(check "completed divergence leaves output unpublished"
+       (eq? (vector-ref divergent-completed-request 3) #f))
+(vector-set! rich-state-record 5 saved-rich-completed)
+
+;;; Repeated staging and region-bounded scratch create/retire no O2 borrow
+;;; shells and leave all I2/f32 live, retired, and event controls exactly flat.
+(define counters-before (snapshot-counts))
+(let repeat ((remaining 24))
+  (if (= remaining 0)
+      #t
+      (let ((cycle (stage rich-o2 rich-p1 'checkpoint-save!)))
+        (check "repeated staging bytes are deterministic"
+               (and (c1-bytes=? rich-metadata (vector-ref cycle 0))
+                    (c1-bytes=? rich-payload (vector-ref cycle 1))))
+        (check "every native live/retired control remains flat"
+               (equal? counters-before (snapshot-counts)))
+        (repeat (- remaining 1)))))
+(with-region ('c2-o2-wire-scratch 131072)
+  (let repeat-region ((remaining 8))
+    (if (= remaining 0)
+        #t
+        (let ((cycle (stage rich-o2 rich-p1 'checkpoint-save!)))
+          (check "regional staging metadata is deterministic"
+                 (c1-bytes=? rich-metadata (vector-ref cycle 0)))
+          (check "regional staging payload is deterministic"
+                 (c1-bytes=? rich-payload (vector-ref cycle 1)))
+          (check "regional payload scratch leaves controls flat"
+                 (equal? counters-before (snapshot-counts)))
+          (repeat-region (- remaining 1))))))
+(check "region exit leaves live and retired controls flat"
+       (equal? counters-before (snapshot-counts)))
+(check "no O2 borrow shell was created or retired"
+       (and (= (vector-ref counters-before 30)
+               (vector-ref (snapshot-counts) 30))
+            (= (vector-ref counters-before 28)
+               (vector-ref (snapshot-counts) 28))
+            (= (vector-ref counters-before 29)
+               (vector-ref (snapshot-counts) 29))))
+
+(check "wrong-alias P1 releases" (state-dict-release! wrong-alias-p1))
+(check "fixture P1 releases" (state-dict-release! fixture-p1))
+(check "rich P1 releases" (state-dict-release! rich-p1))
+(check "coverage P1 releases" (state-dict-release! coverage-p1))
+(check "wrong-shape O2 releases"
+       (o2-public-optimizer-state-release! wrong-shape-o2))
+(check "fixture O2 releases" (o2-public-optimizer-state-release! fixture-o2))
+(check "rich O2 releases" (o2-public-optimizer-state-release! rich-o2))
+(check "coverage O2 releases"
+       (o2-public-optimizer-state-release! coverage-o2))
+
+(display "C2 O2 ENCODE PASS: ")
+(display checks)
+(display " checks")
+(newline)

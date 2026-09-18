@@ -1,0 +1,213 @@
+(require transformer.persistence_policy_internal)
+(load "c2_persistence_policy_extension.esk")
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C2 POLICY FAIL: ") (display label) (newline) (exit 1))))
+
+(define (expect-error label category operation thunk)
+  (let ((matched
+          (guard (raised
+                   (#t
+                     (and (transformer-error? raised)
+                          (eq? category (transformer-error-category raised))
+                          (eq? operation (transformer-error-operation raised)))))
+            (thunk) #f)))
+    (check label matched)))
+
+(define (make-lookalike-shell)
+  (guard (raised (#t raised))
+    (error "transformer.persistence.policy:c2-v1")))
+
+(define (check-limits label policy file metadata tensor tensors device mode)
+  (let ((limits (c2-policy-limits-internal 'checkpoint-inspect policy)))
+    (check (string-append label " file") (= file (vector-ref limits 0)))
+    (check (string-append label " metadata")
+           (= metadata (vector-ref limits 1)))
+    (check (string-append label " tensor") (= tensor (vector-ref limits 2)))
+    (check (string-append label " tensors") (= tensors (vector-ref limits 3)))
+    (check (string-append label " device") (eq? device (vector-ref limits 4)))
+    (check (string-append label " mode") (eq? mode (vector-ref limits 5)))))
+
+(define hard
+  (c2-persistence-policy-internal
+    1099511627776 268435456 274877906944 6826 'cpu))
+(check "C2 shell is opaque" (not (vector? hard)))
+(check "equal policies retain distinct identities"
+       (not (eq? hard
+                 (c2-persistence-policy-internal
+                   1099511627776 268435456 274877906944 6826 'cpu))))
+(check-limits "hard maxima" hard
+              1099511627776 268435456 274877906944 6826 'cpu 'wire)
+(define hard-c1 (c2-policy-c1-subpolicy-internal 'checkpoint-load hard))
+(check "hard owns valid C1 subpolicy"
+       (eq? hard-c1 (c1-require-policy 'checkpoint-load hard-c1)))
+(check "aggregate 6826 projects C1 4096" (= 4096 (vector-ref hard-c1 4)))
+(check "owned C1 subpolicy identity stable"
+       (eq? hard-c1 (c2-policy-c1-subpolicy-internal 'checkpoint-save! hard)))
+
+(define below-c1
+  (c2-persistence-policy-internal 99 98 97 4095 'cpu))
+(define below-c1-sub
+  (c2-policy-c1-subpolicy-internal 'checkpoint-inspect below-c1))
+(check "aggregate below C1 ceiling projects exactly"
+       (= 4095 (vector-ref below-c1-sub 4)))
+(check "C1 projection preserves file" (= 99 (vector-ref below-c1-sub 1)))
+(check "C1 projection preserves metadata" (= 98 (vector-ref below-c1-sub 2)))
+(check "C1 projection preserves tensor" (= 97 (vector-ref below-c1-sub 3)))
+(check "C1 projection preserves device" (eq? 'cpu (vector-ref below-c1-sub 5)))
+
+(define above-c1
+  (c2-persistence-policy-internal 99 98 97 4097 'cpu))
+(check "aggregate above C1 ceiling projects capped subpolicy"
+       (= 4096
+          (vector-ref
+            (c2-policy-c1-subpolicy-internal 'checkpoint-load above-c1) 4)))
+
+;;; Wire hard limits are exact and independently one-over rejected.
+(expect-error "file hard one-over" 'invalid-argument 'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-internal
+      1099511627777 268435456 274877906944 6826 'cpu)))
+(expect-error "metadata hard one-over" 'invalid-argument 'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-internal
+      1099511627776 268435457 274877906944 6826 'cpu)))
+(expect-error "tensor hard one-over" 'invalid-argument 'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-internal
+      1099511627776 268435456 274877906945 6826 'cpu)))
+(expect-error "aggregate tensors hard one-over" 'invalid-argument
+  'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-internal
+      1099511627776 268435456 274877906944 6827 'cpu)))
+
+;;; Existing standalone C1 limit and semantics remain unchanged.
+(define c1-hard
+  (c1-persistence-policy-internal
+    1099511627776 268435456 274877906944 4096 'cpu))
+(check "standalone C1 exact ceiling unchanged"
+       (= 4096 (vector-ref (c1-require-policy 'checkpoint-load c1-hard) 4)))
+(expect-error "standalone C1 still rejects 4097" 'invalid-argument
+  'persistence-policy
+  (lambda ()
+    (c1-persistence-policy-internal
+      1099511627776 268435456 274877906944 4097 'cpu)))
+
+;;; Default wire mode must not silently apply the operational target.
+(define above-operational
+  (c2-persistence-policy-internal
+    16777217 524289 8388609 65 'cpu))
+(check-limits "wire preserves above-operational caller limits"
+              above-operational 16777217 524289 8388609 65 'cpu 'wire)
+(check "wire does not request operational target"
+       (not (c2-policy-operational-target-requested-internal
+              'checkpoint-inspect above-operational)))
+
+(define target (c2-policy-operational-target-internal))
+(check "operational file represented" (= 16777216 (vector-ref target 0)))
+(check "operational metadata represented" (= 524288 (vector-ref target 1)))
+(check "operational tensor represented" (= 8388608 (vector-ref target 2)))
+(check "operational tensors represented" (= 64 (vector-ref target 3)))
+(check "operational tuple explicitly unverified"
+       (eq? 'unverified-target (vector-ref target 4)))
+
+(define operational
+  (c2-persistence-policy-mode-internal
+    16777216 524288 8388608 64 'cpu 'operational-target))
+(check-limits "operational exact tuple" operational
+              16777216 524288 8388608 64 'cpu 'operational-target)
+(check "operational target explicitly requested"
+       (c2-policy-operational-target-requested-internal
+         'checkpoint-load operational))
+(check "operational C1 projection owns exact tuple"
+       (= 64
+          (vector-ref
+            (c2-policy-c1-subpolicy-internal 'checkpoint-load operational) 4)))
+(define operational-lower
+  (c2-persistence-policy-mode-internal 1 2 3 4 'cpu 'operational-target))
+(check-limits "operational caller may lower" operational-lower
+              1 2 3 4 'cpu 'operational-target)
+
+(define operational-one-over
+  (c2-persistence-policy-mode-internal
+    16777217 524289 8388609 65 'cpu 'operational-target))
+(check-limits "operational one-over remains caller policy"
+              operational-one-over 16777217 524289 8388609 65
+              'cpu 'operational-target)
+(check "operational one-over still selects fixed profile"
+       (c2-policy-operational-target-requested-internal
+         'checkpoint-load operational-one-over))
+(check "operational mode does not lower nested C1 caller ceiling"
+       (= 65
+          (vector-ref
+            (c2-policy-c1-subpolicy-internal
+              'checkpoint-load operational-one-over) 4)))
+(expect-error "operational mode still rejects wire hard one-over"
+  'invalid-argument 'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-mode-internal
+      1099511627777 268435456 274877906944 6826
+      'cpu 'operational-target)))
+
+;;; Exact aggregate identity rejects structural lookalikes and other kinds.
+(define copied-hard (make-lookalike-shell))
+(expect-error "copied C2 shell rejected" 'invalid-argument 'checkpoint-load
+  (lambda () (c2-policy-limits-internal 'checkpoint-load copied-hard)))
+(define policy-relay-called? #f)
+(define policy-relay #f)
+(set! policy-relay
+  (lambda (query)
+    (set! policy-relay-called? #t)
+    (let ((entry (hard query)))
+      (vector-set! entry 0 policy-relay)
+      entry)))
+(expect-error "relay C2 shell rejected before private query"
+  'invalid-argument 'checkpoint-load
+  (lambda () (c2-policy-limits-internal 'checkpoint-load policy-relay)))
+(check "relay rejection preserves original policy without invocation"
+       (and (not policy-relay-called?)
+            (= 1099511627776
+               (vector-ref
+                 (c2-policy-limits-internal 'checkpoint-load hard) 0))))
+(expect-error "forged C2 shell rejected" 'invalid-argument 'checkpoint-load
+  (lambda ()
+    (c2-policy-limits-internal
+      'checkpoint-load (vector 'c2-persistence-policy (vector 'forged)))))
+(expect-error "C1 shell is wrong kind" 'invalid-argument 'checkpoint-load
+  (lambda () (c2-policy-limits-internal 'checkpoint-load c1-hard)))
+(expect-error "arbitrary vector is wrong kind" 'invalid-argument
+  'checkpoint-load
+  (lambda () (c2-policy-limits-internal 'checkpoint-load (vector hard))))
+(expect-error "false is wrong kind" 'invalid-argument 'checkpoint-load
+  (lambda () (c2-policy-limits-internal 'checkpoint-load #f)))
+
+;;; Malformed values, devices, and modes are never normalized or downgraded.
+(expect-error "zero rejected" 'invalid-argument 'persistence-policy
+  (lambda () (c2-persistence-policy-internal 0 1 1 1 'cpu)))
+(expect-error "negative rejected" 'invalid-argument 'persistence-policy
+  (lambda () (c2-persistence-policy-internal 1 -1 1 1 'cpu)))
+(expect-error "fraction rejected" 'invalid-argument 'persistence-policy
+  (lambda () (c2-persistence-policy-internal 1 1 (/ 1 2) 1 'cpu)))
+(expect-error "string count rejected" 'invalid-argument 'persistence-policy
+  (lambda () (c2-persistence-policy-internal 1 1 1 "1" 'cpu)))
+(expect-error "CUDA rejected" 'invalid-argument 'persistence-policy
+  (lambda () (c2-persistence-policy-internal 1 1 1 1 'cuda)))
+(expect-error "device string rejected" 'invalid-argument 'persistence-policy
+  (lambda () (c2-persistence-policy-internal 1 1 1 1 "cpu")))
+(expect-error "unknown mode rejected" 'invalid-argument 'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-mode-internal 1 1 1 1 'cpu 'supported)))
+(expect-error "mode string rejected" 'invalid-argument 'persistence-policy
+  (lambda ()
+    (c2-persistence-policy-mode-internal 1 1 1 1 'cpu "wire")))
+
+(display "C2 PERSISTENCE POLICY PASS: ")
+(display checks)
+(display " checks")
+(newline)

@@ -16,6 +16,7 @@ native/f32_parameter_internal.h
 include/eshkol_transformer/f32_tensor.h
 include/eshkol_transformer/kernel_abi.h
 native/o2_optimizer_internal.h
+native/o2_wave2_public_bridge_extension.c
 native/data_io.c
 native/checkpoint_io.c
 native/checkpoint_io.h

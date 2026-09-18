@@ -2,61 +2,66 @@
 
 ## CI tiers
 
-Blocking code pull-request CI partitions the complete test command set across eight
-parallel suites: native numerics, contracts/data, checkpoint I/O, parameter state,
-byte tokenization, BPE runtime, BPE boundary, and shard loading. T2's runtime and
-existing standalone boundary script run separately; the full local T2 command still
-runs both. Native numerics includes the combined N2/O2 provider, numerical,
-atomicity, ownership, and lifetime gates. All repeated AOT, aggregate-boundary, sanitizer, malformed-input,
-and maximum/resource cases remain required for code changes. The suite-specific build targets create only canonical
-artifacts consumed before the test script; tests that construct their own canonical
-and repeated artifacts do not receive an unused outer full build.
+The CI-E candidate uses one full-coverage engine in
+`.github/workflows/full-coverage.yml`, shared by blocking CI and exhaustive
+acceptance. It runs a clean canonical build with smoke/benchmark, the eight
+existing component suites (checkpoint I/O now owns C1 alone), and six independent
+C2 groups. The command graph preserves all 23 top-level local test commands.
+C2 composition invokes each unique leaf gate once instead of repeating regression
+tails nested inside other gates. Standalone core, load, and operational commands
+retain their historical regression tails; explicit focused flags are only used by
+the complete partition driver. Every purposeful repeated fresh-cache/AOT build,
+compiler comparison, sanitizer, malformed-input case, exact-limit assertion, and
+same-process memory/lifetime trajectory remains required.
 
-The previous single-job supported run 34373099684 took 3h59m10s including queue and
-invoked the full build four times across build, test, smoke, and benchmark entry
-points. About 72 minutes were redundant builds. The earlier reduced four-suite run
-34057603751 took 11m55s but omitted expensive full gates and is not a coverage-equal
-baseline. The first parallel run 34400156724 passed five suites, but exposed missing
-D2 aggregate prerequisites in both tokenizer jobs. Those prerequisites are now
-explicit; the BPE runtime and boundary phases are separate jobs.
+No compiled test binary or mutable runtime state is shared between jobs. Each job
+cleans/configures its own build and constructs the canonical prerequisites it
+actually reads. The separate canonical-build job still runs `make clean && make
+build`, smoke and benchmark. No cross-run binary cache or fresh-proof bypass is
+introduced. The existing pinned compiler cache remains subject to toolchain
+verification. Per-job prerequisite and test seconds are recorded in job summaries.
 
-The outer job timeout is selected by suite identity: `native-numerics` receives 105
-minutes and every other blocking suite retains 75 minutes. Topology and final-status
-jobs retain two minutes, and exhaustive acceptance retains 240 minutes. This bounded
-exception followed two 75-minute cancellations of the native suite in
-[run 34788832457](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457)
-at exact K2 source head `2641c24b2c50939f300ae995c00d0337c01660a3`.
-Both attempts passed K2, N2, and N3K before cancellation during O2 without an
-assertion failure; neither reached smoke/benchmark and neither is passing evidence.
-No inner timeout, test, sanitizer, oracle, leak check, resource assertion, command,
-or failure-propagation gate changes with the outer scheduling budget. The executable
-topology check pins the 60-second A0 compiler timeout in both workflows and rejects
-mutations that mask required blocking/exhaustive command failures, remove the final
-status assertion, or disable the native-only oracle and smoke conditions.
+Outer budgets remain 105 minutes for native numerics, 75 minutes for ordinary
+component and clean-build jobs, and 240 minutes for each C2 group. The previous
+checkpoint budget is not confused with a runtime resource bound: inner compiler
+timeouts, the fixed C2 RSS/arena ceilings, test counts, and leak checks are
+unchanged. Topology/evidence/final-status jobs receive two minutes and evidence
+selection three minutes. An explicit structural checker and mutation tests reject
+missing/duplicate gates, altered environment/budgets, failure masking, and skipped
+final assertions.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
-`docs/**/*.md`, excluding `AGENTS.md`) run CI topology and change-selection tests.
-The selector compares the PR base to the tested merge commit, including both sides
-of renames. Mixed/unknown paths, empty diffs, or unavailable history require the full
-matrix. Pushes to main and merge-queue runs always run the full matrix. The final
-status check fails for unsuccessful topology checks, failed/cancelled suites, or
-missing selection output; it permits skipped suites only for an explicit prose-only
-selection.
+`docs/**/*.md`, excluding `AGENTS.md`) run topology and change-selection tests.
+Renames are checked on both sides; mixed/unknown paths, empty diffs and unavailable
+history require full CI. Pushes to main and merge-queue runs require full coverage.
+A documentation-only skipped matrix is not eligible for exhaustive evidence reuse.
 
-Exhaustive acceptance runs nightly and on manual dispatch. It repeats the complete
-suite serially in one supported environment while retaining every repeated
-fresh-cache compilation, hostile-path and symbol-isolation proof, maximum-size and
-resource-bound case, sanitizer gate, and compiled corruption matrix described below.
-It builds once, then uses the no-rebuild test, smoke, and benchmark entry points
-under the 240-minute outer timeout.
-A pinned N2-only development-oracle wrapper selects PyTorch's baseline CPU dispatch
-before import so frozen reference bytes do not depend on the hosted runner's
-AVX2/AVX512 capability. O2, A2, and Q0 retain the direct pinned interpreter; the
-dispatch setting never enters an Eshkol-native runtime path.
-A failing exhaustive run is a main-branch health blocker and must be resolved before
-a release or a workstream is declared accepted. Risky changes to packaging,
-persistence, tokenizer limits, or compiler boundaries should manually dispatch it
-before merge.
+Nightly acceptance always runs fresh full coverage through the same engine.
+Manual acceptance can reuse only the latest completed successful CI for the exact
+candidate revision whose recorded actual checkout tree equals the candidate tree.
+The verifier checks repository/run/attempt identity, every expected suite including
+the clean build, successful evidence and final aggregation jobs, and the actual
+tested commit/tree through GitHub. Missing, stale, partial, malformed, or failed
+evidence cannot produce acceptance: it requires fresh full coverage instead.
+An in-progress matching CI is reported as pending rather than launching a duplicate.
+There is no arbitrary artifact execution and no reuse across changed trees. This
+is reuse of a completed full-coverage result, not omission of a gate.
+
+Historical baseline evidence remains valid only for its original revision:
+- run 35350092230 completed its C2 job in 3h40m43s, with about 3h30m in testing;
+  its predecessor job hit 240 minutes after a 44-minute clean build, before Q0,
+  smoke and benchmark completed.
+- run 35349163791 attempt 2 passed; native prerequisites took 30m50s and tests
+  60m47s. Attempt 1's fresh N2 oracle mismatch remains unexplained; a passing retry
+  does not establish its cause or erase the failure.
+- the predecessor-only 300-minute scheduling correction in PR #77 is separate
+  from CI-E. Its running acceptance evidence is not cancelled or retroactively
+  relabeled as evidence for this optimization.
+
+The CI-E architecture is a review candidate until supported execution and independent
+review complete. No speedup percentage is claimed before measurement. See
+[CI efficiency evidence](CI_EFFICIENCY.md) for mapping and before/after status.
+A failed required full-coverage or exhaustive run remains an acceptance blocker.
 
 ## Required on every numerical component
 
@@ -140,6 +145,32 @@ before merge.
   followed by independent D2-R, merge, merge-head retest, and acceptance-document
   follow-up. ROADMAP may move from `review` to `complete` only after all are
   satisfied.
+
+## Required C2 checkpoint gates
+
+- Prove exact outer/C1 fixed-header staged admission on one `O_NOFOLLOW` regular-file
+  descriptor, retained-header byte equality, final same-fd size/EOF agreement, and
+  zero codec/publication calls for every unstable, corrupt, version, or limit failure.
+- Exercise the accepted C2 1.0 header, every checked sum/product/span, inert identity
+  grammar, X1 canonical projection, both real D2 cursor families/relations, complete
+  C1 and O2 metadata, per-tensor and whole digests, and all cross-component counts,
+  paths, shapes, aliases, seeds, vocabulary, and update counters.
+- Prove failure-atomic detached P1/O2 reconstruction and C2 publication at every
+  allocation/transfer/release boundary. Exact dead release is idempotent; forged,
+  copied, wrong-owner, busy, active-borrow, and provider-defect cases retain the
+  documented error and exact-once cleanup behavior.
+- Repeated model and moment saves use the direct exact-bit copy seams and leave all
+  live plus newly instrumented retired-control counts/bytes flat. Scratch remains
+  lexical-region bounded; no implicit promotion or finalizer is evidence.
+- The 16-MiB file, 512-KiB artifact metadata, 8-MiB tensor, and 64-tensor operational
+  tuple requires exact/one-over and jointly attainable pinned-runtime measurements,
+  bounded time, no heap warning, and peak plus retained RSS below 512 MiB. It is not
+  accepted merely because the wire parser declares those constants.
+- Public integration proves the actual source-composed 81/75 candidate counts,
+  81 public-name strings, eleven truthful capability rows, exact supplied-report
+  admission for every staged tensor, hostile linkage/input isolation, deterministic
+  clean builds, flat 1,024/8,192-iteration root retention, full predecessor gates,
+  supported blocking CI, and independent exact-head review.
 
 ## Required configuration gates
 

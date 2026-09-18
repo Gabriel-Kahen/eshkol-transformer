@@ -78,6 +78,10 @@ typedef struct et_k2_state {
   uint64_t report_factory;
   uint64_t request_factory;
   uint64_t entry_factory;
+#ifdef ET_C2_CARRIER_FACTORIES
+  uint64_t c2_policy_factory;
+  uint64_t c2_metadata_factory;
+#endif
 #ifdef ET_K2_TESTING
   const et_kernel_provider_v1 *provider_override;
   int provider_override_enabled;
@@ -88,6 +92,7 @@ typedef struct et_k2_state {
   uint64_t destroy_count;
   uint64_t runtime_live_count;
   uint64_t require_count;
+  uint64_t require_fail_at;
 #endif
 } et_k2_state;
 
@@ -950,6 +955,14 @@ int64_t et_k2_private_runtime_require_v1(
   state.busy = 1;
 #ifdef ET_K2_TESTING
   state.require_count++;
+  if (state.require_fail_at != 0u &&
+      state.require_count == state.require_fail_at) {
+    state.require_fail_at = 0u;
+    state.busy = 0;
+    return write_error(error_payload, ET_K2_STATUS_UNSUPPORTED,
+                       ET_K2_CODE_PROVIDER_ABSENT, "capability-require",
+                       "injected K2 capability requirement failure");
+  }
 #endif
   result = et_kernel_runtime_capability_require(
       state.runtime, expected_names[sorted_entry_index], &request, &entry,
@@ -1073,6 +1086,43 @@ int64_t et_k2_private_entry_factory_authenticate_v1(const void *closure) {
   return authenticate_factory(closure, &state.entry_factory);
 }
 
+#ifdef ET_C2_CARRIER_FACTORIES
+static int64_t register_c2_factory(const void *closure, uint64_t *slot,
+                                   const uint64_t *other) {
+  uint64_t code;
+  if (!closure_code(closure, &code)) {
+    return ET_K2_SCALAR_INVALID_ARGUMENT;
+  }
+  if (*slot == code) {
+    return 1;
+  }
+  if (*slot != 0u || *other == code || state.report_factory == code ||
+      state.request_factory == code || state.entry_factory == code) {
+    return ET_K2_SCALAR_INTERNAL;
+  }
+  *slot = code;
+  return 1;
+}
+
+int64_t et_c2_private_policy_factory_register_v1(const void *closure) {
+  return register_c2_factory(closure, &state.c2_policy_factory,
+                             &state.c2_metadata_factory);
+}
+
+int64_t et_c2_private_policy_factory_authenticate_v1(const void *closure) {
+  return authenticate_factory(closure, &state.c2_policy_factory);
+}
+
+int64_t et_c2_private_metadata_factory_register_v1(const void *closure) {
+  return register_c2_factory(closure, &state.c2_metadata_factory,
+                             &state.c2_policy_factory);
+}
+
+int64_t et_c2_private_metadata_factory_authenticate_v1(const void *closure) {
+  return authenticate_factory(closure, &state.c2_metadata_factory);
+}
+#endif
+
 #ifdef ET_K2_TESTING
 void et_k2_test_reset_v1(void) {
   if (state.runtime != NULL) {
@@ -1114,6 +1164,10 @@ uint64_t et_k2_test_runtime_live_count_v1(void) {
 }
 
 uint64_t et_k2_test_require_count_v1(void) { return state.require_count; }
+
+void et_k2_test_fail_require_at_v1(uint64_t ordinal) {
+  state.require_fail_at = ordinal;
+}
 
 static int test_protected_text(const char *text) {
   return text == NULL || span_overlaps_protected(text, strlen(text) + 1u);

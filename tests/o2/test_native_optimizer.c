@@ -410,6 +410,92 @@ static void test_snapshot_allocation_rollback_and_cross_owner(void) {
   CHECK(et_o2_optimizer_state_release_v1(second, &error) == 0);
 }
 
+static void test_c2_state_reconstruction_and_nonallocating_copy(void) {
+  const uint64_t shape[] = {3u};
+  const uint32_t avg[] = {UINT32_C(0x80000000), UINT32_C(0x3f000000),
+                          UINT32_C(0xbf000000)};
+  const uint32_t avg_sq[] = {UINT32_C(0x80000000), UINT32_C(0x3e800000),
+                             UINT32_C(0x3f800000)};
+  uint32_t actual[3] = {0u, 0u, 0u};
+  et_o2_state_reconstruct_config_v1 config = {
+      sizeof(config), ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT,
+      UINT32_C(0x3f800000), 0u, 0u, 17u, 1u};
+  et_o2_state_reconstruct_entry_v1 entry = {
+      sizeof(entry), 1u, shape, avg, avg_sq, 3u,
+      UINT32_C(0x3dcccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3a83126f), 0u, 0u};
+  et_o2_state_reconstruct_builder *builder = NULL;
+  et_o2_optimizer_state *state = NULL;
+  et_o2_test_live_counts_v1 before = {.struct_size = sizeof(before)};
+  et_o2_test_live_counts_v1 during = {.struct_size = sizeof(during)};
+  et_o2_test_live_counts_v1 after = {.struct_size = sizeof(after)};
+  et_o2_error_v1 error;
+  uint64_t updates = 0u;
+
+  et_o2_test_live_counts_snapshot_v1(&before);
+  CHECK(et_o2_optimizer_state_reconstruct_create_v1(&config, &builder,
+                                                     &error) == 0);
+  CHECK(builder != NULL);
+  CHECK(et_o2_optimizer_state_reconstruct_set_v1(builder, 0u, &entry,
+                                                  &error) == 0);
+  CHECK(et_o2_optimizer_state_reconstruct_prepare_v1(builder, &error) == 0);
+  et_o2_test_fail_reconstruct_commit_v1(1);
+  CHECK(et_o2_optimizer_state_reconstruct_commit_v1(&builder, &state, &error) ==
+        ET_O2_STATUS_INTERNAL);
+  CHECK(builder != NULL && state == NULL);
+  et_o2_test_fail_reconstruct_commit_v1(0);
+  CHECK(et_o2_optimizer_state_reconstruct_commit_v1(&builder, &state, &error) ==
+        0);
+  CHECK(builder == NULL && state != NULL);
+  CHECK(et_o2_optimizer_state_completed_updates_v1(state, &updates, &error) ==
+        0);
+  CHECK(updates == 17u);
+  CHECK(et_o2_optimizer_state_copy_moment_bits_v1(
+            state, 0u, ET_O2_MOMENT_EXP_AVG, actual, 3u, &error) == 0);
+  CHECK(memcmp(actual, avg, sizeof(avg)) == 0);
+  memset(actual, 0, sizeof(actual));
+  CHECK(et_o2_optimizer_state_copy_moment_bits_v1(
+            state, 0u, ET_O2_MOMENT_EXP_AVG_SQ, actual, 3u, &error) == 0);
+  CHECK(memcmp(actual, avg_sq, sizeof(avg_sq)) == 0);
+  et_o2_test_live_counts_snapshot_v1(&during);
+  CHECK(during.reconstruct_builders == before.reconstruct_builders);
+  CHECK(during.state_borrows == before.state_borrows);
+  CHECK(during.owned_state_clones == before.owned_state_clones + 2u);
+  CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
+  et_o2_test_live_counts_snapshot_v1(&after);
+  CHECK(after.owned_state_clones == before.owned_state_clones);
+  CHECK(after.reconstruct_builders == before.reconstruct_builders);
+}
+
+static void test_c2_state_reconstruction_abort(void) {
+  const uint64_t shape[] = {1u};
+  const uint32_t avg[] = {UINT32_C(0x3f000000)};
+  const uint32_t avg_sq[] = {UINT32_C(0x3e800000)};
+  et_o2_state_reconstruct_config_v1 config = {
+      sizeof(config), ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT,
+      UINT32_C(0x3f800000), 0u, 0u, 0u, 1u};
+  et_o2_state_reconstruct_entry_v1 entry = {
+      sizeof(entry), 1u, shape, avg, avg_sq, 1u,
+      UINT32_C(0x3dcccccd), UINT32_C(0x3f000000),
+      UINT32_C(0x3f000000), UINT32_C(0x3a83126f), 0u, 0u};
+  et_o2_state_reconstruct_builder *builder = NULL;
+  et_o2_test_live_counts_v1 before = {.struct_size = sizeof(before)};
+  et_o2_test_live_counts_v1 after = {.struct_size = sizeof(after)};
+  et_o2_error_v1 error;
+
+  et_o2_test_live_counts_snapshot_v1(&before);
+  CHECK(et_o2_optimizer_state_reconstruct_create_v1(&config, &builder,
+                                                     &error) == 0);
+  CHECK(et_o2_optimizer_state_reconstruct_set_v1(builder, 0u, &entry,
+                                                  &error) == 0);
+  CHECK(et_o2_optimizer_state_reconstruct_abort_v1(&builder, &error) == 0);
+  CHECK(builder == NULL);
+  CHECK(et_o2_optimizer_state_reconstruct_abort_v1(&builder, &error) == 0);
+  et_o2_test_live_counts_snapshot_v1(&after);
+  CHECK(after.owned_state_clones == before.owned_state_clones);
+  CHECK(after.reconstruct_builders == before.reconstruct_builders);
+}
+
 int main(void) {
   et_o2_test_reset_failpoints_v1();
   test_frozen_adamw_reference();
@@ -418,6 +504,8 @@ int main(void) {
   test_step_zero_and_state_lifetime();
   test_atomic_missing_gradient();
   test_snapshot_allocation_rollback_and_cross_owner();
+  test_c2_state_reconstruction_and_nonallocating_copy();
+  test_c2_state_reconstruction_abort();
   puts("O2 native optimizer PASS");
   return 0;
 }

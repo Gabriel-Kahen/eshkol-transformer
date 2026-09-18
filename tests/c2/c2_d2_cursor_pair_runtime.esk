@@ -1,0 +1,313 @@
+(load "d2_wave2_root.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "C2 D2 PAIR FAIL: ") (display label) (newline) (exit 1))))
+(define (error? category thunk)
+  (error-at? category 'checkpoint-load thunk))
+(define (error-at? category operation thunk)
+  (guard (raised (#t (and (transformer-error? raised)
+                          (eq? category (transformer-error-category raised))
+                          (eq? operation
+                               (transformer-error-operation raised)))))
+    (thunk) #f))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (path root leaf) (string-append root "/" leaf))
+(define (config directory packing?)
+  (list ':directory directory ':batch-size 1 ':sequence-length 1
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 17
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
+(define (open-dataset directory tokenizer packing?)
+  (d2-token-dataset-open (config directory packing?) tokenizer))
+(define (advance dataset)
+  (let ((batch (d2-token-dataset-next-batch dataset)))
+    (if (d2-token-dataset-end? batch) #f
+        (begin (d2-token-batch-validate batch)
+               (d2-token-batch-release! batch)
+               (d2-token-dataset-cursor dataset)))))
+(define (pair current epoch fingerprint vocabulary)
+  (pair-at current epoch fingerprint vocabulary 'checkpoint-load))
+(define (pair-at current epoch fingerprint vocabulary operation)
+  (let ((request (vector current epoch fingerprint vocabulary
+                         operation #f)))
+    (c2-d2-cursor-pair-internal request)
+    request))
+(define (resign-cursor! cursor)
+  (let* ((header-bytes (d2-core-load-unsigned-le cursor 12 4))
+         (prefix (bytevector-copy cursor 0 header-bytes))
+         (digest (c1-sha256
+                   (d2-core-concat d2-core-cursor-checksum-domain prefix))))
+    (d2-core-copy-into! cursor header-bytes digest)
+    cursor))
+(define (cursor-with-vocabulary cursor vocabulary)
+  (let ((copy (bytevector-copy cursor 0 (bytevector-length cursor))))
+    (d2-core-store-unsigned-le! copy 40 8 vocabulary)
+    (resign-cursor! copy)))
+(define (cursor-with-ordinal cursor ordinal)
+  (let ((copy (bytevector-copy cursor 0 (bytevector-length cursor))))
+    (d2-core-store-unsigned-le! copy 120 8 ordinal)
+    (resign-cursor! copy)))
+
+(define args (command-line))
+(define byte-tokenizer-path (car (cdr args)))
+(define bpe-tokenizer-path (car (cdr (cdr args))))
+(define resources (car (cdr (cdr (cdr args)))))
+(define policy (c1-wave2-persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define bpe-tokenizer (t2-wave2-tokenizer-load bpe-tokenizer-path policy))
+(define bpe-fingerprint (t2-private-tokenizer-fingerprint bpe-tokenizer))
+(define bpe-vocabulary (t2-private-tokenizer-vocab-size bpe-tokenizer))
+
+(define source (open-dataset (path resources "exact") bpe-tokenizer #f))
+(define start (d2-token-dataset-cursor source))
+(define after-one (advance source))
+(define after-two (advance source))
+(define at-eos (advance source))
+(check "source reaches stable EOS"
+       (and at-eos (d2-token-dataset-end? (d2-token-dataset-next-batch source))))
+(d2-token-dataset-close! source)
+
+(define hostile-current
+  (bytevector-copy after-one 0 (bytevector-length after-one)))
+(define hostile-epoch (bytevector-copy start 0 (bytevector-length start)))
+(with-region ('c2-d2-pair 65536)
+  (let ((region-request
+          (vector hostile-current hostile-epoch bpe-fingerprint bpe-vocabulary
+                  'checkpoint-load #f)))
+    (c2-d2-cursor-pair-internal region-request)
+    (let ((region-projection (vector-ref region-request 5)))
+      (bytevector-u8-set! hostile-current 0 0)
+      (bytevector-u8-set! hostile-epoch 0 0)
+      (check "projection owns both cursor bytevectors"
+             (and (= (bytevector-u8-ref (vector-ref region-projection 3) 0) 69)
+                  (= (bytevector-u8-ref (vector-ref region-projection 4) 0) 69)
+                  (not (eq? (vector-ref region-projection 3) hostile-current))
+                  (not (eq? (vector-ref region-projection 4) hostile-epoch)))))))
+(define projection (vector-ref
+                     (pair after-one start bpe-fingerprint bpe-vocabulary) 5))
+(check "exact detached projection"
+  (and (= (vector-length projection) 10)
+       (eq? (vector-ref projection 0) 'c2-dataset-cursor-pair)
+       (= (vector-ref projection 1) 1) (= (vector-ref projection 2) 0)
+       (= (vector-ref projection 6) bpe-vocabulary)
+       (= (vector-ref projection 7) 3)
+       (= (vector-ref projection 8) 1) (= (vector-ref projection 9) 0)))
+
+;;; Reopen the external corpus, seek each detached cursor, and execute D2's real
+;;; next-batch path. Equality of the next cursor proves exact continuation.
+(define resumed-current (open-dataset (path resources "exact") bpe-tokenizer #f))
+(check "seek current" (d2-token-dataset-seek! resumed-current
+                                                (vector-ref projection 3)))
+(check "current external continuation"
+       (bytes=? (advance resumed-current) after-two))
+(d2-token-dataset-close! resumed-current)
+(define resumed-epoch (open-dataset (path resources "exact") bpe-tokenizer #f))
+(check "seek epoch" (d2-token-dataset-seek! resumed-epoch
+                                              (vector-ref projection 4)))
+(check "epoch external continuation"
+       (bytes=? (advance resumed-epoch) (vector-ref projection 3)))
+(d2-token-dataset-close! resumed-epoch)
+
+(define eos-pair (pair at-eos start bpe-fingerprint bpe-vocabulary))
+(check "current may equal EOS" (= (vector-ref (vector-ref eos-pair 5) 8) 3))
+(define resumed-eos (open-dataset (path resources "exact") bpe-tokenizer #f))
+(d2-token-dataset-seek! resumed-eos (vector-ref (vector-ref eos-pair 5) 3))
+(check "EOS continuation remains EOS"
+       (d2-token-dataset-end? (d2-token-dataset-next-batch resumed-eos)))
+(d2-token-dataset-close! resumed-eos)
+(define nonzero (pair after-two (vector-ref projection 3)
+                      bpe-fingerprint bpe-vocabulary))
+(check "nonzero epoch start accepted"
+       (and (= (vector-ref (vector-ref nonzero 5) 8) 2)
+            (= (vector-ref (vector-ref nonzero 5) 9) 1)))
+(define resumed-nonzero-current
+  (open-dataset (path resources "exact") bpe-tokenizer #f))
+(check "seek nonzero current"
+       (d2-token-dataset-seek!
+         resumed-nonzero-current (vector-ref (vector-ref nonzero 5) 3)))
+(check "nonzero current external continuation"
+       (bytes=? (advance resumed-nonzero-current) at-eos))
+(d2-token-dataset-close! resumed-nonzero-current)
+(define resumed-nonzero-epoch
+  (open-dataset (path resources "exact") bpe-tokenizer #f))
+(check "seek nonzero epoch start"
+       (d2-token-dataset-seek!
+         resumed-nonzero-epoch (vector-ref (vector-ref nonzero 5) 4)))
+(check "nonzero epoch external continuation"
+       (bytes=? (advance resumed-nonzero-epoch) after-two))
+(d2-token-dataset-close! resumed-nonzero-epoch)
+
+(define empty-dataset (open-dataset (path resources "empty") bpe-tokenizer #f))
+(define empty-cursor (d2-token-dataset-cursor empty-dataset))
+(define empty-request
+  (vector empty-cursor empty-cursor bpe-fingerprint bpe-vocabulary
+          'checkpoint-load #f))
+(define empty-resumed (open-dataset (path resources "empty") bpe-tokenizer #f))
+(check "seek valid empty D2 cursor"
+       (d2-token-dataset-seek! empty-resumed empty-cursor))
+(check "valid empty D2 cursor remains EOS"
+       (d2-token-dataset-end? (d2-token-dataset-next-batch empty-resumed)))
+(d2-token-dataset-close! empty-resumed)
+(check "empty checkpoint interval is corrupt-data"
+       (and (error? 'corrupt-data
+                    (lambda () (c2-d2-cursor-pair-internal empty-request)))
+            (eq? (vector-ref empty-request 5) #f)))
+(check "empty composition interval is invalid-state"
+       (error-at? 'invalid-state 'trainer-state
+         (lambda () (pair-at empty-cursor empty-cursor bpe-fingerprint
+                             bpe-vocabulary 'trainer-state))))
+(d2-token-dataset-close! empty-dataset)
+(define eos-start
+  (vector at-eos at-eos bpe-fingerprint bpe-vocabulary 'checkpoint-load #f))
+(define eos-start-resumed
+  (open-dataset (path resources "exact") bpe-tokenizer #f))
+(check "seek valid start-at-EOS D2 cursor"
+       (d2-token-dataset-seek! eos-start-resumed at-eos))
+(check "valid start-at-EOS D2 cursor remains EOS"
+       (d2-token-dataset-end?
+         (d2-token-dataset-next-batch eos-start-resumed)))
+(d2-token-dataset-close! eos-start-resumed)
+(check "checkpoint epoch start at EOS is corrupt-data"
+       (error? 'corrupt-data
+               (lambda () (c2-d2-cursor-pair-internal eos-start))))
+(check "composition epoch start at EOS is invalid-state"
+       (error-at? 'invalid-state 'trainer-state
+         (lambda () (pair-at at-eos at-eos bpe-fingerprint bpe-vocabulary
+                             'trainer-state))))
+(define reversed
+  (vector (vector-ref projection 3) after-two bpe-fingerprint bpe-vocabulary
+          'checkpoint-load #f))
+(check "epoch may not exceed current"
+       (error? 'corrupt-data
+               (lambda () (c2-d2-cursor-pair-internal reversed))))
+(check "current may not exceed total rows"
+       (error? 'corrupt-data
+         (lambda () (pair (cursor-with-ordinal (vector-ref projection 3) 4)
+                          start bpe-fingerprint bpe-vocabulary))))
+
+(define corrupt-current
+  (bytevector-copy (vector-ref projection 3) 0
+                   (bytevector-length (vector-ref projection 3))))
+(bytevector-u8-set! corrupt-current 40
+                    (modulo (+ 1 (bytevector-u8-ref corrupt-current 40)) 256))
+(define corrupt-current-request
+  (vector corrupt-current start bpe-fingerprint bpe-vocabulary
+          'checkpoint-load #f))
+(check "current independently checksummed"
+       (and (error? 'corrupt-data
+                    (lambda ()
+                      (c2-d2-cursor-pair-internal corrupt-current-request)))
+            (eq? (vector-ref corrupt-current-request 5) #f)))
+(define corrupt-epoch (bytevector-copy start 0 (bytevector-length start)))
+(bytevector-u8-set! corrupt-epoch 40
+                    (modulo (+ 1 (bytevector-u8-ref corrupt-epoch 40)) 256))
+(check "epoch independently checksummed"
+       (error? 'corrupt-data
+         (lambda ()
+           (c2-d2-cursor-pair-internal
+             (vector (vector-ref projection 3) corrupt-epoch bpe-fingerprint
+                     bpe-vocabulary 'checkpoint-load #f)))))
+(check "top fingerprint agreement"
+       (error? 'corrupt-data
+         (lambda () (pair (vector-ref projection 3) start
+                          (string-append bpe-fingerprint "0") bpe-vocabulary))))
+(check "fingerprint lowercase grammar is exact"
+       (error? 'corrupt-data
+         (lambda () (pair
+           (vector-ref projection 3) start
+           (string-append
+             "sha256:eshkol-bpe-tokenizer-v1:"
+             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+           bpe-vocabulary))))
+(check "top vocabulary agreement"
+       (error? 'corrupt-data
+         (lambda () (pair (vector-ref projection 3) start
+                          bpe-fingerprint (+ bpe-vocabulary 1)))))
+(define packing-dataset
+  (open-dataset (path resources "exact") bpe-tokenizer #t))
+(define packing-start (d2-token-dataset-cursor packing-dataset))
+(check "invariant byte mismatch"
+       (error? 'corrupt-data
+         (lambda () (pair (vector-ref projection 3) packing-start
+                          bpe-fingerprint bpe-vocabulary))))
+(d2-token-dataset-close! packing-dataset)
+(define other-dataset
+  (open-dataset (path resources "padded") bpe-tokenizer #f))
+(define other-start (d2-token-dataset-cursor other-dataset))
+(check "manifest invariant byte mismatch"
+       (error? 'corrupt-data
+         (lambda () (pair (vector-ref projection 3) other-start
+                          bpe-fingerprint bpe-vocabulary))))
+(d2-token-dataset-close! other-dataset)
+
+(define bpe-min-current (cursor-with-vocabulary (vector-ref projection 3) 256))
+(define bpe-min-start (cursor-with-vocabulary start 256))
+(check "T2 minimum vocabulary accepted"
+       (= (vector-ref (vector-ref
+                        (pair bpe-min-current bpe-min-start bpe-fingerprint 256)
+                        5) 6) 256))
+(define bpe-max-current (cursor-with-vocabulary (vector-ref projection 3) 4608))
+(define bpe-max-start (cursor-with-vocabulary start 4608))
+(check "T2 maximum vocabulary accepted"
+       (= (vector-ref (vector-ref
+                        (pair bpe-max-current bpe-max-start bpe-fingerprint 4608)
+                        5) 6) 4608))
+(check "T2 below-minimum vocabulary rejects"
+       (error? 'corrupt-data
+         (lambda () (pair (cursor-with-vocabulary (vector-ref projection 3) 255)
+                          (cursor-with-vocabulary start 255)
+                          bpe-fingerprint 255))))
+(check "T2 above-maximum vocabulary rejects"
+       (error? 'corrupt-data
+         (lambda () (pair (cursor-with-vocabulary (vector-ref projection 3) 4609)
+                          (cursor-with-vocabulary start 4609)
+                          bpe-fingerprint 4609))))
+
+;;; Exercise the other exact C2 tokenizer fingerprint family with real D2 data.
+(define byte-tokenizer (t2-wave2-tokenizer-load byte-tokenizer-path policy))
+(define byte-fingerprint (t2-private-tokenizer-fingerprint byte-tokenizer))
+(define byte-vocabulary (t2-private-tokenizer-vocab-size byte-tokenizer))
+(define byte-dataset
+  (open-dataset (path resources "byte-exact") byte-tokenizer #f))
+(define byte-start (d2-token-dataset-cursor byte-dataset))
+(define byte-current (advance byte-dataset))
+(check "T1 fingerprint family accepted"
+       (= (vector-ref (vector-ref
+                        (pair byte-current byte-start byte-fingerprint
+                              byte-vocabulary) 5) 8) 1))
+(define byte-min-current (cursor-with-vocabulary byte-current 256))
+(define byte-min-start (cursor-with-vocabulary byte-start 256))
+(check "T1 minimum vocabulary accepted"
+       (= (vector-ref (vector-ref
+                        (pair byte-min-current byte-min-start byte-fingerprint 256)
+                        5) 6) 256))
+(define byte-max-current (cursor-with-vocabulary byte-current 4352))
+(define byte-max-start (cursor-with-vocabulary byte-start 4352))
+(check "T1 maximum vocabulary accepted"
+       (= (vector-ref (vector-ref
+                        (pair byte-max-current byte-max-start byte-fingerprint 4352)
+                        5) 6) 4352))
+(check "T1 below-minimum vocabulary rejects"
+       (error? 'corrupt-data
+         (lambda () (pair (cursor-with-vocabulary byte-current 255)
+                          (cursor-with-vocabulary byte-start 255)
+                          byte-fingerprint 255))))
+(check "T1 above-maximum vocabulary rejects"
+       (error? 'corrupt-data
+         (lambda () (pair (cursor-with-vocabulary byte-current 4353)
+                          (cursor-with-vocabulary byte-start 4353)
+                          byte-fingerprint 4353))))
+(d2-token-dataset-close! byte-dataset)
+
+(check "malformed request rejects before publication"
+       (error-at? 'invalid-argument 'c2-d2-cursor-pair-internal
+         (lambda () (c2-d2-cursor-pair-internal (vector #f)))))
+(display "C2 D2 CURSOR PAIR PASS: ") (display checks) (display " checks") (newline)

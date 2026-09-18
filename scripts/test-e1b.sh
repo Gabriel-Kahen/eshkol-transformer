@@ -40,6 +40,13 @@ run_program() {
     "${e1b_runtime_timeout}s" "$@"
 }
 
+"${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -I "$(eshkol_source_dir)/inc" -I "${PROJECT_ROOT}/native" \
+  "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
+  "${PROJECT_ROOT}/tests/fixtures/e1b/private_initializer_retry.c" \
+  -o "${e1b_tmp}/private-initializer-retry"
+run_program "${e1b_tmp}/private-initializer-retry"
+
 provide_words() {
   sed -n '/^(provide /,/)/p' "$1" | \
     sed -e '1s/^(provide //' -e '$s/)$//' | tr '\n' ' ' | xargs

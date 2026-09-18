@@ -11,6 +11,12 @@
 #define ET_O2_STATE_MAGIC UINT64_C(0x45544f3253544154)
 #define ET_O2_HANDLE_MAGIC UINT64_C(0x45544f3248414e44)
 #define ET_O2_BORROW_MAGIC UINT64_C(0x45544f32424f5252)
+#define ET_O2_RECONSTRUCT_MAGIC UINT64_C(0x45544f3252434e31)
+
+_Static_assert(sizeof(et_o2_state_reconstruct_config_v1) == 56u,
+               "O2 reconstruction config v1 size changed");
+_Static_assert(sizeof(et_o2_state_reconstruct_entry_v1) == 72u,
+               "O2 reconstruction entry v1 size changed");
 
 _Static_assert(ET_O2_MAX_PARAMETERS <= ET_F32_PARAMETER_MAX_BATCH / 3u,
                "O2 step exceeds the I2 transaction ceiling");
@@ -106,12 +112,26 @@ struct et_o2_optimizer_state_borrow {
   et_f32_tensor_borrow *i2_borrow;
 };
 
+struct et_o2_state_reconstruct_builder {
+  uint64_t magic;
+  et_o2_state_reconstruct_builder *registry_next;
+  size_t count;
+  et_o2_config config;
+  uint64_t completed_updates;
+  et_o2_state_entry *entries;
+  et_f32_tensor **owned_clones;
+  unsigned char *entry_set;
+  et_o2_optimizer_state *prepared_state;
+  uint32_t prepared;
+};
+
 static et_o2_optimizer_builder *et_o2_builders;
 static et_o2_optimizer *et_o2_optimizers;
 static et_o2_optimizer_state *et_o2_states;
 static et_o2_optimizer_state_handle *et_o2_handles;
 static et_o2_optimizer_state_borrow *et_o2_borrows;
 static et_o2_optimizer_state_borrow *et_o2_retired_borrows;
+static et_o2_state_reconstruct_builder *et_o2_reconstruct_builders;
 static size_t et_o2_owned_state_clones;
 
 #ifdef ET_O2_TESTING
@@ -119,6 +139,7 @@ static size_t et_o2_allocation_limit = SIZE_MAX;
 static size_t et_o2_successful_allocations;
 static size_t et_o2_release_limit = SIZE_MAX;
 static size_t et_o2_successful_releases;
+static int et_o2_fail_reconstruct_commit;
 #endif
 
 static void *et_o2_calloc(size_t count, size_t size) {
@@ -237,6 +258,30 @@ static et_o2_optimizer_state_borrow *et_o2_find_borrow(const void *candidate) {
     cursor = cursor->registry_next;
   }
   return NULL;
+}
+
+static et_o2_state_reconstruct_builder *
+et_o2_find_reconstruct_builder(const void *candidate) {
+  et_o2_state_reconstruct_builder *cursor = et_o2_reconstruct_builders;
+  while (cursor != NULL) {
+    if ((const void *)cursor == candidate) {
+      return cursor->magic == ET_O2_RECONSTRUCT_MAGIC ? cursor : NULL;
+    }
+    cursor = cursor->registry_next;
+  }
+  return NULL;
+}
+
+static void
+et_o2_unlink_reconstruct_builder(et_o2_state_reconstruct_builder *builder) {
+  et_o2_state_reconstruct_builder **cursor = &et_o2_reconstruct_builders;
+  while (*cursor != NULL) {
+    if (*cursor == builder) {
+      *cursor = builder->registry_next;
+      return;
+    }
+    cursor = &(*cursor)->registry_next;
+  }
 }
 
 static void et_o2_unlink_builder(et_o2_optimizer_builder *builder) {
@@ -1637,7 +1682,7 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
   et_o2_optimizer_state *state = NULL;
   size_t index;
   size_t handle_index;
-  int32_t result;
+  int32_t result = ET_O2_STATUS_INTERNAL;
   et_f32_tensor_error i2_error;
   if (output == NULL || *output != NULL ||
       (result = et_o2_require_optimizer(candidate, "optimizer-state", error)) !=
@@ -2139,6 +2184,531 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
   return et_o2_success(error);
 }
 
+static int et_o2_private_span_valid(const void *pointer, size_t bytes,
+                                    size_t alignment) {
+  return bytes == 0u ||
+         (pointer != NULL && (uintptr_t)pointer % alignment == 0u &&
+          (uintptr_t)pointer <= UINTPTR_MAX - bytes);
+}
+
+static int et_o2_private_ranges_overlap(const void *left, size_t left_bytes,
+                                        const void *right,
+                                        size_t right_bytes) {
+  const uintptr_t left_start = (uintptr_t)left;
+  const uintptr_t right_start = (uintptr_t)right;
+  if (left_bytes == 0u || right_bytes == 0u) {
+    return 0;
+  }
+  return left_start < right_start + right_bytes &&
+         right_start < left_start + left_bytes;
+}
+
+static void et_o2_reconstruct_free_prepared(
+    et_o2_state_reconstruct_builder *builder) {
+  et_o2_optimizer_state *state = builder->prepared_state;
+  size_t index;
+  if (state == NULL) {
+    return;
+  }
+  if (state->handles != NULL) {
+    for (index = 0u; index < builder->count * 2u; ++index) {
+      free(state->handles[index]);
+    }
+  }
+  free(state->owned_clones);
+  free(state->handles);
+  free(state->entries);
+  free(state);
+  builder->prepared_state = NULL;
+  builder->prepared = 0u;
+}
+
+int32_t et_o2_optimizer_state_reconstruct_create_v1(
+    const et_o2_state_reconstruct_config_v1 *input,
+    et_o2_state_reconstruct_builder **output, et_o2_error_v1 *error) {
+  et_o2_state_reconstruct_builder *builder = NULL;
+  et_o2_config config;
+  if (output == NULL || *output != NULL || input == NULL ||
+      input->struct_size != sizeof(*input) || input->parameter_count == 0u ||
+      input->parameter_count > ET_O2_MAX_PARAMETERS ||
+      input->completed_updates > (uint64_t)INT64_MAX) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-reconstruct",
+                      "reconstruction config or output is invalid");
+  }
+  config.clip_kind = input->clip_kind;
+  config.clip_max_bits = input->clip_max_bits;
+  config.schedule_kind = input->schedule_kind;
+  config.minimum_ratio_bits = input->minimum_ratio_bits;
+  config.warmup_updates = input->warmup_updates;
+  config.total_updates = input->total_updates;
+  if (!et_o2_config_valid(&config)) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-reconstruct",
+                      "reconstruction optimizer config is invalid");
+  }
+  builder = (et_o2_state_reconstruct_builder *)et_o2_calloc(1u,
+                                                              sizeof(*builder));
+  if (builder != NULL) {
+    builder->entries = (et_o2_state_entry *)et_o2_calloc(
+        input->parameter_count, sizeof(*builder->entries));
+    builder->owned_clones = (et_f32_tensor **)et_o2_calloc(
+        input->parameter_count * 2u, sizeof(*builder->owned_clones));
+    builder->entry_set = (unsigned char *)et_o2_calloc(
+        input->parameter_count, sizeof(*builder->entry_set));
+  }
+  if (builder == NULL || builder->entries == NULL ||
+      builder->owned_clones == NULL || builder->entry_set == NULL) {
+    if (builder != NULL) {
+      free(builder->entry_set);
+      free(builder->owned_clones);
+      free(builder->entries);
+    }
+    free(builder);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED,
+                      "optimizer-state-reconstruct",
+                      "cannot allocate reconstruction builder");
+  }
+  builder->magic = ET_O2_RECONSTRUCT_MAGIC;
+  builder->count = input->parameter_count;
+  builder->config = config;
+  builder->completed_updates = input->completed_updates;
+  builder->registry_next = et_o2_reconstruct_builders;
+  et_o2_reconstruct_builders = builder;
+  *output = builder;
+  return et_o2_success(error);
+}
+
+int32_t et_o2_optimizer_state_reconstruct_set_v1(
+    et_o2_state_reconstruct_builder *candidate, size_t index,
+    const et_o2_state_reconstruct_entry_v1 *input, et_o2_error_v1 *error) {
+  et_o2_state_reconstruct_builder *builder =
+      et_o2_find_reconstruct_builder(candidate);
+  et_f32_tensor *avg_temp = NULL;
+  et_f32_tensor *sq_temp = NULL;
+  et_f32_tensor *avg_owned = NULL;
+  et_f32_tensor *sq_owned = NULL;
+  et_f32_tensor_error i2_error;
+  et_o2_options options;
+  size_t bit_bytes;
+  size_t shape_bytes;
+  size_t bit_index;
+  int32_t result;
+  if (builder == NULL || input == NULL || builder->prepared != 0u ||
+      input->struct_size != sizeof(*input) || index >= builder->count ||
+      builder->entry_set[index] != 0u || input->reserved != 0u ||
+      input->rank > ET_KERNEL_MAX_RANK ||
+      input->element_count > SIZE_MAX / sizeof(uint32_t) ||
+      input->rank > SIZE_MAX / sizeof(uint64_t)) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-reconstruct",
+                      "reconstruction entry is malformed or already set");
+  }
+  bit_bytes = input->element_count * sizeof(uint32_t);
+  shape_bytes = input->rank * sizeof(uint64_t);
+  if (!et_o2_private_span_valid(input->shape, shape_bytes,
+                                _Alignof(uint64_t)) ||
+      !et_o2_private_span_valid(input->exp_avg_bits, bit_bytes,
+                                _Alignof(uint32_t)) ||
+      !et_o2_private_span_valid(input->exp_avg_sq_bits, bit_bytes,
+                                _Alignof(uint32_t)) ||
+      et_o2_private_ranges_overlap(input->exp_avg_bits, bit_bytes,
+                                    input->exp_avg_sq_bits, bit_bytes)) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_HANDLE,
+                      "optimizer-state-reconstruct",
+                      "reconstruction input spans are invalid or overlap");
+  }
+  options.learning_rate_bits = input->learning_rate_bits;
+  options.beta1_bits = input->beta1_bits;
+  options.beta2_bits = input->beta2_bits;
+  options.epsilon_bits = input->epsilon_bits;
+  options.weight_decay_bits = input->weight_decay_bits;
+  if (!et_o2_options_valid(&options)) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-reconstruct",
+                      "reconstruction entry options are invalid");
+  }
+  for (bit_index = 0u; bit_index < input->element_count; ++bit_index) {
+    const uint32_t avg = input->exp_avg_bits[bit_index];
+    const uint32_t sq = input->exp_avg_sq_bits[bit_index];
+    if (!et_o2_bits_finite(avg) || !et_o2_bits_finite(sq) ||
+        ((sq & UINT32_C(0x80000000)) != 0u &&
+         (sq & UINT32_C(0x7fffffff)) != 0u)) {
+      return et_o2_fail(error, ET_O2_STATUS_CORRUPT_DATA,
+                        ET_O2_CODE_INVALID_MOMENT,
+                        "optimizer-state-reconstruct",
+                        "reconstruction moment bits are invalid");
+    }
+  }
+  memset(&i2_error, 0, sizeof(i2_error));
+  if (et_f32_tensor_create_v1(input->rank, input->shape, &avg_temp,
+                              &i2_error) != 0 ||
+      et_f32_tensor_element_count_v1(avg_temp, &bit_index, &i2_error) != 0 ||
+      bit_index != input->element_count ||
+      et_f32_tensor_copy_bits_from_v1(avg_temp, input->exp_avg_bits,
+                                      input->element_count, &i2_error) != 0 ||
+      et_f32_owned_tensor_clone_v1(avg_temp, &avg_owned, &i2_error) != 0) {
+    result = et_o2_from_i2(&i2_error, error, "optimizer-state-reconstruct",
+                           ET_O2_STATUS_SHAPE_MISMATCH);
+    goto cleanup;
+  }
+  if (et_f32_tensor_create_v1(input->rank, input->shape, &sq_temp,
+                              &i2_error) != 0 ||
+      et_f32_tensor_copy_bits_from_v1(sq_temp, input->exp_avg_sq_bits,
+                                      input->element_count, &i2_error) != 0 ||
+      et_f32_owned_tensor_clone_v1(sq_temp, &sq_owned, &i2_error) != 0) {
+    result = et_o2_from_i2(&i2_error, error, "optimizer-state-reconstruct",
+                           ET_O2_STATUS_SHAPE_MISMATCH);
+    goto cleanup;
+  }
+  builder->entries[index].options = options;
+  builder->entries[index].exp_avg = avg_owned;
+  builder->entries[index].exp_avg_sq = sq_owned;
+  builder->owned_clones[index * 2u] = avg_owned;
+  builder->owned_clones[index * 2u + 1u] = sq_owned;
+  builder->entry_set[index] = 1u;
+  et_o2_owned_state_clones += 2u;
+  avg_owned = NULL;
+  sq_owned = NULL;
+  result = et_o2_success(error);
+
+cleanup:
+  if (avg_owned != NULL) {
+    (void)et_f32_owned_tensor_release_v1(avg_owned, NULL);
+  }
+  if (sq_owned != NULL) {
+    (void)et_f32_owned_tensor_release_v1(sq_owned, NULL);
+  }
+  if (avg_temp != NULL) {
+    (void)et_f32_tensor_destroy_v1(&avg_temp, NULL);
+  }
+  if (sq_temp != NULL) {
+    (void)et_f32_tensor_destroy_v1(&sq_temp, NULL);
+  }
+  return result;
+}
+
+int32_t et_o2_optimizer_state_reconstruct_prepare_v1(
+    et_o2_state_reconstruct_builder *candidate, et_o2_error_v1 *error) {
+  et_o2_state_reconstruct_builder *builder =
+      et_o2_find_reconstruct_builder(candidate);
+  et_o2_optimizer_state *state = NULL;
+  size_t index;
+  if (builder == NULL || builder->prepared != 0u) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_HANDLE,
+                      "optimizer-state-reconstruct",
+                      "reconstruction builder is invalid or prepared");
+  }
+  for (index = 0u; index < builder->count; ++index) {
+    if (builder->entry_set[index] == 0u ||
+        builder->owned_clones[index * 2u] == NULL ||
+        builder->owned_clones[index * 2u + 1u] == NULL ||
+        et_f32_tensor_is_live_v1(builder->owned_clones[index * 2u]) != 1 ||
+        et_f32_tensor_is_live_v1(builder->owned_clones[index * 2u + 1u]) !=
+            1) {
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_OWNER_CONFLICT,
+                        "optimizer-state-reconstruct",
+                        "reconstruction builder is incomplete or stale");
+    }
+  }
+  state = (et_o2_optimizer_state *)et_o2_calloc(1u, sizeof(*state));
+  if (state != NULL) {
+    state->entries = (et_o2_state_entry *)et_o2_calloc(
+        builder->count, sizeof(*state->entries));
+    state->handles = (et_o2_optimizer_state_handle **)et_o2_calloc(
+        builder->count * 2u, sizeof(*state->handles));
+    state->owned_clones = (et_f32_tensor **)et_o2_calloc(
+        builder->count * 2u, sizeof(*state->owned_clones));
+  }
+  if (state == NULL || state->entries == NULL || state->handles == NULL ||
+      state->owned_clones == NULL) {
+    if (state != NULL) {
+      free(state->owned_clones);
+      free(state->handles);
+      free(state->entries);
+    }
+    free(state);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED,
+                      "optimizer-state-reconstruct",
+                      "cannot allocate prepared optimizer state");
+  }
+  for (index = 0u; index < builder->count * 2u; ++index) {
+    et_o2_optimizer_state_handle *handle =
+        (et_o2_optimizer_state_handle *)et_o2_calloc(1u, sizeof(*handle));
+    if (handle == NULL) {
+      builder->prepared_state = state;
+      et_o2_reconstruct_free_prepared(builder);
+      return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                        ET_O2_CODE_ALLOCATION_FAILED,
+                        "optimizer-state-reconstruct",
+                        "cannot allocate prepared state handle");
+    }
+    handle->magic = ET_O2_HANDLE_MAGIC;
+    handle->owner = state;
+    handle->index = index / 2u;
+    handle->moment_kind = (uint32_t)(index % 2u);
+    handle->live = 1u;
+    state->handles[index] = handle;
+  }
+  state->count = builder->count;
+  state->config = builder->config;
+  state->completed_updates = builder->completed_updates;
+  state->provider_major = ET_O2_PROVIDER_ABI_MAJOR;
+  state->provider_minor = ET_O2_PROVIDER_ABI_MINOR;
+  memcpy(state->provider_id, ET_O2_PROVIDER_ID, sizeof(ET_O2_PROVIDER_ID));
+  builder->prepared_state = state;
+  builder->prepared = 1u;
+  return et_o2_success(error);
+}
+
+int32_t et_o2_optimizer_state_reconstruct_commit_v1(
+    et_o2_state_reconstruct_builder **slot, et_o2_optimizer_state **output,
+    et_o2_error_v1 *error) {
+  et_o2_state_reconstruct_builder *builder;
+  et_o2_optimizer_state *state;
+  size_t index;
+  if (slot == NULL || output == NULL || *output != NULL ||
+      (builder = et_o2_find_reconstruct_builder(
+           slot != NULL ? *slot : NULL)) == NULL ||
+      builder->prepared == 0u || builder->prepared_state == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_HANDLE,
+                      "optimizer-state-reconstruct",
+                      "prepared builder and empty outputs are required");
+  }
+#ifdef ET_O2_TESTING
+  if (et_o2_fail_reconstruct_commit != 0) {
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED,
+                      "optimizer-state-reconstruct",
+                      "injected pre-transfer commit failure");
+  }
+#endif
+  state = builder->prepared_state;
+  for (index = 0u; index < builder->count * 2u; ++index) {
+    if (builder->owned_clones[index] == NULL ||
+        et_f32_tensor_is_live_v1(builder->owned_clones[index]) != 1) {
+      return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                        ET_O2_CODE_OWNER_CONFLICT,
+                        "optimizer-state-reconstruct",
+                        "prepared clone ledger changed before commit");
+    }
+  }
+  for (index = 0u; index < builder->count; ++index) {
+    state->entries[index] = builder->entries[index];
+  }
+  state->owned_clone_ledger_count = builder->count * 2u;
+  state->owned_clone_count = (uint64_t)(builder->count * 2u);
+  for (index = 0u; index < builder->count * 2u; ++index) {
+    state->owned_clones[index] = builder->owned_clones[index];
+    builder->owned_clones[index] = NULL;
+  }
+  state->magic = ET_O2_STATE_MAGIC;
+  state->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
+  state->registry_next = et_o2_states;
+  et_o2_states = state;
+  for (index = 0u; index < builder->count * 2u; ++index) {
+    state->handles[index]->registry_next = et_o2_handles;
+    et_o2_handles = state->handles[index];
+  }
+  builder->prepared_state = NULL;
+  et_o2_unlink_reconstruct_builder(builder);
+  builder->magic = 0u;
+  free(builder->entry_set);
+  free(builder->owned_clones);
+  free(builder->entries);
+  free(builder);
+  *slot = NULL;
+  *output = state;
+  return et_o2_success(error);
+}
+
+int32_t et_o2_optimizer_state_reconstruct_abort_v1(
+    et_o2_state_reconstruct_builder **slot, et_o2_error_v1 *error) {
+  et_o2_state_reconstruct_builder *builder;
+  size_t index;
+  int defect = 0;
+  if (slot == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_NULL_ARGUMENT,
+                      "optimizer-state-reconstruct",
+                      "reconstruction builder slot is null");
+  }
+  if (*slot == NULL) {
+    return et_o2_success(error);
+  }
+  builder = et_o2_find_reconstruct_builder(*slot);
+  if (builder == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_HANDLE,
+                      "optimizer-state-reconstruct",
+                      "reconstruction builder is foreign or consumed");
+  }
+  et_o2_reconstruct_free_prepared(builder);
+  for (index = 0u; index < builder->count * 2u; ++index) {
+    if (builder->owned_clones[index] != NULL) {
+      if (et_f32_owned_tensor_release_v1(builder->owned_clones[index], NULL) !=
+          0) {
+        defect = 1;
+      }
+      builder->owned_clones[index] = NULL;
+      et_o2_owned_state_clones--;
+    }
+  }
+  et_o2_unlink_reconstruct_builder(builder);
+  builder->magic = 0u;
+  free(builder->entry_set);
+  free(builder->owned_clones);
+  free(builder->entries);
+  free(builder);
+  *slot = NULL;
+  if (defect != 0) {
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_PROVIDER_DEFECT,
+                      "optimizer-state-reconstruct",
+                      "owned clone abort cleanup failed");
+  }
+  return et_o2_success(error);
+}
+
+int32_t et_o2_optimizer_state_copy_moment_bits_v1(
+    const et_o2_optimizer_state *candidate, size_t index,
+    uint32_t moment_kind, uint32_t *destination, size_t element_count,
+    et_o2_error_v1 *error) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  et_f32_tensor *moment;
+  et_f32_tensor_error i2_error;
+  int32_t result;
+  if ((result = et_o2_require_state_live(candidate,
+                                         "optimizer-state-copy-moment",
+                                         error)) != 0) {
+    return result;
+  }
+  if (index >= state->count || moment_kind > ET_O2_MOMENT_EXP_AVG_SQ) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-copy-moment",
+                      "moment selector is invalid");
+  }
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_INVALID_STATE,
+          "optimizer-state-copy-moment", error) != 0) {
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  moment = moment_kind == ET_O2_MOMENT_EXP_AVG
+               ? state->entries[index].exp_avg
+               : state->entries[index].exp_avg_sq;
+  memset(&i2_error, 0, sizeof(i2_error));
+  if (et_f32_tensor_copy_bits_to_v1(moment, destination, element_count,
+                                    &i2_error) != 0) {
+    return et_o2_from_i2(&i2_error, error, "optimizer-state-copy-moment",
+                         ET_O2_STATUS_INVALID_ARGUMENT);
+  }
+  return et_o2_success(error);
+}
+
+int32_t et_o2_optimizer_state_preflight_c2_transfer_v1(
+    const et_o2_optimizer_state *candidate, size_t expected_count,
+    uint64_t expected_completed_updates, et_o2_error_v1 *error) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  int32_t result;
+  if ((result = et_o2_require_state_live(
+           candidate, "optimizer-state-c2-transfer", error)) != 0) {
+    return result;
+  }
+  if (state->active_borrows != 0u) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_ACTIVE_BORROW,
+                      "optimizer-state-c2-transfer",
+                      "optimizer state has an active moment borrow");
+  }
+  if (state->count != expected_count ||
+      state->completed_updates != expected_completed_updates) {
+    return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                      ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-c2-transfer",
+                      "optimizer state count or update counter differs");
+  }
+  return et_o2_validate_state_owner_ledger(
+      state, ET_O2_STATUS_INVALID_STATE, "optimizer-state-c2-transfer",
+      error);
+}
+
+int32_t et_o2_optimizer_state_require_shape_v1(
+    const et_o2_optimizer_state *candidate, size_t index, size_t rank,
+    const uint64_t *shape, et_o2_error_v1 *error) {
+  et_o2_optimizer_state *state = et_o2_find_state(candidate);
+  et_f32_tensor *moments[2];
+  et_f32_tensor_error tensor_error;
+  size_t moment_index;
+  size_t actual_rank = 0u;
+  size_t dimension;
+  int32_t result;
+  if ((result = et_o2_require_state_live(
+           candidate, "optimizer-state-c2-transfer", error)) != 0) {
+    return result;
+  }
+  if (state->active_borrows != 0u || index >= state->count ||
+      rank > ET_KERNEL_MAX_RANK || (rank != 0u && shape == NULL)) {
+    return et_o2_fail(error,
+                      state->active_borrows != 0u
+                          ? ET_O2_STATUS_INVALID_STATE
+                          : ET_O2_STATUS_INVALID_ARGUMENT,
+                      state->active_borrows != 0u ? ET_O2_CODE_ACTIVE_BORROW
+                                                  : ET_O2_CODE_INVALID_OPTION,
+                      "optimizer-state-c2-transfer",
+                      "optimizer state shape operands are invalid");
+  }
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_INVALID_STATE,
+          "optimizer-state-c2-transfer", error) != 0) {
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  moments[0] = state->entries[index].exp_avg;
+  moments[1] = state->entries[index].exp_avg_sq;
+  for (moment_index = 0u; moment_index < 2u; ++moment_index) {
+    memset(&tensor_error, 0, sizeof(tensor_error));
+    if (et_f32_tensor_rank_v1(moments[moment_index], &actual_rank,
+                              &tensor_error) != 0) {
+      return et_o2_from_i2(&tensor_error, error,
+                           "optimizer-state-c2-transfer",
+                           ET_O2_STATUS_INVALID_STATE);
+    }
+    if (actual_rank != rank) {
+      return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                        ET_O2_CODE_INVALID_OPTION,
+                        "optimizer-state-c2-transfer",
+                        "optimizer moment rank differs from P1");
+    }
+    for (dimension = 0u; dimension < rank; ++dimension) {
+      uint64_t extent = 0u;
+      memset(&tensor_error, 0, sizeof(tensor_error));
+      if (et_f32_tensor_shape_at_v1(moments[moment_index], dimension,
+                                    &extent, &tensor_error) != 0) {
+        return et_o2_from_i2(&tensor_error, error,
+                             "optimizer-state-c2-transfer",
+                             ET_O2_STATUS_INVALID_STATE);
+      }
+      if (extent != shape[dimension]) {
+        return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                          ET_O2_CODE_INVALID_OPTION,
+                          "optimizer-state-c2-transfer",
+                          "optimizer moment shape differs from P1");
+      }
+    }
+  }
+  return et_o2_success(error);
+}
+
 #ifdef ET_O2_TESTING
 void et_o2_test_fail_alloc_after_v1(size_t allowed) {
   et_o2_allocation_limit = allowed;
@@ -2155,6 +2725,11 @@ void et_o2_test_reset_failpoints_v1(void) {
   et_o2_successful_allocations = 0u;
   et_o2_release_limit = SIZE_MAX;
   et_o2_successful_releases = 0u;
+  et_o2_fail_reconstruct_commit = 0;
+}
+
+void et_o2_test_fail_reconstruct_commit_v1(int enabled) {
+  et_o2_fail_reconstruct_commit = enabled != 0;
 }
 
 void et_o2_test_live_counts_snapshot_v1(et_o2_test_live_counts_v1 *counts) {
@@ -2163,6 +2738,7 @@ void et_o2_test_live_counts_snapshot_v1(et_o2_test_live_counts_v1 *counts) {
   et_o2_optimizer_state *state;
   et_o2_optimizer_state_handle *handle;
   et_o2_optimizer_state_borrow *borrow;
+  et_o2_state_reconstruct_builder *reconstruct;
   if (counts == NULL || counts->struct_size != sizeof(*counts)) {
     return;
   }
@@ -2192,6 +2768,10 @@ void et_o2_test_live_counts_snapshot_v1(et_o2_test_live_counts_v1 *counts) {
   }
   for (borrow = et_o2_borrows; borrow != NULL; borrow = borrow->registry_next) {
     counts->state_borrows++;
+  }
+  for (reconstruct = et_o2_reconstruct_builders; reconstruct != NULL;
+       reconstruct = reconstruct->registry_next) {
+    counts->reconstruct_builders++;
   }
   counts->owned_state_clones = et_o2_owned_state_clones;
 }

@@ -1,0 +1,69 @@
+(require transformer.capabilities)
+(require transformer.persistence)
+(require transformer.trainer)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "C2 PUBLIC FAIL: ") (display label) (newline) (exit 1))))
+
+(define (expect-error label category operation thunk)
+  (let ((caught? #f) (captured #f))
+    (guard (raised
+             (#t (set! caught? #t) (set! captured raised) #f))
+      (thunk))
+    (check label
+      (and caught? (transformer-error? captured)
+           (eq? category (transformer-error-category captured))
+           (eq? operation (transformer-error-operation captured))))))
+
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define args (command-line))
+(if (not (= (proper-length args) 4))
+    (begin (display "usage: public_runtime INPUT OUTPUT NONF32") (newline)
+           (exit 2)))
+(define input (car (cdr args)))
+(define output (car (cdr (cdr args))))
+(define nonf32 (car (cdr (cdr (cdr args)))))
+(define policy
+  (persistence-policy 16777216 524288 8388608 64 'cpu))
+(define metadata (checkpoint-inspect input policy))
+(check "format id"
+       (eq? (checkpoint-metadata-ref metadata 'format-id)
+            'eshkol-training-state))
+(check "format version"
+       (equal? (checkpoint-metadata-ref metadata 'format-version) '(1 0)))
+(check "tensor count" (= (checkpoint-metadata-ref metadata 'tensor-count) 3))
+(define report (capability-discover))
+(check "eleven capability rows"
+       (= (proper-length (capability-report-entries report)) 11))
+
+;;; The report and complete reconstructed owner originate inside a caller
+;;; region. Only the owner escapes; subsequent save/release proves that C2 did
+;;; not retain the K2 report and P1 registry publication remained canonical.
+(define owner
+  (with-region ('c2-public-nested-load 65536)
+    (checkpoint-load input policy (capability-discover))))
+(check "save escaped owner"
+       (checkpoint-save!
+         owner output policy
+         (list ':overwrite? #t ':required-features '())))
+(check "release" (trainer-state-release! owner))
+(check "idempotent release" (trainer-state-release! owner))
+(expect-error "dead save" 'invalid-state 'checkpoint-save!
+  (lambda () (checkpoint-save! owner output policy '())))
+
+;;; Full byte/semantic staging outranks report authentication.
+(expect-error "semantic corruption precedes forged report"
+  'dtype-mismatch 'checkpoint-load
+  (lambda () (checkpoint-load nonf32 policy (lambda (query) query))))
+(expect-error "forged report" 'invalid-argument 'checkpoint-load
+  (lambda () (checkpoint-load input policy (lambda (query) query))))
+
+(display "C2 PUBLIC RUNTIME PASS: ") (display checks) (display " checks")
+(newline)

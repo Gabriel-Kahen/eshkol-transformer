@@ -1,0 +1,807 @@
+(load "c2_wave2_root.esk")
+
+(extern i64 c2-operational-counter i64
+        :real et_c2_checkpoint_save_test_counter_v1)
+(extern void c2-operational-load-reset
+        :real et_c2_checkpoint_load_test_reset_v1)
+(extern i64 c2-operational-copy-count
+        :real et_c2_checkpoint_load_test_copy_count_v1)
+(extern i64 c2-operational-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 c2-operational-live-readers
+        :real et_c2_checkpoint_reader_test_live_count_v1)
+(extern i64 c2-operational-live-fds
+        :real et_c2_checkpoint_reader_test_fd_live_count_v1)
+(extern void c2-operational-io-reset
+        :real et_checkpoint_io_test_reset_v1)
+(extern i64 c2-operational-io-events
+        :real et_checkpoint_io_test_event_count_v1)
+(extern i64 c2-operational-current-rss
+        :real et_c2_operational_current_rss_kib_v1)
+(extern i64 c2-operational-peak-rss
+        :real et_c2_operational_peak_rss_kib_v1)
+(extern i64 c2-operational-now
+        :real et_c2_operational_monotonic_millis_v1)
+(extern i64 c2-operational-f32-control-bytes
+        :real et_f32_tensor_test_control_bytes_v1)
+(extern i64 c2-operational-i2-decode-control-bytes
+        :real et_i2_test_decode_builder_control_bytes_v1)
+(extern i64 c2-operational-k2-require-count
+        :real et_k2_test_require_count_v1)
+(extern void c2-operational-k2-fail-require-at i64
+        :real et_k2_test_fail_require_at_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C2 OPERATIONAL FAIL: ") (display label) (newline)
+        (exit 1))))
+
+(define (expect-error label category thunk)
+  (let ((caught? #f) (captured #f))
+    (guard (raised
+             (#t
+               (set! caught? #t)
+               (set! captured raised)
+               #f))
+      (thunk))
+    (check label
+      (and caught? (transformer-error? captured)
+           (eq? category (transformer-error-category captured))
+           (eq? 'checkpoint-load (transformer-error-operation captured))))))
+
+(define (expect-save-error label category thunk)
+  (let ((caught? #f) (captured #f))
+    (guard (raised
+             (#t
+               (set! caught? #t)
+               (set! captured raised)
+               #f))
+      (thunk))
+    (check label
+      (and caught? (transformer-error? captured)
+           (eq? category (transformer-error-category captured))
+           (eq? 'checkpoint-save! (transformer-error-operation captured))))))
+
+(define (snapshot-counts)
+  (let ((result (make-vector 35 0)))
+    (let loop ((index 0))
+      (if (= index 35) result
+          (begin
+            (vector-set! result index (c2-operational-counter index))
+            (loop (+ index 1)))))))
+
+(define (same-live-storage? left right)
+  (and
+    (= (vector-ref left 0) (vector-ref right 0))
+    (= (vector-ref left 1) (vector-ref right 1))
+    (= (vector-ref left 2) (vector-ref right 2))
+    (= (vector-ref left 3) (vector-ref right 3))
+    (= (vector-ref left 4) (vector-ref right 4))
+    (= (vector-ref left 5) (vector-ref right 5))
+    (= (vector-ref left 6) (vector-ref right 6))
+    (= (vector-ref left 17) (vector-ref right 17))
+    (= (vector-ref left 18) (vector-ref right 18))
+    (= (vector-ref left 19) (vector-ref right 19))
+    (= (vector-ref left 24) (vector-ref right 24))
+    (= (vector-ref left 25) (vector-ref right 25))
+    (= (vector-ref left 26) (vector-ref right 26))
+    (= (vector-ref left 28) (vector-ref right 28))
+    (= (vector-ref left 30) (vector-ref right 30))
+    (= (vector-ref left 31) (vector-ref right 31))
+    (= (vector-ref left 32) (vector-ref right 32))
+    (= (vector-ref left 33) (vector-ref right 33))))
+
+(define (same-except-delta? before after changed delta)
+  (let loop ((index 0))
+    (if (= index 35) #t
+        (and (= (vector-ref after index)
+                (+ (vector-ref before index)
+                   (if (= index changed) delta 0)))
+             (loop (+ index 1))))))
+
+(define (native-flat?)
+  (and (= (c2-operational-live-images) 0)
+       (= (c2-operational-live-readers) 0)
+       (= (c2-operational-live-fds) 0)))
+
+(define args (command-line))
+(define joint-path (car (cdr args)))
+(define file-one-path (car (cdr (cdr args))))
+(define metadata-one-path (car (cdr (cdr (cdr args)))))
+(define tensor-one-path (car (cdr (cdr (cdr (cdr args))))))
+(define count-one-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
+(define corrupt-path (car (cdr (cdr (cdr (cdr (cdr (cdr args))))))))
+(define alias-shape-path
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))
+(define rank-two-path
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))
+(define count-exact-path
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))))
+(define output-root
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))))
+(define mode
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))))))
+
+(define target-policy
+  (c2-persistence-policy-mode-internal
+    16777216 524288 8388608 64 'cpu 'operational-target))
+(define profile-policy
+  (c2-persistence-policy-mode-internal
+    1099511627776 268435456 274877906944 6826
+    'cpu 'operational-target))
+(define wire-policy
+  (c2-persistence-policy-mode-internal
+    1099511627776 268435456 274877906944 6826 'cpu 'wire))
+(define operational-report (k2-public-capability-discover))
+(define start-ms (c2-operational-now))
+(define baseline-rss (c2-operational-current-rss))
+(define rejected-save-max-arena-delta 0)
+(define exact-save-max-arena-delta 0)
+(check "metric baseline is available" (and (>= start-ms 0) (> baseline-rss 0)))
+(define f32-control-bytes (c2-operational-f32-control-bytes))
+(define i2-decode-control-bytes
+  (c2-operational-i2-decode-control-bytes))
+(check "test ABI reports positive f32 tensor control size"
+       (> f32-control-bytes 0))
+(check "test ABI reports positive I2 decode control size"
+       (> i2-decode-control-bytes 0))
+
+;;; Every profile/corruption rejection publishes no staging owner and invokes
+;;; no C1 or O2 codec. The gate repeats this matrix in fresh processes.
+(define saved-decode c2-load-decode-model-internal)
+(define saved-o2 c2-load-reconstruct-o2-internal)
+(define decoder-calls 0)
+(define o2-calls 0)
+(set! c2-load-decode-model-internal
+  (lambda (model policy)
+    (set! decoder-calls (+ decoder-calls 1))
+    (saved-decode model policy)))
+(set! c2-load-reconstruct-o2-internal
+  (lambda (request)
+    (set! o2-calls (+ o2-calls 1))
+    (saved-o2 request)))
+
+(define (reject-stage label category path policy)
+  (let ((before (c2-load-stage-counts-internal)))
+    (c2-operational-load-reset)
+    (expect-error label category
+      (lambda () (c2-checkpoint-load-stage-internal path policy)))
+    (check "rejected stage publishes no identity"
+           (equal? before (c2-load-stage-counts-internal)))
+    (check "rejected stage performs zero component copies"
+           (= (c2-operational-copy-count) 0))
+    (check "rejected stage drains image/reader/fd" (native-flat?))))
+
+(define (reject-mode-stage label path)
+  (reject-stage
+    (string-append label " fixed-profile one-over is unsupported")
+    'unsupported path profile-policy)
+  (reject-stage
+    (string-append label " caller lowering wins combined violation")
+    'corrupt-data path target-policy)
+  (check "both rejected inputs invoke zero codecs"
+         (and (= decoder-calls 0) (= o2-calls 0))))
+
+;;; Wire-valid over-profile states can be reconstructed privately with profile
+;;; enforcement off. Operational SAVE must reject them before writer I/O while
+;;; leaving each exact owner and every model/moment control reusable.
+(define (reject-over-save label source destination entries first-touch)
+  (let* ((case-before (snapshot-counts))
+         (case-stage-before (c2-load-stage-counts-internal))
+         (case-owner-before (c2-load-owner-counts-internal))
+         (stage (c2-checkpoint-load-stage-internal source wire-policy))
+         (owner
+           (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load))
+         (before (snapshot-counts)))
+    (check "over-profile reconstruction has exact live E+2P storage"
+      (and (= (vector-ref before 0)
+              (+ entries 2 (vector-ref case-before 0)))
+           (= (vector-ref before 1) (vector-ref case-before 1))
+           (= (vector-ref before 2) (vector-ref case-before 2))
+           (= (vector-ref before 3) (vector-ref case-before 3))
+           (= (vector-ref before 4) (vector-ref case-before 4))
+           (= (vector-ref before 5) (vector-ref case-before 5))
+           (= (vector-ref before 6)
+              (+ entries 2 (vector-ref case-before 6)))
+           (= (vector-ref before 7)
+              (+ entries 2 (vector-ref case-before 7)))
+           (= (vector-ref before 13)
+              (+ (* (+ entries 2) f32-control-bytes)
+                 (vector-ref case-before 13)))
+           (= (vector-ref before 17) (vector-ref case-before 17))
+           (= (vector-ref before 18) (vector-ref case-before 18))
+           (= (vector-ref before 19) (vector-ref case-before 19))
+           (= (vector-ref before 22)
+              (+ entries (vector-ref case-before 22)))
+           (= (vector-ref before 23)
+              (+ (* entries i2-decode-control-bytes)
+                 (vector-ref case-before 23)))
+           (= (vector-ref before 24) (vector-ref case-before 24))
+           (= (vector-ref before 25) (vector-ref case-before 25))
+           (= (vector-ref before 26) (+ 1 (vector-ref case-before 26)))
+           (= (vector-ref before 28) (+ 2 (vector-ref case-before 28)))
+           (= (vector-ref before 30) (vector-ref case-before 30))
+           (= (vector-ref before 31) (+ 2 (vector-ref case-before 31)))
+           (= (vector-ref before 32) (vector-ref case-before 32))
+           (= (vector-ref before 33) (+ 1 (vector-ref case-before 33)))))
+    (c2-operational-io-reset)
+    (expect-save-error label 'invalid-state
+      (lambda ()
+        (c2-checkpoint-save-internal!
+          owner destination target-policy '(:overwrite? #t))))
+    (check "over-profile save performs zero writer I/O"
+           (= (c2-operational-io-events) 0))
+    ;; C1 publishes state-entry identities and each state-tensor identity
+    ;; reached before the rejecting dimension. This exact first-touch delta is
+    ;; owner state, not storage or writer work; every later rejection is flat.
+    (check "first over-profile save only publishes exact lazy P1 identities"
+           (same-except-delta?
+             before (snapshot-counts) 33 first-touch))
+    (let ((second-before (snapshot-counts)))
+      (let ((second-arena-before (__arena-used)))
+      (c2-operational-io-reset)
+      (expect-save-error label 'invalid-state
+        (lambda ()
+          (c2-checkpoint-save-internal!
+            owner destination target-policy '(:overwrite? #t))))
+      (check "second over-profile save is provider-counter flat"
+             (equal? second-before (snapshot-counts)))
+      (let ((arena-delta (- (__arena-used) second-arena-before)))
+        (if (> arena-delta rejected-save-max-arena-delta)
+            (set! rejected-save-max-arena-delta arena-delta))
+        (check "warmed rejected save retains under 5 MiB of outer arena"
+               (and (>= arena-delta 0) (< arena-delta 5242880))))))
+    (check "over-profile owner remains live after rejected save"
+           (c2-load-exact-live-owner? owner))
+    (check "over-profile owner remains releasable"
+           (c2-training-state-release-internal!
+             owner 'trainer-state-release!))
+    (let ((released (snapshot-counts)))
+      (check "over-profile release restores every storage live counter"
+             (same-live-storage? case-before released))
+      (check "over-profile release has exact f32/I2/P1 retirement"
+        (and (= (vector-ref released 7)
+                (+ (* 2 entries) 4 (vector-ref case-before 7)))
+             (= (vector-ref released 13)
+                (+ (* (+ (* 2 entries) 4) f32-control-bytes)
+                   (vector-ref case-before 13)))
+             (= (vector-ref released 8) (vector-ref case-before 8))
+             (= (vector-ref released 9) (vector-ref case-before 9))
+             (= (vector-ref released 10) (vector-ref case-before 10))
+             (= (vector-ref released 11) (vector-ref case-before 11))
+             (= (vector-ref released 12) (vector-ref case-before 12))
+             (= (vector-ref released 20) (vector-ref case-before 20))
+             (= (vector-ref released 21) (vector-ref case-before 21))
+             (= (vector-ref released 22)
+                (+ entries (vector-ref case-before 22)))
+             (= (vector-ref released 23)
+                (+ (* entries i2-decode-control-bytes)
+                   (vector-ref case-before 23)))
+             (= (vector-ref released 34)
+                (+ first-touch 1 (vector-ref case-before 34)))
+             (= (vector-ref released 27)
+                (+ 1 (vector-ref case-before 27)))
+             (= (vector-ref released 29)
+                (+ 2 (vector-ref case-before 29)))))
+      (let ((case-stage-after (c2-load-stage-counts-internal))
+            (case-owner-after (c2-load-owner-counts-internal)))
+        (check "over-profile stage is consumed exactly once"
+          (and (= (vector-ref case-stage-after 0)
+                  (vector-ref case-stage-before 0))
+               (= (vector-ref case-stage-after 1)
+                  (vector-ref case-stage-before 1))
+               (= (vector-ref case-stage-after 2)
+                  (+ 1 (vector-ref case-stage-before 2)))
+               (= (vector-ref case-stage-after 3)
+                  (vector-ref case-stage-before 3))))
+        (check "over-profile C2 owner retires exactly once"
+          (and (= (vector-ref case-owner-after 0)
+                  (vector-ref case-owner-before 0))
+               (= (vector-ref case-owner-after 1)
+                  (vector-ref case-owner-before 1))
+               (= (vector-ref case-owner-after 2)
+                  (vector-ref case-owner-before 2))
+               (= (vector-ref case-owner-after 3)
+                  (+ 1 (vector-ref case-owner-before 3)))))))
+    (check "over-profile load/save drains native staging" (native-flat?))))
+
+(define (finish-over-mode label entries first-touch)
+  (let ((retained-rss (c2-operational-current-rss))
+        (peak-rss (c2-operational-peak-rss))
+        (elapsed-ms (- (c2-operational-now) start-ms)))
+    (check "measured retained RSS is below 512 MiB"
+           (and (> retained-rss 0) (< retained-rss 524288)))
+    (check "measured process peak RSS is below 512 MiB"
+           (and (> peak-rss 0) (< peak-rss 524288)))
+    (check "measured runtime is inside the explicit watchdog"
+           (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+    (display "C2 OPERATIONAL RUNTIME PASS: ")
+    (display checks)
+    (display " checks mode=") (display label)
+    (display " baseline-kib=") (display baseline-rss)
+    (display " retained-kib=") (display retained-rss)
+    (display " peak-kib=") (display peak-rss)
+    (display " elapsed-ms=") (display elapsed-ms)
+    (display " f32-retained-bytes=")
+    (display (* (+ (* 2 entries) 4) f32-control-bytes))
+    (display " i2-retained-bytes=")
+    (display (* entries i2-decode-control-bytes))
+    (display " stage-dead-delta=1 c2-dead-delta=1")
+    (display " p1-first-touch=") (display first-touch)
+    (display " p1-tombstone-delta=") (display (+ first-touch 1))
+    (display " rejected-save-max-arena-delta=")
+    (display rejected-save-max-arena-delta)
+    (display " exact-save-max-arena-delta=0")
+    (newline)))
+
+(define (run-over-mode label source entries first-touch)
+  (reject-mode-stage label source)
+  (reject-over-save
+    (string-append label " owner rejects operational save") source
+    (string-append output-root "/" label "-reject.c2")
+    entries first-touch)
+  (finish-over-mode label entries first-touch))
+
+(define (run-corrupt-mode)
+  (reject-stage "checksummed joint corruption is corrupt-data"
+                'corrupt-data corrupt-path profile-policy)
+  (check "corrupt input invokes zero codecs"
+         (and (= decoder-calls 0) (= o2-calls 0)))
+  (let ((retained-rss (c2-operational-current-rss))
+        (peak-rss (c2-operational-peak-rss))
+        (elapsed-ms (- (c2-operational-now) start-ms)))
+    (check "measured retained RSS is below 512 MiB"
+           (and (> retained-rss 0) (< retained-rss 524288)))
+    (check "measured process peak RSS is below 512 MiB"
+           (and (> peak-rss 0) (< peak-rss 524288)))
+    (check "measured runtime is inside the explicit watchdog"
+           (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+    (display "C2 OPERATIONAL RUNTIME PASS: ")
+    (display checks)
+    (display " checks mode=corrupt")
+    (display " baseline-kib=") (display baseline-rss)
+    (display " retained-kib=") (display retained-rss)
+    (display " peak-kib=") (display peak-rss)
+    (display " elapsed-ms=") (display elapsed-ms)
+    (display " f32-retained-bytes=0 i2-retained-bytes=0")
+    (display " stage-dead-delta=0 c2-dead-delta=0")
+    (display " p1-first-touch=0 p1-tombstone-delta=0")
+    (display " rejected-save-max-arena-delta=0")
+    (display " exact-save-max-arena-delta=0")
+    (newline)))
+
+(define (stage-retired-exactly? before after count)
+  (and (= (vector-ref after 0) (vector-ref before 0))
+       (= (vector-ref after 1) (vector-ref before 1))
+       (= (vector-ref after 2) (+ count (vector-ref before 2)))
+       (= (vector-ref after 3) (vector-ref before 3))))
+
+(define (finish-admission-mode label stage-before owner-before dead-delta)
+  (let ((stage-after (c2-load-stage-counts-internal))
+        (owner-after (c2-load-owner-counts-internal))
+        (retained-rss (c2-operational-current-rss))
+        (peak-rss (c2-operational-peak-rss))
+        (elapsed-ms (- (c2-operational-now) start-ms)))
+    (check "admission mode retires exact staging count"
+           (stage-retired-exactly? stage-before stage-after dead-delta))
+    (check "admission mode publishes no C2 owner"
+           (equal? owner-before owner-after))
+    (check "admission mode drains image/reader/fd" (native-flat?))
+    (check "measured retained RSS is below 512 MiB"
+           (and (> retained-rss 0) (< retained-rss 524288)))
+    (check "measured process peak RSS is below 512 MiB"
+           (and (> peak-rss 0) (< peak-rss 524288)))
+    (check "measured runtime is inside the explicit watchdog"
+           (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+    (display "C2 OPERATIONAL RUNTIME PASS: ")
+    (display checks)
+    (display " checks mode=") (display label)
+    (display " baseline-kib=") (display baseline-rss)
+    (display " retained-kib=") (display retained-rss)
+    (display " peak-kib=") (display peak-rss)
+    (display " elapsed-ms=") (display elapsed-ms)
+    (display " f32-retained-bytes=0 i2-retained-bytes=0")
+    (display " stage-dead-delta=") (display dead-delta)
+    (display " c2-dead-delta=0 p1-first-touch=0 p1-tombstone-delta=0")
+    (display " rejected-save-max-arena-delta=0")
+    (display " exact-save-max-arena-delta=0")
+    (newline)))
+
+;;; Every possible K2 admission failure in the 64-descriptor public path must
+;;; release the fully validated stage before reconstruction or publication.
+(define (run-k2-fail-mode)
+  (let ((mode-stage-before (c2-load-stage-counts-internal))
+        (mode-owner-before (c2-load-owner-counts-internal)))
+    (let loop ((ordinal 1))
+      (if (> ordinal 64) #t
+          (let ((require-before (c2-operational-k2-require-count))
+                (stage-before (c2-load-stage-counts-internal))
+                (owner-before (c2-load-owner-counts-internal))
+                (storage-before (snapshot-counts))
+                (decoder-before decoder-calls)
+                (o2-before o2-calls))
+            (c2-operational-k2-fail-require-at
+              (+ require-before ordinal))
+            (with-region ('c2-k2-admission-failure 4194304)
+              (expect-error "injected K2 admission failure is normalized"
+                'unsupported
+                (lambda ()
+                  (c2-public-checkpoint-load
+                    count-exact-path target-policy operational-report))))
+            (check "K2 failure occurs at the exact descriptor ordinal"
+                   (= (c2-operational-k2-require-count)
+                      (+ require-before ordinal)))
+            (check "K2 failure retires one stage and clears references"
+                   (stage-retired-exactly?
+                     stage-before (c2-load-stage-counts-internal) 1))
+            (check "K2 failure publishes no C2 owner"
+                   (equal? owner-before (c2-load-owner-counts-internal)))
+            (check "K2 failure is storage-counter flat"
+                   (equal? storage-before (snapshot-counts)))
+            (check "K2 failure invokes zero codecs"
+                   (and (= decoder-before decoder-calls)
+                        (= o2-before o2-calls)))
+            (check "K2 failure drains native staging" (native-flat?))
+            (loop (+ ordinal 1)))))
+    (finish-admission-mode
+      "k2-fail" mode-stage-before mode-owner-before 64)))
+
+;;; A fully valid, checksummed rank-two artifact proves the same public cleanup
+;;; guard at the current K2 provider's explicit rank boundary.
+(define (run-rank-mode)
+  (let ((mode-stage-before (c2-load-stage-counts-internal))
+        (mode-owner-before (c2-load-owner-counts-internal))
+        (storage-before (snapshot-counts))
+        (require-before (c2-operational-k2-require-count))
+        (decoder-before decoder-calls)
+        (o2-before o2-calls))
+    (expect-error "unsupported rank is normalized at public checkpoint-load"
+      'unsupported
+      (lambda ()
+        (c2-public-checkpoint-load
+          rank-two-path target-policy operational-report)))
+    (check "unsupported rank performs one exact K2 requirement"
+           (= (c2-operational-k2-require-count) (+ require-before 1)))
+    (check "unsupported rank is storage-counter flat"
+           (equal? storage-before (snapshot-counts)))
+    (check "unsupported rank invokes zero codecs"
+           (and (= decoder-before decoder-calls) (= o2-before o2-calls)))
+    (finish-admission-mode
+      "rank" mode-stage-before mode-owner-before 1)))
+
+(define (run-alias-mode)
+  (let ((mode-stage-before (c2-load-stage-counts-internal))
+        (mode-owner-before (c2-load-owner-counts-internal))
+        (storage-before (snapshot-counts))
+        (require-before (c2-operational-k2-require-count))
+        (decoder-before decoder-calls)
+        (o2-before o2-calls))
+    (expect-error "alias shape mismatch is early corrupt-data"
+      'corrupt-data
+      (lambda ()
+        (c2-public-checkpoint-load
+          alias-shape-path target-policy operational-report)))
+    (check "alias shape corruption invokes zero K2 requirements"
+           (= (c2-operational-k2-require-count) require-before))
+    (check "alias shape corruption publishes no stage"
+           (equal? mode-stage-before (c2-load-stage-counts-internal)))
+    (check "alias shape corruption is storage-counter flat"
+           (equal? storage-before (snapshot-counts)))
+    (check "alias shape corruption invokes zero codecs"
+           (and (= decoder-before decoder-calls) (= o2-before o2-calls)))
+    (finish-admission-mode
+      "alias" mode-stage-before mode-owner-before 0)))
+
+;;; The joint exact artifact is authoritative for the measured lifecycle.
+(define (run-joint-mode)
+(define lifecycle-before (snapshot-counts))
+(define owner-before (c2-load-owner-counts-internal))
+(define stage-before (c2-load-stage-counts-internal))
+(define require-before (c2-operational-k2-require-count))
+(define owner
+  (c2-public-checkpoint-load
+    joint-path target-policy operational-report))
+(check "joint public load requires every one of 64 descriptors exactly once"
+       (= (c2-operational-k2-require-count) (+ require-before 64)))
+(check "joint exact reconstruction publishes one exact C2 owner"
+       (c2-load-exact-live-owner? owner))
+(define live (snapshot-counts))
+(check "joint E=62/P=1 owner has exact live storage"
+  (and (= (vector-ref live 0) (+ 64 (vector-ref lifecycle-before 0)))
+       (= (vector-ref live 1) (vector-ref lifecycle-before 1))
+       (= (vector-ref live 2) (vector-ref lifecycle-before 2))
+       (= (vector-ref live 3) (vector-ref lifecycle-before 3))
+       (= (vector-ref live 4) (vector-ref lifecycle-before 4))
+       (= (vector-ref live 5) (vector-ref lifecycle-before 5))
+       (= (vector-ref live 6) (+ 64 (vector-ref lifecycle-before 6)))
+       (= (vector-ref live 17) (vector-ref lifecycle-before 17))
+       (= (vector-ref live 18) (vector-ref lifecycle-before 18))
+       (= (vector-ref live 19) (vector-ref lifecycle-before 19))
+       (= (vector-ref live 22) (+ 62 (vector-ref lifecycle-before 22)))
+       (= (vector-ref live 24) (vector-ref lifecycle-before 24))
+       (= (vector-ref live 25) (vector-ref lifecycle-before 25))
+       (= (vector-ref live 26) (+ 1 (vector-ref lifecycle-before 26)))
+       (= (vector-ref live 28) (+ 2 (vector-ref lifecycle-before 28)))
+       (= (vector-ref live 30) (vector-ref lifecycle-before 30))
+       (= (vector-ref live 31) (+ 2 (vector-ref lifecycle-before 31)))
+       (= (vector-ref live 32) (vector-ref lifecycle-before 32))
+       (= (vector-ref live 33) (+ 1 (vector-ref lifecycle-before 33)))))
+(check "joint exact owner count is live/nonbusy"
+  (let ((counts (c2-load-owner-counts-internal)))
+    (and (= (vector-ref counts 0) (+ 1 (vector-ref owner-before 0)))
+         (= (vector-ref counts 1) (vector-ref owner-before 1))
+         (= (vector-ref counts 2) (vector-ref owner-before 2))
+         (= (vector-ref counts 3) (vector-ref owner-before 3)))))
+
+;;; Save three times from the same owner. Both model and O2 exact-bit paths
+;;; must leave every one of the 35 live/retired test counters flat per cycle.
+(define save-a (string-append output-root "/joint-a.c2"))
+(define save-b (string-append output-root "/joint-b.c2"))
+(define joint-measure-current (make-vector 3 0))
+(define joint-measure-peak (make-vector 3 0))
+(define joint-borrow-arena (make-vector 3 0))
+(define joint-preflight-arena (make-vector 3 0))
+(define joint-measure-arena (make-vector 3 0))
+(define joint-encode-arena (make-vector 3 0))
+(define joint-publish-arena (make-vector 3 0))
+(define joint-encode-current (make-vector 3 0))
+(define joint-encode-peak (make-vector 3 0))
+(define joint-publish-current (make-vector 3 0))
+(define joint-publish-peak (make-vector 3 0))
+(define joint-measure-calls 0)
+(define joint-encode-calls 0)
+(define joint-publish-calls 0)
+(define joint-borrow-calls 0)
+(define joint-preflight-calls 0)
+(define saved-operational-borrow c2-save-borrow-begin-internal)
+(define saved-operational-preflight c2-save-o2-policy-preflight-internal)
+(define saved-operational-measure c2-save-measure-staged-internal)
+(define saved-operational-encode c2-save-encode-staged-into-internal!)
+(define saved-operational-publish c2-save-publish-internal)
+(set! c2-save-borrow-begin-internal
+  (lambda (state operation)
+    (let ((result (saved-operational-borrow state operation)))
+      (vector-set! joint-borrow-arena joint-borrow-calls (__arena-used))
+      (set! joint-borrow-calls (+ joint-borrow-calls 1))
+      result)))
+(set! c2-save-o2-policy-preflight-internal
+  (lambda (topology o2-projection limits)
+    (let ((result
+            (saved-operational-preflight topology o2-projection limits)))
+      (vector-set! joint-preflight-arena joint-preflight-calls (__arena-used))
+      (set! joint-preflight-calls (+ joint-preflight-calls 1))
+      result)))
+(set! c2-save-measure-staged-internal
+  (lambda (staged limits)
+    (let ((result (saved-operational-measure staged limits)))
+      (vector-set! joint-measure-current joint-measure-calls
+                   (c2-operational-current-rss))
+      (vector-set! joint-measure-peak joint-measure-calls
+                   (c2-operational-peak-rss))
+      (vector-set! joint-measure-arena joint-measure-calls (__arena-used))
+      (set! joint-measure-calls (+ joint-measure-calls 1))
+      result)))
+(set! c2-save-encode-staged-into-internal!
+  (lambda (staged limits destination file-bytes)
+    (let ((result
+            (saved-operational-encode
+              staged limits destination file-bytes)))
+      (vector-set! joint-encode-current joint-encode-calls
+                   (c2-operational-current-rss))
+      (vector-set! joint-encode-peak joint-encode-calls
+                   (c2-operational-peak-rss))
+      (vector-set! joint-encode-arena joint-encode-calls (__arena-used))
+      (set! joint-encode-calls (+ joint-encode-calls 1))
+      result)))
+(set! c2-save-publish-internal
+  (lambda (path bytes overwrite)
+    (let ((result (saved-operational-publish path bytes overwrite)))
+      (vector-set! joint-publish-current joint-publish-calls
+                   (c2-operational-current-rss))
+      (vector-set! joint-publish-peak joint-publish-calls
+                   (c2-operational-peak-rss))
+      (vector-set! joint-publish-arena joint-publish-calls (__arena-used))
+      (set! joint-publish-calls (+ joint-publish-calls 1))
+      result)))
+(define first-save-counts (snapshot-counts))
+(define first-save-arena-before (__arena-used))
+(check "first joint operational save succeeds"
+       (c2-public-checkpoint-save! owner save-a target-policy '()))
+(define first-save-arena-delta (- (__arena-used) first-save-arena-before))
+(check "first joint save retains under two exact file images"
+       (and (>= first-save-arena-delta 0)
+            (< first-save-arena-delta 33554432)))
+(set! exact-save-max-arena-delta first-save-arena-delta)
+(check "first joint save only publishes 124 lazy P1 identities"
+       (same-except-delta?
+         first-save-counts (snapshot-counts) 33 124))
+(define save-counts (snapshot-counts))
+(define second-save-arena-before (__arena-used))
+(check "second joint operational save succeeds"
+       (c2-public-checkpoint-save! owner save-b target-policy '()))
+(define second-save-arena-delta (- (__arena-used) second-save-arena-before))
+(if (or (< second-save-arena-delta 0)
+        (>= second-save-arena-delta 32768))
+    (begin
+      (display "C2 OPERATIONAL DIAGNOSTIC: second-save-arena-delta=")
+      (display second-save-arena-delta)
+      (display " before=") (display second-save-arena-before)
+      (display " borrow=") (display (vector-ref joint-borrow-arena 1))
+      (display " preflight=") (display (vector-ref joint-preflight-arena 1))
+      (display " measure=") (display (vector-ref joint-measure-arena 1))
+      (display " encode=") (display (vector-ref joint-encode-arena 1))
+      (display " publish=") (display (vector-ref joint-publish-arena 1))
+      (display " after=") (display (__arena-used)) (newline)))
+(check "warmed second joint save retains under 32 KiB"
+       (and (>= second-save-arena-delta 0)
+            (< second-save-arena-delta 32768)))
+(if (> second-save-arena-delta exact-save-max-arena-delta)
+    (set! exact-save-max-arena-delta second-save-arena-delta))
+(check "second joint operational save is control-flat"
+       (equal? save-counts (snapshot-counts)))
+(define overwrite-save-arena-before (__arena-used))
+(check "overwrite joint operational save succeeds"
+       (c2-public-checkpoint-save!
+         owner save-a target-policy '(:overwrite? #t)))
+(define overwrite-save-arena-delta
+  (- (__arena-used) overwrite-save-arena-before))
+(if (or (< overwrite-save-arena-delta 0)
+        (>= overwrite-save-arena-delta 32768))
+    (begin
+      (display "C2 OPERATIONAL DIAGNOSTIC: overwrite-save-arena-delta=")
+      (display overwrite-save-arena-delta)
+      (display " before=") (display overwrite-save-arena-before)
+      (display " borrow=") (display (vector-ref joint-borrow-arena 2))
+      (display " preflight=") (display (vector-ref joint-preflight-arena 2))
+      (display " measure=") (display (vector-ref joint-measure-arena 2))
+      (display " encode=") (display (vector-ref joint-encode-arena 2))
+      (display " publish=") (display (vector-ref joint-publish-arena 2))
+      (display " after=") (display (__arena-used)) (newline)))
+(check "warmed overwrite joint save retains under 32 KiB"
+       (and (>= overwrite-save-arena-delta 0)
+            (< overwrite-save-arena-delta 32768)))
+(if (> overwrite-save-arena-delta exact-save-max-arena-delta)
+    (set! exact-save-max-arena-delta overwrite-save-arena-delta))
+(check "overwrite joint operational save is control-flat"
+       (equal? save-counts (snapshot-counts)))
+(set! c2-save-measure-staged-internal saved-operational-measure)
+(set! c2-save-encode-staged-into-internal! saved-operational-encode)
+(set! c2-save-publish-internal saved-operational-publish)
+(set! c2-save-o2-policy-preflight-internal saved-operational-preflight)
+(set! c2-save-borrow-begin-internal saved-operational-borrow)
+(check "joint phase probes observe exactly three complete saves"
+       (and (= joint-borrow-calls 3)
+            (= joint-preflight-calls 3)
+            (= joint-measure-calls 3)
+            (= joint-encode-calls 3)
+            (= joint-publish-calls 3)))
+
+(check "joint exact owner releases"
+       (c2-public-trainer-state-release! owner))
+(define lifecycle-after (snapshot-counts))
+(define stage-after (c2-load-stage-counts-internal))
+(define owner-after (c2-load-owner-counts-internal))
+(check "joint exact lifecycle restores all storage live counters"
+       (same-live-storage? lifecycle-before lifecycle-after))
+(check "joint exact lifecycle has exact retired controls"
+  (and (= (vector-ref lifecycle-after 7)
+          (+ 128 (vector-ref lifecycle-before 7)))
+       (= (vector-ref lifecycle-after 13)
+          (+ (* 128 f32-control-bytes)
+             (vector-ref lifecycle-before 13)))
+       (= (vector-ref lifecycle-after 8) (vector-ref lifecycle-before 8))
+       (= (vector-ref lifecycle-after 9) (vector-ref lifecycle-before 9))
+       (= (vector-ref lifecycle-after 10) (vector-ref lifecycle-before 10))
+       (= (vector-ref lifecycle-after 11) (vector-ref lifecycle-before 11))
+       (= (vector-ref lifecycle-after 12) (vector-ref lifecycle-before 12))
+       (= (vector-ref lifecycle-after 20) (vector-ref lifecycle-before 20))
+       (= (vector-ref lifecycle-after 21) (vector-ref lifecycle-before 21))
+       (= (vector-ref lifecycle-after 22)
+          (+ 62 (vector-ref lifecycle-before 22)))
+       (= (vector-ref lifecycle-after 23)
+          (+ (* 62 i2-decode-control-bytes)
+             (vector-ref lifecycle-before 23)))
+       (= (vector-ref lifecycle-after 34)
+          (+ 125 (vector-ref lifecycle-before 34)))
+       (= (vector-ref lifecycle-after 27)
+          (+ 1 (vector-ref lifecycle-before 27)))
+       (= (vector-ref lifecycle-after 29)
+          (+ 2 (vector-ref lifecycle-before 29)))))
+(check "joint exact stage is consumed and clears four large references"
+  (and (= (vector-ref stage-after 0) (vector-ref stage-before 0))
+       (= (vector-ref stage-after 1) (vector-ref stage-before 1))
+       (= (vector-ref stage-after 2) (+ 1 (vector-ref stage-before 2)))
+       (= (vector-ref stage-after 3) (vector-ref stage-before 3))))
+(check "joint exact C2 owner retires once"
+  (and (= (vector-ref owner-after 0) (vector-ref owner-before 0))
+       (= (vector-ref owner-after 1) (vector-ref owner-before 1))
+       (= (vector-ref owner-after 2) (vector-ref owner-before 2))
+       (= (vector-ref owner-after 3) (+ 1 (vector-ref owner-before 3)))))
+(check "joint lifecycle drains all image/reader/fd state" (native-flat?))
+
+(define retained-rss (c2-operational-current-rss))
+(define peak-rss (c2-operational-peak-rss))
+(define elapsed-ms (- (c2-operational-now) start-ms))
+(display "C2 OPERATIONAL MEASURE: mode=joint baseline-kib=")
+(display baseline-rss)
+(display " retained-kib=") (display retained-rss)
+(display " peak-kib=") (display peak-rss)
+(display " elapsed-ms=") (display elapsed-ms)
+(display " exact-save-max-arena-delta=")
+(display exact-save-max-arena-delta)
+(newline)
+(display "C2 OPERATIONAL PHASE: mode=joint")
+(display " first-save-arena-delta=") (display first-save-arena-delta)
+(display " second-save-arena-delta=") (display second-save-arena-delta)
+(display " overwrite-save-arena-delta=") (display overwrite-save-arena-delta)
+(let phase ((index 0))
+  (if (= index 3) #t
+      (begin
+        (display " measure-current-kib-") (display (+ index 1))
+        (display "=") (display (vector-ref joint-measure-current index))
+        (display " measure-peak-kib-") (display (+ index 1))
+        (display "=") (display (vector-ref joint-measure-peak index))
+        (display " encode-current-kib-") (display (+ index 1))
+        (display "=") (display (vector-ref joint-encode-current index))
+        (display " encode-peak-kib-") (display (+ index 1))
+        (display "=") (display (vector-ref joint-encode-peak index))
+        (display " publish-current-kib-") (display (+ index 1))
+        (display "=") (display (vector-ref joint-publish-current index))
+        (display " publish-peak-kib-") (display (+ index 1))
+        (display "=") (display (vector-ref joint-publish-peak index))
+        (phase (+ index 1)))))
+(newline)
+(check "measured retained RSS is below 512 MiB"
+       (and (> retained-rss 0) (< retained-rss 524288)))
+(check "measured process peak RSS is below 512 MiB"
+       (and (> peak-rss 0) (< peak-rss 524288)))
+(check "measured runtime is inside the explicit watchdog"
+       (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+
+(display "C2 OPERATIONAL RUNTIME PASS: ")
+(display checks)
+(display " checks mode=joint")
+(display " baseline-kib=") (display baseline-rss)
+(display " retained-kib=") (display retained-rss)
+(display " peak-kib=") (display peak-rss)
+(display " elapsed-ms=") (display elapsed-ms)
+(display " f32-retained-bytes=")
+(display (* 128 f32-control-bytes))
+(display " i2-retained-bytes=")
+(display (* 62 i2-decode-control-bytes))
+(display " stage-dead-delta=")
+(display (- (vector-ref stage-after 2) (vector-ref stage-before 2)))
+(display " c2-dead-delta=")
+(display (- (vector-ref owner-after 3) (vector-ref owner-before 3)))
+(display " p1-first-touch=") (display 124)
+(display " p1-tombstone-delta=")
+(display (- (vector-ref lifecycle-after 34)
+            (vector-ref lifecycle-before 34)))
+(display " rejected-save-max-arena-delta=")
+(display rejected-save-max-arena-delta)
+(display " exact-save-max-arena-delta=")
+(display exact-save-max-arena-delta)
+(newline))
+
+(cond
+  ((string=? mode "joint") (run-joint-mode))
+  ((string=? mode "k2-fail") (run-k2-fail-mode))
+  ((string=? mode "rank") (run-rank-mode))
+  ((string=? mode "alias") (run-alias-mode))
+  ((string=? mode "file")
+    (run-over-mode "file" file-one-path 62 124))
+  ((string=? mode "metadata")
+    (run-over-mode "metadata" metadata-one-path 9 18))
+  ((string=? mode "tensor")
+    (run-over-mode "tensor" tensor-one-path 2 4))
+  ((string=? mode "count")
+    (run-over-mode "count" count-one-path 63 126))
+  ((string=? mode "corrupt") (run-corrupt-mode))
+  (else
+    (display "C2 OPERATIONAL FAIL: unknown mode ")
+    (display mode)
+    (newline)
+    (exit 1)))

@@ -284,7 +284,17 @@
          tensor-provider-preflight-internal
          tensor-provider-release-owned-internal!
          tensor-provider-admit-owned-internal!
-         state-dict-adopt-owned-internal!)
+         state-dict-adopt-owned-internal!
+         state-dict-c2-parameter-topology-internal
+         state-dict-claim-c2-internal!
+         state-dict-claim-c2-rollback-internal!
+         state-dict-release-c2-owned-internal!
+         state-dict-c2-owned-projection-internal
+         state-dict-c2-owned-tensor-borrow-begin-internal
+         state-dict-c2-owned-tensor-borrow-end-internal
+         state-dict-c2-owned-borrow-activate-internal!
+         state-dict-c2-owned-borrow-deactivate-internal!
+         state-dict-c2-owned-entry-shells-internal)
 
 (define p1-trusted-surface
   (let ()
@@ -296,6 +306,7 @@
 (define state-entry-tag (vector 'transformer-state-entry))
 (define state-lifecycle-tag (vector 'transformer-state-lifecycle))
 (define state-borrow-access-tag (vector 'transformer-state-borrow-access))
+(define state-c2-borrow-access-tag (vector 'transformer-state-c2-borrow-access))
 (define state-tensor-tag (vector 'transformer-state-backed-tensor))
 (define tensor-provider-tag (vector 'transformer-tensor-provider))
 (define unsafe-entry-input-tag (vector 'transformer-unsafe-entry-input))
@@ -307,12 +318,21 @@
 (define provider-interface-major 2)
 (define provider-interface-minor 0)
 (define row-major-layout 'dense-row-major-contiguous)
-(define tensor-providers '())
+(define tensor-provider-registry-root (vector '()))
+(define (tensor-provider-registry-current)
+  (vector-ref tensor-provider-registry-root 0))
 (define tensor-provider-admission-active? #f)
 (define tensor-provider-admission-active-shell #f)
 (define protected-storage-comparison-active? #f)
 (define protected-storage-comparison-request (vector #f #f #f #f #f))
-(define shell-registry '())
+;;; The holder is allocated during aggregate initialization in the root arena.
+;;; Publishing a newly allocated registry graph through vector-set! invokes the
+;;; region write barrier; every read then starts from the canonical promoted
+;;; graph stored back into this holder.
+(define shell-registry-root (vector '()))
+
+(define (shell-registry-current)
+  (vector-ref shell-registry-root 0))
 (define dead-state-raw (vector 'released-state-raw))
 (define dead-state-tensor-raw (vector 'released-state-tensor-raw))
 (define dead-state-entry-raw (vector 'released-state-entry-raw))
@@ -455,7 +475,7 @@
   (p1-native-result-ptr native-context))
 
 (define (shell-entry value)
-  (let loop ((entries shell-registry))
+  (let loop ((entries (shell-registry-current)))
     (cond
       ((null? entries) #f)
       ((eq? value (vector-ref (car entries) 0)) (car entries))
@@ -467,15 +487,16 @@
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'shell-for-raw
             "released registry marker cannot be published" '())
-      (let find ((entries shell-registry))
+      (let find ((entries (shell-registry-current)))
         (cond
       ((null? entries)
        (let* ((entry (vector #f kind raw))
-              (next-registry (cons entry shell-registry))
+              (next-registry (cons entry (shell-registry-current)))
               (shell (native-create-shell kind raw)))
          (vector-set! entry 0 shell)
-         (set! shell-registry next-registry)
-         shell))
+         (vector-set! shell-registry-root 0 next-registry)
+         ;; Return only the canonical post-barrier identity.
+         (vector-ref (car (shell-registry-current)) 0)))
       ((and (eq? kind (vector-ref (car entries) 1))
             (eq? raw (vector-ref (car entries) 2)))
        (vector-ref (car entries) 0))
@@ -489,19 +510,20 @@
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'state-entry-shell-for-raw
             "released registry marker cannot be published" '())
-      (let find ((records shell-registry))
+      (let find ((records (shell-registry-current)))
         (cond
           ((null? records)
            (let* ((record (vector #f 'entry raw state))
-                  (next-registry (cons record shell-registry)))
+                  (next-registry (cons record (shell-registry-current))))
              (require-native-context 'state-entry-shell-for-raw)
              (native-check
                'state-entry-shell-for-raw
                (p1-native-state-entry-create native-context state-shell))
              (let ((shell (p1-native-result-ptr native-context)))
                (vector-set! record 0 shell)
-               (set! shell-registry next-registry)
-               shell)))
+               (vector-set! shell-registry-root 0 next-registry)
+               ;; Return only the canonical post-barrier identity.
+               (vector-ref (car (shell-registry-current)) 0))))
           ((and (eq? (vector-ref (car records) 1) 'entry)
                 (= (vector-length (car records)) 4)
                 (eq? (vector-ref (car records) 2) raw)
@@ -539,7 +561,7 @@
   ;; Replace all registry edges into the released raw graph with shared small
   ;; markers. Markers retain neither state, entry, carrier, path, nor aliases.
   (let ((entries (vector-ref state 6)))
-    (let scan ((remaining shell-registry))
+    (let scan ((remaining (shell-registry-current)))
       (if (null? remaining)
           #t
           (let* ((record (car remaining))
@@ -815,7 +837,7 @@
 (define (require-live-state operation value)
   (let* ((state (require-state operation value))
          (lifecycle (state-lifecycle state)))
-    (if (and (vector? lifecycle) (= (vector-length lifecycle) 7)
+    (if (and (vector? lifecycle) (= (vector-length lifecycle) 8)
              (eq? (vector-ref lifecycle 0) state-lifecycle-tag)
              (eq? (vector-ref lifecycle 1) 'live))
         state
@@ -865,18 +887,21 @@
   (list provider-identity-format provider-interface-major
         provider-interface-minor (tensor-provider-name provider)))
 
-(define (state-provider-binding-find state)
-  (require-live-state 'state-provider-binding-find state)
+(define (state-provider-binding-find-admitted operation state)
   (let* ((shell (shell-for-raw 'state state))
          (status (p1-native-state-provider native-context shell)))
     (if (= status 0)
-        (raw-for-shell 'state-provider-binding-find 'provider
+        (raw-for-shell operation 'provider
                        (p1-native-result-ptr native-context))
         (if (= (p1-native-error-code native-context) 11)
             #f
             (native-raise
-              'state-provider-binding-find status
+              operation status
               (p1-native-error-code native-context))))))
+
+(define (state-provider-binding-find state)
+  (require-live-state 'state-provider-binding-find state)
+  (state-provider-binding-find-admitted 'state-provider-binding-find state))
 
 (define (state-provider-bind! operation state provider)
   (let ((state-shell (shell-for-raw 'state state))
@@ -888,7 +913,7 @@
     state))
 
 (define (tensor-provider-registration-find name)
-  (let loop ((providers tensor-providers))
+  (let loop ((providers (tensor-provider-registry-current)))
     (cond
       ((null? providers) #f)
       ((eq? name (vector-ref (car providers) 0)) (car providers))
@@ -906,7 +931,7 @@
           (vector-ref provider 8) (vector-ref provider 9) #f))
 
 (define (replace-shell-raw! operation kind old-raw new-raw)
-  (let find ((entries shell-registry))
+  (let find ((entries (shell-registry-current)))
     (cond
       ((null? entries)
        (fail 'internal operation "opaque identity registry entry is missing" '()))
@@ -1060,10 +1085,13 @@
                                       'tensor-provider-register-internal!))
                        (tombstones-before (native-tombstone-count
                                             'tensor-provider-register-internal!))
-                       (registration
-                         (vector (tensor-provider-name admitted)
-                                 shell admitted))
-                       (next-providers (cons registration tensor-providers))
+                       ;; Allocate the later publication spine before sealing;
+                       ;; its identity fields are filled only from canonical
+                       ;; registry readback after admission succeeds.
+                       (registration (vector #f shell #f))
+                       (next-providers
+                         (cons registration
+                               (tensor-provider-registry-current)))
                        (callbacks #f)
                        (outcome (vector #f #f))
                        (abort-failed? #f)
@@ -1105,8 +1133,28 @@
                         ;; sealing. These writes are bounded and nonraising.
                         (vector-set! admitted 10 callbacks)
                         (vector-set! shell-record 2 admitted)
-                        (set! tensor-providers next-providers)
-                        admitted)
+                        ;; The registry write barrier may promote the admitted
+                        ;; provider. Build every later publication from the
+                        ;; canonical registry readback, then return only the
+                        ;; provider read back from the promoted provider list.
+                        (let* ((canonical-record (shell-entry shell))
+                               (canonical-admitted
+                                 (vector-ref canonical-record 2)))
+                          (vector-set! registration 0
+                                       (tensor-provider-name canonical-admitted))
+                          (vector-set! registration 2 canonical-admitted)
+                          (vector-set! tensor-provider-registry-root 0
+                                       next-providers)
+                          (let ((published
+                                  (vector-ref
+                                    (car (tensor-provider-registry-current))
+                                    2)))
+                            ;; Provider-registry publication may promote the
+                            ;; admitted graph a second time. Keep the shell
+                            ;; registry and provider registry on that final
+                            ;; exact canonical identity.
+                            (vector-set! canonical-record 2 published)
+                            published)))
                       (begin
                         (set! tensor-provider-admission-active-shell #f)
                         (guard (caught
@@ -1522,7 +1570,7 @@
   ;; Exact identity protection does not invoke a provider. After trusted
   ;; provider preflight, the same scan may use that provider's admitted
   ;; storage-identity callback to reject a distinct wrapper over live storage.
-  (let scan-states ((records shell-registry))
+  (let scan-states ((records (shell-registry-current)))
     (if (null? records)
         #f
         (let* ((record (car records))
@@ -1588,7 +1636,7 @@
   (if (carrier-owned-by-live-state?
         operation provider carrier carrier-kind compare-storage?)
       #t
-      (let scan-modules ((records shell-registry))
+      (let scan-modules ((records (shell-registry-current)))
         (if (null? records)
             #f
             (let* ((record (car records))
@@ -1745,20 +1793,31 @@
 
 (define (protected-storage-identical?
           operation provider left right left-kind right-kind)
-  ;; One process-local request is allocated before any callback can publish an
-  ;; owner. P1 is serialized/nonreentrant, so protection scans may reuse it
-  ;; without allocating after publication or while a release envelope is
-  ;; disarmed. Every exit clears temporary carrier references.
+  ;; Ordinary owner operations reuse one process-local request so they allocate
+  ;; nothing after publication or while a release envelope is disarmed.
+  ;; Provider admission is different: it is still inside the total rollback
+  ;; transaction and may originate in a lexical region. A regional request
+  ;; avoids promoting its not-yet-published evidence/clone carriers through the
+  ;; process root before provider publication commits.
   (if protected-storage-comparison-active?
       (fail 'invalid-state operation
             "protected storage comparison is not reentrant" '())
       #t)
+  (let ((request
+          (if (eq? operation 'tensor-provider-register-internal!)
+              (vector left right left-kind right-kind operation)
+              protected-storage-comparison-request)))
+  ;; Allocate any provider-admission request before publishing the global
+  ;; reentrancy flag. Allocation failure must leave the comparison idle.
   (set! protected-storage-comparison-active? #t)
-  (vector-set! protected-storage-comparison-request 0 left)
-  (vector-set! protected-storage-comparison-request 1 right)
-  (vector-set! protected-storage-comparison-request 2 left-kind)
-  (vector-set! protected-storage-comparison-request 3 right-kind)
-  (vector-set! protected-storage-comparison-request 4 operation)
+  (if (eq? request protected-storage-comparison-request)
+      (begin
+        (vector-set! request 0 left)
+        (vector-set! request 1 right)
+        (vector-set! request 2 left-kind)
+        (vector-set! request 3 right-kind)
+        (vector-set! request 4 operation))
+      #t)
   (let ((returned #f) (callback-failed? #f) (callback-error #f))
     (guard (caught
              (#t
@@ -1766,22 +1825,19 @@
                (set! callback-error caught)
                #f))
       (set! returned
-            ((vector-ref provider 4) protected-storage-comparison-request)))
+            ((vector-ref provider 4) request)))
     (let ((valid?
             (and (boolean? returned)
-                 (eq? (vector-ref protected-storage-comparison-request 0) left)
-                 (eq? (vector-ref protected-storage-comparison-request 1) right)
-                 (eq? (vector-ref protected-storage-comparison-request 2)
-                      left-kind)
-                 (eq? (vector-ref protected-storage-comparison-request 3)
-                      right-kind)
-                 (eq? (vector-ref protected-storage-comparison-request 4)
-                      operation))))
-      (vector-set! protected-storage-comparison-request 0 #f)
-      (vector-set! protected-storage-comparison-request 1 #f)
-      (vector-set! protected-storage-comparison-request 2 #f)
-      (vector-set! protected-storage-comparison-request 3 #f)
-      (vector-set! protected-storage-comparison-request 4 #f)
+                 (eq? (vector-ref request 0) left)
+                 (eq? (vector-ref request 1) right)
+                 (eq? (vector-ref request 2) left-kind)
+                 (eq? (vector-ref request 3) right-kind)
+                 (eq? (vector-ref request 4) operation))))
+      (vector-set! request 0 #f)
+      (vector-set! request 1 #f)
+      (vector-set! request 2 #f)
+      (vector-set! request 3 #f)
+      (vector-set! request 4 #f)
       (set! protected-storage-comparison-active? #f)
       (if callback-failed?
           (raise callback-error)
@@ -1789,7 +1845,7 @@
               returned
               (fail 'internal operation
                     "tensor provider corrupted protected storage comparison"
-                    '()))))))
+                    '())))))))
 
 (define (tensor-storage-identical? operation provider left right left-kind right-kind)
   ;; Every storage comparison, including ordinary pre-commit alias checks,
@@ -2778,7 +2834,7 @@
               (copy-data-for 'state-dict-create-unsafe-internal
                              'invalid-argument aliases)
               (vector state-lifecycle-tag 'live #f #f '()
-                      (vector '() (vector-ref entry-input 2)) #f))))
+                      (vector '() (vector-ref entry-input 2)) #f #f))))
 
 (define (state-dict-format-internal state)
   (vector-ref (require-live-state 'state-dict-format-internal state) 1))
@@ -2911,10 +2967,17 @@
                     (tensor-provider-identity provider) entries
                     (copy-data aliases)
                     (vector state-lifecycle-tag 'live #t provider '()
-                            ownership #f)))
+                            ownership #f #f)))
       ;; Capture publication so rollback can revoke a shell even when native
       ;; bind fails after shell creation.
       (set! state-shell (shell-for-raw 'state state))
+      ;; A nested caller region promotes the published graph into the root
+      ;; registry. Continue only with that canonical post-barrier raw state;
+      ;; otherwise a later lookup would publish a second native identity for
+      ;; the stale regional object.
+      (set! state (raw-for-shell operation 'state state-shell))
+      (set! entries (vector-ref state 6))
+      (set! ownership (vector-ref (state-lifecycle state) 5))
       (vector-set! outcome 0 #t)
       (vector-set! outcome 1
                    (state-provider-bind! operation state provider)))
@@ -3125,8 +3188,7 @@
                                             (if first-tensor first-tensor
                                                 (vector-ref entry 7))))))))))))))))
 
-(define (validate-state-envelope operation state)
-  (require-live-state operation state)
+(define (validate-state-envelope-admitted operation state)
   (if (not (symbol? (vector-ref state 1)))
       (fail 'corrupt-data operation "malformed state dictionary format" '())
       (if (not (eq? (vector-ref state 1) state-format))
@@ -3151,8 +3213,12 @@
                       (validate-provider-identity operation
                                                   (vector-ref state 5)))))))))
 
-(define (validate-state-with-provider operation state provider)
-  (let ((identity (validate-state-envelope operation state)))
+(define (validate-state-envelope operation state)
+  (require-live-state operation state)
+  (validate-state-envelope-admitted operation state))
+
+(define (validate-state-with-provider-admitted operation state provider)
+  (let ((identity (validate-state-envelope-admitted operation state)))
     (if (not (equal? identity (tensor-provider-identity provider)))
         (fail 'unsupported operation
               "state and destination tensor providers differ" '())
@@ -3162,11 +3228,20 @@
                                  (vector-ref state 6))
           provider))))
 
-(define (validate-bound-state operation state)
+(define (validate-state-with-provider operation state provider)
+  (require-live-state operation state)
+  (validate-state-with-provider-admitted operation state provider))
+
+(define (validate-bound-state-admitted operation state)
   (require-state operation state)
-  (let ((provider (require-provider operation
-                                    (state-provider-binding-find state))))
-    (validate-state-with-provider operation state provider)))
+  (let ((provider (require-provider
+                    operation
+                    (state-provider-binding-find-admitted operation state))))
+    (validate-state-with-provider-admitted operation state provider)))
+
+(define (validate-bound-state operation state)
+  (require-live-state operation state)
+  (validate-bound-state-admitted operation state))
 
 (define (unsafe-entry-copy-matches-source? copied source)
   (and (state-entry-value? copied) (state-entry-value? source)
@@ -3305,7 +3380,7 @@
   ;; This snapshot is allocated before native bind. After bind succeeds the
   ;; bounded tail only mutates these already-existing registry records, so a
   ;; shell published for a pre-clone entry cannot retain borrowed storage.
-  (let scan ((records shell-registry) (result '()))
+  (let scan ((records (shell-registry-current)) (result '()))
     (if (null? records)
         result
         (let ((record (car records)))
@@ -3846,7 +3921,7 @@
                      (tensor-provider-identity provider) entries
                      (copy-data aliases)
                      (vector state-lifecycle-tag 'live #f #f '()
-                             adopted-ownership #f)))
+                             adopted-ownership #f #f)))
            (state-shell #f)
            (cleanup-failed? #f)
            (cleanup-error #f)
@@ -3861,6 +3936,12 @@
                  outcome))
         (validate-state-with-provider operation state provider)
         (set! state-shell (shell-for-raw 'state state))
+        ;; `shell-for-raw` may promote a regional state graph. Bind and return
+        ;; the canonical registry-owned raw state, never the stale regional
+        ;; source used to construct it.
+        (set! state (raw-for-shell operation 'state state-shell))
+        (set! entries (vector-ref state 6))
+        (set! adopted-ownership (vector-ref (state-lifecycle state) 5))
         (state-provider-bind! operation state provider)
         ;; No fallible operation follows transfer into the live state.
         (vector-set! (state-lifecycle state) 2 #t)
@@ -4076,7 +4157,7 @@
   (if (not (= (vector-length entry-record) 4))
       #f
       (let ((owner-state (vector-ref entry-record 3)))
-  (let scan ((records shell-registry))
+  (let scan ((records (shell-registry-current)))
     (if (null? records)
         #f
         (let* ((record (car records))
@@ -4130,6 +4211,38 @@
                               state-shell state (car remaining))
                             (car remaining))
                         result))))))
+
+;; A claimed P1 state remains c2-owned throughout an outer C2 borrow.  This
+;; private marker admits only the unforgeable access identity installed by
+;; that exact active borrow; ordinary live-state admission is untouched.
+(define (c2-owned-state-record operation state-shell)
+  (if (not (symbol? operation))
+      (fail 'invalid-argument 'state-dict-c2-owned-projection-internal
+            "C2 owner operation must be a symbol" '()))
+  (reject-protected-storage-comparison-reentry operation)
+  (let ((entry (shell-entry state-shell)))
+    (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+        (fail 'invalid-argument operation
+              "expected an exact registered P1 state" '()))
+    (let ((raw (vector-ref entry 2)))
+      (if (eq? raw dead-state-raw)
+          (fail 'invalid-state operation "P1 state is dead" '()))
+      raw)))
+
+(define (c2-owned-active-marker operation state-shell access-token)
+  (let* ((raw (c2-owned-state-record operation state-shell))
+         (lifecycle (state-lifecycle raw))
+         (marker (vector-ref lifecycle 7)))
+    (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+            (not (vector? marker)) (not (= (vector-length marker) 5))
+            (not (eq? (vector-ref marker 0) state-c2-borrow-access-tag))
+            (not (eq? (vector-ref marker 1) raw))
+            (not (eq? (vector-ref marker 2) (vector-ref lifecycle 6)))
+            (not (eq? (vector-ref marker 3) access-token))
+            (not (vector? (vector-ref marker 4))))
+        (fail 'invalid-state operation
+              "C2 P1 borrow authority is stale or forged" '()))
+    marker))
 
 (define (exposed-tensor-provider-create
           (name : symbol)
@@ -4222,6 +4335,11 @@
                 "expected registered opaque value" '())
           (let ((raw (vector-ref entry 2)))
             (if (and (not (eq? raw dead-state-raw))
+                     (eq? (vector-ref (state-lifecycle raw) 1) 'c2-owned))
+                (fail 'invalid-state 'state-dict-release!
+                      "state dictionary ownership was transferred" '())
+                #t)
+            (if (and (not (eq? raw dead-state-raw))
                      (eq? (vector-ref (state-lifecycle raw) 1) 'live)
                      (vector-ref (state-lifecycle raw) 6))
                 (fail 'invalid-state 'state-dict-release!
@@ -4284,7 +4402,14 @@
                    (vector-ref (vector-ref plan 1) 7)
                    (vector-ref plan 5))
                  (raise caught)))
-        (let ((shell (shell-for-raw 'handle (vector-ref plan 1))))
+        (let* ((shell (shell-for-raw 'handle (vector-ref plan 1)))
+               (canonical-handle
+                 (raw-for-shell 'module-register-parameter-internal!
+                                'handle shell)))
+          ;; The registry publication above may promote the handle. Replace
+          ;; both pending plan edges before the module itself is published.
+          (vector-set! plan 1 canonical-handle)
+          (vector-set! (car (vector-ref plan 2)) 2 canonical-handle)
           (commit-parameter-registration! plan)
           shell))))
   (lambda (module name handle)
@@ -4415,6 +4540,183 @@
       'state
       (state-dict-adopt-owned-internal!
         records aliases provider-name major minor ownership)))
+  (lambda (state operation)
+    (let* ((raw (c2-owned-state-record operation state))
+           (lifecycle (state-lifecycle raw)))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'live))
+              (vector-ref lifecycle 6) (vector-ref lifecycle 7))
+          (fail 'invalid-state operation
+                "P1 state is busy or transferred" '()))
+      (validate-bound-state-admitted operation raw)
+      (let ((aliases (copy-data (vector-ref raw 7))))
+        (let secondary? ((path #f) (groups aliases))
+          (if path
+              (cond ((null? groups) #f)
+                    ((path-member? path (cdr (car groups))) #t)
+                    (else (secondary? path (cdr groups))))
+              (let collect ((entries (vector-ref raw 6))
+                            (paths '()) (shapes '()))
+                (if (null? entries)
+                    (vector (list-reverse paths)
+                            (list-reverse shapes) aliases)
+                    (let ((item (car entries)))
+                      (if (and (eq? (vector-ref item 2) 'parameter)
+                               (not (secondary? (vector-ref item 1) aliases)))
+                          (collect (cdr entries)
+                                   (cons (copy-data (vector-ref item 1)) paths)
+                                   (cons (copy-data (vector-ref item 3)) shapes))
+                          (collect (cdr entries) paths shapes))))))))))
+  (lambda (state owner-token)
+    (let* ((raw
+             (c2-owned-state-record 'state-dict-claim-c2-internal! state))
+           (lifecycle (state-lifecycle raw)))
+      (if (not owner-token)
+          (fail 'invalid-argument 'state-dict-claim-c2-internal!
+                "expected an owner token" '()))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'live))
+              (vector-ref lifecycle 6) (vector-ref lifecycle 7))
+          (fail 'invalid-state 'state-dict-claim-c2-internal!
+                "P1 state is not claimable at an update boundary" '()))
+      (vector-set! lifecycle 1 'c2-owned)
+      (vector-set! lifecycle 6 owner-token)
+      #t))
+  (lambda (state owner-token)
+    (let* ((raw
+             (c2-owned-state-record
+               'state-dict-claim-c2-rollback-internal! state))
+           (lifecycle (state-lifecycle raw)))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+              (not (eq? (vector-ref lifecycle 6) owner-token))
+              (vector-ref lifecycle 7))
+          (fail 'invalid-state 'state-dict-claim-c2-rollback-internal!
+                "P1 state claim token differs" '()))
+      (vector-set! lifecycle 6 #f)
+      (vector-set! lifecycle 1 'live)
+      #t))
+  (lambda (state owner-token)
+    (reject-protected-storage-comparison-reentry
+      'state-dict-release-c2-owned-internal!)
+    (let* ((operation 'state-dict-release-c2-owned-internal!)
+           (entry (shell-entry state)))
+      (if (or (not entry) (not (eq? (vector-ref entry 1) 'state)))
+          (fail 'invalid-argument operation
+                "expected an exact claimed P1 state" '()))
+      (let ((raw (vector-ref entry 2)))
+        (if (eq? raw dead-state-raw) #t
+            (let ((lifecycle (state-lifecycle raw)))
+              (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+                      (not (eq? (vector-ref lifecycle 6) owner-token))
+                      (vector-ref lifecycle 7))
+                  (fail 'invalid-state operation
+                        "P1 state claim token differs or is busy" '()))
+              (native-check operation
+                (p1-native-state-release-begin native-context state))
+              (if (= (p1-native-result-i64 native-context) 0) #t
+                  (begin
+                    (compact-released-state-shells! raw)
+                    (vector-set! lifecycle 6 #f)
+                    (state-dict-release-owned! raw))))))))
+  (lambda (state access-token operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (raw (vector-ref marker 1)))
+      (validate-bound-state-admitted operation raw)
+      (vector (vector-ref raw 1)
+              (list (vector-ref raw 2) (vector-ref raw 3))
+              (copy-data (vector-ref raw 4))
+              (copy-data (vector-ref raw 5))
+              (wrap-entry-items operation state raw (vector-ref raw 6))
+              (copy-data (vector-ref raw 7)))))
+  (lambda (state access-token entry operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (raw (vector-ref marker 1))
+           (borrow (vector-ref marker 4))
+           (access (vector-ref borrow 5))
+           (raw-entry (raw-entry-for-trusted operation entry)))
+      (if (or (not (state-entry-identical-member? raw-entry (vector-ref raw 6)))
+              (not (vector? access)) (not (= (vector-length access) 5))
+              (vector-ref access 0) (vector-ref access 1)
+              (vector-ref access 2) (vector-ref access 3)
+              (vector-ref access 4))
+          (fail 'invalid-state operation
+                "C2 owner has a stale or active tensor access" '()))
+      (let* ((raw-tensor (state-tensor-for-entry raw raw-entry))
+             (tensor-shell (shell-for-raw 'state-tensor raw-tensor))
+             (carrier (vector-ref raw-entry 7)))
+        (native-check operation
+          (p1-native-state-tensor-validate native-context state tensor-shell))
+        (if (not carrier)
+            (fail 'invalid-state operation
+                  "state-backed tensor is released" '()))
+        ;; Reuse the one outer record allocated with the C2 borrow. Regional
+        ;; callers never publish a short-lived access vector into outer state.
+        (vector-set! access 0 state-c2-borrow-access-tag)
+        (vector-set! access 1 marker)
+        (vector-set! access 2 raw-entry)
+        (vector-set! access 3 tensor-shell)
+        (vector-set! access 4 borrow)
+        carrier)))
+  (lambda (state access-token entry operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (borrow (vector-ref marker 4))
+           (access (vector-ref borrow 5))
+           (raw-entry (raw-entry-for-trusted operation entry)))
+      (if (or (not (vector? access)) (not (= (vector-length access) 5))
+              (not (eq? (vector-ref access 0) state-c2-borrow-access-tag))
+              (not (eq? (vector-ref access 1) marker))
+              (not (eq? (vector-ref access 2) raw-entry))
+              (not (eq? (vector-ref access 4) borrow)))
+          (fail 'invalid-argument operation
+                "C2 tensor access handle differs" '()))
+      (let ((tensor-shell (vector-ref access 3)))
+        ;; Retire the exact access before the fallible native validation. A
+        ;; provider/native defect must not strand the enclosing C2 owner busy.
+        (vector-set! access 0 #f)
+        (vector-set! access 1 #f)
+        (vector-set! access 2 #f)
+        (vector-set! access 3 #f)
+        (vector-set! access 4 #f)
+        (native-check operation
+          (p1-native-state-tensor-validate
+            native-context state tensor-shell))
+        #t)))
+  (lambda (state owner-token access-token borrow operation)
+    (let* ((raw (c2-owned-state-record operation state))
+           (lifecycle (state-lifecycle raw)))
+      (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
+              (not (eq? (vector-ref lifecycle 6) owner-token))
+              (vector-ref lifecycle 7))
+          (fail 'invalid-state operation
+                "P1 state cannot activate this C2 borrow" '()))
+      (validate-bound-state-admitted operation raw)
+      (vector-set! lifecycle 7
+                   (vector state-c2-borrow-access-tag raw owner-token
+                           access-token borrow))
+      #t))
+  (lambda (state owner-token access-token borrow operation)
+    (let* ((raw (c2-owned-state-record operation state))
+           (lifecycle (state-lifecycle raw))
+           (marker (vector-ref lifecycle 7))
+           (access (vector-ref borrow 5)))
+      (if (or (not (vector? marker)) (not (= (vector-length marker) 5))
+              (not (eq? (vector-ref marker 0) state-c2-borrow-access-tag))
+              (not (eq? (vector-ref marker 2) owner-token))
+              (not (eq? (vector-ref marker 3) access-token))
+              (not (eq? (vector-ref marker 4) borrow))
+              (not (vector? access)) (not (= (vector-length access) 5))
+              (vector-ref access 0) (vector-ref access 1)
+              (vector-ref access 2) (vector-ref access 3)
+              (vector-ref access 4))
+          (fail 'invalid-state operation
+                "P1 C2 borrow is stale or has active tensor access" '()))
+      (vector-set! lifecycle 7 #f)
+      #t))
+  ;; Append-only trusted slot 58. Materialize only exact entry shells in the
+  ;; caller's current owner-lifetime arena; do not project metadata or payloads.
+  (lambda (state access-token operation)
+    (let* ((marker (c2-owned-active-marker operation state access-token))
+           (raw (vector-ref marker 1)))
+      (validate-bound-state-admitted operation raw)
+      (wrap-entry-items operation state raw (vector-ref raw 6))))
   )))
 
 (define (module-parameters module)
@@ -4535,4 +4837,31 @@
           records aliases provider-name major minor ownership)
   ((vector-ref p1-trusted-surface 48)
    records aliases provider-name major minor ownership))
+(define (state-dict-c2-parameter-topology-internal state operation)
+  ((vector-ref p1-trusted-surface 49) state operation))
+(define (state-dict-claim-c2-internal! state owner-token)
+  ((vector-ref p1-trusted-surface 50) state owner-token))
+(define (state-dict-claim-c2-rollback-internal! state owner-token)
+  ((vector-ref p1-trusted-surface 51) state owner-token))
+(define (state-dict-release-c2-owned-internal! state owner-token)
+  ((vector-ref p1-trusted-surface 52) state owner-token))
+(define (state-dict-c2-owned-projection-internal state access-token operation)
+  ((vector-ref p1-trusted-surface 53) state access-token operation))
+(define (state-dict-c2-owned-tensor-borrow-begin-internal
+          state access-token entry operation)
+  ((vector-ref p1-trusted-surface 54) state access-token entry operation))
+(define (state-dict-c2-owned-tensor-borrow-end-internal
+          state access-token entry operation)
+  ((vector-ref p1-trusted-surface 55) state access-token entry operation))
+(define (state-dict-c2-owned-borrow-activate-internal!
+          state owner-token access-token borrow operation)
+  ((vector-ref p1-trusted-surface 56)
+   state owner-token access-token borrow operation))
+(define (state-dict-c2-owned-borrow-deactivate-internal!
+          state owner-token access-token borrow operation)
+  ((vector-ref p1-trusted-surface 57)
+   state owner-token access-token borrow operation))
+(define (state-dict-c2-owned-entry-shells-internal
+          state access-token operation)
+  ((vector-ref p1-trusted-surface 58) state access-token operation))
 @@P1_TRUSTED_END@@

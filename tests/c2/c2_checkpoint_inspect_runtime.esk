@@ -1,0 +1,233 @@
+(require transformer.persistence_policy_internal)
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_inspect_extension.esk")
+
+(extern void c2-inspect-test-reset
+        :real et_c2_checkpoint_inspect_test_reset_v1)
+(extern void c2-inspect-test-fail-projection i64
+        :real et_c2_checkpoint_inspect_test_fail_projection_v1)
+(extern void c2-inspect-test-fail-release i64
+        :real et_c2_checkpoint_inspect_test_fail_release_v1)
+(extern void c2-core-test-reset :real et_c2_checkpoint_core_test_reset_v1)
+(extern void c2-core-test-fail-alloc i64
+        :real et_c2_checkpoint_core_test_fail_alloc_after_v1)
+(extern i64 c2-core-test-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "C2 INSPECT FAIL: ") (display label) (newline) (exit 1))))
+
+(define (details-ref details key fallback)
+  (let loop ((remaining details))
+    (if (null? remaining) fallback
+        (if (and (pair? (car remaining)) (pair? (cdr (car remaining)))
+                 (eq? (car (car remaining)) key))
+            (car (cdr (car remaining)))
+            (loop (cdr remaining))))))
+
+(define (capture thunk)
+  (guard (raised (#t raised)) (thunk) #f))
+
+(define (check-error label value category operation)
+  (check label
+    (and (transformer-error? value)
+         (eq? category (transformer-error-category value))
+         (eq? operation (transformer-error-operation value)))))
+
+(define args (cdr (command-line)))
+(define valid-path (car args))
+(define compiler-path (car (cdr args)))
+(define checksum-path (car (cdr (cdr args))))
+(define hostile-path (car (cdr (cdr (cdr args)))))
+(define profile-path (car (cdr (cdr (cdr (cdr args))))))
+(define missing-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
+(define directory-path (car (cdr (cdr (cdr (cdr (cdr (cdr args))))))))
+(define symlink-path
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))
+
+(define policy
+  (c2-persistence-policy-internal 3039 2567 8 3 'cpu))
+(define metadata (c2-checkpoint-inspect-internal valid-path policy))
+(check "metadata shell opaque" (not (vector? metadata)))
+(check "format id" (eq? 'eshkol-training-state
+                         (c2-checkpoint-metadata-ref-internal metadata 'format-id)))
+(check "format version" (equal? '(1 0)
+                         (c2-checkpoint-metadata-ref-internal metadata 'format-version)))
+(check "required features" (null?
+                         (c2-checkpoint-metadata-ref-internal metadata 'required-features)))
+(check "checksum" (eq? 'sha256
+                         (c2-checkpoint-metadata-ref-internal metadata 'checksum-algorithm)))
+(check "API version" (string=? "0.1.0-draft"
+                         (c2-checkpoint-metadata-ref-internal metadata 'api-version)))
+(check "config schema" (equal? '(1 0)
+                         (c2-checkpoint-metadata-ref-internal metadata 'config-schema-version)))
+(check "tokenizer fingerprint" (string=?
+  "sha256:eshkol-byte-tokenizer-v1:0000000000000000000000000000000000000000000000000000000000000000"
+  (c2-checkpoint-metadata-ref-internal metadata 'tokenizer-fingerprint)))
+(check "config fingerprint" (string=?
+  "sha256:eshkol-config-json-v1:a27ed00686df9879a06d4cb177c65807b3443a41463e8a397f8f1672562242b0"
+  (c2-checkpoint-metadata-ref-internal metadata 'config-fingerprint)))
+(check "tensor count" (= 3
+                         (c2-checkpoint-metadata-ref-internal metadata 'tensor-count)))
+(check "logical payload bytes" (= 24
+                         (c2-checkpoint-metadata-ref-internal metadata 'payload-bytes)))
+(check "string access returns owned copies"
+  (not (eq? (c2-checkpoint-metadata-ref-internal metadata 'api-version)
+            (c2-checkpoint-metadata-ref-internal metadata 'api-version))))
+(check "list access returns owned copies"
+  (not (eq? (c2-checkpoint-metadata-ref-internal metadata 'format-version)
+            (c2-checkpoint-metadata-ref-internal metadata 'format-version))))
+(define metadata-two (c2-checkpoint-inspect-internal valid-path policy))
+(check "equal inspections have distinct exact identities" (not (eq? metadata metadata-two)))
+(check "no retained image after success" (= 0 (c2-core-test-live-images)))
+
+(define copied
+  (guard (raised (#t raised)) (error "transformer.checkpoint.metadata:c2-v1")))
+(check-error "copied shell rejected"
+  (capture (lambda () (c2-checkpoint-metadata-ref-internal copied 'format-id)))
+  'invalid-argument 'checkpoint-metadata-ref)
+(define metadata-relay-called? #f)
+(define metadata-relay #f)
+(set! metadata-relay
+  (lambda (query)
+    (set! metadata-relay-called? #t)
+    (let ((entry (metadata query)))
+      (vector-set! entry 0 metadata-relay)
+      entry)))
+(check-error "relay shell rejected before private query"
+  (capture
+    (lambda ()
+      (c2-checkpoint-metadata-ref-internal metadata-relay 'format-id)))
+  'invalid-argument 'checkpoint-metadata-ref)
+(check "relay rejection preserves original metadata without invocation"
+       (and (not metadata-relay-called?)
+            (= 3
+               (c2-checkpoint-metadata-ref-internal
+                 metadata 'tensor-count))))
+(check-error "forged shell rejected before key"
+  (capture (lambda ()
+    (c2-checkpoint-metadata-ref-internal
+      (vector 'c2-checkpoint-metadata) (vector 'poison))))
+  'invalid-argument 'checkpoint-metadata-ref)
+(check-error "wrong-kind policy shell rejected"
+  (capture (lambda () (c2-checkpoint-metadata-ref-internal policy 'format-id)))
+  'invalid-argument 'checkpoint-metadata-ref)
+(check-error "unknown key rejected"
+  (capture (lambda () (c2-checkpoint-metadata-ref-internal metadata 'file-bytes)))
+  'invalid-argument 'checkpoint-metadata-ref)
+
+(define compiler-error
+  (capture (lambda () (c2-checkpoint-inspect-internal compiler-path policy))))
+(check-error "compiler identity inspect classification" compiler-error
+             'unsupported 'checkpoint-inspect)
+(check "compiler exact core code"
+  (= 9 (details-ref (transformer-error-details compiler-error) 'source-code -1)))
+(check "compiler exact format category"
+  (= 4 (details-ref (transformer-error-details compiler-error) 'format-category -1)))
+(check "compiler exact format code"
+  (= 12 (details-ref (transformer-error-details compiler-error) 'format-code -1)))
+(check "compiler exact format offset"
+  (= 521 (details-ref (transformer-error-details compiler-error) 'format-offset -1)))
+
+(define checksum-error
+  (capture (lambda () (c2-checkpoint-inspect-internal checksum-path policy))))
+(check-error "checksum category" checksum-error 'corrupt-data 'checkpoint-inspect)
+(check "checksum exact format code"
+  (= 10 (details-ref (transformer-error-details checksum-error) 'format-code -1)))
+(check "checksum exact format offset"
+  (= 3007 (details-ref (transformer-error-details checksum-error) 'format-offset -1)))
+(define hostile-error
+  (capture (lambda () (c2-checkpoint-inspect-internal hostile-path policy))))
+(check-error "hostile identity" hostile-error 'corrupt-data 'checkpoint-inspect)
+(check "hostile exact format code"
+  (= 12 (details-ref (transformer-error-details hostile-error) 'format-code -1)))
+(check "hostile exact format offset"
+  (= 256 (details-ref (transformer-error-details hostile-error) 'format-offset -1)))
+
+(check-error "file limit"
+  (capture (lambda ()
+    (c2-checkpoint-inspect-internal valid-path
+      (c2-persistence-policy-internal 3038 2567 8 3 'cpu))))
+  'corrupt-data 'checkpoint-inspect)
+(check-error "metadata limit"
+  (capture (lambda ()
+    (c2-checkpoint-inspect-internal valid-path
+      (c2-persistence-policy-internal 3039 2566 8 3 'cpu))))
+  'corrupt-data 'checkpoint-inspect)
+(check-error "tensor limit"
+  (capture (lambda ()
+    (c2-checkpoint-inspect-internal valid-path
+      (c2-persistence-policy-internal 3039 2567 7 3 'cpu))))
+  'corrupt-data 'checkpoint-inspect)
+(check-error "count limit"
+  (capture (lambda ()
+    (c2-checkpoint-inspect-internal valid-path
+      (c2-persistence-policy-internal 3039 2567 8 2 'cpu))))
+  'corrupt-data 'checkpoint-inspect)
+
+(define profile-error
+  (capture (lambda ()
+    (c2-checkpoint-inspect-internal profile-path
+      (c2-persistence-policy-mode-internal
+        1099511627776 268435456 274877906944 6826 'cpu 'operational-target)))))
+(check-error "profile category" profile-error 'unsupported 'checkpoint-inspect)
+(check "profile exact code"
+  (= 19 (details-ref (transformer-error-details profile-error) 'format-code -1)))
+
+(check-error "non-string path"
+  (capture (lambda () (c2-checkpoint-inspect-internal 7 policy)))
+  'invalid-argument 'checkpoint-inspect)
+(check-error "empty path"
+  (capture (lambda () (c2-checkpoint-inspect-internal "" policy)))
+  'invalid-argument 'checkpoint-inspect)
+(check-error "embedded-NUL path"
+  (capture (lambda ()
+    (let ((path (string-copy "axb")))
+      (string-set! path 1 #\nul)
+      (c2-checkpoint-inspect-internal path policy))))
+  'invalid-argument 'checkpoint-inspect)
+(check-error "oversized path"
+  (capture (lambda () (c2-checkpoint-inspect-internal (make-string 4097 #\x) policy)))
+  'invalid-argument 'checkpoint-inspect)
+(check-error "missing path"
+  (capture (lambda () (c2-checkpoint-inspect-internal missing-path policy)))
+  'io 'checkpoint-inspect)
+(check-error "directory path"
+  (capture (lambda () (c2-checkpoint-inspect-internal directory-path policy)))
+  'io 'checkpoint-inspect)
+(check-error "nofollow symlink path"
+  (capture (lambda () (c2-checkpoint-inspect-internal symlink-path policy)))
+  'io 'checkpoint-inspect)
+
+(c2-core-test-fail-alloc 0)
+(define allocation-error
+  (capture (lambda () (c2-checkpoint-inspect-internal valid-path policy))))
+(check-error "retained-image allocation" allocation-error 'io 'checkpoint-inspect)
+(check "retained allocation exact code"
+  (= 6 (details-ref (transformer-error-details allocation-error) 'source-code -1)))
+(check "retained allocation no leak" (= 0 (c2-core-test-live-images)))
+(c2-core-test-reset)
+
+(c2-inspect-test-fail-projection 1)
+(define projection-error
+  (capture (lambda () (c2-checkpoint-inspect-internal valid-path policy))))
+(check-error "projection allocation" projection-error 'internal 'checkpoint-inspect)
+(check "projection exact code"
+  (= 100 (details-ref (transformer-error-details projection-error) 'source-code -1)))
+(check "projection failure no leak" (= 0 (c2-core-test-live-images)))
+(c2-inspect-test-reset)
+
+(c2-inspect-test-fail-release 1)
+(define release-error
+  (capture (lambda () (c2-checkpoint-inspect-internal valid-path policy))))
+(check-error "release failure" release-error 'internal 'checkpoint-inspect)
+(check "release exact code"
+  (= 101 (details-ref (transformer-error-details release-error) 'source-code -1)))
+(check "release failure no leak" (= 0 (c2-core-test-live-images)))
+(c2-inspect-test-reset)
+
+(check "all paths finish without retained images" (= 0 (c2-core-test-live-images)))
+(display "C2 CHECKPOINT INSPECT PASS: ") (display checks) (display " checks")
+(newline)

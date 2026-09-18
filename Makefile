@@ -5,13 +5,20 @@ SHELL := /usr/bin/bash
 	build-ci-core build-ci-contracts build-ci-checkpoint build-ci-parameters \
 	build-ci-tokenizer-byte build-ci-tokenizer-bpe \
 	build-ci-tokenizer-bpe-boundary build-ci-dataset \
-	test test-after-build test-ci-core-after-build \
+	test test-after-build test-acceptance-predecessors-after-build \
+	test-acceptance-c2-after-build test-ci-core-after-build \
 	test-ci-contracts-after-build test-ci-checkpoint-after-build \
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
 	test-ci-topology \
-	test-a0 test-a2 test-b0 test-c1 test-d1 test-d2 test-e1 test-e1b \
+	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
+	test-c2-checkpoint-inspect test-c2-checkpoint-load test-c2-checkpoint-save \
+	test-c2-checkpoint-operational test-c2-public \
+	test-c2-d2-cursor-pair test-c2-format \
+	test-c2-model-encode test-c2-o2-encode \
+	test-c2-persistence-policy test-c2-training-state-owner \
+	test-c2-x1-canonical test-d1 test-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-x1 \
@@ -33,6 +40,7 @@ build: configure
 	/usr/bin/bash scripts/build-t1.sh
 	/usr/bin/bash scripts/build-t2.sh
 	/usr/bin/bash scripts/build-d2.sh
+	/usr/bin/bash scripts/build-c2.sh
 
 build-ci-core: configure
 	/usr/bin/bash scripts/generate-p1-roots.sh --check
@@ -56,6 +64,7 @@ build-ci-contracts: configure
 
 build-ci-checkpoint: configure
 	/usr/bin/bash scripts/build-c1.sh
+	/usr/bin/bash scripts/build-c2.sh
 
 build-ci-parameters: configure
 
@@ -94,10 +103,38 @@ test-after-build:
 	/usr/bin/bash scripts/test-d1.sh
 	/usr/bin/bash scripts/test-d2.sh
 	/usr/bin/bash scripts/test-c1.sh
+	/usr/bin/bash scripts/test-c2.sh
 	/usr/bin/bash scripts/test-t1.sh
 	/usr/bin/bash scripts/test-t2.sh --runtime-only
 	/usr/bin/bash scripts/test-t2-boundary.sh
 	/usr/bin/bash scripts/test-q0.sh
+
+test-acceptance-predecessors-after-build:
+	/usr/bin/bash scripts/test.sh
+	/usr/bin/bash scripts/check_a0_api_contract.sh
+	/usr/bin/bash scripts/test-k1.sh
+	/usr/bin/bash scripts/test-a2.sh
+	/usr/bin/bash scripts/test-l2.sh
+	/usr/bin/bash scripts/test-e1.sh
+	/usr/bin/bash scripts/test-e1b.sh
+	/usr/bin/bash scripts/test-i1.sh
+	/usr/bin/bash scripts/test-i2.sh
+	/usr/bin/bash scripts/test-k2.sh
+	/usr/bin/bash scripts/test-n2.sh
+	/usr/bin/bash scripts/test-n3k.sh
+	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-x1.sh
+	/usr/bin/bash scripts/test-p1.sh
+	/usr/bin/bash scripts/test-d1.sh
+	/usr/bin/bash scripts/test-d2.sh
+	/usr/bin/bash scripts/test-c1.sh
+	/usr/bin/bash scripts/test-t1.sh
+	/usr/bin/bash scripts/test-t2.sh --runtime-only
+	/usr/bin/bash scripts/test-t2-boundary.sh
+	/usr/bin/bash scripts/test-q0.sh
+
+test-acceptance-c2-after-build:
+	/usr/bin/bash scripts/test-c2.sh
 
 test-ci-core-after-build:
 	/usr/bin/bash scripts/test.sh
@@ -121,6 +158,32 @@ test-ci-contracts-after-build:
 
 test-ci-checkpoint-after-build:
 	/usr/bin/bash scripts/test-c1.sh
+
+.PHONY: test-ci-clean-build-after-build test-ci-c2-format-after-build \
+	test-ci-c2-state-after-build test-ci-c2-save-after-build \
+	test-ci-c2-load-after-build test-ci-c2-public-after-build \
+	test-ci-c2-operational-after-build
+
+test-ci-clean-build-after-build:
+	$(MAKE) smoke-after-build benchmark-after-build
+
+test-ci-c2-format-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-format
+
+test-ci-c2-state-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-state
+
+test-ci-c2-save-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-save
+
+test-ci-c2-load-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-load
+
+test-ci-c2-public-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-public
+
+test-ci-c2-operational-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-operational
 
 test-ci-parameters-after-build:
 	/usr/bin/bash scripts/test-p1.sh
@@ -199,6 +262,51 @@ test-d2: build
 
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
+
+test-c2: configure
+	/usr/bin/bash scripts/test-c2.sh
+
+test-c2-format:
+	/usr/bin/bash scripts/test-c2-format.sh
+
+test-c2-codec:
+	/usr/bin/bash scripts/test-c2-codec.sh
+
+test-c2-core:
+	/usr/bin/bash scripts/test-c2-core.sh
+
+test-c2-checkpoint-inspect:
+	/usr/bin/bash scripts/test-c2-checkpoint-inspect.sh
+
+test-c2-checkpoint-load:
+	/usr/bin/bash scripts/test-c2-checkpoint-load.sh
+
+test-c2-checkpoint-save:
+	/usr/bin/bash scripts/test-c2-checkpoint-save.sh
+
+test-c2-checkpoint-operational:
+	/usr/bin/bash scripts/test-c2-checkpoint-operational.sh
+
+test-c2-public:
+	/usr/bin/bash scripts/test-c2-public.sh
+
+test-c2-persistence-policy:
+	/usr/bin/bash scripts/test-c2-persistence-policy.sh
+
+test-c2-x1-canonical:
+	/usr/bin/bash scripts/test-c2-x1-canonical.sh
+
+test-c2-d2-cursor-pair:
+	/usr/bin/bash scripts/test-c2-d2-cursor-pair.sh
+
+test-c2-training-state-owner:
+	/usr/bin/bash scripts/test-c2-training-state-owner.sh
+
+test-c2-model-encode:
+	/usr/bin/bash scripts/test-c2-model-encode.sh
+
+test-c2-o2-encode:
+	/usr/bin/bash scripts/test-c2-o2-encode.sh
 
 test-t1: build
 	/usr/bin/bash scripts/test-t1.sh

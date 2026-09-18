@@ -1870,3 +1870,16 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   oracle regeneration, O2's 6,201 adversarial checks, sanitizers/LSan, full smoke,
   and benchmark. A new independent O2-R exact-head review is required after green
   evidence. O2 and the F0 topology remain `review`; PR #58 must not be merged here.
+## 2026-09-18 — CI-E user-authorized full-coverage efficiency candidate
+
+Issue #78, stacked on PR #77 scheduling head
+`e99b127b0b194c2a11d350a36d6b9f7507a66560`. The user authorized all four
+identified CI efficiency changes. Implementation removes only accidental nested
+C2 regression invocations, partitions independent C2 groups, builds audited
+prerequisites once per job, and shares one full-coverage workflow with strict
+exact-tree completed-CI evidence reuse for manual acceptance. Nightly remains
+fresh; an explicit canonical clean-build job remains mandatory. No runtime/API,
+format, numerical/resource-bound or Wave 3 change. Existing running PR #77 jobs
+are not cancelled. See `docs/CI_EFFICIENCY.md` for mapping and measured baseline.
+Status: proposed/review candidate; hosted evidence and independent final review
+remain required before integration or any speedup claim.
