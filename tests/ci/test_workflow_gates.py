@@ -2,7 +2,10 @@
 
 import os
 from pathlib import Path
+import json
 import subprocess
+import sys
+import tempfile
 import textwrap
 import unittest
 
@@ -13,6 +16,21 @@ FULL_COVERAGE = WORKFLOW.with_name("full-coverage.yml")
 
 
 class WorkflowGateTests(unittest.TestCase):
+    def assert_n2_reference_environment_is_pinned(self, workflow):
+        install = workflow.split(
+            "      - name: Install pinned development oracle\n", 1
+        )[1].split("      - name: Verify pinned Eshkol toolchain\n", 1)[0]
+        self.assertIn("export ATEN_CPU_CAPABILITY=default", install)
+        self.assertIn("export MKL_CBWR=COMPATIBLE", install)
+        self.assertIn(
+            'os.environ.get("ATEN_CPU_CAPABILITY") == "default"', install
+        )
+        self.assertIn('os.environ.get("MKL_CBWR") == "COMPATIBLE"', install)
+        self.assertIn(
+            'torch.backends.cpu.get_cpu_capability() == "DEFAULT"', install
+        )
+        self.assertEqual(workflow.count("MKL_CBWR"), 2)
+
     def test_final_status_accepts_only_completed_required_scope(self):
         gate = WORKFLOW.read_text().split("  f0-linux:\n", 1)[1]
         command = textwrap.dedent(gate.split("        run: |\n", 1)[1])
@@ -58,15 +76,68 @@ class WorkflowGateTests(unittest.TestCase):
             workflow.count("if: matrix.suite == 'native-numerics'"),
             2,
         )
-        self.assertIn("ATEN_CPU_CAPABILITY=default", workflow)
-        self.assertIn(
-            'torch.backends.cpu.get_cpu_capability() == "DEFAULT"',
-            workflow,
-        )
+        self.assert_n2_reference_environment_is_pinned(workflow)
         self.assertIn("N2_ORACLE_PYTHON=$n2_oracle_python", workflow)
         self.assertIn("O2_ORACLE_PYTHON=$oracle_python", workflow)
         self.assertIn("A2_ORACLE_PYTHON=$oracle_python", workflow)
         self.assertIn("Q0_PYTHON=$oracle_python", workflow)
+
+    def test_n2_reference_environment_rejects_missing_or_escaped_mkl_pin(self):
+        workflow = FULL_COVERAGE.read_text()
+        mutations = (
+            workflow.replace("export MKL_CBWR=COMPATIBLE\\n", "", 1),
+            workflow.replace(
+                'assert os.environ.get("MKL_CBWR") == "COMPATIBLE"; ', "", 1
+            ),
+            workflow.replace(
+                "    env:\n      CC: clang-21",
+                "    env:\n      MKL_CBWR: COMPATIBLE\n      CC: clang-21",
+                1,
+            ),
+        )
+        for mutation in mutations:
+            with self.subTest(), self.assertRaises(AssertionError):
+                self.assert_n2_reference_environment_is_pinned(mutation)
+
+    def test_n2_wrapper_overrides_inherited_dispatch_only_for_wrapped_python(self):
+        workflow = FULL_COVERAGE.read_text()
+        install = workflow.split(
+            "      - name: Install pinned development oracle\n", 1
+        )[1].split("      - name: Verify pinned Eshkol toolchain\n", 1)[0]
+        wrapper_format = install.split("          printf '", 1)[1].split("' \\\n", 1)[0]
+        inherited = {
+            **os.environ,
+            "ATEN_CPU_CAPABILITY": "inherited-aten",
+            "MKL_CBWR": "inherited-mkl",
+        }
+        probe = (
+            "import json, os; print(json.dumps({"
+            "'aten': os.environ.get('ATEN_CPU_CAPABILITY'), "
+            "'mkl': os.environ.get('MKL_CBWR')}))"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            wrapper = Path(directory) / "n2-oracle-python"
+            subprocess.run(
+                ["bash", "-c", 'printf "$1" "$2" > "$3"', "_",
+                 wrapper_format, sys.executable, str(wrapper)],
+                check=True,
+            )
+            wrapper.chmod(0o500)
+            wrapped = subprocess.run(
+                [str(wrapper), "-c", probe], env=inherited,
+                check=True, capture_output=True, text=True,
+            )
+            direct = subprocess.run(
+                [sys.executable, "-c", probe], env=inherited,
+                check=True, capture_output=True, text=True,
+            )
+        self.assertEqual(
+            json.loads(wrapped.stdout), {"aten": "default", "mkl": "COMPATIBLE"}
+        )
+        self.assertEqual(
+            json.loads(direct.stdout),
+            {"aten": "inherited-aten", "mkl": "inherited-mkl"},
+        )
 
 
 if __name__ == "__main__":

@@ -62,6 +62,26 @@ Job summaries expose prerequisite/test seconds. Raw logs retain exact checks and
 resource results. Workflow selection/evidence and topology tests are development
 Python only, outside all delivered Eshkol/runtime closures.
 
+## N2 reference environment
+
+The N2 development-oracle wrapper pins `ATEN_CPU_CAPABILITY=default` and
+`MKL_CBWR=COMPATIBLE`. This is a reference-generation environment constraint only:
+the O2, A2, and Q0 oracle commands still use the unwrapped pinned Python, and no
+runtime, native kernel, frozen fixture, generator, dependency lock, or tolerance is
+changed.
+
+Diagnostic run 35390303234 reproduced the frozen oracle on two AMD EPYC 7763
+hosts, but an Intel Xeon Platinum 8573C host differed in the same 18 words under
+both before- and after-generation host probing. The differences were confined to
+linear forward, weight-gradient, and input-gradient tensors; metadata was
+unchanged. Controlled run 35390613831 sampled six hosts. Both baseline repetitions
+failed with those same 18 word differences on Intel Xeon Platinum 8573C and 6973P-C
+hosts, while the three AMD hosts matched. All 12 `MKL_CBWR=COMPATIBLE` repetitions
+matched the frozen SHA-256
+`a32e065db6d7654600121696ba680cb15654c6712696e37fdb4a5cfb51abca03` exactly.
+These runs justify the candidate CI reference pin; they do not claim that this
+branch has merged or that production numerics changed.
+
 ## Measurements
 
 | Supported baseline | Observed |

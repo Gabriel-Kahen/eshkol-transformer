@@ -151,6 +151,10 @@ def check(root, overrides=None):
     assert field(ss["Select pinned oracle Python"], 8, "uses") == "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
     assert field(ss["Restore pinned Eshkol toolchain"], 8, "uses") == "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830"
     assert 'ATEN_CPU_CAPABILITY=default' in ss["Install pinned development oracle"]
+    assert 'MKL_CBWR=COMPATIBLE' in ss["Install pinned development oracle"]
+    assert suite.count("MKL_CBWR") == 2
+    assert 'os.environ.get("ATEN_CPU_CAPABILITY") == "default"' in ss["Install pinned development oracle"]
+    assert 'os.environ.get("MKL_CBWR") == "COMPATIBLE"' in ss["Install pinned development oracle"]
     assert 'torch.backends.cpu.get_cpu_capability() == "DEFAULT"' in ss["Install pinned development oracle"]
     for variable, value in (("N2", "n2_oracle_python"), ("O2", "oracle_python"), ("A2", "oracle_python")):
         assert f'echo "{variable}_ORACLE_PYTHON=${value}"' in ss["Install pinned development oracle"]
