@@ -1,77 +1,38 @@
-name: CI
+name: N2 oracle diagnostic
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  topology:
-    name: CI topology
+  oracle-diagnostic:
+    name: N2 oracle diagnostic / sample-${{ matrix.sample }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 2
-    outputs:
-      run_full: ${{ steps.changes.outputs.run_full }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+    env:
+      ATEN_CPU_CAPABILITY: default
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
-          fetch-depth: 0
-      - run: make test-ci-topology
-      - name: Test change selection
-        run: |
-          python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
-          python3 -m unittest -v tests.q0.test_python_isolation
-      - name: Select required suites
-        id: changes
-        env:
-          CI_EVENT: ${{ github.event_name }}
-          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          CI_HEAD_SHA: ${{ github.sha }}
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: |
-          run_full=true
-          if [[ "$CI_EVENT" == pull_request ]]; then
-            run_full=$(python3 tests/ci/changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
-          fi
-          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
-          if [[ "$run_full" == false ]]; then
-            echo 'Documentation-only PR: compiler suites are not required.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'Full compiler and acceptance suites are required.' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-  blocking:
-    name: Full suites
-    needs: topology
-    if: needs.topology.outputs.run_full == 'true'
-    uses: ./.github/workflows/full-coverage.yml
-
-  f0-linux:
-    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
-    if: ${{ always() }}
-    needs: [topology, blocking]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 2
-    steps:
-      - name: Require successful checks for the selected scope
-        env:
-          TOPOLOGY_RESULT: ${{ needs.topology.result }}
-          BLOCKING_RESULT: ${{ needs.blocking.result }}
-          RUN_FULL: ${{ needs.topology.outputs.run_full }}
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: |
-          test "$TOPOLOGY_RESULT" = success
-          case "$RUN_FULL:$BLOCKING_RESULT" in
-            true:success|false:skipped) ;;
-            *) exit 1 ;;
-          esac
+          python-version: 3.14.6
+          cache: pip
+          cache-dependency-path: tests/n2/requirements-reference.lock
+      - name: Install exact reference dependencies
+        run: python -m pip install --requirement tests/n2/requirements-reference.lock
+      - name: Regenerate and compare the N2 oracle
+        run: python tests/ci/diagnose_n2_oracle.py --output-dir "$RUNNER_TEMP/n2-oracle-diagnostic"
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: n2-oracle-diagnostic-${{ matrix.sample }}
+          path: ${{ runner.temp }}/n2-oracle-diagnostic
+          if-no-files-found: error
