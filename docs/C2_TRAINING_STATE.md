@@ -9,13 +9,15 @@ LOAD/SAVE ownership gates pass. A local source-composed candidate now exposes
 the capability-facing `checkpoint-load/3` through the caller's exact K2 report,
 with an exact 81-global / 75-export / 81-public-string boundary and one archive
 member. Its fresh-cache public lifecycle, hostile-linkage, deterministic-build,
-and root-retention gates pass on the unsupported development host. The final
-canonical-root gate drives two fresh AOT copies through the public 64-tensor
-LOAD/SAVE/release lifecycle at 519,028 and 520,656 KiB peak RSS, below the
-unchanged 524,288 KiB ceiling. Exact per-tensor admission, every injected K2
-failure ordinal, unsupported-rank cleanup, alias-shape rejection, and affected
-format/core/save/load regressions pass. Publication still waits for Ubuntu
-22.04/LLVM 21.1.8 blocking and exhaustive CI plus final integration acceptance.
+and root-retention gates pass on the supported Ubuntu 22.04/LLVM 21.1.8 runner.
+Blocking run 35328578567 at source head `e1fbbfe` holds the canonical roots flat
+at 5,701,632 bytes for both 1,024 and 8,192 iterations and drives two fresh AOT
+copies through the public 64-tensor LOAD/SAVE/release lifecycle at 521,340 and
+521,380 KiB peak RSS, below the unchanged 524,288 KiB ceiling. Exact per-tensor
+admission, every injected K2 failure ordinal, unsupported-rank cleanup,
+alias-shape rejection, and affected format/core/save/load regressions pass.
+Publication still waits for partitioned exhaustive CI plus final integration
+acceptance.
 
 ## Scope
 
@@ -161,10 +163,11 @@ The initial operational target is 16 MiB file bytes, 512 KiB artifact-wide
 metadata, 8 MiB per tensor, and 64 total tensors. This tuple is not a wire
 property and is not considered supported until exact/one-over, jointly
 attainable, repeated-save, memory, timing, and no-warning probes pass on the
-pinned toolchain. The private gates now demonstrate that tuple on the current
-CachyOS/Clang 22 development host without lowering it; the support claim still
-requires the project-supported Ubuntu 22.04/LLVM 21 CI environment. It must not
-be silently lowered.
+pinned toolchain. The gates demonstrate that tuple without lowering it on the
+project-supported Ubuntu 22.04/LLVM 21 environment in blocking run 35328578567:
+the two fresh joint runs peak at 521,340 and 521,380 KiB and the 1,024/8,192
+root-retention horizons are both 5,701,632 bytes. It must not be silently
+lowered.
 
 Input uses one `O_NOFOLLOW` regular-file descriptor. C2 probes the outer and
 nested C1 fixed headers, applies size/metadata/count checks before allocating

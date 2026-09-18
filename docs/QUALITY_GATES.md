@@ -20,14 +20,25 @@ baseline. The first parallel run 34400156724 passed five suites, but exposed mis
 D2 aggregate prerequisites in both tokenizer jobs. Those prerequisites are now
 explicit; the BPE runtime and boundary phases are separate jobs.
 
-The outer job timeout is selected by suite identity: `native-numerics` receives 105
-minutes and every other blocking suite retains 75 minutes. Topology and final-status
-jobs retain two minutes, and exhaustive acceptance retains 240 minutes. This bounded
-exception followed two 75-minute cancellations of the native suite in
+The outer job timeout is selected by suite identity: `checkpoint-io` receives 240
+minutes, `native-numerics` receives 105 minutes, and every other blocking suite
+retains 75 minutes. Topology and final-status jobs retain two minutes, and each
+exhaustive-acceptance partition retains 240 minutes. The native exception followed
+two 75-minute cancellations of the native suite in
 [run 34788832457](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34788832457)
 at exact K2 source head `2641c24b2c50939f300ae995c00d0337c01660a3`.
 Both attempts passed K2, N2, and N3K before cancellation during O2 without an
 assertion failure; neither reached smoke/benchmark and neither is passing evidence.
+The checkpoint exception followed the exact 75-minute outer cancellation in
+[run 35321511393](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35321511393):
+the lane passed C1 plus C2 core, inspect, codec, X1, cursor, policy, owner, model/O2
+encode, and SAVE before cancellation during LOAD, without an assertion failure and
+before public/operational evidence. At the corrected scheduling-only successor
+head, with only the outer budget changed,
+[run 35328578567](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35328578567)
+passed the same checkpoint lane in 3h44m36s, including two 64-tensor
+joint runs at 521,340 and 521,380 KiB peak RSS below the unchanged 524,288 KiB
+ceiling and flat 1,024/8,192 root retention at 5,701,632 bytes.
 No inner timeout, test, sanitizer, oracle, leak check, resource assertion, command,
 or failure-propagation gate changes with the outer scheduling budget. The executable
 topology check pins the 60-second A0 compiler timeout in both workflows and rejects
@@ -43,12 +54,17 @@ status check fails for unsuccessful topology checks, failed/cancelled suites, or
 missing selection output; it permits skipped suites only for an explicit prose-only
 selection.
 
-Exhaustive acceptance runs nightly and on manual dispatch. It repeats the complete
-suite serially in one supported environment while retaining every repeated
+Exhaustive acceptance runs nightly and on manual dispatch. It partitions the exact
+complete 23-command suite across two isolated Ubuntu 22.04/LLVM 21 jobs with the
+same pinned toolchain, oracle, sanitizer, and leak-check environment. The predecessor
+partition performs a fresh canonical full build, its 22 commands, smoke, and the
+reproducible benchmark. The C2 partition performs a separate fresh canonical C1/C2
+build and the unchanged aggregate C2 command. Their command multisets must equal the
+local no-rebuild suite exactly, so each command runs once while every repeated
 fresh-cache compilation, hostile-path and symbol-isolation proof, maximum-size and
-resource-bound case, sanitizer gate, and compiled corruption matrix described below.
-It builds once, then uses the no-rebuild test, smoke, and benchmark entry points
-under the 240-minute outer timeout.
+resource-bound case, sanitizer gate, and compiled corruption matrix inside those
+commands remains intact. Each independent partition retains the 240-minute outer
+timeout; no runtime state or artifact crosses between jobs.
 A pinned N2-only development-oracle wrapper selects PyTorch's baseline CPU dispatch
 before import so frozen reference bytes do not depend on the hosted runner's
 AVX2/AVX512 capability. O2, A2, and Q0 retain the direct pinned interpreter; the

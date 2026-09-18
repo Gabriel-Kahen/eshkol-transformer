@@ -5,7 +5,8 @@ SHELL := /usr/bin/bash
 	build-ci-core build-ci-contracts build-ci-checkpoint build-ci-parameters \
 	build-ci-tokenizer-byte build-ci-tokenizer-bpe \
 	build-ci-tokenizer-bpe-boundary build-ci-dataset \
-	test test-after-build test-ci-core-after-build \
+	test test-after-build test-acceptance-predecessors-after-build \
+	test-acceptance-c2-after-build test-ci-core-after-build \
 	test-ci-contracts-after-build test-ci-checkpoint-after-build \
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
@@ -107,6 +108,33 @@ test-after-build:
 	/usr/bin/bash scripts/test-t2.sh --runtime-only
 	/usr/bin/bash scripts/test-t2-boundary.sh
 	/usr/bin/bash scripts/test-q0.sh
+
+test-acceptance-predecessors-after-build:
+	/usr/bin/bash scripts/test.sh
+	/usr/bin/bash scripts/check_a0_api_contract.sh
+	/usr/bin/bash scripts/test-k1.sh
+	/usr/bin/bash scripts/test-a2.sh
+	/usr/bin/bash scripts/test-l2.sh
+	/usr/bin/bash scripts/test-e1.sh
+	/usr/bin/bash scripts/test-e1b.sh
+	/usr/bin/bash scripts/test-i1.sh
+	/usr/bin/bash scripts/test-i2.sh
+	/usr/bin/bash scripts/test-k2.sh
+	/usr/bin/bash scripts/test-n2.sh
+	/usr/bin/bash scripts/test-n3k.sh
+	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-x1.sh
+	/usr/bin/bash scripts/test-p1.sh
+	/usr/bin/bash scripts/test-d1.sh
+	/usr/bin/bash scripts/test-d2.sh
+	/usr/bin/bash scripts/test-c1.sh
+	/usr/bin/bash scripts/test-t1.sh
+	/usr/bin/bash scripts/test-t2.sh --runtime-only
+	/usr/bin/bash scripts/test-t2-boundary.sh
+	/usr/bin/bash scripts/test-q0.sh
+
+test-acceptance-c2-after-build:
+	/usr/bin/bash scripts/test-c2.sh
 
 test-ci-core-after-build:
 	/usr/bin/bash scripts/test.sh

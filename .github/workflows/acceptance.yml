@@ -14,9 +14,19 @@ concurrency:
 
 jobs:
   supported-linux:
-    name: Full Ubuntu 22.04 acceptance
+    name: Full Ubuntu 22.04 acceptance / ${{ matrix.suite }}
     runs-on: ubuntu-22.04
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: predecessors
+            build_target: build
+            test_target: test-acceptance-predecessors-after-build
+          - suite: c2-checkpoint
+            build_target: build-ci-checkpoint
+            test_target: test-acceptance-c2-after-build
     env:
       CC: clang-21
       CXX: clang++-21
@@ -87,14 +97,15 @@ jobs:
         shell: /usr/bin/bash -euo pipefail {0}
         run: make toolchain
 
-      - name: Clean build
+      - name: Clean canonical build
         shell: /usr/bin/bash -euo pipefail {0}
-        run: make clean && make build
+        run: make clean && make "${{ matrix.build_target }}"
 
-      - name: Full test suite
+      - name: Full partition suite
         shell: /usr/bin/bash -euo pipefail {0}
-        run: make test-after-build
+        run: make "${{ matrix.test_target }}"
 
       - name: Smoke and reproducible benchmark
+        if: matrix.suite == 'predecessors'
         shell: /usr/bin/bash -euo pipefail {0}
         run: make smoke-after-build benchmark-after-build

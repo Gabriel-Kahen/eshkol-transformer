@@ -138,17 +138,49 @@ def check_ci_workflow_contract(workflow: str) -> None:
 
 def check_acceptance_workflow_contract(workflow: str) -> None:
     supported = job_body(workflow, "supported-linux")
+    assert job_field(supported, "runs-on") == "ubuntu-22.04"
     assert job_timeout(supported) == "240"
+    assert job_env(supported, "CC") == "clang-21"
+    assert job_env(supported, "CXX") == "clang++-21"
+    assert job_env(supported, "LLVM_CONFIG_EXECUTABLE") == "llvm-config-21"
     assert job_env(supported, "A0_COMPILER_TIMEOUT_SECONDS") == "'60'"
-    assert step_run(step_body(supported, "Clean build")) == [
-        "make clean && make build"
+    expected_partitions = [
+        (
+            "predecessors",
+            "build",
+            "test-acceptance-predecessors-after-build",
+        ),
+        (
+            "c2-checkpoint",
+            "build-ci-checkpoint",
+            "test-acceptance-c2-after-build",
+        ),
     ]
-    assert step_run(step_body(supported, "Full test suite")) == [
-        "make test-after-build"
+    actual_partitions = re.findall(
+        r"- suite: ([a-z0-9-]+)\n\s+build_target: ([a-z0-9-]+)\n"
+        r"\s+test_target: ([a-z0-9-]+)",
+        supported,
+    )
+    assert actual_partitions == expected_partitions, (
+        actual_partitions,
+        expected_partitions,
+    )
+    assert supported.count("      fail-fast: false") == 1
+    assert step_run(step_body(supported, "Clean canonical build")) == [
+        'make clean && make "${{ matrix.build_target }}"'
+    ]
+    assert step_run(step_body(supported, "Full partition suite")) == [
+        'make "${{ matrix.test_target }}"'
     ]
     assert step_run(step_body(supported, "Smoke and reproducible benchmark")) == [
         "make smoke-after-build benchmark-after-build"
     ]
+    assert step_field(
+        step_body(supported, "Smoke and reproducible benchmark"), "if"
+    ) == "matrix.suite == 'predecessors'"
+    assert "test \"$(llvm-config-21 --version)\" = '21.1.8'" in step_run(
+        step_body(supported, "Install host dependencies")
+    )
 
 
 def assert_timeout_mutation_rejected(workflow: str, replacement: str) -> None:
@@ -258,8 +290,14 @@ assert_mutation_rejected(
 )
 assert_mutation_rejected(
     acceptance,
-    "        run: make test-after-build",
-    "        run: make test-after-build || true",
+    '        run: make "${{ matrix.test_target }}"',
+    '        run: make "${{ matrix.test_target }}" || true',
+    check_acceptance_workflow_contract,
+)
+assert_mutation_rejected(
+    acceptance,
+    "        if: matrix.suite == 'predecessors'",
+    "        if: false",
     check_acceptance_workflow_contract,
 )
 assert_mutation_rejected(
@@ -358,6 +396,25 @@ for _, build_target, test_target in expected_suites:
         assert not missing, (test_command, build_target, missing)
 
 full_commands = targets["test-after-build"]
+assert len(full_commands) == 23
+assert len(set(full_commands)) == 23
+assert targets["test-acceptance-predecessors-after-build"] == [
+    command
+    for command in full_commands
+    if command != "/usr/bin/bash scripts/test-c2.sh"
+]
+assert targets["test-acceptance-c2-after-build"] == [
+    "/usr/bin/bash scripts/test-c2.sh"
+]
+acceptance_commands = (
+    targets["test-acceptance-predecessors-after-build"]
+    + targets["test-acceptance-c2-after-build"]
+)
+assert Counter(acceptance_commands) == Counter(full_commands), (
+    Counter(full_commands) - Counter(acceptance_commands),
+    Counter(acceptance_commands) - Counter(full_commands),
+)
+assert len(acceptance_commands) == len(full_commands)
 sharded_commands = [
     command
     for _, _, test_target in expected_suites
@@ -406,7 +463,7 @@ print(
 print(
     "CI BUDGET PASS: checkpoint-io=240, native-numerics=105, "
     "other blocking suites=75, "
-    "control jobs=2, exhaustive=240, A0 compiler timeout=60; "
+    "control jobs=2, exhaustive partitions=2x240, A0 compiler timeout=60; "
     "command, condition, gate, and timeout mutations rejected"
 )
 PY
