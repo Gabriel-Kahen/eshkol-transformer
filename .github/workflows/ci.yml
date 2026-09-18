@@ -27,8 +27,28 @@ jobs:
           cache-dependency-path: tests/n2/requirements-reference.lock
       - name: Install exact reference dependencies
         run: python -m pip install --requirement tests/n2/requirements-reference.lock
-      - name: Regenerate and compare the N2 oracle
-        run: python tests/ci/diagnose_n2_oracle.py --output-dir "$RUNNER_TEMP/n2-oracle-diagnostic"
+      - name: Run paired fresh-process oracle experiments
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          evidence_root="$RUNNER_TEMP/n2-oracle-diagnostic"
+          mkdir -p "$evidence_root"
+          overall=0
+          printf 'probe_order\trepetition\texit_code\n' > "$evidence_root/results.tsv"
+          for probe_order in before after; do
+            for repetition in 1 2 3 4 5 6 7 8; do
+              output_dir="$evidence_root/$probe_order/run-$repetition"
+              if python tests/ci/diagnose_n2_oracle.py \
+                  --probe-order "$probe_order" --output-dir "$output_dir"; then
+                result=0
+              else
+                result=$?
+                overall=1
+              fi
+              printf '%s\t%s\t%s\n' "$probe_order" "$repetition" "$result" \
+                >> "$evidence_root/results.tsv"
+            done
+          done
+          exit "$overall"
       - name: Upload diagnostic evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

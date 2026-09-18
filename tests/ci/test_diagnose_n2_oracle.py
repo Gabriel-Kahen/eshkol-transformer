@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from tests.ci import diagnose_n2_oracle as diagnostic
+from tests.q0 import generate_n2_primitives as generator
 from tests.q0.oracle_format import encode_fixture
 
 
@@ -55,6 +57,37 @@ class DiagnoseN2OracleTests(unittest.TestCase):
                               "processor: 1\nmodel name: Second\n", encoding="utf-8")
             self.assertEqual(diagnostic._cpu_info(source),
                              {"model_name": "First", "flags": ["a", "b"]})
+
+    def test_probe_order_brackets_generation_in_fresh_run(self) -> None:
+        for probe_order, expected in (("before", ["probe", "build"]),
+                                      ("after", ["build", "probe"])):
+            with self.subTest(probe_order=probe_order), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                frozen = root / "frozen.json"
+                frozen.write_bytes(encode_fixture(_payload()))
+                events: list[str] = []
+
+                def build_payload() -> dict:
+                    events.append("build")
+                    return _payload()
+
+                def probe(_torch: object) -> dict:
+                    events.append("probe")
+                    return {"schema": "test-host"}
+
+                with mock.patch.object(generator, "build_payload", side_effect=build_payload), \
+                     mock.patch.object(diagnostic, "host_report", side_effect=probe), \
+                     mock.patch.object(diagnostic, "_torch_execution_state", return_value={}):
+                    result = diagnostic.run(root / "output", probe_order, frozen)
+
+                self.assertEqual(result, 0)
+                self.assertEqual(events, expected)
+                self.assertTrue((root / "output" / "generated-n2-primitives-v1.json").is_file())
+
+    def test_invalid_probe_order_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "probe_order"):
+                diagnostic.run(Path(directory), "during")
 
 
 if __name__ == "__main__":

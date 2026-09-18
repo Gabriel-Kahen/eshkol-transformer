@@ -200,29 +200,43 @@ def _torch_execution_state(torch_module: Any) -> dict[str, Any]:
     }
 
 
-def run(output_dir: Path, frozen_path: Path = FROZEN_FIXTURE) -> int:
+def run(output_dir: Path, probe_order: str,
+        frozen_path: Path = FROZEN_FIXTURE) -> int:
+    if probe_order not in {"before", "after"}:
+        raise ValueError("probe_order must be 'before' or 'after'")
     output_dir.mkdir(parents=True, exist_ok=True)
     from tests.q0 import generate_n2_primitives as generator
 
-    host = host_report(generator.torch)
-    (output_dir / "host-report.json").write_text(
-        json.dumps(host, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    host = None
+    if probe_order == "before":
+        host = host_report(generator.torch)
+        host["probe_order"] = probe_order
+        (output_dir / "host-report.json").write_text(
+            json.dumps(host, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     generated = encode_fixture(generator.build_payload())
+    (output_dir / "generated-n2-primitives-v1.json").write_bytes(generated)
+    if probe_order == "after":
+        host = host_report(generator.torch)
+        host["probe_order"] = probe_order
+    assert host is not None
     host["torch_after_generation"] = _torch_execution_state(generator.torch)
     (output_dir / "host-report.json").write_text(
         json.dumps(host, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (output_dir / "generated-n2-primitives-v1.json").write_bytes(generated)
     comparison = compare_fixtures(frozen_path.read_bytes(), generated)
+    comparison["probe_order"] = probe_order
     (output_dir / "n2-oracle-diagnostic.json").write_text(
         json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"exact_match": comparison["exact_match"], "output_dir": str(output_dir)}))
+    print(json.dumps({"exact_match": comparison["exact_match"], "output_dir": str(output_dir),
+                      "probe_order": probe_order}))
     return 0 if comparison["exact_match"] else 1
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True, type=Path)
-    return run(parser.parse_args().output_dir)
+    parser.add_argument("--probe-order", required=True, choices=("before", "after"))
+    arguments = parser.parse_args()
+    return run(arguments.output_dir, arguments.probe_order)
 
 
 if __name__ == "__main__":
