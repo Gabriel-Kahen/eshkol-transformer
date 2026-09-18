@@ -2,6 +2,14 @@
 
 ## CI tiers
 
+The CI-E2 candidate described in [CI efficiency](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse-candidate)
+extends this topology to 16 suites by separating unchanged O2 tests. It also
+proposes main-push reuse of directly verified original full PR evidence and
+prose-only main selection only with completed base coverage. These scheduling
+changes remain subject to independent review and supported exact-head execution;
+all numerical, lifetime, fresh-build and resource gates below remain mandatory.
+The following records the previously accepted CI-E policy and measurements.
+
 The accepted CI-E topology uses one full-coverage engine in
 `.github/workflows/full-coverage.yml`, shared by blocking CI and exhaustive
 acceptance. It runs a clean canonical build with smoke/benchmark, the eight

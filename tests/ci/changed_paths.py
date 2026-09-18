@@ -8,6 +8,7 @@ solely of the small prose allowlist below may skip the full suite.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -110,12 +111,42 @@ def requires_full_suite(base: str, head: str, repository: Path | None = None) ->
     return not all(_is_prose_path(path) for path in paths)
 
 
+def push_requires_full_suite(
+    base: str, head: str, env: dict[str, str], repository: Path | None = None
+) -> bool:
+    """Only a proven ordinary main fast-forward may use prose-only selection."""
+    root = Path.cwd() if repository is None else repository
+    if (
+        env.get("CI_REF") != "refs/heads/main"
+        or any(env.get(key) != "false" for key in (
+            "CI_PUSH_FORCED", "CI_PUSH_CREATED", "CI_PUSH_DELETED"
+        ))
+        or not COMMIT_HASH.fullmatch(base)
+        or not COMMIT_HASH.fullmatch(head)
+        or set(base) == {"0"}
+        or set(head) == {"0"}
+    ):
+        return True
+    try:
+        if _resolve_commit("HEAD", root) != head:
+            return True
+        _git(["merge-base", "--is-ancestor", base, head], root)
+    except SelectionError:
+        return True
+    return requires_full_suite(base, head, root)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="")
     parser.add_argument("--head", default="")
+    parser.add_argument("--push", action="store_true")
     arguments = parser.parse_args(argv)
-    print("true" if requires_full_suite(arguments.base, arguments.head) else "false")
+    required = (
+        push_requires_full_suite(arguments.base, arguments.head, dict(os.environ))
+        if arguments.push else requires_full_suite(arguments.base, arguments.head)
+    )
+    print("true" if required else "false")
     return 0
 
 

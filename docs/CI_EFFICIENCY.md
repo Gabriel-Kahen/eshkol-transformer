@@ -1,6 +1,9 @@
 # CI-E: full-coverage efficiency
 
 Status: **accepted / complete**.
+This status applies to CI-E below. The separately tracked CI-E2 extension at the
+end of this document is an unaccepted implementation candidate until its own
+supported run and independent review complete.
 Tracking: [issue #78](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/78).
 Integration: PR #79 merged as `cbd0929`; PR #77 merged to main as
 `913cdf4097db09d6c33769e9b0968c01ce0e1f55`. Both share accepted tree
@@ -124,3 +127,45 @@ post-merge compatibility retest passed C2 format/core-only, 69 CI unit tests, tw
 Python-isolation tests, topology, rebuilt compile smoke, and exact smoke output; it
 was not a full local repository, public-AOT, or operational rerun. Automatic main
 run 35401303514 is currently running and is not claimed green here.
+
+## CI-E2 — native critical path and main-push reuse candidate
+
+Tracking: [issue #81](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/81).
+Status: **implementation candidate; no further speedup claimed**.
+
+The full engine now assigns the unchanged O2 gate to `native-optimizer`, separate
+from `native-numerics`. Both receive the pinned development oracle. The command
+union is still exactly 23; the expected full-evidence inventory becomes 16 suites.
+Optimizer prerequisites are K1/I2/T2/D2/O2. The other native job retains its full
+prerequisites, including O2: K2's positive collision/link checks consume them.
+No intentional fresh-cache, deterministic rebuild, sanitizer, oracle, failure,
+or memory proof is removed, and no test binary is shared between jobs.
+
+In accepted run 35393213200 the native job spent 28m40s on prerequisites and
+61m44s in tests; O2 accounted for about 31m07s of that testing. Splitting it could
+bring the native critical path near 60–62 minutes, at which point the C2 operational
+job (57m34s in main run 35401303514) may dominate. This is an estimate, not a
+measurement of the candidate. Duplicated minimal prerequisites can increase summed
+runner time even while reducing elapsed time; both must be measured.
+
+Main-push reuse must verify a unique associated merged same-repository PR targeting
+main and the exact merge commit, then validate its latest PR CI's full inventory,
+run attempt, successful jobs and aggregation, and actual checkout tree through
+GitHub. A green check or equal PR-head SHA alone is not evidence. A changed tree,
+missing or ambiguous association, incomplete response, pending/failed source,
+skipped matrix, or malformed report falls back to fresh full CI. No arbitrary
+artifact is executed, and skipped/reused CI does not itself become full evidence.
+
+Prose-only main pushes require an exact ordinary non-forced before/after diff,
+checked-out HEAD agreement, ancestry, and the same prose allowlist as PRs. They
+also require completed full coverage for the base code. This prevents a docs push
+from cancelling an unfinished code run and then accepting its untested code.
+If a base push reused PR evidence, the original full PR evidence must be verified
+directly rather than following a chain of green statuses. Uncertain or incomplete
+base coverage requires a fresh full run. Docs PRs retain their lightweight checks;
+merge-queue, explicit fresh CI dispatch and nightly acceptance remain full.
+
+Acceptance requires offline adverse selection/topology tests, independent review,
+an exact-head supported 16-suite run with measured timings, and live post-merge
+selection evidence. Until then the accepted 93m19s result above remains the latest
+measured optimization, and no Wave 3 work is authorized by this extension.

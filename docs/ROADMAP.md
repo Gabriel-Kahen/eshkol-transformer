@@ -33,6 +33,10 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 ## Wave 2 — model and training primitives
 
+The user-authorized [CI-E2 follow-up](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse-candidate)
+is tracked separately in issue #81. It changes CI scheduling/evidence selection,
+not the accepted Wave 2 runtime scope, and starts no Wave 3 task.
+
 Wave 2 is complete within the bounded component contracts below. Wave 3 work
 remains paused; this closeout starts no Wave 3 tasks. C2 completion does not prove
 a live trainer trajectory or generation.

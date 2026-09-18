@@ -4,6 +4,28 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-18 — CI-E2 scheduling/evidence extension proposed
+
+- **Scope authorized by user; implementation acceptance pending:** issue #81
+  separates unchanged O2 into a native optimizer job and adds main-push selection
+  using directly verified original full CI evidence. No runtime, format, numerical
+  tolerance, fresh-build proof, sanitizer, or operational bound changes.
+- **Coverage:** 16 suite jobs retain the exact 23-command union, canonical clean
+  build and nightly fresh coverage. K2 keeps O2 and all other positive collision
+  prerequisites; optimizer owns K1/I2/T2/D2/O2 prerequisites independently.
+- **Safety condition found by independent review:** prose-only main diff alone
+  is insufficient because it could cancel an unfinished preceding code run. Main
+  prose selection additionally requires proven completed coverage for that base;
+  pending/failed/unverified evidence forces fresh execution. Identical-tree merge
+  reuse validates the associated merged same-repository main PR, actual checkout
+  tree, latest full CI attempt, all suites, evidence and final status. A reused or
+  skipped status is never a substitute for inspecting original full evidence.
+- **Evidence pending:** roughly 60-minute critical path is an estimate. Accepted
+  CI-E remains 93m19s; exact candidate hosted measurement, independent final review,
+  and live main selection are required before accepting further savings.
+- **Scope limit:** Wave 3 stays paused; the earlier Wave 2 implementation acceptance
+  is not reopened by this CI-only follow-up.
+
 ## 2026-09-18 — C2, CI-E, and bounded Wave 2 accepted
 
 - **Decision:** C2 and F0/CI-E are accepted and complete within their documented

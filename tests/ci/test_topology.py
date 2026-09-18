@@ -10,7 +10,7 @@ ENGINE = ".github/workflows/full-coverage.yml"
 
 class TopologyTests(unittest.TestCase):
     def test_current_complete_graph(self):
-        self.assertEqual(check(ROOT), 15)
+        self.assertEqual(check(ROOT), 16)
 
     def test_workflow_mutations_rejected(self):
         mutations = [
@@ -34,7 +34,15 @@ class TopologyTests(unittest.TestCase):
             (CI, 'test "$TOPOLOGY_RESULT" = success', ': "$TOPOLOGY_RESULT"'),
             (CI, "needs: [topology, blocking]", "needs: topology"),
             (CI, "  workflow_dispatch:\n", ""),
-            (CI, "true:success|false:skipped", "true:success|true:failure|false:skipped"),
+            (CI, "full:success|docs:skipped|reused:skipped", "full:success|full:failure|docs:skipped|reused:skipped"),
+            (CI, "evidence.py select-push", "evidence.py select-push || true"),
+            (CI, "--push --base", "--base"),
+            (CI, "${{ github.event.before }}", "${{ github.sha }}"),
+            (CI, "  actions: read\n", ""),
+            (CI, "  pull-requests: read\n", ""),
+            (CI, "push:false:false:true", "push:false:false:false"),
+            (CI, "${{ steps.evidence.outputs.docs_verified }}", "true"),
+            (ENGINE, "test-ci-optimizer-after-build", "test-ci-core-after-build"),
             (ACCEPTANCE, 'test "$SELECTION_RESULT" = success', ': "$SELECTION_RESULT"'),
             (ACCEPTANCE, "true:skipped|false:success", "true:skipped|false:success|false:failure"),
             (ACCEPTANCE, "needs.select.outputs.reused == 'false'", "false"),
