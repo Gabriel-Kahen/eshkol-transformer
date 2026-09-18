@@ -30,9 +30,9 @@ resolve_executable_into() {
   resolved="$(command -v "${configured}" 2>/dev/null || true)"
   [[ -n "${resolved}" && -x "${resolved}" ]] || \
     die "${description} is not executable or not found on PATH: ${configured}"
-  resolved="$(readlink -f -- "${resolved}")"
-  [[ -n "${resolved}" && -x "${resolved}" ]] || \
-    die "cannot resolve ${description}: ${configured}"
+  if [[ "${resolved}" != /* ]]; then
+    resolved="$(cd -- "$(dirname -- "${resolved}")" && pwd -P)/$(basename -- "${resolved}")"
+  fi
   printf -v "${output_name}" '%s' "${resolved}"
 }
 
@@ -55,8 +55,10 @@ resolve_provenance_compilers() {
   recorded_cxx="$(tsv_value "${provenance}" cxx_path)"
   [[ -x "${recorded_cc}" && -x "${recorded_cxx}" ]] || \
     die "Eshkol provenance does not identify executable C and C++ compilers"
-  expected_cc="$(readlink -f -- "${recorded_cc}")"
-  expected_cxx="$(readlink -f -- "${recorded_cxx}")"
+  [[ "${recorded_cc}" == /* && "${recorded_cxx}" == /* ]] || \
+    die "Eshkol provenance compiler paths must be absolute"
+  expected_cc="${recorded_cc}"
+  expected_cxx="${recorded_cxx}"
   [[ "${resolved_cc}" == "${expected_cc}" ]] || \
     die "configured C compiler ${resolved_cc} does not match Eshkol provenance ${expected_cc}"
   [[ "${resolved_cxx}" == "${expected_cxx}" ]] || \

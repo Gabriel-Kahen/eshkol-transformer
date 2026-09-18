@@ -296,6 +296,7 @@ compile_public_d2() {
       ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${d2_cxx}" \
       timeout --foreground --signal=TERM --kill-after=5s "${d2_timeout}s" \
       "${d2_runner}" --strict-types "${optimize_args[@]}" --no-stdlib \
+      -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
       -I "${PROJECT_ROOT}/lib" -L "${library_dir}" \
       --lib "${library_name}" \
       "${PROJECT_ROOT}/tests/d2/${source}.esk" \
@@ -409,7 +410,9 @@ compile_private_view() {
       -I "${PROJECT_ROOT}/internal/t2/lib" \
       -I "${PROJECT_ROOT}/internal/t1/lib" \
       -I "${PROJECT_ROOT}/internal/d2/lib" \
-      -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
+      -I "${PROJECT_ROOT}/src" \
+      -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
+      -I "${PROJECT_ROOT}/lib" \
       -I "${PROJECT_ROOT}/native" -L "${d2_runtime_dir}" \
       --lib eshkol_transformer_d2_test_runtime \
       "${PROJECT_ROOT}/tests/d2/private_view_runtime.esk" \
@@ -755,7 +758,9 @@ for private_binding in d2-token-dataset-open d2-token-tensor-with-view-internal 
   if env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
       XDG_CACHE_HOME="${d2_tmp}/cache-private-${private_binding}" \
       ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${d2_cxx}" \
-      "${d2_runner}" --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+      "${d2_runner}" --strict-types --no-stdlib \
+      -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
+      -I "${PROJECT_ROOT}/lib" \
       -L "${d2_dir}" --lib eshkol_transformer_wave2 \
       -e "(begin (require transformer.data) ${private_binding})" \
       >"${d2_tmp}/private-${private_binding}.stdout" \

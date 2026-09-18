@@ -1,7 +1,11 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <setjmp.h>
 
 #include "e1b_error_consumer_bridge.h"
+
+#undef setjmp
+extern int setjmp(jmp_buf environment) __attribute__((returns_twice));
 
 typedef struct et_e1b_box_v1 {
   int64_t length;
@@ -18,7 +22,12 @@ _Static_assert(sizeof(et_e1b_box_v1) == 24,
                "E1B requires one length and one tagged vector element");
 
 extern void __eshkol_lib_init__(void *arena);
-extern void *get_global_arena(void);
+extern void *get_global_arena_shared(void);
+extern eshkol_exception_t *eshkol_get_current_exception(void);
+extern void eshkol_get_raised_value(eshkol_tagged_value_t *value);
+extern void eshkol_set_raised_value(const eshkol_tagged_value_t *value);
+extern void eshkol_parallel_scope_begin(void);
+extern void eshkol_parallel_scope_end(void);
 
 extern eshkol_tagged_value_t et_e1b_private_error_predicate_cabi_v1(
     eshkol_tagged_value_t value);
@@ -49,7 +58,30 @@ eshkol_tagged_value_t *et_e1b_box_value_v1(void *opaque) {
 void et_e1b_ensure_private_initialized_v1(void) {
   static int initialized = 0;
   if (!initialized) {
-    __eshkol_lib_init__(get_global_arena());
+    jmp_buf init_exception;
+    eshkol_exception_handler_t *const previous_handler =
+        g_exception_handler_stack;
+
+    eshkol_push_exception_handler(&init_exception);
+    if (g_exception_handler_stack == previous_handler) {
+      __builtin_trap();
+    }
+    if (setjmp(init_exception) != 0) {
+      eshkol_tagged_value_t raised;
+      eshkol_exception_t *exception = eshkol_get_current_exception();
+
+      eshkol_get_raised_value(&raised);
+      eshkol_parallel_scope_end();
+      eshkol_pop_exception_handler();
+      eshkol_set_raised_value(&raised);
+      eshkol_raise(exception);
+      __builtin_unreachable();
+    }
+
+    eshkol_parallel_scope_begin();
+    __eshkol_lib_init__(get_global_arena_shared());
+    eshkol_parallel_scope_end();
+    eshkol_pop_exception_handler();
     initialized = 1;
   }
 }

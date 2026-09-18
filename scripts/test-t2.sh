@@ -194,6 +194,7 @@ for repetition in 1 2; do
     ESHKOL_CXX_COMPILER="${t2_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 300s \
     "${t2_runner}" --strict-types --no-stdlib \
+    -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
     -I "${PROJECT_ROOT}/lib" -L "${t2_dir}" \
     --lib eshkol_transformer_wave2 \
     "${PROJECT_ROOT}/tests/t2/public_runtime.esk" \
@@ -222,6 +223,7 @@ env -u ESHKOL_PATH XDG_CACHE_HOME="${t2_tmp}/parser-negatives-cache" \
   ESHKOL_CXX_COMPILER="${t2_cxx}" \
   timeout --foreground --signal=TERM --kill-after=5s 300s \
   "${t2_runner}" --strict-types --no-stdlib \
+  -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
   -I "${PROJECT_ROOT}/lib" -L "${t2_dir}" \
   --lib eshkol_transformer_wave2 \
   "${PROJECT_ROOT}/tests/t2/parser_negatives_runtime.esk" \
@@ -246,6 +248,7 @@ env -u ESHKOL_PATH XDG_CACHE_HOME="${t2_tmp}/d1-cache" \
   ESHKOL_CXX_COMPILER="${t2_cxx}" \
   timeout --foreground --signal=TERM --kill-after=5s 300s \
   "${t2_runner}" --strict-types --no-stdlib \
+  -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
   -I "${PROJECT_ROOT}/lib" -L "${t2_tmp}" \
   --lib eshkol_transformer_wave2_d1_test \
   "${PROJECT_ROOT}/tests/t2/d1_roundtrip_runtime.esk" \
@@ -262,6 +265,7 @@ env -u ESHKOL_PATH XDG_CACHE_HOME="${t2_tmp}/d1-negatives-cache" \
   ESHKOL_CXX_COMPILER="${t2_cxx}" \
   timeout --foreground --signal=TERM --kill-after=5s 300s \
   "${t2_runner}" --strict-types --no-stdlib \
+  -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
   -I "${PROJECT_ROOT}/lib" -L "${t2_tmp}" \
   --lib eshkol_transformer_wave2_d1_test \
   "${PROJECT_ROOT}/tests/t2/d1_negatives_runtime.esk" \
@@ -301,6 +305,7 @@ env -u ESHKOL_PATH XDG_CACHE_HOME="${t2_tmp}/t1-cache" \
   ESHKOL_CXX_COMPILER="${t2_cxx}" \
   timeout --foreground --signal=TERM --kill-after=5s 300s \
   "${t2_runner}" --strict-types --no-stdlib \
+  -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
   -I "${PROJECT_ROOT}/lib" -L "${t2_dir}" \
   --lib eshkol_transformer_wave2 \
   "${PROJECT_ROOT}/tests/t1/public_runtime.esk" \

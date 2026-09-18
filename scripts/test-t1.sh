@@ -109,7 +109,7 @@ t1_runner="$(eshkol_build_dir)/eshkol-run"
 ESHKOL_CXX_COMPILER="${t1_cxx}" \
   timeout --foreground --signal=TERM --kill-after=5s 240s \
   "${t1_runner}" --strict-types --no-stdlib \
-  -I "${PROJECT_ROOT}/lib" \
+  -I "${PROJECT_ROOT}/tests/fixtures/c1-public" -I "${PROJECT_ROOT}/lib" \
   -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
   -L "${t1_tmp}" --lib eshkol_transformer_t1_save_failpoints \
   "${PROJECT_ROOT}/tests/t1/save_failpoint_runtime.esk" \
@@ -147,7 +147,7 @@ for repetition in 1 2; do
   ESHKOL_CXX_COMPILER="${t1_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 240s \
     "${t1_runner}" --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" \
+    -I "${PROJECT_ROOT}/tests/fixtures/c1-public" -I "${PROJECT_ROOT}/lib" \
     -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
     "${PROJECT_ROOT}/tests/t1/public_runtime.esk" \
     -o "${t1_tmp}/public-runtime-${repetition}"
@@ -213,7 +213,7 @@ for repetition in 1 2; do
   ESHKOL_CXX_COMPILER="${t1_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 240s \
     "${t1_runner}" --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" \
+    -I "${PROJECT_ROOT}/tests/fixtures/c1-public" -I "${PROJECT_ROOT}/lib" \
     -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
     "${PROJECT_ROOT}/tests/t1/adversarial_runtime.esk" \
     -o "${t1_tmp}/adversarial-runtime-${repetition}"
@@ -305,7 +305,7 @@ for repetition in 1 2; do
   ESHKOL_CXX_COMPILER="${t1_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 240s \
     "${t1_runner}" --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" \
+    -I "${PROJECT_ROOT}/tests/fixtures/c1-public" -I "${PROJECT_ROOT}/lib" \
     -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
     "${PROJECT_ROOT}/tests/t1/limit_runtime.esk" \
     -o "${t1_tmp}/limit-runtime-${repetition}"
@@ -340,7 +340,7 @@ for repetition in 1 2; do
   ESHKOL_CXX_COMPILER="${t1_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s 240s \
     "${t1_runner}" --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" \
+    -I "${PROJECT_ROOT}/tests/fixtures/c1-public" -I "${PROJECT_ROOT}/lib" \
     -L "$(project_build_dir)/t1" --lib eshkol_transformer_wave1 \
     "${PROJECT_ROOT}/tests/t1/registry_lifetime.esk" \
     -o "${t1_tmp}/registry-lifetime-${repetition}"

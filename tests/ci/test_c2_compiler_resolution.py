@@ -29,8 +29,11 @@ class C2CompilerResolutionTests(unittest.TestCase):
         self.version = lock["clang_version"]
         self.supported_cc = lock["supported_cc"]
         self.supported_cxx = lock["supported_cxx"]
-        self.cc = self._write_compiler(self.supported_cc)
-        self.cxx = self._write_compiler(self.supported_cxx)
+        driver = self._write_compiler("clang-real")
+        self.cc = (self.bin / self.supported_cc).absolute()
+        self.cxx = (self.bin / self.supported_cxx).absolute()
+        self.cc.symlink_to(driver.name)
+        self.cxx.symlink_to(driver.name)
         (self.build / "eshkol-transformer-provenance.tsv").write_text(
             f"cc_path\t{self.cc}\n"
             f"cc_version\t{self.version}\n"
@@ -47,7 +50,7 @@ class C2CompilerResolutionTests(unittest.TestCase):
             encoding="utf-8",
         )
         path.chmod(0o755)
-        return path.resolve()
+        return path.absolute()
 
     def _resolve(
         self, cc: str | None = None, cxx: str | None = None
@@ -84,6 +87,7 @@ printf '%s\\n%s\\n' "$cc" "$cxx"
         )
 
     def test_resolves_versioned_path_only_compilers(self) -> None:
+        self.assertEqual(self.cc.resolve(), self.cxx.resolve())
         result = self._resolve()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, f"{self.cc}\n{self.cxx}\n")

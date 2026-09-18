@@ -45,6 +45,8 @@ eshkol_lambda_registry_init
 eshkol_limit_poll_interrupt
 eshkol_make_exception_with_header
 eshkol_object_abi_v1_h8_s0_a8
+eshkol_parallel_scope_begin
+eshkol_parallel_scope_end
 eshkol_parameter_converter_ref_ptr
 eshkol_parameter_ref_ptr
 eshkol_parameter_set_ptr
@@ -74,7 +76,8 @@ eshkol_utf8_strlen
 eshkol_utf8_substring
 exit
 floor
-get_global_arena
+g_exception_handler_stack
+get_global_arena_shared
 memcpy
 printf
 setjmp

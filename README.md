@@ -215,9 +215,10 @@ canonical `build/t1/libeshkol_transformer_wave1.a` aggregate from trusted source
 inputs and localizes it once. Its public boundary is exactly 47 globals: six E1
 error accessors, eighteen P1 module/state wrappers, eight D1 data wrappers, six X1
 configuration wrappers, one C1 persistence-policy wrapper, and eight T1 tokenizer
-wrappers. The installed `transformer.persistence` surface contains only
-`persistence-policy`; C2 checkpoint operations remain unavailable. The authoritative
-runtime test is compiled Eshkol AOT; Python participates only as an independent
+wrappers. That historical Wave 1 surface contains only `persistence-policy`; the
+current installed `transformer.persistence` facade also exposes C2 checkpoint
+operations and therefore requires the C2 aggregate when those sources are linked.
+The authoritative runtime test is compiled Eshkol AOT; Python participates only as an independent
 development oracle and never in the production archive or execution path.
 Tokenizer, policy, and successful encoded-tensor identities are strongly retained in
 append-only aggregate registries until process exit. Their lookup cost is linear and
