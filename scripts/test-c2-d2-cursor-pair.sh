@@ -2,7 +2,10 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 for command in ar cmp diff python3 timeout; do require_command "${command}"; done
-cc="${CC:-/usr/bin/clang}"; cxx="${CXX:-/usr/bin/clang++}"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-d2-pair.XXXXXX")"
 cleanup() {

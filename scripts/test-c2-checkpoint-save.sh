@@ -6,16 +6,16 @@ for command in ar awk cmp diff find git nm python3 rg sed sha256sum sort tee \
   require_command "${command}"
 done
 
-cc="${CC:-/usr/bin/clang}"
-cxx="${CXX:-/usr/bin/clang++}"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_SAVE_DEVELOPMENT_RUNTIME_ONLY:-0}"
 if [[ "${development}" != 0 && "${development}" != 1 ]]; then
   die "C2_SAVE_DEVELOPMENT_RUNTIME_ONLY must be 0 or 1"
 fi
 if [[ "${development}" == 1 ]]; then
-  cc=/usr/bin/clang
-  cxx=/usr/bin/clang++
   tmp="${C2_DEV_ARTIFACT_DIR:-}"
   [[ -n "${tmp}" && "${tmp}" = /* && -d "${tmp}" ]] || \
     die "developer mode requires an explicit absolute C2_DEV_ARTIFACT_DIR"

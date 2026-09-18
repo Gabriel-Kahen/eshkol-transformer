@@ -23,6 +23,65 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
+resolve_executable_into() {
+  local output_name="$1" configured="$2" description="$3" resolved
+  [[ "${output_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || \
+    die "invalid executable output variable: ${output_name}"
+  resolved="$(command -v "${configured}" 2>/dev/null || true)"
+  [[ -n "${resolved}" && -x "${resolved}" ]] || \
+    die "${description} is not executable or not found on PATH: ${configured}"
+  resolved="$(readlink -f -- "${resolved}")"
+  [[ -n "${resolved}" && -x "${resolved}" ]] || \
+    die "cannot resolve ${description}: ${configured}"
+  printf -v "${output_name}" '%s' "${resolved}"
+}
+
+resolve_provenance_compilers() {
+  local cc_output_name="$1" cxx_output_name="$2"
+  local configured_cc="$3" configured_cxx="$4"
+  local provenance recorded_cc recorded_cxx expected_cc expected_cxx
+  local resolved_cc resolved_cxx actual_cc_version actual_cxx_version
+  local recorded_cc_version recorded_cxx_version expected_version
+
+  resolve_executable_into resolved_cc "${configured_cc}" \
+    "configured C compiler"
+  resolve_executable_into resolved_cxx "${configured_cxx}" \
+    "configured C++ compiler"
+
+  provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
+  [[ -r "${provenance}" ]] || \
+    die "Eshkol build provenance not found at ${provenance}; run 'make toolchain'"
+  recorded_cc="$(tsv_value "${provenance}" cc_path)"
+  recorded_cxx="$(tsv_value "${provenance}" cxx_path)"
+  [[ -x "${recorded_cc}" && -x "${recorded_cxx}" ]] || \
+    die "Eshkol provenance does not identify executable C and C++ compilers"
+  expected_cc="$(readlink -f -- "${recorded_cc}")"
+  expected_cxx="$(readlink -f -- "${recorded_cxx}")"
+  [[ "${resolved_cc}" == "${expected_cc}" ]] || \
+    die "configured C compiler ${resolved_cc} does not match Eshkol provenance ${expected_cc}"
+  [[ "${resolved_cxx}" == "${expected_cxx}" ]] || \
+    die "configured C++ compiler ${resolved_cxx} does not match Eshkol provenance ${expected_cxx}"
+
+  actual_cc_version="$("${resolved_cc}" --version | \
+    sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
+  actual_cxx_version="$("${resolved_cxx}" --version | \
+    sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
+  [[ -n "${actual_cc_version}" && -n "${actual_cxx_version}" ]] || \
+    die "could not determine configured Clang compiler versions"
+  recorded_cc_version="$(tsv_value "${provenance}" cc_version)"
+  recorded_cxx_version="$(tsv_value "${provenance}" cxx_version)"
+  [[ "${actual_cc_version}" == "${recorded_cc_version}" ]] || \
+    die "configured C compiler version ${actual_cc_version} does not match Eshkol provenance ${recorded_cc_version}"
+  [[ "${actual_cxx_version}" == "${recorded_cxx_version}" ]] || \
+    die "configured C++ compiler version ${actual_cxx_version} does not match Eshkol provenance ${recorded_cxx_version}"
+  expected_version="$(lock_value clang_version)"
+  check_supported_version Clang "${actual_cc_version}" "${expected_version}"
+  check_supported_version Clang++ "${actual_cxx_version}" "${expected_version}"
+
+  printf -v "${cc_output_name}" '%s' "${resolved_cc}"
+  printf -v "${cxx_output_name}" '%s' "${resolved_cxx}"
+}
+
 check_supported_version() {
   local name="$1" actual="$2" expected="$3"
   if [[ "${actual}" != "${expected}" ]]; then

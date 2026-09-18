@@ -2,7 +2,10 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 for command in cmp nm python3 timeout; do require_command "${command}"; done
-cc="${CC:-/usr/bin/clang}"; cxx="${CXX:-/usr/bin/clang++}"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-x1.XXXXXX")"
 trap 'rm -rf -- "${tmp}"' EXIT
@@ -13,7 +16,7 @@ src=("${PROJECT_ROOT}/native/c2_x1_canonical.c")
 "${cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic -I "${PROJECT_ROOT}/native" "${PROJECT_ROOT}/tests/c2/c2_x1_canonical_header_cpp.cpp" -o "${tmp}/cpp"
 "${tmp}/unit"; "${tmp}/cpp"
 timeout --foreground --signal=TERM --kill-after=5s 60s python3 "${PROJECT_ROOT}/tests/c2/test_c2_x1_canonical.py" "${tmp}/driver"
-for compiler in /usr/bin/clang /usr/bin/gcc; do
+for compiler in "${cc}" /usr/bin/gcc; do
   [[ -x "${compiler}" ]] || continue
   "${compiler}" "${cflags[@]}" -O2 "${src[@]}" "${PROJECT_ROOT}/tests/c2/c2_x1_canonical_unit.c" -o "${tmp}/unit-$(basename "${compiler}")"
   "${tmp}/unit-$(basename "${compiler}")"

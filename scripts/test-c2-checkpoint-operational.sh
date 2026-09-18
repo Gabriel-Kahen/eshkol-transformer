@@ -7,8 +7,10 @@ for command in ar awk cmp diff find nm python3 rg sed sha256sum sort tee timeout
   require_command "${command}"
 done
 
-cc="${CC:-/usr/bin/clang}"
-cxx="${CXX:-/usr/bin/clang++}"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY:-0}"
 read -r -a development_modes <<< \
@@ -25,8 +27,6 @@ for development_mode in "${development_modes[@]}"; do
   esac
 done
 if [[ "${development}" == 1 ]]; then
-  cc=/usr/bin/clang
-  cxx=/usr/bin/clang++
   tmp="${C2_DEV_ARTIFACT_DIR:-}"
   [[ -n "${tmp}" && "${tmp}" = /* && -d "${tmp}" ]] || \
     die "developer mode requires an explicit absolute C2_DEV_ARTIFACT_DIR"

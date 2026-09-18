@@ -5,8 +5,10 @@ for command in ar awk cmp nm rg sed sort timeout tr; do
   require_command "${command}"
 done
 
-cc="${CC:-/usr/bin/clang}"
-cxx="${CXX:-/usr/bin/clang++}"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-model-encode.XXXXXX")"
 cleanup() {

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-cc="${CC:-/usr/bin/clang}"; cxx="${CXX:-/usr/bin/clang++}"
-[[ -x "${cc}" && -x "${cxx}" ]] || die "C2 codec gate requires clang and clang++"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c2-codec.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all -fno-common -I "${PROJECT_ROOT}/native")

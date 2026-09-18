@@ -7,9 +7,10 @@ for command in cmp python3 rg timeout; do
   require_command "${command}"
 done
 
-cc="${CC:-/usr/bin/clang}"
-cxx="${CXX:-/usr/bin/clang++}"
-[[ -x "${cc}" && -x "${cxx}" ]] || die "C2 format gate requires clang and clang++"
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c2-format.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 

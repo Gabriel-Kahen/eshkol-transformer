@@ -3,8 +3,12 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-for command in ar cc cmp env rg timeout; do require_command "${command}"; done
+for command in ar cmp env rg timeout; do require_command "${command}"; done
 
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-policy.XXXXXX")"
 cleanup() {
@@ -20,12 +24,12 @@ trap cleanup EXIT
 runtime="${tmp}/runtime"
 mkdir -p "${runtime}"
 for source in kernel_abi f32_tensor; do
-  cc -std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC \
+  "${cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC \
     -fvisibility=hidden -fno-common -I "${PROJECT_ROOT}/include" \
     -I "${PROJECT_ROOT}/native" -c "${PROJECT_ROOT}/native/${source}.c" \
     -o "${runtime}/${source}.o"
 done
-cc -std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC \
+"${cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC \
   -fvisibility=hidden -fno-common -DET_C2_CARRIER_FACTORIES \
   -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native" \
   -c "${PROJECT_ROOT}/native/k2_capabilities.c" \

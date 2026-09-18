@@ -7,10 +7,10 @@ for command in awk cmp gcc g++ nm python3 rg sed sort timeout tr; do
   require_command "${command}"
 done
 
-clang_cc="${CC:-/usr/bin/clang}"
-clang_cxx="${CXX:-/usr/bin/clang++}"
-[[ -x "${clang_cc}" && -x "${clang_cxx}" ]] || \
-  die "C2 core gate requires clang and clang++"
+clang_cc=
+clang_cxx=
+resolve_provenance_compilers clang_cc clang_cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-c2-core.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 

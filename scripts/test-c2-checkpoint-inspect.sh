@@ -6,8 +6,10 @@ for command in ar awk cmp diff gcc g++ nm python3 rg sed sort timeout tr; do
   require_command "${command}"
 done
 
-clang_cc="${CC:-/usr/bin/clang}"
-clang_cxx="${CXX:-/usr/bin/clang++}"
+clang_cc=
+clang_cxx=
+resolve_provenance_compilers clang_cc clang_cxx \
+  "${CC:-/usr/bin/clang}" "${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-inspect.XXXXXX")"
 cleanup() {
