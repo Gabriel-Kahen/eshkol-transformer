@@ -9,6 +9,7 @@ import unittest
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
 ACCEPTANCE = WORKFLOW.with_name("acceptance.yml")
+FULL_COVERAGE = WORKFLOW.with_name("full-coverage.yml")
 
 
 class WorkflowGateTests(unittest.TestCase):
@@ -46,18 +47,26 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn("RUN_FULL: ${{ needs.topology.outputs.run_full }}", gate)
 
     def test_n2_oracle_uses_isolated_baseline_cpu_dispatch(self):
+        reusable_workflow = "uses: ./.github/workflows/full-coverage.yml"
         for path in (WORKFLOW, ACCEPTANCE):
-            with self.subTest(workflow=path.name):
-                workflow = path.read_text()
-                self.assertIn("ATEN_CPU_CAPABILITY=default", workflow)
-                self.assertIn(
-                    'torch.backends.cpu.get_cpu_capability() == "DEFAULT"',
-                    workflow,
-                )
-                self.assertIn("N2_ORACLE_PYTHON=$n2_oracle_python", workflow)
-                self.assertIn("O2_ORACLE_PYTHON=$oracle_python", workflow)
-                self.assertIn("A2_ORACLE_PYTHON=$oracle_python", workflow)
-                self.assertIn("Q0_PYTHON=$oracle_python", workflow)
+            with self.subTest(caller=path.name):
+                self.assertIn(reusable_workflow, path.read_text())
+
+        workflow = FULL_COVERAGE.read_text()
+        self.assertIn("if: matrix.suite == 'native-numerics'", workflow)
+        self.assertEqual(
+            workflow.count("if: matrix.suite == 'native-numerics'"),
+            2,
+        )
+        self.assertIn("ATEN_CPU_CAPABILITY=default", workflow)
+        self.assertIn(
+            'torch.backends.cpu.get_cpu_capability() == "DEFAULT"',
+            workflow,
+        )
+        self.assertIn("N2_ORACLE_PYTHON=$n2_oracle_python", workflow)
+        self.assertIn("O2_ORACLE_PYTHON=$oracle_python", workflow)
+        self.assertIn("A2_ORACLE_PYTHON=$oracle_python", workflow)
+        self.assertIn("Q0_PYTHON=$oracle_python", workflow)
 
 
 if __name__ == "__main__":

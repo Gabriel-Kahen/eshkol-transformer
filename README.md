@@ -33,23 +33,20 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make smoke-after-build'
 ```
 
-Code pull requests, pushes to `main`, and merge-queue runs partition the complete
-test command set across eight parallel blocking suites. Full P1, T1, D2, C1,
-native-numerics including N2/O2/Q0, contract/data, T2 runtime, and T2 boundary gates run independently,
-while suite-specific build targets avoid
-outer builds whose artifacts the full scripts immediately rebuild. The serial
-`Exhaustive acceptance` workflow also runs nightly and through manual dispatch;
-after one clean build it uses no-rebuild test, smoke, and benchmark entry points.
+The CI-E candidate routes code pull requests, main pushes and merge-queue runs
+through one full-coverage engine. It runs a clean canonical build and smoke/benchmark,
+the component suites, and six independent C2 groups. All 23 top-level local test
+commands remain covered; accidental nested C2 regression reruns are removed while
+intentional fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
 
-[Supported run 34373099684](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34373099684)
-took 3h59m10s including queue and spent about 72 minutes in redundant full builds.
-The earlier reduced run 34057603751 took 11m55s but did not carry the same coverage.
-[The first parallel run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34400156724)
-passed five suites (native numerics 21m16s, parameters 31m35s, loader 29m39s,
-contracts 12m04s, checkpoint 6m45s), but both tokenizer jobs lacked the D2 aggregate
-needed by their reverse-import checks. The revised prerequisites and separate T2
-runtime/boundary jobs still need hosted validation; that failed run does not establish
-a successful full-suite duration.
+Manual exhaustive acceptance can verify and reuse completed full CI for the exact
+candidate tree and run attempt. Missing or ineligible evidence requires fresh full
+coverage; an already-running matching CI prevents duplicate work. Nightly acceptance
+always runs fresh. Canonical prerequisites are built once per job from an audited
+dependency plan, not a cross-run test-binary cache. See
+[CI efficiency](docs/CI_EFFICIENCY.md) for the coverage mapping, historical timings
+and pending supported performance measurements. The scheduling improvements remain
+review candidates until supported execution and independent acceptance.
 
 PRs changing only `README.md`, `CONTRIBUTING.md`, or Markdown under `docs/` run the
 CI topology and selector checks without launching compiler suites. `AGENTS.md`,

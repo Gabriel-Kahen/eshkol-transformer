@@ -158,7 +158,32 @@ test-ci-contracts-after-build:
 
 test-ci-checkpoint-after-build:
 	/usr/bin/bash scripts/test-c1.sh
-	/usr/bin/bash scripts/test-c2.sh
+
+.PHONY: test-ci-clean-build-after-build test-ci-c2-format-after-build \
+	test-ci-c2-state-after-build test-ci-c2-save-after-build \
+	test-ci-c2-load-after-build test-ci-c2-public-after-build \
+	test-ci-c2-operational-after-build
+
+test-ci-clean-build-after-build:
+	$(MAKE) smoke-after-build benchmark-after-build
+
+test-ci-c2-format-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-format
+
+test-ci-c2-state-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-state
+
+test-ci-c2-save-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-save
+
+test-ci-c2-load-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-load
+
+test-ci-c2-public-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-public
+
+test-ci-c2-operational-after-build:
+	/usr/bin/bash scripts/test-c2.sh --group c2-operational
 
 test-ci-parameters-after-build:
 	/usr/bin/bash scripts/test-p1.sh
