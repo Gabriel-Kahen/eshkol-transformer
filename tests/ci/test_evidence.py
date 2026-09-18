@@ -144,6 +144,51 @@ def successful_responses() -> dict[str, object]:
 
 
 class EvidenceTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        evidence._gh_allows_escape_sequences.cache_clear()
+
+    def test_gh_api_opts_in_only_for_job_logs_when_supported(self) -> None:
+        log_path = logs_path()
+        with mock.patch.object(
+            evidence, "run_bounded",
+            side_effect=["usage: gh api [--allow-escape-sequences]", "log"],
+        ) as bounded:
+            self.assertEqual(evidence.gh_api(log_path), "log")
+        self.assertEqual(
+            bounded.call_args_list,
+            [
+                mock.call(["gh", "api", "--help"]),
+                mock.call(["gh", "api", "--allow-escape-sequences", log_path]),
+            ],
+        )
+
+    def test_gh_api_legacy_cli_reads_job_logs_without_unknown_flag(self) -> None:
+        log_path = logs_path()
+        with mock.patch.object(
+            evidence, "run_bounded", side_effect=["usage: gh api", "log"]
+        ) as bounded:
+            self.assertEqual(evidence.gh_api(log_path), "log")
+        self.assertEqual(
+            bounded.call_args_list,
+            [mock.call(["gh", "api", "--help"]), mock.call(["gh", "api", log_path])],
+        )
+
+    def test_gh_api_does_not_probe_or_opt_in_for_json_requests(self) -> None:
+        path = runs_path()
+        with mock.patch.object(evidence, "run_bounded", return_value="{}") as bounded:
+            self.assertEqual(evidence.gh_api(path), "{}")
+        bounded.assert_called_once_with(["gh", "api", path])
+
+    def test_gh_api_rejects_untrusted_and_malformed_log_paths(self) -> None:
+        for path in (
+            "https://api.github.com/repos/openai/project",
+            "/repos/openai/project/../secret",
+            "/repos/openai/project/actions/jobs/0/logs",
+            "/repos/openai/project/actions/jobs/not-a-number/logs",
+        ):
+            with self.subTest(path=path), self.assertRaises(evidence.EvidenceError):
+                evidence.gh_api(path)
+
     def test_successfully_reuses_exact_run_attempt_tree_and_suite_set(self) -> None:
         api = FakeApi(successful_responses())
         result = evidence.select_reuse(
@@ -363,6 +408,29 @@ class EvidenceTests(unittest.TestCase):
                 )
                 self.assertFalse(result.reused)
 
+    def test_terminal_controls_around_evidence_are_parsed_but_never_rendered(self) -> None:
+        responses = successful_responses()
+        responses[logs_path()] = "\x1b[31mrunner preface\x1b[0m\n" + report_log() + "\x07"
+        with tempfile.TemporaryDirectory() as temporary:
+            output_path = Path(temporary) / "output"
+            summary_path = Path(temporary) / "summary"
+            env = {
+                "CI_EVENT": "workflow_dispatch",
+                "GITHUB_REPOSITORY": REPOSITORY,
+                "GITHUB_OUTPUT": str(output_path),
+                "GITHUB_STEP_SUMMARY": str(summary_path),
+            }
+            stdout = io.StringIO()
+            with mock.patch.object(
+                evidence, "_local_revision", side_effect=[COMMIT, TREE]
+            ), redirect_stdout(stdout):
+                result = evidence.select_cli(env, FakeApi(responses))
+            summary = summary_path.read_text(encoding="utf-8")
+        self.assertTrue(result.reused)
+        self.assertNotIn("\x1b", stdout.getvalue())
+        self.assertNotIn("\x07", stdout.getvalue())
+        self.assertEqual(stdout.getvalue(), summary)
+
     def test_incomplete_duplicate_or_unsuccessful_jobs_fall_back_fresh(self) -> None:
         cases: dict[str, list[dict[str, object]]] = {}
         missing = jobs()
@@ -503,16 +571,19 @@ class EvidenceTests(unittest.TestCase):
                 "GITHUB_STEP_SUMMARY": str(summary_path),
                 "GITHUB_SERVER_URL": "https://github.example",
             }
+            stdout = io.StringIO()
             with mock.patch.object(
                 evidence, "_local_revision", side_effect=[COMMIT, TREE]
-            ):
+            ), redirect_stdout(stdout):
                 result = evidence.select_cli(env, api)
             self.assertTrue(result.reused)
             self.assertEqual(output_path.read_text(encoding="utf-8"), "reused=true\n")
-            self.assertIn(
-                f"https://github.example/{REPOSITORY}/actions/runs/{RUN_ID}",
-                summary_path.read_text(encoding="utf-8"),
+            expected = (
+                "reused completed exact-tree CI evidence: "
+                f"https://github.example/{REPOSITORY}/actions/runs/{RUN_ID}\n"
             )
+            self.assertEqual(summary_path.read_text(encoding="utf-8"), expected)
+            self.assertEqual(stdout.getvalue(), expected)
 
     def test_pending_cli_does_not_claim_reuse(self) -> None:
         responses = successful_responses()

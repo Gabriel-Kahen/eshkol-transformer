@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -44,6 +45,9 @@ SUITES = (
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\Z")
+JOB_LOG_PATH = re.compile(
+    r"/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/jobs/[1-9][0-9]*/logs\Z"
+)
 
 
 class EvidenceError(RuntimeError):
@@ -135,10 +139,22 @@ def run_bounded(command: list[str]) -> str:
     return output
 
 
+@lru_cache(maxsize=1)
+def _gh_allows_escape_sequences() -> bool:
+    return "--allow-escape-sequences" in run_bounded(["gh", "api", "--help"])
+
+
 def gh_api(path: str) -> str:
     if not path.startswith("/repos/") or ".." in path:
         _fail("refusing non-repository GitHub API path")
-    return run_bounded(["gh", "api", path])
+    log_path = JOB_LOG_PATH.fullmatch(path) is not None
+    if "/actions/jobs/" in path and path.endswith("/logs") and not log_path:
+        _fail("refusing malformed GitHub job log path")
+    command = ["gh", "api"]
+    if log_path and _gh_allows_escape_sequences():
+        command.append("--allow-escape-sequences")
+    command.append(path)
+    return run_bounded(command)
 
 
 def _api_text(api: Api, path: str, description: str) -> str:
@@ -437,6 +453,7 @@ def select_cli(env: dict[str, str] | None = None, api: Api = gh_api) -> Selectio
         link = f"{server}/{repository}/actions/runs/{result.run_id}"
         summary += f": {link}"
     _append(values.get("GITHUB_STEP_SUMMARY"), summary + "\n")
+    print(summary)
     return result
 
 

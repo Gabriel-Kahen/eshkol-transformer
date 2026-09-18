@@ -62,6 +62,18 @@ Job summaries expose prerequisite/test seconds. Raw logs retain exact checks and
 resource results. Workflow selection/evidence and topology tests are development
 Python only, outside all delivered Eshkol/runtime closures.
 
+Hosted acceptance run 35392576803 did not reuse the matching completed CI and was
+cancelled immediately after it started the full matrix. Selector-only run
+35392784207 exposed the cause: GitHub CLI 2.100.0 rejects job-log responses that
+contain terminal escape sequences unless its job-log opt-in flag is present. The
+reader now feature-detects that flag and applies it only to the authenticated,
+numeric job-log endpoint. Older CLI versions retain their existing invocation.
+Log bytes remain bounded in a non-terminal temporary file and only the unique,
+strict JSON evidence marker is parsed; raw log text is never rendered in stdout or
+the job summary. Repaired selector-only run 35393115074 succeeded on the hosted
+CLI and selected completed run 35384195050 with exact-tree reuse. This proves the
+transport repair, not the final combined branch's full acceptance workflow.
+
 ## N2 reference environment
 
 The N2 development-oracle wrapper pins `ATEN_CPU_CAPABILITY=default` and
@@ -89,11 +101,18 @@ branch has merged or that production numerics changed.
 | C2 partition, run 35350092230 | 3h40m43s total; about 3h30m testing |
 | Predecessor partition, same run | 44m03s build; cancelled at 240m during T2 boundary |
 | Native rerun, run 35349163791 attempt 2 | 30m50s prerequisites + 60m47s tests |
-| CI-E supported wall time | Pending; no speedup claim |
+| Full engine, run 35384195050 at `aec841b` | 88m10s wall time versus 224m58s for uninterrupted baseline run 35328578567: 136m48s / 60.8% lower |
+| Full-engine summed jobs | 441m59s versus 464m00s: 22m01s / 4.7% lower |
+| C2 partitioned critical path | 56m22s versus 220m43s; six partition jobs sum to 154m03s |
+| Final combined reference/selector repair | Full CI not yet run; no acceptance claim |
+| Selector transport repair | Hosted selector-only run 35393115074 passed and selected exact-tree run 35384195050; final acceptance workflow still pending |
 
 Validation must compare the same pinned Ubuntu 22.04 / LLVM 21.1.8 / oracle inputs,
 record queue and job/step time separately, and retain every required count and
 resource bound. Higher job concurrency reduces the critical path only if runner
 capacity is available; total billed compute is a separate measurement. Do not
 claim the removed wrapper invocation count equals an identical percentage runtime
-saving. Current running PR #77 checks are left untouched.
+saving. These measurements are one hosted sample and remain subject to runner,
+hardware, queue, and cache variance. They establish the optimized engine result,
+not final validation of the later N2 reference and selector transport repairs.
+Current running PR #77 checks are left untouched.
