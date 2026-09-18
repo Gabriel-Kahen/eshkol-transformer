@@ -318,7 +318,9 @@
 (define provider-interface-major 2)
 (define provider-interface-minor 0)
 (define row-major-layout 'dense-row-major-contiguous)
-(define tensor-providers '())
+(define tensor-provider-registry-root (vector '()))
+(define (tensor-provider-registry-current)
+  (vector-ref tensor-provider-registry-root 0))
 (define tensor-provider-admission-active? #f)
 (define tensor-provider-admission-active-shell #f)
 (define protected-storage-comparison-active? #f)
@@ -911,7 +913,7 @@
     state))
 
 (define (tensor-provider-registration-find name)
-  (let loop ((providers tensor-providers))
+  (let loop ((providers (tensor-provider-registry-current)))
     (cond
       ((null? providers) #f)
       ((eq? name (vector-ref (car providers) 0)) (car providers))
@@ -1087,7 +1089,9 @@
                        ;; its identity fields are filled only from canonical
                        ;; registry readback after admission succeeds.
                        (registration (vector #f shell #f))
-                       (next-providers (cons registration tensor-providers))
+                       (next-providers
+                         (cons registration
+                               (tensor-provider-registry-current)))
                        (callbacks #f)
                        (outcome (vector #f #f))
                        (abort-failed? #f)
@@ -1139,8 +1143,18 @@
                           (vector-set! registration 0
                                        (tensor-provider-name canonical-admitted))
                           (vector-set! registration 2 canonical-admitted)
-                          (set! tensor-providers next-providers)
-                          (vector-ref (car tensor-providers) 2)))
+                          (vector-set! tensor-provider-registry-root 0
+                                       next-providers)
+                          (let ((published
+                                  (vector-ref
+                                    (car (tensor-provider-registry-current))
+                                    2)))
+                            ;; Provider-registry publication may promote the
+                            ;; admitted graph a second time. Keep the shell
+                            ;; registry and provider registry on that final
+                            ;; exact canonical identity.
+                            (vector-set! canonical-record 2 published)
+                            published)))
                       (begin
                         (set! tensor-provider-admission-active-shell #f)
                         (guard (caught
@@ -1779,20 +1793,31 @@
 
 (define (protected-storage-identical?
           operation provider left right left-kind right-kind)
-  ;; One process-local request is allocated before any callback can publish an
-  ;; owner. P1 is serialized/nonreentrant, so protection scans may reuse it
-  ;; without allocating after publication or while a release envelope is
-  ;; disarmed. Every exit clears temporary carrier references.
+  ;; Ordinary owner operations reuse one process-local request so they allocate
+  ;; nothing after publication or while a release envelope is disarmed.
+  ;; Provider admission is different: it is still inside the total rollback
+  ;; transaction and may originate in a lexical region. A regional request
+  ;; avoids promoting its not-yet-published evidence/clone carriers through the
+  ;; process root before provider publication commits.
   (if protected-storage-comparison-active?
       (fail 'invalid-state operation
             "protected storage comparison is not reentrant" '())
       #t)
+  (let ((request
+          (if (eq? operation 'tensor-provider-register-internal!)
+              (vector left right left-kind right-kind operation)
+              protected-storage-comparison-request)))
+  ;; Allocate any provider-admission request before publishing the global
+  ;; reentrancy flag. Allocation failure must leave the comparison idle.
   (set! protected-storage-comparison-active? #t)
-  (vector-set! protected-storage-comparison-request 0 left)
-  (vector-set! protected-storage-comparison-request 1 right)
-  (vector-set! protected-storage-comparison-request 2 left-kind)
-  (vector-set! protected-storage-comparison-request 3 right-kind)
-  (vector-set! protected-storage-comparison-request 4 operation)
+  (if (eq? request protected-storage-comparison-request)
+      (begin
+        (vector-set! request 0 left)
+        (vector-set! request 1 right)
+        (vector-set! request 2 left-kind)
+        (vector-set! request 3 right-kind)
+        (vector-set! request 4 operation))
+      #t)
   (let ((returned #f) (callback-failed? #f) (callback-error #f))
     (guard (caught
              (#t
@@ -1800,22 +1825,19 @@
                (set! callback-error caught)
                #f))
       (set! returned
-            ((vector-ref provider 4) protected-storage-comparison-request)))
+            ((vector-ref provider 4) request)))
     (let ((valid?
             (and (boolean? returned)
-                 (eq? (vector-ref protected-storage-comparison-request 0) left)
-                 (eq? (vector-ref protected-storage-comparison-request 1) right)
-                 (eq? (vector-ref protected-storage-comparison-request 2)
-                      left-kind)
-                 (eq? (vector-ref protected-storage-comparison-request 3)
-                      right-kind)
-                 (eq? (vector-ref protected-storage-comparison-request 4)
-                      operation))))
-      (vector-set! protected-storage-comparison-request 0 #f)
-      (vector-set! protected-storage-comparison-request 1 #f)
-      (vector-set! protected-storage-comparison-request 2 #f)
-      (vector-set! protected-storage-comparison-request 3 #f)
-      (vector-set! protected-storage-comparison-request 4 #f)
+                 (eq? (vector-ref request 0) left)
+                 (eq? (vector-ref request 1) right)
+                 (eq? (vector-ref request 2) left-kind)
+                 (eq? (vector-ref request 3) right-kind)
+                 (eq? (vector-ref request 4) operation))))
+      (vector-set! request 0 #f)
+      (vector-set! request 1 #f)
+      (vector-set! request 2 #f)
+      (vector-set! request 3 #f)
+      (vector-set! request 4 #f)
       (set! protected-storage-comparison-active? #f)
       (if callback-failed?
           (raise callback-error)
@@ -1823,7 +1845,7 @@
               returned
               (fail 'internal operation
                     "tensor provider corrupted protected storage comparison"
-                    '()))))))
+                    '())))))))
 
 (define (tensor-storage-identical? operation provider left right left-kind right-kind)
   ;; Every storage comparison, including ordinary pre-commit alias checks,

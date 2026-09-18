@@ -41,6 +41,54 @@
 (check "canonical shell remains usable after sibling destruction"
        (eq? (module-mode-internal child) 'train))
 
+;; Provider admission rewrites the opaque shell from the unsealed input to the
+;; admitted snapshot, then publishes that exact canonical snapshot through the
+;; provider registry. Both registries must survive the nested poisoned arenas.
+(define region-provider-error #f)
+(define region-provider-published?
+  (guard (raised
+           (#t
+             (set! region-provider-error raised)
+             #f))
+    (with-region ('p1-provider-outer 1048576)
+      (with-region ('p1-provider-inner 1048576)
+        (begin
+          (fixture-register-region-provider-internal!)
+          #t)))))
+(if region-provider-error
+    (begin
+      (display "P1 registry publication provider error: ")
+      (if (transformer-error? region-provider-error)
+          (begin
+            (display (transformer-error-category region-provider-error))
+            (display " ")
+            (display (transformer-error-operation region-provider-error))
+            (display " ")
+            (display (transformer-error-message region-provider-error)))
+          (display region-provider-error))
+      (newline)
+      (exit 1)))
+(check "nested provider publication completes"
+       region-provider-published?)
+(define region-provider
+  (tensor-provider-preflight-internal 'region-publication-v1 2 0))
+
+(with-region ('p1-provider-sibling 1048576)
+  (check "provider lookup returns exact canonical admitted identity"
+         (eq? region-provider
+              (tensor-provider-preflight-internal
+                'region-publication-v1 2 0)))
+  (check "canonical provider remains usable in sibling region"
+         (eq? (module-mode-internal
+                (module-create-with-provider-internal
+                  'region-publication-v1))
+              'train)))
+
+(check "provider survives sibling destruction"
+       (eq? region-provider
+            (tensor-provider-preflight-internal
+              'region-publication-v1 2 0)))
+
 ;; Parameter registration publishes the handle shell before committing the
 ;; binding. The pending binding must be rewritten to the canonical raw handle.
 (define parameter-case

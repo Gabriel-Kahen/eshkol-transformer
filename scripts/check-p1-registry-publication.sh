@@ -42,7 +42,13 @@ for source in "${template}" "${generated}"; do
   require_exact_count 1 \
     "(vector-ref canonical-record 2)" "${source}"
   require_exact_count 1 \
-    "(vector-ref (car tensor-providers) 2)" "${source}"
+    "(define tensor-provider-registry-root (vector '()))" "${source}"
+  require_exact_count 1 \
+    "(vector-ref tensor-provider-registry-root 0)" "${source}"
+  require_exact_count 1 \
+    "(vector-set! tensor-provider-registry-root 0" "${source}"
+  require_exact_count 4 \
+    "(tensor-provider-registry-current)" "${source}"
   require_exact_count 2 \
     "(raw-for-shell 'module-register-parameter-internal!" "${source}"
   require_exact_count 1 \
@@ -50,7 +56,9 @@ for source in "${template}" "${generated}"; do
   require_exact_count 1 \
     "(vector-set! (car (vector-ref plan 2)) 2 canonical-handle)" "${source}"
   if rg -F -e "(define shell-registry '())" \
-      -e "(set! shell-registry next-registry)" "${source}" >/dev/null; then
+      -e "(set! shell-registry next-registry)" \
+      -e "(define tensor-providers '())" \
+      -e "(set! tensor-providers next-providers)" "${source}" >/dev/null; then
     die "legacy captured registry mutation remains in ${source}"
   fi
 done
@@ -290,7 +298,7 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/aot/registry-proof" \
   >"${tmp}/runtime.stdout" 2>"${tmp}/runtime.stderr"
 test ! -s "${tmp}/runtime.stderr"
-grep -Fx "P1 REGISTRY PUBLICATION PASS: 7 checks" \
+grep -Fx "P1 REGISTRY PUBLICATION PASS: 11 checks" \
   "${tmp}/runtime.stdout" >/dev/null
 
 cat "${tmp}/publication-witness.txt"
