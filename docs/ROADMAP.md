@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | [CI-E full-coverage efficiency candidate](CI_EFFICIENCY.md): shared 15-job engine, six disjoint C2 groups, exact leaf-coverage/negative tests, minimal prerequisite plans and strict same-tree CI evidence reuse; supported measurement and final independent acceptance pending | review |
+| F0 | Package layout, build/test entry points, CI matrix | — | [Accepted CI-E full-coverage engine](CI_EFFICIENCY.md): all 15 suites and 23 commands, six disjoint C2 groups, canonical build/smoke/benchmark, audited prerequisite plans, strict same-tree evidence reuse, supported exact-tree CI, independent approval, merge, and successful 27-second reuse acceptance | complete |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
@@ -33,6 +33,10 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 ## Wave 2 — model and training primitives
 
+Wave 2 is complete within the bounded component contracts below. Wave 3 work
+remains paused; this closeout starts no Wave 3 tasks. C2 completion does not prove
+a live trainer trajectory or generation.
+
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | P1L | [Release-capable provider/state ownership correction](P1_MODULE_STATE.md) | P1, E1B, C1, T1 | Provider 2.0 exact-once clone ownership, explicit idempotent state release, scoped read-only state-backed handles, callback-defect/failure cleanup, exact P1/C1/T1 aggregate manifests, sanitizers, deterministic fresh-AOT negatives, and supported CI | complete |
@@ -44,7 +48,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | complete |
 | L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | complete |
 | O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; 6,201 adversarial checks, sanitizers, independent review, supported blocking/exhaustive CI, identical-tree merge and bounded merged-main retest | complete |
-| C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | K2 and all component prerequisites are merged. Private parser/reader/inspect, exact-bit staging, canonical deep-owner lifetime, staged LOAD/reconstruction, and atomic SAVE pass. The source-composed public candidate has the exact 81-global/75-export/81-string boundary, authenticated policy/metadata carriers, fresh-cache lifecycle/isolation/determinism gates, poison/IR publication proof, and flat supported 1,024/8,192 policy/metadata root retention at 5,701,632 bytes. Supported blocking run 35328578567 passed every lane; its two public 64-tensor LOAD/SAVE/release runs measured 521,340 and 521,380 KiB below the unchanged 524,288 KiB ceiling. Exact per-tensor K2 admission, every injected failure ordinal, unsupported-rank and alias-shape cleanup, affected C2 regressions, and independent lifetime/numerical/packaging review pass. The exact-head C2 exhaustive partition in run 35350092230 passed; the predecessor partition and final integration acceptance remain outstanding. Component continuation and atomic file publication only; TR3 retains joint live restore/full trajectory and G3 generation proof | active |
+| C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted C2 1.0 component continuation and atomic-file publication: exact 81-global/75-export/81-string boundary, authenticated carriers, exact-bit LOAD/SAVE ownership, failure atomicity, deterministic packaging, flat 1,024/8,192 root retention, and final joint 64-tensor runs at 521,500/521,576 KiB below 524,288 KiB. PR #79 merged as `cbd0929`; PR #77 merged to main as `913cdf4097db09d6c33769e9b0968c01ce0e1f55`; reviewed, tested, and merged states share tree `512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all 15 suites/23 commands plus smoke/benchmark, and acceptance 35401088338 reused the verified exact tree successfully. TR3 retains joint live restore/full trajectory and G3 generation proof | complete |
 
 ## Wave 3 — first complete language model
 

@@ -1,12 +1,14 @@
 # Wave 2 primitive acceptance
 
-Integration closeout, 2026-09-09. A2, T2, L2, I2, and N2 are accepted and
+Initial primitive closeout, 2026-09-09; bounded Wave 2 component closeout,
+2026-09-18. A2, T2, L2, I2, and N2 are accepted and
 complete within their documented bounded contracts. This supersedes their earlier
 active/proposed/review status, not their capability or lifetime limitations.
 D2 has a separate acceptance record. The O2 addendum below records its acceptance
 on 2026-09-10. [K2 was accepted on 2026-09-17](K2_CAPABILITY_FACADE.md#verification).
-C2 remains unfinished; the complete model and
-first-release training gates remain separate. This does not mark Wave 2 complete.
+C2 was subsequently accepted and merged as recorded below, so the bounded Wave 2
+component work is complete. Wave 3 work remains paused; this closeout starts no
+Wave 3 tasks. Complete-model and first-release training gates remain separate.
 
 ## Independent review and supported evidence
 
@@ -31,9 +33,13 @@ account also owns the PRs, so GitHub disallowed owner self-approval.
 
 The immediate N2 merge-push [run 34062447715](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34062447715)
 failed because freshly generated oracle bytes differed from the frozen fixture.
-Smoke and benchmark were skipped. The cause is not established; this closeout
-does not call that run successful or attribute the mismatch to a particular host
-or tool.
+Smoke and benchmark were skipped. This closeout does not call that run successful,
+and no retained per-word diagnostic supports retroactively assigning its mismatch.
+Later controlled evidence diagnosed the same class of fresh-oracle failure on
+recent Intel runners as an MKL cross-vendor dispatch difference in 18 linear tensor
+words. The accepted reference-only `MKL_CBWR=COMPATIBLE` wrapper pin reproduced
+the unchanged frozen fixture on all 12 controlled runs without changing runtime,
+generator, lock, fixture, or tolerance.
 
 Later supported run 34301118384 tested synthetic merge
 `58ec324e9fc983f20bea9e0094eff1367dcbeff7`, whose tree
@@ -93,6 +99,27 @@ with linear lookup. C2 consumes the merged logical projection and scoped synchro
 borrow/release contracts; TR3 retains cadence, token counters/schedules and
 mid-accumulation checkpoint policy. No full training trajectory or generation
 equivalence is claimed by this acceptance.
+
+## C2, CI-E, and Wave 2 closeout
+
+C2 is accepted and complete for detached component-state continuation and atomic
+file publication. PR #79 merged as `cbd0929`, and PR #77 merged to main as
+`913cdf4097db09d6c33769e9b0968c01ce0e1f55`; both share reviewed and tested tree
+`512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all
+15 suites, all 23 top-level commands, canonical smoke, and benchmark. Independent
+authoritative [review](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/77#issuecomment-5733708650)
+approved the exact tree. Acceptance run 35401088338 verified
+the same-tree evidence, skipped the full matrix, and completed successfully in 27
+seconds. The two final joint operational runs measured 521,500 and 521,576 KiB,
+below the unchanged 524,288 KiB ceiling.
+
+The merged-tree integration owner also passed the C2 format and core-only groups,
+69 CI unit tests, two Python-isolation tests, 15-suite/23-command topology, rebuilt
+compile smoke, and exact `eshkol-transformer-smoke:v1` under explicit non-login
+Bash on an unsupported CachyOS/LLVM 22.1.6 compatibility host. This was a bounded
+retest, not a full local repository, public-AOT, or operational rerun; supported
+full evidence remains the run above. C2 does not claim TR3 joint live restoration
+or full-trajectory equivalence, and it does not claim G3 generation equivalence.
 
 ## Scope preserved
 
