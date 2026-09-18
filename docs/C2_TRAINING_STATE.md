@@ -9,11 +9,13 @@ LOAD/SAVE ownership gates pass. A local source-composed candidate now exposes
 the capability-facing `checkpoint-load/3` through the caller's exact K2 report,
 with an exact 81-global / 75-export / 81-public-string boundary and one archive
 member. Its fresh-cache public lifecycle, hostile-linkage, deterministic-build,
-and root-retention gates pass on the unsupported development host. The private
-stage/reconstruct operational path passes the fixed ceiling, but the same
-64-tensor measurement through public `checkpoint-load/3` and counted K2
-admission/failure injection remain open. Publication also waits for Ubuntu
-22.04/LLVM 21.1.8 CI and final independent integration acceptance.
+and root-retention gates pass on the unsupported development host. The final
+canonical-root gate drives two fresh AOT copies through the public 64-tensor
+LOAD/SAVE/release lifecycle at 519,028 and 520,656 KiB peak RSS, below the
+unchanged 524,288 KiB ceiling. Exact per-tensor admission, every injected K2
+failure ordinal, unsupported-rank cleanup, alias-shape rejection, and affected
+format/core/save/load regressions pass. Publication still waits for Ubuntu
+22.04/LLVM 21.1.8 blocking and exhaustive CI plus final integration acceptance.
 
 ## Scope
 
@@ -147,6 +149,13 @@ Wire hard limits are 1 TiB file bytes, 256 MiB artifact-wide metadata, 256 GiB
 per tensor, 6,826 total tensors, 4,096 model entries, 1,365 unique optimizer
 parameters/groups, rank/path depth 64, UTF-8 segment bytes 65,536, D2 cursor
 bytes 400, and canonical X1 bytes 16,384. A caller policy may only lower them.
+
+The current K2 `tensor.f32/storage.copy` capability admits only rank-zero and
+rank-one shapes. Therefore a wire-valid C2 checkpoint containing any rank-two
+through rank-64 tensor fails public `checkpoint-load/3` with `unsupported`
+after complete byte/semantic staging and before reconstruction. There is no
+reshape, scalar, CPU, or other fallback. This is an explicit public capability
+limitation, not a narrower wire-format limit.
 
 The initial operational target is 16 MiB file bytes, 512 KiB artifact-wide
 metadata, 8 MiB per tensor, and 64 total tensors. This tuple is not a wire

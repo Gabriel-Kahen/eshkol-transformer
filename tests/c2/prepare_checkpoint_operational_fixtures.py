@@ -24,6 +24,7 @@ from tests.c2.test_checkpoint_format import (
     X1,
     cursor,
     make_optimizer,
+    make_fixture as make_format_fixture,
     p16,
     p32,
     p64,
@@ -233,6 +234,9 @@ def main() -> None:
             2, single_buffer_bytes=TENSOR_LIMIT + 4),
         "count-exact.c2": make_artifact(62, single_buffer_bytes=4),
         "count-one.c2": make_artifact(63, single_buffer_bytes=4),
+        "alias-shape.c2": bytes(
+            make_format_fixture(alias_shape_mismatch=True)[0]),
+        "rank-two.c2": bytes(make_format_fixture(model_shape=(1, 2))[0]),
     }
     corrupt = bytearray(artifacts["joint-exact.c2"])
     corrupt[-1] ^= 1

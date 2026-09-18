@@ -648,6 +648,13 @@ e1b_source="$(eshkol_source_dir)"
 e1b_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 e1b_cc="$(tsv_value "${e1b_provenance}" cc_path)"
 e1b_cxx="$(tsv_value "${e1b_provenance}" cxx_path)"
+e1b_clean_toolchain_env=(
+  env
+  -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH
+  -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES
+  -u GCC_EXEC_PREFIX -u COMPILER_PATH -u LIBRARY_PATH
+  -u CLANG_CONFIG_FILE -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX
+)
 [[ -f "${undefined_symbols}" ]] || \
   die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
 [[ -s "${undefined_symbols}" ]] || \
@@ -694,7 +701,8 @@ cmp -s "${public_exports}" "${e1b_tmp}/package-exports.txt" || \
 } | LC_ALL=C sort -u >"${e1b_tmp}/expected-global-defined.txt"
 
 run_compiler() {
-  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+  "${e1b_clean_toolchain_env[@]}" \
+    -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
     ESHKOL_JIT_CACHE=0 \
     XDG_CACHE_HOME="${e1b_tmp}/cache" \
     ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
@@ -759,7 +767,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   "${e1b_tmp}/private.ll" || \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
-"${e1b_cc}" -c -x ir "${e1b_tmp}/private.ll" \
+"${e1b_clean_toolchain_env[@]}" \
+  "${e1b_cc}" -c -x ir "${e1b_tmp}/private.ll" \
   -o "${e1b_tmp}/private.o"
 
 {
@@ -811,14 +820,16 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
 objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   "${e1b_tmp}/private.o"
 
-"${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+"${e1b_clean_toolchain_env[@]}" \
+  "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
   -o "${e1b_tmp}/bridge.o"
 
-"${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+"${e1b_clean_toolchain_env[@]}" \
+  "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/package-bridge.d" \
@@ -852,7 +863,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
-    "${e1b_cc}" "${package_native_cflags[@]}" \
+    "${e1b_clean_toolchain_env[@]}" \
+      "${e1b_cc}" "${package_native_cflags[@]}" \
       -MMD -MF "${package_native_depfile}" \
       -c "${package_native_source}" -o "${package_native_object}"
     package_native_objects+=("${package_native_object}")
@@ -878,7 +890,8 @@ if [[ -n "${package_native_source_closure}" ]]; then
     die "${package_policy} trusted native source closure drifted"
 fi
 
-"${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
+"${e1b_clean_toolchain_env[@]}" \
+  "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
   "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
   -o "${e1b_tmp}/combined.raw.o"

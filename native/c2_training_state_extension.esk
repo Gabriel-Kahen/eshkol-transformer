@@ -312,26 +312,24 @@
            (borrow
              (vector c2-training-state-borrow-tag state operation
                      owner-token access-token tensor-access)))
-      ;; Activation validates each exact claimed subowner and installs private
-      ;; access state under guarded rollback. Neither subowner ever transitions
-      ;; back to the ordinary live lifecycle.
-      ;; Publish the outer busy identity before P1 validation can invoke a
-      ;; trusted provider callback. A callback must not be able to release or
-      ;; recursively borrow this owner while activation is in flight.
-      (vector-set! state 7 borrow)
-      ;; A caller may already own a scratch region. The state-slot write
-      ;; barrier then promotes the complete borrow graph into owner lifetime.
-      ;; Read that canonical graph back and use only its linked authorities;
-      ;; the pre-barrier locals may still denote the regional originals.
-      (let* ((active-borrow (vector-ref state 7))
-             (active-owner-token (vector-ref active-borrow 3))
-             (active-access-token (vector-ref active-borrow 4)))
-        (vector-set! active-owner-token 2 active-borrow)
-        ;; Hosted exception handlers retain a large stack/handler graph. Keep
-        ;; both activation guards in scratch after every authority identity is
-        ;; allocated outer. P1's write barrier promotes only its tiny installed
-        ;; marker; success returns immediate #t and destroys all guard state.
-        (with-region ('c2-training-state-borrow-activation 65536)
+      ;; Establish scratch before publishing busy. If region establishment
+      ;; fails, the owner and both subowners are still untouched. Once inside,
+      ;; every fallible activation step is enclosed by an exact rollback guard.
+      (with-region ('c2-training-state-borrow-activation 65536)
+        ;; Publish the outer busy identity before P1 validation can invoke a
+        ;; trusted provider callback. A callback must not be able to release or
+        ;; recursively borrow this owner while activation is in flight.
+        (vector-set! state 7 borrow)
+        ;; The state-slot write barrier promotes the complete borrow graph into
+        ;; owner lifetime. Read it back and use only its linked authorities;
+        ;; the pre-barrier locals may still denote the regional originals.
+        (let* ((active-borrow (vector-ref state 7))
+               (active-owner-token (vector-ref active-borrow 3))
+               (active-access-token (vector-ref active-borrow 4)))
+          (vector-set! active-owner-token 2 active-borrow)
+          ;; Hosted exception handlers retain a large stack/handler graph.
+          ;; P1's write barrier promotes only its tiny installed marker;
+          ;; success returns the canonical outer borrow and drops guard state.
           (guard (caught
                    (#t
                      (vector-set! active-owner-token 2 #f)
@@ -351,8 +349,7 @@
             (c2-training-state-activate-o2-borrow!
               (vector-ref state 2) active-owner-token active-access-token
               active-borrow operation))
-          #t)
-        active-borrow))))
+          active-borrow)))))
 
 (define (c2-training-state-borrow-projection-internal borrow)
   (if (or (not (vector? borrow)) (not (= (vector-length borrow) 6))

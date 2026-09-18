@@ -50,6 +50,29 @@ def path(value: bytes) -> bytes:
     return struct.pack("<I", len(value)) + value
 
 
+def c1_parameter_record(name: bytes, shape: tuple[int, ...],
+                        payload_offset: int, payload: bytes) -> bytes:
+    encoded_path = path(name)
+    record = bytearray(80 + 8 * len(shape) + len(encoded_path))
+    p64(record, 0, len(record))
+    p64(record, 8, payload_offset)
+    p64(record, 16, len(payload))
+    p32(record, 24, len(encoded_path))
+    p16(record, 28, 1)
+    p16(record, 30, len(shape))
+    record[32:36] = bytes((1, 3, 1, 1))
+    elements = 1
+    for dimension, extent in enumerate(shape):
+        p64(record, 80 + 8 * dimension, extent)
+        elements *= extent
+    p64(record, 40, elements)
+    record[80 + 8 * len(shape):] = encoded_path
+    record[48:80] = hashlib.sha256(
+        C1_TENSOR_DOMAIN + record[:48] + b"\0" * 32 + record[80:] + payload
+    ).digest()
+    return bytes(record)
+
+
 def cursor(ordinal: int) -> bytes:
     fp = TOKENIZER
     header_bytes = 176 + len(fp)
@@ -131,7 +154,68 @@ def make_c1(buffer_bytes: int = 0, buffer_dtype: int = 1) -> tuple[bytes, dict[s
     }
 
 
-def make_optimizer() -> tuple[bytes, bytes, dict[str, int]]:
+def make_alias_shape_mismatch_c1() -> tuple[bytes, dict[str, int]]:
+    payload = struct.pack("<I", 0x3F800000)
+    first = c1_parameter_record(b"weight", (), 0, payload)
+    second = c1_parameter_record(b"weight_tied", (1,), len(payload), payload)
+    aliases = struct.pack("<IIII", 2, 0, 0, 1)
+    metadata = PROVIDER + first + second + aliases
+    header = bytearray(128)
+    header[:16] = C1_MAGIC
+    p16(header, 16, 1)
+    p32(header, 20, 128)
+    p32(header, 24, 1)
+    p32(header, 28, 1)
+    total = 128 + len(metadata) + 2 * len(payload) + 32
+    p64(header, 40, total)
+    p64(header, 48, 128)
+    p64(header, 56, len(metadata))
+    p64(header, 64, 128 + len(metadata))
+    p64(header, 72, 2 * len(payload))
+    p32(header, 80, 2)
+    p32(header, 84, 1)
+    p32(header, 88, len(PROVIDER))
+    p16(header, 92, 1)
+    p16(header, 96, 2)
+    unsigned = bytes(header) + metadata + payload + payload
+    return unsigned + hashlib.sha256(C1_DOMAIN + unsigned).digest(), {
+        "record": 128 + len(PROVIDER),
+        "payload": 128 + len(metadata),
+    }
+
+
+def make_shaped_c1(shape: tuple[int, ...]) -> tuple[bytes, dict[str, int]]:
+    elements = 1
+    for extent in shape:
+        elements *= extent
+    payload = b"\0" * (4 * elements)
+    record = c1_parameter_record(b"weight", shape, 0, payload)
+    metadata = PROVIDER + record
+    header = bytearray(128)
+    header[:16] = C1_MAGIC
+    p16(header, 16, 1)
+    p32(header, 20, 128)
+    p32(header, 24, 1)
+    p32(header, 28, 1)
+    total = 128 + len(metadata) + len(payload) + 32
+    p64(header, 40, total)
+    p64(header, 48, 128)
+    p64(header, 56, len(metadata))
+    p64(header, 64, 128 + len(metadata))
+    p64(header, 72, len(payload))
+    p32(header, 80, 1)
+    p32(header, 88, len(PROVIDER))
+    p16(header, 92, 1)
+    p16(header, 96, 2)
+    unsigned = bytes(header) + metadata + payload
+    return unsigned + hashlib.sha256(C1_DOMAIN + unsigned).digest(), {
+        "record": 128 + len(PROVIDER),
+        "payload": 128 + len(metadata),
+    }
+
+
+def make_optimizer(shape: tuple[int, ...] = (2,)
+                   ) -> tuple[bytes, bytes, dict[str, int]]:
     group = bytearray(44)
     p64(group, 0, len(group))
     p32(group, 8, 1)
@@ -146,22 +230,26 @@ def make_optimizer() -> tuple[bytes, bytes, dict[str, int]]:
     p64(config, 48, len(group))
     config += group
     encoded_path = path(b"weight")
-    record = bytearray(120 + 8 + len(encoded_path))
+    record = bytearray(120 + 8 * len(shape) + len(encoded_path))
     p64(record, 0, len(record))
     p32(record, 12, len(encoded_path))
     p16(record, 16, 1)
-    p16(record, 18, 1)
-    p64(record, 24, 2)
-    p64(record, 32, 8)
-    p64(record, 48, 8)
-    p64(record, 120, 2)
-    record[128:] = encoded_path
-    payload = b"\0" * 16
+    p16(record, 18, len(shape))
+    elements = 1
+    for dimension, extent in enumerate(shape):
+        p64(record, 120 + 8 * dimension, extent)
+        elements *= extent
+    moment_bytes = 4 * elements
+    p64(record, 24, elements)
+    p64(record, 32, moment_bytes)
+    p64(record, 48, moment_bytes)
+    record[120 + 8 * len(shape):] = encoded_path
+    payload = b"\0" * (2 * moment_bytes)
     zero_record = record[:56] + b"\0" * 64 + record[120:]
     record[56:88] = hashlib.sha256(MOMENT_DOMAIN + struct.pack("<II", 0, 1) +
-                                   zero_record + payload[:8]).digest()
+                                   zero_record + payload[:moment_bytes]).digest()
     record[88:120] = hashlib.sha256(MOMENT_DOMAIN + struct.pack("<II", 0, 2) +
-                                    zero_record + payload[8:]).digest()
+                                    zero_record + payload[moment_bytes:]).digest()
     header = bytearray(128)
     header[:8] = b"ESHKOPT1"
     p16(header, 8, 1)
@@ -189,9 +277,22 @@ def make_optimizer() -> tuple[bytes, bytes, dict[str, int]]:
     }
 
 
-def make_fixture(buffer_bytes: int = 0, buffer_dtype: int = 1) -> tuple[bytearray, dict[str, int]]:
-    model, c1 = make_c1(buffer_bytes, buffer_dtype)
-    optimizer, moments, o2 = make_optimizer()
+def make_fixture(buffer_bytes: int = 0, buffer_dtype: int = 1,
+                 alias_shape_mismatch: bool = False,
+                 model_shape: tuple[int, ...] | None = None
+                 ) -> tuple[bytearray, dict[str, int]]:
+    if alias_shape_mismatch:
+        model, c1 = make_alias_shape_mismatch_c1()
+    elif model_shape is not None:
+        model, c1 = make_shaped_c1(model_shape)
+    else:
+        model, c1 = make_c1(buffer_bytes, buffer_dtype)
+    optimizer_shape = (
+        () if alias_shape_mismatch
+        else (2,) if model_shape is None
+        else model_shape
+    )
+    optimizer, moments, o2 = make_optimizer(optimizer_shape)
     x1 = X1
     current, epoch = cursor(1), cursor(0)
     metadata = TOKENIZER + CONFIG + PROVIDER + LIBRARY + COMPILER + x1 + current + epoch + optimizer
@@ -208,10 +309,10 @@ def make_fixture(buffer_bytes: int = 0, buffer_dtype: int = 1) -> tuple[bytearra
     p64(header, 56, len(metadata))
     p64(header, 64, 256 + len(metadata))
     p64(header, 72, len(payload))
-    p32(header, 80, 1 + bool(buffer_bytes))
+    p32(header, 80, 2 if alias_shape_mismatch else 1 + bool(buffer_bytes))
     p32(header, 84, 1)
     p32(header, 88, 2)
-    p32(header, 92, 3 + bool(buffer_bytes))
+    p32(header, 92, 4 if alias_shape_mismatch else 3 + bool(buffer_bytes))
     p64(header, 96, len(model))
     p64(header, 104, len(optimizer))
     p64(header, 112, len(moments))
@@ -396,6 +497,11 @@ class ParserTests(unittest.TestCase):
 
     def test_nested_and_optimizer_adversaries(self) -> None:
         data, off = make_fixture()
+        alias_shape, alias_off = make_fixture(alias_shape_mismatch=True)
+        self.assertEqual(
+            self.invoke(alias_shape)[:3],
+            (2, 15, alias_off["c1_record"] + 205),
+        )
         item = data.copy(); item[off["c1_record"] + 36] = 1
         resign_c1(item, off["model"]); resign_outer(item)
         self.assertEqual(self.invoke(item)[0], 2)

@@ -4,7 +4,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar awk cmp diff env grep ldd nm python3 rg sort \
+for command in ar awk cmp diff env grep ldd nm python3 rg sort strings \
     timeout tr wc; do
   require_command "${command}"
 done
@@ -27,6 +27,12 @@ evidence="${object}.evidence"
   die "canonical C2 aggregate is missing; run scripts/build-c2.sh"
 [[ "$(ar t "${library}")" == "c2_wave2.o" ]] || \
   die "canonical C2 archive must contain exactly c2_wave2.o"
+ar p "${library}" c2_wave2.o >"${temporary_dir}/canonical-archive-member.o"
+cmp "${object}" "${temporary_dir}/canonical-archive-member.o"
+if nm -a "${object}" | \
+    rg 'et_k2_test_(require_count|fail_require_at)_v1' >/dev/null; then
+  die "canonical C2 aggregate contains a private K2 test hook"
+fi
 
 evidence_names=(
   global-defined.txt package-exports.txt undefined.txt expected-undefined.txt
@@ -315,17 +321,51 @@ grep -F 'C2 aggregate policy requires exact lexical repository inputs' \
 test ! -e "${temporary_dir}/hostile-lexical.o"
 test ! -e "${temporary_dir}/hostile-lexical.o.evidence"
 
+hostile_include="${temporary_dir}/hostile-include"
+mkdir -p "${hostile_include}"
+printf '%s\n' \
+  '#ifndef ET_C2_HOSTILE_STDINT_H' \
+  '#define ET_C2_HOSTILE_STDINT_H' \
+  '#include_next <stdint.h>' \
+  'static const char et_c2_hostile_cpath[] __attribute__((used, section(".c2_hostile_cpath"))) = "ET_C2_HOSTILE_CPATH";' \
+  '#endif' >"${hostile_include}/stdint.h"
+
 for rebuild in a b; do
-  ESHKOL_PATH="${temporary_dir}/missing-${rebuild}" \
-  ESHKOL_LIB_DIR="${temporary_dir}/missing-${rebuild}" \
-  ESHKOL_JIT_CACHE_DIR="${temporary_dir}/cache-${rebuild}" \
-    /usr/bin/bash "${PROJECT_ROOT}/scripts/build-c2.sh" \
-      "${temporary_dir}/rebuild-${rebuild}"
+  rebuild_env=(
+    env
+    ESHKOL_PATH="${temporary_dir}/missing-${rebuild}"
+    ESHKOL_LIB_DIR="${temporary_dir}/missing-${rebuild}"
+    ESHKOL_JIT_CACHE_DIR="${temporary_dir}/cache-${rebuild}"
+  )
+  if [[ "${rebuild}" == b ]]; then
+    rebuild_env+=(
+      CPATH="${hostile_include}"
+      C_INCLUDE_PATH="${hostile_include}"
+      CPLUS_INCLUDE_PATH="${hostile_include}"
+      OBJC_INCLUDE_PATH="${hostile_include}"
+      DEPENDENCIES_OUTPUT="${temporary_dir}/hostile-dependencies.out"
+      SUNPRO_DEPENDENCIES="${temporary_dir}/hostile-sunpro.out hostile"
+      GCC_EXEC_PREFIX="${temporary_dir}/missing-gcc-prefix/"
+      COMPILER_PATH="${temporary_dir}/missing-compiler-path"
+      LIBRARY_PATH="${temporary_dir}/missing-library-path"
+      CLANG_CONFIG_FILE="${temporary_dir}/missing-clang.cfg"
+      CCC_OVERRIDE_OPTIONS="#^-DHOSTILE_ENV"
+      CCC_CC="${temporary_dir}/missing-cc"
+      CCC_CXX="${temporary_dir}/missing-cxx"
+    )
+  fi
+  "${rebuild_env[@]}" /usr/bin/bash \
+    "${PROJECT_ROOT}/scripts/build-c2.sh" \
+    "${temporary_dir}/rebuild-${rebuild}"
 done
 cmp "${temporary_dir}/rebuild-a/c2_wave2.o" \
   "${temporary_dir}/rebuild-b/c2_wave2.o"
 cmp "${temporary_dir}/rebuild-a/libeshkol_transformer_wave2.a" \
   "${temporary_dir}/rebuild-b/libeshkol_transformer_wave2.a"
+if strings "${temporary_dir}/rebuild-b/c2_wave2.o" | \
+    grep -F 'ET_C2_HOSTILE_CPATH' >/dev/null; then
+  die "C2 deterministic rebuild inherited a hostile compiler include path"
+fi
 deterministic_evidence=(
   global-defined.txt package-exports.txt undefined.txt expected-undefined.txt
   public-strings.txt source-closure.txt native-source-closure.txt private.d
@@ -336,6 +376,14 @@ for evidence_name in "${deterministic_evidence[@]}"; do
     "${temporary_dir}/rebuild-b/c2_wave2.o.evidence/${evidence_name}"
 done
 cmp "${object}" "${temporary_dir}/rebuild-a/c2_wave2.o"
+cmp "${library}" \
+  "${temporary_dir}/rebuild-a/libeshkol_transformer_wave2.a"
+for rebuild in a b; do
+  if nm -a "${temporary_dir}/rebuild-${rebuild}/c2_wave2.o" | \
+      rg 'et_k2_test_(require_count|fail_require_at)_v1' >/dev/null; then
+    die "rebuilt C2 aggregate contains a private K2 test hook"
+  fi
+done
 
 printf '%s\n' \
   'C2 PUBLIC PACKAGING PASS: exact 81/75/81 surface, one-object archive, public load/save/release, arity and private isolation, deterministic rebuilds, native-only linkage'

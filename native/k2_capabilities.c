@@ -92,6 +92,7 @@ typedef struct et_k2_state {
   uint64_t destroy_count;
   uint64_t runtime_live_count;
   uint64_t require_count;
+  uint64_t require_fail_at;
 #endif
 } et_k2_state;
 
@@ -954,6 +955,14 @@ int64_t et_k2_private_runtime_require_v1(
   state.busy = 1;
 #ifdef ET_K2_TESTING
   state.require_count++;
+  if (state.require_fail_at != 0u &&
+      state.require_count == state.require_fail_at) {
+    state.require_fail_at = 0u;
+    state.busy = 0;
+    return write_error(error_payload, ET_K2_STATUS_UNSUPPORTED,
+                       ET_K2_CODE_PROVIDER_ABSENT, "capability-require",
+                       "injected K2 capability requirement failure");
+  }
 #endif
   result = et_kernel_runtime_capability_require(
       state.runtime, expected_names[sorted_entry_index], &request, &entry,
@@ -1155,6 +1164,10 @@ uint64_t et_k2_test_runtime_live_count_v1(void) {
 }
 
 uint64_t et_k2_test_require_count_v1(void) { return state.require_count; }
+
+void et_k2_test_fail_require_at_v1(uint64_t ordinal) {
+  state.require_fail_at = ordinal;
+}
 
 static int test_protected_text(const char *text) {
   return text == NULL || span_overlaps_protected(text, strlen(text) + 1u);

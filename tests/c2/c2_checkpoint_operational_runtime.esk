@@ -1,14 +1,4 @@
-(load "d2_wave2_root.esk")
-(load "c2_d2_cursor_pair_extension.esk")
-(load "o2_wave2_extension.esk")
-(load "c2_o2_reconstruct_extension.esk")
-(load "c2_o2_encode_extension.esk")
-(load "c2_model_encode_extension.esk")
-(load "c2_x1_canonical_extension.esk")
-(load "c2_training_state_extension.esk")
-(load "c2_persistence_policy_extension.esk")
-(load "c2_checkpoint_save_extension.esk")
-(load "c2_checkpoint_load_extension.esk")
+(load "c2_wave2_root.esk")
 
 (extern i64 c2-operational-counter i64
         :real et_c2_checkpoint_save_test_counter_v1)
@@ -36,6 +26,10 @@
         :real et_f32_tensor_test_control_bytes_v1)
 (extern i64 c2-operational-i2-decode-control-bytes
         :real et_i2_test_decode_builder_control_bytes_v1)
+(extern i64 c2-operational-k2-require-count
+        :real et_k2_test_require_count_v1)
+(extern void c2-operational-k2-fail-require-at i64
+        :real et_k2_test_fail_require_at_v1)
 
 (define checks 0)
 (define (check label condition)
@@ -120,10 +114,16 @@
 (define tensor-one-path (car (cdr (cdr (cdr (cdr args))))))
 (define count-one-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
 (define corrupt-path (car (cdr (cdr (cdr (cdr (cdr (cdr args))))))))
-(define output-root
+(define alias-shape-path
   (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))
-(define mode
+(define rank-two-path
   (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))
+(define count-exact-path
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))))
+(define output-root
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))))
+(define mode
+  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))))))
 
 (define target-policy
   (c2-persistence-policy-mode-internal
@@ -135,6 +135,7 @@
 (define wire-policy
   (c2-persistence-policy-mode-internal
     1099511627776 268435456 274877906944 6826 'cpu 'wire))
+(define operational-report (k2-public-capability-discover))
 (define start-ms (c2-operational-now))
 (define baseline-rss (c2-operational-current-rss))
 (define rejected-save-max-arena-delta 0)
@@ -372,20 +373,139 @@
     (display " exact-save-max-arena-delta=0")
     (newline)))
 
+(define (stage-retired-exactly? before after count)
+  (and (= (vector-ref after 0) (vector-ref before 0))
+       (= (vector-ref after 1) (vector-ref before 1))
+       (= (vector-ref after 2) (+ count (vector-ref before 2)))
+       (= (vector-ref after 3) (vector-ref before 3))))
+
+(define (finish-admission-mode label stage-before owner-before dead-delta)
+  (let ((stage-after (c2-load-stage-counts-internal))
+        (owner-after (c2-load-owner-counts-internal))
+        (retained-rss (c2-operational-current-rss))
+        (peak-rss (c2-operational-peak-rss))
+        (elapsed-ms (- (c2-operational-now) start-ms)))
+    (check "admission mode retires exact staging count"
+           (stage-retired-exactly? stage-before stage-after dead-delta))
+    (check "admission mode publishes no C2 owner"
+           (equal? owner-before owner-after))
+    (check "admission mode drains image/reader/fd" (native-flat?))
+    (check "measured retained RSS is below 512 MiB"
+           (and (> retained-rss 0) (< retained-rss 524288)))
+    (check "measured process peak RSS is below 512 MiB"
+           (and (> peak-rss 0) (< peak-rss 524288)))
+    (check "measured runtime is inside the explicit watchdog"
+           (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+    (display "C2 OPERATIONAL RUNTIME PASS: ")
+    (display checks)
+    (display " checks mode=") (display label)
+    (display " baseline-kib=") (display baseline-rss)
+    (display " retained-kib=") (display retained-rss)
+    (display " peak-kib=") (display peak-rss)
+    (display " elapsed-ms=") (display elapsed-ms)
+    (display " f32-retained-bytes=0 i2-retained-bytes=0")
+    (display " stage-dead-delta=") (display dead-delta)
+    (display " c2-dead-delta=0 p1-first-touch=0 p1-tombstone-delta=0")
+    (display " rejected-save-max-arena-delta=0")
+    (display " exact-save-max-arena-delta=0")
+    (newline)))
+
+;;; Every possible K2 admission failure in the 64-descriptor public path must
+;;; release the fully validated stage before reconstruction or publication.
+(define (run-k2-fail-mode)
+  (let ((mode-stage-before (c2-load-stage-counts-internal))
+        (mode-owner-before (c2-load-owner-counts-internal)))
+    (let loop ((ordinal 1))
+      (if (> ordinal 64) #t
+          (let ((require-before (c2-operational-k2-require-count))
+                (stage-before (c2-load-stage-counts-internal))
+                (owner-before (c2-load-owner-counts-internal))
+                (storage-before (snapshot-counts))
+                (decoder-before decoder-calls)
+                (o2-before o2-calls))
+            (c2-operational-k2-fail-require-at
+              (+ require-before ordinal))
+            (with-region ('c2-k2-admission-failure 4194304)
+              (expect-error "injected K2 admission failure is normalized"
+                'unsupported
+                (lambda ()
+                  (c2-public-checkpoint-load
+                    count-exact-path target-policy operational-report))))
+            (check "K2 failure occurs at the exact descriptor ordinal"
+                   (= (c2-operational-k2-require-count)
+                      (+ require-before ordinal)))
+            (check "K2 failure retires one stage and clears references"
+                   (stage-retired-exactly?
+                     stage-before (c2-load-stage-counts-internal) 1))
+            (check "K2 failure publishes no C2 owner"
+                   (equal? owner-before (c2-load-owner-counts-internal)))
+            (check "K2 failure is storage-counter flat"
+                   (equal? storage-before (snapshot-counts)))
+            (check "K2 failure invokes zero codecs"
+                   (and (= decoder-before decoder-calls)
+                        (= o2-before o2-calls)))
+            (check "K2 failure drains native staging" (native-flat?))
+            (loop (+ ordinal 1)))))
+    (finish-admission-mode
+      "k2-fail" mode-stage-before mode-owner-before 64)))
+
+;;; A fully valid, checksummed rank-two artifact proves the same public cleanup
+;;; guard at the current K2 provider's explicit rank boundary.
+(define (run-rank-mode)
+  (let ((mode-stage-before (c2-load-stage-counts-internal))
+        (mode-owner-before (c2-load-owner-counts-internal))
+        (storage-before (snapshot-counts))
+        (require-before (c2-operational-k2-require-count))
+        (decoder-before decoder-calls)
+        (o2-before o2-calls))
+    (expect-error "unsupported rank is normalized at public checkpoint-load"
+      'unsupported
+      (lambda ()
+        (c2-public-checkpoint-load
+          rank-two-path target-policy operational-report)))
+    (check "unsupported rank performs one exact K2 requirement"
+           (= (c2-operational-k2-require-count) (+ require-before 1)))
+    (check "unsupported rank is storage-counter flat"
+           (equal? storage-before (snapshot-counts)))
+    (check "unsupported rank invokes zero codecs"
+           (and (= decoder-before decoder-calls) (= o2-before o2-calls)))
+    (finish-admission-mode
+      "rank" mode-stage-before mode-owner-before 1)))
+
+(define (run-alias-mode)
+  (let ((mode-stage-before (c2-load-stage-counts-internal))
+        (mode-owner-before (c2-load-owner-counts-internal))
+        (storage-before (snapshot-counts))
+        (require-before (c2-operational-k2-require-count))
+        (decoder-before decoder-calls)
+        (o2-before o2-calls))
+    (expect-error "alias shape mismatch is early corrupt-data"
+      'corrupt-data
+      (lambda ()
+        (c2-public-checkpoint-load
+          alias-shape-path target-policy operational-report)))
+    (check "alias shape corruption invokes zero K2 requirements"
+           (= (c2-operational-k2-require-count) require-before))
+    (check "alias shape corruption publishes no stage"
+           (equal? mode-stage-before (c2-load-stage-counts-internal)))
+    (check "alias shape corruption is storage-counter flat"
+           (equal? storage-before (snapshot-counts)))
+    (check "alias shape corruption invokes zero codecs"
+           (and (= decoder-before decoder-calls) (= o2-before o2-calls)))
+    (finish-admission-mode
+      "alias" mode-stage-before mode-owner-before 0)))
+
 ;;; The joint exact artifact is authoritative for the measured lifecycle.
 (define (run-joint-mode)
 (define lifecycle-before (snapshot-counts))
 (define owner-before (c2-load-owner-counts-internal))
 (define stage-before (c2-load-stage-counts-internal))
-(define stage (c2-checkpoint-load-stage-internal joint-path target-policy))
-(define staged (c2-load-stage-counts-internal))
-(check "joint exact stage publishes one bounded identity"
-  (and (= (vector-ref staged 0) (+ 1 (vector-ref stage-before 0)))
-       (= (vector-ref staged 1) (vector-ref stage-before 1))
-       (= (vector-ref staged 2) (vector-ref stage-before 2))
-       (= (vector-ref staged 3) (+ 4 (vector-ref stage-before 3)))))
+(define require-before (c2-operational-k2-require-count))
 (define owner
-  (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load))
+  (c2-public-checkpoint-load
+    joint-path target-policy operational-report))
+(check "joint public load requires every one of 64 descriptors exactly once"
+       (= (c2-operational-k2-require-count) (+ require-before 64)))
 (check "joint exact reconstruction publishes one exact C2 owner"
        (c2-load-exact-live-owner? owner))
 (define live (snapshot-counts))
@@ -489,7 +609,7 @@
 (define first-save-counts (snapshot-counts))
 (define first-save-arena-before (__arena-used))
 (check "first joint operational save succeeds"
-       (c2-checkpoint-save-internal! owner save-a target-policy '()))
+       (c2-public-checkpoint-save! owner save-a target-policy '()))
 (define first-save-arena-delta (- (__arena-used) first-save-arena-before))
 (check "first joint save retains under two exact file images"
        (and (>= first-save-arena-delta 0)
@@ -501,7 +621,7 @@
 (define save-counts (snapshot-counts))
 (define second-save-arena-before (__arena-used))
 (check "second joint operational save succeeds"
-       (c2-checkpoint-save-internal! owner save-b target-policy '()))
+       (c2-public-checkpoint-save! owner save-b target-policy '()))
 (define second-save-arena-delta (- (__arena-used) second-save-arena-before))
 (if (or (< second-save-arena-delta 0)
         (>= second-save-arena-delta 32768))
@@ -524,7 +644,7 @@
        (equal? save-counts (snapshot-counts)))
 (define overwrite-save-arena-before (__arena-used))
 (check "overwrite joint operational save succeeds"
-       (c2-checkpoint-save-internal!
+       (c2-public-checkpoint-save!
          owner save-a target-policy '(:overwrite? #t)))
 (define overwrite-save-arena-delta
   (- (__arena-used) overwrite-save-arena-before))
@@ -560,8 +680,7 @@
             (= joint-publish-calls 3)))
 
 (check "joint exact owner releases"
-       (c2-training-state-release-internal!
-         owner 'trainer-state-release!))
+       (c2-public-trainer-state-release! owner))
 (define lifecycle-after (snapshot-counts))
 (define stage-after (c2-load-stage-counts-internal))
 (define owner-after (c2-load-owner-counts-internal))
@@ -669,6 +788,9 @@
 
 (cond
   ((string=? mode "joint") (run-joint-mode))
+  ((string=? mode "k2-fail") (run-k2-fail-mode))
+  ((string=? mode "rank") (run-rank-mode))
+  ((string=? mode "alias") (run-alias-mode))
   ((string=? mode "file")
     (run-over-mode "file" file-one-path 62 124))
   ((string=? mode "metadata")

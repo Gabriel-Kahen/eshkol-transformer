@@ -509,13 +509,22 @@ static int32_t validate_c1(parser *p, uint64_t base, uint64_t declared_bytes,
           earlier += UINT64_C(8) + UINT64_C(4) * ec;
         }
         if (j != 0u) {
+          uint16_t dimension;
           c1_record_at(p, out, first, &canonical);
-          if (rec.payload_bytes != canonical.payload_bytes ||
+          if (rec.rank != canonical.rank ||
+              rec.payload_bytes != canonical.payload_bytes ||
               memcmp(p->bytes + out->payload_offset + rec.payload_offset,
                      p->bytes + out->payload_offset + canonical.payload_offset,
                      (size_t)rec.payload_bytes) != 0)
             return fail(p, ET_C2_FORMAT_CORRUPT_DATA, ET_C2_FORMAT_CODE_ALIAS,
                         at + 8u + UINT64_C(4) * j);
+          for (dimension = 0u; dimension < rec.rank; ++dimension)
+            if (u64(p->bytes + rec.start + 80u + UINT64_C(8) * dimension) !=
+                u64(p->bytes + canonical.start + 80u +
+                    UINT64_C(8) * dimension))
+              return fail(p, ET_C2_FORMAT_CORRUPT_DATA,
+                          ET_C2_FORMAT_CODE_ALIAS,
+                          at + 8u + UINT64_C(4) * j);
         }
       }
       alias_members += count; previous_first = first; have_first = 1;

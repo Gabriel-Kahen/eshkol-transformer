@@ -162,6 +162,8 @@ for source in data_io kernel_abi t1_i64_shell f32_tensor i64_tensor \
   "${cc}" "${runtime_cflags[@]}" -c "${PROJECT_ROOT}/native/${source}.c" \
     -o "${runtime}/${source}.o"
 done
+"${cc}" "${runtime_cflags[@]}" -DET_C2_CARRIER_FACTORIES -c \
+  "${PROJECT_ROOT}/native/k2_capabilities.c" -o "${runtime}/k2.o"
 "${cc}" "${runtime_cflags[@]}" -DET_CHECKPOINT_IO_TESTING -c \
   "${PROJECT_ROOT}/native/checkpoint_io.c" -o "${runtime}/checkpoint_io.o"
 "${cc}" "${runtime_cflags[@]}" -DET_C2_CHECKPOINT_READER_TESTING -c \

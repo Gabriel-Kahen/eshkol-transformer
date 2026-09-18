@@ -243,6 +243,7 @@ runtime_native_inputs=(
   "${PROJECT_ROOT}/native/c2_x1_canonical.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_codec.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_format.c"
+  "${PROJECT_ROOT}/native/k2_capabilities.c"
   "${PROJECT_ROOT}/native/checkpoint_io.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_save_bridge.c"
   "${PROJECT_ROOT}/tests/c2/c2_checkpoint_save_test_bridge.c"
@@ -262,6 +263,8 @@ for source in data_io kernel_abi t1_i64_shell f32_tensor i64_tensor d2_native \
   "${cc}" "${runtime_cflags[@]}" -c "${PROJECT_ROOT}/native/${source}.c" \
     -o "${runtime}/${source}.o"
 done
+"${cc}" "${runtime_cflags[@]}" -DET_C2_CARRIER_FACTORIES -c \
+  "${PROJECT_ROOT}/native/k2_capabilities.c" -o "${runtime}/k2.o"
 "${cc}" "${runtime_cflags[@]}" -DET_CHECKPOINT_IO_TESTING -c \
   "${PROJECT_ROOT}/native/checkpoint_io.c" -o "${runtime}/checkpoint_io.o"
 "${cc}" "${runtime_cflags[@]}" -DET_C2_CHECKPOINT_SAVE_TESTING -c \
@@ -331,7 +334,8 @@ write_lifetime_witness() {
   local pre_touch_ir="${tmp}/clang-a/pre-touch.ll"
   local borrow_ir="${tmp}/clang-a/borrow-begin.ll"
   local state_barrier_line active_borrow_line active_owner_line
-  local active_access_line owner_barrier_line region_line region_block return_line
+  local active_access_line owner_barrier_line region_line escape_store_line
+  local unwind_line return_line
   test -s "${ir}"
   sed -n '/^define .*@c2-save-pre-touch-p1-identities(/,/^}/p' \
     "${ir}" >"${pre_touch_ir}"
@@ -361,25 +365,24 @@ write_lifetime_witness() {
   region_line="$(rg -n -m1 -F \
     '%region_mark = call i64 @eshkol_region_mark()' "${borrow_ir}")"
   region_line="${region_line%%:*}"
-  region_block="$(sed -n "1,${region_line}p" "${borrow_ir}" | awk '
-    /^[[:alnum:]_.-]+:/ { block = $1; sub(/:$/, "", block) }
-    END { print block }
-  ')"
+  escape_store_line="$(rg -n -m1 \
+    'store %eshkol_tagged_value %active-borrow\.load[0-9]*, ptr %region_result_slot' \
+    "${borrow_ir}")"
+  escape_store_line="${escape_store_line%%:*}"
+  unwind_line="$(rg -n -m1 -F \
+    'call void @eshkol_region_unwind_to' "${borrow_ir}")"
+  unwind_line="${unwind_line%%:*}"
   return_line="$(rg -n -m1 -F \
-    'ret %eshkol_tagged_value %active-borrow.load' "${borrow_ir}")"
+    'ret %eshkol_tagged_value %escaped_result' "${borrow_ir}")"
   return_line="${return_line%%:*}"
-  (( state_barrier_line < active_borrow_line &&
+  (( region_line < state_barrier_line &&
+     state_barrier_line < active_borrow_line &&
      active_borrow_line < active_owner_line &&
      active_owner_line < active_access_line &&
      active_access_line < owner_barrier_line &&
-     active_access_line < region_line && region_line < return_line )) || \
+     owner_barrier_line < escape_store_line &&
+     escape_store_line < unwind_line && unwind_line < return_line )) || \
     die "compiled borrow lifetime ordering is not canonical"
-  sed -n "${owner_barrier_line},$((owner_barrier_line + 6))p" \
-    "${borrow_ir}" | rg -F "br label %${region_block}" >/dev/null || \
-    die "compiled owner-link barrier does not precede activation scratch"
-  rg -F 'store %eshkol_tagged_value { i8 3, i8 0, i16 0, i32 0, i64 1 }, ptr %region_result_slot' \
-    "${borrow_ir}" >/dev/null
-  rg -F 'call void @eshkol_region_unwind_to' "${borrow_ir}" >/dev/null
   if sed -n "$((state_barrier_line + 1)),\$p" "${borrow_ir}" | \
        rg -F -e '%borrow.load' -e '%owner-token.load' \
          -e '%access-token.load' -e '%tensor-access.load' >/dev/null; then
@@ -392,9 +395,11 @@ write_lifetime_witness() {
     printf 'borrow-canonical-readback-line=%s\n' "${active_borrow_line}"
     printf 'borrow-owner-link-write-barrier-line=%s\n' "${owner_barrier_line}"
     printf 'borrow-activation-region-line=%s\n' "${region_line}"
+    printf 'borrow-region-escape-store-line=%s\n' "${escape_store_line}"
+    printf 'borrow-region-unwind-line=%s\n' "${unwind_line}"
     printf 'borrow-canonical-return-line=%s\n' "${return_line}"
     printf 'borrow-post-barrier-original-use=false\n'
-    printf 'borrow-region-escape=immediate-true\n'
+    printf 'borrow-region-escape=canonical-active-borrow\n'
     sha256sum "${ir}" "${pre_touch_ir}" "${borrow_ir}" \
       "${tmp}/pre-touch-source.esk"
   } >"${tmp}/lifetime-witness.txt"

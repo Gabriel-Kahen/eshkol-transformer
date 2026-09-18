@@ -11,9 +11,19 @@ cc="${CC:-/usr/bin/clang}"
 cxx="${CXX:-/usr/bin/clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY:-0}"
+read -r -a development_modes <<< \
+  "${C2_OPERATIONAL_DEVELOPMENT_MODE:-joint}"
 if [[ "${development}" != 0 && "${development}" != 1 ]]; then
   die "C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY must be 0 or 1"
 fi
+[[ "${#development_modes[@]}" -gt 0 ]] || \
+  die "C2_OPERATIONAL_DEVELOPMENT_MODE must name at least one mode"
+for development_mode in "${development_modes[@]}"; do
+  case "${development_mode}" in
+    joint|k2-fail|rank|alias) ;;
+    *) die "C2_OPERATIONAL_DEVELOPMENT_MODE accepts joint, k2-fail, rank, and alias" ;;
+  esac
+done
 if [[ "${development}" == 1 ]]; then
   cc=/usr/bin/clang
   cxx=/usr/bin/clang++
@@ -25,7 +35,7 @@ if [[ "${development}" == 1 ]]; then
   exec > >(tee "${tmp}/driver.stdout") \
     2> >(tee "${tmp}/driver.stderr" >&2)
   printf '%s\n' \
-    'C2 OPERATIONAL DEVELOPER MODE: NON-ACCEPTANCE; one Clang AOT and one intact joint lifecycle only'
+    "C2 OPERATIONAL DEVELOPER MODE: NON-ACCEPTANCE; one Clang AOT and modes=${development_modes[*]} only"
 else
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-operational.XXXXXX")"
 fi
@@ -158,6 +168,8 @@ runtime_native_inputs=(
   "${PROJECT_ROOT}/native/c2_checkpoint_reader.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_core.c"
   "${PROJECT_ROOT}/native/c2_checkpoint_load_bridge.c"
+  "${PROJECT_ROOT}/native/c2_checkpoint_inspect_bridge.c"
+  "${PROJECT_ROOT}/native/k2_capabilities.c"
   "${PROJECT_ROOT}/tests/c2/c2_checkpoint_save_test_bridge.c"
   "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_metrics.c"
 )
@@ -187,6 +199,12 @@ done
 "${cc}" "${runtime_cflags[@]}" -DET_C2_CHECKPOINT_LOAD_TESTING -c \
   "${PROJECT_ROOT}/native/c2_checkpoint_load_bridge.c" -o "${runtime}/load.o"
 "${cc}" "${runtime_cflags[@]}" -c \
+  "${PROJECT_ROOT}/native/c2_checkpoint_inspect_bridge.c" \
+  -o "${runtime}/inspect.o"
+"${cc}" "${runtime_cflags[@]}" -DET_K2_TESTING \
+  -DET_C2_CARRIER_FACTORIES -c \
+  "${PROJECT_ROOT}/native/k2_capabilities.c" -o "${runtime}/k2.o"
+"${cc}" "${runtime_cflags[@]}" -c \
   "${PROJECT_ROOT}/tests/c2/c2_checkpoint_save_test_bridge.c" \
   -o "${runtime}/test.o"
 "${cc}" "${runtime_cflags[@]}" -c \
@@ -204,11 +222,14 @@ if [[ "${development}" == 0 ]]; then
 "${cc}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY -c \
   "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
   -o "${tmp}/i2-production.o"
+"${cc}" "${cflags[@]}" -DET_C2_CARRIER_FACTORIES -c \
+  "${PROJECT_ROOT}/native/k2_capabilities.c" \
+  -o "${tmp}/k2-production.o"
 if nm -g --defined-only --format=posix "${tmp}/f32-production.o" \
-    "${tmp}/i2-production.o" | \
-    rg 'et_(f32_tensor_test_control|i2_test_decode_builder_control)_bytes_v1' \
+    "${tmp}/i2-production.o" "${tmp}/k2-production.o" | \
+    rg 'et_(f32_tensor_test_control|i2_test_decode_builder_control)_bytes_v1|et_k2_test_(require_count|fail_require_at)_v1' \
     >/dev/null; then
-  die "operational ABI-size witnesses escaped a production translation"
+  die "operational test witnesses escaped a production translation"
 fi
 test "$(nm -g --defined-only --format=posix "${runtime}/f32_tensor.o" | \
   awk '$1 == "et_f32_tensor_test_control_bytes_v1" { count++ } END { print count+0 }')" \
@@ -216,6 +237,11 @@ test "$(nm -g --defined-only --format=posix "${runtime}/f32_tensor.o" | \
 test "$(nm -g --defined-only --format=posix "${runtime}/i2.o" | \
   awk '$1 == "et_i2_test_decode_builder_control_bytes_v1" { count++ } END { print count+0 }')" \
   -eq 1
+for hook in et_k2_test_require_count_v1 et_k2_test_fail_require_at_v1; do
+  test "$(nm -g --defined-only --format=posix "${runtime}/k2.o" | \
+    awk -v hook="${hook}" '$1 == hook { count++ } END { print count+0 }')" \
+    -eq 1
+done
 
 for compiler in "${cxx}" /usr/bin/g++; do
   if [[ -x "${compiler}" ]]; then
@@ -328,7 +354,10 @@ run_runtime() {
       "${fixtures}/joint-exact.c2" "${fixtures}/file-one.c2" \
       "${fixtures}/metadata-one.c2" "${fixtures}/tensor-one.c2" \
       "${fixtures}/count-one.c2" "${fixtures}/joint-corrupt.c2" \
-      "${output}" "${mode}" >"${tmp}/${label}/${mode}.stdout" \
+      "${fixtures}/alias-shape.c2" "${fixtures}/rank-two.c2" \
+      "${fixtures}/count-exact.c2" \
+      "${output}" "${mode}" \
+      >"${tmp}/${label}/${mode}.stdout" \
       2>"${tmp}/${label}/${mode}.stderr"
   test ! -s "${tmp}/${label}/${mode}.stderr"
   rg -x "C2 OPERATIONAL RUNTIME PASS: [0-9]+ checks mode=${mode} baseline-kib=[0-9]+ retained-kib=[0-9]+ peak-kib=[0-9]+ elapsed-ms=[0-9]+ f32-retained-bytes=[0-9]+ i2-retained-bytes=[0-9]+ stage-dead-delta=[0-9]+ c2-dead-delta=[0-9]+ p1-first-touch=[0-9]+ p1-tombstone-delta=[0-9]+ rejected-save-max-arena-delta=[0-9]+ exact-save-max-arena-delta=[0-9]+" \
@@ -370,7 +399,9 @@ run_runtime() {
 
 compile_runtime clang-a "${cxx}"
 if [[ "${development}" == 1 ]]; then
-  run_runtime clang-a joint
+  for development_mode in "${development_modes[@]}"; do
+    run_runtime clang-a "${development_mode}"
+  done
   printf '%s artifact-dir=%s\n' \
     'C2 OPERATIONAL DEVELOPER NON-ACCEPTANCE PASS:' "${tmp}"
   exit 0
@@ -378,7 +409,7 @@ fi
 compile_runtime clang-b "${cxx}"
 cmp "${tmp}/clang-a/operational" "${tmp}/clang-b/operational"
 read -r -a operational_modes <<< \
-  "${C2_OPERATIONAL_MODES:-joint file metadata tensor count corrupt}"
+  "${C2_OPERATIONAL_MODES:-joint k2-fail rank alias file metadata tensor count corrupt}"
 for mode in "${operational_modes[@]}"; do
   run_runtime clang-a "${mode}"
   run_runtime clang-b "${mode}"
@@ -397,4 +428,4 @@ for gate in test-c2-format.sh test-c2-core.sh test-c2-checkpoint-save.sh \
 done
 
 printf '%s\n' \
-  'C2 CHECKPOINT OPERATIONAL EVIDENCE PASS: exact/one-over tuple, early/late precedence, deterministic byte-identical LOAD/SAVE, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure, affected regressions'
+  'C2 CHECKPOINT OPERATIONAL EVIDENCE PASS: public 64-tensor K2 LOAD/SAVE/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure, affected regressions'
