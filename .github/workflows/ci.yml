@@ -54,7 +54,7 @@ jobs:
     needs: topology
     if: needs.topology.outputs.run_full == 'true'
     runs-on: ubuntu-22.04
-    timeout-minutes: ${{ matrix.suite == 'native-numerics' && 105 || 75 }}
+    timeout-minutes: ${{ matrix.suite == 'checkpoint-io' && 240 || matrix.suite == 'native-numerics' && 105 || 75 }}
     strategy:
       fail-fast: false
       matrix:

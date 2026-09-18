@@ -15,8 +15,9 @@ makefile = (root / "Makefile").read_text(encoding="utf-8")
 ci = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 acceptance = (root / ".github/workflows/acceptance.yml").read_text(encoding="utf-8")
 
+CHECKPOINT_SUITE = "checkpoint-io"
 NATIVE_SUITE = "native-numerics"
-BLOCKING_TIMEOUT = "${{ matrix.suite == 'native-numerics' && 105 || 75 }}"
+BLOCKING_TIMEOUT = "${{ matrix.suite == 'checkpoint-io' && 240 || matrix.suite == 'native-numerics' && 105 || 75 }}"
 
 
 def job_body(workflow: str, name: str, next_name: str | None = None) -> str:
@@ -217,19 +218,24 @@ check_ci_workflow_contract(ci)
 check_acceptance_workflow_contract(acceptance)
 assert ci.count(BLOCKING_TIMEOUT) == 1
 expected_suite_timeouts = {
-    suite: 105 if suite == NATIVE_SUITE else 75 for suite, _, _ in expected_suites
+    suite: 240 if suite == CHECKPOINT_SUITE else 105 if suite == NATIVE_SUITE else 75
+    for suite, _, _ in expected_suites
 }
+assert expected_suite_timeouts[CHECKPOINT_SUITE] == 240
 assert expected_suite_timeouts[NATIVE_SUITE] == 105
 assert all(
     timeout == 75
     for suite, timeout in expected_suite_timeouts.items()
-    if suite != NATIVE_SUITE
+    if suite not in (CHECKPOINT_SUITE, NATIVE_SUITE)
 )
 assert_timeout_mutation_rejected(
-    ci, "${{ matrix.suite == 'native-numerics' && 75 || 75 }}"
+    ci, "${{ matrix.suite == 'checkpoint-io' && 75 || matrix.suite == 'native-numerics' && 105 || 75 }}"
 )
 assert_timeout_mutation_rejected(
-    ci, "${{ matrix.suite == 'native-numerics' && 105 || 105 }}"
+    ci, "${{ matrix.suite == 'checkpoint-io' && 240 || matrix.suite == 'native-numerics' && 75 || 75 }}"
+)
+assert_timeout_mutation_rejected(
+    ci, "${{ matrix.suite == 'checkpoint-io' && 240 || matrix.suite == 'native-numerics' && 105 || 105 }}"
 )
 assert_mutation_rejected(
     ci,
@@ -398,7 +404,8 @@ print(
     f"all {len(full_commands)} full test commands exactly once"
 )
 print(
-    "CI BUDGET PASS: native-numerics=105, other blocking suites=75, "
+    "CI BUDGET PASS: checkpoint-io=240, native-numerics=105, "
+    "other blocking suites=75, "
     "control jobs=2, exhaustive=240, A0 compiler timeout=60; "
     "command, condition, gate, and timeout mutations rejected"
 )
