@@ -7,6 +7,7 @@ GROUPS = ("format", "state", "save", "load", "public", "operational")
 SUITES = [
     ("canonical-build", "test-ci-clean-build-after-build", 75),
     ("native-numerics", "test-ci-core-after-build", 105),
+    ("native-optimizer", "test-ci-optimizer-after-build", 105),
     ("contracts-data", "test-ci-contracts-after-build", 75),
     ("checkpoint-io", "test-ci-checkpoint-after-build", 75),
     ("parameter-state", "test-ci-parameters-after-build", 75),
@@ -85,6 +86,8 @@ def check(root, overrides=None):
     assert "  workflow_call:" in engine
     assert "  workflow_dispatch:" in ci
     assert "  actions: read\n" in acceptance.split("\njobs:\n", 1)[0]
+    assert "  actions: read\n" in ci.split("\njobs:\n", 1)[0]
+    assert "  pull-requests: read\n" in ci.split("\njobs:\n", 1)[0]
     for body in (cj["blocking"], aj["full"]):
         assert field(body, 4, "uses") == "./.github/workflows/full-coverage.yml"
     assert field(cj["blocking"], 4, "needs") == "topology"
@@ -96,8 +99,44 @@ def check(root, overrides=None):
     assert field(cj["f0-linux"], 4, "if") == "${{ always() }}"
     assert field(aj["accepted"], 4, "if") == "${{ always() }}"
     assert run(steps(cj["f0-linux"])["Require successful checks for the selected scope"]) == [
-        'test "$TOPOLOGY_RESULT" = success', 'case "$RUN_FULL:$BLOCKING_RESULT" in',
-        "  true:success|false:skipped) ;;", "  *) exit 1 ;;", "esac"]
+        'test "$TOPOLOGY_RESULT" = success', 'case "$SCOPE:$BLOCKING_RESULT" in',
+        "  full:success|docs:skipped|reused:skipped) ;;", "  *) exit 1 ;;", "esac"]
+    cs = steps(cj["topology"])
+    assert field(cj["topology"], 6, "run_full") == "${{ steps.scope.outputs.run_full }}"
+    assert field(cj["topology"], 6, "scope") == "${{ steps.scope.outputs.scope }}"
+    assert field(cs["Find merged PR full-coverage evidence"], 8, "if") == "github.event_name == 'push'"
+    assert run(cs["Find merged PR full-coverage evidence"]) == ["python3 tests/ci/evidence.py select-push"]
+    assert field(cs["Find merged PR full-coverage evidence"], 10, "CI_PROSE_ONLY") == "${{ steps.changes.outputs.run_full == 'false' }}"
+    assert field(cs["Find merged PR full-coverage evidence"], 10, "CI_PUSH_BEFORE") == "${{ github.event.before }}"
+    assert run(cs["Select execution scope"]) == [
+        'case "$CI_EVENT:$REQUIRED:$REUSED:$DOCS_VERIFIED" in',
+        "  pull_request:false::|push:false:false:true) scope=docs; run_full=false ;;",
+        "  push:true:true:false) scope=reused; run_full=false ;;",
+        "  push:true:false:false|push:false:false:false|pull_request:true::|merge_group:true::|workflow_dispatch:true::) scope=full; run_full=true ;;",
+        "  *) exit 1 ;;", "esac",
+        'echo "scope=$scope" >> "$GITHUB_OUTPUT"',
+        'echo "run_full=$run_full" >> "$GITHUB_OUTPUT"']
+    assert field(cs["Select execution scope"], 10, "REQUIRED") == "${{ steps.changes.outputs.run_full }}"
+    assert field(cs["Select execution scope"], 10, "REUSED") == "${{ steps.evidence.outputs.reused }}"
+    assert field(cs["Select execution scope"], 10, "DOCS_VERIFIED") == "${{ steps.evidence.outputs.docs_verified }}"
+    assert field(cs["Select execution scope"], 10, "CI_EVENT") == "${{ github.event_name }}"
+    assert run(cs["Select required suites"]) == [
+        "run_full=true", 'if [[ "$CI_EVENT" == pull_request ]]; then',
+        '  run_full=$(python3 tests/ci/changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")',
+        'elif [[ "$CI_EVENT" == push ]]; then',
+        '  run_full=$(python3 tests/ci/changed_paths.py --push --base "$CI_PUSH_BEFORE" --head "$CI_HEAD_SHA")',
+        "fi", 'echo "run_full=$run_full" >> "$GITHUB_OUTPUT"',
+        'if [[ "$run_full" == false ]]; then',
+        "  echo 'Prose-only candidate: main pushes additionally require completed base evidence; this is not full-coverage evidence.' >> \"$GITHUB_STEP_SUMMARY\"",
+        "else", "  echo 'Full compiler and acceptance suites are required.' >> \"$GITHUB_STEP_SUMMARY\"", "fi"]
+    for key, value in {
+        "CI_EVENT": "${{ github.event_name }}", "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}",
+        "CI_HEAD_SHA": "${{ github.sha }}", "CI_PUSH_BEFORE": "${{ github.event.before }}",
+        "CI_PUSH_FORCED": "${{ github.event.forced }}", "CI_PUSH_CREATED": "${{ github.event.created }}",
+        "CI_PUSH_DELETED": "${{ github.event.deleted }}", "CI_REF": "${{ github.ref }}",
+    }.items():
+        assert field(cs["Select required suites"], 10, key) == value
+    assert field(steps(cj["f0-linux"])["Require successful checks for the selected scope"], 10, "SCOPE") == "${{ needs.topology.outputs.scope }}"
     assert run(steps(aj["accepted"])["Require verified evidence or fresh complete coverage"]) == [
         'test "$SELECTION_RESULT" = success', 'case "$REUSED:$FULL_RESULT" in',
         "  true:skipped|false:success) ;;", "  *) exit 1 ;;", "esac"]
@@ -133,7 +172,7 @@ def check(root, overrides=None):
         "Verify pinned Eshkol toolchain", "Build suite prerequisites", "Run full suite"}
     assert suite.count("        if:") == 2
     for name in ("Select pinned oracle Python", "Install pinned development oracle"):
-        assert field(ss[name], 8, "if") == "matrix.suite == 'native-numerics'"
+        assert field(ss[name], 8, "if") == "matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer'"
     assert run(ss["Build suite prerequisites"]) == [
         "started=$SECONDS", 'if [[ "${{ matrix.suite }}" == canonical-build ]]; then',
         "  make clean && make build", "else",
@@ -165,8 +204,9 @@ def check(root, overrides=None):
         'test "$SUITES_RESULT" = success', "python3 tests/ci/evidence.py emit"]
     for body in (suite, ej["evidence"], cj["topology"], aj["select"]):
         assert f"      - uses: {CHECKOUT}" in body
-    for body in (cj["topology"], cj["f0-linux"], aj["accepted"], ej["evidence"]):
+    for body in (cj["f0-linux"], aj["accepted"], ej["evidence"]):
         assert field(body, 4, "timeout-minutes") == "2"
+    assert field(cj["topology"], 4, "timeout-minutes") == "3"
     assert field(aj["select"], 4, "timeout-minutes") == "3"
     targets = recipes(make)
     assert targets["test-after-build"] == FULL

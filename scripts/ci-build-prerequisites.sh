@@ -34,8 +34,13 @@ select_producers() {
 for suite in "$@"; do
   case "${suite}" in
     native-numerics)
-      # K2 and O2 prove collisions against the I2, T2, D2, and O2 archives.
+      # K2 proves collisions against the I2, T2, D2, and O2 archives, so the
+      # core partition retains O2 even though test-o2.sh runs separately.
       select_producers k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2
+      ;;
+    native-optimizer)
+      # O2 reads its own aggregate, K1, and the I2/T2/D2 collision archives.
+      select_producers k1 i2 t2 d2 o2
       ;;
     contracts-data)
       # A0 and D1 read the canonical D1 archive; X1 builds into a temporary.

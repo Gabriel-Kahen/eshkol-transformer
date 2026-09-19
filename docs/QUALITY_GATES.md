@@ -2,7 +2,15 @@
 
 ## CI tiers
 
-The CI-E candidate uses one full-coverage engine in
+The CI-E2 candidate described in [CI efficiency](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse-candidate)
+extends this topology to 16 suites by separating unchanged O2 tests. It also
+proposes main-push reuse of directly verified original full PR evidence and
+prose-only main selection only with completed base coverage. These scheduling
+changes remain subject to independent review and supported exact-head execution;
+all numerical, lifetime, fresh-build and resource gates below remain mandatory.
+The following records the previously accepted CI-E policy and measurements.
+
+The accepted CI-E topology uses one full-coverage engine in
 `.github/workflows/full-coverage.yml`, shared by blocking CI and exhaustive
 acceptance. It runs a clean canonical build with smoke/benchmark, the eight
 existing component suites (checkpoint I/O now owns C1 alone), and six independent
@@ -52,16 +60,23 @@ Historical baseline evidence remains valid only for its original revision:
   its predecessor job hit 240 minutes after a 44-minute clean build, before Q0,
   smoke and benchmark completed.
 - run 35349163791 attempt 2 passed; native prerequisites took 30m50s and tests
-  60m47s. Attempt 1's fresh N2 oracle mismatch remains unexplained; a passing retry
-  does not establish its cause or erase the failure.
+  60m47s. Attempt 1's fresh N2 oracle mismatch remains a recorded failure. Later
+  controlled runs isolated a recent same-class failure to 18 linear tensor words
+  affected by Intel MKL dispatch; all 12 cross-vendor
+  `MKL_CBWR=COMPATIBLE` controls matched the frozen fixture. The accepted
+  reference-only wrapper pin changes no runtime or golden data.
 - the predecessor-only 300-minute scheduling correction in PR #77 is separate
-  from CI-E. Its running acceptance evidence is not cancelled or retroactively
-  relabeled as evidence for this optimization.
+  from CI-E. Its then-running acceptance evidence was not cancelled or
+  retroactively relabeled as evidence for this optimization.
 
-The CI-E architecture is a review candidate until supported execution and independent
-review complete. No speedup percentage is claimed before measurement. See
-[CI efficiency evidence](CI_EFFICIENCY.md) for mapping and before/after status.
-A failed required full-coverage or exhaustive run remains an acceptance blocker.
+Supported run 35393213200 passed the accepted engine's 15 suites, all 23 commands,
+canonical smoke and benchmark. Independent authoritative review approved the exact
+tree, and acceptance run 35401088338 verified and reused it with the full matrix
+skipped, completing in 27 seconds. See [CI efficiency evidence](CI_EFFICIENCY.md)
+for exact provenance, before/after measurements, and variance limits. The final
+93m19s wall time is 131m39s / 58.5% below the 224m58s uninterrupted baseline;
+421m23s summed runner time is 42m37s / 9.2% below 464m00s. A failed required
+full-coverage or exhaustive run remains an acceptance blocker.
 
 ## Required on every numerical component
 

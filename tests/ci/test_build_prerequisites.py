@@ -57,6 +57,21 @@ class BuildPrerequisitesTests(unittest.TestCase):
         self.assertNotIn("c1", result.stdout)
         self.assertNotIn("x1", result.stdout)
 
+    def test_native_optimizer_plan_contains_exact_o2_inputs(self) -> None:
+        result = run_script("--plan", "native-optimizer")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(producers(result), ["k1", "i2", "t2", "d2", "o2"])
+
+    def test_native_partition_union_is_deduplicated(self) -> None:
+        native = run_script("--plan", "native-numerics")
+        combined = run_script(
+            "--plan", "native-numerics", "native-optimizer"
+        )
+        self.assertEqual(native.returncode, 0, native.stderr)
+        self.assertEqual(combined.returncode, 0, combined.stderr)
+        self.assertEqual(producers(combined), producers(native))
+        self.assertEqual(len(producers(combined)), len(set(producers(combined))))
+
     def test_smoke_is_a_separate_post_suite_prerequisite(self) -> None:
         native = run_script("--plan", "native-numerics")
         with_post_suite = run_script(

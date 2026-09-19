@@ -1,13 +1,18 @@
 # CI-E: full-coverage efficiency
 
-Status: implementation/review candidate; not accepted performance evidence.
+Status: **accepted / complete**.
+This status applies to CI-E below. The separately tracked CI-E2 extension at the
+end of this document is an unaccepted implementation candidate until its own
+supported run and independent review complete.
 Tracking: [issue #78](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/78).
-Base: PR #77 scheduling head `e99b127b0b194c2a11d350a36d6b9f7507a66560`.
+Integration: PR #79 merged as `cbd0929`; PR #77 merged to main as
+`913cdf4097db09d6c33769e9b0968c01ce0e1f55`. Both share accepted tree
+`512a3355cea79583d73b49f690a46478fb1c772c`.
 No runtime, API, ABI, checkpoint format, numerical tolerance, or Wave 3 work changes.
 
 ## Coverage-preserving changes
 
-| Work | Before | Candidate |
+| Work | Before | Accepted |
 |---|---|---|
 | C2 format | Seven nested invocations | One full gate |
 | C2 core | Four nested invocations | One full gate |
@@ -72,7 +77,7 @@ Log bytes remain bounded in a non-terminal temporary file and only the unique,
 strict JSON evidence marker is parsed; raw log text is never rendered in stdout or
 the job summary. Repaired selector-only run 35393115074 succeeded on the hosted
 CLI and selected completed run 35384195050 with exact-tree reuse. This proves the
-transport repair, not the final combined branch's full acceptance workflow.
+transport repair in isolation; final combined CI and acceptance are recorded below.
 
 ## N2 reference environment
 
@@ -91,8 +96,8 @@ failed with those same 18 word differences on Intel Xeon Platinum 8573C and 6973
 hosts, while the three AMD hosts matched. All 12 `MKL_CBWR=COMPATIBLE` repetitions
 matched the frozen SHA-256
 `a32e065db6d7654600121696ba680cb15654c6712696e37fdb4a5cfb51abca03` exactly.
-These runs justify the candidate CI reference pin; they do not claim that this
-branch has merged or that production numerics changed.
+These runs justify the accepted CI reference pin; production numerics did not
+change.
 
 ## Measurements
 
@@ -101,18 +106,66 @@ branch has merged or that production numerics changed.
 | C2 partition, run 35350092230 | 3h40m43s total; about 3h30m testing |
 | Predecessor partition, same run | 44m03s build; cancelled at 240m during T2 boundary |
 | Native rerun, run 35349163791 attempt 2 | 30m50s prerequisites + 60m47s tests |
-| Full engine, run 35384195050 at `aec841b` | 88m10s wall time versus 224m58s for uninterrupted baseline run 35328578567: 136m48s / 60.8% lower |
-| Full-engine summed jobs | 441m59s versus 464m00s: 22m01s / 4.7% lower |
 | C2 partitioned critical path | 56m22s versus 220m43s; six partition jobs sum to 154m03s |
-| Final combined reference/selector repair | Full CI not yet run; no acceptance claim |
-| Selector transport repair | Hosted selector-only run 35393115074 passed and selected exact-tree run 35384195050; final acceptance workflow still pending |
+| Earlier optimized sample, run 35384195050 at `aec841b` | 88m10s wall / 441m59s summed jobs versus 224m58s / 464m00s: 60.8% wall / 4.7% summed reduction; retained as hardware/runner variance evidence |
+| Final accepted run 35393213200 | 93m19s wall versus 224m58s: 131m39s / 58.5% lower; 421m23s summed jobs versus 464m00s: 42m37s / 9.2% lower |
+| Selector transport repair | Hosted selector-only run 35393115074 selected exact-tree run 35384195050 |
+| Final acceptance, run 35401088338 | Same-tree evidence verified; all full-matrix jobs skipped; success in 27s wall / 15 job-seconds |
 
 Validation must compare the same pinned Ubuntu 22.04 / LLVM 21.1.8 / oracle inputs,
 record queue and job/step time separately, and retain every required count and
 resource bound. Higher job concurrency reduces the critical path only if runner
 capacity is available; total billed compute is a separate measurement. Do not
 claim the removed wrapper invocation count equals an identical percentage runtime
-saving. These measurements are one hosted sample and remain subject to runner,
-hardware, queue, and cache variance. They establish the optimized engine result,
-not final validation of the later N2 reference and selector transport repairs.
-Current running PR #77 checks are left untouched.
+speedup. These measurements are individual hosted samples and remain subject to
+runner, hardware, queue, and cache variance. The earlier sample establishes
+variance; final run 35393213200 validates the combined engine, N2 reference, and
+selector repairs.
+The accepted exact-tree result covered all 15 suites and 23 commands plus canonical
+smoke and benchmark. Independent authoritative review approved that tree. A bounded
+post-merge compatibility retest passed C2 format/core-only, 69 CI unit tests, two
+Python-isolation tests, topology, rebuilt compile smoke, and exact smoke output; it
+was not a full local repository, public-AOT, or operational rerun. Automatic main
+run 35401303514 is currently running and is not claimed green here.
+
+## CI-E2 — native critical path and main-push reuse candidate
+
+Tracking: [issue #81](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/81).
+Status: **implementation candidate; no further speedup claimed**.
+
+The full engine now assigns the unchanged O2 gate to `native-optimizer`, separate
+from `native-numerics`. Both receive the pinned development oracle. The command
+union is still exactly 23; the expected full-evidence inventory becomes 16 suites.
+Optimizer prerequisites are K1/I2/T2/D2/O2. The other native job retains its full
+prerequisites, including O2: K2's positive collision/link checks consume them.
+No intentional fresh-cache, deterministic rebuild, sanitizer, oracle, failure,
+or memory proof is removed, and no test binary is shared between jobs.
+
+In accepted run 35393213200 the native job spent 28m40s on prerequisites and
+61m44s in tests; O2 accounted for about 31m07s of that testing. Splitting it could
+bring the native critical path near 60–62 minutes, at which point the C2 operational
+job (57m34s in main run 35401303514) may dominate. This is an estimate, not a
+measurement of the candidate. Duplicated minimal prerequisites can increase summed
+runner time even while reducing elapsed time; both must be measured.
+
+Main-push reuse must verify a unique associated merged same-repository PR targeting
+main and the exact merge commit, then validate its latest PR CI's full inventory,
+run attempt, successful jobs and aggregation, and actual checkout tree through
+GitHub. A green check or equal PR-head SHA alone is not evidence. A changed tree,
+missing or ambiguous association, incomplete response, pending/failed source,
+skipped matrix, or malformed report falls back to fresh full CI. No arbitrary
+artifact is executed, and skipped/reused CI does not itself become full evidence.
+
+Prose-only main pushes require an exact ordinary non-forced before/after diff,
+checked-out HEAD agreement, ancestry, and the same prose allowlist as PRs. They
+also require completed full coverage for the base code. This prevents a docs push
+from cancelling an unfinished code run and then accepting its untested code.
+If a base push reused PR evidence, the original full PR evidence must be verified
+directly rather than following a chain of green statuses. Uncertain or incomplete
+base coverage requires a fresh full run. Docs PRs retain their lightweight checks;
+merge-queue, explicit fresh CI dispatch and nightly acceptance remain full.
+
+Acceptance requires offline adverse selection/topology tests, independent review,
+an exact-head supported 16-suite run with measured timings, and live post-merge
+selection evidence. Until then the accepted 93m19s result above remains the latest
+measured optimization, and no Wave 3 work is authorized by this extension.

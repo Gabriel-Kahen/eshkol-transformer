@@ -7,6 +7,7 @@ SHELL := /usr/bin/bash
 	build-ci-tokenizer-bpe-boundary build-ci-dataset \
 	test test-after-build test-acceptance-predecessors-after-build \
 	test-acceptance-c2-after-build test-ci-core-after-build \
+	test-ci-optimizer-after-build \
 	test-ci-contracts-after-build test-ci-checkpoint-after-build \
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
@@ -146,8 +147,10 @@ test-ci-core-after-build:
 	/usr/bin/bash scripts/test-k2.sh
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
-	/usr/bin/bash scripts/test-o2.sh
 	/usr/bin/bash scripts/test-q0.sh
+
+test-ci-optimizer-after-build:
+	/usr/bin/bash scripts/test-o2.sh
 
 test-ci-contracts-after-build:
 	/usr/bin/bash scripts/check_a0_api_contract.sh

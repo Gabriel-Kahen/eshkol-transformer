@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -19,9 +21,10 @@ jobs:
   topology:
     name: CI topology
     runs-on: ubuntu-22.04
-    timeout-minutes: 2
+    timeout-minutes: 3
     outputs:
-      run_full: ${{ steps.changes.outputs.run_full }}
+      run_full: ${{ steps.scope.outputs.run_full }}
+      scope: ${{ steps.scope.outputs.scope }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -37,18 +40,51 @@ jobs:
           CI_EVENT: ${{ github.event_name }}
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI_HEAD_SHA: ${{ github.sha }}
+          CI_PUSH_BEFORE: ${{ github.event.before }}
+          CI_PUSH_FORCED: ${{ github.event.forced }}
+          CI_PUSH_CREATED: ${{ github.event.created }}
+          CI_PUSH_DELETED: ${{ github.event.deleted }}
+          CI_REF: ${{ github.ref }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           run_full=true
           if [[ "$CI_EVENT" == pull_request ]]; then
             run_full=$(python3 tests/ci/changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
+          elif [[ "$CI_EVENT" == push ]]; then
+            run_full=$(python3 tests/ci/changed_paths.py --push --base "$CI_PUSH_BEFORE" --head "$CI_HEAD_SHA")
           fi
           echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
           if [[ "$run_full" == false ]]; then
-            echo 'Documentation-only PR: compiler suites are not required.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Prose-only candidate: main pushes additionally require completed base evidence; this is not full-coverage evidence.' >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'Full compiler and acceptance suites are required.' >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Find merged PR full-coverage evidence
+        id: evidence
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVENT: ${{ github.event_name }}
+          CI_PROSE_ONLY: ${{ steps.changes.outputs.run_full == 'false' }}
+          CI_PUSH_BEFORE: ${{ github.event.before }}
+        run: python3 tests/ci/evidence.py select-push
+      - name: Select execution scope
+        id: scope
+        env:
+          REQUIRED: ${{ steps.changes.outputs.run_full }}
+          REUSED: ${{ steps.evidence.outputs.reused }}
+          DOCS_VERIFIED: ${{ steps.evidence.outputs.docs_verified }}
+          CI_EVENT: ${{ github.event_name }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          case "$CI_EVENT:$REQUIRED:$REUSED:$DOCS_VERIFIED" in
+            pull_request:false::|push:false:false:true) scope=docs; run_full=false ;;
+            push:true:true:false) scope=reused; run_full=false ;;
+            push:true:false:false|push:false:false:false|pull_request:true::|merge_group:true::|workflow_dispatch:true::) scope=full; run_full=true ;;
+            *) exit 1 ;;
+          esac
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
 
   blocking:
     name: Full suites
@@ -67,11 +103,11 @@ jobs:
         env:
           TOPOLOGY_RESULT: ${{ needs.topology.result }}
           BLOCKING_RESULT: ${{ needs.blocking.result }}
-          RUN_FULL: ${{ needs.topology.outputs.run_full }}
+          SCOPE: ${{ needs.topology.outputs.scope }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           test "$TOPOLOGY_RESULT" = success
-          case "$RUN_FULL:$BLOCKING_RESULT" in
-            true:success|false:skipped) ;;
+          case "$SCOPE:$BLOCKING_RESULT" in
+            full:success|docs:skipped|reused:skipped) ;;
             *) exit 1 ;;
           esac

@@ -1,23 +1,27 @@
 # C2 detached training-state checkpoints
 
-Status: **implementation / integration-gated**. Integration accepted the C2 1.0
-logical schema and wire format in issue #1 comment `5628609463`, with the final
-nonallocating model-copy seam accepted in comment `5628659732`. Separable
-parser, codec, and ownership work proceeded privately. K2 issue #73 is now
-independently accepted and merged through PR #76 at `36a9231`. The private
-LOAD/SAVE ownership gates pass. A local source-composed candidate now exposes
-the capability-facing `checkpoint-load/3` through the caller's exact K2 report,
-with an exact 81-global / 75-export / 81-public-string boundary and one archive
-member. Its fresh-cache public lifecycle, hostile-linkage, deterministic-build,
-and root-retention gates pass on the supported Ubuntu 22.04/LLVM 21.1.8 runner.
-Blocking run 35328578567 at source head `e1fbbfe` holds the canonical roots flat
-at 5,701,632 bytes for both 1,024 and 8,192 iterations and drives two fresh AOT
-copies through the public 64-tensor LOAD/SAVE/release lifecycle at 521,340 and
-521,380 KiB peak RSS, below the unchanged 524,288 KiB ceiling. Exact per-tensor
-admission, every injected K2 failure ordinal, unsupported-rank cleanup,
-alias-shape rejection, and affected format/core/save/load regressions pass.
-Publication still waits for partitioned exhaustive CI plus final integration
-acceptance.
+Status: **accepted / complete**. Integration accepted the C2 1.0 logical schema
+and wire format in issue #1 comment `5628609463`, with the final nonallocating
+model-copy seam accepted in comment `5628659732`. The source-composed public
+package exposes capability-facing `checkpoint-load/3` through the caller's exact
+K2 report, with an exact 81-global / 75-export / 81-public-string boundary and one
+archive member. Its fresh-cache lifecycle, hostile-linkage, deterministic-build,
+root-retention, private LOAD/SAVE ownership, exact per-tensor admission, injected
+K2 failure, unsupported-rank, alias-shape, and affected regression gates pass.
+Final supported run 35393213200 holds canonical roots flat at 5,701,632 bytes for
+both 1,024 and 8,192 iterations and drives two fresh public 64-tensor
+LOAD/SAVE/release runs at 521,500 and 521,576 KiB peak RSS, below the unchanged
+524,288 KiB ceiling. PR #79 merged as `cbd0929`; PR #77 merged to main as
+`913cdf4097db09d6c33769e9b0968c01ce0e1f55`. Reviewed, supported-CI, and merged
+states share exact tree `512a3355cea79583d73b49f690a46478fb1c772c`.
+Acceptance run 35401088338 verified that tree and reused the successful full-engine
+evidence.
+
+A bounded merged-main compatibility retest at `913cdf4` passed C2 format and
+core-only groups, 69 CI unit tests, two Python-isolation tests, 15-suite/23-command
+topology, rebuilt compile smoke, and exact smoke output under explicit non-login
+Bash on unsupported CachyOS/LLVM 22.1.6. It was not a full local repository,
+public-AOT, or operational rerun; those supported claims come from run 35393213200.
 
 ## Scope
 
@@ -164,10 +168,12 @@ metadata, 8 MiB per tensor, and 64 total tensors. This tuple is not a wire
 property and is not considered supported until exact/one-over, jointly
 attainable, repeated-save, memory, timing, and no-warning probes pass on the
 pinned toolchain. The gates demonstrate that tuple without lowering it on the
-project-supported Ubuntu 22.04/LLVM 21 environment in blocking run 35328578567:
-the two fresh joint runs peak at 521,340 and 521,380 KiB and the 1,024/8,192
+project-supported Ubuntu 22.04/LLVM 21 environment in final run 35393213200:
+the two fresh joint runs peak at 521,500 and 521,576 KiB and the 1,024/8,192
 root-retention horizons are both 5,701,632 bytes. It must not be silently
-lowered.
+lowered. This proves component continuation and atomic file publication only;
+TR3 still owns joint live restore and full-trajectory equivalence, while G3 owns
+generation equivalence.
 
 Input uses one `O_NOFOLLOW` regular-file descriptor. C2 probes the outer and
 nested C1 fixed headers, applies size/metadata/count checks before allocating

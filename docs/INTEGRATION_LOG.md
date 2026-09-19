@@ -4,6 +4,67 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-18 — CI-E2 scheduling/evidence extension proposed
+
+- **Scope authorized by user; implementation acceptance pending:** issue #81
+  separates unchanged O2 into a native optimizer job and adds main-push selection
+  using directly verified original full CI evidence. No runtime, format, numerical
+  tolerance, fresh-build proof, sanitizer, or operational bound changes.
+- **Coverage:** 16 suite jobs retain the exact 23-command union, canonical clean
+  build and nightly fresh coverage. K2 keeps O2 and all other positive collision
+  prerequisites; optimizer owns K1/I2/T2/D2/O2 prerequisites independently.
+- **Safety condition found by independent review:** prose-only main diff alone
+  is insufficient because it could cancel an unfinished preceding code run. Main
+  prose selection additionally requires proven completed coverage for that base;
+  pending/failed/unverified evidence forces fresh execution. Identical-tree merge
+  reuse validates the associated merged same-repository main PR, actual checkout
+  tree, latest full CI attempt, all suites, evidence and final status. A reused or
+  skipped status is never a substitute for inspecting original full evidence.
+- **Evidence pending:** roughly 60-minute critical path is an estimate. Accepted
+  CI-E remains 93m19s; exact candidate hosted measurement, independent final review,
+  and live main selection are required before accepting further savings.
+- **Scope limit:** Wave 3 stays paused; the earlier Wave 2 implementation acceptance
+  is not reopened by this CI-only follow-up.
+
+## 2026-09-18 — C2, CI-E, and bounded Wave 2 accepted
+
+- **Decision:** C2 and F0/CI-E are accepted and complete within their documented
+  bounded contracts; consequently the bounded Wave 2 component work is complete.
+  Wave 3 work remains paused, and this closeout starts no Wave 3 task. C2 proves
+  detached component continuation and atomic file publication only. TR3 retains
+  joint live restoration/full-trajectory proof, and G3 retains generation proof.
+- **Merge and review provenance:** PR #79 merged into the C2 line as `cbd0929`, and
+  PR #77 merged to main as
+  `913cdf4097db09d6c33769e9b0968c01ce0e1f55`. Both have exact tree
+  `512a3355cea79583d73b49f690a46478fb1c772c`, identical to the reviewed and tested
+  tree. [Authoritative independent approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/77#issuecomment-5733708650)
+  covers the exact C2/CI-E tree and supported evidence.
+- **Supported evidence:** run 35393213200 at head `171f628` passed all 15 shared
+  suites, all 23 top-level commands, the canonical clean build, smoke, and
+  benchmark. Its two joint C2 operational runs measured 521,500 and 521,576 KiB,
+  below the unchanged 524,288 KiB ceiling. Acceptance run 35401088338 verified the
+  exact repository/run/attempt/commit/tree and every successful suite/evidence/final
+  job, skipped the full matrix, and succeeded in 27 seconds wall / 15 job-seconds.
+- **Efficiency evidence:** final supported wall time was 93m19s versus the 224m58s
+  uninterrupted baseline, a 131m39s / 58.5% reduction. Summed runner time was
+  421m23s versus 464m00s, a 42m37s / 9.2% reduction. Earlier run 35384195050
+  completed in 88m10s / 441m59s and is retained as runner/hardware variance
+  evidence, not substituted for final acceptance.
+- **Merged-tree bounded retest:** at main `913cdf4` with tracked implementation
+  tree unchanged, explicit non-login `/usr/bin/bash` on unsupported CachyOS/LLVM
+  22.1.6 with `ESHKOL_ALLOW_UNSUPPORTED_HOST=1`, `CC=/usr/bin/clang`,
+  `CXX=/usr/bin/clang++`, and `LLVM_CONFIG_EXECUTABLE=/usr/bin/llvm-config` passed
+  `test-c2-format.sh`, `test-c2-core.sh --core-only`, 69 CI unit
+  tests, two Python-isolation tests, 15-suite/23-command topology, rebuilt compile
+  smoke, and exact `eshkol-transformer-smoke:v1`. Format evidence included native
+  unit, seven parser groups repeated including sanitizers, C++17, deterministic
+  fixtures, and ASan/UBSan/LSan; core evidence included same-fd retained-reader,
+  hostile mutation, symbol/source closure, C++, and sanitizers. Canonical Eshkol
+  source was `90cbd7130f47b8184bcc77b8d5c1b0026da980de`; local binary SHA-256 was
+  `3e0b923e2e272a89474dff6739b6a2023d71ae483863a64b685ec8ea71ca1cc0`.
+  This was not a full local repository, public-AOT, or operational rerun. Automatic
+  main run 35401303514 is running and is not claimed successful here.
+
 ## 2026-09-17 — K2 accepted; C2 dependency hold lifted
 
 - **Decision:** K2 is accepted and complete within its bounded capability contract.
@@ -1870,7 +1931,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   oracle regeneration, O2's 6,201 adversarial checks, sanitizers/LSan, full smoke,
   and benchmark. A new independent O2-R exact-head review is required after green
   evidence. O2 and the F0 topology remain `review`; PR #58 must not be merged here.
-## 2026-09-18 — CI-E user-authorized full-coverage efficiency candidate
+## 2026-09-18 — CI-E user-authorized full-coverage efficiency
 
 Issue #78, stacked on PR #77 scheduling head
 `e99b127b0b194c2a11d350a36d6b9f7507a66560`. The user authorized all four
@@ -1881,5 +1942,6 @@ exact-tree completed-CI evidence reuse for manual acceptance. Nightly remains
 fresh; an explicit canonical clean-build job remains mandatory. No runtime/API,
 format, numerical/resource-bound or Wave 3 change. Existing running PR #77 jobs
 are not cancelled. See `docs/CI_EFFICIENCY.md` for mapping and measured baseline.
-Status: proposed/review candidate; hosted evidence and independent final review
-remain required before integration or any speedup claim.
+Status: accepted and merged, as superseded by the top ledger entry. Supported run
+35393213200, independent exact-tree approval, PR #79/PR #77 merge provenance, and
+successful reuse acceptance 35401088338 satisfy the previously pending gates.

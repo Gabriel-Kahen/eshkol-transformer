@@ -18,6 +18,9 @@ jobs:
           - suite: native-numerics
             test_target: test-ci-core-after-build
             timeout: 105
+          - suite: native-optimizer
+            test_target: test-ci-optimizer-after-build
+            timeout: 105
           - suite: contracts-data
             test_target: test-ci-contracts-after-build
             timeout: 75
@@ -97,13 +100,13 @@ jobs:
           key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
 
       - name: Select pinned oracle Python
-        if: matrix.suite == 'native-numerics'
+        if: matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.14.6'
 
       - name: Install pinned development oracle
-        if: matrix.suite == 'native-numerics'
+        if: matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer'
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           oracle_python="$RUNNER_TEMP/development-oracle/bin/python"

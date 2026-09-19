@@ -122,6 +122,37 @@ class ChangedPathSelectorTests(unittest.TestCase):
     def test_empty_diff_requires_full_suite(self) -> None:
         self.assertTrue(self._requires_full_suite(self.base))
 
+    def test_main_push_prose_selection_is_fail_closed(self) -> None:
+        self._write("docs/guide.md", "updated\n")
+        head = self._commit("push prose")
+        env = dict(CI_REF="refs/heads/main", CI_PUSH_FORCED="false",
+                   CI_PUSH_CREATED="false", CI_PUSH_DELETED="false")
+        select = lambda base, tip, values: ci_changed_paths.push_requires_full_suite(
+            base, tip, values, self.repository
+        )
+        self.assertFalse(select(self.base, head, env))
+        for key in env:
+            for invalid in ("", "true", "False", "refs/heads/feature"):
+                with self.subTest(key=key, value=invalid):
+                    self.assertTrue(select(self.base, head, {**env, key: invalid}))
+        for base, tip in (("0" * 40, head), ("", head), ("HEAD~1", head),
+                          (self.base, self.base), (head, self.base)):
+            self.assertTrue(select(base, tip, env))
+        self._git("checkout", "--quiet", "--detach", self.base)
+        self._write("docs/branch.md", "divergent\n")
+        divergent = self._commit("unrelated tip")
+        self.assertTrue(select(head, divergent, env))
+
+    def test_main_push_code_and_missing_history_require_full(self) -> None:
+        self._write("src/program.esk", "updated\n")
+        head = self._commit("push code")
+        env = dict(CI_REF="refs/heads/main", CI_PUSH_FORCED="false",
+                   CI_PUSH_CREATED="false", CI_PUSH_DELETED="false")
+        self.assertTrue(ci_changed_paths.push_requires_full_suite(
+            self.base, head, env, self.repository))
+        self.assertTrue(ci_changed_paths.push_requires_full_suite(
+            "a" * 40, head, env, self.repository))
+
     def test_shallow_checkout_without_base_commit_requires_full_suite(self) -> None:
         self._write("docs/guide.md", "updated\n")
         head = self._commit("shallow head")
