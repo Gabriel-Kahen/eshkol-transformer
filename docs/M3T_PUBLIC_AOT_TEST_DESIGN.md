@@ -35,6 +35,13 @@ the completed M3T aggregate and normal pinned Eshkol runtime. No trusted Eshkol
 root, private include path, test C transport, private symbol extern or native
 fixture carrier is available to this caller.
 
+The refreshed package is the restricted 85-global / 79-export diagnostic sibling.
+Its installed closure excludes D2/O2/K2/C2 facades and admits only one registry-
+owning artifact per process. Current-main compile/link probes establish that the
+existing imports above fit the 47-global I2 base; they do not establish a built
+M3T artifact. Full training composition and checkpoint support remain separate
+dependencies. See [refresh evidence](M3T_REFRESH.md).
+
 Create once outside reclaimed iteration regions: seed-1729 initializer, exact
 resolved profile config, genuine P1 model, input, workspace, logits receiver, and
 independent upstream logits receiver. Input is [65,66]. Use a finite nonzero
@@ -162,7 +169,14 @@ copy into the same logits receiver, optional 12-call VJP prefix, reset. Discard
 all transient wrapper boxes inside the region; retain no new identity or detached
 snapshot. Check output bytes and owner addresses between measured batches, not via
 allocating snapshot accessors every iteration. Compare increasing post-warmup
-iteration counts using current RSS and native payload/guard/retired-shell counts.
+iteration counts using exact retained Eshkol arena counters and native
+payload/guard/retired-shell counts; current RSS is supplementary. Exercise the
+merged P1 promotion/canonical-readback boundary in constructor failure and
+publication cases. Keep all ten existing C2 private P1 seams and their affected
+regressions intact: Eshkol expectations become 46 private / 64 total after the
+five additions, while native identity expectations independently become 36 private.
+Released-alias rejection is guaranteed only while the shell's Eshkol allocation
+remains live; tests must never dereference storage after its region expires.
 
 The mandatory public copy step means this lane is a full forward *test witness*;
 calling it a short fragment would be inaccurate. A separate genuinely short

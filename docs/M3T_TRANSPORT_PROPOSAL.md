@@ -4,9 +4,11 @@ Status: **proposal for integration decision; no implementation authorized**.
 Tracking [#68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68), parents
 [#65](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/65) and
 [#1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
-Base: merged main `15ab04d4be6df11ca279c3eeb50b582e8163d535`.
-Inputs are the merged contracts and fresh preflight `a97c109`; deleted proposals
-and unmerged D2/O2/C2 are not inputs.
+Refreshed base: accepted main `7d9ad1cf6d997fc3c1f489f3955ff97c97281f68`,
+merged without rewriting proposal history at `207d0e95047fe3f6b73880a0c163369c5b375bf0`.
+The original proposal/refinement at `8b72fde` and preflight `a97c109` remain
+historical evidence. Current merged P1L/I2/K2/D2/O2/C2 contracts inform this
+amendment; deleted proposals are not inputs. See [refresh evidence](M3T_REFRESH.md).
 
 ## Decision requested
 
@@ -19,6 +21,13 @@ and three narrowly necessary lifetime decisions before production changes:
    and existing borrow exclusion, because ordinary borrow release retains shells.
 3. Private P1/I2 unpublished-constructor abort/seal handling, because partial
    registration currently has no safe destruction boundary.
+
+The amended package is an **85-global / 79-export diagnostic sibling**, with the
+restricted facade closure specified below. All three current-main audits found
+no correctness requirement for the 119-global full successor. Integration's
+preference for the sibling is incorporated here for binding disposition; it is
+not production authorization. The 38 M3T names, arities, profile and initializer
+contract remain unchanged.
 
 The public primitive transport is deliberately real production functionality:
 ordinary Eshkol application code can call the bounded operations in an order it
@@ -330,6 +339,15 @@ sealed constructions. Seal validates/finalizes the full tree before its infallib
 publication tail. Seal/abort clear the active scope. This is not a general module
 destructor or public builder.
 
+Preserve merged P1's root-owned registry holders, promotion write barriers and
+canonical identity readback. Enrollment, parameter-plan edges and native owner
+bindings must use the canonical promoted shell/handle, not a pre-promotion alias.
+All promotion and allocation completes while construction remains abortable,
+before the coordinated nonfailing publication tail. Persistent model/receiver
+identities must outlive scratch regions. A released alias is recognizable only
+while its Eshkol allocation remains live; retaining a raw reference does not keep
+expired-region storage alive.
+
 A fifth trusted operation, `module-construction-parameters-internal` (arity 1),
 returns detached `#(rows ties)`. Each path-sorted row is
 `#(path exact-enrolled-P1-handle shape dtype device)`; all logical paths are included
@@ -363,10 +381,15 @@ grow toward the existing 65,536 limit. There is no generic token revoker.
 The coordinated seal preflights every participant while abort remains possible;
 its native seal call is used only in the already-proved nonfailing tail.
 
-Implement these changes in the canonical P1 root template and regenerate the trusted
-root. Its private surface count changes from 31 to 36; the installed 18-name P1
-facade remains byte-identical. Update exact trusted native/surface manifests to
-admit the five new native and five new Eshkol entries; all remain localized in M3T.
+After acceptance, implement these changes in the canonical P1 root template and
+regenerate the trusted root. The Eshkol private surface changes from **41 to 46**,
+and the total from **59 to 64**, preserving all ten merged C2 private seams and
+existing slots 0..58; append the five construction entries at slots 59..63.
+The separate native identity private surface changes from **31 to 36**.
+The installed 18-name P1 facade remains byte-identical. Update generator
+expectations and exact trusted native/surface manifests accordingly; all new
+entries remain localized in M3T. The present proposal refresh does not change
+the generator or implement these additions.
 
 The I2 wrapper operations are `i2-construction-begin-internal` (arity 0 → owner
 ledger plus P1 construction), `i2-construction-seal-internal!` (arity 1), and
@@ -479,7 +502,24 @@ roots; `native/m3t_package_bridge.c` adds reviewed boxed wrappers;
 `src/eshkol_transformer/m3t_transport.c` owns fixed native transport; installed
 `lib/transformer/diagnostic_transport.esk` contains only public stubs.
 Output: one `m3t_package.o` in `build/m3t/libeshkol_transformer_m3t.a`.
-This replaces earlier registry-owning aggregates; none is linked beside it.
+This is a restricted diagnostic sibling of the current full package. Install only
+`transformer.config`, `transformer.module`, `transformer.tokenizer`,
+`transformer.error_public`, `transformer.error_consumer`, and
+`transformer.diagnostic_transport` in its facade closure. Tokenization retains
+the I2/Wave1 byte-tokenizer contract. Do not install the current data, optim,
+persistence, capabilities or trainer facades with this artifact. Exactly one
+registry-owning artifact may be linked per process; no I2/D2/O2/K2/C2 aggregate
+may accompany M3T, and cross-aggregate values are not interoperable.
+
+The accepted C2 aggregate has 81 globals / 75 package exports; adding these same
+38 wrappers would yield 119 / 113. That full successor is outside M3T scope.
+Later full training composition must explicitly inherit the C2 root/bridge and
+its source/native policy and establish the required capabilities. K2's current
+report remains fixed to I2; M3T's private providers do not widen it. C2/K2 public
+load currently rejects rank-two diagnostic weights, so even full composition
+would not establish model checkpoint support. C2 RNG identity also does not
+substitute for M3T's typed initializer. C2-owned direct-copy seams grant no M3T
+parameter/workspace authority and are not transport dependencies.
 
 The exact export set is the existing 47 globals plus 38 new wrappers: 21 lifecycle/
 identity/copy operations, 8 forward, 8 VJP and 1 sum. C names are
@@ -502,19 +542,25 @@ The tuple uses `native/m3t_package_private_renames.txt`,
 E1B adds six error accessors to produce 85 globals. Preserve I2's special P1 rename
 map and its zero-grad replacement. The M3T bridge includes I2's bridge once, which
 already nests the other package bridges/P1 identity; do not add them again.
-Prefer the ordinarily built reviewed N2/N3K/A2 attention objects before the one
-localization step, with exact native depfile/object manifests. A2 cache is unused.
+Use the ordinarily built reviewed N2/N3K/A2 attention objects before the one
+localization step, with exact native depfile/object manifests. E1B currently has
+no reviewed external-object argument: the proposed extension admits only the
+repository-owned M3T native-input tuple, never caller-selected generic objects.
+Preserve exact lexical/canonical paths, ordered includes, symlink rejection,
+sanitized compiler environment and one-member archive checks. A2 cache is unused.
 
 ## Evidence and acceptance gates
 
 Independent Astra-high reviews covered compiled reachability, ownership/RNG and
 aggregation/errors. Existing preflight already proves public model/private bridge
 unreachability and a positive public P1/E1 AOT caller; no broad compiler audit is
-needed. A narrow fresh local development probe measured I2 retired borrow shells:
+needed. The original September 8 local development probe measured I2 retired
+borrow shells:
 1,000/10,000/30,000 borrow cycles leave exactly that many 96-byte shells and zero
 live borrows (96,000/960,000/2,880,000 bytes). Current process RSS was observed as
 2240/3224/5388 KiB; inherited peak RSS was unsuitable and is not evidence.
-A pinned AOT region probe with poisoning ran 30,000 transient-vector iterations
+An original pinned AOT region probe with poisoning ran 30,000 transient-vector
+iterations
 and returned the expected count. These are local compatibility diagnostics only;
 neither is public aggregate flat-memory evidence.
 The development probe sources are checked in at
@@ -523,6 +569,10 @@ The native probe is reproducible with
 `clang -std=c11 -Iinclude -Inative tests/probes/m3t_lifetime/borrow_retention.c native/kernel_abi.c -lm -o /tmp/m3t-borrow-retention`
 followed by `/tmp/m3t-borrow-retention 30000`. Record compiler/host separately;
 this command alone never establishes supported provenance.
+The September 19 refresh independently repeated 1,000 borrow cycles and checked
+current public import/link closure and C2-owned exact-copy behavior; see the
+separate [refresh log](M3T_REFRESH.md). It did not repeat the public region probe
+or establish M3T public-loop memory behavior.
 
 After acceptance, required gates are:
 
@@ -537,18 +587,25 @@ After acceptance, required gates are:
 - Every constructor/ingress/frame allocation failpoint and partial P1 registration:
   revoked partial authority before destruction, exact live payload baseline,
   no outstanding guards, unchanged outputs/parameters/RNG and retryable state.
+  Exercise canonical promoted identities and preserve all existing P1/C2 private
+  seams, including affected C2 publication and model-copy regressions.
 - Scoped I2 guards versus ordinary borrow/copy/destroy/plan paths; unchanged K1
   malformed shape/dtype/device/alias/finite/fenv behavior and status precedence.
 - Long public AOT successful begin/fragment/copy/reset loop with one set of owners,
   region poisoning, exact stable native addresses, zero growing I2 lease shells,
-  payload/guard counters, and current-RSS plateau across increasing iteration
-  counts after warmup. Report measured budgets; do not extrapolate to training,
-  retained errors, fresh output creation, snapshots or gradient plans.
+  payload/guard counters, and exact retained Eshkol arena counters across increasing
+  iteration counts after warmup. Current RSS is supplementary evidence, not a
+  substitute for retained-allocation accounting. Report measured budgets; do not
+  extrapolate to training, retained errors, fresh output creation, snapshots or
+  gradient plans.
 - Exact source/symbol/archive/undefined manifests, private name/object/link negatives,
   hostile include/environment and copied/partial tuple rejection, duplicate registry
   owner rejection, production Python isolation and repeatable fresh artifacts.
 - Focused ASan/UBSan/LSan and supported Ubuntu22/LLVM21.1.8 CI at final head;
   local CachyOS/LLVM22 results remain explicitly compatibility evidence.
+- Route the dedicated M3T gate and affected P1/I2/E1B/C2 regressions through the
+  accepted CI-E2 planner/topology/evidence inventory (currently 16 suites and
+  23 commands); do not substitute an obsolete full-test layout or duplicate CI.
 
 Future M3 still owns complete Eshkol scheduling, all-parameter forward/VJP oracle
 and gradient checks, atomic numerator contribution, its plan-memory boundary, and
