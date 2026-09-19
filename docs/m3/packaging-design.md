@@ -170,7 +170,9 @@ present-zero gradients with positive count and weight. Only explicit
 `module-zero-grad!` clears to absent. Post-commit cleanup failure must not be
 reported as a retryable unchanged-gradient failure; the final implementation
 must prove its private exact cleanup tail cannot fail after validated commit or
-explicitly document a distinct committed-error disposition.
+report a committed result as a recoverable error. The binding integration decision
+5744129957 accepts only the proved infallible tail; any committed-error alternative
+in the historical checkpoint is superseded.
 
 No loss kernel/target-mask transport, generic rank adaptation, RNG ingress, or
 cross-aggregate bridge is silently added by these seams.

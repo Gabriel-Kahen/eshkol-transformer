@@ -1,7 +1,9 @@
 # M3 ownership and contribution review
 
-Nonbinding contract recommendation for issue #85. No runtime API is implemented
-or frozen here. Integration must accept the complete proposal on issue #1 first.
+Historical contract-checkpoint review for issue #85. The consolidated proposal was
+subsequently accepted at [issue #1 comment 5744129957](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957).
+The recommendations and preimplementation validation statements below record that
+checkpoint; current implementation/evidence belongs to `docs/M3_MODEL.md`.
 
 ## Existing evidence
 

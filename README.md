@@ -37,8 +37,9 @@ The accepted CI-E2 engine routes code pull requests, main pushes and merge-queue
 runs through one full-coverage engine. Its original 16 suites include a clean canonical
 build with smoke/benchmark, a separate native optimizer job, the other component
 suites, and six independent C2 groups. All 23 top-level local test commands remain
-covered. Accepted M3T adds a diagnostic-transport suite and command, bringing the
-current total to 17 suites / 24 commands. Accidental nested C2 regression reruns are removed while intentional
+covered. Accepted M3T adds diagnostic transport; the M3 composition candidate adds
+the model suite, bringing the current total to 18 suites / 25 commands.
+Accidental nested C2 regression reruns are removed while intentional
 fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
 
 Manual exhaustive acceptance can verify and reuse completed full CI for the exact
@@ -236,6 +237,14 @@ the Wave-1 aggregate, never both. Wave 2 preserves the same 47 public globals wh
 adding localized Eshkol-only training, rank-stage streaming, and bounded D1
 composition contracts. Python is a development oracle only. See
 [docs/BPE_TOKENIZER_FORMAT.md](docs/BPE_TOKENIZER_FORMAT.md).
+
+M3 adds [fixed-profile model composition](docs/M3_MODEL.md) in a distinct
+`libeshkol_transformer_m3.a` sibling. Its Eshkol forward and analytic reverse
+schedules support owned immutable outputs and graph-retaining logits, with one
+atomic contribution over all 14 unique parameters. The accepted scope is CPU f32
+N1/T2/V256/D4/Hq=Hkv2/Dh2/L1/F8, with a tied head and no loss/RNG ingress,
+dropout or cache. Runtime acceptance remains pending. Retained identity/plan
+costs are cumulative; full training and D2/O2/K2/C2 composition remain downstream.
 
 ## First release criterion
 

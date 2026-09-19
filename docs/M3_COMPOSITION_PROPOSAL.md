@@ -1,15 +1,23 @@
 # M3 fixed-profile composition proposal
 
-Status: **proposed, not accepted or frozen**. Decision checkpoint for
+Status: **design accepted for bounded implementation; runtime acceptance pending**.
+The binding [integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957)
+accepts the exact consolidated proposal at `37db2ec1b6b9947c384cb3d9638fc2a84053ede8`
+(tree `1fb786518a51b9d7b7173380236ce7d4e1904706`). It selects the A0 subset and
+ten private seams below; historical alternatives are not additional authority.
+The post-commit tail must be infallible: no recoverable committed-error alternative
+is accepted. Implementation, independent M3-R, supported CI and integration
+merge/retest remain required. Decision checkpoint for
 [issue #85](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/85) and
 [the integration ledger](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Base: main `21b1df13940e94adce998ab88cb45c329c956b58`; M3T implementation
 `f50160968bd97677632f3539fd2e278a63624cf9` is accepted. The main update is
-acceptance prose only. This document changes no runtime, ABI, manifest or status.
+acceptance prose only. The original checkpoint changed no runtime or ABI; M3 is
+now active under the linked binding decision.
 
-## Decision requested
+## Accepted decision
 
-Accept a bounded A0-compatible logits/explicit-VJP implementation with eight
+Implement a bounded A0-compatible logits/explicit-VJP subset with eight
 additional public wrappers, owned immutable graph snapshots, Eshkol forward/reverse
 replay, and one same-call I2 numerator contribution. Use ordinary I2 plans with
 explicit cumulative control-shell accounting. Leave optional loss/RNG ingress,
@@ -62,11 +70,8 @@ All other shapes, dtypes, devices and cross-aggregate input carriers reject.
 This implements the shape/ownership semantics of four A0 operations for a stated
 subset; it does not claim first-release A0 coverage or compiler autodiff. The
 existing explicit M3T integer/tokenizer adapters remain the only input ingress.
-If integration elects to leave A0 names declaration-only, rename the first four
-bindings to `diagnostic-forward`, `diagnostic-output-logits`,
-`diagnostic-output-loss`, `diagnostic-output-rng`, and rename output release to
-`diagnostic-output-release!`. Counts and ownership work are unchanged. The
-recommended decision is the A0-name subset above.
+The binding decision selected these A0 names for the stated subset; the earlier
+diagnostic-only naming alternative is superseded.
 
 ## Owned graph and reusable workspace
 
@@ -261,8 +266,8 @@ gradient checks, complete ownership/atomicity negatives and sanitizers, exact me
 trajectories, affected predecessor gates and one exact-head supported
 Ubuntu22/LLVM21.1.8 full CI through the accepted engine. Separate M3-R, integration
 merge/retest and acceptance remain mandatory. This proposal is not supported CI,
-JIT, full-model execution or first-release evidence; M3 remains planned pending
-the binding contract decision.
+JIT, full-model execution or first-release evidence; M3 is active under the
+binding contract decision, with implementation acceptance pending.
 
 Independent checkpoint subreviews: [numerical/reference](m3/NUMERICAL_REFERENCE_DESIGN.md)
 found no schedule/seed blocker; [ownership/atomicity](m3/ownership-design.md)

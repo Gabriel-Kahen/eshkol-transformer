@@ -1,0 +1,164 @@
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.error_public)
+(require transformer.error_consumer)
+(require transformer.diagnostic_transport)
+(require transformer.model)
+
+(define (check label value)
+  (if value #t (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect label category operation thunk)
+  (let ((caught #f))
+    (guard (raised (#t (set! caught
+                        (and (transformer-error? raised)
+                             (eq? (transformer-error-category raised) category)
+                             (eq? (transformer-error-operation raised) operation)
+                             (eq? (transformer-error-cause raised) #f)))))
+      (thunk))
+    (check label caught)))
+(define (same-bytes? a b)
+  (and (= (bytevector-length a) (bytevector-length b))
+       (let loop ((i 0))
+         (if (= i (bytevector-length a)) #t
+             (and (= (bytevector-u8-ref a i) (bytevector-u8-ref b i))
+                  (loop (+ i 1)))))))
+(define cfg (config-resolve
+  (config-parse "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}") '()))
+(define model (with-region ('model-construction 65536)
+  (diagnostic-model-create cfg (diagnostic-initializer-state 1729))))
+(define input (diagnostic-input-create))
+(define seed (diagnostic-logits-create))
+(check "input" (diagnostic-input-copy! input '(3 197)))
+(define output (with-region ('model-forward-output 65536) (model-forward model input)))
+(define logits (with-region ('model-forward-logits 65536) (model-output-logits output)))
+(define sibling (model-output-logits output))
+(define original (diagnostic-model-logits-bits logits))
+(check "independent tensor identities" (not (eq? logits sibling)))
+(check "equal copies" (same-bytes? original (diagnostic-model-logits-bits sibling)))
+(check "loss absent" (eq? (model-output-loss output) #f))
+(check "rng absent" (eq? (model-output-rng output) #f))
+(bytevector-u8-set! original 0 (modulo (+ (bytevector-u8-ref original 0) 1) 256))
+(check "detached observation" (not (same-bytes? original (diagnostic-model-logits-bits logits))))
+(define stable (diagnostic-model-logits-bits logits))
+(diagnostic-input-copy! input '(0 255))
+(define later (model-forward model input ':deterministic? #f))
+(define later-logits (model-output-logits later))
+(check "later forward is distinguishable" (not (same-bytes? stable (diagnostic-model-logits-bits later-logits))))
+(check "old output unchanged" (same-bytes? stable (diagnostic-model-logits-bits logits)))
+(check "release output" (model-output-release! output))
+(check "repeat output release" (model-output-release! output))
+(expect "dead output" 'invalid-state 'model-output-logits (lambda () (model-output-logits output)))
+(check "retained graph VJP" (diagnostic-output-vjp! logits seed 1065353216 0))
+(expect "stale contribution ordinal" 'invalid-state 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! sibling seed 1065353216 0)))
+(check "retry current ordinal" (diagnostic-output-vjp! sibling seed 1056964608 1))
+(check "explicit reset" (module-zero-grad! model))
+(check "sibling release" (diagnostic-model-logits-release! sibling))
+(check "sibling repeated release" (diagnostic-model-logits-release! sibling))
+(expect "dead logits" 'invalid-state 'diagnostic-model-logits-bits
+  (lambda () (diagnostic-model-logits-bits sibling)))
+(check "remaining copy unaffected" (same-bytes? stable (diagnostic-model-logits-bits logits)))
+
+;; A public diagnostic frame and a model call share one active-model exclusion.
+(define external (diagnostic-workspace-create model))
+(diagnostic-workspace-begin! external input)
+(expect "active model forward" 'invalid-state 'model-forward (lambda () (model-forward model input)))
+(expect "active model reverse" 'invalid-state 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 0)))
+(check "other frame preserved" (diagnostic-workspace-check-primals external))
+(diagnostic-workspace-reset! external)
+(diagnostic-workspace-release! external)
+
+;; Mode/value restoration is exact-value semantics, not mutation-history detection.
+(module-eval! model)
+(expect "changed mode" 'invalid-state 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 0)))
+(define eval-output (model-forward model input))
+(check "eval VJP" (diagnostic-output-vjp! eval-output seed 1065353216 0))
+(model-output-release! eval-output)
+(module-zero-grad! model)
+(module-train! model)
+(check "restored mode" (diagnostic-output-vjp! logits seed 1065353216 0))
+(module-zero-grad! model)
+(define saved (module-state-dict model))
+(define other (diagnostic-model-create cfg (diagnostic-model-initializer model)))
+(define changed (module-state-dict other))
+(module-load-state-dict! model changed)
+(expect "changed live parameters" 'invalid-state 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 0)))
+(check "snapshot logits survive parameter load" (same-bytes? stable (diagnostic-model-logits-bits logits)))
+(module-load-state-dict! model saved)
+(check "restored values" (diagnostic-output-vjp! logits seed 1065353216 0))
+(module-zero-grad! model)
+(state-dict-release! changed)
+(state-dict-release! saved)
+
+;; Reject unavailable features before their data can be used as tensor authority.
+(expect "targets without mask" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':targets input)))
+(expect "mask without targets" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':loss-mask #t)))
+(expect "loss unsupported" 'unsupported 'model-forward
+  (lambda () (model-forward model input ':targets input ':loss-mask #t)))
+(expect "rng unsupported" 'unsupported 'model-forward
+  (lambda () (model-forward model input ':rng #f)))
+(expect "validate syntax before unsupported RNG" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':rng #f ':unknown #f)))
+(expect "duplicate unsupported option" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':rng #f ':rng #f)))
+(expect "validate determinism before unsupported loss" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':targets #f ':loss-mask #f ':deterministic? 1)))
+(expect "unknown option" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':cache #f)))
+(expect "missing option value" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':deterministic?)))
+(expect "duplicate option" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':deterministic? #t ':deterministic? #f)))
+(expect "wrong determinism type" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':deterministic? 1)))
+(expect "no model forging" 'invalid-argument 'model-forward
+  (lambda () (model-forward (vector 'diagnostic-owner) input)))
+(expect "no input relabel" 'invalid-argument 'model-forward
+  (lambda () (model-forward model '(3 197))))
+(expect "no output forging" 'invalid-argument 'model-output-logits
+  (lambda () (model-output-logits (vector 'diagnostic-owner))))
+(expect "mutable logits are not graph tensors" 'invalid-argument 'diagnostic-model-logits-bits
+  (lambda () (diagnostic-model-logits-bits seed)))
+(expect "immutable logits are not mutable seeds" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits logits 1065353216 0)))
+(expect "zero weight" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 0 0)))
+(expect "infinite weight" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 2139095040 0)))
+(expect "negative weight bits" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 3212836864 0)))
+(expect "inexact weight bits" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216.0 0)))
+(expect "negative ordinal" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 -1)))
+(expect "inexact ordinal" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 0.0)))
+
+;; Nonfinite seed failure must clean the private frame and leave count zero.
+(define bad-seed (make-bytevector 2048 0))
+(bytevector-u8-set! bad-seed 2 192)
+(bytevector-u8-set! bad-seed 3 127)
+(diagnostic-logits-copy-bits! seed bad-seed)
+(expect "nonfinite seed" 'invalid-argument 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 0)))
+(diagnostic-logits-copy-bits! seed (make-bytevector 2048 0))
+(check "failure retry" (diagnostic-output-vjp! logits seed 1065353216 0))
+(module-zero-grad! model)
+(check "other independent graph" (diagnostic-output-vjp! later seed 1065353216 0))
+(module-zero-grad! model)
+(check "logits before output release" (diagnostic-model-logits-release! later-logits))
+(check "remaining output graph" (diagnostic-output-vjp! later seed 1065353216 0))
+(model-output-release! later)
+(diagnostic-model-logits-release! logits)
+(expect "last graph gone" 'invalid-state 'diagnostic-output-vjp!
+  (lambda () (diagnostic-output-vjp! logits seed 1065353216 1)))
+(diagnostic-logits-release! seed)
+(diagnostic-input-release! input)
+(expect "dead input" 'invalid-state 'model-forward (lambda () (model-forward model input)))
+(display "M3-LIFETIME-PASS") (newline)

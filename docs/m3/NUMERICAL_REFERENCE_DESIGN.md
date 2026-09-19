@@ -1,10 +1,13 @@
 # M3 numerical/reference checkpoint
 
-Development-only design for issue #85. This document proposes evidence, not a
-public ABI, implementation acceptance, or numerical result. The production
-schedule remains Eshkol-authored. No provider change is needed for fixed-profile
-logits and their VJP; loss/seed ownership and contribution lifetime still need the
-integration decision.
+Development-only design checkpoint for issue #85. The initial gap analysis below
+predates the accepted binding in issue #1 comment 5744129957; the resulting
+contract is recorded in `docs/M3_COMPOSITION_PROPOSAL.md` and `docs/M3_MODEL.md`.
+The production schedule is Eshkol-authored. Fixed-profile logits and raw-seed VJP
+use existing numerical providers; optional loss and RNG trace are absent.
+The independent reference is now frozen in `tests/m3/reference_manifest.json`;
+`tests/m3/README.md` describes executable evidence and its limitations. This
+checkpoint does not define additional ABI or confer supported-platform status.
 
 ## Actual merged numerical boundary
 
@@ -186,7 +189,7 @@ future token row. The tied head still legitimately contributes to every
 vocabulary row: causal assertions must inspect the separate embedding edge,
 not incorrectly demand a zero final tied gradient for that row.
 
-## Missing loss, seed, and accumulation seams
+## Preacceptance loss, seed, and accumulation gap analysis
 
 A raw logits VJP needs no L2 operation: its caller supplies an already-weighted
 finite f32 `[1,2,256]` numerator seed and a separate positive finite f32

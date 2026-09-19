@@ -405,6 +405,35 @@ mutable cache receiver is supplied by a later accepted contract. Training mode m
 consume explicit RNG state; it must not use hidden global randomness. P1 owns module
 representation; N2/A2/L2/M3 own numerical implementation and gradient evidence.
 
+### Bounded M3 implementation coverage
+
+The [accepted M3 design](M3_COMPOSITION_PROPOSAL.md) implements a restricted
+CPU-f32 diagnostic profile; runtime acceptance remains pending. `model-forward`
+admits the exact M3T model and owned i64[1,2] input with optional boolean
+`':deterministic?` only. It validates flat option structure, names, duplicates,
+paired targets/mask and boolean determinism first, then rejects the presence of
+targets/mask or RNG as `unsupported`, including `':rng #f`. It does not inspect
+unavailable carriers or silently substitute initializer identity for forward RNG.
+This subset does not change the full first-release loss/RNG semantics above.
+
+Owned outputs and new read-only f32[1,2,256] logits copies retain independent
+leases on immutable saved graphs. Additive `model-output-release!`/1 and
+`diagnostic-model-logits-release!`/1 explicitly release their respective owners;
+surviving logits remain readable and differentiable after output release.
+`diagnostic-model-logits-bits`/1 exports a detached 2,048-byte exact-bit copy.
+`diagnostic-output-vjp!`/4 takes a live output or graph-retaining logits, a genuine
+diagnostic seed owner, positive finite f32 normalization-weight bits, and the exact
+current contribution ordinal. It performs the explicit Eshkol analytic VJP and one
+failure-atomic 14-unique-parameter numerator contribution. Weight is metadata only;
+it neither scales nor divides the seed. This is not compiler autodiff or generic
+tensor backward. Exact lifecycle, graph replay, errors and retention are specified
+by the accepted proposal and binding issue #1 decision 5744129957.
+
+The M3 sibling has one registry owner and no D2/O2/K2/C2 interoperability. Ordinary
+I2 plan/tensor identity controls retain cumulative tombstones after payload release;
+this milestone makes no flat output/VJP/training-memory claim. A training path must
+separately prove flat step retention before TR3 acceptance.
+
 I2's carrier-local accumulated-gradient contract uses absent/present slots. Absent
 is count zero, normalization-weight exact `+0`, and exact-positive-zero backing;
 present retains an unnormalized weighted numerator, positive finite normalization

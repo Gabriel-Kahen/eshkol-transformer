@@ -1,0 +1,68 @@
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.error_public)
+(require transformer.error_consumer)
+(require transformer.diagnostic_transport)
+(require transformer.model)
+
+(define (m3-test-check label value)
+  (if value #t (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (m3-test-power2 exponent)
+  (if (= exponent 0) 1 (* 2 (m3-test-power2 (- exponent 1)))))
+(define (m3-test-seed-bits salt)
+  ;; Test-only exact serialization of numerator/64, numerator in [-50,50].
+  ;; All model numerical work is performed by the public Eshkol model schedule.
+  (let ((bytes (make-bytevector 2048 0)))
+    (let fill ((index 0))
+      (if (= index 512) bytes
+          (let* ((numerator (- (modulo (+ (* index 29) (* salt 17)) 101) 50))
+                 (magnitude (if (< numerator 0) (- numerator) numerator))
+                 (bits
+                   (if (= magnitude 0) 0
+                       (let leading ((power 0) (threshold 2))
+                         (if (>= magnitude threshold)
+                             (leading (+ power 1) (* threshold 2))
+                             (+ (if (< numerator 0) 2147483648 0)
+                                (* (+ power 121) 8388608)
+                                (- (* magnitude (m3-test-power2 (- 23 power))) 8388608)))))))
+            (let store ((offset 0) (remaining bits))
+              (if (= offset 4) #t
+                  (begin (bytevector-u8-set! bytes (+ (* index 4) offset) (modulo remaining 256))
+                         (store (+ offset 1) (quotient remaining 256)))))
+            (fill (+ index 1)))))))
+(define (m3-test-emit-bytes label case-index bytes)
+  (display label) (display " ") (display case-index)
+  (let loop ((index 0))
+    (if (= index (bytevector-length bytes)) (newline)
+        (begin (display " ") (display (bytevector-u8-ref bytes index)) (loop (+ index 1))))))
+
+;; M3-OBSERVATION-BEGIN
+(define (m3-test-observe case-index) #t)
+;; M3-OBSERVATION-END
+
+(define (m3-test-case case-index config-text init-seed tokens salt weight-bits)
+  (let* ((config (config-resolve (config-parse config-text) '()))
+         (initial (diagnostic-initializer-state init-seed))
+         (model (diagnostic-model-create config initial))
+         (input (diagnostic-input-create))
+         (seed (diagnostic-logits-create)))
+    (m3-test-check "input copy" (diagnostic-input-copy! input tokens))
+    (m3-test-check "seed copy" (diagnostic-logits-copy-bits! seed (m3-test-seed-bits salt)))
+    (let* ((output (model-forward model input))
+           (logits (model-output-logits output)))
+      (m3-test-check "no loss" (eq? (model-output-loss output) #f))
+      (m3-test-check "no rng" (eq? (model-output-rng output) #f))
+      (m3-test-emit-bytes "M3-LOGITS" case-index (diagnostic-model-logits-bits logits))
+      (m3-test-check "output release" (model-output-release! output))
+      (m3-test-check "retained graph VJP" (diagnostic-output-vjp! logits seed weight-bits 0))
+      (m3-test-observe case-index)
+      (m3-test-check "logits release" (diagnostic-model-logits-release! logits)))
+    (m3-test-check "input release" (diagnostic-input-release! input))
+    (m3-test-check "seed release" (diagnostic-logits-release! seed))))
+
+(m3-test-case 0 "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}" 1729 '(3 197) 1 1065353216)
+(m3-test-case 1 "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":0}" 0 '(0 255) 2 1056964608)
+(m3-test-case 2 "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":9223372036854775807}" 9223372036854775807 '(7 7) 3 1075838976)
+(display "M3-PUBLIC-MODEL-PASS")
+(newline)

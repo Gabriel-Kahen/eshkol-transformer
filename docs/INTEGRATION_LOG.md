@@ -4,6 +4,25 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-19 — M3 bounded composition design accepted
+
+Integration [accepted proposal 37db2ec](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957)
+for implementation on issue #85: eight public names, 93 globals/87 exports,
+seven facades and ten localized native seams. The fixed diagnostic model uses
+independent immutable graph snapshots, graph-retaining owned logits, Eshkol
+21-forward/25-reverse schedules and one same-call 14-unique-handle I2 numerator
+transaction. Ordinary I2 controls have explicitly cumulative retention; this
+does not establish flat model/training memory, loss/RNG ingress, full-training
+aggregation or arbitrary shapes.
+
+The decision requires registry-first I1 admission and error-output alias checks
+before any write; cleanup eligibility precedes prepare, and the post-commit tail
+is infallible plan release/direct-field-reset/preallocated Eshkol stores. A
+recoverable committed-error alternative is not accepted. Three task subreviews
+and an additional integration ownership review accepted the contract, not runtime
+evidence. M3 is active; independent M3-R, exact-head supported CI, integration
+merge/retest and acceptance remain required. See [the accepted proposal](M3_COMPOSITION_PROPOSAL.md).
+
 ## 2026-09-19 — M3T implementation accepted and merged
 
 - **Disposition:** accepted and complete only for the bounded diagnostic transport
