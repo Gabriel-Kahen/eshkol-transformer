@@ -259,7 +259,7 @@ error or output record.
 The [M3 prerequisite decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)
 authorizes this narrow implementation change. Independent differential tests and
 the full I2 gate pass on the explicit local compatibility host; new exact-head
-supported CI and M3 integration evidence remain pending independently of the
+supported CI and independent M3-R remain pending independently of the
 previously accepted I2 implementation above.
 Every protected span comes from `f32_calloc`. Successful nonzero allocations
 expand a monotone half-open address envelope, including storage later freed by

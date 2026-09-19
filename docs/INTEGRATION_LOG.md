@@ -15,8 +15,10 @@ arithmetic failure; allocation history never shrinks. No public contract,
 concurrency, retention, native flag, horizon or timeout change is authorized.
 
 Independent differential and full I2 ownership/ABI/sanitizer gates pass locally,
-as does the unchanged M3 native gate. The unchanged full canonical/instrumented
-M3 gates remain required before exact-head supported CI and M3-R. The 24-entry predecessor source
+as do the unchanged M3 native and complete canonical/instrumented M3 gates
+(all five modes at both 1024/8192 horizons). Exact-head supported CI and M3-R
+remain required. The complete measured table preserves cumulative retention
+and the original timeout history. The 24-entry predecessor source
 inventory has zero affected entries and remains unchanged, as confirmed by
 integration. Exact pre/post source hashes and the separate 24-byte static-state
 accounting are recorded in [the retention evidence](M3_RETENTION_GATE.md).

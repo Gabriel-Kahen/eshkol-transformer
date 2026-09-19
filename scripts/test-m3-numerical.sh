@@ -149,5 +149,7 @@ for artifact in libeshkol_transformer_m3.a m3_numerical.o numerical numerical.es
 done
 cp -a "${tmp}/facades" "${output}/"
 cp "${tmp}"/arena-*.stdout "${tmp}"/arena-*.stderr "${output}/"
+cp "${provenance}" "${output}/toolchain-provenance.tsv"
+printf 'Clean scripts/test-m3-numerical.sh PASS: all three numerical cases and all five arena modes at both contracted horizons. Toolchain qualification follows recorded provenance; compatibility overrides do not establish supported-platform status.\n' >"${output}/LOCAL_STATUS.txt"
 cat "${tmp}/parity.txt"
 printf 'M3 instrumented public-wrapper numerical/arena evidence: %s\n' "${output}"

@@ -1,12 +1,15 @@
 # M3 retention gate: measured failure and accepted prerequisite fix
 
-Status: canonical forward/8192 **failed its unchanged 600-second cap**, followed
-by the five-second kill escalation, exit 137. No completion marker or exact
-8192 arena counter was produced. Remaining modes did not run. Supported CI is
-withheld until a credible canonical local gate passes. The accepted 1024/8192
-horizons and production compilation semantics remain unchanged.
+Status: after the accepted I2 prerequisite fix, the full canonical and clean
+instrumented local gates **pass all five modes at both 1024/8192 horizons**, with
+unchanged production flags and 600-second caps plus five-second kill escalation.
+Exact-head supported Ubuntu22/LLVM21 CI and independent M3-R remain required.
 
-## Evidence before the failed gate
+The initial canonical forward/8192 run failed its unchanged cap, exit 137, without
+a completion marker or exact arena counter; its remaining modes did not run.
+That failure remains historical evidence below. It is not relabeled a pass.
+
+## Historical evidence before the failed gate
 
 Local evidence uses the pinned Eshkol source with explicit CachyOS / LLVM-Clang
 22.1.6 compatibility permission. It is not supported Ubuntu22/LLVM21 evidence.
@@ -24,7 +27,7 @@ deliberately shorter. The separate existing-I2 1,000-cycle probe passes both.
 Native-test fixtures inject readiness/slot bytes and do not execute a C model
 schedule. Whole-model numerical evidence comes from the public Eshkol path.
 
-## Bounded timing and stack observations
+## Historical bounded timing and stack observations
 
 The diagnostic variant rebuilds only the seven private native translation units
 at `-O2`. It reuses the same trusted Eshkol object, boxed bridges and provider
@@ -57,7 +60,7 @@ dominant sampled work; it is not an exhaustive profiler or a proof that Eshkol
 lookup contributes no cost. That diagnostic process was deliberately terminated,
 without disturbing the canonical horizon run.
 
-## Retention evidence and limitations
+## Historical retention evidence and limitations
 
 Canonical forward/1024 completes with exact Eshkol arena allocation
 **5,177,344 bytes** and peak RSS **95,476 KiB**. Approximately 132.38 seconds is
@@ -80,7 +83,7 @@ builder**. These are not completed 1024/8192 measured slopes: the full native
 and Eshkol trajectories remain unmet. Fixed K1/P1 allocations, Eshkol identities
 and errors are separate accounting. No flat-memory or performance claim follows.
 
-## Accepted prerequisite fix, pending validation
+## Accepted prerequisite fix and local validation
 
 Integration [accepted the narrow I2 allocation envelope for implementation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)
 in a separate prerequisite-fix commit after runtime checkpoint
@@ -134,7 +137,7 @@ parameters, gradients and transactions, K1 views, borrow/stale/alias/failpoint
 cases, public Eshkol integration, private/duplicate-authority rejection, hostile
 fresh-build determinism and ASan/UBSan/LSan. Its log is
 `build/i2-alias-full-gate.log`. Independent source, ABI and sanitizer review found
-no blocker in the prerequisite delta. The full canonical M3 gate remains pending.
+no blocker in the prerequisite delta. The full canonical M3 result is recorded below.
 
 The unchanged M3 native gate also passes after the fix: normal 1,000 cycles /
 76,484 checks in 1.502 seconds; ASan/UBSan/LSan 100 cycles / 20,679 checks in
@@ -154,7 +157,7 @@ attempting the unchanged canonical gate; it is composed compatibility evidence,
 not fresh-package determinism, a full retention trajectory or supported CI.
 Artifacts are in `build/m3-alias-envelope-probe`.
 
-Required proof is differential comparison against the original scan across all
+The completed local proof includes differential comparison against the original scan across all
 live/retired storage classes, interior/straddling/endpoints, envelope holes,
 outside spans, zero/null and overflowing spans; allocation failure, freed-history
 and permanent-fallback cases; existing I2 alias/stale/ABA/atomicity gates; then
@@ -168,3 +171,64 @@ Detailed local logs remain in `build/m3-public-evidence`, `build/m3-numerical`,
 `build/m3-native-o2-probe`, `build/m3-profile/stacks.log`, and
 `build/m3-native-final.log`. The native gate log SHA256 is
 `19586d55541b1030c44c8452f085549a154611bcd5737c7bd96ac10549a777a5`.
+
+## Clean instrumented result after the prerequisite fix
+
+A single clean `scripts/test-m3-numerical.sh` invocation passes all three public
+numerical cases, all 14 unique gradients, exact initializer bytes and metadata,
+plus all five modes at both 1,024 and 8,192 iterations. Each case completes within
+the unchanged 600-second timeout and matches all 36 source-derived native fields;
+stderr is empty. Exact 97-global, undefined-symbol and source/native-closure
+checks pass. Numerical stdout is byte-identical to the original. These are fresh
+final-source results, separate from the earlier composed probe.
+
+The complete measured native retained-control slopes are 1,768 bytes/iteration
+for forward, 1,888 for logits, 48 for VJP, 128 for VJP/reset, and zero for rejected
+nonfinite-seed VJP. The reset slope includes the 40-byte public reset builder.
+All modes end with zero live graphs, logits copies, frames, plans and borrows;
+the deliberately live model/workspace retain the same 32,868 f32 payload bytes.
+The I2 envelope's 24 static bytes, fixed K1/P1 storage and Eshkol arena are separate.
+
+Stable evidence is in `build/m3-numerical`, including exact raw outputs, toolchain
+provenance and a clean completion status. The full invocation log is
+`build/m3-envelope-clean-numerical.log`. This script uses a timeout, not GNU time;
+no elapsed-time measurement is claimed for its individual instrumented cases.
+CachyOS / LLVM22 compatibility does not establish supported Ubuntu22 / LLVM21 CI.
+
+## Complete canonical result after the prerequisite fix
+
+One refreshed canonical build and one full `scripts/test-m3-package.sh` invocation
+pass on runtime commit `c41d0d240184a0426068347f3b4cdcc6fac3e33e`. The gate
+checks two fresh packages against the canonical artifact, exact one-member
+93-global/87-export closure and ten localized seams, source/native dependency
+closures, caller and stdout determinism, all three public numerical cases,
+reverse imports, privacy, 15 arity negatives, registry collisions and lifetime.
+All five modes complete at both contracted horizons under the original caps.
+
+| Mode | Arena bytes: 1024 / 8192 | Peak RSS KiB: 1024 / 8192 | GNU elapsed seconds: 1024 / 8192 |
+|---|---:|---:|---:|
+| forward | 5,177,344 / 7,274,496 | 97,316 / 113,540 | 3.83 / 325.62 |
+| logits | 5,505,024 / 9,633,792 | 97,528 / 115,948 | 4.81 / 315.27 |
+| vjp | 4,915,200 / 4,915,200 | 95,832 / 96,036 | 0.37 / 3.03 |
+| reset | 13,369,344 / 72,548,352 | 105,044 / 167,872 | 2.23 / 87.73 |
+| failure | 9,830,400 / 44,236,800 | 99,468 / 134,612 | 0.51 / 3.74 |
+
+These are actual GNU-time elapsed/RSS fields and exact reported Eshkol arena
+allocation totals. Arena differences reflect measured allocation trajectories,
+including allocation granularity; they are separate from the source-derived and
+independently measured native control slopes above. Reset and failure have
+substantial cumulative Eshkol allocation despite releasing temporary payloads.
+The envelope does not establish flat memory, general performance or training
+retention guarantees.
+
+Raw evidence is retained in `build/m3-public-evidence`; the parsed table and
+per-file checksums are in `build/m3-envelope-public-result.json`. Full log
+`build/m3-envelope-public-gate.log` has SHA256
+`daf65c75d05840f96af562026580022c8ae42fb2f23d3cae896baba98d052820`.
+The canonical object SHA256 is
+`45324d8bc855f1116736ad9741252a75cc70f88dc3f01102bc8c35e52ed8f950`;
+archive SHA256 is
+`b5cb08b9fcaa4d17b22b08fb0652b194973e84619349c41da6374e248de4eda0`.
+Local timing uses GNU time 1.10 with the explicit configured executable path.
+All measurements use the verified pinned Eshkol source under CachyOS / LLVM22
+compatibility settings; supported CI and independent M3-R remain pending.

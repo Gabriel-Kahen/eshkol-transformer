@@ -2,12 +2,11 @@
 
 M3 implements the bounded [composition contract](M3_COMPOSITION_PROPOSAL.md)
 accepted in [integration decision 5744129957](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957).
-Numerical, ownership and package-identity checks pass locally. The initial
-canonical8192-forward retention gate exceeded its 600-second cap; integration
-authorized a narrow I2 prerequisite fix, with differential and bounded probes
-passing and the full canonical retest pending. See the
-[measured failure and accepted prerequisite fix](M3_RETENTION_GATE.md). Complete
-retention, supported CI and independent M3-R remain required for acceptance.
+All local numerical, ownership, fresh-package and 1024/8192 retention gates pass
+on the explicit CachyOS / LLVM22 compatibility host. The initial canonical8192
+forward timeout and the separately accepted I2 prerequisite fix remain recorded
+in [the measured retention evidence](M3_RETENTION_GATE.md). Exact-head supported
+Ubuntu22 / LLVM21 CI and independent M3-R remain required for acceptance.
 The accepted M3T evidence establishes its
 dependencies; it is not evidence that this model implementation passes.
 
@@ -107,9 +106,9 @@ the explicit local CachyOS / Clang-LLVM 22.1.6 compatibility host. Its installed
 public caller passed for initializer seeds 1729, 0 and signed-i64 maximum, with
 distinct, boundary and repeated token IDs respectively. Maximum absolute logits
 errors against the independent mathematical reference were `1.34583584e-08`,
-`9.4684347e-09` and `2.24634212e-08`. These are preliminary local observations;
-they do not substitute for the all-parameter VJP, lifetime, fresh-package or
-supported-CI gates.
+`9.4684347e-09` and `2.24634212e-08`. The complete local all-parameter VJP, lifetime,
+fresh-package and retention gates subsequently pass, as recorded in the linked
+evidence. Supported-CI qualification remains separate.
 
 ## Retention and remaining scope
 
