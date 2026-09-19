@@ -9,6 +9,7 @@ SUITES = [
     ("native-numerics", "test-ci-core-after-build", 105),
     ("native-optimizer", "test-ci-optimizer-after-build", 105),
     ("diagnostic-transport", "test-ci-m3t-after-build", 105),
+    ("model-composition", "test-ci-m3-after-build", 105),
     ("contracts-data", "test-ci-contracts-after-build", 75),
     ("checkpoint-io", "test-ci-checkpoint-after-build", 75),
     ("parameter-state", "test-ci-parameters-after-build", 75),
@@ -22,7 +23,7 @@ FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test-l2.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-c1.sh", "test-c2.sh",
-    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh",
+    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh",
 )]
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
 
@@ -164,7 +165,7 @@ def check(root, overrides=None):
         "LLVM_CONFIG_EXECUTABLE": "llvm-config-21", "A0_COMPILER_TIMEOUT_SECONDS": "'60'",
         **{k: "'1'" for k in ("P1_LSAN", "C1_LSAN", "I2_ASAN_DETECT_LEAKS",
            "K2_ASAN_DETECT_LEAKS", "D2_ASAN_DETECT_LEAKS", "N2_ASAN_DETECT_LEAKS",
-           "O2_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS", "M3T_ASAN_DETECT_LEAKS")}
+           "O2_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS", "M3T_ASAN_DETECT_LEAKS", "M3_ASAN_DETECT_LEAKS")}
     }.items():
         assert field(suite, 6, name) == value
     ss = steps(suite)
@@ -173,7 +174,7 @@ def check(root, overrides=None):
         "Verify pinned Eshkol toolchain", "Build suite prerequisites", "Run full suite"}
     assert suite.count("        if:") == 2
     for name in ("Select pinned oracle Python", "Install pinned development oracle"):
-        assert field(ss[name], 8, "if") == "matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer'"
+        assert field(ss[name], 8, "if") == "matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer' || matrix.suite == 'model-composition'"
     assert run(ss["Build suite prerequisites"]) == [
         "started=$SECONDS", 'if [[ "${{ matrix.suite }}" == canonical-build ]]; then',
         "  make clean && make build", "else",
@@ -196,7 +197,7 @@ def check(root, overrides=None):
     assert 'os.environ.get("ATEN_CPU_CAPABILITY") == "default"' in ss["Install pinned development oracle"]
     assert 'os.environ.get("MKL_CBWR") == "COMPATIBLE"' in ss["Install pinned development oracle"]
     assert 'torch.backends.cpu.get_cpu_capability() == "DEFAULT"' in ss["Install pinned development oracle"]
-    for variable, value in (("N2", "n2_oracle_python"), ("O2", "oracle_python"), ("A2", "oracle_python")):
+    for variable, value in (("M3", "n2_oracle_python"), ("N2", "n2_oracle_python"), ("O2", "oracle_python"), ("A2", "oracle_python")):
         assert f'echo "{variable}_ORACLE_PYTHON=${value}"' in ss["Install pinned development oracle"]
     assert 'echo "Q0_PYTHON=$oracle_python"' in ss["Install pinned development oracle"]
     assert field(ej["evidence"], 4, "needs") == "suites"
@@ -224,15 +225,15 @@ def check(root, overrides=None):
         else:
             leaves += targets[target]
     assert Counter(leaves) == Counter(c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh")
-    assert len(leaves) == 23
+    assert len(leaves) == 24
     canonical = ["/usr/bin/bash scripts/" + s for s in (
         "generate-p1-roots.sh --check", "build.sh", "build-a2.sh",
         "build-p1-identity.sh", "build-p1-package.sh", "build-c1.sh",
-        "build-t1.sh", "build-t2.sh", "build-d2.sh", "build-c2.sh", "build-m3t.sh")]
+        "build-t1.sh", "build-t2.sh", "build-d2.sh", "build-c2.sh", "build-m3t.sh", "build-m3.sh")]
     assert targets["build"] == canonical
     return len(SUITES)
 
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[2]
-    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 24-command coverage, six C2 groups, clean build, strict evidence gates")
+    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 25-command coverage, six C2 groups, clean build, strict evidence gates")

@@ -30,6 +30,7 @@ SUITES = (
     "native-numerics",
     "native-optimizer",
     "diagnostic-transport",
+    "model-composition",
     "contracts-data",
     "checkpoint-io",
     "parameter-state",

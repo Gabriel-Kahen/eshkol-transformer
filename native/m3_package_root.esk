@@ -1,0 +1,4 @@
+;;; Trusted M3 successor sibling. Never install this source.
+(load "m3t_package_root.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")

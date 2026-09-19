@@ -32,6 +32,8 @@
         parameter-handle-device state-dict-paths state-dict-tensor
         state-dict-alias-groups state-dict-release!
         model-forward model-output-logits model-output-loss model-output-rng
+        model-output-release! diagnostic-output-vjp!
+        diagnostic-model-logits-bits diagnostic-model-logits-release!
         optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
         optimizer-load-state! optimizer-state-release!
         trainer-create trainer-step! trainer-stop-policy trainer-train!
