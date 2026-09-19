@@ -11,7 +11,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| F0 | Package layout, build/test entry points, CI matrix | — | [Accepted CI-E full-coverage engine](CI_EFFICIENCY.md): all 15 suites and 23 commands, six disjoint C2 groups, canonical build/smoke/benchmark, audited prerequisite plans, strict same-tree evidence reuse, supported exact-tree CI, independent approval, merge, and successful 27-second reuse acceptance | complete |
+| F0 | Package layout, build/test entry points, CI matrix | — | [Accepted CI-E2 full-coverage engine](CI_EFFICIENCY.md): all 16 suites and 23 commands, separate native optimizer, six disjoint C2 groups, canonical build/smoke/benchmark, audited prerequisite plans, strict original-evidence reuse, supported exact-tree CI 35407378830, independent approval, PR #82 merge, and successful 18-second main reuse | complete |
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
@@ -33,7 +33,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 ## Wave 2 — model and training primitives
 
-The user-authorized [CI-E2 follow-up](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse-candidate)
+The accepted [CI-E2 follow-up](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse)
 is tracked separately in issue #81. It changes CI scheduling/evidence selection,
 not the accepted Wave 2 runtime scope, and starts no Wave 3 task.
 

@@ -4,6 +4,37 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-18 — CI-E2 scheduling/evidence extension accepted
+
+- **Decision:** CI-E2 is accepted and complete. It separates unchanged O2 tests
+  into a native optimizer job and admits main-push skips only through direct,
+  fail-closed verification of original full evidence. No runtime, format,
+  numerical tolerance, fresh-build proof, sanitizer, operational bound, or Wave 3
+  work changes. This entry supersedes the proposal record immediately below.
+- **Merge and review provenance:** PR #82, including the auto-merged PR #80 state,
+  merged as `f9d8366b17ecf408a60d8f62e8bf6c4d4eebbbe1`. Its tree
+  `d5137fca07ef71648e108ac5776072097b551df3` is identical to the approved and
+  tested tree. [Independent approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/82#issuecomment-5738034159)
+  covers the exact implementation and evidence policy.
+- **Supported evidence:** run 35407378830 at exact head
+  `22e54314078ffb133cd937bd454c89e6a7712282` passed all 16 suites, all 23
+  top-level commands, the canonical clean build, smoke, benchmark, suite evidence,
+  and final aggregation. No test or intentional fresh-cache, deterministic,
+  sanitizer, oracle, failure, lifetime, or resource proof was removed.
+- **Efficiency evidence:** supported wall time was 55m22s, 37m57s / 40.7% below
+  accepted CI-E and 169m36s / 75.4% below the 224m58s baseline. Summed runner time
+  was 409m13s, 12m10s / 2.9% below accepted CI-E and 54m47s / 11.8% below the
+  464m00s baseline. These public-repository runner-time measurements are not
+  billing or cost claims.
+- **Live main reuse:** run 35410997717 completed in 18 seconds after directly
+  verifying original full run 35407378830. Its exact three jobs were topology
+  success, full suites skipped, and final success. At this documentation review,
+  the live prose-base branch has not yet run; its subsequent result is recorded in
+  issue #81.
+- **Historical clarification:** main run 35401303514 later completed successfully.
+  The older accepted Wave 2 entry below retains its contemporaneous running status.
+  Wave 3 remains paused.
+
 ## 2026-09-18 — CI-E2 scheduling/evidence extension proposed
 
 - **Scope authorized by user; implementation acceptance pending:** issue #81
