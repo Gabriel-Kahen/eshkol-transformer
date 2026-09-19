@@ -80,6 +80,33 @@ source "$2"
             str(ROOT), str(ROOT / 'scripts/m3t-package-policy.sh')], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_public_closure_requires_real_complete_installed_depfile(self):
+        from tests.m3t.check_public_closure import validate
+        with tempfile.TemporaryDirectory() as temp:
+            installed = Path(temp)
+            for facade in manifest('facades'):
+                path = installed / 'facades' / facade
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('; installed facade\n')
+            source = ROOT / 'tests/m3t/public_runtime.esk'
+            depfile = installed / 'public.d'
+            dependencies = [str(source)] + [str(installed / 'facades' / f) for f in manifest('facades')]
+            with self.assertRaises(ValueError):
+                validate(installed, source, depfile)
+            for observed in ([], [str(source)], dependencies + [dependencies[-1]],
+                             dependencies + [str(ROOT / 'native/m3t_package_root.esk')],
+                             [str(source)] + [str(ROOT / 'lib' / f) for f in manifest('facades')]):
+                depfile.write_text('public.o: ' + ' '.join(observed) + '\n')
+                with self.assertRaises(ValueError):
+                    validate(installed, source, depfile)
+            depfile.write_text('public.o: ' + ' '.join(dependencies) + '\n')
+            self.assertEqual(validate(installed, source, depfile), dependencies)
+            facade = installed / 'facades' / manifest('facades')[0]
+            facade.unlink()
+            facade.symlink_to(ROOT / 'lib' / manifest('facades')[0])
+            with self.assertRaises(ValueError):
+                validate(installed, source, depfile)
+
     def test_source_closure_rejects_every_outside_or_aliased_dependency(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'repository'

@@ -21,6 +21,7 @@ m3t_cleanup() {
 trap m3t_cleanup EXIT
 m3t_canonical="$(project_build_dir)/m3t"
 m3t_i2_object="$(project_build_dir)/i2/i2_wave2.o"
+m3t_caller_install="${m3t_test_tmp}/caller-install"
 [[ -s "${m3t_canonical}/m3t_package.o" && -s "${m3t_canonical}/libeshkol_transformer_m3t.a" && \
    -s "${m3t_i2_object}" ]] || die "M3T and I2 canonical CI prerequisites are missing"
 cmp "${PROJECT_ROOT}/native/m3t_package_defined_symbols.txt" \
@@ -42,6 +43,25 @@ m3t_compile() {
     ESHKOL_CXX_COMPILER="${m3t_cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s "${m3t_timeout}s" \
     "${m3t_runner}" --strict-types --no-stdlib -I "${installed}/facades" "$@"
+}
+# Imported diagnostic filenames are embedded in caller objects. Use the same
+# clean installation path for each independently built package, without stripping.
+m3t_install_for_caller() {
+  rm -rf -- "${m3t_caller_install:?}"
+  mkdir -p "${m3t_caller_install}"
+  cp -a "$1/facades" "${m3t_caller_install}/facades"
+  cp "$1/libeshkol_transformer_m3t.a" "${m3t_caller_install}/"
+}
+m3t_compile_public() {
+  local installed=$1 source=$2 output=$3
+  shift 3
+  rm -f -- "${output}.d"
+  m3t_compile "${installed}" "$@" --compile-only --emit-depfile "${output}.d" \
+    "${source}" -o "${output}.o"
+  python3 "${PROJECT_ROOT}/tests/m3t/check_public_closure.py" \
+    "${installed}" "${source}" "${output}.d"
+  m3t_compile "${installed}" "$@" -L "${installed}" --lib eshkol_transformer_m3t \
+    "${source}" -o "${output}"
 }
 for repetition in 1 2; do
   installed="${m3t_test_tmp}/fresh-${repetition}"
@@ -69,11 +89,11 @@ for repetition in 1 2; do
   (cd "${installed}/facades" && find . -type f -printf '%P\n' | LC_ALL=C sort) \
     >"${m3t_test_tmp}/facades-${repetition}.txt"
   cmp "${PROJECT_ROOT}/native/m3t_package_facades.txt" "${m3t_test_tmp}/facades-${repetition}.txt"
-  m3t_compile "${installed}" --compile-only \
+  m3t_install_for_caller "${installed}"
+  m3t_compile "${m3t_caller_install}" --compile-only \
     "${PROJECT_ROOT}/tests/m3t/compile_api.esk" -o "${installed}/api.o"
-  m3t_compile "${installed}" -L "${installed}" --lib eshkol_transformer_m3t \
-    --emit-depfile "${installed}/public.d" \
-    "${PROJECT_ROOT}/tests/m3t/public_runtime.esk" -o "${installed}/public"
+  m3t_compile_public "${m3t_caller_install}" \
+    "${PROJECT_ROOT}/tests/m3t/public_runtime.esk" "${installed}/public"
   if ! timeout --foreground --signal=TERM --kill-after=5s 120s "${installed}/public" \
       >"${installed}/public.stdout" 2>"${installed}/public.stderr"; then
     cat "${installed}/public.stdout" "${installed}/public.stderr" >&2
@@ -81,9 +101,6 @@ for repetition in 1 2; do
   fi
   printf 'M3T-PUBLIC-TRANSPORT-PASS\n' >"${installed}/expected.stdout"
   cmp "${installed}/expected.stdout" "${installed}/public.stdout"
-  if grep -E '/(native|internal|src)/' "${installed}/public.d"; then
-    die "M3T public witness imported trusted source"
-  fi
   if nm -u --format=posix "${installed}/api.o" | \
       grep -E 'et_(m3t|i2|f32|p1|kernel)_private|et_e1b_private_'; then
     die "M3T facade retained private authority"
@@ -103,8 +120,8 @@ cmp "${m3t_canonical}/libeshkol_transformer_m3t.a" "${m3t_test_tmp}/fresh-1/libe
 # Reversed import order still obtains the aggregate's one E1 registry.
 { printf '(require transformer.error_public)\n'; cat "${PROJECT_ROOT}/tests/m3t/public_runtime.esk"; } \
   >"${m3t_test_tmp}/reverse.esk"
-m3t_compile "${m3t_test_tmp}/fresh-1" -L "${m3t_test_tmp}/fresh-1" \
-  --lib eshkol_transformer_m3t "${m3t_test_tmp}/reverse.esk" -o "${m3t_test_tmp}/reverse"
+m3t_install_for_caller "${m3t_test_tmp}/fresh-1"
+m3t_compile_public "${m3t_caller_install}" "${m3t_test_tmp}/reverse.esk" "${m3t_test_tmp}/reverse"
 "${m3t_test_tmp}/reverse" >"${m3t_test_tmp}/reverse.stdout"
 cmp "${m3t_test_tmp}/fresh-1/public.stdout" "${m3t_test_tmp}/reverse.stdout"
 # Local symbols cannot become callable merely by spelling a private extern.
@@ -112,12 +129,12 @@ for private in et_m3t_private_input_create_v1 et_e1b_private_m3t_input_create_ca
     et_p1_private_construction_begin_v1 et_f32_tensor_scoped_begin_internal; do
   printf '(extern ptr hidden :real %s)\n(display (hidden))\n' "${private}" \
     >"${m3t_test_tmp}/negative.esk"
-  m3t_compile "${m3t_test_tmp}/fresh-1" --compile-only \
+  m3t_compile "${m3t_caller_install}" --compile-only \
     "${m3t_test_tmp}/negative.esk" -o "${m3t_test_tmp}/negative.o"
   nm -u --format=posix "${m3t_test_tmp}/negative.o" | \
     awk '{print $1}' | grep -Fx "${private}" >/dev/null || \
     die "M3T private-link negative omitted its intended symbol"
-  if m3t_compile "${m3t_test_tmp}/fresh-1" -L "${m3t_test_tmp}/fresh-1" \
+  if m3t_compile "${m3t_caller_install}" -L "${m3t_caller_install}" \
       --lib eshkol_transformer_m3t "${m3t_test_tmp}/negative.esk" \
       -o "${m3t_test_tmp}/negative" >"${m3t_test_tmp}/negative.log" 2>&1; then
     die "M3T private symbol escaped localization: ${private}"
@@ -129,7 +146,7 @@ for private in m3t-public-model-create m3t-workspace-contributions-internal \
     i2-construction-begin-internal module-construction-begin-internal; do
   printf '(require transformer.diagnostic_transport)\n%s\n' "${private}" \
     >"${m3t_test_tmp}/private-binding.esk"
-  if m3t_compile "${m3t_test_tmp}/fresh-1" --compile-only \
+  if m3t_compile "${m3t_caller_install}" --compile-only \
       "${m3t_test_tmp}/private-binding.esk" -o "${m3t_test_tmp}/private-binding.o" \
       >"${m3t_test_tmp}/private-binding.log" 2>&1; then
     die "M3T facade imported private binding ${private}"
@@ -141,7 +158,7 @@ for entry in 'diagnostic-input-create 0' 'diagnostic-initializer-state 1' 'diagn
   read -r public arity <<<"${entry}"
   printf '(require transformer.diagnostic_transport)\n(%s #f #f #f)\n' "${public}" \
     >"${m3t_test_tmp}/arity.esk"
-  if m3t_compile "${m3t_test_tmp}/fresh-1" --compile-only \
+  if m3t_compile "${m3t_caller_install}" --compile-only \
       "${m3t_test_tmp}/arity.esk" -o "${m3t_test_tmp}/arity.o" \
       >"${m3t_test_tmp}/arity.log" 2>&1; then
     die "M3T wrong arity was accepted for ${public}"
@@ -166,9 +183,8 @@ fi
 grep -E 'multiple definition|duplicate symbol' "${m3t_test_tmp}/cross-aggregate.log" >/dev/null || \
   die "M3T cross-aggregate fixture failed for another reason"
 # Success-only public full transport witnesses run in reclaimed poisoned regions.
-m3t_compile "${m3t_test_tmp}/fresh-1" -O 2 -L "${m3t_test_tmp}/fresh-1" \
-  --lib eshkol_transformer_m3t "${PROJECT_ROOT}/tests/m3t/arena_retention.esk" \
-  -o "${m3t_test_tmp}/arena-retention"
+m3t_compile_public "${m3t_caller_install}" "${PROJECT_ROOT}/tests/m3t/arena_retention.esk" \
+  "${m3t_test_tmp}/arena-retention" -O 2
 for horizon in 1024 8192; do
   ESHKOL_ARENA_REPORT=1 ESHKOL_ARENA_POISON=1 \
     "${m3t_time}" -f 'max_rss_kib=%M' timeout --foreground --signal=TERM --kill-after=5s 240s \
