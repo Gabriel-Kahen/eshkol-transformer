@@ -57,3 +57,8 @@ internal	state-dict-c2-owned-tensor-borrow-end-internal
 internal	state-dict-c2-owned-borrow-activate-internal!
 internal	state-dict-c2-owned-borrow-deactivate-internal!
 internal	state-dict-c2-owned-entry-shells-internal
+internal	module-construction-begin-internal
+internal	module-construction-root-internal
+internal	module-construction-seal-internal!
+internal	module-construction-abort-internal!
+internal	module-construction-parameters-internal

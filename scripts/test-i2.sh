@@ -202,7 +202,7 @@ for run in a b; do
 done
 cmp "${temporary_dir}/integration-a.stdout" \
   "${temporary_dir}/integration-b.stdout"
-grep -Fx 'I2/P1 integration PASS: 30 checks' \
+grep -Fx 'I2/P1 integration PASS: 31 checks' \
   "${temporary_dir}/integration-a.stdout" >/dev/null
 
 for evidence_name in global-defined.txt package-exports.txt undefined.txt \

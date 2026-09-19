@@ -1,0 +1,153 @@
+(load "i2_wave2_root.esk")
+(extern ptr construction-test-initializer i64 :real et_m3t_private_initializer_create_v1)
+(extern ptr construction-test-owner ptr :real et_m3t_private_owner_create_v1)
+(extern ptr construction-test-parameter ptr i64 :real et_m3t_private_owner_parameter_v1)
+(extern i64 construction-test-owner-abort ptr :real et_m3t_private_owner_abort_v1)
+(extern i64 construction-test-initializer-seal ptr :real et_m3t_private_initializer_seal_v1)
+(extern i64 construction-test-initializer-word ptr i64 :real et_m3t_private_initializer_word_v1)
+(extern i64 construction-test-live-count :real et_p1_test_live_entry_count_v1)
+
+(extern i64 construction-test-count i64 :real et_i2_construction_test_count_v1)
+(extern i64 construction-test-hold ptr i64 :real et_i2_construction_test_hold_v1)
+(extern i64 construction-test-unchanged :real et_i2_construction_test_unchanged_v1)
+(extern i64 construction-test-unhold :real et_i2_construction_test_unhold_v1)
+
+(extern i64 construction-test-fail-after i64 :real et_i2_construction_test_fail_after_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "I2 construction FAIL: ") (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label (guard (caught (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category))))
+                (thunk) #f)))
+(define parameter-baseline (construction-test-count 0))
+(define tensor-baseline (construction-test-count 1))
+(define baseline (construction-test-live-count))
+(define module-baseline i2-module-count)
+(define initial (construction-test-initializer 7))
+(check "initializer" (not (null? initial)))
+(check "seal input initializer" (= (construction-test-initializer-seal initial) 0))
+(let failure ((index 0))
+  (if (= index 4) #t
+      (let ((pending (construction-test-owner initial)))
+        (check "native owner before failed begin" (not (null? pending)))
+        (construction-test-fail-after index)
+        (reject "begin failure restores both scopes" 'internal
+          (lambda () (i2-construction-begin-internal)))
+        (reject "false ledger after failed native begin" 'invalid-argument
+          (lambda () (module-construction-abort-internal! #f)))
+        (check "failed begin P1 and I2 baselines"
+               (and (= baseline (construction-test-live-count))
+                    (= module-baseline i2-module-count)))
+        (check "failed begin native owner cleanup"
+               (= (construction-test-owner-abort pending) 0))
+        (check "failed begin native payload baselines"
+               (and (= parameter-baseline (construction-test-count 0))
+                    (= tensor-baseline (construction-test-count 1))))
+        (failure (+ index 1)))))
+(define owner (construction-test-owner initial))
+(define construction
+  (with-region ('i2-create-scope 1048576) (i2-construction-begin-internal)))
+(if (not (null? owner))
+    (vector-set! (vector-ref construction 8) 2 (construction-test-parameter owner 0)))
+(check "owner" (not (null? owner)))
+(define root (vector-ref construction 2))
+(reject "copied ledger" 'invalid-argument
+  (lambda () (i2-construction-abort-internal! (vector construction))))
+(reject "nested scope" 'invalid-state (lambda () (i2-construction-begin-internal)))
+(reject "arbitrary parameter creation" 'unsupported
+  (lambda () (i2-parameter-create-uniform-internal 4 0)))
+(define parameter0 (vector-ref (vector-ref construction 8) 2))
+(vector-set! (vector-ref construction 8) 2 initial)
+(reject "wrong-kind anchor" 'invalid-state
+  (lambda () (i2-construction-abort-internal! construction)))
+(check "wrong anchor leaves root admitted" (i2-module? root))
+(vector-set! (vector-ref construction 8) 2 parameter0)
+(define (blocked-abort-matrix start partial?)
+  (let ((live (construction-test-live-count))
+        (modules i2-module-count)
+        (parameters (construction-test-count 0))
+        (tensors (construction-test-count 1)))
+    (let position ((index start))
+      (if (= index 14) #t
+          (begin
+            (let kind ((mode 0))
+              (if (= mode 7) #t
+                  (let ((status (construction-test-hold (construction-test-parameter owner index) mode)))
+                    (if (and (>= mode 5) (not (and partial? (< index 2))))
+                        (begin
+                          ;; The upstream plan APIs require a bound identity.
+                          ;; These modes cannot create a blocker on a genuinely
+                          ;; unbound carrier; reject without changing authority.
+                          (check "unbound parameter plan explicitly unavailable" (= status 4))
+                          (check "unavailable plan preserves native live counts"
+                            (= (construction-test-unchanged) 1)))
+                        (begin
+                          (check "hold exact position and mode" (= status 0))
+                          (reject "whole-owner blocker preserves scope" 'invalid-state
+                            (lambda () (i2-construction-abort-internal! construction)))
+                          (check "exact native held live counts unchanged"
+                            (= (construction-test-unchanged) 1))
+                          (check "release exact blocker" (= (construction-test-unhold) 0))))
+                    (check "P1 and I2 authority unchanged"
+                      (and (= live (construction-test-live-count))
+                           (= modules i2-module-count) (i2-module? root)
+                           (if partial?
+                               (and (i2-module? child)
+                                 (eq? first (vector-ref (parameter-handle-tensor-identity-internal first) 3))
+                                 (eq? second (vector-ref (parameter-handle-tensor-identity-internal second) 3)))
+                               #t)))
+                    (check "native payload baseline after blocker release"
+                      (and (= parameters (construction-test-count 0))
+                           (= tensors (construction-test-count 1))
+                           (= 0 (construction-test-count 2))))
+                    (kind (+ mode 1)))))
+            (position (+ index 1)))))))
+(blocked-abort-matrix 0 #f)
+(define first
+  (with-region ('i2-parameter-scope 1048576)
+    (i2-module-register-parameter-internal! root "first"
+      (i2-carrier 'parameter (construction-test-parameter owner 0) 'parameter))))
+(define child
+  (with-region ('i2-child-scope 1048576) (i2-module-create-internal)))
+(module-register-child-internal! root "child" child)
+(define second
+  (with-region ('i2-second-scope 1048576)
+    (i2-module-register-parameter-internal! child "second"
+      (i2-carrier 'parameter (construction-test-parameter owner 1) 'parameter))))
+(check "canonical carrier handle survives scratch"
+       (eq? first (vector-ref (parameter-handle-tensor-identity-internal first) 3)))
+(check "canonical child membership" (i2-module? child))
+(reject "duplicate name remains abortable" 'invalid-argument
+  (lambda () (i2-module-register-parameter-internal! root "first"
+    (i2-carrier 'parameter (construction-test-parameter owner 2) 'parameter))))
+(check "private rows"
+  (= (i2-bounded-list-length
+       (vector-ref (module-construction-parameters-internal
+                     (vector-ref construction 1)) 0) 4096) 2))
+(blocked-abort-matrix 0 #t)
+(check "revoke I2/P1" (i2-construction-abort-internal! construction))
+(check "repeat abort" (i2-construction-abort-internal! construction))
+(check "members removed" (and (not (i2-module? root)) (not (i2-module? child))))
+(check "module count baseline" (= i2-module-count module-baseline))
+(check "P1 live baseline before storage teardown" (= baseline (construction-test-live-count)))
+(reject "handle revoked before storage teardown" 'invalid-state
+  (lambda () (parameter-handle-shape first)))
+(check "native owner teardown after revocation" (= (construction-test-owner-abort owner) 0))
+(check "input initializer preserved"
+       (and (= (construction-test-initializer-word initial 1) 7)
+            (= (construction-test-initializer-word initial 2) 0)))
+(check "native parameter baseline" (= parameter-baseline (construction-test-count 0)))
+(check "native tensor baseline" (= tensor-baseline (construction-test-count 1)))
+(check "no outstanding borrow" (= (construction-test-count 2) 0))
+(define retry (i2-construction-begin-internal))
+(vector-set! (vector-ref retry 8) 2 parameter0)
+(reject "stale native owner anchor" 'invalid-state
+  (lambda () (i2-construction-abort-internal! retry)))
+(check "stale anchor leaves retry root admitted" (i2-module? (vector-ref retry 2)))
+(vector-set! (vector-ref retry 8) 2 '())
+(check "scope retry" (i2-construction-abort-internal! retry))
+(check "retry baseline" (= baseline (construction-test-live-count)))
+(display "I2 construction PASS: ") (display checks) (newline)

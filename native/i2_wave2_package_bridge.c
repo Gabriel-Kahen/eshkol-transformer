@@ -9,6 +9,9 @@
 #endif
 
 #include "f32_parameter_internal.h"
+#if defined(ET_M3T_PACKAGE_BUILD)
+#include "eshkol_transformer/m3t_transport.h"
+#endif
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -451,6 +454,23 @@ int64_t et_i2_private_parameter_bind_v1(void *parameter, void *p1_handle) {
     return -1;
   }
   return 0;
+}
+
+/* Fixed M3T construction availability and read-only teardown preflight.
+ * NULL/NULL reports availability only, and never admits an owner or parameter.
+ * Ordinary aggregates reject before any scope, enrollment, or allocation. */
+int64_t et_i2_private_construction_parameter_preflight_v1(
+    void *parameter, void *exact_handle) {
+#if defined(ET_M3T_PACKAGE_BUILD)
+  et_i2_clear_error();
+  if (parameter == NULL && exact_handle == NULL) return INT64_C(0);
+  return (int64_t)et_m3t_construction_parameter_preflight_internal(
+      parameter, exact_handle, &et_i2_last_error);
+#else
+  (void)parameter;
+  (void)exact_handle;
+  return INT64_C(-1);
+#endif
 }
 
 int64_t et_i2_private_parameter_admission_live_v1(void *parameter) {

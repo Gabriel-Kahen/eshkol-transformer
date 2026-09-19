@@ -79,6 +79,18 @@ static et_p1_record *records;
 #if defined(ET_P1_TRUSTED_BUILD)
 static et_p1_context *contexts;
 static uint8_t private_context_claimed;
+#define ET_P1_CONSTRUCTION_CAPACITY 8192u
+typedef struct et_p1_construction {
+  struct et_p1_construction *next;
+  et_p1_context *owner;
+  et_p1_record **entries;
+  size_t count;
+  int64_t origin_pid;
+  uint8_t state; /* 0 unpublished, 1 sealed, 2 aborted */
+} et_p1_construction;
+static et_p1_construction *constructions;
+static et_p1_construction *active_construction;
+
 #if defined(ET_P1_TEST_HOOKS)
 static int64_t test_callback_successes_before_failure = INT64_C(-1);
 static uint8_t test_state_bind_fail_next;
@@ -380,12 +392,141 @@ ET_P1_PRIVATE void *et_p1_private_context_create_v1(void) {
   return context;
 }
 
+
+static et_p1_construction *require_construction(et_p1_context *context,
+                                               const void *candidate,
+                                               const char *operation) {
+  et_p1_construction *ledger = constructions;
+  while (ledger != NULL && (const void *)ledger != candidate) ledger = ledger->next;
+  if (ledger == NULL || ledger->owner != context ||
+      ledger->origin_pid != (int64_t)getpid()) {
+    (void)set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                    ET_P1_CODE_FOREIGN_TOKEN, operation, "foreign construction");
+    return NULL;
+  }
+  return ledger;
+}
+
+static int64_t construction_preflight(et_p1_context *context,
+                                      et_p1_construction *ledger,
+                                      const char *operation) {
+  size_t i;
+  if (ledger->state != 0u || active_construction != ledger)
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_ALREADY_SEALED, operation, "construction is closed");
+  for (i = 0u; i < ledger->count; ++i) {
+    const et_p1_record *record = ledger->entries[i];
+    if (!token_integrity(record) || record->owner != context ||
+        (record->kind != ET_P1_TOKEN_MODULE &&
+         record->kind != ET_P1_TOKEN_PARAMETER_HANDLE))
+      return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                       ET_P1_CODE_TOKEN_INTEGRITY, operation,
+                       "construction enrollment integrity failed");
+  }
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_construction_begin_v1(void *candidate) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  const char *operation = "construction-begin";
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  if (active_construction != NULL)
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_BINDING_CONFLICT, operation, "nested construction");
+  ledger = (et_p1_construction *)calloc(1u, sizeof(*ledger));
+  if (ledger == NULL)
+    return set_error(context, ET_P1_STATUS_INTERNAL, ET_P1_CODE_ALLOCATION_FAILED,
+                     operation, "cannot allocate construction ledger");
+  ledger->entries = (et_p1_record **)calloc(ET_P1_CONSTRUCTION_CAPACITY,
+                                           sizeof(*ledger->entries));
+  if (ledger->entries == NULL) {
+    free(ledger);
+    return set_error(context, ET_P1_STATUS_INTERNAL, ET_P1_CODE_ALLOCATION_FAILED,
+                     operation, "cannot allocate construction enrollment");
+  }
+  ledger->owner = context;
+  ledger->origin_pid = (int64_t)getpid();
+  ledger->next = constructions;
+  constructions = ledger;
+  active_construction = ledger;
+  context->result_ptr = ledger;
+  return ET_P1_STATUS_OK;
+}
+
+static int64_t construction_create(void *candidate, void *construction,
+                                   int64_t kind, const char *operation) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  int64_t status;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction, operation);
+  if (ledger == NULL) return context->error.category;
+  status = construction_preflight(context, ledger, operation);
+  if (status != ET_P1_STATUS_OK) return status;
+  if (ledger->count >= ET_P1_CONSTRUCTION_CAPACITY)
+    return set_error(context, ET_P1_STATUS_UNSUPPORTED,
+                     ET_P1_CODE_CAPACITY_EXCEEDED, operation, "construction is full");
+  status = create_token(context, kind, operation, NULL, 0u);
+  if (status == ET_P1_STATUS_OK)
+    ledger->entries[ledger->count++] = find_record(context->result_ptr);
+  return status;
+}
+ET_P1_PRIVATE int64_t et_p1_private_construction_module_create_v1(
+    void *context, void *construction) {
+  return construction_create(context, construction, ET_P1_TOKEN_MODULE,
+                             "construction-module-create");
+}
+ET_P1_PRIVATE int64_t et_p1_private_construction_handle_create_v1(
+    void *context, void *construction) {
+  return construction_create(context, construction, ET_P1_TOKEN_PARAMETER_HANDLE,
+                             "construction-handle-create");
+}
+ET_P1_PRIVATE int64_t et_p1_private_construction_seal_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  int64_t status;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction, "construction-seal");
+  if (ledger == NULL) return context->error.category;
+  status = construction_preflight(context, ledger, "construction-seal");
+  if (status != ET_P1_STATUS_OK) return status;
+  ledger->state = 1u;
+  active_construction = NULL;
+  free(ledger->entries);
+  ledger->entries = NULL;
+  return ET_P1_STATUS_OK;
+}
+ET_P1_PRIVATE int64_t et_p1_private_construction_abort_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  size_t i;
+  int64_t status;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction, "construction-abort");
+  if (ledger == NULL) return context->error.category;
+  if (ledger->state == 2u) return ET_P1_STATUS_OK;
+  status = construction_preflight(context, ledger, "construction-abort");
+  if (status != ET_P1_STATUS_OK) return status;
+  for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
+  ledger->state = 2u;
+  active_construction = NULL;
+  free(ledger->entries);
+  ledger->entries = NULL;
+  return ET_P1_STATUS_OK;
+}
+
 ET_P1_PRIVATE int64_t et_p1_private_context_release_v1(void *candidate) {
   et_p1_context *context = require_context(candidate);
   et_p1_record *record;
   if (context == NULL) {
     return ET_P1_STATUS_INVALID_ARGUMENT;
   }
+  if (active_construction != NULL && active_construction->owner == context)
+    return set_error(context, ET_P1_STATUS_INVALID_STATE, ET_P1_CODE_LIVE_ENTRIES,
+                     "context-release", "context owns an unpublished construction");
   record = records;
   while (record != NULL) {
     if (record->owner == context && record->live != 0u) {
