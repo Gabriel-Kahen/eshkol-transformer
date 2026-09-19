@@ -204,6 +204,17 @@ not an application-visible per-borrow capability, so defect containment for a
 malicious trusted consumer is not claimed; I2/C1 executable evidence must prove the
 one-call begin/use/end discipline.
 
+The private fixed-arity `state-dict-c2-owned-entry-shells-internal` helper is a
+trusted C2 lifetime seam, not a public state projection. It authenticates the exact
+active C2 borrow marker and returns a freshly allocated, bounded, canonically ordered
+list spine containing the existing state-owned entry shells. It does not copy entry
+metadata, clone payloads, create tensor identities, or cache the returned list. Its
+caller must invoke it outside every temporary region so the list and any lazily
+created entry shells are allocated in the established owner-lifetime context. Wrong,
+foreign, stale, or released authority fails through the same scoped-borrow rules.
+The helper is append-only trusted surface slot 58; slots 0 through 57 and the public
+18-binding facade are unchanged.
+
 `state-dict-release!` is public, arity 1, and P1-specific. It rejects before mutation
 when a scoped borrow is active. Otherwise its first transition invalidates the state
 and all dependent state-entry and state-tensor identities before provider destruction begins, clears

@@ -1,0 +1,4 @@
+et_c2_checkpoint_reader_close_v1
+et_c2_checkpoint_reader_open_v1
+et_c2_checkpoint_reader_read_exact_v1
+et_c2_checkpoint_reader_validate_final_v1

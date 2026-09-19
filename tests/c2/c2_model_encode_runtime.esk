@@ -1,0 +1,198 @@
+(load "i2_wave2_root.esk")
+(load "c2_model_encode_extension.esk")
+
+(extern i64 c2-model-encode-test-counter i64
+        :real et_c2_model_encode_test_counter_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C2 MODEL ENCODE FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (expect-error label category operation thunk)
+  (let ((matched
+          (guard (raised
+                   (#t
+                     (and (transformer-error? raised)
+                          (eq? category
+                               (transformer-error-category raised))
+                          (eq? operation
+                               (transformer-error-operation raised)))))
+            (thunk)
+            #f)))
+    (check label matched)))
+
+(define (snapshot-i2-counters)
+  (let ((result (make-vector 24 0)))
+    (let loop ((index 0))
+      (if (= index 24)
+          result
+          (let ((value (c2-model-encode-test-counter index)))
+            (check "counter fits the Eshkol integer boundary" (>= value 0))
+            (vector-set! result index value)
+            (loop (+ index 1)))))))
+
+(define policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+(define module (i2-module-create-internal))
+(define weight
+  (i2-parameter-create-uniform-internal 6 2143363909))
+(define bias
+  (i2-parameter-create-uniform-internal 2 2147483648))
+(define weight-handle
+  (i2-module-register-parameter-internal! module "weight" weight))
+(i2-module-register-tied-parameter-internal!
+  module "weight_tied" weight-handle)
+(i2-module-register-parameter-internal! module "bias" bias)
+(define state (module-state-dict module))
+
+(check "real state preserves the tied parameter topology"
+       (equal? (state-dict-alias-groups state)
+               '((("weight") ("weight_tied")))))
+
+;;; The accepted C1/I2 codec is the byte-for-byte reference. It uses its
+;;; ordinary f32 borrow seam; take all flat-counter baselines only afterward.
+(define reference
+  (c1-checkpoint-encode-state-internal
+    state policy i2-checkpoint-codec-internal))
+(define encoded (c2-model-encode-state-internal state policy))
+(check "private adapter preserves the exact C1 1.0 bytes"
+       (c1-bytes=? reference encoded))
+(define metadata (c1-checkpoint-inspect-bytes-internal encoded policy))
+(check "nested model remains exact C1 1.0"
+       (and (eq? (c1-checkpoint-metadata-ref-internal metadata 'format-id)
+                 'eshkol-checkpoint)
+            (equal? (c1-checkpoint-metadata-ref-internal
+                      metadata 'format-version)
+                    '(1 0))
+            (string=? (c1-checkpoint-metadata-ref-internal metadata 'provider-id)
+                      "i2-dense-cpu-f32-v1")
+            (= (c1-checkpoint-metadata-ref-internal metadata 'tensor-count) 3)))
+(define decoded
+  (c1-checkpoint-decode-state-internal
+    encoded policy i2-checkpoint-codec-internal i2-provider-name))
+(check "adapter bytes preserve C1 alias semantics"
+       (equal? (state-dict-alias-groups decoded)
+               '((("weight") ("weight_tied")))))
+(check "adapter bytes preserve exact weight bits"
+       (= (i2-state-tensor-checksum-internal
+            state (state-dict-tensor state '("weight")) 'parameter)
+          (i2-state-tensor-checksum-internal
+            decoded (state-dict-tensor decoded '("weight")) 'parameter)))
+(check "reference decode state releases" (state-dict-release! decoded))
+
+;;; Direct callback admission still uses real I2 carriers. A live module
+;;; parameter is not a state-owned clone and cannot use the C2 shortcut.
+(expect-error "live parameter carrier is outside the state-owned seam"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (c2-model-checkpoint-encode
+      (vector weight 'parameter '(6) 'f32 'cpu
+              'dense-row-major-contiguous 'checkpoint-save!))))
+(expect-error "malformed callback request rejects before native access"
+              'invalid-argument 'c2-model-checkpoint-encode
+  (lambda () (c2-model-checkpoint-encode (vector state))))
+
+;;; Hold the actual P1 state/tensor pin while exercising a same-byte-count but
+;;; wrong-rank shape. The failure must preserve both the owner and its bits.
+(define state-weight (state-dict-tensor state '("weight")))
+(define checksum-before
+  (i2-state-tensor-checksum-internal state state-weight 'parameter))
+(let ((carrier (state-dict-tensor-borrow-begin-internal state state-weight)))
+  (guard (raised
+           (#t
+             (state-dict-tensor-borrow-end-internal state state-weight)
+             (raise raised)))
+    (expect-error "state-owned carrier rejects mismatched exact shape"
+                  'shape-mismatch 'checkpoint-save!
+      (lambda ()
+        (c2-model-checkpoint-encode
+          (vector carrier 'parameter '(3 2) 'f32 'cpu
+                  'dense-row-major-contiguous 'checkpoint-save!))))
+    (state-dict-tensor-borrow-end-internal state state-weight)))
+(check "shape failure preserves exact state bits"
+       (= checksum-before
+          (i2-state-tensor-checksum-internal state state-weight 'parameter)))
+(check "shape failure publishes no partial C1 bytes"
+       (c1-bytes=? reference (c2-model-encode-state-internal state policy)))
+
+;;; State-level rejection occurs before the private codec callback and leaves
+;;; prior output detached and unchanged.
+(define released-state (module-state-dict module))
+(check "malformed-state fixture releases" (state-dict-release! released-state))
+(expect-error "released state rejects before model encoding"
+              'invalid-state 'state-dict-alias-groups
+  (lambda () (c2-model-encode-state-internal released-state policy)))
+(check "state rejection cannot mutate prior output"
+       (c1-bytes=? reference encoded))
+(define too-small-policy
+  (c1-persistence-policy-internal 4096 4096 8 64 'cpu))
+(expect-error "shape-derived payload limit rejects atomically"
+              'invalid-state 'c1-checkpoint-encode-state-internal
+  (lambda () (c2-model-encode-state-internal state too-small-policy)))
+(check "policy failure leaves the live state encodable"
+       (c1-bytes=? reference (c2-model-encode-state-internal state policy)))
+
+;;; Snapshot every native I2/f32 live, retired, borrow-event, and bridge-builder
+;;; counter after setup. Saves must be completely flat both inside a region and
+;;; after region-bounded bytevector scratch is reclaimed.
+(define counters-before (snapshot-i2-counters))
+(let repeat ((remaining 32))
+  (if (= remaining 0)
+      #t
+      (let ((cycle (c2-model-encode-state-internal state policy)))
+        (check "repeated save preserves exact C1 bytes"
+               (c1-bytes=? reference cycle))
+        (check "all I2 counters stay flat across repeated saves"
+               (equal? counters-before (snapshot-i2-counters)))
+        (repeat (- remaining 1)))))
+(define counters-after (snapshot-i2-counters))
+(check "all I2 live and retired counters stay flat after repeated saves"
+       (equal? counters-before counters-after))
+(check "no f32 borrow shell was created or retired"
+       (and (= (vector-ref counters-before 2) (vector-ref counters-after 2))
+            (= (vector-ref counters-before 9) (vector-ref counters-after 9))
+            (= (vector-ref counters-before 14) (vector-ref counters-after 14))
+            (= (vector-ref counters-before 15) (vector-ref counters-after 15))
+            (= (vector-ref counters-before 16) (vector-ref counters-after 16))))
+
+;;; C1 owns the P1 state shell's region. Hold the real P1 pin outside a nested
+;;; payload-scratch region, then exercise this codec slice repeatedly inside
+;;; it. The accepted I2 callback supplies the exact payload reference before
+;;; the flat baseline is taken.
+(define region-carrier
+  (state-dict-tensor-borrow-begin-internal state state-weight))
+(guard (raised
+         (#t
+           (state-dict-tensor-borrow-end-internal state state-weight)
+           (raise raised)))
+  (let* ((request
+           (vector region-carrier 'parameter '(6) 'f32 'cpu
+                   'dense-row-major-contiguous 'checkpoint-save!))
+         (payload-reference
+           ((vector-ref i2-checkpoint-codec-internal 2) request))
+         (region-before (snapshot-i2-counters)))
+    (with-region ('c2-model-payload-scratch 65536)
+      (let repeat-region ((remaining 8))
+        (if (= remaining 0)
+            #t
+            (let ((cycle (c2-model-checkpoint-encode request)))
+              (check "regional codec slice preserves exact C1 payload bytes"
+                     (c1-bytes=? payload-reference cycle))
+              (check "regional codec slice keeps every I2 counter flat"
+                     (equal? region-before (snapshot-i2-counters)))
+              (repeat-region (- remaining 1))))))
+    (check "region exit leaves every I2 live and retired counter unchanged"
+           (equal? region-before (snapshot-i2-counters))))
+  (state-dict-tensor-borrow-end-internal state state-weight))
+
+(check "live model state releases" (state-dict-release! state))
+(display "C2 MODEL ENCODE PASS: ")
+(display checks)
+(display " checks")
+(newline)

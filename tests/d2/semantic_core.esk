@@ -1,0 +1,593 @@
+(load "internal/c1/lib/c1_sha256.esk")
+(load "internal/d2/lib/d2_semantic_core.esk")
+
+(define passed 0)
+(define (check name condition)
+  (if condition (set! passed (+ passed 1))
+      (begin (display "FAIL: ") (display name) (newline) (exit 1))))
+(define (rejects? thunk)
+  (guard (condition (else #t)) (thunk) #f))
+(define (d2-error-of thunk)
+  (guard (condition
+          ((d2-core-error? condition) condition)
+          (else #f))
+    (thunk)
+    #f))
+(define (d2-error-matches? thunk category operation)
+  (let ((condition (d2-error-of thunk)))
+    (and condition
+         (eq? (d2-core-error-category condition) category)
+         (eq? (d2-core-error-operation condition) operation))))
+(define (d2-error-message-is? thunk category operation message)
+  (let ((condition (d2-error-of thunk)))
+    (and condition
+         (eq? (d2-core-error-category condition) category)
+         (eq? (d2-core-error-operation condition) operation)
+         (string=? (d2-core-error-message condition) message))))
+(define (coord=? coordinate shard offset)
+  (and (= (vector-ref coordinate 0) shard)
+       (= (vector-ref coordinate 1) offset)))
+
+(define (make-config directory batch-size sequence-length manifest-limit
+                     shard-limit total-limit batch-limit seed window packing?)
+  (list ':packing? packing?
+        ':shuffle-window-rows window
+        ':maximum-batch-bytes batch-limit
+        ':directory directory
+        ':maximum-total-tokens total-limit
+        ':batch-size batch-size
+        ':shuffle-seed seed
+        ':maximum-shard-bytes shard-limit
+        ':sequence-length sequence-length
+        ':maximum-manifest-bytes manifest-limit))
+
+(define source-directory (string-copy "corpus"))
+(define source-config
+  (make-config source-directory 2 3 4096 8192 9 102 #f 4 #t))
+(define normalized-config (d2-core-normalize-config source-config))
+(check "ten-key config normalizes arbitrary key order"
+       (and (d2-core-config-valid? normalized-config)
+            (string=? (d2-core-config-ref normalized-config ':directory)
+                      "corpus")
+            (= (d2-core-config-ref normalized-config ':batch-size) 2)
+            (= (d2-core-config-ref normalized-config ':sequence-length) 3)
+            (= (d2-core-config-ref normalized-config ':maximum-manifest-bytes)
+               4096)
+            (= (d2-core-config-ref normalized-config ':maximum-shard-bytes)
+               8192)
+            (= (d2-core-config-ref normalized-config ':maximum-total-tokens) 9)
+            (= (d2-core-config-ref normalized-config ':maximum-batch-bytes) 102)
+            (eq? (d2-core-config-ref normalized-config ':shuffle-seed) #f)
+            (= (d2-core-config-ref normalized-config ':shuffle-window-rows) 4)
+            (eq? (d2-core-config-ref normalized-config ':packing?) #t)))
+(string-set! source-directory 0 #\X)
+(set-car! (cdr source-config) #f)
+(check "normalized config owns directory and scalar selection"
+       (and (string=? (d2-core-config-ref normalized-config ':directory)
+                      "corpus")
+            (eq? (d2-core-config-ref normalized-config ':packing?) #t)))
+(define (config-rejects? config)
+  (d2-error-matches? (lambda () (d2-core-normalize-config config))
+                     'invalid-argument 'token-dataset-open))
+(check "config non-list rejected" (config-rejects? '#()))
+(check "config odd rejected" (config-rejects? (list ':directory)))
+(check "config improper rejected" (config-rejects? (cons ':directory "x")))
+(define cyclic-config (list ':directory "x"))
+(set-cdr! (cdr cyclic-config) cyclic-config)
+(check "config cyclic rejected" (config-rejects? cyclic-config))
+(define missing-config
+  (make-config "corpus" 2 3 4096 8192 9 102 #f 4 #t))
+(set-cdr! (cdr (cdr missing-config)) (cdr (cdr (cdr (cdr missing-config)))))
+(check "config missing key rejected" (config-rejects? missing-config))
+(define unknown-config
+  (make-config "corpus" 2 3 4096 8192 9 102 #f 4 #t))
+(set-car! unknown-config ':unknown)
+(check "config unknown key rejected" (config-rejects? unknown-config))
+(define duplicate-config
+  (make-config "corpus" 2 3 4096 8192 9 102 #f 4 #t))
+(set-car! duplicate-config ':directory)
+(check "config duplicate key rejected" (config-rejects? duplicate-config))
+(check "config empty directory rejected"
+       (config-rejects? (make-config "" 2 3 4096 8192 9 102 #f 4 #t)))
+(define nul-directory (make-string 7 #\x))
+(string-set! nul-directory 6 (integer->char 0))
+(check "config NUL directory rejected"
+       (config-rejects?
+        (make-config nul-directory
+                     2 3 4096 8192 9 102 #f 4 #t)))
+(check "config directory type rejected"
+       (config-rejects? (make-config 1 2 3 4096 8192 9 102 #f 4 #t)))
+(check "config zero batch rejected"
+       (config-rejects? (make-config "corpus" 0 3 4096 8192 9 102 #f 4 #t)))
+(check "config inexact sequence rejected"
+       (config-rejects?
+        (make-config "corpus" 2 3.0 4096 8192 9 102 #f 4 #t)))
+(check "config oversized manifest limit rejected"
+       (config-rejects?
+        (make-config "corpus" 2 3 (+ d2-core-i64-max 1) 8192 9 102 #f 4 #t)))
+(check "config zero shard limit rejected"
+       (config-rejects? (make-config "corpus" 2 3 4096 0 9 102 #f 4 #t)))
+(check "config negative total rejected"
+       (config-rejects? (make-config "corpus" 2 3 4096 8192 -1 102 #f 4 #t)))
+(check "config zero total admitted"
+       (d2-core-config-valid?
+        (d2-core-normalize-config
+         (make-config "corpus" 2 3 4096 8192 0 102 #f 4 #t))))
+(check "config one-under batch bytes rejected"
+       (config-rejects? (make-config "corpus" 2 3 4096 8192 9 101 #f 4 #t)))
+(check "config exact batch bytes admitted"
+       (d2-core-config-valid?
+        (d2-core-normalize-config
+         (make-config "corpus" 2 3 4096 8192 9 102 #f 4 #t))))
+(check "config negative seed rejected"
+       (config-rejects? (make-config "corpus" 2 3 4096 8192 9 102 -1 4 #t)))
+(check "config maximum seed admitted"
+       (= (d2-core-config-ref
+           (d2-core-normalize-config
+            (make-config "corpus" 2 3 4096 8192 9 102
+                         d2-core-i64-max 4 #t))
+           ':shuffle-seed)
+          d2-core-i64-max))
+(check "config zero shuffle window rejected"
+       (config-rejects? (make-config "corpus" 2 3 4096 8192 9 102 #f 0 #t)))
+(check "config nonboolean packing rejected"
+       (config-rejects?
+        (make-config "corpus" 2 3 4096 8192 9 102 #f 4 1)))
+(check "config batch multiplication overflow rejected"
+       (config-rejects?
+        (make-config "corpus" d2-core-i64-max 2 4096 8192 9
+                     d2-core-i64-max #f 4 #t)))
+
+(define lengths (vector 3 1 5))
+(check "packed empty" (= (d2-core-packed-row-count (vector) 3) 0))
+(check "packed singleton" (= (d2-core-packed-row-count (vector 1) 3) 0))
+(check "packed exact two" (= (d2-core-packed-row-count (vector 2) 3) 1))
+(check "packed formula" (= (d2-core-packed-row-count lengths 3) 3))
+(check "unpacked formula" (= (d2-core-unpacked-row-count lengths 3) 3))
+(check "unpacked singleton omitted"
+       (= (d2-core-unpacked-row-count (vector 1 1 1) 8) 0))
+
+(define packed0 (d2-core-row-plan lengths 3 #t 0))
+(define packed1 (d2-core-row-plan lengths 3 #t 1))
+(define packed2 (d2-core-row-plan lengths 3 #t 2))
+(check "packed full row" (= (vector-ref packed0 5) 3))
+(check "packed final short row" (= (vector-ref packed2 5) 2))
+(check "packed input before shard edge"
+       (coord=? (d2-core-row-position lengths packed0 2 #f) 0 2))
+(check "packed target crosses shard edge"
+       (coord=? (d2-core-row-position lengths packed0 2 #t) 1 0))
+(check "packed next row begins singleton shard"
+       (coord=? (d2-core-row-position lengths packed1 0 #f) 1 0))
+(check "packed next target crosses again"
+       (coord=? (d2-core-row-position lengths packed1 0 #t) 2 0))
+(define many-shards (vector 1 1 1 1 1))
+(define many-plan (d2-core-row-plan many-shards 4 #t 0))
+(check "packed row spans three-plus shard boundaries"
+       (and (coord=? (d2-core-row-position many-shards many-plan 0 #f) 0 0)
+            (coord=? (d2-core-row-position many-shards many-plan 3 #f) 3 0)
+            (coord=? (d2-core-row-position many-shards many-plan 3 #t) 4 0)))
+(check "masked position rejected"
+       (rejects? (lambda ()
+                   (d2-core-row-position lengths packed2 2 #f))))
+
+(define unpacked0 (d2-core-row-plan lengths 3 #f 0))
+(define unpacked1 (d2-core-row-plan lengths 3 #f 1))
+(define unpacked2 (d2-core-row-plan lengths 3 #f 2))
+(check "unpacked first shard" (= (vector-ref unpacked0 3) 0))
+(check "unpacked skips singleton" (= (vector-ref unpacked1 3) 2))
+(check "unpacked final short row" (= (vector-ref unpacked2 5) 1))
+(check "unpacked target stays in shard"
+       (coord=? (d2-core-row-position lengths unpacked2 0 #t) 2 4))
+(check "bad sequence rejected"
+       (rejects? (lambda () (d2-core-packed-row-count lengths 0))))
+(check "bad row rejected"
+       (rejects? (lambda () (d2-core-row-plan lengths 3 #t 3))))
+(check "overflow token total rejected"
+       (rejects? (lambda ()
+                   (d2-core-shard-total
+                    (vector d2-core-i64-max 1)))))
+
+;;; The first u64 is rejected for range 3; counter 1 is then accepted as 5 mod 3.
+(define rejection-calls (vector 0 0 0))
+(define (rejection-source seed window counter)
+  (vector-set! rejection-calls counter (+ (vector-ref rejection-calls counter) 1))
+  (if (= counter 0) d2-core-u64-max 5))
+(define rejection-draw
+  (d2-core-unbiased-draw-with-source 3 7 2 0 rejection-source))
+(check "rejection value" (= (vector-ref rejection-draw 0) 2))
+(check "rejection counter" (= (vector-ref rejection-draw 1) 2))
+(check "rejection consumes exact counters"
+       (and (= (vector-ref rejection-calls 0) 1)
+            (= (vector-ref rejection-calls 1) 1)
+            (= (vector-ref rejection-calls 2) 0)))
+(check "invalid word rejected"
+       (rejects? (lambda ()
+                   (d2-core-unbiased-draw-with-source
+                    2 1 0 0 (lambda (seed window counter) -1)))))
+(check "counter exhaustion is unsupported"
+       (d2-error-matches?
+        (lambda ()
+          (d2-core-unbiased-draw-with-source
+           3 1 0 d2-core-u64-max
+           (lambda (seed window counter) d2-core-u64-max)))
+        'unsupported 'token-dataset-next-batch))
+(define accepted-at-maximum
+  (d2-core-unbiased-draw-with-source
+   8 1 0 d2-core-u64-max
+   (lambda (seed window counter) d2-core-u64-max)))
+(check "maximum counter candidate can be accepted"
+       (and (= (vector-ref accepted-at-maximum 0) 7)
+            (= (vector-ref accepted-at-maximum 1) d2-core-u64-space)))
+(check "draw after accepted maximum is unsupported"
+       (rejects? (lambda ()
+                   (d2-core-unbiased-draw-with-source
+                    2 1 0 (vector-ref accepted-at-maximum 1)
+                    (lambda (seed window counter) 0)))))
+
+;;; Descending ranges are 4,3,2.  Range 3 rejects counter 1 and accepts counter 2.
+(define fisher-calls (make-vector 4 -1))
+(define (fisher-source seed window counter)
+  (vector-set! fisher-calls counter window)
+  (cond ((= counter 0) 3)
+        ((= counter 1) d2-core-u64-max)
+        ((= counter 2) 5)
+        (else 0)))
+(check "fisher selected ordinal"
+       (= (d2-core-permute-ordinal-with-source 6 4 99 0 fisher-source) 1))
+(check "fisher draw order"
+       (and (= (vector-ref fisher-calls 0) 0)
+            (= (vector-ref fisher-calls 1) 0)
+            (= (vector-ref fisher-calls 2) 0)
+            (= (vector-ref fisher-calls 3) 0)))
+(check "unseeded canonical"
+       (= (d2-core-permute-ordinal-with-source
+           6 4 #f 5 (lambda (seed window counter) (raise "must not draw")))
+          5))
+(check "window one identity"
+       (= (d2-core-permute-ordinal-with-source 6 1 4 3 fisher-source) 3))
+(check "second bounded window"
+       (= (d2-core-permute-ordinal-with-source
+           6 4 4 4 (lambda (seed window counter) 1))
+          4))
+(define exact-seed0
+  (vector 3 1 0 2 6 4 7 5 10 9 11 8))
+(check "exact SHA-256 frozen window vector"
+       (let loop ((ordinal 0))
+         (if (= ordinal 12) #t
+             (and (= (d2-core-permute-ordinal 12 4 0 ordinal)
+                     (vector-ref exact-seed0 ordinal))
+                  (loop (+ ordinal 1))))))
+(define exact-seed7
+  (vector 0 2 3 4 1 8 9 5 6 7 10 11))
+(check "exact SHA-256 uneven-window vector"
+       (let loop ((ordinal 0))
+         (if (= ordinal 12) #t
+             (and (= (d2-core-permute-ordinal 12 5 7 ordinal)
+                     (vector-ref exact-seed7 ordinal))
+                  (loop (+ ordinal 1))))))
+(define byte-shuffle-buffer
+  (make-bytevector (d2-core-shuffle-buffer-bytes 12 5) 0))
+(check "bytevector shuffle storage is exact u64 slots"
+       (= (bytevector-length byte-shuffle-buffer) 40))
+(check "bytevector shuffle reproduces frozen vector"
+       (let loop ((ordinal 0))
+         (if (= ordinal 12) #t
+             (and (= (d2-core-permute-ordinal-in-bytevector!
+                      byte-shuffle-buffer 12 5 7 ordinal)
+                     (vector-ref exact-seed7 ordinal))
+                  (loop (+ ordinal 1))))))
+(define byte-identity-buffer
+  (make-bytevector (d2-core-shuffle-buffer-bytes 6 4) 0))
+(check "unseeded bytevector shuffle never hashes"
+       (= (d2-core-permute-ordinal-in-bytevector-with-source!
+           byte-identity-buffer 6 4 #f 5
+           (lambda (seed window counter) (raise "must not draw")))
+          5))
+(check "bytevector shuffle rejects one-under storage"
+       (rejects?
+        (lambda ()
+          (d2-core-fill-window-bytevector!
+           (make-bytevector 31 0) 6 4 1 0))))
+(check "empty dataset has exact zero shuffle bytes"
+       (= (d2-core-shuffle-buffer-bytes 0 100) 0))
+(check "shuffle u64 byte payload overflow rejected"
+       (rejects?
+        (lambda ()
+          (d2-core-shuffle-buffer-bytes
+           (+ (quotient d2-core-i64-max 8) 1)
+           (+ (quotient d2-core-i64-max 8) 1)))))
+(define reuse-calls (vector 0 0 0))
+(define (reuse-source seed window counter)
+  (vector-set! reuse-calls window (+ (vector-ref reuse-calls window) 1))
+  0)
+(define reuse-state
+  (d2-core-state-create (make-bytevector 32 1) "reuse" 300
+                        5 2 100 100 13 170 9 2 #t 6))
+(define reuse-plan
+  (d2-core-plan-next-batch-with-source reuse-state (vector 13) reuse-source))
+(check "batch planner reuses exactly one window buffer"
+       (and (= (vector-length (vector-ref reuse-plan 1)) 5)
+            (= (vector-ref reuse-calls 0) 1)
+            (= (vector-ref reuse-calls 1) 1)
+            (= (vector-ref reuse-calls 2) 1)))
+
+(check "batch payload exact" (= (d2-core-batch-payload-bytes 2 3 102) 102))
+(check "batch payload limit"
+       (rejects? (lambda () (d2-core-batch-payload-bytes 2 3 101))))
+(check "batch payload overflow"
+       (rejects? (lambda ()
+                   (d2-core-batch-payload-bytes
+                    d2-core-i64-max 2 d2-core-i64-max))))
+(check "working payload exact"
+       (= (d2-core-working-payload-bytes 200 1000 2 4 136 5 7)
+          1376))
+(check "working payload component one over is exact"
+       (= (d2-core-working-payload-bytes 201 1000 2 4 136 5 7)
+          1377))
+(check "empty corpus has no shuffle ordinal payload"
+       (= (d2-core-working-payload-bytes 200 1000 2 4 136 50 0)
+          1336))
+(check "working payload addition overflow"
+       (d2-error-matches?
+        (lambda ()
+          (d2-core-working-payload-bytes
+           d2-core-i64-max 1 1 1 17 1 1))
+        'invalid-argument 'token-dataset-open))
+
+(define digest (make-bytevector 32 17))
+(define (new-state digest-value)
+  (d2-core-state-create digest-value "tokenizer-fingerprint" 300
+                        2 3 4096 8192 9 102 #f 4 #t 3))
+(define state (new-state digest))
+(define epoch-start (d2-core-cursor-snapshot state))
+(bytevector-u8-set! digest 0 99)
+(check "state owns digest" (= (bytevector-u8-ref (vector-ref state 1) 0) 17))
+(check "cursor exact 208+F bytes"
+       (= (bytevector-length epoch-start)
+          (+ 208 (bytevector-length (string->utf8 "tokenizer-fingerprint")))))
+(define expected-cursor-checksum
+  (bytevector 196 14 230 113 146 0 4 124 186 50 191 65 107 98 23 60
+              84 235 97 237 17 184 169 117 62 70 72 205 228 79 244 151))
+(define expected-cursor-sha256
+  (bytevector 241 53 29 199 189 189 226 42 126 219 251 67 149 147 146 116
+              251 109 158 20 229 196 90 99 86 29 170 128 85 12 93 37))
+(check "cursor independent checksum golden"
+       (d2-core-bytes=?
+        (bytevector-copy epoch-start (- (bytevector-length epoch-start) 32)
+                         (bytevector-length epoch-start))
+        expected-cursor-checksum))
+(check "cursor independent whole-byte golden"
+       (d2-core-bytes=? (c1-sha256 epoch-start) expected-cursor-sha256))
+(check "cursor canonical roundtrip"
+       (d2-core-bytes=? epoch-start
+                        (d2-core-cursor-encode
+                         (let ((decoded (d2-core-cursor-decode epoch-start)))
+                           (vector-set! decoded 0 'd2-dataset-state)
+                           decoded))))
+(define seeded-state
+  (d2-core-state-create (make-bytevector 32 17) "tokenizer-fingerprint" 300
+                        2 3 4096 8192 9 102 7 4 #t 3))
+(define seeded-cursor (d2-core-cursor-snapshot seeded-state))
+(check "seeded cursor canonical algorithm pair"
+       (and (= (d2-core-load-unsigned-le seeded-cursor 24 4) 1)
+            (= (d2-core-load-unsigned-le seeded-cursor 32 4) 1)
+            (= (d2-core-load-unsigned-le seeded-cursor 96 8) 7)))
+(define first-range (d2-core-next-batch-range state))
+(check "first range"
+       (and (= (vector-ref first-range 0) 0)
+            (= (vector-ref first-range 1) 2)
+            (= (vector-ref first-range 2) 2)))
+(define first-plan
+  (d2-core-plan-next-batch state lengths))
+(check "batch plan fixed rows" (= (vector-length (vector-ref first-plan 1)) 2))
+(check "planning does not advance" (= (d2-core-state-next-ordinal state) 0))
+(d2-core-commit-batch! state first-range)
+(check "commit advances" (= (d2-core-state-next-ordinal state) 2))
+(define before-stale (d2-core-state-next-ordinal state))
+(check "stale commit rejected"
+       (rejects? (lambda () (d2-core-commit-batch! state first-range))))
+(check "stale commit atomic" (= (d2-core-state-next-ordinal state) before-stale))
+(define final-range (d2-core-next-batch-range state))
+(check "final short batch count" (= (vector-ref final-range 1) 1))
+(define final-plan
+  (d2-core-plan-next-batch state lengths))
+(check "unused final row is mask-false sentinel"
+       (eq? (vector-ref (vector-ref final-plan 1) 1) #f))
+(d2-core-commit-batch! state final-range)
+(check "final commit is M" (= (d2-core-state-next-ordinal state) 3))
+(check "stable EOS one" (eq? (d2-core-next-batch-range state) #f))
+(check "stable EOS two" (eq? (d2-core-next-batch-range state) #f))
+
+(define resumed (new-state (make-bytevector 32 17)))
+(d2-core-seek! resumed epoch-start)
+(check "epoch cursor replay" (= (d2-core-state-next-ordinal resumed) 0))
+(d2-core-commit-batch! resumed (d2-core-next-batch-range resumed))
+(define after-first (d2-core-cursor-snapshot resumed))
+(define relocated (new-state (make-bytevector 32 17)))
+(d2-core-seek! relocated after-first)
+(check "relocated identical corpus resumes"
+       (= (d2-core-state-next-ordinal relocated) 2))
+
+(define corrupt (d2-core-cursor-snapshot relocated))
+(bytevector-u8-set! corrupt 128 18)
+(define before-corrupt (d2-core-state-next-ordinal relocated))
+(check "identity mismatch rejected"
+       (rejects? (lambda () (d2-core-seek! relocated corrupt))))
+(check "identity mismatch atomic"
+       (= (d2-core-state-next-ordinal relocated) before-corrupt))
+(check "cursor mutation detached"
+       (= (bytevector-u8-ref (vector-ref relocated 1) 0) 17))
+
+(define (resign! cursor)
+  (let* ((header-bytes (d2-core-load-unsigned-le cursor 12 4))
+         (prefix (bytevector-copy cursor 0 header-bytes))
+         (digest-value
+          (c1-sha256
+           (d2-core-concat d2-core-cursor-checksum-domain prefix))))
+    (d2-core-copy-into! cursor header-bytes digest-value)
+    cursor))
+(define (cursor-with-word source offset width value)
+  (let ((copy (bytevector-copy source 0 (bytevector-length source))))
+    (d2-core-store-unsigned-le! copy offset width value)
+    copy))
+(define (cursor-with-byte source offset value)
+  (let ((copy (bytevector-copy source 0 (bytevector-length source))))
+    (bytevector-u8-set! copy offset value)
+    copy))
+
+(check "cursor carrier precedence"
+       (d2-error-matches? (lambda () (d2-core-seek! relocated '#()))
+                          'invalid-argument 'token-dataset-seek!))
+(check "cursor physical-size precedence"
+       (d2-error-message-is?
+        (lambda () (d2-core-seek! relocated (make-bytevector 208 0)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor has a noncanonical physical length"))
+(define bad-magic-and-version (cursor-with-byte after-first 0 0))
+(d2-core-store-unsigned-le! bad-magic-and-version 8 2 2)
+(check "cursor magic precedes version"
+       (d2-error-message-is?
+        (lambda () (d2-core-seek! relocated bad-magic-and-version))
+        'corrupt-data 'token-dataset-seek! "D2 cursor magic mismatch"))
+(define bad-header-and-version (cursor-with-word after-first 12 4 176))
+(d2-core-store-unsigned-le! bad-header-and-version 8 2 2)
+(check "cursor header arithmetic precedes version"
+       (d2-error-message-is?
+        (lambda () (d2-core-seek! relocated bad-header-and-version))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor lengths are noncanonical"))
+(define bad-version-and-features (cursor-with-word after-first 8 2 2))
+(d2-core-store-unsigned-le! bad-version-and-features 16 4 1)
+(check "cursor version precedes feature identifier"
+       (d2-error-matches?
+        (lambda () (d2-core-seek! relocated bad-version-and-features))
+        'version-mismatch 'token-dataset-seek!))
+(define bad-features-and-checksum-id (cursor-with-word after-first 16 4 1))
+(d2-core-store-unsigned-le! bad-features-and-checksum-id 20 4 2)
+(check "cursor feature identifier precedence"
+       (d2-error-message-is?
+        (lambda () (d2-core-seek! relocated bad-features-and-checksum-id))
+        'unsupported 'token-dataset-seek!
+        "D2 cursor requires unknown features"))
+(check "cursor checksum identifier precedence"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 20 4 2)))
+        'unsupported 'token-dataset-seek!
+        "D2 cursor checksum algorithm is unknown"))
+(check "cursor shuffle identifier precedence"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 24 4 2)))
+        'unsupported 'token-dataset-seek!
+        "D2 cursor shuffle algorithm is unknown"))
+(check "cursor cross-field canonicality precedes checksum"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 28 4 2)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor semantic fields are noncanonical"))
+(check "cursor positive fields checked before checksum"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 48 8 0)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor semantic fields are noncanonical"))
+(define bad-working-payload
+  (cursor-with-word after-first 64 8 d2-core-i64-max))
+(d2-core-store-unsigned-le! bad-working-payload 72 8 1)
+(check "cursor working-payload overflow precedes checksum"
+       (d2-error-message-is?
+        (lambda () (d2-core-seek! relocated bad-working-payload))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor semantic fields are noncanonical"))
+(check "cursor shuffle/seed pair checked before checksum"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 24 4 1)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor semantic fields are noncanonical"))
+(check "cursor absent seed must serialize zero"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 96 8 1)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor semantic fields are noncanonical"))
+(check "cursor reserved bytes checked before checksum"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-word after-first 168 8 1)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor semantic fields are noncanonical"))
+(check "cursor UTF-8 checked before checksum"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-byte after-first 176 255)))
+        'corrupt-data 'token-dataset-seek!
+        "D2 cursor fingerprint is not canonical UTF-8"))
+(check "cursor checksum precedes dataset identity"
+       (d2-error-message-is?
+        (lambda ()
+          (d2-core-seek! relocated (cursor-with-byte after-first 128 18)))
+        'corrupt-data 'token-dataset-seek! "D2 cursor checksum mismatch"))
+(define wrong-options (cursor-with-word after-first 104 8 5))
+(resign! wrong-options)
+(check "cursor same-options validation after checksum"
+       (d2-error-matches? (lambda () (d2-core-seek! relocated wrong-options))
+                          'invalid-argument 'token-dataset-seek!))
+(define wrong-row-count (cursor-with-word after-first 112 8 4))
+(resign! wrong-row-count)
+(check "cursor recomputed row count validation"
+       (d2-error-matches? (lambda () (d2-core-seek! relocated wrong-row-count))
+                          'invalid-argument 'token-dataset-seek!))
+(define forged (d2-core-cursor-snapshot relocated))
+(d2-core-store-unsigned-le! forged 120 8 4)
+(resign! forged)
+(check "cursor ordinal above M rejected"
+       (d2-error-matches? (lambda () (d2-core-seek! relocated forged))
+                          'corrupt-data 'token-dataset-seek!))
+(define bad-pair (d2-core-cursor-snapshot relocated))
+(d2-core-store-unsigned-le! bad-pair 24 4 1)
+(resign! bad-pair)
+(check "shuffle/seed pair must be canonical"
+       (rejects? (lambda () (d2-core-seek! relocated bad-pair))))
+(check "oversized fingerprint rejects before cursor allocation"
+       (rejects? (lambda ()
+                   (d2-core-state-create
+                    (make-bytevector 32 0) (make-string 193 #\a) 1
+                    1 1 1 1 1 17 #f 1 #t 0))))
+(check "bad batch corpus identity rejected"
+       (rejects? (lambda ()
+                   (d2-core-plan-next-batch relocated (vector 7)))))
+
+(define state-from-config
+  (d2-core-state-create-from-config
+   (make-bytevector 32 17) "tokenizer-fingerprint" 300
+   normalized-config 3))
+(check "normalized config constructs exact cursor identity"
+       (d2-core-bytes=? (d2-core-cursor-snapshot state-from-config) epoch-start))
+(check "cursor minimum fingerprint physical bound"
+       (= (bytevector-length
+           (d2-core-cursor-snapshot
+            (d2-core-state-create (make-bytevector 32 0) "x" 1
+                                  1 1 1 1 0 17 #f 1 #t 0)))
+          209))
+(check "cursor maximum fingerprint physical bound"
+       (= (bytevector-length
+           (d2-core-cursor-snapshot
+            (d2-core-state-create (make-bytevector 32 0) (make-string 192 #\a) 1
+                                  1 1 1 1 0 17 #f 1 #t 0)))
+          400))
+(check "state rejects working-payload overflow"
+       (rejects?
+        (lambda ()
+          (d2-core-state-create-from-config
+           (make-bytevector 32 0) "x" 1
+           (d2-core-normalize-config
+            (make-config "corpus" 1 1 d2-core-i64-max 1 0 17 #f 1 #t))
+           0))))
+
+(display "D2 SEMANTIC CORE PASS: ")
+(display passed)
+(display " checks")
+(newline)

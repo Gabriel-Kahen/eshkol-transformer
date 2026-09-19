@@ -106,8 +106,10 @@ reported losses and metrics accumulate and return `f32` in the first release.
 
 ## 4. Ownership, lifetime, mutation, and aliases
 
-- Configuration values, tokenizer values, capability reports, cursors, error values,
-  and persistence metadata are immutable snapshots owned by the caller.
+- Configuration values, tokenizer values, capability reports, error values, and
+  persistence metadata are immutable snapshots owned by the caller. Cursors are
+  immutable snapshots except for D2's explicitly detached, newly owned mutable
+  canonical bytevector.
 - A dataset, module/model, optimizer, trainer, generator, and cache is an opaque,
   exclusively mutable object. It is not safe for concurrent mutation.
 - Ordinary tensor inputs are borrowed for the duration of a call. Returned tensors
@@ -126,8 +128,11 @@ reported losses and metrics accumulate and return `f32` in the first release.
   while retaining every logical path and tie relationship. `module-buffers` snapshots
   non-trainable tensors in the same path order using the state-dict accessors below. Optimizer
   parameter groups refer to stable parameter paths, not raw addresses.
-- Dataset and generator calls invalidate only their receiver's previous transient
-  iteration result; returned batches/tensors remain owned by the caller.
+- A D2 dataset owns at most one live native batch carrier. Returned batch and tensor
+  shells are authenticated caller-region-managed aliases to that generation, not
+  independently owned carrier clones. `token-batch-release!` invalidates them and
+  frees the native carrier; shell-region storage remains caller-owned. Other dataset
+  and generator lifetime rules remain operation-specific.
 - `token-dataset-close!` is idempotent. Other dataset operations after close raise
   `invalid-state`. Checkpoint writes retain no caller-owned state after return.
 - `trainer-create` takes an exclusive lease on its dataset, model, and optimizer until
@@ -319,28 +324,59 @@ Whole-directory atomicity, `fsync`, and power-loss durability are not claimed.
 Deterministic I/O faults exist only in a separately linked test archive; production
 contains no fault-injection branch or write fallback.
 
+The accepted D2 decision explicitly amends A0 ownership: the three batch accessors
+below return stable read-only state-backed identities rather than newly owned tensor
+clones, and `token-dataset-cursor` returns newly owned detached mutable canonical
+bytevector storage rather than an immutable registry object.
+
 | Operation | Shapes and semantics | Dtype/device/ownership/errors/gradient |
 |---|---|---|
-| `token-dataset-open config tokenizer` | Open a deterministic, finite or explicitly streaming token source. Tokenizer fingerprint must match source metadata. | New mutable receiver; CPU control plane; config/I/O/version/checksum/unsupported errors; no gradient. |
-| `token-dataset-next-batch dataset` | Return end-of-stream or an immutable batch with `input-ids i64[N,T]`, `targets i64[N,T]`, `loss-mask bool[N,T]` or `f32[N,T]`. Targets are the declared next-token shift; all IDs are in `[0,V)`. | New contiguous tensors on configured verified device; no implicit copy/fallback; errors above plus `invalid-state`; no gradient. |
-| `token-dataset-end? value` | True only for the unique immutable end-of-stream sentinel returned by `token-dataset-next-batch`. | CPU; no mutation or gradient. |
-| `token-dataset-cursor dataset` | Snapshot all ordering/shuffle/packing/shard offsets needed to reproduce the next batch exactly. | New immutable CPU value; `invalid-state`; no gradient. |
-| `token-dataset-seek! dataset cursor` | Validate identity/version/checksum then make the next batch identical to the captured continuation. | Atomic receiver mutation; `invalid-argument`, `version-mismatch`, `corrupt-data`, `invalid-state`; no gradient. |
-| `token-dataset-close! dataset` | Release resources; idempotent. | Mutates receiver only; `io`; no gradient. |
-| `token-batch-inputs batch` | Return newly owned `i64[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-targets batch` | Return newly owned `i64[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-loss-mask batch` | Return newly owned `bool[N,T]` or nonnegative finite `f32[N,T]`. | Same device, contiguous; no gradient. |
-| `token-batch-validate batch` | Check ranks/extents/dtypes/device/contiguity/ranges and require positive total mask weight. | Returns `#t`; structured errors; no gradient. |
+| `token-dataset-open config tokenizer` | Open the accepted finite D1 source from the exact ten-key flat D2 option list. Deep-copy options, bind tokenizer/corpus identity, and validate every bounded shard before publication. | New mutable CPU receiver; retains neither caller config nor tokenizer; config/I/O/version/corruption/unsupported errors; no gradient. |
+| `token-dataset-next-batch dataset` | Return the stable EOS sentinel or one fixed `[N,T]` shifted batch. Packed rows may cross D1 shards; unpacked rows do not. | Dataset owns at most one live batch; no implicit copy/fallback; late failure is cursor-atomic; no gradient. |
+| `token-dataset-end? value` | True only for the unique immutable EOS sentinel returned after the final live batch is released. | CPU; no mutation or gradient. |
+| `token-dataset-cursor dataset` | Snapshot the exact next ordinal and bound identity/options in canonical `ESHKDCU1` 1.0 bytes. | Newly owned detached mutable bytevector of exactly `208+F` bytes; no native registry/storage; no gradient. |
+| `token-dataset-seek! dataset cursor` | Fully validate canonical bytes, checksum, identity/options, recomputed row count, and ordinal before restoring the next batch. | One atomic receiver commit; `invalid-argument`, `version-mismatch`, `unsupported`, `corrupt-data`, `invalid-state`; no gradient. |
+| `token-dataset-close! dataset` | Best-effort release the live batch, unregister resources, and close. | Idempotent receiver mutation; dependent shells become stale; no gradient. |
+| `token-batch-inputs batch` | Return the batch's stable read-only state-backed opaque `i64[N,T]` identity. | CPU dense row-major; zero offset; natural alignment; no allocation/copy or gradient. |
+| `token-batch-targets batch` | Return the batch's stable read-only state-backed opaque `i64[N,T]` identity. | CPU dense row-major; zero offset; natural alignment; no allocation/copy or gradient. |
+| `token-batch-loss-mask batch` | Return the batch's stable read-only state-backed opaque one-byte `bool[N,T]` identity. | CPU dense row-major; zero offset; no f32 alternative, allocation/copy, or gradient. |
+| `token-batch-validate batch` | Validate the current authenticated live generation and its fixed carrier invariants. | Returns `#t`; forged/wrong-kind is `invalid-argument`, stale is `invalid-state`; no gradient. |
+| `token-batch-release! batch` | Invalidate the batch generation and all three tensor identities before the fixed destruction tail, end its native borrow lifetime, and free the exact native `17*N*T` carrier. | Every exact authentic already-issued generation releases idempotently, including after successor, seek, or close; no per-generation tombstone or fallback; active borrow is `invalid-state`. Caller-region shell storage is not individually reclaimed. |
 
-No batch dimension, sequence dimension, or mask broadcasting is permitted. D1/D2 own
-the shard and cursor formats.
+No batch dimension, sequence dimension, or mask broadcasting is permitted. A batch
+owns exactly two CPU dense i64 planes and one CPU dense one-byte bool plane with
+semantic payload `17*N*T`. There is no causal mask, alternate dtype/device, cast,
+transfer, scalar, or allocation fallback. D1 owns shard bytes; D2 owns the
+`ESHKDCU1` cursor specified in [D2_SHARD_LOADER.md](D2_SHARD_LOADER.md).
 
 `token-dataset-seek!` commits only after complete cursor validation. A failed
-`token-dataset-next-batch` does not advance the cursor. `token-dataset-close!` always
-transitions to closed after best-effort release; an I/O release failure is reported,
-but later calls still observe closed.
-After end-of-stream, repeated `token-dataset-next-batch` calls return the same sentinel
-without changing state until seek or close.
+`token-dataset-next-batch` does not advance the cursor. A reviewed same-aggregate
+consumer may resolve a tensor identity to its unchanged K1 view only within one
+synchronous begin/use/end call; raw views and pointers cannot escape. Release and
+close reject before mutation while that borrow is active. `token-dataset-close!`
+always leaves the dataset closed after its nonrecoverable release tail. After EOS,
+repeated next calls return the same sentinel without changing state until seek or
+close. D2 is serialized and makes no concurrent or reentrant mutation claim.
+
+The pinned Eshkol runtime has no tracing garbage collector. In the accepted D2
+implementation, every long-running Eshkol loop must enclose each next/validate/use/
+release interval in one lexical `with-region`. Batch and tensor shells must not cross
+that boundary unless the caller deliberately retains or promotes them and accounts
+for their caller-owned closure/environment/capability storage. The dataset retains
+only the last-issued generation and current status, not any shell, per-generation authenticator, or
+tombstone. This caller-region interpretation is
+[accepted with live-shell conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5608140148)
+and changes no public name, arity, carrier, cursor, or format. Authentic-alias stale
+and idempotent-release guarantees require a live Eshkol shell allocation. After
+region exit, an unretained/unpromoted shell is inaccessible; accessing freed region
+storage has no safety or structured-error guarantee. Merely keeping a raw reference
+does not preserve allocation lifetime. A genuinely retained/promoted live alias is
+caller-owned and keeps the accepted stale/idempotent semantics.
+
+The canonical D2 aggregate authenticates shells using the compiled code identities
+of two fixed private constructors, dataset and batch. Native state stores only those
+two per-process code addresses. This is neither a public or serialized ABI nor a
+portable closure-layout or cross-aggregate identity contract.
 
 ## 10. Modules and models
 
@@ -425,13 +461,20 @@ reference is not a reclamation guarantee.
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
 | `optimizer-create config parameter-tree` | Validate unique paths, groups, dtypes/devices, hyperparameters, alias graph, and stable module/handle identities. | New mutable receiver retaining parameter handles; mismatch/unsupported errors; no gradient. |
-| `optimizer-step! optimizer` | Require valid finite gradients as configured, compute one atomic update, and advance step/RNG/scheduler state only on success. | Mutates bound parameters and optimizer state; no implicit clipping, precision conversion, fallback, or approximate gradient. `invalid-state`, shape/dtype/device/unsupported/determinism errors. |
+| `optimizer-step! optimizer` | Require valid finite gradients as configured, compute one atomic update, and advance the completed-update counter and derived schedule only on success. O2 v1 has no RNG state. | Mutates bound parameters and optimizer state; no implicit gradient clearing, precision conversion, fallback, or approximate gradient. `invalid-state`, shape/dtype/device/unsupported/`determinism-unavailable` errors. |
 | `optimizer-zero-grad! optimizer` | Clear gradients of bound unique parameters once. | Mutates gradient slots; `invalid-state`; no gradient. |
 | `optimizer-state optimizer` | Deep snapshot keyed by stable parameter paths, including groups, step counters, schedules, and precision policy. | New owned state; `invalid-state`; no graph. |
 | `optimizer-load-state! optimizer state` | Strict atomic load against bound paths/aliases/shapes/dtypes/devices. | Mutates optimizer state, not parameter values; mismatch/version/corruption errors; no graph. |
+| `optimizer-state-release! state` | Release the exact registered, detached O2 snapshot and invalidate its state-backed moment handles. | Idempotent arity-1 mutation for the exact dead token; release has no source-optimizer backreference and remains valid after that source later accumulates or steps; malformed, forged, copied, unregistered, or cross-aggregate values are `invalid-argument`; recognized busy or releasing state is `invalid-state`. |
 
 O2 owns algorithms and state schema. Mixed precision is optional Wave 4 behavior and
 must raise `unsupported` in the first release unless separately verified.
+The public optimizer state is an opaque, explicitly releasable receiver representing
+O2's versioned byte-independent logical projection; it is not itself the future C2
+serialized list or bytes. O2 v1 defines no optimizer-destroy operation. A live
+optimizer and its two moment tensors per unique parameter remain process-local until
+exit, while released state moment carriers are reclaimed and only inert identity
+tombstones remain.
 
 ## 12. Trainer
 
@@ -522,6 +565,7 @@ sampling and cache implementation.
 | `checkpoint-inspect path policy` | Validate envelope, policy bounds, versions, entry table, and checksums without constructing executable objects; return checkpoint metadata only. | New immutable CPU metadata; `io`, `corrupt-data`, `version-mismatch`, `unsupported`; no gradient. |
 | `checkpoint-load path policy capability-report` | Verify all bytes/checksums/limits before exposing a data-only state snapshot; reject code, callbacks, foreign paths, and unknown required features. Require verified tensor/device capabilities for the policy device. Return exactly a deep-owned trainer state accepted by `trainer-load-state!`. | New owned CPU control metadata plus tensors on exactly the policy device; no implicit conversion/transfer/fallback and no graph. |
 | `checkpoint-save! state path policy options` | Accept only a complete `trainer-state` result, validate it and policy limits, write a same-directory temporary file, flush as required, then atomically replace target. | State borrowed and unchanged; `io`, `invalid-state`, `unsupported`; no graph. |
+| `trainer-state-release! state` | Release the exact registered deep-owned detached trainer state. Exact dead release is idempotent; busy/releasing state rejects without a second cleanup. | Invalidates dependent handles, drains P1/O2 component owners exactly once, and returns no tensor; `invalid-argument`, `invalid-state`, or post-cleanup `internal`; no graph. |
 
 The only save options are `':overwrite? bool` and
 `':required-features symbol-list`. `checkpoint-metadata-ref metadata key` returns a
@@ -540,9 +584,10 @@ temporary may remain after I/O failure.
 Checkpoint, tokenizer, token-shard, cursor, resolved-config, and native ABI formats are
 separate version domains. This contract requires an envelope with a format identifier,
 major/minor version, required-feature list, declared size limits, checksum algorithm,
-and checksums. It deliberately commits to **no magic bytes, encoding, field numbers,
-container layout, tensor encoding, or migration algorithm**. T1/D1/C1/X1/K1 must
-propose those decisions through issue #1 before merging a public format or ABI.
+and checksums. The accepted C2 `eshkol-training-state` 1.0 encoding and detached-owner
+lifecycle are specified in [C2_TRAINING_STATE.md](C2_TRAINING_STATE.md); other formats
+do not inherit its bytes or migration policy. Every future public format or ABI change
+still requires an issue #1 version/migration decision.
 
 Data loaders must enforce configurable hard limits before allocation and must never
 evaluate code, resolve arbitrary object constructors, follow embedded paths, or load

@@ -338,8 +338,12 @@ for repetition in 1 2; do
     --compile-only -I "${PROJECT_ROOT}/lib" \
     --emit-depfile "${t2_boundary_tmp}/caller.d" "${caller_source}" \
     -o "${t2_boundary_tmp}/caller.o"
+  # The historical T2 aggregate remains checked above at its accepted 47/41
+  # boundary. The current facade is inspected in caller.o, while the predecessor
+  # executable selects the frozen C1 persistence facade and links through D2.
   run_compiler "caller-link-${repetition}" --strict-types --no-stdlib \
-    -I "${PROJECT_ROOT}/lib" -L "${production_one}" \
+    -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
+    -I "${PROJECT_ROOT}/lib" -L "$(project_build_dir)/d2" \
     --lib eshkol_transformer_wave2 "${caller_source}" \
     -o "${t2_boundary_tmp}/caller"
   timeout --foreground --signal=TERM --kill-after=5s 60s \
@@ -402,7 +406,15 @@ done
 nm -u --format=posix "${t2_boundary_tmp}/caller-1.o" | \
   awk '{ print $1 }' | grep '^et_e1b_' | LC_ALL=C sort -u \
   >"${t2_boundary_tmp}/caller-wrapper-refs.txt"
-cmp "${PROJECT_ROOT}/native/t2_wave2_defined_symbols.txt" \
+{
+  cat "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt"
+  printf '%s\n' \
+    et_e1b_public_c2_checkpoint_inspect_v1 \
+    et_e1b_public_c2_checkpoint_load_v1 \
+    et_e1b_public_c2_checkpoint_metadata_ref_v1 \
+    et_e1b_public_c2_checkpoint_save_v1
+} | LC_ALL=C sort -u >"${t2_boundary_tmp}/current-public-wrapper-refs.txt"
+cmp "${t2_boundary_tmp}/current-public-wrapper-refs.txt" \
   "${t2_boundary_tmp}/caller-wrapper-refs.txt"
 if ldd "${t2_boundary_tmp}/caller-1" | grep -Eiq 'python|torch'; then
   die "Wave 2 public caller links a Python or Torch runtime"

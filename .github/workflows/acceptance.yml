@@ -1,0 +1,55 @@
+name: Exhaustive acceptance
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: exhaustive-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  select:
+    name: Select exact-tree evidence
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    outputs:
+      reused: ${{ steps.evidence.outputs.reused }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Validate topology and selection
+        run: |
+          make test-ci-topology
+          python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
+          python3 -m unittest -v tests.q0.test_python_isolation
+      - name: Find completed exact-tree full CI
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVENT: ${{ github.event_name }}
+        run: python3 tests/ci/evidence.py select
+  full:
+    name: Fresh full suites
+    needs: select
+    if: needs.select.outputs.reused == 'false'
+    uses: ./.github/workflows/full-coverage.yml
+  accepted:
+    name: Exhaustive acceptance result
+    needs: [select, full]
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Require verified evidence or fresh complete coverage
+        env:
+          SELECTION_RESULT: ${{ needs.select.result }}
+          REUSED: ${{ needs.select.outputs.reused }}
+          FULL_RESULT: ${{ needs.full.result }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$REUSED:$FULL_RESULT" in
+            true:skipped|false:success) ;;
+            *) exit 1 ;;
+          esac

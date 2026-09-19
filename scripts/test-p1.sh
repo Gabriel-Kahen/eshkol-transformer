@@ -673,4 +673,6 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
   die "P1 strict load creates or binds a temporary expected state"
 fi
 
-printf 'P1 PASS: E1B-integrated public/private packaging, 419 structural checks, 405 native checks, 169 registry-atomicity checks, sanitizers, negatives, atomicity, and determinism\n'
+/usr/bin/bash "${PROJECT_ROOT}/scripts/check-p1-registry-publication.sh"
+
+printf 'P1 PASS: E1B-integrated packaging, structural/native/registry checks, root-publication IR and poison proof, sanitizers, negatives, atomicity, and determinism\n'

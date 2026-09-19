@@ -1,0 +1,113 @@
+(load "i2_wave2_root.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C2 O2 COMPOSITION FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (set-u32-le! bytes index bits)
+  (let ((offset (* index 4)))
+    (bytevector-u8-set! bytes offset (modulo bits 256))
+    (bytevector-u8-set! bytes (+ offset 1) (modulo (quotient bits 256) 256))
+    (bytevector-u8-set! bytes (+ offset 2)
+                        (modulo (quotient bits 65536) 256))
+    (bytevector-u8-set! bytes (+ offset 3)
+                        (modulo (quotient bits 16777216) 256))))
+
+(define borrowed-name (string-copy "weight"))
+(define config
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (list (list borrowed-name))
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define paths (list (list borrowed-name)))
+(define aliases '())
+(define avg (make-bytevector 16 0))
+(define sq (make-bytevector 16 0))
+(set-u32-le! avg 0 2147483648)
+(set-u32-le! avg 1 1)
+(set-u32-le! avg 2 1056964608)
+(set-u32-le! avg 3 3204448256)
+(set-u32-le! sq 0 0)
+(set-u32-le! sq 1 8388608)
+(set-u32-le! sq 2 1048576000)
+(set-u32-le! sq 3 1065353216)
+(define entries (vector (vector (list borrowed-name) '(4) avg sq)))
+(define request
+  (vector o2-c2-reconstruct-tag config paths aliases 17 entries
+          'checkpoint-load #f))
+(define returned (o2-state-reconstruct-internal request))
+(define state (vector-ref request 7))
+(check "reconstruction returns the same request envelope" (eq? returned request))
+(check "reconstruction publishes an O2 state identity" state)
+
+;;; The native state must own the supplied moments before publication.
+(bytevector-u8-set! avg 0 165)
+(bytevector-u8-set! sq 0 165)
+(string-set! borrowed-name 0 #\X)
+(define copied-avg (make-bytevector 16 165))
+(define copied-sq (make-bytevector 16 165))
+(check "moment copy returns its exact destination"
+       (eq? copied-avg
+            (o2-state-copy-moment-bits-internal
+              (vector state 0 0 copied-avg 4 'checkpoint-save))))
+(check "second moment copy returns its exact destination"
+       (eq? copied-sq
+            (o2-state-copy-moment-bits-internal
+              (vector state 0 1 copied-sq 4 'checkpoint-save))))
+(check "exp-avg bits survive caller mutation"
+       (and (= (bytevector-u8-ref copied-avg 0) 0)
+            (= (bytevector-u8-ref copied-avg 4) 1)
+            (= (bytevector-u8-ref copied-avg 10) 0)
+            (= (bytevector-u8-ref copied-avg 11) 63)
+            (= (bytevector-u8-ref copied-avg 15) 191)))
+(check "exp-avg-sq bits survive caller mutation"
+       (and (= (bytevector-u8-ref copied-sq 0) 0)
+            (= (bytevector-u8-ref copied-sq 6) 128)
+            (= (bytevector-u8-ref copied-sq 11) 62)
+            (= (bytevector-u8-ref copied-sq 15) 63)))
+
+(define module (i2-module-create-internal))
+(define parameter (i2-parameter-create-uniform-internal 4 0))
+(i2-module-register-parameter-internal! module "weight" parameter)
+(define target-config
+  '(transformer-optimizer-config 1 0 () adamw f32 cpu
+    (none) (constant)
+    ((group (("weight")) "3dcccccd" "3f000000" "3f000000"
+            "3a83126f" "00000000"))))
+(define optimizer
+  (o2-public-optimizer-create target-config (module-parameters module)))
+(check "published logical envelope is independent of caller path/config storage"
+       (o2-public-optimizer-load-state! optimizer state))
+(check "load observes the reconstructed completed-update counter"
+       (= (o2-optimizer-completed-updates-internal optimizer) 17))
+
+(define bad-request
+  (vector o2-c2-reconstruct-tag config paths aliases 0
+          (vector (vector '("weight") '(2 3) copied-avg copied-sq))
+          'checkpoint-load #f))
+(check "failed reconstruction leaves output empty"
+       (guard (value
+                (#t
+                  (and (transformer-error? value)
+                       (eq? 'shape-mismatch
+                            (transformer-error-category value))
+                       (eq? (vector-ref bad-request 7) #f))))
+         (o2-state-reconstruct-internal bad-request)
+         #f))
+
+(check "reconstructed state releases through the ordinary O2 lifecycle"
+       (o2-public-optimizer-state-release! state))
+(display "C2 O2 composition PASS: ")
+(display checks)
+(display " checks")
+(newline)

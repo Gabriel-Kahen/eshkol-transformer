@@ -1,0 +1,2 @@
+(require transformer.persistence)
+(persistence-policy 1 1 1 1)

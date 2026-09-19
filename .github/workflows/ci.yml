@@ -5,83 +5,109 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  f0-linux:
-    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
+  topology:
+    name: CI topology
     runs-on: ubuntu-22.04
-    timeout-minutes: 240
-    env:
-      CC: clang-21
-      CXX: clang++-21
-      ESHKOL_CXX_COMPILER: clang++-21
-      LLVM_CONFIG_EXECUTABLE: llvm-config-21
-      ESHKOL_JOBS: '2'
-      A0_COMPILER_TIMEOUT_SECONDS: '60'
-      P1_LSAN: '1'
-      C1_LSAN: '1'
-      I2_ASAN_DETECT_LEAKS: '1'
-      N2_ASAN_DETECT_LEAKS: '1'
-      N3K_ASAN_DETECT_LEAKS: '1'
+    timeout-minutes: 3
+    outputs:
+      run_full: ${{ steps.scope.outputs.run_full }}
+      scope: ${{ steps.scope.outputs.scope }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Install host dependencies
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: |
-          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
-          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
-          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
-          sudo apt-get update -o Acquire::Retries=5
-          sudo apt-get install -y \
-            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
-            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
-            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
-            ripgrep
-          test "$(llvm-config-21 --version)" = '21.1.8'
-
-      - name: Select pinned N2 oracle Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
-          python-version: '3.14.6'
-
-      - name: Install pinned N2 development oracle
+          fetch-depth: 0
+      - run: make test-ci-topology
+      - name: Test change selection
+        run: |
+          python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
+          python3 -m unittest -v tests.q0.test_python_isolation
+      - name: Select required suites
+        id: changes
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.sha }}
+          CI_PUSH_BEFORE: ${{ github.event.before }}
+          CI_PUSH_FORCED: ${{ github.event.forced }}
+          CI_PUSH_CREATED: ${{ github.event.created }}
+          CI_PUSH_DELETED: ${{ github.event.deleted }}
+          CI_REF: ${{ github.ref }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
-          python3 -m venv "$RUNNER_TEMP/n2-oracle"
-          "$RUNNER_TEMP/n2-oracle/bin/python" -m pip install \
-            --disable-pip-version-check \
-            -r tests/n2/requirements-reference.lock
-          echo "N2_ORACLE_PYTHON=$RUNNER_TEMP/n2-oracle/bin/python" >> "$GITHUB_ENV"
-
-      - name: Build pinned Eshkol toolchain
+          run_full=true
+          if [[ "$CI_EVENT" == pull_request ]]; then
+            run_full=$(python3 tests/ci/changed_paths.py --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA")
+          elif [[ "$CI_EVENT" == push ]]; then
+            run_full=$(python3 tests/ci/changed_paths.py --push --base "$CI_PUSH_BEFORE" --head "$CI_HEAD_SHA")
+          fi
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          if [[ "$run_full" == false ]]; then
+            echo 'Prose-only candidate: main pushes additionally require completed base evidence; this is not full-coverage evidence.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Full compiler and acceptance suites are required.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Find merged PR full-coverage evidence
+        id: evidence
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVENT: ${{ github.event_name }}
+          CI_PROSE_ONLY: ${{ steps.changes.outputs.run_full == 'false' }}
+          CI_PUSH_BEFORE: ${{ github.event.before }}
+        run: python3 tests/ci/evidence.py select-push
+      - name: Select execution scope
+        id: scope
+        env:
+          REQUIRED: ${{ steps.changes.outputs.run_full }}
+          REUSED: ${{ steps.evidence.outputs.reused }}
+          DOCS_VERIFIED: ${{ steps.evidence.outputs.docs_verified }}
+          CI_EVENT: ${{ github.event_name }}
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make toolchain'
+        run: |
+          case "$CI_EVENT:$REQUIRED:$REUSED:$DOCS_VERIFIED" in
+            pull_request:false::|push:false:false:true) scope=docs; run_full=false ;;
+            push:true:true:false) scope=reused; run_full=false ;;
+            push:true:false:false|push:false:false:false|pull_request:true::|merge_group:true::|workflow_dispatch:true::) scope=full; run_full=true ;;
+            *) exit 1 ;;
+          esac
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
 
-      - name: Fresh configure
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make clean && make configure'
+  blocking:
+    name: Full suites
+    needs: topology
+    if: needs.topology.outputs.run_full == 'true'
+    uses: ./.github/workflows/full-coverage.yml
 
-      - name: Build
+  f0-linux:
+    name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
+    if: ${{ always() }}
+    needs: [topology, blocking]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Require successful checks for the selected scope
+        env:
+          TOPOLOGY_RESULT: ${{ needs.topology.result }}
+          BLOCKING_RESULT: ${{ needs.blocking.result }}
+          SCOPE: ${{ needs.topology.outputs.scope }}
         shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make build'
-
-      - name: Test (F0/A0/A2/B0/C1/D1/E1/E1B/I1/I2/K1/L2/N2/N3K/P1/Q0/T1/T2/X1)
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make test'
-
-      - name: Smoke
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make smoke'
-
-      - name: Reproducible smoke benchmark
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: /usr/bin/bash -c 'make benchmark'
+        run: |
+          test "$TOPOLOGY_RESULT" = success
+          case "$SCOPE:$BLOCKING_RESULT" in
+            full:success|docs:skipped|reused:skipped) ;;
+            *) exit 1 ;;
+          esac

@@ -1,0 +1,74 @@
+;;; Installed O2 optimizer facade. The source-composed O2 aggregate owns the
+;;; implementation and all P1/I2/native authority; this module only transports
+;;; fixed-arity boxed values across that reviewed public boundary.
+
+(require transformer.error_consumer)
+
+(provide optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
+         optimizer-load-state! optimizer-state-release!)
+
+(define o2-safe-optimizer-create
+  (let ()
+    (extern void o2-public-optimizer-create ptr ptr ptr
+            :real et_e1b_public_o2_optimizer_create_v1)
+    (lambda (config parameter-tree)
+      (let ((output (vector #f)))
+        (o2-public-optimizer-create
+          (vector config) (vector parameter-tree) output)
+        (vector-ref output 0)))))
+(define (optimizer-create config parameter-tree)
+  (o2-safe-optimizer-create config parameter-tree))
+
+(define o2-safe-optimizer-step
+  (let ()
+    (extern void o2-public-optimizer-step ptr ptr
+            :real et_e1b_public_o2_optimizer_step_v1)
+    (lambda (optimizer)
+      (let ((output (vector #f)))
+        (o2-public-optimizer-step (vector optimizer) output)
+        (vector-ref output 0)))))
+(define (optimizer-step! optimizer) (o2-safe-optimizer-step optimizer))
+
+(define o2-safe-optimizer-zero-grad
+  (let ()
+    (extern void o2-public-optimizer-zero-grad ptr ptr
+            :real et_e1b_public_o2_optimizer_zero_grad_v1)
+    (lambda (optimizer)
+      (let ((output (vector #f)))
+        (o2-public-optimizer-zero-grad (vector optimizer) output)
+        (vector-ref output 0)))))
+(define (optimizer-zero-grad! optimizer)
+  (o2-safe-optimizer-zero-grad optimizer))
+
+(define o2-safe-optimizer-state
+  (let ()
+    (extern void o2-public-optimizer-state ptr ptr
+            :real et_e1b_public_o2_optimizer_state_v1)
+    (lambda (optimizer)
+      (let ((output (vector #f)))
+        (o2-public-optimizer-state (vector optimizer) output)
+        (vector-ref output 0)))))
+(define (optimizer-state optimizer) (o2-safe-optimizer-state optimizer))
+
+(define o2-safe-optimizer-load-state
+  (let ()
+    (extern void o2-public-optimizer-load-state ptr ptr ptr
+            :real et_e1b_public_o2_optimizer_load_state_v1)
+    (lambda (optimizer state)
+      (let ((output (vector #f)))
+        (o2-public-optimizer-load-state
+          (vector optimizer) (vector state) output)
+        (vector-ref output 0)))))
+(define (optimizer-load-state! optimizer state)
+  (o2-safe-optimizer-load-state optimizer state))
+
+(define o2-safe-optimizer-state-release
+  (let ()
+    (extern void o2-public-optimizer-state-release ptr ptr
+            :real et_e1b_public_o2_optimizer_state_release_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (o2-public-optimizer-state-release (vector state) output)
+        (vector-ref output 0)))))
+(define (optimizer-state-release! state)
+  (o2-safe-optimizer-state-release state))

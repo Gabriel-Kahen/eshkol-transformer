@@ -1,0 +1,121 @@
+;;; Focused lifetime proof for the private P1 shell registry.
+;;;
+;;; The child shell is first published while nested scratch regions are active.
+;;; Returning that shell does not itself retain the private registry entry or
+;;; registry-list spine.  A later sibling region must therefore recover the
+;;; exact canonical shell through the root-owned registry holder after the
+;;; creating regions have been poisoned and destroyed.
+
+(require transformer.module)
+(require p1_test.tensor_provider)
+
+(define checks 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "P1 registry publication FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define parent (module-create-internal))
+(define child
+  (with-region ('p1-registry-outer 65536)
+    (with-region ('p1-registry-inner 65536)
+      (module-create-internal))))
+
+(check "shell survives destroyed nested publication regions"
+       (eq? (module-mode-internal child) 'train))
+
+;; Child registration asks shell-for-raw for the already-published child raw
+;; value.  Exact identity proves traversal of the promoted registry graph.
+(with-region ('p1-registry-sibling 65536)
+  (check "sibling lookup returns exact canonical shell"
+         (eq? child
+              (module-register-child-internal! parent "child" child)))
+  (check "canonical shell remains usable in sibling region"
+         (eq? (module-mode-internal child) 'train)))
+
+(check "canonical shell remains usable after sibling destruction"
+       (eq? (module-mode-internal child) 'train))
+
+;; Provider admission rewrites the opaque shell from the unsealed input to the
+;; admitted snapshot, then publishes that exact canonical snapshot through the
+;; provider registry. Both registries must survive the nested poisoned arenas.
+(define region-provider-error #f)
+(define region-provider-published?
+  (guard (raised
+           (#t
+             (set! region-provider-error raised)
+             #f))
+    (with-region ('p1-provider-outer 1048576)
+      (with-region ('p1-provider-inner 1048576)
+        (begin
+          (fixture-register-region-provider-internal!)
+          #t)))))
+(if region-provider-error
+    (begin
+      (display "P1 registry publication provider error: ")
+      (if (transformer-error? region-provider-error)
+          (begin
+            (display (transformer-error-category region-provider-error))
+            (display " ")
+            (display (transformer-error-operation region-provider-error))
+            (display " ")
+            (display (transformer-error-message region-provider-error)))
+          (display region-provider-error))
+      (newline)
+      (exit 1)))
+(check "nested provider publication completes"
+       region-provider-published?)
+(define region-provider
+  (tensor-provider-preflight-internal 'region-publication-v1 2 0))
+
+(with-region ('p1-provider-sibling 1048576)
+  (check "provider lookup returns exact canonical admitted identity"
+         (eq? region-provider
+              (tensor-provider-preflight-internal
+                'region-publication-v1 2 0)))
+  (check "canonical provider remains usable in sibling region"
+         (eq? (module-mode-internal
+                (module-create-with-provider-internal
+                  'region-publication-v1))
+              'train)))
+
+(check "provider survives sibling destruction"
+       (eq? region-provider
+            (tensor-provider-preflight-internal
+              'region-publication-v1 2 0)))
+
+;; Parameter registration publishes the handle shell before committing the
+;; binding. The pending binding must be rewritten to the canonical raw handle.
+(define parameter-case
+  (with-region ('p1-parameter-outer 1048576)
+    (with-region ('p1-parameter-inner 1048576)
+      (let* ((module (module-create-fixture-internal))
+             (handle
+               (module-register-parameter-internal!
+                 module "weight"
+                 (fixture-tensor-internal '(2) 'f32 'cpu
+                                          (vector 'weight 'bits-v1)))))
+        (vector module handle)))))
+(define parameter-module (vector-ref parameter-case 0))
+(define parameter-handle (vector-ref parameter-case 1))
+
+(with-region ('p1-parameter-sibling 1048576)
+  (check "tied binding returns exact canonical parameter handle"
+         (eq? parameter-handle
+              (module-register-tied-parameter-internal!
+                parameter-module "weight-tied" parameter-handle)))
+  (check "canonical parameter handle remains usable"
+         (equal? '(2) (parameter-handle-shape parameter-handle))))
+
+(check "parameter handle survives sibling destruction"
+       (eq? 'f32 (parameter-handle-dtype parameter-handle)))
+
+(display "P1 REGISTRY PUBLICATION PASS: ")
+(display checks)
+(display " checks")
+(newline)

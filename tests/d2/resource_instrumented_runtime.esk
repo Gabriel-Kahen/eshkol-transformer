@@ -1,0 +1,215 @@
+(require transformer.data)
+(require transformer.persistence)
+(require transformer.tokenizer)
+
+;; These bindings exist only in the temporary test-instrumented aggregate.
+(extern i64 d2-test-resource-count i64
+        :real et_e1b_public_d2_test_resource_count_v1)
+
+(define (d2-test-dataset-live) (d2-test-resource-count 0))
+(define (d2-test-batch-live) (d2-test-resource-count 1))
+(define (d2-test-borrow-live) (d2-test-resource-count 2))
+(define (d2-test-allocation-live) (d2-test-resource-count 3))
+(define (d2-test-fd-live) (d2-test-resource-count 4))
+(define (d2-test-fd-peak) (d2-test-resource-count 5))
+
+(define (resource-fail phase)
+  (display "D2 resource invariant failed: ") (display phase) (newline)
+  (exit 65))
+
+(define (assert-native-state phase datasets batches borrows allocations)
+  (if (not (and (= (d2-test-dataset-live) datasets)
+                (= (d2-test-batch-live) batches)
+                (= (d2-test-borrow-live) borrows)
+                (= (d2-test-allocation-live) allocations)))
+      (resource-fail phase)))
+
+(define (assert-fd-state phase live peak)
+  (if (not (and (= (d2-test-fd-live) live)
+                (= (d2-test-fd-peak) peak)))
+      (resource-fail phase)))
+
+(define (display-native-state datasets batches borrows allocations)
+  (display datasets) (display "/")
+  (display batches) (display "/")
+  (display borrows) (display "/")
+  (display allocations))
+
+(define (config directory)
+  (list ':directory directory
+        ':batch-size 1
+        ':sequence-length 1
+        ':maximum-manifest-bytes 1048576
+        ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536
+        ':maximum-batch-bytes 17
+        ':shuffle-seed 7
+        ':shuffle-window-rows 64
+        ':packing? #t))
+
+;; Exact accepted payload bound:
+;; 57567 + 8399 + 17*1*1023 + 8*min(1,1024) = 83365.
+(define (arena-config directory)
+  (list ':directory directory
+        ':batch-size 1
+        ':sequence-length 1023
+        ':maximum-manifest-bytes 57567
+        ':maximum-shard-bytes 8399
+        ':maximum-total-tokens 1024
+        ':maximum-batch-bytes 17391
+        ':shuffle-seed #f
+        ':shuffle-window-rows 1
+        ':packing? #t))
+
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define directory (car (cdr (cdr args))))
+(define mode (car (cdr (cdr (cdr args)))))
+(define policy (persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (tokenizer-load tokenizer-path policy))
+
+(cond
+ ((string=? mode "arena-open")
+  (let* ((before (__arena-used))
+         (dataset (token-dataset-open (arena-config directory) tokenizer))
+         (after (__arena-used)))
+    (token-dataset-close! dataset)
+    (display "D2 RESOURCE ARENA OPEN: ")
+    (display (- after before)) (display " bytes") (newline)))
+ ((string=? mode "arena-packed")
+  (let* ((dataset (token-dataset-open (arena-config directory) tokenizer))
+         (before (__arena-used))
+         (batch (token-dataset-next-batch dataset)))
+    (if (token-dataset-end? batch)
+        (begin (display "unexpected D2 arena EOS") (newline) (exit 65))
+        (begin
+          (token-batch-validate batch)
+          (token-batch-release! batch)))
+    (let ((after (__arena-used)))
+      (token-dataset-close! dataset)
+      (display "D2 RESOURCE ARENA PACKED: ")
+      (display (- after before)) (display " bytes") (newline))))
+ ((or (string=? mode "consume") (string=? mode "consume-short"))
+  (let* ((base-datasets (d2-test-dataset-live))
+         (base-batches (d2-test-batch-live))
+         (base-borrows (d2-test-borrow-live))
+         (base-allocations (d2-test-allocation-live))
+         (base-fd-live (d2-test-fd-live))
+         (base-fd-peak (d2-test-fd-peak)))
+    (if (not (and (= base-datasets 0) (= base-batches 0)
+                  (= base-borrows 0) (= base-allocations 0)
+                  (= base-fd-live 0) (= base-fd-peak 0)))
+        (resource-fail "fresh-process-baseline"))
+    (let ((dataset (token-dataset-open (config directory) tokenizer)))
+      ;; The shuffled dataset owns exactly its control and bounded window.
+      (assert-native-state "open"
+                           (+ base-datasets 1) base-batches base-borrows
+                           (+ base-allocations 2))
+      (assert-fd-state "open-fd" 0 1)
+      (let loop ((batches 0))
+      ;; Public shells are caller-owned Eshkol values. Explicit native batch
+      ;; release ends their borrow/storage lifetime; this explicit iteration
+      ;; region ends their Eshkol allocation lifetime after the last use.
+      (let ((finished?
+             (if (and (string=? mode "consume-short") (= batches 1024))
+                 #t
+                 (with-region ('d2-batch-iteration 65536)
+                   (let ((batch (token-dataset-next-batch dataset)))
+                     (if (token-dataset-end? batch) #t
+                         (begin
+                           (let ((inputs (token-batch-inputs batch))
+                                 (targets (token-batch-targets batch))
+                                 (mask (token-batch-loss-mask batch)))
+                             (if (not (and (eq? inputs (token-batch-inputs batch))
+                                           (eq? targets (token-batch-targets batch))
+                                           (eq? mask (token-batch-loss-mask batch))))
+                                 (begin
+                                   (display "D2 accessor identity drift") (newline)
+                                   (exit 65))))
+                           (token-batch-validate batch)
+                           ;; Accessor/validation borrows are synchronous. The
+                           ;; live batch owns only its control and byte mask;
+                           ;; I1 owns the two tensor allocations separately.
+                           (assert-native-state
+                            "live-batch"
+                            (+ base-datasets 1) (+ base-batches 1)
+                            base-borrows (+ base-allocations 4))
+                           (assert-fd-state "live-batch-fd" 0 1)
+                           (token-batch-release! batch)
+                           (assert-native-state
+                            "released-batch"
+                            (+ base-datasets 1) base-batches base-borrows
+                            (+ base-allocations 2))
+                           (assert-fd-state "released-batch-fd" 0 1)
+                           #f)))))))
+        (if finished?
+            (begin
+              (assert-native-state "pre-close"
+                                   (+ base-datasets 1) base-batches
+                                   base-borrows (+ base-allocations 2))
+              (assert-fd-state "pre-close-fd" 0 1)
+              (token-dataset-close! dataset)
+              (assert-native-state "post-close"
+                                   base-datasets base-batches base-borrows
+                                   base-allocations)
+              (assert-fd-state "post-close-fd" 0 1)
+              (let ((post-fds (d2-test-fd-live)))
+                (display "D2 RESOURCE NATIVE COUNTERS: baseline=")
+                (display-native-state base-datasets base-batches
+                                      base-borrows base-allocations)
+                (display " open-delta=1/0/0/2 live-delta=1/1/0/4")
+                (display " released-delta=1/0/0/2 post-close=")
+                (display-native-state (d2-test-dataset-live)
+                                      (d2-test-batch-live)
+                                      (d2-test-borrow-live)
+                                      (d2-test-allocation-live))
+                (newline)
+                (display "D2 RESOURCE NATIVE FD: baseline=")
+                (display base-fd-live) (display " peak=")
+                (display (d2-test-fd-peak)) (display " post-close=")
+                (display post-fds)
+                (display " baseline-to-peak=1 final-delta=0") (newline))
+              (display "D2 RESOURCE CONSUME PASS: ")
+              (display batches) (display " batches") (newline))
+            (loop (+ batches 1))))))))
+ ((string=? mode "reopen")
+  (let loop ((iteration 0))
+    (if (= iteration 256)
+        (begin
+          (display "D2 RESOURCE REOPEN PASS: 256 datasets") (newline))
+        (let ((dataset (token-dataset-open (config directory) tokenizer)))
+          (let ((batch (token-dataset-next-batch dataset)))
+            (if (token-dataset-end? batch) #t
+                (token-batch-release! batch)))
+          (token-dataset-close! dataset)
+          (loop (+ iteration 1))))))
+ ((string=? mode "accessors")
+  (let* ((dataset (token-dataset-open (config directory) tokenizer))
+         (batch (token-dataset-next-batch dataset)))
+    ;; Warm the three reusable bridge boxes before measuring the exact live
+    ;; path. Every later accessor returns the already-published tensor shell.
+    (token-batch-inputs batch)
+    (token-batch-targets batch)
+    (token-batch-loss-mask batch)
+    (let ((before (__arena-used)))
+      (let loop ((iteration 0))
+        (if (< iteration 4096)
+            (begin
+              (token-batch-inputs batch)
+              (token-batch-targets batch)
+              (token-batch-loss-mask batch)
+              (loop (+ iteration 1)))))
+      (let ((live-delta (- (__arena-used) before)))
+        (token-batch-release! batch)
+        (let ((released-before (__arena-used)))
+          (let loop ((iteration 0))
+            (if (< iteration 4096)
+                (begin (token-batch-release! batch)
+                       (loop (+ iteration 1)))))
+          (let ((released-delta (- (__arena-used) released-before)))
+            (token-dataset-close! dataset)
+            (display "D2 RESOURCE ACCESSORS PASS: live=")
+            (display live-delta) (display " bytes released=")
+            (display released-delta) (display " bytes") (newline)))))))
+ (else
+  (display "unknown D2 resource mode") (newline) (exit 64)))

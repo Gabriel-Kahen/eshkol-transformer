@@ -1,0 +1,603 @@
+;;; Private full C2 checkpoint save. Source-compose after the exact C2 owner,
+;;; persistence policy, claimed model encoder, and claimed O2 staging adapter.
+;;; This file defines no public wrapper and composes no K2/load authority.
+
+(extern i64 c2-save-native-measure
+        ptr ptr ptr ptr ptr ptr ptr i64 i64 i64 i64 i64
+        i64 i64 i64 i64 i64 ptr
+        :real et_c2_private_checkpoint_save_measure_v1)
+(extern i64 c2-save-native-encode-validate
+        ptr ptr ptr ptr ptr ptr ptr i64 i64 i64 i64 i64
+        i64 i64 i64 i64 i64 ptr ptr
+        :real et_c2_private_checkpoint_save_encode_validate_v1)
+
+(define c2-save-result-bytes 32)
+(define c2-save-result-magic 4842024089462059312)
+
+(define (c2-save-fail-raw category message details cause)
+  (let ((unreachable
+          (et-e1b-private-raise
+            category 'checkpoint-save! message details cause)))
+    unreachable))
+
+(define-syntax c2-save-fail
+  (syntax-rules ()
+    ((_ category message details cause)
+     (let ((result
+             (c2-save-fail-raw category message details cause))) result))))
+
+(define (c2-save-u64 bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (c2-save-proper-symbol-list? value)
+  (let loop ((remaining value) (count 0))
+    (cond ((null? remaining) #t)
+          ((or (not (pair? remaining)) (> count 64)) #f)
+          ((not (symbol? (car remaining))) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+
+;;; Return [overwrite?,required-features]. Omitted v1 options default to #f
+;;; and (). Supplied keys are accepted at most once in either order.
+(define (c2-save-options options)
+  (let loop ((remaining options) (seen-overwrite #f) (overwrite #f)
+             (seen-features #f) (features '()) (pairs 0))
+    (cond
+      ((null? remaining) (vector overwrite features))
+      ((or (not (pair? remaining)) (not (pair? (cdr remaining)))
+           (>= pairs 2))
+       (c2-save-fail 'invalid-argument
+                     "checkpoint save options must be a proper flat list"
+                     '() #f))
+      ((eq? (car remaining) ':overwrite?)
+       (if (or seen-overwrite (not (boolean? (car (cdr remaining)))))
+           (c2-save-fail 'invalid-argument
+                         "overwrite option is duplicated or ill-typed"
+                         '() #f))
+       (loop (cdr (cdr remaining)) #t (car (cdr remaining))
+             seen-features features (+ pairs 1)))
+      ((eq? (car remaining) ':required-features)
+       (let ((value (car (cdr remaining))))
+         (if (or seen-features (not (c2-save-proper-symbol-list? value)))
+             (c2-save-fail
+               'invalid-argument
+               "required-features is duplicated or not a proper symbol list"
+               '() #f))
+         (loop (cdr (cdr remaining)) seen-overwrite overwrite
+               #t value (+ pairs 1))))
+      (else
+        (c2-save-fail 'invalid-argument "unknown checkpoint save option"
+                      '() #f)))))
+
+(define (c2-save-native-failure result)
+  (let ((phase (c2-save-u64 result 0))
+        (category (c2-save-u64 result 8))
+        (code (c2-save-u64 result 16))
+        (offset (c2-save-u64 result 24)))
+    (if (or
+          (and (= phase 1) (= category 2)
+               (or (= code 7) (= code 8)))
+          (and (or (= phase 1) (= phase 3))
+               (= category 4) (= code 19))
+          (and (= phase 3) (= category 2) (= code 7)))
+        (c2-save-fail
+          'invalid-state "checkpoint state exceeds the persistence policy"
+          (list (list 'source-domain 'c2-checkpoint-save)
+                (list 'source-code code) (list 'source-offset offset)) #f)
+        (c2-save-fail
+          'internal "trusted C2 checkpoint encoder or validator failed"
+          (list (list 'source-domain 'c2-checkpoint-save)
+                (list 'source-code code) (list 'source-offset offset)
+                (list 'native-stage phase)
+                (list 'native-category category)) #f))))
+
+(define (c2-save-require-native-success status result)
+  (if (or (not (= status 0))
+          (not (= (c2-save-u64 result 0) c2-save-result-magic)))
+      (let ((unreachable (c2-save-native-failure result))) unreachable)))
+
+(define (c2-save-effective-limit limits index operational)
+  (let ((caller (vector-ref limits index))
+        (target (vector-ref operational index)))
+    (if (and (eq? (vector-ref limits 5) 'operational-target)
+             (> caller target))
+        target caller)))
+
+(define (c2-save-effective-model-policy limits subpolicy)
+  (if (not (eq? (vector-ref limits 5) 'operational-target))
+      subpolicy
+      (let ((operational (c2-policy-operational-target-internal)))
+        (let ((result
+                (c1-persistence-policy-internal
+                  (c2-save-effective-limit limits 0 operational)
+                  (c2-save-effective-limit limits 1 operational)
+                  (c2-save-effective-limit limits 2 operational)
+                  (c2-save-effective-limit limits 3 operational)
+                  'cpu)))
+          result))))
+
+;;; The owner stores already-validated inert projections, not its original
+;;; constructor input. Re-form only the serialized authoritative leaves and
+;;; run the committed owner validator/copier again under the active borrow.
+(define (c2-save-controls-copy controls)
+  (if (or (not (vector? controls)) (not (= (vector-length controls) 5))
+          (not (vector? (vector-ref controls 2)))
+          (not (= (vector-length (vector-ref controls 2)) 10))
+          (not (vector? (vector-ref controls 3)))
+          (not (= (vector-length (vector-ref controls 3)) 3)))
+      (c2-save-fail 'internal "C2 owner control projection is malformed"
+                    '() #f))
+  (let ((dataset (vector-ref controls 2))
+        (resolved (vector-ref controls 3)))
+    (let ((result
+            (c2-training-state-controls-copy
+              'checkpoint-save!
+              (vector
+                (vector-ref controls 0) (vector-ref controls 1)
+                (vector (vector-ref dataset 3) (vector-ref dataset 4))
+                (vector (vector-ref resolved 0) (vector-ref resolved 1))
+                (vector-ref controls 4)))))
+      result)))
+
+(define (c2-save-path-encoded-size path limit)
+  (let loop ((remaining path) (total 0))
+    (if (null? remaining)
+        total
+        (let ((next (+ total 4 (string-byte-length (car remaining)))))
+          (if (> next limit)
+              (c2-save-fail
+                'invalid-state
+                "optimizer path metadata exceeds the persistence policy"
+                '() #f))
+          (loop (cdr remaining) next)))))
+
+(define (c2-save-o2-policy-preflight topology o2-projection limits)
+  (if (or (not (vector? topology)) (not (= (vector-length topology) 3)))
+      (c2-save-fail 'internal "C2 owner topology is malformed" '() #f))
+  (let* ((shapes (vector-ref topology 1))
+         (paths (vector-ref topology 0))
+         (count (c1-list-length-bounded shapes 1366))
+         (path-count (c1-list-length-bounded paths 1366))
+         (operational (c2-policy-operational-target-internal))
+         (file-limit (c2-save-effective-limit limits 0 operational))
+         (metadata-limit (c2-save-effective-limit limits 1 operational))
+         (tensor-limit (c2-save-effective-limit limits 2 operational))
+         (count-limit (c2-save-effective-limit limits 3 operational)))
+    (if (or (not count) (= count 0) (not path-count)
+            (not (= count path-count))
+            (not (vector? o2-projection))
+            (not (= (vector-length o2-projection) 4))
+            (> (* 2 count) count-limit))
+        (c2-save-fail 'invalid-state
+                      "optimizer tensor count exceeds the persistence policy"
+                      '() #f))
+    ;; The O2 config projection was validated and deeply copied when the exact
+    ;; owner was composed. Read only its group/path counts here; the committed
+    ;; stager reparses it after admission. This avoids copying up to 16 MiB of
+    ;; config merely to decide a smaller metadata policy.
+    (let* ((config (vector-ref o2-projection 0))
+           (config-length (c1-list-length-bounded config 11)))
+      (if (or (not config-length) (not (= config-length 10)))
+          (c2-save-fail
+            'internal "optimizer config projection is malformed" '() #f))
+      (let* ((groups (o2-list-ref config 9))
+             (group-count (c1-list-length-bounded groups 1366)))
+      (if (or (not group-count) (= group-count 0))
+          (c2-save-fail
+            'internal "optimizer config projection is malformed" '() #f))
+      (let group-loop ((remaining groups) (group-bytes 0) (members-total 0))
+        (if (null? remaining)
+            (begin
+              (if (not (= members-total count))
+                  (c2-save-fail
+                    'internal "optimizer group coverage is malformed" '() #f))
+              (let record-loop ((remaining-paths paths)
+                                (remaining-shapes shapes)
+                                (payload 0) (record-bytes 0))
+              (if (null? remaining-paths)
+                  (let ((metadata
+                          (+ 128 19 64 group-bytes record-bytes)))
+                    (if (or (> metadata metadata-limit)
+                            (> (+ metadata payload) file-limit))
+                        (c2-save-fail
+                          'invalid-state
+                          "optimizer staging exceeds the persistence policy"
+                          '() #f))
+                    (vector count payload metadata))
+                  (let* ((shape (car remaining-shapes))
+                         (rank (c1-list-length-bounded shape 65))
+                         (elements
+                           (c1-shape-product shape 'checkpoint-save!))
+                         (bytes (* elements 4))
+                         (path-bytes
+                           (c2-save-path-encoded-size
+                             (car remaining-paths) metadata-limit))
+                         (next-payload (+ payload (* bytes 2)))
+                         (next-record
+                           (if rank (+ record-bytes 120 (* rank 8) path-bytes)
+                               (+ metadata-limit 1))))
+                    ;; This also rejects an operational-profile model parameter
+                    ;; before the claimed C1 payload callback is entered.
+                    (if (or (not rank) (> bytes tensor-limit)
+                            (> next-payload file-limit)
+                            (> next-record metadata-limit))
+                        (c2-save-fail
+                          'invalid-state
+                          "optimizer moments exceed the persistence policy"
+                          '() #f))
+                    (record-loop
+                      (cdr remaining-paths) (cdr remaining-shapes)
+                      next-payload next-record)))))
+            (let* ((group (car remaining))
+                   (group-length (c1-list-length-bounded group 8)))
+              (if (or (not group-length) (not (= group-length 7)))
+                  (c2-save-fail
+                    'internal "optimizer group projection is malformed"
+                    '() #f))
+              (let* ((group-paths (o2-list-ref group 1))
+                     (members
+                       (c1-list-length-bounded group-paths 1366)))
+              (if (or (not members) (= members 0))
+                  (c2-save-fail
+                    'internal "optimizer group projection is malformed"
+                    '() #f))
+              (group-loop
+                (cdr remaining) (+ group-bytes 40 (* members 4))
+                    (+ members-total members))))))))))
+
+(define (c2-save-component-policy-preflight controls model o2-info limits)
+  (let* ((tokenizer (vector-ref controls 1))
+         (dataset (vector-ref controls 2))
+         (resolved (vector-ref controls 3))
+         (operational (c2-policy-operational-target-internal))
+         (file-limit (c2-save-effective-limit limits 0 operational))
+         (metadata-limit (c2-save-effective-limit limits 1 operational))
+         (metadata
+           (+ 240
+              (string-byte-length (vector-ref tokenizer 0))
+              (bytevector-length (vector-ref resolved 0))
+              (bytevector-length (vector-ref dataset 3))
+              (bytevector-length (vector-ref dataset 4))
+              (vector-ref o2-info 2)
+              (c1-read-u64 model 56)))
+         (file-bytes
+           (+ 256 32
+              (- metadata (c1-read-u64 model 56))
+              (bytevector-length model) (vector-ref o2-info 1))))
+    (if (or (> metadata metadata-limit) (> file-bytes file-limit))
+        (c2-save-fail
+          'invalid-state "checkpoint components exceed the persistence policy"
+          '() #f))))
+
+;;; Test-only read-only preflight seam. Production delegates to the exact
+;;; policy validator above; replacements may observe/fail but must not mutate
+;;; topology, O2 projection, or limits.
+(define c2-save-o2-policy-preflight-internal
+  c2-save-o2-policy-preflight)
+
+;;; Private lexical indirections let the focused gate observe the exact
+;;; component-staging boundary without weakening either claimed codec.
+(define c2-save-model-encode-internal
+  c2-model-encode-c2-owned-state-internal)
+(define c2-save-o2-stage-internal
+  c2-o2-encode-c2-owned-staging-internal)
+
+(define (c2-save-measure-staged staged limits)
+  (let* ((result (make-bytevector c2-save-result-bytes 0))
+         (status
+           (c2-save-native-measure
+             (vector-ref staged 0) (vector-ref staged 1)
+             (vector-ref staged 2) (vector-ref staged 3)
+             (vector-ref staged 4) (vector-ref staged 5)
+             (vector-ref staged 6)
+             (vector-ref (vector-ref staged 7) 0)
+             (vector-ref (vector-ref staged 7) 2)
+             (vector-ref (vector-ref staged 8) 2)
+             (vector-ref (vector-ref staged 8) 3)
+             (vector-ref (vector-ref staged 8) 4)
+             (vector-ref limits 0) (vector-ref limits 1)
+             (vector-ref limits 2) (vector-ref limits 3)
+             (if (eq? (vector-ref limits 5) 'operational-target) 1 0)
+             result)))
+    (c2-save-require-native-success status result)
+    (let* ((file-bytes (c2-save-u64 result 8))
+           (operational (c2-policy-operational-target-internal))
+           (file-limit (c2-save-effective-limit limits 0 operational)))
+      (if (> file-bytes file-limit)
+          (c2-save-fail 'invalid-state
+                        "checkpoint state exceeds the persistence policy"
+                        '() #f))
+      file-bytes)))
+
+(define (c2-save-encode-staged-into! staged limits destination file-bytes)
+  (if (or (not (bytevector? destination))
+          (not (= (bytevector-length destination) file-bytes)))
+      (c2-save-fail
+        'internal "C2 checkpoint destination size postcondition failed"
+        '() #f))
+  (let* ((validation (make-bytevector c2-save-result-bytes 0))
+         (validated
+           (c2-save-native-encode-validate
+             (vector-ref staged 0) (vector-ref staged 1)
+             (vector-ref staged 2) (vector-ref staged 3)
+             (vector-ref staged 4) (vector-ref staged 5)
+             (vector-ref staged 6)
+             (vector-ref (vector-ref staged 7) 0)
+             (vector-ref (vector-ref staged 7) 2)
+             (vector-ref (vector-ref staged 8) 2)
+             (vector-ref (vector-ref staged 8) 3)
+             (vector-ref (vector-ref staged 8) 4)
+             (vector-ref limits 0) (vector-ref limits 1)
+             (vector-ref limits 2) (vector-ref limits 3)
+             (if (eq? (vector-ref limits 5) 'operational-target) 1 0)
+             destination validation)))
+    (c2-save-require-native-success validated validation)
+    (if (not (= (c2-save-u64 validation 8) file-bytes))
+        (c2-save-fail
+          'internal "C2 checkpoint encoder size postcondition failed"
+          '() #f))
+    #t))
+
+(define c2-save-measure-staged-internal c2-save-measure-staged)
+(define c2-save-encode-staged-into-internal! c2-save-encode-staged-into!)
+(define c2-save-destination-allocate-internal
+  (lambda (file-bytes) (make-bytevector file-bytes 0)))
+
+;;; Compatibility helper retained for the focused definition closure. The
+;;; owner SAVE path below uses two independent component builds so staging can
+;;; die before the unchanged atomic writer allocates its input snapshot.
+(define (c2-save-assemble tokenizer x1 current epoch model optimizer-metadata
+                          optimizer-payload counters rng limits)
+  (let* ((staged
+           (vector tokenizer x1 current epoch model optimizer-metadata
+                   optimizer-payload counters rng))
+         (file-bytes (c2-save-measure-staged staged limits))
+         (destination (make-bytevector file-bytes 0)))
+    (c2-save-encode-staged-into!
+      staged limits destination file-bytes)
+    destination))
+
+(define (c2-save-stage-components-core
+          projection owner-token limits subpolicy)
+  (let* ((p1 (vector-ref projection 0))
+         (o2 (vector-ref projection 1))
+         ;; The borrow wrapper revalidated these deep-owned controls in a
+         ;; sibling region. This private trusted seam is read-only: no stage
+         ;; may mutate the owner controls or retain them after returning.
+         (controls (vector-ref projection 2))
+         (rng (vector-ref controls 0))
+         (tokenizer-control (vector-ref controls 1))
+         (dataset-control (vector-ref controls 2))
+         (resolved-control (vector-ref controls 3))
+         (counters (vector-ref controls 4))
+         (o2-info
+           (c2-save-o2-policy-preflight
+             (vector-ref projection 3) (vector-ref projection 4) limits))
+         (unique-count (vector-ref o2-info 0))
+         (model
+           (c2-save-model-encode-internal
+             p1 owner-token subpolicy 'checkpoint-save!))
+         (operational (c2-policy-operational-target-internal))
+         (count-limit (c2-save-effective-limit limits 3 operational))
+         (model-count (c1-read-u32 model 80)))
+    (if (> (+ model-count (* 2 unique-count)) count-limit)
+        (c2-save-fail 'invalid-state
+                      "aggregate tensor count exceeds the persistence policy"
+                      '() #f))
+    (c2-save-component-policy-preflight controls model o2-info limits)
+    (let ((optimizer-request
+            (vector o2 p1 owner-token 'checkpoint-save! #f)))
+      (c2-save-o2-stage-internal optimizer-request)
+      (let ((optimizer (vector-ref optimizer-request 4)))
+        ;; Byte images are detached. Owner counters/RNG remain read-only inputs
+        ;; within this child call and never cross its region boundary.
+        (vector
+          (string->utf8 (vector-ref tokenizer-control 0))
+          (vector-ref resolved-control 0)
+          (vector-ref dataset-control 3) (vector-ref dataset-control 4)
+          model (vector-ref optimizer 0) (vector-ref optimizer 1)
+          counters rng)))))
+
+;;; Lexical indirection exists only so the focused gate can prove that an
+;;; arbitrary exception, including (raise #f), still ends the outer borrow.
+(define c2-save-stage-components-internal c2-save-stage-components-core)
+
+;;; P1 entry/tensor shells are process-lifetime authenticated identities. Touch
+;;; each exact claimed entry before SAVE-owned scratch so later C1 encoding
+;;; only reuses the registry-retained identities; no payload callback runs here.
+(define c2-save-pre-touch-tensor-begin-internal
+  state-dict-c2-owned-tensor-borrow-begin-internal)
+(define c2-save-pre-touch-tensor-end-internal
+  state-dict-c2-owned-tensor-borrow-end-internal)
+(define c2-save-pre-touch-entry-shells-internal
+  state-dict-c2-owned-entry-shells-internal)
+
+(define (c2-save-pre-touch-p1-identities state access-token operation)
+  ;; This narrow trusted helper runs before SAVE-owned scratch. P1's registry
+  ;; retains the exact entry shells; the ordered list remains call-local and is
+  ;; bounded by P1/wire hard E <= 4096. No metadata or payload is cloned.
+  ;; Caller/profile aggregate-count admission occurs later, during measurement.
+  (let ((entries
+          (c2-save-pre-touch-entry-shells-internal
+            state access-token operation)))
+    (let loop ((remaining entries))
+      (if (null? remaining) #t
+          (let ((entry (car remaining)))
+            (c2-save-pre-touch-tensor-begin-internal
+              state access-token entry operation)
+            ;; No fallible call may intervene after begin: exact paired end
+            ;; clears the active access before tail recursion or unwinding.
+            (c2-save-pre-touch-tensor-end-internal
+              state access-token entry operation)
+            (loop (cdr remaining)))))))
+
+;;; Focused tests replace only this private phase boundary. Production uses the
+;;; exact pre-touch above; no symbol or public install surface is introduced.
+(define c2-save-pre-touch-p1-identities-internal
+  c2-save-pre-touch-p1-identities)
+
+;;; Synchronous publication consumes the regional image before returning.
+;;; Tests replace this lexical boundary to prove post-publication exceptions
+;;; cannot re-end an already inactive owner borrow.
+(define (c2-save-publish-core path bytes overwrite)
+  (let ((status
+          (c1-native-atomic-write
+            path bytes (bytevector-length bytes) overwrite)))
+    (if (= status 0) #t
+        (c1-native-fail
+          'checkpoint-save!
+          "atomic C2 checkpoint publication failed" status))))
+
+(define c2-save-publish-internal c2-save-publish-core)
+(define c2-save-borrow-begin-internal
+  c2-training-state-borrow-begin-internal)
+
+(define (c2-save-with-owner-borrow state limits subpolicy build publish)
+  ;; Borrow-begin publishes through the owner state slot and reads back the
+  ;; canonical promoted graph before this operation creates any SAVE-owned
+  ;; scratch. The guard encloses region establishment itself, so an arena setup
+  ;; failure still cannot strand the owner busy.
+  (let* ((borrow
+           (c2-save-borrow-begin-internal
+             state 'checkpoint-save!))
+         ;; This single outer transaction record survives scratch teardown:
+         ;; [borrow-ended?, failed?, caught-value]. Success crosses as the
+         ;; immediate #t; an explicit failure bit preserves (raise #f).
+         (transaction (vector #f #f #f))
+         (outcome
+           (guard (caught
+                    (#t
+                      (vector-set! transaction 1 #t)
+                      (vector-set! transaction 2 caught)
+                      #f))
+             (let ((access-token
+                     (c2-training-state-borrow-owner-token-internal
+                       borrow 'checkpoint-save!)))
+               (let ((identities-ready?
+                       (c2-training-state-borrow-p1-identities-ready-internal?
+                         borrow 'checkpoint-save!)))
+               (let ((p1
+                       ;; Revalidate/copy authoritative serialized controls in
+                       ;; one sibling region per SAVE. The copy is intentionally
+                       ;; discarded before either component stage; the owner
+                       ;; already holds the only deep-owned controls, which all
+                       ;; private SAVE replacement seams must treat as read-only.
+                       ;; Only the exact P1 owner reference may escape, and only
+                       ;; on the first lazy-identity touch.
+                       (with-region
+                         ('c2-checkpoint-save-preflight 65536)
+                         (let ((projection
+                                 (c2-training-state-borrow-projection-internal
+                                   borrow)))
+                           (c2-save-controls-copy
+                             (vector-ref projection 2))
+                           (c2-save-o2-policy-preflight-internal
+                             (vector-ref projection 3)
+                             (vector-ref projection 4) limits)
+                           (if identities-ready?
+                               #f
+                               (vector-ref projection 0))))))
+               (if (not identities-ready?)
+                   (begin
+                     ;; Authenticated P1 shells are intentionally outer
+                     ;; identities; materialize them only after both preflights.
+                     (c2-save-pre-touch-p1-identities-internal
+                       p1 access-token
+                       'checkpoint-save!)
+                     ;; Assignment-only after the complete traversal. Partial
+                     ;; or exceptional pre-touch leaves readiness false; once
+                     ;; true it remains valid across later build/writer errors.
+                     (c2-training-state-borrow-mark-p1-identities-ready-internal!
+                       borrow 'checkpoint-save!)))
+               (with-region ('c2-checkpoint-save-scratch 65536)
+                 ;; Measure and encode use independent child regions. Each
+                 ;; child reconstructs the complete component stage;
+                 ;; only an exact scalar size or immediate #t crosses back.
+                 ;; This prevents the writer's native image snapshot from
+                 ;; coexisting with either component stage.
+                 (let* ((file-bytes
+                          (with-region ('c2-checkpoint-save-measure-pass 65536)
+                            (let* ((projection
+                                     ;; Once identities are ready, every SAVE
+                                     ;; projection is child-regional and cannot
+                                     ;; retain even bounded wrapper controls in
+                                     ;; the process arena.
+                                     (c2-training-state-borrow-projection-internal
+                                       borrow))
+                                   (regional-projection
+                                     (vector
+                                       (vector-ref projection 0)
+                                       (vector-ref projection 1)
+                                       ;; The exact owner controls were
+                                       ;; revalidated in the sibling preflight
+                                       ;; and are application-inaccessible;
+                                       ;; trusted SAVE seams treat them read-only.
+                                       (vector-ref projection 2)
+                                       (vector-ref projection 3)
+                                       (vector-ref projection 4)))
+                                   (staged
+                                     (build regional-projection access-token
+                                            limits subpolicy)))
+                              (c2-save-measure-staged-internal
+                                staged limits))))
+                        ;; The destination belongs to the parent scratch. A
+                        ;; child encode may mutate its raw bytes, but cannot
+                        ;; store an arena pointer in the bytevector.
+                        (destination
+                          (c2-save-destination-allocate-internal file-bytes)))
+                   (with-region ('c2-checkpoint-save-encode-pass 65536)
+                     (let* ((projection
+                              (c2-training-state-borrow-projection-internal
+                                borrow))
+                            (regional-projection
+                              (vector
+                                (vector-ref projection 0)
+                                (vector-ref projection 1)
+                                (vector-ref projection 2)
+                                (vector-ref projection 3)
+                                (vector-ref projection 4)))
+                            (staged
+                              (build regional-projection access-token
+                                     limits subpolicy)))
+                       (c2-save-encode-staged-into-internal!
+                         staged limits destination file-bytes)))
+                   ;; Both child stages are gone before borrow end and the
+                   ;; first filesystem action. Publication consumes the parent
+                   ;; destination synchronously while its scratch is live.
+                   (c2-training-state-borrow-end-internal borrow)
+                   (vector-set! transaction 0 #t)
+                   (publish destination)))))))))
+    ;; Build/region exceptions, including #f, arrive with an active borrow.
+    ;; Writer exceptions arrive after borrow-ended was set and must not cause a
+    ;; second end attempt.
+    (if (not (vector-ref transaction 0))
+        (c2-training-state-borrow-end-internal borrow))
+    (if (vector-ref transaction 1)
+        (raise (vector-ref transaction 2))
+        outcome)))
+
+(define (c2-checkpoint-save-internal! state path policy options)
+  ;; Observable admission order: option/version, path, policy, exact state;
+  ;; native filesystem work occurs only after complete encode and full parse.
+  (let ((parsed-options (c2-save-options options)))
+    (if (not (null? (vector-ref parsed-options 1)))
+        (c2-save-fail 'version-mismatch
+                      "C2 checkpoint 1.0 accepts no required features"
+                      '() #f))
+    (if (not (c1-valid-file-path? path))
+        (c2-save-fail 'invalid-argument "invalid checkpoint path" '() #f))
+    (let ((limits
+            (c2-policy-limits-internal 'checkpoint-save! policy))
+          (subpolicy
+            (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)))
+      (let ((result
+              (c2-save-with-owner-borrow
+                state limits (c2-save-effective-model-policy limits subpolicy)
+                c2-save-stage-components-internal
+                (lambda (bytes)
+                  (c2-save-publish-internal
+                    path bytes (if (vector-ref parsed-options 0) 1 0))))))
+        result))))

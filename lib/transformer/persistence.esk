@@ -1,7 +1,9 @@
-;;; Wave 1 public persistence surface. Checkpoint operations remain C2-owned.
+;;; Public persistence surface. The completed source-composed aggregate owns
+;;; the implementation; this module transports only fixed-arity boxed values.
 (require transformer.error_consumer)
 
-(provide persistence-policy)
+(provide persistence-policy checkpoint-inspect checkpoint-metadata-ref
+         checkpoint-load checkpoint-save!)
 
 (define t1-safe-persistence-policy
   (let ()
@@ -17,3 +19,50 @@
 (define (persistence-policy max-file max-metadata max-tensor max-tensors device)
   (t1-safe-persistence-policy
    max-file max-metadata max-tensor max-tensors device))
+
+(define c2-safe-checkpoint-inspect
+  (let ()
+    (extern void c2-public-checkpoint-inspect ptr ptr ptr
+            :real et_e1b_public_c2_checkpoint_inspect_v1)
+    (lambda (path policy)
+      (let ((output (vector #f)))
+        (c2-public-checkpoint-inspect (vector path) (vector policy) output)
+        (vector-ref output 0)))))
+(define (checkpoint-inspect path policy)
+  (c2-safe-checkpoint-inspect path policy))
+
+(define c2-safe-checkpoint-metadata-ref
+  (let ()
+    (extern void c2-public-checkpoint-metadata-ref ptr ptr ptr
+            :real et_e1b_public_c2_checkpoint_metadata_ref_v1)
+    (lambda (metadata key)
+      (let ((output (vector #f)))
+        (c2-public-checkpoint-metadata-ref
+          (vector metadata) (vector key) output)
+        (vector-ref output 0)))))
+(define (checkpoint-metadata-ref metadata key)
+  (c2-safe-checkpoint-metadata-ref metadata key))
+
+(define c2-safe-checkpoint-load
+  (let ()
+    (extern void c2-public-checkpoint-load ptr ptr ptr ptr
+            :real et_e1b_public_c2_checkpoint_load_v1)
+    (lambda (path policy report)
+      (let ((output (vector #f)))
+        (c2-public-checkpoint-load
+          (vector path) (vector policy) (vector report) output)
+        (vector-ref output 0)))))
+(define (checkpoint-load path policy report)
+  (c2-safe-checkpoint-load path policy report))
+
+(define c2-safe-checkpoint-save
+  (let ()
+    (extern void c2-public-checkpoint-save ptr ptr ptr ptr ptr
+            :real et_e1b_public_c2_checkpoint_save_v1)
+    (lambda (state path policy options)
+      (let ((output (vector #f)))
+        (c2-public-checkpoint-save
+          (vector state) (vector path) (vector policy) (vector options) output)
+        (vector-ref output 0)))))
+(define (checkpoint-save! state path policy options)
+  (c2-safe-checkpoint-save state path policy options))

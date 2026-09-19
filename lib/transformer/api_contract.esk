@@ -40,6 +40,7 @@
     token-dataset-open token-dataset-next-batch token-dataset-cursor token-dataset-end?
     token-dataset-seek! token-dataset-close! token-batch-inputs
     token-batch-targets token-batch-loss-mask token-batch-validate
+    token-batch-release!
     module-parameters module-buffers module-state-dict
     module-load-state-dict! module-train! module-eval! module-zero-grad!
     parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups
@@ -48,9 +49,9 @@
     state-dict-alias-groups state-dict-release!
     model-forward model-output-logits model-output-loss model-output-rng
     optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
-    optimizer-load-state!
+    optimizer-load-state! optimizer-state-release!
     trainer-create trainer-step! trainer-stop-policy trainer-train! trainer-evaluate!
-    trainer-state trainer-load-state! metrics-ref
+    trainer-state trainer-load-state! trainer-state-release! metrics-ref
     generator-create generator-prefill! generator-decode-step!
     generator-generate! generation-output-ids generation-output-lengths
     generation-output-text generation-output-rng generation-output-cache-lengths

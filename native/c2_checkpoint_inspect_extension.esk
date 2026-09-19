@@ -1,0 +1,186 @@
+;;; Private C2 checkpoint inspection adapter. Source-compose after the C2
+;;; persistence policy. It defines no public facade and never composes K2.
+
+(extern i64 c2-inspect-native ptr i64 i64 i64 i64 i64 ptr
+        :real et_c2_private_checkpoint_inspect_bridge_v1)
+(extern i64 c2-metadata-factory-register ptr
+        :real et_c2_private_metadata_factory_register_v1)
+(extern i64 c2-metadata-factory-authenticate ptr
+        :real et_c2_private_metadata_factory_authenticate_v1)
+
+(define c2-inspect-result-bytes 320)
+(define c2-inspect-result-magic 4842013150130745648)
+(define c2-inspect-metadata-tag (vector 'c2-checkpoint-metadata))
+(define c2-inspect-metadata-query (vector 'c2-checkpoint-metadata-query))
+
+(define (c2-inspect-u64 bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256) (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (c2-inspect-category status)
+  (cond ((= status 1) 'invalid-argument)
+        ((= status 2) 'corrupt-data)
+        ((= status 3) 'version-mismatch)
+        ((= status 4) 'unsupported)
+        ((= status 5) 'determinism-unavailable)
+        ((= status 6) 'shape-mismatch)
+        ((= status 7) 'dtype-mismatch)
+        ((= status 8) 'device-mismatch)
+        ((= status 9) 'noncontiguous)
+        ((= status 10) 'io)
+        (else 'internal)))
+
+(define (c2-inspect-fail-raw category operation message details)
+  (let ((unreachable
+          (et-e1b-private-raise category operation message details #f)))
+    unreachable))
+
+(define-syntax c2-inspect-fail
+  (syntax-rules ()
+    ((_ category operation message details)
+     (let ((result
+             (c2-inspect-fail-raw category operation message details))) result))))
+
+(define (c2-inspect-native-fail status result)
+  (let ((core-code (c2-inspect-u64 result 16))
+        (core-offset (c2-inspect-u64 result 24))
+        (native-status (c2-inspect-u64 result 32))
+        (format-category (c2-inspect-u64 result 40))
+        (format-code (c2-inspect-u64 result 48))
+        (format-offset (c2-inspect-u64 result 56)))
+    (c2-inspect-fail
+      (c2-inspect-category status)
+      'checkpoint-inspect
+      "C2 checkpoint inspection failed"
+      (list (list 'source-domain 'c2-checkpoint-inspect)
+            (list 'source-code core-code)
+            (list 'source-message "C2 checkpoint inspection failed")
+            (list 'source-offset core-offset)
+            (list 'native-status native-status)
+            (list 'format-category format-category)
+            (list 'format-code format-code)
+            (list 'format-offset format-offset)))))
+
+(define (c2-inspect-make-identity entry)
+  (let ((state (vector entry c2-inspect-metadata-query)))
+    (lambda (query)
+      (if (eq? query (vector-ref state 1)) (vector-ref state 0)
+          (error "transformer.checkpoint.metadata:c2-v1")))))
+
+(define (c2-inspect-ensure-factory! operation)
+  (let* ((probe (c2-inspect-make-identity (vector #f)))
+         (registered (c2-metadata-factory-register probe)))
+    (if (= registered -1)
+        (c2-inspect-fail 'internal operation
+                         "C2 metadata closure factory is malformed" '()))
+    (if (= registered -9)
+        (c2-inspect-fail 'internal operation
+                         "C2 metadata closure factory conflicts" '()))
+    (if (not (= registered 1))
+        (c2-inspect-fail
+          'internal operation
+          "C2 metadata closure factory returned an invalid status" '()))
+    (if (not (= (c2-metadata-factory-authenticate probe) 1))
+        (c2-inspect-fail
+          'internal operation
+          "C2 metadata closure factory failed authentication" '()))
+    #t))
+
+(define (c2-inspect-find shell)
+  (c2-inspect-ensure-factory! 'checkpoint-metadata-ref)
+  (if (or (not (procedure? shell))
+          (not (= (c2-metadata-factory-authenticate shell) 1)))
+      #f
+      (guard (raised (#t #f))
+        (let ((entry (shell c2-inspect-metadata-query)))
+          (if (and (vector? entry) (= (vector-length entry) 8)
+                   (eq? (vector-ref entry 0) shell))
+              entry #f)))))
+
+(define (c2-inspect-path-string-valid? path)
+  (and (string? path) (> (string-length path) 0)
+       (<= (string-length path) 4096)
+       (let loop ((index 0))
+         (if (= index (string-length path)) #t
+             (and (not (char=? (string-ref path index) #\nul))
+                  (loop (+ index 1)))))))
+
+(define (c2-inspect-metadata-entry-valid? entry)
+  (and (vector? entry) (= (vector-length entry) 8)
+       (eq? (vector-ref entry 1) c2-inspect-metadata-tag)
+       (string? (vector-ref entry 2))
+       (string? (vector-ref entry 3))
+       (string? (vector-ref entry 4))
+       (integer? (vector-ref entry 5)) (exact? (vector-ref entry 5))
+       (>= (vector-ref entry 5) 0)
+       (integer? (vector-ref entry 6)) (exact? (vector-ref entry 6))
+       (>= (vector-ref entry 6) 0)
+       (integer? (vector-ref entry 7)) (exact? (vector-ref entry 7))
+       (>= (vector-ref entry 7) 0)))
+
+;;; Entry layout: shell, tag, API version, tokenizer fingerprint,
+;;; configuration fingerprint, tensor count, payload bytes, file bytes.
+(define (c2-checkpoint-inspect-internal path policy)
+  (let* ((limits (c2-policy-limits-internal 'checkpoint-inspect policy)))
+    (c2-inspect-ensure-factory! 'checkpoint-inspect)
+    (if (not (c2-inspect-path-string-valid? path))
+        (c2-inspect-fail 'invalid-argument 'checkpoint-inspect
+                         "checkpoint path is invalid" '()))
+    (let* ((path-bytes (string->utf8 path))
+           (result (make-bytevector c2-inspect-result-bytes 0))
+           (profile (if (eq? (vector-ref limits 5) 'operational-target) 1 0))
+           (status
+             (c2-inspect-native path-bytes
+               (vector-ref limits 0) (vector-ref limits 1)
+               (vector-ref limits 2) (vector-ref limits 3) profile result)))
+      (if (not (= status 0)) (c2-inspect-native-fail status result))
+      (if (not (= (c2-inspect-u64 result 0) c2-inspect-result-magic))
+          (c2-inspect-fail
+            'internal 'checkpoint-inspect
+            "C2 checkpoint projection was not published" '()))
+      (let* ((tokenizer-bytes (c2-inspect-u64 result 88))
+             (config-bytes (c2-inspect-u64 result 96))
+             (api-bytes (c2-inspect-u64 result 104)))
+        (if (or (not (or (= tokenizer-bytes 95) (= tokenizer-bytes 96)))
+                (not (= config-bytes 93)) (not (= api-bytes 11)))
+            (c2-inspect-fail
+              'internal 'checkpoint-inspect
+              "C2 checkpoint projection lengths are invalid" '()))
+        (let* ((api (utf8->string (bytevector-copy result 301 312)))
+               (tokenizer
+                 (utf8->string
+                   (bytevector-copy result 112 (+ 112 tokenizer-bytes))))
+               (config (utf8->string (bytevector-copy result 208 301)))
+               (entry
+                 (vector #f c2-inspect-metadata-tag api tokenizer config
+                         (c2-inspect-u64 result 80)
+                         (c2-inspect-u64 result 72)
+                         (c2-inspect-u64 result 64)))
+               (shell (c2-inspect-make-identity entry)))
+          (vector-set! entry 0 shell)
+          shell)))))
+
+(define (c2-checkpoint-metadata-ref-internal metadata key)
+  (let ((entry (c2-inspect-find metadata)))
+    (if (or (not entry) (not (c2-inspect-metadata-entry-valid? entry)))
+        (c2-inspect-fail
+          'invalid-argument 'checkpoint-metadata-ref
+          "expected exact C2 checkpoint metadata" '()))
+    (cond ((eq? key 'format-id) 'eshkol-training-state)
+          ((eq? key 'format-version) (list 1 0))
+          ((eq? key 'required-features) '())
+          ((eq? key 'checksum-algorithm) 'sha256)
+          ((eq? key 'api-version) (string-copy (vector-ref entry 2)))
+          ((eq? key 'config-schema-version) (list 1 0))
+          ((eq? key 'tokenizer-fingerprint)
+           (string-copy (vector-ref entry 3)))
+          ((eq? key 'config-fingerprint)
+           (string-copy (vector-ref entry 4)))
+          ((eq? key 'tensor-count) (vector-ref entry 5))
+          ((eq? key 'payload-bytes) (vector-ref entry 6))
+          (else
+            (c2-inspect-fail
+              'invalid-argument 'checkpoint-metadata-ref
+              "unknown checkpoint metadata key" '())))))

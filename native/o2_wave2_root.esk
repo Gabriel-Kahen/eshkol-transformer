@@ -1,0 +1,5 @@
+;;; Canonical standalone O2 successor aggregate root. Never install this source.
+;;; The reusable suffix lets C2 extend an existing I2/D2 identity universe.
+
+(load "i2_wave2_root.esk")
+(load "o2_wave2_extension.esk")

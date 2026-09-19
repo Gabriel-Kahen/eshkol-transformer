@@ -43,18 +43,29 @@ public contracts are versioned independently of implementations.
 - Hidden states are floating tensors shaped `[batch, sequence, hidden]`.
 - Attention projections explicitly document head and grouped-query layouts.
 - Logits are `[batch, sequence, vocabulary]`.
-- Indexed LM targets are `[batch, sequence]`; padding/document exclusions are carried
-  by a boolean or numeric loss mask of the same leading shape.
+- Indexed LM targets are `[batch, sequence]`; D2 batches carry a one-byte boolean
+  loss mask of exactly the same shape. D2 shards do not imply document boundaries.
 - Every operation declares accepted dtypes, devices, contiguity, broadcasting, and
   gradient support.
 
 I2 supplies the carrier-local boundary for the first shared owned dense CPU-f32
-storage. Its active P1 integration binds stable live parameter value storage and
+storage. Its accepted P1 integration binds stable live parameter value storage and
 explicit accumulated-gradient slots to P1's canonical unique handles while
 preserving ties through the merged release-capable P1L provider interface. Exact i64
 and bool operands remain separate carrier contracts; no numeric vector, cast,
 transfer, or fallback may impersonate them. I2 is a prerequisite of N2 and O2, but
 owns neither numerical layer kernels nor an optimizer algorithm.
+
+D2 owns the finite memory-bounded D1-shard-to-batch path. One dataset retains one
+bounded manifest, at most one bounded shard, one fixed-shape batch, and one bounded
+shuffle window. Its carrier is two dense CPU i64 `[N,T]` planes and one dense CPU
+one-byte bool `[N,T]` plane. Public tensor identities are stable state-backed
+capabilities; reviewed consumers borrow unchanged K1 views only synchronously.
+Explicit batch release invalidates authority before storage destruction. The
+detached `ESHKDCU1` cursor is D2's only downstream C2 state contract. D2 exact-range
+native I/O owns descriptor lifetime only; Eshkol owns parsing and validation. The
+dataset's private native control owns the admitted fixed shuffle slots while the
+shuffle algorithm and cursor remain Eshkol-native.
 
 ## Native boundary
 
@@ -69,6 +80,14 @@ duplicate capability/operation ownership and routes unchanged borrowed views to 
 provider. The storage owner keeps the data and metadata stable for the complete
 two-phase validate/invoke call; operation providers retain no ordinary view after
 dispatch.
+
+K2 is the process-local control-plane facade for the accepted A0 capability API. Its
+production resolver is fixed to the explicit I2 accessor, and it publishes a report
+only after genuine K1 discovery plus exact descriptor and eleven-row audits. K2
+matches through K1 but never dispatches the storage operation. Reports, requests,
+and entries are caller-region-owned authenticated snapshots; the one bounded native
+runtime retains no shell identity, resolver authority, serialized proof, or generic
+provider registry. Later provider composition requires a separate accepted contract.
 
 ## Persistence
 
@@ -85,3 +104,12 @@ Trusted consumers validate and borrow those handles synchronously, end the borro
 the same call, and retain no raw native pointer. Optimizer snapshots require their
 own versioned receiver ledger and release API; they cannot reuse P1's public state
 release as generic construction or destruction authority.
+
+[C2](C2_TRAINING_STATE.md) defines the accepted `eshkol-training-state` 1.0
+detached container around C1 model bytes, O2 state, typed N2 RNG words, two D2
+cursors, tokenizer/config identities, and counters. C2 validation is staged on one
+no-follow descriptor and completes all byte, checksum, identity, limit, and
+cross-component checks before codec work. C2 owns detached component continuation
+and explicit trainer-state release; TR3 retains the joint atomic live receiver
+transaction and full interrupted/resumed trajectory. Public C2 composition is
+dependency-gated on the merged K2 capability facade.

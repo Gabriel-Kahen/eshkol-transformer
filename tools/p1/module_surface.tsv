@@ -47,3 +47,13 @@ internal	tensor-provider-preflight-internal
 internal	tensor-provider-release-owned-internal!
 internal	tensor-provider-admit-owned-internal!
 internal	state-dict-adopt-owned-internal!
+internal	state-dict-c2-parameter-topology-internal
+internal	state-dict-claim-c2-internal!
+internal	state-dict-claim-c2-rollback-internal!
+internal	state-dict-release-c2-owned-internal!
+internal	state-dict-c2-owned-projection-internal
+internal	state-dict-c2-owned-tensor-borrow-begin-internal
+internal	state-dict-c2-owned-tensor-borrow-end-internal
+internal	state-dict-c2-owned-borrow-activate-internal!
+internal	state-dict-c2-owned-borrow-deactivate-internal!
+internal	state-dict-c2-owned-entry-shells-internal

@@ -233,13 +233,27 @@ D1_PUBLIC_NAMES=(
   token-corpus-summary-tokenizer-fingerprint
   token-corpus-summary-total-shard-bytes
 )
+D2_PUBLIC_NAMES=(
+  token-dataset-open
+  token-dataset-next-batch
+  token-dataset-cursor
+  token-dataset-end?
+  token-dataset-seek!
+  token-dataset-close!
+  token-batch-inputs
+  token-batch-targets
+  token-batch-loss-mask
+  token-batch-validate
+  token-batch-release!
+)
 mapfile -t D1_DECLARED_NAMES < <(
   sed -n '/^(provide /,/)/p' "${PROJECT_ROOT}/lib/transformer/data.esk" |
     tr '()' '  ' | tr -s '[:space:]' '\n' |
     grep -v -e '^provide$' -e '^$'
 )
-[[ "${D1_DECLARED_NAMES[*]}" == "${D1_PUBLIC_NAMES[*]}" ]] || \
-  die "transformer.data must provide exactly the eight accepted D1 names"
+EXPECTED_DATA_NAMES=("${D1_PUBLIC_NAMES[@]}" "${D2_PUBLIC_NAMES[@]}")
+[[ "${D1_DECLARED_NAMES[*]}" == "${EXPECTED_DATA_NAMES[*]}" ]] || \
+  die "transformer.data must provide the exact accepted D1 and D2 names"
 
 LC_ALL=C sort -cu "${D1_PUBLIC_EXPORTS}" || \
   die "D1 public native export manifest is not C-sorted unique text"
@@ -880,6 +894,38 @@ for hidden_index in "${!hidden_summary_names[@]}"; do
   cmp --silent "${D1_TMP}/negative-summary-${hidden_source}-1.log" \
     "${D1_TMP}/negative-summary-${hidden_source}-2.log"
 done
+
+# Importing transformer.data emits references for every installed D1 and D2
+# wrapper, even if a program calls only a D1 operation. Keep this gate linked
+# solely to the standalone D1 production/fault archives by replacing its staged
+# runtime facade with the exact marked D1 wrapper component from the production
+# source. The complete installed facade was compiled and inspected above.
+D1_FACADE_COMPONENT_BEGIN=';;; D1 facade component begin.'
+D1_FACADE_COMPONENT_END=';;; D1 facade component end.'
+[[ "$(grep -Fxc "${D1_FACADE_COMPONENT_BEGIN}" \
+  "${PROJECT_ROOT}/lib/transformer/data.esk")" == 1 ]] || \
+  die "production data facade must have exactly one D1 component begin marker"
+[[ "$(grep -Fxc "${D1_FACADE_COMPONENT_END}" \
+  "${PROJECT_ROOT}/lib/transformer/data.esk")" == 1 ]] || \
+  die "production data facade must have exactly one D1 component end marker"
+{
+  printf '%s\n\n' ';;; D1-only staged facade extracted from production wrappers.'
+  printf '%s\n\n' '(require transformer.error_consumer)'
+  printf '%s\n' '(provide token-corpus-write!'
+  printf '         %s\n' "${D1_PUBLIC_NAMES[@]:1}"
+  printf '%s\n\n' ')'
+  sed -n "/^${D1_FACADE_COMPONENT_BEGIN//./\\.}$/,/^${D1_FACADE_COMPONENT_END//./\\.}$/p" \
+    "${PROJECT_ROOT}/lib/transformer/data.esk"
+} >"${D1_PUBLIC_ROOT}/transformer/data.esk.tmp"
+mv -f "${D1_PUBLIC_ROOT}/transformer/data.esk.tmp" \
+  "${D1_PUBLIC_ROOT}/transformer/data.esk"
+[[ "$(grep -Ec '^\(define \(token-corpus-' \
+  "${D1_PUBLIC_ROOT}/transformer/data.esk")" == 8 ]] || \
+  die "staged D1 facade did not extract exactly eight public wrappers"
+if grep -F 'et_e1b_public_d2_' \
+    "${D1_PUBLIC_ROOT}/transformer/data.esk" >/dev/null; then
+  die "staged D1 facade retained a D2 native reference"
+fi
 
 D1_INCLUDE_ROOT="${PROJECT_ROOT}/lib" D1_SOURCE_ROOT="${PROJECT_ROOT}/src" \
   d1_compile "${PROJECT_ROOT}/tests/d1/sha256_probe.esk" \

@@ -1,0 +1,32 @@
+(require transformer.optim)
+(require transformer.error_consumer)
+
+(define checks 0)
+(define failures 0)
+
+(define (check condition)
+  (set! checks (+ checks 1))
+  (if (not condition) (set! failures (+ failures 1))))
+
+(define (expect-error category operation thunk)
+  (guard (caught
+           (#t
+             (check
+               (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught) operation)))))
+    (thunk)
+    (check #f)))
+
+(expect-error 'invalid-argument 'optimizer-create
+              (lambda () (optimizer-create '(invalid) #f)))
+(expect-error 'invalid-argument 'optimizer-state-release!
+              (lambda () (optimizer-state-release! '#(forged))))
+
+(if (= failures 0)
+    (begin
+      (display "O2 package smoke PASS: ")
+      (display checks)
+      (display " checks")
+      (newline))
+    (exit 1))

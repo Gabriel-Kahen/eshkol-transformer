@@ -25,6 +25,7 @@
 (define t2-wave2-limit 1048576)
 (define t2-wave2-i64-max 9223372036854775807)
 (define t2-wave2-policy-registry '())
+(define t2-wave2-policy-projector (vector #f))
 (define t2-wave2-tensor-registry '())
 
 (define (t2-wave2-fail-raw category operation message)
@@ -86,8 +87,16 @@
            (vector-ref entry 1) (vector-ref entry 2) (vector-ref entry 3)
            (vector-ref entry 4) (vector-ref entry 5))
           entry)
-        (t2-wave2-fail 'invalid-argument operation
-                       "expected aggregate persistence policy"))))
+        (let ((projector (vector-ref t2-wave2-policy-projector 0)))
+          (if projector
+              (let ((projected (projector value operation)))
+                (c1-persistence-policy-internal
+                  (vector-ref projected 1) (vector-ref projected 2)
+                  (vector-ref projected 3) (vector-ref projected 4)
+                  (vector-ref projected 5))
+                projected)
+              (t2-wave2-fail 'invalid-argument operation
+                             "expected aggregate persistence policy"))))))
 
 (define (t2-wave2-effective value)
   (if (< value t2-wave2-limit) value t2-wave2-limit))

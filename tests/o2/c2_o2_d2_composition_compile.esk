@@ -1,0 +1,4 @@
+;;; Compile-only evidence that O2 extends the D2 aggregate's existing I2 world.
+(load "d2_wave2_root.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")

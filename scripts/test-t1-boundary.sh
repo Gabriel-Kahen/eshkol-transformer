@@ -64,8 +64,9 @@ check_public_module transformer/config \
 check_public_module transformer/module \
   'module-parameters module-buffers module-state-dict module-load-state-dict! module-train! module-eval! module-zero-grad! parameter-tree-paths parameter-tree-handle parameter-tree-tie-groups parameter-handle-path parameter-handle-shape parameter-handle-dtype parameter-handle-device state-dict-paths state-dict-tensor state-dict-alias-groups state-dict-release!'
 check_public_module transformer/data \
-  'token-corpus-write! token-corpus-validate token-corpus-summary-shard-count token-corpus-summary-total-tokens token-corpus-summary-vocab-size token-corpus-summary-shard-token-limit token-corpus-summary-tokenizer-fingerprint token-corpus-summary-total-shard-bytes'
-check_public_module transformer/persistence 'persistence-policy'
+  'token-corpus-write! token-corpus-validate token-corpus-summary-shard-count token-corpus-summary-total-tokens token-corpus-summary-vocab-size token-corpus-summary-shard-token-limit token-corpus-summary-tokenizer-fingerprint token-corpus-summary-total-shard-bytes token-dataset-open token-dataset-next-batch token-dataset-cursor token-dataset-end? token-dataset-seek! token-dataset-close! token-batch-inputs token-batch-targets token-batch-loss-mask token-batch-validate token-batch-release!'
+check_public_module transformer/persistence \
+  'persistence-policy checkpoint-inspect checkpoint-metadata-ref checkpoint-load checkpoint-save!'
 check_public_module transformer/tokenizer \
   'tokenizer-byte tokenizer-load tokenizer-save! tokenizer-encode tokenizer-decode tokenizer-vocab-size tokenizer-fingerprint tokenizer-special-token-id'
 
@@ -244,9 +245,33 @@ cmp "${t1_boundary_tmp}/public-source-closure.txt" \
 cmp "${PROJECT_ROOT}/native/t1_wave1_public_source_closure.txt" \
   "${t1_boundary_tmp}/public-source-closure.txt" || \
   die "reverse import public source closure drifted"
+# The historical 47-wrapper T1 artifact remains checked above. The current public
+# facade contains accepted D2 and C2 operations, so inspect that complete source
+# closure separately. A predecessor link must use the frozen C1 persistence facade
+# rather than inventing C2 stubs in the D2 archive.
+run_compiler reverse-import-predecessor-object --strict-types --no-stdlib \
+  --compile-only -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
+  -I "${PROJECT_ROOT}/lib" \
+  --emit-depfile "${t1_boundary_tmp}/import-reverse-predecessor.d" \
+  "${PROJECT_ROOT}/tests/t1/import_reverse.esk" \
+  -o "${t1_boundary_tmp}/import-reverse-predecessor.o"
+grep -F 'tests/fixtures/c1-public/transformer/persistence.esk' \
+  "${t1_boundary_tmp}/import-reverse-predecessor.d" >/dev/null || \
+  die "predecessor caller did not select the frozen C1 persistence facade"
+if grep -F 'lib/transformer/persistence.esk' \
+    "${t1_boundary_tmp}/import-reverse-predecessor.d" >/dev/null; then
+  die "predecessor caller admitted the current C2 persistence facade"
+fi
+nm -u --format=posix "${t1_boundary_tmp}/import-reverse-predecessor.o" | \
+  awk '{ print $1 }' | grep '^et_e1b_' | LC_ALL=C sort -u \
+  >"${t1_boundary_tmp}/predecessor-wrapper-refs.txt"
+cmp "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt" \
+  "${t1_boundary_tmp}/predecessor-wrapper-refs.txt" || \
+  die "frozen predecessor facade does not reference exactly the D2 wrappers"
 run_compiler reverse-import-link --strict-types --no-stdlib \
-  -I "${PROJECT_ROOT}/lib" -L "$(project_build_dir)/t1" \
-  --lib eshkol_transformer_wave1 \
+  -I "${PROJECT_ROOT}/tests/fixtures/c1-public" \
+  -I "${PROJECT_ROOT}/lib" -L "$(project_build_dir)/d2" \
+  --lib eshkol_transformer_wave2 \
   "${PROJECT_ROOT}/tests/t1/import_reverse.esk" \
   -o "${t1_boundary_tmp}/import-reverse"
 timeout --foreground --signal=TERM --kill-after=5s 60s \
@@ -279,9 +304,17 @@ done
 nm -u --format=posix "${t1_boundary_tmp}/import-reverse.o" | \
   awk '{ print $1 }' | grep '^et_e1b_' | LC_ALL=C sort -u \
   >"${t1_boundary_tmp}/public-wrapper-refs.txt"
-cmp "${PROJECT_ROOT}/native/t1_wave1_defined_symbols.txt" \
+{
+  cat "${PROJECT_ROOT}/native/d2_wave2_defined_symbols.txt"
+  printf '%s\n' \
+    et_e1b_public_c2_checkpoint_inspect_v1 \
+    et_e1b_public_c2_checkpoint_load_v1 \
+    et_e1b_public_c2_checkpoint_metadata_ref_v1 \
+    et_e1b_public_c2_checkpoint_save_v1
+} | LC_ALL=C sort -u >"${t1_boundary_tmp}/current-public-wrapper-refs.txt"
+cmp "${t1_boundary_tmp}/current-public-wrapper-refs.txt" \
   "${t1_boundary_tmp}/public-wrapper-refs.txt" || \
-  die "aggregate public source closure does not reference exactly 47 wrappers"
+  die "current public source closure does not reference the exact D2/C2 wrappers"
 if ldd "${t1_boundary_tmp}/import-reverse" | grep -Eiq 'python|torch'; then
   die "Wave 1 aggregate caller links a Python or Torch runtime"
 fi

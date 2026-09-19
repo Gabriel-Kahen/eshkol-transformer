@@ -1,0 +1,11 @@
+d2-token-batch-inputs et_e1b_private_d2_token_batch_inputs_cabi_v1
+d2-token-batch-loss-mask et_e1b_private_d2_token_batch_loss_mask_cabi_v1
+d2-token-batch-release! et_e1b_private_d2_token_batch_release_cabi_v1
+d2-token-batch-targets et_e1b_private_d2_token_batch_targets_cabi_v1
+d2-token-batch-validate et_e1b_private_d2_token_batch_validate_cabi_v1
+d2-token-dataset-close! et_e1b_private_d2_token_dataset_close_cabi_v1
+d2-token-dataset-cursor et_e1b_private_d2_token_dataset_cursor_cabi_v1
+d2-token-dataset-end? et_e1b_private_d2_token_dataset_end_cabi_v1
+d2-token-dataset-next-batch et_e1b_private_d2_token_dataset_next_batch_cabi_v1
+d2-token-dataset-open et_e1b_private_d2_token_dataset_open_cabi_v1
+d2-token-dataset-seek! et_e1b_private_d2_token_dataset_seek_cabi_v1

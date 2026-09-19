@@ -1,12 +1,26 @@
 # N3K bounded diagnostic primitives
 
-Status: **review; contract accepted with corrections**.
+Status: **accepted; bounded N3K workstream complete**.
 Acceptance: https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584383610. Tracking #66,
 parent #1, prerequisite audit #65 at `a97c1095b542f1f86f3273139d39af2d8ae47e93`.
-Base is merged main `231f9354f14389db15faac7820ef23dc038ae941`.
+Implementation base: `231f9354f14389db15faac7820ef23dc038ae941`.
 The profile direction is accepted at
 https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5584217290;
 The specific boundary below incorporates the subsequent acceptance corrections.
+
+[PR #67](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67) merged as
+`15ab04d4be6df11ca279c3eeb50b582e8163d535` after
+[independent Astra-high approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/67#issuecomment-5587426332)
+and [supported CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/34222643674).
+The reviewed head `39a79d2d6a87f9759b828082ac86fd66c67e2cf0`, CI's synthetic merge
+`b8c1768b75f54b4ac399d1d4cef0e05f68ae9f73`, and the actual merge share tree
+`07cf8f8c3d9529a4df4c2f4a81e649fcc9e4bc49`.
+Integration rebuilt K1/I1/I2/N3K and reran `scripts/test-n3k.sh` with
+`N3K_ASAN_DETECT_LEAKS=1` on the actual merge: all focused checks passed, including
+fresh private AOT and sanitizers. That retest used the revalidated pinned Eshkol
+compiler on the explicit CachyOS/LLVM22 compatibility lane; supported evidence
+comes from Ubuntu22/LLVM21 CI. Acceptance covers the diagnostic kernels below,
+not a public model or training framework.
 
 ## Provider identity and immutable predecessors
 
@@ -258,8 +272,8 @@ correctness, permutation/sum/initializer bits/errors, and native ownership/fenv/
 packaging. Numerical and packaging review found no implementation defect. The
 negative-suite review identified missing invalid-ID and ordinary-input alias cases;
 these were added with repeated-ID scatter overflow and independently rerun under
-ASan/UBSan/LSan. No unresolved review blocker remains in this task; integration
-still owns the separate integration review and merge decision.
+ASan/UBSan/LSan. The separate integration review also approved, and integration
+merged and retested the implementation as recorded above.
 
 Native carrier comparison uses the same provider with raw and owned views;
 independent mathematical parity is established by the separate primitive and

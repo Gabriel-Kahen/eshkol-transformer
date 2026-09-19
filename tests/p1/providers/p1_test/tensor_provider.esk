@@ -44,6 +44,7 @@
          fixture-register-overlimit-evidence-provider-internal!
          fixture-register-improper-evidence-provider-internal!
          fixture-register-repeat-mutating-provider-internal!
+         fixture-register-region-provider-internal!
          fixture-register-storage-raise-provider-internal!
          fixture-register-storage-raise-false-provider-internal!
          fixture-register-storage-mutation-provider-internal!
@@ -786,6 +787,13 @@
     fixture-device-equal? fixture-prepare-load fixture-commit-load!
     fixture-release-owned!))
 
+(define region-publication-provider
+  (tensor-provider-create-internal
+    'region-publication-v1 fixture-describe fixture-clone
+    fixture-storage-identical? fixture-value-equal?
+    fixture-device-equal? fixture-prepare-load fixture-commit-load!
+    fixture-release-owned!))
+
 (define collision-provider
   (tensor-provider-create-internal
     fixture-provider-name fixture-describe fixture-clone
@@ -931,10 +939,18 @@
     fixture-device-equal? repeat-mutating-prepare repeat-mutating-commit
     fixture-release-owned!))
 
+;; Keep admission carriers in root lifetime so the focused region test isolates
+;; provider shell/registration publication rather than evidence-carrier rules.
+(define region-publication-evidence (fixture-admission-evidence))
+
 (tensor-provider-register-internal! fixture-provider
                                     (fixture-admission-evidence))
 (tensor-provider-register-internal! alternate-provider
                                     (fixture-admission-evidence))
+
+(define (fixture-register-region-provider-internal!)
+  (tensor-provider-register-internal!
+    region-publication-provider region-publication-evidence))
 
 (define (fixture-register-substituting-provider-internal!)
   (tensor-provider-register-internal! substituting-provider

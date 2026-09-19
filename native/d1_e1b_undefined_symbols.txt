@@ -60,6 +60,8 @@ eshkol_limit_poll_interrupt
 eshkol_make_exception_with_header
 eshkol_mkdir
 eshkol_object_abi_v1_h8_s0_a8
+eshkol_parallel_scope_begin
+eshkol_parallel_scope_end
 eshkol_parameter_converter_ref_ptr
 eshkol_parameter_ref_ptr
 eshkol_parameter_set_ptr
@@ -73,6 +75,8 @@ eshkol_rational_compare_tagged_ptr
 eshkol_rational_create
 eshkol_rational_to_double
 eshkol_rational_to_string
+eshkol_region_close_builtin
+eshkol_region_open_builtin
 eshkol_region_unwind_for_continuation
 eshkol_region_write_barrier_into
 eshkol_remove
@@ -101,7 +105,8 @@ fmod
 fread
 fseek
 ftell
-get_global_arena
+g_exception_handler_stack
+get_global_arena_shared
 memcpy
 memmove
 memset

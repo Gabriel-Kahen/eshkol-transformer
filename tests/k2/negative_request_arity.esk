@@ -1,0 +1,2 @@
+(require transformer.capabilities)
+(capability-request 'storage.copy 'f32 'cpu '())

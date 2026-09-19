@@ -1,0 +1,13 @@
+(require transformer.capabilities)
+(require transformer.persistence)
+(require transformer.trainer)
+
+;;; Compile the exact public C2 arities without executing them.
+(define (c2-compile-public path policy metadata report state options)
+  (list
+    (persistence-policy 1 1 1 1 'cpu)
+    (checkpoint-inspect path policy)
+    (checkpoint-metadata-ref metadata 'format-id)
+    (checkpoint-load path policy report)
+    (checkpoint-save! state path policy options)
+    (trainer-state-release! state)))
