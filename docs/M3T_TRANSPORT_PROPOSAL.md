@@ -1,6 +1,13 @@
 # M3T production transport proposal
 
-Status: **proposal for integration decision; no implementation authorized**.
+Status: **design accepted for implementation; implementation and acceptance
+evidence pending**. Binding disposition accepts the exact amended proposal at
+`e7ad6b0d82f4cf7f5d45efff04179433379965bb`:
+[issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740555652),
+[issue #68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68#issuecomment-5740555698).
+Historical requests below record the accepted design; they are not outstanding
+permission requests. Implementation, independent review and supported CI remain
+required before completion; integration owns merge.
 Tracking [#68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68), parents
 [#65](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/65) and
 [#1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
@@ -409,7 +416,8 @@ forbidden.
 
 ### Private Eshkol/native transport names
 
-Trusted Eshkol handlers have the exact public suffixes prefixed `m3t-public-` and
+Trusted Eshkol handlers remove the public `diagnostic-` prefix and prefix the
+remaining suffix with `m3t-public-` (for example, `m3t-public-initializer-state`), with
 the same arities. The source owns configuration checks, opaque identity admission,
 canonical P1 construction/tie traversal and call ordering. The native boundary
 below only transports fixed owners and calls reviewed kernels. Names in the table

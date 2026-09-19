@@ -4,6 +4,29 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-19 — M3T design accepted; implementation pending
+
+- **Authoritative disposition:** integration accepted amended proposal
+  `e7ad6b0d82f4cf7f5d45efff04179433379965bb` in
+  [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740555652)
+  and [issue #68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68#issuecomment-5740555698).
+  This ledger records that decision; it does not independently accept an implementation.
+- **Scope:** 85-global / 79-export diagnostic sibling, unchanged 38 operations
+  and bounded profile. Exactly one registry-owning artifact per process, restricted
+  six-facade closure, no D2/O2/K2/C2 interoperability. Full training composition and
+  rank-two checkpoint capability remain downstream dependencies.
+- **Lifetime conditions:** preserve all ten C2 P1 seams and slots 0..58, append
+  five construction entries at 59..63. Eshkol P1 becomes 46 private / 64 total;
+  native identity separately becomes 36 private. Preserve canonical promotion,
+  fresh-only ownership, authority revocation before teardown, nonfallible seal,
+  exact scoped guards and existing aggregate regressions.
+- **Implementation pending:** ordinary public AOT witnesses, independent numerical
+  role-wiring checks, failure/cleanup and exact retained-memory proofs, fresh
+  packaging and localization, sanitizers, affected P1/I2/E1B/C2/T1 regressions,
+  independent review and supported exact-head CI through the accepted planner.
+  Design acceptance lifts the implementation hold; it does not mark M3T complete.
+  M3 now explicitly depends on M3T. Integration retains merge ownership.
+
 ## 2026-09-18 — CI-E2 scheduling/evidence extension accepted
 
 - **Decision:** CI-E2 is accepted and complete. It separates unchanged O2 tests

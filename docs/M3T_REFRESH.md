@@ -1,7 +1,10 @@
 # M3T current-main proposal refresh — 2026-09-19
 
-Status: **amended proposal awaiting binding integration disposition**. Production
-implementation remains held; M3T and M3 are not complete.
+Status: **design accepted; implementation pending**. The
+[binding disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740555652)
+accepts exact proposal `e7ad6b0d82f4cf7f5d45efff04179433379965bb` and lifts the
+implementation hold. The evidence below predates that disposition; it does not
+establish implementation acceptance. M3T and M3 are not complete.
 
 Accepted base: `7d9ad1cf6d997fc3c1f489f3955ff97c97281f68`.
 Local history-preserving merge: `207d0e95047fe3f6b73880a0c163369c5b375bf0`.
