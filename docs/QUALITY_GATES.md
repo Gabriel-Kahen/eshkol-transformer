@@ -2,19 +2,13 @@
 
 ## CI tiers
 
-The CI-E2 candidate described in [CI efficiency](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse-candidate)
-extends this topology to 16 suites by separating unchanged O2 tests. It also
-proposes main-push reuse of directly verified original full PR evidence and
-prose-only main selection only with completed base coverage. These scheduling
-changes remain subject to independent review and supported exact-head execution;
-all numerical, lifetime, fresh-build and resource gates below remain mandatory.
-The following records the previously accepted CI-E policy and measurements.
-
-The accepted CI-E topology uses one full-coverage engine in
+The accepted [CI-E2 topology](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-main-push-reuse)
+uses one full-coverage engine in
 `.github/workflows/full-coverage.yml`, shared by blocking CI and exhaustive
-acceptance. It runs a clean canonical build with smoke/benchmark, the eight
-existing component suites (checkpoint I/O now owns C1 alone), and six independent
-C2 groups. The command graph preserves all 23 top-level local test commands.
+acceptance. It runs one clean canonical build with smoke/benchmark, nine component
+suites including the separate unchanged O2 optimizer gate (checkpoint I/O owns C1
+alone), and six independent C2 groups: 16 suites total. The command graph preserves
+all 23 top-level local test commands.
 C2 composition invokes each unique leaf gate once instead of repeating regression
 tails nested inside other gates. Standalone core, load, and operational commands
 retain their historical regression tails; explicit focused flags are only used by
@@ -29,20 +23,25 @@ build`, smoke and benchmark. No cross-run binary cache or fresh-proof bypass is
 introduced. The existing pinned compiler cache remains subject to toolchain
 verification. Per-job prerequisite and test seconds are recorded in job summaries.
 
-Outer budgets remain 105 minutes for native numerics, 75 minutes for ordinary
+Outer budgets remain 105 minutes for both native suites, 75 minutes for ordinary
 component and clean-build jobs, and 240 minutes for each C2 group. The previous
 checkpoint budget is not confused with a runtime resource bound: inner compiler
 timeouts, the fixed C2 RSS/arena ceilings, test counts, and leak checks are
-unchanged. Topology/evidence/final-status jobs receive two minutes and evidence
-selection three minutes. An explicit structural checker and mutation tests reject
-missing/duplicate gates, altered environment/budgets, failure masking, and skipped
-final assertions.
+unchanged. Main topology/selection and exhaustive evidence selection receive three
+minutes; evidence and final-status jobs receive two minutes. An explicit structural
+checker and mutation tests reject missing/duplicate gates, altered
+environment/budgets, failure masking, and skipped final assertions.
 
 PRs consisting solely of allowlisted prose (`README.md`, `CONTRIBUTING.md`, and
 `docs/**/*.md`, excluding `AGENTS.md`) run topology and change-selection tests.
 Renames are checked on both sides; mixed/unknown paths, empty diffs and unavailable
-history require full CI. Pushes to main and merge-queue runs require full coverage.
-A documentation-only skipped matrix is not eligible for exhaustive evidence reuse.
+history require full CI. Every main push executes authenticated selection. A
+prose-only main push may skip the matrix only after direct verification of completed
+full coverage for its base code. An eligible merged code PR may reuse only its
+directly verified original full result; missing, partial, pending, failed,
+ambiguous, or stale evidence falls back to fresh full coverage. Skipped or reused
+CI does not itself become reusable full evidence. Merge-queue runs, explicit CI
+dispatches, and nightly acceptance remain fresh full coverage.
 
 Nightly acceptance always runs fresh full coverage through the same engine.
 Manual acceptance can reuse only the latest completed successful CI for the exact
@@ -77,6 +76,20 @@ for exact provenance, before/after measurements, and variance limits. The final
 93m19s wall time is 131m39s / 58.5% below the 224m58s uninterrupted baseline;
 421m23s summed runner time is 42m37s / 9.2% below 464m00s. A failed required
 full-coverage or exhaustive run remains an acceptance blocker.
+
+CI-E2 supported run 35407378830 at exact head
+`22e54314078ffb133cd937bd454c89e6a7712282` passed all 16 suites, all 23
+commands, canonical smoke and benchmark on the independently approved tree
+`d5137fca07ef71648e108ac5776072097b551df3`. PR #82 merged that tree as
+`f9d8366b17ecf408a60d8f62e8bf6c4d4eebbbe1`; main run 35410997717 directly
+verified and reused the original full run with exactly topology success, full suites
+skipped, and final success in 18 seconds. The supported full run took 55m22s wall
+and 409m13s summed runner time. This is 37m57s / 40.7% wall and 12m10s / 2.9%
+summed-runner improvement over accepted CI-E, and 169m36s / 75.4% wall and
+54m47s / 11.8% summed-runner improvement over the uninterrupted baseline. These
+public-repository runner-time measurements are not billing or cost claims. At this
+documentation review, the live prose-base branch has not yet run; its subsequent
+result is recorded in issue #81.
 
 ## Required on every numerical component
 

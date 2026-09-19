@@ -28,16 +28,17 @@ From a clean checkout on the supported lane, run:
 /usr/bin/bash -c 'make build'
 /usr/bin/bash -c 'python3.14 -m venv "$(pwd)/.tmp/q0-venv"'
 /usr/bin/bash -c '"$(pwd)/.tmp/q0-venv/bin/python" -m pip install -r tests/q0/requirements-oracle.lock'
-/usr/bin/bash -c 'printf '\''#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexec "%s" "$@"\n'\'' "$(pwd)/.tmp/q0-venv/bin/python" > "$(pwd)/.tmp/n2-oracle-python" && chmod 0500 "$(pwd)/.tmp/n2-oracle-python"'
+/usr/bin/bash -c 'printf '\''#!/usr/bin/bash\nexport ATEN_CPU_CAPABILITY=default\nexport MKL_CBWR=COMPATIBLE\nexec "%s" "$@"\n'\'' "$(pwd)/.tmp/q0-venv/bin/python" > "$(pwd)/.tmp/n2-oracle-python" && chmod 0500 "$(pwd)/.tmp/n2-oracle-python"'
 /usr/bin/bash -c 'Q0_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" N2_ORACLE_PYTHON="$(pwd)/.tmp/n2-oracle-python" O2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" A2_ORACLE_PYTHON="$(pwd)/.tmp/q0-venv/bin/python" ESHKOL_RUN="$(pwd)/.deps/eshkol-build/eshkol-run" make test-after-build'
 /usr/bin/bash -c 'make smoke-after-build'
 ```
 
-The CI-E candidate routes code pull requests, main pushes and merge-queue runs
-through one full-coverage engine. It runs a clean canonical build and smoke/benchmark,
-the component suites, and six independent C2 groups. All 23 top-level local test
-commands remain covered; accidental nested C2 regression reruns are removed while
-intentional fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
+The accepted CI-E2 engine routes code pull requests, main pushes and merge-queue
+runs through one full-coverage engine. Its 16 suites include a clean canonical
+build with smoke/benchmark, a separate native optimizer job, the other component
+suites, and six independent C2 groups. All 23 top-level local test commands remain
+covered; accidental nested C2 regression reruns are removed while intentional
+fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
 
 Manual exhaustive acceptance can verify and reuse completed full CI for the exact
 candidate tree and run attempt. Missing or ineligible evidence requires fresh full
@@ -45,15 +46,18 @@ coverage; an already-running matching CI prevents duplicate work. Nightly accept
 always runs fresh. Canonical prerequisites are built once per job from an audited
 dependency plan, not a cross-run test-binary cache. See
 [CI efficiency](docs/CI_EFFICIENCY.md) for the coverage mapping, historical timings
-and pending supported performance measurements. The scheduling improvements remain
-review candidates until supported execution and independent acceptance.
+and accepted supported measurements.
 
 PRs changing only `README.md`, `CONTRIBUTING.md`, or Markdown under `docs/` run the
 CI topology and selector checks without launching compiler suites. `AGENTS.md`,
 unknown paths, mixed changes, empty diffs, or unavailable history require full CI.
 Renames are checked as both a deletion and an addition. Every push to `main` and
-merge-queue run still requires all suites, and the final status check accepts a
-skipped matrix only for an explicitly selected documentation-only PR.
+merge-queue run is checked fail-closed. A main prose-only push may skip compiler
+suites only after direct verification of completed full coverage for its base code;
+an eligible merged code PR may reuse its directly verified original full result.
+Missing, partial, pending, failed, ambiguous, or stale evidence runs the full
+engine. Merge-queue runs, explicit CI dispatches, and nightly acceptance always run
+fresh full coverage.
 
 The pinned oracle environment requires Python 3.14.6.
 Run the serial test phase locally after a build with the same four absolute oracle
