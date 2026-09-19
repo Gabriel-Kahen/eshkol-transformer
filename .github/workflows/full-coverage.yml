@@ -21,6 +21,9 @@ jobs:
           - suite: native-optimizer
             test_target: test-ci-optimizer-after-build
             timeout: 105
+          - suite: diagnostic-transport
+            test_target: test-ci-m3t-after-build
+            timeout: 105
           - suite: contracts-data
             test_target: test-ci-contracts-after-build
             timeout: 75
@@ -75,6 +78,7 @@ jobs:
       N2_ASAN_DETECT_LEAKS: '1'
       O2_ASAN_DETECT_LEAKS: '1'
       N3K_ASAN_DETECT_LEAKS: '1'
+      M3T_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -90,7 +94,7 @@ jobs:
             build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
             ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
             libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
-            ripgrep
+            ripgrep time
           test "$(llvm-config-21 --version)" = '21.1.8'
 
       - name: Restore pinned Eshkol toolchain

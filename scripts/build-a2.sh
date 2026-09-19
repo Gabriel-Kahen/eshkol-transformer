@@ -29,7 +29,8 @@ case "${mode}" in
   *) die "unknown A2 build mode: ${mode}" ;;
 esac
 
-"${cc}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/a2_attention_provider.c" \
+"${cc}" "${cflags[@]}" -MMD -MF "${temporary_dir}/a2_attention_provider.d" -MT a2_attention_provider.o \
+  -c "${PROJECT_ROOT}/native/a2_attention_provider.c" \
   -o "${temporary_dir}/a2_attention_provider.o"
 "${cc}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/a2_kv_cache.c" \
   -o "${temporary_dir}/a2_kv_cache.o"
@@ -38,6 +39,7 @@ ar rcsD "${temporary_dir}/libeshkol_transformer_a2.a" \
   "${temporary_dir}/a2_kv_cache.o"
 
 mkdir -p "${artifact_dir}"
+mv -f "${temporary_dir}/a2_attention_provider.d" "${artifact_dir}/a2_attention_provider.d"
 mv -f "${temporary_dir}/a2_attention_provider.o" "${artifact_dir}/a2_attention_provider.o"
 mv -f "${temporary_dir}/a2_kv_cache.o" "${artifact_dir}/a2_kv_cache.o"
 mv -f "${temporary_dir}/libeshkol_transformer_a2.a" \

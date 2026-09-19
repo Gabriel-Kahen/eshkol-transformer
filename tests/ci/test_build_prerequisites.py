@@ -103,6 +103,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
                 "d2",
                 "o2",
                 "d1",
+                "m3t",
             ],
         )
         self.assertEqual(len(planned), len(set(planned)))
@@ -113,6 +114,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
     def test_partition_plans_only_build_canonical_artifacts_they_read(self) -> None:
         cases = {
             "contracts-data": ["d1"],
+            "diagnostic-transport": ["i2", "m3t"],
             "checkpoint-io": [],
             "parameter-state": [],
             "byte-tokenizer": ["d2"],

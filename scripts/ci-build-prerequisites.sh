@@ -38,6 +38,9 @@ for suite in "$@"; do
       # core partition retains O2 even though test-o2.sh runs separately.
       select_producers k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2
       ;;
+    diagnostic-transport)
+      select_producers i2 m3t
+      ;;
     native-optimizer)
       # O2 reads its own aggregate, K1, and the I2/T2/D2 collision archives.
       select_producers k1 i2 t2 d2 o2
@@ -75,7 +78,7 @@ for suite in "$@"; do
       # Union of predecessor read-before-write artifacts. X1, P1, C1, T1,
       # and the smoke test itself perform intentional test-local fresh builds.
       # Add smoke-benchmark when those post-suite checks run in the same job.
-      select_producers k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2 d1
+      select_producers k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2 d1 m3t
       ;;
     *)
       printf 'error: unknown CI suite: %s\n' "${suite}" >&2
@@ -85,7 +88,7 @@ for suite in "$@"; do
   esac
 done
 
-producer_order=(smoke k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2 d1 c2)
+producer_order=(smoke k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2 d1 c2 m3t)
 
 producer_script() {
   case "$1" in
@@ -168,6 +171,12 @@ verify_producer() {
     d1)
       verify_file "${build_dir}/d1/libeshkol_transformer_d1.a"
       verify_file "${build_dir}/d1/libeshkol_transformer_d1.a.evidence/global-defined.txt"
+      ;;
+    m3t)
+      verify_file "${build_dir}/m3t/m3t_package.o"
+      verify_file "${build_dir}/m3t/libeshkol_transformer_m3t.a"
+      verify_file "${build_dir}/m3t/m3t_package.o.evidence/global-defined.txt"
+      verify_file "${build_dir}/m3t/facades/transformer/diagnostic_transport.esk"
       ;;
     c2)
       verify_file "${build_dir}/c2/c2_wave2.o"

@@ -29,6 +29,7 @@ SUITES = (
     "canonical-build",
     "native-numerics",
     "native-optimizer",
+    "diagnostic-transport",
     "contracts-data",
     "checkpoint-io",
     "parameter-state",
