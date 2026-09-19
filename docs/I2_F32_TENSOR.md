@@ -254,6 +254,31 @@ Allocation failure is explicit `INTERNAL/ALLOCATION_FAILED`; it is never relabel
 as a shape, state, or capability error. A live-storage alias cannot be used as an
 error or output record.
 
+## M3 prerequisite: conservative alias envelope
+
+The [M3 prerequisite decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)
+authorizes this narrow implementation change. Independent differential tests and
+the full I2 gate pass on the explicit local compatibility host; new exact-head
+supported CI and M3 integration evidence remain pending independently of the
+previously accepted I2 implementation above.
+Every protected span comes from `f32_calloc`. Successful nonzero allocations
+expand a monotone half-open address envelope, including storage later freed by
+partial construction. A nonnull, nonempty, representable candidate wholly outside
+that envelope can return no-overlap immediately. Boundary contact is disjoint.
+All other candidates use the unchanged registry scan, including holes, enclosing
+spans, zero/null and overflow cases. In particular, invalid spans retain the old
+empty-registry result rather than becoming unconditional errors.
+
+Unrepresentable successful allocation arithmetic permanently disables the
+shortcut. Frees, retirement and test allocator reset never shrink, reset or
+re-enable it. Allocation results, failpoints, counters, authentication, stale
+handle protection, ownership and caller serialization are unchanged. There are
+no new exports or heap allocations. The envelope adds 24 local static bytes on
+x86-64, separately from retained shells. Inside-envelope queries still scan the
+cumulative registries; no flat-memory or general performance guarantee follows.
+See [M3 retention evidence](M3_RETENTION_GATE.md) for the original failed gate,
+source hashes, pin audit and required retests.
+
 ## Explicit limitations
 
 - Owned storage is CPU binary32 only. There is no f64, f16, bf16, accelerator,

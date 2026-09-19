@@ -60,6 +60,9 @@ sed -e 's/^[^:]*://' -e 's/\\//g' "${wave2_evidence}/private.d" | \
 cmp "${PROJECT_ROOT}/native/i2_wave2_source_closure.txt" \
   "${temporary_dir}/wave2-source-closure.txt"
 
+# Differentially preserve alias decisions, including retired allocation shells.
+/usr/bin/bash "${PROJECT_ROOT}/scripts/test-i2-alias-envelope.sh"
+
 for source in test_f32_tensor test_f32_parameter; do
   "${cc}" "${cflags[@]}" "${PROJECT_ROOT}/tests/i2/${source}.c" \
     "${library}" "${k1_library}" -o "${temporary_dir}/${source}"

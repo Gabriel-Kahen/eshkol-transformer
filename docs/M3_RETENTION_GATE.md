@@ -1,4 +1,4 @@
-# M3 retention gate: measured failure and scoped remedy proposal
+# M3 retention gate: measured failure and accepted prerequisite fix
 
 Status: canonical forward/8192 **failed its unchanged 600-second cap**, followed
 by the five-second kill escalation, exit 137. No completion marker or exact
@@ -80,15 +80,21 @@ builder**. These are not completed 1024/8192 measured slopes: the full native
 and Eshkol trajectories remain unmet. Fixed K1/P1 allocations, Eshkol identities
 and errors are separate accounting. No flat-memory or performance claim follows.
 
-## Proposed remedy, not implemented
+## Accepted prerequisite fix, pending validation
 
-Propose a conservative allocation envelope in the existing I2 f32 implementation.
+Integration [accepted the narrow I2 allocation envelope for implementation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)
+in a separate prerequisite-fix commit after runtime checkpoint
+`4a317d4d12d050944a2c20ed9c283438629a9297`. This acceptance does not approve
+the runtime or waive any retention, numerical, ownership or supported-CI gate.
+
+The implementation adds a conservative allocation envelope to the existing I2
+f32 implementation.
 A read-only audit found that every protected span visited by
 `storage_aliases_live` originates in its one `f32_calloc` helper: tensor shells,
 shapes, strides and data; parameter and borrow shells; copy-plan assignments;
 gradient-plan entries and prepared values; reset-plan tables; and all retained
 shells. External identities, provider statics and M3T stack guards are not scan
-members today, and this proposal does not change their coverage.
+members today, and this fix does not change their coverage.
 
 Maintain monotonically expanding address bounds after every successful nonzero
 allocation. At the alias scan entry, return false early only for a nonempty,
@@ -98,12 +104,55 @@ size/address arithmetic cannot be represented, permanently disable the shortcut
 without changing the allocator result. Never shrink/reset the envelope, including
 after failed construction, free, retirement or test allocator reset.
 
-This adds fixed static integer state, no heap allocation, no reclamation, no
-changed ownership/authentication or numerical behavior, and no public API. It
+This adds 24 bytes of local static integer state on the supported x86-64 ABI,
+accounted separately from per-iteration retired controls. It adds no heap
+allocation, reclamation or public API, and preserves ownership, authentication
+and numerical behavior. It
 is constant-time only outside the envelope; address spread and inside-envelope
 queries retain the full cumulative cost. It is not a promised solution to 8192
-until measured on the canonical build. It touches pinned predecessor I2 source,
-so integration approval and a reviewed source-pin update are required first.
+until measured on the canonical build. The existing 24-entry N3K predecessor
+source inventory contains no entry for `native/f32_tensor.c`; all 24 pins pass
+unchanged. Integration confirmed that this zero-entry result requires no new pin.
+The exact source hashes are:
+
+- Before: `c95fb958445bceb565516511690074a1e6139fae07faa63553670549488bd9ce`.
+- After: `cf66922cf4c814396c4eb9e67a843babba3f45b8c3cedb35cb265ff66d7aff64`.
+
+The original scan body is unchanged after its private rename. Independent local
+object inspection finds identical defined/undefined global inventories and one
+24-byte local BSS envelope. The independent differential suite passes four fresh
+processes in each of normal and ASan/UBSan/LSan builds: coverage 837 checks,
+product-overflow 849, endpoint-overflow 849 and uninitialized disablement 22
+(2,557 per build). It explicitly constructs 13 live storage classes and all six
+retired shell classes through existing APIs, checks scalar/empty storage and
+boundary cases, preserves empty-registry invalid-span behavior, and tests
+partial failures, freed holes, allocator reset and zero-byte allocation counters.
+A separate reviewer found no blocker in the test inventory or oracle. These are
+local compatibility results. The full existing `I2_ASAN_DETECT_LEAKS=1
+scripts/test-i2.sh` gate also passes, including C/C++ ABI, exact-f32 storage,
+parameters, gradients and transactions, K1 views, borrow/stale/alias/failpoint
+cases, public Eshkol integration, private/duplicate-authority rejection, hostile
+fresh-build determinism and ASan/UBSan/LSan. Its log is
+`build/i2-alias-full-gate.log`. Independent source, ABI and sanitizer review found
+no blocker in the prerequisite delta. The full canonical M3 gate remains pending.
+
+The unchanged M3 native gate also passes after the fix: normal 1,000 cycles /
+76,484 checks in 1.502 seconds; ASan/UBSan/LSan 100 cycles / 20,679 checks in
+0.075 seconds. The separate I2 plan probe passes 1,000 cycles in each variant.
+Retired-control counts are unchanged, including 1,496,000 I2 bytes for the native
+1,000-cycle fixture. Log `build/m3-native-envelope.log` has SHA256
+`768ddc666b44f7679e84f5db41115e021a9f9631bfca7e612e06966fbd1afa7d`.
+
+A composed bounded probe recompiles only the changed I2 integration translation
+unit with unchanged production native flags, reusing the original instrumented
+Eshkol object, bridges and providers. Its exact 97 globals, undefined inventory
+and source closures pass. All three cases' 14 gradients, initializer bytes and
+metadata, and all 36 native fields at each bounded horizon are byte-identical
+to the original. Forward/release takes 0.03 / 0.10 / 0.42 seconds at 10 / 100 /
+300 iterations, versus the original 0.14 / 1.92 / 12.05 seconds. This supports
+attempting the unchanged canonical gate; it is composed compatibility evidence,
+not fresh-package determinism, a full retention trajectory or supported CI.
+Artifacts are in `build/m3-alias-envelope-probe`.
 
 Required proof is differential comparison against the original scan across all
 live/retired storage classes, interior/straddling/endpoints, envelope holes,
@@ -111,6 +160,9 @@ outside spans, zero/null and overflowing spans; allocation failure, freed-histor
 and permanent-fallback cases; existing I2 alias/stale/ABA/atomicity gates; then
 unchanged M3 numerical/ownership and canonical retention gates. No timeout,
 horizon, optimization flag or public-contract change substitutes for that proof.
+
+The original failed checkpoint evidence is preserved with a hash manifest under
+`build/m3-pre-envelope`; it must not be replaced by subsequent successful evidence.
 
 Detailed local logs remain in `build/m3-public-evidence`, `build/m3-numerical`,
 `build/m3-native-o2-probe`, `build/m3-profile/stacks.log`, and

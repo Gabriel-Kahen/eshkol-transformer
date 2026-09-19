@@ -2,9 +2,11 @@
 
 M3 implements the bounded [composition contract](M3_COMPOSITION_PROPOSAL.md)
 accepted in [integration decision 5744129957](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957).
-Numerical, ownership and package-identity checks pass locally, but the canonical
-8192-forward retention gate exceeds its 600-second cap. See the
-[measured failure and scoped remedy proposal](M3_RETENTION_GATE.md). Complete
+Numerical, ownership and package-identity checks pass locally. The initial
+canonical8192-forward retention gate exceeded its 600-second cap; integration
+authorized a narrow I2 prerequisite fix, with differential and bounded probes
+passing and the full canonical retest pending. See the
+[measured failure and accepted prerequisite fix](M3_RETENTION_GATE.md). Complete
 retention, supported CI and independent M3-R remain required for acceptance.
 The accepted M3T evidence establishes its
 dependencies; it is not evidence that this model implementation passes.

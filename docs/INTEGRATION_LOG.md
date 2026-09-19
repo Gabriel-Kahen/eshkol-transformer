@@ -4,6 +4,23 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-19 — M3 narrow I2 prerequisite accepted for implementation
+
+[Decision 5744597535](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)
+permits one focused I2 allocation-envelope commit within the existing M3 branch,
+after checkpoint `4a317d4d12d050944a2c20ed9c283438629a9297`. The original
+canonical forward/8192 timeout remains failed evidence. The shortcut must preserve
+the old scan for every uncertain case and permanently fall back after extent
+arithmetic failure; allocation history never shrinks. No public contract,
+concurrency, retention, native flag, horizon or timeout change is authorized.
+
+Independent differential and full I2 ownership/ABI/sanitizer gates pass locally,
+as does the unchanged M3 native gate. The unchanged full canonical/instrumented
+M3 gates remain required before exact-head supported CI and M3-R. The 24-entry predecessor source
+inventory has zero affected entries and remains unchanged, as confirmed by
+integration. Exact pre/post source hashes and the separate 24-byte static-state
+accounting are recorded in [the retention evidence](M3_RETENTION_GATE.md).
+
 ## 2026-09-19 — M3 bounded composition design accepted
 
 Integration [accepted proposal 37db2ec](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957)
