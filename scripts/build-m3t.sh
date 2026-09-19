@@ -2,6 +2,9 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 [[ $# -le 1 ]] || die "usage: $0 [ARTIFACT_DIR]"
+# Reject predecessor-pin drift before compiling any canonical or fresh package.
+(cd "${PROJECT_ROOT}" && python3 -m unittest -q \
+  tests.m3t.test_package_contract.PackageContract.test_predecessor_pin_inventory)
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 m3t_artifact_dir="${1:-$(project_build_dir)/m3t}"

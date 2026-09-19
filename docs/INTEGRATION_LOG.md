@@ -30,6 +30,19 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   with integration acceptance pending. M3 explicitly depends on M3T; integration
   retains merge ownership.
 
+- **CI integrity repair:** supported run
+  [35437954347](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35437954347)
+  passed M3T and the other 15 suites but failed native-numerics at N3K's predecessor
+  inventory: the A2/N2 builders now emit dependency files, while their pins still
+  described the accepted older recipes. The authorized repair updates exactly
+  those two hashes and checks the full inventory before M3T compilation. All ten
+  old/current object and archive pairs are byte-identical across normal and
+  sanitizer builds. Nine package tests and the complete N3K gate pass locally
+  with explicit CachyOS/LLVM22 compatibility settings, including ASan/UBSan/LSan.
+  N3K's integrity gate and all other pins remain unchanged. Independent bounded
+  repair review passed; supported CI and integration review of the new head remain
+  required.
+
 - **Accepted private abort refinement:**
   [authoritative comment](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740631242)
   admits fixed `et_i2_private_construction_parameter_preflight_v1(parameter,

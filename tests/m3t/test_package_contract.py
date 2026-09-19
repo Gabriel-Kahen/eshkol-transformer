@@ -22,6 +22,12 @@ def operations():
 
 
 class PackageContract(unittest.TestCase):
+    def test_predecessor_pin_inventory(self):
+        result = subprocess.run(['sha256sum', '--quiet', '-c',
+            str(ROOT / 'tests/n3k/expected/predecessor_sources.sha256')],
+            cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_exact_surface_and_arity(self):
         ops = operations()
         self.assertEqual(len(ops), 38)
