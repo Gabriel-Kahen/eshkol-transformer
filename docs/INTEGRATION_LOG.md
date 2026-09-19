@@ -4,7 +4,7 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
-## 2026-09-19 — M3T design accepted; implementation pending
+## 2026-09-19 — M3T design accepted; implementation in review
 
 - **Authoritative disposition:** integration accepted amended proposal
   `e7ad6b0d82f4cf7f5d45efff04179433379965bb` in
@@ -20,12 +20,37 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   native identity separately becomes 36 private. Preserve canonical promotion,
   fresh-only ownership, authority revocation before teardown, nonfallible seal,
   exact scoped guards and existing aggregate regressions.
-- **Implementation pending:** ordinary public AOT witnesses, independent numerical
-  role-wiring checks, failure/cleanup and exact retained-memory proofs, fresh
-  packaging and localization, sanitizers, affected P1/I2/E1B/C2/T1 regressions,
-  independent review and supported exact-head CI through the accepted planner.
-  Design acceptance lifts the implementation hold; it does not mark M3T complete.
-  M3 now explicitly depends on M3T. Integration retains merge ownership.
+- **Implementation in review:** [local evidence and limits](M3T_TRANSPORT.md)
+  cover installed public AOT, independent role wiring, failure/cleanup, exact
+  retained-memory checks, two fresh packages and sanitizers. All final local gate
+  commands have evidence through full-driver stages and the amended caller replay;
+  this is not an untouched final-script PASS. Scoped independent reviews passed.
+  Supported exact-head CI must run the complete final gate and affected
+  P1/I2/E1B/C2/T1 regressions through the accepted planner. M3T remains `review`,
+  with integration acceptance pending. M3 explicitly depends on M3T; integration
+  retains merge ownership.
+
+- **Accepted private abort refinement:**
+  [authoritative comment](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740631242)
+  admits fixed `et_i2_private_construction_parameter_preflight_v1(parameter,
+  exact_handle)` only in the M3T tuple. Exact unpublished membership and binding,
+  all value/gradient borrows and plan pins must pass for the entire enrolled set
+  before any revocation. Native owner abort independently preflights all 14.
+  Ordinary I2/C2 reject construction as unsupported before allocation; status -1
+  is a private availability sentinel, and `(NULL,NULL)` returns 0 only as M3T's
+  availability query. Positive errors preserve I2 taxonomy. No public/count change.
+  Required proof includes every carrier position, late failure without earlier
+  destruction, retry, exact live/payload counts, allocation-disabled checks,
+  ordinary aggregate regressions, sanitizers and independent lifetime review.
+  The subsequent [ledger refinement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740748874)
+  requires a preallocated exact-owner anchor covering all 14 native parameters
+  before P1 revocation even with zero/partial registration, plus nonallocating
+  restoration of the exact preconstruction registry/count. Handoff must be
+  nonraising and precede fallible registration; retained references clear on
+  seal/abort. Private begin promotes its ledger/membership graphs before P1 native
+  construction authority; guards restore both scope baselines. Proof covers
+  failures before begin, within begin and at handoff. These remain implementation
+  proof obligations.
 
 ## 2026-09-18 — CI-E2 scheduling/evidence extension accepted
 

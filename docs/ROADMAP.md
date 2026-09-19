@@ -60,7 +60,7 @@ a live trainer trajectory or generation.
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |
 | M3 | Decoder-only GPT configuration, blocks and tied LM head | M3T, N2, A2, P1 | Full forward/gradient oracle parity | planned |
-| M3T | [Bounded production Eshkol transport/lifetime contract](M3T_TRANSPORT_PROPOSAL.md) | N3K, N2, A2, I1, I2, P1L, E1B | #68; exact amended design e7ad6b0 accepted for implementation; restricted 85-global sibling; implementation, independent review and supported exact-head CI pending; no model-completion claim | active |
+| M3T | [Bounded production Eshkol transport/lifetime contract](M3T_TRANSPORT_PROPOSAL.md) | N3K, N2, A2, I1, I2, P1L, E1B | #68; [implementation and local evidence](M3T_TRANSPORT.md); restricted 85-global sibling; local command coverage and scoped reviews passed; supported exact-head CI and integration acceptance pending; no model-completion claim | review |
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | Seeded sampling and cache/no-cache parity | planned |
 | TR3 | Trainer state machine and exact resume | M3, L2, O2, D2, C2, E3 | One-batch overfit and interrupted/resumed equivalence | planned |

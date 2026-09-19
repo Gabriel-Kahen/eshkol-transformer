@@ -7,8 +7,11 @@ uses one full-coverage engine in
 `.github/workflows/full-coverage.yml`, shared by blocking CI and exhaustive
 acceptance. It runs one clean canonical build with smoke/benchmark, nine component
 suites including the separate unchanged O2 optimizer gate (checkpoint I/O owns C1
-alone), and six independent C2 groups: 16 suites total. The command graph preserves
-all 23 top-level local test commands.
+alone), and six independent C2 groups. The M3T review candidate extends this
+engine with one diagnostic-transport suite: 17 suites and 24 top-level local test
+commands, preserving all 16 accepted suites and their 23 commands. Historical
+accepted CI-E2 evidence below remains a 16-suite / 23-command measurement; it does
+not establish M3T acceptance.
 C2 composition invokes each unique leaf gate once instead of repeating regression
 tails nested inside other gates. Standalone core, load, and operational commands
 retain their historical regression tails; explicit focused flags are only used by

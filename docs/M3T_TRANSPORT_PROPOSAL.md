@@ -414,6 +414,39 @@ preflight while every participant remains abortable, then publishes all through
 one nonfailing tail. An irreversible seal followed by another fallible seal is
 forbidden.
 
+The [accepted abort-preflight refinement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740631242)
+adds only the localized bridge helper
+`int64_t et_i2_private_construction_parameter_preflight_v1(void *parameter, void *exact_handle)`.
+The exact M3T tuple enables it with `ET_M3T_PACKAGE_BUILD`; ordinary I2/C2
+compositions return the private sentinel -1, mapped by trusted source to
+`unsupported`, before construction allocation or enrollment. In M3T only,
+`(NULL,NULL)` is a read-only availability query returning 0, not parameter
+admission. Actual parameter calls return 0 on success or the unchanged positive
+I2/f32 error category with fixed diagnostic state.
+
+Callers plus the helper authenticate current unpublished construction membership,
+canonical parameter/handle binding, and the exact native owner before dereference.
+A NULL expected handle admits only a genuinely unbound parameter of that owner.
+Foreign, stale, published, cross-construction and mismatched identities reject.
+Whole-set preflight checks all value/gradient ordinary or scoped borrows and all
+plan pins before any P1 revocation, carrier invalidation or membership removal.
+The [accepted ledger refinement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740748874)
+retains the exact preconstruction I2 registry/count and preallocates a private
+owner anchor. The trusted coordinator fills that anchor from the exact native
+owner's parameter zero immediately after begin, without allocation or failure and
+before registration. The helper authenticates the unpublished owner through this
+anchor and preflights all 14 parameters, including zero/partial P1 enrollment;
+I2 separately validates every enrolled canonical P1 binding. Registration updates
+the anchor's bound handle. Exclusive construction permits nonallocating registry
+restoration; seal/abort clear retained baseline and anchor references. No callback,
+allocation or fallible action intervenes before the nonfailing teardown tail.
+Private begin promotes ledger/membership graphs before acquiring P1 native
+construction authority; guarded failures restore both scope baselines. Cleanup
+proof covers failures before begin, within begin and at the owner handoff.
+Native owner abort independently preflights all 14 owned parameters before any
+destruction. Rejection leaves participants unchanged and permits retry after the
+exclusion clears. This adds no public ABI, generic revoker or standalone f32 seam.
+
 ### Private Eshkol/native transport names
 
 Trusted Eshkol handlers remove the public `diagnostic-` prefix and prefix the
@@ -604,8 +637,8 @@ After acceptance, required gates are:
   payload/guard counters, and exact retained Eshkol arena counters across increasing
   iteration counts after warmup. Current RSS is supplementary evidence, not a
   substitute for retained-allocation accounting. Report measured budgets; do not
-  extrapolate to training, retained errors, fresh output creation, snapshots or
-  gradient plans.
+  extrapolate to training, retained errors, fresh output creation, allocating
+  accessor snapshots or gradient plans.
 - Exact source/symbol/archive/undefined manifests, private name/object/link negatives,
   hostile include/environment and copied/partial tuple rejection, duplicate registry
   owner rejection, production Python isolation and repeatable fresh artifacts.
