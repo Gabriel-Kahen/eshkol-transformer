@@ -1,10 +1,15 @@
 # M3T diagnostic transport implementation
 
 M3T implements the [accepted transport contract](M3T_TRANSPORT_PROPOSAL.md)
-for `eshkol-diagnostic-byte-decoder-v1`. Implementation acceptance, supported
-exact-head CI and integration merge remain pending. M3T is in review in the
-[roadmap](ROADMAP.md); M3 owns the production model schedule and full-model
-forward/gradient parity.
+for `eshkol-diagnostic-byte-decoder-v1`. M3T is **accepted and complete within
+this bounded transport contract**. [PR #84](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/84)
+merged as `f50160968bd97677632f3539fd2e278a63624cf9` after
+[independent approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/84#issuecomment-5743777776)
+and [supported CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35441033357).
+Reviewed head `ef659b9c542f5244b9ca42706a69f30ba0e8d963`, CI checkout
+`aa3f0d13c5ce70440e73ead588f8bb1e74448d22`, and actual merge share tree
+`12e3d0595ddde6c067cd6fca44132bc99b176387`. M3 still owns the production model
+schedule and full-model forward/gradient parity; Wave 3 is not complete.
 
 ## Public and private contracts
 
@@ -89,7 +94,7 @@ The canonical package and two independent fresh packages passed exact manifests,
 installed public execution, reverse import order, private/arity/cross-registry
 negatives and real compiler dependency checks. Each public runtime/reverse/arena
 depfile must contain exactly its caller and all six installed facades; missing,
-empty, incomplete, duplicate, foreign and aliased dependencies reject. Eight
+empty, incomplete, duplicate, foreign and aliased dependencies reject. Nine
 package tests, 98 CI tests, five Python-isolation tests and the 17-suite /
 24-command topology check passed.
 
@@ -107,9 +112,12 @@ script PASS. The amendments require real compile-only depfiles (executable mode
 does not emit them) and a stable caller installation path, preserving every raw
 comparison. Earlier public assertions were corrected for E1's sorted detail keys
 and the compiler's two precise arity diagnostics. All final gate commands have
-local evidence; supported Ubuntu 22.04 / LLVM-Clang 21.1.8 CI remains required.
+local evidence. The accepted supported Ubuntu 22.04 / LLVM-Clang 21.1.8 run above
+subsequently passed the uninterrupted final scripts, all 17 suites / 24 commands,
+canonical clean build, smoke, benchmark, suite evidence and final aggregation.
+This does not retroactively relabel the original composite local run.
 
-The final public reuse witness retained exactly 4,325,376 arena bytes at both
+The local public reuse witness retained exactly 4,325,376 arena bytes at both
 1024 and 8192 frames. Supplementary peak RSS was 94,460 and 94,376 KiB,
 respectively; it does not substitute for the exact retained-allocation counter.
 Owner creation, fresh allocating accessor snapshots, errors and arbitrary
@@ -125,6 +133,8 @@ P1 native sanitizers, runtime (419 checks), registry atomicity (169), constructi
 crossed a source correction and rejected mixed-source objects; a fresh frozen-root
 object subsequently matched byte-for-byte. The affected C2 model-encode and
 training-state-owner gates passed before the final constructor-only begin
-refinement. Supported CI must run the full final P1/I2/E1B/C2/T1 regressions.
+refinement. The accepted supported run subsequently passed the full final
+P1/I2/E1B/C2/T1 regressions. Supported public arena retention was 4,325,376 bytes
+at both horizons; supplementary RSS was 92,748/92,744 KiB.
 Detailed local logs, provenance, failed attempts and review hashes are retained
 under `build/m3t-evidence/` outside Git.

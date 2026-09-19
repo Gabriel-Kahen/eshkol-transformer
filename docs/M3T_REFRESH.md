@@ -1,10 +1,13 @@
 # M3T current-main proposal refresh — 2026-09-19
 
-Status: **design accepted; implementation pending**. The
+Status: **historical pre-implementation refresh; superseded by
+[M3T implementation acceptance](M3T_TRANSPORT.md)**. The
 [binding disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740555652)
 accepts exact proposal `e7ad6b0d82f4cf7f5d45efff04179433379965bb` and lifts the
 implementation hold. The evidence below predates that disposition; it does not
-establish implementation acceptance. M3T and M3 are not complete.
+establish implementation acceptance. At that point M3T and M3 were incomplete;
+M3T has since merged, while M3 remains downstream. All pre-implementation
+statements below describe the refresh date, not the current runtime.
 
 Accepted base: `7d9ad1cf6d997fc3c1f489f3955ff97c97281f68`.
 Local history-preserving merge: `207d0e95047fe3f6b73880a0c163369c5b375bf0`.
@@ -12,7 +15,7 @@ Preserved proposal/probes: `8b72fde`.
 Tracking: [#68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68).
 Original [proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5587828007)
 and [refinement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5587947469).
-The binding candidate is [the amended contract](M3T_TRANSPORT_PROPOSAL.md),
+The accepted design is [the amended contract](M3T_TRANSPORT_PROPOSAL.md),
 with [public witness design](M3T_PUBLIC_AOT_TEST_DESIGN.md).
 
 ## Actual amendments
