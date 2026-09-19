@@ -1,0 +1,697 @@
+;;; Trusted fixed-profile M3T transport. Never install this source.
+;;; The enclosing sibling aggregate owns one E1/P1/I2 identity universe.
+
+(extern ptr m3t-native-initializer-create i64
+        :real et_m3t_private_initializer_create_v1)
+(extern i64 m3t-native-initializer-word ptr i64
+        :real et_m3t_private_initializer_word_v1)
+(extern ptr m3t-native-owner-create ptr
+        :real et_m3t_private_owner_create_v1)
+(extern ptr m3t-native-owner-parameter ptr i64
+        :real et_m3t_private_owner_parameter_v1)
+(extern i64 m3t-native-owner-bind ptr i64 ptr
+        :real et_m3t_private_owner_bind_v1)
+(extern i64 m3t-native-owner-initialize ptr i64
+        :real et_m3t_private_owner_initialize_v1)
+(extern ptr m3t-native-owner-successor ptr
+        :real et_m3t_private_owner_successor_v1)
+(extern ptr m3t-native-input-create
+        :real et_m3t_private_input_create_v1)
+(extern i64 m3t-native-input-copy ptr i64 i64
+        :real et_m3t_private_input_copy_v1)
+(extern i64 m3t-native-input-copy-tokenizer ptr ptr
+        :real et_m3t_private_input_copy_tokenizer_v1)
+(extern ptr m3t-native-logits-create
+        :real et_m3t_private_logits_create_v1)
+(extern ptr m3t-native-workspace-create ptr
+        :real et_m3t_private_workspace_create_v1)
+(extern i64 m3t-native-workspace-begin ptr ptr i64
+        :real et_m3t_private_workspace_begin_v1)
+(extern i64 m3t-native-workspace-check-primals ptr i64
+        :real et_m3t_private_workspace_check_primals_v1)
+(extern ptr m3t-native-workspace-gradient ptr i64
+        :real et_m3t_private_workspace_gradient_v1)
+(extern i64 m3t-native-sum ptr i64
+        :real et_m3t_private_sum_v1)
+(extern i64 m3t-native-initializer-seal ptr
+        :real et_m3t_private_initializer_seal_v1)
+(extern i64 m3t-native-initializer-abort ptr
+        :real et_m3t_private_initializer_abort_v1)
+(extern i64 m3t-native-owner-seal ptr
+        :real et_m3t_private_owner_seal_v1)
+(extern i64 m3t-native-owner-abort ptr
+        :real et_m3t_private_owner_abort_v1)
+(extern i64 m3t-native-input-release ptr
+        :real et_m3t_private_input_release_v1)
+(extern i64 m3t-native-logits-release ptr
+        :real et_m3t_private_logits_release_v1)
+(extern i64 m3t-native-workspace-release ptr
+        :real et_m3t_private_workspace_release_v1)
+(extern i64 m3t-native-workspace-reset ptr
+        :real et_m3t_private_workspace_reset_v1)
+(extern i64 m3t-native-logits-copy-from ptr ptr i64
+        :real et_m3t_private_logits_copy_from_v1)
+(extern i64 m3t-native-logits-copy-to ptr ptr i64
+        :real et_m3t_private_logits_copy_to_v1)
+(extern i64 m3t-native-workspace-vjp-begin ptr ptr
+        :real et_m3t_private_workspace_vjp_begin_v1)
+(extern i64 m3t-native-workspace-copy-logits ptr ptr
+        :real et_m3t_private_workspace_copy_logits_v1)
+(extern i64 m3t-native-embedding ptr i64 i64
+        :real et_m3t_private_embedding_v1)
+(extern i64 m3t-native-linear ptr i64 i64
+        :real et_m3t_private_linear_v1)
+(extern i64 m3t-native-layer-norm ptr i64 i64
+        :real et_m3t_private_layer_norm_v1)
+(extern i64 m3t-native-residual ptr i64 i64
+        :real et_m3t_private_residual_v1)
+(extern i64 m3t-native-heads-split ptr i64 i64
+        :real et_m3t_private_heads_split_v1)
+(extern i64 m3t-native-gelu ptr i64
+        :real et_m3t_private_gelu_v1)
+(extern i64 m3t-native-heads-merge ptr i64
+        :real et_m3t_private_heads_merge_v1)
+(extern i64 m3t-native-attention ptr i64
+        :real et_m3t_private_attention_v1)
+(extern i64 m3t-native-last-error-domain
+        :real et_m3t_private_last_error_domain_v1)
+(extern i64 m3t-native-last-error-category
+        :real et_m3t_private_last_error_category_v1)
+(extern i64 m3t-native-last-error-code
+        :real et_m3t_private_last_error_code_v1)
+
+(define m3t-profile 'eshkol-diagnostic-byte-decoder-v1)
+(define m3t-algorithm 'n3k.philox4x32-10.uniform-f32.v1)
+;;; Root-owned publication invokes the region write barrier. State is separate
+;;; from the publicly returned shell; mutable/copyable shell data is not authority.
+;;; Entry: #(shell kind lifecycle native model-entry original successor config
+;;;          canonical-handles contribution-rows frame-state profile).
+(define m3t-registry (vector '()))
+
+(define (m3t-fail-raw category operation message)
+  (let* ((native-category
+           (cond ((eq? category 'invalid-argument) 1)
+                 ((eq? category 'invalid-state) 2)
+                 ((eq? category 'shape-mismatch) 3)
+                 ((eq? category 'unsupported) 4) (else 5)))
+         (code (cond ((= native-category 1) 1) ((= native-category 2) 2)
+                     ((= native-category 3) 4) ((= native-category 4) 8) (else 10)))
+         (unreachable
+           (et-e1b-private-raise category operation message
+             (list (list 'source-domain 'm3t-transport)
+                   (list 'source-code code)
+                   (list 'source-message message)
+                   (list 'native-category native-category)) #f)))
+    unreachable))
+(define-syntax m3t-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (m3t-fail-raw category operation message))) result))))
+
+(define (m3t-rethrow-raw caught operation)
+  (let ((unreachable
+          (if (transformer-error? caught)
+              ;; Our fixed-operation errors already snapshot bounded native
+              ;; details before cleanup. Dependency errors use another operation
+              ;; and may contain context graphs, so replace their details.
+              (if (eq? (transformer-error-operation caught) operation)
+                  (et-e1b-private-raise
+                    (transformer-error-category caught) operation
+                    "diagnostic transport rejected the request"
+                    (transformer-error-details caught) #f)
+                  (m3t-fail (transformer-error-category caught) operation
+                    "diagnostic dependency rejected the request"))
+              (m3t-fail 'internal operation
+                "diagnostic dependency raised a foreign value"))))
+    unreachable))
+(define-syntax m3t-boundary
+  (syntax-rules ()
+    ((_ operation body ...)
+     (guard (caught (#t (let ((result (m3t-rethrow-raw caught operation))) result)))
+       body ...))))
+
+(define (m3t-native-category domain category)
+  (cond
+    ((= domain 0)
+     (cond ((= category 1) 'invalid-argument) ((= category 2) 'invalid-state)
+           ((= category 3) 'shape-mismatch) ((= category 4) 'unsupported)
+           (else 'internal)))
+    ((= domain 1)
+     (cond ((= category 1) 'invalid-argument) ((= category 2) 'shape-mismatch)
+           ((= category 3) 'dtype-mismatch) ((= category 4) 'device-mismatch)
+           ((= category 5) 'noncontiguous) ((= category 6) 'unsupported)
+           ((= category 7) 'version-mismatch)
+           (else 'internal)))
+    (else
+     (cond ((= category 1) 'invalid-argument) ((= category 2) 'shape-mismatch)
+           ((= category 3) 'noncontiguous) ((= category 4) 'invalid-state)
+           ((= category 5) 'version-mismatch) (else 'internal)))))
+
+(define (m3t-native-fail-raw operation)
+  (let* ((domain (m3t-native-last-error-domain))
+         (category (m3t-native-last-error-category))
+         (code (m3t-native-last-error-code))
+         (valid (and (>= domain 0) (<= domain 3) (> category 0)
+                     (<= category (cond ((= domain 0) 5) ((= domain 1) 8) (else 6)))
+                     (> code 0)
+                     (<= code (cond ((= domain 0) 10) ((= domain 1) 16) (else 11)))))
+         (message (if valid "fixed diagnostic native transport rejected the request"
+                            "invalid diagnostic native status"))
+         (unreachable
+           (et-e1b-private-raise
+             (if valid (m3t-native-category domain category) 'internal)
+             operation message
+             (list (list 'source-domain
+                         (cond ((= domain 1) 'kernel-abi)
+                               ((= domain 2) 'i64-tensor)
+                               ((= domain 3) 'f32-tensor)
+                               (else 'm3t-transport)))
+                   (list 'source-code (if valid code 10))
+                   (list 'source-message message)
+                   (list 'native-category (if valid category 5))) #f)))
+    unreachable))
+(define-syntax m3t-native-fail
+  (syntax-rules ()
+    ((_ operation)
+     (let ((result (m3t-native-fail-raw operation))) result))))
+(define (m3t-check-raw status operation)
+  (if (= status 0) #t (m3t-native-fail operation)))
+(define-syntax m3t-check
+  (syntax-rules ()
+    ((_ status operation)
+     (let ((result (m3t-check-raw status operation))) result))))
+
+(define (m3t-find shell)
+  (let loop ((remaining (vector-ref m3t-registry 0)))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (m3t-entry shell kind operation live?)
+  (let ((entry (m3t-find shell)))
+    (if (or (not entry) (not (eq? (vector-ref entry 1) kind)))
+        (m3t-fail 'invalid-argument operation "expected an exact diagnostic owner"))
+    (if (or (eq? (vector-ref entry 2) 'pending)
+            (and live? (not (eq? (vector-ref entry 2) 'live))))
+        (m3t-fail 'invalid-state operation "diagnostic owner is unavailable"))
+    entry))
+(define (m3t-stage kind)
+  (let* ((shell (vector 'diagnostic-owner))
+         (entry (vector shell kind 'pending '() #f #f #f #f #f #f #f #f))
+         (next (cons entry (vector-ref m3t-registry 0))))
+    (vector-set! m3t-registry 0 next)
+    (car (vector-ref m3t-registry 0))))
+(define (m3t-exact-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value -9223372036854775808) (<= value 9223372036854775807)))
+(define (m3t-proper-list? value)
+  (let loop ((slow value) (fast value))
+    (cond ((null? fast) #t)
+          ((not (pair? fast)) #f)
+          ((null? (cdr fast)) #t)
+          ((not (pair? (cdr fast))) #f)
+          ((eq? (cdr slow) (cdr (cdr fast))) #f)
+          (else (loop (cdr slow) (cdr (cdr fast)))))))
+
+(define (m3t-public-initializer-state seed)
+  (let ((operation 'diagnostic-initializer-state))
+    (if (not (and (m3t-exact-i64? seed) (>= seed 0)))
+        (m3t-fail 'invalid-argument operation "seed must be a nonnegative exact i64"))
+    (let* ((entry (m3t-stage 'initializer))
+           (native (m3t-native-initializer-create seed)))
+      (if (null? native)
+          (begin (vector-set! entry 2 'dead) (m3t-native-fail operation)))
+      (vector-set! entry 3 native)
+      (m3t-check (m3t-native-initializer-seal native) operation)
+      (vector-set! entry 2 'live)
+      (vector-ref entry 0))))
+(define (m3t-public-initializer-algorithm value)
+  (m3t-entry value 'initializer 'diagnostic-initializer-algorithm #t)
+  m3t-algorithm)
+(define (m3t-public-initializer-words value)
+  (let* ((entry (m3t-entry value 'initializer 'diagnostic-initializer-words #t))
+         (native (vector-ref entry 3)))
+    (list (m3t-native-initializer-word native 0)
+          (m3t-native-initializer-word native 1)
+          (m3t-native-initializer-word native 2)
+          (m3t-native-initializer-word native 3))))
+
+(define (m3t-public-input-create)
+  (let* ((entry (m3t-stage 'input)) (native (m3t-native-input-create)))
+    (if (null? native)
+        (begin (vector-set! entry 2 'dead)
+               (m3t-native-fail 'diagnostic-input-create)))
+    (vector-set! entry 3 native)
+    (vector-set! entry 2 'live)
+    (vector-ref entry 0)))
+(define (m3t-public-input-copy! input values)
+  (let* ((operation 'diagnostic-input-copy!)
+         (entry (m3t-entry input 'input operation #t)))
+    ;; Examine at most three pairs, so improper and cyclic lists terminate.
+    (if (not (and (pair? values) (pair? (cdr values))
+                  (null? (cdr (cdr values)))))
+        (if (m3t-proper-list? values)
+            (m3t-fail 'shape-mismatch operation "input must have exactly two IDs")
+            (m3t-fail 'invalid-argument operation "input must be a proper two-ID list")))
+    (let ((first (car values)) (second (car (cdr values))))
+      (if (not (and (m3t-exact-i64? first) (m3t-exact-i64? second)))
+          (m3t-fail 'invalid-argument operation "IDs must be representation-real exact i64"))
+      (if (or (< first 0) (>= first 256) (< second 0) (>= second 256))
+          (m3t-fail 'shape-mismatch operation "IDs must be within the byte vocabulary"))
+      (m3t-check (m3t-native-input-copy (vector-ref entry 3) first second) operation))))
+(define (m3t-public-input-copy-tokenizer! input tokens)
+  (let* ((operation 'diagnostic-input-copy-tokenizer!)
+         (entry (m3t-entry input 'input operation #t)))
+    (if (not (t1-wave1-tensor-admitted? tokens))
+        (m3t-fail 'invalid-argument operation "expected a sealed same-aggregate tokenizer tensor"))
+    (m3t-check (m3t-native-input-copy-tokenizer (vector-ref entry 3) tokens) operation)))
+(define (m3t-public-input-release! input)
+  (let* ((operation 'diagnostic-input-release!)
+         (entry (m3t-entry input 'input operation #f)))
+    (if (eq? (vector-ref entry 2) 'dead) #t
+        (begin
+          (m3t-check (m3t-native-input-release (vector-ref entry 3)) operation)
+          (vector-set! entry 2 'dead) #t))))
+
+(define (m3t-public-logits-create)
+  (let* ((entry (m3t-stage 'logits)) (native (m3t-native-logits-create)))
+    (if (null? native)
+        (begin (vector-set! entry 2 'dead)
+               (m3t-native-fail 'diagnostic-logits-create)))
+    (vector-set! entry 3 native)
+    (vector-set! entry 2 'live)
+    (vector-ref entry 0)))
+(define (m3t-public-logits-copy-bits! logits bytes)
+  (let* ((operation 'diagnostic-logits-copy-bits!)
+         (entry (m3t-entry logits 'logits operation #t)))
+    (if (not (bytevector? bytes))
+        (m3t-fail 'invalid-argument operation "expected binary32 bytevector"))
+    (if (not (= (bytevector-length bytes) 2048))
+        (m3t-fail 'shape-mismatch operation "logits require exactly 2048 bytes"))
+    (m3t-check (m3t-native-logits-copy-from (vector-ref entry 3) bytes 2048) operation)))
+(define (m3t-public-logits-bits logits)
+  (let* ((operation 'diagnostic-logits-bits)
+         (entry (m3t-entry logits 'logits operation #t))
+         (bytes (make-bytevector 2048 0)))
+    (m3t-check (m3t-native-logits-copy-to (vector-ref entry 3) bytes 2048) operation)
+    bytes))
+(define (m3t-public-logits-release! logits)
+  (let* ((operation 'diagnostic-logits-release!)
+         (entry (m3t-entry logits 'logits operation #f)))
+    (if (eq? (vector-ref entry 2) 'dead) #t
+        (begin
+          (m3t-check (m3t-native-logits-release (vector-ref entry 3)) operation)
+          (vector-set! entry 2 'dead) #t))))
+
+;;; Metadata traversal only: no numerical operation runs through scalar lists.
+(define m3t-paths
+  '#(("blocks" "0" "attention" "key" "weight")
+     ("blocks" "0" "attention" "output" "weight")
+     ("blocks" "0" "attention" "query" "weight")
+     ("blocks" "0" "attention" "value" "weight")
+     ("blocks" "0" "ffn" "down" "weight")
+     ("blocks" "0" "ffn" "up" "weight")
+     ("blocks" "0" "norm1" "bias") ("blocks" "0" "norm1" "weight")
+     ("blocks" "0" "norm2" "bias") ("blocks" "0" "norm2" "weight")
+     ("head" "weight") ("norm_final" "bias") ("norm_final" "weight")
+     ("position_embedding" "weight")))
+(define m3t-shapes
+  '#((4 4) (4 4) (4 4) (4 4) (4 8) (8 4) (4) (4) (4) (4)
+     (256 4) (4) (4) (2 4)))
+(define (m3t-append-name prefix name)
+  (if (null? prefix) (list name)
+      (cons (car prefix) (m3t-append-name (cdr prefix) name))))
+(define (m3t-assoc key entries)
+  (cond ((null? entries) #f)
+        ((equal? key (car (car entries))) (car entries))
+        (else (m3t-assoc key (cdr entries)))))
+(define (m3t-config-check config initializer operation)
+  (m3t-boundary operation
+    (x1-private-config-validate config)
+    (let loop ((checks '((model.context-length . 2) (model.hidden-size . 4)
+                         (model.layer-count . 1) (model.query-head-count . 2)
+                         (model.kv-head-count . 2) (model.head-size . 2)
+                         (model.vocabulary-size . 256) (model.dtype . f32)
+                         (model.device . cpu) (run.deterministic . #t))))
+      (if (null? checks) #t
+          (begin
+            (if (not (equal? (x1-private-config-ref config (car (car checks)))
+                            (cdr (car checks))))
+                (m3t-fail 'unsupported operation "configuration differs from the fixed diagnostic profile"))
+            (loop (cdr checks)))))
+    (if (not (= (x1-private-config-ref config 'run.seed)
+                (m3t-native-initializer-word (vector-ref initializer 3) 1)))
+        (m3t-fail 'invalid-argument operation "initializer seed differs from resolved configuration"))
+    (vector (x1-private-config-canonical config)
+            (x1-private-config-fingerprint config))))
+
+(define (m3t-child-parent root path cache)
+  (let loop ((module root) (remaining path) (prefix '()))
+    (if (null? (cdr remaining)) module
+        (let* ((name (car remaining))
+               (next-prefix (m3t-append-name prefix name))
+               (found (m3t-assoc next-prefix (vector-ref cache 0))))
+          (if found
+              (loop (cdr found) (cdr remaining) next-prefix)
+              (let ((child (i2-module-create-internal)))
+                (module-register-child-internal! module name child)
+                (vector-set! cache 0
+                             (cons (cons next-prefix child) (vector-ref cache 0)))
+                (loop child (cdr remaining) next-prefix)))))))
+(define (m3t-path-leaf path)
+  (if (null? (cdr path)) (car path)
+      (m3t-path-leaf (cdr path))))
+
+(define (m3t-validate-schedule snapshot handles operation)
+  (let loop ((rows (vector-ref snapshot 0)) (index 0))
+    (cond
+      ((= index 14)
+       (if (not (and (pair? rows) (null? (cdr rows))
+                     (equal? (vector-ref (car rows) 0) '("token_embedding" "weight"))
+                     (eq? (vector-ref (car rows) 1) (vector-ref handles 10))
+                     (equal? (vector-ref (car rows) 2) '(256 4))
+                     (eq? (vector-ref (car rows) 3) 'f32)
+                     (eq? (vector-ref (car rows) 4) 'cpu)
+                     (equal? (vector-ref snapshot 1)
+                             '((("head" "weight") ("token_embedding" "weight"))))))
+           (m3t-fail 'internal operation "diagnostic tie schedule differs"))
+       #t)
+      ((null? rows) (m3t-fail 'internal operation "diagnostic parameter schedule is incomplete"))
+      (else
+       (let ((row (car rows)))
+         (if (not (and (equal? (vector-ref row 0) (vector-ref m3t-paths index))
+                       (eq? (vector-ref row 1) (vector-ref handles index))
+                       (equal? (vector-ref row 2) (vector-ref m3t-shapes index))
+                       (eq? (vector-ref row 3) 'f32) (eq? (vector-ref row 4) 'cpu)))
+             (m3t-fail 'internal operation "diagnostic canonical parameter row differs"))
+         (let distinct ((previous 0))
+           (if (= previous index) #t
+               (begin
+                 (if (eq? (vector-ref handles previous) (vector-ref handles index))
+                     (m3t-fail 'internal operation "unexpected diagnostic parameter alias"))
+                 (distinct (+ previous 1)))))
+         (loop (cdr rows) (+ index 1)))))))
+
+(define (m3t-public-model-create config state)
+  (let* ((operation 'diagnostic-model-create)
+         (initial (m3t-entry state 'initializer operation #t))
+         (config-data (m3t-config-check config initial operation))
+         (entry (m3t-stage 'model))
+         (successor (m3t-stage 'initializer))
+         (handles (make-vector 14 #f))
+         (cache (vector '()))
+         (cleanup (vector #f #f)))
+    ;; Promote all Eshkol registry metadata before native ownership staging.
+    (vector-set! entry 5 initial)
+    (vector-set! entry 6 successor)
+    (vector-set! entry 7 config-data)
+    (vector-set! entry 8 handles)
+    (vector-set! entry 11 m3t-profile)
+    (let ((native (m3t-native-owner-create (vector-ref initial 3))))
+      (if (null? native)
+          (begin (vector-set! entry 2 'dead) (vector-set! successor 2 'dead)
+                 (m3t-native-fail operation)))
+      (vector-set! entry 3 native)
+      (m3t-boundary operation
+        (guard (caught
+                 (#t
+                   ;; No caller can access this fresh graph. Abort authenticates
+                   ;; and preflights the entire enrolled set before revocation.
+                   (if (not (vector-ref cleanup 1))
+                       (begin
+                         (if (vector-ref cleanup 0)
+                             (i2-construction-abort-internal! (vector-ref cleanup 0)))
+                         (m3t-check (m3t-native-owner-abort native) operation)
+                         (vector-set! entry 2 'dead)
+                         (vector-set! successor 2 'dead)))
+                   (raise caught)))
+          (let ((construction (i2-construction-begin-internal)))
+            (vector-set! cleanup 0 construction)
+            ;; The preallocated anchor receives an already authenticated opaque
+            ;; pointer before any fallible registration. It gives I2 abort a
+            ;; complete native-owner preflight even with zero P1 parameters.
+            (vector-set! (vector-ref construction 8) 2
+                         (m3t-native-owner-parameter native 0))
+            (let ((root (vector-ref construction 2)))
+            (vector-set! entry 0 root)
+            (let register ((index 0))
+              (if (= index 14) #t
+                  (let* ((path (vector-ref m3t-paths index))
+                         (parent (m3t-child-parent root path cache))
+                         (parameter (m3t-native-owner-parameter native index)))
+                    (if (null? parameter) (m3t-native-fail operation))
+                    (let* ((carrier (i2-carrier 'parameter parameter 'parameter))
+                           (handle (i2-module-register-parameter-internal!
+                                     parent (m3t-path-leaf path) carrier)))
+                      (vector-set! (vector-ref entry 8) index handle)
+                      (m3t-check (m3t-native-owner-bind native index handle) operation)
+                      (register (+ index 1))))))
+            (let ((parent (m3t-child-parent root '("token_embedding" "weight") cache)))
+              (i2-module-register-tied-parameter-internal!
+                parent "weight" (vector-ref (vector-ref entry 8) 10)))
+            (let ((schedule (module-construction-parameters-internal (vector-ref construction 1))))
+              (m3t-validate-schedule schedule (vector-ref entry 8) operation))
+            (let initialize ((index 0))
+              (if (= index 14) #t
+                  (begin
+                    (m3t-check (m3t-native-owner-initialize native index) operation)
+                    (initialize (+ index 1)))))
+            (let ((next (m3t-native-owner-successor native)))
+              (if (null? next) (m3t-native-fail operation))
+              (vector-set! successor 3 next))
+            ;; P1 recomputes its schedule/finalization while every participant
+            ;; remains abortable, then enters its nonfailing seal. Native flags
+            ;; were preflighted by owner-successor; these tail seals allocate none.
+            (i2-construction-seal-internal! construction)
+            (vector-set! cleanup 1 #t)
+            (m3t-check (m3t-native-owner-seal native) operation)
+            (m3t-check (m3t-native-initializer-seal (vector-ref successor 3)) operation)
+            (vector-set! successor 2 'live)
+            (vector-set! entry 2 'live)
+            root)))))))
+(define (m3t-public-model-profile model)
+  (let ((entry (m3t-entry model 'model 'diagnostic-model-profile #t)))
+    (vector-ref entry 11)))
+(define (m3t-public-model-initializer model)
+  (let ((entry (m3t-entry model 'model 'diagnostic-model-initializer #t)))
+    (vector-ref (vector-ref entry 6) 0)))
+
+(define (m3t-public-workspace-create model)
+  (let* ((operation 'diagnostic-workspace-create)
+         (owner (m3t-entry model 'model operation #t))
+         (entry (m3t-stage 'workspace))
+         (rows (make-vector 14 #f)))
+    (let fill ((index 0))
+      (if (= index 14) #t
+          (begin
+            (vector-set! rows index (vector (vector-ref (vector-ref owner 8) index) #f))
+            (fill (+ index 1)))))
+    (vector-set! entry 4 owner)
+    (vector-set! entry 11 (vector-ref owner 11))
+    (vector-set! entry 10 'idle)
+    (vector-set! entry 9 rows)
+    (let ((native (m3t-native-workspace-create (vector-ref owner 3))))
+      (if (null? native)
+          (begin (vector-set! entry 2 'dead) (m3t-native-fail operation)))
+      (vector-set! entry 3 native)
+      (vector-set! entry 2 'live)
+      (vector-ref entry 0))))
+(define (m3t-mode entry operation)
+  (m3t-boundary operation
+    (if (or (not (eq? (vector-ref entry 11) m3t-profile))
+            (not (eq? (vector-ref (vector-ref entry 4) 11) (vector-ref entry 11))))
+        (m3t-fail 'invalid-state operation "diagnostic profile identity changed"))
+    (let ((mode (module-mode-internal (vector-ref (vector-ref entry 4) 0))))
+      (cond ((eq? mode 'train) 1) ((eq? mode 'eval) 0)
+            (else (m3t-fail 'internal operation "diagnostic model mode is invalid"))))))
+(define (m3t-workspace-phase workspace phase operation)
+  (let ((entry (m3t-entry workspace 'workspace operation #t)))
+    (if (not (eq? (vector-ref entry 10) phase))
+        (m3t-fail 'invalid-state operation "diagnostic workspace phase conflicts"))
+    entry))
+(define (m3t-workspace-active workspace operation)
+  (let ((entry (m3t-entry workspace 'workspace operation #t)))
+    (if (eq? (vector-ref entry 10) 'idle)
+        (m3t-fail 'invalid-state operation "diagnostic workspace has no active frame"))
+    entry))
+(define (m3t-public-workspace-begin! workspace input)
+  (let* ((operation 'diagnostic-workspace-begin!)
+         (entry (m3t-workspace-phase workspace 'idle operation))
+         (owner (vector-ref entry 4)))
+    (if (vector-ref owner 10)
+        (m3t-fail 'invalid-state operation "diagnostic model already has an active frame"))
+    (let ((source (m3t-entry input 'input operation #t)))
+      (m3t-check (m3t-native-workspace-begin
+                (vector-ref entry 3) (vector-ref source 3) (m3t-mode entry operation))
+                operation)
+      (vector-set! owner 10 entry)
+      (vector-set! entry 10 'forward)
+      #t)))
+(define (m3t-public-workspace-vjp-begin! workspace logits)
+  (let* ((operation 'diagnostic-workspace-vjp-begin!)
+         (entry (m3t-workspace-phase workspace 'forward operation))
+         (source (m3t-entry logits 'logits operation #t)))
+    (m3t-check (m3t-native-workspace-vjp-begin (vector-ref entry 3) (vector-ref source 3)) operation)
+    (vector-set! entry 10 'reverse)
+    #t))
+(define (m3t-public-workspace-copy-logits! workspace logits)
+  (let* ((operation 'diagnostic-workspace-copy-logits!)
+         (entry (m3t-workspace-active workspace operation))
+         (destination (m3t-entry logits 'logits operation #t)))
+    (m3t-check (m3t-native-workspace-copy-logits
+                (vector-ref entry 3) (vector-ref destination 3)) operation)))
+(define (m3t-public-workspace-check-primals workspace)
+  (let* ((operation 'diagnostic-workspace-check-primals)
+         (entry (m3t-workspace-active workspace operation)))
+    (m3t-check (m3t-native-workspace-check-primals (vector-ref entry 3)
+                                                (m3t-mode entry operation)) operation)))
+(define (m3t-public-workspace-reset! workspace)
+  (let* ((operation 'diagnostic-workspace-reset!)
+         (entry (m3t-entry workspace 'workspace operation #t)))
+    (m3t-check (m3t-native-workspace-reset (vector-ref entry 3)) operation)
+    (if (not (eq? (vector-ref entry 10) 'idle))
+        (vector-set! (vector-ref entry 4) 10 #f))
+    (vector-set! entry 10 'idle)
+    #t))
+(define (m3t-public-workspace-release! workspace)
+  (let* ((operation 'diagnostic-workspace-release!)
+         (entry (m3t-entry workspace 'workspace operation #f)))
+    (if (eq? (vector-ref entry 2) 'dead) #t
+        (begin
+          (m3t-check (m3t-native-workspace-release (vector-ref entry 3)) operation)
+          (if (not (eq? (vector-ref entry 10) 'idle))
+              (vector-set! (vector-ref entry 4) 10 #f))
+          (vector-set! entry 10 'dead)
+          (vector-set! entry 2 'dead) #t))))
+
+(define (m3t-selector value choices operation)
+  (if (not (symbol? value))
+      (m3t-fail 'invalid-argument operation "diagnostic selector must be a symbol"))
+  (let loop ((remaining choices) (index 0))
+    (cond ((null? remaining)
+           (m3t-fail 'invalid-argument operation "unknown fixed diagnostic selector"))
+          ((eq? value (car remaining)) index)
+          (else (loop (cdr remaining) (+ index 1))))))
+
+(define (m3t-workspace-contributions-internal workspace)
+  (let* ((operation 'diagnostic-workspace-contributions-internal)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (rows (vector-ref entry 9)))
+    (let loop ((index 0))
+      (if (= index 14) rows
+          (let ((carrier (m3t-native-workspace-gradient (vector-ref entry 3) index)))
+            (if (null? carrier) (m3t-native-fail operation))
+            (vector-set! (vector-ref rows index) 1 carrier)
+            (loop (+ index 1)))))))
+
+(define (m3t-public-embedding! workspace selector)
+  (let* ((operation 'diagnostic-embedding!)
+         (entry (m3t-workspace-phase workspace 'forward operation))
+         (role (m3t-selector selector '(token position) operation)))
+    (m3t-check
+      (m3t-native-embedding (vector-ref entry 3) role 0) operation)))
+
+(define (m3t-public-embedding-vjp! workspace selector)
+  (let* ((operation 'diagnostic-embedding-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (role (m3t-selector selector '(token position) operation)))
+    (m3t-check
+      (m3t-native-embedding (vector-ref entry 3) role 1) operation)))
+
+(define (m3t-public-linear! workspace selector)
+  (let* ((operation 'diagnostic-linear!)
+         (entry (m3t-workspace-phase workspace 'forward operation))
+         (role (m3t-selector selector '(q k v attention-output ffn-up ffn-down tied-head) operation)))
+    (m3t-check
+      (m3t-native-linear (vector-ref entry 3) role 0) operation)))
+
+(define (m3t-public-linear-vjp! workspace selector)
+  (let* ((operation 'diagnostic-linear-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (role (m3t-selector selector '(q k v attention-output ffn-up ffn-down tied-head) operation)))
+    (m3t-check
+      (m3t-native-linear (vector-ref entry 3) role 1) operation)))
+
+(define (m3t-public-layer-norm! workspace selector)
+  (let* ((operation 'diagnostic-layer-norm!)
+         (entry (m3t-workspace-phase workspace 'forward operation))
+         (role (m3t-selector selector '(block-input ffn-input final) operation)))
+    (m3t-check
+      (m3t-native-layer-norm (vector-ref entry 3) role 0) operation)))
+
+(define (m3t-public-layer-norm-vjp! workspace selector)
+  (let* ((operation 'diagnostic-layer-norm-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (role (m3t-selector selector '(block-input ffn-input final) operation)))
+    (m3t-check
+      (m3t-native-layer-norm (vector-ref entry 3) role 1) operation)))
+
+(define (m3t-public-gelu! workspace)
+  (let* ((operation 'diagnostic-gelu!)
+         (entry (m3t-workspace-phase workspace 'forward operation)))
+    (m3t-check
+      (m3t-native-gelu (vector-ref entry 3) 0) operation)))
+
+(define (m3t-public-gelu-vjp! workspace)
+  (let* ((operation 'diagnostic-gelu-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation)))
+    (m3t-check
+      (m3t-native-gelu (vector-ref entry 3) 1) operation)))
+
+(define (m3t-public-residual! workspace selector)
+  (let* ((operation 'diagnostic-residual!)
+         (entry (m3t-workspace-phase workspace 'forward operation))
+         (role (m3t-selector selector '(embeddings attention ffn) operation)))
+    (m3t-check
+      (m3t-native-residual (vector-ref entry 3) role 0) operation)))
+
+(define (m3t-public-residual-vjp! workspace selector)
+  (let* ((operation 'diagnostic-residual-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (role (m3t-selector selector '(embeddings attention ffn) operation)))
+    (m3t-check
+      (m3t-native-residual (vector-ref entry 3) role 1) operation)))
+
+(define (m3t-public-heads-split! workspace selector)
+  (let* ((operation 'diagnostic-heads-split!)
+         (entry (m3t-workspace-phase workspace 'forward operation))
+         (role (m3t-selector selector '(q k v) operation)))
+    (m3t-check
+      (m3t-native-heads-split (vector-ref entry 3) role 0) operation)))
+
+(define (m3t-public-heads-split-vjp! workspace selector)
+  (let* ((operation 'diagnostic-heads-split-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (role (m3t-selector selector '(q k v) operation)))
+    (m3t-check
+      (m3t-native-heads-split (vector-ref entry 3) role 1) operation)))
+
+(define (m3t-public-heads-merge! workspace)
+  (let* ((operation 'diagnostic-heads-merge!)
+         (entry (m3t-workspace-phase workspace 'forward operation)))
+    (m3t-check
+      (m3t-native-heads-merge (vector-ref entry 3) 0) operation)))
+
+(define (m3t-public-heads-merge-vjp! workspace)
+  (let* ((operation 'diagnostic-heads-merge-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation)))
+    (m3t-check
+      (m3t-native-heads-merge (vector-ref entry 3) 1) operation)))
+
+(define (m3t-public-attention! workspace)
+  (let* ((operation 'diagnostic-attention!)
+         (entry (m3t-workspace-phase workspace 'forward operation)))
+    (m3t-check
+      (m3t-native-attention (vector-ref entry 3) 0) operation)))
+
+(define (m3t-public-attention-vjp! workspace)
+  (let* ((operation 'diagnostic-attention-vjp!)
+         (entry (m3t-workspace-phase workspace 'reverse operation)))
+    (m3t-check
+      (m3t-native-attention (vector-ref entry 3) 1) operation)))
+
+(define (m3t-public-sum! workspace selector)
+  (let* ((operation 'diagnostic-sum!)
+         (entry (m3t-workspace-phase workspace 'reverse operation))
+         (role (m3t-selector selector '(qkv-input attention-residual-input ffn-residual-input tied-weight) operation)))
+    (m3t-check
+      (m3t-native-sum (vector-ref entry 3) role) operation)))

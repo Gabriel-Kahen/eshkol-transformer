@@ -189,6 +189,10 @@
       (vector (vector 'forged) source-weight
               'parameter 'parameter 'i2-forged-storage))))
 
+(expect-error "ordinary I2 construction is explicitly unavailable"
+              'unsupported
+  (lambda () (i2-construction-begin-internal)))
+
 (display "I2/P1 integration PASS: ")
 (display checks)
 (display " checks\n")

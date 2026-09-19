@@ -281,7 +281,7 @@ trusted_private_count="$(readelf -Ws \
   "${p1_trusted_link}/p1_identity.o" | \
   awk '/et_p1_private_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 private symbol visibility changed"
-[[ "${trusted_private_count}" == 31 ]] || \
+[[ "${trusted_private_count}" == 36 ]] || \
   die "P1 trusted ABI symbol count changed: ${trusted_private_count}"
 
 p1_public_cflags=(
@@ -477,6 +477,11 @@ for run in 1 2; do
     rg 'et_p1_private_provider_seal_release_v1' >/dev/null || \
     die "P1 trusted object omits its explicit private bridge reference"
 done
+
+compile_trusted_aot "${PROJECT_ROOT}/tests/p1/construction_test.esk" \
+  "${p1_tmp}/construction" "${p1_tmp}/construction.aot.log"
+ESHKOL_ARENA_POISON=1 "${p1_tmp}/construction" >"${p1_tmp}/construction.stdout"
+grep -Fx 'P1 construction PASS: 23' "${p1_tmp}/construction.stdout" >/dev/null
 
 for stem in module example public-stubs public-reverse test; do
   cmp "${p1_tmp}/${stem}-1.o" "${p1_tmp}/${stem}-2.o"

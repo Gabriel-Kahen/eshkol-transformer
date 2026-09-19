@@ -31,12 +31,14 @@ case "${mode}" in
 esac
 
 "${cc}" "${cflags[@]}" \
+  -MMD -MF "${temporary_dir}/n2_primitives_provider.d" -MT n2_primitives_provider.o \
   -c "${PROJECT_ROOT}/native/n2_primitives_provider.c" \
   -o "${temporary_dir}/n2_primitives_provider.o"
 ar rcsD "${temporary_dir}/libeshkol_transformer_n2.a" \
   "${temporary_dir}/n2_primitives_provider.o"
 
 mkdir -p "${artifact_dir}"
+mv -f "${temporary_dir}/n2_primitives_provider.d" "${artifact_dir}/n2_primitives_provider.d"
 mv -f "${temporary_dir}/n2_primitives_provider.o" \
   "${artifact_dir}/n2_primitives_provider.o"
 mv -f "${temporary_dir}/libeshkol_transformer_n2.a" \

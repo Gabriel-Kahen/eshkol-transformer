@@ -1,0 +1,73 @@
+(require transformer.module)
+(require p1_test.tensor_provider)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P1 construction FAIL: ") (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught (#t (and (transformer-error? caught)
+                            (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define existing (module-create-fixture-internal))
+(define construction
+  (with-region ('construction-create 1048576)
+    (module-construction-begin-internal 'fixture-v1)))
+(define root (module-construction-root-internal construction))
+(reject "nested begin" 'invalid-state
+        (lambda () (module-construction-begin-internal 'fixture-v1)))
+(reject "foreign ledger" 'invalid-argument
+        (lambda () (module-construction-root-internal (vector construction))))
+(reject "no observation" 'invalid-state (lambda () (module-parameters root)))
+(reject "no snapshot" 'invalid-state (lambda () (module-state-dict root)))
+(reject "no mode" 'invalid-state (lambda () (module-train! root)))
+(reject "no adoption" 'invalid-argument
+        (lambda () (module-register-child-internal! root "old" existing)))
+(define handle
+  (with-region ('construction-register 1048576)
+    (module-register-parameter-internal! root "weight"
+      (fixture-tensor-internal '(2) 'f32 'cpu (vector 'weight 'bits)))))
+(reject "no handle observation" 'invalid-state
+        (lambda () (parameter-handle-shape handle)))
+(module-register-tied-parameter-internal! root "tied" handle)
+(define snapshot (module-construction-parameters-internal construction))
+(check "path sorting" (equal? (vector-ref (car (vector-ref snapshot 0)) 0) '("tied")))
+(check "canonical handle" (eq? handle (vector-ref (car (vector-ref snapshot 0)) 1)))
+(check "ties" (equal? (vector-ref snapshot 1) '((("tied") ("weight")))))
+(vector-set! (car (vector-ref snapshot 0)) 0 '("corrupted"))
+(vector-set! (car (vector-ref snapshot 0)) 2 '(999))
+(vector-set! snapshot 1 '())
+(check "seal canonical root" (eq? root (module-construction-seal-internal! construction)))
+(check "metadata detached"
+       (and (equal? (parameter-handle-path handle) '("tied"))
+            (equal? (parameter-handle-shape handle) '(2))))
+(check "published tree" (equal? (parameter-tree-paths (module-parameters root))
+                               '(("tied") ("weight"))))
+(reject "sealed cannot abort" 'invalid-state
+        (lambda () (module-construction-abort-internal! construction)))
+(define abandoned (module-construction-begin-internal 'fixture-v1))
+(define abandoned-root (module-construction-root-internal abandoned))
+(reject "cross-scope handle" 'invalid-argument
+        (lambda () (module-register-tied-parameter-internal! abandoned-root "old" handle)))
+(define abandoned-handle
+  (module-register-parameter-internal! abandoned-root "weight"
+    (fixture-tensor-internal '(1) 'f32 'cpu (vector 'abandoned))))
+(module-construction-parameters-internal abandoned)
+(define orphan (module-create-with-provider-internal 'fixture-v1))
+(reject "unattached module" 'invalid-state
+        (lambda () (module-construction-seal-internal! abandoned)))
+(check "abort" (module-construction-abort-internal! abandoned))
+(check "abort idempotent" (module-construction-abort-internal! abandoned))
+(reject "aborted module" 'invalid-state (lambda () (module-parameters abandoned-root)))
+(reject "aborted handle" 'invalid-state (lambda () (parameter-handle-shape abandoned-handle)))
+(reject "aborted orphan" 'invalid-state (lambda () (module-parameters orphan)))
+(define changed (module-construction-begin-internal 'fixture-v1))
+(module-construction-parameters-internal changed)
+(module-register-parameter-internal! (module-construction-root-internal changed) "new"
+  (fixture-tensor-internal '(1) 'f32 'cpu (vector 'changed)))
+(reject "schedule mismatch" 'invalid-state
+        (lambda () (module-construction-seal-internal! changed)))
+(module-construction-abort-internal! changed)
+(check "unrelated live module preserved" (eq? (module-mode-internal existing) 'train))
+(display "P1 construction PASS: ") (display checks) (newline)

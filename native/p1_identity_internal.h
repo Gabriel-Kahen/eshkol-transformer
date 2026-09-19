@@ -98,6 +98,12 @@ int64_t et_p1_private_provider_create_v1(void *context,
                                          const void *provider_id,
                                          int64_t provider_id_bytes);
 int64_t et_p1_private_provider_abort_v1(void *context, void *provider);
+/* Fresh unpublished ownership only; not a general token destructor. */
+int64_t et_p1_private_construction_begin_v1(void *context);
+int64_t et_p1_private_construction_module_create_v1(void *context, void *construction);
+int64_t et_p1_private_construction_handle_create_v1(void *context, void *construction);
+int64_t et_p1_private_construction_seal_v1(void *context, void *construction);
+int64_t et_p1_private_construction_abort_v1(void *context, void *construction);
 int64_t et_p1_private_module_create_v1(void *context);
 int64_t et_p1_private_parameter_handle_create_v1(void *context);
 int64_t et_p1_private_parameter_tree_create_v1(void *context);

@@ -16,7 +16,7 @@ The public product is
 - `et_p1_public_token_live_v1(token)`.
 
 The trusted product has the same archive basename under a mutually exclusive
-`trusted` directory. It is a replacement, never an additive library. Its 31
+`trusted` directory. It is a replacement, never an additive library. Its 36
 `et_p1_private_*_v1` functions have hidden ELF visibility and cover one private
 context, fixed-kind identity creation, immutable provider admission witnesses,
 exact state/provider binding, state-backed tensor identity and release transitions,
@@ -117,3 +117,62 @@ call a provider, inspect a tensor, prepare/commit a load, serialize state, or in
 capability. Arbitrary malicious native object injection is outside the Eshkol-module
 threat model. Fresh-cache AOT tests prove arbitrary compiled Eshkol linked only with
 the public package cannot resolve private Eshkol names or private native symbols.
+
+## Unpublished construction extension v1
+
+The accepted M3T extension adds exactly five private native calls: construction
+`begin(context)`, `module_create(context, construction)`,
+`handle_create(context, construction)`, `seal(context, construction)`, and
+`abort(context, construction)`, all with the `et_p1_private_construction_` prefix
+and `_v1` suffix. Results use the existing context result pointer. The four public
+inspection functions, token kinds, ABI 1.1 layouts, and existing signatures are
+unchanged. Construction identities are separately registered before dereference;
+they are not public P1 token kinds.
+
+Only one unpublished construction may be active. Begin reserves 8,192 enrollment
+slots (the 4,096 module and 4,096 parameter bounds) before returning. Scoped creates
+reserve capacity before allocating a token, and enroll each successful token without
+further allocation. Seal and abort validate all exact enrolled records before a
+nonallocating transition. Abort revokes only those modules and handles; it cannot
+revoke arbitrary existing tokens. Abort is idempotent; sealed ledgers reject abort.
+Both terminal transitions free the enrollment array and retain a small ledger
+identity tombstone. Repeated failures consume identity tombstones but no live-token
+capacity. Successful modules retain the existing process-local lifetime.
+
+The trusted Eshkol surface appends construction begin, root, seal, abort, and
+parameters at slots 59–63, preserving all preceding slots and all ten C2 seams.
+Its exact surface is 18 public plus 46 private names. Begin takes an admitted
+provider name and returns the registered construction identity. Root returns the
+fresh root shell. Registration can only attach exact same-construction modules
+and handles; public observation and buffer registration reject before seal.
+Parameters returns detached `#(rows ties)`, with a path-sorted list of
+`#(path canonical-handle shape dtype device)` rows and ordinary P1 tie groups.
+The retained independent schedule is compared to a new actual traversal at seal;
+mutating the returned metadata cannot alter that schedule. Seal also rejects
+unattached enrolled modules or handles. It returns the canonical finalized root.
+
+I2's wrapper binds its ledger to this exact P1 construction. M3T owns all native
+parameter storage. Begin promotes all ledger/membership graphs before native
+scope creation and retains the exact preconstruction I2 registry/count. A
+preallocated parameter0 anchor is filled by the fixed trusted caller immediately
+after I2 begin returns, using the already-created native owner and only scalar
+pointer stores. Abort validates
+that anchor and every canonical carrier/handle binding and preflights all 14 native
+parameters, including zero/partial P1 enrollment, borrows and plan pins. It then
+revokes P1 authority and restores the saved I2 registry/count without allocation
+before M3T performs its fixed nonfailing storage teardown. Both terminal states
+clear the anchor and saved baseline references. No provider
+callback selects a destructor. The source-only I2 preflight bridge is available
+only in the M3T aggregate; ordinary I2/C2 construction begin explicitly reports
+unsupported before allocating or enrolling anything. Its `NULL,NULL` sentinel
+queries that fixed availability and confers no parameter authority.
+
+The focused `scripts/test-m3t-construction.sh` witness exercises each of the 14
+positions at zero and partial enrollment. Five blockers are reachable on unbound
+parameters: value/gradient ordinary borrows, value/gradient scoped borrows, and a
+tensor copy plan. Gradient-reset and gradient-contribution plans require a bound
+identity; the witness checks their explicit invalid-state rejection and unchanged
+live counts on unbound parameters, then exercises all seven modes on the two
+canonically bound partial-enrollment parameters. Rejected aborts preserve exact
+P1/I2 authority and native live counts, and release permits retry. Native P1 begin
+allocation failpoints also prove cleanup before the caller receives an I2 ledger.

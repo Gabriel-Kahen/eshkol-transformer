@@ -275,7 +275,7 @@ class EvidenceTests(unittest.TestCase):
         )
 
     def test_suite_inventory_includes_optimizer_after_native_numerics(self) -> None:
-        self.assertEqual(len(evidence.SUITES), 16)
+        self.assertEqual(len(evidence.SUITES), 17)
         index = evidence.SUITES.index("native-numerics")
         self.assertEqual(evidence.SUITES[index + 1], "native-optimizer")
 

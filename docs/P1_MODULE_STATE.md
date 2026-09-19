@@ -414,7 +414,7 @@ The bridge requires 64-bit pointers and fixed-width `i64` calls. Compile-time
 assertions freeze the caller token, private registry record, context, and error-record
 sizes at 264, 256, 344, and 272 bytes. The public archive defines only four read-only functions: ABI major,
 ABI minor, token kind, and token liveness. It contains no context, constructor,
-provider, callback, bind, revoke, result, error, or generic-dispatch symbol. All 31
+provider, callback, bind, revoke, result, error, or generic-dispatch symbol. All 36
 fixed-arity private functions have hidden ELF visibility and exist only in the
 trusted replacement archive.
 

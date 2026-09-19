@@ -124,4 +124,11 @@ UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 60s \
     "${temporary_dir}/test-failpoints-sanitized" >/dev/null
 
+"${cc}" "${trusted_cflags[@]}" -fsanitize=address,undefined \
+  -fno-omit-frame-pointer "${PROJECT_ROOT}/tests/p1/test_p1_construction.c" \
+  "${sanitized_archive}" -Wl,--wrap=calloc \
+  -o "${temporary_dir}/test-construction-sanitized"
+ASAN_OPTIONS=detect_leaks="${P1_LSAN:-0}":halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 "${temporary_dir}/test-construction-sanitized"
+
 printf 'P1 NATIVE PASS: ABI, ownership, failpoints, cross-role identity, determinism, and sanitizers\n'

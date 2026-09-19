@@ -4,6 +4,67 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-19 — M3T design accepted; implementation in review
+
+- **Authoritative disposition:** integration accepted amended proposal
+  `e7ad6b0d82f4cf7f5d45efff04179433379965bb` in
+  [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740555652)
+  and [issue #68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68#issuecomment-5740555698).
+  This ledger records that decision; it does not independently accept an implementation.
+- **Scope:** 85-global / 79-export diagnostic sibling, unchanged 38 operations
+  and bounded profile. Exactly one registry-owning artifact per process, restricted
+  six-facade closure, no D2/O2/K2/C2 interoperability. Full training composition and
+  rank-two checkpoint capability remain downstream dependencies.
+- **Lifetime conditions:** preserve all ten C2 P1 seams and slots 0..58, append
+  five construction entries at 59..63. Eshkol P1 becomes 46 private / 64 total;
+  native identity separately becomes 36 private. Preserve canonical promotion,
+  fresh-only ownership, authority revocation before teardown, nonfallible seal,
+  exact scoped guards and existing aggregate regressions.
+- **Implementation in review:** [local evidence and limits](M3T_TRANSPORT.md)
+  cover installed public AOT, independent role wiring, failure/cleanup, exact
+  retained-memory checks, two fresh packages and sanitizers. All final local gate
+  commands have evidence through full-driver stages and the amended caller replay;
+  this is not an untouched final-script PASS. Scoped independent reviews passed.
+  Supported exact-head CI must run the complete final gate and affected
+  P1/I2/E1B/C2/T1 regressions through the accepted planner. M3T remains `review`,
+  with integration acceptance pending. M3 explicitly depends on M3T; integration
+  retains merge ownership.
+
+- **CI integrity repair:** supported run
+  [35437954347](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35437954347)
+  passed M3T and the other 15 suites but failed native-numerics at N3K's predecessor
+  inventory: the A2/N2 builders now emit dependency files, while their pins still
+  described the accepted older recipes. The authorized repair updates exactly
+  those two hashes and checks the full inventory before M3T compilation. All ten
+  old/current object and archive pairs are byte-identical across normal and
+  sanitizer builds. Nine package tests and the complete N3K gate pass locally
+  with explicit CachyOS/LLVM22 compatibility settings, including ASan/UBSan/LSan.
+  N3K's integrity gate and all other pins remain unchanged. Independent bounded
+  repair review passed; supported CI and integration review of the new head remain
+  required.
+
+- **Accepted private abort refinement:**
+  [authoritative comment](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740631242)
+  admits fixed `et_i2_private_construction_parameter_preflight_v1(parameter,
+  exact_handle)` only in the M3T tuple. Exact unpublished membership and binding,
+  all value/gradient borrows and plan pins must pass for the entire enrolled set
+  before any revocation. Native owner abort independently preflights all 14.
+  Ordinary I2/C2 reject construction as unsupported before allocation; status -1
+  is a private availability sentinel, and `(NULL,NULL)` returns 0 only as M3T's
+  availability query. Positive errors preserve I2 taxonomy. No public/count change.
+  Required proof includes every carrier position, late failure without earlier
+  destruction, retry, exact live/payload counts, allocation-disabled checks,
+  ordinary aggregate regressions, sanitizers and independent lifetime review.
+  The subsequent [ledger refinement](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740748874)
+  requires a preallocated exact-owner anchor covering all 14 native parameters
+  before P1 revocation even with zero/partial registration, plus nonallocating
+  restoration of the exact preconstruction registry/count. Handoff must be
+  nonraising and precede fallible registration; retained references clear on
+  seal/abort. Private begin promotes its ledger/membership graphs before P1 native
+  construction authority; guards restore both scope baselines. Proof covers
+  failures before begin, within begin and at handoff. These remain implementation
+  proof obligations.
+
 ## 2026-09-18 — CI-E2 scheduling/evidence extension accepted
 
 - **Decision:** CI-E2 is accepted and complete. It separates unchanged O2 tests

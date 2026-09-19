@@ -1,0 +1,249 @@
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.error_public)
+(require transformer.diagnostic_transport)
+
+(define (check label value)
+  (if value #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (error-details-valid? details)
+  (let loop ((rows details)
+             ;; E1 returns its canonical lexicographically sorted alist.
+             (keys '(native-category source-code source-domain source-message))
+             (index 0))
+    (if (null? keys) (null? rows)
+        (and (pair? rows) (pair? (car rows))
+             (eq? (car (car rows)) (car keys))
+             (pair? (cdr (car rows))) (null? (cdr (cdr (car rows))))
+             (let ((value (car (cdr (car rows)))))
+               (cond ((= index 2) (symbol? value))
+                     ((= index 3) (string? value))
+                     (else (and (integer? value) (exact? value)
+                                (> value 0) (<= value 16)))))
+             (loop (cdr rows) (cdr keys) (+ index 1))))))
+(define (expect-error label category operation thunk)
+  (let ((caught #f))
+    (guard (raised
+             (#t (set! caught
+                         (and (transformer-error? raised)
+                              (eq? (transformer-error-category raised) category)
+                              (eq? (transformer-error-operation raised) operation)
+                              (error-details-valid? (transformer-error-details raised))
+                              (eq? (transformer-error-cause raised) #f)))))
+      (thunk))
+    (check label caught)))
+(define config-text
+  "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+(define config (config-resolve (config-parse config-text) '()))
+(define initial (diagnostic-initializer-state 1729))
+(define model
+  (with-region ('m3t-constructor 65536)
+    (diagnostic-model-create config initial)))
+(define input (diagnostic-input-create))
+(define logits (diagnostic-logits-create))
+(define upstream (diagnostic-logits-create))
+(define workspace (diagnostic-workspace-create model))
+(define upstream-bytes (make-bytevector 2048 0))
+(let fill ((index 0))
+  (if (= index 512) #t
+      (begin
+        (bytevector-u8-set! upstream-bytes (+ (* index 4) 2)
+                            (if (= (modulo index 2) 0) 128 0))
+        (bytevector-u8-set! upstream-bytes (+ (* index 4) 3)
+                            (if (= (modulo index 2) 0) 63 191))
+        (fill (+ index 1)))))
+(check "upstream ingress" (diagnostic-logits-copy-bits! upstream upstream-bytes))
+(check "input ingress" (diagnostic-input-copy! input '(65 66)))
+(define (forward workspace logits)
+  (check "diagnostic-embedding! result" (eq? (diagnostic-embedding! workspace 'token) #t))
+  (check "diagnostic-embedding! result" (eq? (diagnostic-embedding! workspace 'position) #t))
+  (check "diagnostic-residual! result" (eq? (diagnostic-residual! workspace 'embeddings) #t))
+  (check "diagnostic-layer-norm! result" (eq? (diagnostic-layer-norm! workspace 'block-input) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'q) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'k) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'v) #t))
+  (check "diagnostic-heads-split! result" (eq? (diagnostic-heads-split! workspace 'q) #t))
+  (check "diagnostic-heads-split! result" (eq? (diagnostic-heads-split! workspace 'k) #t))
+  (check "diagnostic-heads-split! result" (eq? (diagnostic-heads-split! workspace 'v) #t))
+  (check "diagnostic-attention! result" (eq? (diagnostic-attention! workspace) #t))
+  (check "diagnostic-heads-merge! result" (eq? (diagnostic-heads-merge! workspace) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'attention-output) #t))
+  (check "diagnostic-residual! result" (eq? (diagnostic-residual! workspace 'attention) #t))
+  (check "diagnostic-layer-norm! result" (eq? (diagnostic-layer-norm! workspace 'ffn-input) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'ffn-up) #t))
+  (check "diagnostic-gelu! result" (eq? (diagnostic-gelu! workspace) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'ffn-down) #t))
+  (check "diagnostic-residual! result" (eq? (diagnostic-residual! workspace 'ffn) #t))
+  (check "diagnostic-layer-norm! result" (eq? (diagnostic-layer-norm! workspace 'final) #t))
+  (check "diagnostic-linear! result" (eq? (diagnostic-linear! workspace 'tied-head) #t))
+  (check "diagnostic-workspace-copy-logits! result" (eq? (diagnostic-workspace-copy-logits! workspace logits) #t))
+  #t)
+
+(define (reverse workspace)
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'tied-head) #t))
+  (check "diagnostic-layer-norm-vjp! result" (eq? (diagnostic-layer-norm-vjp! workspace 'final) #t))
+  (check "diagnostic-residual-vjp! result" (eq? (diagnostic-residual-vjp! workspace 'ffn) #t))
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'ffn-down) #t))
+  (check "diagnostic-gelu-vjp! result" (eq? (diagnostic-gelu-vjp! workspace) #t))
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'ffn-up) #t))
+  (check "diagnostic-layer-norm-vjp! result" (eq? (diagnostic-layer-norm-vjp! workspace 'ffn-input) #t))
+  (check "diagnostic-sum! result" (eq? (diagnostic-sum! workspace 'ffn-residual-input) #t))
+  (check "diagnostic-residual-vjp! result" (eq? (diagnostic-residual-vjp! workspace 'attention) #t))
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'attention-output) #t))
+  (check "diagnostic-heads-merge-vjp! result" (eq? (diagnostic-heads-merge-vjp! workspace) #t))
+  (check "diagnostic-attention-vjp! result" (eq? (diagnostic-attention-vjp! workspace) #t))
+  (check "diagnostic-heads-split-vjp! result" (eq? (diagnostic-heads-split-vjp! workspace 'q) #t))
+  (check "diagnostic-heads-split-vjp! result" (eq? (diagnostic-heads-split-vjp! workspace 'k) #t))
+  (check "diagnostic-heads-split-vjp! result" (eq? (diagnostic-heads-split-vjp! workspace 'v) #t))
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'q) #t))
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'k) #t))
+  (check "diagnostic-linear-vjp! result" (eq? (diagnostic-linear-vjp! workspace 'v) #t))
+  (check "diagnostic-sum! result" (eq? (diagnostic-sum! workspace 'qkv-input) #t))
+  (check "diagnostic-layer-norm-vjp! result" (eq? (diagnostic-layer-norm-vjp! workspace 'block-input) #t))
+  (check "diagnostic-sum! result" (eq? (diagnostic-sum! workspace 'attention-residual-input) #t))
+  (check "diagnostic-residual-vjp! result" (eq? (diagnostic-residual-vjp! workspace 'embeddings) #t))
+  (check "diagnostic-embedding-vjp! result" (eq? (diagnostic-embedding-vjp! workspace 'token) #t))
+  (check "diagnostic-embedding-vjp! result" (eq? (diagnostic-embedding-vjp! workspace 'position) #t))
+  (check "diagnostic-sum! result" (eq? (diagnostic-sum! workspace 'tied-weight) #t))
+  #t)
+
+(check "algorithm" (eq? (diagnostic-initializer-algorithm initial)
+                         'n3k.philox4x32-10.uniform-f32.v1))
+(check "original RNG unchanged" (equal? (diagnostic-initializer-words initial) '(1 1729 0 0)))
+(check "successor" (equal? (diagnostic-initializer-words (diagnostic-model-initializer model))
+                           '(1 1729 290 0)))
+(check "cached successor" (eq? (diagnostic-model-initializer model)
+                               (diagnostic-model-initializer model)))
+(check "profile" (eq? (diagnostic-model-profile model) 'eshkol-diagnostic-byte-decoder-v1))
+(define tree (module-parameters model))
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+(check "fifteen paths" (= (proper-length (parameter-tree-paths tree)) 15))
+(check "one tied weight"
+       (eq? (parameter-tree-handle tree '("head" "weight"))
+            (parameter-tree-handle tree '("token_embedding" "weight"))))
+(check "matrix shape" (equal? (parameter-handle-shape
+                                (parameter-tree-handle tree '("head" "weight"))) '(256 4)))
+(define second-model
+  (diagnostic-model-create config (diagnostic-model-initializer model)))
+(check "continuation" (equal? (diagnostic-initializer-words
+                               (diagnostic-model-initializer second-model)) '(1 1729 580 0)))
+(define (bytes-equal? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index) (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define original-state (module-state-dict model))
+(define changed-state (module-state-dict second-model))
+(expect-error "copied initializer" 'invalid-argument 'diagnostic-initializer-words
+  (lambda () (diagnostic-initializer-words (vector 'diagnostic-owner))))
+(expect-error "negative seed" 'invalid-argument 'diagnostic-initializer-state
+  (lambda () (diagnostic-initializer-state -1)))
+(expect-error "inexact seed" 'invalid-argument 'diagnostic-initializer-state
+  (lambda () (diagnostic-initializer-state 1729.0)))
+(expect-error "seed mismatch" 'invalid-argument 'diagnostic-model-create
+  (lambda () (diagnostic-model-create config (diagnostic-initializer-state 4))))
+(expect-error "malformed configuration" 'invalid-argument 'diagnostic-model-create
+  (lambda () (diagnostic-model-create #f initial)))
+(expect-error "unsupported dimensions" 'unsupported 'diagnostic-model-create
+  (lambda () (diagnostic-model-create
+               (config-resolve (config-parse config-text) '(:model.hidden-size 8)) initial)))
+(expect-error "short input" 'shape-mismatch 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(65))))
+(expect-error "long input" 'shape-mismatch 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(65 66 67))))
+(expect-error "improper input" 'invalid-argument 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(65 . 66))))
+(define cyclic (cons 65 '()))
+(set-cdr! cyclic cyclic)
+(expect-error "cyclic input" 'invalid-argument 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input cyclic)))
+(expect-error "inexact ID" 'invalid-argument 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(65.0 66))))
+(expect-error "complex ID" 'invalid-argument 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input (list (make-rectangular 65 0) 66))))
+(expect-error "overflow ID" 'invalid-argument 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(9223372036854775808 66))))
+(expect-error "ID range" 'shape-mismatch 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(65 256))))
+(expect-error "copied input" 'invalid-argument 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! (vector 'diagnostic-owner) '(65 66))))
+(expect-error "wrong owner kind" 'invalid-argument 'diagnostic-logits-bits
+  (lambda () (diagnostic-logits-bits input)))
+(expect-error "short bytes" 'shape-mismatch 'diagnostic-logits-copy-bits!
+  (lambda () (diagnostic-logits-copy-bits! logits (make-bytevector 4 0))))
+(expect-error "idle primitive" 'invalid-state 'diagnostic-linear!
+  (lambda () (diagnostic-linear! workspace 'q)))
+(check "begin" (diagnostic-workspace-begin! workspace input))
+(expect-error "second begin" 'invalid-state 'diagnostic-workspace-begin!
+  (lambda () (diagnostic-workspace-begin! workspace input)))
+(define other-workspace (diagnostic-workspace-create model))
+(expect-error "second active frame" 'invalid-state 'diagnostic-workspace-begin!
+  (lambda () (diagnostic-workspace-begin! other-workspace input)))
+(expect-error "not ready" 'invalid-state 'diagnostic-linear!
+  (lambda () (diagnostic-linear! workspace 'q)))
+(expect-error "early VJP" 'invalid-state 'diagnostic-workspace-vjp-begin!
+  (lambda () (diagnostic-workspace-vjp-begin! workspace upstream)))
+(expect-error "bad selector" 'invalid-argument 'diagnostic-linear!
+  (lambda () (diagnostic-linear! workspace 'not-a-projection)))
+(expect-error "selector type" 'invalid-argument 'diagnostic-linear!
+  (lambda () (diagnostic-linear! workspace 0)))
+(check "forward witness" (forward workspace logits))
+(expect-error "duplicate write" 'invalid-state 'diagnostic-linear!
+  (lambda () (diagnostic-linear! workspace 'tied-head)))
+(define first-bytes (diagnostic-logits-bits logits))
+(let finite ((index 0) (nonzero #f))
+  (if (= index 512)
+      (check "nonzero output" nonzero)
+      (let ((high (bytevector-u8-ref first-bytes (+ (* index 4) 3)))
+            (low (bytevector-u8-ref first-bytes (+ (* index 4) 2))))
+        (check "finite output"
+               (not (and (= (bitwise-and high 127) 127)
+                         (= (bitwise-and low 128) 128))))
+        (finite (+ index 1) (or nonzero (> (bitwise-and high 127) 0) (> low 0))))))
+(check "saved primals" (diagnostic-workspace-check-primals workspace))
+(check "load changed parameters" (module-load-state-dict! model changed-state))
+(expect-error "changed bytes stale" 'invalid-state 'diagnostic-workspace-check-primals
+  (lambda () (diagnostic-workspace-check-primals workspace)))
+(check "restore exact parameters" (module-load-state-dict! model original-state))
+(check "restored bytes accepted" (diagnostic-workspace-check-primals workspace))
+(check "VJP begin" (diagnostic-workspace-vjp-begin! workspace upstream))
+(expect-error "forward in reverse" 'invalid-state 'diagnostic-gelu!
+  (lambda () (diagnostic-gelu! workspace)))
+(check "complete reverse selector witness" (reverse workspace))
+(check "reset" (diagnostic-workspace-reset! workspace))
+(check "idempotent idle reset" (diagnostic-workspace-reset! workspace))
+(check "P1 gradient reset" (module-zero-grad! model))
+(check "independent output after reset" (bytes-equal? first-bytes (diagnostic-logits-bits logits)))
+(define encoded (tokenizer-encode (tokenizer-byte config) "AB"))
+(check "T1 adapter" (diagnostic-input-copy-tokenizer! input encoded))
+(check "begin again" (diagnostic-workspace-begin! workspace input))
+(check "forward again" (forward workspace logits))
+(check "exact repeat/T1 parity" (bytes-equal? first-bytes (diagnostic-logits-bits logits)))
+(check "mode changes" (module-eval! model))
+(expect-error "mode stale" 'invalid-state 'diagnostic-workspace-check-primals
+  (lambda () (diagnostic-workspace-check-primals workspace)))
+(check "restore mode" (module-train! model))
+(check "restored mode accepted" (diagnostic-workspace-check-primals workspace))
+(check "release active workspace" (diagnostic-workspace-release! workspace))
+(check "repeat release" (diagnostic-workspace-release! workspace))
+(expect-error "dead workspace" 'invalid-state 'diagnostic-workspace-reset!
+  (lambda () (diagnostic-workspace-reset! workspace)))
+(check "second workspace retry" (diagnostic-workspace-begin! other-workspace input))
+(check "second workspace release" (diagnostic-workspace-release! other-workspace))
+(check "input release" (diagnostic-input-release! input))
+(check "input repeat release" (diagnostic-input-release! input))
+(expect-error "dead input" 'invalid-state 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(65 66))))
+(check "logits release" (diagnostic-logits-release! logits))
+(check "logits repeat release" (diagnostic-logits-release! logits))
+(expect-error "dead logits" 'invalid-state 'diagnostic-logits-bits
+  (lambda () (diagnostic-logits-bits logits)))
+(check "upstream release" (diagnostic-logits-release! upstream))
+(check "original snapshot release" (state-dict-release! original-state))
+(check "changed snapshot release" (state-dict-release! changed-state))
+(display "M3T-PUBLIC-TRANSPORT-PASS")
+(newline)

@@ -225,6 +225,17 @@
         :real et_p1_private_module_create_v1)
 (extern i64 p1-native-handle-create ptr
         :real et_p1_private_parameter_handle_create_v1)
+(extern i64 p1-native-construction-begin ptr
+        :real et_p1_private_construction_begin_v1)
+(extern i64 p1-native-construction-module-create ptr ptr
+        :real et_p1_private_construction_module_create_v1)
+(extern i64 p1-native-construction-handle-create ptr ptr
+        :real et_p1_private_construction_handle_create_v1)
+(extern i64 p1-native-construction-seal ptr ptr
+        :real et_p1_private_construction_seal_v1)
+(extern i64 p1-native-construction-abort ptr ptr
+        :real et_p1_private_construction_abort_v1)
+
 (extern i64 p1-native-tree-create ptr
         :real et_p1_private_parameter_tree_create_v1)
 (extern i64 p1-native-state-create ptr
@@ -294,7 +305,12 @@
          state-dict-c2-owned-tensor-borrow-end-internal
          state-dict-c2-owned-borrow-activate-internal!
          state-dict-c2-owned-borrow-deactivate-internal!
-         state-dict-c2-owned-entry-shells-internal)
+         state-dict-c2-owned-entry-shells-internal
+         module-construction-begin-internal
+         module-construction-root-internal
+         module-construction-seal-internal!
+         module-construction-abort-internal!
+         module-construction-parameters-internal)
 
 (define p1-trusted-surface
   (let ()
@@ -333,6 +349,60 @@
 
 (define (shell-registry-current)
   (vector-ref shell-registry-root 0))
+;; Private construction records are retained in a root holder. Callers receive
+;; only the admitted native ledger identity, never the mutable record.
+(define construction-registry-root (vector '() #f))
+(define dead-construction-raw (vector 'aborted-construction))
+(define construction-busy? #f)
+(define (construction-call operation thunk)
+  (if construction-busy?
+      (fail 'invalid-state operation "construction operation is not reentrant" '()))
+  (let ((scoped? (active-construction)))
+    (if scoped? (set! construction-busy? #t))
+    (guard (caught (#t (set! construction-busy? #f) (raise caught)))
+      (let ((result (thunk)))
+        (set! construction-busy? #f)
+        result))))
+(define (active-construction) (vector-ref construction-registry-root 1))
+(define (construction-record operation identity)
+  (let loop ((remaining (vector-ref construction-registry-root 0)))
+    (cond ((null? remaining)
+           (fail 'invalid-argument operation "foreign construction" '()))
+          ((and (vector-ref (car remaining) 0)
+                (eq? identity (vector-ref (car remaining) 0))) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (construction-open operation identity)
+  (let ((record (construction-record operation identity)))
+    (if (or (not (eq? identity (active-construction)))
+            (not (eq? (vector-ref record 1) 'open)))
+        (fail 'invalid-state operation "construction is closed" '()))
+    record))
+(define (construction-private-access? operation)
+  (or (eq? operation 'module-register-parameter-internal!)
+      (eq? operation 'module-register-tied-parameter-internal!)
+      (eq? operation 'module-register-child-internal!)
+      (eq? operation 'parameter-handle-tensor-identity-internal)
+      (eq? operation 'parameter-handle-tensor-internal)
+      (eq? operation 'module-construction-parameters-internal)
+      (eq? operation 'module-construction-seal-internal!)))
+(define (construction-registration? operation)
+  (or (eq? operation 'module-register-parameter-internal!)
+      (eq? operation 'module-register-tied-parameter-internal!)
+      (eq? operation 'module-register-child-internal!)
+      (eq? operation 'module-register-buffer-internal!)))
+(define (construction-check-shell! operation entry)
+  (let ((scope (if (and (= (vector-length entry) 4)
+                        (or (eq? (vector-ref entry 1) 'module)
+                            (eq? (vector-ref entry 1) 'handle)))
+                   (vector-ref entry 3) #f)))
+    (if (and (active-construction) (construction-registration? operation)
+             (not (eq? scope (active-construction))))
+        (fail 'invalid-argument operation "operand belongs to another construction" '()))
+    (if (and scope
+             (eq? (vector-ref (construction-record operation scope) 1) 'open)
+             (not (construction-private-access? operation)))
+        (fail 'invalid-state operation "unpublished construction cannot be observed" '()))))
+
 (define dead-state-raw (vector 'released-state-raw))
 (define dead-state-tensor-raw (vector 'released-state-tensor-raw))
 (define dead-state-entry-raw (vector 'released-state-entry-raw))
@@ -462,8 +532,14 @@
        (let ((name (symbol->string (vector-ref raw 1))))
          (p1-native-provider-create native-context name
                                     (string-byte-length name))))
-      ((eq? kind 'module) (p1-native-module-create native-context))
-      ((eq? kind 'handle) (p1-native-handle-create native-context))
+      ((eq? kind 'module)
+       (if (active-construction)
+           (p1-native-construction-module-create native-context (active-construction))
+           (p1-native-module-create native-context)))
+      ((eq? kind 'handle)
+       (if (active-construction)
+           (p1-native-construction-handle-create native-context (active-construction))
+           (p1-native-handle-create native-context)))
       ((eq? kind 'tree) (p1-native-tree-create native-context))
       ((eq? kind 'state) (p1-native-state-create native-context))
       ((eq? kind 'state-tensor)
@@ -482,7 +558,8 @@
       (else (loop (cdr entries))))))
 
 (define (shell-for-raw kind raw)
-  (if (or (eq? raw dead-state-raw)
+  (if (or (eq? raw dead-construction-raw)
+          (eq? raw dead-state-raw)
           (eq? raw dead-state-tensor-raw)
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'shell-for-raw
@@ -490,7 +567,9 @@
       (let find ((entries (shell-registry-current)))
         (cond
       ((null? entries)
-       (let* ((entry (vector #f kind raw))
+       (let* ((entry (if (or (eq? kind 'module) (eq? kind 'handle))
+                         (vector #f kind raw (active-construction))
+                         (vector #f kind raw)))
               (next-registry (cons entry (shell-registry-current)))
               (shell (native-create-shell kind raw)))
          (vector-set! entry 0 shell)
@@ -537,7 +616,8 @@
     (if (not (and entry (eq? kind (vector-ref entry 1))))
         (fail 'invalid-argument operation "expected registered opaque value" '())
         (let ((raw (vector-ref entry 2)))
-          (if (or (eq? raw dead-state-raw)
+          (construction-check-shell! operation entry)
+          (if (or (eq? raw dead-construction-raw) (eq? raw dead-state-raw)
                   (eq? raw dead-state-tensor-raw)
                   (eq? raw dead-state-entry-raw))
               (fail 'invalid-state operation
@@ -2195,6 +2275,12 @@
                   (raise (vector-ref outcome 1))))))))
 
 (define (module-create-with-provider-internal provider-name)
+  (if (and (active-construction)
+           (not (eq? provider-name
+                     (vector-ref (construction-open 'module-create-with-provider-internal
+                                                     (active-construction)) 2))))
+      (fail 'invalid-argument 'module-create-with-provider-internal
+            "construction provider is fixed" '()))
   (let ((provider (require-provider-name 'module-create-with-provider-internal
                                          provider-name)))
   ;; Fields: tag, mode, parameters, buffers, children, parent, provider,
@@ -2204,6 +2290,8 @@
     (vector module-tag 'train '() '() '() #f provider #f #f 0 1 0 0)))
 
 (define (module-create-internal)
+  (if (active-construction)
+      (fail 'invalid-state 'module-create-internal "construction requires its fixed provider" '()))
   (vector module-tag 'train '() '() '() #f #f #f #f 0 1 0 0))
 
 (define (local-name-used? module name)
@@ -4244,6 +4332,114 @@
               "C2 P1 borrow authority is stale or forged" '()))
     marker))
 
+
+(define (construction-rows record operation)
+  (let* ((root (raw-for-shell operation 'module (vector-ref record 3)))
+         (entries (sort-entries (flatten-parameters root '())))
+         (count (validate-generated-entry-paths! operation entries)))
+    (let loop ((remaining entries) (rows '()))
+      (if (null? remaining)
+          (vector (list-reverse rows) (copy-data (tie-groups-from-entries entries)))
+          (let* ((entry (car remaining)) (handle (vector-ref entry 2))
+                 (shell (shell-for-raw 'handle handle)))
+            (construction-check-shell! operation (shell-entry shell))
+            (loop (cdr remaining)
+                  (cons (vector (copy-data (entry-path entry)) shell
+                                (copy-data (vector-ref handle 3))
+                                (vector-ref handle 4) (copy-data (vector-ref handle 5)))
+                        rows)))))))
+(define (construction-abort! identity)
+  (let ((record (construction-record 'module-construction-abort-internal! identity)))
+    (if (eq? (vector-ref record 1) 'aborted)
+        #t
+        (begin
+          (construction-open 'module-construction-abort-internal! identity)
+          ;; Native validates the whole enrollment before revoking any token.
+          (native-check 'module-construction-abort-internal!
+                        (p1-native-construction-abort native-context identity))
+          (let loop ((remaining (shell-registry-current)))
+            (if (null? remaining) #t
+                (let ((entry (car remaining)))
+                  (if (and (= (vector-length entry) 4)
+                           (or (eq? (vector-ref entry 1) 'module)
+                               (eq? (vector-ref entry 1) 'handle))
+                           (eq? (vector-ref entry 3) identity))
+                      (vector-set! entry 2 dead-construction-raw))
+                  (loop (cdr remaining)))))
+          (vector-set! record 1 'aborted)
+          (vector-set! record 3 #f)
+          (vector-set! record 4 #f)
+          (vector-set! construction-registry-root 1 #f)
+          #t))))
+(define (construction-begin provider-name)
+  (reject-protected-storage-comparison-reentry 'module-construction-begin-internal)
+  (require-provider-name 'module-construction-begin-internal provider-name)
+  (if (or (active-construction) construction-busy?)
+      (fail 'invalid-state 'module-construction-begin-internal "nested construction" '()))
+  ;; Publish/promote the complete Eshkol ledger graph before native begin.
+  ;; Until its native identity is installed it is an inert aborted record.
+  (let* ((record (vector #f 'aborted provider-name #f #f))
+         (next (cons record (vector-ref construction-registry-root 0))))
+    (vector-set! construction-registry-root 0 next)
+    (let ((canonical (car (vector-ref construction-registry-root 0))))
+      (native-check 'module-construction-begin-internal
+                    (p1-native-construction-begin native-context))
+      (let ((identity (p1-native-result-ptr native-context)))
+        ;; Native pointers and existing symbols require no graph promotion.
+        (vector-set! canonical 0 identity)
+        (vector-set! canonical 1 'open)
+        (vector-set! construction-registry-root 1 identity)
+        (guard (caught (#t (construction-abort! identity) (raise caught)))
+          (let ((root (shell-for-raw 'module
+                        (module-create-with-provider-internal provider-name))))
+            (vector-set! canonical 3 root)
+            identity))))))
+(define (construction-parameters identity)
+  (let* ((record (construction-open 'module-construction-parameters-internal identity))
+         (snapshot (construction-rows record 'module-construction-parameters-internal))
+         ;; Recompute the private retained schedule so mutable returned metadata
+         ;; can never alter the final seal comparison.
+         (retained (construction-rows record 'module-construction-parameters-internal)))
+    (vector-set! record 4 retained)
+    snapshot))
+(define (construction-seal! identity)
+  (let* ((operation 'module-construction-seal-internal!)
+         (record (construction-open operation identity))
+         (root-shell (vector-ref record 3))
+         (root (raw-for-shell operation 'module root-shell))
+         (actual (construction-rows record operation))
+         (schedule (vector-ref record 4))
+         (finalizers (finalization-plan operation root))
+         (updates (canonical-path-updates (sort-entries (flatten-parameters root '())))))
+    (if (or (not schedule) (not (equal? actual schedule)))
+        (fail 'invalid-state operation "construction changed after parameter schedule" '()))
+    (let scan ((remaining (shell-registry-current)))
+      (if (null? remaining) #t
+          (let ((entry (car remaining)))
+            (if (and (= (vector-length entry) 4)
+                     (eq? (vector-ref entry 1) 'module)
+                     (eq? (vector-ref entry 3) identity)
+                     (not (identity-member-local? (vector-ref entry 2) finalizers)))
+                (fail 'invalid-state operation "construction has unattached modules" '()))
+            (if (and (= (vector-length entry) 4)
+                     (eq? (vector-ref entry 1) 'handle)
+                     (eq? (vector-ref entry 3) identity)
+                     (not (let handles ((rows (vector-ref actual 0)))
+                            (cond ((null? rows) #f)
+                                  ((eq? (vector-ref entry 0)
+                                        (vector-ref (car rows) 1)) #t)
+                                  (else (handles (cdr rows)))))))
+                (fail 'invalid-state operation "construction has unattached handles" '()))
+            (scan (cdr remaining)))))
+    ;; Write barriers/promotion and all traversal finish while abortable.
+    (install-canonical-paths! updates)
+    (finalize-modules! finalizers)
+    (native-check operation (p1-native-construction-seal native-context identity))
+    (vector-set! record 1 'sealed)
+    (vector-set! record 4 #f)
+    (vector-set! construction-registry-root 1 #f)
+    root-shell))
+
 (define (exposed-tensor-provider-create
           (name : symbol)
           (describe : (-> vector vector))
@@ -4382,14 +4578,17 @@
               evidence)))
       (shell-for-raw 'provider raw)))
   (lambda ()
+    (construction-call 'module-create-internal (lambda ()
     (reject-protected-storage-comparison-reentry 'module-create-internal)
-    (shell-for-raw 'module (module-create-internal)))
+    (shell-for-raw 'module (module-create-internal)))))
   (lambda (provider-name)
+    (construction-call 'module-create-with-provider-internal (lambda ()
     (reject-protected-storage-comparison-reentry
       'module-create-with-provider-internal)
     (shell-for-raw
-      'module (module-create-with-provider-internal provider-name)))
+      'module (module-create-with-provider-internal provider-name)))))
   (lambda (module name tensor)
+    (construction-call 'module-register-parameter-internal! (lambda ()
     (let ((plan
             (prepare-parameter-registration
               (raw-for-shell 'module-register-parameter-internal!
@@ -4411,27 +4610,30 @@
           (vector-set! plan 1 canonical-handle)
           (vector-set! (car (vector-ref plan 2)) 2 canonical-handle)
           (commit-parameter-registration! plan)
-          shell))))
+          shell))))))
   (lambda (module name handle)
+    (construction-call 'module-register-tied-parameter-internal! (lambda ()
     (shell-for-raw
       'handle
       (module-register-tied-parameter-internal!
         (raw-for-shell 'module-register-tied-parameter-internal! 'module module)
         name
         (raw-for-shell 'module-register-tied-parameter-internal!
-                       'handle handle))))
+                       'handle handle))))))
   (lambda (module name tensor)
+    (construction-call 'module-register-buffer-internal! (lambda ()
     (module-register-buffer-internal!
       (raw-for-shell 'module-register-buffer-internal! 'module module)
       name tensor)
-    #t)
+    #t)))
   (lambda (module name child)
+    (construction-call 'module-register-child-internal! (lambda ()
     (shell-for-raw
       'module
       (module-register-child-internal!
         (raw-for-shell 'module-register-child-internal! 'module module)
         name
-        (raw-for-shell 'module-register-child-internal! 'module child))))
+        (raw-for-shell 'module-register-child-internal! 'module child))))))
   (lambda (module)
     (module-mode-internal
       (raw-for-shell 'module-mode-internal 'module module)))
@@ -4717,6 +4919,19 @@
            (raw (vector-ref marker 1)))
       (validate-bound-state-admitted operation raw)
       (wrap-entry-items operation state raw (vector-ref raw 6))))
+  ;; Append-only slots 59..63: fresh unpublished construction only.
+  (lambda (provider-name) (construction-begin provider-name))
+  (lambda (identity)
+    (vector-ref (construction-open 'module-construction-root-internal identity) 3))
+  (lambda (identity)
+    (construction-call 'module-construction-seal-internal! (lambda () (construction-seal! identity))))
+  (lambda (identity)
+    (if construction-busy?
+        (fail 'invalid-state 'module-construction-abort-internal!
+              "construction operation is not reentrant" '()))
+    (construction-abort! identity))
+  (lambda (identity)
+    (construction-call 'module-construction-parameters-internal (lambda () (construction-parameters identity))))
   )))
 
 (define (module-parameters module)
@@ -4864,4 +5079,14 @@
 (define (state-dict-c2-owned-entry-shells-internal
           state access-token operation)
   ((vector-ref p1-trusted-surface 58) state access-token operation))
+(define (module-construction-begin-internal value)
+  ((vector-ref p1-trusted-surface 59) value))
+(define (module-construction-root-internal value)
+  ((vector-ref p1-trusted-surface 60) value))
+(define (module-construction-seal-internal! value)
+  ((vector-ref p1-trusted-surface 61) value))
+(define (module-construction-abort-internal! value)
+  ((vector-ref p1-trusted-surface 62) value))
+(define (module-construction-parameters-internal value)
+  ((vector-ref p1-trusted-surface 63) value))
 @@P1_TRUSTED_END@@

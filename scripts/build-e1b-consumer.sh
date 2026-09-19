@@ -12,6 +12,7 @@ raw_package_bridge=$2
 raw_package_renames=$3
 raw_public_exports=$4
 raw_include_dirs=("${@:6}")
+source "${PROJECT_ROOT}/scripts/m3t-package-policy.sh"
 k2_lexical_root="${PROJECT_ROOT}/native/k2_wave2_root.esk"
 k2_lexical_bridge="${PROJECT_ROOT}/native/k2_wave2_package_bridge.c"
 k2_lexical_renames="${PROJECT_ROOT}/native/k2_wave2_private_renames.txt"
@@ -234,7 +235,22 @@ package_native_define=
 package_public_strings=
 package_source_closure=
 package_native_source_closure=
-if [[ "${private_root}" == "${c2_private_root}" ]]; then
+if [[ "${m3t_tuple_requested}" == 1 ]]; then
+    package_policy=m3t-diagnostic-aggregate
+    undefined_symbols="${m3t_prefix}_undefined_symbols.txt"
+    package_public_strings="${m3t_prefix}_public_strings.txt"
+    package_source_closure="${m3t_prefix}_source_closure.txt"
+    package_native_source_closure="${m3t_prefix}_native_source_closure.txt"
+    package_native_sources=(
+      "${PROJECT_ROOT}/native/data_io.c"
+      "${PROJECT_ROOT}/native/checkpoint_io.c"
+      "${PROJECT_ROOT}/native/kernel_abi.c"
+      "${PROJECT_ROOT}/native/i64_tensor.c"
+      "${PROJECT_ROOT}/native/t1_i64_shell.c"
+      "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c"
+      "${PROJECT_ROOT}/src/eshkol_transformer/m3t_transport.c"
+    )
+elif [[ "${private_root}" == "${c2_private_root}" ]]; then
     [[ "${raw_private_root}" == "${c2_lexical_root}" && \
        "${raw_package_bridge}" == "${c2_lexical_bridge}" && \
        "${raw_package_renames}" == "${c2_lexical_renames}" && \
@@ -711,7 +727,8 @@ run_compiler() {
       "${e1b_timeout_seconds}s" "${e1b_runner}" "$@"
 }
 
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
@@ -727,7 +744,8 @@ fi
 for include_dir in "${canonical_include_dirs[@]}"; do
   include_args+=(-I "${include_dir}")
 done
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
@@ -748,9 +766,15 @@ fi
 )
 [[ -f "${e1b_tmp}/private.ll" ]] || die "E1B private IR was not emitted"
 if [[ -n "${package_source_closure}" ]]; then
-  sed -e 's/^[^:]*://' -e 's/\\//g' "${e1b_tmp}/private.d" | \
-    tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
-    sed "s#^${PROJECT_ROOT}/##" >"${e1b_tmp}/source-closure.txt"
+  if [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
+    sed -e 's/^[^:]*://' -e 's/\\//g' "${e1b_tmp}/private.d" | \
+      tr -s '[:space:]' '\n' | m3t_normalize_source_dependencies \
+      >"${e1b_tmp}/source-closure.txt"
+  else
+    sed -e 's/^[^:]*://' -e 's/\\//g' "${e1b_tmp}/private.d" | \
+      tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+      sed "s#^${PROJECT_ROOT}/##" >"${e1b_tmp}/source-closure.txt"
+  fi
   cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
     die "${package_policy} trusted Eshkol source closure drifted"
 fi
@@ -776,6 +800,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   if [[ "${package_policy}" == c2-wave2-aggregate || \
         "${package_policy}" == t1-wave1-aggregate || \
         "${package_policy}" == k2-wave2-aggregate || \
+        "${package_policy}" == m3t-diagnostic-aggregate || \
         "${package_policy}" == i2-wave2-aggregate || \
         "${package_policy}" == o2-wave2-aggregate || \
         "${package_policy}" == t2-wave2-aggregate || \
@@ -785,6 +810,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
     cat "${PROJECT_ROOT}/native/x1_config_private_renames.txt"
     if [[ "${package_policy}" == c2-wave2-aggregate || \
           "${package_policy}" == k2-wave2-aggregate || \
+          "${package_policy}" == m3t-diagnostic-aggregate || \
           "${package_policy}" == i2-wave2-aggregate || \
           "${package_policy}" == o2-wave2-aggregate || \
           "${package_policy}" == d2-wave2-aggregate || \
@@ -795,6 +821,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
     fi
     cat "${PROJECT_ROOT}/native/d1_e1b_private_renames.txt"
     if [[ "${package_policy}" == k2-wave2-aggregate || \
+          "${package_policy}" == m3t-diagnostic-aggregate || \
           "${package_policy}" == i2-wave2-aggregate || \
           "${package_policy}" == o2-wave2-aggregate ]]; then
       cat "${PROJECT_ROOT}/native/t1_wave1_private_renames.txt"
@@ -811,7 +838,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
       cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
     fi
   fi
-  if [[ "${package_policy}" == k2-wave2-aggregate || \
+  if [[ "${package_policy}" == m3t-diagnostic-aggregate || \
+        "${package_policy}" == k2-wave2-aggregate || \
         "${package_policy}" == o2-wave2-aggregate ]]; then
     cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
   fi
@@ -828,8 +856,13 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
   -o "${e1b_tmp}/bridge.o"
 
+package_bridge_flags=()
+if [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
+  package_bridge_flags+=(-DET_M3T_PACKAGE_BUILD -I "${PROJECT_ROOT}/src")
+fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/package-bridge.d" \
@@ -845,6 +878,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   )
   if [[ "${package_policy}" == c2-wave2-aggregate || \
         "${package_policy}" == k2-wave2-aggregate || \
+        "${package_policy}" == m3t-diagnostic-aggregate || \
         "${package_policy}" == i2-wave2-aggregate || \
         "${package_policy}" == o2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-aggregate || \
@@ -873,11 +907,35 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   done
 fi
 
+if [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
+  source "${PROJECT_ROOT}/scripts/m3t-native-inputs.sh"
+fi
+
 if [[ -n "${package_native_source_closure}" ]]; then
   {
     for native_depfile in "${package_native_depfiles[@]}"; do
       sed -e 's/^[^:]*://' -e 's/\\//g' "${native_depfile}" | \
-        tr -s '[:space:]' '\n'
+        tr -s '[:space:]' '\n' | while IFS= read -r native_dependency; do
+          [[ -n "${native_dependency}" ]] || continue
+          if [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
+            # Includes within the integration TU use reviewed relative paths.
+            # Compare their real repository identity, not ../ spelling.
+            m3t_check_native_dependency_path "${native_dependency}"
+            native_dependency="$(realpath -- "${native_dependency}")"
+            m3t_verified_source="$(realpath -- "${e1b_source}")"
+            case "${native_dependency}" in
+              "${m3t_verified_source}/"*)
+                # verify_toolchain above authenticates this external pinned tree.
+                printf '%s/.deps/eshkol-src/%s\n' "${PROJECT_ROOT}" \
+                  "${native_dependency#"${m3t_verified_source}/"}"
+                ;;
+              "${PROJECT_ROOT}/"*) printf '%s\n' "${native_dependency}" ;;
+              *) die "M3T native dependency is outside reviewed source roots" ;;
+            esac
+          else
+            printf '%s\n' "${native_dependency}"
+          fi
+        done
     done
   } | awk -v root="${PROJECT_ROOT}/" '
       index($0, root) == 1 {
@@ -922,7 +980,8 @@ if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-er
     "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "E1B final object retains an unresolved privileged reference"
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-test-d1 || \
@@ -934,6 +993,7 @@ if [[ "${package_policy}" == c2-wave2-aggregate || \
 fi
 if [[ "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
+      "${package_policy}" == m3t-diagnostic-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate || \
@@ -944,6 +1004,18 @@ fi
 
 readelf --wide --syms "${e1b_tmp}/combined.o" \
   >"${e1b_tmp}/readelf-symbols.txt"
+if [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
+  if grep -E '^et_(m3t|n2|n3k|a2|f32|i64|p1|kernel)_' "${e1b_tmp}/undefined.txt" >/dev/null; then
+    die "M3T aggregate retains unresolved private native authority"
+  fi
+  for privileged in et_m3t_private_owner_create_v1 et_m3t_private_workspace_begin_v1 \
+      et_f32_tensor_scoped_begin_internal et_f32_tensor_scoped_end_internal \
+      et_p1_private_construction_begin_v1 et_e1b_private_m3t_model_create_cabi_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "M3T required private definition is not local: ${privileged}"
+  done
+fi
 if awk '
   /et_e1b_(private|consumer|box|ensure)|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))/ {
     if ($5 != "LOCAL" && $7 != "UND") bad = 1
@@ -970,7 +1042,8 @@ if [[ "${package_policy}" == d1 || "${package_policy}" == d1-test-faults ]]; the
       die "D1 required privileged definition is not local: ${privileged}"
   done
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
       "${package_policy}" == t2-wave2-test-d1 || \
@@ -988,6 +1061,7 @@ if [[ "${package_policy}" == c2-wave2-aggregate || \
 fi
 if [[ "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
+      "${package_policy}" == m3t-diagnostic-aggregate || \
       "${package_policy}" == i2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate || \
@@ -1076,6 +1150,13 @@ fi
 if [[ -n "${package_native_source_closure}" ]]; then
   cp "${e1b_tmp}/native-source-closure.txt" \
     "${evidence_dir}.tmp.$$/native-source-closure.txt"
+  if [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
+    cp "${e1b_tmp}/m3t-native-objects.txt" "${evidence_dir}.tmp.$$/native-objects.txt"
+    mkdir "${evidence_dir}.tmp.$$/native-depfiles"
+    for native_depfile in "${package_native_depfiles[@]}"; do
+      sed "s#${e1b_tmp}#<E1B_BUILD>#g" "${native_depfile}" >"${evidence_dir}.tmp.$$/native-depfiles/$(basename "${native_depfile}")"
+    done
+  fi
 fi
 {
   printf 'package_policy\t%s\n' "${package_policy}"

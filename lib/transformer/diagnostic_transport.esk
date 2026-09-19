@@ -1,0 +1,460 @@
+;;; Installed diagnostic sibling facade: fixed boxed calls only.
+;;; Exactly one registry-owning aggregate may be linked per process.
+(require transformer.error_consumer)
+
+(provide diagnostic-initializer-state
+         diagnostic-initializer-algorithm
+         diagnostic-initializer-words
+         diagnostic-model-create
+         diagnostic-model-profile
+         diagnostic-model-initializer
+         diagnostic-input-create
+         diagnostic-input-copy!
+         diagnostic-input-copy-tokenizer!
+         diagnostic-input-release!
+         diagnostic-logits-create
+         diagnostic-logits-copy-bits!
+         diagnostic-logits-bits
+         diagnostic-logits-release!
+         diagnostic-workspace-create
+         diagnostic-workspace-begin!
+         diagnostic-workspace-vjp-begin!
+         diagnostic-workspace-copy-logits!
+         diagnostic-workspace-check-primals
+         diagnostic-workspace-reset!
+         diagnostic-workspace-release!
+         diagnostic-embedding!
+         diagnostic-linear!
+         diagnostic-layer-norm!
+         diagnostic-gelu!
+         diagnostic-residual!
+         diagnostic-heads-split!
+         diagnostic-heads-merge!
+         diagnostic-attention!
+         diagnostic-embedding-vjp!
+         diagnostic-linear-vjp!
+         diagnostic-layer-norm-vjp!
+         diagnostic-gelu-vjp!
+         diagnostic-residual-vjp!
+         diagnostic-heads-split-vjp!
+         diagnostic-heads-merge-vjp!
+         diagnostic-attention-vjp!
+         diagnostic-sum!)
+
+(define m3t-safe-initializer-state
+  (let ()
+    (extern void m3t-boxed-initializer-state ptr ptr
+            :real et_e1b_public_m3t_initializer_state_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-initializer-state (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-initializer-state first)
+  (m3t-safe-initializer-state first))
+
+(define m3t-safe-initializer-algorithm
+  (let ()
+    (extern void m3t-boxed-initializer-algorithm ptr ptr
+            :real et_e1b_public_m3t_initializer_algorithm_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-initializer-algorithm (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-initializer-algorithm first)
+  (m3t-safe-initializer-algorithm first))
+
+(define m3t-safe-initializer-words
+  (let ()
+    (extern void m3t-boxed-initializer-words ptr ptr
+            :real et_e1b_public_m3t_initializer_words_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-initializer-words (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-initializer-words first)
+  (m3t-safe-initializer-words first))
+
+(define m3t-safe-model-create
+  (let ()
+    (extern void m3t-boxed-model-create ptr ptr ptr
+            :real et_e1b_public_m3t_model_create_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-model-create (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-model-create first second)
+  (m3t-safe-model-create first second))
+
+(define m3t-safe-model-profile
+  (let ()
+    (extern void m3t-boxed-model-profile ptr ptr
+            :real et_e1b_public_m3t_model_profile_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-model-profile (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-model-profile first)
+  (m3t-safe-model-profile first))
+
+(define m3t-safe-model-initializer
+  (let ()
+    (extern void m3t-boxed-model-initializer ptr ptr
+            :real et_e1b_public_m3t_model_initializer_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-model-initializer (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-model-initializer first)
+  (m3t-safe-model-initializer first))
+
+(define m3t-safe-input-create
+  (let ()
+    (extern void m3t-boxed-input-create ptr
+            :real et_e1b_public_m3t_input_create_v1)
+    (lambda ()
+      (let ((output (vector #f)))
+        (m3t-boxed-input-create output)
+        (vector-ref output 0)))))
+(define (diagnostic-input-create)
+  (m3t-safe-input-create))
+
+(define m3t-safe-input-copy
+  (let ()
+    (extern void m3t-boxed-input-copy ptr ptr ptr
+            :real et_e1b_public_m3t_input_copy_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-input-copy (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-input-copy! first second)
+  (m3t-safe-input-copy first second))
+
+(define m3t-safe-input-copy-tokenizer
+  (let ()
+    (extern void m3t-boxed-input-copy-tokenizer ptr ptr ptr
+            :real et_e1b_public_m3t_input_copy_tokenizer_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-input-copy-tokenizer (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-input-copy-tokenizer! first second)
+  (m3t-safe-input-copy-tokenizer first second))
+
+(define m3t-safe-input-release
+  (let ()
+    (extern void m3t-boxed-input-release ptr ptr
+            :real et_e1b_public_m3t_input_release_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-input-release (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-input-release! first)
+  (m3t-safe-input-release first))
+
+(define m3t-safe-logits-create
+  (let ()
+    (extern void m3t-boxed-logits-create ptr
+            :real et_e1b_public_m3t_logits_create_v1)
+    (lambda ()
+      (let ((output (vector #f)))
+        (m3t-boxed-logits-create output)
+        (vector-ref output 0)))))
+(define (diagnostic-logits-create)
+  (m3t-safe-logits-create))
+
+(define m3t-safe-logits-copy-bits
+  (let ()
+    (extern void m3t-boxed-logits-copy-bits ptr ptr ptr
+            :real et_e1b_public_m3t_logits_copy_bits_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-logits-copy-bits (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-logits-copy-bits! first second)
+  (m3t-safe-logits-copy-bits first second))
+
+(define m3t-safe-logits-bits
+  (let ()
+    (extern void m3t-boxed-logits-bits ptr ptr
+            :real et_e1b_public_m3t_logits_bits_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-logits-bits (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-logits-bits first)
+  (m3t-safe-logits-bits first))
+
+(define m3t-safe-logits-release
+  (let ()
+    (extern void m3t-boxed-logits-release ptr ptr
+            :real et_e1b_public_m3t_logits_release_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-logits-release (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-logits-release! first)
+  (m3t-safe-logits-release first))
+
+(define m3t-safe-workspace-create
+  (let ()
+    (extern void m3t-boxed-workspace-create ptr ptr
+            :real et_e1b_public_m3t_workspace_create_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-create (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-create first)
+  (m3t-safe-workspace-create first))
+
+(define m3t-safe-workspace-begin
+  (let ()
+    (extern void m3t-boxed-workspace-begin ptr ptr ptr
+            :real et_e1b_public_m3t_workspace_begin_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-begin (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-begin! first second)
+  (m3t-safe-workspace-begin first second))
+
+(define m3t-safe-workspace-vjp-begin
+  (let ()
+    (extern void m3t-boxed-workspace-vjp-begin ptr ptr ptr
+            :real et_e1b_public_m3t_workspace_vjp_begin_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-vjp-begin (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-vjp-begin! first second)
+  (m3t-safe-workspace-vjp-begin first second))
+
+(define m3t-safe-workspace-copy-logits
+  (let ()
+    (extern void m3t-boxed-workspace-copy-logits ptr ptr ptr
+            :real et_e1b_public_m3t_workspace_copy_logits_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-copy-logits (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-copy-logits! first second)
+  (m3t-safe-workspace-copy-logits first second))
+
+(define m3t-safe-workspace-check-primals
+  (let ()
+    (extern void m3t-boxed-workspace-check-primals ptr ptr
+            :real et_e1b_public_m3t_workspace_check_primals_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-check-primals (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-check-primals first)
+  (m3t-safe-workspace-check-primals first))
+
+(define m3t-safe-workspace-reset
+  (let ()
+    (extern void m3t-boxed-workspace-reset ptr ptr
+            :real et_e1b_public_m3t_workspace_reset_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-reset (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-reset! first)
+  (m3t-safe-workspace-reset first))
+
+(define m3t-safe-workspace-release
+  (let ()
+    (extern void m3t-boxed-workspace-release ptr ptr
+            :real et_e1b_public_m3t_workspace_release_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-workspace-release (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-workspace-release! first)
+  (m3t-safe-workspace-release first))
+
+(define m3t-safe-embedding
+  (let ()
+    (extern void m3t-boxed-embedding ptr ptr ptr
+            :real et_e1b_public_m3t_embedding_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-embedding (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-embedding! first second)
+  (m3t-safe-embedding first second))
+
+(define m3t-safe-linear
+  (let ()
+    (extern void m3t-boxed-linear ptr ptr ptr
+            :real et_e1b_public_m3t_linear_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-linear (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-linear! first second)
+  (m3t-safe-linear first second))
+
+(define m3t-safe-layer-norm
+  (let ()
+    (extern void m3t-boxed-layer-norm ptr ptr ptr
+            :real et_e1b_public_m3t_layer_norm_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-layer-norm (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-layer-norm! first second)
+  (m3t-safe-layer-norm first second))
+
+(define m3t-safe-gelu
+  (let ()
+    (extern void m3t-boxed-gelu ptr ptr
+            :real et_e1b_public_m3t_gelu_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-gelu (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-gelu! first)
+  (m3t-safe-gelu first))
+
+(define m3t-safe-residual
+  (let ()
+    (extern void m3t-boxed-residual ptr ptr ptr
+            :real et_e1b_public_m3t_residual_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-residual (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-residual! first second)
+  (m3t-safe-residual first second))
+
+(define m3t-safe-heads-split
+  (let ()
+    (extern void m3t-boxed-heads-split ptr ptr ptr
+            :real et_e1b_public_m3t_heads_split_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-heads-split (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-heads-split! first second)
+  (m3t-safe-heads-split first second))
+
+(define m3t-safe-heads-merge
+  (let ()
+    (extern void m3t-boxed-heads-merge ptr ptr
+            :real et_e1b_public_m3t_heads_merge_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-heads-merge (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-heads-merge! first)
+  (m3t-safe-heads-merge first))
+
+(define m3t-safe-attention
+  (let ()
+    (extern void m3t-boxed-attention ptr ptr
+            :real et_e1b_public_m3t_attention_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-attention (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-attention! first)
+  (m3t-safe-attention first))
+
+(define m3t-safe-embedding-vjp
+  (let ()
+    (extern void m3t-boxed-embedding-vjp ptr ptr ptr
+            :real et_e1b_public_m3t_embedding_vjp_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-embedding-vjp (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-embedding-vjp! first second)
+  (m3t-safe-embedding-vjp first second))
+
+(define m3t-safe-linear-vjp
+  (let ()
+    (extern void m3t-boxed-linear-vjp ptr ptr ptr
+            :real et_e1b_public_m3t_linear_vjp_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-linear-vjp (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-linear-vjp! first second)
+  (m3t-safe-linear-vjp first second))
+
+(define m3t-safe-layer-norm-vjp
+  (let ()
+    (extern void m3t-boxed-layer-norm-vjp ptr ptr ptr
+            :real et_e1b_public_m3t_layer_norm_vjp_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-layer-norm-vjp (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-layer-norm-vjp! first second)
+  (m3t-safe-layer-norm-vjp first second))
+
+(define m3t-safe-gelu-vjp
+  (let ()
+    (extern void m3t-boxed-gelu-vjp ptr ptr
+            :real et_e1b_public_m3t_gelu_vjp_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-gelu-vjp (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-gelu-vjp! first)
+  (m3t-safe-gelu-vjp first))
+
+(define m3t-safe-residual-vjp
+  (let ()
+    (extern void m3t-boxed-residual-vjp ptr ptr ptr
+            :real et_e1b_public_m3t_residual_vjp_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-residual-vjp (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-residual-vjp! first second)
+  (m3t-safe-residual-vjp first second))
+
+(define m3t-safe-heads-split-vjp
+  (let ()
+    (extern void m3t-boxed-heads-split-vjp ptr ptr ptr
+            :real et_e1b_public_m3t_heads_split_vjp_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-heads-split-vjp (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-heads-split-vjp! first second)
+  (m3t-safe-heads-split-vjp first second))
+
+(define m3t-safe-heads-merge-vjp
+  (let ()
+    (extern void m3t-boxed-heads-merge-vjp ptr ptr
+            :real et_e1b_public_m3t_heads_merge_vjp_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-heads-merge-vjp (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-heads-merge-vjp! first)
+  (m3t-safe-heads-merge-vjp first))
+
+(define m3t-safe-attention-vjp
+  (let ()
+    (extern void m3t-boxed-attention-vjp ptr ptr
+            :real et_e1b_public_m3t_attention_vjp_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3t-boxed-attention-vjp (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-attention-vjp! first)
+  (m3t-safe-attention-vjp first))
+
+(define m3t-safe-sum
+  (let ()
+    (extern void m3t-boxed-sum ptr ptr ptr
+            :real et_e1b_public_m3t_sum_v1)
+    (lambda (first second)
+      (let ((output (vector #f)))
+        (m3t-boxed-sum (vector first) (vector second) output)
+        (vector-ref output 0)))))
+(define (diagnostic-sum! first second)
+  (m3t-safe-sum first second))
