@@ -1,13 +1,15 @@
 # M3T production transport proposal
 
-Status: **design accepted for implementation; implementation and acceptance
-evidence pending**. Binding disposition accepts the exact amended proposal at
+Status: **accepted bounded contract; implementation merged in PR #84**.
+[Implementation acceptance and evidence](M3T_TRANSPORT.md) supersede the
+historical proposal-stage holds below. Binding design disposition accepted
+the exact amended proposal at
 `e7ad6b0d82f4cf7f5d45efff04179433379965bb`:
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5740555652),
 [issue #68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68#issuecomment-5740555698).
 Historical requests below record the accepted design; they are not outstanding
-permission requests. Implementation, independent review and supported CI remain
-required before completion; integration owns merge.
+permission requests. Independent review, supported CI and integration merge are
+complete for M3T; production model scheduling and full-model parity remain M3.
 Tracking [#68](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/68), parents
 [#65](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/65) and
 [#1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
@@ -17,7 +19,7 @@ The original proposal/refinement at `8b72fde` and preflight `a97c109` remain
 historical evidence. Current merged P1L/I2/K2/D2/O2/C2 contracts inform this
 amendment; deleted proposals are not inputs. See [refresh evidence](M3T_REFRESH.md).
 
-## Decision requested
+## Accepted design decision (historical proposal)
 
 Accept the bounded diagnostic public surface below, its separate profile identity,
 and three narrowly necessary lifetime decisions before production changes:
@@ -32,8 +34,8 @@ and three narrowly necessary lifetime decisions before production changes:
 The amended package is an **85-global / 79-export diagnostic sibling**, with the
 restricted facade closure specified below. All three current-main audits found
 no correctness requirement for the 119-global full successor. Integration's
-preference for the sibling is incorporated here for binding disposition; it is
-not production authorization. The 38 M3T names, arities, profile and initializer
+preference for the sibling was incorporated for the binding disposition, which
+subsequently authorized implementation. The 38 M3T names, arities, profile and initializer
 contract remain unchanged.
 
 The public primitive transport is deliberately real production functionality:
@@ -407,8 +409,8 @@ then removes I2 membership and destroys each owned carrier once without a fallib
 callback. Metadata/provider IDs cannot select a destructor. Constructor failures
 may leave authority-free identity
 tombstones, but no live parameter/tensor payload or dangling actionable carrier.
-These are proposed changes to P1/I2 private lifetime assumptions and require
-explicit integration acceptance; source inspection alone does not authorize them.
+These changes to P1/I2 private lifetime assumptions required explicit integration
+acceptance, now recorded above; source inspection alone did not authorize them.
 One seal coordinator completes P1 construction, native owner and successor-state
 preflight while every participant remains abortable, then publishes all through
 one nonfailing tail. An irreversible seal followed by another fallible seal is
@@ -645,10 +647,12 @@ After acceptance, required gates are:
 - Focused ASan/UBSan/LSan and supported Ubuntu22/LLVM21.1.8 CI at final head;
   local CachyOS/LLVM22 results remain explicitly compatibility evidence.
 - Route the dedicated M3T gate and affected P1/I2/E1B/C2 regressions through the
-  accepted CI-E2 planner/topology/evidence inventory (currently 16 suites and
-  23 commands); do not substitute an obsolete full-test layout or duplicate CI.
+  accepted CI-E2 planner/topology/evidence inventory (16 suites / 23 commands at
+  proposal time, extended to 17 / 24 by M3T); do not substitute an obsolete
+  full-test layout or duplicate CI.
 
 Future M3 still owns complete Eshkol scheduling, all-parameter forward/VJP oracle
 and gradient checks, atomic numerator contribution, its plan-memory boundary, and
 ordinary model-output/A0 graph integration. Integration owns acceptance, review and
-merge. This proposal does not mark M3T or M3 complete.
+merge. M3T completion is established by the linked implementation acceptance,
+not the proposal alone; M3 remains incomplete.

@@ -1,7 +1,9 @@
 # M3T public AOT transport witness design
 
-Design only; no production or test implementation. Based on proposal #1 comment
-5587828007 and `docs/M3T_TRANSPORT_PROPOSAL.md` at the current worktree.
+Historical witness design, now implemented and validated by the
+[accepted M3T gate](M3T_TRANSPORT.md). Based on proposal #1 comment
+5587828007 and `docs/M3T_TRANSPORT_PROPOSAL.md`. Prospective wording below records
+the design rationale; it does not supersede final measured evidence.
 
 ## Scope decision
 

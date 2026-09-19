@@ -37,8 +37,9 @@ The accepted [CI-E2 follow-up](CI_EFFICIENCY.md#ci-e2--native-critical-path-and-
 is tracked separately in issue #81. It changes CI scheduling/evidence selection,
 not the accepted Wave 2 runtime scope, and starts no Wave 3 task.
 
-Wave 2 is complete within the bounded component contracts below. Wave 3 work
-remains paused; this closeout starts no Wave 3 tasks. C2 completion does not prove
+Wave 2 is complete within the bounded component contracts below. Wave 3 resumed
+on September 19 at 04:30 EDT by user direction; M3T is now accepted, and model
+composition is the next dependency-ready workstream. C2 completion does not prove
 a live trainer trajectory or generation.
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
@@ -59,8 +60,8 @@ a live trainer trajectory or generation.
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |
-| M3 | Decoder-only GPT configuration, blocks and tied LM head | M3T, N2, A2, P1 | Full forward/gradient oracle parity | planned |
-| M3T | [Bounded production Eshkol transport/lifetime contract](M3T_TRANSPORT_PROPOSAL.md) | N3K, N2, A2, I1, I2, P1L, E1B | #68; [implementation and local evidence](M3T_TRANSPORT.md); restricted 85-global sibling; local command coverage and scoped reviews passed; supported exact-head CI and integration acceptance pending; no model-completion claim | review |
+| M3 | Decoder-only GPT configuration, blocks and tied LM head | M3T, N2, A2, P1 | #85 stages the bounded composition/output/contribution contract; implementation acceptance requires full forward/gradient oracle parity | planned |
+| M3T | [Bounded production Eshkol transport/lifetime contract](M3T_TRANSPORT_PROPOSAL.md) | N3K, N2, A2, I1, I2, P1L, E1B | #68; [accepted implementation and evidence](M3T_TRANSPORT.md); restricted 85-global sibling; independent M3T-R approval, supported full CI 35441033357, identical-tree PR #84 merge `f501609`, and focused merged-main retest; no model-completion claim | complete |
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | Seeded sampling and cache/no-cache parity | planned |
 | TR3 | Trainer state machine and exact resume | M3, L2, O2, D2, C2, E3 | One-batch overfit and interrupted/resumed equivalence | planned |

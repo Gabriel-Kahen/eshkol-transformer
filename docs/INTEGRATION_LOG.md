@@ -4,7 +4,51 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
-## 2026-09-19 — M3T design accepted; implementation in review
+## 2026-09-19 — M3T implementation accepted and merged
+
+- **Disposition:** accepted and complete only for the bounded diagnostic transport
+  contract in [M3T_TRANSPORT.md](M3T_TRANSPORT.md). Wave 3 resumed at the user's
+  requested 04:30 EDT; M3 production scheduling, whole-model parity and gradient
+  contribution remain downstream. No training/checkpoint/GPU claim is added.
+- **Review and merge:** [independent M3T-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/84#issuecomment-5743777776)
+  covers exact head `ef659b9c542f5244b9ca42706a69f30ba0e8d963`, including the
+  bounded four-file integrity repair. [PR #84](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/84)
+  merged as `f50160968bd97677632f3539fd2e278a63624cf9`. Reviewed head, supported
+  checkout `aa3f0d13c5ce70440e73ead588f8bb1e74448d22`, and actual merge share
+  tree `12e3d0595ddde6c067cd6fca44132bc99b176387`.
+- **Supported evidence:** [35441033357](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35441033357)
+  passed all 17 suites / 24 commands, canonical clean build, smoke, benchmark,
+  evidence and final aggregation on Ubuntu 22.04 / LLVM-Clang 21.1.8. The final
+  complete M3T and P1 scripts passed; the original composite local evidence and
+  failed first CI run remain explicitly historical, not relabeled successful.
+  Supported arena retention was 4,325,376 bytes at both 1024 and 8192 frames;
+  supplementary RSS was 92,748/92,744 KiB.
+- **Main evidence reuse:** [35457200721](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35457200721)
+  succeeded after directly verifying original full run 35441033357; topology and
+  final jobs passed, full suites were skipped without a duplicate run.
+- **Merged-main checks:** integration's explicit non-login `/usr/bin/bash` reran
+  native normal/ASan/UBSan/LSan (including 30,000 scoped cycles), the 1123-check
+  construction AOT, 76 package/CI topology/evidence/prerequisite unit checks,
+  generated-root verification and diff checks on the actual merge. A fresh M3T
+  package build and strict installed-facade public AOT also passed, including the
+  exact seven-file caller closure and `M3T-PUBLIC-TRANSPORT-PASS`. An initial
+  integration command used relative closure paths and was correctly rejected;
+  rerunning with the gate's required canonical absolute paths passed unchanged.
+  `scripts/smoke.sh` passed with exact `eshkol-transformer-smoke:v1` output.
+  These are CachyOS/LLVM 22 compatibility results; supported evidence is the run
+  above. The full local `make smoke` prerequisite rebuild is separate from these
+  completed checks and is not claimed here as a completed full build.
+- **Boundary retained:** 38 operations, 85 globals / 79 package exports, six
+  facades, one registry owner per process; no D2/O2/K2/C2 interoperability. All
+  ten existing C2 private P1 seams survive. Full training aggregate composition,
+  rank-two checkpoint admission, A0 owned-output graphs and contribution-plan
+  lifetime require separate accepted downstream contracts.
+- **Next workstream:** fresh bounded M3 issue #85 is authorized for the concrete
+  Eshkol model-composition/ownership/contribution proposal and non-freezing
+  reference work. Its implementation contract remains pending; M3 stays planned
+  until that decision. Deleted early M3 prerequisite attempts are not revived.
+
+## 2026-09-19 — M3T design/review history (superseded by acceptance above)
 
 - **Authoritative disposition:** integration accepted amended proposal
   `e7ad6b0d82f4cf7f5d45efff04179433379965bb` in

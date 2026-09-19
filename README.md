@@ -34,10 +34,11 @@ From a clean checkout on the supported lane, run:
 ```
 
 The accepted CI-E2 engine routes code pull requests, main pushes and merge-queue
-runs through one full-coverage engine. Its 16 suites include a clean canonical
+runs through one full-coverage engine. Its original 16 suites include a clean canonical
 build with smoke/benchmark, a separate native optimizer job, the other component
 suites, and six independent C2 groups. All 23 top-level local test commands remain
-covered; accidental nested C2 regression reruns are removed while intentional
+covered. Accepted M3T adds a diagnostic-transport suite and command, bringing the
+current total to 17 suites / 24 commands. Accidental nested C2 regression reruns are removed while intentional
 fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
 
 Manual exhaustive acceptance can verify and reuse completed full CI for the exact
