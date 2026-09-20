@@ -1,19 +1,24 @@
 # M3 fixed-profile composition proposal
 
-Status: **design accepted for bounded implementation; runtime acceptance pending**.
+Status: **accepted bounded design; implementation accepted**.
+[Implementation acceptance and evidence](M3_MODEL.md) supersede the historical
+active/pending status of this design checkpoint; the bounded contract below is
+unchanged.
 The binding [integration decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957)
 accepts the exact consolidated proposal at `37db2ec1b6b9947c384cb3d9638fc2a84053ede8`
 (tree `1fb786518a51b9d7b7173380236ce7d4e1904706`). It selects the A0 subset and
 ten private seams below; historical alternatives are not additional authority.
 The post-commit tail must be infallible: no recoverable committed-error alternative
 is accepted. Implementation, independent M3-R, supported CI and integration
-merge/retest remain required. Decision checkpoint for
+merge/retest were required by this decision checkpoint and are recorded in the
+linked implementation acceptance. Decision checkpoint for
 [issue #85](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/85) and
 [the integration ledger](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Base: main `21b1df13940e94adce998ab88cb45c329c956b58`; M3T implementation
-`f50160968bd97677632f3539fd2e278a63624cf9` is accepted. The main update is
-acceptance prose only. The original checkpoint changed no runtime or ABI; M3 is
-now active under the linked binding decision.
+`f50160968bd97677632f3539fd2e278a63624cf9` was accepted. The original main update
+was acceptance prose only and changed no runtime or ABI; it activated M3 under
+the linked binding decision. That active status is superseded by implementation
+acceptance.
 
 ## Accepted decision
 
@@ -265,9 +270,10 @@ source/symbol/arity/hostile-import/duplicate-owner checks, numerical parity and
 gradient checks, complete ownership/atomicity negatives and sanitizers, exact memory
 trajectories, affected predecessor gates and one exact-head supported
 Ubuntu22/LLVM21.1.8 full CI through the accepted engine. Separate M3-R, integration
-merge/retest and acceptance remain mandatory. This proposal is not supported CI,
-JIT, full-model execution or first-release evidence; M3 is active under the
-binding contract decision, with implementation acceptance pending.
+merge/retest and acceptance were mandatory. Their completed disposition is
+recorded in [M3_MODEL.md](M3_MODEL.md), superseding this checkpoint's pending
+status. This proposal itself is not supported CI, JIT, full-model execution or
+first-release evidence.
 
 Independent checkpoint subreviews: [numerical/reference](m3/NUMERICAL_REFERENCE_DESIGN.md)
 found no schedule/seed blocker; [ownership/atomicity](m3/ownership-design.md)
@@ -278,4 +284,5 @@ cleanup boundary. Local checks passed: 9 existing package
 contract tests, 19 CI selector/topology tests, the 17-suite/24-command structural
 checker, and `git diff --check`. Ownership compile-only assertions used GCC
 16.1.1 and confirmed 88/48/40-byte controls. None are runtime M3 or supported-lane
-acceptance evidence. The independent project M3-R review remains separate.
+acceptance evidence. The independent project M3-R approval is recorded separately
+in the linked implementation acceptance.

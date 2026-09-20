@@ -2,13 +2,40 @@
 
 M3 implements the bounded [composition contract](M3_COMPOSITION_PROPOSAL.md)
 accepted in [integration decision 5744129957](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957).
-All local numerical, ownership, fresh-package and 1024/8192 retention gates pass
-on the explicit CachyOS / LLVM22 compatibility host. The initial canonical8192
-forward timeout and the separately accepted I2 prerequisite fix remain recorded
-in [the measured retention evidence](M3_RETENTION_GATE.md). Exact-head supported
-Ubuntu22 / LLVM21 CI and independent M3-R remain required for acceptance.
-The accepted M3T evidence establishes its
-dependencies; it is not evidence that this model implementation passes.
+M3 is **accepted and complete within this fixed-profile contract** under
+[integration disposition 5748002917](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748002917).
+[Independent M3-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/88#issuecomment-5747957422)
+covers head `10449bbefb2e2061ce5e0d9bbb1b26676e17d618`.
+[PR #88](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/88) merged as
+`aa9e78f96b5545b52b77c238b92b26c281b41af0`; reviewed and merged states share
+tree `7d81855be5ad35a44e74a708642668f8d789ebff`.
+[Supported run 35465971406](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35465971406)
+passed all 18 suites / 25 commands on Ubuntu 22.04 / LLVM-Clang 21.1.8.
+[Main run 35492853557](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35492853557)
+successfully verified and reused that original full evidence.
+
+Focused merged-main checks passed native 76,484 and ASan/UBSan/LSan 20,679
+checks, the I2 envelope's 2,557 checks in each normal/sanitized build, 76
+package/retention/CI unit tests, and all 12 pinned development-oracle tests,
+including 4,736 finite-difference comparisons. Two reference regenerations were
+byte-identical with the frozen checksum
+`fd53baf6c42e893b71a747e59d05cfc976aa1f5f1c2b7713b1f4bfcaecad8267`.
+The fresh canonical package build and fresh strict installed-facade public-runtime
+and optimized lifetime AOT builds passed, each with the exact eight-file caller
+closure. Three-case logits parity passed at maximum absolute errors
+`1.34583584e-08`, `9.4684347e-09` and `2.24634212e-08`; lifetime output was exactly
+`M3-LIFETIME-PASS`, with empty stderr and arena poisoning enabled.
+`scripts/smoke.sh` passed with exact `eshkol-transformer-smoke:v1` output from
+the existing smoke executable; this was not a fresh full prerequisite build.
+These focused checks used the explicit CachyOS / LLVM22 compatibility host;
+they did not repeat the full suite or retention horizons. Supported full evidence
+is the run above.
+
+Earlier local numerical, ownership, fresh-package and 1024/8192 retention gates
+also pass on that compatibility host. The original canonical8192 forward timeout
+and separately accepted I2 prerequisite fix remain recorded in
+[the measured retention evidence](M3_RETENTION_GATE.md). The acceptance above
+supersedes earlier pending status without relabeling failed or local evidence.
 
 ## API and execution
 
@@ -108,7 +135,8 @@ distinct, boundary and repeated token IDs respectively. Maximum absolute logits
 errors against the independent mathematical reference were `1.34583584e-08`,
 `9.4684347e-09` and `2.24634212e-08`. The complete local all-parameter VJP, lifetime,
 fresh-package and retention gates subsequently pass, as recorded in the linked
-evidence. Supported-CI qualification remains separate.
+evidence. Supported-CI qualification is supplied separately by run 35465971406
+recorded above.
 
 ## Retention and remaining scope
 

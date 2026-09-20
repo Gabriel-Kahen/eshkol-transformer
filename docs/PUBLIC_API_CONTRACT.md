@@ -407,8 +407,9 @@ representation; N2/A2/L2/M3 own numerical implementation and gradient evidence.
 
 ### Bounded M3 implementation coverage
 
-The [accepted M3 design](M3_COMPOSITION_PROPOSAL.md) implements a restricted
-CPU-f32 diagnostic profile; runtime acceptance remains pending. `model-forward`
+The [accepted M3 implementation](M3_MODEL.md) implements the restricted CPU-f32
+diagnostic profile specified by the [composition contract](M3_COMPOSITION_PROPOSAL.md).
+`model-forward`
 admits the exact M3T model and owned i64[1,2] input with optional boolean
 `':deterministic?` only. It validates flat option structure, names, duplicates,
 paired targets/mask and boolean determinism first, then rejects the presence of

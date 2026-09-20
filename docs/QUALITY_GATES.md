@@ -14,6 +14,11 @@ accepted CI-E2 evidence below remains a 16-suite / 23-command measurement; it do
 not establish M3T acceptance. M3T's separate accepted evidence is supported run
 35441033357, independent PR #84 review, and identical-tree merge `f501609`;
 see [transport acceptance](M3T_TRANSPORT.md).
+Accepted M3 adds the model-composition suite, bringing current full coverage to
+18 suites / 25 commands. Supported run 35465971406, independent PR #88 approval,
+identical-tree merge and focused merged-main checks establish the separate
+[model acceptance](M3_MODEL.md). Earlier 16/23 and 17/24 results retain their
+historical scope.
 C2 composition invokes each unique leaf gate once instead of repeating regression
 tails nested inside other gates. Standalone core, load, and operational commands
 retain their historical regression tails; explicit focused flags are only used by

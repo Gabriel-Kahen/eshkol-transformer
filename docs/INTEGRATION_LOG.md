@@ -4,7 +4,48 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-20 — bounded M3 implementation accepted and merged
+
+- **Disposition:** [accepted and complete](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748002917)
+  within the fixed-profile contract in [M3_MODEL.md](M3_MODEL.md). This supersedes
+  the historical active/pending M3 status below; Wave 3 remains incomplete.
+- **Review and merge:** [independent M3-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/88#issuecomment-5747957422)
+  covers head `10449bbefb2e2061ce5e0d9bbb1b26676e17d618`.
+  [PR #88](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/88) merged as
+  `aa9e78f96b5545b52b77c238b92b26c281b41af0`; reviewed and merged states share
+  tree `7d81855be5ad35a44e74a708642668f8d789ebff`.
+- **Supported evidence:** [run 35465971406](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35465971406)
+  passed all 18 suites / 25 commands on Ubuntu 22.04 / LLVM-Clang 21.1.8.
+  [Main run 35492853557](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35492853557)
+  succeeded by directly verifying and reusing that original full result.
+- **Merged-main checks:** native 76,484 and ASan/UBSan/LSan 20,679 checks passed,
+  as did the I2 envelope's 2,557 checks in each normal/sanitized build, 76
+  package/retention/CI unit tests and all 12 pinned oracle tests, including 4,736
+  finite-difference comparisons. Two regenerations matched the frozen reference
+  checksum byte-for-byte. The fresh canonical package build and fresh strict
+  installed-facade public-runtime and optimized lifetime AOT builds passed, each
+  with the exact eight-file caller closure. Three-case logits parity, empty
+  stderr and exact `M3-LIFETIME-PASS` passed with arena poisoning enabled.
+  `scripts/smoke.sh` produced exactly `eshkol-transformer-smoke:v1` from the
+  existing executable; no fresh full prerequisite build is claimed. These are
+  focused CachyOS / LLVM22 compatibility checks, not a rerun of the full suite
+  or retention horizons. Detailed values are in [model acceptance](M3_MODEL.md).
+- **Boundary retained:** CPU f32 N1/T2/V256/D4/Hq=Hkv2/Dh2/L1/F8, eight model
+  operations, 93 globals / 87 exports, seven facades and one registry owner.
+  Independent immutable graphs and graph-retaining logits execute the Eshkol
+  21-forward/25-reverse schedules and one atomic contribution over 14 unique
+  parameters. The [original retention timeout](M3_RETENTION_GATE.md) remains
+  failed historical evidence; the I2 envelope fix does not reclaim cumulative
+  identity/plan controls or establish flat memory.
+- **Downstream contracts:** loss/target/mask ingress and reduction, RNG/cache
+  behavior, D2/O2/K2/C2 source composition, rank-two checkpoint admission and
+  complete training remain separate. TR3 still owns flat training retention,
+  joint live restore and interrupted/resumed trajectory proof; G3 owns generation.
+
 ## 2026-09-19 — M3 narrow I2 prerequisite accepted for implementation
+
+Historical implementation-prerequisite checkpoint; its pending CI/review status
+is superseded by bounded M3 acceptance above.
 
 [Decision 5744597535](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)
 permits one focused I2 allocation-envelope commit within the existing M3 branch,
@@ -24,6 +65,9 @@ integration. Exact pre/post source hashes and the separate 24-byte static-state
 accounting are recorded in [the retention evidence](M3_RETENTION_GATE.md).
 
 ## 2026-09-19 — M3 bounded composition design accepted
+
+Historical design checkpoint; its active/pending implementation status is
+superseded by bounded M3 acceptance above.
 
 Integration [accepted proposal 37db2ec](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744129957)
 for implementation on issue #85: eight public names, 93 globals/87 exports,
@@ -85,6 +129,8 @@ merge/retest and acceptance remain required. See [the accepted proposal](M3_COMP
   Eshkol model-composition/ownership/contribution proposal and non-freezing
   reference work. Its implementation contract remains pending; M3 stays planned
   until that decision. Deleted early M3 prerequisite attempts are not revived.
+  This historical planned/pending status is superseded by the subsequent design
+  and bounded implementation acceptances above.
 
 ## 2026-09-19 — M3T design/review history (superseded by acceptance above)
 
