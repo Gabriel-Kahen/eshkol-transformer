@@ -1,3 +1,0 @@
-;;; Expected compile rejection with only installed M3 facades visible.
-(require transformer.generation)
-(generator-create #f #f #f)

@@ -4,6 +4,27 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-20 — exact G3-N / G3-S ABI accepted for implementation
+
+Integration [decision 5751933660](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660),
+mirrored in [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89#issuecomment-5751933730),
+accepts all four exact ABI deltas at `d2b0858a39d99954396ade51b019f6094a00a0f3`.
+Root audited both full proposals and the actual K1 boundary; two additional
+independent Astra/high root reviews returned ACCEPT with no blockers.
+The accepted identities, rows/descriptors, scalar/alias admission, errors/fenv/
+publication, source/export/dependency ceilings and S automatic-storage bound are
+unchanged. The reviewed proposal hashes are recorded in the
+[compact contract record](g3/G3_PRIMITIVE_ABI_REQUEST.md).
+
+This is contract acceptance only. No implementation, VERIFIED capability,
+numerical/performance evidence or G3 completion follows. Contract documentation
+merges first; integration then dispatches separate N/S implementation worktrees
+in parallel with their full independent-review and acceptance inventories.
+G3-T remains an exact-private-seam hold and depends on accepted seams plus merged
+numerical implementations. No N/S/T implementation or merge occurs in this task.
+The contract-only PR's final diff contains Markdown only; probe sources remain
+at immutable `c354cb2`. No runtime/build/CI-topology changes or full-suite rerun.
+
 ## 2026-09-20 — G3 binding design recorded; exact primitive ABIs proposed
 
 Integration [decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295),
@@ -32,6 +53,11 @@ compiled probe keeps its explicit reused-package/compatibility qualifications.
 Root reports M3 acceptance prose PR #90 merged as `a879e3a` with green main run
 35498209573; this branch retains the unchanged merged M3 runtime ancestor.
 No duplicate task, implementation PR or merge is created here.
+The subsequent contract-only PR preserves probe sources at immutable evidence
+commit `c354cb2`; its final diff to main contains only Markdown. Exact N/S ABI
+disposition remains pending the integration owner's immediate independent review;
+G3-T stays separate and non-freezing. This packaging step adds no new runtime,
+build, CI-topology or numerical evidence.
 
 The N candidate has six capabilities, seven forward operations and eleven exact
 operation/row pairs; S has separate greedy/categorical operations on [1,256],

@@ -1,12 +1,13 @@
 # G3 generation: contract and compiled reachability proposal
 
-Status: **bounded design accepted; exact primitive ABI deltas proposed separately**.
+Status: **bounded design and exact G3-N/S ABIs accepted for implementation**.
 Tracking [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89).
 The [binding decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
 accepts proposal commit `c354cb2b96c521bb7c8115e20da21c1aa7030f64` with the
 draw-dependent exhaustion clarification incorporated below. This is design
 acceptance, not runtime acceptance or G3 completion. Exact [G3-N](g3/G3_N_ABI_PROPOSAL.md)
-and [G3-S](g3/G3_S_ABI_PROPOSAL.md) ABI proposals still require disposition;
+and [G3-S](g3/G3_S_ABI_PROPOSAL.md) ABIs at `d2b0858` are accepted by
+[decision 5751933660](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660);
 [G3-T seams](g3/G3_T_SEAM_PLAN.md) remain separately gated.
 No production API, ABI, capability, configuration schema or file format is changed.
 No implementation PR, full build, CI dispatch or generation-completion claim is
@@ -23,12 +24,14 @@ Treating arbitrary A2 cache capacity as additional model context would be wrong.
 
 ## What actually works
 
-The executable [probe](../scripts/probe-g3.sh) builds development callers against
+The preserved executable [probe at c354cb2](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/c354cb2b96c521bb7c8115e20da21c1aa7030f64/scripts/probe-g3.sh) builds development callers against
 an existing verified-toolchain M3 package. It does not build prerequisites or add
 a generator. [Package evidence](g3/PACKAGE_REVIEW.md) records exact commands,
 hashes and limitations. Independent reviews cover [numerics/sampling](g3/NUMERICAL_REVIEW.md),
 [cache/lifetime](g3/LIFETIME_REVIEW.md) and [compiled packaging](g3/PACKAGE_REVIEW.md).
 The consolidated decisions below govern where review alternatives differ.
+The contract-only PR keeps probe code at that immutable evidence commit; it adds
+no script, test implementation, runtime or CI-topology change to main.
 
 | Compiled observation | Consequence |
 |---|---|
@@ -333,9 +336,9 @@ prerequisite whose own required gates pass.
 
 ## Historical consolidated request (dispositioned)
 
-The binding decision linked above settles these high-level choices. They are
-retained as the decision record, not reopened questions. The next disposition
-concerns only the exact primitive ABI deltas linked at the top.
+The binding decisions linked above settle these high-level choices and the exact
+primitive ABI deltas. They are retained as the decision record, not reopened
+questions. Runtime acceptance and the G3-T exact-private-seam hold remain separate.
 
 1. Accept the minimal C2 slice as a prerequisite only, keeping larger-context
    generation and G3 completion separate; or direct a separately contracted C4

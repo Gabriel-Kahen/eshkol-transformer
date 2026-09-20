@@ -1,6 +1,10 @@
 # G3-N exact forward primitive ABI proposal
 
-Status: **ABI proposal only; no headers, implementation or new capability evidence**.
+Status: **exact ABI accepted for implementation; no headers, implementation or new capability evidence**.
+Integration [decision 5751933660](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660)
+accepts this contract at `d2b0858a39d99954396ade51b019f6094a00a0f3`, reviewed
+SHA-256 `ae7cbf18a1675e8305e494045f3af8ff1c6715b5c137081c518b1691e660a377`.
+The proposal text below is preserved; its requested ABI decisions are now settled.
 This specializes the settled C2 design in [binding decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295).
 It preserves the accepted profile, no-grad boundary, prerequisite ordering and
 unchanged predecessor APIs/formats. Source inspection only was performed for this

@@ -1,8 +1,11 @@
 # G3-S bounded sampler ABI proposal
 
-Status: proposed ABI delta only, under binding [decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295).
-The high-level C2 design is accepted; these native names/descriptors still require
-disposition before implementation. No code, build, numerical run or capability
+Status: **exact ABI accepted for implementation**, under [decision 5751933660](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660)
+and the binding C2 [decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295).
+The accepted contract is `d2b0858a39d99954396ade51b019f6094a00a0f3`, reviewed
+SHA-256 `a27f281bba82359995a6d13bc8061990fb9fe5b196199572427c9dd81d584f16`.
+The proposal text below is preserved; its requested ABI decisions are now settled.
+No code, build, numerical run or capability
 claim is delivered here. G3-S is independent of G3-N and has no L3S dependency.
 
 ## Provider and ABI identity

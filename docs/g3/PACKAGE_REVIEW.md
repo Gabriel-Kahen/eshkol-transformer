@@ -94,6 +94,13 @@ Required decisions before that successor exists:
 
 ## Reproduction and provenance
 
+The executable probe and its four test files are preserved at immutable commit
+[`c354cb2b96c521bb7c8115e20da21c1aa7030f64`](https://github.com/Gabriel-Kahen/eshkol-transformer/tree/c354cb2b96c521bb7c8115e20da21c1aa7030f64/tests/probes/g3).
+The contract-only PR omits these files from its final diff to main. To rerun the
+commands below, use a checkout of that evidence commit with the documented
+compiler and package prerequisites. The commands and paths record the original
+executed experiment; they do not imply probe installation by this prose PR.
+
 `/usr/bin/bash scripts/probe-g3.sh [M3_ARTIFACT_DIR [EVIDENCE_DIR]]` verifies the
 pinned compiler/provenance, archive inventories and actual symbols, copies the
 installed package into its evidence directory, compiles only development callers,

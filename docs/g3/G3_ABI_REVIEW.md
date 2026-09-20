@@ -1,6 +1,10 @@
 # G3-N / G3-S independent packaging and adversarial ABI review
 
-Status: **independent contract review passed; integration ABI disposition remains required**.
+Status: **independent contract review passed; integration accepted the exact ABI**.
+Integration [decision 5751933660](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660)
+accepts `d2b0858` following root cross-contract audit and two additional independent
+Astra/high root reviews. The historical review below is unchanged; this is
+contract acceptance only, with runtime and capability proof still pending.
 This is an independent Astra/high source review under binding
 [decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295).
 It adds no production code and runs no build, numerical test, or CI.

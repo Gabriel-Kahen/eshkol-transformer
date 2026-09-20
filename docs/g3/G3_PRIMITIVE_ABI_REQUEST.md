@@ -1,8 +1,11 @@
 # G3-N / G3-S: exact ABI decision request
 
-**Proposed only.** The [binding C2 design](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
-is settled. This request freezes only the following primitive contracts after
-root disposition; it does not install headers, claim numerical evidence or
+**Accepted for implementation** by [decision 5751933660](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660)
+at `d2b0858a39d99954396ade51b019f6094a00a0f3`, reviewed request SHA-256
+`43b68b2c58cd8e4862339b27ef880ab78ffa6bbbcc453aa1c228660160a1c12a`.
+The [binding C2 design](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
+is unchanged. This historical request records the accepted primitive contracts;
+it does not install headers, claim numerical evidence or
 authorize dependent implementation against unmerged APIs.
 
 | Contract | G3-N | G3-S |
@@ -71,7 +74,7 @@ provider/helper automatic storage; no recursion, VLA or alloca. External libc/li
 and caller/K1 frames are excluded and reported; provider/helper compiler spills
 remain counted.
 
-## Disposition requested
+## Disposition requested (now accepted)
 
 Ratify (1) exact identities/capability matrices/descriptor arities; (2) primitive
 scalar domains and alias exceptions; (3) native error/fenv/lifetime/publication
