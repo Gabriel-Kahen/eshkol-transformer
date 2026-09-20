@@ -81,6 +81,7 @@ jobs:
       N2_ASAN_DETECT_LEAKS: '1'
       O2_ASAN_DETECT_LEAKS: '1'
       N3K_ASAN_DETECT_LEAKS: '1'
+      L3S_ASAN_DETECT_LEAKS: '1'
       M3T_ASAN_DETECT_LEAKS: '1'
       M3_ASAN_DETECT_LEAKS: '1'
     steps:

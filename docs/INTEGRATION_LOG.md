@@ -4,6 +4,31 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-20 — L3S bounded masked-objective contract accepted
+
+- **Disposition:** [root accepted with conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069),
+  [issue #87 mirror](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/87#issuecomment-5747250113).
+  Implementation is active, not accepted or complete. The [prefreeze proposal](L3S_MASKED_OBJECTIVE_PROPOSAL.md)
+  includes independent numerical/reference, API/packaging and adversarial reviews.
+- **Boundary:** ABI 1.0 sole explicit provider accessor, six bool/f32 reduction and
+  numerator/mean seed schemas at `[1,2]`, positive finite W, exact binary32 order,
+  strict FP controls, complete preflight and independent caller-owned outputs.
+  No predecessor ABI, M3 surface, aggregate, installed carrier or training change.
+- **Traversal correction:** [ledger decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747145256)
+  and [issue mirror](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/87#issuecomment-5747145336)
+  accept addition-only reversal equivalence for two nonnegative terms. Independent
+  bitwise equivalence and structural checks replace a nonexistent order-sensitive
+  golden; genuine pairing/seed/normalization/reciprocal/contraction mutants remain
+  required and tested.
+- **Evidence boundary:** local optimized 9,849 native checks, real L2 reference/FD,
+  exact-rational probes, 11 compiled mutants, genuine I1/I2 borrows, deterministic
+  private AOT, exact manifests/baseline and ASan/UBSan/LSan pass. The local host is
+  unsupported CachyOS/LLVM22; supported exact-head full CI and separate integration
+  review remain pending. No merge performed by this workstream.
+- **Integration base:** fast-forwarded to accepted M3 closeout `a879e3a`; preserve
+  the strict merged CI union (18 suites / 26 commands with L3S). This is build/test
+  integration only; L3S does not depend on the M3 implementation.
+
 ## 2026-09-20 — bounded M3 implementation accepted and merged
 
 - **Disposition:** [accepted and complete](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748002917)

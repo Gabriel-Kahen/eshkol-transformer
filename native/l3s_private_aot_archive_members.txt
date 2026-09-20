@@ -1,0 +1,6 @@
+aot_private_bridge.o
+l3s_masked_objective_provider.o
+indexed_cross_entropy.o
+f32_tensor.o
+i64_tensor.o
+kernel_abi.o

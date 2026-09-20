@@ -38,7 +38,8 @@ runs through one full-coverage engine. Its original 16 suites include a clean ca
 build with smoke/benchmark, a separate native optimizer job, the other component
 suites, and six independent C2 groups. All 23 top-level local test commands remain
 covered. Accepted M3T adds diagnostic transport; accepted M3 composition adds
-the model suite, bringing the current total to 18 suites / 25 commands.
+the model suite, bringing accepted coverage to 18 suites / 25 commands. L3S adds
+one masked-objective command in native-numerics: 18 suites / 26 commands.
 Accidental nested C2 regression reruns are removed while intentional
 fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
 
@@ -177,6 +178,15 @@ at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
 provider-accessor discovery, per-token forward, and direct backward; it does not
 claim an owned tensor, Eshkol autodiff graph, global provider, or I2 carrier. See
 [docs/L2_INDEXED_CROSS_ENTROPY.md](docs/L2_INDEXED_CROSS_ENTROPY.md).
+
+L3S provides an independent ABI 1.0 CPU-f32 provider for masked-objective reduction
+and explicit numerator/mean seeds at exactly `[1,2]`. Its sole accessor is
+`et_l3s_kernel_provider_v1`; its archive is `build/l3s/libeshkol_transformer_l3s.a`.
+The six bool/f32 operations borrow inputs and overwrite caller-owned outputs,
+including separate scalar numerator, weight, and reported mean. Run `make test-l3s`
+with the pinned `Q0_PYTHON` oracle; see [the contract](docs/L3S_MASKED_OBJECTIVE.md).
+L3S adds no model loss facade or tensor owner. Implementation acceptance remains
+pending supported CI and independent integration review.
 
 The build leaves A2's carrier-neutral serial CPU-f32 provider and fixed-capacity
 transactional cache in `build/a2/libeshkol_transformer_a2.a`. Consumers obtain the
