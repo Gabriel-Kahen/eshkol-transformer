@@ -1,0 +1,78 @@
+;;; Development-only: test the accepted M3 path and prove its G3 gaps.
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.error_public)
+(require transformer.error_consumer)
+(require transformer.diagnostic_transport)
+(require transformer.model)
+
+(define (check label value)
+  (if value #t (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect label category operation thunk)
+  (let ((caught #f))
+    (guard (raised (#t (set! caught
+      (and (transformer-error? raised)
+           (eq? (transformer-error-category raised) category)
+           (eq? (transformer-error-operation raised) operation)
+           (eq? (transformer-error-cause raised) #f)))))
+      (thunk))
+    (check label caught)))
+(define (same-bytes? a b)
+  ;; Test-only serialization comparison, not a numerical implementation.
+  (and (= (bytevector-length a) (bytevector-length b))
+       (let loop ((i 0))
+         (if (= i (bytevector-length a)) #t
+             (and (= (bytevector-u8-ref a i) (bytevector-u8-ref b i))
+                  (loop (+ i 1)))))))
+(define cfg (config-resolve
+  (config-parse "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}") '()))
+(define model (diagnostic-model-create cfg (diagnostic-initializer-state 1729)))
+(define input (diagnostic-input-create))
+(check "input ingress" (diagnostic-input-copy! input '(3 197)))
+(module-eval! model)
+(define output (model-forward model input ':deterministic? #t))
+(define logits (model-output-logits output))
+(define original (diagnostic-model-logits-bits logits))
+(check "fixed f32[1,2,256] byte count" (= (bytevector-length original) 2048))
+;; Compare detached serialized bytes across processes, not just pass markers.
+(display "G3-M3-LOGITS")
+(let emit ((i 0))
+  (if (= i (bytevector-length original)) (newline)
+      (begin (display " ") (display (bytevector-u8-ref original i))
+             (emit (+ i 1)))))
+(check "no returned RNG" (eq? (model-output-rng output) #f))
+(check "no loss" (eq? (model-output-loss output) #f))
+(expect "T1 ingress unavailable" 'shape-mismatch 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(3))))
+(expect "T3 ingress unavailable" 'shape-mismatch 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(3 197 1))))
+(expect "out-of-vocabulary ingress" 'shape-mismatch 'diagnostic-input-copy!
+  (lambda () (diagnostic-input-copy! input '(3 256))))
+(expect "RNG ingress unsupported" 'unsupported 'model-forward
+  (lambda () (model-forward model input ':rng #f)))
+(expect "cache ingress unknown" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':cache #f)))
+(expect "no-grad option unknown" 'invalid-argument 'model-forward
+  (lambda () (model-forward model input ':no-grad? #t)))
+(define retry (model-forward model input ':deterministic? #t))
+(define retry-logits (model-output-logits retry))
+(check "failed admissions leave usable unchanged input/model"
+       (same-bytes? original (diagnostic-model-logits-bits retry-logits)))
+(model-output-release! retry)
+(diagnostic-model-logits-release! retry-logits)
+(model-output-release! output)
+(check "logits survive output release"
+       (same-bytes? original (diagnostic-model-logits-bits logits)))
+;; Eval is demonstrably not a no-grad execution contract: its retained graph
+;; accepts the existing VJP entry point after the output itself is released.
+(define seed (diagnostic-logits-create))
+(diagnostic-logits-copy-bits! seed (make-bytevector 2048 0))
+(check "eval retains backward-capable graph"
+       (diagnostic-output-vjp! logits seed 1065353216 0))
+(module-zero-grad! model)
+(diagnostic-logits-release! seed)
+(diagnostic-model-logits-release! logits)
+(diagnostic-input-release! input)
+(display "G3-M3-REACHABILITY-PASS") (newline)
+(display "G3-GAPS no-grad cache T1 T3 sampling-RNG generation-facade") (newline)

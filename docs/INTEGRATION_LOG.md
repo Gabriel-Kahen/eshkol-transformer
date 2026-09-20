@@ -4,6 +4,34 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-20 — G3 generation contract and reachability (proposed only)
+
+Issue [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89), based
+on merged M3 `aa9e78f96b5545b52b77c238b92b26c281b41af0`. The
+[decision-ready proposal](G3_GENERATION_PROPOSAL.md) consolidates independent
+numerical/sampling, cache/lifetime and compiled/package reviews. No production
+API, ABI, configuration schema, format or capability is frozen or implemented.
+G3 is active for this contract phase, not complete. M3 acceptance prose remains
+integration's separate follow-up.
+
+The recommendation retains the C2 learned-position diagnostic model and permits
+at most one emitted token. Proposed G3-N/T/S/M/G prerequisites cover exact T1
+rows, authentic no-grad/cache transport, sampler/RNG, lifecycle and one successor
+registry owner. G3-R and a separately approved larger profile remain necessary
+for save/reload and repeated-decode evidence. No dependency on unmerged L3S.
+Six additions to the nine A0 names, exact-bit policy fields, numeric-byte EOS,
+learned-position A2 cache admission, private no-enrollment T1 decoding, per-token
+cache/RNG publication and separate RNG release await issue #1 disposition.
+
+Development-only compiled probes pass existing M3 forward, repeatable logits,
+admission failures and graph lifetime; they prove eval remains graph-bearing,
+T1/T3 ingress rejects, RNG is unsupported and production generation is absent.
+All nine A0 declaration arities are checked separately. Actual archive/symbol
+inventories and 61 source/facade correspondences were checked for a reused M3
+artifact; callers were freshly compiled. The evidence is explicit CachyOS/LLVM22
+compatibility evidence, not a fresh package build or supported-host acceptance.
+No full build, full CI, implementation PR or merge was run for this phase.
+
 ## 2026-09-19 — M3 narrow I2 prerequisite accepted for implementation
 
 [Decision 5744597535](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5744597535)

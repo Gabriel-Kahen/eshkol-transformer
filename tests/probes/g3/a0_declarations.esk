@@ -1,0 +1,12 @@
+;;; Compile only. These are A0 declaration stubs, never production support.
+(require transformer.generation)
+(define (g3-declarations model tokenizer config generator ids output)
+  (generator-create model tokenizer config)
+  (generator-prefill! generator ids)
+  (generator-decode-step! generator ids)
+  (generator-generate! generator ids)
+  (generation-output-ids output)
+  (generation-output-lengths output)
+  (generation-output-text output)
+  (generation-output-rng output)
+  (generation-output-cache-lengths output))
