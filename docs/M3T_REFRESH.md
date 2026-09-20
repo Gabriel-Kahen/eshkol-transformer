@@ -6,7 +6,8 @@ Status: **historical pre-implementation refresh; superseded by
 accepts exact proposal `e7ad6b0d82f4cf7f5d45efff04179433379965bb` and lifts the
 implementation hold. The evidence below predates that disposition; it does not
 establish implementation acceptance. At that point M3T and M3 were incomplete;
-M3T has since merged, while M3 remains downstream. All pre-implementation
+M3T has since merged, and [bounded M3 acceptance](M3_MODEL.md) supersedes its
+historical downstream/incomplete status. All pre-implementation
 statements below describe the refresh date, not the current runtime.
 
 Accepted base: `7d9ad1cf6d997fc3c1f489f3955ff97c97281f68`.

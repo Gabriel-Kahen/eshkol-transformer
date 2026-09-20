@@ -38,9 +38,10 @@ is tracked separately in issue #81. It changes CI scheduling/evidence selection,
 not the accepted Wave 2 runtime scope, and starts no Wave 3 task.
 
 Wave 2 is complete within the bounded component contracts below. Wave 3 resumed
-on September 19 at 04:30 EDT by user direction; M3T is now accepted, and model
-composition is the next dependency-ready workstream. C2 completion does not prove
-a live trainer trajectory or generation.
+on September 19 at 04:30 EDT by user direction; M3T and bounded M3 model composition
+are accepted. Downstream evaluation, generation and training require the remaining
+composition contracts. C2 completion does not prove a live trainer trajectory or
+generation, and Wave 3 remains incomplete.
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
@@ -60,7 +61,7 @@ a live trainer trajectory or generation.
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |
-| M3 | Decoder-only GPT configuration, blocks and tied LM head | M3T, N2, A2, P1 | #85 [bounded composition/output/contribution contract accepted for implementation](M3_COMPOSITION_PROPOSAL.md), issue #1 decision 5744129957; [I2 alias prerequisite](M3_RETENTION_GATE.md) accepted for implementation after the canonical8192 timeout (decision 5744597535); full local retention, forward/gradient, lifetime and packaging gates pass after that fix; exact-head supported CI and independent M3-R remain required | active |
+| M3 | [Fixed-profile decoder-only model composition](M3_MODEL.md) | M3T, N2, A2, P1 | #85; bounded immutable-output/graph and 14-parameter contribution contract; independent M3-R approval 5747957422, supported full CI 35465971406 (18 suites / 25 commands), PR #88 merge `aa9e78f` at reviewed tree `7d81855be5ad35a44e74a708642668f8d789ebff`, verified main evidence reuse and focused merged-main native/oracle/package/public-AOT/lifetime checks. [Retention evidence](M3_RETENTION_GATE.md) preserves the original timeout and cumulative costs; no full-training or flat-memory claim | complete |
 | M3T | [Bounded production Eshkol transport/lifetime contract](M3T_TRANSPORT_PROPOSAL.md) | N3K, N2, A2, I1, I2, P1L, E1B | #68; [accepted implementation and evidence](M3T_TRANSPORT.md); restricted 85-global sibling; independent M3T-R approval, supported full CI 35441033357, identical-tree PR #84 merge `f501609`, and focused merged-main retest; no model-completion claim | complete |
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | Seeded sampling and cache/no-cache parity | planned |

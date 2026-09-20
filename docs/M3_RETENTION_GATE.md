@@ -3,7 +3,10 @@
 Status: after the accepted I2 prerequisite fix, the full canonical and clean
 instrumented local gates **pass all five modes at both 1024/8192 horizons**, with
 unchanged production flags and 600-second caps plus five-second kill escalation.
-Exact-head supported Ubuntu22/LLVM21 CI and independent M3-R remain required.
+Subsequent supported Ubuntu22/LLVM21 CI, independent M3-R, merge and focused
+merged-main checks establish [bounded M3 acceptance](M3_MODEL.md), superseding
+the earlier pending status. The measurements below remain local compatibility
+evidence, distinct from the supported run.
 
 The initial canonical forward/8192 run failed its unchanged cap, exit 137, without
 a completion marker or exact arena counter; its remaining modes did not run.
@@ -231,4 +234,6 @@ archive SHA256 is
 `b5cb08b9fcaa4d17b22b08fb0652b194973e84619349c41da6374e248de4eda0`.
 Local timing uses GNU time 1.10 with the explicit configured executable path.
 All measurements use the verified pinned Eshkol source under CachyOS / LLVM22
-compatibility settings; supported CI and independent M3-R remain pending.
+compatibility settings. Subsequent supported CI and independent M3-R are recorded
+in [M3 acceptance](M3_MODEL.md), superseding the earlier pending status without
+reclassifying these local measurements.

@@ -37,7 +37,7 @@ The accepted CI-E2 engine routes code pull requests, main pushes and merge-queue
 runs through one full-coverage engine. Its original 16 suites include a clean canonical
 build with smoke/benchmark, a separate native optimizer job, the other component
 suites, and six independent C2 groups. All 23 top-level local test commands remain
-covered. Accepted M3T adds diagnostic transport; the M3 composition candidate adds
+covered. Accepted M3T adds diagnostic transport; accepted M3 composition adds
 the model suite, bringing the current total to 18 suites / 25 commands.
 Accidental nested C2 regression reruns are removed while intentional
 fresh-cache/AOT, sanitizer and resource-bound repetitions remain.
@@ -243,7 +243,9 @@ M3 adds [fixed-profile model composition](docs/M3_MODEL.md) in a distinct
 schedules support owned immutable outputs and graph-retaining logits, with one
 atomic contribution over all 14 unique parameters. The accepted scope is CPU f32
 N1/T2/V256/D4/Hq=Hkv2/Dh2/L1/F8, with a tied head and no loss/RNG ingress,
-dropout or cache. Runtime acceptance remains pending. Retained identity/plan
+dropout or cache. M3 is accepted and complete within this fixed-profile contract
+after independent review, supported CI, merge and focused merged-main checks.
+Retained identity/plan
 costs are cumulative; full training and D2/O2/K2/C2 composition remain downstream.
 
 ## First release criterion

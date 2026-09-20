@@ -651,8 +651,10 @@ After acceptance, required gates are:
   proposal time, extended to 17 / 24 by M3T); do not substitute an obsolete
   full-test layout or duplicate CI.
 
-Future M3 still owns complete Eshkol scheduling, all-parameter forward/VJP oracle
-and gradient checks, atomic numerator contribution, its plan-memory boundary, and
-ordinary model-output/A0 graph integration. Integration owns acceptance, review and
+At this proposal checkpoint, future M3 owned complete Eshkol scheduling,
+all-parameter forward/VJP oracle and gradient checks, atomic numerator
+contribution, its plan-memory boundary, and ordinary model-output/A0 graph
+integration. That historical incomplete status is superseded by the separate
+[bounded M3 acceptance](M3_MODEL.md). Integration owns acceptance, review and
 merge. M3T completion is established by the linked implementation acceptance,
-not the proposal alone; M3 remains incomplete.
+not the proposal alone; neither milestone establishes complete training.

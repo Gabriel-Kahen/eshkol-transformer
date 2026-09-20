@@ -8,8 +8,9 @@ merged as `f50160968bd97677632f3539fd2e278a63624cf9` after
 and [supported CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35441033357).
 Reviewed head `ef659b9c542f5244b9ca42706a69f30ba0e8d963`, CI checkout
 `aa3f0d13c5ce70440e73ead588f8bb1e74448d22`, and actual merge share tree
-`12e3d0595ddde6c067cd6fca44132bc99b176387`. M3 still owns the production model
-schedule and full-model forward/gradient parity; Wave 3 is not complete.
+`12e3d0595ddde6c067cd6fca44132bc99b176387`. The separately accepted
+[M3 implementation](M3_MODEL.md) supplies the bounded production model schedule
+and forward/gradient parity; Wave 3 is not complete.
 
 ## Public and private contracts
 
