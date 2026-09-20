@@ -2258,3 +2258,22 @@ inventories and 61 source/facade correspondences were checked for a reused M3
 artifact; callers were freshly compiled. The evidence is explicit CachyOS/LLVM22
 compatibility evidence, not a fresh package build or supported-host acceptance.
 No full build, full CI, implementation PR or merge was run for this phase.
+
+
+## 2026-09-20 — exact G3-T private seams proposed
+
+The [single G3-T decision request](g3/G3_T_PRIVATE_CONTRACT.md) follows merged
+contract PR #92 at `4353bd2f14ae4fb50c877c27fc73b8edef8e2f30`. It proposes
+shared M3/M3T invocation admission, a fixed14 stable pin adapter with temporary
+parameter control pins, exact closed owners/calls/error transport, preallocated
+T1 decoding, and a private-only seven-facade/87-export/93-global successor.
+All38 M3T outer adapters are gated without changing their C ABI targets. The
+explicit six-object tuple adds A2 cache plus G3-N/S; current M3 does not select
+A2 cache. Independent guard/pinning, owner/T1 and packaging reviews consolidate
+these deltas in one proposal.
+
+Root disposition remains pending. G3-N #93 and G3-S #94 implementations must
+both merge before production integration. Accepted C2/config/EOS/RNG/token
+transaction semantics and N/S arithmetic/ABI proposals are unchanged. This
+phase adds documentation only; no production header, public export, full build,
+full CI, implementation PR, merge or new runtime evidence is claimed.

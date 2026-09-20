@@ -1,4 +1,9 @@
-# G3-T private seams: planning hold
+# G3-T private seams: original planning hold
+
+The successor [exact private-seam proposal](G3_T_PRIVATE_CONTRACT.md) now
+consolidates these questions for root disposition. It remains proposed; production
+integration waits for both G3-N/S implementation merges. The checklist below
+records the original hold and is not a second competing contract.
 
 The [binding decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
 accepts the C2 consumer/lifetime direction. This file preserves the separately
