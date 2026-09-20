@@ -443,9 +443,13 @@ accepted all four, following two separate Astra/high
 guard/pinning and package/error reviews and a root ownership/decoder/A2
 transaction audit. These source/design reviews provide no runtime evidence.
 
-Executed documentation checks pass:29 unique native seams,46rename rows split
+At reviewed proposal `a7a4590`, documentation checks passed:29 unique native
+seams,46rename rows split
 38M3T/8M3,4,736 parameter bytes,55 local links across the five changed Markdown
 files, accepted G3/N/S/request files byte-identical to HEAD, and `git diff --check`.
-Exactly five Markdown files change. These are documentation consistency checks; all implementation
-proof above remains future work. No production file, header, ABI, full build,
+Exactly five Markdown files changed in that proposal. The acceptance follow-up
+changes four Markdown files and verifies the reviewed seam body is byte-identical
+after removing only the binding decision's gradient-lock clarification. Local
+links and whitespace pass; accepted G3/N/S contracts remain unchanged. These are
+documentation checks; all implementation proof above remains future work. No production file, header, ABI, full build,
 full CI, implementation PR or merge is added by this proposal.
