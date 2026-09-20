@@ -35,6 +35,8 @@
          parameter-handle-device state-dict-paths state-dict-tensor
          state-dict-alias-groups state-dict-release!
          model-forward model-output-logits model-output-loss model-output-rng
+         model-output-release! diagnostic-output-vjp!
+         diagnostic-model-logits-bits diagnostic-model-logits-release!
          optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
          optimizer-load-state! optimizer-state-release!
          trainer-create trainer-step! trainer-stop-policy trainer-train!
@@ -140,6 +142,13 @@
 (define (model-output-logits output) (a0-declaration-only 'model-output-logits))
 (define (model-output-loss output) (a0-declaration-only 'model-output-loss))
 (define (model-output-rng output) (a0-declaration-only 'model-output-rng))
+(define (model-output-release! output) (a0-declaration-only 'model-output-release!))
+(define (diagnostic-output-vjp! output seed weight-bits ordinal)
+  (a0-declaration-only 'diagnostic-output-vjp!))
+(define (diagnostic-model-logits-bits logits)
+  (a0-declaration-only 'diagnostic-model-logits-bits))
+(define (diagnostic-model-logits-release! logits)
+  (a0-declaration-only 'diagnostic-model-logits-release!))
 
 (define (optimizer-create config parameter-tree) (a0-declaration-only 'optimizer-create))
 (define (optimizer-step! optimizer) (a0-declaration-only 'optimizer-step!))

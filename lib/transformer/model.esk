@@ -1,0 +1,99 @@
+;;; Installed fixed-profile model facade. One registry-owning aggregate per process.
+(require transformer.error_consumer)
+
+(provide model-forward
+         model-output-logits
+         model-output-loss
+         model-output-rng
+         model-output-release!
+         diagnostic-output-vjp!
+         diagnostic-model-logits-bits
+         diagnostic-model-logits-release!)
+
+(define m3-safe-model-forward
+  (let ()
+    (extern void m3-boxed-model-forward ptr ptr ptr ptr
+            :real et_e1b_public_m3_model_forward_v1)
+    (lambda (first second third)
+      (let ((output (vector #f)))
+        (m3-boxed-model-forward (vector first) (vector second) (vector third) output)
+        (vector-ref output 0)))))
+(define (model-forward model input-ids . opts)
+  (m3-safe-model-forward model input-ids opts))
+
+(define m3-safe-model-output-logits
+  (let ()
+    (extern void m3-boxed-model-output-logits ptr ptr
+            :real et_e1b_public_m3_model_output_logits_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3-boxed-model-output-logits (vector first) output)
+        (vector-ref output 0)))))
+(define (model-output-logits first)
+  (m3-safe-model-output-logits first))
+
+(define m3-safe-model-output-loss
+  (let ()
+    (extern void m3-boxed-model-output-loss ptr ptr
+            :real et_e1b_public_m3_model_output_loss_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3-boxed-model-output-loss (vector first) output)
+        (vector-ref output 0)))))
+(define (model-output-loss first)
+  (m3-safe-model-output-loss first))
+
+(define m3-safe-model-output-rng
+  (let ()
+    (extern void m3-boxed-model-output-rng ptr ptr
+            :real et_e1b_public_m3_model_output_rng_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3-boxed-model-output-rng (vector first) output)
+        (vector-ref output 0)))))
+(define (model-output-rng first)
+  (m3-safe-model-output-rng first))
+
+(define m3-safe-model-output-release
+  (let ()
+    (extern void m3-boxed-model-output-release ptr ptr
+            :real et_e1b_public_m3_model_output_release_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3-boxed-model-output-release (vector first) output)
+        (vector-ref output 0)))))
+(define (model-output-release! first)
+  (m3-safe-model-output-release first))
+
+(define m3-safe-diagnostic-output-vjp
+  (let ()
+    (extern void m3-boxed-diagnostic-output-vjp ptr ptr ptr ptr ptr
+            :real et_e1b_public_m3_diagnostic_output_vjp_v1)
+    (lambda (first second third fourth)
+      (let ((output (vector #f)))
+        (m3-boxed-diagnostic-output-vjp (vector first) (vector second) (vector third) (vector fourth) output)
+        (vector-ref output 0)))))
+(define (diagnostic-output-vjp! first second third fourth)
+  (m3-safe-diagnostic-output-vjp first second third fourth))
+
+(define m3-safe-diagnostic-model-logits-bits
+  (let ()
+    (extern void m3-boxed-diagnostic-model-logits-bits ptr ptr
+            :real et_e1b_public_m3_diagnostic_model_logits_bits_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3-boxed-diagnostic-model-logits-bits (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-model-logits-bits first)
+  (m3-safe-diagnostic-model-logits-bits first))
+
+(define m3-safe-diagnostic-model-logits-release
+  (let ()
+    (extern void m3-boxed-diagnostic-model-logits-release ptr ptr
+            :real et_e1b_public_m3_diagnostic_model_logits_release_v1)
+    (lambda (first)
+      (let ((output (vector #f)))
+        (m3-boxed-diagnostic-model-logits-release (vector first) output)
+        (vector-ref output 0)))))
+(define (diagnostic-model-logits-release! first)
+  (m3-safe-diagnostic-model-logits-release first))

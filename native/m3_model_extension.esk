@@ -1,0 +1,239 @@
+;;; Accepted M3 owned-output composition. Trusted source; never install.
+;;; Numerical ordering lives exclusively in m3_schedule.esk.
+(extern ptr m3-native-graph-capture ptr :real et_m3_private_graph_capture_v1)
+(extern i64 m3-native-graph-restore ptr ptr :real et_m3_private_graph_restore_v1)
+(extern i64 m3-native-graph-check ptr i64 :real et_m3_private_graph_check_primals_v1)
+(extern i64 m3-native-graph-release ptr :real et_m3_private_graph_release_v1)
+(extern ptr m3-native-logits-create ptr :real et_m3_private_model_logits_create_v1)
+(extern i64 m3-native-logits-copy-to ptr ptr i64 :real et_m3_private_model_logits_copy_to_v1)
+(extern i64 m3-native-logits-release ptr :real et_m3_private_model_logits_release_v1)
+(extern i64 m3-native-contribute ptr ptr i64 i64 i64 :real et_m3_private_workspace_contribute_v1)
+(extern i64 m3-native-reset ptr :real et_m3_private_workspace_reset_v1)
+
+;;; Root cells and canonical readback preserve registry edges across regions.
+;;; Cache rows: #(model-entry workspace-entry lifecycle).
+(define m3-workspaces (vector '()))
+(define m3-call-state (vector #f))
+
+(define-syntax m3-call
+  (syntax-rules ()
+    ((_ operation body ...)
+     (m3t-boundary operation
+       (if (vector-ref m3-call-state 0)
+           (m3t-fail 'invalid-state operation "model operation is already active"))
+       (vector-set! m3-call-state 0 #t)
+       (guard (caught (#t (begin (vector-set! m3-call-state 0 #f)
+                                (m3t-rethrow-raw caught operation))))
+         (let ((answer (begin body ...)))
+           (vector-set! m3-call-state 0 #f)
+           answer))))))
+
+(define (m3-dead! entry)
+  (vector-set! entry 2 'dead)
+  (vector-set! entry 3 '())
+  (vector-set! entry 4 #f)
+  (vector-set! entry 5 '())
+  (vector-set! entry 11 #f)
+  #t)
+
+(define (m3-note-idle! workspace)
+  (vector-set! (vector-ref workspace 4) 10 #f)
+  (vector-set! workspace 10 'idle)
+  #t)
+
+(define (m3-reset! workspace operation)
+  (m3t-check (m3-native-reset (vector-ref workspace 3)) operation)
+  (m3-note-idle! workspace)
+  #t)
+
+(define (m3-workspace-for owner operation)
+  (let find ((remaining (vector-ref m3-workspaces 0)))
+    (cond
+      ((null? remaining)
+       (let ((next (cons (vector owner #f 'pending)
+                         (vector-ref m3-workspaces 0))))
+         (vector-set! m3-workspaces 0 next)
+         (let ((row (car (vector-ref m3-workspaces 0))))
+           (guard (caught
+                    (#t (begin
+                          (if (vector-ref row 1)
+                              (let ((workspace (vector-ref row 1)))
+                                (m3t-check (m3t-native-workspace-release
+                                            (vector-ref workspace 3)) operation)
+                                (vector-set! workspace 2 'dead)))
+                          (vector-set! row 1 #f)
+                          (vector-set! row 2 'dead)
+                          (m3t-rethrow-raw caught operation))))
+             (let ((workspace (m3t-entry
+                                (m3t-public-workspace-create (vector-ref owner 0))
+                                'workspace operation #t)))
+               (vector-set! row 1 workspace)
+               ;; First private reset enrolls a fresh never-begun workspace.
+               (m3-reset! workspace operation)
+               (vector-set! row 2 'live)
+               workspace)))))
+      ((and (eq? (vector-ref (car remaining) 0) owner)
+            (eq? (vector-ref (car remaining) 2) 'live))
+       (vector-ref (car remaining) 1))
+      (else (find (cdr remaining))))))
+
+(define (m3-options options operation)
+  (if (not (m3t-proper-list? options))
+      (m3t-fail 'invalid-argument operation "model options must be a proper list"))
+  (let loop ((rest options) (targets #f) (mask #f) (rng #f) (deterministic #f))
+    (cond
+      ((null? rest)
+       (if (not (eq? targets mask))
+           (m3t-fail 'invalid-argument operation "targets and loss mask must appear together"))
+       (if (or targets mask rng)
+           (m3t-fail 'unsupported operation "this model subset has no loss or forward RNG ingress"))
+       #t)
+      ((null? (cdr rest))
+       (m3t-fail 'invalid-argument operation "model option has no value"))
+      (else
+       (let ((key (car rest)) (value (car (cdr rest))) (tail (cdr (cdr rest))))
+         (cond
+           ((eq? key ':targets)
+            (if targets (m3t-fail 'invalid-argument operation "duplicate targets option"))
+            (loop tail #t mask rng deterministic))
+           ((eq? key ':loss-mask)
+            (if mask (m3t-fail 'invalid-argument operation "duplicate loss mask option"))
+            (loop tail targets #t rng deterministic))
+           ((eq? key ':rng)
+            (if rng (m3t-fail 'invalid-argument operation "duplicate RNG option"))
+            (loop tail targets mask #t deterministic))
+           ((eq? key ':deterministic?)
+            (if (or deterministic (not (boolean? value)))
+                (m3t-fail 'invalid-argument operation "invalid or duplicate determinism option"))
+            (loop tail targets mask rng #t))
+           (else (m3t-fail 'invalid-argument operation "unknown model option"))))))))
+
+(define (m3-graph-bearing value operation)
+  (let ((entry (m3t-find value)))
+    (if (or (not entry)
+            (not (or (eq? (vector-ref entry 1) 'model-output)
+                     (eq? (vector-ref entry 1) 'model-logits))))
+        (m3t-fail 'invalid-argument operation "expected an owned model output or logits tensor"))
+    (if (not (eq? (vector-ref entry 2) 'live))
+        (m3t-fail 'invalid-state operation "model result is released or unpublished"))
+    entry))
+
+(define (m3-public-model-forward model input options)
+  (let ((operation 'model-forward))
+    (m3-call operation
+      (m3-options options operation)
+      (let* ((owner (m3t-entry model 'model operation #t))
+             (source (m3t-entry input 'input operation #t)))
+        (if (vector-ref owner 10)
+            (m3t-fail 'invalid-state operation "model already has an active frame"))
+        (let* ((workspace (m3-workspace-for owner operation))
+               (output (m3t-stage 'model-output)))
+          (vector-set! output 4 owner)
+          (vector-set! output 11 m3t-profile)
+          (guard (caught
+                   (#t (begin
+                         (if (not (eq? (vector-ref workspace 10) 'idle))
+                             (m3-reset! workspace operation))
+                         (if (not (null? (vector-ref output 3)))
+                             (m3t-check (m3-native-graph-release
+                                         (vector-ref output 3)) operation))
+                         (m3-dead! output)
+                         (m3t-rethrow-raw caught operation))))
+            (m3t-public-workspace-begin! (vector-ref workspace 0) (vector-ref source 0))
+            (m3-forward-schedule-internal (vector-ref workspace 0))
+            (let ((graph (m3-native-graph-capture (vector-ref workspace 3))))
+              (if (null? graph) (m3t-native-fail operation))
+              (vector-set! output 3 graph)
+              (vector-set! output 5 graph)
+              (m3-reset! workspace operation)
+              (vector-set! output 2 'live)
+              (vector-ref output 0))))))))
+
+(define (m3-public-model-output-logits value)
+  (let ((operation 'model-output-logits))
+    (m3-call operation
+      (let* ((source (m3t-entry value 'model-output operation #t))
+             (entry (m3t-stage 'model-logits)))
+        (vector-set! entry 4 (vector-ref source 4))
+        (vector-set! entry 5 (vector-ref source 5))
+        (vector-set! entry 11 m3t-profile)
+        (let ((native (m3-native-logits-create (vector-ref source 5))))
+          (if (null? native)
+              (begin (m3-dead! entry) (m3t-native-fail operation)))
+          (vector-set! entry 3 native)
+          (vector-set! entry 2 'live)
+          (vector-ref entry 0))))))
+
+(define (m3-public-model-output-loss value)
+  (let ((operation 'model-output-loss))
+    (m3-call operation (m3t-entry value 'model-output operation #t) #f)))
+(define (m3-public-model-output-rng value)
+  (let ((operation 'model-output-rng))
+    (m3-call operation (m3t-entry value 'model-output operation #t) #f)))
+
+(define (m3-public-model-output-release! value)
+  (let ((operation 'model-output-release!))
+    (m3-call operation
+      (let ((entry (m3t-entry value 'model-output operation #f)))
+        (if (eq? (vector-ref entry 2) 'dead) #t
+            (begin
+              (m3t-check (m3-native-graph-release (vector-ref entry 3)) operation)
+              (m3-dead! entry)))))))
+
+(define (m3-public-diagnostic-model-logits-bits value)
+  (let ((operation 'diagnostic-model-logits-bits))
+    (m3-call operation
+      (let* ((entry (m3t-entry value 'model-logits operation #t))
+             (bytes (make-bytevector 2048 0)))
+        (m3t-check (m3-native-logits-copy-to (vector-ref entry 3) bytes 2048) operation)
+        bytes))))
+(define (m3-public-diagnostic-model-logits-release! value)
+  (let ((operation 'diagnostic-model-logits-release!))
+    (m3-call operation
+      (let ((entry (m3t-entry value 'model-logits operation #f)))
+        (if (eq? (vector-ref entry 2) 'dead) #t
+            (begin
+              (m3t-check (m3-native-logits-release (vector-ref entry 3)) operation)
+              (m3-dead! entry)))))))
+
+(define (m3-public-diagnostic-output-vjp! value seed weight ordinal)
+  (let ((operation 'diagnostic-output-vjp!))
+    (m3-call operation
+      (let* ((result (m3-graph-bearing value operation))
+             (upstream (m3t-entry seed 'logits operation #t))
+             (owner (vector-ref result 4)))
+        ;; Positive finite IEEE binary32 has an unsigned encoding in this interval.
+        (if (not (and (m3t-exact-i64? weight) (> weight 0) (< weight 2139095040)
+                      (m3t-exact-i64? ordinal) (>= ordinal 0)))
+            (m3t-fail 'invalid-argument operation "expected positive finite f32 weight bits and nonnegative i64 ordinal"))
+        (if (vector-ref owner 10)
+            (m3t-fail 'invalid-state operation "model already has an active frame"))
+        (let* ((workspace (m3-workspace-for owner operation))
+               (graph (vector-ref result 5)))
+          (m3t-check (m3-native-graph-check graph (m3t-mode result operation)) operation)
+          (guard (caught
+                   (#t (begin
+                         (if (not (eq? (vector-ref workspace 10) 'idle))
+                             (m3-reset! workspace operation))
+                         (m3t-rethrow-raw caught operation))))
+            (m3t-check (m3-native-graph-restore (vector-ref workspace 3) graph) operation)
+            (vector-set! owner 10 workspace)
+            (vector-set! workspace 10 'forward)
+            (m3-forward-schedule-internal (vector-ref workspace 0))
+            (m3t-public-workspace-vjp-begin! (vector-ref workspace 0) (vector-ref upstream 0))
+            (m3-reverse-schedule-internal (vector-ref workspace 0))
+            (let ((rows (m3t-workspace-contributions-internal (vector-ref workspace 0))))
+              (let check ((index 0))
+                (if (= index 14) #t
+                    (begin
+                      (if (not (eq? (vector-ref (vector-ref rows index) 0)
+                                    (vector-ref (vector-ref owner 8) index)))
+                          (m3t-fail 'invalid-state operation "canonical parameter identity changed"))
+                      (check (+ index 1))))))
+            (m3t-check (m3-native-contribute (vector-ref workspace 3) graph
+                                           (m3t-mode result operation) weight ordinal)
+                       operation)
+            ;; Native commit has already released its plan and reset the frame.
+            ;; Only preallocated nonraising stores follow the mutation boundary.
+            (m3-note-idle! workspace)
+            #t))))))

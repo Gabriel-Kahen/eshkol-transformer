@@ -104,6 +104,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
                 "o2",
                 "d1",
                 "m3t",
+                "m3",
             ],
         )
         self.assertEqual(len(planned), len(set(planned)))
@@ -115,6 +116,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
         cases = {
             "contracts-data": ["d1"],
             "diagnostic-transport": ["i2", "m3t"],
+            "model-composition": ["i2", "m3"],
             "checkpoint-io": [],
             "parameter-state": [],
             "byte-tokenizer": ["d2"],

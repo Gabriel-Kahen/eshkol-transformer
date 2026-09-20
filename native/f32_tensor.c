@@ -102,6 +102,17 @@ static et_f32_parameter *retired_parameters;
 static et_f32_gradient_plan *retired_gradient_plans;
 static et_f32_gradient_reset_plan *retired_reset_plans;
 
+typedef struct f32_allocation_envelope_state {
+  uintptr_t low;
+  uintptr_t high;
+  int initialized;
+  int disabled;
+} f32_allocation_envelope_state;
+
+/* Every span protected by storage_aliases_live comes from f32_calloc.
+ * Keep freed allocation history too: widening can only require more scans. */
+static f32_allocation_envelope_state f32_allocation_envelope;
+
 _Static_assert(CHAR_BIT == 8, "I2 requires 8-bit bytes");
 _Static_assert(sizeof(float) == 4u && sizeof(uint32_t) == 4u,
                "I2 requires 32-bit float and bit carriers");
@@ -129,6 +140,42 @@ void et_f32_tensor_test_reset_allocator_v1(void) {
 }
 #endif
 
+static void f32_record_allocation(const void *allocation, size_t count,
+                                  size_t size) {
+  size_t bytes;
+  uintptr_t start;
+  uintptr_t extent;
+  uintptr_t end;
+  if (allocation == NULL || count == 0u || size == 0u ||
+      f32_allocation_envelope.disabled) {
+    return;
+  }
+  if (count > SIZE_MAX / size) {
+    f32_allocation_envelope.disabled = 1;
+    return;
+  }
+  bytes = count * size;
+  extent = (uintptr_t)bytes;
+  start = (uintptr_t)allocation;
+  if ((size_t)extent != bytes || start > UINTPTR_MAX - extent) {
+    f32_allocation_envelope.disabled = 1;
+    return;
+  }
+  end = start + extent;
+  if (!f32_allocation_envelope.initialized) {
+    f32_allocation_envelope.low = start;
+    f32_allocation_envelope.high = end;
+    f32_allocation_envelope.initialized = 1;
+  } else {
+    if (start < f32_allocation_envelope.low) {
+      f32_allocation_envelope.low = start;
+    }
+    if (end > f32_allocation_envelope.high) {
+      f32_allocation_envelope.high = end;
+    }
+  }
+}
+
 static void *f32_calloc(size_t count, size_t size) {
   void *allocation;
 #ifdef ET_F32_TENSOR_TESTING
@@ -142,6 +189,7 @@ static void *f32_calloc(size_t count, size_t size) {
     successful_allocations++;
   }
 #endif
+  f32_record_allocation(allocation, count, size);
   return allocation;
 }
 
@@ -355,7 +403,7 @@ static void retire_reset_plan(et_f32_gradient_reset_plan *plan) {
   retired_reset_plans = plan;
 }
 
-static int storage_aliases_live(const void *storage, size_t bytes) {
+static int storage_aliases_live_reference(const void *storage, size_t bytes) {
   const et_f32_tensor *tensor;
   const et_f32_tensor_borrow *borrow;
   const et_f32_tensor_copy_plan *copy_plan;
@@ -455,6 +503,20 @@ static int storage_aliases_live(const void *storage, size_t bytes) {
     }
   }
   return 0;
+}
+
+static int storage_aliases_live(const void *storage, size_t bytes) {
+  if (f32_allocation_envelope.initialized &&
+      !f32_allocation_envelope.disabled && bytes != 0u && storage != NULL &&
+      (size_t)(uintptr_t)bytes == bytes && pointer_span_fits(storage, bytes)) {
+    uintptr_t start = (uintptr_t)storage;
+    uintptr_t end = start + (uintptr_t)bytes;
+    if (end <= f32_allocation_envelope.low ||
+        start >= f32_allocation_envelope.high) {
+      return 0;
+    }
+  }
+  return storage_aliases_live_reference(storage, bytes);
 }
 
 void et_f32_tensor_error_clear_v1(et_f32_tensor_error *error) {
