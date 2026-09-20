@@ -3,6 +3,11 @@
 Status: **proposed only; no numerical provider, public API, RNG format or G3
 acceptance is established by this review**. Scope is issue #89's contract phase.
 This source audit ran no builds and makes no new measured execution claim.
+Historical independent review of `c354cb2`; its C2/sampling direction is now
+accepted by [decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295).
+The binding exhaustion rule admits every no-draw operation and rejects a required
+categorical draw before generate's prefill commit. Exact primitive ABIs remain
+separate proposals, not runtime evidence.
 
 ## Existing evidence and exact gaps
 
@@ -205,8 +210,8 @@ successful prefill, unchanged RNG and cache length P.
   shape/dtype/device/nonfinite/fenv rejections; output-byte and input preservation
   on failure. New differentiable/backward claims, if any, require central
   differences, not inference from an old row.
-- T1 head permutation has T!=H and must use distinguishable marked values; it
-  catches assumptions hidden by M3's T=H=2 layout.
+- T1 head layout has T!=H but its flat permutation is identity. Marked-value tests
+  check rank/direction contracts; this row cannot prove nontrivial permutation.
 - All C2 routes: P1 cached prefill against true uncached T1, P2 cached prefill
   against current M3 full T2, and P1 then decode at absolute position 1 against
   full-prefix T2. Compare all logits (supported-lane bits where arithmetic order

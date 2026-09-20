@@ -4,6 +4,9 @@ Status: proposed only. This review changes no API, ABI, serialized format, or
 capability claim. It audits merged M3/M3T, A2, I1/I2, T1 and P1 for issue #89.
 The smallest candidate below is a diagnostic prerequisite for G3, not completion
 of the roadmap generation workstream. No builds were run by this reviewer.
+Historical review of `c354cb2`; [binding decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
+now settles its high-level choices, including all six additions with independent
+RNG release. Exact [G3-T seam planning](G3_T_SEAM_PLAN.md) remains separately gated.
 
 ## Findings from the implementation
 

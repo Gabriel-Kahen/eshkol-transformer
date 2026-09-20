@@ -1,6 +1,13 @@
 # G3 generation: contract and compiled reachability proposal
 
-Status: **proposed only, awaiting issue #1 disposition**. Tracking [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89).
+Status: **bounded design accepted; exact primitive ABI deltas proposed separately**.
+Tracking [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89).
+The [binding decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
+accepts proposal commit `c354cb2b96c521bb7c8115e20da21c1aa7030f64` with the
+draw-dependent exhaustion clarification incorporated below. This is design
+acceptance, not runtime acceptance or G3 completion. Exact [G3-N](g3/G3_N_ABI_PROPOSAL.md)
+and [G3-S](g3/G3_S_ABI_PROPOSAL.md) ABI proposals still require disposition;
+[G3-T seams](g3/G3_T_SEAM_PLAN.md) remain separately gated.
 No production API, ABI, capability, configuration schema or file format is changed.
 No implementation PR, full build, CI dispatch or generation-completion claim is
 part of this phase. The implementation base is merged M3
@@ -97,7 +104,7 @@ The nine A0 names/arities remain unchanged:
 | `generation-output-rng` | 1 | independent immutable, explicitly releasable G3 RNG snapshot |
 | `generation-output-cache-lengths` | 1 | new owned CPU i64[1], value P+G |
 
-Six additive candidate names require integration approval before installation:
+Six additive names are accepted design commitments for the later reviewed aggregate:
 
 | Proposed name | Arity | Authority and lifetime |
 |---|---:|---|
@@ -128,7 +135,7 @@ the exact identity, then returns on an exact dead owner before busy/borrow check
 | Failure | E1 category |
 |---|---|
 | Wrong/forged/copied/cross-owner kind; malformed config or scalar policy | `invalid-argument` |
-| Authentic dead/busy owner, missing cache, train mode, stale cache binding, exhausted authenticated RNG | `invalid-state` |
+| Authentic dead/busy owner, missing cache, train mode, stale cache binding; exhausted authenticated RNG only when a categorical draw is required | `invalid-state` |
 | Admitted carrier rank/extent, token range, context overflow or model/tokenizer vocabulary mismatch | `shape-mismatch` |
 | Admitted carrier dtype, device or layout mismatch | `dtype-mismatch`, `device-mismatch`, `noncontiguous` respectively |
 | Well-formed unavailable model profile, tokenizer policy or exact provider row | `unsupported` |
@@ -179,9 +186,9 @@ views retain full C2 shape f32[1,2,2,2]. Materialize bool[1,A,2] explicitly;
 query positions are i64[1,A], key positions i64[1,2]={0,1}. False mask protects
 unused initialized tails; it does not authorize a shorter dense view over
 capacity-strided storage. Learned-position K is already position-conditioned
-before projection; explicit A2 contract disposition must admit these unrotated
-keys. Applying RoPE or treating the existing post-RoPE prose as permission is not
-part of this proposal.
+before projection; the binding decision admits these unrotated keys for this
+exact profile. G3-T must document and directly test that consumer contract;
+existing A2 ABI, RoPE semantics and capability rows stay unchanged.
 
 ## Mutation, failure and resource boundaries
 
@@ -199,7 +206,9 @@ views, validates commit eligibility, then publishes cache/result without fallibl
 work. Failure aborts and scrubs the tail, preserving committed prefix and RNG.
 Manual prefill/decode consume no random draws, including manual EOS append.
 
-Generate validates the whole request before replacing the old cache. Its successful
+Generate validates the whole request before replacing the old cache, including
+exhaustion only when categorical sampling with nonzero budget requires a draw.
+Such exhaustion rejects before the initial prefill commit. Its successful
 prefill is an explicit initial commit. Zero budget still prefills and returns an
 empty output, cache length P and unchanged RNG. After prefill, token failure leaves
 the prompt-only cache. Each sampled token, including EOS, must run through the
@@ -239,7 +248,10 @@ kinds. Key is seed XOR `0x4733434154454731`; this distinguishes same-seed use
 from the initializer, not every possible differently seeded stream. Consume one
 Philox block per categorical emitted token, use lane0's high24 bits times 2^-24,
 discard other lanes, and advance the full 128-bit counter. Maximum counter is an
-unconsumable exhausted sentinel. Singleton categorical selection and EOS still
+unconsumable exhausted sentinel. An authentic exhausted snapshot remains admitted
+at construction and for greedy, prefill, manual decode and zero-budget generation;
+each preserves it. The final consumable block may publish that sentinel successor.
+Singleton categorical selection and EOS still
 consume one block; greedy, prefill, manual decode, zero budget and failed token
 attempts consume zero. Immutable input/output snapshots never advance in place.
 
@@ -319,7 +331,11 @@ failure/EOS gates on a separately admitted larger profile. The C2 slice leaves
 these obligations open. This does not prevent separate acceptance of a bounded
 prerequisite whose own required gates pass.
 
-## Consolidated request to integration
+## Historical consolidated request (dispositioned)
+
+The binding decision linked above settles these high-level choices. They are
+retained as the decision record, not reopened questions. The next disposition
+concerns only the exact primitive ABI deltas linked at the top.
 
 1. Accept the minimal C2 slice as a prerequisite only, keeping larger-context
    generation and G3 completion separate; or direct a separately contracted C4

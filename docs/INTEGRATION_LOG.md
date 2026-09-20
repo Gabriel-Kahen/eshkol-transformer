@@ -4,6 +4,45 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-20 — G3 binding design recorded; exact primitive ABIs proposed
+
+Integration [decision 5748532295](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295),
+mirrored in [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89#issuecomment-5748532340),
+accepts `c354cb2b96c521bb7c8115e20da21c1aa7030f64` as the bounded C2 design,
+not runtime acceptance or full G3 completion. This entry records the integration
+owner's decision; the [compact ABI request](g3/G3_PRIMITIVE_ABI_REQUEST.md) and exact [G3-N](g3/G3_N_ABI_PROPOSAL.md) and
+[G3-S](g3/G3_S_ABI_PROPOSAL.md) primitive ABI proposals remain **proposed only**.
+Independent Astra/high numerical, sampler/adversarial and packaging reviews
+prepare these deltas in parallel. [G3-T private seam planning](g3/G3_T_SEAM_PLAN.md)
+is preserved separately; its implementation waits for merged numerical contracts.
+
+All settled choices remain in force: diagnostic C2 limit, nine A0 names plus six
+unary additions, exact config/ownership, learned-position A2 consumer, private
+no-grad/T1 borrow, transaction publication and literal sampler semantics.
+The binding clarification admits authentic exhausted RNG snapshots for creation,
+greedy, manual prefill/decode and zero-budget generation. Only a required
+categorical draw rejects exhaustion, before generate's initial prefill commit;
+the final consumable block may publish the exhausted successor. No new K1
+enum, public format, generic tensor authority or numerical capability is inferred.
+
+G3-N/S identity/row/descriptor/error/fenv/alias/export contracts require root
+disposition before production implementation freeze. No new numerical test,
+full build or CI evidence is claimed for this planning follow-up. The existing
+compiled probe keeps its explicit reused-package/compatibility qualifications.
+Root reports M3 acceptance prose PR #90 merged as `a879e3a` with green main run
+35498209573; this branch retains the unchanged merged M3 runtime ancestor.
+No duplicate task, implementation PR or merge is created here.
+
+The N candidate has six capabilities, seven forward operations and eleven exact
+operation/row pairs; S has separate greedy/categorical operations on [1,256],
+returning token i64[1] and numeric successor i64[4]. Each proposes one explicit
+provider export and one registry-free source/object/archive. Independent authors
+cross-reviewed the opposite numerical contract; packaging/adversarial review
+found no remaining blocker after prefix/reserved-byte, error-precedence, alias
+and dependency-inventory clarifications. All numerical/sanitizer/AOT/support-lane
+checks listed there are future acceptance requirements. This follow-up ran only
+documentation link and whitespace checks; no new numerical result is claimed.
+
 ## 2026-09-20 — G3 generation contract and reachability (proposed only)
 
 Issue [#89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89), based
