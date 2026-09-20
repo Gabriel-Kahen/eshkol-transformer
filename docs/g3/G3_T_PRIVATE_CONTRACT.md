@@ -1,11 +1,15 @@
-# G3-T exact private-seam proposal
+# G3-T exact private-seam contract
 
-**Proposed; root disposition required.** Base: merged contract PR #92,
-`4353bd2f14ae4fb50c877c27fc73b8edef8e2f30`, tree
-`c5c7d2879cefe2d331b2f5167627c947409d7af0`. This is one source-private
-successor contract, not installed headers, a public ABI freeze or implementation.
-Production integration waits for **both** G3-N #93 and G3-S #94 implementations
-to merge, plus root acceptance of this proposal.
+**Accepted, implementation dependency-gated**, by
+[decision 5752756205](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5752756205),
+mirrored in [G3 issue #89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89#issuecomment-5752756256).
+Reviewed commit: `a7a45908d9b5224ad6d2d6cb08926ecc3bb75ccf`; proposal SHA-256:
+`78a770237a000bc0d3a7b22c678fc1a6692a9d8052456bbed350c02e4366b9fe`.
+Base: merged contract PR #92, `4353bd2f14ae4fb50c877c27fc73b8edef8e2f30`,
+tree `c5c7d2879cefe2d331b2f5167627c947409d7af0`. This is one accepted
+source-private contract, not installed headers, a public ABI or implementation.
+Production integration remains blocked until **both** G3-N #93 and G3-S #94
+implementations are independently approved and merged.
 
 The [binding C2 decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5748532295)
 and [accepted N/S decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5751933660)
@@ -15,10 +19,11 @@ specifies configuration, nine A0 names plus six additions, EOS, ownership and
 transactions. G3-T installs **none** of those generation names. C2 admits P=1/2,
 G=0/1, and P+G<=2; this cannot prove repeated generation or save/reload.
 
-## Decisions requested
+## Accepted decisions
 
 1. One shared invocation guard and fixed 14-pin frame, including temporary use
-   of I2's parameter control-pin count to exclude gradient mutation.
+   of I2's parameter control-pin count to exclude reset/contribution preparation.
+   Gradient preservation also relies on the closed no-gradient/no-callback path.
 2. The exact closed owner kinds, registry slots, calls and publication protocol
    below, including preallocated T1 raw-byte decoding without shell enrollment.
 3. Fixed provider routing and the private-only successor tuple: seven facades,
@@ -26,9 +31,9 @@ G=0/1, and P+G<=2; this cannot prove repeated generation or save/reload.
 4. Separate normal-package and instrumented private witness gates. No test hook
    or new public transport escape is admitted to make private code callable.
 
-These are the remaining deltas; root acceptance of the earlier design/N/S does
-not itself approve them. No broader context, generic parameter/tensor access,
-resolver, gradient plan, checkpoint format or P1 slot is proposed.
+Root accepted these four bounded deltas in the decision above. No broader
+context, generic parameter/tensor access, resolver, gradient plan, checkpoint
+format or P1 slot is proposed.
 
 ## Authentication, slots and shared admission
 
@@ -130,6 +135,11 @@ parameter `plan_pins` from0 to1 and value `active_borrow` to
 `(et_f32_tensor_borrow *)(void *)&pins->views[i]` as the exact stable sentinel. This reserves a control count; it creates **no gradient plan**, gradient
 view, contribution or numerical mutation. A value borrow alone would not exclude
 existing gradient reset/plan preparation, which checks the parameter counter.
+The binding decision clarifies that parameter `plan_pins` is not a universal
+gradient-access lock: current privileged `gradient_borrow_begin` admission does
+not test that count. Preservation also requires the closed role inventory, no
+gradient-view/plan calls, serialized execution and no callback/reentrancy. This
+clarification does not strengthen or change I2's existing locking contract.
 Partial failure reverses only held bits without allocation or error clobbering.
 Check validates self, registries, identities, sentinels and exact count1. End,
 after successful preflight, clears sentinels and decrements1 to0 in reverse order;
@@ -428,8 +438,10 @@ postcommit finish. Packaging and guard reviewers both rejected premature private
 generation orchestration; it is replaced with single-step transport bindings.
 Those corrections are incorporated. Final owner/T1 and packaging cross-reviews
 pass for contract submission with no remaining corrections; the guard review
-found no other blocker after its specified corrections. Root still owns
-disposition of the four decision deltas above.
+found no other blocker after its specified corrections. Root subsequently
+accepted all four, following two separate Astra/high
+guard/pinning and package/error reviews and a root ownership/decoder/A2
+transaction audit. These source/design reviews provide no runtime evidence.
 
 Executed documentation checks pass:29 unique native seams,46rename rows split
 38M3T/8M3,4,736 parameter bytes,55 local links across the five changed Markdown

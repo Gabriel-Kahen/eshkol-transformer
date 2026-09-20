@@ -2277,3 +2277,27 @@ both merge before production integration. Accepted C2/config/EOS/RNG/token
 transaction semantics and N/S arithmetic/ABI proposals are unchanged. This
 phase adds documentation only; no production header, public export, full build,
 full CI, implementation PR, merge or new runtime evidence is claimed.
+
+
+## 2026-09-20 — exact G3-T private contract accepted; implementation blocked
+
+[Binding decision 5752756205](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5752756205),
+[mirrored on #89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89#issuecomment-5752756256),
+accepts all four deltas of the [G3-T private contract](g3/G3_T_PRIVATE_CONTRACT.md)
+at `a7a45908d9b5224ad6d2d6cb08926ecc3bb75ccf`, reviewed proposal SHA-256
+`78a770237a000bc0d3a7b22c678fc1a6692a9d8052456bbed350c02e4366b9fe`.
+Separate root Astra/high guard/pinning and package/error reviews accepted; root
+ownership/decoder/A2 transaction audit agreed. These are source/design reviews.
+
+The decision clarifies that parameter `plan_pins` excludes reset/contribution
+preparation and parameter destruction, but privileged gradient-borrow admission
+does not test that count. Gradient preservation also requires the closed
+no-gradient/no-callback, serialized inventory; no stronger I2 lock is claimed
+or changed. Reviewed signatures, slots, authority, ownership and error schemas
+are preserved by the acceptance update.
+
+Production G3-T remains blocked until both G3-N #93 and G3-S #94 implementations
+are independently approved and merged. This follow-up prepares contract-only
+acceptance/provenance documentation for root's final delta review and merge.
+No production implementation, full CI, runtime evidence, public generation,
+save/reload, flat-memory claim or G3 completion follows from acceptance.
