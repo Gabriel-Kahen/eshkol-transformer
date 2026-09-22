@@ -21,9 +21,11 @@
      (m3t-boundary operation
        (if (vector-ref m3-call-state 0)
            (m3t-fail 'invalid-state operation "model operation is already active"))
-       (vector-set! m3-call-state 0 #t)
        (guard (caught (#t (begin (vector-set! m3-call-state 0 #f)
                                 (m3t-rethrow-raw caught operation))))
+         ;; Install cleanup before publishing the busy state. If handler
+         ;; allocation fails, the outer boundary observes an idle call guard.
+         (vector-set! m3-call-state 0 #t)
          (let ((answer (begin body ...)))
            (vector-set! m3-call-state 0 #f)
            answer))))))
