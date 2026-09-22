@@ -22,7 +22,7 @@ SUITES = [
 ] + [(f"c2-{g}", f"test-ci-c2-{g}-after-build", 240) for g in GROUPS]
 FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
-    "test-l2.sh", "test-l3s.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
+    "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-c1.sh", "test-c2.sh",
     "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-g3n.sh",
@@ -246,15 +246,21 @@ def check(root, overrides=None):
         else:
             leaves += targets[target]
     assert Counter(leaves) == Counter(c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh")
-    assert len(leaves) == 26
+    assert len(leaves) == 27
     canonical = ["/usr/bin/bash scripts/" + s for s in (
         "generate-p1-roots.sh --check", "build.sh", "build-a2.sh",
         "build-p1-identity.sh", "build-p1-package.sh", "build-c1.sh",
         "build-t1.sh", "build-t2.sh", "build-d2.sh", "build-c2.sh", "build-m3t.sh", "build-m3.sh", "build-g3n.sh")]
     assert targets["build"] == canonical
+    metrics_build = "/usr/bin/bash scripts/build-e3-metrics.sh"
+    assert targets["build-ci-core"].count(metrics_build) == 1
+    assert targets["test-e3-metrics"] == ["/usr/bin/bash scripts/" + name for name in (
+        "build-k1.sh", "build-l2.sh", "build-i1.sh", "build-i2.sh", "build-l3s.sh",
+        "build-e3-metrics.sh", "test-e3-metrics.sh")]
+    assert read("scripts/build.sh").count('/usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-metrics.sh"') == 1
     return len(SUITES)
 
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[2]
-    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 27-command coverage, six C2 groups, clean build, strict evidence gates")
+    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 28-command coverage, six C2 groups, clean build, strict evidence gates")

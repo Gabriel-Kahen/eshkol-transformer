@@ -99,6 +99,8 @@ class TopologyTests(unittest.TestCase):
         for command in (
             "/usr/bin/bash scripts/test-o2.sh",
             "/usr/bin/bash scripts/test-l3s.sh",
+            "/usr/bin/bash scripts/test-e3-metrics.sh",
+            "/usr/bin/bash scripts/build-e3-metrics.sh",
             "/usr/bin/bash scripts/test-c2.sh --group c2-operational",
             "/usr/bin/bash scripts/test-t2-boundary.sh",
             "/usr/bin/bash scripts/build-c2.sh",

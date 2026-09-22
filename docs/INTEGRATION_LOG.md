@@ -4,6 +4,38 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — E3-METRICS implementation candidate
+
+- **Scope:** issue [#107](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/107),
+  based on merged exact-contract commit `ba0e37d06076d0a16c473ff742ab95723cb2cb89`,
+  tree `221e00c9c258841995195a051b9f44df515679b9`. The single ABI 1.0 accessor
+  implements only CPU-f32/BOOL/i64 `correct.bool`, `accumulate` and `finalize`
+  at request `[1,2,256]`. No accepted contract, predecessor provider, canonical
+  discovery, shared guard, public evaluator or serialized format changes.
+- **Evidence:** [focused implementation record](e3/E3_METRICS_IMPLEMENTATION.md)
+  reports local strict native checks (70,231), fenv bookkeeping fault checks
+  (135), rational/reference tests (5+5), 102 Decimal-exp inputs (maximum 0 ULP),
+  12 numerical/5 admission-and-atomicity/5 orchestration mutation kills and five
+  equivalent controls. Exact packages, two fresh identical pinned private AOT
+  binaries/stdout, real L2/L3S/I1/I2 composition and ASan/UBSan/LSan1 pass.
+  Linux process accounting measured 24.215215 seconds and 312,424 KiB maximum
+  child RSS. The unavailable `/usr/bin/time` launch failed before execution;
+  development-only monotonic/getrusage measurement recorded the successful run.
+- **Independent reviews:** separate Astra/high numerical and package reviewers
+  found no provider blocker. Independent adversarial review requested unique
+  per-view text aliases, partial input overlap, adjacent inputs, exact one-over
+  counters and empty-shape checks; all were added and verified. A separate
+  fenv fault runner proves save/restore failure precedence and errno/byte preservation.
+- **CI registration:** root-authorized addition to the existing native-numerics
+  and acceptance-predecessors plans preserves 19 suites and all budgets, adds
+  top-level command 28, and leaves smoke-only prerequisites unchanged. All 102
+  CI unit tests pass, including omission and producer/test failure propagation.
+- **Disposition:** candidate only. CachyOS/LLVM 22 compatibility evidence does
+  not establish supported Ubuntu 22.04/LLVM 21 acceptance. Exact-candidate
+  supported CI, independent integration review and root merge remain required.
+  Real E3 frame/M3/D2 traversal, rollback/publication/retention and eventual public
+  execution remain separate downstream obligations; roadmap E3 stays active.
+
 ## 2026-09-22 — E3 exact private design accepted
 
 - **Disposition:** [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
