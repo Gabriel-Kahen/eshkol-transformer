@@ -1,12 +1,15 @@
 # E3-CG: exact shared M3 guard and fixed14 pin contract
 
-**Exact shared design accepted by root; runtime not implemented or accepted.** [Issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101)
+**Exact shared design accepted; source implementation under review, runtime acceptance open.** [Issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101)
 consolidates the shared prerequisite of [E3](E3_EVALUATION_PROPOSAL.md) and
 [G3-T](g3/G3_T_PRIVATE_CONTRACT.md). Source base is PR #100 merge
 `27c99f7c9f27a227f0e237f1571ac89d5cdfa225`. Binding architecture decisions
 [5771430755](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771430755)
 and [5771464954](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771464954)
-authorize this exact-design review, not implementation or a public ABI.
+authorized the exact-design review. The contract merged in PR #102 as
+`2ac0b5bc5a385e79700f46bf899bab841f33d1cb`; subsequent
+[dispatch 5771713077](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101#issuecomment-5771713077)
+authorizes the bounded [shared source implementation](M3_SHARED_CALL.md).
 
 E3-CG owns the common definitions below. The original G3-T owner reviews affected
 G3 compatibility; E3 owns its frame, P1 modes, D2 cursor, metrics and publication.
@@ -20,7 +23,9 @@ includes no sampler review, runtime capability, public operation or numerical ch
 
 ## 1. Exact source ownership
 
-The three canonical source paths are accepted design; none is created by this docs PR:
+The three canonical source paths implement the accepted design in the current
+candidate; sections 8 and its original validation record describe the preceding
+documentation-only phase:
 
 | Path | Definitions and inclusion |
 |---|---|
@@ -385,7 +390,7 @@ environment, exact public strings and localization. G3's include roots remain
 additional D2/P1 integration remains its own acceptance item. Predecessor archive
 and public boundaries do not change merely because a successor exists.
 
-Required later proof: all38 checked entries plus8 M3 entries reject reentry,
+Required implementation proof: all38 checked entries plus8 M3 entries reject reentry,
 trusted M3 schedules still run; idle different-model/manual-frame cases; forged,
 copied, stale, wrong-kind and cross-owner contexts reject before payload access;
 all14 acquisition failure positions, exact partial rollback and reverse drain;
@@ -393,8 +398,10 @@ corrupt descriptor/sentinel/count/self/mask fail before writes; error-span alias
 negatives and original-error preservation; actual parameter/gradient bytes and
 counts unchanged; no gradients/graphs in E3; no allocating or callback cleanup;
 consumer restoration/publication order; exact source/ELF/archive isolation and
-normal-versus-instrumented separation. Supported runtime/AOT/sanitizer and live
-plus cumulative retention gates remain future implementation work.
+normal-versus-instrumented separation. The [shared implementation record](M3_SHARED_CALL.md)
+tracks common-layer runtime/AOT/sanitizer and live plus cumulative retention
+evidence. Consumer authentication, restoration and publication remain separately
+owned downstream proof obligations.
 
 ## 8. Bounded design evidence and dispositions
 

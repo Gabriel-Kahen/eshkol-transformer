@@ -58,6 +58,23 @@ class TopologyTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)):
                     check(ROOT, {path: text.replace(before, after, 1)})
 
+    def test_shared_call_subgate_cannot_be_removed_or_weakened(self):
+        mutations = [
+            ("scripts/test-m3.sh", '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3cg.sh"', ""),
+            ("scripts/test-m3.sh", '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3cg.sh"',
+             '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3cg.sh" || true'),
+            ("scripts/test-m3cg.sh", "python3 -m unittest -v tests.m3cg.test_contract", ":"),
+            ("tests/m3cg/measure_gate.py", '"test-m3cg-package.sh"', '"test-m3cg-native.sh"'),
+            ("tests/m3cg/measure_gate.py", "return result.returncode", "return 0"),
+            ("scripts/test-m3cg-native.sh", "detect_leaks=1", "detect_leaks=0"),
+        ]
+        for path, before, after in mutations:
+            with self.subTest(path=path, before=before):
+                text = (ROOT / path).read_text()
+                self.assertIn(before, text)
+                with self.assertRaises(AssertionError):
+                    check(ROOT, {path: text.replace(before, after)})
+
     def test_g3n_inventory_and_leak_checks_are_mandatory(self):
         engine = (ROOT / ENGINE).read_text()
         make = (ROOT / "Makefile").read_text()

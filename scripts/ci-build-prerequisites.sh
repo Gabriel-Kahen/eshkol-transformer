@@ -43,6 +43,8 @@ for suite in "$@"; do
       select_producers k1 a2 i1 i2 n2 n3k g3n
       ;;
     model-composition)
+      # M3-CG is a required source-only subgate; its witness builds test-local
+      # inputs and adds no canonical producer or competing aggregate.
       select_producers i2 m3
       ;;
     diagnostic-transport)

@@ -1,0 +1,4 @@
+(extern i64 m3cg-run :real et_m3cg_test_run_v1)
+(if (= (m3cg-run) 1)
+    (begin (display "M3CG-SOURCE-AOT-PASS") (newline))
+    (exit 1))
