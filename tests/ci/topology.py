@@ -10,6 +10,7 @@ SUITES = [
     ("native-optimizer", "test-ci-optimizer-after-build", 105),
     ("diagnostic-transport", "test-ci-m3t-after-build", 105),
     ("model-composition", "test-ci-m3-after-build", 105),
+    ("g3n-forward", "test-ci-g3n-after-build", 75),
     ("contracts-data", "test-ci-contracts-after-build", 75),
     ("checkpoint-io", "test-ci-checkpoint-after-build", 75),
     ("parameter-state", "test-ci-parameters-after-build", 75),
@@ -23,7 +24,7 @@ FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test-l2.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-c1.sh", "test-c2.sh",
-    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh",
+    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-g3n.sh",
 )]
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
 
@@ -165,7 +166,7 @@ def check(root, overrides=None):
         "LLVM_CONFIG_EXECUTABLE": "llvm-config-21", "A0_COMPILER_TIMEOUT_SECONDS": "'60'",
         **{k: "'1'" for k in ("P1_LSAN", "C1_LSAN", "I2_ASAN_DETECT_LEAKS",
            "K2_ASAN_DETECT_LEAKS", "D2_ASAN_DETECT_LEAKS", "N2_ASAN_DETECT_LEAKS",
-           "O2_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS", "M3T_ASAN_DETECT_LEAKS", "M3_ASAN_DETECT_LEAKS")}
+           "O2_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS", "M3T_ASAN_DETECT_LEAKS", "M3_ASAN_DETECT_LEAKS", "G3N_ASAN_DETECT_LEAKS")}
     }.items():
         assert field(suite, 6, name) == value
     ss = steps(suite)
@@ -225,15 +226,15 @@ def check(root, overrides=None):
         else:
             leaves += targets[target]
     assert Counter(leaves) == Counter(c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh")
-    assert len(leaves) == 24
+    assert len(leaves) == 25
     canonical = ["/usr/bin/bash scripts/" + s for s in (
         "generate-p1-roots.sh --check", "build.sh", "build-a2.sh",
         "build-p1-identity.sh", "build-p1-package.sh", "build-c1.sh",
-        "build-t1.sh", "build-t2.sh", "build-d2.sh", "build-c2.sh", "build-m3t.sh", "build-m3.sh")]
+        "build-t1.sh", "build-t2.sh", "build-d2.sh", "build-c2.sh", "build-m3t.sh", "build-m3.sh", "build-g3n.sh")]
     assert targets["build"] == canonical
     return len(SUITES)
 
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[2]
-    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 25-command coverage, six C2 groups, clean build, strict evidence gates")
+    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 26-command coverage, six C2 groups, clean build, strict evidence gates")

@@ -2258,3 +2258,40 @@ inventories and 61 source/facade correspondences were checked for a reused M3
 artifact; callers were freshly compiled. The evidence is explicit CachyOS/LLVM22
 compatibility evidence, not a fresh package build or supported-host acceptance.
 No full build, full CI, implementation PR or merge was run for this phase.
+
+## G3-N #93 — exact forward provider implementation under review
+
+Contract baseline: merged PR #92 `4353bd2f14ae4fb50c877c27fc73b8edef8e2f30`,
+issue #1 decision 5751933660. Adds only the exact ABI 1.0 G3-N provider/header,
+one-member archive, eleven operation/row pairs and focused verification described
+in [G3N_PRIMITIVES.md](G3N_PRIMITIVES.md). N2 GELU remains downstream-routed;
+G3-S sampler files and G3-T/M/public generation are outside this change.
+
+Independent Astra/high numerical, adversarial/lifetime and packaging work checked
+mathematical/literal references, compiled discriminating mutations, all-row
+negative/alias/fenv atomicity, actual carrier borrows with allocations disabled,
+source provenance, exact inventories and fresh actual Eshkol AOT. Adversarial
+review identified direct call/request descriptor alignment before dereference;
+implementation now rejects it with INVALID_ARGUMENT/INVALID_BUFFER and regression
+coverage. No accepted contract changes were required.
+
+The bounded CI addition preserves every predecessor command and appends one
+75-minute `g3n-forward` suite with leak detection enabled. Its audited producer
+set is K1/A2/I1/I2/N2/N3K/G3-N. Current branch starts from main's 18 suites/25
+commands and reaches 19/26; concurrent main additions must be incorporated by
+strict union. Supported exact-head evidence is recorded in issue #93 and the
+implementation PR; independent root approval remains pending. ROADMAP is at most
+review; no merge or G3 completion is claimed.
+
+Final local compatibility focus passed with `G3N_ASAN_DETECT_LEAKS=1`, actual
+pinned Eshkol source/build reused read-only, LLVM 22.1.6 and CachyOS. Counts:
+3,712 numerical/metadata, 36,245 adversarial, 26,493 carrier/allocation (26,494
+instrumented); all fifteen compiled mutants, both fresh private AOT binaries/runs,
+ASan/UBSan/LSan and exact packaging checks passed. The final alignment hardening
+removed only `__asan_stack_malloc_1` from the instrumented object; independent
+packaging review confirmed the revised 31-undefined/2-defined sanitizer inventory.
+Normal inventory remains one defined/nine undefined symbols. Earlier local
+failures were sandbox LSan ptrace, a now-corrected extra live-check stdout count,
+and the stale instrumented inventory; no numerical failure was hidden. All 99 CI
+topology/selection tests plus two Python-isolation tests passed. These local
+results do not substitute for supported exact-head CI.
