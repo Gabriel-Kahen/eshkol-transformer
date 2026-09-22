@@ -2502,3 +2502,37 @@ green. Full [G3-N integration provenance](G3N_PRIMITIVES.md#integration-provenan
 retains the commands, revisions and limits. Only G3-N becomes complete; G3-S/T and
 public generation remain unaccepted. No runtime, test or CI file changed, no
 new numerical campaign was launched, and issue closure remains root-owned.
+
+
+## 2026-09-22 — E3-CG shared guards and fixed14 pins accepted
+
+[Root decision 5778924718](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5778924718)
+accepts only the private common M3 guards and fixed14 pin mechanics. PR #105
+merged as `19f404cf21632944e1f2d5d4959e1240f9a79f5f`, with parents
+`ba0e37d06076d0a16c473ff742ab95723cb2cb89` and approved candidate
+`9ae35ecbae04031bb655925545d4176681742c3d`. Its exact tree
+`d5e8a801eeaab3ea666f37dfd8d83daaf473f379` matches the candidate and tested
+PR merge `c9e441aace9da4c617ae435923b108d4ce9fe775`.
+
+Independent implementation approval 5772575224 and documentation-delta approval
+preceded the merge. Supported run 35736728847 attempt 1 passed all 19 suites /
+27 commands, topology, evidence and final aggregation. The authenticated unique
+evidence report and actual GitHub commit tree were verified through the existing
+exact-tree selector. Main run 35745000940 attempt 1 passed by verified reuse
+of that completed PR run; its full suites were skipped, not executed again.
+Original run 35693360705 remains historical for the distinct original tree. [Full provenance and measurements](M3_SHARED_CALL.md#integration-provenance)
+retain identities and resource-measurement limits.
+
+Focused merged-head verification passed 7 shared and 2 isolation tests, all 100
+CI checker tests, unchanged topology and the complete optimized normal plus
+ASan/UBSan/LSan native gate with leak detection enabled. Both native stderr files
+were empty; all failure prefixes, fail-stop cases and repeated absent/present-
+gradient checks passed. This was explicitly CachyOS / LLVM 22.1.6 compatibility
+evidence using pinned Eshkol dependencies read-only. The identical tree did not
+justify repeating supported full CI or AOT/package builds.
+
+Acceptance changes no contract, runtime source, test or CI file. E3/P1/D2
+consumer integration, G3 runtime, public evaluation/generation, training and
+Wave 3 completion remain downstream. Issue #101 closeout is prepared for root;
+acceptance-document integration remains root-owned while PR #112 retains its
+exact runtime test candidate.
