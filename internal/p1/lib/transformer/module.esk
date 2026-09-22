@@ -3596,39 +3596,46 @@
         result))))
 
 (define (state-dict-release-owned! state)
-  (let* ((lifecycle (state-lifecycle state))
-         (provider (vector-ref lifecycle 3))
-         (ownership (vector-ref lifecycle 5))
-         (release-failed? #f)
-         (release-error #f))
-    (if (vector-ref lifecycle 6)
-        (fail 'invalid-state 'state-dict-release!
-              "state dictionary has an active tensor borrow" '())
-        #t)
-    (vector-set! lifecycle 1 'released)
-    (vector-set! lifecycle 4 '())
-    (if (> (vector-length ownership) 1)
-        (vector-set! ownership 1 '())
-        #t)
-    ;; Clear every state entry before invoking provider code. No later path may
-    ;; inspect or compare an opaque carrier after its release callback begins.
-    (let clear ((entries (vector-ref state 6)))
-      (if (null? entries)
-          #t
-          (begin
-            (vector-set! (car entries) 7 #f)
-            (clear (cdr entries)))))
+  ;; [phase, failed?, caught-value, exact-lifecycle]. The record exists before
+  ;; handler setup; phase becomes started only after complete admission.
+  (let ((release-outcome (vector 'empty #f #f #f)))
     (guard (caught
              (#t
-               (set! release-failed? #t)
-               (set! release-error caught)
+               (if (not (eq? (vector-ref release-outcome 0) 'started))
+                   (raise caught))
+               (vector-set! release-outcome 1 #t)
+               (vector-set! release-outcome 2 caught)
                #f))
-      (if (vector-ref lifecycle 2)
-          (release-owned-list! 'state-dict-release! provider ownership)
-          #t))
-    (vector-set! lifecycle 3 #f)
-    (if release-failed?
-        (raise release-error)
+      (let* ((lifecycle (state-lifecycle state))
+             (provider (vector-ref lifecycle 3))
+             (ownership (vector-ref lifecycle 5)))
+        (if (vector-ref lifecycle 6)
+            (fail 'invalid-state 'state-dict-release!
+                  "state dictionary has an active tensor borrow" '())
+            #t)
+        ;; From the phase write through carrier invalidation, every operation is
+        ;; assignment-only and remains inside the preinstalled handler.
+        (vector-set! release-outcome 3 lifecycle)
+        (vector-set! release-outcome 0 'started)
+        (vector-set! lifecycle 1 'released)
+        (vector-set! lifecycle 4 '())
+        (if (> (vector-length ownership) 1)
+            (vector-set! ownership 1 '())
+            #t)
+        ;; Clear every state entry before invoking provider code. No later path
+        ;; may inspect an opaque carrier after its release callback begins.
+        (let clear ((entries (vector-ref state 6)))
+          (if (null? entries)
+              #t
+              (begin
+                (vector-set! (car entries) 7 #f)
+                (clear (cdr entries)))))
+        (if (vector-ref lifecycle 2)
+            (release-owned-list! 'state-dict-release! provider ownership)
+            #t)))
+    (vector-set! (vector-ref release-outcome 3) 3 #f)
+    (if (vector-ref release-outcome 1)
+        (raise (vector-ref release-outcome 2))
         #t)))
 
 (define (decoded-owned-record? record)
