@@ -11,11 +11,15 @@ explicitly dispatches E3-PRIVATE. No prerequisite draft is consumed by this plan
 The baseline table below is historical. Shared guards are now accepted and
 merged as `19f404cf`; [full provenance](../M3_SHARED_CALL.md#integration-provenance)
 records supported and focused merged-head results. Independent source/integration
-reviews approve the metrics and D2 candidates; their combined PR #112 is running
-supported CI at `b052385`, tree `2256194d2daeb233ec1745d0039b383d4358e3d5`.
-Root has [assigned the upstream runtime implementation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/108#issuecomment-5778879904)
-to the P1 owner in an isolated exact-pin Eshkol worktree. That patch is in progress;
-no new compiler pin or downstream P1 acceptance follows from the assignment.
+reviews approved the metrics and D2 candidates. Their combined PR #112 passed
+supported [CI 35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879)
+at `b052385`, tree `2256194d2daeb233ec1745d0039b383d4358e3d5`, and merged
+as `33a54ef7` with that exact tree. Main CI 35798192984 verified and reused this
+evidence. Focused merged-head D2 checks passed; metrics closeout is underway.
+The P1 owner completed the upstream runtime candidate at `222cad3a`, based on
+the current pin `90cbd713`; independent integration review, upstream disposition,
+downstream pin adoption and P1/guard acceptance remain required. No new compiler
+pin or E3 runtime acceptance follows from this candidate.
 
 ## Dependency dispositions
 
@@ -26,8 +30,9 @@ no new compiler pin or downstream P1 acceptance follows from the assignment.
 | D2 identity/idle, [#106 / PR #110](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/110) | `f10acc953b5ab343ed87bdda19a48c3a783b1e40`; supported [run 35698763745](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35698763745), 19 suites / 28 commands | Open; root acceptance and merge. No frame authentication, staging, rollback or restore is supplied by this prerequisite. |
 | P1 modes, [#108](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/108#issuecomment-5772515313) | New blocked checkpoint [`b61a0c53e24e548fefc621340a253c3451effb6a`](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/b61a0c53e24e548fefc621340a253c3451effb6a/docs/E3_P1_MODES.md), parent `17648e2`: 749 ordinary checks passed at explicit O0 on CachyOS/LLVM22; no accepted runtime result or PR. | Corrected upstream promotion and constructor-failure prerequisites, allocation-disabled/short-region/optimized mode and reuse proofs, every affected inheritor regression, independent review and supported CI. |
 
-Candidate CI is evidence for each candidate only. Merged main still has the
-19-suite / 27-command topology. PR #109 and PR #110 each add one distinct
+The historical candidates below retain their original evidence scope. Main
+`33a54ef7` has the accepted 19-suite / 29-command topology. PR #109 and PR #110
+each added one distinct
 top-level command, so their strict union is 19 suites / 29 commands; shared CG
 adds no top-level command. Preserve both additions without dropping predecessor
 coverage. This is the prerequisite union, before any separately reviewed E3-PRIVATE
@@ -47,8 +52,9 @@ parameterless 17-node I2 tree for observable mixed modes; it does not prove E3
 frame admission or all 17 modes on the composed M3 evaluation path. Its ledger
 also reports static IR evidence of unchecked vector-constructor allocation
 results, without executing constructor exhaustion. Promotion repair alone does
-not close all setup-allocation failpoints. No upstream patch owner, new pin or
-runtime acceptance is assumed by this updated checkpoint.
+not close all setup-allocation failpoints. These historical P1 results are not final-source adoption evidence. The frozen
+upstream candidate and its owner are recorded above; no new pin or downstream
+runtime acceptance is assumed.
 
 ## Integration sequence after root dispatch
 
