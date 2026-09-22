@@ -4,6 +4,31 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — E3 private-first architecture accepted with conditions
+
+- **Disposition:** [root direction 5771430755](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771430755)
+  and [shared-owner clarification 5771464954](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771464954)
+  accept architecture only. The [consolidated proposal](E3_EVALUATION_PROPOSAL.md)
+  retains unfrozen exact inventories and no runtime/public/ABI acceptance.
+- **Selected minimum:** private orchestration using genuine existing I2 rank-zero
+  outputs and two i64 counters, bool correctness/accumulation/finalization, fixed
+  M3 profile and unshuffled canonical-byte D2 suffix. Four outputs and both counters
+  publish together only after cursor/all17 modes are restored inside shared exclusion.
+  A0's four-key trainer map and public names/arities remain unchanged.
+- **Ownership:** existing G3-T task owns the one shared38-adapter/fixed14-pin
+  extraction proposal/impact review; E3 owns its direct-pinned forward frame,
+  P1/D2 restoration and one consolidated exact-design package. E3-PRIVATE and
+  E3-PRIVATE-R explicitly follow accepted/merged seams, owned/coordinated by this
+  E3 task with root integration. No duplicated guard or unmerged G3 runtime input.
+- **Deferred:** public four-call facade, report owner/quota,108/102 counts, A0
+  scalar projection and correct.f32/weighted-accuracy rows/tests. They do not block
+  the private milestone; that milestone cannot complete roadmap E3.
+- **Evidence:** original canonical-pin bounded probes on fe24931 are local
+  CachyOS/LLVM22 evidence only. Main f06ea0f merge preserves L3S acceptance and all
+  G3 histories. Initial independent Astra/high reviews and new bounded source/delta
+  audits support architecture disposition, not runtime correctness. No production,
+  full numerical suite/toolchain build/full CI, freeze or merge by this task.
+
 ## 2026-09-22 — bounded L3S implementation accepted and complete
 
 - **Disposition:** accepted and complete within the carrier-neutral `[1,2]`
