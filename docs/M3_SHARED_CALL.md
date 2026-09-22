@@ -1,9 +1,12 @@
 # Shared M3 invocation and fixed14 pin implementation
 
-Status: implementation candidate for [issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101).
-Independent native and packaging source reviews approve the candidate. Supported
-exact-head full CI and root acceptance remain required. The [accepted contract](E3_SHARED_CALL_CONTRACT.md) defines behavior;
-this record describes its bounded source implementation and development evidence.
+Status: **accepted / complete for the bounded shared implementation** in
+[issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101).
+[Root acceptance 5778924718](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5778924718)
+and PR #105 merge `19f404cf21632944e1f2d5d4959e1240f9a79f5f` preserve the
+independently reviewed and supported-tested tree. The
+[accepted contract](E3_SHARED_CALL_CONTRACT.md) defines behavior; this record
+describes implementation, evidence and its consumer boundaries.
 
 `native/m3_call_adapters.esk` adds exactly 38 checked diagnostic entries. Each enters
 the unchanged `m3-call` guard once and invokes its original trusted M3T operation.
@@ -71,3 +74,54 @@ the build directory with monotonic elapsed time and Linux maximum child-process
 RSS; RSS is not aggregate memory. Local component gates were executed separately;
 the mandatory supported-CI invocation supplies the complete subgate measurement.
 The PR evidence records its exact head, supported-CI result and measurement.
+
+## Integration provenance
+
+[Independent implementation approval 5772575224](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5772575224)
+covered `e3d8566eaa33eec2c7fb2a4ef278b1c53b0d3acf`, tree
+`984bc258d25d4078d8ce7201a3b4fdc92d2e8ab3`; supported run 35693360705
+remains historical evidence for that original tree. The independently approved
+[documentation union](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5777816153)
+produced `9ae35ecbae04031bb655925545d4176681742c3d`. All 926 non-Markdown
+blobs and modes stayed identical; nine incoming documents matched main and only
+the E3 roadmap row was reconciled.
+
+[Supported run 35736728847, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35736728847)
+passed all 19 suites / 27 commands, topology, evidence and final aggregation.
+It tested merge `c9e441aace9da4c617ae435923b108d4ce9fe775`, with parents
+`ba0e37d06076d0a16c473ff742ab95723cb2cb89` and `9ae35ecbae04031bb655925545d4176681742c3d`.
+The candidate, tested merge and actual PR #105 merge `19f404cf` all have tree
+`d5e8a801eeaab3ea666f37dfd8d83daaf473f379`. Authenticated evidence job
+106802892449 contains the unique matching versioned report, and the repository's
+exact-tree verifier independently accepted the complete successful run. The
+[final supported handoff](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5778898098)
+retains those distinct commit identities.
+
+[Main run 35745000940, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35745000940)
+passed at `19f404cf`. Topology job 106804199849 explicitly verified reuse of
+completed PR run 35736728847; the full-suite wrapper was skipped and final job
+106804306781 passed with `scope=reused`. This is verified reuse of the above
+supported evidence, not a fresh execution of main's full suites.
+
+The model-composition job took 4,050 seconds (67m30s), within its unchanged
+105-minute limit. The shared subgate measured native 15.369844295 seconds,
+package 925.065518476 seconds and combined 940.435587652 seconds, both child
+exit codes zero. Maximum child-process RSS was 3,846,112 KiB, not aggregate
+memory; the subgate timer excludes preceding static checks and outer toolchain
+verification. These are one-run measurements, not an improvement or flat-total-
+training-memory claim.
+
+Focused verification at the actual merged head passed:
+
+- `python3 -m unittest -v tests.m3cg.test_contract tests.m3cg.test_closure tests.q0.test_python_isolation`: 7 shared and 2 isolation tests.
+- `python3 -m unittest discover -s tests/ci -p 'test_*.py'`: 100 tests.
+- `make test-ci-topology`: unchanged 19 suites / 27 commands.
+- `bash scripts/test-m3cg-native.sh`: optimized normal and ASan/UBSan/LSan with
+  leak detection enabled; both stderr files empty. All 14 failure prefixes,
+  25 fail-stop cases and absent/present-gradient 1,024/8,192-cycle checks passed.
+
+This local native retest explicitly used CachyOS / Clang-LLVM 22.1.6 compatibility
+mode (`ESHKOL_ALLOW_UNSUPPORTED_HOST=1`) and pinned Eshkol sources/build read-only;
+it is separate from supported Ubuntu 22.04 / Clang-LLVM 21.1.8 evidence. No full
+CI or package rebuild was repeated for the identical merged tree. Consumer
+implementation, public evaluation/generation and full training remain downstream.

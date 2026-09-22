@@ -1,6 +1,6 @@
 # E3-CG: exact shared M3 guard and fixed14 pin contract
 
-**Exact shared design accepted; source implementation under review, runtime acceptance open.** [Issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101)
+**Exact shared design and bounded source implementation accepted.** [Issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101)
 consolidates the shared prerequisite of [E3](E3_EVALUATION_PROPOSAL.md) and
 [G3-T](g3/G3_T_PRIVATE_CONTRACT.md). Source base is PR #100 merge
 `27c99f7c9f27a227f0e237f1571ac89d5cdfa225`. Binding architecture decisions
@@ -9,7 +9,10 @@ and [5771464954](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#is
 authorized the exact-design review. The contract merged in PR #102 as
 `2ac0b5bc5a385e79700f46bf899bab841f33d1cb`; subsequent
 [dispatch 5771713077](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101#issuecomment-5771713077)
-authorizes the bounded [shared source implementation](M3_SHARED_CALL.md).
+authorizes the bounded [shared source implementation](M3_SHARED_CALL.md), now
+accepted by [root decision 5778924718](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5778924718)
+and merged in PR #105 as `19f404cf21632944e1f2d5d4959e1240f9a79f5f`.
+Consumer runtime and public evaluator/generation acceptance remain separate.
 
 E3-CG owns the common definitions below. The original G3-T owner reviews affected
 G3 compatibility; E3 owns its frame, P1 modes, D2 cursor, metrics and publication.
@@ -23,8 +26,8 @@ includes no sampler review, runtime capability, public operation or numerical ch
 
 ## 1. Exact source ownership
 
-The three canonical source paths implement the accepted design in the current
-candidate; sections 8 and its original validation record describe the preceding
+The three canonical source paths implement the accepted design in merged PR #105;
+section 8 and its original validation record describe the preceding
 documentation-only phase:
 
 | Path | Definitions and inclusion |
