@@ -2502,3 +2502,19 @@ green. Full [G3-N integration provenance](G3N_PRIMITIVES.md#integration-provenan
 retains the commands, revisions and limits. Only G3-N becomes complete; G3-S/T and
 public generation remain unaccepted. No runtime, test or CI file changed, no
 new numerical campaign was launched, and issue closure remains root-owned.
+
+## 2026-09-22 — G3-T readiness planning after G3-N acceptance
+
+The [readiness checklist](g3/G3_T_READINESS.md), based on main `ba0e37d`,
+separates shared-owner proof from G3 consumer integration and enumerates future
+C2 transcripts, lifetime/error/package witnesses, recoverable failure cuts,
+fail-stop cases and live/cumulative retention measurements. Every runtime witness
+remains pending; no contract signature, slot, public count or execution gate changed.
+
+G3-N is complete. Shared contract PR #102 and exact E3 design PR #104 are merged;
+shared implementation PR #105 was owner-reported reviewed/CI-passed at its original
+candidate, then refreshed with unchanged runtime at `9ae35ec`; exact-tree CI was
+running and root acceptance/merge remained pending. G3-S's restricted-review hold remains untouched.
+G3-T implementation awaits accepted/merged prerequisites and explicit root
+dispatch. This docs-only work opens no larger-profile or persistence contract,
+launches no runtime/full-CI campaign and claims no public generation completion.

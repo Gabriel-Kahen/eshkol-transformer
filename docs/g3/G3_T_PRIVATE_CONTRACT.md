@@ -23,11 +23,16 @@ The subsequent [E3-CG exact shared-source contract](../E3_SHARED_CALL_CONTRACT.m
 consolidates the three pin helpers and 38 checked adapters for G3 and E3. Its
 source ownership and lifecycle refinements are accepted by
 [root decision 5771662657](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/102#issuecomment-5771662657);
-shared runtime is not implemented or accepted, and remaining E3 consumer design
-is unaccepted. The accepted G3 calls, slots, kinds, 29/95 inventory and public counts below do
+shared runtime is not yet accepted/merged at the readiness baseline. The exact
+E3 consumer design merged separately in PR #104. The accepted G3 calls, slots,
+kinds, 29/95 inventory and public counts below do
 not change. E3-CG owns that shared contract; this G3-T owner retains affected-contract
 review. Contract merge and explicit root dispatch precede shared implementation;
 the G3-T N/S implementation hold is unchanged.
+
+The [readiness and future witness checklist](G3_T_READINESS.md) records G3-N's
+completed prerequisite and the remaining shared/G3-S gates at main `ba0e37d`.
+It is planning only and changes none of the accepted contract below.
 
 ## Accepted decisions
 
