@@ -108,6 +108,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
                 "m3t",
                 "m3",
                 "g3n",
+                "g3c4",
             ],
         )
         self.assertEqual(len(planned), len(set(planned)))
@@ -120,7 +121,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
             "contracts-data": ["d1"],
             "diagnostic-transport": ["i2", "m3t"],
             "model-composition": ["i2", "m3"],
-            "g3n-forward": ["k1", "a2", "i1", "i2", "n2", "n3k", "g3n"],
+            "g3n-forward": ["k1", "a2", "i1", "i2", "n2", "n3k", "g3n", "g3c4"],
             "checkpoint-io": [],
             "parameter-state": [],
             "byte-tokenizer": ["d2"],

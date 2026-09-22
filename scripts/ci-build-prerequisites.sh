@@ -40,7 +40,7 @@ for suite in "$@"; do
       ;;
     g3n-forward)
       # Exact canonical read set: provider, carrier borrows and predecessor reports.
-      select_producers k1 a2 i1 i2 n2 n3k g3n
+      select_producers k1 a2 i1 i2 n2 n3k g3n g3c4
       ;;
     model-composition)
       # M3-CG is a required source-only subgate; its witness builds test-local
@@ -87,7 +87,7 @@ for suite in "$@"; do
       # Union of predecessor read-before-write artifacts. X1, P1, C1, T1,
       # and the smoke test itself perform intentional test-local fresh builds.
       # Add smoke-benchmark when those post-suite checks run in the same job.
-      select_producers k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2 d1 m3t m3 g3n
+      select_producers k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2 d1 m3t m3 g3n g3c4
       ;;
     *)
       printf 'error: unknown CI suite: %s\n' "${suite}" >&2
@@ -97,7 +97,7 @@ for suite in "$@"; do
   esac
 done
 
-producer_order=(smoke k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2 d1 c2 m3t m3 g3n)
+producer_order=(smoke k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2 d1 c2 m3t m3 g3n g3c4)
 
 producer_script() {
   case "$1" in
@@ -190,6 +190,11 @@ verify_producer() {
       verify_file "${build_dir}/g3n/g3n_primitives_provider.o"
       verify_file "${build_dir}/g3n/g3n_primitives_provider.d"
       verify_file "${build_dir}/g3n/libeshkol_transformer_g3n.a"
+      ;;
+    g3c4)
+      verify_file "${build_dir}/g3c4/g3c4_primitives_provider.o"
+      verify_file "${build_dir}/g3c4/g3c4_primitives_provider.d"
+      verify_file "${build_dir}/g3c4/libeshkol_transformer_g3c4.a"
       ;;
     m3)
       verify_file "${build_dir}/m3/m3_package.o"
