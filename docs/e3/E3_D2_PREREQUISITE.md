@@ -157,16 +157,72 @@ excludes all Python files. The corrected tracked-candidate isolation gate passes
 three tests. This failure is retained as CI history, not reported as a supported
 runtime run or retried without a source change.
 
-Independent Astra/high source/provenance and native/lifetime agents approved the
+Independent source/provenance and native/lifetime agents approved the
 adapter/native implementation. Independent package source review reconciled the
 actual complete manifests and rejected earlier partial-inventory checks. The
 native reviewer separately approved registration, C/C++/link/isolation gates and
-failure propagation. Two agents later hit model-capacity errors after those
-substantive reviews; the parent finished measurements/docs without changing
-models. The independent native/lifetime reviewer then inspected the final run, repeated
-binary/stdout comparisons and exact closure/hash checks, and approved the final
-local runtime evidence without blockers. Supported CI disposition remains in the
-issue/PR handoff; local review does not substitute for supported runtime acceptance. No merge or workstream completion is claimed.
+failure propagation. The independent native/lifetime reviewer then inspected the
+final candidate run, repeated binary/stdout comparisons and exact closure/hash
+checks, and approved the local runtime evidence without blockers. The supported
+candidate, union and merged-main dispositions are recorded separately below so
+that local compatibility evidence is not confused with supported acceptance.
+
+## Integration acceptance
+
+PR #110 candidate `f10acc953b5ab343ed87bdda19a48c3a783b1e40`, tree
+`cbf145b6af3f986d76053756d2b07cc0dafa22f8`, passed supported Ubuntu 22.04,
+LLVM/Clang 21.1.8 run
+[35698763745](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35698763745),
+attempt 1. All 19 suites and the then-current 28-command topology ran; suite
+evidence and final aggregation passed. The actual PR test merge was
+`fb9783a408fcb2e38b5cbc3b7dfb261129ee03dd` and had the candidate tree exactly.
+
+The combined prerequisite union retained every E3-D2 implementation, generator,
+closure, test, isolation and toolchain-pin blob byte-for-byte. PR #112 head
+`b052385e742626fcfc2557b3b5a9f176f6234b29`, tree
+`2256194d2daeb233ec1745d0039b383d4358e3d5`, passed supported run
+[35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879),
+attempt 1: all 19 suites, the expanded 29-command topology, suite evidence and
+final aggregation. The emitted evidence commit
+`4678160e249fb6477bd4b34be2717f8f3fe77682` has the same tree. Its shard-loader
+job reran this gate in full, including 16 source tests, 408 native snapshots,
+mandatory ASan/UBSan/LSan, 63 compiled identity checks, both exact closure checks
+and five closure mutations. The largest compiler child maximum RSS was
+3,043,812 KiB; the largest AOT execution child maximum RSS was 29,824 KiB.
+
+PR #112 merged to main as `33a54ef7256f43d9e1ce82152915f7bded51bc24`
+with that same tree. Main run
+[35798192984](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35798192984)
+validated and reused the exact-tree supported evidence; it did not rerun the full
+suites and is not reported as fresh compiler evidence. A separate focused test
+from a clean detached checkout of the exact merge reused the pinned compiler
+read-only and passed the complete E3-D2 driver. It reproduced 16 source tests,
+408 native snapshots, sanitizers, 63 compiled checks per required execution,
+both exact closures and five mutations. The two fresh AOT executables and output
+were identical. Focused merged-head measurements were:
+
+| Measured command | Elapsed seconds | Child maximum RSS (KiB) |
+|---|---:|---:|
+| Real compile-only closure | 75.978 | 3,069,932 |
+| Fresh AOT compile A | 75.930 | 3,069,656 |
+| Fresh AOT compile B | 74.205 | 3,069,216 |
+| AOT execution A | 0.098 | 29,528 |
+| AOT execution B | 0.087 | 28,060 |
+| Localized execution | 0.086 | 30,144 |
+| Native idle | 0.001 | 14,908 |
+| Native ASan/UBSan/LSan | 0.008 | 21,360 |
+
+On the exact merge, `scripts/check-ci-topology.sh` passed 19 suites/29 commands,
+the three focused Python-isolation tests passed, and an explicit candidate-to-
+merge comparison confirmed byte preservation of the complete E3-D2 component
+and closure inputs. Independent merged-head review found no component or closure
+blocker. These process measurements do not establish long-run retention.
+
+This closes only the bounded sections 1–3 prerequisite. Full M3/E3 composition,
+frame authentication and root-stable construction, staging, rollback, restore,
+owned-batch cleanup, shared exclusion and repeated-frame retention remain
+downstream E3 obligations. No public evaluator or new-runtime acceptance follows
+from this integration.
 
 Development Python is used only for fixture generation, source preparation,
 timing and evidence checks. The delivered identity adapter and compiled dataset path are Eshkol;
