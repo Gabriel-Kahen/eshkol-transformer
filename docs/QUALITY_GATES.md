@@ -20,9 +20,10 @@ identical-tree merge and focused merged-main checks establish the separate
 [model acceptance](M3_MODEL.md). Earlier 16/23 and 17/24 results retain their
 historical scope.
 L3S adds one masked-objective gate to native-numerics, preserving that full union:
-18 suites / 26 commands. Its contract is accepted; implementation acceptance still
-requires supported exact-head CI and independent review. The gate covers all six
-schemas, real L2 gradients, bool/f32/weighted masks, exact environment/byte atomicity,
+18 suites / 26 commands. Supported run 35531132634 and independent L3S-R approval
+cover the candidate merged in PR #91; the focused merged-main check also passed.
+Acceptance closeout awaits combined-main CI and documentation review. The gate
+covers all six schemas, real L2 gradients, bool/f32/weighted masks, exact environment/byte atomicity,
 observable compiled mutants and the documented two-term reversal equivalence,
 private I1/I2/AOT composition, exact manifests and ASan/UBSan/LSan.
 C2 composition invokes each unique leaf gate once instead of repeating regression

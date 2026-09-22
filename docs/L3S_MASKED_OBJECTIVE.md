@@ -1,9 +1,11 @@
 # L3S bounded masked objective
 
-Status: active implementation of the [accepted ABI 1.0 contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069).
-Supported exact-head CI, independent integration review, merge, and postmerge checks
-remain pending. This is carrier-neutral numerical evidence, not public model loss
-or training integration.
+Status: independently approved and merged within the
+[accepted ABI 1.0 contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069).
+The merged-main focused check passed. Acceptance closeout remains in review,
+pending the combined-main CI result and independent documentation review.
+This is carrier-neutral numerical evidence, not public model loss or training
+integration.
 
 ## Boundary and discovery
 
@@ -127,7 +129,8 @@ K1/L2/I1/I2/L3S prerequisites; full CI runs it once in the existing native-numer
 suite and reuses those prerequisite builds. The strict union with accepted M3 is
 18 suites and 26 top-level commands.
 
-Local CachyOS/LLVM 22 compatibility evidence includes 9,849 native assertions,
+Supported Ubuntu 22.04 / LLVM 21.1.8 and local CachyOS/LLVM 22 compatibility
+evidence include 9,849 native assertions,
 all six schemas, independent analytic and finite-difference real-L2 composition,
 frozen pinned-PyTorch parity, exact-rational binary32 witnesses, and 11 compiled
 mutants. Maximum analytic-gradient absolute error is `3.74637521e-08`; native f32
@@ -158,7 +161,52 @@ baseline, warning-clean C11/C++17, and deterministic fresh object/archive bytes.
 Native, numerical, carrier, and private bridge ASan/UBSan/LSan runs pass with
 `detect_leaks=1` outside the traced local sandbox. The initial sandbox LSan run
 failed because leak detection cannot run under ptrace; this was not a leak result.
-Supported Ubuntu 22.04 / LLVM 21.1.8 evidence is still required.
+Supported evidence comes from the exact-tree full CI below; the local host is
+compatibility evidence only.
+
+## Integration provenance
+
+[Independent L3S-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/91#issuecomment-5770338523)
+reviewed head `b320ec0aca7bd0f6d36553dadc6031d6a16bb546`, based on
+`a879e3ae5628756670d924012b91cadd9c0ad658`. The reviewer and three independent
+Astra/high lanes reproduced the focused gate with ASan/UBSan/LSan enabled and
+authenticated the pinned oracle. Additional development-only probes passed 24,000
+exact-bit/domain calls and 778,415 native assertions, including all 4,096 independent
+x87/MXCSR sticky-flag combinations. These are review evidence, not new operations
+or a broader capability claim. The approval is the published independent review
+comment; GitHub rejected a formal approval because the authenticated account owns
+the PR.
+
+[Supported run 35531132634, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35531132634)
+passed all 18 suites / 26 commands, canonical build/smoke/benchmark, evidence and
+final aggregation gates. Its actual tested merge
+`3412df0d61e591659f4f5eb545d0df8846d1c887` has the exact base and reviewed head
+above as parents. The tested and reviewed trees are both
+`535304a751daf80b922d84b1bc78f8219cf066ce`.
+
+[PR #91](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/91) merged as
+`fe2493168e72cd7bf81d810c9c172c40aacfee61`, tree
+`902d4645e13c133a811f1c1cf72ffb799976a58a`. The merge also preserves the intervening
+accepted G3 contract Markdown from PRs #92 and #95. Those documentation changes
+are the only differences from the reviewed/tested candidate; the complete runtime,
+test and build sources are unchanged. The merged tree is therefore not claimed
+to equal the earlier tested tree.
+
+The integration owner's [merged-main verification](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5770560669)
+passed on exact merge `fe249316`: fresh canonical K1/I1/I2/L2/L3S builders, then
+`scripts/test-l3s.sh` with `L3S_ASAN_DETECT_LEAKS=1`, plus topology and all 98 CI
+unit tests. The gate repeated the 9,849 native checks, four reference tests and
+eleven exact-rational probes, pinned regeneration, eleven compiled mutants and
+reversal equivalence, scoped I1/I2 views, two identical fresh private AOT binaries,
+package/baseline/isolation and ASan/UBSan/LSan. Commands used non-login
+`/usr/bin/bash`, the canonical Eshkol pin and the pinned oracle. This is explicitly
+CachyOS/Clang-LLVM 22.1.6 compatibility evidence. Torch's existing optional-NumPy
+warning did not affect the matching regeneration or reference checks.
+
+[Combined-main CI 35680925863](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35680925863)
+is still running at documentation preparation. Acceptance merge requires its
+success and independent review of this prose-only update; no success or final
+completion is claimed for that pending gate.
 
 There is no arbitrary shape, accelerator, mixed precision, ownership graph,
 installed mask/scalar facade, public Eshkol model-loss API, compiler autodiff,
