@@ -19,12 +19,15 @@ specifies configuration, nine A0 names plus six additions, EOS, ownership and
 transactions. G3-T installs **none** of those generation names. C2 admits P=1/2,
 G=0/1, and P+G<=2; this cannot prove repeated generation or save/reload.
 
-The subsequent [E3-CG exact shared-source proposal](../E3_SHARED_CALL_CONTRACT.md)
+The subsequent [E3-CG exact shared-source contract](../E3_SHARED_CALL_CONTRACT.md)
 consolidates the three pin helpers and 38 checked adapters for G3 and E3. Its
-source ownership and lifecycle refinements remain proposed until root acceptance;
-the accepted G3 calls, slots, kinds, 29/95 inventory and public counts below do
-not change. E3-CG owns that proposal; this G3-T owner retains affected-contract
-review. Neither sharing nor that review lifts the N/S implementation hold.
+source ownership and lifecycle refinements are accepted by
+[root decision 5771662657](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/102#issuecomment-5771662657);
+shared runtime is not implemented or accepted, and remaining E3 consumer design
+is unaccepted. The accepted G3 calls, slots, kinds, 29/95 inventory and public counts below do
+not change. E3-CG owns that shared contract; this G3-T owner retains affected-contract
+review. Contract merge and explicit root dispatch precede shared implementation;
+the G3-T N/S implementation hold is unchanged.
 
 ## Accepted decisions
 
@@ -120,7 +123,7 @@ norm1-beta/gamma, norm2-beta/gamma, tied-token/head, final-beta/gamma, position.
 Their shapes are four[4,4], [4,8], [8,4], four[4], [256,4], two[4], [2,4]:
 1,184 f32 values, exactly **4,736 bytes**. No role may choose a parameter index.
 
-The common source proposal preserves C-only type `et_g3t_model_pins_internal`.
+The accepted common source contract preserves C-only type `et_g3t_model_pins_internal`.
 Its [exact declaration and begin/check/end lifecycle](../E3_SHARED_CALL_CONTRACT.md#3-exact-private-pin-declaration-and-geometry)
 are consolidated there. It contains `self`,
 `parameters[14]`, `identities[14]`, `values[14]`, read-only `views[14]` and
@@ -397,13 +400,13 @@ globals match M3 exactly. All G3T/G3-N/G3-S/A2-cache symbols are LOCAL; reject
 unresolved private references. Later G3-G's fifteen names would yield eight
 facades/102 boxed exports/108 globals, requiring its own reviewed tuple.
 
-Under the common-source proposal, the root loads the M3 root, then
+Under the accepted common-source contract, the root loads the M3 root, then
 `native/m3_call_adapters.esk` once, then `native/g3t_transport_extension.esk`.
 The common source owns the existing 38 checked bindings; `m3-call-state` and
 `m3-call` stay canonical in `native/m3_model_extension.esk`. T1's new
 raw helper is trusted internal source only. Proposed transport TU
 `src/eshkol_transformer/g3t_transport.c` includes `m3_model.c` and replaces its
-compile entry once. The common proposal replaces the formerly proposed `g3t_f32_integration.c`
+compile entry once. The accepted common contract replaces the formerly proposed `g3t_f32_integration.c`
 with `src/eshkol_transformer/m3_call_f32_integration.c`, including the existing
 `m3t_f32_integration.c` once and adding only the fixed14 pin mechanics; it
 replaces that compile entry. Neither old proposed G3 pin path becomes a shim. Keep `m3_i64_integration.c` and `t1_i64_shell.c` once; no new

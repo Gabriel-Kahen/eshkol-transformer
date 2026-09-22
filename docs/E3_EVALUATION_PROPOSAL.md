@@ -1,7 +1,7 @@
 # E3 evaluation: proposed composition and reachability
 
-Status: **private-first architecture accepted with conditions; exact design remains
-proposed** for [issue #99](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/99).
+Status: **private-first architecture accepted with conditions; exact E3-CG shared
+design accepted; remaining E3 consumer design remains proposed and unaccepted** for [issue #99](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/99).
 The binding [root disposition](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771430755)
 selects the bounded private route, not an ABI/runtime/public freeze. Integration
 owns exact-contract acceptance, implementation dispatch, review and merge.
@@ -24,7 +24,7 @@ still does not establish a joint installed evaluator.
    execution/tests. Preserve merged L2/L3S behavior; existing weighted L3S reference
    semantics provide future context, not an extra required E3 row.
 3. **One shared guard owner.** [E3-CG](E3_SHARED_CALL_CONTRACT.md), issue #101, owns the exact shared
-   guard/fixed14 proposal in task `01a0c789-bd3f-7b21-b865-8b9365c7a282`.
+   guard/fixed14 contract in task `01a0c789-bd3f-7b21-b865-8b9365c7a282`.
    Original G3-T task `01a0bd6a-1e15-7662-a245-0eaa201426d3` retains affected
    G3-T review. This E3 task owns its consumption requirements,
    sequence-length-2 (T=2) no-grad frame and evaluation transaction. No duplicated
@@ -349,13 +349,16 @@ no claim that the public fixed model emits exactly these CE words.
 
 ## 6. Transaction, no-grad and lifetime prerequisites
 
-The [E3-CG exact contract](E3_SHARED_CALL_CONTRACT.md) proposes canonical
+The [E3-CG exact contract](E3_SHARED_CALL_CONTRACT.md), accepted by
+[root decision 5771662657](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/102#issuecomment-5771662657), specifies canonical
 `native/m3_call_adapters.esk`, `src/eshkol_transformer/m3_call_pins.h` and
 `src/eshkol_transformer/m3_call_f32_integration.c`, preserving the existing
 `et_g3t_model_pins_internal` type and three helper signatures. E3 authenticates
 its own frame/model before deriving embedded pins and retains model/outer tokens
 after pin-end until its restoration/publication tail. The common layer has no
-E3 registration or token API. Exact source design remains under review.
+E3 registration or token API. Shared exact design is accepted; its implementation
+awaits contract merge and explicit root dispatch. Remaining E3 consumer design
+and all runtime acceptance remain open.
 
 The canonical shared-guard owner must provide one common outer invocation guard
 and the address-stable fixed14
@@ -430,9 +433,8 @@ cache bytes, are the preservation contract.
 
 The original G3-T owner and its independent Astra/high reviewer supplied the split;
 root accepted the [extraction direction](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771464954).
-The following are the four proposed clarifications to the accepted G3-T document,
-recorded here for its owner's exact-wording review. That document is not rewritten
-by this E3 proposal; its 29 calls/95 bindings and 93-global/87-export/seven-facade
+The following four architecture clarifications are now covered by the accepted
+E3-CG exact contract and its reviewed G3-T wording update; its 29 calls/95 bindings and 93-global/87-export/seven-facade
 contract, slots/kinds, cache/RNG/decoder publication and N/S implementation hold stay
 unchanged. No sampler work is included.
 
@@ -461,8 +463,8 @@ unchanged. No sampler work is included.
 The shared layer has no `accept-train` flag or restoration callback. It preserves
 exact14 ties/identities, 4,736 bytes, self/view sentinels, count0-to1 admission,
 held-mask partial rollback and reverse drain. E3's own native/source inventory is
-not implicitly part of G3's 29/95 inventory. The common exact source/contract must
-be reviewed and merged before either consumer implements against it.
+not implicitly part of G3's 29/95 inventory. The accepted common exact source/contract must
+be merged before either consumer implements against it.
 
 ### 6.2 Fixed forward frame and private call responsibilities
 
@@ -731,7 +733,7 @@ These are ownership/milestone labels, **not eight independent dispatch requests*
 
 | Milestone | Owner and deliverable | Gate |
 |---|---|---|
-| Shared guard extraction | [E3-CG #101](E3_SHARED_CALL_CONTRACT.md) owns the canonical source/guard/fixed14 inventory; original G3-T owner reviews affected contract; E3 supplies consumer requirements | Exact contract reviewed/merged before either consumer implements against it |
+| Shared guard extraction | [E3-CG #101](E3_SHARED_CALL_CONTRACT.md) owns the canonical source/guard/fixed14 inventory; original G3-T owner reviews affected contract; E3 supplies consumer requirements | Exact shared design accepted by root; merge and explicit implementation dispatch pending; remaining E3 consumer design unaccepted |
 | E3-DESIGN | This E3 task consolidates bool metric descriptors, fixed frame/21 roles, P1 all-mode token, D2 identity/staging/restore, six-output commit and private package manifest proposal | Root approves exact inventories; architecture direction alone is insufficient |
 | Required seam implementations | Root chooses bounded implementation grouping after exact design; shared guard/frame, P1/D2 restoration/transport and three bool metric operations | Independent substantive review, supported CI and merge for each actual prerequisite; no invented/unmerged upstream API |
 | **E3-PRIVATE** | **This E3 task owns Eshkol private orchestration and real-source composition**, reusing preowned I2 outputs and a fixed frame | Required shared guard/frame, P1/D2 and numerical contracts/implementations accepted and merged; root authorizes implementation |
@@ -853,8 +855,9 @@ Detailed source reviews and re-review dispositions are in local
 `*-final-review.md` files. These independent agents used GPT-6 Astra/high as
 requested. No lane approved runtime behavior or an installed public evaluator.
 
-Private-first architecture alone is accepted; no runtime/ABI/format or new VERIFIED
-capability is accepted. Unsupported: arbitrary
+Private-first architecture and the exact E3-CG shared design are accepted; the
+remaining E3 consumer design is unaccepted. No runtime/public ABI/format or new
+VERIFIED capability is accepted. Unsupported: arbitrary
 profiles, public f32-mask ingress, BPE/shuffled datasets in this proposal, streaming
 or unbounded evaluation, ordinary f32 numeric boxing, GPU/mixed precision/f64 retry,
 compiler autodiff, public trainer trajectory, checkpoint/resume, generation,

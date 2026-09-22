@@ -1,6 +1,6 @@
-# E3-CG: exact shared M3 guard and fixed14 pin proposal
+# E3-CG: exact shared M3 guard and fixed14 pin contract
 
-**Proposed, not frozen or implemented.** [Issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101)
+**Exact shared design accepted by root; runtime not implemented or accepted.** [Issue #101](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/101)
 consolidates the shared prerequisite of [E3](E3_EVALUATION_PROPOSAL.md) and
 [G3-T](g3/G3_T_PRIVATE_CONTRACT.md). Source base is PR #100 merge
 `27c99f7c9f27a227f0e237f1571ac89d5cdfa225`. Binding architecture decisions
@@ -10,13 +10,17 @@ authorize this exact-design review, not implementation or a public ABI.
 
 E3-CG owns the common definitions below. The original G3-T owner reviews affected
 G3 compatibility; E3 owns its frame, P1 modes, D2 cursor, metrics and publication.
-Root owns acceptance, merge and later implementation dispatch. G3-T retains its
+[Root decision 5771662657](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/102#issuecomment-5771662657)
+accepts the behavioral contract at `5c554421ec37ac3a2cc0e7bc960ad126664fa6f5`,
+tree `18f725bc19b8eab15342608de83f5edbb79b659e`, following independent
+exact-head review. Contract merge and explicit root dispatch precede implementation;
+remaining E3 consumer design is not accepted by this decision. G3-T retains its
 hold for both independently approved N/S implementation merges. This proposal
 includes no sampler review, runtime capability, public operation or numerical change.
 
 ## 1. Exact source ownership
 
-The three new canonical files are proposals; none is created by this docs PR:
+The three canonical source paths are accepted design; none is created by this docs PR:
 
 | Path | Definitions and inclusion |
 |---|---|
@@ -119,7 +123,7 @@ calling the checked adapters from those schedules would be erroneous reentry.
 
 ## 3. Exact private pin declaration and geometry
 
-The header content proposed for `m3_call_pins.h` is:
+The accepted private header declaration for `m3_call_pins.h` is:
 
 ```c
 #ifndef ET_M3_CALL_PINS_H
@@ -448,8 +452,8 @@ Its own error contract may return a fixed failure sentinel normally through
 `m3-call` after cleanup and raise a prepared final-operation error outside the
 guard, because pinned Eshkol raise allocates. This requires no common change;
 normalization applies before any rethrow through the canonical handler. Exact
-E3 frame/restore/error implementation remains separately reviewed. Root
-exact-contract acceptance remains open. Compilation cannot prove acquisition, release, authentication,
+E3 frame/restore/error design remains separately unaccepted. Root acceptance
+covers only this shared design; runtime implementation and acceptance remain open. Compilation cannot prove acquisition, release, authentication,
 source-composed execution, gradients, determinism, memory bounds or rollback.
 No production implementation, public API, installed artifact, full numerical CI,
 toolchain build, merge or runtime capability is delivered by this proposal.
