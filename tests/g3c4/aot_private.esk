@@ -1,0 +1,6 @@
+;;; Private fixed-buffer diagnostic bridge; no public model transport.
+(extern i64 g3c4-test-provider :real et_g3c4_test_provider_transport_v1)
+(if (= (g3c4-test-provider) 28)
+    (begin (display "G3-C4-N PRIVATE AOT PASS: 28 forward rows and adjacent negatives")
+           (newline) (exit 0))
+    (begin (display "G3-C4-N PRIVATE AOT FAIL") (newline) (exit 1)))

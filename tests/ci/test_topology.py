@@ -78,7 +78,7 @@ class TopologyTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     check(ROOT, {path: text.replace(before, after)})
 
-    def test_g3n_inventory_and_leak_checks_are_mandatory(self):
+    def test_g3n_and_g3c4_inventory_and_leak_checks_are_mandatory(self):
         engine = (ROOT / ENGINE).read_text()
         make = (ROOT / "Makefile").read_text()
         entry = ("          - suite: g3n-forward\n"
@@ -90,6 +90,12 @@ class TopologyTests(unittest.TestCase):
             (ENGINE, engine, "G3N_ASAN_DETECT_LEAKS: '1'", "G3N_ASAN_DETECT_LEAKS: '0'"),
             ("Makefile", make, "/usr/bin/bash scripts/test-g3n.sh", ":"),
             ("Makefile", make, "/usr/bin/bash scripts/build-g3n.sh", ":"),
+            (ENGINE, engine, "G3C4_ASAN_DETECT_LEAKS: '1'", "G3C4_ASAN_DETECT_LEAKS: '0'"),
+            ("Makefile", make, "/usr/bin/bash scripts/test-g3c4.sh", ":"),
+            ("Makefile", make, "/usr/bin/bash scripts/build-g3c4.sh", ":"),
+            ("Makefile", make,
+             "/usr/bin/bash scripts/test-g3n.sh\n\t/usr/bin/bash scripts/test-g3c4.sh",
+             "/usr/bin/bash scripts/test-g3c4.sh\n\t/usr/bin/bash scripts/test-g3n.sh"),
         ]
         for path, text, before, after in mutations:
             with self.subTest(path=path, mutation=before, replacement=after):
