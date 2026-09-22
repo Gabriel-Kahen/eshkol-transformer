@@ -176,8 +176,9 @@ G3-N adds the separate forward-only ABI 1.0 provider
 `build/g3n/libeshkol_transformer_g3n.a`, discovered solely through
 `et_g3n_kernel_provider_v1`. Its eleven exact T1 operation/row pairs, borrowed
 lifetimes, numerical/fenv rules and focused `make test-g3n` gate are documented in
-[docs/G3N_PRIMITIVES.md](docs/G3N_PRIMITIVES.md). It is under review; it supplies no
-public generation API or G3 completion evidence.
+[docs/G3N_PRIMITIVES.md](docs/G3N_PRIMITIVES.md). The bounded provider is accepted
+after independent review, supported full CI and a focused merged-head retest; it
+supplies no public generation API or G3 completion evidence.
 
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at

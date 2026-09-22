@@ -2443,3 +2443,38 @@ preserves its build, focused/core/full/acceptance commands, leak setting and
 prerequisite inventory as a strict union: 19 suites and 27 commands. G3-N runtime
 source and focused tests are unchanged. The superseded full run and final union
 run dispositions are retained in issue #93/PR #97; acceptance requires the latter.
+
+
+## 2026-09-22 — G3-N bounded forward provider accepted
+
+[Independent G3-N-R approval 5771670331](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/97#issuecomment-5771670331)
+and [supported run 35681252651 attempt 2](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35681252651/attempts/2)
+accepted candidate `15014b81bbfb32dece08b204d8bf52173a6a5c32`, tree
+`90e83c02d13eb7851b0d0a5a6a5eabb64bf37983`: all 19 suites / 27 commands,
+topology, evidence and final aggregation passed. The accepted ABI remains six
+capabilities, seven operations and eleven exact CPU-f32 forward pairs.
+
+Attempt 1's unchanged P1 timeout 124 is retained; its exact subcommand/root cause
+remain unknown. Root disposition 5770842334 authorized one failed-job-only retry;
+P1 106618260262 passed in 44m46s, reusing the 18 successful component results and
+rerunning dependent aggregation without code, timeout or leak-gate changes.
+Independent review authenticated original/reused jobs and actual checkout/tree.
+Older cancelled run 35679799935 is partial historical evidence only.
+
+PR #97 merged as `ca3880f6e5da4850bafbf349a846de7829203e51`, tree
+`68e6063612eaba06843d7f37d0d4184dffd0e085`; only seven accepted L3S/E3 Markdown
+files differ from the supported candidate. The distinct trees are not conflated.
+[Root merged-head retest 5771719405](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/93#issuecomment-5771719405)
+passed fresh canonical prerequisites, the complete focused gate with 3,712 /
+36,245 / 26,493 (26,494 instrumented) checks, all 15 mutants, two fresh AOT builds/
+runs, ASan/UBSan/LSan enabled, topology 19/27 and all 99 CI checker tests. This was
+CachyOS/LLVM 22 compatibility evidence at the fixed clean merge, separate from the
+supported candidate run.
+
+Acceptance documentation is based on subsequent main `2ac0b5bc`, whose additional
+shared-contract changes are four Markdown files only. Main run 35691068144 was
+cancelled; latest main run 35691356855 was in progress at preparation, not claimed
+green. Full [G3-N integration provenance](G3N_PRIMITIVES.md#integration-provenance)
+retains the commands, revisions and limits. Only G3-N becomes complete; G3-S/T and
+public generation remain unaccepted. No runtime, test or CI file changed, no
+new numerical campaign was launched, and issue closure remains root-owned.
