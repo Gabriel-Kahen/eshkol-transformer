@@ -1,6 +1,7 @@
 """Check the accepted shared source boundary, independently of its native tests."""
 from pathlib import Path
 import contextlib
+import copy
 import io
 import json
 import re
@@ -30,6 +31,12 @@ def forms(text):
     return [one(token) for token in tokens]
 
 
+def _render(form):
+    if isinstance(form, list):
+        return "(" + " ".join(_render(item) for item in form) + ")"
+    return form
+
+
 def expected_adapters():
     source = (ROOT / "native/m3t_transport_extension.esk").read_text()
     definitions = {name: args.split() for name, args in re.findall(
@@ -45,7 +52,62 @@ def expected_adapters():
     return expected
 
 
+def validate_m3_call_guard(source):
+    """Require reentry check, then cleanup installation, then busy publication."""
+    macro = next(row for row in forms(source)
+                 if row[:2] == ["define-syntax", "m3-call"])
+    boundary = macro[2][2][1]
+    if boundary[:2] != ["m3t-boundary", "operation"] or len(boundary) != 4:
+        raise ValueError("m3-call must have one boundary, reentry check and guard")
+    reentry, cleanup = boundary[2:]
+    if reentry[:2] != ["if", ["vector-ref", "m3-call-state", "0"]]:
+        raise ValueError("m3-call reentry check must precede cleanup")
+    expected_rejection = ["m3t-fail", "'invalid-state", "operation", '"model',
+                          "operation", "is", "already", 'active"']
+    if len(reentry) != 3 or reentry[2] != expected_rejection:
+        raise ValueError("m3-call must reject reentry with its fixed operation error")
+    if cleanup[0] != "guard" or len(cleanup) != 4:
+        raise ValueError("m3-call must install one cleanup guard around publication and body")
+    handler, publish, body = cleanup[1:]
+    clear = ["vector-set!", "m3-call-state", "0", "#f"]
+    if publish != ["vector-set!", "m3-call-state", "0", "#t"]:
+        raise ValueError("m3-call must publish busy only inside the installed cleanup guard")
+    if handler != ["caught", ["#t", ["begin", clear,
+                                      ["m3t-rethrow-raw", "caught", "operation"]]]]:
+        raise ValueError("m3-call exceptional cleanup must clear then rethrow")
+    expected_body = ["let", [["answer", ["begin", "body", "..."]]], clear, "answer"]
+    if body != expected_body:
+        raise ValueError("m3-call normal cleanup must clear before returning")
+    return boundary
+
+
 class SharedContract(unittest.TestCase):
+    def test_m3_call_installs_cleanup_before_busy_publish(self):
+        source = (ROOT / "native/m3_model_extension.esk").read_text()
+        boundary = validate_m3_call_guard(source)
+        for mutation in ("publish-before-guard", "missing-exception-clear",
+                         "missing-normal-clear", "reentry-after-guard",
+                         "dropped-reentry-rejection", "body-binding-bypass"):
+            changed = copy.deepcopy(boundary)
+            guard = changed[3]
+            if mutation == "publish-before-guard":
+                changed[3:] = [guard[2], [guard[0], guard[1], guard[3]]]
+            elif mutation == "missing-exception-clear":
+                guard[1][1][1].pop(1)
+            elif mutation == "missing-normal-clear":
+                guard[3].pop(-2)
+            elif mutation == "reentry-after-guard":
+                changed[2], changed[3] = changed[3], changed[2]
+            elif mutation == "dropped-reentry-rejection":
+                changed[2][2] = "#f"
+            else:
+                guard[3][1][0][1] = ["begin", "#t"]
+            mutated = copy.deepcopy(forms(source))
+            macro = next(row for row in mutated if row[:2] == ["define-syntax", "m3-call"])
+            macro[2][2][1] = changed
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                validate_m3_call_guard(" ".join(_render(row) for row in mutated))
+
     def test_measurement_executes_both_gates_and_preserves_failure(self):
         expected = [["/usr/bin/bash", str(ROOT / "scripts" / name)] for name in (
             "test-m3cg-native.sh", "test-m3cg-package.sh")]
