@@ -15,7 +15,7 @@ explicitly dispatches E3-PRIVATE. No prerequisite draft is consumed by this plan
 | Shared call/pins, [#101 / PR #105](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105) | Refreshed head `9ae35ecbae04031bb655925545d4176681742c3d`; [run 35736728847](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35736728847) in progress, topology and C2-format passed. Earlier head `e3d8566eaa33eec2c7fb2a4ef278b1c53b0d3acf` passed [run 35693360705](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35693360705), 19 suites / 27 commands. | Open and `MERGEABLE`; `UNSTABLE` while checks remain active. The previous `DIRTY` snapshot is superseded. Refreshed-head evidence, independent root acceptance and merge remain required; earlier candidate success is not a new-tree pass. |
 | BOOL metrics, [#107 / PR #109](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/109) | `80d74f8564b39a92e025f8693cdc0cf6d1a224af`; supported [run 35697784630](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35697784630), 19 suites / 28 commands | Open; root disposition, coordinated merge and merged-head validation. |
 | D2 identity/idle, [#106 / PR #110](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/110) | `f10acc953b5ab343ed87bdda19a48c3a783b1e40`; supported [run 35698763745](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35698763745), 19 suites / 27 commands | Open; root acceptance and merge. No frame authentication, staging, rollback or restore is supplied by this prerequisite. |
-| P1 modes, [#108](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/108#issuecomment-5772515313) | Blocked checkpoint `17648e2cb79f9d8737b8c6ee45e42f4a157295b7`; no accepted runtime result or PR | Corrected upstream promotion prerequisite, final compiled mode/failure/reuse proofs, every affected inheritor regression, independent review and supported CI. |
+| P1 modes, [#108](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/108#issuecomment-5772515313) | New blocked checkpoint [`b61a0c53e24e548fefc621340a253c3451effb6a`](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/b61a0c53e24e548fefc621340a253c3451effb6a/docs/E3_P1_MODES.md), parent `17648e2`: 749 ordinary checks passed at explicit O0 on CachyOS/LLVM22; no accepted runtime result or PR. | Corrected upstream promotion and constructor-failure prerequisites, allocation-disabled/short-region/optimized mode and reuse proofs, every affected inheritor regression, independent review and supported CI. |
 
 Candidate CI is evidence for each candidate only. Merged main still has the
 19-suite / 27-command topology; PR #109's additional command must survive the
@@ -29,6 +29,14 @@ lifetime. The reproduction is deterministic bounded exhaustion, not measured
 natural host OOM. Root selected an upstream contract-preserving prerequisite;
 there is no authorized root-only relaxation or untested repin. D2 dependency
 error promotion also remains relevant to the eventual real transaction proof.
+
+P1's newer ordinary result includes genuine M3 construction plus a separate
+parameterless 17-node I2 tree for observable mixed modes; it does not prove E3
+frame admission or all 17 modes on the composed M3 evaluation path. Its ledger
+also reports static IR evidence of unchecked vector-constructor allocation
+results, without executing constructor exhaustion. Promotion repair alone does
+not close all setup-allocation failpoints. No upstream patch owner, new pin or
+runtime acceptance is assumed by this updated checkpoint.
 
 ## Integration sequence after root dispatch
 
