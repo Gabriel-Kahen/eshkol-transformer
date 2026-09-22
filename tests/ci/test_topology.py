@@ -1,4 +1,7 @@
 from pathlib import Path
+import re
+import subprocess
+import tempfile
 import unittest
 from tests.ci.topology import check
 
@@ -82,6 +85,7 @@ class TopologyTests(unittest.TestCase):
         for command in (
             "/usr/bin/bash scripts/test-o2.sh",
             "/usr/bin/bash scripts/test-l3s.sh",
+            "/usr/bin/bash scripts/test-e3-d2.sh",
             "/usr/bin/bash scripts/test-c2.sh --group c2-operational",
             "/usr/bin/bash scripts/test-t2-boundary.sh",
             "/usr/bin/bash scripts/build-c2.sh",
@@ -91,6 +95,26 @@ class TopologyTests(unittest.TestCase):
                 self.assertIn(command, text)
                 with self.assertRaises(AssertionError):
                     check(ROOT, {"Makefile": text.replace(command, ":")})
+
+    def test_e3_d2_failure_stops_every_registered_tier(self):
+        make = (ROOT / "Makefile").read_text()
+        for target in ("test-after-build", "test-acceptance-predecessors-after-build",
+                       "test-ci-dataset-after-build"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Makefile").write_text(make)
+                (root / "scripts").mkdir()
+                for script in set(re.findall(r"scripts/([a-zA-Z0-9_.-]+\.sh)", make)):
+                    (root / "scripts" / script).write_text(
+                        "#!/usr/bin/bash\necho " + script + " >> called\n" +
+                        ("exit 73\n" if script == "test-e3-d2.sh" else "exit 0\n"))
+                result = subprocess.run(["make", target], cwd=root, capture_output=True,
+                                        text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Error 73", result.stderr)
+                calls = (root / "called").read_text().splitlines()
+                self.assertEqual(calls[-2:], ["test-d2.sh", "test-e3-d2.sh"])
+                self.assertEqual(calls.count("test-e3-d2.sh"), 1)
 
 
 if __name__ == "__main__":

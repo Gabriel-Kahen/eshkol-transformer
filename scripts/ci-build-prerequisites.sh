@@ -70,6 +70,7 @@ for suite in "$@"; do
       ;;
     shard-loader)
       # D2 reads its canonical private/aggregate outputs plus canonical I1/K1.
+      # E3-D2 compiles its private T1/D2 fixture locally; it adds no reads.
       select_producers k1 i1 d2
       ;;
     c2-public|acceptance-c2)

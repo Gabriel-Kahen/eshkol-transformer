@@ -2502,3 +2502,38 @@ green. Full [G3-N integration provenance](G3N_PRIMITIVES.md#integration-provenan
 retains the commands, revisions and limits. Only G3-N becomes complete; G3-S/T and
 public generation remain unaccepted. No runtime, test or CI file changed, no
 new numerical campaign was launched, and issue closure remains root-owned.
+
+
+## 2026-09-22 — E3-D2 independent prerequisite submitted for review (#106)
+
+The bounded [E3-D2 prerequisite](e3/E3_D2_PREREQUISITE.md) starts from merged
+contract `ba0e37d06076d0a16c473ff742ab95723cb2cb89`, tree
+`221e00c9c258841995195a051b9f44df515679b9`. It adds only the fixed one-definition
+source generator and provenance manifest, canonical T1 raw/empty identity adapter,
+and same-TU native idle query. Original D2/T1/T2 sources and standalone D2/T2 build
+tuples remain unchanged. No public API or production E3 aggregate is introduced.
+
+The test-only T1/D2 composition has exactly 16 Eshkol dependencies and seven
+native objects, with actual compiler depfiles, native predecessor hashes, exact
+symbol delta, duplicate-link rejection and localized prerequisite symbols.
+Native tests exercise real current batches, leases, allocation rollback and
+exhaustion, requiring no resource mutation at idle preflight. Source generation
+rejects drift, changed forms, unexpected include/root inputs, symlinks and escape.
+
+Root approved one mandatory focused command after D2 in the existing shard-loader
+suite, full local tier and acceptance-predecessor tier. There are 19 suites and
+28 commands on this branch; the existing shard-loader k1/i1/d2 producers and all
+workflow budgets/environments are unchanged. Exact-inventory omission tests and
+an executable exit-73 probe require failure propagation in all three tiers.
+
+The independent native/lifetime and source/provenance lanes reviewed the adapter,
+native implementation, manifest closure and registration without source blockers.
+Local runtime/measurement and any remaining independent disposition are recorded
+in the prerequisite evidence document. Local LLVM22/CachyOS evidence is explicitly
+unsupported; supported Ubuntu22/LLVM21 CI, root acceptance and merge are separate
+requirements, not inferred from local tests. No roadmap item becomes complete.
+
+Frame record authentication, true root-stable dataset ownership, cursor/mode
+restoration, same-region owned-batch cleanup, normal-lease staging and repeated
+1,024/8,192-frame resource proof remain with the later E3 composition owner.
+No frame authority or restoration stub is supplied by this change.

@@ -1,0 +1,36 @@
+{
+  "checkpoint_io": [
+    "native/checkpoint_io.c",
+    "native/checkpoint_io.h"
+  ],
+  "data_io": [
+    "native/data_io.c"
+  ],
+  "e3_d2_native": [
+    "native/e3_d2_native.c",
+    "native/d2_native.c",
+    "native/d2_native.h",
+    "include/eshkol_transformer/kernel_abi.h",
+    "include/eshkol_transformer/i64_tensor.h",
+    "native/e3_d2_native.h"
+  ],
+  "i64_tensor": [
+    "native/i64_tensor.c",
+    "include/eshkol_transformer/i64_tensor.h",
+    "include/eshkol_transformer/kernel_abi.h"
+  ],
+  "kernel_abi": [
+    "native/kernel_abi.c",
+    "include/eshkol_transformer/kernel_abi.h"
+  ],
+  "p1_identity": [
+    "native/p1_identity.c",
+    "native/p1_identity_internal.h"
+  ],
+  "t1_i64_shell": [
+    "native/t1_i64_shell.c",
+    "native/t1_i64_shell.h",
+    "include/eshkol_transformer/i64_tensor.h",
+    "include/eshkol_transformer/kernel_abi.h"
+  ]
+}
