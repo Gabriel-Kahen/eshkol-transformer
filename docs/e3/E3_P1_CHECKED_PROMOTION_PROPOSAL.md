@@ -264,37 +264,193 @@ upstream runtime conditions are not extra P1 return codes. This proposal alone
 does not prove allocation failure of every ordinary Eshkol object constructor;
 the complete P1 allocation-failpoint matrix remains required.
 
-## Legacy ABI and rollout boundary
+## Complete native caller inventory at the pin
 
-The old `eshkol_region_write_barrier_into` and range/region-escape symbols cannot
-be reinterpreted as the new checked ABI. New generated code references the new
-versioned symbol; linking it against the old runtime fails rather than silently
-falling back. Require an accepted upstream revision, updated toolchain provenance,
-and fresh compiler/runtime/package/AOT artifacts; mixing previously compiled
-callers into candidate evidence is forbidden.
+The inventory below distinguishes actual calls from comments referring to the
+native design. Each row must have an explicit disposition in the upstream patch;
+no forwarding-map writer remains on an old implementation.
 
-For the minimal prerequisite, retain legacy ABI symbols and document their existing
-unaccepted failure behavior. Do not route the new checked caller through them.
-An upstream decision to deprecate or convert old symbols needs its own compatible
-caller audit; this proposal is not authority to change their failure policy.
-In particular, `eshkol_region_write_barrier_range` is currently called **after**
-`vector-copy!` has copied into its destination. Adding a per-slot status or raising
-halfway through cannot establish atomicity: earlier writes have already happened.
-Whole-range prepublication staging is a separate upstream contract. Likewise,
-region-close/result escape, nursery recycle, and nonlocal-exit promotion are not
-proved transactional by this single-store interface.
+| File and function/callsite | Pin behavior | Required disposition |
+|---|---|---|
+| `runtime_regions.cpp`: `region_evacuate_value`, `evac_value`, `evac_object_ptr`, `evac_object`, `evac_raw` | One map shared by deep graph-copy callers, currently modified before completion. | Refactor this implementation into the single checked engine; remove all failure-as-source-pointer branches in this engine. |
+| `runtime_regions.cpp`: `eshkol_region_write_barrier_into` | Scalar void adapter around deep evacuation. | Retain its ABI as a checked-engine adapter; stage privately, publish only after success, otherwise transfer the fixed emergency condition after cleanup. |
+| `runtime_regions.cpp`: `region_escape_tagged_value_impl`, `region_escape_tagged_value`, `region_escape_tagged_value_into` | Return/overwrite escaped result, currently without a failure channel. | Same engine and cleanup-before-emergency rule; no result returned or out-slot overwritten on failure. These symbols retain their signatures. |
+| `runtime_regions.cpp`: `eshkol_iter_nursery_recycle` | Promotes `vals` one at a time, then poisons/resets the nursery and clears the map. | Stage all kept values in one engine transaction before any result-slot write, poison, reset, or map invalidation. Failure cannot recycle the source. |
+| `runtime_regions.cpp`: `eshkol_region_unwind_to`, reached by `eshkol_region_handle_close` | Retires handles, promotes values individually at each level, restores allocation slot, pops region. | At each level, stage the entire kept-value set before its handle retirement, slot writes, arena restoration and destruction. Failure leaves that level live until ordinary emergency exception transfer determines its cleanup. |
+| `runtime_exceptions_hosted.cpp:815`, `runtime_continuations.cpp:225` | Raise and continuation transfer call `eshkol_region_unwind_to`. | Audit the updated unwind call and root-owned emergency value; preserve existing dynamic-wind/promise ordering. No separate evacuator or exception-graph shortcut. |
+| `codegen_context.cpp`: `emitRegionWriteBarrier` | Calls the void barrier and loads its result. | New versioned checked ABI and status-dominated load/store sequence. |
+| `collection_codegen.cpp`: `vectorSet` at 2203; `vectorFill` at 2808 | Scalar tagged mutation; fill promotes its single fill value before its write loop. | Use the central checked helper; prove the first actual write follows successful promotion. Preserve the distinct numeric tensor branches. |
+| `hash_codegen.cpp`: `HashCodegen::hashSet` at 416/418 | Promotes key and value before `hash_table_set`. | Both promotions finish before table mutation. If the second fails, the first committed promotion may remain retained; table state remains unchanged. Hash-table allocation behavior is a separate operation contract. |
+| `llvm_codegen.cpp`: global `set!` store at 13678; cons mutation at 39230 | Central helper protects the store. | Updated helper; no bypass to the old void call and no write before success. |
+| `runtime_parameters_hosted.cpp`: `eshkol_make_parameter`, `eshkol_parameter_push`, `eshkol_parameter_set`, `eshkol_parameter_set_converter` | Four direct scalar calls; push increments `top` before promotion, and constructor allocates native stack before promotion. | Stage through the checked engine before publishing slot/top/converter. On constructor promotion failure, free its unpublished malloc stack and retire the unpublished control before emergency transfer. Retain separate constructor/realloc failure accounting. |
+| `runtime_vector_mutation.cpp`: `eshkol_vector_copy_mutating`, calls at 97/113/145/155 | Vector↔vector and tagged dual-tensor branches copy first and barrier afterward. | Migrate all four callsites to the whole-range staging rule below before removing the old postwrite range entry point. |
+| `collection_codegen.cpp`: `CollectionCodegen::vectorCopy` | Calls `eshkol_vector_copy_mutating`; existing statuses 0–3 describe shape/type admission. | Preserve those statuses. Promotion failure is raised inside the runtime helper only after all temporary native state has been released; do not map OOM to a type error. |
+| `llvm_codegen.cpp`: nursery runtime declarations at 28741/28743 and region lowering at 35384 | Calls recycle/result-escape/unwind symbols. | Retain signatures but test the updated adapters and failure-before-reset/pop ordering in generated AOT. |
+| `repl/repl_jit.cpp` resolver near 1060 | Explicitly registers result escape and nursery recycle. | Register the three new compiler-private v1 symbols alongside existing runtime discovery; test exact JIT/static linkage, not just dynamic lookup on one host. |
 
-The new checked engine must not consume a persistent map polluted by a failed
-legacy promotion. The accepted P1 execution closure must demonstrate that its
-publication paths use only the checked engine and that no such legacy failure
-continues into them. Upstream rollout review must resolve this coexistence boundary
-explicitly; it must not infer safety from a versioned symbol alone. If the actual
-P1 failing/rethrowing path necessarily traverses an unsafe legacy promotion,
-acceptance stays blocked until that exact additional path is separately addressed.
+All runtime paths in the table are under upstream `lib/core/`, compiler paths
+under `lib/backend/`, except the explicitly named REPL path. Update the companion
+declarations in `lib/core/arena_memory.h` and
+`inc/eshkol/backend/codegen_context.h`. A private C++ declaration, if needed to
+share the checked batch implementation between core translation units, belongs
+in `lib/core/runtime_region_promotion_internal.h`; it is not a registered C ABI,
+installed source operation, or an additional authority surface.
 
-No local patch to shared `.deps`, alternate native wrapper, raw region pin,
-whole-region retention workaround, revised P1 token authority, compiler flag
-exception, sanitizer disablement, or timeout increase is part of this proposal.
+The shallow `region_escape`, `region_escape_string`, and
+`region_escape_tagged_cons_cell` functions at 828/857/889 neither read nor write
+the persistent forwarding map. The audited production C/C++ sources contain no
+calls to them outside their definitions/declarations; they are excluded from P1's
+compiled execution proof, not relabeled deep checked promotion. Their standalone
+allocation behavior remains separate. The bytecode VM uses its own heap/evacuation
+implementation; comments naming native functions are not calls into this engine.
+Browser shims in `web/eshkol-repl.js` and `site/static/eshkol-runtime.js` implement
+nonreclaiming stubs. They do not establish this native prerequisite, and must not
+silently resolve the new checked ABI to an old shallow/no-op shim. The initial
+acceptance scope remains the supported hosted native compiler/runtime lane.
+
+## Concrete coexistence and bulk-copy decision
+
+This revision replaces the earlier open legacy-map coexistence choice with a
+specific proposal: **one transactional forwarding engine for every native map
+writer, safe compatibility adapters for scalar/result escape, and retirement of
+the unrepairable postwrite range ABI at the explicitly reviewed toolchain
+transition.** Root and the upstream owner must accept that transition before any
+patch is dispatched. Keeping two evacuators or accepting old failed maps is not
+an implementation option under this proposal.
+
+Legacy scalar/escape wrappers preserve their successful return conventions and
+null-pointer conventions where documented. Internally they call the checked
+engine with private staging output. On failure, the engine returns after scrubbing
+and releasing temporary state; only then does the wrapper invoke emergency
+transfer. The wrapper never returns the original younger pointer as a failure
+fallback. Native direct callers that currently pass their actual destination as
+`out`, including parameters, must use a local staged value and commit their
+container metadata only after success. This does not relax the new checked ABI's
+private-staging precondition.
+
+Since every deep caller uses the same transaction rules, the map contains only
+fully committed copies irrespective of whether the call entered through a legacy
+scalar name or the new checked name. A failed call leaves that map and forwarding
+target identity unchanged; speculative target-arena bytes are scrubbed and remain
+retained as accounted above. No map-version tag, second registry, opaque caller
+token, serialized proof, or selective trust of old entries is needed. Start only fresh processes
+with the rebuilt runtime; no old process/map is upgraded in place. Test alternating
+legacy and checked calls, including failure/retry and target changes, in one
+region. These are the required coexistence proofs; none is established by the
+current pin or by assuming that failed legacy paths happen not to execute.
+
+The internal engine accepts one or more roots for one destination lifetime and
+commits their forwarding map once. The one-root C ABI is its scalar adapter.
+Batch entry points are runtime-internal plumbing, not another Eshkol intrinsic.
+The batch output is caller-private scratch; no true destination range is modified
+until the whole transaction succeeds. Scratch allocations and copying use checked
+counts and the same first-failure/cleanup discipline.
+
+For `eshkol_vector_copy_mutating`, preserve all shape/type/overlap validation and
+all four vector/tagged-dual conversion directions. When copied elements can need
+promotion, first snapshot the complete source slice into temporary native tagged
+storage, run a single batch promotion transaction for the destination lifetime,
+then copy the completed slice to the true destination and release the scratch.
+Thus overlap keeps memmove semantics, cycles/shared tails keep identity, and no
+input/output alias can expose a partly promoted range. If snapshot allocation or
+promotion fails, release all scratch before transferring the emergency exception;
+the destination bytes are unchanged. Pointer-free numeric conversion and proven
+no-promotion cases keep their existing direct paths; do not add allocation to them
+just to reuse the staging implementation. No C++ destructor is bypassed by the
+eventual `longjmp`.
+
+The old void `eshkol_region_write_barrier_range(dst, slots, n)` cannot repair the
+caller's original destination after that caller has already overwritten it; its
+arguments contain no original bytes. Therefore remove that postwrite symbol and
+declaration from the newly accepted native runtime after migrating every in-tree
+caller. Do not keep a compatibility implementation that raises with younger
+pointers already published, return a shallow success, or silently change the
+meaning of its arguments. Old external objects requiring that symbol must fail
+link/load under the new compiler-private runtime ABI. Existing self-contained old
+executables remain old artifacts and are not evidence for the new pin. This is an
+explicit runtime ABI migration requirement; if upstream will not accept it, root
+must choose a separately reviewed alternative before patching, not leave mixed
+failure semantics in the candidate.
+
+For kept-value arrays in nursery recycle and region unwind, use the same internal
+batch transaction before array writes and reclamation. An unwind is staged one
+region level at a time; it does not promise to resurrect levels already completed
+before a later failure. For the current level, handle retirement and arena
+destruction follow successful staging. On failure, the fixed root-owned emergency
+value can traverse the normal exception unwind without graph promotion; test this
+actual path and nested-handler marks. Preserve dynamic-wind ordering and the
+existing callback semantics rather than introducing a fail-stop or callback skip.
+
+Concretely, replace the initial bulk `rh_retire_above(mark)` in
+`eshkol_region_unwind_to` with retirement of reclaiming handles belonging to the
+successfully staged current depth, immediately before that depth is destroyed.
+An outer/lower-depth handle cannot be retired before its own promotion stage has
+succeeded. The existing independent bookkeeping-only handle path keeps its own
+documented sequence/cascade rules.
+
+The batch engine must preflight the no-promotion case **before** constructing any
+scratch array, span ledger, candidate map, or worklist. For the fixed root-owned
+emergency exception, every unwind level takes this zero-allocation path. This is
+mandatory: otherwise an allocation-disabled unwind could allocate batch scratch,
+fail again, and recurse indefinitely through emergency transfer. Force an unwind
+promotion failure with allocation still disabled through emergency retry; require
+exactly one emergency transfer, a still-live current level until its successful
+retry, no early handle retirement/reset/pop, and eventual delivery of the same
+fixed condition. This test counts emergency transfers separately from an original
+ordinary raise or continuation request.
+
+New generated code references the versioned checked symbol; linking against the
+old runtime fails rather than falling back. Rebuild compiler, runtime, all native
+support libraries, canonical aggregates and AOT callers together, with explicit
+new upstream revision/provenance and exact symbol closure checks. No old object
+cache or postwrite range reference may survive in the accepted dependency set.
+
+## Patch ordering and ownership proposal
+
+One upstream implementation owner must be named by root. That owner owns the
+whole runtime/compiler transition and integration order; independent testing and
+lifetime review can be delegated, but no second owner patches a parallel
+evacuator. Transformer agents do not edit shared `.deps` or adopt a speculative
+pin. The following are review/commit boundaries in one dependency chain, not
+permission to merge a partially migrated runtime:
+
+| Order | Exact owned scope | Required gate before the next boundary |
+|---|---|---|
+| P0: checked transaction | `runtime_regions.cpp` evacuator and map lifecycle; private batch declaration if necessary; `arena_memory.h` new checked ABI. | Native scalar/multiroot transaction tests, complete allocation failpoints, retained-byte ledger, old-map preservation, cycles/aliases and target-switch negatives. No new publication path enabled yet. |
+| P1: error transfer and scalar migration | `runtime_exceptions_hosted.cpp` fixed emergency objects/transfer and immutable metadata checks; `codegen_context.cpp/.h` checked branch; `llvm_codegen.cpp` exact rethrow fast path; parameter direct callers; safe legacy scalar/result adapters. | Actual AOT single-store suppression and nearest-guard cleanup/rethrow with allocation disabled; exact old/new scalar-map interoperability and parameter slot/top atomicity. Ordinary raise behavior preserved. |
+| P2: remaining shared-map callers | `runtime_regions.cpp` recycle/unwind batches and per-successful-depth handle retirement; `runtime_vector_mutation.cpp` prewrite batch staging; remove old range declaration/definition; audit exception/continuation callsites. | Every copied-element failure leaves the full destination unchanged; no failed recycle/reset/pop; zero-allocation emergency unwind retry with exactly one emergency transfer; nested unwind tests; no production range references; all scratch freed before emergency transfer. |
+| P3: integration and pin eligibility | REPL resolver, exact native symbol/linkage tests, upstream release/provenance surfaces; supported full upstream CI and independent lifetime review. | Fresh artifact closure, old-runtime/old-range mismatch fails explicitly, all existing successful-behavior regressions and supported sanitizer/leak evidence. Only the completed P0–P3 union is eligible for root's new-pin decision. |
+| Transformer adoption | Root-coordinated toolchain lock/provenance transition, then canonical P1 append and inherited packages. | New pin independently accepted; constructor prerequisite below separately resolved; complete issue108 failpoint/lifetime/public/package tests and supported exact-candidate CI. |
+
+Intermediate commits are reviewable upstream work, not installable transformer
+prerequisites. P1's frozen draft stays blocked until the complete transition is
+accepted. Root still has not assigned the sole upstream implementation owner.
+
+## Separate ordinary-constructor prerequisite
+
+Checked promotion handles allocations performed by the promotion engine and its
+temporary bookkeeping. It does not automatically fix allocation of the original
+token/record/vectors/list cell or construction of P1's cleanup handler.
+
+The parent audit of local compiled IR found a separate null-check gap: the
+two-slot `vector` allocator call is followed by an unconditional length store at
+lines 2786–2787 of `.tmp/e3-p1/resume/constructor.o.ll`, and `make-vector17` has
+the analogous call/store at 2804–2805. The pinned
+`lib/core/runtime_object_alloc.cpp:239–258` allocator can return null. This is
+static IR/source evidence, not an executed constructor-OOM test.
+
+Final issue108 all-allocation acceptance therefore also needs a root-approved
+adjacent audit/fix for the exact vector, cons/list-cell and guard-handler
+constructors used by bind, with their null-check-before-initialization and
+nonallocating failure-transfer paths. The emergency condition introduced here
+must not be repurposed to constructor errors without that explicit design and
+review. None of P0–P3 may be reported as proof of those constructors, and this
+proposal does not casually expand into every language allocator. Parent/root
+retains ownership of that adjacent scope.
+
+No alternate native wrapper, raw region pin, whole-region retention workaround,
+revised P1 token authority, compiler flag exception, sanitizer disablement, or
+timeout increase is part of either proposal.
 
 ## Required upstream and downstream evidence
 
@@ -326,7 +482,10 @@ exception, sanitizer disablement, or timeout increase is part of this proposal.
    package/public-isolation/retention gate. The runtime AOT regression cannot
    replace those downstream proofs.
 
-Open acceptance decisions are the exact upstream revision/PR and pin transition,
-legacy-map coexistence proof, and measured predecessor impact of the staged map.
-They remain blockers for patch/freeze approval, not implied authorization from
-this design document.
+Required root decisions are the sole upstream owner and approval of the complete
+P0–P3 scope, including retirement of the postwrite range ABI and the separate
+constructor prerequisite. The proposed construction specifies how to prevent failed
+map contamination; its implementation and mixed-call tests are still absent. Exact
+upstream revision/PR, supported results, measured predecessor impact and the new-pin decision
+remain blockers for transformer freeze. This refinement is design only and is not
+patch authorization or a claim that the current draft is merge-ready.

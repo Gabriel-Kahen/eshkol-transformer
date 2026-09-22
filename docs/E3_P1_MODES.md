@@ -122,8 +122,8 @@ inferred from the new helper-only resource witness.
 | Proof | Required recorded evidence | Current disposition |
 |---|---|---|
 | Source preservation | First64, unchanged public/named surface, template agreement, wrapper slots/arities, source digests | Static draft check passed; exact final candidate pending |
-| Topology/modes | Real17-node tree; exact mixed train/eval restoration; all identity/topology/mode corruptions rejected before writes | Pending |
-| Lifecycle/statuses | Exact 0–4 statuses, every phase transition, copied/foreign/dead tokens and comparator reentry | Pending |
+| Topology/modes | Real17-node tree; exact mixed train/eval restoration; all identity/topology/mode corruptions rejected before writes | O0 ordinary fixture passes mixed17 and constructible negatives; full gate pending |
+| Lifecycle/statuses | Exact 0–4 statuses, every phase transition, copied/foreign/dead tokens and comparator reentry | O0 ordinary fixture passes statuses/lifecycle; genuine comparator reentry pending |
 | Root lifetime | Bind in short region; read back canonical token; poisoned exit and successful reuse | Pending |
 | Setup atomicity | Every allocation and barrier failpoint; untouched setup output/modes; dead published records clear frame/model roots | Pending |
 | Nonallocating tails | Allocation-disabled prepare/enter/prepared-restore/entered-restore/unbind; exact counters | Pending |
@@ -134,8 +134,8 @@ inferred from the new helper-only resource witness.
 
 Local CachyOS/LLVM22 measurements, if performed, are compatibility evidence only.
 They do not establish supported Ubuntu22/LLVM21 behavior, sanitizer/leak success,
-or accepted resource bounds. No runtime result, PR acceptance, downstream E3
-composition, or roadmap completion is claimed by this ledger.
+or accepted resource bounds. Only explicitly recorded local runtime results below are claimed. No PR acceptance,
+downstream E3 composition, or roadmap completion is claimed by this ledger.
 
 ## Recorded blocked-work checkpoint
 
@@ -186,11 +186,11 @@ which was corrected. Its replacement emitted IR over canonical M3/P1 and the
 five wrappers. Independent inspection of that draft IR found compiler-generated
 nursery allocations/interrupt polls around mutating named-let loops. The current
 source replaces the fixed17/6 store tails with explicit stores, captures root-owned
-mode/provider symbols, and checks exact integer phases. It has **not** been
-recompiled or proved nonallocating; the older IR is defect evidence only. The
+mode/provider symbols, and checks exact integer phases. That checkpoint had not
+been recompiled or proved nonallocating; the older IR is defect evidence only. The
 obsolete AOT build was stopped after the publication hold and source corrections;
-no smoke execution, current candidate runtime success, resource slope, or supported
-acceptance is claimed.
+at that checkpoint no smoke execution, candidate runtime success, resource slope,
+or supported acceptance was established. The later ordinary result is recorded below.
 
 Three independent Astra/high lanes handled implementation, lifetime diagnostics,
 and package evidence. The lifetime lane's executed findings were independently
@@ -200,3 +200,102 @@ reviewed the source corrections and the [upstream design proposal](e3/E3_P1_CHEC
 It found no additional design blocker beyond that proposal's explicit upstream,
 coexistence and evidence conditions. This is conditional design review, not a
 patch-ready verdict or approval of the blocked implementation for integration.
+
+
+## Checked-promotion prerequisite refinement
+
+The [upstream proposal](e3/E3_P1_CHECKED_PROMOTION_PROPOSAL.md) now inventories
+all native callers sharing the forwarding map. Its proposed P0–P3 transition uses
+one checked transactional engine, safe scalar/result compatibility adapters,
+prepublication batch staging for vector copies/recycle/unwind, and explicit
+retirement of the old postwrite range ABI. Independent design review requires
+current-depth handle retirement only after successful staging and a zero-allocation
+emergency unwind path before any batch scratch/map allocation. These are proposed
+implementation obligations, not proved runtime behavior. The sole upstream owner,
+ABI transition, exact patch and new toolchain pin remain root decisions.
+
+A separate constructor gap was found in a small strict/no-stdlib emitted-object
+probe at the same pin: `(vector key #f)` and `(make-vector 17 #f)` each call
+`eshkol_allocate_vector` and immediately store through its result, without a null
+check. The pinned allocator can return null. The local IR call/store pairs are
+2786–2787 and 2804–2805 in `.tmp/e3-p1/resume/constructor.o.ll`.
+This is static source/IR evidence only; constructor exhaustion was not executed.
+Promotion repair alone therefore cannot satisfy every bind-allocation failpoint.
+The exact vector, cons and cleanup-handler constructor closure needs its own
+root-approved prerequisite audit and tests.
+
+The read-only upstream check found issue713 still open and the same failure-as-old-
+pointer behavior in current `runtime_regions.cpp` blob
+`15d5e06e46f5de290169dbd6a54ec52d8aa4810d` (last modifying commit
+`0c0436d5c76861023d07ad36b4cb8f4dfa21da02`). This is a source comparison;
+no newer upstream compiler/runtime was built or tested.
+
+
+## Ordinary-path continuation result
+
+The expanded `tests/e3_p1/modes_smoke.esk` compiled and ran successfully over the
+current canonical source SHA above. It uses the genuine M3 constructor and existing
+opaque P1/I2 APIs. A separate exact17-node parameterless I2 tree supplies observable
+mixed modes; it proves P1 topology/mode behavior, not genuine E3 or M3 admission.
+All **749 checks passed**, including genuine M3's 15 logical parameter paths and
+head/token tie, statuses0–4, malformed setup/copied/foreign/dead tokens, lifecycle
+rejection/retry, all17 mixed-mode restoration, independent bindings, a simulated
+caught failure and eight ordinary reuses, constructible unsupported topologies,
+and rebinding. No raw authority or production API changed in this continuation.
+The test-only unavailable `length` call was replaced with a local bounded counter
+before the successful compile.
+
+The same verified read-only pin/compiler/runtime was used, with explicit `-O 0`,
+`--strict-types`, `--no-stdlib`, `--dump-ir`, JIT caching disabled, and canonical
+P1/C1/T1/source/library/native include roots. The existing local native support
+archive links genuine I2/P1/M3 prerequisites; it is not an accepted package artifact.
+Exact successful compilation command from the repository root:
+
+```sh
+root="$PWD"
+cd build/e3-p1
+ESHKOL_CXX_COMPILER=/usr/bin/clang++ ESHKOL_JIT_CACHE=0 \
+ESHKOL_LIB_DIR="$root/lib" XDG_CACHE_HOME="$root/.tmp/e3-p1/cache" \
+timeout --foreground --signal=TERM --kill-after=5s 600s \
+/home/gabe/.codex/worktrees/7fca/eshkol-transformer/.deps/eshkol-build/eshkol-run \
+  --strict-types --no-stdlib -O 0 --dump-ir \
+  --emit-depfile "$root/build/e3-p1/ordinary.d" \
+  -I "$root/internal/p1/lib" -I "$root/internal/c1/lib" \
+  -I "$root/internal/t1/lib" -I "$root/src" -I "$root/lib" -I "$root/native" \
+  -L "$root/build/e3-p1/native" --lib e3_p1_test_runtime \
+  "$root/tests/e3_p1/modes_smoke.esk" -o "$root/build/e3-p1/modes-ordinary"
+timeout --foreground --signal=TERM --kill-after=5s 30s ./modes-ordinary
+```
+
+Both commands exited0; execution printed `E3-P1-MODES-ORDINARY-PASS checks=749`.
+Compilation wall time was84.443 seconds and child peak RSS3,480,468KiB,
+measured through Python monotonic time and `getrusage(RUSAGE_CHILDREN)` around the
+bounded compiler subprocess. Binary size is54,180,752 bytes; emitted IR size is
+615,734,304 bytes. These are one local build's measurements, not a baseline
+comparison or accepted performance budget. The requested dependency file was not
+emitted at that path; no compiled source-closure proof is inferred.
+
+| Local artifact | SHA-256 |
+|---|---|
+| Ordinary fixture | `729b98f1a04e7e26adf8fac305dcccceebcd4c5853dfa55c956e048d324d7e63` |
+| Executed binary | `6126fc1129788057e6b2d055a2acb14af3b4b03d964eea3b3d15b187bdc773b5` |
+| Emitted current O0 IR | `00fb555d93a5bd24afc33590cb69db84e0b8f628282cfd208a994087560848f2` |
+| Existing local native support archive | `1aba5bd3d053a56f812dc83a8e5226673ff51e11d72ce6e116542376053dea2a` |
+
+Local command/log/timing records remain under `.tmp/e3-p1/resume/`; generated
+artifacts are deliberately absent from Git. This run does not disable allocation,
+exercise setup exhaustion, bind across a poisoned short region, prove optimized
+code behavior, or establish supported Ubuntu22/LLVM21 acceptance. The diagnostic
+publication failure still blocks integration. All inherited-package, fixed-cost,
+1,024/8,192 reuse and full independent runtime review obligations remain pending.
+
+
+Independent inspection of the current O0 IR linked source helper definitions to
+`modes_smoke_lambda_331` (retire),335 (prepare),336 (enter),337 (restore),338
+(unbind). Their direct calls contain no named-let, nursery recycle, region-entry
+or interrupt-poll operations. Retire/prepare/enter/restore have respectively
+8/18/18/35 fixed barrier sites and no indirect calls after their first barrier;
+unbind delegates retirement. No symbol-interning call appears in those closures.
+This confirms removal of the earlier mutating-loop lowering defect in this O0
+artifact only. Generic type/error branches still contain allocation and raising;
+allocation-disabled valid-path instrumentation and optimized proof remain pending.
