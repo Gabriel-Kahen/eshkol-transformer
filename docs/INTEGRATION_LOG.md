@@ -132,6 +132,29 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   supported CI, independent integration review and root merge remain required.
   Real E3 frame/M3/D2 traversal, rollback/publication/retention and eventual public
   execution remain separate downstream obligations; roadmap E3 stays active.
+## 2026-09-22 — E3-P1 implementation held on promotion failure
+
+- **Scope:** issue #108 was dispatched on merged contract `ba0e37d`, tree
+  `221e00c9`. The draft appends only lexical P1 slots64..68 and five private
+  E3 wrappers. Root authorized synchronization through the existing canonical
+  `templates/p1/module_roots.esk.tmpl` generator; the first64 closures and public
+  surface are structurally unchanged. No runtime acceptance or manifest freeze.
+- **Blocker:** independent synthetic allocator-failure diagnostics, including
+  executed generated Eshkol `vector-set!`, show the pinned promotion barrier
+  publishing younger-region graph edges on allocation failure. Root independently
+  confirmed the defect and filed [Eshkol #713](https://github.com/tsotchke/eshkol/issues/713).
+  This is bounded allocator-failure injection on CachyOS/LLVM22, not natural host
+  OOM or supported Ubuntu/LLVM21 evidence. Diagnostic commit `c388b42` is separate
+  from the unaccepted implementation and absent from default gates.
+- **Direction:** root selected an upstream contract-preserving prerequisite for
+  design review. The [checked-promotion proposal](e3/E3_P1_CHECKED_PROMOTION_PROPOSAL.md)
+  is not authority for a dependency patch, native ABI freeze, root-only contract
+  relaxation, or a local duplicate of graph machinery. No full CI/PR was launched.
+- **Evidence and follow-up:** [P1 evidence ledger](E3_P1_MODES.md) inventories
+  inherited package/resource obligations, source preservation, diagnostic results,
+  remaining failpoints and nonallocation proof. Real E3 admission, all17 mixed-mode
+  restoration, resource reuse, full predecessor gates, independent exact-head
+  review and supported CI remain unaccepted.
 
 ## 2026-09-22 — E3 exact private design accepted
 
