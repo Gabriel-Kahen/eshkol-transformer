@@ -125,6 +125,8 @@ bitwise reconstruction does not rely on differently grouped schedules being equa
 
 ## Exact missing numerical rows
 
+The separately dispatchable [exact numerical ABI](G3_C4_N_ABI_PROPOSAL.md)
+freezes the proposed operands, aliases, errors, arithmetic and source provenance.
 Existing G3-N/N3K/N2/A2 rows remain frozen. Add a distinct explicit K1 provider
 `et_g3c4_kernel_provider_v1`, header `g3c4_primitives_abi.h`, ABI1.0, provider and
 implementation `g3c4.cpu-f32.serial`, version `1.0`, evidence identity
@@ -155,7 +157,9 @@ These are seven capabilities, eight operations and **28 operation/row pairs**:
 6 embedding +8 linear +2 norm +2 GELU +1 residual +4 layout +5 attention.
 T4 full-prefix attention and T4 full-capacity attention share the same row.
 Attention uses explicit positions/mask, learned-position projected K and no RoPE;
-its arithmetic remains A2's reciprocal-then-multiply scale and serial f32 order.
+its arithmetic retains A2's reciprocal-then-multiply scale and serial f32 order.
+The exact C4-N proposal explicitly rejects overflow in score-minus-maximum
+before expf, a checked multikey-domain refinement rather than a predecessor edit.
 The T3 residual already has N2 `kernel.residual`/[1,3,4]; reuse it. T1/T2 token,
 linear, norm, GELU, residual and layouts retain the accepted G3-N/N3K/N2 routes.
 Position lookup always selects the new [1,T,4,4] row, including single decode.
