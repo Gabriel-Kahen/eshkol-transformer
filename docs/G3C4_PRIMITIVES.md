@@ -45,9 +45,10 @@ unchanged K1 header. Link it explicitly before K1 and `-lm`.
 The full and acceptance-predecessor test tiers append the gate immediately
 after G3-N. The existing `g3n-forward` suite runs both gates, retains its
 75-minute budget and requires both leak-check settings. Its audited producer
-order is K1, A2, I1, I2, N2, N3K, G3-N, G3-C4. This base has 19 shared suites
-and 28 commands; integration with the pending two-command PR #112 produces
-19 suites and 30 commands. Root owns that union and supported CI dispatch.
+order is K1, A2, I1, I2, N2, N3K, G3-N, G3-C4. The integrated tree includes
+accepted prerequisite PR #112 and has 19 shared suites and 30 commands. The
+104 CI configuration tests and topology check pass. Supported full CI and root
+acceptance remain pending.
 
 Local verification uses the unchanged pinned Eshkol commit
 `90cbd7130f47b8184bcc77b8d5c1b0026da980de` with an already-built, provenance-
@@ -104,11 +105,16 @@ descriptor/fenv coverage and real-carrier admission; they required no production
 change. The weighted-product proof refinement is recorded in
 [issue #115 comment 5779652587](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/115#issuecomment-5779652587).
 
-Integration base is `19f404cf21632944e1f2d5d4959e1240f9a79f5f`.
+The original implementation base was `19f404cf21632944e1f2d5d4959e1240f9a79f5f`.
+Integration merge `fa54142c807ca35fc1855f477cbfb0f670bac79b` combines candidate
+`b04edf038255b1abbaa7d50584dd1eb10a32b8fe` with accepted main
+`33a54ef7256f43d9e1ce82152915f7bded51bc24`, preserving the provider, header,
+build/test scripts and fixtures byte-for-byte. Its pre-documentation-fix tree
+is `52d05c2174341822a4341a54ddcae941dbc93c7f`.
 Focused commits carry the accepted ABI (`d2668fb`), provider/header/build
 (`6ad4e54`), proof refinement (`59de933`), and tests/package (`5a60775`).
 The full local gate log is `/tmp/g3c4-focused-gate.log`, SHA-256
 `2bca0480832e002fcab6afd4f2e3fcb53f93dc5ddaffc3bb9169b025e4bb8ae9`.
-Root retains current-main integration, compiler evidence freeze, supported CI,
+Root retains final integration review, compiler evidence freeze, supported CI,
 and merged-head verification. C4 model construction, shared-storage admission,
 generation and continuation/save-load remain separate workstreams.
