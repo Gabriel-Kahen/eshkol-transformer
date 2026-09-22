@@ -1,0 +1,15 @@
+;;; Private E3 prerequisite: authenticate the canonical T1 raw/empty profile.
+;;; Loaded once before the hash-pinned generated D2 source. No public facade.
+
+(define (e3-d2-byte-identity tokenizer)
+  (let ((core (t1-private-require-core
+               tokenizer 'token-dataset-open 'invalid-argument)))
+    (if (not (and (t1-core-tokenizer? core)
+                  (eq? (vector-ref core 1) 'raw)
+                  (null? (vector-ref core 2))
+                  (null? (vector-ref core 3))
+                  (null? (vector-ref core 4))
+                  (= (t1-tokenizer-core-vocab-size core) 256)))
+        (t1-private-raise 'unsupported 'token-dataset-open
+                          "expected canonical raw byte tokenizer without specials"))
+    (vector (t1-tokenizer-core-fingerprint core) 256)))

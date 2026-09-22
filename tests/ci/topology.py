@@ -24,7 +24,7 @@ FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
     "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-x1.sh",
-    "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-c1.sh", "test-c2.sh",
+    "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
     "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-g3n.sh",
 )]
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
@@ -246,7 +246,7 @@ def check(root, overrides=None):
         else:
             leaves += targets[target]
     assert Counter(leaves) == Counter(c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh")
-    assert len(leaves) == 27
+    assert len(leaves) == len(FULL) - 1
     canonical = ["/usr/bin/bash scripts/" + s for s in (
         "generate-p1-roots.sh --check", "build.sh", "build-a2.sh",
         "build-p1-identity.sh", "build-p1-package.sh", "build-c1.sh",
@@ -263,4 +263,4 @@ def check(root, overrides=None):
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[2]
-    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full 28-command coverage, six C2 groups, clean build, strict evidence gates")
+    print(f"CI TOPOLOGY PASS: {check(root)} shared suites; full {len(FULL)}-command coverage, six C2 groups, clean build, strict evidence gates")

@@ -19,7 +19,7 @@ SHELL := /usr/bin/bash
 	test-c2-d2-cursor-pair test-c2-format \
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
-	test-c2-x1-canonical test-d1 test-d2 test-e1 test-e1b \
+	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-x1 \
@@ -110,6 +110,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
 	/usr/bin/bash scripts/test-d2.sh
+	/usr/bin/bash scripts/test-e3-d2.sh
 	/usr/bin/bash scripts/test-c1.sh
 	/usr/bin/bash scripts/test-c2.sh
 	/usr/bin/bash scripts/test-t1.sh
@@ -140,6 +141,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
 	/usr/bin/bash scripts/test-d2.sh
+	/usr/bin/bash scripts/test-e3-d2.sh
 	/usr/bin/bash scripts/test-c1.sh
 	/usr/bin/bash scripts/test-t1.sh
 	/usr/bin/bash scripts/test-t2.sh --runtime-only
@@ -219,6 +221,7 @@ test-ci-tokenizer-bpe-boundary-after-build:
 
 test-ci-dataset-after-build:
 	/usr/bin/bash scripts/test-d2.sh
+	/usr/bin/bash scripts/test-e3-d2.sh
 
 test-ci-topology:
 	/usr/bin/bash scripts/check-ci-topology.sh
@@ -407,3 +410,7 @@ test-e3-metrics: configure
 	/usr/bin/bash scripts/build-l3s.sh
 	/usr/bin/bash scripts/build-e3-metrics.sh
 	/usr/bin/bash scripts/test-e3-metrics.sh
+
+# Private E3-D2 prerequisite builds its exact test tuple locally.
+test-e3-d2: configure
+	/usr/bin/bash scripts/test-e3-d2.sh
