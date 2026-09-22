@@ -8,6 +8,15 @@ remain authoritative. Snapshot: 2026-09-22, merged main
 E3 composition is held until prerequisites are accepted and merged and root
 explicitly dispatches E3-PRIVATE. No prerequisite draft is consumed by this plan.
 
+The baseline table below is historical. Shared guards are now accepted and
+merged as `19f404cf`; [full provenance](../M3_SHARED_CALL.md#integration-provenance)
+records supported and focused merged-head results. Independent source/integration
+reviews approve the metrics and D2 candidates; their combined PR #112 is running
+supported CI at `b052385`, tree `2256194d2daeb233ec1745d0039b383d4358e3d5`.
+Root has [assigned the upstream runtime implementation](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/108#issuecomment-5778879904)
+to the P1 owner in an isolated exact-pin Eshkol worktree. That patch is in progress;
+no new compiler pin or downstream P1 acceptance follows from the assignment.
+
 ## Dependency dispositions
 
 | Prerequisite | Candidate evidence at this snapshot | Remaining gate |

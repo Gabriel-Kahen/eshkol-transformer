@@ -7,6 +7,13 @@ accepted [G3-T private contract](G3_T_PRIVATE_CONTRACT.md) and
 slot, owner kind, numerical rule, public surface or dependency hold. The proposed
 witnesses below must use the eventual accepted implementations and exact artifact.
 
+The baseline table below is historical. Shared guards are now accepted and
+merged in PR #105 as `19f404cf`, with [verified integration evidence](../M3_SHARED_CALL.md#integration-provenance).
+The G3-S platform-blocked review still gates transport implementation. Separately,
+[SHARED-R2 #114](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/114)
+is being implemented for genuine fixed-model checkpoint admission. Full C4/R
+contracts are being developed separately; none of these updates proves generation.
+
 ## Dependency disposition
 
 | Dependency | Evidence at this planning baseline | Consequence |
