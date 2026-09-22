@@ -1,0 +1,47 @@
+;;; TR3-A-only optimizer update-and-clear transaction adapter.  Its trusted
+;;; caller must already have loaded the accepted O2 extension in the same
+;;; source-composed registry universe.  Never install this source.
+
+(extern ptr tr3-o2-native-trainer-step-clear-prepare
+        ptr i64 i64 i64
+        :real et_tr3_private_o2_trainer_step_clear_prepare_v1)
+(extern i64 tr3-o2-native-trainer-step-clear-commit ptr
+        :real et_tr3_private_o2_trainer_step_clear_commit_v1)
+(extern i64 tr3-o2-native-trainer-step-clear-abort ptr
+        :real et_tr3_private_o2_trainer_step_clear_abort_v1)
+
+(define (o2-trainer-step-clear-prepare-internal
+          optimizer-value expected-completed-updates
+          expected-contributions expected-normalization-weight-bits)
+  (let* ((operation 'o2-trainer-step-clear-prepare-internal)
+         (optimizer (o2-require-optimizer operation optimizer-value)))
+    (if (or (not (o2-exact-nonnegative-i64? expected-completed-updates))
+            (= expected-completed-updates o2-i64-max)
+            (not (o2-exact-nonnegative-i64? expected-contributions))
+            (= expected-contributions 0)
+            (not (o2-exact-nonnegative-i64?
+                   expected-normalization-weight-bits))
+            (> expected-normalization-weight-bits 4294967295)
+            (not (o2-positive-finite?
+                   expected-normalization-weight-bits)))
+        (o2-fail 'invalid-argument operation
+                 "optimizer transaction expectations are invalid"))
+    (let ((plan
+            (tr3-o2-native-trainer-step-clear-prepare
+              (vector-ref optimizer 1)
+              expected-completed-updates expected-contributions
+              expected-normalization-weight-bits)))
+      (if (null? plan) (o2-native-fail operation))
+      plan)))
+
+(define (o2-trainer-step-clear-commit-internal! plan)
+  (let ((operation 'o2-trainer-step-clear-commit-internal!))
+    (if (not (= (tr3-o2-native-trainer-step-clear-commit plan) 0))
+        (o2-native-fail operation))
+    #t))
+
+(define (o2-trainer-step-clear-abort-internal! plan)
+  (let ((operation 'o2-trainer-step-clear-abort-internal!))
+    (if (not (= (tr3-o2-native-trainer-step-clear-abort plan) 0))
+        (o2-native-fail operation))
+    #t))

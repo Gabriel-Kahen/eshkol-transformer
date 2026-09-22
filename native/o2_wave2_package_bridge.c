@@ -6,6 +6,9 @@
 #endif
 
 #include "o2_optimizer_internal.h"
+#ifdef ET_TR3_O2_STEP_CLEAR_BRIDGE
+#include "tr3_o2_step_clear_internal.h"
+#endif
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,6 +19,55 @@ static _Thread_local et_o2_error_v1 et_o2_bridge_error;
 int64_t et_o2_private_last_error_category_v1(void) {
   return (int64_t)et_o2_bridge_error.category;
 }
+
+#ifdef ET_TR3_O2_STEP_CLEAR_BRIDGE
+/* TR3-A source-composes this bridge once through its inherited O2 bridge.
+ * Standalone O2/C2 never define the feature gate and therefore neither define
+ * nor reference this private transaction authority. */
+static void et_tr3_o2_step_clear_invalid_prepare(void) {
+  static const char operation[] = "optimizer-step-clear-prepare";
+  static const char message[] = "optimizer transaction expectations are invalid";
+  memset(&et_o2_bridge_error, 0, sizeof(et_o2_bridge_error));
+  et_o2_bridge_error.category = ET_O2_STATUS_INVALID_ARGUMENT;
+  et_o2_bridge_error.code = ET_O2_CODE_INVALID_OPTION;
+  memcpy(et_o2_bridge_error.operation, operation, sizeof(operation));
+  memcpy(et_o2_bridge_error.message, message, sizeof(message));
+}
+
+void *et_tr3_private_o2_trainer_step_clear_prepare_v1(
+    void *optimizer, int64_t expected_completed_updates,
+    int64_t expected_contribution_count,
+    int64_t expected_normalization_weight_bits) {
+  et_o2_trainer_step_clear_plan *plan = NULL;
+  if (expected_completed_updates < 0 ||
+      expected_completed_updates == INT64_MAX ||
+      expected_contribution_count <= 0 ||
+      expected_normalization_weight_bits < 0 ||
+      (uint64_t)expected_normalization_weight_bits > UINT32_MAX) {
+    et_tr3_o2_step_clear_invalid_prepare();
+    return NULL;
+  }
+  if (et_o2_trainer_step_clear_prepare_v1(
+          (et_o2_optimizer *)optimizer,
+          (uint64_t)expected_completed_updates,
+          (uint64_t)expected_contribution_count,
+          (uint32_t)expected_normalization_weight_bits, &plan,
+          &et_o2_bridge_error) != 0) {
+    return NULL;
+  }
+  return plan;
+}
+
+int64_t et_tr3_private_o2_trainer_step_clear_commit_v1(void *plan) {
+  return (int64_t)et_o2_trainer_step_clear_commit_v1(
+      (et_o2_trainer_step_clear_plan *)plan, &et_o2_bridge_error);
+}
+
+int64_t et_tr3_private_o2_trainer_step_clear_abort_v1(void *plan) {
+  return (int64_t)et_o2_trainer_step_clear_abort_v1(
+      (et_o2_trainer_step_clear_plan *)plan, &et_o2_bridge_error);
+}
+#endif
 
 void *et_o2_private_builder_create_v1(
     int64_t count, int64_t clip_kind, int64_t clip_bits,
