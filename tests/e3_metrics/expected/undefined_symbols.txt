@@ -1,0 +1,9 @@
+__errno_location
+__stack_chk_fail
+et_kernel_error_clear
+expf
+fegetenv
+fesetenv
+snprintf
+strcmp
+strlen

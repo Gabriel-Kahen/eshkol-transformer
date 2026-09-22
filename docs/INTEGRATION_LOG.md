@@ -4,6 +4,38 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — E3-METRICS implementation candidate
+
+- **Scope:** issue [#107](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/107),
+  based on merged exact-contract commit `ba0e37d06076d0a16c473ff742ab95723cb2cb89`,
+  tree `221e00c9c258841995195a051b9f44df515679b9`. The single ABI 1.0 accessor
+  implements only CPU-f32/BOOL/i64 `correct.bool`, `accumulate` and `finalize`
+  at request `[1,2,256]`. No accepted contract, predecessor provider, canonical
+  discovery, shared guard, public evaluator or serialized format changes.
+- **Evidence:** [focused implementation record](e3/E3_METRICS_IMPLEMENTATION.md)
+  reports local strict native checks (70,231), fenv bookkeeping fault checks
+  (135), rational/reference tests (5+5), 102 Decimal-exp inputs (maximum 0 ULP),
+  12 numerical/5 admission-and-atomicity/5 orchestration mutation kills and five
+  equivalent controls. Exact packages, two fresh identical pinned private AOT
+  binaries/stdout, real L2/L3S/I1/I2 composition and ASan/UBSan/LSan1 pass.
+  Linux process accounting measured 24.215215 seconds and 312,424 KiB maximum
+  child RSS. The unavailable `/usr/bin/time` launch failed before execution;
+  development-only monotonic/getrusage measurement recorded the successful run.
+- **Independent reviews:** separate Astra/high numerical and package reviewers
+  found no provider blocker. Independent adversarial review requested unique
+  per-view text aliases, partial input overlap, adjacent inputs, exact one-over
+  counters and empty-shape checks; all were added and verified. A separate
+  fenv fault runner proves save/restore failure precedence and errno/byte preservation.
+- **CI registration:** root-authorized addition to the existing native-numerics
+  and acceptance-predecessors plans preserves 19 suites and all budgets, adds
+  top-level command 28, and leaves smoke-only prerequisites unchanged. All 102
+  CI unit tests pass, including omission and producer/test failure propagation.
+- **Disposition:** candidate only. CachyOS/LLVM 22 compatibility evidence does
+  not establish supported Ubuntu 22.04/LLVM 21 acceptance. Exact-candidate
+  supported CI, independent integration review and root merge remain required.
+  Real E3 frame/M3/D2 traversal, rollback/publication/retention and eventual public
+  execution remain separate downstream obligations; roadmap E3 stays active.
+
 ## 2026-09-22 — E3 exact private design accepted
 
 - **Disposition:** [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
@@ -2502,3 +2534,48 @@ green. Full [G3-N integration provenance](G3N_PRIMITIVES.md#integration-provenan
 retains the commands, revisions and limits. Only G3-N becomes complete; G3-S/T and
 public generation remain unaccepted. No runtime, test or CI file changed, no
 new numerical campaign was launched, and issue closure remains root-owned.
+
+
+## 2026-09-22 — E3-D2 independent prerequisite submitted for review (#106)
+
+The bounded [E3-D2 prerequisite](e3/E3_D2_PREREQUISITE.md) starts from merged
+contract `ba0e37d06076d0a16c473ff742ab95723cb2cb89`, tree
+`221e00c9c258841995195a051b9f44df515679b9`. It adds only the fixed one-definition
+source generator and provenance manifest, canonical T1 raw/empty identity adapter,
+and same-TU native idle query. Original D2/T1/T2 sources and standalone D2/T2 build
+tuples remain unchanged. No public API or production E3 aggregate is introduced.
+
+The test-only T1/D2 composition has exactly 16 Eshkol dependencies and seven
+native objects, with actual compiler depfiles, native predecessor hashes, exact
+symbol delta, duplicate-link rejection and localized prerequisite symbols.
+Native tests exercise real current batches, leases, allocation rollback and
+exhaustion, requiring no resource mutation at idle preflight. Source generation
+rejects drift, changed forms, unexpected include/root inputs, symlinks and escape.
+
+Root approved one mandatory focused command after D2 in the existing shard-loader
+suite, full local tier and acceptance-predecessor tier. There are 19 suites and
+28 commands on this branch; the existing shard-loader k1/i1/d2 producers and all
+workflow budgets/environments are unchanged. Exact-inventory omission tests and
+an executable exit-73 probe require failure propagation in all three tiers.
+
+The independent native/lifetime and source/provenance lanes reviewed the adapter,
+native implementation, manifest closure and registration without source blockers.
+Local runtime/measurement and any remaining independent disposition are recorded
+in the prerequisite evidence document. Local LLVM22/CachyOS evidence is explicitly
+unsupported; supported Ubuntu22/LLVM21 CI, root acceptance and merge are separate
+requirements, not inferred from local tests. No roadmap item becomes complete.
+
+Frame record authentication, true root-stable dataset ownership, cursor/mode
+restoration, same-region owned-batch cleanup, normal-lease staging and repeated
+1,024/8,192-frame resource proof remain with the later E3 composition owner.
+No frame authority or restoration stub is supplied by this change.
+
+
+The first PR #110 CI run `35698295743` stopped at Python isolation before any full
+compiler suite: the newly tracked, contract-selected build generator lacked an
+exact exception to the tests-only `.py` inventory. A prior local isolation run
+had not included that then-untracked file. The focused correction admits only
+`scripts/generate-e3-d2-source.py`, rejects other script/production paths, and
+preserves the manifest prohibition on runtime Python/PyTorch. All three corrected
+isolation tests pass with the generator tracked; no runtime source changes or
+compiler-suite omission is used to fix this registration failure.

@@ -1,0 +1,19 @@
+{
+  "format": "eshkol-e3-d2-source-variant",
+  "version": 1,
+  "source": "internal/d2/lib/d2_dataset.esk",
+  "source_sha256": "d16224de20732fa9eaf4f9be990d33712986d2f94723d7517f7e9b653ebf2fcf",
+  "expected_form": "(define (d2-tokenizer-identity tokenizer)\n  ;; T2 accessors intentionally name their own operations.  D2 remaps a forged\n  ;; or wrong-aggregate tokenizer at its public boundary without leaking those\n  ;; lower-layer operation names.\n  (guard\n   (caught\n    ((transformer-error? caught)\n     (d2-fail 'invalid-argument 'token-dataset-open\n              \"expected a same-aggregate tokenizer\"))\n    (else (raise caught)))\n   (vector (t2-private-tokenizer-fingerprint tokenizer)\n           (t2-private-tokenizer-vocab-size tokenizer))))\n\n",
+  "expected_form_sha256": "3833c0b46a54779cb2a587337359fb12546b739fb1f5a1d0d2044ee7c284ed27",
+  "replacement_form": "(define (d2-tokenizer-identity tokenizer)\n  (let ((result (e3-d2-byte-identity tokenizer))) result))\n\n",
+  "replacement_form_sha256": "2ac3329c7b432d29a1d734f4e6328a1ccec6fd309642c97849ca8b176687b0a6",
+  "output": "source/e3_d2_dataset.esk",
+  "generated_sha256": "d102ee50a33140271653f732f9dfea7c1c842c5c0922e99b4509ebffdc46ccaa",
+  "source_bytes": 45415,
+  "generated_bytes": 44982,
+  "prefix_bytes": 28787,
+  "prefix_sha256": "2e3082880402347924a47dfd411117b02f48f051abe49ef0146389416d44ddc2",
+  "suffix_bytes": 16093,
+  "suffix_sha256": "03361330e059506c17cc95be5f0f484df6ec80820b4999ad434ea5e9c5ca6eab",
+  "generator": "scripts/generate-e3-d2-source.py"
+}
