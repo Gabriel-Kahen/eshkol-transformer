@@ -1,0 +1,3 @@
+include/eshkol_transformer/g3n_primitives_abi.h
+include/eshkol_transformer/kernel_abi.h
+native/g3n_primitives_provider.c
