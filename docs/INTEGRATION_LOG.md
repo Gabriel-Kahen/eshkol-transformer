@@ -24,9 +24,13 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   relaxation, or a local duplicate of graph machinery. No full CI/PR was launched.
 - **Evidence and follow-up:** [P1 evidence ledger](E3_P1_MODES.md) inventories
   inherited package/resource obligations, source preservation, diagnostic results,
-  remaining failpoints and nonallocation proof. Real E3 admission, all17 mixed-mode
-  restoration, resource reuse, full predecessor gates, independent exact-head
-  review and supported CI remain unaccepted.
+  remaining failpoints and nonallocation proof. A subsequent strict/no-stdlib O0
+  ordinary run passes749 checks, including observable all17 mixed restoration,
+  on local CachyOS/LLVM22. The refined upstream proposal inventories every shared-map
+  caller and an explicit ABI transition; ordinary constructor null-check gaps remain
+  a separate prerequisite. Real E3 admission, allocation/short-region safety,
+  resource reuse, full predecessor gates, independent exact-head review and
+  supported CI remain unaccepted.
 
 ## 2026-09-22 — E3 exact private design accepted
 
