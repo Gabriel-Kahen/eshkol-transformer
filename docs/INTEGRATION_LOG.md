@@ -4,6 +4,24 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — E3 evaluation composition proposed
+
+- **Disposition:** proposed for root review in issue #99 and issue #1; no API/ABI,
+  metric schema, runtime, format or packaging freeze. See the
+  [evaluation proposal](E3_EVALUATION_PROPOSAL.md) for exact requested decisions.
+- **Scope:** fixed M3 N1/T2 byte model, genuine D2 bool batches, ordered CPU-f32
+  CE/weight/accuracy/perplexity and transactional cursor/mode restoration. The
+  smallest next slice reuses private accepted I2 scalar owners; a separately named
+  public report is an optional decision. A0 trainer interface remains unchanged.
+- **Prerequisites:** shared G3-T-compatible guard/fixed14 pins and sequence-length-2
+  no-grad frame, byte-only D2 identity/staging/restore, native metric rows and one
+  private localized source composition. Public report ownership/package are optional. None is inferred
+  from separately accepted components or unmerged G3 runtime.
+- **Evidence:** clean merged base `fe24931`, verified canonical compiler pin;
+  bounded source/object/AOT and missing-evaluator probes on CachyOS/LLVM22 only.
+  Three independent Astra/high design/review lanes; no production edits, full
+  suite/toolchain build, full CI, implementation PR, merge or completion claim.
+
 ## 2026-09-20 — L3S bounded masked-objective contract accepted
 
 - **Disposition:** [root accepted with conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069),
