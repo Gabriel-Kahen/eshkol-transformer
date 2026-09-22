@@ -31,6 +31,7 @@ SUITES = (
     "native-optimizer",
     "diagnostic-transport",
     "model-composition",
+    "g3n-forward",
     "contracts-data",
     "checkpoint-io",
     "parameter-state",
