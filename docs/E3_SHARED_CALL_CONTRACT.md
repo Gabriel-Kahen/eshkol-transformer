@@ -440,11 +440,16 @@ file hash `b8797d91ba5bc8d42215af50c31f5a5b44d5bf0b6f59ecb43ccb55eeb333a910`.
 That owner independently checked all46 rows and three helper declarations and
 confirms29/95/93/87/7 and the N/S hold are preserved.
 
-E3 confirms the concrete shared filenames, type/signatures, include strategy and
-closed native frame/token authentication. Its broader consumer design remains
-separately under review; full shared-draft review has also been requested. This
-agreement supports opening a draft PR without freezing E3's frame or restoring
-seams. Root exact-contract acceptance remains open. Compilation cannot prove acquisition, release, authentication,
+E3 also approves the complete shared contract for design submission at behavioral
+hash `f10190df0dc8daf70d8b796cc3a7ed0ca4f69c45df1346063f06fdb439725aaa`;
+its independent packaging reviewer found no shared-map/closure blocker. E3 confirms
+exact pins/source/authentication/domain3 and retained exclusion are compatible.
+Its own error contract may return a fixed failure sentinel normally through
+`m3-call` after cleanup and raise a prepared final-operation error outside the
+guard, because pinned Eshkol raise allocates. This requires no common change;
+normalization applies before any rethrow through the canonical handler. Exact
+E3 frame/restore/error implementation remains separately reviewed. Root
+exact-contract acceptance remains open. Compilation cannot prove acquisition, release, authentication,
 source-composed execution, gradients, determinism, memory bounds or rollback.
 No production implementation, public API, installed artifact, full numerical CI,
 toolchain build, merge or runtime capability is delivered by this proposal.
