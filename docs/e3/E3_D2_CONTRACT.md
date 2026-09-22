@@ -119,7 +119,55 @@ Frame copy contract: require successive stage ordinals0→1→2→3, validate ex
 
 The original D2 wrapper authenticates owner/generation and provides the unchanged exact K1 view only during the current lease; no raw-view provenance is claimed outside that scoped call. Existing D2 guard ends the borrow even if a fixed consumer raises. A failure in any plane causes the transaction to release only its exact owned batch before its region ends, restore and keep all caller result destinations unchanged. Final stage3 alone permits forward.
 
-## 7. Focused proof required before integration
+## 7. Exact owned-batch release without new guard construction
+
+Choose `e3-d2-release-owned!/2(frame,owned-cell)` in e3_d2_restore.esk. The
+cell is source-private lexical storage in the current batch region, allocated
+before next-batch, with exact four slots `[batch,generation,owned?,inspect-args]`.
+Initial values are `[#f,0,#f,(cons #f '())]`. It never enters a root record or
+escapes its region. Immediately after the trusted next-batch returns a non-EOS
+shell, before another fallible query/operation, store the shell, current prepared
+state[8] generation and true ownership, and set the frame's owned bit. These are
+nonallocating same-region/older-value stores. Stage still authenticates the batch
+normally; if that authentication fails, the already-recorded native ownership can
+be released. A failed next-batch before return retains no E3 ownership; existing
+D2 owns cleanup of its unpublished batch.
+
+Release uses canonical frame/D2 record and the cell's just-acquired generation;
+no public batch/dataset query, guard, closure construction, E1 reader or error
+constructor is called. If owned? is false it returns#t without release. Otherwise
+verify prepared record, open same root shell/state, state[8]==generation,
+state[10]=='live, state[15]==0, frame ownership bit and exact cell lifetime. Call
+existing `et_d2_batch_release_preflight_v1(record.dataset,generation)` through
+its already-loaded D2 extern. On0 set state[10]='released, call existing
+`et_d2_batch_release_v1` with those same operands, clear cell slots0/1/2 and frame
+owned bit. Native release clears current_batch and frees its payload/control; it
+already aborts on invalid generation/live lease. Any source/preflight/nonzero
+post-release invariant defect uses the fixed source `e3-native-invariant-fail/0`
+(libc abort), never an allocating error replacing the first failure. Do not modify
+monotonic generations or use this helper on a caller-owned entry-live batch.
+
+This selects the source-grounded native preflight/commit seam, not the public
+`d2-token-batch-release!` validator. Its valid path queries opaque shells through
+`guard`; pinned `eshkol_push_exception_handler` can malloc when its recycled frame
+list is empty. Such allocation cannot be assumed absent just because a high-level
+reader looks pure. The closed cleanup above creates no new guard. New E3 outer/inner handlers are installed before their own acquired work; their
+allocation cost belongs to preparation/execution, with compiled failure tests.
+The predecessor D2 with-view guard is installed after its native borrow begins;
+its handler-allocation/runtime-exhaustion behavior is not an E3 noalloc or
+recoverable-all-failures claim. Existing dependency behavior remains visible,
+and runtime-exhaustion defects must not be reported as successful rollback.
+
+For an ordinary E3 staging-native rejection, the fixed consumer snapshots its
+first diagnostic/table index and returns the nonzero immediate status normally.
+Existing D2 with-view then ends its lease on the normal path. The staging wrapper
+explicitly tests `(= status 0)`, converts it to#t/#f, skips remaining planes on
+nonzero and returns#f to the loop (all Scheme integer values are truthy);
+it does not raise through the borrowed callback. Unexpected dependency exceptions
+still use D2's existing borrow-end guard, then the same-region E3 classifier.
+These are3 fixed consumer sites, no caller callback or new native D2 API.
+
+## 8. Focused proof required before integration
 
 - Deterministic generator run twice; exact one-form delta and expected hashes; wrong predecessor/duplicate/missing form, symlink and unexpected include/source inputs reject. Original D2 source, bytecode source closure and build tuple unchanged.
 - Native idle table covers null/unknown/closed, open-empty, unpublished/live/sealed/borrowed batch, released batch and exhausted generation counters; receiver/control/allocation/generation snapshots unchanged, last_status exact. Same private TU owns registry.
