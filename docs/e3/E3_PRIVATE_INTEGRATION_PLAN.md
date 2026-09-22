@@ -15,7 +15,8 @@ reviews approved the metrics and D2 candidates. Their combined PR #112 passed
 supported [CI 35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879)
 at `b052385`, tree `2256194d2daeb233ec1745d0039b383d4358e3d5`, and merged
 as `33a54ef7` with that exact tree. Main CI 35798192984 verified and reused this
-evidence. Focused merged-head D2 checks passed; metrics closeout is underway.
+evidence. Focused merged-head D2 and metrics gates passed, including independent
+byte-preservation/ABI reviews, closure checks and sanitizers.
 The P1 owner completed the upstream runtime candidate at `222cad3a`, based on
 the current pin `90cbd713`; independent integration review, upstream disposition,
 downstream pin adoption and P1/guard acceptance remain required. No new compiler
