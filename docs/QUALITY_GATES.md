@@ -27,6 +27,16 @@ The gate covers all six schemas, real L2 gradients, bool/f32/weighted masks, exa
 environment/byte atomicity,
 observable compiled mutants and the documented two-term reversal equivalence,
 private I1/I2/AOT composition, exact manifests and ASan/UBSan/LSan.
+G3-N adds the separate forward-only `g3n-forward` suite, bringing the union to
+19 suites / 27 commands. Independent approval 5771670331, supported run
+35681252651 attempt 2, PR #97 merge and the root focused merged-head gate establish
+bounded [G3-N acceptance](G3N_PRIMITIVES.md#integration-provenance). The gate checks
+all eleven exact operation/row pairs, numerical/metadata mutations, malformed
+requests, byte/fenv atomicity, genuine I1/I2 borrows, exact packaging inventories,
+two fresh deterministic private AOT builds/runs and ASan/UBSan/LSan. The initial
+P1 timeout and sole authorized failed-job retry remain in the provenance; supported
+candidate and merged prose-union trees are distinct. Newer main CI is tracked
+separately and is not inferred green from the local compatibility retest.
 C2 composition invokes each unique leaf gate once instead of repeating regression
 tails nested inside other gates. Standalone core, load, and operational commands
 retain their historical regression tails; explicit focused flags are only used by
