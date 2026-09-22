@@ -65,6 +65,7 @@ generation, and Wave 3 remains incomplete.
 | M3T | [Bounded production Eshkol transport/lifetime contract](M3T_TRANSPORT_PROPOSAL.md) | N3K, N2, A2, I1, I2, P1L, E1B | #68; [accepted implementation and evidence](M3T_TRANSPORT.md); restricted 85-global sibling; independent M3T-R approval, supported full CI 35441033357, identical-tree PR #84 merge `f501609`, and focused merged-main retest; no model-completion claim | complete |
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | #89 [bounded design and compiled reachability](G3_GENERATION_PROPOSAL.md), decision 5748532295; exact G3-N/S ABIs accepted for implementation by decision 5751933660; G3-T private seams and all runtime/generation/save-reload acceptance remain open | active |
+| G3-S | [Bounded deterministic native sampler](G3S_SAMPLER.md) | K1, Q0, I1, I2, N2, N3K, A2; accepted PR #92 | #94; exact greedy/categorical ABI1.0, independent literal/mathematical/mutation, borrowed-carrier/fenv/adversarial, stack and package/AOT gates; supported CI and independent root review pending | review |
 | TR3 | Trainer state machine and exact resume | M3, L2, O2, D2, C2, E3 | One-batch overfit and interrupted/resumed equivalence | planned |
 | CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | End-to-end command tests and actionable diagnostics | planned |
 

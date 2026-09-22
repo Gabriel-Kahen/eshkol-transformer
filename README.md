@@ -171,6 +171,13 @@ numerical/gradient references, owned I1/I2 borrows, native failure atomicity,
 private pinned-Eshkol AOT, sanitizers, and package isolation. This provider adds no
 public model, RNG transport, initializer registry, or provider composition.
 
+G3-S adds the registry-free ABI 1.0 CPU-f32 `[1,256]` greedy/categorical sampler
+at `build/g3s/libeshkol_transformer_g3s.a`, discovered only through
+`et_g3s_kernel_provider_v1`. Run its focused numerical, adversarial, fenv, carrier,
+stack, package and private-AOT gate with `make test-g3s`; see
+[docs/G3S_SAMPLER.md](docs/G3S_SAMPLER.md). This numeric provider does not establish
+authenticated RNG transport, public generation, or model/cache commit semantics.
+
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at
 `include/eshkol_transformer/indexed_cross_entropy.h`. It exposes only explicit K1

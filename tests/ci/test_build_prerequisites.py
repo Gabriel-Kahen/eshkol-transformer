@@ -99,6 +99,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
                 "k2",
                 "n2",
                 "n3k",
+                "g3s",
                 "t2",
                 "d2",
                 "o2",
@@ -115,6 +116,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
     def test_partition_plans_only_build_canonical_artifacts_they_read(self) -> None:
         cases = {
             "contracts-data": ["d1"],
+            "g3s-sampling": ["k1", "i1", "i2", "g3s"],
             "diagnostic-transport": ["i2", "m3t"],
             "model-composition": ["i2", "m3"],
             "checkpoint-io": [],

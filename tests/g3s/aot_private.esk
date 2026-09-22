@@ -1,0 +1,11 @@
+;;; Private fixed-native-buffer diagnostic; this is not public model transport.
+(extern i64 g3s-test-provider :real et_g3s_test_provider_transport_v1)
+(if (= (g3s-test-provider) 1)
+    (begin
+      (display "G3S PRIVATE AOT PASS: greedy/categorical and numeric continuation")
+      (newline)
+      (exit 0))
+    (begin
+      (display "G3S PRIVATE AOT FAIL")
+      (newline)
+      (exit 1)))

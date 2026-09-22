@@ -10,7 +10,7 @@ ENGINE = ".github/workflows/full-coverage.yml"
 
 class TopologyTests(unittest.TestCase):
     def test_current_complete_graph(self):
-        self.assertEqual(check(ROOT), 18)
+        self.assertEqual(check(ROOT), 19)
 
     def test_workflow_mutations_rejected(self):
         mutations = [
