@@ -20,7 +20,7 @@ SHELL := /usr/bin/bash
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
 	test-c2-x1-canonical test-d1 test-d2 test-e1 test-e1b \
-	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-n2 test-n3k \
+	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
@@ -51,6 +51,7 @@ build-ci-core: configure
 	/usr/bin/bash scripts/compile-smoke.sh "$${BUILD_DIR:-$$(pwd)/build}"
 	/usr/bin/bash scripts/build-k1.sh
 	/usr/bin/bash scripts/build-l2.sh
+	/usr/bin/bash scripts/build-l3s.sh
 	/usr/bin/bash scripts/build-i1.sh
 	/usr/bin/bash scripts/build-a2.sh
 	/usr/bin/bash scripts/build-i2.sh
@@ -94,6 +95,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-k1.sh
 	/usr/bin/bash scripts/test-a2.sh
 	/usr/bin/bash scripts/test-l2.sh
+	/usr/bin/bash scripts/test-l3s.sh
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
@@ -122,6 +124,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-k1.sh
 	/usr/bin/bash scripts/test-a2.sh
 	/usr/bin/bash scripts/test-l2.sh
+	/usr/bin/bash scripts/test-l3s.sh
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
@@ -151,6 +154,7 @@ test-ci-core-after-build:
 	/usr/bin/bash scripts/test-k1.sh
 	/usr/bin/bash scripts/test-a2.sh
 	/usr/bin/bash scripts/test-l2.sh
+	/usr/bin/bash scripts/test-l3s.sh
 	/usr/bin/bash scripts/test-i1.sh
 	/usr/bin/bash scripts/test-i2.sh
 	/usr/bin/bash scripts/test-k2.sh
@@ -367,6 +371,15 @@ test-ci-m3-after-build:
 test-m3: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh model-composition
 	/usr/bin/bash scripts/test-m3.sh
+
+# Focused standalone gate; the CI core consumes its once-built prerequisites.
+test-l3s: configure
+	/usr/bin/bash scripts/build-k1.sh
+	/usr/bin/bash scripts/build-l2.sh
+	/usr/bin/bash scripts/build-i1.sh
+	/usr/bin/bash scripts/build-i2.sh
+	/usr/bin/bash scripts/build-l3s.sh
+	/usr/bin/bash scripts/test-l3s.sh
 
 .PHONY: test-ci-g3n-after-build test-g3n
 test-ci-g3n-after-build:

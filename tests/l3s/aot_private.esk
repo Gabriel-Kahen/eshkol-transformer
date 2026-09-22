@@ -1,0 +1,8 @@
+;;; Private AOT evidence only; no public Eshkol model or tensor API.
+(extern i64 l3s-test-bridge :real et_l3s_test_aot_bridge_v1)
+(if (= (l3s-test-bridge) 1)
+    (begin
+      (display "L3S PRIVATE AOT PASS: scoped I1/I2 and real L2 masked objective")
+      (newline)
+      (exit 0))
+    (exit 1))

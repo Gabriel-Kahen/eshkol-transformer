@@ -62,7 +62,9 @@ header. The deterministic archive has one `g3n_primitives_provider.o` member and
 one defined global. Local LLVM 22 measures nine undefined symbols:
 `__stack_chk_fail`, `et_kernel_error_clear`, `expf`, `fegetenv`, `fesetenv`, `memset`,
 `snprintf`, `sqrtf`, `strcmp`. The accepted ceiling additionally permits `memcpy`;
-the supported compiler must confirm its exact frozen subset before acceptance.
+the supported LLVM 21.1.8 job 106594118935 confirmed the same exact subset
+at candidate `aca9c4a37333c2e52de7ed4f197fe0259584d1a0`. The full union
+candidate still requires complete supported CI before acceptance.
 Sanitizer object inventories are separate and never shipped.
 
 The immutable K1 report is 4,979 bytes excluding NUL, SHA-256
@@ -77,9 +79,10 @@ Run `make test-g3n` for the focused gate. It verifies the pinned compiler, build
 only the canonical inputs read by this gate and runs `scripts/test-g3n.sh`.
 The normal build includes the archive, and normal/acceptance test lists include
 the focused gate. The `g3n-forward` supported CI suite adds to all existing suites;
-its prerequisites are K1, A2, I1, I2, N2, N3K and G3-N. At contract base main's
-18-suite/25-command boundary this yields 19 suites/26 commands. Future integration
-must union with actual main coverage, not replace concurrent additions.
+its prerequisites are K1, A2, I1, I2, N2, N3K and G3-N. Main's accepted L3S
+addition brings its baseline to 18 suites/26 commands; the G3-N union is 19
+suites/27 commands. Future integration must union with actual main coverage,
+not replace concurrent additions.
 
 The local compatibility gate measures 3,712 numerical/metadata checks, 36,245
 adversarial checks, and 26,493 carrier/allocation checks (26,494 with the additional
