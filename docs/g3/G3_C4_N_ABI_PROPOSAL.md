@@ -214,10 +214,21 @@ full-model loop or persistence work is part of that dispatch.
 Required proof: all28 pairs through actual K1 require/dispatch; independent
 mathematical/literal f32 references, non-self-inverse marked layouts, all mask/
 position arrangements and empty rows, extreme finite opposite-sign scores that
-force shifted overflow, expf underflow, weighted-product/reduction overflow,
+force shifted overflow, expf underflow, and reachable serial weighted-reduction
+overflow with individually finite products and unchanged output on rejection;
 GELU signs/subnormals/zeros, norm epsilons/overflow and embedding boundaries.
 Assert exact metadata and rejected neighbours for every row; mutated arithmetic/
 layout/mask/domain checks must fail the intended oracle.
+
+Root's issue #115 proof refinement requires an independently reviewed argument
+for the unreachability of weighted-product overflow under admitted inputs.
+With the accepted round-to-nearest binary32 operation order, each nonnegative
+exponential weight is at most the monotone positive denominator; the rounded
+quotient remains in [0,1]. Multiplying that probability by any admitted finite V
+cannot overflow. Preserve the copied weighted-product finite guard and its
+provenance; this refinement changes no production arithmetic or numerical ABI.
+All reachable score/product/difference/denominator/output negatives remain
+required. Synthetic invalid-fenv paths do not count as admitted overflow proof.
 
 Cover every descriptor/error/alias/fenv path, both complete input-alias exceptions
 and partial-alias rejection, unchanged inputs/outputs on failure, identical dry/
