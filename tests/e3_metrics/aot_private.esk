@@ -1,0 +1,8 @@
+;;; Private numerical transport only; no evaluator/frame/model authority.
+(extern i64 e3-metrics-test-bridge :real et_e3_metrics_test_aot_bridge_v1)
+(if (= (e3-metrics-test-bridge) 1)
+    (begin
+      (display "E3-METRICS PRIVATE AOT PASS: errors, atomicity and real L2/L3S/I1/I2")
+      (newline)
+      (exit 0))
+    (exit 1))
