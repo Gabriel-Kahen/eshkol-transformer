@@ -23,9 +23,10 @@ still does not establish a joint installed evaluator.
    `accumulate`, and `finalize`. Defer `correct.f32` and weighted-mask accuracy
    execution/tests. Preserve merged L2/L3S behavior; existing weighted L3S reference
    semantics provide future context, not an extra required E3 row.
-3. **One shared guard owner.** Existing G3-T contract task
-   `01a0bd6a-1e15-7662-a245-0eaa201426d3` owns the shared guard/fixed14 extraction
-   proposal and affected G3-T review. This E3 task owns its consumption requirements,
+3. **One shared guard owner.** [E3-CG](E3_SHARED_CALL_CONTRACT.md), issue #101, owns the exact shared
+   guard/fixed14 proposal in task `01a0c789-bd3f-7b21-b865-8b9365c7a282`.
+   Original G3-T task `01a0bd6a-1e15-7662-a245-0eaa201426d3` retains affected
+   G3-T review. This E3 task owns its consumption requirements,
    sequence-length-2 (T=2) no-grad frame and evaluation transaction. No duplicated
    guard, strengthened I2 lock or dependency on unmerged G3-N/S/T runtime.
 4. **One private source composition.** Use M3 lineage, an authenticated fixed-byte
@@ -347,6 +348,14 @@ with finite perplexity. Unequal bool weights `(N_b,W_b)=(1,1),(6,2)` distinguish
 no claim that the public fixed model emits exactly these CE words.
 
 ## 6. Transaction, no-grad and lifetime prerequisites
+
+The [E3-CG exact contract](E3_SHARED_CALL_CONTRACT.md) proposes canonical
+`native/m3_call_adapters.esk`, `src/eshkol_transformer/m3_call_pins.h` and
+`src/eshkol_transformer/m3_call_f32_integration.c`, preserving the existing
+`et_g3t_model_pins_internal` type and three helper signatures. E3 authenticates
+its own frame/model before deriving embedded pins and retains model/outer tokens
+after pin-end until its restoration/publication tail. The common layer has no
+E3 registration or token API. Exact source design remains under review.
 
 The canonical shared-guard owner must provide one common outer invocation guard
 and the address-stable fixed14
@@ -722,7 +731,7 @@ These are ownership/milestone labels, **not eight independent dispatch requests*
 
 | Milestone | Owner and deliverable | Gate |
 |---|---|---|
-| Shared guard extraction | Existing G3-T contract task owns one canonical source/guard/fixed14 inventory and affected G3-T review; E3 supplies consumer requirements | Exact contract reviewed/merged before either consumer implements against it |
+| Shared guard extraction | [E3-CG #101](E3_SHARED_CALL_CONTRACT.md) owns the canonical source/guard/fixed14 inventory; original G3-T owner reviews affected contract; E3 supplies consumer requirements | Exact contract reviewed/merged before either consumer implements against it |
 | E3-DESIGN | This E3 task consolidates bool metric descriptors, fixed frame/21 roles, P1 all-mode token, D2 identity/staging/restore, six-output commit and private package manifest proposal | Root approves exact inventories; architecture direction alone is insufficient |
 | Required seam implementations | Root chooses bounded implementation grouping after exact design; shared guard/frame, P1/D2 restoration/transport and three bool metric operations | Independent substantive review, supported CI and merge for each actual prerequisite; no invented/unmerged upstream API |
 | **E3-PRIVATE** | **This E3 task owns Eshkol private orchestration and real-source composition**, reusing preowned I2 outputs and a fixed frame | Required shared guard/frame, P1/D2 and numerical contracts/implementations accepted and merged; root authorizes implementation |

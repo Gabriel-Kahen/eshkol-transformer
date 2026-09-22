@@ -19,6 +19,13 @@ specifies configuration, nine A0 names plus six additions, EOS, ownership and
 transactions. G3-T installs **none** of those generation names. C2 admits P=1/2,
 G=0/1, and P+G<=2; this cannot prove repeated generation or save/reload.
 
+The subsequent [E3-CG exact shared-source proposal](../E3_SHARED_CALL_CONTRACT.md)
+consolidates the three pin helpers and 38 checked adapters for G3 and E3. Its
+source ownership and lifecycle refinements remain proposed until root acceptance;
+the accepted G3 calls, slots, kinds, 29/95 inventory and public counts below do
+not change. E3-CG owns that proposal; this G3-T owner retains affected-contract
+review. Neither sharing nor that review lifts the N/S implementation hold.
+
 ## Accepted decisions
 
 1. One shared invocation guard and fixed 14-pin frame, including temporary use
@@ -113,10 +120,14 @@ norm1-beta/gamma, norm2-beta/gamma, tied-token/head, final-beta/gamma, position.
 Their shapes are four[4,4], [4,8], [8,4], four[4], [256,4], two[4], [2,4]:
 1,184 f32 values, exactly **4,736 bytes**. No role may choose a parameter index.
 
-Proposed C-only type `et_g3t_model_pins_internal` contains `self`,
+The common source proposal preserves C-only type `et_g3t_model_pins_internal`.
+Its [exact declaration and begin/check/end lifecycle](../E3_SHARED_CALL_CONTRACT.md#3-exact-private-pin-declaration-and-geometry)
+are consolidated there. It contains `self`,
 `parameters[14]`, `identities[14]`, `values[14]`, read-only `views[14]` and
-`uint16_t held_mask`. It is embedded in the stable generator context, never
-copied, moved or reallocated while held. This is a **new** frame-pin contract;
+`uint16_t held_mask`. It is embedded in the stable authenticated generator context for G3, or in E3's
+separately authenticated stable frame, never copied, moved or reallocated while
+held. `self` is copy detection, not context authentication. Only closed consumer
+adapters derive its address and canonical arrays after registry admission. This is a **new** frame-pin contract;
 `et_f32_tensor_scoped_*_internal` retains its synchronous stack-only semantics.
 
 ```c
@@ -344,6 +355,12 @@ mutation. Tensor/output/RNG release and close clear payload roots but retain
 identity tombstones. Accessors allocate independent clones; output-text returns
 a fresh one-element list and detached bytevector, surviving all parent releases.
 
+E3's mode/cursor restoration and staged-result publication belong only to its
+consumer. Shared pin-end clears pins only, never native/model/outer exclusion or
+consumer state. G3's finish/abort still own matching token cleanup; only the
+outer `m3-call` clears its guard after the inner consumer handler completes.
+G3 stays eval-only, with no shared mode flag or restoration callback.
+
 ## Bounded error transport
 
 Do not reuse M3T's mapper for new G3T codes. Native constructors preserve first
@@ -380,14 +397,20 @@ globals match M3 exactly. All G3T/G3-N/G3-S/A2-cache symbols are LOCAL; reject
 unresolved private references. Later G3-G's fifteen names would yield eight
 facades/102 boxed exports/108 globals, requiring its own reviewed tuple.
 
-The root loads the M3 root then `native/g3t_transport_extension.esk`; T1's new
+Under the common-source proposal, the root loads the M3 root, then
+`native/m3_call_adapters.esk` once, then `native/g3t_transport_extension.esk`.
+The common source owns the existing 38 checked bindings; `m3-call-state` and
+`m3-call` stay canonical in `native/m3_model_extension.esk`. T1's new
 raw helper is trusted internal source only. Proposed transport TU
 `src/eshkol_transformer/g3t_transport.c` includes `m3_model.c` and replaces its
-compile entry once. Proposed `g3t_f32_integration.c` includes the existing
-`m3t_f32_integration.c` once and adds only the fixed14pin adapter; it replaces
-that compile entry. Keep `m3_i64_integration.c` and `t1_i64_shell.c` once; no new
-registry copy. Private declarations live in `g3t_transport.h` and
-`g3t_model_pins.h`, never installed. Actual depfiles must include both new and
+compile entry once. The common proposal replaces the formerly proposed `g3t_f32_integration.c`
+with `src/eshkol_transformer/m3_call_f32_integration.c`, including the existing
+`m3t_f32_integration.c` once and adding only the fixed14 pin mechanics; it
+replaces that compile entry. Neither old proposed G3 pin path becomes a shim. Keep `m3_i64_integration.c` and `t1_i64_shell.c` once; no new
+registry copy. Private declarations live in `g3t_transport.h` and the common
+`m3_call_pins.h` (superseding proposed `g3t_model_pins.h`), never installed.
+Actual `et_g3t_*` spellings and all three signatures remain unchanged. Shared
+sources import no G3 registry, cache, decoder, sampler or provider runtime. Actual depfiles must include both new and
 included predecessor sources. No whole-archive provider admission is allowed.
 
 The exact selected native object tuple is:
