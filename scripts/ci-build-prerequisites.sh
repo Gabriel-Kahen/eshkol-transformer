@@ -36,7 +36,7 @@ for suite in "$@"; do
     native-numerics)
       # K2 proves collisions against the I2, T2, D2, and O2 archives, so the
       # core partition retains O2 even though test-o2.sh runs separately.
-      select_producers k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2
+      select_producers k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2
       ;;
     model-composition)
       select_producers i2 m3
@@ -81,7 +81,7 @@ for suite in "$@"; do
       # Union of predecessor read-before-write artifacts. X1, P1, C1, T1,
       # and the smoke test itself perform intentional test-local fresh builds.
       # Add smoke-benchmark when those post-suite checks run in the same job.
-      select_producers k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2 d1 m3t m3
+      select_producers k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2 d1 m3t m3
       ;;
     *)
       printf 'error: unknown CI suite: %s\n' "${suite}" >&2
@@ -91,7 +91,7 @@ for suite in "$@"; do
   esac
 done
 
-producer_order=(smoke k1 a2 l2 i1 i2 k2 n2 n3k t2 d2 o2 d1 c2 m3t m3)
+producer_order=(smoke k1 a2 l2 l3s i1 i2 k2 n2 n3k t2 d2 o2 d1 c2 m3t m3)
 
 producer_script() {
   case "$1" in
@@ -128,6 +128,11 @@ verify_producer() {
     l2)
       verify_file "${build_dir}/l2/indexed_cross_entropy.o"
       verify_file "${build_dir}/l2/libeshkol_transformer_l2.a"
+      ;;
+    l3s)
+      verify_file "${build_dir}/l3s/l3s_masked_objective_provider.o"
+      verify_file "${build_dir}/l3s/l3s_masked_objective_provider.d"
+      verify_file "${build_dir}/l3s/libeshkol_transformer_l3s.a"
       ;;
     i1)
       verify_file "${build_dir}/i1/i64_tensor.o"

@@ -1,0 +1,7 @@
+__stack_chk_fail
+et_kernel_error_clear
+fegetenv
+fesetenv
+snprintf
+strcmp
+strlen

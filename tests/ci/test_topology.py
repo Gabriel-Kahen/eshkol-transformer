@@ -20,6 +20,7 @@ class TopologyTests(unittest.TestCase):
             (ENGINE, "timeout: 240", "timeout: 75"),
             (ENGINE, "A0_COMPILER_TIMEOUT_SECONDS: '60'", "A0_COMPILER_TIMEOUT_SECONDS: '600'"),
             (ENGINE, "P1_LSAN: '1'", "P1_LSAN: '0'"),
+            (ENGINE, "L3S_ASAN_DETECT_LEAKS: '1'", "L3S_ASAN_DETECT_LEAKS: '0'"),
             (ENGINE, "K2_ASAN_DETECT_LEAKS: '1'", "K2_ASAN_DETECT_LEAKS: '0'"),
             (ENGINE, "if: matrix.suite == 'native-numerics'", "if: false"),
             (ENGINE, 'test "$SUITES_RESULT" = success', ': "$SUITES_RESULT"'),
@@ -61,6 +62,7 @@ class TopologyTests(unittest.TestCase):
         text = (ROOT / "Makefile").read_text()
         for command in (
             "/usr/bin/bash scripts/test-o2.sh",
+            "/usr/bin/bash scripts/test-l3s.sh",
             "/usr/bin/bash scripts/test-c2.sh --group c2-operational",
             "/usr/bin/bash scripts/test-t2-boundary.sh",
             "/usr/bin/bash scripts/build-c2.sh",
