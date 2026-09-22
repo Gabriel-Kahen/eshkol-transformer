@@ -4,9 +4,10 @@ Historical prefreeze proposal: the contract was accepted for bounded implementat
 [Binding decision](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069),
 [issue mirror](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/87#issuecomment-5747250113).
 The original proposal below is retained for provenance; its future-tense gates and
-base-relative CI counts are historical. The implementation has since passed
-supported CI and independent review and merged; current status and exact provenance
-are in [L3S_MASKED_OBJECTIVE.md](L3S_MASKED_OBJECTIVE.md).
+base-relative CI counts are historical. The bounded implementation is accepted and
+complete after independent review, supported candidate and combined-main CI, merge
+and focused postmerge checks. Current status and exact provenance are in
+[L3S_MASKED_OBJECTIVE.md](L3S_MASKED_OBJECTIVE.md).
 Proposal base: `21b1df13940e94adce998ab88cb45c329c956b58`.
 
 ## Boundary and discovery

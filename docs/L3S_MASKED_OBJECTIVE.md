@@ -1,11 +1,10 @@
 # L3S bounded masked objective
 
-Status: independently approved and merged within the
-[accepted ABI 1.0 contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069).
-The merged-main focused check passed. Acceptance closeout remains in review,
-pending the combined-main CI result and independent documentation review.
-This is carrier-neutral numerical evidence, not public model loss or training
-integration.
+Status: **accepted and complete** within the bounded
+[ABI 1.0 contract](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069).
+Independent approval, supported candidate and merged-main CI, merge and focused
+postmerge evidence are recorded below. This is carrier-neutral numerical evidence;
+public model loss, training integration and Wave 3 completion remain downstream.
 
 ## Boundary and discovery
 
@@ -203,10 +202,13 @@ package/baseline/isolation and ASan/UBSan/LSan. Commands used non-login
 CachyOS/Clang-LLVM 22.1.6 compatibility evidence. Torch's existing optional-NumPy
 warning did not affect the matching regeneration or reference checks.
 
-[Combined-main CI 35680925863](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35680925863)
-is still running at documentation preparation. Acceptance merge requires its
-success and independent review of this prose-only update; no success or final
-completion is claimed for that pending gate.
+[Combined-main CI 35680925863, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35680925863)
+completed successfully on exact merge `fe2493168e72cd7bf81d810c9c172c40aacfee61`,
+tree `902d4645e13c133a811f1c1cf72ffb799976a58a`. All 18 supported suites / 26
+commands, topology, suite evidence and final aggregation succeeded. The actual
+checkout logs for all 18 suites and the single evidence record match that commit
+and tree. This is fresh Ubuntu 22.04 / LLVM 21.1.8 coverage of the combined main,
+separate from the earlier candidate run and local compatibility retest.
 
 There is no arbitrary shape, accelerator, mixed precision, ownership graph,
 installed mask/scalar facade, public Eshkol model-loss API, compiler autodiff,

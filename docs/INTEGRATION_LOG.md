@@ -4,8 +4,11 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
-## 2026-09-21 — L3S reviewed, merged and retested; acceptance closeout in review
+## 2026-09-22 — bounded L3S implementation accepted and complete
 
+- **Disposition:** accepted and complete within the carrier-neutral `[1,2]`
+  CPU-f32 contract. The evidence below supersedes the historical pending status;
+  public model loss, training and Wave 3 completion remain downstream.
 - **Review:** [independent L3S-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/91#issuecomment-5770338523)
   covers exact head `b320ec0aca7bd0f6d36553dadc6031d6a16bb546`, tree
   `535304a751daf80b922d84b1bc78f8219cf066ce`, with three independent Astra/high
@@ -29,10 +32,14 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   borrows, two fresh identical private AOT binaries, package/baseline/isolation
   and ASan/UBSan/LSan passed. This is CachyOS/LLVM22 compatibility evidence;
   the optional NumPy warning did not affect oracle equality or reference checks.
-- **Pending acceptance:** [combined-main CI 35680925863](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35680925863)
-  is running. Its success and independent exact-head documentation review are
-  required before acceptance merge. No duplicate gate or full CI was launched
-  by this prose-only follow-up.
+- **Combined-main supported evidence:** [run 35680925863, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35680925863)
+  completed successfully on exact merge `fe249316`, tree
+  `902d4645e13c133a811f1c1cf72ffb799976a58a`. All 18 supported suites / 26
+  commands plus topology, evidence and final aggregation succeeded. Run/attempt
+  metadata, all suite checkout hashes and the single evidence record authenticate
+  the exact merged commit/tree. This fresh Ubuntu 22.04 / LLVM 21.1.8 run is
+  separate from the original candidate proof and local focused retest. No duplicate
+  runtime gate or full CI was launched by this prose-only follow-up.
 - **Scope:** the [L3S contract](L3S_MASKED_OBJECTIVE.md) remains carrier-neutral
   `[1,2]` CPU-f32 only. This supplies no model-loss facade, installed carrier,
   broader shape, trainer, accelerator or performance claim. Future composition
@@ -41,7 +48,7 @@ Only the integration owner changes a proposed decision to `accepted` after revie
 ## 2026-09-20 — L3S bounded masked-objective contract accepted
 
 Historical contract checkpoint; the pending CI/review/merge statements below are
-superseded by the integration provenance above. Final closeout remains in review.
+superseded by the completed bounded acceptance and integration provenance above.
 
 - **Disposition:** [root accepted with conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069),
   [issue #87 mirror](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/87#issuecomment-5747250113).
