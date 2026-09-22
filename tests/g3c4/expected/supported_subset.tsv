@@ -1,0 +1,7 @@
+supported_os	ubuntu-22.04
+supported_arch	x86_64
+llvm_version	21.1.8
+cc_version	21.1.8
+cxx_version	21.1.8
+eshkol_version	1.3.4-evolve
+eshkol_commit	90cbd7130f47b8184bcc77b8d5c1b0026da980de

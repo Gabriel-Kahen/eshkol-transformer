@@ -1,0 +1,2 @@
+___asan_globals_registered
+et_g3c4_kernel_provider_v1
