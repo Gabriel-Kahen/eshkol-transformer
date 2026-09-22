@@ -45,13 +45,22 @@ facade, not changes to existing `checkpoint-load/3` or `checkpoint-save!/4`:
 | `generation-checkpoint-save!(generator, path, policy, options)` | `#t` after atomic publication and successful durability checks; snapshot an idle C4 generator and its currently bound model |
 | `generation-checkpoint-load(path, policy, tokenizer)` | Fresh two-element list `(model generator)` containing authentic C4 model and generator shells; publish both together after full replay |
 
-`policy` is the current M3/G3-lineage C1 policy returned by
-`persistence-policy/5`, validated by `c1-require-policy` on each invocation. It is
-a tagged, mutable data vector whose shape, exact tag, values and ceilings are
-revalidated, not a native-authenticated owner or capability. Do not substitute
-C2's distinct authenticated closure policy or assume its private projection is
-already composed here. G3-R applies the lower of the caller's bounds and its own
-limits; accepting a conforming copied C1 data policy grants no runtime authority. `options` is exactly the finite flat list
+The eventual single Wave 3 aggregate uses the canonical C2 authenticated
+`persistence-policy/5` closure, shared with training/checkpoint and tokenizer
+surfaces. G3-R calls `c2-require-policy` for exact factory/entry authentication
+and revalidation, and obtains nested C1 bounds only through
+`c2-policy-c1-subpolicy-internal` (validated private entry slot8). Public mutable
+C1 policy vectors, copied closures and foreign-aggregate identities reject.
+The raw C1 projection stays private and grants no additional authority.
+
+This requires a reviewed source-composition change from today's M3 policy
+producer, preserving one public name/arity and one policy factory/registry.
+Follow the existing `c2-policy-t2-entry-internal` projection installed by
+`c2_public_extension.esk`; retain tokenizer predecessor tests. Never link M3/C2
+owning archives together or install competing public producers. The G3 capsule
+applies the lower of authenticated caller limits and its own ceilings; nested
+C1 receives the private lowering projection, not the wider aggregate tensor limit.
+`options` is exactly the finite flat list
 `(:overwrite? boolean)`; unknown, missing, duplicate, cyclic or extra elements
 reject. Path admission and atomic publication follow C1. A result list may be
 copied as ordinary data; its elements gain authority solely from exact registry
@@ -179,7 +188,11 @@ Eshkol Compiler v1.3.4-evolve\0
 ```
 
 The first three lines form the library identity; the last two form the compiler
-identity. Displayed line breaks only separate concatenated string fragments: they
+identity example. Freeze the exact compiler bytes and all lane-record values
+against the accepted upstream pin before implementation evidence; `90cbd...` is
+not mandated as the final runtime. Preserve the71-byte field grammar/width; do
+not truncate, pad or silently change schema if the accepted identity cannot fit.
+Displayed line breaks only separate concatenated string fragments: they
 are not bytes. Each `\0` is exactly one NUL, including the final fragment's NUL;
 there is no extra C-string terminator. Metadata length is exactly 274 bytes;
 the nested C1 begins at offset530. Identities are inert fixed-length bytes,
@@ -367,7 +380,9 @@ contracts, merges those dependencies and accepts the complete supported evidence
 - [C1 format](../CHECKPOINT_FORMAT.md): non-executable nested model, checksum and
   ownership ledger, alias checks and atomic I/O; [C2](../C2_TRAINING_STATE.md):
   detached training owner and current public rank-two capability limitation.
-- [C2 public compositor](../../native/c2_public_extension.esk): authentic report
+- [Canonical C2 policy](../../native/c2_persistence_policy_extension.esk) and
+  [public compositor](../../native/c2_public_extension.esk): one authenticated
+  policy and private C1/T2 projection, authentic report
   requests before reconstruction; [K2 native audit](../../native/k2_capabilities.c):
   exact eleven-row runtime and report generation admission.
 - [M3T model composition](../../native/m3t_transport_extension.esk): exact paths,

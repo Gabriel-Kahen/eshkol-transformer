@@ -16,7 +16,7 @@ exact owner-reviewed seam/report freeze before any implementation uses them.
 | Decision | Proposed boundary | Required follow-through |
 |---|---|---|
 | [G3-C4](G3_C4_PROFILE_PROPOSAL.md) | Separate learned-position C4 profile; P1..4, G0..3, P+G<=4; repeated single decode; 14 parameters/4,768 bytes; constructor and continuation API | Closed C4 owner/transport delta, shared-owner C4 pins and construction rollback admission |
-| C4 numerical prerequisite | One distinct registry-free forward provider: 7 capabilities, 8 operations, 28 missing row pairs; retain all frozen predecessor reports | Exact ABI/header/source arithmetic/error/metadata review and independent numerical implementation proof |
+| [C4 numerical prerequisite](G3_C4_N_ABI_PROPOSAL.md) | One distinct registry-free forward provider: 7 capabilities, 8 operations, 28 missing row pairs; retain all frozen predecessor reports | Exact ABI/header/source arithmetic/error/metadata review and independent numerical implementation proof |
 | [G3-R](G3_R_PERSISTENCE_PROPOSAL.md) | C4-only data capsule containing unchanged C1 model bytes, policy, typed RNG, tokenizer fingerprint, history, prefill partition and EOS stop; fresh model+generator restore | Shared I2/K2 storage admission, staged P1/I2 prepare/seal/abort and closed candidate replay |
 | Shared persistence | C4 exact rank1 [4], rank2 [4,4]/[4,8]/[8,4]/[256,4]; TR3 C2 additionally needs [2,4] | Root-directed I2 tensor.f32/storage.copy successor plus K2 audit; five exact rank2 alternatives, no alternate capability; [SHARED-R2 #114](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/114) freezes version1.1/evidence-v2 and dispatches one owner; implementation acceptance pending |
 | Deterministic continuation | Same original prefill width then single-token append replay, no random draw; exact supported-lane identity | Freeze reviewed execution-lane manifest values and prove fresh-process continuation; never infer bit equality from tolerance parity |
@@ -41,6 +41,9 @@ only new public names, the projected generation successor is eight facades,
 an arithmetic budget, not a measured/frozen artifact inventory. K2 admission is
 private in G3-R: compose its reviewed extension once over the existing registry
 lineage, without an extra public report facade or a second owning aggregate.
+The single eventual Wave3 lineage also uses C2's authenticated
+`persistence-policy/5` and its reviewed private C1/T2 projection; replace the
+current M3 producer in that successor, never expose conflicting same-name policies.
 Actual source/native/member/defined/undefined/name inventories must be reviewed
 on the implemented successor and reflect all merged prerequisite changes.
 
@@ -109,6 +112,6 @@ or hidden smaller test loop substitutes for these measurements.
 This package is ready for profile/public/wire-direction decisions. It deliberately
 identifies the remaining exact seam/report freezes: C4 native/Eshkol transport;
 shared C4 pins and construction eligibility; P1/I2 prepare/seal/abort plus candidate
-replay; accepted implementation/report provenance for dispatched SHARED-R2#114; reviewed
-lane-manifest values; final package inventories. Approval of the direction must
+replay; accepted implementation/report provenance for dispatched SHARED-R2#114; canonical C2-policy/C1-projection composition; reviewed
+lane-manifest and compiler-identity values after the accepted upstream repin; final package inventories. Approval of the direction must
 not be recorded as approval or implementation of those unresolved prerequisites.
