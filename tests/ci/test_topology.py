@@ -10,7 +10,7 @@ ENGINE = ".github/workflows/full-coverage.yml"
 
 class TopologyTests(unittest.TestCase):
     def test_current_complete_graph(self):
-        self.assertEqual(check(ROOT), 18)
+        self.assertEqual(check(ROOT), 19)
 
     def test_workflow_mutations_rejected(self):
         mutations = [
@@ -57,6 +57,25 @@ class TopologyTests(unittest.TestCase):
                 self.assertIn(before, text)
                 with self.assertRaises((AssertionError, KeyError)):
                     check(ROOT, {path: text.replace(before, after, 1)})
+
+    def test_g3n_inventory_and_leak_checks_are_mandatory(self):
+        engine = (ROOT / ENGINE).read_text()
+        make = (ROOT / "Makefile").read_text()
+        entry = ("          - suite: g3n-forward\n"
+                 "            test_target: test-ci-g3n-after-build\n"
+                 "            timeout: 75\n")
+        mutations = [
+            (ENGINE, engine, entry, ""),
+            (ENGINE, engine, entry, entry + entry),
+            (ENGINE, engine, "G3N_ASAN_DETECT_LEAKS: '1'", "G3N_ASAN_DETECT_LEAKS: '0'"),
+            ("Makefile", make, "/usr/bin/bash scripts/test-g3n.sh", ":"),
+            ("Makefile", make, "/usr/bin/bash scripts/build-g3n.sh", ":"),
+        ]
+        for path, text, before, after in mutations:
+            with self.subTest(path=path, mutation=before, replacement=after):
+                self.assertIn(before, text)
+                with self.assertRaises((AssertionError, KeyError)):
+                    check(ROOT, {path: text.replace(before, after)})
 
     def test_coverage_mutations_rejected_even_if_both_tiers_drop_same_gate(self):
         text = (ROOT / "Makefile").read_text()

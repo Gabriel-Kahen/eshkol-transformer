@@ -44,6 +44,7 @@ build: configure
 	/usr/bin/bash scripts/build-c2.sh
 	/usr/bin/bash scripts/build-m3t.sh
 	/usr/bin/bash scripts/build-m3.sh
+	/usr/bin/bash scripts/build-g3n.sh
 
 build-ci-core: configure
 	/usr/bin/bash scripts/generate-p1-roots.sh --check
@@ -115,6 +116,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-q0.sh
 	/usr/bin/bash scripts/test-m3t.sh
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-g3n.sh
 
 test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test.sh
@@ -142,6 +144,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-q0.sh
 	/usr/bin/bash scripts/test-m3t.sh
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-g3n.sh
 
 test-acceptance-c2-after-build:
 	/usr/bin/bash scripts/test-c2.sh
@@ -377,3 +380,11 @@ test-l3s: configure
 	/usr/bin/bash scripts/build-i2.sh
 	/usr/bin/bash scripts/build-l3s.sh
 	/usr/bin/bash scripts/test-l3s.sh
+
+.PHONY: test-ci-g3n-after-build test-g3n
+test-ci-g3n-after-build:
+	/usr/bin/bash scripts/test-g3n.sh
+
+test-g3n: configure
+	/usr/bin/bash scripts/ci-build-prerequisites.sh g3n-forward
+	/usr/bin/bash scripts/test-g3n.sh

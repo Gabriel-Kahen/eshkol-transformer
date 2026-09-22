@@ -27,6 +27,9 @@ jobs:
           - suite: model-composition
             test_target: test-ci-m3-after-build
             timeout: 105
+          - suite: g3n-forward
+            test_target: test-ci-g3n-after-build
+            timeout: 75
           - suite: contracts-data
             test_target: test-ci-contracts-after-build
             timeout: 75
@@ -84,6 +87,7 @@ jobs:
       L3S_ASAN_DETECT_LEAKS: '1'
       M3T_ASAN_DETECT_LEAKS: '1'
       M3_ASAN_DETECT_LEAKS: '1'
+      G3N_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
