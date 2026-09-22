@@ -57,8 +57,12 @@ scalar implementation of sampling or model numerics.
 The trusted chain is `m3_package_root.esk` → `m3t_package_root.esk` →
 `i2_wave2_root.esk` → `t1_wave1_root.esk`, with the M3 schedule/model extension
 loaded into that same root. M3's native-object inventory includes N2, N3K and A2
-providers. Presence of A2's native cache code in an archive does not furnish an
-Eshkol generator/cache carrier or a callable public transport.
+providers, specifically `a2_attention_provider.o`; it does **not** select
+`a2_kv_cache.o`. The standalone A2 archive contains that cache object, but G3-T
+must explicitly admit it and its depfile/source closure. Neither archive
+presence nor native cache code furnishes an Eshkol generator/cache carrier or
+a callable public transport. This inventory correction comes from the later
+[G3-T source audit](G3_T_PRIVATE_CONTRACT.md), not a new executable probe.
 
 M3's admitted source-private seams are localized. Its graph/owned-logits registry,
 M3T input/workspace registry, I2/P1 parameter identities, T1 token tensors, and E1

@@ -2258,3 +2258,46 @@ inventories and 61 source/facade correspondences were checked for a reused M3
 artifact; callers were freshly compiled. The evidence is explicit CachyOS/LLVM22
 compatibility evidence, not a fresh package build or supported-host acceptance.
 No full build, full CI, implementation PR or merge was run for this phase.
+
+
+## 2026-09-20 — exact G3-T private seams proposed
+
+The [single G3-T decision request](g3/G3_T_PRIVATE_CONTRACT.md) follows merged
+contract PR #92 at `4353bd2f14ae4fb50c877c27fc73b8edef8e2f30`. It proposes
+shared M3/M3T invocation admission, a fixed14 stable pin adapter with temporary
+parameter control pins, exact closed owners/calls/error transport, preallocated
+T1 decoding, and a private-only seven-facade/87-export/93-global successor.
+All38 M3T outer adapters are gated without changing their C ABI targets. The
+explicit six-object tuple adds A2 cache plus G3-N/S; current M3 does not select
+A2 cache. Independent guard/pinning, owner/T1 and packaging reviews consolidate
+these deltas in one proposal.
+
+Root disposition remains pending. G3-N #93 and G3-S #94 implementations must
+both merge before production integration. Accepted C2/config/EOS/RNG/token
+transaction semantics and N/S arithmetic/ABI proposals are unchanged. This
+phase adds documentation only; no production header, public export, full build,
+full CI, implementation PR, merge or new runtime evidence is claimed.
+
+
+## 2026-09-20 — exact G3-T private contract accepted; implementation blocked
+
+[Binding decision 5752756205](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5752756205),
+[mirrored on #89](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/89#issuecomment-5752756256),
+accepts all four deltas of the [G3-T private contract](g3/G3_T_PRIVATE_CONTRACT.md)
+at `a7a45908d9b5224ad6d2d6cb08926ecc3bb75ccf`, reviewed proposal SHA-256
+`78a770237a000bc0d3a7b22c678fc1a6692a9d8052456bbed350c02e4366b9fe`.
+Separate root Astra/high guard/pinning and package/error reviews accepted; root
+ownership/decoder/A2 transaction audit agreed. These are source/design reviews.
+
+The decision clarifies that parameter `plan_pins` excludes reset/contribution
+preparation and parameter destruction, but privileged gradient-borrow admission
+does not test that count. Gradient preservation also requires the closed
+no-gradient/no-callback, serialized inventory; no stronger I2 lock is claimed
+or changed. Reviewed signatures, slots, authority, ownership and error schemas
+are preserved by the acceptance update.
+
+Production G3-T remains blocked until both G3-N #93 and G3-S #94 implementations
+are independently approved and merged. This follow-up prepares contract-only
+acceptance/provenance documentation for root's final delta review and merge.
+No production implementation, full CI, runtime evidence, public generation,
+save/reload, flat-memory claim or G3 completion follows from acceptance.
