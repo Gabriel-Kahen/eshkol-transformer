@@ -185,8 +185,9 @@ and explicit numerator/mean seeds at exactly `[1,2]`. Its sole accessor is
 The six bool/f32 operations borrow inputs and overwrite caller-owned outputs,
 including separate scalar numerator, weight, and reported mean. Run `make test-l3s`
 with the pinned `Q0_PYTHON` oracle; see [the contract](docs/L3S_MASKED_OBJECTIVE.md).
-L3S adds no model loss facade or tensor owner. Implementation acceptance remains
-pending supported CI and independent integration review.
+L3S is accepted and complete within this bounded profile: independent L3S-R
+approval, supported candidate and combined-main CI, PR #91 merge and the focused
+merged-main check passed. It adds no model loss facade or tensor owner.
 
 The build leaves A2's carrier-neutral serial CPU-f32 provider and fixed-capacity
 transactional cache in `build/a2/libeshkol_transformer_a2.a`. Consumers obtain the

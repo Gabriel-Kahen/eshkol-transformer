@@ -4,7 +4,51 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — bounded L3S implementation accepted and complete
+
+- **Disposition:** accepted and complete within the carrier-neutral `[1,2]`
+  CPU-f32 contract. The evidence below supersedes the historical pending status;
+  public model loss, training and Wave 3 completion remain downstream.
+- **Review:** [independent L3S-R approval](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/91#issuecomment-5770338523)
+  covers exact head `b320ec0aca7bd0f6d36553dadc6031d6a16bb546`, tree
+  `535304a751daf80b922d84b1bc78f8219cf066ce`, with three independent Astra/high
+  audits, reproduced focused/LSan evidence and additional exact-bit/domain/fenv
+  probes. The published comment is the independent approval; the platform rejected
+  a formal GitHub approval by the account owning the PR.
+- **Supported evidence:** [run 35531132634, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35531132634)
+  passed all 18 suites / 26 commands and evidence/final gates on Ubuntu 22.04 /
+  LLVM 21.1.8. Tested merge `3412df0d61e591659f4f5eb545d0df8846d1c887` has base
+  `a879e3ae5628756670d924012b91cadd9c0ad658` and reviewed head as its parents;
+  its tree equals the reviewed tree.
+- **Root merge:** [PR #91](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/91)
+  merged as `fe2493168e72cd7bf81d810c9c172c40aacfee61`, tree
+  `902d4645e13c133a811f1c1cf72ffb799976a58a`. Only accepted G3 contract Markdown
+  from intervening PRs #92 and #95 differs from the tested candidate; runtime,
+  tests, builds and the 18/26 CI union are unchanged. Both G3 histories remain.
+- **Merged-main evidence:** [root verification](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5770560669)
+  passed fresh K1/I1/I2/L2/L3S builders, the full focused gate with
+  `L3S_ASAN_DETECT_LEAKS=1`, topology and all 98 CI tests on exact merge `fe249316`.
+  All 9,849 native checks, reference/FD/regeneration/mutation controls, genuine
+  borrows, two fresh identical private AOT binaries, package/baseline/isolation
+  and ASan/UBSan/LSan passed. This is CachyOS/LLVM22 compatibility evidence;
+  the optional NumPy warning did not affect oracle equality or reference checks.
+- **Combined-main supported evidence:** [run 35680925863, attempt 1](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35680925863)
+  completed successfully on exact merge `fe249316`, tree
+  `902d4645e13c133a811f1c1cf72ffb799976a58a`. All 18 supported suites / 26
+  commands plus topology, evidence and final aggregation succeeded. Run/attempt
+  metadata, all suite checkout hashes and the single evidence record authenticate
+  the exact merged commit/tree. This fresh Ubuntu 22.04 / LLVM 21.1.8 run is
+  separate from the original candidate proof and local focused retest. No duplicate
+  runtime gate or full CI was launched by this prose-only follow-up.
+- **Scope:** the [L3S contract](L3S_MASKED_OBJECTIVE.md) remains carrier-neutral
+  `[1,2]` CPU-f32 only. This supplies no model-loss facade, installed carrier,
+  broader shape, trainer, accelerator or performance claim. Future composition
+  must distinguish numerator/mean seeds and normalize once.
+
 ## 2026-09-20 — L3S bounded masked-objective contract accepted
+
+Historical contract checkpoint; the pending CI/review/merge statements below are
+superseded by the completed bounded acceptance and integration provenance above.
 
 - **Disposition:** [root accepted with conditions](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5747250069),
   [issue #87 mirror](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/87#issuecomment-5747250113).
