@@ -388,3 +388,8 @@ test-ci-g3n-after-build:
 test-g3n: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh g3n-forward
 	/usr/bin/bash scripts/test-g3n.sh
+
+# Source-only shared layer; no production consumer aggregate is built.
+.PHONY: test-m3cg
+test-m3cg: configure
+	/usr/bin/bash scripts/test-m3cg.sh

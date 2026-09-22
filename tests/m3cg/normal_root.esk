@@ -1,0 +1,3 @@
+;;; Normal shared-source composition; contains no observers or test runner.
+(load "../../native/m3_package_root.esk")
+(load "../../native/m3_call_adapters.esk")

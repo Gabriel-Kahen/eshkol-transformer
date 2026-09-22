@@ -1,0 +1,4 @@
+;;; Fixed development witness; never installed.
+(load "../../native/m3_package_root.esk")
+(load "../../native/m3_call_adapters.esk")
+(load "witness.esk")

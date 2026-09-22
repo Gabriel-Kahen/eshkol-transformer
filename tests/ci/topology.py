@@ -1,4 +1,5 @@
 """Fail-closed structural coverage checks for the shared full CI engine."""
+import ast
 from collections import Counter
 from pathlib import Path
 import re
@@ -211,6 +212,25 @@ def check(root, overrides=None):
         assert field(body, 4, "timeout-minutes") == "2"
     assert field(cj["topology"], 4, "timeout-minutes") == "3"
     assert field(aj["select"], 4, "timeout-minutes") == "3"
+    # The source-only CG gate is mandatory within M3, preserving the 19/27 union.
+    m3 = read("scripts/test-m3.sh")
+    m3_calls = re.findall(r'^/usr/bin/bash "\$\{PROJECT_ROOT\}/scripts/([^"\n]+)"$', m3, re.M)
+    assert m3_calls == ["test-m3-native.sh", "test-m3-reference.sh",
+                       "test-m3-numerical.sh", "test-m3-package.sh", "test-m3cg.sh"]
+    assert [line for line in m3.splitlines() if line and not line.startswith("#")][3:] == [
+        '/usr/bin/bash "${PROJECT_ROOT}/scripts/' + name + '"' for name in m3_calls]
+    cg = read("scripts/test-m3cg.sh")
+    assert [line for line in cg.splitlines() if line and not line.startswith("#")][3:] == [
+        "python3 -m unittest -v tests.m3cg.test_contract",
+        'python3 "${PROJECT_ROOT}/tests/m3cg/measure_gate.py" "$(project_build_dir)/m3cg"']
+    measured = read("tests/m3cg/measure_gate.py")
+    assignments = [node for node in ast.parse(measured).body if isinstance(node, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "GATES" for t in node.targets)]
+    assert len(assignments) == 1
+    assert ast.literal_eval(assignments[0].value) == ("test-m3cg-native.sh", "test-m3cg-package.sh")
+    assert 'if result.returncode:\n            return result.returncode' in measured
+    assert 'raise SystemExit(main())' in measured
+    assert 'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1' in read("scripts/test-m3cg-native.sh")
     targets = recipes(make)
     assert targets["test-after-build"] == FULL
     assert targets["test-ci-clean-build-after-build"] == ["$(MAKE) smoke-after-build benchmark-after-build"]

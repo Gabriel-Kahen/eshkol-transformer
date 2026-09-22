@@ -6,3 +6,4 @@ verify_toolchain
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3-reference.sh"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3-numerical.sh"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3-package.sh"
+/usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3cg.sh"

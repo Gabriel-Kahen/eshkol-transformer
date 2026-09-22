@@ -1,0 +1,154 @@
+;;; Shared M3-lineage outer adapters. Trusted source; never install.
+;;; Load once after m3_package_root.esk. Trusted M3T originals remain unwrapped.
+
+(define (g3t-checked-m3t-attention! workspace)
+  (m3-call 'diagnostic-attention!
+    (m3t-public-attention! workspace)))
+
+(define (g3t-checked-m3t-attention-vjp! workspace)
+  (m3-call 'diagnostic-attention-vjp!
+    (m3t-public-attention-vjp! workspace)))
+
+(define (g3t-checked-m3t-embedding! workspace selector)
+  (m3-call 'diagnostic-embedding!
+    (m3t-public-embedding! workspace selector)))
+
+(define (g3t-checked-m3t-embedding-vjp! workspace selector)
+  (m3-call 'diagnostic-embedding-vjp!
+    (m3t-public-embedding-vjp! workspace selector)))
+
+(define (g3t-checked-m3t-gelu! workspace)
+  (m3-call 'diagnostic-gelu!
+    (m3t-public-gelu! workspace)))
+
+(define (g3t-checked-m3t-gelu-vjp! workspace)
+  (m3-call 'diagnostic-gelu-vjp!
+    (m3t-public-gelu-vjp! workspace)))
+
+(define (g3t-checked-m3t-heads-merge! workspace)
+  (m3-call 'diagnostic-heads-merge!
+    (m3t-public-heads-merge! workspace)))
+
+(define (g3t-checked-m3t-heads-merge-vjp! workspace)
+  (m3-call 'diagnostic-heads-merge-vjp!
+    (m3t-public-heads-merge-vjp! workspace)))
+
+(define (g3t-checked-m3t-heads-split! workspace selector)
+  (m3-call 'diagnostic-heads-split!
+    (m3t-public-heads-split! workspace selector)))
+
+(define (g3t-checked-m3t-heads-split-vjp! workspace selector)
+  (m3-call 'diagnostic-heads-split-vjp!
+    (m3t-public-heads-split-vjp! workspace selector)))
+
+(define (g3t-checked-m3t-initializer-algorithm value)
+  (m3-call 'diagnostic-initializer-algorithm
+    (m3t-public-initializer-algorithm value)))
+
+(define (g3t-checked-m3t-initializer-state seed)
+  (m3-call 'diagnostic-initializer-state
+    (m3t-public-initializer-state seed)))
+
+(define (g3t-checked-m3t-initializer-words value)
+  (m3-call 'diagnostic-initializer-words
+    (m3t-public-initializer-words value)))
+
+(define (g3t-checked-m3t-input-copy! input values)
+  (m3-call 'diagnostic-input-copy!
+    (m3t-public-input-copy! input values)))
+
+(define (g3t-checked-m3t-input-copy-tokenizer! input tokens)
+  (m3-call 'diagnostic-input-copy-tokenizer!
+    (m3t-public-input-copy-tokenizer! input tokens)))
+
+(define (g3t-checked-m3t-input-create)
+  (m3-call 'diagnostic-input-create
+    (m3t-public-input-create)))
+
+(define (g3t-checked-m3t-input-release! input)
+  (m3-call 'diagnostic-input-release!
+    (m3t-public-input-release! input)))
+
+(define (g3t-checked-m3t-layer-norm! workspace selector)
+  (m3-call 'diagnostic-layer-norm!
+    (m3t-public-layer-norm! workspace selector)))
+
+(define (g3t-checked-m3t-layer-norm-vjp! workspace selector)
+  (m3-call 'diagnostic-layer-norm-vjp!
+    (m3t-public-layer-norm-vjp! workspace selector)))
+
+(define (g3t-checked-m3t-linear! workspace selector)
+  (m3-call 'diagnostic-linear!
+    (m3t-public-linear! workspace selector)))
+
+(define (g3t-checked-m3t-linear-vjp! workspace selector)
+  (m3-call 'diagnostic-linear-vjp!
+    (m3t-public-linear-vjp! workspace selector)))
+
+(define (g3t-checked-m3t-logits-bits logits)
+  (m3-call 'diagnostic-logits-bits
+    (m3t-public-logits-bits logits)))
+
+(define (g3t-checked-m3t-logits-copy-bits! logits bytes)
+  (m3-call 'diagnostic-logits-copy-bits!
+    (m3t-public-logits-copy-bits! logits bytes)))
+
+(define (g3t-checked-m3t-logits-create)
+  (m3-call 'diagnostic-logits-create
+    (m3t-public-logits-create)))
+
+(define (g3t-checked-m3t-logits-release! logits)
+  (m3-call 'diagnostic-logits-release!
+    (m3t-public-logits-release! logits)))
+
+(define (g3t-checked-m3t-model-create config state)
+  (m3-call 'diagnostic-model-create
+    (m3t-public-model-create config state)))
+
+(define (g3t-checked-m3t-model-initializer model)
+  (m3-call 'diagnostic-model-initializer
+    (m3t-public-model-initializer model)))
+
+(define (g3t-checked-m3t-model-profile model)
+  (m3-call 'diagnostic-model-profile
+    (m3t-public-model-profile model)))
+
+(define (g3t-checked-m3t-residual! workspace selector)
+  (m3-call 'diagnostic-residual!
+    (m3t-public-residual! workspace selector)))
+
+(define (g3t-checked-m3t-residual-vjp! workspace selector)
+  (m3-call 'diagnostic-residual-vjp!
+    (m3t-public-residual-vjp! workspace selector)))
+
+(define (g3t-checked-m3t-sum! workspace selector)
+  (m3-call 'diagnostic-sum!
+    (m3t-public-sum! workspace selector)))
+
+(define (g3t-checked-m3t-workspace-begin! workspace input)
+  (m3-call 'diagnostic-workspace-begin!
+    (m3t-public-workspace-begin! workspace input)))
+
+(define (g3t-checked-m3t-workspace-check-primals workspace)
+  (m3-call 'diagnostic-workspace-check-primals
+    (m3t-public-workspace-check-primals workspace)))
+
+(define (g3t-checked-m3t-workspace-copy-logits! workspace logits)
+  (m3-call 'diagnostic-workspace-copy-logits!
+    (m3t-public-workspace-copy-logits! workspace logits)))
+
+(define (g3t-checked-m3t-workspace-create model)
+  (m3-call 'diagnostic-workspace-create
+    (m3t-public-workspace-create model)))
+
+(define (g3t-checked-m3t-workspace-release! workspace)
+  (m3-call 'diagnostic-workspace-release!
+    (m3t-public-workspace-release! workspace)))
+
+(define (g3t-checked-m3t-workspace-reset! workspace)
+  (m3-call 'diagnostic-workspace-reset!
+    (m3t-public-workspace-reset! workspace)))
+
+(define (g3t-checked-m3t-workspace-vjp-begin! workspace logits)
+  (m3-call 'diagnostic-workspace-vjp-begin!
+    (m3t-public-workspace-vjp-begin! workspace logits)))
