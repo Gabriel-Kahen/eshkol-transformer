@@ -32,18 +32,40 @@ alternate checksum, device, dtype, or approximate implementation.
 ## Command grammar
 
 All options are long options and use `--name value`; booleans are bare flags.
+Options may appear in any order after the complete `GROUP COMMAND` prefix.
 There are no abbreviations, short-option clusters, environment-derived options,
 configuration includes, or implicit current-directory inputs. Unknown options,
-missing values, duplicates, unexpected positionals, and a value after a boolean
-flag are usage errors. `--help` is accepted only before a group, after a group,
-or after a complete command and exits zero without touching files. `--version`
-is top-level only. Paths are nonempty UTF-8 strings of at most 4,096 bytes with
-no NUL. `-` has no stdin/stdout meaning in this slice.
+missing values, duplicate singleton options, unexpected positionals, and a value
+after a boolean flag are usage errors. Each occurrence of a repeatable option is
+one option/value pair: `--document PATH --document PATH`, never
+`--document PATH...` as one argv value. Occurrence order is preserved.
+
+`--help` must be the sole option at one of three complete parse stages: top
+level, after a known group, or after a complete known command. `--version` must
+be the sole top-level option. Either exits zero without touching files. A help
+flag mixed with any other token is a usage error. Paths are nonempty UTF-8
+strings of at most 4,096 bytes with no NUL. `-` has no stdin/stdout meaning in
+this slice.
 
 Unsigned integers use shortest ASCII decimal spelling: no sign and no leading
 zero except `0`. The parser checks signed-i64 range before applying the narrower
 command limit. Repeated options are rejected except the options explicitly
-marked repeatable below; their order is preserved.
+marked repeatable below. The exact version output, including its LF, is:
+
+```text
+eshkol-transformer 0.0.1
+```
+
+The exact top-level help output, including its final LF, is:
+
+```text
+Usage: eshkol-transformer GROUP COMMAND [OPTIONS]
+
+Groups:
+  tokenizer   Create and inspect tokenizer artifacts
+  corpus      Build and inspect D1 token corpora
+  checkpoint  Inspect C2 checkpoints
+```
 
 ### Tokenizers
 
@@ -52,7 +74,7 @@ eshkol-transformer tokenizer byte
   --config PATH --output PATH [--force]
 
 eshkol-transformer tokenizer train-bpe
-  --document PATH... --maximum-merges N --minimum-frequency N
+  --document PATH [--document PATH]... --maximum-merges N --minimum-frequency N
   --utf8-policy raw|strict [--special NAME=omit|error]...
   [--prefix NAME]... [--suffix NAME]... --output PATH [--force]
 
@@ -60,6 +82,27 @@ eshkol-transformer tokenizer inspect
   --input PATH [--special NAME]...
   [--max-file-bytes N] [--max-metadata-bytes N]
 ```
+
+The exact tokenizer group help is:
+
+```text
+Usage: eshkol-transformer tokenizer COMMAND [OPTIONS]
+
+Commands:
+  byte       Create a canonical byte tokenizer
+  train-bpe  Train a bounded deterministic BPE tokenizer
+  inspect    Validate and inspect a tokenizer artifact
+```
+
+The exact command help lines are:
+
+```text
+Usage: eshkol-transformer tokenizer byte --config PATH --output PATH [--force]
+Usage: eshkol-transformer tokenizer train-bpe --document PATH [--document PATH]... --maximum-merges N --minimum-frequency N --utf8-policy raw|strict [--special NAME=omit|error]... [--prefix NAME]... [--suffix NAME]... --output PATH [--force]
+Usage: eshkol-transformer tokenizer inspect --input PATH [--special NAME]... [--max-file-bytes N] [--max-metadata-bytes N]
+```
+
+Each command help response is its one applicable line plus LF.
 
 `tokenizer byte` reads at most 16,384 bytes, calls X1 parse and resolution with
 an empty override list, validates the result, and requires the T1 rule
@@ -85,14 +128,17 @@ must say that the artifact is visible with unknown crash durability.
 `tokenizer inspect` fully loads and validates the artifact, then reports its
 family from the exact fingerprint prefix, fingerprint, and vocabulary size.
 Every repeated `--special NAME` is resolved through
-`tokenizer-special-token-id`; an absent name is an error rather than a null ID.
-Default file and metadata limits are 1,048,576 bytes and may only be lowered.
+`tokenizer-special-token-id`; duplicate requested names are usage errors, two
+distinct names resolving to the same integer ID are rejected as corrupt data,
+and an absent name is an error rather than a null ID. The output contains each
+requested name exactly once in ascending ASCII order. Default file and metadata
+limits are 1,048,576 bytes and may only be lowered.
 
 ### Corpus
 
 ```text
 eshkol-transformer corpus build
-  --tokenizer PATH --document PATH... --output-directory DIRECTORY
+  --tokenizer PATH --document PATH [--document PATH]... --output-directory DIRECTORY
   --shard-token-limit N
 
 eshkol-transformer corpus inspect
@@ -100,6 +146,25 @@ eshkol-transformer corpus inspect
   [--max-manifest-bytes N] [--max-shard-bytes N]
   [--max-total-tokens N]
 ```
+
+The exact corpus group help is:
+
+```text
+Usage: eshkol-transformer corpus COMMAND [OPTIONS]
+
+Commands:
+  build    Encode documents into a D1 token corpus
+  inspect  Validate and inspect a D1 token corpus
+```
+
+The exact command help lines are:
+
+```text
+Usage: eshkol-transformer corpus build --tokenizer PATH --document PATH [--document PATH]... --output-directory DIRECTORY --shard-token-limit N
+Usage: eshkol-transformer corpus inspect --input-directory DIRECTORY [--max-manifest-bytes N] [--max-shard-bytes N] [--max-total-tokens N]
+```
+
+Each command help response is its one applicable line plus LF.
 
 `corpus build` loads the tokenizer under the exact 1,048,576-byte T1/T2 policy.
 It reads 1..4,096 regular document files with at most 65,536 aggregate bytes,
@@ -131,19 +196,38 @@ eshkol-transformer checkpoint inspect
   [--max-tensor-bytes N] [--max-tensors N]
 ```
 
-Defaults are C2's measured operational tuple: 16,777,216 file bytes, 524,288
-metadata bytes, 8,388,608 bytes per tensor, 64 tensors, and device `cpu`.
-Options may lower these limits only. The command performs full C2 envelope,
-semantic, size, version, and checksum validation via `checkpoint-inspect`; it
-does not call `checkpoint-load`, construct tensors, discover a provider, or
-claim that the checkpoint can be resumed by a trainer.
+The exact checkpoint group and command help are:
+
+```text
+Usage: eshkol-transformer checkpoint COMMAND [OPTIONS]
+
+Commands:
+  inspect  Validate and inspect a C2 checkpoint
+```
+
+```text
+Usage: eshkol-transformer checkpoint inspect --input PATH [--max-file-bytes N] [--max-metadata-bytes N] [--max-tensor-bytes N] [--max-tensors N]
+```
+
+The command help response is that one line plus LF.
+
+Defaults are CLI3's measured bounded caller tuple: 16,777,216 file bytes,
+524,288 metadata bytes, 8,388,608 bytes per tensor, 64 tensors, and device
+`cpu`. Options may lower these limits only. The command constructs the ordinary
+public five-argument `persistence-policy` in authenticated C2 `wire` mode; it
+never calls the private unverified operational-target constructor. It performs
+full C2 envelope, semantic, size, version, and checksum validation via
+`checkpoint-inspect`, preserving C2's `corrupt-data` versus `unsupported`
+classifications. It does not call `checkpoint-load`, construct tensors,
+discover a provider, or claim that the checkpoint can be resumed by a trainer.
 
 ## Output and diagnostics
 
 Successful non-help commands write exactly one compact UTF-8 JSON object plus
 LF to stdout and nothing to stderr. Keys are in the order shown below; strings
 are JSON-escaped, integers are decimal, symbols are emitted as strings, and
-versions are two-integer arrays.
+versions are two-integer arrays. The executable buffers and completes this
+object before its first stdout write.
 
 ```json
 {"artifact":"tokenizer","family":"byte","fingerprint":"...","vocabulary_size":256}
@@ -154,16 +238,57 @@ versions are two-integer arrays.
 Tokenizer inspection with requested specials adds a final `specials` object;
 names are ascending ASCII regardless of query order. Creation prints the same
 tokenizer object as inspection. Corpus creation prints the same summary as
-inspection. Output is buffered until the operation and any publication-status
-handling complete, so failure emits no partial stdout.
+inspection. Parse, domain, publication, and rendering failures occur before the
+first stdout write and therefore leave stdout empty. A stdout short write is
+retried. A terminal stdout write error is an `io` failure with status 13 and a
+diagnostic on working stderr; stdout may then contain the already written
+prefix because a process cannot retract it. That reporting failure never
+changes a successfully published artifact into an unsuccessful publication:
+its diagnostic retains the known publication and durability details.
 
-Usage errors have the exact single-line form
-`eshkol-transformer: usage: MESSAGE` on stderr. A caught E1 error has
-`eshkol-transformer: CATEGORY: OPERATION: MESSAGE`; sorted scalar E1 details
-follow as ` key=VALUE`. Paths and artifact contents are never inferred from a
-message. A foreign condition becomes the fixed `internal: cli-dispatch:
-unexpected runtime condition` diagnostic; it is never reported as a successful
-empty result. Stable exit statuses are:
+The diagnostic guarantee begins after the executable has installed its outer
+dispatch handler and assumes a working stderr. Runtime startup failure, host
+process termination, and stderr-device failure are outside this guarantee.
+Within it, every failure writes exactly one ASCII stderr line of at most 4,096
+bytes including LF. Stdout is empty except for the explicitly bounded reporting
+write-failure case above. General successful output and ordinary diagnostic
+rendering may allocate.
+
+Usage errors have the exact form
+`eshkol-transformer: usage message=JSON-STRING`. A caught E1 error has the exact
+field order `eshkol-transformer: category=JSON-STRING operation=JSON-STRING
+message=JSON-STRING details=JSON-OBJECT`. JSON strings escape quote, backslash,
+and control characters; every other non-ASCII Unicode scalar is written with
+lowercase `\u` escapes, using a surrogate pair when necessary. Invalid UTF-8 is
+never copied into a diagnostic. Encoded category and operation strings are
+limited to 256 bytes each, message strings to 1,024 bytes (3,072 for a usage
+message), and each detail value to 256 bytes. A longer string retains the
+longest complete escaped-scalar prefix that permits an ASCII `...` and closing
+quote. Detail entries whose encoded key exceeds 256 bytes are omitted.
+Truncation therefore never divides an escape or creates duplicate keys.
+
+Detail keys are sorted by ASCII spelling. The scalar allowlist is boolean,
+signed-i64 exact integer, character, symbol, and string; characters and symbols
+render as JSON strings. Lists, vectors, nested values, non-integral numbers,
+and exact integers outside signed-i64 are omitted. Rendering stops before 64
+entries or 2,048 encoded detail bytes. Paths and artifact contents are never
+inferred from a message.
+
+If normal formatting fails, a private checked nonallocating stderr seam writes
+one of these fixed lines from static bytes:
+
+```text
+eshkol-transformer: usage: invalid command line
+eshkol-transformer: io: publication state unknown; inspect the output path
+eshkol-transformer: internal: diagnostic unavailable
+```
+
+The first retains status 2. When the already captured failure is in the known
+I/O/publication category, the second conservatively reports publication as
+unknown and retains status 13. All other formatting failures and foreign
+conditions use the third and status 70. Private status capture is permitted for
+this fallback, but it adds no public policy or launcher. Stable exit statuses
+are:
 
 | Status | Meaning |
 |---:|---|
@@ -188,7 +313,7 @@ empty result. Stable exit statuses are:
 | Document encoding | localized `t2-private-tokenizer-encode-staging`; its i64-le values are range-checked before forming D1's bounded list |
 | Corpus publication/report | `token-corpus-write!`, then its returned summary and all six `token-corpus-summary-*` accessors |
 | Corpus admission/report | `token-corpus-validate` and all six summary accessors |
-| Checkpoint admission/report | `persistence-policy`, `checkpoint-inspect`, and the ten required `checkpoint-metadata-ref` keys |
+| Checkpoint admission/report | ordinary five-argument `persistence-policy` in authenticated C2 `wire` mode, `checkpoint-inspect`, and the ten required `checkpoint-metadata-ref` keys |
 
 T2 deliberately has no installed BPE-training or streaming procedure. These calls
 therefore do not become library API. The CLI must be a new reviewed
@@ -244,7 +369,12 @@ deterministic cases without Python in the delivered process:
    unsupported version/feature/algorithm, stale writer lock, existing output,
    short read/write, close/sync/rename failures, and `published?` diagnostics.
    Every failure has the specified exit status, empty stdout, one bounded stderr
-   diagnostic, and no partially published artifact.
+   diagnostic, and no partially published artifact, except that the stdout
+   reporting-error fixture may retain its written prefix. Inject an actual
+   stdout short write followed by success and an actual stdout write error: the
+   former must retry to exact output and status 0; the latter must return status
+   13, emit its stderr diagnostic, preserve the published artifact bytes and
+   report their known publication state.
 
 ## Dependency split and blockers
 
