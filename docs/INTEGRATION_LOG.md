@@ -4,6 +4,38 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — E3-METRICS bounded implementation accepted
+
+- **Disposition:** E3-METRICS is accepted at merged prerequisite-union commit
+  `33a54ef7256f43d9e1ce82152915f7bded51bc24`, tree
+  `2256194d2daeb233ec1745d0039b383d4358e3d5`. This accepts only the exact ABI 1.0
+  CPU-f32/BOOL/i64 operations and boundaries recorded in the
+  [implementation evidence](e3/E3_METRICS_IMPLEMENTATION.md). E3 remains active.
+- **Supported evidence:** original candidate
+  `80d74f8564b39a92e025f8693cdc0cf6d1a224af`, tree
+  `2be8c16610052d515fcf62b5237147ede32688ca`, passed run
+  [35697784630](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35697784630).
+  PR #112 head `b052385e742626fcfc2557b3b5a9f176f6234b29` has the same tree as
+  the merge and passed run
+  [35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879)
+  with all 19 suites / 29 commands, suite evidence and final aggregation green.
+  Merged-head run
+  [35798192984](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35798192984)
+  verified topology and reused that completed exact-tree evidence.
+- **Independent review:** all 29 candidate paths unaffected by the union retain
+  identical modes and blobs, including every metrics-owned artifact. The six
+  changed shared integration files preserve metrics registration while adding
+  the accepted shared-call/E3-D2 union. ABI 1.0, the sole explicit accessor, all
+  three operation schemas, and numerical/error/unsupported boundaries are unchanged.
+  Direct topology checks reported 19 suites / 29 commands; 22 focused structural
+  tests and the complete merged-head metrics gate passed.
+- **Limits:** local merged-head execution used the explicit CachyOS/LLVM 22
+  compatibility override with unmodified read-only compiler inputs. Its existing
+  I2 LLVM 22 vectorization and pinned PyTorch missing-NumPy warnings remain
+  unsupported-lane diagnostics. E3 frame ownership, real M3/D2 no-grad traversal,
+  restore/staging, shared exclusion, publication, retention and public evaluation
+  remain downstream.
+
 ## 2026-09-22 — E3-METRICS implementation candidate
 
 - **Scope:** issue [#107](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/107),
