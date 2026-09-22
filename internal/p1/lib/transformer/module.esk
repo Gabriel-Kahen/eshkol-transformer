@@ -4252,6 +4252,321 @@
             device-equal? prepare-load commit-load! release-owned!)))
     (shell-for-raw 'provider raw)))
 
+;;; E3/P1 fixed-profile mode authority. Slots 64..68 are lexical only.
+;;; The ledger owns snapshots; the returned one-slot token carries no authority
+;;; in its contents. Setup is the only allocating operation.
+;;; Fixed write/clear tails are deliberately unrolled: the pinned compiler
+;;; otherwise inserts allocating nursery regions and interrupt polls around
+;;; mutating named-let loops, including between committed writes.
+(define e3-mode-registry-root (vector '()))
+;;; Intern once in root initialization. A long symbol literal lookup constructs
+;;; a host std::string even on its cache-hit path in the pinned runtime.
+(define e3-mode-provider-name 'i2-dense-cpu-f32-v1)
+(define e3-mode-train 'train)
+(define e3-mode-eval 'eval)
+
+(define (e3-mode-i64=? value expected)
+  (and (integer? value) (exact? value) (eq? value expected)))
+
+(define (e3-mode-record token)
+  (let loop ((records (vector-ref e3-mode-registry-root 0)))
+    (cond ((null? records) #f)
+          ((eq? token (vector-ref (car records) 0)) (car records))
+          (else (loop (cdr records))))))
+
+(define (e3-mode-enrolled? frame model)
+  (let loop ((records (vector-ref e3-mode-registry-root 0)))
+    (if (null? records) #f
+        (let ((record (car records)))
+          (if (and (not (e3-mode-i64=? (vector-ref record 1) 3))
+                   (or (eq? frame (vector-ref record 2))
+                       (eq? model (vector-ref record 3))))
+              #t (loop (cdr records)))))))
+
+(define (e3-mode-parent index)
+  (cond ((= index 0) -1)
+        ((or (= index 1) (>= index 13)) 0)
+        ((= index 2) 1)
+        ((or (= index 3) (= index 8) (= index 11) (= index 12)) 2)
+        ((and (>= index 4) (<= index 7)) 3)
+        (else 8)))
+
+(define (e3-mode-name index)
+  (cond ((= index 1) "blocks") ((= index 2) "0")
+        ((= index 3) "attention") ((= index 4) "key")
+        ((= index 5) "output") ((= index 6) "query")
+        ((= index 7) "value") ((= index 8) "ffn")
+        ((= index 9) "down") ((= index 10) "up")
+        ((= index 11) "norm1") ((= index 12) "norm2")
+        ((= index 13) "head") ((= index 14) "norm_final")
+        ((= index 15) "position_embedding") (else "token_embedding")))
+
+(define (e3-mode-child-count index)
+  (cond ((= index 0) 5) ((= index 1) 1)
+        ((or (= index 2) (= index 3)) 4) ((= index 8) 2)
+        (else 0)))
+
+(define (e3-mode-symbol? mode) (or (eq? mode e3-mode-train) (eq? mode e3-mode-eval)))
+
+(define (e3-mode-child-list? children count)
+  ;; Fixed bound also rejects cycles and improper lists before car/cdr access.
+  (if (= count 0) (null? children)
+      (and (pair? children)
+           (let ((binding (car children)))
+             (and (vector? binding) (= (vector-length binding) 3)
+                  (eq? (vector-ref binding 0) 'child-binding)
+                  (string? (vector-ref binding 1))
+                  (e3-mode-child-list? (cdr children) (- count 1)))))))
+
+(define (e3-mode-child children name)
+  (cond ((null? children) #f)
+        ((string=? (vector-ref (car children) 1) name)
+         (vector-ref (car children) 2))
+        (else (e3-mode-child (cdr children) name))))
+
+(define (e3-mode-distinct? nodes node limit)
+  (let loop ((index 0))
+    (cond ((= index limit) #t)
+          ((eq? node (vector-ref nodes index)) #f)
+          (else (loop (+ index 1))))))
+
+(define (e3-mode-fill! root provider nodes heads)
+  (vector-set! nodes 0 root)
+  (let loop ((index 0))
+    (if (= index 17) 0
+        (let* ((parent-index (e3-mode-parent index))
+               (parent (if (= index 0) #f (vector-ref nodes parent-index)))
+               (node (if (= index 0) root
+                         (e3-mode-child (vector-ref parent 4)
+                                        (e3-mode-name index)))))
+          (cond
+            ((not (and (module-value? node)
+                       (eq? (vector-ref node 5) parent)
+                       (eq? (vector-ref node 6) provider)
+                       (eq? (vector-ref node 7) #t)
+                       (e3-mode-distinct? nodes node index)
+                       (e3-mode-child-list? (vector-ref node 4)
+                                            (e3-mode-child-count index)))) 3)
+            ((not (e3-mode-symbol? (vector-ref node 1))) 4)
+            (else
+              (vector-set! nodes index node)
+              (vector-set! heads index (vector-ref node 4))
+              (loop (+ index 1))))))))
+
+(define (e3-mode-retire! record)
+  (vector-set! record 2 #f)
+  (vector-set! record 3 #f)
+  (vector-set! record 4 #f)
+  (vector-set! record 5 #f)
+  (vector-set! record 6 #f)
+  (vector-set! record 7 #f)
+  (vector-set! record 8 0)
+  (vector-set! record 1 3)
+  0)
+
+(define (e3-mode-bind! model setup-box)
+  (cond
+    ((not (and (vector? setup-box) (= (vector-length setup-box) 2)
+               (vector-ref setup-box 0))) 1)
+    ((and (vector-ref setup-box 1)
+          (not (e3-mode-record (vector-ref setup-box 1)))) 1)
+    ((or protected-storage-comparison-active? (vector-ref setup-box 1)
+         (e3-mode-enrolled? (vector-ref setup-box 0) model)) 2)
+    (else
+      (let ((entry (shell-entry model)))
+        (if (not (and entry (eq? (vector-ref entry 1) 'module))) 1
+            (let* ((root (raw-for-shell 'p1-e3-mode-bind! 'module model))
+                   (provider (tensor-provider-find e3-mode-provider-name)))
+              (if (not (and provider (module-value? root)
+                            (eq? (vector-ref root 6) provider)
+                            (eq? (vector-ref root 5) #f)
+                            (e3-mode-i64=? (vector-ref root 10) 17))) 3
+                  (begin
+                    (native-provider-snapshot-check! 'p1-e3-mode-bind! provider)
+                    (let* ((nodes (make-vector 17 #f))
+                           (saved (make-vector 17 #f))
+                           (heads (make-vector 17 #f))
+                           (status (e3-mode-fill! root provider nodes heads)))
+                      (if (not (= status 0)) status
+                          (let* ((token (vector #f))
+                                 (record (vector token 0 (vector-ref setup-box 0)
+                                                 model root nodes saved heads 0))
+                                 (next (cons record (vector-ref e3-mode-registry-root 0)))
+                                 (canonical #f))
+                            ;; Install before the root barrier. Never clean up
+                            ;; a regional copy after canonical publication.
+                            (guard (caught
+                                     (#t (if canonical (e3-mode-retire! canonical))
+                                         (raise caught)))
+                              (vector-set! e3-mode-registry-root 0 next)
+                              (set! canonical (car (vector-ref e3-mode-registry-root 0)))
+                              (vector-set! setup-box 1 (vector-ref canonical 0))
+                              0))))))))))))
+
+(define (e3-mode-check record)
+  ;; This nonallocating path deliberately does not call raw-for-shell,
+  ;; finalization-plan, native/provider callbacks, or an error constructor.
+  (let* ((entry (shell-entry (vector-ref record 3)))
+         (root (vector-ref record 4))
+         (nodes (vector-ref record 5))
+         (saved (vector-ref record 6))
+         (heads (vector-ref record 7))
+         (provider (tensor-provider-find e3-mode-provider-name)))
+    (if (not (and (vector-ref record 2) entry
+                  (eq? (vector-ref entry 1) 'module)
+                  (eq? (vector-ref entry 2) root)
+                  (module-value? root)
+                  (e3-mode-i64=? (vector-ref root 10) 17)
+                  provider (eq? (vector-ref root 6) provider)
+                  (vector? nodes) (= (vector-length nodes) 17)
+                  (vector? saved) (= (vector-length saved) 17)
+                  (vector? heads) (= (vector-length heads) 17)
+                  (eq? (vector-ref nodes 0) root)
+                  (e3-mode-i64=? (vector-ref record 8) 0))) 4
+        (let loop ((index 0))
+          (if (= index 17) 0
+              (let ((node (vector-ref nodes index))
+                    (parent-index (e3-mode-parent index)))
+                (if (and (module-value? node)
+                         (eq? (vector-ref node 5)
+                              (if (= index 0) #f (vector-ref nodes parent-index)))
+                         (eq? (vector-ref node 6) provider)
+                         (eq? (vector-ref node 7) #t)
+                         (eq? (vector-ref node 4) (vector-ref heads index))
+                         (e3-mode-distinct? nodes node index)
+                         (e3-mode-symbol? (vector-ref node 1)))
+                    (loop (+ index 1)) 4)))))))
+
+(define (e3-mode-snapshot-check record entered?)
+  (let ((nodes (vector-ref record 5)) (saved (vector-ref record 6)))
+    (let loop ((index 0))
+      (if (= index 17) 0
+          (if (and (e3-mode-symbol? (vector-ref saved index))
+                   (eq? (vector-ref (vector-ref nodes index) 1)
+                        (if entered? e3-mode-eval (vector-ref saved index))))
+              (loop (+ index 1)) 4)))))
+
+(define (e3-mode-prepare! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          ((or protected-storage-comparison-active?
+               (not (e3-mode-i64=? (vector-ref record 1) 0))) 2)
+          (else
+            (let ((status (e3-mode-check record)))
+              (if (not (= status 0)) status
+                  (let ((nodes (vector-ref record 5)) (saved (vector-ref record 6)))
+                    (vector-set! saved 0 (vector-ref (vector-ref nodes 0) 1))
+                    (vector-set! saved 1 (vector-ref (vector-ref nodes 1) 1))
+                    (vector-set! saved 2 (vector-ref (vector-ref nodes 2) 1))
+                    (vector-set! saved 3 (vector-ref (vector-ref nodes 3) 1))
+                    (vector-set! saved 4 (vector-ref (vector-ref nodes 4) 1))
+                    (vector-set! saved 5 (vector-ref (vector-ref nodes 5) 1))
+                    (vector-set! saved 6 (vector-ref (vector-ref nodes 6) 1))
+                    (vector-set! saved 7 (vector-ref (vector-ref nodes 7) 1))
+                    (vector-set! saved 8 (vector-ref (vector-ref nodes 8) 1))
+                    (vector-set! saved 9 (vector-ref (vector-ref nodes 9) 1))
+                    (vector-set! saved 10 (vector-ref (vector-ref nodes 10) 1))
+                    (vector-set! saved 11 (vector-ref (vector-ref nodes 11) 1))
+                    (vector-set! saved 12 (vector-ref (vector-ref nodes 12) 1))
+                    (vector-set! saved 13 (vector-ref (vector-ref nodes 13) 1))
+                    (vector-set! saved 14 (vector-ref (vector-ref nodes 14) 1))
+                    (vector-set! saved 15 (vector-ref (vector-ref nodes 15) 1))
+                    (vector-set! saved 16 (vector-ref (vector-ref nodes 16) 1))
+                    (vector-set! record 1 1)
+                    0)))))))
+
+(define (e3-mode-enter! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          ((or protected-storage-comparison-active?
+               (not (e3-mode-i64=? (vector-ref record 1) 1))) 2)
+          (else
+            (let ((status (e3-mode-check record)))
+              (if (not (= status 0)) status
+                  (let ((snapshot-status (e3-mode-snapshot-check record #f)))
+                    (if (not (= snapshot-status 0)) snapshot-status
+                        (let ((nodes (vector-ref record 5)))
+                          (vector-set! (vector-ref nodes 0) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 1) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 2) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 3) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 4) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 5) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 6) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 7) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 8) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 9) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 10) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 11) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 12) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 13) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 14) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 15) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 16) 1 e3-mode-eval)
+                          (vector-set! record 1 2)
+                          0)))))))))
+
+(define (e3-mode-restore! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          ((or protected-storage-comparison-active?
+               (not (or (e3-mode-i64=? (vector-ref record 1) 1)
+                        (e3-mode-i64=? (vector-ref record 1) 2)))) 2)
+          (else
+            (let ((status (e3-mode-check record)))
+              (if (not (= status 0)) status
+                  (let* ((entered? (e3-mode-i64=? (vector-ref record 1) 2))
+                         (snapshot-status (e3-mode-snapshot-check record entered?)))
+                    (if (not (= snapshot-status 0)) snapshot-status
+                        (let ((nodes (vector-ref record 5)) (saved (vector-ref record 6)))
+                          (if entered?
+                              (begin
+                                (vector-set! (vector-ref nodes 0) 1 (vector-ref saved 0))
+                                (vector-set! (vector-ref nodes 1) 1 (vector-ref saved 1))
+                                (vector-set! (vector-ref nodes 2) 1 (vector-ref saved 2))
+                                (vector-set! (vector-ref nodes 3) 1 (vector-ref saved 3))
+                                (vector-set! (vector-ref nodes 4) 1 (vector-ref saved 4))
+                                (vector-set! (vector-ref nodes 5) 1 (vector-ref saved 5))
+                                (vector-set! (vector-ref nodes 6) 1 (vector-ref saved 6))
+                                (vector-set! (vector-ref nodes 7) 1 (vector-ref saved 7))
+                                (vector-set! (vector-ref nodes 8) 1 (vector-ref saved 8))
+                                (vector-set! (vector-ref nodes 9) 1 (vector-ref saved 9))
+                                (vector-set! (vector-ref nodes 10) 1 (vector-ref saved 10))
+                                (vector-set! (vector-ref nodes 11) 1 (vector-ref saved 11))
+                                (vector-set! (vector-ref nodes 12) 1 (vector-ref saved 12))
+                                (vector-set! (vector-ref nodes 13) 1 (vector-ref saved 13))
+                                (vector-set! (vector-ref nodes 14) 1 (vector-ref saved 14))
+                                (vector-set! (vector-ref nodes 15) 1 (vector-ref saved 15))
+                                (vector-set! (vector-ref nodes 16) 1 (vector-ref saved 16))))
+                          (vector-set! saved 0 #f)
+                          (vector-set! saved 1 #f)
+                          (vector-set! saved 2 #f)
+                          (vector-set! saved 3 #f)
+                          (vector-set! saved 4 #f)
+                          (vector-set! saved 5 #f)
+                          (vector-set! saved 6 #f)
+                          (vector-set! saved 7 #f)
+                          (vector-set! saved 8 #f)
+                          (vector-set! saved 9 #f)
+                          (vector-set! saved 10 #f)
+                          (vector-set! saved 11 #f)
+                          (vector-set! saved 12 #f)
+                          (vector-set! saved 13 #f)
+                          (vector-set! saved 14 #f)
+                          (vector-set! saved 15 #f)
+                          (vector-set! saved 16 #f)
+                          (vector-set! record 1 0)
+                          0)))))))))
+
+(define (e3-mode-unbind! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          (protected-storage-comparison-active? 2)
+          ((e3-mode-i64=? (vector-ref record 1) 3) 0)
+          ((not (e3-mode-i64=? (vector-ref record 1) 0)) 2)
+          (else (e3-mode-retire! record)))))
+
+
 (vector
   (lambda (module)
     (let* ((observation
@@ -4726,6 +5041,12 @@
     (construction-abort! identity))
   (lambda (identity)
     (construction-call 'module-construction-parameters-internal (lambda () (construction-parameters identity))))
+  ;; Append-only source-private E3 mode lifecycle, slots 64..68.
+  e3-mode-bind!
+  e3-mode-prepare!
+  e3-mode-enter!
+  e3-mode-restore!
+  e3-mode-unbind!
   )))
 
 (define (module-parameters module)
