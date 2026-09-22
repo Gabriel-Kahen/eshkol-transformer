@@ -1,11 +1,24 @@
-# E3-DESIGN: exact private evaluation contract proposal
+# E3-DESIGN: exact private evaluation contract
 
-**Proposed, not implemented or frozen.** This package concretizes the accepted
+**Exact design accepted by root; implementation and runtime acceptance pending.**
+This package concretizes the accepted
 [private-first architecture](E3_EVALUATION_PROPOSAL.md) at main
-`27c99f7c9f27a227f0e237f1571ac89d5cdfa225`. Root acceptance and prerequisite merges
-must precede implementation. It adds no public evaluator, VERIFIED evidence, A0
+`27c99f7c9f27a227f0e237f1571ac89d5cdfa225`. Contract merge and explicit bounded
+dispatch must precede implementation; prerequisite implementations must merge
+before E3-PRIVATE composition. It adds no public evaluator, VERIFIED evidence, A0
 schema change or completion claim. The E3 task owns E3-DESIGN, later E3-PRIVATE
 orchestration/integration, and independent E3-PRIVATE-R; root owns acceptance.
+
+[Root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949), mirrored in
+[ledger5771846024](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771846024),
+accepts reviewed head `0a077a7a2425c07b4b66c29bf7e90b79c25aa299`, tree
+`3e8e1a9fac1ff973bb4c8439cc85cc7723c6a44c`, against main2ac0b5b. This includes
+the canonical P1 prerequisite (slots64..68, total69) and exact error-lifetime
+choices. P1 inheritor manifest/resource regressions remain mandatory. Two
+independent root reviews approve numerical/forward and D2/lifetime/packaging;
+prose CI35692000581 passed with full suites skipped. No runtime work is dispatched
+by the verdict. Proposal wording in the source-audit companions is superseded by
+this acceptance state; their behavioral contracts remain unchanged.
 
 The following documents form one review unit:
 
@@ -57,8 +70,9 @@ Proposed new files (these names are contract choices, not existing APIs):
 Numeric header/source/scripts and deterministic D2 source generator paths are
 fixed in their companion documents. Only canonical P1 module source changes in
 place: append slots64..68 and lexical helpers, preserving first64/public provide.
-This affects all P1 inheritors' private symbols/fixed allocation. Their manifests
-and retention tests require explicit P1/root acceptance; no predecessor binary
+This affects all P1 inheritors' private symbols/fixed allocation. The P1 design is
+explicitly accepted; implementation manifests and retention tests still require
+separate P1/root acceptance. No predecessor binary
 identity is promised. Existing D2 sources and its T2 tuple remain byte-identical.
 
 ## 2. Source identities and lifetime
@@ -671,8 +685,9 @@ this phase. The topology check is not execution of those19 suites.
 
 Detailed local review records are `.tmp/e3-probes/exact-{numerical,composition,
 packaging}-review.md`, `exact-cleanup-review.md` and
-`exact-common-consumer-review.md`. Root acceptance of this consumer package,
-explicit P1 prerequisite acceptance, merged shared/P1/D2/numeric implementation
-and independent E3-PRIVATE-R remain follow-up gates. Unsupported cases and runtime
-allocation/diagnostic-delivery limitations above are unchanged. This is a
-reviewable exact proposal, not runtime/ABI acceptance or E3 completion.
+`exact-common-consumer-review.md`. Root accepted this consumer package and the
+P1 prerequisite design through the verdict above. Contract merge, explicit bounded
+dispatch, merged shared/P1/D2/numeric implementations and independent E3-PRIVATE-R
+remain follow-up gates. Unsupported cases and runtime
+allocation/diagnostic-delivery limitations above are unchanged. This is an
+accepted exact design, not implementation/runtime acceptance or E3 completion.

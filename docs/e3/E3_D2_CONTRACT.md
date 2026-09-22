@@ -1,4 +1,9 @@
-# Exact proposed private E3–D2 contract
+# Exact private E3–D2 contract
+
+**Exact design accepted by [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
+at reviewed head0a077a7.** This supersedes the proposal-state wording in the
+source audit below; behavior is unchanged. Contract merge and explicit bounded
+dispatch remain required; implementation and runtime evidence are not accepted.
 
 Base `27c99f7`, branch `codex/e3-private-contract`. Proposal only; no implementation/build/ABI acceptance. Existing common-owner task `01a0c789-bd3f-7b21-b865-8b9365c7a282` owns canonical guard/pins and its single translation unit. This design adds no common source name, implementation or duplicate guard.
 

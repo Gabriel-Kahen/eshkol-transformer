@@ -1,4 +1,9 @@
-# Exact proposed E3/P1 mode contract
+# Exact E3/P1 mode contract
+
+**Exact design accepted by [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
+at reviewed head0a077a7.** This supersedes the proposal-state wording in the
+source audit below; behavior is unchanged. Contract merge and explicit bounded
+dispatch remain required; implementation and runtime evidence are not accepted.
 
 Bounded source/design audit at E3-DESIGN branch; no edits/build/tests. This is a concrete proposed private contract for root/P1 acceptance, not evidence those slots exist. Shared guard/pin mechanics remain owned by task01a0c789-bd3f-7b21-b865-8b9365c7a282; E3 owns frame admission; this contract adds no guard or pin authority.
 

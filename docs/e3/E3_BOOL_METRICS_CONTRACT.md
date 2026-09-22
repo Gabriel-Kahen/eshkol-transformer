@@ -1,4 +1,9 @@
-# Exact proposed E3 BOOL metric provider contract
+# Exact E3 BOOL metric provider contract
+
+**Exact design accepted by [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
+at reviewed head0a077a7.** This supersedes the proposal-state wording in the
+source audit below; behavior is unchanged. Contract merge and explicit bounded
+dispatch remain required; implementation and runtime evidence are not accepted.
 
 Design-only proposal for root acceptance. Base inspected: merged `27c99f7c9f27a227f0e237f1571ac89d5cdfa225`. This fixes concrete choices for a later bounded implementation; it does not authorize production edits, publish VERIFIED evidence, change A0/Eshkol APIs, or modify accepted K1/L2/L3S/I1/I2. The three operations are correctness with BOOL masks, accumulation and finalization only.
 

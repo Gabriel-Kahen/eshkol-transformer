@@ -1,4 +1,9 @@
-# Exact proposed E3 error lifetime contract
+# Exact E3 error lifetime contract
+
+**Exact design accepted by [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
+at reviewed head0a077a7.** This supersedes the proposal-state wording in the
+source audit below; behavior is unchanged. Contract merge and explicit bounded
+dispatch remain required; implementation and runtime evidence are not accepted.
 
 Inspected actual E1 core/internal/consumer code, M3 `m3-call`/`m3t-rethrow-raw`, and read-only pinned compiler/runtime source at90cbd7130f47b8184bcc77b8d5c1b0026da980de. No build/runtime proof. The proposed prebuilt table is feasible with the corrections below.
 
