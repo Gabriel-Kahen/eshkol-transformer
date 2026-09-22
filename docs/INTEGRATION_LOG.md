@@ -4,6 +4,29 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-22 — E3 exact private design accepted
+
+- **Disposition:** [root verdict5771845949](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/104#issuecomment-5771845949)
+  and [ledger5771846024](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771846024)
+  accept the [exact contract package](E3_PRIVATE_CONTRACT.md) at head0a077a7,
+  tree3e8e1a9: frame/types/statuses, BOOL ABI1.0, P1 slots64..68, D2 identity/staging/
+  restore, error lifetime and generated-manifest method. No implementation,
+  public evaluator, VERIFIED evidence or runtime acceptance.
+- **Dependencies:** issue101 owns shared38-adapter/fixed14-pin exact source;
+  original G3-T owner retains affected-contract review. P1 append changes canonical
+  private surface retention/manifests; root explicitly accepts that design while
+  requiring affected P1/C1/T1/I2/O2/C2/M3 manifest/resource regression evidence.
+  Contract merge and explicit dispatch precede implementation; E3 composition
+  follows independently accepted/merged prerequisites; E3-PRIVATE-R remains a
+  separate independent integration gate.
+- **Error boundary:** pinned raise allocates even with a prebuilt E1 error; closed
+  rollback completes and exits shared guard normally before error delivery.
+  Dependency/delivery allocations are measured separately from cleanup.
+- **Evidence:** two independent root reviews approve the numerical/forward and
+  D2/lifetime/package scopes. Prose CI35692000581 passed at an identical reviewed
+  tree; full suites skipped. No numerical/toolchain build or runtime claim.
+  Root holds documentation merge while main CI35691356855 remains active.
+
 ## 2026-09-22 — E3 private-first architecture accepted with conditions
 
 - **Disposition:** [root direction 5771430755](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1#issuecomment-5771430755)
@@ -15,8 +38,9 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   M3 profile and unshuffled canonical-byte D2 suffix. Four outputs and both counters
   publish together only after cursor/all17 modes are restored inside shared exclusion.
   A0's four-key trainer map and public names/arities remain unchanged.
-- **Ownership:** existing G3-T task owns the one shared38-adapter/fixed14-pin
-  extraction proposal/impact review; E3 owns its direct-pinned forward frame,
+- **Ownership:** issue101 E3-CG task owns the one shared38-adapter/fixed14-pin
+  extraction proposal; original G3-T task owns affected-contract review. E3 owns
+  its direct-pinned forward frame,
   P1/D2 restoration and one consolidated exact-design package. E3-PRIVATE and
   E3-PRIVATE-R explicitly follow accepted/merged seams, owned/coordinated by this
   E3 task with root integration. No duplicated guard or unmerged G3 runtime input.
