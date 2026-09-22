@@ -140,9 +140,22 @@ E3_D2_KEEP_EVIDENCE=1 /usr/bin/bash scripts/test-e3-d2.sh
 
 `/usr/bin/bash scripts/check-ci-topology.sh` passes 19 suites/28 commands;
 `python3 -m unittest discover -q -s tests/ci -p 'test_*.py'` passes 100 tests;
-`python3 -m unittest -q tests.q0.test_python_isolation` passes two tests;
+`python3 -m unittest -q tests.q0.test_python_isolation` passes three tests after
+the exact build-generator registration below;
 `git diff --check` passes. CI unit-test output containing a synthetic successful
 run ID is fixture evidence only, never supported compiler-suite acceptance.
+
+The initial PR CI run `35698295743` failed before launching any full compiler
+suite: the Python-isolation gate rejected the newly tracked
+`scripts/generate-e3-d2-source.py`. The earlier local two-test pass had run before
+staging that generator, while the gate enumerates `git ls-files`; it therefore
+did not establish isolation for the complete candidate. The correction admits
+only that exact contract-selected build utility outside `tests/`, with negative
+checks for nearby names, nested scripts and production roots. The package
+manifest still forbids Python/PyTorch, and the actual compiled closure still
+excludes all Python files. The corrected tracked-candidate isolation gate passes
+three tests. This failure is retained as CI history, not reported as a supported
+runtime run or retried without a source change.
 
 Independent Astra/high source/provenance and native/lifetime agents approved the
 adapter/native implementation. Independent package source review reconciled the

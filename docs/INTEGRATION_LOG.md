@@ -2537,3 +2537,13 @@ Frame record authentication, true root-stable dataset ownership, cursor/mode
 restoration, same-region owned-batch cleanup, normal-lease staging and repeated
 1,024/8,192-frame resource proof remain with the later E3 composition owner.
 No frame authority or restoration stub is supplied by this change.
+
+
+The first PR #110 CI run `35698295743` stopped at Python isolation before any full
+compiler suite: the newly tracked, contract-selected build generator lacked an
+exact exception to the tests-only `.py` inventory. A prior local isolation run
+had not included that then-untracked file. The focused correction admits only
+`scripts/generate-e3-d2-source.py`, rejects other script/production paths, and
+preserves the manifest prohibition on runtime Python/PyTorch. All three corrected
+isolation tests pass with the generator tracked; no runtime source changes or
+compiler-suite omission is used to fix this registration failure.
