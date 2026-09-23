@@ -798,10 +798,10 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
                                 et_f32_tensor **output,
                                 et_f32_tensor_error *error) {
   et_f32_tensor *tensor;
-  size_t count;
-  size_t bytes;
+  size_t count = 0u;
+  size_t bytes = 0u;
   size_t shape_bytes;
-  int empty;
+  int empty = 0;
   int32_t result;
   if (!caller_shape_span(rank, shape, &shape_bytes)) {
     if (error != NULL) {

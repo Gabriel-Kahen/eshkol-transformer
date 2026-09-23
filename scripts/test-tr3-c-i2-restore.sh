@@ -35,6 +35,32 @@ if cmp -s "${PROJECT_ROOT}/native/f32_tensor.c" \
     "${baseline_root}/native/f32_tensor.c"; then
   die "pre-repair f32 baseline unexpectedly matches the current source"
 fi
+baseline_patched="${tmp}/f32_tensor-approved-portability.c"
+awk '
+  $0 == "int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape," {
+    in_create = 1
+  }
+  in_create && $0 == "  size_t count;" {
+    $0 = "  size_t count = 0u;"
+    count_changes++
+  }
+  in_create && $0 == "  size_t bytes;" {
+    $0 = "  size_t bytes = 0u;"
+    byte_changes++
+  }
+  in_create && $0 == "  int empty;" {
+    $0 = "  int empty = 0;"
+    empty_changes++
+  }
+  { print }
+  in_create && $0 == "  int32_t result;" { in_create = 0 }
+  END {
+    if (count_changes != 1 || byte_changes != 1 || empty_changes != 1) {
+      exit 1
+    }
+  }
+' "${baseline_root}/native/f32_tensor.c" >"${baseline_patched}"
+mv "${baseline_patched}" "${baseline_root}/native/f32_tensor.c"
 
 cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -O0
         -ffp-contract=off -fexcess-precision=standard -frounding-math
@@ -60,6 +86,8 @@ check_hidden() {
 for compiler in clang gcc; do
   ordinary_f32="${tmp}/${compiler}-f32-ordinary.o"
   baseline_f32="${tmp}/${compiler}-f32-pre-repair.o"
+  optimized_ordinary_f32="${tmp}/${compiler}-f32-ordinary-optimized.o"
+  optimized_baseline_f32="${tmp}/${compiler}-f32-pre-repair-optimized.o"
   feature_f32="${tmp}/${compiler}-f32-feature.o"
   ordinary_bridge="${tmp}/${compiler}-bridge-ordinary.o"
   declaration_bridge="${tmp}/${compiler}-bridge-declaration-only.o"
@@ -87,6 +115,17 @@ for compiler in clang gcc; do
     "${compiler}" "${cflags[@]}" -c native/f32_tensor.c -o "${baseline_f32}"
   )
   cmp "${ordinary_f32}" "${baseline_f32}"
+  (
+    cd "${PROJECT_ROOT}"
+    "${compiler}" "${cflags[@]}" -O2 -fstrict-aliasing \
+      -c native/f32_tensor.c -o "${optimized_ordinary_f32}"
+  )
+  (
+    cd "${baseline_root}"
+    "${compiler}" "${cflags[@]}" -O2 -fstrict-aliasing \
+      -c native/f32_tensor.c -o "${optimized_baseline_f32}"
+  )
+  cmp "${optimized_ordinary_f32}" "${optimized_baseline_f32}"
   "${compiler}" "${cflags[@]}" -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
     -c "${PROJECT_ROOT}/native/f32_tensor.c" -o "${feature_f32}"
   "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
@@ -115,6 +154,18 @@ for compiler in clang gcc; do
     "${tmp}/${compiler}-baseline_f32.defined"
   cmp "${tmp}/${compiler}-ordinary_f32.undefined" \
     "${tmp}/${compiler}-baseline_f32.undefined"
+  symbols defined "${optimized_ordinary_f32}" \
+    "${tmp}/${compiler}-optimized_ordinary_f32.defined"
+  symbols undefined "${optimized_ordinary_f32}" \
+    "${tmp}/${compiler}-optimized_ordinary_f32.undefined"
+  symbols defined "${optimized_baseline_f32}" \
+    "${tmp}/${compiler}-optimized_baseline_f32.defined"
+  symbols undefined "${optimized_baseline_f32}" \
+    "${tmp}/${compiler}-optimized_baseline_f32.undefined"
+  cmp "${tmp}/${compiler}-optimized_ordinary_f32.defined" \
+    "${tmp}/${compiler}-optimized_baseline_f32.defined"
+  cmp "${tmp}/${compiler}-optimized_ordinary_f32.undefined" \
+    "${tmp}/${compiler}-optimized_baseline_f32.undefined"
 
   cmp "${PROJECT_ROOT}/native/f32_tensor_defined_symbols.txt" \
     "${tmp}/${compiler}-ordinary_f32.defined"
