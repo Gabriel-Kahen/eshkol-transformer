@@ -8,10 +8,11 @@ Work proceeds in dependency-aware waves. Within a wave, workstreams may run in
 parallel in isolated worktrees. Contracts merge before downstream implementation.
 
 The Wave 3 checked-promotion adoption candidate pins
-`Gabriel-Kahen/eshkol@222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`, proposed
+`Gabriel-Kahen/eshkol@81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, proposed
 upstream in [PR #714](https://github.com/tsotchke/eshkol/pull/714). Adoption remains
-under review until the separate #117/#121 guard-order repairs, fresh supported
-toolchain/package rebuild, focused acceptance, and final integration review pass.
+under review. The exact-pin supported toolchain/package rebuild and focused B0/C2/E3
+adoption gates pass; the separate #117/#121 guard-order repairs, their combined
+aggregate evidence, full supported CI, and final integration review remain pending.
 No workstream status changes solely from the pin update.
 
 ## Wave 0 — contracts and verification foundation

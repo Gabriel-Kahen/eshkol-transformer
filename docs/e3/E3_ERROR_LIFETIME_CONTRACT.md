@@ -6,7 +6,7 @@ source audit below; behavior is unchanged. Contract merge and explicit bounded
 dispatch remain required; implementation and runtime evidence are not accepted.
 
 The active implementation baseline is the reviewed compiler/runtime candidate
-`Gabriel-Kahen/eshkol@222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`.
+`Gabriel-Kahen/eshkol@81298b4a9608fb92eb6f351a2eabd8392da7d9ef`.
 The original contract audit inspected E1 core/internal/consumer code, M3
 `m3-call`/`m3t-rethrow-raw`, and the predecessor runtime at
 `90cbd7130f47b8184bcc77b8d5c1b0026da980de`; that audit supplied no build/runtime

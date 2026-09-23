@@ -32,7 +32,7 @@ training state:
 (transformer-trainer-state 1 0 ()
   (library-identity "0.1.0-draft" eshkol-training-state 1 0)
   (compiler-identity eshkol 1 3 4 evolve
-                     222cad3aac68ddf48d09c1cdf322fa4c4e7b8296)
+                     81298b4a9608fb92eb6f351a2eabd8392da7d9ef)
   (tensor-provider 2 0 i2-dense-cpu-f32-v1 f32 cpu row-major)
   <owned-P1-state-1.0>
   <owned-O2-state-1.0>

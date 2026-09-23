@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from tests.q0.oracle_format import encode_fixture
 
-PIN = "222cad3aac68ddf48d09c1cdf322fa4c4e7b8296"
+PIN = "81298b4a9608fb92eb6f351a2eabd8392da7d9ef"
 if os.environ.get("ATEN_CPU_CAPABILITY") != "default" or os.environ.get("MKL_CBWR") != "COMPATIBLE":
     raise RuntimeError("set ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE before generation")
 import torch

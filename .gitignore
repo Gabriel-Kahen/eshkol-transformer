@@ -1,6 +1,7 @@
 .tmp/
 .deps/
 .review-f0-build/
+.wave3-final/
 build/
 checkpoints/
 data/

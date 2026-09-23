@@ -16,7 +16,7 @@ API is stable yet.
 
 The initial supported lane is Ubuntu 22.04 x86-64 with Clang/LLVM 21.1.8. The
 Eshkol compiler/runtime is built from the reviewed `Gabriel-Kahen/eshkol`
-candidate at `222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`, which reports version
+candidate at `81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, which reports version
 `1.3.4-evolve`. Its checked-promotion implementation is proposed upstream in
 [PR #714](https://github.com/tsotchke/eshkol/pull/714). Exact compatibility inputs
 are in `toolchain/eshkol.lock`; package requirements and limitations are in
