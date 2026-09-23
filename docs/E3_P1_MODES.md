@@ -7,18 +7,13 @@ This ledger starts at merged contract commit
 `221e00c9c258841995195a051b9f44df515679b9`. Pending rows are requirements,
 not passing implementation or acceptance evidence.
 
-Implementation freeze is currently held at root publication failure atomicity.
-Independent direct-runtime and generated Eshkol `vector-set!` probes show the
-pinned runtime write barrier returning/publishing regional graph edges after
-promotion allocation returns null. The root independently confirmed this and filed
-[upstream issue713](https://github.com/tsotchke/eshkol/issues/713); the
-[executed AOT follow-up](https://github.com/tsotchke/eshkol/issues/713#issuecomment-5772455008)
-records the six graph-copy-prefix failures. This is deterministic allocation-failure
-injection, not natural host OOM, supported-lane behavior, or execution of the complete
-P1 bind helper. Ordinary semantic
-testing can continue, but the short-region promotion and setup-atomicity requirements
-remain unresolved. No manifest/CI freeze or contract weakening follows from this
-probe.
+The former root-publication and constructor prerequisites are resolved by frozen
+runtime candidate `81298b4a9608fb92eb6f351a2eabd8392da7d9ef`. The focused
+supported-container evidence below exercises the complete P1 bind helper across
+all six constructor and six checked-promotion allocation boundaries. This does
+not complete inherited-package retention, full-suite union, or E3 composition.
+The earlier blocked-runtime findings remain below as historical evidence of why
+the repaired runtime is required.
 
 ## Scope and stable boundary
 
@@ -121,16 +116,16 @@ inferred from the new helper-only resource witness.
 
 | Proof | Required recorded evidence | Current disposition |
 |---|---|---|
-| Source preservation | First64, unchanged public/named surface, template agreement, wrapper slots/arities, source digests | Static draft check passed; exact final candidate pending |
-| Topology/modes | Real17-node tree; exact mixed train/eval restoration; all identity/topology/mode corruptions rejected before writes | O0 ordinary fixture passes mixed17 and constructible negatives; full gate pending |
-| Lifecycle/statuses | Exact 0–4 statuses, every phase transition, copied/foreign/dead tokens and comparator reentry | O0 ordinary fixture passes statuses/lifecycle; genuine comparator reentry pending |
-| Root lifetime | Bind in short region; read back canonical token; poisoned exit and successful reuse | Pending |
-| Setup atomicity | Every allocation and barrier failpoint; untouched setup output/modes; dead published records clear frame/model roots | Pending |
-| Nonallocating tails | Allocation-disabled prepare/enter/prepared-restore/entered-restore/unbind; exact counters | Pending |
-| Reuse | Separate 1,024/8,192 token-reuse arena/native/cumulative allocation counters and peak RSS | Pending |
+| Source preservation | First64, unchanged public/named surface, template agreement, wrapper slots/arities, source digests | Exact first64/first69, 71-slot total, unchanged public surface, generated roots and source digests pass |
+| Topology/modes | Real17-node tree; exact mixed train/eval restoration; all identity/topology/mode corruptions rejected before writes | O0 749-check and O2 1,075-check fixtures pass; all17 preserved across focused setup failures |
+| Lifecycle/statuses | Exact 0–4 statuses, every phase transition, copied/foreign/dead tokens and comparator reentry | O0 statuses/lifecycle and genuine protected-comparator reentry for all five wrappers pass |
+| Root lifetime | Bind in short region; read back canonical token; poisoned exit and successful reuse | Supported O2 poisoned short-region bind/readback/reuse passes |
+| Setup atomicity | Every allocation and barrier failpoint; untouched setup output/modes; dead published records clear frame/model roots | Six constructor plus six checked-promotion boundaries pass; failed-prefix bytes recorded exactly |
+| Nonallocating tails | Allocation-disabled prepare/enter/prepared-restore/entered-restore/unbind; exact counters | Supported O2 real bounded-arena profile passes |
+| Reuse | Separate 1,024/8,192 token-reuse arena/native/cumulative allocation counters and peak RSS | Supported O2 profile passes exact zero deltas and equal 7,405,568-byte cumulative arena totals |
 | Inherited packages | Each row above: exact public/local/undefined/source/native/archive inventories, public-caller/hostile-link negatives, determinism | Pending |
 | Fixed setup cost | Per-inheritor baseline/candidate root bytes and artifact/build resources; success/dead/failed bind separately | Pending |
-| Supported acceptance | Exact candidate commit/tree, independent review, supported Ubuntu22/LLVM21 run and complete original suite union | Pending |
+| Supported acceptance | Exact candidate commit/tree, independent review, supported Ubuntu22/LLVM21 run and complete original suite union | Focused Ubuntu22/LLVM21 run passes; independent review and complete suite/inheritor union pending |
 
 Local CachyOS/LLVM22 measurements, if performed, are compatibility evidence only.
 They do not establish supported Ubuntu22/LLVM21 behavior, sanitizer/leak success,
@@ -298,4 +293,67 @@ or interrupt-poll operations. Retire/prepare/enter/restore have respectively
 unbind delegates retirement. No symbol-interning call appears in those closures.
 This confirms removal of the earlier mutating-loop lowering defect in this O0
 artifact only. Generic type/error branches still contain allocation and raising;
-allocation-disabled valid-path instrumentation and optimized proof remain pending.
+allocation-disabled valid-path instrumentation and optimized proof were pending
+at that checkpoint and are recorded separately below.
+
+## Final-runtime focused acceptance
+
+The focused acceptance profile uses frozen runtime source commit
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, tree
+`7669312845a9d8d372006af52271045e69505813`, packaged runner SHA-256
+`4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1`,
+and runtime archive SHA-256
+`c32bb593ac1f365f3cbeaefd581704c4be029a4aa8877db29463d0e12356c168`.
+It ran in immutable Ubuntu22/LLVM21.1.8 image
+`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`
+with networking disabled. The manifest
+`tests/e3_p1/final_runtime_candidate.tsv` pins those inputs and every test/source
+digest; `scripts/test-e3-p1-final-runtime.sh` records commands, provenance,
+hashes, timing and compact results under `build/e3-p1-final-runtime.*`.
+
+The unchanged O0 profile passed all749 existing checks. A distinct `-O 2`
+profile passed1,075 checks at both1,024 and8,192 reuse horizons. It constructs a
+genuine M3 model and an independently observable exact17-node mixed-mode tree,
+binds from a poisoned short region, reads back and reuses the canonical token,
+and invokes bind/prepare/enter/prepared-restore/entered-restore/unbind from a
+genuine P1 protected-storage comparator callback. Every reentrant call returned
+status2 before writes and every all17 mode check remained exact.
+
+The optimized valid tails ran while the real process root arena was temporarily
+bounded with zero remaining capacity. Prepare, enter, prepared restore, entered
+restore, and unbind succeeded. The reuse loops executed exactly3,072 and24,576
+operations. Both horizons reported zero deltas for root used bytes, cumulative
+arena capacity, arena blocks, P1 native live entries and P1 native tombstones.
+The process-level cumulative arena total was exactly7,405,568 bytes at both
+horizons. Observed peak RSS was39,324KiB at1,024 and39,128KiB at8,192; RSS is
+reported, not used as an equality gate.
+
+Compilation was intentionally separate from the delivered builder flags and
+was resource-intensive. The unchanged O0 profile used3,247,036KiB peak RSS in
+74.80 seconds; the O2 main profile used4,265,536KiB in832.83 seconds; and the O2
+failure profile used3,951,764KiB in682.59 seconds. Each compiler was wrapped in
+an explicit900- or1,200-second timeout. These are observed build resources, not
+portable limits.
+
+The setup-failure artifact runs one failpoint in a fresh process. Exact
+constructor budgets `0,288,576,864,896,1056` fail before each of the three17-slot
+vectors, token, record and cons allocations with runtime allocation condition1.
+Exact root budgets `0,48,208,240,528,816` fail at each corresponding
+transactional graph-copy boundary with promotion condition2. All12 runs preserve
+setup output and all17 mixed modes, change neither arena capacity nor block count,
+and successfully bind/prepare/enter/restore/unbind the same model afterward.
+The reported used-byte delta equals the admitted prefix budget in every case;
+this is explicit cumulative failed-setup cost, not a flat failed-bind claim.
+
+The test-only C++ shim changes only the selected arena's existing `bounded` and
+current-block `used` controls. It neither replaces nor wraps an allocator. It
+records the exact counters before restoring those controls for test teardown;
+that restoration is not a production rollback mechanism. The generic comparator
+arm is confined to `tests/p1/providers/p1_test/tensor_provider.esk`; no production
+P1 or runtime API changed.
+
+This closes the focused optimized lifetime, setup atomicity, comparator reentry
+and reuse rows. It does not establish arbitrary host OOM behavior, total frame
+creation bounds, inherited package fixed costs, archive/manifest isolation for
+every inheritor, the complete repository suite union, or full E3 frame/error/
+guard composition. Those remain integration-owner gates.
