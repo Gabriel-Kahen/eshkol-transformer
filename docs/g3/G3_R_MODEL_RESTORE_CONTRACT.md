@@ -8,8 +8,8 @@ schedule or sampler contract. It authorizes no implementation by itself. The
 restricted sampler source remains outside this work.
 
 The source basis is the C4 model/transport contract at
-`ab876989245959b35198cfdbf57e6bee2eee7571`, runtime reservation candidate
-`b7bb6d8e40e5316943d6c32058eca006b6d01e51`, and SHARED-R2 candidate
+`ab876989245959b35198cfdbf57e6bee2eee7571`, reviewed runtime candidate
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, and SHARED-R2 candidate
 `8047cec9` over implementation `939f1c835282a468b901c1d4b48b9889e7e93c89`.
 None is described here as an accepted final integration pin. Final compiler and
 execution-lane identity bytes remain a separate dependency-owned freeze; an
@@ -241,7 +241,19 @@ active C4 tuple, FULL pins, logical ordinal 0..14, its fixed C1 path-to-C4-owner
 mapping, parameter identity and canonical handle, allocates one standard I2 owned
 clone of the exact shape, and invokes the genuine
 SHARED-R2 `storage.copy` row from the pinned source into that disjoint clone.
-Failure destroys local allocation and publishes nothing. Success returns one
+Clone creation must call the existing `et_i2_private_owned_clone_v1` path, which
+calls `et_f32_owned_tensor_clone_v1` and therefore records
+`ET_F32_OWNERSHIP_PRIVATE_CLONE` and increments I2's owned-clone count. Ordinary
+`et_f32_tensor_clone_v1`, parameter snapshots and same-shaped allocations do not
+establish that ownership and are forbidden here. The subsequent exact copy does
+not replace or infer the ownership proof.
+Clone-creation failure publishes nothing. Any later copy/admission failure first
+snapshots the dependency/R error, then releases the unpublished clone exactly once
+through `et_i2_private_owned_release_v1`; that path destroys the PRIVATE_CLONE and
+decrements I2's owned-clone count. Raw `et_f32_owned_tensor_release_v1` is
+insufficient cleanup here because it does not own that I2 count. A release defect
+after successful clone preflight is fail-stop and cannot replace the first
+recoverable snapshot. Success returns one
 native owned-clone control which the I2 wrapper immediately encloses in the
 ordinary authenticated carrier and release envelope. No bare tensor pointer is
 returned to a public or cross-aggregate caller.
@@ -319,8 +331,9 @@ restored owner, index, destination I2 parameter carrier and canonical P1 handle.
 The wrapper passes the authenticated source tensor pointer, fixed owned-clone role
 3 and `source_handle == NULL`; the C bridge rejects any other role or nonnull
 source handle. No Eshkol carrier vector crosses the C boundary. The C
-bridge repeats C4 owner/index/membership/handle checks and proves the source is a
-live I2 owned clone of the exact shape. It then calls the existing I2 copy builder
+bridge repeats C4 owner/index/membership/handle checks, then consumes the sole
+dependency-owned private-clone validator described below before any shape read or
+builder creation. It then calls the existing I2 copy builder
 route exactly as follows: create count 1; set assignment 0 with destination role
 1 and source role 3 plus their exact handles; prepare; abort on every create/set/
 prepare failure for which a builder exists; and commit once. Prepared commit is
@@ -330,6 +343,30 @@ Only after success does one nonraising store mark that restored-owner index fill
 Every precommit failure leaves the destination unchanged. Indices are accepted
 exactly once in order 0..13. K2 SHARED-R2 admission proves capability; it is not a
 substitute for this I2 mutation route.
+
+The validator is an explicit #120 dependency, not an R-owned API. Its declaration
+belongs only in `native/f32_parameter_internal.h`; its definition belongs only in
+`native/f32_tensor.c`, the translation unit that owns the complete live-tensor
+registry and private `ownership_kind`. Both are present only under the same
+#120-frozen private feature conditional used by an R-enabled build of
+`native/i2_wave2_package_bridge.c`. The symbol is not installed, JIT-registered,
+renamed into Eshkol, exported through a public header or admitted in any non-R
+source closure.
+
+The dependency validator accepts only a candidate tensor pointer and returns
+without allocation, callback, mutation or error construction. It first searches
+the real live-tensor registry by pointer equality and does not dereference the
+candidate before a match. A match is admissible only when magic and registry
+liveness are current, `ownership_kind == ET_F32_OWNERSHIP_PRIVATE_CLONE`,
+`active_borrow == NULL`, and `plan_pins == 0`. Null, foreign, stale and ordinary
+clones reject; an exact private clone with a borrow or plan pin rejects busy. The
+R bridge calls this validator after its Eshkol carrier/role/null-handle proof and
+before shape inspection, translates only the #120-frozen exact result classes
+into the existing I2 error snapshot, and never substitutes
+`et_f32_tensor_is_live_v1`, `et_f32_tensor_canonical_owner_v1`, role 3, a P1
+precondition, a count query or destructive release as proof. Until #120 freezes
+the validator declaration, conditional spelling and result mapping, restore-copy
+implementation remains blocked; R defines no competing validator.
 
 The source mapping is the C4 unique-owner order. Index 10 consumes the decoded
 carrier for canonical least-path `head/weight` after the decoded state and stage
@@ -551,13 +588,16 @@ the implementation dependency.
 Implementation remains blocked until root accepts this contract, the final
 compiler/runtime and M3/M3T canonical-error successor, C4 model/transport,
 SHARED-R2, the final deterministic-lane manifest and dependency owner changes to
-P1/I2/C1 private trusted surfaces. Exact implementation must then freeze the R
-header/source/object list, every Eshkol source-closure member, defined/undefined
-native symbols, package facade/export/global counts, and supported artifact hashes.
+P1/I2/C1 private trusted surfaces, including the accepted #120 private-clone
+validator. Exact implementation must then freeze the R header/source/object list,
+every Eshkol source-closure member, defined/undefined native symbols, package
+facade/export/global counts, and supported artifact hashes.
 
 Required focused evidence includes every stage/decoder/copy/replay/abort fault
 cut; exact release and tombstone counts; forged/stale/cross-owner tuples; mutated
-stage/projection/state/carriers/handles; all reserve high-water and persistent-
+stage/projection/state/carriers/handles; ordinary, foreign, stale, borrowed and
+pinned clone rejection plus genuine PRIVATE_CLONE snapshot creation/counts; all
+reserve high-water and persistent-
 failure cases, including cleanup-status defects after the reconstruction capture
 has popped; no-draw replay of every P0/H partition; fresh-process exact
 continuation; SAVE self-parse; old-destination preservation and publication-
