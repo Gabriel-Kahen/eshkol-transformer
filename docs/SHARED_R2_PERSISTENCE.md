@@ -1,9 +1,13 @@
 # SHARED-R2 bounded persistence admission
 
-Status: **independently reviewed integration candidate with local owner gates
-complete** under issue
-[#114](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/114). Root-owned
-supported integration CI remains required for acceptance.
+Status: **accepted and merged** under issue
+[#114](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/114), through
+[PR #124](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/124), merge
+`f74fede59b08f26aa8f3f2300be46eb5fa56f116`. Supported Ubuntu 22.04/LLVM 21.1.8
+run `35925066612` passed all 19 suites/34 commands at the exact merged tree
+`64ac6cdc00c239c3f5b835c9d1bbd216a6927a78`; main run `35933002462`
+verified reuse of that evidence. This accepts only the bounded persistence
+admission described below, not full trainer or generation behavior.
 
 SHARED-R2 keeps K1 ABI 1.0, every I2 native symbol and public arity, the provider
 name `eshkol-transformer-f32`, and C1/C2 serialized bytes. The I2 provider and its
