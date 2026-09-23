@@ -65,8 +65,8 @@ def compile_stdin(source: bytes, output: Path, *defines: str) -> None:
     )
 
 
-def nm_symbols(obj: Path, flag: str) -> set[str]:
-    output = run("nm", flag, "--format=posix", str(obj)).decode()
+def nm_symbols(obj: Path, *flags: str) -> set[str]:
+    output = run("nm", *flags, "--format=posix", str(obj)).decode()
     return {line.split()[0] for line in output.splitlines() if line.strip()}
 
 
@@ -165,8 +165,12 @@ class Tr3O2StepClearPackageTests(unittest.TestCase):
             present = temp / "present.o"
             compile_stdin(current, absent)
             compile_stdin(current, present, "ET_TR3_O2_STEP_CLEAR_BRIDGE")
-            absent_defined = nm_symbols(absent, "-gU")
-            present_defined = nm_symbols(present, "-gU")
+            # Ubuntu 22.04 binutils 2.38 assigns short -U to --unicode and
+            # consumes the next argument.  Spell the symbol-class predicates
+            # explicitly so GNU nm 2.38 and newer nm implementations apply the
+            # same global-defined filter.
+            absent_defined = nm_symbols(absent, "-g", "--defined-only")
+            present_defined = nm_symbols(present, "-g", "--defined-only")
             self.assertEqual(present_defined - absent_defined, PRIVATE_BRIDGE_SYMBOLS)
             absent_undefined = nm_symbols(absent, "-gu")
             present_undefined = nm_symbols(present, "-gu")
