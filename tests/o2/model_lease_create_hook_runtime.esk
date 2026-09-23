@@ -75,14 +75,29 @@
       (cond ((= hook-mode 0) 0)
             ((= hook-mode 1) 1)
             ((= hook-mode 2) 2)
-            (else (error "injected fixed overlap-check failure")))))
+            ((= hook-mode 3) #f)
+            ((= hook-mode 4)
+             (error "injected fixed overlap-check failure"))
+            (else (raise #f)))))
 (define (alternate-overlap-check handles) 0)
 
 (define (live-counts)
   (vector (hook-test-live-count 0)
           (hook-test-live-count 1)
           (hook-test-live-count 2)
-          (hook-test-live-count 3)))
+          (hook-test-live-count 3)
+          (hook-test-live-count 4)
+          (hook-test-live-count 5)
+          (hook-test-live-count 6)
+          (hook-test-live-count 7)
+          (hook-test-live-count 8)
+          (hook-test-live-count 9)
+          (hook-test-live-count 10)
+          (hook-test-live-count 11)
+          (hook-test-live-count 12)
+          (hook-test-live-count 13)
+          (hook-test-live-count 14)
+          (hook-test-live-count 15)))
 
 (define baseline-counts (live-counts))
 (define uninstalled-optimizer
@@ -142,12 +157,12 @@
        (and (error-object? installed-zero-optimizer)
             (= (vector-ref zero-after 0) (vector-ref zero-before 0))
             (= (vector-ref zero-after 1) (+ (vector-ref zero-before 1) 1))
-            (= (- (vector-ref zero-after 2) (vector-ref zero-before 2))
-               (- (vector-ref after-uninstalled-counts 2)
-                  (vector-ref baseline-counts 2)))
-            (= (- (vector-ref zero-after 3) (vector-ref zero-before 3))
-               (- (vector-ref after-uninstalled-counts 3)
-                  (vector-ref baseline-counts 3)))))
+            (= (- (vector-ref zero-after 9) (vector-ref zero-before 9))
+               (- (vector-ref after-uninstalled-counts 9)
+                  (vector-ref baseline-counts 9)))
+            (= (- (vector-ref zero-after 15) (vector-ref zero-before 15))
+               (- (vector-ref after-uninstalled-counts 15)
+                  (vector-ref baseline-counts 15)))))
 (check "installed zero preserves uninstalled predecessor result fields"
        (and (equal? (vector-ref installed-zero-record 2)
                     (vector-ref uninstalled-record 2))
@@ -238,6 +253,17 @@
             (equal? (live-counts) invalid-status-counts)))
 
 (set! hook-mode 3)
+(define malformed-status-head o2-optimizers)
+(define malformed-status-counts (live-counts))
+(check "malformed hook status maps to internal"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "malformed hook status publishes nothing"
+       (and (eq? o2-optimizers malformed-status-head)
+            (equal? (live-counts) malformed-status-counts)))
+
+(set! hook-mode 4)
 (define raised-head o2-optimizers)
 (define raised-counts (live-counts))
 (check "foreign hook raise maps to internal"
@@ -247,6 +273,17 @@
 (check "foreign hook raise publishes nothing"
        (and (eq? o2-optimizers raised-head)
             (equal? (live-counts) raised-counts)))
+
+(set! hook-mode 5)
+(define raised-false-head o2-optimizers)
+(define raised-false-counts (live-counts))
+(check "raise-false hook maps to internal"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "raise-false hook publishes nothing"
+       (and (eq? o2-optimizers raised-false-head)
+            (equal? (live-counts) raised-false-counts)))
 
 (if (= failures 0)
     (begin
