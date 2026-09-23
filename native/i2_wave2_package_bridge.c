@@ -941,6 +941,117 @@ int64_t et_i2_private_copy_builder_abort_v1(void *opaque) {
   return 0;
 }
 
+#ifdef ET_TR3_C_I2_CHECKED_BRIDGE
+/* These entries are linked only into the source-composed TR3-C package.  The
+ * source plan authenticates the parent/builder relation; this translation unit
+ * authenticates the exact live child capability before touching it. */
+static void et_tr3_c_i2_fail_stop(void) { _Exit(134); }
+
+#ifdef ET_F32_TENSOR_TESTING
+static int et_tr3_c_i2_fail_copy_commit;
+static int et_tr3_c_i2_fail_copy_release;
+static int et_tr3_c_i2_fail_owned_release;
+
+void et_tr3_c_i2_test_fail_copy_commit_v1(int64_t enabled) {
+  et_tr3_c_i2_fail_copy_commit = enabled != 0;
+}
+
+void et_tr3_c_i2_test_fail_copy_release_v1(int64_t enabled) {
+  et_tr3_c_i2_fail_copy_release = enabled != 0;
+}
+
+void et_tr3_c_i2_test_fail_owned_release_v1(int64_t enabled) {
+  et_tr3_c_i2_fail_owned_release = enabled != 0;
+}
+#endif
+
+static int32_t et_tr3_c_i2_copy_commit(et_f32_tensor_copy_plan *plan) {
+#ifdef ET_F32_TENSOR_TESTING
+  if (et_tr3_c_i2_fail_copy_commit) {
+    return -1;
+  }
+#endif
+  return et_f32_tensor_copy_plan_commit_v1(plan, &et_i2_last_error);
+}
+
+static int32_t et_tr3_c_i2_copy_release(et_f32_tensor_copy_plan **plan) {
+#ifdef ET_F32_TENSOR_TESTING
+  if (et_tr3_c_i2_fail_copy_release) {
+    return -1;
+  }
+#endif
+  return et_f32_tensor_copy_plan_release_v1(plan, &et_i2_last_error);
+}
+
+int64_t et_tr3_c_i2_copy_builder_commit_checked_v1(void *opaque) {
+  et_i2_copy_builder *const builder = et_i2_find_copy_builder(opaque);
+  int32_t status;
+
+  if (builder == NULL) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+  if (builder->plan == NULL) {
+    et_tr3_c_i2_fail_stop();
+  }
+  et_i2_clear_error();
+  status = et_tr3_c_i2_copy_commit(builder->plan);
+  if (status != 0) {
+    et_tr3_c_i2_fail_stop();
+  }
+  status = et_tr3_c_i2_copy_release(&builder->plan);
+  if (status != 0 || builder->plan != NULL) {
+    et_tr3_c_i2_fail_stop();
+  }
+  et_i2_unlink_copy_builder(builder);
+  free(builder->assignments);
+  et_i2_retire_copy_builder(builder);
+  return 0;
+}
+
+int64_t et_tr3_c_i2_copy_builder_abort_checked_v1(void *opaque) {
+  et_i2_copy_builder *const builder = et_i2_find_copy_builder(opaque);
+  int32_t status;
+
+  if (builder == NULL) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+  if (builder->plan != NULL) {
+    et_i2_clear_error();
+    status = et_tr3_c_i2_copy_release(&builder->plan);
+    if (status != 0 || builder->plan != NULL) {
+      et_tr3_c_i2_fail_stop();
+    }
+  }
+  et_i2_unlink_copy_builder(builder);
+  free(builder->assignments);
+  et_i2_retire_copy_builder(builder);
+  return 0;
+}
+
+void et_tr3_c_i2_owned_release_checked_v1(void *opaque) {
+  et_f32_tensor *const owned = (et_f32_tensor *)opaque;
+  int32_t status;
+
+  if (et_f32_tensor_canonical_owner_v1(owned) != owned) {
+    et_tr3_c_i2_fail_stop();
+  }
+  et_i2_clear_error();
+#ifdef ET_F32_TENSOR_TESTING
+  if (et_tr3_c_i2_fail_owned_release) {
+    et_tr3_c_i2_fail_stop();
+  }
+#endif
+  status = (int32_t)et_i2_private_owned_release_v1(owned);
+  if (status != 0) {
+    et_tr3_c_i2_fail_stop();
+  }
+}
+#endif
+
 void *et_i2_private_reset_builder_create_v1(int64_t count) {
   et_i2_reset_builder *builder;
   if (count <= 0 || count > (int64_t)ET_F32_PARAMETER_MAX_BATCH) {
