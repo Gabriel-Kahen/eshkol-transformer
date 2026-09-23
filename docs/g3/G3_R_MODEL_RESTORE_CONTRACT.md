@@ -348,25 +348,25 @@ The validator is an explicit #120 dependency, not an R-owned API. Its declaratio
 belongs only in `native/f32_parameter_internal.h`; its definition belongs only in
 `native/f32_tensor.c`, the translation unit that owns the complete live-tensor
 registry and private `ownership_kind`. Both are present only under the same
-#120-frozen private feature conditional used by an R-enabled build of
-`native/i2_wave2_package_bridge.c`. The symbol is not installed, JIT-registered,
-renamed into Eshkol, exported through a public header or admitted in any non-R
-source closure.
+#120-frozen private feature conditional used when compiling
+`native/f32_tensor.c` and `native/i2_wave2_package_bridge.c` for exactly the
+dependency-approved private TR3-C and G3-R restore closures. The symbol is absent
+from every ordinary, predecessor and public source closure and has no other
+consumer. It is not installed, JIT-registered, renamed into Eshkol or exported
+through a public header.
 
-The dependency validator accepts only a candidate tensor pointer and returns
-without allocation, callback, mutation or error construction. It first searches
-the real live-tensor registry by pointer equality and does not dereference the
-candidate before a match. A match is admissible only when magic and registry
-liveness are current, `ownership_kind == ET_F32_OWNERSHIP_PRIVATE_CLONE`,
-`active_borrow == NULL`, and `plan_pins == 0`. Null, foreign, stale and ordinary
-clones reject; an exact private clone with a borrow or plan pin rejects busy. The
-R bridge calls this validator after its Eshkol carrier/role/null-handle proof and
-before shape inspection, translates only the #120-frozen exact result classes
-into the existing I2 error snapshot, and never substitutes
+The R bridge consumes the one #120-frozen private source/destination owned-clone
+match; #120 alone owns its exact symbol, signature, conditional spelling, checks
+and result set. R supplies the exact decoded source and exact restored destination
+only after its Eshkol carrier/role/null-handle and C4 owner/index/member/handle
+proofs, and calls the match before any separate shape inspection or builder
+creation. It proceeds only on the accepted exact-match result and translates every
+other #120-frozen result class into the existing I2 error snapshot. It never
+substitutes
 `et_f32_tensor_is_live_v1`, `et_f32_tensor_canonical_owner_v1`, role 3, a P1
 precondition, a count query or destructive release as proof. Until #120 freezes
-the validator declaration, conditional spelling and result mapping, restore-copy
-implementation remains blocked; R defines no competing validator.
+and root accepts that shared match contract, restore-copy implementation remains
+blocked; R defines no competing validator or narrower admission rule.
 
 The source mapping is the C4 unique-owner order. Index 10 consumes the decoded
 carrier for canonical least-path `head/weight` after the decoded state and stage

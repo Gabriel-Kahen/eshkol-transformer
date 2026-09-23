@@ -3,13 +3,12 @@
 **Proposed exact contract; implementation requires root acceptance.** This file
 replaces the unresolved model/transport placeholders in
 [the C4 profile proposal](G3_C4_PROFILE_PROPOSAL.md). It is derived from the
-reviewed C4 integration candidate `637cec09e00d6f9c2414e051836ab50665709606`,
-whose PR #122 acceptance remains pending, the checked-promotion candidate at
-`222cad3aac68ddf48d09c1cdf322fa4c4e7b8296` over implementation
-`714d20fea64d97286dde34b841fc0146bfdcc40b`, the handler-reservation candidate
-checkpoint `b7bb6d8e40e5316943d6c32058eca006b6d01e51`, whose runtime acceptance and
-transformer pin remain pending, and the SHARED-R2 candidate checkpoint
-`0e25452ec3dc7630c295cb6a475ae549c43be8fc`, whose acceptance remains pending.
+reviewed C4 numerical integration merge
+`0342932091236d707eb67947bec11ccec606f615`, the reviewed runtime candidate
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, whose transformer pin remains
+pending, and the source-approved SHARED-R2 checkpoint `8047cec9` over
+implementation `939f1c835282a468b901c1d4b48b9889e7e93c89`, whose owner-local gates
+pass while merge and downstream pin acceptance remain pending.
 It authorizes no implementation by itself. The restricted sampler source remains
 outside this work.
 
@@ -615,22 +614,20 @@ candidate accessor is authorized by this contract.
 
 ## Dependency pins and implementation hold
 
-SHARED-R2 checkpoint `0e25452ec3dc7630c295cb6a475ae549c43be8fc` must be
+SHARED-R2 checkpoint `8047cec9` over implementation
+`939f1c835282a468b901c1d4b48b9889e7e93c89` must be
 accepted and merged as the genuine I2/K2 successor: provider
 and verified entry `eshkol-transformer-f32`, version `1.1`, evidence
 `I2:bounded-exact-f32-storage.copy-v2`, with rank0, rank1, and only exact rank2
 `[2,4]`, `[4,4]`, `[4,8]`, `[8,4]`, `[256,4]`. It changes no construction,
-owner, pin, or replay authority. The checkpoint records the bounded rank-two
-implementation and persistence candidate; independent review and root acceptance
-are still pending.
+owner, pin, or replay authority. Its source contract is approved and owner-local
+gates pass; merge and downstream transformer-pin acceptance remain pending.
 
-The transformer currently pins compiler `90cbd713`; checked-promotion adoption
-is therefore not present. Runtime docs commit `222cad3a` over implementation
-`714d20fe` alone is insufficient. The final reviewed successor must include the
-exact handler-reservation behavior above; checkpoint
-`b7bb6d8e40e5316943d6c32058eca006b6d01e51` is the current validation candidate,
-not an accepted runtime or transformer pin. Only the complete accepted union may
-replace the transformer pin. That union must also supply the exact
+The transformer currently pins compiler `90cbd713`; reviewed runtime candidate
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef` is therefore not yet adopted by the
+transformer pin. Historical `222cad3a`/`714d20fe` and `b7bb6d8e` candidates are
+superseded evidence. Only the complete accepted union may replace the transformer
+pin. That union must also supply the exact
 canonical-emergency check at both `m3t-rethrow-raw` invocations described above;
 the current transformer source does not. P1 construction writes must compile
 through `eshkol_region_write_barrier_checked_v1`; status failure must transfer through
