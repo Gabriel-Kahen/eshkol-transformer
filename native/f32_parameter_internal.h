@@ -169,6 +169,28 @@ typedef struct et_f32_test_borrow_event_counts_v1 {
   size_t end_calls;
 } et_f32_test_borrow_event_counts_v1;
 
+enum {
+  ET_F32_TEST_TENSOR_METADATA_RANK = 1,
+  ET_F32_TEST_TENSOR_METADATA_ELEMENT_COUNT = 2,
+  ET_F32_TEST_TENSOR_METADATA_BYTE_LENGTH = 3,
+  ET_F32_TEST_TENSOR_METADATA_SHAPE = 4,
+  ET_F32_TEST_TENSOR_METADATA_STRIDE = 5,
+  ET_F32_TEST_TENSOR_METADATA_DATA = 6
+};
+
+typedef struct et_f32_test_tensor_metadata_v1 {
+  size_t struct_size;
+  size_t rank;
+  size_t element_count;
+  size_t byte_length;
+  size_t plan_pins;
+  uint64_t *shape_storage;
+  size_t *stride_storage;
+  float *data_storage;
+  uint64_t shape[ET_KERNEL_MAX_RANK];
+  size_t strides[ET_KERNEL_MAX_RANK];
+} et_f32_test_tensor_metadata_v1;
+
 void et_f32_parameter_test_set_metadata_v1(et_f32_parameter *parameter,
                                            uint32_t state,
                                            uint64_t contribution_count,
@@ -181,6 +203,15 @@ void et_f32_test_retired_counts_snapshot_v1(
 void et_f32_test_borrow_event_counts_snapshot_v1(
     et_f32_test_borrow_event_counts_v1 *counts);
 size_t et_f32_tensor_test_successful_allocations_v1(void);
+int32_t et_f32_tensor_test_metadata_snapshot_v1(
+    const et_f32_tensor *tensor, et_f32_test_tensor_metadata_v1 *snapshot);
+int32_t et_f32_tensor_test_metadata_corrupt_v1(et_f32_tensor *tensor,
+                                               uint32_t member,
+                                               size_t dimension);
+int32_t et_f32_tensor_test_metadata_restore_v1(
+    et_f32_tensor *tensor, const et_f32_test_tensor_metadata_v1 *snapshot);
+int32_t et_f32_tensor_test_plan_pins_v1(const et_f32_tensor *tensor,
+                                        size_t *pins);
 #endif
 
 #ifdef __cplusplus

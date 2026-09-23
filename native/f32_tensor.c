@@ -234,6 +234,120 @@ static et_f32_tensor *find_tensor(const void *candidate) {
   return NULL;
 }
 
+#ifdef ET_F32_TENSOR_TESTING
+int32_t et_f32_tensor_test_metadata_snapshot_v1(
+    const et_f32_tensor *candidate,
+    et_f32_test_tensor_metadata_v1 *snapshot) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL || snapshot == NULL ||
+      snapshot->struct_size != sizeof(*snapshot) ||
+      tensor->rank > ET_KERNEL_MAX_RANK ||
+      (tensor->rank != 0u &&
+       (tensor->shape == NULL || tensor->strides == NULL))) {
+    return -1;
+  }
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->struct_size = sizeof(*snapshot);
+  snapshot->rank = tensor->rank;
+  snapshot->element_count = tensor->element_count;
+  snapshot->byte_length = tensor->byte_length;
+  snapshot->plan_pins = tensor->plan_pins;
+  snapshot->shape_storage = tensor->shape;
+  snapshot->stride_storage = tensor->strides;
+  snapshot->data_storage = tensor->data;
+  if (tensor->rank != 0u) {
+    memcpy(snapshot->shape, tensor->shape,
+           tensor->rank * sizeof(snapshot->shape[0]));
+    memcpy(snapshot->strides, tensor->strides,
+           tensor->rank * sizeof(snapshot->strides[0]));
+  }
+  return 0;
+}
+
+int32_t et_f32_tensor_test_metadata_corrupt_v1(et_f32_tensor *candidate,
+                                               uint32_t member,
+                                               size_t dimension) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL) {
+    return -1;
+  }
+  switch (member) {
+    case ET_F32_TEST_TENSOR_METADATA_RANK:
+      tensor->rank = tensor->rank == 0u ? 1u : tensor->rank - 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_ELEMENT_COUNT:
+      tensor->element_count = tensor->element_count == SIZE_MAX
+                                  ? tensor->element_count - 1u
+                                  : tensor->element_count + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_BYTE_LENGTH:
+      tensor->byte_length = tensor->byte_length == SIZE_MAX
+                                ? tensor->byte_length - 1u
+                                : tensor->byte_length + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_SHAPE:
+      if (dimension >= tensor->rank || tensor->shape == NULL) {
+        return -1;
+      }
+      tensor->shape[dimension] = tensor->shape[dimension] == UINT64_MAX
+                                     ? tensor->shape[dimension] - 1u
+                                     : tensor->shape[dimension] + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_STRIDE:
+      if (dimension >= tensor->rank || tensor->strides == NULL) {
+        return -1;
+      }
+      tensor->strides[dimension] = tensor->strides[dimension] == SIZE_MAX
+                                       ? tensor->strides[dimension] - 1u
+                                       : tensor->strides[dimension] + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_DATA:
+      tensor->data = NULL;
+      return 0;
+    default:
+      return -1;
+  }
+}
+
+int32_t et_f32_tensor_test_metadata_restore_v1(
+    et_f32_tensor *candidate,
+    const et_f32_test_tensor_metadata_v1 *snapshot) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL || snapshot == NULL ||
+      snapshot->struct_size != sizeof(*snapshot) ||
+      snapshot->rank > ET_KERNEL_MAX_RANK ||
+      (snapshot->rank != 0u &&
+       (snapshot->shape_storage == NULL ||
+        snapshot->stride_storage == NULL))) {
+    return -1;
+  }
+  tensor->rank = snapshot->rank;
+  tensor->element_count = snapshot->element_count;
+  tensor->byte_length = snapshot->byte_length;
+  tensor->plan_pins = snapshot->plan_pins;
+  tensor->shape = snapshot->shape_storage;
+  tensor->strides = snapshot->stride_storage;
+  tensor->data = snapshot->data_storage;
+  if (snapshot->rank != 0u) {
+    memcpy(tensor->shape, snapshot->shape,
+           snapshot->rank * sizeof(snapshot->shape[0]));
+    memcpy(tensor->strides, snapshot->strides,
+           snapshot->rank * sizeof(snapshot->strides[0]));
+  }
+  return 0;
+}
+
+int32_t et_f32_tensor_test_plan_pins_v1(const et_f32_tensor *candidate,
+                                        size_t *pins) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL || pins == NULL) {
+    return -1;
+  }
+  *pins = tensor->plan_pins;
+  return 0;
+}
+#endif
+
 static et_f32_tensor_borrow *find_borrow(const void *candidate) {
   et_f32_tensor_borrow *cursor = live_borrows;
   while (cursor != NULL) {

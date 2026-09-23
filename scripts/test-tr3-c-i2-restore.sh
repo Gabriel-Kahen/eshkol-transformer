@@ -47,6 +47,7 @@ check_hidden() {
 
 for compiler in clang gcc; do
   ordinary_f32="${tmp}/${compiler}-f32-ordinary.o"
+  ordinary_f32_parity="${tmp}/${compiler}-f32-ordinary-parity.o"
   feature_f32="${tmp}/${compiler}-f32-feature.o"
   ordinary_bridge="${tmp}/${compiler}-bridge-ordinary.o"
   declaration_bridge="${tmp}/${compiler}-bridge-declaration-only.o"
@@ -65,6 +66,9 @@ for compiler in clang gcc; do
 
   "${compiler}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/f32_tensor.c" \
     -o "${ordinary_f32}"
+  "${compiler}" "${cflags[@]}" -UET_F32_TENSOR_TESTING \
+    -c "${PROJECT_ROOT}/native/f32_tensor.c" -o "${ordinary_f32_parity}"
+  cmp "${ordinary_f32}" "${ordinary_f32_parity}"
   "${compiler}" "${cflags[@]}" -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
     -c "${PROJECT_ROOT}/native/f32_tensor.c" -o "${feature_f32}"
   "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
@@ -139,6 +143,19 @@ for compiler in clang gcc; do
     "${tmp}/${compiler}-1.stdout" >/dev/null
   grep -E '^TR3-C I2 restore PASS: [0-9]+ checks$' \
     "${tmp}/${compiler}-1.stdout" >/dev/null
+
+  "${compiler}" "${cflags[@]}" -O2 -fstrict-aliasing \
+    -DET_F32_TENSOR_TESTING -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
+    "${PROJECT_ROOT}/tests/i2/test_tr3_c_i2_restore.c" \
+    "${PROJECT_ROOT}/native/f32_tensor.c" \
+    "${PROJECT_ROOT}/native/kernel_abi.c" -lm \
+    -o "${tmp}/test-optimized-${compiler}"
+  timeout --foreground --signal=TERM --kill-after=5s 90s \
+    "${tmp}/test-optimized-${compiler}" \
+    >"${tmp}/${compiler}-optimized.stdout" \
+    2>"${tmp}/${compiler}-optimized.stderr"
+  test ! -s "${tmp}/${compiler}-optimized.stderr"
+  cmp "${tmp}/${compiler}-1.stdout" "${tmp}/${compiler}-optimized.stdout"
 
   "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
     -DET_F32_TENSOR_TESTING -DET_I2_PRIVATE_OWNED_CLONE_MATCH \

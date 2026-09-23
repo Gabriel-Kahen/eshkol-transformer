@@ -29,21 +29,6 @@ typedef struct allocation_snapshot {
   size_t f32;
 } allocation_snapshot;
 
-/* Test-only mirror used to corrupt otherwise opaque shape metadata in place. */
-typedef struct test_tensor_layout {
-  uint64_t magic;
-  et_f32_tensor *registry_next;
-  size_t rank;
-  size_t element_count;
-  size_t byte_length;
-  et_f32_tensor_borrow *active_borrow;
-  size_t plan_pins;
-  uint64_t *shape;
-  size_t *strides;
-  float *data;
-  uint32_t ownership_kind;
-} test_tensor_layout;
-
 enum { TEST_MAX_ELEMENTS = 1024 };
 
 static const size_t model_ranks[ET_TR3_C_MODEL_DESTINATIONS] = {
@@ -250,21 +235,25 @@ static void fixture_release(restore_fixture *fixture) {
 static void check_fixture_plan_pins(const restore_fixture *fixture,
                                     size_t expected) {
   for (size_t index = 0u; index < ET_TR3_C_MODEL_DESTINATIONS; ++index) {
-    const test_tensor_layout *destination = (const test_tensor_layout *)(
-        const void *)et_f32_parameter_canonical_owner_v1(
-        fixture->parameters[index]);
-    const test_tensor_layout *source =
-        (const test_tensor_layout *)(const void *)fixture->model_sources[index];
-    CHECK(destination->plan_pins == expected);
-    CHECK(source->plan_pins == expected);
+    size_t destination_pins = SIZE_MAX;
+    size_t source_pins = SIZE_MAX;
+    CHECK(et_f32_tensor_test_plan_pins_v1(
+              et_f32_parameter_canonical_owner_v1(fixture->parameters[index]),
+              &destination_pins) == 0);
+    CHECK(et_f32_tensor_test_plan_pins_v1(fixture->model_sources[index],
+                                          &source_pins) == 0);
+    CHECK(destination_pins == expected);
+    CHECK(source_pins == expected);
   }
   for (size_t index = 0u; index < ET_TR3_C_O2_MOMENT_ASSIGNMENTS; ++index) {
-    const test_tensor_layout *destination = (const test_tensor_layout *)(
-        const void *)fixture->moment_destinations[index];
-    const test_tensor_layout *source = (const test_tensor_layout *)(
-        const void *)fixture->moment_sources[index];
-    CHECK(destination->plan_pins == expected);
-    CHECK(source->plan_pins == expected);
+    size_t destination_pins = SIZE_MAX;
+    size_t source_pins = SIZE_MAX;
+    CHECK(et_f32_tensor_test_plan_pins_v1(
+              fixture->moment_destinations[index], &destination_pins) == 0);
+    CHECK(et_f32_tensor_test_plan_pins_v1(fixture->moment_sources[index],
+                                          &source_pins) == 0);
+    CHECK(destination_pins == expected);
+    CHECK(source_pins == expected);
   }
 }
 
@@ -355,45 +344,69 @@ static void test_matcher(void) {
             owned, wrong_shape, ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
         ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
 
-  test_tensor_layout *metadata = (test_tensor_layout *)(void *)metadata_destination;
-  const size_t saved_rank = metadata->rank;
-  const size_t saved_element_count = metadata->element_count;
-  const size_t saved_byte_length = metadata->byte_length;
-  metadata->rank = 1u;
-  CHECK(et_i2_private_owned_clone_match_v1(
-            metadata_source, metadata_destination,
-            ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
-        ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
-  metadata->rank = saved_rank;
-  metadata->element_count++;
-  CHECK(et_i2_private_owned_clone_match_v1(
-            metadata_source, metadata_destination,
-            ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
-        ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
-  metadata->element_count = saved_element_count;
-  metadata->byte_length++;
-  CHECK(et_i2_private_owned_clone_match_v1(
-            metadata_source, metadata_destination,
-            ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
-        ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
-  metadata->byte_length = saved_byte_length;
-  for (size_t dimension = 0u; dimension < metadata->rank; ++dimension) {
-    const uint64_t saved_extent = metadata->shape[dimension];
-    metadata->shape[dimension] = saved_extent + 1u;
+  et_f32_test_tensor_metadata_v1 saved_metadata = {
+      .struct_size = sizeof(saved_metadata),
+  };
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(metadata_destination,
+                                                 &saved_metadata) == 0);
+  static const uint32_t scalar_metadata_members[] = {
+      ET_F32_TEST_TENSOR_METADATA_RANK,
+      ET_F32_TEST_TENSOR_METADATA_ELEMENT_COUNT,
+      ET_F32_TEST_TENSOR_METADATA_BYTE_LENGTH,
+      ET_F32_TEST_TENSOR_METADATA_DATA,
+  };
+  for (size_t index = 0u;
+       index < sizeof(scalar_metadata_members) /
+                   sizeof(scalar_metadata_members[0]);
+       ++index) {
+    et_f32_test_tensor_metadata_v1 restored = {
+        .struct_size = sizeof(restored),
+    };
+    CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+              metadata_destination, scalar_metadata_members[index], 0u) == 0);
     CHECK(et_i2_private_owned_clone_match_v1(
               metadata_source, metadata_destination,
               ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
           ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
-    metadata->shape[dimension] = saved_extent;
+    CHECK(et_f32_tensor_test_metadata_restore_v1(
+              metadata_destination, &saved_metadata) == 0);
+    CHECK(et_f32_tensor_test_metadata_snapshot_v1(metadata_destination,
+                                                   &restored) == 0);
+    CHECK(memcmp(&saved_metadata, &restored, sizeof(restored)) == 0);
   }
-  for (size_t dimension = 0u; dimension < metadata->rank; ++dimension) {
-    const size_t saved_stride = metadata->strides[dimension];
-    metadata->strides[dimension] = saved_stride + 1u;
+  for (size_t dimension = 0u; dimension < saved_metadata.rank; ++dimension) {
+    et_f32_test_tensor_metadata_v1 restored = {
+        .struct_size = sizeof(restored),
+    };
+    CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+              metadata_destination, ET_F32_TEST_TENSOR_METADATA_SHAPE,
+              dimension) == 0);
     CHECK(et_i2_private_owned_clone_match_v1(
               metadata_source, metadata_destination,
               ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
           ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
-    metadata->strides[dimension] = saved_stride;
+    CHECK(et_f32_tensor_test_metadata_restore_v1(
+              metadata_destination, &saved_metadata) == 0);
+    CHECK(et_f32_tensor_test_metadata_snapshot_v1(metadata_destination,
+                                                   &restored) == 0);
+    CHECK(memcmp(&saved_metadata, &restored, sizeof(restored)) == 0);
+  }
+  for (size_t dimension = 0u; dimension < saved_metadata.rank; ++dimension) {
+    et_f32_test_tensor_metadata_v1 restored = {
+        .struct_size = sizeof(restored),
+    };
+    CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+              metadata_destination, ET_F32_TEST_TENSOR_METADATA_STRIDE,
+              dimension) == 0);
+    CHECK(et_i2_private_owned_clone_match_v1(
+              metadata_source, metadata_destination,
+              ET_I2_PRIVATE_OWNED_VALUE_FINITE) ==
+          ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH);
+    CHECK(et_f32_tensor_test_metadata_restore_v1(
+              metadata_destination, &saved_metadata) == 0);
+    CHECK(et_f32_tensor_test_metadata_snapshot_v1(metadata_destination,
+                                                   &restored) == 0);
+    CHECK(memcmp(&saved_metadata, &restored, sizeof(restored)) == 0);
   }
 
   CHECK(et_f32_tensor_borrow_begin_v1(owned, &borrow, &error) == 0);
@@ -664,6 +677,56 @@ static void test_suffix_failures(void) {
         ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE);
   check_snapshot(builder, &snapshot);
   CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+
+  et_f32_tensor *pin_destination = tensor_create_model(0u, 0u);
+  et_f32_tensor_copy_plan *pin_plan = NULL;
+  et_f32_tensor_copy_assignment_v1 pin_assignment = {
+      .struct_size = sizeof(pin_assignment),
+      .destination = pin_destination,
+      .source = fixture.moment_sources[0],
+  };
+  size_t source_pins = SIZE_MAX;
+  size_t destination_pins = SIZE_MAX;
+  CHECK(pin_destination != NULL);
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &pin_assignment, &pin_plan,
+                                           &error) == 0);
+  CHECK(et_f32_tensor_test_plan_pins_v1(fixture.moment_sources[0],
+                                        &source_pins) == 0);
+  CHECK(et_f32_tensor_test_plan_pins_v1(fixture.moment_destinations[0],
+                                        &destination_pins) == 0);
+  CHECK(source_pins == 1u && destination_pins == 0u);
+  snapshot_builder(builder, &snapshot);
+  CHECK(et_tr3_c_i2_copy_builder_append_restore42_v1(
+            opaque, &fixture.request) ==
+        ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE);
+  check_snapshot(builder, &snapshot);
+  CHECK(et_f32_tensor_copy_plan_release_v1(&pin_plan, &error) == 0);
+  CHECK(et_f32_tensor_test_plan_pins_v1(fixture.moment_sources[0],
+                                        &source_pins) == 0);
+  CHECK(source_pins == 0u);
+  CHECK(et_f32_tensor_destroy_v1(&pin_destination, &error) == 0);
+
+  et_f32_tensor *pin_source = owned_create_model(0u, UINT32_C(0x3f000000));
+  pin_assignment.destination = fixture.moment_destinations[0];
+  pin_assignment.source = pin_source;
+  CHECK(pin_source != NULL);
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &pin_assignment, &pin_plan,
+                                           &error) == 0);
+  CHECK(et_f32_tensor_test_plan_pins_v1(fixture.moment_sources[0],
+                                        &source_pins) == 0);
+  CHECK(et_f32_tensor_test_plan_pins_v1(fixture.moment_destinations[0],
+                                        &destination_pins) == 0);
+  CHECK(source_pins == 0u && destination_pins == 1u);
+  snapshot_builder(builder, &snapshot);
+  CHECK(et_tr3_c_i2_copy_builder_append_restore42_v1(
+            opaque, &fixture.request) ==
+        ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE);
+  check_snapshot(builder, &snapshot);
+  CHECK(et_f32_tensor_copy_plan_release_v1(&pin_plan, &error) == 0);
+  CHECK(et_f32_tensor_test_plan_pins_v1(fixture.moment_destinations[0],
+                                        &destination_pins) == 0);
+  CHECK(destination_pins == 0u);
+  CHECK(et_f32_owned_tensor_release_v1(pin_source, &error) == 0);
 
   et_f32_tensor *ordinary = tensor_create(1u, 0u);
   bad = fixture.request;
