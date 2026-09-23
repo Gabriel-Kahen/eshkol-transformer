@@ -41,6 +41,22 @@ int32_t et_f32_tensor_scoped_end_internal(et_f32_scoped_guard_internal *guard) {
   return 0;
 }
 
+#ifdef ET_G3C4_NATIVE_OWNER_PRIVATE
+int32_t et_f32_parameter_idle_preflight_internal(
+    et_f32_parameter *parameter, et_f32_tensor_error *error) {
+  int32_t rc = require_parameter(
+      parameter, "f32-parameter-idle-preflight", error);
+  if (rc) return rc;
+  if (parameter->plan_pins || parameter->value->active_borrow ||
+      parameter->gradient->active_borrow || parameter->value->plan_pins ||
+      parameter->gradient->plan_pins)
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+      ET_F32_TENSOR_CODE_INVALID_HANDLE, "f32-parameter-idle-preflight",
+      "parameter is borrowed or pinned");
+  return success(error);
+}
+#endif
+
 int32_t et_m3t_f32_parameter_preflight_internal(et_f32_parameter *parameter,
     et_f32_tensor_error *error) {
   int32_t rc = require_parameter(parameter, "m3t-parameter-preflight", error);
