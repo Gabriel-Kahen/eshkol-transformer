@@ -6,7 +6,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 artifact_dir="${1:-$(project_build_dir)/cli3}"
 executable="${artifact_dir}/eshkol-transformer"
 [[ -x "${executable}" ]] || die "CLI3 executable not found: ${executable}"
-for command in cmp python3 sha256sum; do
+for command in ar cmp python3 sha256sum; do
   require_command "${command}"
 done
 
@@ -205,6 +205,42 @@ grep -F '"published?":true' \
   "${temporary_dir}/publish-after-rename.stderr" >/dev/null
 grep -F '"durability":"unknown"' \
   "${temporary_dir}/publish-after-rename.stderr" >/dev/null
+
+formatter_dir="${temporary_dir}/formatter-private"
+mkdir -p "${formatter_dir}/app-cache"
+E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+    "${PROJECT_ROOT}/tests/cli3/formatter_private_root.esk" \
+    "${PROJECT_ROOT}/native/cli3_package_bridge.c" \
+    "${PROJECT_ROOT}/native/cli3_private_renames.txt" \
+    "${PROJECT_ROOT}/native/cli3_public_exports.txt" \
+    "${formatter_dir}/cli3-formatter.o" \
+    "${PROJECT_ROOT}/internal/p1/lib" \
+    "${PROJECT_ROOT}/internal/c1/lib" \
+    "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/t1/lib" \
+    "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/src"
+cmp "${PROJECT_ROOT}/native/cli3_defined_symbols.txt" \
+  "${formatter_dir}/cli3-formatter.o.evidence/global-defined.txt"
+ar rcsD "${formatter_dir}/libeshkol_transformer_cli3_formatter.a" \
+  "${formatter_dir}/cli3-formatter.o"
+runner="$(eshkol_build_dir)/eshkol-run"
+cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
+env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+  ESHKOL_JIT_CACHE=0 \
+  XDG_CACHE_HOME="${formatter_dir}/app-cache" \
+  ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+  ESHKOL_CXX_COMPILER="${cxx}" \
+  "${runner}" --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+    -L "${formatter_dir}" --lib eshkol_transformer_cli3_formatter \
+    "${PROJECT_ROOT}/src/eshkol_transformer/cli.esk" \
+    -o "${formatter_dir}/eshkol-transformer"
+run_exact formatter-boundaries 0 \
+  "${formatter_dir}/eshkol-transformer" --version
+cmp "${temporary_dir}/version.expected" \
+  "${temporary_dir}/formatter-boundaries.stdout"
+[[ ! -s "${temporary_dir}/formatter-boundaries.stderr" ]]
 
 if ldd "${executable}" | grep -Ei 'python|torch' >/dev/null; then
   die "CLI3 executable links a Python/PyTorch runtime"

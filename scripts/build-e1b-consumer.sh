@@ -31,11 +31,13 @@ c2_lexical_source_closure="${PROJECT_ROOT}/native/c2_wave2_source_closure.txt"
 c2_lexical_native_source_closure="${PROJECT_ROOT}/native/c2_wave2_native_source_closure.txt"
 c2_lexical_undefined="${PROJECT_ROOT}/native/c2_wave2_undefined_symbols.txt"
 cli3_lexical_root="${PROJECT_ROOT}/native/cli3_root.esk"
+cli3_lexical_formatter_root="${PROJECT_ROOT}/tests/cli3/formatter_private_root.esk"
 cli3_lexical_bridge="${PROJECT_ROOT}/native/cli3_package_bridge.c"
 cli3_lexical_renames="${PROJECT_ROOT}/native/cli3_private_renames.txt"
 cli3_lexical_exports="${PROJECT_ROOT}/native/cli3_public_exports.txt"
 cli3_lexical_public_strings="${PROJECT_ROOT}/native/cli3_public_strings.txt"
 cli3_lexical_source_closure="${PROJECT_ROOT}/native/cli3_source_closure.txt"
+cli3_lexical_formatter_source_closure="${PROJECT_ROOT}/tests/cli3/formatter_source_closure.txt"
 cli3_lexical_native_source_closure="${PROJECT_ROOT}/native/cli3_native_source_closure.txt"
 cli3_lexical_undefined="${PROJECT_ROOT}/native/cli3_undefined_symbols.txt"
 k2_tuple_requested=0
@@ -136,6 +138,7 @@ for raw_cli3_input in \
     "${raw_package_renames}" "${raw_public_exports}"; do
   case "${raw_cli3_input}" in
     "${cli3_lexical_root}"|native/cli3_root.esk|\
+    "${cli3_lexical_formatter_root}"|tests/cli3/formatter_private_root.esk|\
     "${cli3_lexical_bridge}"|native/cli3_package_bridge.c|\
     "${cli3_lexical_renames}"|native/cli3_private_renames.txt|\
     "${cli3_lexical_exports}"|native/cli3_public_exports.txt)
@@ -144,18 +147,24 @@ for raw_cli3_input in \
   esac
 done
 if [[ "${cli3_tuple_requested}" == 1 ]]; then
+  cli3_requested_lexical_root="${cli3_lexical_root}"
+  cli3_requested_lexical_source_closure="${cli3_lexical_source_closure}"
+  if [[ "${raw_private_root}" == "${cli3_lexical_formatter_root}" ]]; then
+    cli3_requested_lexical_root="${cli3_lexical_formatter_root}"
+    cli3_requested_lexical_source_closure="${cli3_lexical_formatter_source_closure}"
+  fi
   for raw_cli3_input in \
       "${raw_private_root}" "${raw_package_bridge}" \
       "${raw_package_renames}" "${raw_public_exports}" \
       "${raw_include_dirs[@]}" \
       "${cli3_lexical_public_strings}" \
-      "${cli3_lexical_source_closure}" \
+      "${cli3_requested_lexical_source_closure}" \
       "${cli3_lexical_native_source_closure}" \
       "${cli3_lexical_undefined}"; do
     [[ ! -L "${raw_cli3_input}" ]] || \
       die "CLI3 aggregate policy rejects symlinked repository inputs before canonicalization"
   done
-  [[ "${raw_private_root}" == "${cli3_lexical_root}" && \
+  [[ "${raw_private_root}" == "${cli3_requested_lexical_root}" && \
      "${raw_package_bridge}" == "${cli3_lexical_bridge}" && \
      "${raw_package_renames}" == "${cli3_lexical_renames}" && \
      "${raw_public_exports}" == "${cli3_lexical_exports}" ]] || \
@@ -169,7 +178,7 @@ if [[ "${cli3_tuple_requested}" == 1 ]]; then
      "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/src" ]] || \
     die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
   for cli3_closure_manifest in \
-      "${cli3_lexical_source_closure}" \
+      "${cli3_requested_lexical_source_closure}" \
       "${cli3_lexical_native_source_closure}"; do
     while IFS= read -r cli3_relative_input; do
       [[ -n "${cli3_relative_input}" && \
@@ -290,12 +299,14 @@ c2_public_strings="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_public_strings
 c2_source_closure="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_source_closure.txt")"
 c2_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_native_source_closure.txt")"
 cli3_private_root="$(realpath -- "${PROJECT_ROOT}/native/cli3_root.esk")"
+cli3_formatter_private_root="$(realpath -- "${PROJECT_ROOT}/tests/cli3/formatter_private_root.esk")"
 cli3_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/cli3_package_bridge.c")"
 cli3_package_renames="$(realpath -- "${PROJECT_ROOT}/native/cli3_private_renames.txt")"
 cli3_public_exports="$(realpath -- "${PROJECT_ROOT}/native/cli3_public_exports.txt")"
 cli3_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/cli3_undefined_symbols.txt")"
 cli3_public_strings="$(realpath -- "${PROJECT_ROOT}/native/cli3_public_strings.txt")"
 cli3_source_closure="$(realpath -- "${PROJECT_ROOT}/native/cli3_source_closure.txt")"
+cli3_formatter_source_closure="$(realpath -- "${PROJECT_ROOT}/tests/cli3/formatter_source_closure.txt")"
 cli3_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/cli3_native_source_closure.txt")"
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
@@ -307,6 +318,7 @@ package_native_define=
 package_public_strings=
 package_source_closure=
 package_native_source_closure=
+cli3_formatter_fixture=0
 if [[ "${m3_tuple_requested}" == 1 ]]; then
     package_policy=m3-model-aggregate
     undefined_symbols="${m3_prefix}_undefined_symbols.txt"
@@ -337,8 +349,18 @@ elif [[ "${m3t_tuple_requested}" == 1 ]]; then
       "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c"
       "${PROJECT_ROOT}/src/eshkol_transformer/m3t_transport.c"
     )
-elif [[ "${private_root}" == "${cli3_private_root}" ]]; then
-    [[ "${raw_private_root}" == "${cli3_lexical_root}" && \
+elif [[ "${private_root}" == "${cli3_private_root}" || \
+        "${private_root}" == "${cli3_formatter_private_root}" ]]; then
+    cli3_selected_lexical_root="${cli3_lexical_root}"
+    cli3_selected_lexical_source_closure="${cli3_lexical_source_closure}"
+    cli3_selected_source_closure="${cli3_source_closure}"
+    if [[ "${private_root}" == "${cli3_formatter_private_root}" ]]; then
+      cli3_formatter_fixture=1
+      cli3_selected_lexical_root="${cli3_lexical_formatter_root}"
+      cli3_selected_lexical_source_closure="${cli3_lexical_formatter_source_closure}"
+      cli3_selected_source_closure="${cli3_formatter_source_closure}"
+    fi
+    [[ "${raw_private_root}" == "${cli3_selected_lexical_root}" && \
        "${raw_package_bridge}" == "${cli3_lexical_bridge}" && \
        "${raw_package_renames}" == "${cli3_lexical_renames}" && \
        "${raw_public_exports}" == "${cli3_lexical_exports}" ]] || \
@@ -356,14 +378,14 @@ elif [[ "${private_root}" == "${cli3_private_root}" ]]; then
         "${raw_package_renames}" "${raw_public_exports}" \
         "${raw_include_dirs[@]}" \
         "${cli3_lexical_public_strings}" \
-        "${cli3_lexical_source_closure}" \
+        "${cli3_selected_lexical_source_closure}" \
         "${cli3_lexical_native_source_closure}" \
         "${cli3_lexical_undefined}"; do
       [[ ! -L "${raw_cli3_input}" ]] || \
         die "CLI3 aggregate policy rejects symlinked repository inputs"
     done
     for cli3_closure_manifest in \
-        "${cli3_lexical_source_closure}" \
+        "${cli3_selected_lexical_source_closure}" \
         "${cli3_lexical_native_source_closure}"; do
       while IFS= read -r cli3_relative_input; do
         [[ -n "${cli3_relative_input}" && \
@@ -389,7 +411,7 @@ elif [[ "${private_root}" == "${cli3_private_root}" ]]; then
     package_policy=cli3-c2-successor
     undefined_symbols="${cli3_undefined_symbols}"
     package_public_strings="${cli3_public_strings}"
-    package_source_closure="${cli3_source_closure}"
+    package_source_closure="${cli3_selected_source_closure}"
     package_native_source_closure="${cli3_native_source_closure}"
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
@@ -797,6 +819,14 @@ if [[ "${package_policy}" == d2-wave2-test-resource ]]; then
   case "${output_object}" in
     "${canonical_d2_artifact_dir}"/*)
       die "D2 resource-test object cannot target the canonical production directory"
+      ;;
+  esac
+fi
+if [[ "${cli3_formatter_fixture}" == 1 ]]; then
+  canonical_cli3_artifact_dir="$(realpath -m -- "$(project_build_dir)/cli3")"
+  case "${output_object}" in
+    "${canonical_cli3_artifact_dir}"/*)
+      die "CLI3 formatter-test object cannot target the canonical production directory"
       ;;
   esac
 fi
