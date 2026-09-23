@@ -1,7 +1,7 @@
 # Wave 3 G3-C4 owner/pins and I2 restore native integration
 
-Status: **integration-preparation candidate; both supported native gates pass;
-independent combined-source review and root acceptance pending**.
+Status: **bounded native integration accepted by the orchestrator; supported
+combined native gates pass; package/AOT/full CI remain pending**.
 
 This candidate merges two native-only parents over their common reviewed
 runtime/reference base `d5fa9a71b000ab1139a25e9b734b230ab5bda759`,
@@ -79,3 +79,19 @@ restore, trainer, active owner attachment, transport, KV cache, sampler,
 checkpoint format, public API, package manifest, CI registration, or runtime
 dependency. It does not establish package/AOT/full-CI behavior, active-model
 retention, joint restore, resume equivalence, or generation behavior.
+
+
+## Root acceptance
+
+The orchestrator accepted source commit
+`3928fc01f06a3b2634a34ef917b55428b047c8d8`, tree
+`66ff3019c4807f34211ea4281bcd436d15fab81c`, after independently checking
+all 29 source mode/blob rows, 30 source hashes, all 64 evidence checksums,
+ordinary-object byte identity, normal/repeat/sanitizer transcript identity,
+empty execution stderr, and the exact one-line pin baseline adaptation.
+The evidence manifest SHA-256 is
+`7830227ceb7f91013d477f439414985ab2cd8eeb79733ac84784986845d8ab5c`.
+The first I2 attempt failed only because its temporary executable directory was
+mounted `noexec`; that log is preserved. The successful retry changed only the
+scratch mount policy. This acceptance applies to the bounded native union and
+does not extend the boundary described above.
