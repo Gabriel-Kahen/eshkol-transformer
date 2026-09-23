@@ -47,8 +47,9 @@ not the accepted Wave 2 runtime scope, and starts no Wave 3 task.
 
 The original Wave 2 component contracts below are accepted. The bounded
 [C2/P1 handler-order correction #121](C2_HANDLER_ORDER.md) is active. Its final
-runtime allocation witness and focused owner/LOAD gates pass; transformer freeze,
-pin adoption, full affected-gate union and supported integration remain pending.
+runtime allocation witness and focused owner/LOAD gates pass; transformer commit
+`beb5821` is frozen and independently approved. Pin adoption, the full affected-gate
+union and supported integration remain pending.
 Wave 3 resumed on September 19 at
 04:30 EDT by user direction; M3T and bounded M3 model composition
 are accepted. Downstream evaluation, generation and training require the remaining
@@ -66,7 +67,7 @@ generation, and Wave 3 remains incomplete.
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | complete |
 | L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | complete |
 | O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; 6,201 adversarial checks, sanitizers, independent review, supported blocking/exhaustive CI, identical-tree merge and bounded merged-main retest | complete |
-| C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted C2 1.0 component continuation and atomic-file publication: exact 81-global/75-export/81-string boundary, authenticated carriers, exact-bit LOAD/SAVE ownership, failure atomicity, deterministic packaging, flat 1,024/8,192 root retention, and final joint 64-tensor runs at 521,500/521,576 KiB below 524,288 KiB. PR #79 merged as `cbd0929`; PR #77 merged to main as `913cdf4097db09d6c33769e9b0968c01ce0e1f55`; reviewed, tested, and merged states share tree `512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all 15 suites/23 commands plus smoke/benchmark, and acceptance 35401088338 reused the verified exact tree successfully. TR3 retains joint live restore/full trajectory and G3 generation proof; [issue #121 handler-order correction](C2_HANDLER_ORDER.md) is in progress: source-order/mutation tests, the exact 5/6/11 final-runtime allocation witness, and focused owner/LOAD gates pass; transformer freeze, pin adoption, full affected-gate union and supported integration remain pending | active |
+| C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted C2 1.0 component continuation and atomic-file publication: exact 81-global/75-export/81-string boundary, authenticated carriers, exact-bit LOAD/SAVE ownership, failure atomicity, deterministic packaging, flat 1,024/8,192 root retention, and final joint 64-tensor runs at 521,500/521,576 KiB below 524,288 KiB. PR #79 merged as `cbd0929`; PR #77 merged to main as `913cdf4097db09d6c33769e9b0968c01ce0e1f55`; reviewed, tested, and merged states share tree `512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all 15 suites/23 commands plus smoke/benchmark, and acceptance 35401088338 reused the verified exact tree successfully. TR3 retains joint live restore/full trajectory and G3 generation proof; [issue #121 handler-order correction](C2_HANDLER_ORDER.md) is in progress: source-order/mutation tests, the exact 5/6/11 final-runtime allocation witness, and focused owner/LOAD gates pass; transformer commit `beb5821` is frozen and independently approved. Pin adoption, the full affected-gate union and supported integration remain pending | active |
 
 ## Wave 3 — first complete language model
 
