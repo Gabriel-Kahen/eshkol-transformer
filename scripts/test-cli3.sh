@@ -49,6 +49,23 @@ grep -Fx 'eshkol-transformer: usage message="unknown option --help"' \
 run_exact nonascii-option 2 "${executable}" tokenizer byte --é
 grep -Fx 'eshkol-transformer: usage message="unknown option --\u00e9"' \
   "${temporary_dir}/nonascii-option.stderr" >/dev/null
+long_option="--$(python3 - <<'PY'
+print("\U0001f642" * 800)
+PY
+)"
+run_exact bounded-diagnostic 2 "${executable}" tokenizer byte "${long_option}"
+[[ ! -s "${temporary_dir}/bounded-diagnostic.stdout" ]]
+python3 - "${temporary_dir}/bounded-diagnostic.stderr" <<'PY'
+import json, pathlib, sys
+line = pathlib.Path(sys.argv[1]).read_bytes()
+prefix = b"eshkol-transformer: usage message="
+assert line.startswith(prefix) and line.endswith(b"\n"), line[:80]
+encoded = line[len(prefix):-1]
+assert len(encoded) <= 3072, len(encoded)
+assert encoded.isascii(), encoded[-32:]
+message = json.loads(encoded)
+assert message.startswith("unknown option --") and message.endswith("..."), message[-32:]
+PY
 
 byte_path="${temporary_dir}/byte.tsv"
 run_exact byte 0 "${executable}" tokenizer byte \
@@ -163,7 +180,33 @@ cmp "${byte_path}" "${fault_artifact}"
 grep -F 'category="io"' "${temporary_dir}/stdout-error.stderr" >/dev/null
 grep -F '"published?":true' "${temporary_dir}/stdout-error.stderr" >/dev/null
 
+prepublish_artifact="${temporary_dir}/fault-prepublish.tsv"
+run_exact publish-before-rename 13 env \
+  LD_PRELOAD="${temporary_dir}/write-fault.so" \
+  CLI3_TEST_FSYNC_MODE=regular-once "${executable}" tokenizer byte \
+  --config "${PROJECT_ROOT}/tests/x1/fixtures/minimal_config_v1.json" \
+  --output "${prepublish_artifact}"
+[[ ! -e "${prepublish_artifact}" ]]
+[[ ! -s "${temporary_dir}/publish-before-rename.stdout" ]]
+grep -F '"published?":false' \
+  "${temporary_dir}/publish-before-rename.stderr" >/dev/null
+grep -F '"durability":"not-published"' \
+  "${temporary_dir}/publish-before-rename.stderr" >/dev/null
+
+postpublish_artifact="${temporary_dir}/fault-postpublish.tsv"
+run_exact publish-after-rename 13 env \
+  LD_PRELOAD="${temporary_dir}/write-fault.so" \
+  CLI3_TEST_FSYNC_MODE=directory-once "${executable}" tokenizer byte \
+  --config "${PROJECT_ROOT}/tests/x1/fixtures/minimal_config_v1.json" \
+  --output "${postpublish_artifact}"
+cmp "${byte_path}" "${postpublish_artifact}"
+[[ ! -s "${temporary_dir}/publish-after-rename.stdout" ]]
+grep -F '"published?":true' \
+  "${temporary_dir}/publish-after-rename.stderr" >/dev/null
+grep -F '"durability":"unknown"' \
+  "${temporary_dir}/publish-after-rename.stderr" >/dev/null
+
 if ldd "${executable}" | grep -Ei 'python|torch' >/dev/null; then
   die "CLI3 executable links a Python/PyTorch runtime"
 fi
-printf 'CLI3 TARGETED PASS: six commands, grammar, artifacts, and stdout faults\n'
+printf 'CLI3 TARGETED PASS: six commands, grammar, artifacts, and I/O faults\n'
