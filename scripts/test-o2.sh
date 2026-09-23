@@ -226,13 +226,73 @@ for runtime_source in data_io checkpoint_io kernel_abi i64_tensor \
   runtime_testing=()
   if [[ "${runtime_source}" == o2_optimizer ]]; then
     runtime_testing=(-DET_O2_TESTING)
+  elif [[ "${runtime_source}" == f32_tensor ]]; then
+    runtime_testing=(-DET_F32_TENSOR_TESTING)
   fi
   "${cc}" "${runtime_cflags[@]}" "${runtime_testing[@]}" \
     -c "${PROJECT_ROOT}/native/${runtime_source}.c" \
     -o "${runtime_dir}/${runtime_source}.o"
 done
+"${cc}" "${runtime_cflags[@]}" -DET_O2_TESTING \
+  -DET_F32_TENSOR_TESTING \
+  -c "${PROJECT_ROOT}/tests/o2/model_lease_create_hook_test_bridge.c" \
+  -o "${runtime_dir}/model_lease_create_hook_test_bridge.o"
 ar rcsD "${runtime_dir}/libeshkol_transformer_o2_runtime.a" \
   "${runtime_dir}"/*.o
+
+nm -g --defined-only --format=posix \
+  "${runtime_dir}/model_lease_create_hook_test_bridge.o" | \
+  awk '{ print $1 }' >"${temporary_dir}/hook-test-bridge-defined.txt"
+grep -Fx et_o2_model_lease_hook_test_live_count_v1 \
+  "${temporary_dir}/hook-test-bridge-defined.txt" >/dev/null
+[[ "$(wc -l <"${temporary_dir}/hook-test-bridge-defined.txt")" == 1 ]] || \
+  die "O2 model-lease hook test bridge exposes an unexpected symbol"
+if nm -a "${object}" | \
+    grep -F et_o2_model_lease_hook_test_live_count_v1 >/dev/null; then
+  die "canonical O2 object contains the model-lease hook test bridge"
+fi
+
+hook_fixture="${PROJECT_ROOT}/tests/o2/model_lease_create_hook_runtime.esk"
+hook_compile_args=(
+  --strict-types --optimize 0 --no-stdlib
+  -I "${PROJECT_ROOT}/internal/p1/lib"
+  -I "${PROJECT_ROOT}/internal/c1/lib"
+  -I "${PROJECT_ROOT}/internal/t1/lib"
+  -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib"
+  -I "${PROJECT_ROOT}/native" -L "${runtime_dir}"
+  --lib eshkol_transformer_o2_runtime
+)
+run_compiler model-lease-hook-depfile \
+  "${hook_compile_args[@]}" --compile-only \
+  --emit-depfile "${temporary_dir}/model-lease-hook.d" \
+  "${hook_fixture}" -o "${temporary_dir}/model-lease-hook.o" \
+  >"${temporary_dir}/model-lease-hook-depfile.stdout" \
+  2>"${temporary_dir}/model-lease-hook-depfile.stderr"
+sed -e 's/^[^:]*://' -e 's/\\//g' \
+  "${temporary_dir}/model-lease-hook.d" | \
+  tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+  sed "s#^${PROJECT_ROOT}/##" \
+  >"${temporary_dir}/model-lease-hook-source-closure.txt"
+cmp "${PROJECT_ROOT}/tests/o2/model_lease_create_hook_source_closure.txt" \
+  "${temporary_dir}/model-lease-hook-source-closure.txt"
+
+for hook_run in 1 2; do
+  mkdir -p "${temporary_dir}/model-lease-hook-${hook_run}"
+  run_compiler "model-lease-hook-aot-${hook_run}" \
+    "${hook_compile_args[@]}" "${hook_fixture}" \
+    -o "${temporary_dir}/model-lease-hook-${hook_run}/runtime" \
+    >"${temporary_dir}/model-lease-hook-${hook_run}/compile.stdout" \
+    2>"${temporary_dir}/model-lease-hook-${hook_run}/compile.stderr"
+  timeout --foreground --signal=TERM --kill-after=5s 300s \
+    "${temporary_dir}/model-lease-hook-${hook_run}/runtime" \
+    >"${temporary_dir}/model-lease-hook-${hook_run}/runtime.stdout"
+done
+cmp "${temporary_dir}/model-lease-hook-1/runtime" \
+  "${temporary_dir}/model-lease-hook-2/runtime"
+cmp "${temporary_dir}/model-lease-hook-1/runtime.stdout" \
+  "${temporary_dir}/model-lease-hook-2/runtime.stdout"
+grep -Fx 'O2 MODEL LEASE CREATE HOOK PASS: 23 checks' \
+  "${temporary_dir}/model-lease-hook-1/runtime.stdout" >/dev/null
 
 mkdir -p "${temporary_dir}/config-cache"
 env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
@@ -290,6 +350,9 @@ run_compiler c2-d2-composition --strict-types --optimize 0 --no-stdlib \
 
 for private_binding in o2-provider-name o2-native-builder-create \
     o2-native-optimizer-step o2-optimizer-tag o2-state-tag \
+    o2-tr3-create-overlap-check-cell-internal \
+    o2-install-tr3-create-overlap-check-internal! \
+    o2-tr3-create-overlap-check-internal \
     o2-optimizer-completed-updates-internal \
     o2-optimizer-schedule-factor-bits-internal \
     i2-native-owned-release tensor-provider-release-owned-internal!; do
@@ -305,6 +368,9 @@ for private_binding in o2-provider-name o2-native-builder-create \
     "${temporary_dir}/private-${private_binding}.stderr" >/dev/null || \
     die "O2 private-binding negative failed for the wrong reason"
 done
+
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+  tests.o2.test_model_lease_create_hook_package
 
 mkdir -p "${temporary_dir}/shadow/transformer"
 printf '(error "hostile O2 root loaded")\n' \
