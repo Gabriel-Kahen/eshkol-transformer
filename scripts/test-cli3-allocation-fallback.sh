@@ -46,8 +46,12 @@ cli_artifact_dir="$(readlink -f -- "${cli_artifact_dir}")"
 runner="${runtime_build}/eshkol-run"
 runtime_archive="${runtime_build}/libeshkol-runtime.a"
 cli_archive="${cli_artifact_dir}/libeshkol_transformer_cli3.a"
+cli_object="${cli_artifact_dir}/cli3.o"
+cli_evidence="${cli_artifact_dir}/cli3.o.evidence"
+production_cli="${cli_artifact_dir}/eshkol-transformer"
 provenance="${runtime_build}/final-provenance.tsv"
 [[ -x "${runner}" && -r "${runtime_archive}" && -r "${cli_archive}" && \
+   -r "${cli_object}" && -d "${cli_evidence}" && -x "${production_cli}" && \
    -r "${provenance}" ]] || \
   die "runtime or CLI production artifact is incomplete"
 
@@ -97,6 +101,31 @@ else
 fi
 mkdir -p "${evidence_dir}/cache"
 
+ar t "${cli_archive}" >"${evidence_dir}/archive-members.txt"
+printf '%s\n' cli3.o >"${evidence_dir}/expected-archive-members.txt"
+cmp "${evidence_dir}/expected-archive-members.txt" \
+  "${evidence_dir}/archive-members.txt" || \
+  die "CLI3 production archive member inventory drifted"
+ar p "${cli_archive}" cli3.o >"${evidence_dir}/cli3-archive-member.o"
+cmp "${cli_object}" "${evidence_dir}/cli3-archive-member.o" || \
+  die "CLI3 production archive does not contain its measured object"
+readelf -Ws "${cli_object}" >"${evidence_dir}/cli3-readelf-symbols.txt"
+cmp "${cli_evidence}/readelf-symbols.txt" \
+  "${evidence_dir}/cli3-readelf-symbols.txt" || \
+  die "CLI3 production object differs from its measured symbol evidence"
+for manifest in \
+    defined_symbols:global-defined.txt \
+    public_exports:package-exports.txt \
+    public_strings:public-strings.txt \
+    source_closure:source-closure.txt \
+    native_source_closure:native-source-closure.txt \
+    undefined_symbols:undefined.txt; do
+  repository_name="native/cli3_${manifest%%:*}.txt"
+  evidence_name="${manifest#*:}"
+  cmp "${PROJECT_ROOT}/${repository_name}" "${cli_evidence}/${evidence_name}" || \
+    die "CLI3 production evidence drifted: ${evidence_name}"
+done
+
 env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
   XDG_CACHE_HOME="${evidence_dir}/cache" ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
   ESHKOL_CXX_COMPILER="${cxx}" \
@@ -117,6 +146,7 @@ wrap_flags=(
   -Wl,--wrap=malloc
   -Wl,--wrap=arena_allocate_vector_with_header
   -Wl,--wrap=et_e1b_public_cli3_dispatch_fallback_v1
+  -Wl,--wrap=eshkol_push_exception_handler
 )
 "${cxx}" -fPIE -fuse-ld=bfd "${evidence_dir}/cli-main.o" \
   "${evidence_dir}/allocation-fallback-shim.o" \
@@ -131,6 +161,7 @@ nm -u "${evidence_dir}/allocation-fallback-shim.o" | awk '{ print $2 }' | \
   rg '^__real_' | LC_ALL=C sort >"${evidence_dir}/actual-real-symbols.txt"
 printf '%s\n' \
   __real_arena_allocate_vector_with_header \
+  __real_eshkol_push_exception_handler \
   __real_et_e1b_public_cli3_dispatch_fallback_v1 \
   __real_malloc >"${evidence_dir}/expected-real-symbols.txt"
 cmp "${evidence_dir}/expected-real-symbols.txt" \
@@ -142,12 +173,24 @@ sed 's/^__real_/__wrap_/' "${evidence_dir}/expected-real-symbols.txt" \
   >"${evidence_dir}/expected-wrap-symbols.txt"
 cmp "${evidence_dir}/expected-wrap-symbols.txt" \
   "${evidence_dir}/actual-wrap-symbols.txt" || die "linked GNU wrapper set drifted"
-rg -F 'libeshkol-runtime.a(runtime_exceptions_hosted.cpp.o)' \
-  "${evidence_dir}/allocation-fallback.map" >/dev/null || \
-  die "link map does not bind the supplied final exception runtime"
-rg -F 'libeshkol_transformer_cli3.a(cli3.o)' \
-  "${evidence_dir}/allocation-fallback.map" >/dev/null || \
-  die "link map does not bind the supplied production CLI aggregate"
+map_symbol_from() {
+  local origin=$1 symbol=$2
+  awk -v origin="${origin}" -v symbol="${symbol}" '
+    index($0, origin) { active=1; next }
+    active && $NF == symbol { found=1; exit }
+    active && $1 ~ /^\./ { active=0 }
+    END { exit found ? 0 : 1 }
+  ' "${evidence_dir}/allocation-fallback.map" || \
+    die "link map does not bind ${symbol} from ${origin}"
+}
+cli_member="${cli_archive}(cli3.o)"
+runtime_exception_member="${runtime_archive}(runtime_exceptions_hosted.cpp.o)"
+runtime_object_member="${runtime_archive}(runtime_object_alloc.cpp.o)"
+map_symbol_from "${cli_member}" et_e1b_public_cli3_dispatch_v1
+map_symbol_from "${cli_member}" et_e1b_public_cli3_dispatch_fallback_v1
+map_symbol_from "${runtime_exception_member}" eshkol_runtime_emergency_raise_v1
+map_symbol_from "${runtime_exception_member}" eshkol_push_exception_handler
+map_symbol_from "${runtime_object_member}" arena_allocate_vector_with_header
 
 fault_cli="${evidence_dir}/eshkol-transformer-allocation-fallback"
 run_fault() {
@@ -171,13 +214,13 @@ run_fault handler "${handler_marker}" env \
   CLI3_ALLOCATION_FALLBACK_MODE=handler \
   CLI3_ALLOCATION_FALLBACK_MARKER="${handler_marker}" \
   "${fault_cli}" --version
-printf '%s\n' 'mode=handler trigger=1 fallback=1 depth=1 condition=5' \
+printf '%s\n' 'mode=handler trigger=1 fallback=1 depth=1 push=2 condition=5' \
   >"${evidence_dir}/handler.expected.marker"
 cmp "${evidence_dir}/handler.expected.marker" "${handler_marker}" || \
   die "handler allocation marker drifted"
 
 printf 'abcdefg' >"${evidence_dir}/document"
-"${fault_cli}" tokenizer byte \
+"${production_cli}" tokenizer byte \
   --config "${PROJECT_ROOT}/tests/x1/fixtures/minimal_config_v1.json" \
   --output "${evidence_dir}/byte.tsv" \
   >"${evidence_dir}/prepare.stdout" 2>"${evidence_dir}/prepare.stderr"
@@ -206,7 +249,10 @@ cmp "${evidence_dir}/rollback.expected.marker" "${rollback_marker}" || \
   printf 'runtime_tree\t%s\n' 7669312845a9d8d372006af52271045e69505813
   printf 'runtime_runner_sha256\t%s\n' "$(sha256sum "${runner}" | awk '{ print $1 }')"
   printf 'runtime_archive_sha256\t%s\n' "$(sha256sum "${runtime_archive}" | awk '{ print $1 }')"
-  for item in cli-main.o allocation-fallback-shim.o \
+  printf 'cli_object_sha256\t%s\n' "$(sha256sum "${cli_object}" | awk '{ print $1 }')"
+  printf 'cli_archive_sha256\t%s\n' "$(sha256sum "${cli_archive}" | awk '{ print $1 }')"
+  printf 'production_cli_sha256\t%s\n' "$(sha256sum "${production_cli}" | awk '{ print $1 }')"
+  for item in cli-main.o cli3-archive-member.o allocation-fallback-shim.o \
       eshkol-transformer-allocation-fallback handler.stderr handler.marker \
       rollback.stderr rollback.marker allocation-fallback.map; do
     printf '%s_sha256\t%s\n' "${item//[^a-zA-Z0-9]/_}" \
