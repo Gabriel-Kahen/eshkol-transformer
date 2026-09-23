@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-for command in awk clang cmp comm gcc grep nm readelf timeout; do
+for command in awk clang cmp comm gcc git grep nm readelf tar timeout; do
   require_command "${command}"
 done
 
@@ -23,6 +23,18 @@ cleanup() {
   return "${status}"
 }
 trap cleanup EXIT
+
+baseline_ref=1c3745b10d349adcdcb4ae6d845705de76795d20
+baseline_root="${tmp}/pre-o2-restore"
+mkdir -p "${baseline_root}"
+git -C "${PROJECT_ROOT}" cat-file -e "${baseline_ref}^{commit}"
+git -C "${PROJECT_ROOT}" archive "${baseline_ref}" \
+  native/o2_optimizer.c native/o2_optimizer_internal.h |
+  tar -x -C "${baseline_root}"
+if cmp -s "${PROJECT_ROOT}/native/o2_optimizer.c" \
+    "${baseline_root}/native/o2_optimizer.c"; then
+  die "pre-restore O2 baseline unexpectedly matches the current source"
+fi
 
 cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -O0
         -ffp-contract=off -fexcess-precision=standard -frounding-math
@@ -47,6 +59,7 @@ check_hidden() {
 
 for compiler in clang gcc; do
   ordinary="${tmp}/${compiler}-ordinary.o"
+  baseline="${tmp}/${compiler}-pre-restore.o"
   declaration="${tmp}/${compiler}-declaration.o"
   feature="${tmp}/${compiler}-feature.o"
   step="${tmp}/${compiler}-step.o"
@@ -62,8 +75,15 @@ for compiler in clang gcc; do
   grep -F 'requires the shared owned-clone authorizer' \
     "${tmp}/${compiler}-invalid-ungated.stderr" >/dev/null
 
-  "${compiler}" "${cflags[@]}" -c \
-    "${PROJECT_ROOT}/native/o2_optimizer.c" -o "${ordinary}"
+  (
+    cd "${PROJECT_ROOT}"
+    "${compiler}" "${cflags[@]}" -c native/o2_optimizer.c -o "${ordinary}"
+  )
+  (
+    cd "${baseline_root}"
+    "${compiler}" "${cflags[@]}" -c native/o2_optimizer.c -o "${baseline}"
+  )
+  cmp "${ordinary}" "${baseline}"
   "${compiler}" "${cflags[@]}" -DET_I2_PRIVATE_OWNED_CLONE_MATCH -c \
     "${PROJECT_ROOT}/native/o2_optimizer.c" -o "${declaration}"
   cmp "${ordinary}" "${declaration}"
@@ -81,6 +101,12 @@ for compiler in clang gcc; do
     symbols defined "${object}" "${tmp}/${compiler}-${kind}.defined"
     symbols undefined "${object}" "${tmp}/${compiler}-${kind}.undefined"
   done
+  symbols defined "${baseline}" "${tmp}/${compiler}-baseline.defined"
+  symbols undefined "${baseline}" "${tmp}/${compiler}-baseline.undefined"
+  cmp "${tmp}/${compiler}-ordinary.defined" \
+    "${tmp}/${compiler}-baseline.defined"
+  cmp "${tmp}/${compiler}-ordinary.undefined" \
+    "${tmp}/${compiler}-baseline.undefined"
   cmp "${PROJECT_ROOT}/native/o2_optimizer_tr3_c_restore_defined_symbols.txt" \
     "${tmp}/${compiler}-feature.defined"
   cmp \
@@ -154,6 +180,26 @@ UBSAN_OPTIONS=halt_on_error=1 \
     2>"${tmp}/sanitized.stderr"
 test ! -s "${tmp}/sanitized.stderr"
 cmp "${tmp}/clang-1.stdout" "${tmp}/sanitized.stdout"
+
+clang "${cflags[@]}" "${sanitize_flags[@]}" -O3 \
+  "${PROJECT_ROOT}/tests/o2/test_tr3_c_o2_restore.c" \
+  "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  "${PROJECT_ROOT}/native/f32_tensor.c" \
+  "${PROJECT_ROOT}/native/kernel_abi.c" -lm -o "${tmp}/test-long-cycles"
+ET_TR3_C_O2_CYCLE_MODE=abort \
+  timeout --foreground --signal=TERM --kill-after=5s 1200s \
+    "${tmp}/test-long-cycles" >"${tmp}/long-cycles.stdout" \
+    2>"${tmp}/long-cycles.stderr"
+test ! -s "${tmp}/long-cycles.stderr"
+grep -Fx 'TR3-C O2 cycle batch PASS: 1024 abort, 0 commit' \
+  "${tmp}/long-cycles.stdout" >/dev/null
+ET_TR3_C_O2_CYCLE_MODE=commit \
+  timeout --foreground --signal=TERM --kill-after=5s 1800s \
+    "${tmp}/test-long-cycles" >"${tmp}/commit-cycles.stdout" \
+    2>"${tmp}/commit-cycles.stderr"
+test ! -s "${tmp}/commit-cycles.stderr"
+grep -Fx 'TR3-C O2 cycle batch PASS: 0 abort, 8192 commit' \
+  "${tmp}/commit-cycles.stdout" >/dev/null
 
 clang "${cflags[@]}" "${sanitize_flags[@]}" -O2 \
   "${PROJECT_ROOT}/tests/o2/test_tr3o_update_clear_adversarial.c" \
