@@ -16,6 +16,7 @@ publish any candidate.
 | TR3-O implementation | `783dc576e534b241523e9b1e987933d5c5e433d0` | `67edabf43470b894ff8df3347ad5017889f2e847` | implementation/test blobs retained; shared topology is the reviewed base union |
 | G3-C4 integration | `637cec09e00d6f9c2414e051836ab50665709606` | `df022486337c92a560147bf1f0d3a9f7a901b5b8` | provider, fixtures and prerequisite hook blobs retained; shared topology is the reviewed base union |
 | SHARED-R2 | `8047cec9ccae8f39ce1e300224659eed3b15fb59` | `e80930797d556edac83fed12ea18c6c4dabcaa2b` | merged with source ancestry |
+| SHARED-R2 evidence | `92c2f5853d1ca3f82c6700f07e47bf9f08052b3e` | `0217c51cdd07e8ec544b02f8a74e8446c2f89063` | evidence-only successor; ROADMAP reconciled |
 | E3 reference toolkit | `37a8078ce756e7f3c22f14a046142d2f09e98807` | `a2767cbb8e22c10ac29d3e18b076de182653264b` | nine `tests/e3_reference` files only |
 | TR3-O documentation | `eef6f420f64c88c3821fbc3a79660e7a2a3e4b8b` | `0c03f85bfde3469dfc18a13dddd34beef1873f48` | two exact documents plus one ROADMAP union |
 
@@ -31,10 +32,11 @@ Mode-and-blob comparison against the component heads gives these results:
   files are the reviewed 19-suite/32-command base union.
 - G3-C4: 36 provider, fixture, workflow and prerequisite-hook paths are exact.
   `Makefile`, `docs/ROADMAP.md` and the two topology files are integration unions.
-- SHARED-R2: 20 of its 21 paths, including every native, script and test path,
-  are exact. Only `docs/ROADMAP.md` is the status union. This preserves I2
-  rank-two admission, the K2 v1.1 descriptor/report audit, K1 copy semantics and
-  both private I2 plan gates without an ABI change.
+- SHARED-R2: 19 implementation, supporting-document, script and test paths are
+  exact to `8047cec`; its evidence document is exact to successor `92c2f585`,
+  and `docs/ROADMAP.md` is the status union. This preserves I2 rank-two
+  admission, the K2 v1.1 descriptor/report audit, K1 copy semantics and both
+  private I2 plan gates without an ABI change.
 - The TR3-O documentation source matches `docs/INTEGRATION_LOG.md` and
   `docs/TR3_O_OPTIMIZER_TRANSACTION_PROPOSAL.md` byte for byte. Its ROADMAP line
   is combined with TR3-B, G3-C4, SHARED-R2 and current evaluator status.
@@ -68,12 +70,23 @@ identical to base `2006cde`. SHARED-R2 adds no command, and the E3 reference
 toolkit is intentionally unregistered, so the strict union remains 19 suites and
 32 unique commands.
 
+SHARED-R2 changes the admitted `native/f32_tensor.c` and
+`docs/I2_F32_TENSOR.md` predecessor bytes. Four live predecessor manifests are
+therefore refreshed as part of this integration: one row each in the L3S,
+E3-METRICS and M3 shared-call manifests, and two rows in the G3-N manifest. All
+other rows in all six repository predecessor manifests retain their reviewed
+values and verify against the integrated tree. These five checksum-row changes
+are recorded separately from source-component byte identity in the per-path TSV.
+
 ## Lightweight validation
 
 The integration-preparation gate passed:
 
 - `python3 -m unittest discover -v -s tests/ci -p 'test_*.py'`: 105 tests;
 - `scripts/check-ci-topology.sh`: 19 suites and 32 unique commands;
+- all six predecessor manifests verify against the integrated tree;
+- `python3 -m unittest -v tests.m3cg.test_contract`: five shared-call contract
+  and package-boundary tests;
 - `python3 -m unittest -v tests.q0.test_python_isolation`: three tests;
 - the E3 stdlib/schema/isolation selection: 15 tests;
 - the pinned PyTorch 2.13.0+cpu E3 mathematical oracle: four tests.
