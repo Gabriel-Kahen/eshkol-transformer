@@ -799,4 +799,6 @@ for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
   fi
 done
 
+/usr/bin/bash "${PROJECT_ROOT}/scripts/test-tr3-c-d2-restore.sh"
+
 printf 'D2 PASS: carrier-neutral shift/shuffle/cursor semantics, frozen Q0 fixture, private carrier lifetime, determinism, resource, sanitizer, and isolation gates\n'

@@ -47,6 +47,9 @@ static et_d2_dataset_control *live_datasets;
 static int64_t last_status;
 static uint64_t dataset_shell_factory;
 static uint64_t batch_shell_factory;
+#ifdef ET_TR3_C_D2_RESTORE
+static uint64_t tr3_c_restore_plan_factory;
+#endif
 
 /* Exact pinned Eshkol CALLABLE/CLOSURE ABI used only for shell admission. */
 typedef struct et_d2_eshkol_object_header {
@@ -179,6 +182,11 @@ static uint64_t *shell_factory_slot(int64_t factory_kind) {
   if (factory_kind == ET_D2_SHELL_FACTORY_BATCH) {
     return &batch_shell_factory;
   }
+#ifdef ET_TR3_C_D2_RESTORE
+  if (factory_kind == 3) {
+    return &tr3_c_restore_plan_factory;
+  }
+#endif
   return NULL;
 }
 
@@ -193,7 +201,15 @@ int64_t et_d2_shell_factory_register_v1(const void *closure,
     if ((factory_kind == ET_D2_SHELL_FACTORY_DATASET &&
          batch_shell_factory == factory) ||
         (factory_kind == ET_D2_SHELL_FACTORY_BATCH &&
-         dataset_shell_factory == factory)) {
+         dataset_shell_factory == factory)
+#ifdef ET_TR3_C_D2_RESTORE
+        || ((factory_kind == ET_D2_SHELL_FACTORY_DATASET ||
+             factory_kind == ET_D2_SHELL_FACTORY_BATCH) &&
+            tr3_c_restore_plan_factory == factory) ||
+        (factory_kind == 3 &&
+         (dataset_shell_factory == factory || batch_shell_factory == factory))
+#endif
+    ) {
       return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
     }
     *slot = factory;
@@ -224,6 +240,25 @@ static et_d2_dataset_control *find_dataset(const void *owner) {
   }
   return NULL;
 }
+
+#ifdef ET_TR3_C_D2_RESTORE
+/*
+ * TR3-C's private restore binding must distinguish an authentic idle dataset
+ * from source state that merely claims not to own a batch.  This opt-in probe
+ * stays in the D2 translation unit so it compares through the actual private
+ * registry; owner is never dereferenced and ordinary D2 gains no new symbol.
+ */
+int64_t et_tr3_c_d2_dataset_idle_preflight_v1(const void *owner) {
+  const et_d2_dataset_control *dataset = find_dataset(owner);
+  if (dataset == NULL) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  }
+  if (dataset->current_batch != NULL) {
+    return status(ET_D2_NATIVE_STATUS_INVALID_STATE);
+  }
+  return status(ET_D2_NATIVE_STATUS_OK);
+}
+#endif
 
 static et_d2_batch_control *find_batch(const void *owner, int64_t generation) {
   et_d2_dataset_control *dataset = find_dataset(owner);
