@@ -1,0 +1,9 @@
+[
+  ["causal-attention", ["causal-attention.forward"], [[1,2,2,1,4,2],[1,2,2,2,4,2],[1,2,2,3,4,2],[1,2,2,4,4,2],[1,2,2,3,3,2]]],
+  ["embedding-forward", ["embedding.forward"], [[1,1,4,4],[1,2,4,4],[1,3,4,4],[1,4,4,4],[1,3,256,4],[1,4,256,4]]],
+  ["gelu", ["gelu.forward"], [[1,3,8],[1,4,8]]],
+  ["head-layout", ["heads.merge.forward","heads.split.forward"], [[1,3,2,2],[1,4,2,2]]],
+  ["layer-norm", ["layer-norm.forward"], [[1,3,4],[1,4,4]]],
+  ["linear", ["linear.forward-no-bias"], [[1,3,4,4],[1,3,4,8],[1,3,8,4],[1,3,4,256],[1,4,4,4],[1,4,4,8],[1,4,8,4],[1,4,4,256]]],
+  ["residual", ["residual.forward"], [[1,4,4]]]
+]
