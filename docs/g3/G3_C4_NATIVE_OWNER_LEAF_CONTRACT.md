@@ -63,23 +63,45 @@ initialization, and no active call. The exact positive-zero gradient storage is
 the preserved I2 parameter-constructor invariant: no operation in this leaf can
 obtain or mutate an absent gradient. Prepare then
 changes only `OPEN` to `PREPARED`. Commit accepts only the exact prepared staged
-owner, clears the singleton, and changes it to `SEALED` without allocation or a
-recoverable branch. Abort accepts `OPEN` or `PREPARED`, is idempotent for
+owner, changes it to `SEALED`, and then clears the singleton without allocation
+or a recoverable branch. Abort accepts `OPEN` or `PREPARED`, is idempotent for
 `ABORTED`, rejects `SEALED`, authenticates membership and identity, and runs the
 idle preflight over all fourteen parameters before destroying any of them. It
 then destroys all parameters, tombstones the owner, and clears the singleton.
-The whole-owner M3T preflight is never called.
+The whole-owner M3T preflight is never called. After complete preflight, any
+commit-tail invariant defect or parameter-destruction failure is fail-stop; a
+partially committed or partially destroyed owner is never returned as a
+recoverable error.
 
 This source owns the sole `_Thread_local` C4 `(domain, category, code)` snapshot
-and the three getters. Its private header also owns reset, validated set,
-snapshot, and restore helpers for future C4 transport; future sources must reuse
-this storage. Domains are C4=0, K1=1, I1=2, I2=3. C4 categories are OK=0,
+and the three getters. Its private header also freezes these helpers for future
+C4 transport; future sources must reuse this storage:
+
+```c
+typedef struct et_g3c4_error_state_internal {
+  int64_t domain;
+  int64_t category;
+  int64_t code;
+} et_g3c4_error_state_internal;
+
+void et_g3c4_error_reset_internal(void);
+void et_g3c4_error_set_internal(
+    int64_t domain, int64_t category, int64_t code);
+et_g3c4_error_state_internal et_g3c4_error_snapshot_internal(void);
+void et_g3c4_error_restore_internal(et_g3c4_error_state_internal snapshot);
+```
+
+Set and restore return no status: they store an accepted exact triple, while a
+malformed triple is deterministically stored as C4/internal/invariant. Reset
+stores the all-zero success triple and snapshot returns the current value.
+Domains are C4=0, K1=1, I1=2, I2=3. C4 categories are OK=0,
 invalid-argument=1, invalid-state=2, shape-mismatch=3, unsupported=4, internal=5,
 and determinism-unavailable=6. C4 codes are OK=0, identity=1, lifecycle=2,
 selector/config=3, shape/token-range=4, alias=5, topology=6, allocation=7,
 capability=8, stale-binding=9, invariant=10, FP-control=11,
 required-draw-exhaustion=12, and readiness=13. K1 and I2 triples retain their
-actual accepted category and code. Unknown domains, out-of-range categories, or
+actual accepted category and code. I1 triples likewise retain their actual
+accepted I1 category and code. Unknown domains, out-of-range categories, or
 out-of-range codes normalize to C4/internal/invariant. Each boundary snapshots
 its first failure before cleanup; cleanup cannot overwrite it.
 
