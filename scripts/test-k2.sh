@@ -150,7 +150,7 @@ cmp "${temporary_dir}/public-run-1/k2-public-runtime" \
   "${temporary_dir}/public-run-2/k2-public-runtime"
 cmp "${temporary_dir}/public-run-1.stdout" \
   "${temporary_dir}/public-run-2.stdout"
-grep -Fx 'k2-public-runtime:v1 46' \
+grep -Fx 'k2-public-runtime:v1 49' \
   "${temporary_dir}/public-run-1.stdout" >/dev/null
 ldd "${temporary_dir}/public-run-1/k2-public-runtime" \
   >"${temporary_dir}/public-runtime.ldd"
@@ -174,13 +174,13 @@ for repetition in 1 2; do
 done
 cmp "${temporary_dir}/report-i2-1.json" \
   "${temporary_dir}/report-i2-2.json"
-[[ "$(wc -c <"${temporary_dir}/report-i2-1.json")" == 3059 ]] || \
-  die "K2 genuine I2/K1 report is not exactly 3,059 bytes"
+[[ "$(wc -c <"${temporary_dir}/report-i2-1.json")" == 3133 ]] || \
+  die "K2 genuine I2/K1 report is not exactly 3,133 bytes"
 report_sha256="$(sha256sum "${temporary_dir}/report-i2-1.json" | awk '{print $1}')"
 [[ "${report_sha256}" == \
-   742800ea988627d9093f8fe394c8ad2be801e35413e20bbcad816f2431be86cb ]] || \
+   50c7078af4d3e495c4d668b6b8aaab29024cbab6a775fa6e98c9e9d10124389e ]] || \
   die "K2 genuine I2/K1 report SHA-256 drifted: ${report_sha256}"
-printf 'K2 REPORT GOLDEN PASS: 3059 bytes sha256=%s\n' "${report_sha256}"
+printf 'K2 REPORT GOLDEN PASS: 3133 bytes sha256=%s\n' "${report_sha256}"
 
 private_runtime_dir="${temporary_dir}/private-runtime"
 mkdir -p "${private_runtime_dir}"
@@ -451,7 +451,7 @@ allocator_link_flags=(
   -Wl,--wrap=malloc -Wl,--wrap=calloc
   -Wl,--wrap=realloc -Wl,--wrap=free
 )
-allocator_measurement='K2 K1 allocation measurement: calls=58 requested=2487 live-blocks=54 live-bytes=2407 peak-bytes=2487'
+allocator_measurement='K2 K1 allocation measurement: calls=63 requested=2807 live-blocks=59 live-bytes=2727 peak-bytes=2807'
 for allocator_mode in normal sanitized; do
   allocator_flags=(-DET_K2_ALLOCATOR_WRAP)
   if [[ "${allocator_mode}" == sanitized ]]; then

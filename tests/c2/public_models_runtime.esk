@@ -1,0 +1,84 @@
+(require transformer.capabilities)
+(require transformer.persistence)
+(require transformer.trainer)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "C2 PUBLIC MODELS FAIL: ") (display label) (newline)
+        (exit 1))))
+
+(define (must label thunk)
+  (guard (raised
+           (#t
+             (display "C2 PUBLIC MODELS ERROR: ") (display label)
+             (if (transformer-error? raised)
+                 (begin
+                   (display " category=")
+                   (display (transformer-error-category raised))
+                   (display " operation=")
+                   (display (transformer-error-operation raised))
+                   (display " message=")
+                   (display (transformer-error-message raised)))
+                 #f)
+             (newline)
+             (exit 1)))
+    (thunk)))
+
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define args (command-line))
+(if (not (= (proper-length args) 5))
+    (begin
+      (display "usage: public_models_runtime M3 M3-OUTPUT C4 C4-OUTPUT")
+      (newline)
+      (exit 2)))
+(define m3-input (car (cdr args)))
+(define m3-output (car (cdr (cdr args))))
+(define c4-input (car (cdr (cdr (cdr args)))))
+(define c4-output (car (cdr (cdr (cdr (cdr args))))))
+(define policy
+  (persistence-policy 16777216 524288 8388608 64 'cpu))
+
+(define m3-metadata
+  (must "inspect M3" (lambda () (checkpoint-inspect m3-input policy))))
+(check "M3 metadata has 43 descriptors"
+       (= (checkpoint-metadata-ref m3-metadata 'tensor-count) 43))
+(define m3-owner
+  (must "load M3"
+    (lambda () (checkpoint-load m3-input policy (capability-discover)))))
+(check "installed facade saves loaded M3 owner"
+       (must "save M3"
+         (lambda ()
+           (checkpoint-save!
+             m3-owner m3-output policy
+             (list ':overwrite? #t ':required-features '())))))
+(check "installed facade releases M3 owner" (trainer-state-release! m3-owner))
+(check "installed facade M3 release is idempotent"
+       (trainer-state-release! m3-owner))
+
+(define c4-metadata
+  (must "inspect C4 schema"
+    (lambda () (checkpoint-inspect c4-input policy))))
+(check "C4 schema metadata has 43 descriptors"
+       (= (checkpoint-metadata-ref c4-metadata 'tensor-count) 43))
+(define c4-owner
+  (must "load C4 schema"
+    (lambda () (checkpoint-load c4-input policy (capability-discover)))))
+(check "installed facade saves loaded C4 schema owner"
+       (must "save C4 schema"
+         (lambda ()
+           (checkpoint-save!
+             c4-owner c4-output policy
+             (list ':overwrite? #t ':required-features '())))))
+(check "installed facade releases C4 schema owner"
+       (trainer-state-release! c4-owner))
+(check "installed facade C4 schema release is idempotent"
+       (trainer-state-release! c4-owner))
+
+(display "C2 PUBLIC MODELS PASS: ") (display checks) (display " checks")
+(newline)

@@ -122,6 +122,7 @@ uint64_t et_k2_test_discovery_count_v1(void);
 uint64_t et_k2_test_destroy_count_v1(void);
 uint64_t et_k2_test_runtime_live_count_v1(void);
 uint64_t et_k2_test_require_count_v1(void);
+uint64_t et_k2_test_require_shape_count_v1(uint64_t index);
 void et_k2_test_fail_require_at_v1(uint64_t ordinal);
 uint32_t et_k2_test_protected_overlap_mask_v1(void);
 int64_t et_k2_test_fork_v1(void);

@@ -672,6 +672,10 @@ static void test_k1_category_code_pairs(void) {
 
 static void test_discovery_and_matching(void) {
   static const int64_t unverified_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10};
+  static const uint64_t rank2_supported[5][2] = {
+      {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
+  static const uint64_t rank2_unsupported[][2] = {
+      {1u, 4u}, {2u, 5u}, {4u, 7u}, {8u, 5u}, {257u, 4u}, {256u, 5u}};
   aligned_error diagnostic;
   uint64_t rank1[1];
   uint64_t rank2[2] = {1u, 1u};
@@ -719,6 +723,18 @@ static void test_discovery_and_matching(void) {
                         1, &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
   CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu", rank2, 2,
                         1, &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
+  for (size_t index = 0u; index < 5u; index++) {
+    CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu",
+                          rank2_supported[index], 2, 1, &diagnostic) == 0);
+  }
+  for (size_t index = 0u;
+       index < sizeof(rank2_unsupported) / sizeof(rank2_unsupported[0]);
+       index++) {
+    CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu",
+                          rank2_unsupported[index], 2, 1,
+                          &diagnostic) == ET_K2_STATUS_UNSUPPORTED);
+    check_k1_no_match(&diagnostic);
+  }
   for (size_t index = 0;
        index < sizeof(unverified_indices) / sizeof(unverified_indices[0]);
        index++) {
@@ -861,8 +877,8 @@ static void test_exact_provider_audit(void) {
       (const et_kernel_capability_v1 *)known->capabilities;
   et_kernel_provider_v1 provider;
   et_kernel_capability_v1 entry;
-  et_kernel_shape_range_v1 ranges[2];
-  et_kernel_dimension_range_v1 dimension;
+  et_kernel_shape_range_v1 ranges[7];
+  et_kernel_dimension_range_v1 dimensions[2];
   const char *operations[1] = {"storage.copy"};
   const char *dtypes[1] = {"f32"};
   const char *devices[1] = {"cpu"};
@@ -931,11 +947,25 @@ static void test_exact_provider_audit(void) {
 
   devices[0] = "cpu";
   entry = *known_entry;
-  ranges[0] = known_entry->shape_ranges[0];
-  ranges[1] = known_entry->shape_ranges[1];
-  dimension = ranges[1].dimensions[0];
-  dimension.maximum--;
-  ranges[1].dimensions = &dimension;
+  memcpy(ranges, known_entry->shape_ranges, sizeof(ranges));
+  dimensions[0] = ranges[4].dimensions[0];
+  dimensions[1] = ranges[4].dimensions[1];
+  dimensions[1].maximum--;
+  ranges[4].dimensions = dimensions;
+  entry.shape_ranges = ranges;
+  provider.capabilities = &entry;
+  expect_provider_rejected(&provider, ET_K2_STATUS_INTERNAL);
+
+  entry = *known_entry;
+  entry.shape_range_count = 6u;
+  provider.capabilities = &entry;
+  expect_provider_rejected(&provider, ET_K2_STATUS_INTERNAL);
+
+  entry = *known_entry;
+  memcpy(ranges, known_entry->shape_ranges, sizeof(ranges));
+  { et_kernel_shape_range_v1 temporary = ranges[2];
+    ranges[2] = ranges[3];
+    ranges[3] = temporary; }
   entry.shape_ranges = ranges;
   provider.capabilities = &entry;
   expect_provider_rejected(&provider, ET_K2_STATUS_INTERNAL);
@@ -951,7 +981,8 @@ static void test_every_k1_discovery_allocation(void) {
    * return NULL after capability_count was set to 11.  K1 then destroys the
    * partial runtime by iterating that count through a NULL table and crashes.
    * This exhaustive sweep is the regression gate for the authorized K1 fix;
-   * fail_after==0 and 2..57 already cleaned up correctly on the broken head.
+   * fail_after==0 and 2..62 clean up correctly with the bounded rank-two
+   * descriptor retained by K1.
    */
   aligned_error diagnostic;
   size_t successful_fail_index = SIZE_MAX;
@@ -988,11 +1019,11 @@ static void test_every_k1_discovery_allocation(void) {
     CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == ET_K2_STATUS_OK);
     allocation_end();
     CHECK(all_bytes(diagnostic.bytes, sizeof(diagnostic.bytes), 0u));
-    CHECK(allocation_calls == 58u);
-    CHECK(allocation_requested_bytes == 2487u);
-    CHECK(allocation_live_blocks == 54u);
-    CHECK(allocation_live_bytes == 2407u);
-    CHECK(allocation_peak_bytes == 2487u);
+    CHECK(allocation_calls == 63u);
+    CHECK(allocation_requested_bytes == 2807u);
+    CHECK(allocation_live_blocks == 59u);
+    CHECK(allocation_live_bytes == 2727u);
+    CHECK(allocation_peak_bytes == 2807u);
     CHECK(et_k2_test_runtime_live_count_v1() == 1u);
     CHECK(et_k2_private_runtime_generation_v1() == 1);
     CHECK(et_k2_test_discovery_count_v1() == 2u);
@@ -1002,11 +1033,11 @@ static void test_every_k1_discovery_allocation(void) {
   }
   CHECK(successful_fail_index != SIZE_MAX);
   CHECK(successful_fail_index == allocation_calls);
-  CHECK(successful_fail_index == 58u);
-  CHECK(successful_requested == 2487u);
-  CHECK(successful_live_blocks == 54u);
-  CHECK(successful_live_bytes == 2407u);
-  CHECK(successful_peak_bytes == 2487u);
+  CHECK(successful_fail_index == 63u);
+  CHECK(successful_requested == 2807u);
+  CHECK(successful_live_blocks == 59u);
+  CHECK(successful_live_bytes == 2727u);
+  CHECK(successful_peak_bytes == 2807u);
   (void)printf("K2 K1 allocation measurement: calls=%zu requested=%zu "
                "live-blocks=%zu live-bytes=%zu peak-bytes=%zu\n",
                successful_fail_index, successful_requested,
