@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from pathlib import Path
 import struct
 import tempfile
 import unittest
 
 from tests.d2.reference import D2ReferenceError, ReferenceConfig, ReferenceDataset, decode_reference_cursor, resign_reference_cursor
+from tests.d2.test_resources import write_d1_resource
 from tests.tr3_reference import schema
+from tests.tr3_reference.constants import TOKENIZER_FINGERPRINT
 from tests.tr3_reference.corpus import materialize
 
 
@@ -101,6 +104,61 @@ class TR3SchemaTests(unittest.TestCase):
             for label, changed in mutations:
                 with self.subTest(mutation=label), self.assertRaises(ValueError):
                     schema.validate_corpora(changed, root)
+
+    def test_rejects_self_consistent_replacement_corpus(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="tr3-profile-parent-") as raw:
+            root = Path(raw) / "generated"
+            payload = {
+                "format": "eshkol-tr3-training-reference",
+                "version": 1,
+                "kind": "corpora-and-cursors",
+                "profile": "tr3-fixed-n1-t2-v256-d4-v1",
+                **materialize(root),
+            }
+            replacement = ((3, 196, 40),)
+            directory = root / "train"
+            manifest = write_d1_resource(
+                directory,
+                replacement,
+                fingerprint=TOKENIZER_FINGERPRINT,
+                vocab=256,
+            )
+            dataset = ReferenceDataset(
+                replacement,
+                ReferenceConfig(1, 2, None, 1, True),
+                manifest_digest=manifest[-32:],
+                tokenizer_fingerprint=TOKENIZER_FINGERPRINT,
+                vocab_size=256,
+            )
+            start = dataset.snapshot()
+            batches = []
+            while (batch := dataset.next_batch()) is not None:
+                batches.append(
+                    {
+                        "inputs": list(batch.inputs[0]),
+                        "targets": list(batch.targets[0]),
+                        "mask": list(batch.loss_mask[0]),
+                        "weight": sum(batch.loss_mask[0]),
+                    }
+                )
+            payload["datasets"]["train"] = {
+                "packing": True,
+                "shards": [list(shard) for shard in replacement],
+                "batches": batches,
+                "start_cursor": start.hex(),
+                "end_cursor": dataset.snapshot().hex(),
+                "manifest_trailer_sha256": manifest[-32:].hex(),
+                "files": [
+                    {
+                        "path": path.name,
+                        "bytes": path.stat().st_size,
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                    for path in sorted(directory.iterdir(), key=lambda item: item.name)
+                ],
+            }
+            with self.assertRaisesRegex(ValueError, "frozen profile shards/packing"):
+                schema.validate_corpora(payload, root)
 
     def test_rejects_cursor_checksum_identity_and_ordinal(self) -> None:
         config = ReferenceConfig(1, 2, None, 1, True)

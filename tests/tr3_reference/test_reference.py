@@ -3,19 +3,30 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
 from tests.tr3_reference.generate_reference import build, canonical
-from tests.tr3_reference.schema import validate_output, validate_summary
+from tests.tr3_reference.schema import validate_corpora, validate_output, validate_summary
 
 
 HERE = Path(__file__).resolve().parent
 
 
 class TR3ReferenceTests(unittest.TestCase):
+    @staticmethod
+    def _write_summary(root: Path, manifest: dict[str, object], summary: object) -> None:
+        encoded = canonical(summary)
+        (root / "summary.json").write_bytes(encoded)
+        manifest["artifacts"]["summary.json"] = {
+            "bytes": len(encoded),
+            "sha256": hashlib.sha256(encoded).hexdigest(),
+        }
+
     def test_complete_reference_matches_frozen_manifest(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tr3-reference-") as raw:
             root = Path(raw) / "generated"
@@ -48,6 +59,8 @@ class TR3ReferenceTests(unittest.TestCase):
             self.assertEqual(values["heldout_mask_weights"], [2, 1])
             self.assertLess(values["final_heldout_global_mean_ce"], values["initial_heldout_global_mean_ce"])
             summary = json.loads((root / "summary.json").read_text())
+            corpora = json.loads((root / "corpora.json").read_text())
+            corpus_batches = validate_corpora(corpora, root)
             proof = summary["accumulation_reference"]
             self.assertLessEqual(proof["max_abs_difference"], 2.0e-6)
             self.assertGreater(proof["wrong_per_batch_mean_max_abs_difference"], 0.0)
@@ -88,7 +101,60 @@ class TR3ReferenceTests(unittest.TestCase):
             mutations.append(("provenance addition", changed))
             for label, changed in mutations:
                 with self.subTest(mutation=label), self.assertRaises(ValueError):
-                    validate_summary(changed)
+                    validate_summary(changed, corpus_batches)
+
+    def test_refreshed_digest_cross_field_mutations_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="tr3-cross-field-") as raw:
+            root = Path(raw) / "generated"
+            manifest = build(root)
+            summary = json.loads((root / "summary.json").read_text())
+            mutations = []
+
+            changed = copy.deepcopy(summary)
+            changed_manifest = copy.deepcopy(manifest)
+            changed["training"]["after"]["batches"][0]["argmax"][0] ^= 1
+            changed_manifest["measurements"]["final_active_argmax"][0] ^= 1
+            mutations.append(("final argmax", changed, changed_manifest, "unique logits argmax"))
+
+            changed = copy.deepcopy(summary)
+            changed_manifest = copy.deepcopy(manifest)
+            changed["training"]["after"]["batches"][0]["unique_argmax"][0] = False
+            changed_manifest["measurements"]["final_active_unique_argmax"][0] = False
+            mutations.append(("final uniqueness", changed, changed_manifest, "unique logits argmax"))
+
+            changed = copy.deepcopy(summary)
+            changed_manifest = copy.deepcopy(manifest)
+            changed["heldout"]["train_transitions"] = [[1, 2]]
+            changed["heldout"]["heldout_transitions"] = [[3, 4]]
+            mutations.append(("invented transitions", changed, changed_manifest, "authenticated corpus"))
+
+            changed = copy.deepcopy(summary)
+            changed_manifest = copy.deepcopy(manifest)
+            changed["training"]["before"]["batches"][0]["inputs"][0] ^= 1
+            mutations.append(("unbound training input", changed, changed_manifest, "authenticated corpus"))
+
+            changed = copy.deepcopy(summary)
+            changed_manifest = copy.deepcopy(manifest)
+            evaluation = changed["heldout"]["after"]
+            numerator_word = evaluation["batches"][0]["numerator_bits"]
+            numerator = struct.unpack(">f", bytes.fromhex(numerator_word))[0]
+            altered = struct.unpack(">f", struct.pack(">f", numerator + 0.25))[0]
+            evaluation["batches"][0]["numerator_bits"] = struct.pack(">f", altered).hex()
+            batch_numerators = [
+                struct.unpack(">f", bytes.fromhex(batch["numerator_bits"]))[0]
+                for batch in evaluation["batches"]
+            ]
+            evaluation["numerator"] = sum(batch_numerators, 0.0)
+            evaluation["mean"] = evaluation["numerator"] / evaluation["weight"]
+            evaluation["numerator_bits_after_f64_sum"] = struct.pack(">d", evaluation["numerator"]).hex()
+            evaluation["mean_bits_f64"] = struct.pack(">d", evaluation["mean"]).hex()
+            changed_manifest["measurements"]["final_heldout_global_mean_ce"] = evaluation["mean"]
+            mutations.append(("unbound numerator", changed, changed_manifest, "masked per-token"))
+
+            for label, changed, changed_manifest, message in mutations:
+                self._write_summary(root, changed_manifest, changed)
+                with self.subTest(mutation=label), self.assertRaisesRegex(ValueError, message):
+                    validate_output(root, changed_manifest)
 
     def test_manifest_detects_generated_artifact_mutation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tr3-tamper-") as raw:

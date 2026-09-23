@@ -12,13 +12,17 @@ from tests.d2.reference import ReferenceConfig, ReferenceDataset, decode_referen
 from tests.d2.test_resources import load_d1_resource
 from tests.tr3_reference.constants import (
     FORMAT,
+    HELDOUT_SHARDS,
     OPTIMIZER,
     PARAMETER_SHAPES,
     PROFILE,
     PROPOSAL,
+    RESUME_A1_SHARDS,
+    RESUME_A2_SHARDS,
     SOURCE_PATHS,
     TOKENIZER_FINGERPRINT,
     TOLERANCES,
+    TRAIN_SHARDS,
     UPDATE_COUNT,
     VERSION,
 )
@@ -145,8 +149,19 @@ def _batch(record: object, where: str) -> int:
     weight = _exact_int(record["weight"], where + ".weight", 1, 2)
     if weight != sum(mask):
         _fail(f"{where}: weight and mask differ")
-    _f32_words([record["numerator_bits"]], 1, where + ".numerator_bits")
-    _f32_words(record["per_token_loss_bits"], 2, where + ".per_token_loss_bits")
+    _f32_word(record["numerator_bits"], where + ".numerator_bits")
+    loss_words = record["per_token_loss_bits"]
+    if not isinstance(loss_words, list) or len(loss_words) != 2:
+        _fail(f"{where}.per_token_loss_bits: incorrect value count")
+    per_token = [
+        _f32_word(word, f"{where}.per_token_loss_bits[{index}]")
+        for index, word in enumerate(loss_words)
+    ]
+    reconstructed = 0.0
+    for loss, active in zip(per_token, mask):
+        reconstructed = _as_f32(reconstructed + (loss if active else 0.0))
+    if record["numerator_bits"] != struct.pack(">f", reconstructed).hex():
+        _fail(f"{where}: numerator word differs from masked per-token f32 sum")
     return weight
 
 
@@ -159,7 +174,11 @@ def _d2_batch(batch) -> dict[str, object]:
     }
 
 
-def _evaluation(record: object, where: str) -> None:
+def _evaluation(
+    record: object,
+    where: str,
+    expected_batches: list[dict[str, object]] | None = None,
+) -> None:
     expected = {
         "batch_count", "batches", "mean", "mean_bits_f64", "numerator",
         "numerator_bits_after_f64_sum", "token_count", "weight",
@@ -170,6 +189,13 @@ def _evaluation(record: object, where: str) -> None:
     if not isinstance(batches, list) or not batches:
         _fail(f"{where}.batches: expected nonempty list")
     weights = [_batch(batch, f"{where}.batches[{index}]") for index, batch in enumerate(batches)]
+    if expected_batches is not None:
+        observed_batches = [
+            {field: batch[field] for field in ("inputs", "targets", "mask", "weight")}
+            for batch in batches
+        ]
+        if observed_batches != expected_batches:
+            _fail(f"{where}: evaluation batches differ from authenticated corpus")
     batch_numerators = [
         _f32_word(batch["numerator_bits"], f"{where}.batches[{index}].numerator_bits")
         for index, batch in enumerate(batches)
@@ -193,7 +219,7 @@ def _evaluation(record: object, where: str) -> None:
         _fail(f"{where}: f64 words differ from numeric accumulation")
 
 
-def validate_trajectory(payload: object) -> None:
+def validate_trajectory(payload: object, training_batches: list[dict[str, object]]) -> None:
     expected = {
         "entries", "format", "kind", "logical_alias", "parameter_paths",
         "parameter_shapes", "profile", "version",
@@ -220,7 +246,11 @@ def validate_trajectory(payload: object) -> None:
             _fail(f"trajectory.entries[{update}]: nonconsecutive update")
         if list(entry["parameters"]) != list(PATHS) or list(entry["optimizer_state"]) != list(PATHS):
             _fail(f"trajectory.entries[{update}]: parameter order/path mismatch")
-        _evaluation(entry["training_evaluation"], f"trajectory.entries[{update}].training_evaluation")
+        _evaluation(
+            entry["training_evaluation"],
+            f"trajectory.entries[{update}].training_evaluation",
+            training_batches,
+        )
         for path in PATHS:
             _tensor(entry["parameters"][path], SHAPES[path], f"trajectory.entries[{update}].parameters.{path}")
             state = entry["optimizer_state"][path]
@@ -230,7 +260,7 @@ def validate_trajectory(payload: object) -> None:
             _tensor(state["exp_avg_sq"], SHAPES[path], f"trajectory.entries[{update}].optimizer_state.{path}.exp_avg_sq")
 
 
-def validate_corpora(payload: object, root: Path) -> None:
+def validate_corpora(payload: object, root: Path) -> dict[str, list[dict[str, object]]]:
     if not isinstance(payload, dict) or set(payload) != {
         "datasets", "format", "kind", "profile", "resume_cases", "tokenizer", "version"
     }:
@@ -255,12 +285,25 @@ def validate_corpora(payload: object, root: Path) -> None:
     datasets = payload["datasets"]
     if not isinstance(datasets, dict) or set(datasets) != {"train", "heldout", "resume-a1", "resume-a2"}:
         _fail("dataset set mismatch")
+    dataset_contracts = {
+        "train": (TRAIN_SHARDS, True),
+        "heldout": (HELDOUT_SHARDS, False),
+        "resume-a1": (RESUME_A1_SHARDS, True),
+        "resume-a2": (RESUME_A2_SHARDS, False),
+    }
     resources = {}
+    authenticated_batches = {}
     for name, record in datasets.items():
         if not isinstance(record, dict) or set(record) != {
             "batches", "end_cursor", "files", "manifest_trailer_sha256", "packing", "shards", "start_cursor"
         }:
             _fail(f"datasets.{name}: fields differ")
+        expected_shards, expected_packing = dataset_contracts[name]
+        if (
+            record["shards"] != [list(shard) for shard in expected_shards]
+            or record["packing"] is not expected_packing
+        ):
+            _fail(f"datasets.{name}: differs from frozen profile shards/packing")
         if type(record["packing"]) is not bool or not isinstance(record["batches"], list):
             _fail(f"datasets.{name}: invalid packing/batches")
         if not isinstance(record["shards"], list) or not record["shards"]:
@@ -275,7 +318,7 @@ def validate_corpora(payload: object, root: Path) -> None:
                 _fail(f"datasets.{name}.batches[{index}]: fields differ")
             shadow = batch | {
                 "argmax": batch["targets"], "unique_argmax": [True, True],
-                "numerator_bits": "3f800000", "per_token_loss_bits": ["3f800000", "3f800000"],
+                "numerator_bits": "00000000", "per_token_loss_bits": ["00000000", "00000000"],
             }
             _batch(shadow, f"datasets.{name}.batches[{index}]")
         trailer = _sha(record["manifest_trailer_sha256"], f"datasets.{name}.manifest_trailer_sha256")
@@ -321,6 +364,7 @@ def validate_corpora(payload: object, root: Path) -> None:
         if replayed != record["batches"] or dataset.snapshot().hex() != record["end_cursor"]:
             _fail(f"datasets.{name}: batches or end cursor differ from authentic D2 replay")
         resources[name] = (loaded_shards, digest, config)
+        authenticated_batches[name] = replayed
     cases = payload["resume_cases"]
     if not isinstance(cases, dict) or set(cases) != {"accumulation-1", "accumulation-2-unequal-mask"}:
         _fail("resume case set mismatch")
@@ -384,7 +428,7 @@ def validate_corpora(payload: object, root: Path) -> None:
                 _fail(f"resume_cases.{name}.contributions[{index}].batch: fields differ")
             shadow = recorded_batch | {
                 "argmax": recorded_batch["targets"], "unique_argmax": [True, True],
-                "numerator_bits": "3f800000", "per_token_loss_bits": ["3f800000", "3f800000"],
+                "numerator_bits": "00000000", "per_token_loss_bits": ["00000000", "00000000"],
             }
             weight = _batch(shadow, f"resume_cases.{name}.contributions[{index}].batch")
             actual = {
@@ -402,9 +446,63 @@ def validate_corpora(payload: object, root: Path) -> None:
             or case["end_cursor"] != dataset.snapshot().hex()
         ):
             _fail(f"resume_cases.{name}: contribution sequence mismatch")
+    if (
+        len(authenticated_batches["train"]) != 1
+        or [batch["weight"] for batch in authenticated_batches["train"]] != [2]
+        or [batch["weight"] for batch in authenticated_batches["heldout"]] != [2, 1]
+        or [
+            target
+            for batch in authenticated_batches["train"]
+            for target, active in zip(batch["targets"], batch["mask"])
+            if active
+        ]
+        != [197, 41]
+    ):
+        _fail("authenticated corpora differ from frozen profile batch invariants")
+    return authenticated_batches
 
 
-def validate_summary(payload: object) -> None:
+def _active_transitions(batches: list[dict[str, object]]) -> set[tuple[int, int]]:
+    return {
+        (left, right)
+        for batch in batches
+        for left, right, active in zip(batch["inputs"], batch["targets"], batch["mask"])
+        if active
+    }
+
+
+def _active_evaluation_values(evaluation: dict[str, object], field: str) -> list[object]:
+    return [
+        value
+        for batch in evaluation["batches"]
+        for value, active in zip(batch[field], batch["mask"])
+        if active
+    ]
+
+
+def _summary_measurements(payload: dict[str, object]) -> dict[str, object]:
+    training = payload["training"]
+    heldout = payload["heldout"]
+    final_training = training["after"]
+    final_heldout = heldout["after"]
+    return {
+        "initial_training_mean_ce": training["before"]["mean"],
+        "final_training_mean_ce": final_training["mean"],
+        "final_active_targets": _active_evaluation_values(final_training, "targets"),
+        "final_active_argmax": _active_evaluation_values(final_training, "argmax"),
+        "final_active_unique_argmax": _active_evaluation_values(final_training, "unique_argmax"),
+        "initial_heldout_global_mean_ce": heldout["before"]["mean"],
+        "final_heldout_global_mean_ce": final_heldout["mean"],
+        "heldout_weight": final_heldout["weight"],
+        "heldout_batches": final_heldout["batch_count"],
+        "heldout_mask_weights": [batch["weight"] for batch in final_heldout["batches"]],
+    }
+
+
+def validate_summary(
+    payload: object,
+    corpus_batches: dict[str, list[dict[str, object]]],
+) -> dict[str, object]:
     if not isinstance(payload, dict) or set(payload) != {
         "accumulation_reference", "format", "heldout", "initializer", "kind", "optimizer",
         "profile", "provenance", "scope", "thresholds", "training", "updates", "version",
@@ -420,23 +518,39 @@ def validate_summary(payload: object) -> None:
         _fail("summary training fields differ")
     if not isinstance(payload["heldout"], dict) or set(payload["heldout"]) != {"before", "after", "train_transitions", "heldout_transitions"}:
         _fail("summary heldout fields differ")
-    _evaluation(payload["training"]["before"], "summary.training.before")
-    _evaluation(payload["training"]["after"], "summary.training.after")
-    _evaluation(payload["heldout"]["before"], "summary.heldout.before")
-    _evaluation(payload["heldout"]["after"], "summary.heldout.after")
-    transition_sets = []
-    for label in ("train_transitions", "heldout_transitions"):
+    _evaluation(payload["training"]["before"], "summary.training.before", corpus_batches["train"])
+    _evaluation(payload["training"]["after"], "summary.training.after", corpus_batches["train"])
+    _evaluation(payload["heldout"]["before"], "summary.heldout.before", corpus_batches["heldout"])
+    _evaluation(payload["heldout"]["after"], "summary.heldout.after", corpus_batches["heldout"])
+    train_transitions = _active_transitions(corpus_batches["train"])
+    heldout_transitions = _active_transitions(corpus_batches["heldout"])
+    if train_transitions & heldout_transitions:
+        _fail("authenticated held-out transitions overlap training transitions")
+    for label, expected_transitions in (
+        ("train_transitions", train_transitions),
+        ("heldout_transitions", heldout_transitions),
+    ):
         transitions = payload["heldout"][label]
         if not isinstance(transitions, list) or not transitions:
             _fail(f"summary.heldout.{label}: expected nonempty transitions")
-        normalized = set()
+        normalized = []
         for index, pair in enumerate(transitions):
             if not isinstance(pair, list) or len(pair) != 2:
                 _fail(f"summary.heldout.{label}[{index}]: expected token pair")
-            normalized.add(tuple(_exact_int(token, f"summary.heldout.{label}[{index}]", 0, 255) for token in pair))
-        transition_sets.append(normalized)
-    if transition_sets[0] & transition_sets[1]:
-        _fail("held-out transitions overlap training transitions")
+            normalized.append(
+                tuple(
+                    _exact_int(token, f"summary.heldout.{label}[{index}]", 0, 255)
+                    for token in pair
+                )
+            )
+        if normalized != sorted(expected_transitions):
+            _fail(f"summary.heldout.{label}: differs from authenticated corpus")
+    measurements = _summary_measurements(payload)
+    if (
+        measurements["final_active_argmax"] != measurements["final_active_targets"]
+        or not all(measurements["final_active_unique_argmax"])
+    ):
+        _fail("final active targets are not unique logits argmax")
     if payload["training"]["after"]["mean"] >= 0.05:
         _fail("final training mean CE threshold failed")
     if payload["heldout"]["after"]["mean"] >= payload["heldout"]["before"]["mean"]:
@@ -517,6 +631,7 @@ def validate_summary(payload: object) -> None:
         candidate = Path(path)
         if candidate.is_absolute() or ".." in candidate.parts or hashlib.sha256((Path(__file__).resolve().parents[2] / candidate).read_bytes()).hexdigest() != digest:
             _fail(f"provenance source mismatch: {path}")
+    return measurements
 
 
 def validate_output(root: Path, manifest: object) -> None:
@@ -542,22 +657,17 @@ def validate_output(root: Path, manifest: object) -> None:
         if hashlib.sha256(path.read_bytes()).hexdigest() != _sha(record["sha256"], name + ".sha256"):
             _fail(f"manifest artifact digest mismatch: {name}")
         payloads[name] = _load(path, limits[name])
-    validate_corpora(payloads["corpora.json"], root)
-    validate_trajectory(payloads["trajectory.json"])
-    validate_summary(payloads["summary.json"])
-    if payloads["summary.json"]["provenance"] != manifest["provenance"] or payloads["summary.json"]["scope"] != manifest["scope"]:
+    corpus_batches = validate_corpora(payloads["corpora.json"], root)
+    validate_trajectory(payloads["trajectory.json"], corpus_batches["train"])
+    measurements = validate_summary(payloads["summary.json"], corpus_batches)
+    summary = payloads["summary.json"]
+    trajectory = payloads["trajectory.json"]
+    if (
+        summary["training"]["before"] != trajectory["entries"][0]["training_evaluation"]
+        or summary["training"]["after"] != trajectory["entries"][-1]["training_evaluation"]
+    ):
+        _fail("summary training endpoints differ from complete trajectory")
+    if summary["provenance"] != manifest["provenance"] or summary["scope"] != manifest["scope"]:
         _fail("manifest summary provenance/scope mismatch")
-    expected_measurements = {
-        "initial_training_mean_ce": payloads["summary.json"]["training"]["before"]["mean"],
-        "final_training_mean_ce": payloads["summary.json"]["training"]["after"]["mean"],
-        "final_active_targets": [197, 41],
-        "final_active_argmax": [197, 41],
-        "final_active_unique_argmax": [True, True],
-        "initial_heldout_global_mean_ce": payloads["summary.json"]["heldout"]["before"]["mean"],
-        "final_heldout_global_mean_ce": payloads["summary.json"]["heldout"]["after"]["mean"],
-        "heldout_weight": 3,
-        "heldout_batches": 2,
-        "heldout_mask_weights": [2, 1],
-    }
-    if manifest["measurements"] != expected_measurements:
+    if manifest["measurements"] != measurements:
         _fail("manifest measurements differ from generated summary")

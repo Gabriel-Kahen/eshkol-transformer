@@ -37,6 +37,12 @@ transitions disjoint from training. The cursor records also derive an `A=1` case
 and an `A=2` unequal-mask case whose first resumed update crosses dataset EOS.
 The validator reconstructs the authentic D1 resources and D2 datasets, then
 replays the saved position, EOS reset, contribution order, epochs, and end cursor.
+It also requires the exact frozen shards, packing modes, batch weights, and active
+training targets, so a different internally consistent corpus is not this profile.
+Every summary and trajectory evaluation is bound to those authenticated batches;
+masked per-token f32 losses reconstruct each exact numerator word. Final manifest
+measurements are derived from the validated summary, including the unique active
+argmax and exact train/held-out transition sets.
 The generated summary retains all three 14-parameter gradient records used to
 recompute the unequal-mask tolerance result, its bit-identity flag, and the wrong
 per-batch-mean control. Those records establish internal evidence consistency;
