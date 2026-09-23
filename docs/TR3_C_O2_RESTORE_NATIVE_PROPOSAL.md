@@ -781,7 +781,7 @@ gate transforms the frozen pre-repair source by exactly those three approved
 initializers before proving that the testing hooks add no further gate-off
 object or symbol change.
 
-Restore-builder tombstones retain a measured 64 bytes per restore. This is
-bounded retained control, not zero retention. The accepted leaf adds no public
-API or binding and does not accept the O2 participant, trainer integration, or
-joint live restore.
+Each restore retains a measured 64-byte tombstone; total retained control grows
+linearly with the number of restores. No constant-total-retention or zero-
+retention claim is made. The accepted leaf adds no public API or binding and
+does not accept the O2 participant, trainer integration, or joint live restore.
