@@ -173,6 +173,71 @@ root_store_number = root_context[-1][0]
 witness.append(f"root-vector-global-arena-store-line={root_store_number}")
 roles = set()
 
+def block(lines, label, name):
+    index = next((i for i, line in enumerate(lines)
+                  if line.startswith(label + ":")), None)
+    if index is None:
+        raise SystemExit(f"IR proof failed: {name} lacks block {label}")
+    end = next((i for i in range(index + 1, len(lines))
+                if re.match(r"^[-A-Za-z0-9_.]+:", lines[i])), len(lines))
+    return index, lines[index:end]
+
+def checked_barrier_flow(lines, index, name):
+    call = re.search(
+        r"(?P<status>%[-A-Za-z0-9_.]+) = call i32 "
+        r"@eshkol_region_write_barrier_checked_v1\("
+        r"ptr (?P<out>%[-A-Za-z0-9_.]+), ptr [^,]+, ptr [^)]+\)",
+        lines[index])
+    if call is None:
+        raise SystemExit(f"IR proof failed: {name} has malformed checked barrier")
+    status = call.group("status")
+    branch = next((re.search(
+        r"br i1 (%[-A-Za-z0-9_.]+), label %([-A-Za-z0-9_.]+), "
+        r"label %([-A-Za-z0-9_.]+)", line)
+        for line in lines[index + 1:index + 5]
+        if line.lstrip().startswith("br i1 ")), None)
+    if branch is None or not any(
+            re.search(rf"{re.escape(branch.group(1))} = icmp eq i32 "
+                      rf"{re.escape(status)}, 0", line)
+            for line in lines[index + 1:index + 4]):
+        raise SystemExit(f"IR proof failed: {name} does not branch on checked status")
+    success_label, failure_label = branch.group(2), branch.group(3)
+    success_index, success = block(lines, success_label, name)
+    failure_index, failure = block(lines, failure_label, name)
+    result = None
+    for line in success:
+        result = re.search(
+            rf"(%[-A-Za-z0-9_.]+) = load %eshkol_tagged_value, "
+            rf"ptr {re.escape(call.group('out'))}", line)
+        if result is not None:
+            break
+    if result is None or not any(
+            re.search(rf"store %eshkol_tagged_value "
+                      rf"{re.escape(result.group(1))}, ptr ", line)
+            for line in success):
+        raise SystemExit(f"IR proof failed: {name} does not commit checked output")
+    successor = next((re.search(r"br label %([-A-Za-z0-9_.]+)", line)
+                      for line in success
+                      if line.lstrip().startswith("br label %")), None)
+    if successor is None:
+        raise SystemExit(f"IR proof failed: {name} checked success has no successor")
+    failure_text = "\n".join(failure)
+    if (f"call void @eshkol_runtime_emergency_raise_v1(i32 {status})" not in failure_text
+            or "unreachable" not in failure_text
+            or any(line.lstrip().startswith("br ") for line in failure)):
+        raise SystemExit(f"IR proof failed: {name} checked failure can continue")
+    successor_index, successor_lines = block(
+        lines, successor.group(1), name)
+    return {
+        "success_label": success_label,
+        "success_index": success_index,
+        "failure_label": failure_label,
+        "failure_index": failure_index,
+        "successor_label": successor.group(1),
+        "successor_index": successor_index,
+        "successor": successor_lines,
+    }
+
 for ordinal, function in enumerate(publication_functions, 1):
     lines = [line for _, line in function]
     numbers = [number for number, _ in function]
@@ -187,10 +252,13 @@ for ordinal, function in enumerate(publication_functions, 1):
         raise SystemExit(f"IR proof failed: unrecognized publication role in {name}")
     roles.add(role)
     barriers = [i for i, line in enumerate(lines)
-                if "call void @eshkol_region_write_barrier_into" in line]
+                if "call i32 @eshkol_region_write_barrier_checked_v1" in line]
     if len(barriers) != 2:
         raise SystemExit(
             f"IR proof failed: {name} has {len(barriers)} write barriers, expected 2")
+    barrier_flows = {
+        index: checked_barrier_flow(lines, index, name) for index in barriers
+    }
 
     root_loads = set()
     for line in lines:
@@ -236,19 +304,10 @@ for ordinal, function in enumerate(publication_functions, 1):
     if "%shell.load" not in entry_prior:
         raise SystemExit(f"IR proof failed: {name} does not publish shell into record first")
 
-    branch_match = next((re.search(r"br label %([-A-Za-z0-9_.]+)", line)
-                         for line in lines[root_barrier + 1:root_barrier + 7]
-                         if re.search(r"br label %([-A-Za-z0-9_.]+)", line)), None)
-    if branch_match is None:
-        raise SystemExit(f"IR proof failed: {name} root barrier has no successor")
-    successor_label = branch_match.group(1)
-    successor_index = next((i for i, line in enumerate(lines)
-                            if line.startswith(successor_label + ":")), None)
-    if successor_index is None:
-        raise SystemExit(f"IR proof failed: {name} root barrier successor is absent")
-    successor_end = next((i for i in range(successor_index + 1, len(lines))
-                          if re.match(r"^[-A-Za-z0-9_.]+:", lines[i])), len(lines))
-    successor = lines[successor_index:successor_end]
+    root_flow = barrier_flows[root_barrier]
+    successor_label = root_flow["successor_label"]
+    successor_index = root_flow["successor_index"]
+    successor = root_flow["successor"]
     if not any("ptr %shell-registry-current_cap" in line
                and " load " in f" {line} " for line in successor):
         raise SystemExit(
@@ -275,6 +334,8 @@ for ordinal, function in enumerate(publication_functions, 1):
         f"publication-{ordinal}-role={role}",
         f"publication-{ordinal}-entry-write-barrier-line={numbers[entry_barrier]}",
         f"publication-{ordinal}-root-write-barrier-line={numbers[root_barrier]}",
+        f"publication-{ordinal}-root-barrier-success-block={root_flow['success_label']}",
+        f"publication-{ordinal}-root-barrier-failure-block={root_flow['failure_label']}",
         f"publication-{ordinal}-root-barrier-successor={successor_label}",
         f"publication-{ordinal}-root-barrier-successor-line={numbers[successor_index]}",
         f"publication-{ordinal}-canonical-readback-line={numbers[readback_index]}",

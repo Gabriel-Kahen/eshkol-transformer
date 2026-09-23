@@ -80,7 +80,7 @@ class Reference(unittest.TestCase):
         self.assertEqual(g["framework"], {"name": "pytorch", "version": "2.13.0+cpu"})
         provenance = json.loads(FIXTURE.with_suffix(".provenance.json").read_text())
         self.assertEqual(provenance, dict(schema="e3-metrics-oracle-provenance-v1", python="3.14.6", torch="2.13.0+cpu",
-                                         eshkol_source_commit="222cad3aac68ddf48d09c1cdf322fa4c4e7b8296",
+                                         eshkol_source_commit="81298b4a9608fb92eb6f351a2eabd8392da7d9ef",
                                          toolchain_lock_sha256=digest(ROOT / "toolchain/eshkol.lock"),
                                          generator_sha256=g["source_sha256"], fixture_sha256=digest(FIXTURE)))
         self.assertEqual([decode_tensor(tensor_by_name(self.payload, f"batch{b}.mask")) for b in range(3)],

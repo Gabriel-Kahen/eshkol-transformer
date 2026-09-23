@@ -18,7 +18,7 @@ FORMAT_VERSION = 1
 MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
 MAX_JSON_DEPTH = 32
 CANONICAL_UPSTREAM_REPOSITORY = "https://github.com/Gabriel-Kahen/eshkol.git"
-CANONICAL_UPSTREAM_COMMIT = "222cad3aac68ddf48d09c1cdf322fa4c4e7b8296"
+CANONICAL_UPSTREAM_COMMIT = "81298b4a9608fb92eb6f351a2eabd8392da7d9ef"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")

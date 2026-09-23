@@ -27,7 +27,7 @@ static const uint8_t library_id[] =
     "eshkol-training-state:1.0\0";
 static const uint8_t compiler_id[] =
     "Eshkol Compiler v1.3.4-evolve\0"
-    "222cad3aac68ddf48d09c1cdf322fa4c4e7b8296\0";
+    "81298b4a9608fb92eb6f351a2eabd8392da7d9ef\0";
 static const uint8_t c2_domain[] = "eshkol-training-state-container-v1\0";
 static const uint8_t c1_domain[] = "eshkol-checkpoint-container-v1\0";
 static const uint8_t c1_tensor_domain[] = "eshkol-checkpoint-tensor-v1\0";

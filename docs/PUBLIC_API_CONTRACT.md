@@ -2,7 +2,7 @@
 
 Status: **A0 reviewed draft; declaration harness targets the F0-pinned
 `Gabriel-Kahen/eshkol` compiler candidate at commit
-`222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`**. This document specifies the target
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`**. This document specifies the target
 first-release contract. It does not
 claim that Eshkol core implements any tensor, autodiff, device, compiler, or
 persistence capability. R0 must verify each runtime capability, and downstream
