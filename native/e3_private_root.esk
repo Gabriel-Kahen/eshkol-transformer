@@ -1,0 +1,11 @@
+;;; One closed E3 private source universe.  This aggregate is never installed.
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "e3_p1_modes_extension.esk")
+(load "e3_errors_extension.esk")
+(load "d2_semantic_core.esk")
+(load "e3_d2_identity.esk")
+(load "e3_d2_dataset.esk")
+(load "e3_private_extension.esk")
+(load "e3_d2_restore.esk")
+(load "e3_forward_schedule.esk")
