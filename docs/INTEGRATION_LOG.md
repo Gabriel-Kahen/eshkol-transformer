@@ -4,6 +4,37 @@ This repository-side ledger mirrors contract decisions recorded in
 [issue #1](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/1).
 Only the integration owner changes a proposed decision to `accepted` after review.
 
+## 2026-09-23 — TR3-O private update-and-clear candidate (#119)
+
+- **Contract:** the [TR3-O transaction](TR3_O_OPTIMIZER_TRANSACTION_PROPOSAL.md)
+  reuses accepted I2 copy and reset plans inside one typed O2 owner. Prepare binds
+  the exact optimizer, current completed-update counter, positive contribution
+  count, and exact positive-finite f32 normalization-weight bits. Commit publishes
+  staged parameter/moment bytes, clears gradients, and advances the successful
+  update counter in one nonallocating tail. Any impossible child defect after
+  `COMMITTING` invokes `_Exit(134)` rather than returning a recoverable result.
+- **Ownership:** one conditional native `busy + active_operation` seam belongs to
+  #119. TR3-C #120 will consume it and owns only its distinct typed restore plan
+  and minimal include gate. No second optimizer registry, provider authority,
+  lease API, public O2 operation, I2 ABI, logical optimizer state, or C2 bytes are
+  added. The unfrozen trainer lease candidate is source-preconstruction work and
+  does not modify this seam.
+- **Evidence:** implementation/test candidate `783dc576e534b241523e9b1e987933d5c5e433d0`,
+  tree `67edabf43470b894ff8df3347ad5017889f2e847`, passes the canonical focused
+  runner locally: 37,264 optimized and mandatory ASan/UBSan/LSan checks, 99 I2
+  coexistence checks, 6,201 predecessor O2 checks, four package tests, exact
+  allocation prefixes, N=14 first/middle/last atomicity, actual pin conflicts,
+  fail-stop subprocesses, and 1/1,024/8,192 lifetime evidence. Measured reachable
+  control slopes are 96 outer and 1,112 I2 bytes/update; digest is
+  `e40b45e3746140d1`. All 104 CI unit checks and the 19-suite/30-command topology
+  gate pass. Three independent exact-head reviews report no actionable findings.
+- **Disposition:** candidate only. Local CachyOS/Clang 22.1.6 results are not
+  supported Ubuntu 22.04/LLVM-Clang 21.1.8 evidence. The combined TR3 aggregate,
+  symbol localization/manifests, strict AOT/public-resolution/runtime-isolation
+  proof, actual restore coexistence, supported CI, integration approval and merge
+  remain pending. No public trainer, resume, overfit, or roadmap completion is
+  claimed.
+
 ## 2026-09-22 — E3-METRICS implementation candidate
 
 - **Scope:** issue [#107](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/107),
