@@ -1,0 +1,48 @@
+;;; Development-only observation; production m3-call and its mapper are unchanged.
+(extern i64 handler-calibrate :real et_m3cg_handler_calibrate)
+(extern i64 handler-calibrated :real et_m3cg_handler_calibrated)
+(extern i64 handler-prepare i64 :real et_m3cg_handler_prepare)
+(extern i64 handler-fresh :real et_m3cg_handler_fresh)
+(extern i64 handler-arm :real et_m3cg_handler_arm)
+(extern i64 handler-body :real et_m3cg_handler_body)
+(extern i64 handler-caught i64 :real et_m3cg_handler_caught)
+(extern i64 handler-finish i64 i64 :real et_m3cg_handler_finish)
+(extern i64 handler-reserve i64
+  :real eshkol_runtime_reserve_exception_handlers_v1)
+
+;; Occupy recycled handlers until a genuine handler malloc occurs. This avoids
+;; assuming a free-list size or substituting the runtime's push implementation.
+;; Keep recursion non-tail so its guard remains installed across the child call.
+(define (m3cg-handler-scope depth)
+  (guard (caught
+           (#t
+             (handler-caught
+               (if (vector-ref m3-call-state 0) 1 0))))
+    (if (= (handler-fresh) 0)
+        (if (< depth 128)
+            (begin (m3cg-handler-scope (+ depth 1)) (handler-fresh))
+            (exit 71))
+        (begin
+          (handler-arm)
+          (m3-call 'm3cg-handler-failure
+            (if (= (handler-body) 2) (handler-reserve 1) #t))
+          (exit 72)))))
+
+(define (m3cg-handler-case mode)
+  (handler-prepare mode)
+  (m3cg-handler-scope 0)
+  ;; A genuine checked shared call must work after each failed experiment.
+  (let ((input (g3t-checked-m3t-input-create)))
+    (m3cg-check 'handler-retry (g3t-checked-m3t-input-release! input)))
+  (handler-finish mode (if (vector-ref m3-call-state 0) 1 0)))
+
+(define (m3cg-handler-run)
+  ;; Obtain exact static condition5 identity from the frozen runtime itself.
+  (guard (caught (#t (handler-calibrated))) (handler-calibrate))
+  ;; Case 1: cleanup-handler allocation fails before busy publication. The
+  ;; outer m3t boundary must immediately rethrow exact condition 5.
+  (m3cg-handler-case 1)
+  ;; Case 2: a reserve failure inside the body reaches inner cleanup, clears
+  ;; busy, and crosses both physical m3t-rethrow-raw entries unchanged.
+  (m3cg-handler-case 2)
+  #t)

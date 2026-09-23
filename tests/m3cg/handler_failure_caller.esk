@@ -1,0 +1,6 @@
+(extern i64 run-handler :real et_m3cg_handler_run_v1)
+(extern i64 run-ordinary :real et_m3cg_test_run_v1)
+(if (= (run-handler) 1) #t (exit 73))
+(if (= (run-ordinary) 1) #t (exit 74))
+(display "M3CG-REPAIRED-HANDLER-AND-46-ENTRY-PASS")
+(newline)

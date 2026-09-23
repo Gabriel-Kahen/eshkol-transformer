@@ -81,7 +81,35 @@ def validate_m3_call_guard(source):
     return boundary
 
 
+def validate_emergency_rethrow_entry(source):
+    """Require every m3t-rethrow invocation to enter the compiler bridge."""
+    definition = next(row for row in forms(source)
+                      if row[:2] == ["define", ["m3t-rethrow-raw", "caught", "operation"]])
+    if definition[-2:] != [":runtime-emergency-rethrow-param", "caught"]:
+        raise ValueError("m3t-rethrow-raw must canonicalize caught at physical entry")
+    if len(definition) != 5:
+        raise ValueError("m3t-rethrow-raw must have one body and one entry modifier")
+    return definition
+
+
 class SharedContract(unittest.TestCase):
+    def test_m3t_rethrow_canonicalizes_at_every_physical_entry(self):
+        source = (ROOT / "native/m3t_transport_extension.esk").read_text()
+        definition = validate_emergency_rethrow_entry(source)
+        for mutation in ("drop-modifier", "wrong-formal", "move-before-body"):
+            changed = copy.deepcopy(definition)
+            if mutation == "drop-modifier":
+                changed = changed[:-2]
+            elif mutation == "wrong-formal":
+                changed[-1] = "operation"
+            else:
+                changed[-3:] = changed[-2:] + changed[-3:-2]
+            mutated = copy.deepcopy(forms(source))
+            index = next(i for i, row in enumerate(mutated) if row == definition)
+            mutated[index] = changed
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                validate_emergency_rethrow_entry(" ".join(_render(row) for row in mutated))
+
     def test_m3_call_installs_cleanup_before_busy_publish(self):
         source = (ROOT / "native/m3_model_extension.esk").read_text()
         boundary = validate_m3_call_guard(source)
