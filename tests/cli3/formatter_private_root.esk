@@ -1,0 +1,3 @@
+;;; Test-only CLI3 root. Never install or target the canonical CLI3 directory.
+(load "cli3_root.esk")
+(load "formatter_private.esk")
