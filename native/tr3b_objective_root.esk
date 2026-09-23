@@ -1,0 +1,16 @@
+;;; Issue #116 private source aggregate. Never install this trusted source.
+;;; T2 supplies the accepted T1 identity universe needed by D2. I2, M3 and D2
+;;; are extended exactly once in this aggregate; no registry-owning sibling is linked.
+(load "t2_wave2_root.esk")
+(load "i2_wave2_extension.esk")
+
+;;; M3T names the accepted sealed-token predicate from its T1 aggregate. This
+;;; aggregate's exact T2 successor owns the equivalent authority.
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+
+(load "d2_semantic_core.esk")
+(load "d2_dataset.esk")
+(load "tr3b_objective_extension.esk")
