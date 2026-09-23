@@ -1,0 +1,7 @@
+;;; Compile-only smoke for the source-private TR3 lease aggregate.
+;;; Runtime behavior is covered by lease_runtime.esk; this witness deliberately
+;;; needs no test-only native identity or substitute component registry.
+(load "tr3_lease_root.esk")
+
+(define (tr3-lease-compile-smoke resolved tokenizer dataset model optimizer)
+  (tr3-lease-create-internal resolved tokenizer dataset model optimizer))

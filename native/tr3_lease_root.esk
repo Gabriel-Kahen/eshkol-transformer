@@ -1,0 +1,20 @@
+;;; Fixed-profile TR3 lease aggregate. Never install this trusted source.
+(load "t2_wave2_root.esk")
+(load "i2_wave2_extension.esk")
+
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+
+(load "d2_semantic_core.esk")
+(load "d2_dataset.esk")
+(load "o2_wave2_extension.esk")
+(load "tr3_p1_fixed_set_extension.esk")
+(load "tr3_lease_core_extension.esk")
+(load "tr3_lease_public_gates_extension.esk")
+
+;;; Install the one lexical overlap closure before any downstream facade is
+;;; published. Standalone O2 remains unchanged when this root is not loaded.
+(o2-install-tr3-create-overlap-check-internal!
+  tr3-o2-create-overlap-check-internal)

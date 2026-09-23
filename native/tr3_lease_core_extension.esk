@@ -1,0 +1,388 @@
+;;; Source-private fixed-profile trainer lease authority.  This file is loaded
+;;; once by tr3_lease_root.esk and deliberately publishes no package facade.
+
+(extern i64 tr3-d2-native-idle-preflight ptr
+        :real et_tr3_c_d2_dataset_idle_preflight_v1)
+
+;;; Slot 0 is the sole enrolled-record list.  Slot 1 is a temporary promotion
+;;; root used only while an acquisition is active.
+(define tr3-trainers (vector '() #f))
+(define tr3-acquisition-active? #f)
+(define tr3-lease-record-tag (vector 'tr3-lease-record-v1))
+
+(define (tr3-lease-fail category message)
+  (m3t-fail category 'trainer-create message))
+
+(define (tr3-lease-vector-identical? vector-value list-value count)
+  (and (vector? vector-value) (= (vector-length vector-value) count)
+       (let loop ((index 0) (remaining list-value))
+         (if (= index count)
+             (null? remaining)
+             (and (pair? remaining)
+                  (eq? (vector-ref vector-value index) (car remaining))
+                  (loop (+ index 1) (cdr remaining)))))))
+
+(define (tr3-lease-vector-eq? left right count)
+  (and (vector? left) (vector? right)
+       (= (vector-length left) count) (= (vector-length right) count)
+       (let loop ((index 0))
+         (if (= index count) #t
+             (and (eq? (vector-ref left index) (vector-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (tr3-lease-vectors-overlap? left right)
+  (let outer ((left-index 0))
+    (if (= left-index (vector-length left)) #f
+        (let inner ((right-index 0))
+          (cond ((= right-index (vector-length right))
+                 (outer (+ left-index 1)))
+                ((eq? (vector-ref left left-index)
+                      (vector-ref right right-index)) #t)
+                (else (inner (+ right-index 1))))))))
+
+(define (tr3-lease-record-overlap?
+          record model optimizer dataset modules handles carriers)
+  (or (eq? model (vector-ref record 8))
+      (eq? optimizer (vector-ref record 13))
+      (eq? dataset (vector-ref record 15))
+      (tr3-lease-vectors-overlap? modules (vector-ref record 10))
+      (tr3-lease-vectors-overlap? handles (vector-ref record 11))
+      (tr3-lease-vectors-overlap? carriers (vector-ref record 12))))
+
+(define (tr3-lease-tuple-overlap?
+          head model optimizer dataset modules handles carriers)
+  (if (null? head) #f
+      (or (tr3-lease-record-overlap?
+            (car head) model optimizer dataset modules handles carriers)
+          (tr3-lease-tuple-overlap?
+            (cdr head) model optimizer dataset modules handles carriers))))
+
+(define (tr3-o2-create-overlap-check-internal handles)
+  (let record-loop ((records (vector-ref tr3-trainers 0)))
+    (if (null? records) 0
+        (let handle-loop ((remaining handles))
+          (cond ((null? remaining) (record-loop (cdr records)))
+                ((let vector-loop ((index 0))
+                   (cond ((= index 14) #f)
+                         ((eq? (car remaining)
+                               (vector-ref (vector-ref (car records) 11) index)) #t)
+                         (else (vector-loop (+ index 1))))) 1)
+                (else (handle-loop (cdr remaining))))))))
+
+(define (tr3-lease-p1-status! status operation)
+  (cond ((= status 0) #t)
+        ((= status 1)
+         (m3t-fail 'invalid-argument operation
+                   "model identity is not the fixed trainer profile"))
+        ((= status 2)
+         (m3t-fail 'invalid-state operation "model is not idle in train mode"))
+        ((= status 3)
+         (m3t-fail 'unsupported operation
+                   "model topology is not the fixed trainer profile"))
+        (else
+          (m3t-fail 'internal operation
+                    "fixed model identity invariant failed"))))
+
+(define (tr3-lease-config-witness!
+          model-entry config-canonical config-fingerprint)
+  (let ((model-config (vector-ref model-entry 7)))
+    (if (or (not (vector? model-config))
+            (not (= (vector-length model-config) 2))
+            (not (equal? config-canonical (vector-ref model-config 0)))
+            (not (equal? config-fingerprint (vector-ref model-config 1))))
+        (tr3-lease-fail 'invalid-argument
+                        "resolved configuration differs from the model")))
+  #t)
+
+(define (tr3-lease-tokenizer-dataset! tokenizer-identity dataset-state)
+  (let ((core (vector-ref dataset-state 6)))
+    (if (or (not (string=? (vector-ref tokenizer-identity 0)
+                           (vector-ref core 2)))
+            (not (= (vector-ref tokenizer-identity 1) (vector-ref core 3))))
+        (tr3-lease-fail 'invalid-argument
+                        "tokenizer differs from the dataset identity")))
+  #t)
+
+(define (tr3-lease-d2-idle! dataset-state)
+  (let ((generation (vector-ref dataset-state 8))
+        (status (vector-ref dataset-state 10))
+        (borrows (vector-ref dataset-state 15)))
+    (if (or (not (d2-core-nonnegative-i64? generation))
+            (not (d2-core-nonnegative-i64? borrows))
+            (not (= borrows 0))
+            (not (or (eq? status 'none) (eq? status 'released)))
+            (and (eq? status 'released) (= generation 0)))
+        (tr3-lease-fail 'invalid-state "dataset is not at an idle boundary"))
+    (let ((native-status
+            (tr3-d2-native-idle-preflight (vector-ref dataset-state 1))))
+      (if (not (= native-status (d2-native-last-status)))
+          (tr3-lease-fail 'internal "dataset idle status diverged"))
+      (if (not (= native-status 0))
+          (tr3-lease-fail
+            (if (= native-status 2) 'invalid-state 'invalid-argument)
+            "dataset is not natively idle"))))
+  #t)
+
+(define (tr3-lease-m3-cache-workspace model-entry)
+  (let loop ((rows (vector-ref m3-workspaces 0)))
+    (cond ((null? rows) #f)
+          ((and (eq? (vector-ref (car rows) 0) model-entry)
+                (eq? (vector-ref (car rows) 2) 'live))
+           (vector-ref (car rows) 1))
+          (else (loop (cdr rows))))))
+
+(define (tr3-lease-m3-idle! model-entry)
+  (if (vector-ref m3-call-state 0)
+      (tr3-lease-fail 'invalid-state "a model operation is active"))
+  (if (vector-ref model-entry 10)
+      (tr3-lease-fail 'invalid-state "model has an active frame"))
+  (let ((cache (tr3-lease-m3-cache-workspace model-entry)))
+    (let loop ((entries (vector-ref m3t-registry 0)))
+      (if (null? entries) #t
+          (let* ((entry (car entries))
+                 (kind (vector-ref entry 1))
+                 (live? (eq? (vector-ref entry 2) 'live))
+                 (owned? (eq? (vector-ref entry 4) model-entry)))
+            (if (and live? owned?
+                     (or (eq? kind 'model-output)
+                         (eq? kind 'model-logits)))
+                (tr3-lease-fail 'invalid-state
+                                "model has a live owned result"))
+            (if (and live? owned? (eq? kind 'workspace)
+                     (or (not cache) (not (eq? entry cache))
+                         (not (eq? (vector-ref entry 10) 'idle))
+                         (vector-ref entry 5)))
+                (tr3-lease-fail 'invalid-state
+                                "model has a live caller workspace"))
+            (loop (cdr entries))))))
+  #t)
+
+(define (tr3-lease-o2-record-overlap? left right)
+  (let outer ((remaining-left (vector-ref left 5)))
+    (if (null? remaining-left) #f
+        (let inner ((remaining-right (vector-ref right 5)))
+          (cond ((null? remaining-right) (outer (cdr remaining-left)))
+                ((eq? (car remaining-left) (car remaining-right)) #t)
+                (else (inner (cdr remaining-right))))))))
+
+(define (tr3-lease-o2-idle! optimizer-record retained-handles)
+  (if (not (tr3-lease-vector-identical?
+             retained-handles (vector-ref optimizer-record 5) 14))
+      (tr3-lease-fail 'invalid-argument
+                      "optimizer handle order differs from the fixed model"))
+  (if (not (= (o2-optimizer-completed-updates-internal
+                (vector-ref optimizer-record 0)) 0))
+      (tr3-lease-fail 'invalid-state "optimizer has completed updates"))
+  ;; The #119 transaction core proves active_operation is null whenever this
+  ;; exact busy preflight succeeds; do not add a second source registry/probe.
+  (if (not (= (o2-native-optimizer-require-absent-gradients
+                (vector-ref optimizer-record 1)) 0))
+      (o2-native-fail 'trainer-create))
+  (let loop ((remaining o2-optimizers))
+    (if (null? remaining) #t
+        (begin
+          (if (and (not (eq? (car remaining) optimizer-record))
+                   (tr3-lease-o2-record-overlap?
+                     optimizer-record (car remaining)))
+              (tr3-lease-fail 'invalid-state
+                              "another optimizer overlaps the fixed model"))
+          (loop (cdr remaining)))))
+  #t)
+
+(define (tr3-lease-recheck!
+          observed-head dataset model optimizer
+          model-entry optimizer-record dataset-state modules handles carriers)
+  (tr3-lease-p1-status!
+    (tr3-p1-fixed-recheck-internal model modules handles carriers)
+    'trainer-create)
+  (if (not (eq? model-entry (m3t-entry model 'model 'trainer-create #t)))
+      (tr3-lease-fail 'invalid-state "model registry identity changed"))
+  (if (not (eq? optimizer-record
+                 (o2-require-optimizer 'trainer-create optimizer)))
+      (tr3-lease-fail 'invalid-state "optimizer registry identity changed"))
+  (if (or (not (eq? (vector-ref dataset-state 1) dataset))
+          (not (vector-ref dataset-state 2)))
+      (tr3-lease-fail 'invalid-state "dataset registry identity changed"))
+  (if (tr3-lease-tuple-overlap?
+        observed-head model optimizer dataset modules handles carriers)
+      (tr3-lease-fail 'invalid-state "trainer tuple overlaps an enrolled trainer"))
+  (tr3-lease-m3-idle! model-entry)
+  (tr3-lease-o2-idle! optimizer-record handles)
+  (tr3-lease-d2-idle! dataset-state)
+  ;; This is deliberately the last fallible observation before the commit
+  ;; store. A reentrant dependency cannot make us overwrite a newer head.
+  (if (not (eq? observed-head (vector-ref tr3-trainers 0)))
+      (tr3-lease-fail 'invalid-state "trainer registry changed during acquisition"))
+  #t)
+
+(define (tr3-lease-create-internal resolved tokenizer dataset model optimizer)
+  (if tr3-acquisition-active?
+      (tr3-lease-fail 'invalid-state "trainer acquisition is already active"))
+  ;; The handler is installed before the global guard.  Every recoverable exit
+  ;; clears both the staging root and the guard without changing registry head.
+  (guard (caught
+           (#t (begin
+                 (vector-set! tr3-trainers 1 #f)
+                 (set! tr3-acquisition-active? #f)
+                 (raise caught))))
+    (set! tr3-acquisition-active? #t)
+    (let* ((observed-head (vector-ref tr3-trainers 0))
+           (model-entry (m3t-entry model 'model 'trainer-create #t))
+           (optimizer-record (o2-require-optimizer 'trainer-create optimizer))
+           (dataset-state (d2-open-dataset-state dataset 'trainer-create))
+           (source-handles (vector-ref model-entry 8))
+           (modules (make-vector 17 #f))
+           (handles (make-vector 14 #f))
+           (carriers (make-vector 14 #f))
+           (config-canonical
+             (begin (x1-private-config-validate resolved)
+                    (x1-private-config-canonical resolved)))
+           (config-fingerprint (x1-private-config-fingerprint resolved))
+           (tokenizer-identity (d2-tokenizer-identity tokenizer))
+           (tokenizer-entry (t2-private-entry tokenizer)))
+      (if (not (eq? (vector-ref model-entry 11) m3t-profile))
+          (tr3-lease-fail 'unsupported "model profile is not supported"))
+      (tr3-lease-config-witness!
+        model-entry config-canonical config-fingerprint)
+      (tr3-lease-tokenizer-dataset!
+        tokenizer-identity dataset-state)
+      (tr3-lease-p1-status!
+        (tr3-p1-fixed-capture-internal
+          model source-handles modules handles carriers)
+        'trainer-create)
+      (if (tr3-lease-tuple-overlap?
+            observed-head model optimizer dataset modules handles carriers)
+          (tr3-lease-fail 'invalid-state
+                          "trainer tuple overlaps an enrolled trainer"))
+      (tr3-lease-m3-idle! model-entry)
+      (tr3-lease-o2-idle! optimizer-record handles)
+      (tr3-lease-d2-idle! dataset-state)
+      ;; All allocation is complete before the final dependency and registry
+      ;; rechecks.  Staging through the sole root promotes the entire graph.
+      (let* ((shell (vector 'trainer))
+             (token (vector 'tr3-lease-token))
+             (record
+               (vector tr3-lease-record-tag #f shell 'idle #f token resolved
+                       tokenizer-identity model model-entry modules handles
+                       carriers optimizer optimizer-record dataset dataset-state))
+             (successor (cons record observed-head))
+             ;; The staging envelope retains every fresh witness used after
+             ;; promotion. Final checks never dereference their regional inputs.
+             (staging
+               (vector successor config-canonical config-fingerprint
+                       tokenizer-entry tokenizer)))
+        (vector-set! record 1 record)
+        (vector-set! tr3-trainers 1 staging)
+        (let* ((canonical-staging (vector-ref tr3-trainers 1))
+               (canonical-successor (vector-ref canonical-staging 0))
+               (canonical-record (car canonical-successor))
+               (canonical-config-canonical (vector-ref canonical-staging 1))
+               (canonical-config-fingerprint (vector-ref canonical-staging 2))
+               (canonical-tokenizer-entry (vector-ref canonical-staging 3))
+               (canonical-tokenizer (vector-ref canonical-staging 4))
+               (canonical-tokenizer-identity (vector-ref canonical-record 7))
+               (canonical-model (vector-ref canonical-record 8))
+               (canonical-model-entry (vector-ref canonical-record 9))
+               (canonical-modules (vector-ref canonical-record 10))
+               (canonical-handles (vector-ref canonical-record 11))
+               (canonical-carriers (vector-ref canonical-record 12))
+               (canonical-optimizer (vector-ref canonical-record 13))
+               (canonical-optimizer-record (vector-ref canonical-record 14))
+               (canonical-dataset (vector-ref canonical-record 15))
+               (canonical-dataset-state (vector-ref canonical-record 16)))
+          ;; The allocation-free final pass consumes only retained witnesses.
+          (tr3-lease-config-witness!
+            canonical-model-entry canonical-config-canonical
+            canonical-config-fingerprint)
+          (if (not (eq? canonical-tokenizer-entry
+                         (t2-private-entry canonical-tokenizer)))
+              (tr3-lease-fail 'invalid-state
+                              "tokenizer registry identity changed"))
+          (tr3-lease-tokenizer-dataset!
+            canonical-tokenizer-identity canonical-dataset-state)
+          (tr3-lease-recheck!
+            observed-head canonical-dataset canonical-model canonical-optimizer
+            canonical-model-entry canonical-optimizer-record
+            canonical-dataset-state canonical-modules canonical-handles
+            canonical-carriers)
+          ;; The promoted graph remains live in root storage.  No fallible
+          ;; operation lies between removing its staging edge and enrollment.
+          (vector-set! tr3-trainers 1 #f)
+          (vector-set! tr3-trainers 0 canonical-successor)
+          (let ((canonical-shell
+                  (vector-ref (car (vector-ref tr3-trainers 0)) 2)))
+            (set! tr3-acquisition-active? #f)
+            canonical-shell))))))
+
+(define (tr3-lease-authenticate record token operation)
+  (let find ((remaining (vector-ref tr3-trainers 0)))
+    (cond
+      ((null? remaining)
+       (m3t-fail 'invalid-argument operation
+                 "expected an enrolled trainer record"))
+      ((eq? record (car remaining))
+       (if (or (not (vector? record)) (not (= (vector-length record) 17))
+               (not (eq? (vector-ref record 0) tr3-lease-record-tag))
+               (not (eq? (vector-ref record 1) record))
+               (not (eq? (vector-ref record 5) token)))
+           (m3t-fail 'invalid-argument operation
+                     "trainer record or lease token is stale"))
+       (if (or (not (eq? (m3t-find (vector-ref record 8))
+                         (vector-ref record 9)))
+               (not (eq? (vector-ref (vector-ref record 9) 2) 'live))
+               (not (eq? (vector-ref (vector-ref record 10) 0)
+                         (vector-ref record 8)))
+               (not (tr3-lease-vector-eq?
+                      (vector-ref record 11)
+                      (vector-ref (vector-ref record 9) 8) 14))
+               (not (eq? (o2-find-identity
+                           (vector-ref record 13) o2-optimizers)
+                         (vector-ref record 14)))
+               (not (tr3-lease-vector-identical?
+                      (vector-ref record 11)
+                      (vector-ref (vector-ref record 14) 5) 14))
+               (not (eq? (d2-open-dataset-state
+                           (vector-ref record 15) operation)
+                         (vector-ref record 16))))
+           (m3t-fail 'invalid-state operation
+                     "trainer component identity changed"))
+       (tr3-lease-p1-status!
+         (tr3-p1-fixed-recheck-internal
+           (vector-ref record 8) (vector-ref record 10)
+           (vector-ref record 11) (vector-ref record 12))
+         operation)
+       record)
+      (else (find (cdr remaining))))))
+
+(define (tr3-lease-phase! record token phase active operation)
+  (let ((enrolled (tr3-lease-authenticate record token operation)))
+    (if (or (not (eq? (vector-ref enrolled 3) phase))
+            (not (eq? (vector-ref enrolled 4) active)))
+        (m3t-fail 'invalid-state operation
+                  "trainer phase or active plan differs"))
+    enrolled))
+
+(define (tr3-lease-step-model-internal trainer-record lease-token)
+  (vector-ref
+    (tr3-lease-phase! trainer-record lease-token 'step #f 'trainer-step!) 9))
+(define (tr3-lease-step-optimizer-internal trainer-record lease-token)
+  (vector-ref
+    (tr3-lease-phase! trainer-record lease-token 'step #f 'trainer-step!) 14))
+(define (tr3-lease-step-dataset-internal trainer-record lease-token)
+  (vector-ref
+    (tr3-lease-phase! trainer-record lease-token 'step #f 'trainer-step!) 16))
+(define (tr3-lease-commit-optimizer-internal trainer-record lease-token o2-plan)
+  (vector-ref
+    (tr3-lease-phase! trainer-record lease-token 'commit o2-plan 'trainer-step!) 14))
+(define (tr3-lease-evaluation-modes-internal trainer-record lease-token evaluation-frame)
+  (if (not evaluation-frame)
+      (m3t-fail 'invalid-argument 'trainer-evaluate!
+                "expected an evaluation frame"))
+  (vector-ref
+    (tr3-lease-phase! trainer-record lease-token 'evaluate #f 'trainer-evaluate!) 9))
+(define (tr3-lease-snapshot-internal trainer-record lease-token)
+  (tr3-lease-phase!
+    trainer-record lease-token 'snapshotting #f 'trainer-state))
+(define (tr3-lease-restore-internal trainer-record lease-token restore-record)
+  (tr3-lease-phase!
+    trainer-record lease-token 'restoring restore-record 'trainer-load-state!))
