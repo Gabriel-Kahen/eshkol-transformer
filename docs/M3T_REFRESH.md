@@ -46,6 +46,10 @@ for disposition, not treated as production authorization.
   with object/depfile provenance and localization, not generic external objects.
   Future gate routing must extend CI-E2's accepted 16-suite / 23-command engine.
 
+The K2/C2 limitation described below is historical M3T acceptance evidence and is
+superseded for current persistence admission by
+[SHARED-R2](SHARED_R2_PERSISTENCE.md).
+
 There are no changes to the 38 public names/arities, profile, typed initializer,
 X1, numerical providers or complete-model scope. Full training composition and
 capability widening remain explicit downstream dependencies. Current K2's fixed

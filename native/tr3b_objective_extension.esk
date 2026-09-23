@@ -1,0 +1,127 @@
+;;; Private fixed-profile D2/M3/L2/L3S bridge. Never install this source.
+(extern i64 tr3b-native-stage-input ptr ptr
+        :real et_tr3b_private_stage_input_v1)
+(extern i64 tr3b-native-copy-targets ptr ptr
+        :real et_tr3b_private_copy_targets_v1)
+(extern i64 tr3b-native-copy-mask ptr ptr
+        :real et_tr3b_private_copy_mask_v1)
+(extern i64 tr3b-native-objective-prepare ptr ptr ptr ptr ptr
+        :real et_tr3b_private_objective_prepare_v1)
+
+(define (tr3b-fail-raw category operation message)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax tr3b-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     (let ((result (tr3b-fail-raw category operation message))) result))))
+
+(define (tr3b-rethrow-raw caught operation)
+  (let ((unreachable
+         (if (transformer-error? caught)
+             (tr3b-fail (transformer-error-category caught) operation
+                        "TR3-B dependency rejected the request")
+             (tr3b-fail 'internal operation
+                        "TR3-B dependency raised a foreign value"))))
+    unreachable))
+
+(define-syntax tr3b-boundary
+  (syntax-rules ()
+    ((_ operation body ...)
+     (guard (caught (#t (tr3b-rethrow-raw caught operation))) body ...))))
+
+(define (tr3b-check status operation)
+  (if (= status 0) #t
+      (tr3b-fail
+       (cond ((= status 1) 'invalid-argument)
+             ((= status 2) 'shape-mismatch)
+             ((= status 3) 'dtype-mismatch)
+             ((= status 4) 'device-mismatch)
+             ((= status 5) 'noncontiguous)
+             ((= status 6) 'unsupported)
+             ((= status 7) 'version-mismatch)
+             ((= status 9) 'invalid-state)
+             (else 'internal))
+       operation "TR3-B native bridge rejected the request")))
+
+(define (tr3b-u32-le bytes offset)
+  (+ (bytevector-u8-ref bytes offset)
+     (* 256 (bytevector-u8-ref bytes (+ offset 1)))
+     (* 65536 (bytevector-u8-ref bytes (+ offset 2)))
+     (* 16777216 (bytevector-u8-ref bytes (+ offset 3)))))
+
+;;; Exact private contract: (live D2 batch, live genuine M3T input) -> #t.
+(define (tr3-stage-d2-input! batch input)
+  (let ((operation 'tr3-stage-d2-input!))
+    (tr3b-boundary operation
+      (let* ((entry (m3t-entry input 'input operation #t))
+             (ignored (d2-token-batch-validate batch))
+             (inputs (d2-token-batch-inputs batch)))
+        (d2-token-tensor-with-view-internal
+         inputs
+         (lambda (view)
+           (tr3b-check
+            (tr3b-native-stage-input (vector-ref entry 3) view)
+            operation)))))))
+
+(define (tr3b-copy-batch-scratch! batch targets mask operation)
+  (let ((target-shell (d2-token-batch-targets batch))
+        (mask-shell (d2-token-batch-loss-mask batch)))
+    (d2-token-tensor-with-view-internal
+     target-shell
+     (lambda (view)
+       (tr3b-check (tr3b-native-copy-targets view targets) operation)))
+    (d2-token-tensor-with-view-internal
+     mask-shell
+     (lambda (view)
+       (tr3b-check (tr3b-native-copy-mask view mask) operation)))
+    #t))
+
+(define (tr3b-objective-prepare-internal! output logits seed targets mask
+                                          observation operation)
+  (let* ((output-entry (m3t-entry output 'model-output operation #t))
+         (logits-entry (m3t-entry logits 'model-logits operation #t))
+         (seed-entry (m3t-entry seed 'logits operation #t)))
+    (if (or (not (eq? (vector-ref output-entry 4)
+                      (vector-ref logits-entry 4)))
+            (not (eq? (vector-ref output-entry 5)
+                      (vector-ref logits-entry 5))))
+        (tr3b-fail 'invalid-argument operation
+                   "logits are not the exact lease of this output"))
+    (tr3b-check
+     (tr3b-native-objective-prepare
+      (vector-ref logits-entry 3) (vector-ref seed-entry 3)
+      targets mask observation)
+     operation)
+    output-entry))
+
+;;; Exact private contract:
+;;; (output graph-logits live-batch seed expected-ordinal observation-bits) -> #t.
+;;; The caller owns every supplied owner and releases it after this call.
+(define (tr3-objective-vjp! output logits batch seed ordinal observation)
+  (let ((operation 'tr3-objective-vjp!))
+    (tr3b-boundary operation
+      (if (not (and (m3t-exact-i64? ordinal) (>= ordinal 0)))
+          (tr3b-fail 'invalid-argument operation
+                     "expected a nonnegative exact-i64 ordinal"))
+      (if (not (bytevector? observation))
+          (tr3b-fail 'invalid-argument operation
+                     "expected a caller-owned observation bytevector"))
+      (if (not (= (bytevector-length observation) 12))
+          (tr3b-fail 'shape-mismatch operation
+                     "observation bytevector must contain exactly 12 bytes"))
+      ;; All allocations and D2 raw-view borrows precede the sole gradient
+      ;; mutation. Neither scratch bytevector escapes through a public API.
+      (let ((targets (make-bytevector 16 0))
+            (mask (make-bytevector 2 0)))
+        (d2-token-batch-validate batch)
+        (tr3b-copy-batch-scratch! batch targets mask operation)
+        (tr3b-objective-prepare-internal!
+         output logits seed targets mask observation operation)
+        ;; Preparation has closed both D2 views and staged the genuine seed.
+        ;; Accepted M3 performs the one atomic fourteen-gradient contribution.
+        (m3-public-diagnostic-output-vjp!
+         output seed (tr3b-u32-le observation 4) ordinal)
+        #t))))

@@ -262,10 +262,11 @@ result is recorded in issue #81.
 - Genuine fixed-I2 K1 discovery, exact descriptor/reserved/table/callback audit, and
   exact sorted eleven-row report audit before publication; every allocation and
   post-discovery audit failpoint cleans up and permits retry. Emit the genuine
-  K1/I2 report twice and assert byte equality, exactly 3,059 bytes, and SHA-256
-  `742800ea988627d9093f8fe394c8ad2be801e35413e20bbcad816f2431be86cb`.
-- Exact rank-zero/rank-one boundary matching with both boolean determinism values;
-  rank-two, one-over, wrong symbol and all ten unverified-row nonmatches; complete
+  K1/I2 report twice and assert byte equality, exactly 3,133 bytes, and SHA-256
+  `50c7078af4d3e495c4d668b6b8aaab29024cbab6a775fa6e98c9e9d10124389e`.
+- Exact rank-zero/rank-one boundary matching plus the ordered five-shape rank-two
+  matrix with both boolean determinism values; rank-two near-miss/one-over,
+  higher-rank, wrong symbol and all ten unverified-row nonmatches; complete
   logical-A0 versus K1-representability checks for all four symbol positions, rank,
   and unsigned extents without truncation or contradictory native validation.
 - Three pairwise-distinct compiled closure factories, authentication before hidden

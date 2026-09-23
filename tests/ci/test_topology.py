@@ -103,10 +103,120 @@ class TopologyTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)):
                     check(ROOT, {path: text.replace(before, after)})
 
+    def test_tr3b_inventory_cannot_be_removed_or_weakened(self):
+        make = (ROOT / "Makefile").read_text()
+        model_commands = ("/usr/bin/bash scripts/test-m3.sh\n"
+                          "\t/usr/bin/bash scripts/test-tr3b.sh")
+        mutations = [
+            ("/usr/bin/bash scripts/test-tr3b.sh", ":"),
+            ("/usr/bin/bash scripts/test-tr3b.sh",
+             "/usr/bin/bash scripts/test-tr3b.sh || true"),
+            (model_commands,
+             "/usr/bin/bash scripts/test-tr3b.sh\n\t/usr/bin/bash scripts/test-m3.sh"),
+        ]
+        for before, after in mutations:
+            with self.subTest(before=before, after=after):
+                self.assertIn(before, make)
+                with self.assertRaises(AssertionError):
+                    check(ROOT, {"Makefile": make.replace(before, after, 1)})
+
+    def test_e3_native_inventory_and_failure_propagation(self):
+        make = (ROOT / "Makefile").read_text()
+        script = (ROOT / "scripts/test-e3-native-frame.sh").read_text()
+        command = "/usr/bin/bash scripts/test-e3-native-frame.sh"
+        model_commands = ("/usr/bin/bash scripts/test-m3.sh\n"
+                          "\t/usr/bin/bash scripts/test-e3-native-frame.sh\n"
+                          "\t/usr/bin/bash scripts/test-e3-native-parity.sh\n"
+                          "\t/usr/bin/bash scripts/test-tr3b.sh")
+        for before, after in (
+            (command, ":"),
+            (command, command + " || true"),
+            (model_commands,
+             "/usr/bin/bash scripts/test-m3.sh\n"
+             "\t/usr/bin/bash scripts/test-tr3b.sh\n"
+             "\t/usr/bin/bash scripts/test-e3-native-parity.sh\n"
+             "\t/usr/bin/bash scripts/test-e3-native-frame.sh"),
+        ):
+            with self.subTest(mutation=before), self.assertRaises(AssertionError):
+                check(ROOT, {"Makefile": make.replace(before, after, 1)})
+
+        for before, after in (
+            ('"${PROJECT_ROOT}/tests/e3_native/header_cpp.cpp" -c',
+             '"${PROJECT_ROOT}/tests/e3_native/header_cpp.cpp"'),
+            ("for e3_mode in normal sanitize; do", "for e3_mode in normal; do"),
+            ("detect_leaks=1", "detect_leaks=0"),
+            ('"${PROJECT_ROOT}/tests/e3_native/test_frame.c"',
+             '"${PROJECT_ROOT}/tests/e3_native/header_cpp.cpp"'),
+        ):
+            with self.subTest(script_mutation=before), self.assertRaises(AssertionError):
+                check(ROOT, {"scripts/test-e3-native-frame.sh":
+                             script.replace(before, after, 1)})
+
+        for target in ("test-after-build", "test-acceptance-predecessors-after-build",
+                       "test-ci-m3-after-build"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Makefile").write_text(make)
+                (root / "scripts").mkdir()
+                for script in set(re.findall(r"scripts/([a-zA-Z0-9_.-]+\.sh)", make)):
+                    (root / "scripts" / script).write_text(
+                        "#!/usr/bin/bash\necho " + script + " >> called\n" +
+                        ("exit 73\n" if script == "test-e3-native-frame.sh" else "exit 0\n"))
+                result = subprocess.run(["make", target], cwd=root, capture_output=True,
+                                        text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Error 73", result.stderr)
+                calls = (root / "called").read_text().splitlines()
+                self.assertEqual(calls.count("test-e3-native-frame.sh"), 1)
+                self.assertEqual(calls[-1], "test-e3-native-frame.sh")
+
+    def test_e3_parity_inventory_and_failure_propagation(self):
+        make = (ROOT / "Makefile").read_text()
+        script = (ROOT / "scripts/test-e3-native-parity.sh").read_text()
+        command = "/usr/bin/bash scripts/test-e3-native-parity.sh"
+        for before, after in (
+            (command, ":"),
+            (command, command + " || true"),
+        ):
+            with self.subTest(mutation=before), self.assertRaises(AssertionError):
+                check(ROOT, {"Makefile": make.replace(before, after, 1)})
+
+        for before, after in (
+            ("require_q0() {", "true() {"),
+            ("[[ \"${versions}\" == $'3.14.6\\n2.13.0+cpu' ]]",
+             "[[ \"${versions}\" == $'3.14\\n2.13.0' ]]"),
+            ("for build_mode in normal sanitize; do", "for build_mode in normal; do"),
+            ("detect_leaks=1", "detect_leaks=0"),
+            ('"${PROJECT_ROOT}/tests/e3_native_parity/test_frame_parity.c"',
+             '"${PROJECT_ROOT}/tests/e3_native/test_frame.c"'),
+        ):
+            with self.subTest(script_mutation=before), self.assertRaises(AssertionError):
+                check(ROOT, {"scripts/test-e3-native-parity.sh":
+                             script.replace(before, after, 1)})
+
+        for target in ("test-after-build", "test-acceptance-predecessors-after-build",
+                       "test-ci-m3-after-build"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Makefile").write_text(make)
+                (root / "scripts").mkdir()
+                for name in set(re.findall(r"scripts/([a-zA-Z0-9_.-]+\.sh)", make)):
+                    (root / "scripts" / name).write_text(
+                        "#!/usr/bin/bash\necho " + name + " >> called\n" +
+                        ("exit 73\n" if name == "test-e3-native-parity.sh" else "exit 0\n"))
+                result = subprocess.run(["make", target], cwd=root, capture_output=True,
+                                        text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Error 73", result.stderr)
+                calls = (root / "called").read_text().splitlines()
+                self.assertEqual(calls.count("test-e3-native-parity.sh"), 1)
+                self.assertEqual(calls[-1], "test-e3-native-parity.sh")
+
     def test_coverage_mutations_rejected_even_if_both_tiers_drop_same_gate(self):
         text = (ROOT / "Makefile").read_text()
         for command in (
             "/usr/bin/bash scripts/test-o2.sh",
+            "/usr/bin/bash scripts/test-tr3-o.sh",
             "/usr/bin/bash scripts/test-l3s.sh",
             "/usr/bin/bash scripts/test-e3-metrics.sh",
             "/usr/bin/bash scripts/build-e3-metrics.sh",

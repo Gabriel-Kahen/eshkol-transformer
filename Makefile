@@ -19,10 +19,11 @@ SHELL := /usr/bin/bash
 	test-c2-d2-cursor-pair test-c2-format \
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
-	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e1 test-e1b \
+	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e3-native-frame \
+	test-e3-native-parity test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
-	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-x1 \
+	test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
+	test-reference-formats test-t1 test-t2 test-tr3b test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
 
 toolchain:
@@ -99,6 +100,8 @@ test-after-build:
 	/usr/bin/bash scripts/test-l2.sh
 	/usr/bin/bash scripts/test-l3s.sh
 	/usr/bin/bash scripts/test-e3-metrics.sh
+	/usr/bin/bash scripts/test-e3-native-frame.sh
+	/usr/bin/bash scripts/test-e3-native-parity.sh
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
@@ -107,6 +110,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
@@ -120,6 +124,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-q0.sh
 	/usr/bin/bash scripts/test-m3t.sh
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-tr3b.sh
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
 
@@ -131,6 +136,8 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-l2.sh
 	/usr/bin/bash scripts/test-l3s.sh
 	/usr/bin/bash scripts/test-e3-metrics.sh
+	/usr/bin/bash scripts/test-e3-native-frame.sh
+	/usr/bin/bash scripts/test-e3-native-parity.sh
 	/usr/bin/bash scripts/test-e1.sh
 	/usr/bin/bash scripts/test-e1b.sh
 	/usr/bin/bash scripts/test-i1.sh
@@ -139,6 +146,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
@@ -151,6 +159,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-q0.sh
 	/usr/bin/bash scripts/test-m3t.sh
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-tr3b.sh
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
 
@@ -173,6 +182,7 @@ test-ci-core-after-build:
 
 test-ci-optimizer-after-build:
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 
 test-ci-contracts-after-build:
 	/usr/bin/bash scripts/check_a0_api_contract.sh
@@ -270,6 +280,10 @@ test-n3k: build
 
 test-o2: build
 	/usr/bin/bash scripts/test-o2.sh
+
+# Private TR3 successor seam; no public trainer aggregate is built here.
+test-tr3-o:
+	/usr/bin/bash scripts/test-tr3-o.sh
 
 test-x1: configure
 	/usr/bin/bash scripts/test-x1.sh
@@ -374,13 +388,19 @@ test-m3t: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh diagnostic-transport
 	/usr/bin/bash scripts/test-m3t.sh
 
-.PHONY: test-ci-m3-after-build test-m3
+.PHONY: test-ci-m3-after-build test-m3 test-tr3b test-e3-native-parity
 test-ci-m3-after-build:
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-e3-native-frame.sh
+	/usr/bin/bash scripts/test-e3-native-parity.sh
+	/usr/bin/bash scripts/test-tr3b.sh
 
 test-m3: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh model-composition
 	/usr/bin/bash scripts/test-m3.sh
+
+test-tr3b: configure
+	/usr/bin/bash scripts/test-tr3b.sh
 
 # Focused standalone gate; the CI core consumes its once-built prerequisites.
 test-l3s: configure
@@ -418,6 +438,15 @@ test-e3-metrics: configure
 # Private E3-D2 prerequisite builds its exact test tuple locally.
 test-e3-d2: configure
 	/usr/bin/bash scripts/test-e3-d2.sh
+
+# Private E3 frame compiles its complete native test tuple directly.
+test-e3-native-frame: configure
+	/usr/bin/bash scripts/test-e3-native-frame.sh
+
+# Native parity uses the pinned development oracle only to prepare and verify
+# test fixtures; the production path remains C-only.
+test-e3-native-parity: configure
+	/usr/bin/bash scripts/test-e3-native-parity.sh
 
 .PHONY: test-g3c4
 test-g3c4: configure

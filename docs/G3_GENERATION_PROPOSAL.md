@@ -161,9 +161,9 @@ same call. Public `tokenizer-decode` stays unchanged and rejects G3 tensors.
 
 ## Numerical and transport dependencies
 
-I1/I2 own higher-rank carriers, but their K1 storage-copy capability still verifies
-only ranks zero/one. Do not label their rank-two ownership as a verified generic
-tensor operation. M3T's fixed roles and separate N3K/N2/A2 discovery runtimes
+I1/I2 own higher-rank carriers. SHARED-R2 verifies only its five explicit
+rank-two storage-copy shapes in addition to ranks zero/one; it is not a verified
+generic rank-two tensor operation. M3T's fixed roles and separate N3K/N2/A2 discovery runtimes
 provide a pattern for closed dispatch, not a general new resolver.
 
 The numerical review enumerates every missing row. In compact form, the new T1

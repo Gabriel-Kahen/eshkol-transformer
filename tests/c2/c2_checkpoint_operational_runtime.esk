@@ -28,6 +28,8 @@
         :real et_i2_test_decode_builder_control_bytes_v1)
 (extern i64 c2-operational-k2-require-count
         :real et_k2_test_require_count_v1)
+(extern i64 c2-operational-k2-require-shape-count i64
+        :real et_k2_test_require_shape_count_v1)
 (extern void c2-operational-k2-fail-require-at i64
         :real et_k2_test_fail_require_at_v1)
 
@@ -73,6 +75,22 @@
             (vector-set! result index (c2-operational-counter index))
             (loop (+ index 1)))))))
 
+(define (snapshot-require-shapes)
+  (let ((result (make-vector 6 0)))
+    (let loop ((index 0))
+      (if (= index 6) result
+          (begin
+            (vector-set! result index
+                         (c2-operational-k2-require-shape-count index))
+            (loop (+ index 1)))))))
+
+(define (require-shape-deltas? before after expected)
+  (let loop ((index 0))
+    (if (= index 6) #t
+        (and (= (vector-ref after index)
+                (+ (vector-ref before index) (vector-ref expected index)))
+             (loop (+ index 1))))))
+
 (define (same-live-storage? left right)
   (and
     (= (vector-ref left 0) (vector-ref right 0))
@@ -107,23 +125,23 @@
        (= (c2-operational-live-readers) 0)
        (= (c2-operational-live-fds) 0)))
 
-(define args (command-line))
-(define joint-path (car (cdr args)))
-(define file-one-path (car (cdr (cdr args))))
-(define metadata-one-path (car (cdr (cdr (cdr args)))))
-(define tensor-one-path (car (cdr (cdr (cdr (cdr args))))))
-(define count-one-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
-(define corrupt-path (car (cdr (cdr (cdr (cdr (cdr (cdr args))))))))
-(define alias-shape-path
-  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))
-(define rank-two-path
-  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))
-(define count-exact-path
-  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))))
-(define output-root
-  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))))
-(define mode
-  (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr (cdr args)))))))))))))
+(define (argument-at values index)
+  (if (= index 0) (car values)
+      (argument-at (cdr values) (- index 1))))
+(define args (cdr (command-line)))
+(define joint-path (argument-at args 0))
+(define file-one-path (argument-at args 1))
+(define metadata-one-path (argument-at args 2))
+(define tensor-one-path (argument-at args 3))
+(define count-one-path (argument-at args 4))
+(define corrupt-path (argument-at args 5))
+(define alias-shape-path (argument-at args 6))
+(define rank-two-path (argument-at args 7))
+(define count-exact-path (argument-at args 8))
+(define m3-model-path (argument-at args 9))
+(define c4-schema-path (argument-at args 10))
+(define output-root (argument-at args 11))
+(define mode (argument-at args 12))
 
 (define target-policy
   (c2-persistence-policy-mode-internal
@@ -495,6 +513,93 @@
     (finish-admission-mode
       "alias" mode-stage-before mode-owner-before 0)))
 
+;;; M3's complete parameter schema has fifteen logical paths, one canonical
+;;; head/token tie, fourteen unique tensors, and twenty-eight O2 moments.  C4's
+;;; storage witness changes only position_embedding/weight from [2,4] to [4,4].
+(define (run-models-mode)
+  (let ((stage-before (c2-load-stage-counts-internal))
+        (owner-before (c2-load-owner-counts-internal))
+        (storage-before (snapshot-counts))
+        (require-before (c2-operational-k2-require-count))
+        (shape-before (snapshot-require-shapes))
+        (decoder-before decoder-calls)
+        (o2-before o2-calls))
+    (define m3-owner
+      (c2-public-checkpoint-load
+        m3-model-path target-policy operational-report))
+    (check "public M3 checkpoint admits exactly 15 model and 28 moment tensors"
+           (= (c2-operational-k2-require-count) (+ require-before 43)))
+    (check "public M3 checkpoint requires the exact descriptor-shape multiset"
+           (require-shape-deltas?
+             shape-before (snapshot-require-shapes)
+             (vector 18 3 12 3 3 4)))
+    (check "public M3 checkpoint reconstructs a live C2 owner"
+           (c2-load-exact-live-owner? m3-owner))
+    (check "public M3 checkpoint owner releases"
+           (c2-public-trainer-state-release! m3-owner))
+    (check "public M3 load/release restores live storage"
+           (same-live-storage? storage-before (snapshot-counts)))
+    (let ((c4-owner
+            (c2-public-checkpoint-load
+              c4-schema-path target-policy operational-report)))
+      (check "C4 schema witness admits the same exact 43 descriptors"
+             (= (c2-operational-k2-require-count) (+ require-before 86)))
+      (check "C4 schema witness substitutes only the position shape"
+             (require-shape-deltas?
+               shape-before (snapshot-require-shapes)
+               (vector 36 3 27 6 6 8)))
+      (check "C4 schema witness reconstructs a live C2 owner"
+             (c2-load-exact-live-owner? c4-owner))
+      (check "C4 schema witness owner releases"
+             (c2-public-trainer-state-release! c4-owner))
+      (check "both model witnesses restore live storage"
+             (same-live-storage? storage-before (snapshot-counts)))
+      (check "both model witnesses invoke both genuine codecs"
+             (and (= decoder-calls (+ decoder-before 2))
+                  (= o2-calls (+ o2-before 2))))
+      (let ((stage-after (c2-load-stage-counts-internal))
+            (owner-after (c2-load-owner-counts-internal))
+            (storage-after (snapshot-counts))
+            (retained-rss (c2-operational-current-rss))
+            (peak-rss (c2-operational-peak-rss))
+            (elapsed-ms (- (c2-operational-now) start-ms)))
+        (check "model witnesses retire two stages and clear references"
+               (stage-retired-exactly? stage-before stage-after 2))
+        (check "model witnesses retire two released C2 owners"
+               (and (= (vector-ref owner-after 0) (vector-ref owner-before 0))
+                    (= (vector-ref owner-after 1) (vector-ref owner-before 1))
+                    (= (vector-ref owner-after 2) (vector-ref owner-before 2))
+                    (= (vector-ref owner-after 3)
+                       (+ 2 (vector-ref owner-before 3)))))
+        (check "model witnesses retire exact logical-model decode controls"
+               (and (= (vector-ref storage-after 22)
+                       (+ 30 (vector-ref storage-before 22)))
+                    (= (vector-ref storage-after 23)
+                       (+ (* 30 i2-decode-control-bytes)
+                          (vector-ref storage-before 23)))))
+        (check "model witnesses drain image/reader/fd" (native-flat?))
+        (check "model witness retained RSS is below 512 MiB"
+               (and (> retained-rss 0) (< retained-rss 524288)))
+        (check "model witness peak RSS is below 512 MiB"
+               (and (> peak-rss 0) (< peak-rss 524288)))
+        (check "model witness runtime is inside the watchdog"
+               (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+        (display "C2 OPERATIONAL RUNTIME PASS: ")
+        (display checks)
+        (display " checks mode=models baseline-kib=") (display baseline-rss)
+        (display " retained-kib=") (display retained-rss)
+        (display " peak-kib=") (display peak-rss)
+        (display " elapsed-ms=") (display elapsed-ms)
+        (display " f32-retained-bytes=0 i2-retained-bytes=0")
+        (display " stage-dead-delta=2 c2-dead-delta=2")
+        (display " p1-first-touch=0")
+        (display " p1-tombstone-delta=")
+        (display (- (vector-ref storage-after 34)
+                    (vector-ref storage-before 34)))
+        (display " rejected-save-max-arena-delta=0")
+        (display " exact-save-max-arena-delta=0")
+        (newline)))))
+
 ;;; The joint exact artifact is authoritative for the measured lifecycle.
 (define (run-joint-mode)
 (define lifecycle-before (snapshot-counts))
@@ -791,6 +896,7 @@
   ((string=? mode "k2-fail") (run-k2-fail-mode))
   ((string=? mode "rank") (run-rank-mode))
   ((string=? mode "alias") (run-alias-mode))
+  ((string=? mode "models") (run-models-mode))
   ((string=? mode "file")
     (run-over-mode "file" file-one-path 62 124))
   ((string=? mode "metadata")

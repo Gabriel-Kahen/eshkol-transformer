@@ -87,16 +87,21 @@ exact bool carrier; numeric Eshkol vectors are not substitutes.
 ## K1 provider and composition
 
 `et_f32_tensor_provider_v1()` returns an immutable explicit provider descriptor.
-It verifies only this deterministic request family:
+The SHARED-R2 successor keeps K1 ABI 1.0 and the provider name, while advancing
+the provider and verified entry to version 1.1 with evidence
+`I2:bounded-exact-f32-storage.copy-v2`. It verifies only this deterministic
+request family:
 
 - capability `tensor.f32`;
 - operation `storage.copy`;
 - compute dtype `f32` and device `cpu`;
-- rank zero or rank one with extent `0..SIZE_MAX/4`; and
+- rank zero, rank one with extent `0..SIZE_MAX/4`, or exactly one of the rank-two
+  shapes `[2,4]`, `[4,4]`, `[4,8]`, `[8,4]`, and `[256,4]`; and
 - one dense zero-offset input and one disjoint caller-owned output of identical
   shape.
 
-Validation is complete and non-mutating. Invoke performs only the admitted full
+No other rank-two or higher-rank shape is supported. Validation is complete and
+non-mutating. Invoke performs only the admitted full
 `memcpy`, allocates nothing, and cannot report a recoverable failure. I2 does not
 define `eshkol_transformer_kernel_provider_v1`, mutate K1's provider-free
 baseline, or claim `tensor.contiguous`, `autodiff.reverse`, any N2/A2/L2/O2
@@ -284,8 +289,9 @@ source hashes, pin audit and required retests.
 - Owned storage is CPU binary32 only. There is no f64, f16, bf16, accelerator,
   cast, transfer, materialization, or fallback path.
 - The container admits ranks `0..64`, but its verified K1 `storage.copy`
-  capability admits only rank zero and bounded rank one. Higher-rank ownership
-  and borrowing are not a broader K1 capability claim.
+  capability admits only rank zero, bounded rank one, and the five enumerated
+  rank-two shapes. Other higher-rank ownership and borrowing are not a broader
+  K1 capability claim.
 - A tensor permits one active borrow, and all registries require caller
   serialization. Thread safety and concurrent mutation are not claimed.
 - P1 states require explicit idempotent `state-dict-release!`; the pinned runtime
