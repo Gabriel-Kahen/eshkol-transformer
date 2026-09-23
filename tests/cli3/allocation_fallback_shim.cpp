@@ -16,6 +16,7 @@
 extern "C" void *__real_malloc(std::size_t);
 extern "C" void *__real_arena_allocate_vector_with_header(void *, std::size_t);
 extern "C" int64_t __real_et_e1b_public_cli3_dispatch_fallback_v1(void);
+extern "C" void __real_eshkol_push_exception_handler(void *);
 extern "C" void eshkol_get_raised_value(eshkol_tagged_value_t *);
 
 enum class injection_mode { invalid, handler, rollback };
@@ -23,9 +24,11 @@ enum class injection_mode { invalid, handler, rollback };
 static injection_mode selected_mode = injection_mode::invalid;
 static bool initialized;
 static bool blocked;
+static bool in_push;
 static int trigger_count;
 static int fallback_count;
 static int trigger_depth = -1;
+static int push_count;
 
 [[noreturn]] static void fail(const char *message) {
   static const char prefix[] = "CLI3 allocation fallback shim FAIL: ";
@@ -66,10 +69,13 @@ static bool path_exists(const char *path) {
 
 extern "C" void *__wrap_malloc(std::size_t bytes) {
   if (mode() == injection_mode::handler &&
-      bytes == sizeof(eshkol_exception_handler_t)) {
+      in_push && bytes == sizeof(eshkol_exception_handler_t)) {
     const int depth = handler_depth();
-    if (blocked || depth == 1) {
+    if (depth == 1) {
       if (!blocked) {
+        if (push_count != 2) {
+          fail("private-dispatch guard was not the second real push");
+        }
         blocked = true;
         ++trigger_count;
         trigger_depth = depth;
@@ -78,6 +84,15 @@ extern "C" void *__wrap_malloc(std::size_t bytes) {
     }
   }
   return __real_malloc(bytes);
+}
+
+extern "C" void __wrap_eshkol_push_exception_handler(void *buffer) {
+  if (mode() == injection_mode::handler) {
+    ++push_count;
+    in_push = true;
+  }
+  __real_eshkol_push_exception_handler(buffer);
+  in_push = false;
 }
 
 extern "C" void *__wrap_arena_allocate_vector_with_header(void *arena,
@@ -104,9 +119,10 @@ static void write_marker() {
   }
   const char *record = nullptr;
   std::size_t length = 0;
-  if (selected_mode == injection_mode::handler && trigger_depth == 1) {
+  if (selected_mode == injection_mode::handler && trigger_depth == 1 &&
+      push_count == 2 && in_push) {
     static const char text[] =
-        "mode=handler trigger=1 fallback=1 depth=1 condition=5\n";
+        "mode=handler trigger=1 fallback=1 depth=1 push=2 condition=5\n";
     record = text;
     length = sizeof(text) - 1u;
   } else if (selected_mode == injection_mode::rollback && trigger_depth == 3) {
