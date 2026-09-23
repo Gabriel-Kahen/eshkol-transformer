@@ -8,7 +8,19 @@
 #include "t1_wave1_package_bridge.c"
 #endif
 
+#if defined(ET_TR3_C_I2_RESTORE_PRIVATE) &&                                  \
+    !defined(ET_I2_PRIVATE_OWNED_CLONE_MATCH)
+#error "TR3-C restore bridge requires the shared owned-clone authorizer"
+#endif
+#if defined(ET_TR3_C_I2_RESTORE_PRIVATE) &&                                  \
+    !defined(ET_TR3_C_I2_CHECKED_BRIDGE)
+#define ET_TR3_C_I2_CHECKED_BRIDGE 1
+#endif
+
 #include "f32_parameter_internal.h"
+#if defined(ET_TR3_C_I2_RESTORE_PRIVATE)
+#include "tr3_c_i2_restore_internal.h"
+#endif
 #if defined(ET_M3T_PACKAGE_BUILD)
 #include "eshkol_transformer/m3t_transport.h"
 #endif
@@ -28,12 +40,28 @@ enum {
 #define ET_I2_RESET_BUILDER_MAGIC UINT64_C(0x4932524553455431)
 #define ET_I2_DECODE_BUILDER_MAGIC UINT64_C(0x49324445434f4431)
 
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+enum {
+  ET_TR3_C_I2_RESTORE_PHASE_ORDINARY = 0,
+  ET_TR3_C_I2_RESTORE_PHASE_PREFIX = 1,
+  ET_TR3_C_I2_RESTORE_PHASE_COMPLETE = 2,
+  ET_TR3_C_I2_RESTORE_PHASE_PREPARED = 3,
+  ET_TR3_C_I2_RESTORE_PHASE_COMMITTED = 4,
+  ET_TR3_C_I2_RESTORE_PHASE_ABORTED = 5
+};
+#endif
+
 typedef struct et_i2_copy_builder {
   uint64_t magic;
   struct et_i2_copy_builder *registry_next;
   size_t count;
   et_f32_tensor_copy_assignment_v1 *assignments;
   et_f32_tensor_copy_plan *plan;
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  const void *tr3_c_restore_authority;
+  size_t tr3_c_next_index;
+  uint32_t tr3_c_restore_phase;
+#endif
 } et_i2_copy_builder;
 
 typedef struct et_i2_reset_builder {
@@ -248,6 +276,11 @@ static void et_i2_retire_copy_builder(et_i2_copy_builder *builder) {
   builder->count = 0u;
   builder->assignments = NULL;
   builder->plan = NULL;
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  builder->tr3_c_restore_authority = NULL;
+  builder->tr3_c_next_index = 0u;
+  builder->tr3_c_restore_phase = ET_TR3_C_I2_RESTORE_PHASE_ORDINARY;
+#endif
   builder->registry_next = et_i2_retired_copy_builders;
   et_i2_retired_copy_builders = builder;
 }
@@ -858,6 +891,13 @@ int64_t et_i2_private_copy_builder_set_v1(void *opaque, int64_t index,
                            ET_F32_TENSOR_CODE_INVALID_HANDLE);
     return -1;
   }
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+#endif
   et_f32_tensor *const destination_tensor =
       et_i2_mutable_tensor(destination, destination_role, destination_handle);
   const et_f32_tensor *const source_tensor =
@@ -886,6 +926,13 @@ int64_t et_i2_private_copy_builder_prepare_v1(void *opaque) {
                            ET_F32_TENSOR_CODE_INVALID_HANDLE);
     return -1;
   }
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+#endif
   for (index = 0u; index < builder->count; ++index) {
     if (builder->assignments[index].struct_size !=
         ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE) {
@@ -908,6 +955,13 @@ int64_t et_i2_private_copy_builder_commit_v1(void *opaque) {
                            ET_F32_TENSOR_CODE_INVALID_HANDLE);
     return -1;
   }
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+#endif
   et_i2_clear_error();
   status = et_f32_tensor_copy_plan_commit_v1(builder->plan,
                                              &et_i2_last_error);
@@ -931,6 +985,13 @@ int64_t et_i2_private_copy_builder_abort_v1(void *opaque) {
                            ET_F32_TENSOR_CODE_INVALID_HANDLE);
     return -1;
   }
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+#endif
   if (builder->plan != NULL) {
     (void)et_f32_tensor_copy_plan_release_v1(&builder->plan,
                                              &et_i2_last_error);
@@ -983,6 +1044,501 @@ static int32_t et_tr3_c_i2_copy_release(et_f32_tensor_copy_plan **plan) {
   return et_f32_tensor_copy_plan_release_v1(plan, &et_i2_last_error);
 }
 
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+static int et_tr3_c_i2_span_fits(const void *storage, size_t bytes) {
+  return storage != NULL && (uintptr_t)storage <= UINTPTR_MAX - bytes;
+}
+
+static int et_tr3_c_i2_ranges_overlap(const void *left, size_t left_bytes,
+                                      const void *right,
+                                      size_t right_bytes) {
+  const uintptr_t left_start = (uintptr_t)left;
+  const uintptr_t right_start = (uintptr_t)right;
+  if (left_bytes == 0u || right_bytes == 0u) {
+    return 0;
+  }
+  if (!et_tr3_c_i2_span_fits(left, left_bytes) ||
+      !et_tr3_c_i2_span_fits(right, right_bytes)) {
+    return 1;
+  }
+  return left_start < right_start + right_bytes &&
+         right_start < left_start + left_bytes;
+}
+
+static int et_tr3_c_i2_copy_assignments_overlap(const void *storage,
+                                                size_t bytes) {
+  const et_i2_copy_builder *builder;
+  for (builder = et_i2_live_copy_builders; builder != NULL;
+       builder = builder->registry_next) {
+    if (builder->assignments != NULL &&
+        builder->count <= SIZE_MAX / sizeof(*builder->assignments) &&
+        et_tr3_c_i2_ranges_overlap(
+            storage, bytes, builder->assignments,
+            builder->count * sizeof(*builder->assignments))) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int32_t et_tr3_c_i2_restore_builder_live(
+    const void *opaque, et_i2_copy_builder **output) {
+  et_i2_copy_builder *builder = et_i2_find_copy_builder(opaque);
+  if (builder == NULL || builder->tr3_c_restore_phase ==
+                             ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  if (builder->count != ET_TR3_C_RESTORE_ASSIGNMENTS ||
+      builder->assignments == NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  *output = builder;
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+static int32_t et_tr3_c_i2_restore_authority(
+    const et_i2_copy_builder *builder, const void *authority) {
+  if (authority == NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  return builder->tr3_c_restore_authority == authority
+             ? ET_I2_PRIVATE_OWNED_RESULT_OK
+             : ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT;
+}
+
+static int32_t et_tr3_c_i2_parameter_destination(
+    et_f32_parameter *parameter, const void *p1_handle,
+    et_f32_tensor **destination) {
+  const et_f32_tensor *canonical;
+  if (parameter == NULL || p1_handle == NULL ||
+      et_f32_parameter_is_live_v1(parameter) != 1) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  if (et_f32_parameter_validate_identity_v1(parameter, p1_handle, NULL) != 0) {
+    return ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT;
+  }
+  canonical = et_f32_parameter_canonical_owner_v1(parameter);
+  if (canonical == NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INTERNAL;
+  }
+  *destination = (et_f32_tensor *)canonical;
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+static int32_t et_tr3_c_i2_snapshot_restore42_request(
+    const et_i2_copy_builder *builder,
+    const et_tr3_c_i2_restore42_append_v1 *request,
+    et_tr3_c_i2_restore42_append_v1 *snapshot) {
+  if (request == NULL ||
+      (uintptr_t)request % _Alignof(et_tr3_c_i2_restore42_append_v1) != 0u ||
+      !et_tr3_c_i2_span_fits(request, sizeof(*request)) ||
+      et_tr3_c_i2_ranges_overlap(request, sizeof(*request), builder,
+                                 sizeof(*builder)) ||
+      et_tr3_c_i2_ranges_overlap(
+          request, sizeof(*request), builder->assignments,
+          builder->count * sizeof(*builder->assignments))) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  memcpy(snapshot, request, sizeof(*snapshot));
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+static int32_t et_tr3_c_i2_validate_restore42(
+    et_i2_copy_builder *builder,
+    const et_tr3_c_i2_restore42_append_v1 *request, int complete) {
+  et_f32_tensor *destinations[ET_TR3_C_RESTORE_ASSIGNMENTS];
+  const et_f32_tensor *sources[ET_TR3_C_RESTORE_ASSIGNMENTS];
+  int32_t result;
+
+  if (request->struct_size != ET_TR3_C_I2_RESTORE42_APPEND_V1_0_SIZE) {
+    return ET_I2_PRIVATE_OWNED_RESULT_VERSION_MISMATCH;
+  }
+  if ((result = et_tr3_c_i2_restore_authority(
+           builder, request->restore_authority)) != 0) {
+    return result;
+  }
+  if (builder->plan != NULL ||
+      builder->tr3_c_restore_phase !=
+          (complete != 0 ? ET_TR3_C_I2_RESTORE_PHASE_COMPLETE
+                         : ET_TR3_C_I2_RESTORE_PHASE_PREFIX) ||
+      builder->tr3_c_next_index !=
+          (complete != 0 ? ET_TR3_C_RESTORE_ASSIGNMENTS
+                         : ET_TR3_C_MODEL_DESTINATIONS)) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  for (size_t index = 0u; index < ET_TR3_C_MODEL_DESTINATIONS; ++index) {
+    et_f32_tensor *destination = NULL;
+    const et_f32_tensor_copy_assignment_v1 *assignment =
+        &builder->assignments[index];
+    result = et_tr3_c_i2_parameter_destination(
+        request->parameters[index], request->p1_handles[index], &destination);
+    if (result != 0) {
+      return result;
+    }
+    if (assignment->struct_size !=
+            ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE ||
+        assignment->destination != destination || assignment->source == NULL) {
+      return ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT;
+    }
+    result = et_i2_private_owned_clone_match_v1(
+        assignment->source, destination, ET_I2_PRIVATE_OWNED_VALUE_FINITE);
+    if (result != 0) {
+      return result;
+    }
+    destinations[index] = destination;
+    sources[index] = assignment->source;
+  }
+  for (size_t index = 0u; index < ET_TR3_C_O2_MOMENT_ASSIGNMENTS; ++index) {
+    const size_t assignment_index = ET_TR3_C_O2_FIRST_INDEX + index;
+    const uint32_t policy =
+        index % 2u == 0u ? ET_I2_PRIVATE_OWNED_VALUE_FINITE
+                         : ET_I2_PRIVATE_OWNED_VALUE_FINITE_NONNEGATIVE;
+    const et_f32_tensor_copy_assignment_v1 *assignment =
+        &builder->assignments[assignment_index];
+    et_f32_tensor *destination = request->moment_destinations[index];
+    const et_f32_tensor *source = request->moment_sources[index];
+    if (destination == NULL || source == NULL) {
+      return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+    }
+    if (complete != 0) {
+      if (assignment->struct_size !=
+              ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE ||
+          assignment->destination != destination ||
+          assignment->source != source) {
+        return ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT;
+      }
+    } else if (assignment->struct_size != 0u ||
+               assignment->destination != NULL || assignment->source != NULL) {
+      return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+    }
+    result = et_i2_private_owned_clone_match_v1(source, destination, policy);
+    if (result != 0) {
+      return result;
+    }
+    destinations[assignment_index] = destination;
+    sources[assignment_index] = source;
+  }
+  for (size_t index = 0u; index < ET_TR3_C_RESTORE_ASSIGNMENTS; ++index) {
+    if (destinations[index] == sources[index]) {
+      return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+    }
+    for (size_t other = 0u; other < ET_TR3_C_RESTORE_ASSIGNMENTS; ++other) {
+      if (index != other &&
+          (destinations[index] == destinations[other] ||
+           sources[index] == sources[other])) {
+        return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+      }
+      if (destinations[index] == sources[other]) {
+        return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+      }
+    }
+  }
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+static int32_t et_tr3_c_i2_translate_copy_prepare(
+    int32_t status, const et_f32_tensor_error *error) {
+  if (status == 0) {
+    return ET_I2_PRIVATE_OWNED_RESULT_OK;
+  }
+  if (error->code == ET_F32_TENSOR_CODE_ALLOCATION_FAILED) {
+    return ET_I2_PRIVATE_OWNED_RESULT_ALLOCATION_FAILED;
+  }
+  if (error->category == ET_F32_TENSOR_ERROR_INVALID_STATE) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  if (error->category == ET_F32_TENSOR_ERROR_SHAPE_MISMATCH ||
+      error->code == ET_F32_TENSOR_CODE_BUFFER_SIZE_MISMATCH ||
+      error->code == ET_F32_TENSOR_CODE_INVALID_SHAPE) {
+    return ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH;
+  }
+  if (error->category == ET_F32_TENSOR_ERROR_VERSION_MISMATCH ||
+      error->code == ET_F32_TENSOR_CODE_ABI_VERSION_MISMATCH) {
+    return ET_I2_PRIVATE_OWNED_RESULT_VERSION_MISMATCH;
+  }
+  return ET_I2_PRIVATE_OWNED_RESULT_INTERNAL;
+}
+
+static void et_tr3_c_i2_retire_restore_builder(
+    et_i2_copy_builder *builder, uint32_t terminal_phase) {
+  et_i2_unlink_copy_builder(builder);
+  free(builder->assignments);
+  builder->count = 0u;
+  builder->assignments = NULL;
+  builder->plan = NULL;
+  builder->tr3_c_restore_authority = NULL;
+  builder->tr3_c_next_index = 0u;
+  builder->tr3_c_restore_phase = terminal_phase;
+  builder->registry_next = et_i2_retired_copy_builders;
+  et_i2_retired_copy_builders = builder;
+}
+
+int32_t et_tr3_c_i2_copy_builder_create_restore42_v1(
+    const void *restore_authority, void **output) {
+  et_i2_copy_builder *builder = NULL;
+  if (restore_authority == NULL || output == NULL ||
+      (uintptr_t)output % _Alignof(void *) != 0u ||
+      !et_tr3_c_i2_span_fits(output, sizeof(*output)) ||
+      (const void *)output == restore_authority ||
+      et_i2_builder_shell_aliases(output, sizeof(*output)) ||
+      et_tr3_c_i2_copy_assignments_overlap(output, sizeof(*output))) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  if (*output != NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT;
+  }
+  builder = (et_i2_copy_builder *)et_i2_system_calloc(1u, sizeof(*builder));
+  if (builder != NULL) {
+    builder->assignments = (et_f32_tensor_copy_assignment_v1 *)
+        et_i2_system_calloc(ET_TR3_C_RESTORE_ASSIGNMENTS,
+                            sizeof(*builder->assignments));
+  }
+  if (builder == NULL || builder->assignments == NULL) {
+    if (builder != NULL) {
+      free(builder->assignments);
+    }
+    free(builder);
+    return ET_I2_PRIVATE_OWNED_RESULT_ALLOCATION_FAILED;
+  }
+  builder->magic = ET_I2_COPY_BUILDER_MAGIC;
+  builder->count = ET_TR3_C_RESTORE_ASSIGNMENTS;
+  builder->tr3_c_restore_authority = restore_authority;
+  builder->tr3_c_restore_phase = ET_TR3_C_I2_RESTORE_PHASE_PREFIX;
+  builder->registry_next = et_i2_live_copy_builders;
+  et_i2_live_copy_builders = builder;
+  *output = builder;
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+int32_t et_tr3_c_i2_copy_builder_append_parameter_v1(
+    void *opaque, const void *restore_authority, et_f32_parameter *parameter,
+    const void *p1_handle, const et_f32_tensor *owned_source) {
+  et_i2_copy_builder *builder = NULL;
+  et_f32_tensor *destination = NULL;
+  int32_t result = et_tr3_c_i2_restore_builder_live(opaque, &builder);
+  if (result != 0) {
+    return result;
+  }
+  if ((result = et_tr3_c_i2_restore_authority(builder, restore_authority)) !=
+      0) {
+    return result;
+  }
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_PREFIX ||
+      builder->tr3_c_next_index >= ET_TR3_C_MODEL_DESTINATIONS ||
+      builder->plan != NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  if ((result = et_tr3_c_i2_parameter_destination(parameter, p1_handle,
+                                                   &destination)) != 0) {
+    return result;
+  }
+  if ((result = et_i2_private_owned_clone_match_v1(
+           owned_source, destination,
+           ET_I2_PRIVATE_OWNED_VALUE_FINITE)) != 0) {
+    return result;
+  }
+  if (owned_source == destination) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  for (size_t index = 0u; index < builder->tr3_c_next_index; ++index) {
+    const et_f32_tensor_copy_assignment_v1 *prior =
+        &builder->assignments[index];
+    if (prior->destination == destination || prior->source == owned_source ||
+        prior->destination == owned_source || prior->source == destination) {
+      return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+    }
+  }
+  builder->assignments[builder->tr3_c_next_index].struct_size =
+      ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
+  builder->assignments[builder->tr3_c_next_index].destination = destination;
+  builder->assignments[builder->tr3_c_next_index].source = owned_source;
+  builder->tr3_c_next_index++;
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+int32_t et_tr3_c_i2_copy_builder_append_restore42_v1(
+    void *opaque, const et_tr3_c_i2_restore42_append_v1 *request) {
+  et_i2_copy_builder *builder = NULL;
+  et_tr3_c_i2_restore42_append_v1 snapshot;
+  int32_t result = et_tr3_c_i2_restore_builder_live(opaque, &builder);
+  if (result != 0) {
+    return result;
+  }
+  result = et_tr3_c_i2_snapshot_restore42_request(builder, request, &snapshot);
+  if (result != 0) {
+    return result;
+  }
+  result = et_tr3_c_i2_validate_restore42(builder, &snapshot, 0);
+  if (result != 0) {
+    return result;
+  }
+  for (size_t index = 0u; index < ET_TR3_C_O2_MOMENT_ASSIGNMENTS; ++index) {
+    const size_t assignment_index = ET_TR3_C_O2_FIRST_INDEX + index;
+    builder->assignments[assignment_index].struct_size =
+        ET_F32_TENSOR_COPY_ASSIGNMENT_V1_0_SIZE;
+    builder->assignments[assignment_index].destination =
+        snapshot.moment_destinations[index];
+    builder->assignments[assignment_index].source =
+        snapshot.moment_sources[index];
+  }
+  builder->tr3_c_next_index = ET_TR3_C_RESTORE_ASSIGNMENTS;
+  builder->tr3_c_restore_phase = ET_TR3_C_I2_RESTORE_PHASE_COMPLETE;
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+int32_t et_tr3_c_i2_copy_builder_verify_restore42_v1(
+    const void *opaque,
+    const et_tr3_c_i2_restore42_append_v1 *request) {
+  et_i2_copy_builder *builder = NULL;
+  et_tr3_c_i2_restore42_append_v1 snapshot;
+  int32_t result = et_tr3_c_i2_restore_builder_live(opaque, &builder);
+  if (result != 0) {
+    return result;
+  }
+  result = et_tr3_c_i2_snapshot_restore42_request(builder, request, &snapshot);
+  return result == 0
+             ? et_tr3_c_i2_validate_restore42(builder, &snapshot, 1)
+             : result;
+}
+
+int32_t et_tr3_c_i2_copy_builder_prepare_restore42_v1(
+    void *opaque, const void *restore_authority) {
+  et_i2_copy_builder *builder = NULL;
+  et_f32_tensor_copy_plan *plan = NULL;
+  et_f32_tensor_error error;
+  int32_t status;
+  int32_t result = et_tr3_c_i2_restore_builder_live(opaque, &builder);
+  if (result != 0) {
+    return result;
+  }
+  if ((result = et_tr3_c_i2_restore_authority(builder, restore_authority)) !=
+      0) {
+    return result;
+  }
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_COMPLETE ||
+      builder->tr3_c_next_index != ET_TR3_C_RESTORE_ASSIGNMENTS ||
+      builder->plan != NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  memset(&error, 0, sizeof(error));
+  status = et_f32_tensor_copy_plan_prepare_v1(
+      builder->count, builder->assignments, &plan, &error);
+  if (status != 0) {
+    if (plan != NULL &&
+        et_f32_tensor_copy_plan_release_v1(&plan, NULL) != 0) {
+      et_tr3_c_i2_fail_stop();
+    }
+    return et_tr3_c_i2_translate_copy_prepare(status, &error);
+  }
+  if (plan == NULL) {
+    et_tr3_c_i2_fail_stop();
+  }
+  builder->plan = plan;
+  builder->tr3_c_restore_phase = ET_TR3_C_I2_RESTORE_PHASE_PREPARED;
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+int32_t et_tr3_c_i2_copy_builder_commit_restore42_checked_v1(
+    void *opaque, const void *restore_authority) {
+  et_i2_copy_builder *builder = NULL;
+  int32_t status;
+  int32_t result = et_tr3_c_i2_restore_builder_live(opaque, &builder);
+  if (result != 0) {
+    return result;
+  }
+  if ((result = et_tr3_c_i2_restore_authority(builder, restore_authority)) !=
+      0) {
+    return result;
+  }
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_PREPARED ||
+      builder->tr3_c_next_index != ET_TR3_C_RESTORE_ASSIGNMENTS ||
+      builder->plan == NULL) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  et_i2_clear_error();
+  status = et_tr3_c_i2_copy_commit(builder->plan);
+  if (status != 0) {
+    et_tr3_c_i2_fail_stop();
+  }
+  status = et_tr3_c_i2_copy_release(&builder->plan);
+  if (status != 0 || builder->plan != NULL) {
+    et_tr3_c_i2_fail_stop();
+  }
+  et_tr3_c_i2_retire_restore_builder(
+      builder, ET_TR3_C_I2_RESTORE_PHASE_COMMITTED);
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+int32_t et_tr3_c_i2_copy_builder_abort_restore42_checked_v1(
+    void *opaque, const void *restore_authority) {
+  et_i2_copy_builder *builder = NULL;
+  int32_t status;
+  int32_t result = et_tr3_c_i2_restore_builder_live(opaque, &builder);
+  if (result != 0) {
+    return result;
+  }
+  if ((result = et_tr3_c_i2_restore_authority(builder, restore_authority)) !=
+      0) {
+    return result;
+  }
+  if (!((builder->tr3_c_restore_phase ==
+             ET_TR3_C_I2_RESTORE_PHASE_PREFIX &&
+         builder->tr3_c_next_index <= ET_TR3_C_MODEL_DESTINATIONS &&
+         builder->plan == NULL) ||
+        (builder->tr3_c_restore_phase ==
+             ET_TR3_C_I2_RESTORE_PHASE_COMPLETE &&
+         builder->tr3_c_next_index == ET_TR3_C_RESTORE_ASSIGNMENTS &&
+         builder->plan == NULL) ||
+        (builder->tr3_c_restore_phase ==
+             ET_TR3_C_I2_RESTORE_PHASE_PREPARED &&
+         builder->tr3_c_next_index == ET_TR3_C_RESTORE_ASSIGNMENTS &&
+         builder->plan != NULL))) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  if (builder->plan != NULL) {
+    et_i2_clear_error();
+    status = et_tr3_c_i2_copy_release(&builder->plan);
+    if (status != 0 || builder->plan != NULL) {
+      et_tr3_c_i2_fail_stop();
+    }
+  }
+  et_tr3_c_i2_retire_restore_builder(builder,
+                                     ET_TR3_C_I2_RESTORE_PHASE_ABORTED);
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+
+int32_t et_tr3_c_i2_copy_builder_require_terminal_restore42_v1(
+    const void *opaque, uint32_t expected_terminal) {
+  const et_i2_copy_builder *builder = et_i2_retired_copy_builders;
+  uint32_t expected_phase;
+  if (expected_terminal == ET_TR3_C_I2_TERMINAL_COMMITTED) {
+    expected_phase = ET_TR3_C_I2_RESTORE_PHASE_COMMITTED;
+  } else if (expected_terminal == ET_TR3_C_I2_TERMINAL_ABORTED) {
+    expected_phase = ET_TR3_C_I2_RESTORE_PHASE_ABORTED;
+  } else {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  while (builder != NULL && (const void *)builder != opaque) {
+    builder = builder->registry_next;
+  }
+  if (builder == NULL ||
+      (builder->tr3_c_restore_phase !=
+           ET_TR3_C_I2_RESTORE_PHASE_COMMITTED &&
+       builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ABORTED)) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  if (builder->tr3_c_restore_phase != expected_phase) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  return builder->magic == 0u && builder->count == 0u &&
+                 builder->assignments == NULL && builder->plan == NULL &&
+                 builder->tr3_c_restore_authority == NULL &&
+                 builder->tr3_c_next_index == 0u
+             ? ET_I2_PRIVATE_OWNED_RESULT_OK
+             : ET_I2_PRIVATE_OWNED_RESULT_INTERNAL;
+}
+#endif
+
 int64_t et_tr3_c_i2_copy_builder_commit_checked_v1(void *opaque) {
   et_i2_copy_builder *const builder = et_i2_find_copy_builder(opaque);
   int32_t status;
@@ -992,6 +1548,13 @@ int64_t et_tr3_c_i2_copy_builder_commit_checked_v1(void *opaque) {
                            ET_F32_TENSOR_CODE_INVALID_HANDLE);
     return -1;
   }
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+#endif
   if (builder->plan == NULL) {
     et_tr3_c_i2_fail_stop();
   }
@@ -1019,6 +1582,13 @@ int64_t et_tr3_c_i2_copy_builder_abort_checked_v1(void *opaque) {
                            ET_F32_TENSOR_CODE_INVALID_HANDLE);
     return -1;
   }
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  if (builder->tr3_c_restore_phase != ET_TR3_C_I2_RESTORE_PHASE_ORDINARY) {
+    et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                           ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    return -1;
+  }
+#endif
   if (builder->plan != NULL) {
     et_i2_clear_error();
     status = et_tr3_c_i2_copy_release(&builder->plan);
