@@ -1,7 +1,7 @@
 # C2 handler installation and release authority — issue #121
 
 Status: **in progress; final transformer candidate frozen and independently
-approved; pin adoption, full affected-gate union, and supported integration
+approved; full affected-gate union and supported integration
 evidence pending**. This records the current
 source contract and focused final-runtime evidence for the issue #121 correction.
 It is not completion evidence.
@@ -90,13 +90,13 @@ reserve independently after its parent has consumed authority. The runtime must
 make the reserved frames available across sequential cleanup/rethrow paths;
 source order alone cannot prove that implementation property.
 
-The [toolchain lock](../toolchain/eshkol.lock) still names the existing pin
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`. The final reviewed runtime successor
-used here is commit `81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, tree
+The [toolchain lock](../toolchain/eshkol.lock) now names the reviewed runtime
+successor used here: commit `81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, tree
 `7669312845a9d8d372006af52271045e69505813`, built as Release with Clang/LLVM
-21.1.8 and promotion testing disabled. Pin adoption remains external to this
-source correction. Silently satisfying the new symbol through another runtime
-or library is not acceptable evidence.
+21.1.8 and promotion testing disabled. The isolated dependency union carries the
+exact pin adoption and the handler-reserve dependency in every P1-containing
+aggregate manifest. Silently satisfying the symbol through another runtime or
+library is not acceptable evidence.
 
 ## Current checks and pending evidence
 
@@ -152,7 +152,7 @@ review. The focused gate expects exactly 290 checks.
 - Allocation-failure recovery is proven for the fixed 5/6/11 paths exercised by
   the focused witness. It is not a claim for arbitrary provider-installed guard
   depth or every failure path.
-- Pin adoption, bootstrap/provenance integration, and supported CI are external
+- Exact dependency-union integration, inherited package/retention gates, and supported CI are external
   acceptance dependencies. No adoption or portability result is implied here.
 - Larger lifecycle records and retained handler capacity require fresh retention
   and operational measurements. Historical C2 memory/timing results are not
