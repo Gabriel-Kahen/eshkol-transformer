@@ -246,7 +246,7 @@ def check(root, overrides=None):
         else:
             leaves += targets[target]
     assert Counter(leaves) == Counter(c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh")
-    assert len(leaves) == 26
+    assert len(leaves) == 27
     canonical = ["/usr/bin/bash scripts/" + s for s in (
         "generate-p1-roots.sh --check", "build.sh", "build-a2.sh",
         "build-p1-identity.sh", "build-p1-package.sh", "build-c1.sh",
