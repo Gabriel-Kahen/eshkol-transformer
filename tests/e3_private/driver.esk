@@ -115,6 +115,11 @@
        (* 16777216 (bytevector-u8-ref bytes 3)))))
 
 (define (e3-test-output frame destinations before after)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (if (or (not (= (vector-ref entry 1) 1))
+            (vector-ref (vector-ref entry 3) 10)
+            (not (vector-ref entry 14)))
+        (e3-native-invariant-fail)))
   (vector 'e3-private-result-v1
           (e3-test-u32-ref (vector-ref destinations 0))
           (e3-test-u32-ref (vector-ref destinations 1))
