@@ -64,6 +64,10 @@ for compiler in clang gcc; do
   feature="${tmp}/${compiler}-feature.o"
   step="${tmp}/${compiler}-step.o"
   combined="${tmp}/${compiler}-combined.o"
+  i2_ordinary_bridge="${tmp}/${compiler}-i2-ordinary-bridge.o"
+  i2_restore_bridge="${tmp}/${compiler}-i2-restore-bridge.o"
+  g3_owner_bridge="${tmp}/${compiler}-g3-owner-bridge.o"
+  joint_bridge="${tmp}/${compiler}-joint-i2-g3-bridge.o"
 
   if "${compiler}" "${cflags[@]}" -DET_TR3_C_O2_RESTORE_NATIVE \
       -c "${PROJECT_ROOT}/native/o2_optimizer.c" \
@@ -134,6 +138,66 @@ for compiler in clang gcc; do
       die "unexpected O2 restore defined-symbol delta: ${symbol}"
     check_hidden "${feature}" "${symbol}"
   done <"${tmp}/${compiler}-feature-defined-delta"
+
+  "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+    -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+    -o "${i2_ordinary_bridge}"
+  "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+    -DET_I2_PRIVATE_OWNED_CLONE_MATCH -DET_TR3_C_I2_RESTORE_PRIVATE \
+    -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+    -o "${i2_restore_bridge}"
+  "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+    -DET_G3C4_I2_CONSTRUCTION_PRIVATE -DET_G3C4_NATIVE_OWNER_PRIVATE \
+    -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+    -o "${g3_owner_bridge}"
+  "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+    -DET_I2_PRIVATE_OWNED_CLONE_MATCH -DET_TR3_C_I2_RESTORE_PRIVATE \
+    -DET_G3C4_I2_CONSTRUCTION_PRIVATE -DET_G3C4_NATIVE_OWNER_PRIVATE \
+    -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+    -o "${joint_bridge}"
+  for bridge_kind in i2_ordinary_bridge i2_restore_bridge g3_owner_bridge \
+      joint_bridge; do
+    object="${!bridge_kind}"
+    symbols defined "${object}" \
+      "${tmp}/${compiler}-${bridge_kind}.defined"
+    symbols undefined "${object}" \
+      "${tmp}/${compiler}-${bridge_kind}.undefined"
+  done
+  comm -13 "${tmp}/${compiler}-i2_restore_bridge.defined" \
+    "${tmp}/${compiler}-joint_bridge.defined" \
+    >"${tmp}/${compiler}-joint-g3-defined-delta"
+  comm -13 "${tmp}/${compiler}-i2_ordinary_bridge.defined" \
+    "${tmp}/${compiler}-g3_owner_bridge.defined" \
+    >"${tmp}/${compiler}-owner-defined-delta"
+  cmp "${tmp}/${compiler}-owner-defined-delta" \
+    "${tmp}/${compiler}-joint-g3-defined-delta"
+  printf '%s\n' et_i2_private_g3c4_construction_available_v1 \
+    et_i2_private_g3c4_construction_parameter_preflight_v1 | \
+    LC_ALL=C sort | \
+    cmp - "${tmp}/${compiler}-joint-g3-defined-delta"
+  test ! -s <(comm -23 \
+    "${tmp}/${compiler}-i2_restore_bridge.defined" \
+    "${tmp}/${compiler}-joint_bridge.defined")
+  comm -13 "${tmp}/${compiler}-i2_restore_bridge.undefined" \
+    "${tmp}/${compiler}-joint_bridge.undefined" \
+    >"${tmp}/${compiler}-joint-g3-undefined-delta"
+  comm -13 "${tmp}/${compiler}-i2_ordinary_bridge.undefined" \
+    "${tmp}/${compiler}-g3_owner_bridge.undefined" \
+    >"${tmp}/${compiler}-owner-undefined-delta"
+  cmp "${tmp}/${compiler}-owner-undefined-delta" \
+    "${tmp}/${compiler}-joint-g3-undefined-delta"
+  printf '%s\n' et_g3c4_construction_parameter_preflight_internal | \
+    cmp - "${tmp}/${compiler}-joint-g3-undefined-delta"
+  test ! -s <(comm -23 \
+    "${tmp}/${compiler}-i2_restore_bridge.undefined" \
+    "${tmp}/${compiler}-joint_bridge.undefined")
+  test ! -s <(comm -23 \
+    "${tmp}/${compiler}-i2_ordinary_bridge.undefined" \
+    "${tmp}/${compiler}-g3_owner_bridge.undefined")
+  for symbol in et_i2_private_g3c4_construction_available_v1 \
+    et_i2_private_g3c4_construction_parameter_preflight_v1; do
+    check_hidden "${joint_bridge}" "${symbol}"
+  done
 
   test_flags=(-DET_F32_TENSOR_TESTING -DET_O2_TESTING
               -DET_I2_NATIVE_HELPERS_ONLY
