@@ -7,11 +7,7 @@
 
 (define (cli3-formatter-fixture-check label condition)
   (if (not condition)
-      (begin
-        (display "CLI3 FORMATTER FIXTURE FAIL: ")
-        (display label)
-        (newline)
-        (exit 1))))
+      (exit 1)))
 
 (define cli3-formatter-fixture-smile "🙂")
 (define cli3-formatter-fixture-smile-escape "\\ud83d\\ude42")
