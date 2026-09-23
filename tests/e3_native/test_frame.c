@@ -1,8 +1,23 @@
 #define ET_E3_TESTING 1
+#define et_f32_tensor_destroy_v1 et_e3_test_observed_tensor_destroy_v1
 #include "../../src/eshkol_transformer/e3_frame.c"
+#undef et_f32_tensor_destroy_v1
 
 #include <math.h>
 #include <stdio.h>
+
+int32_t et_f32_tensor_destroy_v1(et_f32_tensor **tensor,
+                                 et_f32_tensor_error *error);
+
+static et_f32_tensor *destroyed_tensors[64];
+static size_t destroyed_tensor_count;
+
+int32_t et_e3_test_observed_tensor_destroy_v1(
+    et_f32_tensor **tensor, et_f32_tensor_error *error) {
+  if (tensor && *tensor && destroyed_tensor_count < 64)
+    destroyed_tensors[destroyed_tensor_count++] = *tensor;
+  return et_f32_tensor_destroy_v1(tensor, error);
+}
 
 static size_t checks;
 #define CHECK(value) do { ++checks; if (!(value)) { \
@@ -15,6 +30,106 @@ static size_t checks;
 
 static unsigned char identities[14];
 static et_f32_tensor_error tensor_error;
+
+static void expect_local_invariant(int64_t status) {
+  CHECK(status == E3_INTERNAL);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+        e3_last_code == E3_CODE_INVARIANT);
+}
+
+static void test_diagnostic_mapping(void) {
+  CHECK(e3_dependency(1, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                      ET_KERNEL_CODE_NULL_ARGUMENT) == E3_INVALID_ARGUMENT);
+  CHECK(e3_last_domain == 1 &&
+        e3_last_category == ET_KERNEL_ERROR_INVALID_ARGUMENT &&
+        e3_last_code == ET_KERNEL_CODE_NULL_ARGUMENT);
+  CHECK(e3_dependency(1, ET_KERNEL_ERROR_UNSUPPORTED,
+                      ET_KERNEL_CODE_PROVIDER_REJECTED) == E3_UNSUPPORTED);
+  expect_local_invariant(e3_dependency(0, ET_KERNEL_ERROR_INTERNAL,
+                                      ET_KERNEL_CODE_PROVIDER_REJECTED));
+  expect_local_invariant(e3_dependency(1, ET_KERNEL_ERROR_NONE,
+                                      ET_KERNEL_CODE_NULL_ARGUMENT));
+  expect_local_invariant(e3_dependency(1, ET_KERNEL_ERROR_INTERNAL + 1,
+                                      ET_KERNEL_CODE_NULL_ARGUMENT));
+  expect_local_invariant(e3_dependency(1, ET_KERNEL_ERROR_INTERNAL,
+                                      ET_KERNEL_CODE_OK));
+  expect_local_invariant(e3_dependency(1, ET_KERNEL_ERROR_INTERNAL,
+                                      ET_KERNEL_CODE_PROVIDER_REJECTED + 1));
+
+  CHECK(e3_dependency(2, ET_I64_TENSOR_ERROR_INVALID_ARGUMENT,
+                      ET_I64_TENSOR_CODE_NULL_ARGUMENT) == E3_INVALID_ARGUMENT);
+  CHECK(e3_dependency(2, ET_I64_TENSOR_ERROR_NONCONTIGUOUS,
+                      ET_I64_TENSOR_CODE_INVALID_BUFFER) == E3_INVALID_ARGUMENT);
+  CHECK(e3_dependency(2, ET_I64_TENSOR_ERROR_INVALID_STATE,
+                      ET_I64_TENSOR_CODE_ACTIVE_BORROW) == E3_INVALID_STATE);
+  CHECK(e3_dependency(2, ET_I64_TENSOR_ERROR_SHAPE_MISMATCH,
+                      ET_I64_TENSOR_CODE_INVALID_SHAPE) == E3_SHAPE_MISMATCH);
+  CHECK(e3_dependency(2, ET_I64_TENSOR_ERROR_VERSION_MISMATCH,
+                      ET_I64_TENSOR_CODE_ABI_VERSION_MISMATCH) == E3_INTERNAL);
+  CHECK(e3_last_domain == 2 &&
+        e3_last_category == ET_I64_TENSOR_ERROR_VERSION_MISMATCH &&
+        e3_last_code == ET_I64_TENSOR_CODE_ABI_VERSION_MISMATCH);
+  expect_local_invariant(e3_dependency(2, ET_I64_TENSOR_ERROR_INTERNAL + 1,
+                                      ET_I64_TENSOR_CODE_NULL_ARGUMENT));
+  expect_local_invariant(e3_dependency(2, ET_I64_TENSOR_ERROR_INTERNAL,
+                                      ET_I64_TENSOR_CODE_PROVIDER_REJECTED + 1));
+
+  CHECK(e3_dependency(3, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                      ET_F32_TENSOR_CODE_ACTIVE_BORROW) == E3_INVALID_STATE);
+  CHECK(e3_dependency(3, ET_F32_TENSOR_ERROR_SHAPE_MISMATCH,
+                      ET_F32_TENSOR_CODE_INVALID_SHAPE) == E3_SHAPE_MISMATCH);
+  expect_local_invariant(e3_dependency(3, ET_F32_TENSOR_ERROR_INTERNAL + 1,
+                                      ET_F32_TENSOR_CODE_NULL_ARGUMENT));
+  expect_local_invariant(e3_dependency(3, ET_F32_TENSOR_ERROR_INTERNAL,
+                                      ET_F32_TENSOR_CODE_FLOAT_ENVIRONMENT + 1));
+
+  static const struct {
+    int64_t category, code, status, local_code;
+  } valid_m3[] = {
+    {ET_M3T_INVALID_ARGUMENT, ET_M3T_CODE_IDENTITY,
+     E3_INVALID_ARGUMENT, E3_CODE_IDENTITY},
+    {ET_M3T_INVALID_STATE, ET_M3T_CODE_LIFECYCLE,
+     E3_INVALID_STATE, E3_CODE_PHASE},
+    {ET_M3T_INTERNAL, ET_M3T_CODE_ALLOCATION,
+     E3_INTERNAL, E3_CODE_ALLOCATION},
+    {ET_M3T_SHAPE_MISMATCH, ET_M3T_CODE_SHAPE,
+     E3_SHAPE_MISMATCH, E3_CODE_SHAPE},
+    {ET_M3T_INVALID_STATE, ET_M3T_CODE_REENTRANCY,
+     E3_INVALID_STATE, E3_CODE_REENTRANCY},
+    {ET_M3T_INTERNAL, ET_M3T_CODE_INTERNAL,
+     E3_INTERNAL, E3_CODE_INVARIANT},
+  };
+  for (size_t i = 0; i < sizeof(valid_m3) / sizeof(valid_m3[0]); ++i) {
+    error_domain = 0;
+    error_category = valid_m3[i].category;
+    error_code = valid_m3[i].code;
+    CHECK(e3_m3_error() == valid_m3[i].status);
+    CHECK(e3_last_domain == 0 && e3_last_category == valid_m3[i].status &&
+          e3_last_code == valid_m3[i].local_code);
+  }
+  error_domain = 0;
+  error_category = ET_M3T_INVALID_ARGUMENT;
+  error_code = ET_M3T_CODE_ALLOCATION;
+  expect_local_invariant(e3_m3_error());
+  error_category = ET_M3T_INTERNAL + 1;
+  error_code = ET_M3T_CODE_INTERNAL;
+  expect_local_invariant(e3_m3_error());
+  error_category = ET_M3T_INTERNAL;
+  error_code = ET_M3T_CODE_INTERNAL + 1;
+  expect_local_invariant(e3_m3_error());
+
+  error_domain = 2;
+  error_category = ET_I64_TENSOR_ERROR_NONCONTIGUOUS;
+  error_code = ET_I64_TENSOR_CODE_INVALID_BUFFER;
+  CHECK(e3_m3_error() == E3_INVALID_ARGUMENT);
+  CHECK(e3_last_domain == 2 &&
+        e3_last_category == ET_I64_TENSOR_ERROR_NONCONTIGUOUS &&
+        e3_last_code == ET_I64_TENSOR_CODE_INVALID_BUFFER);
+  error_domain = 4;
+  error_category = 1;
+  error_code = 1;
+  expect_local_invariant(e3_m3_error());
+}
 
 static owner *make_model(void) {
   initializer *initial = et_m3t_private_initializer_create_v1(1729);
@@ -54,6 +169,65 @@ static et_kernel_tensor_view_v1 i64_pair(int64_t words[2]) {
 
 static et_kernel_tensor_view_v1 bool_pair(unsigned char words[2]) {
   return e3_native_view(words, 2, "bool", 2, e3_shape_pair);
+}
+
+static void expect_input_alias_unchanged(
+    et_e3_frame_internal *frame, const et_kernel_tensor_view_v1 *view) {
+  et_e3_frame_internal before;
+  uint32_t destinations_before[4];
+  memcpy(&before, frame, sizeof(before));
+  for (size_t i = 0; i < 4; ++i)
+    read_scalar(frame->destination[i], &destinations_before[i]);
+  CHECK(et_e3_private_stage_inputs_v1(frame, view) == E3_INVALID_ARGUMENT);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INVALID_ARGUMENT &&
+        e3_last_code == E3_CODE_DESTINATION);
+  CHECK(memcmp(frame, &before, sizeof(before)) == 0);
+  for (size_t i = 0; i < 4; ++i) {
+    uint32_t after;
+    read_scalar(frame->destination[i], &after);
+    CHECK(after == destinations_before[i]);
+  }
+  CHECK(frame->phase == E3_ACQUIRED && frame->stage_plane == 0);
+}
+
+static void test_stage_aliases(et_e3_frame_internal *frame) {
+  int64_t words[2] = {0, 1};
+  uint64_t shape[2] = {1, 2};
+  et_kernel_tensor_view_v1 view = e3_native_view(words, sizeof(words), "i64",
+                                                 2, shape);
+
+  expect_input_alias_unchanged(
+      frame, (const et_kernel_tensor_view_v1 *)(const void *)&frame->counts);
+
+  view.shape = (const uint64_t *)(const void *)&frame->counts;
+  expect_input_alias_unchanged(frame, &view);
+  view.shape = shape;
+  view.data = frame->ids;
+  expect_input_alias_unchanged(frame, &view);
+
+  view.data = words;
+  expect_input_alias_unchanged(
+      frame, (const et_kernel_tensor_view_v1 *)(const void *)frame->destination[0]);
+  view.shape = (const uint64_t *)(const void *)frame->destination[0];
+  expect_input_alias_unchanged(frame, &view);
+  view.shape = shape;
+  view.data = frame->destination[0];
+  expect_input_alias_unchanged(frame, &view);
+  et_f32_scoped_guard_internal guard = {0};
+  OK(et_f32_tensor_scoped_begin_internal(frame->destination[0], &guard,
+                                          &tensor_error));
+  view.data = guard.view.data;
+  OK(et_f32_tensor_scoped_end_internal(&guard));
+  expect_input_alias_unchanged(frame, &view);
+
+  view.data = words;
+  view.shape = (const uint64_t *)(const void *)&view;
+  expect_input_alias_unchanged(frame, &view);
+  view.shape = shape;
+  view.data = &view;
+  expect_input_alias_unchanged(frame, &view);
+  view.data = shape;
+  expect_input_alias_unchanged(frame, &view);
 }
 
 static void stage(et_e3_frame_internal *frame, int64_t first, int64_t second,
@@ -190,6 +364,7 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   int64_t premature_targets[2] = {3, 4};
   et_kernel_tensor_view_v1 premature = i64_pair(premature_targets);
   CHECK(et_e3_private_stage_targets_v1(frame, &premature) == E3_INVALID_STATE);
+  test_stage_aliases(frame);
 
   int64_t bad_ids[2] = {0, 256};
   et_kernel_tensor_view_v1 bad = i64_pair(bad_ids);
@@ -286,13 +461,20 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   CHECK(et_e3_private_frame_destroy_preflight_v1(frame) == E3_INVALID_STATE);
   CHECK(e3_last_code == E3_CODE_DESTINATION);
   OK(et_f32_tensor_borrow_end_v1(&destroy_borrow, &tensor_error));
+  et_f32_tensor *creation_order[37];
+  CHECK(e3_all_tensors(frame, creation_order) == 37);
+  destroyed_tensor_count = 0;
   OK(et_e3_private_frame_destroy_preflight_v1(frame));
   et_e3_private_frame_destroy_v1(frame);
+  CHECK(destroyed_tensor_count == 37);
+  for (size_t i = 0; i < 37; ++i)
+    CHECK(destroyed_tensors[i] == creation_order[36 - i]);
   CHECK(et_e3_private_frame_check_v1(frame) == E3_INVALID_STATE);
   CHECK(et_e3_private_frame_destroy_preflight_v1(frame) == E3_INVALID_STATE);
 }
 
 int main(void) {
+  test_diagnostic_mapping();
   owner *model = make_model();
   et_f32_tensor *destination[4] = {scalar(), scalar(), scalar(), scalar()};
   test_create_rejections(model, destination);

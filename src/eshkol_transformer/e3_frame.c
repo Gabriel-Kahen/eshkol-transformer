@@ -119,6 +119,15 @@ static int64_t e3_dependency_status(int64_t domain, int64_t category) {
     if (category == ET_KERNEL_ERROR_UNSUPPORTED) return E3_UNSUPPORTED;
     return E3_INTERNAL;
   }
+  if (domain == 2) {
+    if (category == ET_I64_TENSOR_ERROR_INVALID_ARGUMENT ||
+        category == ET_I64_TENSOR_ERROR_NONCONTIGUOUS)
+      return E3_INVALID_ARGUMENT;
+    if (category == ET_I64_TENSOR_ERROR_INVALID_STATE) return E3_INVALID_STATE;
+    if (category == ET_I64_TENSOR_ERROR_SHAPE_MISMATCH)
+      return E3_SHAPE_MISMATCH;
+    return E3_INTERNAL;
+  }
   if (domain == 3) {
     if (category == ET_F32_TENSOR_ERROR_INVALID_ARGUMENT ||
         category == ET_F32_TENSOR_ERROR_NONCONTIGUOUS)
@@ -131,8 +140,29 @@ static int64_t e3_dependency_status(int64_t domain, int64_t category) {
   return E3_INTERNAL;
 }
 
+static int e3_dependency_valid(int64_t domain, int64_t category,
+                               int64_t code) {
+  if (domain == 1)
+    return category >= ET_KERNEL_ERROR_INVALID_ARGUMENT &&
+        category <= ET_KERNEL_ERROR_INTERNAL &&
+        code >= ET_KERNEL_CODE_NULL_ARGUMENT &&
+        code <= ET_KERNEL_CODE_PROVIDER_REJECTED;
+  if (domain == 2)
+    return category >= ET_I64_TENSOR_ERROR_INVALID_ARGUMENT &&
+        category <= ET_I64_TENSOR_ERROR_INTERNAL &&
+        code >= ET_I64_TENSOR_CODE_NULL_ARGUMENT &&
+        code <= ET_I64_TENSOR_CODE_PROVIDER_REJECTED;
+  if (domain == 3)
+    return category >= ET_F32_TENSOR_ERROR_INVALID_ARGUMENT &&
+        category <= ET_F32_TENSOR_ERROR_INTERNAL &&
+        code >= ET_F32_TENSOR_CODE_NULL_ARGUMENT &&
+        code <= ET_F32_TENSOR_CODE_FLOAT_ENVIRONMENT;
+  return 0;
+}
+
 static int64_t e3_dependency(int64_t domain, int64_t category, int64_t code) {
-  if (category <= 0 || code <= 0) return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+  if (!e3_dependency_valid(domain, category, code))
+    return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
   e3_last_domain = domain;
   e3_last_category = category;
   e3_last_code = code;
@@ -155,13 +185,17 @@ static int64_t e3_m3_error(void) {
     if (error_category == ET_M3T_INVALID_STATE &&
         error_code == ET_M3T_CODE_LIFECYCLE)
       return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
-    if (error_code == ET_M3T_CODE_ALLOCATION)
+    if (error_category == ET_M3T_INTERNAL &&
+        error_code == ET_M3T_CODE_ALLOCATION)
       return e3_fail(E3_INTERNAL, E3_CODE_ALLOCATION);
-    if (error_code == ET_M3T_CODE_SHAPE)
+    if (error_category == ET_M3T_SHAPE_MISMATCH &&
+        error_code == ET_M3T_CODE_SHAPE)
       return e3_fail(E3_SHAPE_MISMATCH, E3_CODE_SHAPE);
-    if (error_code == ET_M3T_CODE_REENTRANCY)
+    if (error_category == ET_M3T_INVALID_STATE &&
+        error_code == ET_M3T_CODE_REENTRANCY)
       return e3_fail(E3_INVALID_STATE, E3_CODE_REENTRANCY);
-    if (error_code == ET_M3T_CODE_INTERNAL)
+    if (error_category == ET_M3T_INTERNAL &&
+        error_code == ET_M3T_CODE_INTERNAL)
       return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
     return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
   }
@@ -400,14 +434,14 @@ static void e3_tensor_destroy(et_f32_tensor **tensor) {
 }
 
 static void e3_destroy_owned(et_e3_frame_internal *frame) {
-  for (size_t i = 21; i > 0; --i) e3_tensor_destroy(&frame->forward[i - 1]);
-  e3_tensor_destroy(&frame->ce);
-  e3_tensor_destroy(&frame->epsilon);
-  for (size_t i = 4; i > 0; --i) e3_tensor_destroy(&frame->batch[i - 1]);
+  for (size_t i = 4; i > 0; --i) e3_tensor_destroy(&frame->result[i - 1]);
   for (size_t bank = 2; bank > 0; --bank)
     for (size_t i = 3; i > 0; --i)
       e3_tensor_destroy(&frame->sum[bank - 1][i - 1]);
-  for (size_t i = 4; i > 0; --i) e3_tensor_destroy(&frame->result[i - 1]);
+  for (size_t i = 4; i > 0; --i) e3_tensor_destroy(&frame->batch[i - 1]);
+  e3_tensor_destroy(&frame->epsilon);
+  e3_tensor_destroy(&frame->ce);
+  for (size_t i = 21; i > 0; --i) e3_tensor_destroy(&frame->forward[i - 1]);
 }
 
 static int64_t e3_create_owned(et_e3_frame_internal *frame) {
@@ -629,16 +663,17 @@ static et_kernel_tensor_view_v1 e3_native_view(
   };
 }
 
-static int64_t e3_stage_alias_check(et_e3_frame_internal *frame,
-                                    const et_kernel_tensor_view_v1 *view) {
-  if (e3_overlap(view->data, view->byte_length, frame, sizeof(*frame)) ||
-      e3_overlap(view->data, view->byte_length, view, sizeof(*view)) ||
-      e3_overlap(view->data, view->byte_length, view->shape,
-                 2 * sizeof(*view->shape)))
+static int64_t e3_stage_span_alias(et_e3_frame_internal *frame,
+                                   const void *pointer, size_t bytes) {
+  if (!e3_span(pointer, bytes) ||
+      e3_overlap(pointer, bytes, frame, sizeof(*frame)))
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
   for (size_t i = 0; i < 14; ++i)
-    if (e3_overlap(view->data, view->byte_length, frame->pins.views[i].data,
-                   frame->pins.views[i].byte_length))
+    if (e3_overlap(pointer, bytes, frame->pins.views[i].data,
+                   frame->pins.views[i].byte_length) ||
+        e3_overlap(pointer, bytes, frame->pins.views[i].shape,
+                   frame->pins.views[i].rank *
+                       sizeof(*frame->pins.views[i].shape)))
       return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
   et_f32_tensor *owned[37];
   (void)e3_all_tensors(frame, owned);
@@ -647,10 +682,28 @@ static int64_t e3_stage_alias_check(et_e3_frame_internal *frame,
     et_f32_scoped_guard_internal guard = {0};
     int64_t rc = e3_scope_begin(tensor, &guard, i >= 37);
     if (rc) return rc;
-    int overlap = e3_overlap(view->data, view->byte_length,
-                             guard.view.data, guard.view.byte_length);
+    int overlap = e3_overlap(pointer, bytes, tensor, 1) ||
+        e3_overlap(pointer, bytes, guard.view.data, guard.view.byte_length) ||
+        e3_overlap(pointer, bytes, guard.view.shape,
+                   guard.view.rank * sizeof(*guard.view.shape));
     e3_scope_end(&guard);
     if (overlap) return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
+  }
+  return 0;
+}
+
+static int64_t e3_stage_alias_check(et_e3_frame_internal *frame,
+                                    const void *prefix, size_t prefix_bytes,
+                                    const void *shape, size_t shape_bytes,
+                                    const void *data, size_t data_bytes) {
+  const void *source[3] = {prefix, shape, data};
+  const size_t source_bytes[3] = {prefix_bytes, shape_bytes, data_bytes};
+  for (size_t i = 0; i < 3; ++i) {
+    int64_t rc = e3_stage_span_alias(frame, source[i], source_bytes[i]);
+    if (rc) return rc;
+    for (size_t j = 0; j < i; ++j)
+      if (e3_overlap(source[i], source_bytes[i], source[j], source_bytes[j]))
+        return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
   }
   return 0;
 }
@@ -659,21 +712,30 @@ static int64_t e3_stage_view(et_e3_frame_internal *frame,
                              const et_kernel_tensor_view_v1 *view,
                              const char *dtype, size_t bytes,
                              size_t alignment) {
-  if (!view || !e3_span(view, sizeof(*view)) ||
-      view->struct_size != sizeof(*view) || !view->data ||
-      !e3_span(view->data, view->byte_length))
+  if (!view || !e3_span(view, sizeof(*view)))
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
-  if (!view->dtype || !view->device || strcmp(view->dtype, dtype) != 0 ||
-      strcmp(view->device, "cpu") != 0 ||
-      view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR || view->offset_bytes != 0)
+  int64_t rc = e3_stage_span_alias(frame, view, sizeof(*view));
+  if (rc) return rc;
+  const et_kernel_tensor_view_v1 copy = *view;
+  if (copy.struct_size != sizeof(copy) || !copy.data ||
+      !e3_span(copy.data, copy.byte_length))
+    return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
+  if (!copy.dtype || !copy.device || strcmp(copy.dtype, dtype) != 0 ||
+      strcmp(copy.device, "cpu") != 0 ||
+      copy.layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR || copy.offset_bytes != 0)
     return e3_fail(E3_UNSUPPORTED, E3_CODE_PROFILE);
-  if (view->rank != 2 || !view->shape || view->byte_length != bytes ||
-      !e3_span(view->shape, 2 * sizeof(*view->shape)) ||
-      view->shape[0] != 1 || view->shape[1] != 2)
+  if (copy.rank != 2 || !copy.shape || copy.byte_length != bytes ||
+      !e3_span(copy.shape, 2 * sizeof(*copy.shape)))
     return e3_fail(E3_SHAPE_MISMATCH, E3_CODE_SHAPE);
-  if ((uintptr_t)view->data % alignment != 0)
+  rc = e3_stage_alias_check(frame, view, sizeof(*view), copy.shape,
+                            2 * sizeof(*copy.shape), copy.data,
+                            copy.byte_length);
+  if (rc) return rc;
+  if (copy.shape[0] != 1 || copy.shape[1] != 2)
+    return e3_fail(E3_SHAPE_MISMATCH, E3_CODE_SHAPE);
+  if ((uintptr_t)copy.data % alignment != 0)
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_DESTINATION);
-  return e3_stage_alias_check(frame, view);
+  return 0;
 }
 
 int64_t et_e3_private_stage_inputs_v1(
@@ -1227,11 +1289,11 @@ void et_e3_private_frame_destroy_v1(void *pointer) {
     abort();
   for (size_t i = 0; i < 6; ++i)
     if (!frame->runtime[i]) abort();
-  e3_destroy_owned(frame);
   for (size_t i = 6; i > 0; --i) {
     et_kernel_runtime_destroy(frame->runtime[i - 1]);
     frame->runtime[i - 1] = NULL;
   }
+  e3_destroy_owned(frame);
   frame->model = NULL;
   memset(frame->destination, 0, sizeof(frame->destination));
   memset(&frame->pins, 0, sizeof(frame->pins));
