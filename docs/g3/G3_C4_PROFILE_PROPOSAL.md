@@ -248,14 +248,15 @@ sealing before their final no-failure tail. Impossible postcommit invariants
 fail-stop; recoverable failure injection belongs only at valid precommit points.
 Error delivery allocations remain distinct from nonallocating cleanup.
 
-The exact C2 29-seam/95-binding contract is not silently widened. Before any C4
-transport code, submit one exact successor seam delta covering: distinct C4 owner
-construction/admission and exact I2 abort-eligibility routing; profile-authenticated generator construction; input P1..4;
-continue-call kind and explicit budget; repeated-frame transition; internal
-last-logits/history/stop access for R; exact-size output candidate selection;
-shared C4 pin consumption; and staged model restoration. Existing C2 signatures
-and state meanings remain testable through their original path. Native and
-Eshkol seam counts must be derived from that proposal, never guessed here.
+The exact C2 29-seam/95-binding contract is not silently widened. The proposed
+[exact C4 model/transport seam](G3_C4_MODEL_TRANSPORT_CONTRACT.md) now fixes the
+distinct owner, P1/I2 prepare/seal split, abort routing, shared pins, active tuple,
+continuation/repeated-frame boundaries and exact-size output ownership. Existing
+C2 signatures and state meanings remain testable through their original path.
+Implementation still waits for root acceptance of that contract, accepted
+SHARED-R2 integration and the checked-promotion compiler/runtime repin. Exact R
+snapshot/stage layouts and final package inventories remain a later freeze and
+must not be guessed from the semantic persistence proposal.
 
 ## Required future proof
 
