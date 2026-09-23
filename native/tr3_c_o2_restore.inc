@@ -493,6 +493,18 @@ int32_t et_o2_tr3_c_restore_prepare_v1(
       return result;
     }
     values[index] = value;
+    for (size_t previous = 0u; previous < index; ++previous) {
+      /* A valid parameter/P1/value identity is a bijection, so a reachable
+         duplicate repeats all three.  Keep the P1/value comparisons as
+         defensive rejection of an impossible corrupted representation. */
+      if (entry->parameter == optimizer->entries[previous].parameter ||
+          entry->p1_handle == optimizer->entries[previous].p1_handle ||
+          value == values[previous]) {
+        return et_o2_tr3_c_restore_error(
+            error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_PROVIDER_DEFECT,
+            "optimizer receiver contains a duplicate parameter identity");
+      }
+    }
   }
   for (size_t index = 0u; index < ET_TR3_C_O2_MOMENT_ASSIGNMENTS; ++index) {
     const size_t parameter_index = index / 2u;
@@ -707,10 +719,19 @@ int32_t et_o2_tr3_c_restore_abort_v1(
           error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_CONSUMED,
           "restore builder was committed rather than aborted");
     }
+    if (result == ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT) {
+      et_tr3_c_i2_restore42_append_v1 request;
+      et_o2_tr3_c_restore_i2_request(plan, &request);
+      result = et_tr3_c_i2_copy_builder_verify_restore42_v1(
+          plan->i2_builder, &request);
+      if (result == ET_I2_PRIVATE_OWNED_RESULT_OK) {
+        return et_o2_tr3_c_restore_error(
+            error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_ACTIVE_BORROW,
+            "restore builder is not yet terminal-aborted");
+      }
+    }
     if (result != 0) {
-      return et_o2_tr3_c_restore_error(
-          error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_ACTIVE_BORROW,
-          "restore builder is not yet terminal-aborted");
+      return et_o2_tr3_c_restore_from_i2(result, error);
     }
   }
   (void)et_o2_success(error);
