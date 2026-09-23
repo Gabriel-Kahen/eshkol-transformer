@@ -17,10 +17,23 @@ at `b052385`, tree `2256194d2daeb233ec1745d0039b383d4358e3d5`, and merged
 as `33a54ef7` with that exact tree. Main CI 35798192984 verified and reused this
 evidence. Focused merged-head D2 and metrics gates passed, including independent
 byte-preservation/ABI reviews, closure checks and sanitizers.
-The P1 owner completed the upstream runtime candidate at `222cad3a`, based on
-the current pin `90cbd713`; independent integration review, upstream disposition,
-downstream pin adoption and P1/guard acceptance remain required. No new compiler
-pin or E3 runtime acceptance follows from this candidate.
+Fresh scheduled [acceptance 35845981903](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35845981903)
+also passed all 19 suites at `33a54ef7` on 2026-09-23. Its authenticated evidence
+records the same tree `2256194d2daeb233ec1745d0039b383d4358e3d5`; this baseline
+result does not cover later candidates.
+
+As of 2026-09-23, the P1 owner has frozen the checked-promotion and handler-reserve
+runtime candidate at `e00acc625e0cf67bfc2e3acc0371355bf4c5b721`, with implementation
+`b48774a82fa367f8464123be89da2bb0689fea1d`, succeeding `222cad3a`. The supported
+focused suite passed 14/14; eight native sanitizer tests passed with leak
+detection; production closure exposed the five required ABI symbols without
+test hooks, and the reserve probe passed optimized AOT and cache-disabled JIT.
+These are runtime candidate results, not downstream acceptance. The transformer
+still pins `90cbd713`. Pin adoption, actual P1 mode/guard regression gates and
+independent integration acceptance remain required. The M3/M3T wrapper also needs
+an exact reviewed mechanism for preserving canonical runtime emergencies before
+its allocating error normalization. No E3 runtime acceptance follows from these
+prerequisite results.
 
 ## Dependency dispositions
 
