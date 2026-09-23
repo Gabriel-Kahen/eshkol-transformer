@@ -9,6 +9,10 @@
 #endif
 
 #include "f32_parameter_internal.h"
+#if defined(ET_G3C4_I2_CONSTRUCTION_PRIVATE) && \
+    defined(ET_G3C4_NATIVE_OWNER_PRIVATE)
+#include "../src/eshkol_transformer/g3c4_model_owner_internal.h"
+#endif
 #if defined(ET_M3T_PACKAGE_BUILD)
 #include "eshkol_transformer/m3t_transport.h"
 #endif
@@ -472,6 +476,30 @@ int64_t et_i2_private_construction_parameter_preflight_v1(
   return INT64_C(-1);
 #endif
 }
+
+#if defined(ET_G3C4_I2_CONSTRUCTION_PRIVATE)
+int64_t et_i2_private_g3c4_construction_available_v1(void) {
+#if defined(ET_G3C4_NATIVE_OWNER_PRIVATE)
+  return INT64_C(0);
+#else
+  return INT64_C(-1);
+#endif
+}
+
+int64_t et_i2_private_g3c4_construction_parameter_preflight_v1(
+    void *exact_owner, void *parameter, void *exact_handle) {
+#if defined(ET_G3C4_NATIVE_OWNER_PRIVATE)
+  et_i2_clear_error();
+  return (int64_t)et_g3c4_construction_parameter_preflight_internal(
+      exact_owner, parameter, exact_handle, &et_i2_last_error);
+#else
+  (void)exact_owner;
+  (void)parameter;
+  (void)exact_handle;
+  return INT64_C(-1);
+#endif
+}
+#endif
 
 int64_t et_i2_private_parameter_admission_live_v1(void *parameter) {
   const void *identity = NULL;

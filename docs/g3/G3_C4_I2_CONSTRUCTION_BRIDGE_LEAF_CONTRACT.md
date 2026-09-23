@@ -1,6 +1,6 @@
 # G3-C4 private I2 construction-admission bridge leaf contract
 
-**Proposed bounded leaf; implementation requires root acceptance.** Its exact
+**Accepted bounded leaf.** Its exact
 base is the accepted owner-and-pins head
 `e11e61f4a3da6682c49c5422040baefdd32d8d4e` (tree
 `b044c0cc92f52c3dfa1960abf0028c68313e8a2d`). It adds only the two private I2
@@ -66,8 +66,10 @@ bridge include `g3c4_model_owner_internal.h`; availability returns 0. Preflight
 clears `et_i2_last_error` exactly once and directly calls
 `et_g3c4_construction_parameter_preflight_internal(exact_owner, parameter,
 exact_handle, &et_i2_last_error)`, returning its exact status. It never calls the
-M3T adapter. It creates no registry or callback and performs no allocation or
-mutation.
+M3T adapter. It creates no registry or callback, performs no allocation, and
+does not mutate ownership, parameters, or owner lifecycle state. The bridge does
+clear the existing I2 diagnostic before the call, and the accepted target resets
+the existing C4 diagnostic as part of its established diagnostic behavior.
 
 This two-level gate preserves the proposal's availability rule while keeping all
 ordinary and inherited package artifacts byte-identical until a later accepted
@@ -82,6 +84,7 @@ After root acceptance, the only production amendment is:
 Focused additions are:
 
 - `tests/g3c4/test_i2_construction_bridge.c`
+- `tests/g3c4/test_i2_construction_unavailable.c`
 - `scripts/test-g3c4-i2-construction-bridge.sh`
 
 The test composes the accepted owner and I2 sources directly. It covers ordinary
@@ -92,7 +95,9 @@ nonnull-for-unbound and wrong handles; every owner lifecycle state; OPEN and
 PREPARED success; SEALED and ABORTED rejection; duplicate membership/identity
 corruption; and every parameter/value/gradient borrow and plan-pin class through
 the whole-owner idle preflight. Every failure must expose the exact I2
-category/code through the existing I2 getters without mutation or allocation.
+category/code through the existing I2 getters without ownership, parameter, or
+lifecycle-state mutation or allocation. Tests must also verify the established
+I2-clear and C4-reset diagnostic side effects on genuine calls.
 
 The runner requires:
 
