@@ -1,7 +1,8 @@
 # M3 call cleanup-handler ordering follow-up
 
-Status: implementation candidate for
-[issue #117](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/117).
+Status: focused implementation and compiled-witness candidate for
+[issue #117](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/117);
+runtime-pin adoption and full integration CI remain pending.
 This is a narrow follow-up to the accepted shared-call implementation in PR #105;
 it does not revoke or broaden that implementation's recorded evidence.
 
@@ -40,11 +41,11 @@ and caller `a65235e60b3a59a6275282b42986aaa9070116b71fb1257d58ef869339f72bf5`.
 This proves ordinary package compatibility and determinism on that local lane;
 it does not inject exception-handler allocation failure.
 
-Acceptance additionally requires a compiled witness using the repaired runtime.
-That witness must fail allocation of this exact inner exception handler while an
-outer boundary is live, prove the model-call body did not mutate state, prove the
-busy flag stayed false, then execute a subsequent normal M3/shared call
-successfully. Static source order or IR inspection cannot replace that witness.
+The required compiled witness using the repaired runtime passed. It fails
+allocation of this exact inner exception handler while an outer boundary is
+live. The run proves the model-call body did not mutate state, proves the busy
+flag stayed false, then executes a subsequent normal M3/shared call successfully.
+Static source order or IR inspection cannot replace that witness.
 The explicit repaired-runtime gate is
 `scripts/test-m3cg-repaired-handler.sh RUNTIME_SOURCE RUNTIME_BUILD OUTPUT`.
 It requires clean frozen runtime source commit
@@ -54,6 +55,28 @@ It requires clean frozen runtime source commit
 and runtime archive SHA-256
 `c32bb593ac1f365f3cbeaefd581704c4be029a4aa8877db29463d0e12356c168`,
 plus Clang 21.1.8. It changes no dependency pin and builds no runtime.
+
+The final manifest-bound run passed at transformer implementation commit
+`dda768bae8465e60613d3eb1e54f6abb1c7b607b` (tree
+`b8accc68ca0355ce49badc8aed29cde6e8266d89`). Its preserved evidence is
+`.tmp/issue117/final-81298b4a-manifest-bound`: evidence manifest SHA-256
+`f2f215c012d922057c916dd0d44a941c35e5b223b0d8e25be9e7050a8996054d`,
+stdout SHA-256
+`f2c8651ae3ee204e8e85d9ed6638e14660a721505cb1265e8ae0caff5365b9a5`,
+empty stderr SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and source-input manifest SHA-256
+`24d759ac63c589b582d1935ee6cac246baff053d2959d971f35ae63209a1c5f4`.
+This is focused witness evidence; it is not full integration CI or runtime-pin
+adoption.
+
+Independent reviewer `/root/c4_final_review` approved the frozen implementation,
+tests and documentation. The reviewed aggregate manifests have SHA-256
+`9a4d11eb1583733b89c6156ff491fdf44c36ee4482fde1493335f9b6f95bf364`
+for source, `c432698b76c8960bb9a796a527cac229ac101420500d4a54f6bdb0b87f8ef4a1`
+for tests, and
+`594f7aba8681d297a2f8097ce7ae231434b98bb13276e0edaa6170a5795146f6`
+for documentation.
 
 The fixture source-loads the actual M3 package and common adapters, retaining the
 ordinary 46-entry witness. GNU `--wrap=malloc` fails exactly
@@ -79,7 +102,7 @@ Eshkol input plus all manually compiled and reviewed-delta sources, the exact
 inherited-plus-two-runner global inventory, link map, runtime/source/executable
 hashes, stdout and stderr. This is a focused allocation-failure witness, not
 evidence for every failure path, sanitizer coverage or full CI. Root still owns
-the immutable-runtime adoption and acceptance union.
+the immutable-runtime adoption, full integration CI and acceptance union.
 
 No E3/P1/D2 consumer implementation, G3 runtime, public ABI, numerical behavior,
 full-training capability, or new pin is part of this correction. Root owns the
