@@ -760,6 +760,16 @@ The exact integration-path inventory is:
   `native/tr3_c_i2_restore_bridge_undefined_symbols.txt`; and
 - `tests/i2/test_tr3_c_i2_restore.c`.
 
+Integration must selectively replay the I2 deltas; it must not replace the
+union's complete `native/f32_tensor.c`. This branch predates the accepted
+SHARED-R2/runtime union at
+`d5fa9a71b000ab1139a25e9b734b230ab5bda759`, including its rank-2 copy
+shapes, overflow guards, provider 1.1/v2 ranges, and seven-shape coverage. The
+integrated private aggregate must preserve those changes and compose the G3
+owner preflight. The frozen `1c3745b` plus three-initializer baseline proves
+this bounded leaf only; union integration must re-establish ordinary object
+parity against its own accepted predecessor.
+
 Independent exact-commit review approved the final candidate. The supported
 gate ran from a read-only exact snapshot on Ubuntu 22.04.5 with Clang 21.1.8
 and GCC 11.4. It passed O0 and `-O2 -fstrict-aliasing` object/output parity,
