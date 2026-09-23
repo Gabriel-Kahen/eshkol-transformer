@@ -95,6 +95,7 @@ eshkol_runtime_close_port
 eshkol_runtime_emergency_raise_v1
 eshkol_runtime_emergency_rethrow_if_v1
 eshkol_runtime_register_port
+eshkol_runtime_reserve_exception_handlers_v1
 eshkol_set_error_location
 eshkol_set_raised_value
 eshkol_sha256
