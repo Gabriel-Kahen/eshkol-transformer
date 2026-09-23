@@ -1,0 +1,297 @@
+(load "tr3b_objective_root.esk")
+
+(extern i64 tr3b-gradient-copy i64 ptr i64
+        :real et_m3_test_last_gradient_copy_v1)
+(extern i64 tr3b-gradient-metadata i64 i64
+        :real et_m3_test_last_gradient_metadata_v1)
+(extern i64 tr3b-m3-counts :real et_m3_test_report_counts_v1)
+(extern i64 tr3b-d2-datasets :real et_d2_dataset_test_live_count_v1)
+(extern i64 tr3b-d2-batches :real et_d2_batch_test_live_count_v1)
+(extern i64 tr3b-d2-borrows :real et_d2_batch_test_borrow_count_v1)
+(extern i64 tr3b-d2-allocations :real et_d2_test_owned_allocation_count_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "TR3B-FAIL ") (display label) (newline) (exit 1))))
+
+(define (diagnose label thunk)
+  (guard (caught
+          (#t
+           (display "TR3B-EXCEPTION ") (display label)
+           (if (transformer-error? caught)
+               (begin (display " ") (display (transformer-error-category caught))
+                      (display " ") (display (transformer-error-operation caught)))
+               (display " foreign"))
+           (newline)
+           (exit 1)))
+    (thunk)))
+
+(define (expect-error label category operation thunk)
+  (let ((caught #f))
+    (guard (raised
+            (#t
+             (set! caught
+                   (and (transformer-error? raised)
+                        (eq? (transformer-error-category raised) category)
+                        (eq? (transformer-error-operation raised) operation)))))
+      (thunk))
+    (check label caught)))
+
+(define (emit-bytes label case-index bytes)
+  (display label) (display " ") (display case-index)
+  (let loop ((index 0))
+    (if (= index (bytevector-length bytes)) (newline)
+        (begin
+          (display " ") (display (bytevector-u8-ref bytes index))
+          (loop (+ index 1))))))
+
+(define tr3b-gradient-sizes '(64 64 64 64 128 128 16 16 16 16 4096 16 16 32))
+(define (observe-gradients case-index)
+  (let loop ((index 0) (sizes tr3b-gradient-sizes))
+    (if (null? sizes) #t
+        (let ((bytes (make-bytevector (car sizes) 0)))
+          (check "gradient copy"
+                 (= (tr3b-gradient-copy index bytes (car sizes)) 0))
+          (emit-bytes
+           (string-append "TR3B-GRADIENT " (number->string case-index))
+           index bytes)
+          (display "TR3B-METADATA ") (display case-index) (display " ")
+          (display index) (display " ")
+          (display (tr3b-gradient-metadata index 0)) (display " ")
+          (display (tr3b-gradient-metadata index 1)) (display " ")
+          (display (tr3b-gradient-metadata index 2)) (newline)
+          (loop (+ index 1) (cdr sizes))))))
+
+(define (same-bytes? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (copy-bytes source)
+  (let ((result (make-bytevector (bytevector-length source) 0)))
+    (let loop ((index 0))
+      (if (= index (bytevector-length source)) result
+          (begin
+            (bytevector-u8-set! result index (bytevector-u8-ref source index))
+            (loop (+ index 1)))))))
+
+(define (expect-observation-error label category operation observation thunk)
+  (let ((before (copy-bytes observation)))
+    (expect-error label category operation thunk)
+    (check (string-append label " observation preserved")
+           (same-bytes? before observation))))
+
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+
+(define (model-config)
+  (x1-private-config-resolve
+   (x1-private-config-parse
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+   '()))
+
+(define (release-step output logits batch)
+  (check "logits release" (m3-public-diagnostic-model-logits-release! logits))
+  (check "output release" (m3-public-model-output-release! output))
+  (check "batch release" (d2-token-batch-release! batch)))
+
+(define (release-graph output logits)
+  (check "logits release" (m3-public-diagnostic-model-logits-release! logits))
+  (check "output release" (m3-public-model-output-release! output)))
+
+(define (normal-step dataset model input seed ordinal label)
+  (let ((batch (d2-token-dataset-next-batch dataset)))
+    (check "normal batch" (not (d2-token-dataset-end? batch)))
+    (check "stage" (tr3-stage-d2-input! batch input))
+    (let* ((observation (make-bytevector 12 165))
+           (output (m3-public-model-forward model input '()))
+           (logits (m3-public-model-output-logits output)))
+      (check "objective" (tr3-objective-vjp! output logits batch seed ordinal observation))
+      (emit-bytes "TR3B-OBSERVATION" label observation)
+      (release-step output logits batch))))
+
+;; Test-only objective injection. The normal D2 batch is still the authenticated
+;; source of targets, but this local witness deliberately replaces mask 11 by 01.
+(define (test-only-injected-01! output logits batch seed ordinal observation)
+  (let ((targets (make-bytevector 16 0))
+        (mask (make-bytevector 2 0)))
+    (tr3b-copy-batch-scratch! batch targets mask 'TR3B-INJECTED-01)
+    (bytevector-u8-set! mask 0 0)
+    (bytevector-u8-set! mask 1 1)
+    (tr3b-objective-prepare-internal!
+     output logits seed targets mask observation 'TR3B-INJECTED-01)
+    (m3-public-diagnostic-output-vjp!
+     output seed (tr3b-u32-le observation 4) ordinal)
+    #t))
+
+(define args (command-line))
+(define corpus-path (car (cdr args)))
+(define resolved (model-config))
+(define tokenizer
+  (diagnose "tokenizer" (lambda ()
+    (t2-wave2-tokenizer-byte resolved))))
+(define dataset
+  (diagnose "dataset" (lambda ()
+    (d2-token-dataset-open (dataset-config corpus-path) tokenizer))))
+(define start (d2-token-dataset-cursor dataset))
+(define model
+  (diagnose "model" (lambda ()
+    (m3t-public-model-create resolved
+                             (m3t-public-initializer-state 1729)))))
+(define input (m3t-public-input-create))
+(define seed (m3t-public-logits-create))
+
+(diagnose "normal-11" (lambda ()
+  (normal-step dataset model input seed 0 0))) ; normal 11, weight 2
+(observe-gradients 0)
+(diagnose "normal-10" (lambda ()
+  (normal-step dataset model input seed 1 1))) ; normal padded 10, weight 1
+(observe-gradients 1)
+(check "EOS" (d2-token-dataset-end? (d2-token-dataset-next-batch dataset)))
+
+;; Replay the first graph and exercise every source boundary rejection before
+;; the sole VJP mutation. Each failure must preserve its observation carrier.
+;; Snapshots 1 and 2 prove that all fourteen gradient byte strings and metadata
+;; are also unchanged across this entire preparation-failure suite.
+(check "seek" (d2-token-dataset-seek! dataset start))
+(define replay (d2-token-dataset-next-batch dataset))
+(check "replay batch" (not (d2-token-dataset-end? replay)))
+(check "replay stage" (tr3-stage-d2-input! replay input))
+(define late-observation (make-bytevector 12 90))
+(define late-output (m3-public-model-forward model input '()))
+(define late-logits (m3-public-model-output-logits late-output))
+
+(define invalid-observation (make-bytevector 12 37))
+(expect-observation-error
+ "invalid ordinal" 'invalid-argument 'tr3-objective-vjp!
+ invalid-observation
+ (lambda ()
+   (tr3-objective-vjp! late-output late-logits replay seed -1
+                       invalid-observation)))
+(expect-error
+ "observation type" 'invalid-argument 'tr3-objective-vjp!
+ (lambda ()
+   (tr3-objective-vjp! late-output late-logits replay seed 2 '())))
+(define short-observation (make-bytevector 11 38))
+(expect-observation-error
+ "observation length" 'shape-mismatch 'tr3-objective-vjp!
+ short-observation
+ (lambda ()
+   (tr3-objective-vjp! late-output late-logits replay seed 2
+                       short-observation)))
+
+(define other-output (m3-public-model-forward model input '()))
+(define other-logits (m3-public-model-output-logits other-output))
+(define wrong-pair-observation (make-bytevector 12 39))
+(expect-observation-error
+ "wrong output logits pair" 'invalid-argument 'tr3-objective-vjp!
+ wrong-pair-observation
+ (lambda ()
+   (tr3-objective-vjp! late-output other-logits replay seed 2
+                       wrong-pair-observation)))
+(release-graph other-output other-logits)
+
+(define stale-seed (m3t-public-logits-create))
+(check "stale seed release" (m3t-public-logits-release! stale-seed))
+(define stale-seed-observation (make-bytevector 12 40))
+(expect-observation-error
+ "stale seed" 'invalid-state 'tr3-objective-vjp!
+ stale-seed-observation
+ (lambda ()
+   (tr3-objective-vjp! late-output late-logits replay stale-seed 2
+                       stale-seed-observation)))
+
+(define stale-output (m3-public-model-forward model input '()))
+(define stale-output-logits (m3-public-model-output-logits stale-output))
+(check "stale output release" (m3-public-model-output-release! stale-output))
+(define stale-output-observation (make-bytevector 12 41))
+(expect-observation-error
+ "stale output" 'invalid-state 'tr3-objective-vjp!
+ stale-output-observation
+ (lambda ()
+   (tr3-objective-vjp! stale-output stale-output-logits replay seed 2
+                       stale-output-observation)))
+(check "stale output logits release"
+       (m3-public-diagnostic-model-logits-release! stale-output-logits))
+
+(define stale-dataset
+  (d2-token-dataset-open (dataset-config corpus-path) tokenizer))
+(define stale-batch (d2-token-dataset-next-batch stale-dataset))
+(check "stale batch initially live" (not (d2-token-dataset-end? stale-batch)))
+(check "stale batch stage" (tr3-stage-d2-input! stale-batch input))
+(define stale-batch-output (m3-public-model-forward model input '()))
+(define stale-batch-logits
+  (m3-public-model-output-logits stale-batch-output))
+(check "stale batch release" (d2-token-batch-release! stale-batch))
+(define stale-batch-observation (make-bytevector 12 42))
+(expect-observation-error
+ "stale batch" 'invalid-state 'tr3-objective-vjp!
+ stale-batch-observation
+ (lambda ()
+   (tr3-objective-vjp! stale-batch-output stale-batch-logits stale-batch
+                       seed 2 stale-batch-observation)))
+(release-graph stale-batch-output stale-batch-logits)
+(check "stale dataset close" (d2-token-dataset-close! stale-dataset))
+
+;; These two calls cross the private checked preparation seam with malformed
+;; scratch carriers. They authenticate the genuine graph pair and seed first,
+;; then fail before any observation or gradient mutation.
+(define bad-target-observation (make-bytevector 12 43))
+(expect-observation-error
+ "malformed target scratch" 'shape-mismatch 'TR3B-BAD-TARGET
+ bad-target-observation
+ (lambda ()
+   (tr3b-objective-prepare-internal!
+    late-output late-logits seed (make-bytevector 15 0)
+    (make-bytevector 2 1) bad-target-observation 'TR3B-BAD-TARGET)))
+(define bad-mask-observation (make-bytevector 12 44))
+(expect-observation-error
+ "malformed mask scratch" 'shape-mismatch 'TR3B-BAD-MASK
+ bad-mask-observation
+ (lambda ()
+   (tr3b-objective-prepare-internal!
+    late-output late-logits seed (make-bytevector 16 0)
+    (make-bytevector 1 1) bad-mask-observation 'TR3B-BAD-MASK)))
+
+(observe-gradients 2)
+
+;; A late ordinal failure follows successful objective preparation. Its scratch
+;; bytes are allowed to change and are checked against the successful case-0
+;; observation, while all fourteen gradients remain exactly snapshot 1.
+(expect-error
+ "late ordinal error" 'invalid-state 'tr3-objective-vjp!
+ (lambda ()
+   (tr3-objective-vjp! late-output late-logits replay seed 3
+                       late-observation)))
+(emit-bytes "TR3B-LATE-OBSERVATION" 0 late-observation)
+(observe-gradients 3)
+
+(define injected-observation (make-bytevector 12 195))
+(check "test-only injected 01"
+       (test-only-injected-01! late-output late-logits replay seed 2
+                               injected-observation))
+(emit-bytes "TR3B-OBSERVATION" 2 injected-observation)
+(observe-gradients 4)
+(release-step late-output late-logits replay)
+
+;; This trusted aggregate calls the exact I2 implementation installed as the
+;; accepted public module-zero-grad! package export. Snapshot 5 proves exact
+;; zero bytes and absent/count=0/weight=0 metadata for all unique parameters.
+(check "module-zero-grad" (i2-public-module-zero-grad! model))
+(observe-gradients 5)
+
+(check "input release" (m3t-public-input-release! input))
+(check "seed release" (m3t-public-logits-release! seed))
+(check "dataset close" (d2-token-dataset-close! dataset))
+(check "D2 datasets zero" (= (tr3b-d2-datasets) 0))
+(check "D2 batches zero" (= (tr3b-d2-batches) 0))
+(check "D2 borrows zero" (= (tr3b-d2-borrows) 0))
+(check "D2 allocations zero" (= (tr3b-d2-allocations) 0))
+(check "M3 report" (= (tr3b-m3-counts) 0))
+(display "TR3B-WITNESS-PASS") (newline)

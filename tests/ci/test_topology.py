@@ -103,6 +103,23 @@ class TopologyTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)):
                     check(ROOT, {path: text.replace(before, after)})
 
+    def test_tr3b_inventory_cannot_be_removed_or_weakened(self):
+        make = (ROOT / "Makefile").read_text()
+        model_commands = ("/usr/bin/bash scripts/test-m3.sh\n"
+                          "\t/usr/bin/bash scripts/test-tr3b.sh")
+        mutations = [
+            ("/usr/bin/bash scripts/test-tr3b.sh", ":"),
+            ("/usr/bin/bash scripts/test-tr3b.sh",
+             "/usr/bin/bash scripts/test-tr3b.sh || true"),
+            (model_commands,
+             "/usr/bin/bash scripts/test-tr3b.sh\n\t/usr/bin/bash scripts/test-m3.sh"),
+        ]
+        for before, after in mutations:
+            with self.subTest(before=before, after=after):
+                self.assertIn(before, make)
+                with self.assertRaises(AssertionError):
+                    check(ROOT, {"Makefile": make.replace(before, after, 1)})
+
     def test_coverage_mutations_rejected_even_if_both_tiers_drop_same_gate(self):
         text = (ROOT / "Makefile").read_text()
         for command in (

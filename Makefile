@@ -22,7 +22,7 @@ SHELL := /usr/bin/bash
 	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
 	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-x1 \
+	test-reference-formats test-t1 test-t2 test-tr3b test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
 
 toolchain:
@@ -120,6 +120,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-q0.sh
 	/usr/bin/bash scripts/test-m3t.sh
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-tr3b.sh
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
 
@@ -151,6 +152,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-q0.sh
 	/usr/bin/bash scripts/test-m3t.sh
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-tr3b.sh
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
 
@@ -374,13 +376,17 @@ test-m3t: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh diagnostic-transport
 	/usr/bin/bash scripts/test-m3t.sh
 
-.PHONY: test-ci-m3-after-build test-m3
+.PHONY: test-ci-m3-after-build test-m3 test-tr3b
 test-ci-m3-after-build:
 	/usr/bin/bash scripts/test-m3.sh
+	/usr/bin/bash scripts/test-tr3b.sh
 
 test-m3: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh model-composition
 	/usr/bin/bash scripts/test-m3.sh
+
+test-tr3b: configure
+	/usr/bin/bash scripts/test-tr3b.sh
 
 # Focused standalone gate; the CI core consumes its once-built prerequisites.
 test-l3s: configure
