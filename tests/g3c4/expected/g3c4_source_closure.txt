@@ -1,0 +1,2 @@
+include/eshkol_transformer/g3c4_primitives_abi.h
+native/g3c4_primitives_provider.c

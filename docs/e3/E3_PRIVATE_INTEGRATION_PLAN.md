@@ -22,18 +22,30 @@ also passed all 19 suites at `33a54ef7` on 2026-09-23. Its authenticated evidenc
 records the same tree `2256194d2daeb233ec1745d0039b383d4358e3d5`; this baseline
 result does not cover later candidates.
 
-As of 2026-09-23, the P1 owner has frozen the checked-promotion and handler-reserve
-runtime candidate at `e00acc625e0cf67bfc2e3acc0371355bf4c5b721`, with implementation
-`b48774a82fa367f8464123be89da2bb0689fea1d`, succeeding `222cad3a`. The supported
-focused suite passed 14/14; eight native sanitizer tests passed with leak
-detection; production closure exposed the five required ABI symbols without
-test hooks, and the reserve probe passed optimized AOT and cache-disabled JIT.
+As of 2026-09-23, runtime successor
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, tree
+`7669312845a9d8d372006af52271045e69505813`, is frozen. It includes the
+checked-promotion and handler-reserve repair plus the private
+`:runtime-emergency-rethrow-param` definition modifier. On the supported
+Ubuntu 22.04 / LLVM 21.1.8 image, the final checked suite passed 16/16 and the
+declaration-attribute suite passed 1/1. Production closure exposed the five
+required ABI symbols without test hooks; modifier and reserve probes passed
+optimized AOT and cache-disabled JIT. The earlier `e00acc625` reservation
+checkpoint and its 14/14 and eight native sanitizer results are historical;
+they do not establish final-successor sanitizer coverage.
+
 These are runtime candidate results, not downstream acceptance. The transformer
-still pins `90cbd713`. Pin adoption, actual P1 mode/guard regression gates and
-independent integration acceptance remain required. The M3/M3T wrapper also needs
-an exact reviewed mechanism for preserving canonical runtime emergencies before
-its allocating error normalization. No E3 runtime acceptance follows from these
-prerequisite results.
+still pins `90cbd713`. Final source-review verification, pin adoption, P1 mode
+and guard regression gates, and supported integration acceptance remain required.
+The M3/M3T wrapper is adopting the exact emergency-preserving modifier. The
+P1/C2/LOAD reservation candidate is 5/6/11; repeated compiled dual-fault cleanup
+proof against the final runtime remains pending. No E3 runtime acceptance
+follows from these prerequisite results.
+
+Root has separately dispatched the bounded native E3 frame and native tests
+against accepted native prerequisites. This does not dispatch the Eshkol root,
+P1/D2 wrapper composition, public evaluator or package acceptance. The full
+composition hold described above remains in effect.
 
 ## Dependency dispositions
 
