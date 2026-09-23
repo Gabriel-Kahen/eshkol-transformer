@@ -43,6 +43,7 @@
 (define o2-i64-max 9223372036854775807)
 (define o2-optimizers '())
 (define o2-states '())
+(define o2-tr3-create-overlap-check-cell-internal (vector 'uninstalled))
 
 (define (o2-fail-raw category operation message)
   (let ((unreachable
@@ -78,6 +79,45 @@
 (define (o2-exact-nonnegative-i64? value)
   (and (integer? value) (exact? value) (real? value)
        (>= value 0) (<= value o2-i64-max)))
+
+;;; Source-private leaf for the eventual single TR3 aggregate. Standalone O2
+;;; leaves the cell uninstalled, so optimizer construction is unchanged. The
+;;; aggregate initializer is the sole caller and installs its fixed lexical
+;;; overlap check before publishing any public facade.
+(define (o2-install-tr3-create-overlap-check-internal! check)
+  (let ((operation 'optimizer-create))
+    (if (not (eq?
+               (vector-ref o2-tr3-create-overlap-check-cell-internal 0)
+               'uninstalled))
+        (o2-fail 'invalid-state operation
+                 "TR3 optimizer-create overlap check is already installed"))
+    (if (not (procedure? check))
+        (o2-fail 'invalid-argument operation
+                 "expected the fixed TR3 optimizer-create overlap check"))
+    ;; Closure identity is fixed by the sole private aggregate call site.  The
+    ;; leaf deliberately does not add a second expected-closure registry.
+    (vector-set! o2-tr3-create-overlap-check-cell-internal 0 check)
+    #t))
+
+(define (o2-tr3-create-overlap-check-internal handles)
+  (let* ((operation 'optimizer-create)
+         (check
+           (vector-ref o2-tr3-create-overlap-check-cell-internal 0)))
+    (if (eq? check 'uninstalled)
+        0
+        (let ((status
+                (guard (caught
+                         (#t
+                           (o2-fail
+                             'internal operation
+                             "TR3 optimizer-create overlap check failed")))
+                  (check handles))))
+          (if (not (and (o2-exact-nonnegative-i64? status)
+                        (or (= status 0) (= status 1))))
+              (o2-fail
+                'internal operation
+                "TR3 optimizer-create overlap check returned an invalid status"))
+          status))))
 
 (define (o2-member-identity? value values)
   (cond ((null? values) #f)
@@ -629,6 +669,9 @@
                     (i2-bounded-list-length assignments (+ o2-max-parameters 1)))))
         (o2-fail 'shape-mismatch operation
                  "optimizer groups must cover every unique parameter once"))
+    (if (= (o2-tr3-create-overlap-check-internal handles) 1)
+        (o2-fail 'invalid-state operation
+                 "optimizer parameters overlap an enrolled trainer"))
     (o2-state-projection-budget!
       operation (vector-ref parsed 0) paths aliases handles)
     (tensor-provider-preflight-internal o2-provider-name 2 0)
