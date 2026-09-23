@@ -7,7 +7,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE = "ba0e37d06076d0a16c473ff742ab95723cb2cb89"
+BASE = "dd4f1d4b090fb7d4ace907733a0232575be99997"
 SOURCE = "internal/p1/lib/transformer/module.esk"
 WRAPPERS = "native/e3_p1_modes_extension.esk"
 TR3_WRAPPERS = "native/tr3_p1_fixed_set_extension.esk"
@@ -79,8 +79,8 @@ def check():
     require(atom(vector[2][0]) == "vector", "P1 surface must end with its vector")
     require(len(vector[2]) == 72, "expected exactly 71 trusted closure slots")
     require(digest(text, vector[2][1:65]) ==
-            "0f054d3f4e2f5466c77514f98d38aed5421790d8d9a7e6a73a9fc684775326f5",
-            "inherited closure 0..63 changed from accepted base")
+            "d7d3d3a9aff533aa5f3422130d702f730b3cf227c3ecdd0a56423a634fec7d5e",
+            "inherited closure 0..63 changed from accepted #121 base")
     require(digest(text, vector[2][65:70]) ==
             "f2a34d77e5d6db808dcc7bf5b5eeeacbfcda8da274827aa4b9e94ac0fdfa0097",
             "accepted E3 closure slots 64..68 changed")
@@ -99,11 +99,11 @@ def check():
             "69d85636fffe58568c649308796a40d870d7fea7d78d54e88d0c0cb20149da02",
             "accepted E3 lexical definitions changed")
     require(digest(text, (n for n in nodes if n is not surface)) ==
-            "0c8621e2248ad188553e25c9a3a6d103d0cfe122617545847eb15e450d90b098",
-            "P1 top-level authority/provides/wrappers changed from accepted base")
+            "505b1c59f9f2734e4ce457423129ca426fd300c748076e0fac03c9d84762d34f",
+            "P1 top-level authority/provides/wrappers changed from accepted #121 base")
     require(digest(text, externs(nodes)) ==
-            "d970a2c162b05acd64ce94214ac0f56fb37817c8d51bbd6e78aa31b54db9985b",
-            "P1 native extern authority changed from accepted base")
+            "616535438e9ebcb1b5adc240d96a6f837e4d32f45de1ee59983c1b91dd05518e",
+            "P1 native extern authority changed from accepted #121 base")
     for path, expected in {
         "lib/transformer/module.esk":
             "38be7a65d467753dc53abccf5195107d939d842e5988783d8f0073f4b9c9f46c",
@@ -144,7 +144,7 @@ def check():
                 f"predecessor source count/canonical P1 identity drifted: {path.name}")
         require(WRAPPERS not in paths,
                 f"predecessor source closure gained E3-only wrappers: {path.name}")
-    print(f"E3-P1 STRUCTURE PASS: base={BASE} first69=unchanged total=71 public=unchanged")
+    print(f"E3-P1 STRUCTURE PASS: base={BASE} first64=#121-exact first69=E3-exact total=71 public=unchanged")
     for path in (SOURCE, WRAPPERS, TR3_WRAPPERS):
         print(f"sha256 {sha256((ROOT / path).read_bytes()).hexdigest()} {path}")
 

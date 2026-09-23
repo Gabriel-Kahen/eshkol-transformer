@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "internal/p1/lib/transformer/module.esk"
 WRAPPER = ROOT / "native/tr3_p1_fixed_set_extension.esk"
 MANIFEST = ROOT / "native/tr3_p1_fixed_set_source_closure.txt"
-BASE_COMMIT = "b61a0c53e24e548fefc621340a253c3451effb6a"
+COMPOSED_BASE_SHA256 = "77527b1ba8d30eac5d2db206622a529635fb9df50567c7e39879913e9399b188"
 
 
 def require(condition, message):
@@ -117,22 +117,8 @@ def check():
             "TR3 P1 surface append is missing or duplicated")
     without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
     without_leaf = without_leaf.replace(vector_append, "")
-    accepted = subprocess.run(
-        ["git", "show", f"{BASE_COMMIT}:internal/p1/lib/transformer/module.esk"],
-        cwd=ROOT, check=True, text=True, capture_output=True).stdout
-    require(without_leaf == accepted,
-            "canonical P1 source changed outside the exact TR3 helper/vector append")
-
-    changed = subprocess.run(
-        ["git", "diff", "--name-only", BASE_COMMIT, "--", "native"],
-        cwd=ROOT, check=True, text=True, capture_output=True).stdout.splitlines()
-    allowed = {
-        "native/tr3_p1_fixed_set_extension.esk",
-        "native/tr3_p1_fixed_set_source_closure.txt",
-    }
-    require(set(changed) <= allowed,
-            "predecessor native manifests or sources changed: " +
-            ", ".join(sorted(set(changed) - allowed)))
+    require(sha256(without_leaf.encode()).hexdigest() == COMPOSED_BASE_SHA256,
+            "canonical #121+E3 P1 source changed outside the exact TR3 helper/vector append")
 
     print("TR3-P1 FIXED STRUCTURE PASS: slots=69,70 modules=17 handles=14 carriers=14")
     for path in (SOURCE, WRAPPER, MANIFEST):

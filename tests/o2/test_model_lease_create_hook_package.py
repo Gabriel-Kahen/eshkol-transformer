@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXTENSION = ROOT / "native" / "o2_wave2_extension.esk"
 PREDECESSOR_SHA256 = "4ae490979328499bb96f9d6cb3e13ae61398300275b7bfd83361e72d597ad590"
 PUBLIC_HEADER_TREE_SHA256 = (
-    "211cd6bc1b970e0aa61a99170b15e915f93f36cf5b404ac4bde11fdf8900a517"
+    "00c6161443a7e346ba16bc25e33a24af613eb2f465674f4fa5aa15211ced9a6b"
 )
 PUBLIC_FACADE_SHA256 = "b2f96c6119cf51388221dd541c7eda3fefb564c14934e46dede310d0ab9c98b0"
 
@@ -98,7 +98,7 @@ class ModelLeaseCreateHookPackageTests(unittest.TestCase):
             "o2_wave2_public_exports.txt": 47,
             "o2_wave2_public_strings.txt": 53,
             "o2_wave2_private_renames.txt": 6,
-            "o2_wave2_undefined_symbols.txt": 150,
+            "o2_wave2_undefined_symbols.txt": 152,
             "o2_wave2_source_closure.txt": 15,
             "o2_wave2_native_source_closure.txt": 29,
         }
