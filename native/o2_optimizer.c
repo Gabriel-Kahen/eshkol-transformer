@@ -6,6 +6,12 @@
 #include <string.h>
 #include <xmmintrin.h>
 
+#if defined(ET_TR3_O2_STEP_CLEAR_NATIVE) &&                                  \
+    !defined(ET_TR3_O2_PRIVATE_OPERATIONS)
+#define ET_TR3_O2_PRIVATE_OPERATIONS 1
+#define ET_O2_TR3_UNDEFINE_PRIVATE_OPERATIONS 1
+#endif
+
 #define ET_O2_BUILDER_MAGIC UINT64_C(0x45544f324255494c)
 #define ET_O2_OPTIMIZER_MAGIC UINT64_C(0x45544f324f505449)
 #define ET_O2_STATE_MAGIC UINT64_C(0x45544f3253544154)
@@ -75,6 +81,9 @@ struct et_o2_optimizer {
   uint32_t provider_minor;
   char provider_id[sizeof(ET_O2_PROVIDER_ID)];
   uint32_t busy;
+#ifdef ET_TR3_O2_PRIVATE_OPERATIONS
+  const void *active_operation;
+#endif
 };
 
 struct et_o2_optimizer_state_handle {
@@ -643,6 +652,35 @@ static int32_t et_o2_require_optimizer(const et_o2_optimizer *candidate,
   }
   return ET_O2_STATUS_OK;
 }
+
+#ifdef ET_TR3_O2_PRIVATE_OPERATIONS
+static int et_o2_active_operation_acquire(et_o2_optimizer *optimizer,
+                                          const void *operation) {
+  if (optimizer == NULL || operation == NULL || optimizer->busy != 0u ||
+      optimizer->active_operation != NULL) {
+    return -1;
+  }
+  optimizer->busy = 1u;
+  optimizer->active_operation = operation;
+  return 0;
+}
+
+static int et_o2_active_operation_owns(const et_o2_optimizer *optimizer,
+                                       const void *operation) {
+  return optimizer != NULL && operation != NULL && optimizer->busy == 1u &&
+         optimizer->active_operation == operation;
+}
+
+static int et_o2_active_operation_release(et_o2_optimizer *optimizer,
+                                          const void *operation) {
+  if (!et_o2_active_operation_owns(optimizer, operation)) {
+    return -1;
+  }
+  optimizer->active_operation = NULL;
+  optimizer->busy = 0u;
+  return 0;
+}
+#endif
 
 static int32_t et_o2_require_state_live(const et_o2_optimizer_state *candidate,
                                         const char *operation,
@@ -2949,4 +2987,13 @@ int32_t et_o2_test_optimizer_moment_bits_v1(const et_o2_optimizer *candidate,
   }
   return et_o2_success(error);
 }
+#endif
+
+#ifdef ET_TR3_O2_STEP_CLEAR_NATIVE
+#include "tr3_o2_step_clear.inc"
+#endif
+
+#ifdef ET_O2_TR3_UNDEFINE_PRIVATE_OPERATIONS
+#undef ET_O2_TR3_UNDEFINE_PRIVATE_OPERATIONS
+#undef ET_TR3_O2_PRIVATE_OPERATIONS
 #endif
