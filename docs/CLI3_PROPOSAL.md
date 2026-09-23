@@ -1,8 +1,8 @@
 # CLI3 bounded command contract
 
-Status: **proposal**. This document selects a separable first CLI3 slice from the
-already merged D1, T1, T2, C1, C2, and X1 contracts. It does not accept CLI3 or
-define trainer, evaluator, or generator APIs.
+Status: **bounded integration candidate**. This document selects a separable
+first CLI3 slice from the already merged D1, T1, T2, C1, C2, and X1 contracts.
+It does not define trainer, evaluator, or generator APIs.
 
 ## Decision and executable
 
@@ -378,32 +378,38 @@ deterministic cases without Python in the delivered process:
 
 ## Dependency split and blockers
 
-The six commands above can be implemented and tested as one independent CLI3-A
-workstream once its package tuple and pinned runtime are ready. It changes no
-public library name or artifact format. `pretrain` remains blocked on the accepted
-TR3 trainer/restore API and full trajectory evidence; `evaluate` remains blocked
-on E3's accepted public evaluation interface; `generate` remains blocked on G3's
-accepted generator interface and sampling/cache evidence. CLI3 must consume those
-exact merged interfaces later rather than reserve guessed flags now.
+The six commands above are implemented as one independent CLI3-A workstream. It
+changes no public library name or artifact format. `pretrain` remains blocked on
+the accepted TR3 trainer/restore API and full trajectory evidence; `evaluate`
+remains blocked on E3's accepted public evaluation interface; `generate` remains
+blocked on G3's accepted generator interface and sampling/cache evidence. CLI3
+must consume those exact merged interfaces later rather than reserve guessed flags
+now.
 For later pretraining integration, the accepted TR3 stopping limits are deltas for
 one invocation; resumed global O2 schedule and checkpoint counters persist. This
 proposal intentionally assigns no CLI spelling until the TR3 interface merges.
 
-Two prerequisites prevent acceptance on current `origin/main`:
+The isolated runtime-union integration starts at transformer commit `559e318`,
+which pins Eshkol `81298b4a` and admits the handler-reserve ABI. The reviewed CLI
+series is preserved byte-for-byte except for commit `47d06f9`, which adds that one
+measured dependency to the undefined-symbol manifest. Its final package boundary
+is 8 global definitions, 2 public exports, 83 public-name strings, 34 Eshkol
+sources, 36 formatter-fixture sources, 54 native sources, and 157 undefined
+symbols.
 
-1. `scripts/build-e1b-consumer.sh` admits only exact known aggregate tuples and
-   will reject a CLI successor root. CLI3-A needs one explicit source-composed
-   C2-successor tuple with closure, export, undefined-symbol, native-source, and
-   public-string manifests.
-2. The pinned Eshkol runtime logs and returns when allocation of an exception
-   handler frame fails, after which generated `guard` code may execute `setjmp`
-   without an installed handler. Its generic `cons`/`vector` constructor lowering
-   also writes after a potentially null allocation. The dispatcher necessarily
-   uses `guard`, argv lists, vectors, and output construction, so allocation-
-   failure diagnostics and cleanup cannot be proved on this pin. Adopt and pin
-   the independently reviewed runtime repair before CLI3-A acceptance; do not
-   hide the failure with a C/Python launcher or omit the failpoint gate.
+The supported Ubuntu 22.04/LLVM 21 gate builds the package from two fresh caches,
+compares every output byte, and runs `scripts/test-cli3.sh`. The focused
+`scripts/test-cli3-allocation-fallback.sh` gate links the unchanged production CLI
+entry and aggregate to the exact production runtime archive. A test-only linker
+seam fails the real private-dispatch handler allocation at active depth one; the
+outer production guard receives canonical runtime condition 5 and the real static
+fallback emits its fixed internal diagnostic with status 70. A second seam denies
+vector allocation persistently only after D1 has published shard zero under its
+writer lock. The rollback removes the shard, lock, temporaries, and manifest, and
+the same production fallback handles the formatting allocation failure. The seam
+adds no production hook or alternate launcher and audits its exact four GNU
+wrappers and final-runtime link-map bindings.
 
-There is no missing D1/T1/T2/C1/C2/X1 semantic API for this bounded slice. The
-remaining blockers are the reviewed aggregate admission and runtime correctness
-work above.
+There is no missing D1/T1/T2/C1/C2/X1 semantic API for this bounded slice. Full
+CLI3 remains incomplete until the real trainer, evaluator, and generator APIs and
+their end-to-end evidence are accepted.
