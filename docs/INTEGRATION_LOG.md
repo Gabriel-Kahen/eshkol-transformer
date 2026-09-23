@@ -2693,3 +2693,16 @@ running and root acceptance/merge remained pending. G3-S's restricted-review hol
 G3-T implementation awaits accepted/merged prerequisites and explicit root
 dispatch. This docs-only work opens no larger-profile or persistence contract,
 launches no runtime/full-CI campaign and claims no public generation completion.
+
+
+## 2026-09-23 — Wave 3 prerequisite and native evaluation integration
+
+[PR #124](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/124) merged as
+`f74fede59b08f26aa8f3f2300be46eb5fa56f116`, preserving reviewed candidate tree
+`64ac6cdc00c239c3f5b835c9d1bbd216a6927a78`. Supported CI `35925066612`
+passed all 19 suites/34 commands and evidence aggregation; main CI `35933002462`
+verified exact-tree reuse. The [integration audit](WAVE3_TRAINING_PREREQUISITES_INTEGRATION.md)
+records source provenance, the initial failed run, its two reviewed repairs,
+and the final acceptance boundary. SHARED-R2 and the bounded TR3-B/O and E3
+native leaves are accepted. Public evaluator/trainer/generation and full resume
+remain active work; runtime pin adoption remains separate.

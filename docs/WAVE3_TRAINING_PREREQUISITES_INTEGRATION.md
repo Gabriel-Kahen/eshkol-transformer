@@ -1,5 +1,9 @@
 # Wave 3 training-prerequisite integration audit
 
+Status: **accepted and merged through PR #124**. The preparation history below
+preserves the source lineage and failed-run repairs. Final acceptance is recorded
+in the last section.
+
 This integration-preparation branch starts from frozen reviewed PR #124 head
 `79d71086293ccd51bd569785a19c7409d1e070a9`, tree
 `81128ec7c8cb7b4627dad0eeb98e10a624e4fbfd`. That base contains the reviewed
@@ -11,7 +15,7 @@ inventory needed for that leaf. This successor repairs both concrete failures
 from the supported PR #124 run: the reviewed L3S consumer inventory and the
 reviewed TR3-O GNU `nm` query. It also adds the independently approved six-file
 native parity witness and registers parity against the existing pinned
-development oracle. It does not accept or publish the integrated candidate.
+development oracle. That preparation step did not itself accept or publish the candidate.
 
 ## Authenticated sources
 
@@ -242,11 +246,36 @@ evidence for five normal, sanitizer and repeat cases, all 21 roles, 15 strict
 comparisons, the 4,381-check native regression, 12 stdlib checks and four pinned
 PyTorch checks. It explicitly does not exercise a real D2 borrower/cursor, P1
 mode, Eshkol wrapper or public E3 API. Those component results are not integration
-acceptance. The integrated candidate still requires independent exact-tree
-review, supported full CI and root acceptance. It has no public evaluator,
+acceptance by themselves. The exact integrated tree subsequently passed independent
+review, supported full CI and root acceptance as recorded below. It has no public evaluator,
 production source composition, final runtime-pin, P1/D2 restoration,
 guard-adoption, public trainer, sampler, transport, generation, joint live
 restore, one-batch overfit, held-out improvement or interrupted/resumed
-equivalence claim. SHARED-R2 owner gates are complete only on the unsupported
-local compatibility host. Full-union supported CI remains separate from the
-focused component evidence.
+equivalence claim. The earlier SHARED-R2 compatibility-host gates remain separate
+from the subsequently passing supported full-union evidence.
+
+
+## Final integration acceptance — 2026-09-23
+
+[PR #124](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/124) merged
+reviewed head `d35b6cdc36ce0d6e86e9f23e58acce23a6b060de` into the unchanged
+base `e899215cff22afeb00b9a5f56bddad9c4cc6c469`. The merge commit is
+`f74fede59b08f26aa8f3f2300be46eb5fa56f116`. The candidate, GitHub synthetic
+merge, local merge calculation and actual merged main all have tree
+`64ac6cdc00c239c3f5b835c9d1bbd216a6927a78`.
+
+Supported [run 35925066612](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35925066612)
+completed successfully: all 19 suites/34 commands, suite evidence and final
+aggregation passed. Root authenticated the exact repository, event, workflow,
+head, base, tree, jobs and evidence with the candidate's reviewed verifier.
+[Main run 35933002462](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35933002462)
+then passed topology and aggregation while reusing that completed exact-tree
+run. It did not rerun or claim a second execution of the full suites.
+
+This accepts the bounded TR3-B objective bridge, TR3-O update-and-clear,
+SHARED-R2 persistence admission, E3 native frame/parity, and their scoped test
+repairs. The toolchain pin remains `90cbd7130f47b8184bcc77b8d5c1b0026da980de`.
+Newer runtime adoption, E3 source orchestration/P1 restoration, trainer lease and
+live restore, native generation owner/context work, public metric scalars and
+end-to-end training/evaluation/generation CLIs remain separate work. No full
+Wave 3 completion follows from this prerequisite merge.
