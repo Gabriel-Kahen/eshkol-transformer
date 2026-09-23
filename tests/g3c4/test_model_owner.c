@@ -7,6 +7,9 @@
 
 #include <stdio.h>
 
+void et_m3t_test_k1_fail_after(size_t allowed);
+void et_m3t_test_k1_allocator_reset(void);
+
 static size_t checks;
 #define CHECK(condition) do { \
   checks++; \
@@ -145,7 +148,11 @@ static void test_error_snapshot(void) {
   CHECK(et_g3c4_private_last_error_code_v1() ==
         ET_F32_TENSOR_CODE_ACTIVE_BORROW);
 
-  OK(et_g3c4_discover_initializer());
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_error discover_error;
+  OK(et_kernel_runtime_discover(
+      et_g3c4_resolve_provider, (void *)et_n3k_kernel_provider_v1(),
+      &runtime, &discover_error));
   const uint64_t bad_shape[2] = {3u, 3u};
   et_kernel_request_v1 bad_request = {
     sizeof(bad_request), "n3k.matrix-init.uniform", "f32", "cpu", 2u,
@@ -153,7 +160,7 @@ static void test_error_snapshot(void) {
   const et_kernel_capability_v1 *entry = NULL;
   et_kernel_error actual_kernel_error;
   int32_t status = et_kernel_runtime_capability_require(
-      et_g3c4_initializer_runtime, "n3k.matrix-init", &bad_request,
+      runtime, "n3k.matrix-init", &bad_request,
       &entry, &actual_kernel_error);
   CHECK(status != 0);
   CHECK(et_g3c4_capture_kernel(status, &actual_kernel_error) == status);
@@ -161,15 +168,45 @@ static void test_error_snapshot(void) {
   CHECK(et_g3c4_private_last_error_category_v1() ==
         actual_kernel_error.category);
   CHECK(et_g3c4_private_last_error_code_v1() == actual_kernel_error.code);
+  et_kernel_runtime_destroy(runtime);
 }
 
 static void test_allocation_rollback(void) {
+  const et_f32_test_live_counts_v1 baseline = live_counts();
+  const size_t registry_baseline = owner_registry_count();
+
+  et_g3c4_allocation_limit = 0u;
+  et_g3c4_successful_allocations = 0u;
+  size_t k1_limit;
+  for (k1_limit = 0u; k1_limit < 256u; k1_limit++) {
+    et_m3t_test_k1_fail_after(k1_limit);
+    et_g3c4_model_owner_internal *owner =
+        et_g3c4_private_model_owner_create_seeded_v1(1);
+    et_m3t_test_k1_allocator_reset();
+    CHECK(owner == NULL);
+    CHECK(et_g3c4_initializer_runtime == NULL);
+    if (et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_C4) {
+      CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INTERNAL);
+      CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_ALLOCATION);
+      break;
+    }
+    CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_K1);
+    CHECK(et_g3c4_private_last_error_code_v1() ==
+          ET_KERNEL_CODE_ALLOCATION_FAILED);
+    same_live(baseline);
+    CHECK(owner_registry_count() == registry_baseline);
+  }
+  CHECK(k1_limit < 256u);
+  same_live(baseline);
+  CHECK(owner_registry_count() == registry_baseline);
+  et_g3c4_allocation_limit = SIZE_MAX;
   et_g3c4_model_owner_internal *warm =
       et_g3c4_private_model_owner_create_seeded_v1(1);
   CHECK(warm != NULL);
   OK(et_g3c4_private_model_owner_abort_v1(warm));
-  const et_f32_test_live_counts_v1 baseline = live_counts();
-  const size_t registry_baseline = owner_registry_count();
+  const size_t warmed_registry = owner_registry_count();
+  CHECK(warmed_registry == registry_baseline + 1u);
+  printf("seeded owner K1 allocation failpoints: %zu\n", k1_limit);
 
   et_g3c4_allocation_limit = 0u;
   et_g3c4_successful_allocations = 0u;
@@ -178,7 +215,7 @@ static void test_allocation_rollback(void) {
   CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INTERNAL);
   CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_ALLOCATION);
   same_live(baseline);
-  CHECK(owner_registry_count() == registry_baseline);
+  CHECK(owner_registry_count() == warmed_registry);
   et_g3c4_allocation_limit = SIZE_MAX;
 
   size_t limit;
@@ -195,7 +232,7 @@ static void test_allocation_rollback(void) {
     CHECK(et_g3c4_private_last_error_code_v1() ==
           ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
     same_live(baseline);
-    CHECK(owner_registry_count() == registry_baseline);
+    CHECK(owner_registry_count() == warmed_registry);
   }
   CHECK(limit < 512u);
   same_live(baseline);

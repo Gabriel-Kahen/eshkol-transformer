@@ -191,7 +191,8 @@ static const et_kernel_provider_v1 *et_g3c4_resolve_provider(
              ? (const et_kernel_provider_v1 *)context : NULL;
 }
 
-static int et_g3c4_require_initializer_row(size_t index) {
+static int et_g3c4_require_initializer_row(
+    et_kernel_runtime *runtime, size_t index) {
   et_kernel_request_v1 request = {
     sizeof(request), "n3k.matrix-init.uniform", "f32", "cpu", 2u,
     et_g3c4_parameter_shapes[index], 1u, {0}};
@@ -199,13 +200,15 @@ static int et_g3c4_require_initializer_row(size_t index) {
   et_kernel_error error;
   return et_g3c4_capture_kernel(
       et_kernel_runtime_capability_require(
-          et_g3c4_initializer_runtime, "n3k.matrix-init", &request,
+          runtime, "n3k.matrix-init", &request,
           &entry, &error), &error);
 }
 
-static int et_g3c4_discover_initializer(void) {
-  if (et_g3c4_initializer_runtime == NULL) {
-    et_kernel_runtime *runtime = NULL;
+static int et_g3c4_discover_initializer(
+    et_kernel_runtime **runtime_output, int *staged_output) {
+  et_kernel_runtime *runtime = et_g3c4_initializer_runtime;
+  int staged = 0;
+  if (runtime == NULL) {
     et_kernel_error error;
     const et_kernel_provider_v1 *provider = et_n3k_kernel_provider_v1();
     if (et_g3c4_capture_kernel(
@@ -213,13 +216,17 @@ static int et_g3c4_discover_initializer(void) {
                                        (void *)provider, &runtime, &error),
             &error))
       return (int)et_g3c4_error_state.category;
-    et_g3c4_initializer_runtime = runtime;
+    staged = 1;
   }
   for (size_t index = 0u; index < 14u; index++) {
     if (et_g3c4_parameter_rank(index) == 2u &&
-        et_g3c4_require_initializer_row(index))
+        et_g3c4_require_initializer_row(runtime, index)) {
+      if (staged) et_kernel_runtime_destroy(runtime);
       return (int)et_g3c4_error_state.category;
+    }
   }
+  *runtime_output = runtime;
+  *staged_output = staged;
   return 0;
 }
 
@@ -385,6 +392,8 @@ static int32_t et_g3c4_owner_idle_preflight(
 
 void *et_g3c4_private_model_owner_create_seeded_v1(int64_t seed) {
   et_g3c4_model_owner_internal *owner = NULL;
+  et_kernel_runtime *initializer = NULL;
+  int staged_initializer = 0;
   et_g3c4_error_reset_internal();
   if (seed < 0) {
     (void)et_g3c4_fail(
@@ -395,10 +404,13 @@ void *et_g3c4_private_model_owner_create_seeded_v1(int64_t seed) {
     (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return NULL;
   }
-  if (et_g3c4_discover_initializer()) return NULL;
+  if (et_g3c4_discover_initializer(
+          &initializer, &staged_initializer))
+    return NULL;
   owner = (et_g3c4_model_owner_internal *)
       et_g3c4_allocate(sizeof(*owner));
   if (owner == NULL) {
+    if (staged_initializer) et_kernel_runtime_destroy(initializer);
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
   }
@@ -433,10 +445,12 @@ void *et_g3c4_private_model_owner_create_seeded_v1(int64_t seed) {
             abort();
       }
       free(owner);
+      if (staged_initializer) et_kernel_runtime_destroy(initializer);
       et_g3c4_error_restore_internal(first);
       return NULL;
     }
   }
+  if (staged_initializer) et_g3c4_initializer_runtime = initializer;
   owner->registry_next = et_g3c4_owner_registry;
   et_g3c4_owner_registry = owner;
   staged_c4_owner = owner;

@@ -39,7 +39,7 @@ printf '%s\n' et_f32_parameter_idle_preflight_internal |
 
 owner_sources=(
   "${PROJECT_ROOT}/tests/g3c4/test_model_owner.c"
-  "${PROJECT_ROOT}/native/kernel_abi.c"
+  "${PROJECT_ROOT}/tests/m3t/kernel_fail_allocator.c"
   "${PROJECT_ROOT}/native/n3k_primitives_provider.c"
 )
 for owner_mode in normal sanitize; do
