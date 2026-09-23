@@ -2767,3 +2767,15 @@ records source provenance, the initial failed run, its two reviewed repairs,
 and the final acceptance boundary. SHARED-R2 and the bounded TR3-B/O and E3
 native leaves are accepted. Public evaluator/trainer/generation and full resume
 remain active work; runtime pin adoption remains separate.
+
+
+## 2026-09-23 — Native restore successor integration
+
+The [bounded O2 restore participant](TR3_O2_RESTORE_INTEGRATION.md) is accepted at
+`2aeefad` after exact-source independent review and supported native O2/I2/G3/C2
+gates. Integration `5dbac53` preserves all tested production subtrees and ten
+changed paths. The preceding `356ffbd` preserves accepted optimized P1 test
+evidence and merges main acceptance records. Contract-only successor `d777d06`
+is integrated at `ed8dac8`; its first P1 prepared-construction dependency is
+dispatched, with downstream C4 implementation still gated. Full package/CI,
+public trainer/evaluator/generation and exact resume remain incomplete.
