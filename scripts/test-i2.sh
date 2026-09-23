@@ -169,6 +169,45 @@ cmp "${temporary_dir}/test-c2-i2-model-copy-1.stdout" \
 grep -Fx 'C2 I2 model copy PASS: 225 checks' \
   "${temporary_dir}/test-c2-i2-model-copy-1.stdout" >/dev/null
 
+# Compile the checked TR3-C tail only into its feature object.  The ordinary I2
+# bridge and aggregate must not acquire these package-private symbols.
+tr3_c_checked_object="${i2_runtime_dir}/tr3_c_i2_checked_bridge.o"
+"${cc}" "${runtime_cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+  -DET_TR3_C_I2_CHECKED_BRIDGE \
+  -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  -o "${tr3_c_checked_object}"
+nm -g --defined-only --format=posix "${tr3_c_checked_object}" | \
+  awk '$1 ~ /^et_tr3_c_i2_/ { print $1 }' | LC_ALL=C sort \
+  >"${temporary_dir}/tr3-c-i2-checked-defined.txt"
+cmp "${PROJECT_ROOT}/native/tr3_c_i2_checked_defined_symbols.txt" \
+  "${temporary_dir}/tr3-c-i2-checked-defined.txt"
+if nm -g --defined-only --format=posix \
+    "${i2_runtime_dir}/i2_wave2_native_bridge.o" | \
+    grep -E '^et_tr3_c_i2_[^[:space:]]+[[:space:]]'; then
+  die "standalone I2 helper object exposes the TR3-C-only checked seam"
+fi
+
+tr3_c_checked_test_object="${i2_runtime_dir}/tr3_c_i2_checked_test_bridge.o"
+"${cc}" "${runtime_cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+  -DET_TR3_C_I2_CHECKED_BRIDGE -DET_F32_TENSOR_TESTING \
+  -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  -o "${tr3_c_checked_test_object}"
+"${cc}" "${cflags[@]}" -DET_F32_TENSOR_TESTING \
+  "${PROJECT_ROOT}/tests/i2/test_tr3_c_checked_bridge.c" \
+  "${tr3_c_checked_test_object}" \
+  "${i2_runtime_dir}/c2_i2_model_copy_f32.o" \
+  "${i2_runtime_dir}/kernel_abi.o" \
+  -o "${temporary_dir}/test-tr3-c-i2-checked"
+for run in 1 2; do
+  timeout --foreground --signal=TERM --kill-after=5s 90s \
+    "${temporary_dir}/test-tr3-c-i2-checked" \
+    >"${temporary_dir}/test-tr3-c-i2-checked-${run}.stdout"
+done
+cmp "${temporary_dir}/test-tr3-c-i2-checked-1.stdout" \
+  "${temporary_dir}/test-tr3-c-i2-checked-2.stdout"
+grep -Fx 'TR3-C checked I2 bridge PASS: 49 checks' \
+  "${temporary_dir}/test-tr3-c-i2-checked-1.stdout" >/dev/null
+
 compile_i2_integration() {
   local cache=$1 output=$2 log=$3
   mkdir -p "${cache}"
@@ -391,6 +430,18 @@ ASAN_OPTIONS=detect_leaks="${I2_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 90s \
     "${temporary_dir}/test-c2-i2-model-copy-sanitized" >/dev/null
+"${cc}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
+  -DET_TR3_C_I2_CHECKED_BRIDGE -DET_F32_TENSOR_TESTING \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  "${PROJECT_ROOT}/tests/i2/test_tr3_c_checked_bridge.c" \
+  "${temporary_dir}/sanitized-i2/libeshkol_transformer_f32.a" \
+  "${temporary_dir}/sanitized-k1/libeshkol_transformer_k1.a" \
+  -o "${temporary_dir}/test-tr3-c-i2-checked-sanitized"
+ASAN_OPTIONS=detect_leaks="${I2_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 90s \
+    "${temporary_dir}/test-tr3-c-i2-checked-sanitized" >/dev/null
 
 if grep -Ein 'python|pytorch|torch' \
     "${PROJECT_ROOT}/native/f32_tensor.c" \
