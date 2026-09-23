@@ -53,7 +53,7 @@ compile_witness() {
   mkdir -p "${directory}/objects" "${directory}/cache"
   if [[ "${mode}" == sanitize ]]; then
     extra=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
-    runtime=(env ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+    runtime=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
                  UBSAN_OPTIONS=halt_on_error=1)
   fi
 

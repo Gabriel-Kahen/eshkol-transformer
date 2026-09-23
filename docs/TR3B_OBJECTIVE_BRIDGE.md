@@ -69,3 +69,9 @@ special-ID range is admitted or silently truncated.
 M3 graph, output, logits and I2 plan tombstones remain the accepted cumulative
 controls after release. Evidence reports them separately from live owners and
 makes no flat-total-memory claim.
+
+The focused sanitizer build instruments the private native closure and compiled
+Eshkol witness with AddressSanitizer and UndefinedBehaviorSanitizer, enables leak
+detection, and requires byte-identical output to the ordinary build. The live
+owner assertions remain the semantic lifetime proof; sanitizer success does not
+reclassify accepted process-lifetime model storage or cumulative tombstones.
