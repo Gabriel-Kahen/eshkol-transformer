@@ -1,7 +1,7 @@
 # TR3-C private I2/O2 restore boundary proposal
 
-Status: **proposal only; independent review and root freeze required before
-implementation**.
+Status: **root-frozen private boundary; bounded I2 leaf accepted, O2 leaf still
+under implementation review**.
 
 Source commit: `3603ab4f090c57b826fbdc3fd545b2e1fc941a56`.
 Source tree: `c17f953653575bdcc67daae1cd15bdfc183a1a55`.
@@ -13,11 +13,10 @@ source-composed I2/O2 aggregate. It adds no public API, provider row, serialized
 field, generic tensor-kind query, optimizer registry, optimizer exclusion,
 trainer token, callback, or concurrency guarantee.
 
-If root freezes this proposal, its exact shared-authorizer and native-boundary
-terms replace the conflicting minimum/native wording in parent sections 6.2,
-9 steps 3 through 7, and 10's three-function I2 list. Every other parent
-requirement remains unchanged. Until that decision, neither document
-authorizes implementation.
+Root froze this proposal at `9fa30bc71c4e55ba03509b5e8a28575be9a07b0b`.
+Its exact shared-authorizer and native-boundary terms replace the conflicting
+minimum/native wording in parent sections 6.2, 9 steps 3 through 7, and 10's
+three-function I2 list. Every other parent requirement remains unchanged.
 
 The existing `ET_TR3_O2_PRIVATE_OPERATIONS` implementation remains the sole
 optimizer receiver-exclusion lineage. The existing `busy` field,
@@ -732,8 +731,47 @@ be integrated.
 
 ## 10. Explicit non-goals
 
-This proposal does not authorize implementation yet. It does not define the
-orthogonal O2 source create-overlap hook owned by #119, the trainer lease, the
-model/O2 Scheme compositors, C2 staging, D2 integration, the parent restore
-machine, checkpoint bytes, or public `trainer-load-state!` installation. It
-does not relax genuine native authentication into a trusted-source assertion.
+This boundary does not authorize work outside its separately accepted leaves.
+It does not define the orthogonal O2 source create-overlap hook owned by #119,
+the trainer lease, the model/O2 Scheme compositors, C2 staging, D2 integration,
+the parent restore machine, checkpoint bytes, or public
+`trainer-load-state!` installation. It does not relax genuine native
+authentication into a trusted-source assertion.
+
+## 11. Bounded I2 integration evidence
+
+Root accepted the I2 restore leaf at exact commit
+`154d9c3aeabd74027ca9899952ae6534d63ff7b3`, tree
+`2421a7569834fbe1c303d8a27d014293e9d1f169`. The implementation lineage is
+`d403255b31a43c6355f4a0cdb38ace6555eda678`; focused evidence hardening is
+`1c3745b10d349adcdcb4ae6d845705de76795d20`,
+`b838962e6f72c8cf41a69760d9368bab5bb4141c`,
+`a892efde0d1978565492d14f97104dcc3e5aa2c9`, and `154d9c3`.
+
+The exact integration-path inventory is:
+
+- `Makefile` and `scripts/test-tr3-c-i2-restore.sh`;
+- `native/f32_parameter_internal.h`, `native/f32_tensor.c`,
+  `native/i2_wave2_package_bridge.c`, and
+  `native/tr3_c_i2_restore_internal.h`;
+- `native/f32_tensor_owned_match_defined_symbols.txt`,
+  `native/f32_tensor_owned_match_undefined_symbols.txt`,
+  `native/tr3_c_i2_restore_bridge_defined_symbols.txt`, and
+  `native/tr3_c_i2_restore_bridge_undefined_symbols.txt`; and
+- `tests/i2/test_tr3_c_i2_restore.c`.
+
+Independent exact-commit review approved the final candidate. The supported
+gate ran from a read-only exact snapshot on Ubuntu 22.04.5 with Clang 21.1.8
+and GCC 11.4. It passed O0 and `-O2 -fstrict-aliasing` object/output parity,
+exact defined/undefined manifests, ordinary and checked-bridge semantics,
+deterministic repetitions, failure atomicity, terminal behavior, and
+ASan/UBSan/LSan. The production delta outside the private gates is limited to
+initializing `count`, `bytes`, and `empty` in `et_f32_tensor_create_v1`; the
+gate transforms the frozen pre-repair source by exactly those three approved
+initializers before proving that the testing hooks add no further gate-off
+object or symbol change.
+
+Restore-builder tombstones retain a measured 64 bytes per restore. This is
+bounded retained control, not zero retention. The accepted leaf adds no public
+API or binding and does not accept the O2 participant, trainer integration, or
+joint live restore.
