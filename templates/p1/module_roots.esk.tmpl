@@ -264,6 +264,8 @@
         :real et_p1_private_state_tensor_validate_v1)
 (extern i64 p1-native-state-release-begin ptr ptr
         :real et_p1_private_state_release_begin_v1)
+(extern i64 p1-runtime-reserve-exception-handlers i64
+        :real eshkol_runtime_reserve_exception_handlers_v1)
 (extern i64 p1-native-live-count ptr
         :real et_p1_private_live_entry_count_v1)
 (extern i64 p1-native-tombstone-count ptr
@@ -917,7 +919,7 @@
 (define (require-live-state operation value)
   (let* ((state (require-state operation value))
          (lifecycle (state-lifecycle state)))
-    (if (and (vector? lifecycle) (= (vector-length lifecycle) 8)
+    (if (and (vector? lifecycle) (= (vector-length lifecycle) 10)
              (eq? (vector-ref lifecycle 0) state-lifecycle-tag)
              (eq? (vector-ref lifecycle 1) 'live))
         state
@@ -2922,7 +2924,8 @@
               (copy-data-for 'state-dict-create-unsafe-internal
                              'invalid-argument aliases)
               (vector state-lifecycle-tag 'live #f #f '()
-                      (vector '() (vector-ref entry-input 2)) #f #f))))
+                      (vector '() (vector-ref entry-input 2)) #f #f
+                      (vector 'empty #f #f #f) (vector #f #f)))))
 
 (define (state-dict-format-internal state)
   (vector-ref (require-live-state 'state-dict-format-internal state) 1))
@@ -3055,7 +3058,8 @@
                     (tensor-provider-identity provider) entries
                     (copy-data aliases)
                     (vector state-lifecycle-tag 'live #t provider '()
-                            ownership #f #f)))
+                            ownership #f #f
+                            (vector 'empty #f #f #f) (vector #f #f))))
       ;; Capture publication so rollback can revoke a shell even when native
       ;; bind fails after shell creation.
       (set! state-shell (shell-for-raw 'state state))
@@ -3801,48 +3805,48 @@
         (state-use-end! operation state operation)
         result))))
 
-(define (state-dict-release-owned! state)
+(define (state-dict-release-owned! state release-outcome)
   ;; [phase, failed?, caught-value, exact-lifecycle]. The record exists before
-  ;; handler setup; phase becomes started only after complete admission.
-  (let ((release-outcome (vector 'empty #f #f #f)))
-    (guard (caught
-             (#t
-               (if (not (eq? (vector-ref release-outcome 0) 'started))
-                   (raise caught))
-               (vector-set! release-outcome 1 #t)
-               (vector-set! release-outcome 2 caught)
-               #f))
-      (let* ((lifecycle (state-lifecycle state))
-             (provider (vector-ref lifecycle 3))
-             (ownership (vector-ref lifecycle 5)))
-        (if (vector-ref lifecycle 6)
-            (fail 'invalid-state 'state-dict-release!
-                  "state dictionary has an active tensor borrow" '())
-            #t)
-        ;; From the phase write through carrier invalidation, every operation is
-        ;; assignment-only and remains inside the preinstalled handler.
-        (vector-set! release-outcome 3 lifecycle)
-        (vector-set! release-outcome 0 'started)
-        (vector-set! lifecycle 1 'released)
-        (vector-set! lifecycle 4 '())
-        (if (> (vector-length ownership) 1)
-            (vector-set! ownership 1 '())
-            #t)
-        ;; Clear every state entry before invoking provider code. No later path
-        ;; may inspect an opaque carrier after its release callback begins.
-        (let clear ((entries (vector-ref state 6)))
-          (if (null? entries)
-              #t
-              (begin
-                (vector-set! (car entries) 7 #f)
-                (clear (cdr entries)))))
-        (if (vector-ref lifecycle 2)
-            (release-owned-list! 'state-dict-release! provider ownership)
-            #t)))
-    (vector-set! (vector-ref release-outcome 3) 3 #f)
-    (if (vector-ref release-outcome 1)
-        (raise (vector-ref release-outcome 2))
-        #t)))
+  ;; native tombstoning or C2 authority transfer; phase becomes started only
+  ;; after complete admission.
+  (guard (caught
+           (#t
+             (if (not (eq? (vector-ref release-outcome 0) 'started))
+                 (raise caught))
+             (vector-set! release-outcome 1 #t)
+             (vector-set! release-outcome 2 caught)
+             #f))
+    (let* ((lifecycle (state-lifecycle state))
+           (provider (vector-ref lifecycle 3))
+           (ownership (vector-ref lifecycle 5)))
+      (if (vector-ref lifecycle 6)
+          (fail 'invalid-state 'state-dict-release!
+                "state dictionary has an active tensor borrow" '())
+          #t)
+      ;; From the phase write through carrier invalidation, every operation is
+      ;; assignment-only and remains inside the preinstalled handler.
+      (vector-set! release-outcome 3 lifecycle)
+      (vector-set! release-outcome 0 'started)
+      (vector-set! lifecycle 1 'released)
+      (vector-set! lifecycle 4 '())
+      (if (> (vector-length ownership) 1)
+          (vector-set! ownership 1 '())
+          #t)
+      ;; Clear every state entry before invoking provider code. No later path
+      ;; may inspect an opaque carrier after its release callback begins.
+      (let clear ((entries (vector-ref state 6)))
+        (if (null? entries)
+            #t
+            (begin
+              (vector-set! (car entries) 7 #f)
+              (clear (cdr entries)))))
+      (if (vector-ref lifecycle 2)
+          (release-owned-list! 'state-dict-release! provider ownership)
+          #t)))
+  (vector-set! (vector-ref release-outcome 3) 3 #f)
+  (if (vector-ref release-outcome 1)
+      (raise (vector-ref release-outcome 2))
+      #t))
 
 (define (decoded-owned-record? record)
   (and (vector? record) (= (vector-length record) 7)
@@ -4016,7 +4020,8 @@
                      (tensor-provider-identity provider) entries
                      (copy-data aliases)
                      (vector state-lifecycle-tag 'live #f #f '()
-                             adopted-ownership #f #f)))
+                             adopted-ownership #f #f
+                             (vector 'empty #f #f #f) (vector #f #f))))
            (state-shell #f)
            (cleanup-failed? #f)
            (cleanup-error #f)
@@ -4542,13 +4547,24 @@
                 (fail 'invalid-state 'state-dict-release!
                       "state dictionary ownership was transferred" '())
                 #t)
-            (if (and (not (eq? raw dead-state-raw))
-                     (eq? (vector-ref (state-lifecycle raw) 1) 'live)
-                     (vector-ref (state-lifecycle raw) 6))
-                (fail 'invalid-state 'state-dict-release!
-                      "state dictionary has an active tensor borrow" '())
-                (let* ((outcome (vector #f #f))
-                       (status
+            (if (eq? raw dead-state-raw)
+                #t
+                (begin
+                  (if (and (eq? (vector-ref (state-lifecycle raw) 1) 'live)
+                           (vector-ref (state-lifecycle raw) 6))
+                      (fail 'invalid-state 'state-dict-release!
+                            "state dictionary has an active tensor borrow" '())
+                      #t)
+                  (let* ((release-lifecycle (state-lifecycle raw))
+                       (release-outcome (vector-ref release-lifecycle 8))
+                       (outcome (vector-ref release-lifecycle 9)))
+                  ;; Five frames cover the public caller, state cleanup, item,
+                  ;; provider callback, and E1 shell-construction guards at
+                  ;; their exact peak nesting.
+                  (if (not (= (p1-runtime-reserve-exception-handlers 5) 0))
+                      (fail 'internal 'state-dict-release!
+                            "handler reserve returned an invalid status" '()))
+                (let ((status
                          (p1-native-state-release-begin native-context state)))
                   (native-check 'state-dict-release! status)
                   (if (= (p1-native-result-i64 native-context) 0)
@@ -4571,10 +4587,11 @@
                               (vector-set! outcome 0 #t)
                               (vector-set!
                                 outcome 1
-                                (state-dict-release-owned! raw)))
+                                (state-dict-release-owned!
+                                  raw release-outcome)))
                             (if (vector-ref outcome 0)
                                 (vector-ref outcome 1)
-                                (raise (vector-ref outcome 1))))))))))))
+                                (raise (vector-ref outcome 1))))))))))))))
 
   exposed-tensor-provider-create
   (lambda (provider evidence)
@@ -4812,7 +4829,8 @@
                 "expected an exact claimed P1 state" '()))
       (let ((raw (vector-ref entry 2)))
         (if (eq? raw dead-state-raw) #t
-            (let ((lifecycle (state-lifecycle raw)))
+            (let* ((lifecycle (state-lifecycle raw))
+                   (release-outcome (vector-ref lifecycle 8)))
               (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
                       (not (eq? (vector-ref lifecycle 6) owner-token))
                       (vector-ref lifecycle 7))
@@ -4824,7 +4842,8 @@
                   (begin
                     (compact-released-state-shells! raw)
                     (vector-set! lifecycle 6 #f)
-                    (state-dict-release-owned! raw))))))))
+                    (state-dict-release-owned!
+                      raw release-outcome))))))))
   (lambda (state access-token operation)
     (let* ((marker (c2-owned-active-marker operation state access-token))
            (raw (vector-ref marker 1)))

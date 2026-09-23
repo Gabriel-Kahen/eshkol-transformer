@@ -2,6 +2,8 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 for command in ar cmp diff python3 timeout; do require_command "${command}"; done
+(cd "${PROJECT_ROOT}" &&
+  PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.c2.test_handler_order)
 cc=
 cxx=
 resolve_provenance_compilers cc cxx \

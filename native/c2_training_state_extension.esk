@@ -16,6 +16,8 @@
         :real et_c2_private_o2_state_preflight_transfer_v1)
 (extern i64 c2-owner-native-o2-state-require-shape ptr i64 i64 ptr
         :real et_c2_private_o2_state_require_shape_v1)
+(extern i64 c2-runtime-reserve-exception-handlers i64
+        :real eshkol_runtime_reserve_exception_handlers_v1)
 
 (define c2-training-state-compose-tag
   (vector 'c2-private-training-state-compose-v1))
@@ -25,6 +27,8 @@
   (vector 'c2-private-training-state-borrow-access-token-v1))
 (define c2-training-state-owner-token-tag
   (vector 'c2-private-subowner-token-v1))
+(define c2-training-state-release-record-tag
+  (vector 'c2-private-training-state-release-record-v1))
 (define c2-training-state-states '())
 (define c2-training-state-i64-max 9223372036854775807)
 
@@ -274,12 +278,19 @@
          ;; monotonic while live, and never appears in the borrow projection.
          (state (vector shell p1 o2 controls topology o2-projection
                         owner-token 'constructing #f))
-         (next-registry (cons state c2-training-state-states)))
-    (c2-training-state-claim-p1! p1 owner-token)
+         (next-registry (cons state c2-training-state-states))
+         ;; Cleanup progress only. Exact P1 state plus owner-token identity
+         ;; remains the rollback authority.
+         (claim-progress (vector #f)))
     (guard (caught
              (#t
-               (c2-training-state-rollback-p1! p1 owner-token)
+               (if (vector-ref claim-progress 0)
+                   (begin
+                     (c2-training-state-rollback-p1! p1 owner-token)
+                     (vector-set! claim-progress 0 #f)))
                (raise caught)))
+      (c2-training-state-claim-p1! p1 owner-token)
+      (vector-set! claim-progress 0 #t)
       (c2-training-state-claim-o2! o2 owner-token))
     ;; The transfer tail is assignment-only and non-failing.
     (vector-set! state 7 'live)
@@ -288,6 +299,49 @@
     (vector-set! request 2 #f)
     (vector-set! request 5 shell)
     request))
+
+(define (c2-training-state-borrow-activation-rollback!
+          state p1-active operation)
+  ;; Cleanup authority always comes from the canonical owner graph after the
+  ;; publication barrier. The progress cell only says whether exact P1
+  ;; deactivation is required.
+  (let ((owner-token (vector-ref state 6))
+        (active-borrow (vector-ref state 7)))
+    (if (or (not (vector? owner-token))
+            (not (= (vector-length owner-token) 3))
+            (not (eq? (vector-ref owner-token 0)
+                      c2-training-state-owner-token-tag)))
+        (c2-training-state-fail
+          'internal operation "C2 borrow rollback lost owner authority"))
+    (if (eq? active-borrow 'live)
+        (begin
+          (if (not (eq? (vector-ref owner-token 2) #f))
+              (c2-training-state-fail
+                'internal operation
+                "C2 borrow rollback found a live owner with an active backlink"))
+          #t)
+        (begin
+          (if (or (not (vector? active-borrow))
+                  (not (= (vector-length active-borrow) 6))
+                  (not (eq? (vector-ref active-borrow 0)
+                            c2-training-state-borrow-tag))
+                  (not (eq? (vector-ref active-borrow 1) state))
+                  (not (eq? (vector-ref active-borrow 3) owner-token))
+                  (not (or (eq? (vector-ref owner-token 2) #f)
+                           (eq? (vector-ref owner-token 2) active-borrow))))
+              (c2-training-state-fail
+                'internal operation
+                "C2 borrow rollback found mismatched canonical authority"))
+          (if (vector-ref p1-active 0)
+              (begin
+                (state-dict-c2-owned-borrow-deactivate-internal!
+                  (vector-ref state 1) owner-token
+                  (vector-ref active-borrow 4) active-borrow operation)
+                (vector-set! p1-active 0 #f)))
+          (if (eq? (vector-ref owner-token 2) active-borrow)
+              (vector-set! owner-token 2 #f))
+          (vector-set! state 7 'live)
+          #t))))
 
 (define (c2-training-state-borrow-begin-internal value operation)
   (let ((state (c2-training-state-find value)))
@@ -311,45 +365,44 @@
              (vector #f #f #f #f #f))
            (borrow
              (vector c2-training-state-borrow-tag state operation
-                     owner-token access-token tensor-access)))
+                     owner-token access-token tensor-access))
+           ;; Progress only; authority is re-read from state after promotion.
+           (p1-active (vector #f)))
       ;; Establish scratch before publishing busy. If region establishment
       ;; fails, the owner and both subowners are still untouched. Once inside,
       ;; every fallible activation step is enclosed by an exact rollback guard.
       (with-region ('c2-training-state-borrow-activation 65536)
-        ;; Publish the outer busy identity before P1 validation can invoke a
-        ;; trusted provider callback. A callback must not be able to release or
-        ;; recursively borrow this owner while activation is in flight.
-        (vector-set! state 7 borrow)
-        ;; The state-slot write barrier promotes the complete borrow graph into
-        ;; owner lifetime. Read it back and use only its linked authorities;
-        ;; the pre-barrier locals may still denote the regional originals.
-        (let* ((active-borrow (vector-ref state 7))
-               (active-owner-token (vector-ref active-borrow 3))
-               (active-access-token (vector-ref active-borrow 4)))
-          (vector-set! active-owner-token 2 active-borrow)
-          ;; Hosted exception handlers retain a large stack/handler graph.
-          ;; P1's write barrier promotes only its tiny installed marker;
-          ;; success returns the canonical outer borrow and drops guard state.
-          (guard (caught
-                   (#t
-                     (vector-set! active-owner-token 2 #f)
-                     (vector-set! state 7 'live)
-                     (raise caught)))
-            (c2-training-state-activate-p1-borrow!
-              (vector-ref state 1) active-owner-token active-access-token
-              active-borrow operation))
-          (guard (caught
-                   (#t
-                     (state-dict-c2-owned-borrow-deactivate-internal!
-                       (vector-ref state 1) active-owner-token
-                       active-access-token active-borrow operation)
-                     (vector-set! active-owner-token 2 #f)
-                     (vector-set! state 7 'live)
-                     (raise caught)))
-            (c2-training-state-activate-o2-borrow!
-              (vector-ref state 2) active-owner-token active-access-token
-              active-borrow operation))
-          active-borrow)))))
+        ;; This outer guard exists before the first busy publication and remains
+        ;; live while the inner activation handler is installed.
+        (guard (caught
+                 (#t
+                   (c2-training-state-borrow-activation-rollback!
+                     state p1-active operation)
+                   (raise caught)))
+          ;; Publish busy before a trusted provider callback can recursively
+          ;; borrow or release this owner.
+          (vector-set! state 7 borrow)
+          ;; The write barrier promotes the borrow graph into owner lifetime.
+          ;; Read it back and use only its canonical linked authorities.
+          (let* ((active-borrow (vector-ref state 7))
+                 (active-owner-token (vector-ref active-borrow 3))
+                 (active-access-token (vector-ref active-borrow 4)))
+            (vector-set! active-owner-token 2 active-borrow)
+            ;; The inner guard is installed before P1 activation. Its setup
+            ;; failure is still covered by the outer canonical rollback.
+            (guard (caught
+                     (#t
+                       (c2-training-state-borrow-activation-rollback!
+                         state p1-active operation)
+                       (raise caught)))
+              (c2-training-state-activate-p1-borrow!
+                (vector-ref state 1) active-owner-token active-access-token
+                active-borrow operation)
+              (vector-set! p1-active 0 #t)
+              (c2-training-state-activate-o2-borrow!
+                (vector-ref state 2) active-owner-token active-access-token
+                active-borrow operation))
+            active-borrow))))))
 
 (define (c2-training-state-borrow-projection-internal borrow)
   (if (or (not (vector? borrow)) (not (= (vector-length borrow) 6))
@@ -466,6 +519,116 @@
 (define c2-training-state-release-o2-owned!
   o2-state-release-c2-owned-internal!)
 
+;;; Fixed-purpose private release authority shared by direct C2 release and
+;;; LOAD rollback. Layout: [tag, exact-shell, phase, state, P1, O2, owner-token].
+(define (c2-training-state-release-record shell)
+  (vector c2-training-state-release-record-tag shell 'empty #f #f #f #f))
+
+(define (c2-training-state-release-record-valid? record)
+  (and (vector? record) (= (vector-length record) 7)
+       (eq? (vector-ref record 0) c2-training-state-release-record-tag)))
+
+(define (c2-training-state-release-take-authority!
+          record value authority-cell operation)
+  (if (or (not (c2-training-state-release-record-valid? record))
+          (not (eq? (vector-ref record 2) 'empty))
+          (and (vector-ref record 1)
+               (not (eq? (vector-ref record 1) value)))
+          (and authority-cell
+               (or (not (vector? authority-cell))
+                   (not (= (vector-length authority-cell) 1))
+                   (not (eq? (vector-ref authority-cell 0) value)))))
+      (c2-training-state-fail
+        'internal operation "C2 release record authority is invalid"))
+  (let ((state (c2-training-state-find value)))
+    (if (or (not state) (not (eq? (vector-ref state 7) 'live)))
+        (c2-training-state-fail
+          'invalid-state operation "C2 release requires an exact live owner"))
+    (let ((p1 (vector-ref state 1))
+          (o2 (vector-ref state 2))
+          (token (vector-ref state 6)))
+      (if (or (not p1) (not o2)
+              (not (vector? token)) (not (= (vector-length token) 3))
+              (not (eq? (vector-ref token 0)
+                        c2-training-state-owner-token-tag))
+              (not (eq? (vector-ref token 1) value))
+              (not (eq? (vector-ref token 2) #f)))
+          (c2-training-state-fail
+            'internal operation "C2 release lost exact child authority"))
+      ;; From here through the final phase write, every operation is an
+      ;; assignment-only transfer into the preallocated release record.
+      (vector-set! record 1 value)
+      (vector-set! record 3 state)
+      (vector-set! record 4 p1)
+      (vector-set! record 5 o2)
+      (vector-set! record 6 token)
+      (vector-set! state 7 'releasing)
+      (vector-set! state 1 #f)
+      (vector-set! state 2 #f)
+      (vector-set! state 3 'released)
+      (vector-set! state 4 'released)
+      (vector-set! state 5 'released)
+      (vector-set! state 6 #f)
+      (vector-set! state 8 #f)
+      (if authority-cell (vector-set! authority-cell 0 #f))
+      (vector-set! record 2 'started)
+      #t)))
+
+(define (c2-training-state-release-record-p1! record operation)
+  (if (or (not (c2-training-state-release-record-valid? record))
+          (not (eq? (vector-ref record 2) 'started))
+          (not (vector-ref record 4))
+          (not (vector-ref record 6)))
+      (c2-training-state-fail
+        'internal operation "C2 P1 release authority is invalid"))
+  (let ((p1 (vector-ref record 4))
+        (token (vector-ref record 6)))
+    ;; Clear before the consuming callback. A provider defect cannot grant a
+    ;; second release attempt.
+    (vector-set! record 4 #f)
+    (c2-training-state-release-p1-owned! p1 token)))
+
+(define (c2-training-state-release-record-o2! record operation)
+  (if (or (not (c2-training-state-release-record-valid? record))
+          (not (eq? (vector-ref record 2) 'started))
+          (not (vector-ref record 5))
+          (not (vector-ref record 6)))
+      (c2-training-state-fail
+        'internal operation "C2 O2 release authority is invalid"))
+  (let ((o2 (vector-ref record 5))
+        (token (vector-ref record 6)))
+    (vector-set! record 5 #f)
+    (c2-training-state-release-o2-owned! o2 token)))
+
+(define (c2-training-state-release-record-finalize! record operation)
+  (if (or (not (c2-training-state-release-record-valid? record))
+          (not (eq? (vector-ref record 2) 'started))
+          (not (eq? (vector-ref record 4) #f))
+          (not (eq? (vector-ref record 5) #f))
+          (not (vector-ref record 3)))
+      (c2-training-state-fail
+        'internal operation "C2 release finalization authority is invalid"))
+  (let ((state (vector-ref record 3)))
+    (if (not (eq? (vector-ref state 7) 'releasing))
+        (c2-training-state-fail
+          'internal operation "C2 release finalization state is invalid"))
+    (vector-set! state 7 'dead)
+    (vector-set! record 1 #f)
+    (vector-set! record 3 #f)
+    (vector-set! record 6 #f)
+    (vector-set! record 2 'done)
+    #t))
+
+(define (c2-training-state-release-record-note-defect!
+          record defect caught)
+  (if (not (eq? (vector-ref record 2) 'started))
+      (raise caught))
+  (if (not (vector-ref defect 0))
+      (begin
+        (vector-set! defect 0 #t)
+        (vector-set! defect 1 caught)))
+  #f)
+
 (define (c2-training-state-release-internal! value operation)
   (let ((state (c2-training-state-find value)))
     ;; Exact registry/kind admission precedes every component/native access.
@@ -478,37 +641,30 @@
           (if (not (eq? (vector-ref state 7) 'live))
               (c2-training-state-fail
                 'invalid-state operation "C2 state is busy or releasing"))
-          (let ((p1 (vector-ref state 1))
-                (o2 (vector-ref state 2))
-                (token (vector-ref state 6))
-                (have-first-error? #f)
-                (first-error #f))
-            ;; Invalidate dependents and consume both authorities before the
-            ;; first fallible cleanup. Neither can ever be retried by C2.
-            (vector-set! state 7 'releasing)
-            (vector-set! state 1 #f)
-            (vector-set! state 2 #f)
-            (vector-set! state 3 'released)
-            (vector-set! state 4 'released)
-            (vector-set! state 5 'released)
-            (vector-set! state 6 #f)
-            (vector-set! state 8 #f)
+          (let ((record (c2-training-state-release-record value))
+                (defect (vector #f #f)))
+            ;; Peak nesting is the two C2 continuation guards plus P1's state,
+            ;; item, provider callback, and E1 shell-construction guards.
+            ;; Reserve while C2 is live.
+            (if (not (= (c2-runtime-reserve-exception-handlers 6) 0))
+                (c2-training-state-fail
+                  'internal operation "handler reserve returned invalid status"))
+            ;; Both handlers exist before release authority moves out of the
+            ;; registered owner. The outer handler remains active for O2.
             (guard (caught
                      (#t
-                       (set! have-first-error? #t)
-                       (set! first-error caught)
-                       #f))
-              (c2-training-state-release-p1-owned! p1 token))
-            (guard (caught
-                     (#t
-                       (if have-first-error? #t
-                           (begin
-                             (set! have-first-error? #t)
-                             (set! first-error caught)))
-                       #f))
-              (c2-training-state-release-o2-owned! o2 token))
-            (vector-set! state 7 'dead)
-            (if have-first-error?
+                       (c2-training-state-release-record-note-defect!
+                         record defect caught)))
+              (guard (caught
+                       (#t
+                         (c2-training-state-release-record-note-defect!
+                           record defect caught)))
+                (c2-training-state-release-take-authority!
+                  record value #f operation)
+                (c2-training-state-release-record-p1! record operation))
+              (c2-training-state-release-record-o2! record operation))
+            (c2-training-state-release-record-finalize! record operation)
+            (if (vector-ref defect 0)
                 (c2-training-state-fail
                   'internal operation
                   "C2 component owner cleanup reported a provider defect")
