@@ -1,7 +1,9 @@
 # SHARED-R2 bounded persistence admission
 
-Status: **candidate for independent review and root integration** under issue
-[#114](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/114).
+Status: **independently reviewed integration candidate with local owner gates
+complete** under issue
+[#114](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/114). Root-owned
+supported integration CI remains required for acceptance.
 
 SHARED-R2 keeps K1 ABI 1.0, every I2 native symbol and public arity, the provider
 name `eshkol-transformer-f32`, and C1/C2 serialized bytes. The I2 provider and its
@@ -39,6 +41,13 @@ unique model bytes; it does not claim a C4 runtime. A checksummed unsupported
 rank-two near-miss remains an early K2 rejection with zero codec calls and flat
 live storage.
 
-Historical I2, K2, and C2 acceptance runs remain evidence for their original
-bounded contracts. SHARED-R2 requires its own independent review and the root
-orchestrator's single supported integration CI dispatch before acceptance.
+Independent review approved implementation commit `8047cec9` and tree
+`e80930797d556edac83fed12ea18c6c4dabcaa2b` with no remaining source or gate
+design blocker. On the local CachyOS/LLVM-Clang 22 compatibility host,
+`scripts/test-i2.sh`, `scripts/test-k2.sh`, and `scripts/test-c2-public.sh` pass.
+The public C2 retention gate is flat at 5,832,704 bytes for both 1,024 and 8,192
+iterations. This compatibility evidence does not replace the root orchestrator's
+single supported Ubuntu 22.04/LLVM-Clang 21.1.8 integration CI dispatch.
+
+Historical I2, K2, and C2 acceptance runs remain evidence only for their original
+bounded contracts.
