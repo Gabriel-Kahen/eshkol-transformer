@@ -27,8 +27,24 @@ disabled feature add no further production-object change.
 The leaf's original supported gate passed on Ubuntu 22.04.5, Clang 21.1.8, and
 GCC 11.4, including strict-aliasing builds, normal repetitions, exact manifests,
 negative admission, failure atomicity, terminal behavior, and ASan/UBSan/LSan.
-That leaf result alone does not accept the composed source. Exact-candidate
-supported evidence and independent integration review are required separately.
+That leaf result alone does not accept the composed source. The composed
+candidate `b3e846417cae69f653645c693ae3a7aa92cc6961`, tree
+`9f6b3c41d731cec3a080aebd04a741af6bfe9455`, subsequently passed the original
+standalone gate in the immutable supported image
+`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`
+with networking disabled and source mounted read-only. GCC 11.4 and Clang
+21.1.8 passed the O0/O2 ordinary-object and symbol comparisons, strict-aliasing
+execution, exact manifests, normal repetitions, checked bridge, negative and
+failure-atomic cases, terminal checks, and ASan/UBSan/LSan.
+
+Independent integration review approved that exact commit with no findings,
+including its eight exact imports, two explicit compositions, preserved
+SHARED-R2 provider and checked bridge, single I2 registry, and exclusion of O2
+changes. Root accepted this bounded native integration. The retained gate trace
+has SHA-256 `5f4e12665af64dd05f0d6e56e8fae028a489691eab31cfe32268562e3274e256`
+in the `tr3-c-i2-b3e8464-integration-supported` evidence bundle; its command and
+result records identify the exact source, image, and zero exit status. Run
+`make test-tr3-c-i2-restore` to reproduce the standalone gate in that environment.
 
 Each restore retains a measured 64-byte tombstone; total retained control grows
 linearly with restore count. This is not constant-total retention. No native
