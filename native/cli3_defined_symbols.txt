@@ -1,0 +1,8 @@
+et_e1b_error_category_v1
+et_e1b_error_cause_v1
+et_e1b_error_details_v1
+et_e1b_error_message_v1
+et_e1b_error_operation_v1
+et_e1b_error_predicate_v1
+et_e1b_public_cli3_dispatch_fallback_v1
+et_e1b_public_cli3_dispatch_v1
