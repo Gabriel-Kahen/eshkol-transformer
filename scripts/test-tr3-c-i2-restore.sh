@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-for command in awk clang cmp comm gcc grep nm readelf timeout; do
+for command in awk clang cmp comm gcc git grep nm readelf tar timeout; do
   require_command "${command}"
 done
 
@@ -23,6 +23,18 @@ cleanup() {
   return "${status}"
 }
 trap cleanup EXIT
+
+baseline_ref=1c3745b10d349adcdcb4ae6d845705de76795d20
+baseline_root="${tmp}/pre-repair"
+mkdir -p "${baseline_root}"
+git -C "${PROJECT_ROOT}" cat-file -e "${baseline_ref}^{commit}"
+git -C "${PROJECT_ROOT}" archive "${baseline_ref}" \
+  native/f32_tensor.c native/f32_parameter_internal.h |
+  tar -x -C "${baseline_root}"
+if cmp -s "${PROJECT_ROOT}/native/f32_tensor.c" \
+    "${baseline_root}/native/f32_tensor.c"; then
+  die "pre-repair f32 baseline unexpectedly matches the current source"
+fi
 
 cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -O0
         -ffp-contract=off -fexcess-precision=standard -frounding-math
@@ -47,7 +59,7 @@ check_hidden() {
 
 for compiler in clang gcc; do
   ordinary_f32="${tmp}/${compiler}-f32-ordinary.o"
-  ordinary_f32_parity="${tmp}/${compiler}-f32-ordinary-parity.o"
+  baseline_f32="${tmp}/${compiler}-f32-pre-repair.o"
   feature_f32="${tmp}/${compiler}-f32-feature.o"
   ordinary_bridge="${tmp}/${compiler}-bridge-ordinary.o"
   declaration_bridge="${tmp}/${compiler}-bridge-declaration-only.o"
@@ -64,11 +76,17 @@ for compiler in clang gcc; do
   grep -F 'requires the shared owned-clone authorizer' \
     "${tmp}/${compiler}-invalid-ungated.stderr" >/dev/null
 
-  "${compiler}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/f32_tensor.c" \
-    -o "${ordinary_f32}"
-  "${compiler}" "${cflags[@]}" -UET_F32_TENSOR_TESTING \
-    -c "${PROJECT_ROOT}/native/f32_tensor.c" -o "${ordinary_f32_parity}"
-  cmp "${ordinary_f32}" "${ordinary_f32_parity}"
+  # Compile both trees from the same relative source spelling so input paths
+  # cannot create a false object-byte difference.
+  (
+    cd "${PROJECT_ROOT}"
+    "${compiler}" "${cflags[@]}" -c native/f32_tensor.c -o "${ordinary_f32}"
+  )
+  (
+    cd "${baseline_root}"
+    "${compiler}" "${cflags[@]}" -c native/f32_tensor.c -o "${baseline_f32}"
+  )
+  cmp "${ordinary_f32}" "${baseline_f32}"
   "${compiler}" "${cflags[@]}" -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
     -c "${PROJECT_ROOT}/native/f32_tensor.c" -o "${feature_f32}"
   "${compiler}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
@@ -89,6 +107,14 @@ for compiler in clang gcc; do
     symbols defined "${object}" "${tmp}/${compiler}-${kind}.defined"
     symbols undefined "${object}" "${tmp}/${compiler}-${kind}.undefined"
   done
+  symbols defined "${baseline_f32}" \
+    "${tmp}/${compiler}-baseline_f32.defined"
+  symbols undefined "${baseline_f32}" \
+    "${tmp}/${compiler}-baseline_f32.undefined"
+  cmp "${tmp}/${compiler}-ordinary_f32.defined" \
+    "${tmp}/${compiler}-baseline_f32.defined"
+  cmp "${tmp}/${compiler}-ordinary_f32.undefined" \
+    "${tmp}/${compiler}-baseline_f32.undefined"
 
   cmp "${PROJECT_ROOT}/native/f32_tensor_defined_symbols.txt" \
     "${tmp}/${compiler}-ordinary_f32.defined"
