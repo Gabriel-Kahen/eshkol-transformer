@@ -18,6 +18,40 @@ typedef struct et_f32_parameter et_f32_parameter;
 typedef struct et_f32_gradient_plan et_f32_gradient_plan;
 typedef struct et_f32_gradient_reset_plan et_f32_gradient_reset_plan;
 
+#ifdef ET_I2_PRIVATE_OWNED_CLONE_MATCH
+enum {
+  ET_I2_PRIVATE_OWNED_RESULT_OK = 0,
+  ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT = 1,
+  ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE = 2,
+  ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH = 3,
+  ET_I2_PRIVATE_OWNED_RESULT_NONFINITE = 4,
+  ET_I2_PRIVATE_OWNED_RESULT_INVALID_VALUE = 5,
+  ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT = 6,
+  ET_I2_PRIVATE_OWNED_RESULT_VERSION_MISMATCH = 7,
+  ET_I2_PRIVATE_OWNED_RESULT_ALLOCATION_FAILED = 8,
+  ET_I2_PRIVATE_OWNED_RESULT_INTERNAL = 9
+};
+
+enum {
+  ET_I2_PRIVATE_OWNED_VALUE_FINITE = 1,
+  ET_I2_PRIVATE_OWNED_VALUE_FINITE_NONNEGATIVE = 2
+};
+
+#if defined(__cplusplus)
+static_assert(ET_I2_PRIVATE_OWNED_RESULT_OK == 0 &&
+                  ET_I2_PRIVATE_OWNED_RESULT_INTERNAL == 9,
+              "private owned result values changed");
+#else
+_Static_assert(ET_I2_PRIVATE_OWNED_RESULT_OK == 0 &&
+                   ET_I2_PRIVATE_OWNED_RESULT_INTERNAL == 9,
+               "private owned result values changed");
+#endif
+
+int32_t et_i2_private_owned_clone_match_v1(
+    const et_f32_tensor *candidate, const et_f32_tensor *destination,
+    uint32_t value_policy);
+#endif
+
 typedef struct et_f32_gradient_metadata_v1 {
   size_t struct_size;
   uint32_t state;
@@ -146,6 +180,7 @@ void et_f32_test_retired_counts_snapshot_v1(
     et_f32_test_retired_counts_v1 *counts);
 void et_f32_test_borrow_event_counts_snapshot_v1(
     et_f32_test_borrow_event_counts_v1 *counts);
+size_t et_f32_tensor_test_successful_allocations_v1(void);
 #endif
 
 #ifdef __cplusplus
