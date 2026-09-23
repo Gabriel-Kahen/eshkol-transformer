@@ -187,18 +187,36 @@
              (string-append "\\u" (cli3-json-hex4 high)
                             "\\u" (cli3-json-hex4 low)))))))
 
+(define (cli3-json-encoded-length text)
+  (let loop ((index 0) (count 0))
+    (if (= index (string-length text)) count
+        (let ((piece
+               (cli3-json-scalar-piece (string-ref text index))))
+          (loop (+ index 1) (+ count (string-length piece)))))))
+
 (define (cli3-json-string-limit-impl text maximum)
-  (let loop ((index 0) (count 2) (parts '()))
-    (if (= index (string-length text))
-        (string-append "\""
-                       (cli3-concat (cli3-reverse parts)) "\"")
-        (let* ((piece (cli3-json-scalar-piece (string-ref text index)))
-               (next (+ count (string-length piece))))
-          (if (> (+ next 3) maximum)
+  (let ((encoded-length (cli3-json-encoded-length text)))
+    (if (<= (+ encoded-length 2) maximum)
+        (let loop ((index 0) (parts '()))
+          (if (= index (string-length text))
               (string-append "\""
-                             (cli3-concat (cli3-reverse parts))
-                             "...\"")
-              (loop (+ index 1) next (cons piece parts)))))))
+                             (cli3-concat (cli3-reverse parts)) "\"")
+              (loop (+ index 1)
+                    (cons (cli3-json-scalar-piece (string-ref text index))
+                          parts))))
+        (let ((budget (- maximum 5)))
+          (let loop ((index 0) (count 0) (parts '()))
+            (if (= index (string-length text))
+                (string-append "\""
+                               (cli3-concat (cli3-reverse parts)) "...\"")
+                (let* ((piece
+                        (cli3-json-scalar-piece (string-ref text index)))
+                       (next (+ count (string-length piece))))
+                  (if (> next budget)
+                      (string-append "\""
+                                     (cli3-concat (cli3-reverse parts))
+                                     "...\"")
+                      (loop (+ index 1) next (cons piece parts))))))))))
 
 (define-syntax cli3-json-string-limit
   (syntax-rules ()
@@ -230,6 +248,11 @@
         ((string? value) (cli3-json-string-limit value 256))
         (else #f)))
 
+(define (cli3-json-detail-key value)
+  (let ((text (symbol->string value)))
+    (if (> (+ (cli3-json-encoded-length text) 2) 256) #f
+        (cli3-json-string-limit text 256))))
+
 (define (cli3-detail-insert entry sorted)
   (cond ((null? sorted) (list entry))
         ((string<? (symbol->string (car entry))
@@ -251,8 +274,7 @@
         (string-append "{" (cli3-concat (cli3-reverse parts)) "}")
         (let* ((entry (car remaining))
                (key (and (pair? entry) (symbol? (car entry))
-                         (cli3-json-string-limit (symbol->string (car entry))
-                                                 256)))
+                         (cli3-json-detail-key (car entry))))
                (tail (and (pair? entry) (cdr entry)))
                (value (and (pair? tail) (null? (cdr tail))
                            (cli3-json-scalar (car tail))))
