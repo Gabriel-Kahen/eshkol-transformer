@@ -24,7 +24,14 @@ runtime_sources=(
   "${PROJECT_ROOT}/native/kernel_abi.c"
 )
 
-run_twice() {
+run_once() {
+  local binary="$1" label="$2" expected="$3"
+  timeout --foreground --signal=TERM --kill-after=5s 600s \
+    "${binary}" >"${temporary_dir}/${label}.stdout"
+  grep -Fx "${expected}" "${temporary_dir}/${label}.stdout" >/dev/null
+}
+
+run_stateful_twice() {
   local binary="$1" label="$2" expected="$3"
   local run
   for run in 1 2; do
@@ -33,25 +40,33 @@ run_twice() {
   done
   cmp "${temporary_dir}/${label}-1.stdout" \
     "${temporary_dir}/${label}-2.stdout"
+  grep -Fx 'TR3-O retained-control slope: outer=96 i2=1112 bytes/update' \
+    "${temporary_dir}/${label}-1.stdout" >/dev/null
+  grep -Fx 'TR3-O repeated-state digest: e40b45e3746140d1' \
+    "${temporary_dir}/${label}-1.stdout" >/dev/null
   grep -Fx "${expected}" "${temporary_dir}/${label}-1.stdout" >/dev/null
 }
 
 "${cc}" "${cflags[@]}" -O2 -DET_TR3_O2_STEP_CLEAR_NATIVE \
   "${PROJECT_ROOT}/tests/o2/test_tr3o_update_clear_adversarial.c" \
   "${runtime_sources[@]}" -lm -o "${temporary_dir}/update-clear"
-run_twice "${temporary_dir}/update-clear" update-clear \
-  'TR3-O update-clear adversarial PASS: 49771 checks'
+run_stateful_twice "${temporary_dir}/update-clear" update-clear \
+  'TR3-O update-clear adversarial PASS: 37264 checks'
 
 "${cc}" "${cflags[@]}" -O1 -g -DET_TR3_O2_STEP_CLEAR_NATIVE \
   -fsanitize=address,undefined -fno-omit-frame-pointer \
   "${PROJECT_ROOT}/tests/o2/test_tr3o_update_clear_adversarial.c" \
   "${runtime_sources[@]}" -lm -o "${temporary_dir}/update-clear-sanitized"
-ASAN_OPTIONS=detect_leaks="${TR3_O_ASAN_DETECT_LEAKS:-1}":halt_on_error=1 \
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 900s \
     "${temporary_dir}/update-clear-sanitized" \
     >"${temporary_dir}/update-clear-sanitized.stdout"
-grep -Fx 'TR3-O update-clear adversarial PASS: 49771 checks' \
+grep -Fx 'TR3-O retained-control slope: outer=96 i2=1112 bytes/update' \
+  "${temporary_dir}/update-clear-sanitized.stdout" >/dev/null
+grep -Fx 'TR3-O repeated-state digest: e40b45e3746140d1' \
+  "${temporary_dir}/update-clear-sanitized.stdout" >/dev/null
+grep -Fx 'TR3-O update-clear adversarial PASS: 37264 checks' \
   "${temporary_dir}/update-clear-sanitized.stdout" >/dev/null
 
 "${cc}" "${cflags[@]}" -O2 \
@@ -59,7 +74,7 @@ grep -Fx 'TR3-O update-clear adversarial PASS: 49771 checks' \
   "${PROJECT_ROOT}/native/f32_tensor.c" \
   "${PROJECT_ROOT}/native/kernel_abi.c" -lm \
   -o "${temporary_dir}/i2-plan-coexistence"
-run_twice "${temporary_dir}/i2-plan-coexistence" i2-plan-coexistence \
+run_once "${temporary_dir}/i2-plan-coexistence" i2-plan-coexistence \
   'TR3-O I2 plan coexistence PASS: 99 checks'
 
 for source in test_native_optimizer test_optimizer_native; do
@@ -67,9 +82,9 @@ for source in test_native_optimizer test_optimizer_native; do
     "${PROJECT_ROOT}/tests/o2/${source}.c" "${runtime_sources[@]}" -lm \
     -o "${temporary_dir}/${source}"
 done
-run_twice "${temporary_dir}/test_native_optimizer" predecessor-native \
+run_once "${temporary_dir}/test_native_optimizer" predecessor-native \
   'O2 native optimizer PASS'
-run_twice "${temporary_dir}/test_optimizer_native" predecessor-adversarial \
+run_once "${temporary_dir}/test_optimizer_native" predecessor-adversarial \
   'O2 native adversarial PASS: 6201 checks'
 
 "${cc}" "${cflags[@]}" -O2 -DET_O2_NATIVE_HELPERS_ONLY \

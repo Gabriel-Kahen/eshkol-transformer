@@ -1,6 +1,7 @@
 #include "o2_optimizer_internal.h"
 #include "tr3_o2_step_clear_internal.h"
 
+#include <inttypes.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -14,6 +15,9 @@
 
 static size_t checks;
 static size_t failures;
+static size_t outer_retained_bytes_per_update;
+static size_t i2_retained_bytes_per_update;
+static uint64_t repeated_state_digest;
 
 #define CHECK(condition)                                                       \
   do {                                                                         \
@@ -51,6 +55,15 @@ static void expect_o2_error(int32_t result, const et_o2_error_v1 *error,
                   result, error->category, error->code, error->operation,
                   category, code);
   }
+  CHECK(result == (int32_t)category);
+  CHECK(error->category == category);
+  CHECK(error->code == code);
+  CHECK(error->operation[0] != '\0');
+  CHECK(error->message[0] != '\0');
+}
+
+static void expect_i2_error(int32_t result, const et_f32_tensor_error *error,
+                            uint32_t category, uint32_t code) {
   CHECK(result == (int32_t)category);
   CHECK(error->category == category);
   CHECK(error->code == code);
@@ -106,8 +119,8 @@ static const et_f32_tensor *value_storage(et_f32_parameter *parameter) {
   return result;
 }
 
-static const void *gradient_storage(et_f32_parameter *parameter,
-                                    const uint32_t *expected, size_t count) {
+static const void *read_gradient_storage(et_f32_parameter *parameter,
+                                         uint32_t *bits, size_t count) {
   et_f32_tensor_error error;
   et_f32_tensor_borrow *borrow = NULL;
   const et_kernel_tensor_view_v1 *view = NULL;
@@ -117,12 +130,22 @@ static const void *gradient_storage(et_f32_parameter *parameter,
   CHECK(et_f32_tensor_borrow_view_v1(borrow, &view, &error) == 0);
   CHECK(view != NULL);
   if (view != NULL) {
-    CHECK(view->byte_length == count * sizeof(*expected));
-    CHECK(memcmp(view->data, expected, count * sizeof(*expected)) == 0);
+    CHECK(view->byte_length == count * sizeof(*bits));
+    if (view->byte_length == count * sizeof(*bits)) {
+      memcpy(bits, view->data, count * sizeof(*bits));
+    }
     result = view->data;
   }
   CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
   CHECK(borrow == NULL);
+  return result;
+}
+
+static const void *gradient_storage(et_f32_parameter *parameter,
+                                    const uint32_t *expected, size_t count) {
+  uint32_t actual[MAX_ELEMENTS] = {0u};
+  const void *result = read_gradient_storage(parameter, actual, count);
+  CHECK(memcmp(actual, expected, count * sizeof(*expected)) == 0);
   return result;
 }
 
@@ -341,6 +364,128 @@ static et_o2_trainer_step_clear_test_counts_v1 transaction_counts(void) {
   return result;
 }
 
+static et_f32_test_retired_counts_v1 i2_retired_counts(void) {
+  et_f32_test_retired_counts_v1 result = {.struct_size = sizeof(result)};
+  et_f32_test_retired_counts_snapshot_v1(&result);
+  return result;
+}
+
+static void
+check_i2_live_counts_equal(const et_f32_test_live_counts_v1 *left,
+                           const et_f32_test_live_counts_v1 *right) {
+  CHECK(left->tensors == right->tensors);
+  CHECK(left->parameters == right->parameters);
+  CHECK(left->borrows == right->borrows);
+  CHECK(left->copy_plans == right->copy_plans);
+  CHECK(left->gradient_plans == right->gradient_plans);
+  CHECK(left->reset_plans == right->reset_plans);
+  CHECK(left->owned_clones == right->owned_clones);
+}
+
+static void check_transaction_counts_equal(
+    const et_o2_trainer_step_clear_test_counts_v1 *left,
+    const et_o2_trainer_step_clear_test_counts_v1 *right) {
+  CHECK(left->live_plans == right->live_plans);
+  CHECK(left->live_stages == right->live_stages);
+  CHECK(left->committed_plans == right->committed_plans);
+  CHECK(left->aborted_plans == right->aborted_plans);
+  CHECK(left->retained_control_bytes == right->retained_control_bytes);
+}
+
+typedef struct model_state_snapshot {
+  uint64_t updates;
+  uint32_t parameters[N14][MAX_ELEMENTS];
+  uint32_t gradients[N14][MAX_ELEMENTS];
+  uint32_t moments[N14][2][MAX_ELEMENTS];
+  et_f32_gradient_metadata_v1 metadata[N14];
+  const et_f32_tensor *value_identities[N14];
+  const et_f32_tensor *moment_identities[N14][2];
+  const void *gradient_identities[N14];
+  et_f32_test_live_counts_v1 i2_counts;
+  et_o2_trainer_step_clear_test_counts_v1 transaction_counts;
+} model_state_snapshot;
+
+static void capture_model_state(model_fixture *model,
+                                model_state_snapshot *snapshot) {
+  et_o2_error_v1 error;
+  size_t index;
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->updates = completed_updates(model->optimizer);
+  snapshot->i2_counts = i2_live_counts();
+  snapshot->transaction_counts = transaction_counts();
+  for (index = 0u; index < model->count; index++) {
+    read_parameter_bits(model->parameters[index], snapshot->parameters[index],
+                        model->elements[index]);
+    snapshot->metadata[index] = gradient_metadata(model->parameters[index]);
+    snapshot->value_identities[index] = value_storage(model->parameters[index]);
+    snapshot->gradient_identities[index] = read_gradient_storage(
+        model->parameters[index], snapshot->gradients[index],
+        model->elements[index]);
+    CHECK(et_o2_test_optimizer_moment_bits_v1(
+              model->optimizer, index, ET_O2_MOMENT_EXP_AVG,
+              snapshot->moments[index][0], model->elements[index],
+              &error) == 0);
+    CHECK(et_o2_test_optimizer_moment_bits_v1(
+              model->optimizer, index, ET_O2_MOMENT_EXP_AVG_SQ,
+              snapshot->moments[index][1], model->elements[index],
+              &error) == 0);
+    snapshot->moment_identities[index][0] =
+        et_o2_trainer_step_clear_test_moment_storage_v1(model->optimizer, index,
+                                                        ET_O2_MOMENT_EXP_AVG);
+    snapshot->moment_identities[index][1] =
+        et_o2_trainer_step_clear_test_moment_storage_v1(
+            model->optimizer, index, ET_O2_MOMENT_EXP_AVG_SQ);
+  }
+}
+
+static void check_model_state_matches(model_fixture *model,
+                                      const model_state_snapshot *snapshot,
+                                      size_t skipped_gradient_index) {
+  et_o2_error_v1 error;
+  et_f32_test_live_counts_v1 i2_after = i2_live_counts();
+  et_o2_trainer_step_clear_test_counts_v1 tx_after = transaction_counts();
+  size_t index;
+  CHECK(completed_updates(model->optimizer) == snapshot->updates);
+  check_i2_live_counts_equal(&i2_after, &snapshot->i2_counts);
+  check_transaction_counts_equal(&tx_after, &snapshot->transaction_counts);
+  for (index = 0u; index < model->count; index++) {
+    uint32_t actual[MAX_ELEMENTS];
+    uint32_t moment[MAX_ELEMENTS];
+    read_parameter_bits(model->parameters[index], actual,
+                        model->elements[index]);
+    CHECK(memcmp(actual, snapshot->parameters[index],
+                 model->elements[index] * sizeof(*actual)) == 0);
+    CHECK(value_storage(model->parameters[index]) ==
+          snapshot->value_identities[index]);
+    CHECK(et_o2_trainer_step_clear_test_moment_storage_v1(
+              model->optimizer, index, ET_O2_MOMENT_EXP_AVG) ==
+          snapshot->moment_identities[index][0]);
+    CHECK(et_o2_trainer_step_clear_test_moment_storage_v1(
+              model->optimizer, index, ET_O2_MOMENT_EXP_AVG_SQ) ==
+          snapshot->moment_identities[index][1]);
+    CHECK(et_o2_test_optimizer_moment_bits_v1(
+              model->optimizer, index, ET_O2_MOMENT_EXP_AVG, moment,
+              model->elements[index], &error) == 0);
+    CHECK(memcmp(moment, snapshot->moments[index][0],
+                 model->elements[index] * sizeof(*moment)) == 0);
+    CHECK(et_o2_test_optimizer_moment_bits_v1(
+              model->optimizer, index, ET_O2_MOMENT_EXP_AVG_SQ, moment,
+              model->elements[index], &error) == 0);
+    CHECK(memcmp(moment, snapshot->moments[index][1],
+                 model->elements[index] * sizeof(*moment)) == 0);
+    if (index != skipped_gradient_index) {
+      et_f32_gradient_metadata_v1 metadata =
+          gradient_metadata(model->parameters[index]);
+      CHECK(memcmp(&metadata, &snapshot->metadata[index], sizeof(metadata)) ==
+            0);
+      CHECK(gradient_storage(model->parameters[index],
+                             snapshot->gradients[index],
+                             model->elements[index]) ==
+            snapshot->gradient_identities[index]);
+    }
+  }
+}
+
 static void check_n1_state_unchanged(model_fixture *model,
                                      uint32_t parameter_bits,
                                      uint32_t gradient_bits,
@@ -424,6 +569,36 @@ static void test_public_parity_cases(void) {
     private_update_clear(&private_model, 2u, 2u, UINT32_C(0x40400000));
     public_update_clear(&public_model);
     model_compare(&private_model, &public_model);
+  }
+
+  {
+    static const uint64_t completed_before[] = {0u, 1u, 5u, 6u};
+    optimizer_config config = {
+        ET_O2_CLIP_NONE,     0u, ET_O2_SCHEDULE_LINEAR, 2u, 6u,
+        UINT32_C(0x3dcccccd)};
+    size_t index;
+    for (index = 0u;
+         index < sizeof(completed_before) / sizeof(completed_before[0]);
+         index++) {
+      model_fixture private_model;
+      model_fixture public_model;
+      model_create(&private_model, 1u, &config);
+      model_create(&public_model, 1u, &config);
+      CHECK(et_o2_test_optimizer_set_completed_updates_v1(
+                private_model.optimizer, completed_before[index]) == 0);
+      CHECK(et_o2_test_optimizer_set_completed_updates_v1(
+                public_model.optimizer, completed_before[index]) == 0);
+      model_set_gradients(&private_model, 1u, UINT32_C(0x3f800000),
+                          UINT32_C(0x3f000000));
+      model_set_gradients(&public_model, 1u, UINT32_C(0x3f800000),
+                          UINT32_C(0x3f000000));
+      private_update_clear(&private_model, completed_before[index], 1u,
+                           UINT32_C(0x3f800000));
+      public_update_clear(&public_model);
+      model_compare(&private_model, &public_model);
+      CHECK(completed_updates(private_model.optimizer) ==
+            completed_before[index] + 1u);
+    }
   }
 
   {
@@ -576,9 +751,12 @@ static void test_plan_lifetime_busy_abort_retry(void) {
   optimizer_config config = constant_config(ET_O2_CLIP_NONE, 0u);
   model_fixture model;
   et_o2_error_v1 error;
+  et_f32_tensor_error i2_error;
   et_o2_trainer_step_clear_plan *plan = NULL;
   et_o2_trainer_step_clear_plan *retry = NULL;
   et_o2_optimizer_state *state = NULL;
+  et_f32_gradient_reset_plan *reset_plan = NULL;
+  et_f32_tensor_borrow *borrow = NULL;
   et_f32_test_live_counts_v1 i2_before;
   et_f32_test_live_counts_v1 i2_prepared;
   et_o2_trainer_step_clear_test_counts_v1 tx_before;
@@ -586,6 +764,7 @@ static void test_plan_lifetime_busy_abort_retry(void) {
   et_o2_trainer_step_clear_test_counts_v1 tx_aborted;
   const et_f32_tensor *value_identity;
   const et_f32_tensor *moment_identities[2];
+  const et_f32_tensor *stage_identities[3];
   const uint32_t gradient = UINT32_C(0x40000000);
   size_t stage;
 
@@ -612,9 +791,48 @@ static void test_plan_lifetime_busy_abort_retry(void) {
   CHECK(tx_prepared.live_plans == tx_before.live_plans + 1u);
   CHECK(tx_prepared.live_stages == tx_before.live_stages + 3u);
   for (stage = 0u; stage < 3u; stage++) {
-    CHECK(et_o2_trainer_step_clear_test_stage_v1(plan, stage) != NULL);
+    stage_identities[stage] =
+        et_o2_trainer_step_clear_test_stage_v1(plan, stage);
+    CHECK(stage_identities[stage] != NULL);
   }
   CHECK(et_o2_trainer_step_clear_test_stage_v1(plan, 3u) == NULL);
+
+  {
+    const uint32_t overwrite = UINT32_C(0x40400000);
+    et_f32_tensor *attempt;
+    et_f32_parameter *parameter_attempt = model.parameters[0];
+    size_t tensor_index;
+    const et_f32_tensor *pinned_tensors[3] = {
+        value_identity, moment_identities[0], moment_identities[1]};
+    for (tensor_index = 0u; tensor_index < 3u; tensor_index++) {
+      expect_i2_error(et_f32_tensor_copy_bits_from_v1(
+                          (et_f32_tensor *)pinned_tensors[tensor_index],
+                          &overwrite, 1u, &i2_error),
+                      &i2_error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                      ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    }
+    for (stage = 0u; stage < 3u; stage++) {
+      attempt = (et_f32_tensor *)stage_identities[stage];
+      expect_i2_error(et_f32_tensor_destroy_v1(&attempt, &i2_error), &i2_error,
+                      ET_F32_TENSOR_ERROR_INVALID_STATE,
+                      ET_F32_TENSOR_CODE_INVALID_HANDLE);
+      CHECK(attempt == stage_identities[stage]);
+    }
+    expect_i2_error(et_f32_parameter_gradient_borrow_begin_v1(
+                        model.parameters[0], &borrow, &i2_error),
+                    &i2_error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                    ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(borrow == NULL);
+    expect_i2_error(et_f32_parameter_destroy_v1(&parameter_attempt, &i2_error),
+                    &i2_error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                    ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(parameter_attempt == model.parameters[0]);
+    expect_i2_error(et_f32_gradient_reset_plan_prepare_v1(
+                        1u, model.parameters, &reset_plan, &i2_error),
+                    &i2_error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                    ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(reset_plan == NULL);
+  }
 
   expect_o2_error(et_o2_trainer_step_clear_prepare_v1(model.optimizer, 0u, 1u,
                                                       UINT32_C(0x3f800000),
@@ -641,6 +859,26 @@ static void test_plan_lifetime_busy_abort_retry(void) {
     CHECK(after.copy_plans == i2_before.copy_plans);
     CHECK(after.reset_plans == i2_before.reset_plans);
     CHECK(after.borrows == i2_before.borrows);
+  }
+  for (stage = 0u; stage < 3u; stage++) {
+    CHECK(et_f32_tensor_is_live_v1(stage_identities[stage]) == 0);
+  }
+  {
+    const et_f32_tensor *released_tensors[3] = {
+        value_identity, moment_identities[0], moment_identities[1]};
+    size_t tensor_index;
+    for (tensor_index = 0u; tensor_index < 3u; tensor_index++) {
+      CHECK(et_f32_tensor_borrow_begin_v1(
+                (et_f32_tensor *)released_tensors[tensor_index], &borrow,
+                &i2_error) == 0);
+      CHECK(et_f32_tensor_borrow_end_v1(&borrow, &i2_error) == 0);
+    }
+    CHECK(et_f32_parameter_gradient_borrow_begin_v1(model.parameters[0],
+                                                    &borrow, &i2_error) == 0);
+    CHECK(et_f32_tensor_borrow_end_v1(&borrow, &i2_error) == 0);
+    CHECK(et_f32_gradient_reset_plan_prepare_v1(1u, model.parameters,
+                                                &reset_plan, &i2_error) == 0);
+    CHECK(et_f32_gradient_reset_plan_release_v1(&reset_plan, &i2_error) == 0);
   }
   check_n1_state_unchanged(&model, UINT32_C(0x3f800000), gradient, 1u,
                            UINT32_C(0x3f800000), 0u);
@@ -694,6 +932,8 @@ static void test_prepare_allocation_and_publication_failpoints(void) {
   et_f32_test_live_counts_v1 i2_baseline;
   et_o2_trainer_step_clear_test_counts_v1 tx_baseline;
   size_t allowed;
+  size_t failures_seen = 0u;
+  size_t success_boundary = SIZE_MAX;
   int succeeded = 0;
 
   model_create(&model, 1u, &config);
@@ -711,11 +951,14 @@ static void test_prepare_allocation_and_publication_failpoints(void) {
     if (result == 0) {
       CHECK(plan != NULL);
       CHECK(et_o2_trainer_step_clear_abort_v1(plan, &error) == 0);
+      success_boundary = allowed;
       succeeded = 1;
       break;
     }
     expect_o2_error(result, &error, ET_O2_STATUS_INTERNAL,
                     ET_O2_CODE_ALLOCATION_FAILED);
+    CHECK(allowed == failures_seen);
+    failures_seen++;
     CHECK(plan == NULL);
     check_n1_state_unchanged(&model, UINT32_C(0x3f800000), gradient, 1u,
                              UINT32_C(0x3f800000), 0u);
@@ -731,8 +974,20 @@ static void test_prepare_allocation_and_publication_failpoints(void) {
     }
   }
   CHECK(succeeded != 0);
+  CHECK(failures_seen > 0u);
+  CHECK(success_boundary == failures_seen);
+  CHECK(success_boundary == 4u);
+  {
+    et_f32_test_live_counts_v1 i2_after = i2_live_counts();
+    et_o2_trainer_step_clear_test_counts_v1 tx_after = transaction_counts();
+    check_i2_live_counts_equal(&i2_after, &i2_baseline);
+    CHECK(tx_after.live_plans == tx_baseline.live_plans);
+    CHECK(tx_after.live_stages == tx_baseline.live_stages);
+  }
 
   succeeded = 0;
+  failures_seen = 0u;
+  success_boundary = SIZE_MAX;
   for (allowed = 0u; allowed < 128u; allowed++) {
     et_o2_error_v1 error;
     et_o2_trainer_step_clear_plan *plan = NULL;
@@ -744,11 +999,14 @@ static void test_prepare_allocation_and_publication_failpoints(void) {
     if (result == 0) {
       CHECK(plan != NULL);
       CHECK(et_o2_trainer_step_clear_abort_v1(plan, &error) == 0);
+      success_boundary = allowed;
       succeeded = 1;
       break;
     }
     expect_o2_error(result, &error, ET_O2_STATUS_INTERNAL,
                     ET_O2_CODE_ALLOCATION_FAILED);
+    CHECK(allowed == failures_seen);
+    failures_seen++;
     CHECK(plan == NULL);
     check_n1_state_unchanged(&model, UINT32_C(0x3f800000), gradient, 1u,
                              UINT32_C(0x3f800000), 0u);
@@ -761,6 +1019,16 @@ static void test_prepare_allocation_and_publication_failpoints(void) {
     }
   }
   CHECK(succeeded != 0);
+  CHECK(failures_seen > 0u);
+  CHECK(success_boundary == failures_seen);
+  CHECK(success_boundary == 24u);
+  {
+    et_f32_test_live_counts_v1 i2_after = i2_live_counts();
+    et_o2_trainer_step_clear_test_counts_v1 tx_after = transaction_counts();
+    check_i2_live_counts_equal(&i2_after, &i2_baseline);
+    CHECK(tx_after.live_plans == tx_baseline.live_plans);
+    CHECK(tx_after.live_stages == tx_baseline.live_stages);
+  }
 
   {
     et_o2_error_v1 error;
@@ -886,36 +1154,6 @@ static void test_prepare_argument_and_numeric_negatives(void) {
   }
 }
 
-static void check_n14_initial_state(model_fixture *model) {
-  et_o2_error_v1 error;
-  size_t index;
-  CHECK(completed_updates(model->optimizer) == 0u);
-  for (index = 0u; index < N14; index++) {
-    uint32_t actual[MAX_ELEMENTS];
-    uint32_t moment[MAX_ELEMENTS];
-    size_t element;
-    read_parameter_bits(model->parameters[index], actual,
-                        model->elements[index]);
-    for (element = 0u; element < model->elements[index]; element++) {
-      CHECK(actual[element] == (((element + index) & 1u) == 0u
-                                    ? UINT32_C(0x3f800000)
-                                    : UINT32_C(0xbf000000)));
-    }
-    CHECK(et_o2_test_optimizer_moment_bits_v1(
-              model->optimizer, index, ET_O2_MOMENT_EXP_AVG, moment,
-              model->elements[index], &error) == 0);
-    for (element = 0u; element < model->elements[index]; element++) {
-      CHECK(moment[element] == 0u);
-    }
-    CHECK(et_o2_test_optimizer_moment_bits_v1(
-              model->optimizer, index, ET_O2_MOMENT_EXP_AVG_SQ, moment,
-              model->elements[index], &error) == 0);
-    for (element = 0u; element < model->elements[index]; element++) {
-      CHECK(moment[element] == 0u);
-    }
-  }
-}
-
 static void test_n14_first_middle_last_metadata_negatives(void) {
   optimizer_config config = constant_config(ET_O2_CLIP_NONE, 0u);
   model_fixture model;
@@ -923,25 +1161,88 @@ static void test_n14_first_middle_last_metadata_negatives(void) {
   const uint32_t gradient = UINT32_C(0x3f000000);
   size_t position_index;
   model_create(&model, N14, &config);
-  model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
   for (position_index = 0u;
        position_index < sizeof(positions) / sizeof(positions[0]);
        position_index++) {
     const size_t position = positions[position_index];
+    model_state_snapshot snapshot;
+    et_f32_gradient_metadata_v1 metadata;
+    et_f32_test_retired_counts_v1 retired_before;
+    et_f32_test_retired_counts_v1 retired_after;
+    uint32_t poison[MAX_ELEMENTS];
+    size_t element;
+
+    model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
+    capture_model_state(&model, &snapshot);
+    et_f32_parameter_test_set_metadata_v1(model.parameters[position],
+                                          ET_F32_GRADIENT_ABSENT, 0u, 0u);
+    expect_prepare_failure(&model, 0u, 2u, UINT32_C(0x40400000),
+                           ET_O2_STATUS_INVALID_STATE,
+                           ET_O2_CODE_GRADIENT_ABSENT);
+    check_model_state_matches(&model, &snapshot, position);
+    metadata = gradient_metadata(model.parameters[position]);
+    CHECK(metadata.state == ET_F32_GRADIENT_ABSENT);
+    CHECK(metadata.contribution_count == 0u);
+    CHECK(metadata.normalization_weight_bits == 0u);
+    et_f32_parameter_test_set_metadata_v1(model.parameters[position],
+                                          ET_F32_GRADIENT_PRESENT, 2u,
+                                          UINT32_C(0x40400000));
+    check_model_state_matches(&model, &snapshot, SIZE_MAX);
+    retry_abort(&model, 0u, 2u, UINT32_C(0x40400000));
+
+    model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
+    for (element = 0u; element < model.elements[position]; element++) {
+      poison[element] = element == 0u ? UINT32_C(0x7f800000) : gradient;
+    }
+    set_gradient(model.parameters[position], poison, model.elements[position],
+                 2u, UINT32_C(0x40400000));
+    capture_model_state(&model, &snapshot);
+    retired_before = i2_retired_counts();
+    expect_prepare_failure(&model, 0u, 2u, UINT32_C(0x40400000),
+                           ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_NONFINITE);
+    retired_after = i2_retired_counts();
+    CHECK(retired_after.tensors == retired_before.tensors);
+    check_model_state_matches(&model, &snapshot, SIZE_MAX);
+    model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
+    retry_abort(&model, 0u, 2u, UINT32_C(0x40400000));
+
+    model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
+    for (element = 0u; element < model.elements[position]; element++) {
+      poison[element] = element == 0u ? UINT32_C(0x7f7fffff) : 0u;
+    }
+    set_gradient(model.parameters[position], poison, model.elements[position],
+                 2u, UINT32_C(0x40400000));
+    capture_model_state(&model, &snapshot);
+    retired_before = i2_retired_counts();
+    expect_prepare_failure(&model, 0u, 2u, UINT32_C(0x40400000),
+                           ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_NONFINITE);
+    retired_after = i2_retired_counts();
+    CHECK(retired_after.tensors - retired_before.tensors ==
+          (position + 1u) * 3u);
+    check_model_state_matches(&model, &snapshot, SIZE_MAX);
+    model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
+    retry_abort(&model, 0u, 2u, UINT32_C(0x40400000));
+
+    model_set_gradients(&model, 2u, UINT32_C(0x40400000), gradient);
+    capture_model_state(&model, &snapshot);
     et_f32_parameter_test_set_metadata_v1(model.parameters[position],
                                           ET_F32_GRADIENT_PRESENT, 3u,
                                           UINT32_C(0x40400000));
     expect_prepare_failure(&model, 0u, 2u, UINT32_C(0x40400000),
                            ET_O2_STATUS_INVALID_STATE,
                            ET_O2_CODE_GRADIENT_METADATA);
-    check_n14_initial_state(&model);
+    snapshot.metadata[position].contribution_count = 3u;
+    check_model_state_matches(&model, &snapshot, SIZE_MAX);
     et_f32_parameter_test_set_metadata_v1(model.parameters[position],
                                           ET_F32_GRADIENT_PRESENT, 2u,
                                           UINT32_C(0x40000000));
     expect_prepare_failure(&model, 0u, 2u, UINT32_C(0x40400000),
                            ET_O2_STATUS_INVALID_STATE,
                            ET_O2_CODE_GRADIENT_METADATA);
-    check_n14_initial_state(&model);
+    snapshot.metadata[position].contribution_count = 2u;
+    snapshot.metadata[position].normalization_weight_bits =
+        UINT32_C(0x40000000);
+    check_model_state_matches(&model, &snapshot, SIZE_MAX);
     et_f32_parameter_test_set_metadata_v1(model.parameters[position],
                                           ET_F32_GRADIENT_PRESENT, 2u,
                                           UINT32_C(0x40400000));
@@ -985,40 +1286,123 @@ static void test_terminal_failstop_sites(void) {
   expect_terminal_site(ET_O2_TR3_TEST_TERMINAL_STAGE_DESTROY, 2u);
 }
 
+static uint64_t digest_u64(uint64_t digest, uint64_t value) {
+  size_t index;
+  for (index = 0u; index < sizeof(value); index++) {
+    digest ^= (value >> (index * 8u)) & UINT64_C(0xff);
+    digest *= UINT64_C(1099511628211);
+  }
+  return digest;
+}
+
+static uint64_t model_n1_digest(model_fixture *model) {
+  et_o2_error_v1 error;
+  et_f32_gradient_metadata_v1 metadata =
+      gradient_metadata(model->parameters[0]);
+  uint32_t parameter = 0u;
+  uint32_t moment = 0u;
+  uint64_t digest = UINT64_C(1469598103934665603);
+  read_parameter_bits(model->parameters[0], &parameter, 1u);
+  digest = digest_u64(digest, parameter);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(model->optimizer, 0u,
+                                            ET_O2_MOMENT_EXP_AVG, &moment, 1u,
+                                            &error) == 0);
+  digest = digest_u64(digest, moment);
+  CHECK(et_o2_test_optimizer_moment_bits_v1(model->optimizer, 0u,
+                                            ET_O2_MOMENT_EXP_AVG_SQ, &moment,
+                                            1u, &error) == 0);
+  digest = digest_u64(digest, moment);
+  digest = digest_u64(digest, completed_updates(model->optimizer));
+  digest = digest_u64(digest, metadata.state);
+  digest = digest_u64(digest, metadata.contribution_count);
+  return digest_u64(digest, metadata.normalization_weight_bits);
+}
+
 static void test_retained_control_slopes(void) {
   optimizer_config config = constant_config(ET_O2_CLIP_NONE, 0u);
   model_fixture model;
   et_o2_trainer_step_clear_test_counts_v1 before;
+  et_o2_trainer_step_clear_test_counts_v1 at_1 = {.struct_size = sizeof(at_1)};
   et_o2_trainer_step_clear_test_counts_v1 at_1024 = {.struct_size =
                                                          sizeof(at_1024)};
   et_o2_trainer_step_clear_test_counts_v1 at_8192 = {.struct_size =
                                                          sizeof(at_8192)};
+  et_f32_test_live_counts_v1 i2_live_before;
+  et_f32_test_live_counts_v1 i2_live_at_1;
+  et_f32_test_live_counts_v1 i2_live_at_1024;
+  et_f32_test_live_counts_v1 i2_live_at_8192;
+  et_f32_test_retired_counts_v1 i2_retired_before;
+  et_f32_test_retired_counts_v1 i2_retired_at_1;
+  et_f32_test_retired_counts_v1 i2_retired_at_1024;
+  et_f32_test_retired_counts_v1 i2_retired_at_8192;
   const uint32_t gradient = UINT32_C(0x3f800000);
   uint64_t update;
 
   model_create(&model, 1u, &config);
   before = transaction_counts();
+  i2_live_before = i2_live_counts();
+  i2_retired_before = i2_retired_counts();
   for (update = 0u; update < 8192u; update++) {
     set_gradient(model.parameters[0], &gradient, 1u, 1u, UINT32_C(0x3f800000));
     private_update_clear(&model, update, 1u, UINT32_C(0x3f800000));
-    if (update == 1023u) {
+    if (update == 0u) {
+      at_1 = transaction_counts();
+      i2_live_at_1 = i2_live_counts();
+      i2_retired_at_1 = i2_retired_counts();
+    } else if (update == 1023u) {
       at_1024 = transaction_counts();
+      i2_live_at_1024 = i2_live_counts();
+      i2_retired_at_1024 = i2_retired_counts();
     }
   }
   at_8192 = transaction_counts();
+  i2_live_at_8192 = i2_live_counts();
+  i2_retired_at_8192 = i2_retired_counts();
+  CHECK(at_1.committed_plans == before.committed_plans + 1u);
   CHECK(at_1024.committed_plans == before.committed_plans + 1024u);
   CHECK(at_8192.committed_plans == before.committed_plans + 8192u);
+  CHECK(at_1.live_plans == before.live_plans);
   CHECK(at_1024.live_plans == before.live_plans);
   CHECK(at_8192.live_plans == before.live_plans);
+  CHECK(at_1.live_stages == before.live_stages);
   CHECK(at_1024.live_stages == before.live_stages);
   CHECK(at_8192.live_stages == before.live_stages);
-  CHECK(at_1024.retained_control_bytes > before.retained_control_bytes);
-  CHECK((at_1024.retained_control_bytes - before.retained_control_bytes) %
-            1024u ==
-        0u);
+  outer_retained_bytes_per_update =
+      at_1.retained_control_bytes - before.retained_control_bytes;
+  CHECK(outer_retained_bytes_per_update > 0u);
+  CHECK(at_1024.retained_control_bytes - before.retained_control_bytes ==
+        1024u * outer_retained_bytes_per_update);
   CHECK(at_8192.retained_control_bytes - before.retained_control_bytes ==
-        8u * (at_1024.retained_control_bytes - before.retained_control_bytes));
+        8192u * outer_retained_bytes_per_update);
+  check_i2_live_counts_equal(&i2_live_at_1, &i2_live_before);
+  check_i2_live_counts_equal(&i2_live_at_1024, &i2_live_before);
+  check_i2_live_counts_equal(&i2_live_at_8192, &i2_live_before);
+#define CHECK_RETIRED_LINEAR(field)                                            \
+  do {                                                                         \
+    const size_t slope = i2_retired_at_1.field - i2_retired_before.field;      \
+    CHECK(i2_retired_at_1024.field - i2_retired_before.field ==                \
+          1024u * slope);                                                      \
+    CHECK(i2_retired_at_8192.field - i2_retired_before.field ==                \
+          8192u * slope);                                                      \
+  } while (0)
+  CHECK_RETIRED_LINEAR(tensors);
+  CHECK_RETIRED_LINEAR(parameters);
+  CHECK_RETIRED_LINEAR(borrows);
+  CHECK_RETIRED_LINEAR(copy_plans);
+  CHECK_RETIRED_LINEAR(gradient_plans);
+  CHECK_RETIRED_LINEAR(reset_plans);
+  CHECK_RETIRED_LINEAR(retained_control_bytes);
+#undef CHECK_RETIRED_LINEAR
+  CHECK(i2_retired_at_1.tensors - i2_retired_before.tensors == 3u);
+  CHECK(i2_retired_at_1.parameters == i2_retired_before.parameters);
+  CHECK(i2_retired_at_1.copy_plans - i2_retired_before.copy_plans == 1u);
+  CHECK(i2_retired_at_1.gradient_plans == i2_retired_before.gradient_plans);
+  CHECK(i2_retired_at_1.reset_plans - i2_retired_before.reset_plans == 1u);
+  i2_retained_bytes_per_update = i2_retired_at_1.retained_control_bytes -
+                                 i2_retired_before.retained_control_bytes;
+  CHECK(i2_retained_bytes_per_update > 0u);
   CHECK(completed_updates(model.optimizer) == 8192u);
+  repeated_state_digest = model_n1_digest(&model);
 }
 
 int main(void) {
@@ -1036,6 +1420,10 @@ int main(void) {
         failures, checks);
     return 1;
   }
+  (void)printf("TR3-O retained-control slope: outer=%zu i2=%zu bytes/update\n",
+               outer_retained_bytes_per_update, i2_retained_bytes_per_update);
+  (void)printf("TR3-O repeated-state digest: %016" PRIx64 "\n",
+               repeated_state_digest);
   (void)printf("TR3-O update-clear adversarial PASS: %zu checks\n", checks);
   return 0;
 }
