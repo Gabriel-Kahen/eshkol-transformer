@@ -22,7 +22,7 @@ SUITES = [
 ] + [(f"c2-{g}", f"test-ci-c2-{g}-after-build", 240) for g in GROUPS]
 FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
-    "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
+    "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e3-native-frame.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-tr3-o.sh",
     "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
@@ -75,6 +75,7 @@ def recipes(text):
 
 def check(root, overrides=None):
     overrides = overrides or {}
+    assert len(FULL) == len(set(FULL))
     def read(path):
         return overrides[path] if path in overrides else (root / path).read_text()
     ci = read(".github/workflows/ci.yml")
@@ -232,9 +233,20 @@ def check(root, overrides=None):
     assert 'if result.returncode:\n            return result.returncode' in measured
     assert 'raise SystemExit(main())' in measured
     assert 'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1' in read("scripts/test-m3cg-native.sh")
+    e3_native = read("scripts/test-e3-native-frame.sh")
+    assert "verify_supported_host" in e3_native
+    assert '"${PROJECT_ROOT}/tests/e3_native/header_cpp.cpp" -c' in e3_native
+    assert 'for e3_mode in normal sanitize; do' in e3_native
+    assert '-fsanitize=address,undefined' in e3_native
+    assert 'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1' in e3_native
+    assert '"${PROJECT_ROOT}/tests/e3_native/test_frame.c"' in e3_native
+    assert "e3_frame.c" not in read("scripts/build.sh")
     targets = recipes(make)
     assert targets["test-ci-m3-after-build"] == [
-        "/usr/bin/bash scripts/test-m3.sh", "/usr/bin/bash scripts/test-tr3b.sh"]
+        "/usr/bin/bash scripts/test-m3.sh", "/usr/bin/bash scripts/test-e3-native-frame.sh",
+        "/usr/bin/bash scripts/test-tr3b.sh"]
+    assert targets["test-e3-native-frame"] == [
+        "/usr/bin/bash scripts/test-e3-native-frame.sh"]
     assert targets["test-tr3b"] == ["/usr/bin/bash scripts/test-tr3b.sh"]
     assert targets["test-ci-g3n-after-build"] == [
         "/usr/bin/bash scripts/test-g3n.sh", "/usr/bin/bash scripts/test-g3c4.sh"]
