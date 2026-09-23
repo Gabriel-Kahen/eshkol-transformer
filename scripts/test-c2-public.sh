@@ -30,7 +30,8 @@ evidence="${object}.evidence"
 ar p "${library}" c2_wave2.o >"${temporary_dir}/canonical-archive-member.o"
 cmp "${object}" "${temporary_dir}/canonical-archive-member.o"
 if nm -a "${object}" | \
-    rg 'et_k2_test_(require_count|fail_require_at)_v1' >/dev/null; then
+    rg 'et_k2_test_(require_count|require_shape_count|fail_require_at)_v1' \
+      >/dev/null; then
   die "canonical C2 aggregate contains a private K2 test hook"
 fi
 
@@ -408,7 +409,8 @@ cmp "${library}" \
   "${temporary_dir}/rebuild-a/libeshkol_transformer_wave2.a"
 for rebuild in a b; do
   if nm -a "${temporary_dir}/rebuild-${rebuild}/c2_wave2.o" | \
-      rg 'et_k2_test_(require_count|fail_require_at)_v1' >/dev/null; then
+      rg 'et_k2_test_(require_count|require_shape_count|fail_require_at)_v1' \
+        >/dev/null; then
     die "rebuilt C2 aggregate contains a private K2 test hook"
   fi
 done

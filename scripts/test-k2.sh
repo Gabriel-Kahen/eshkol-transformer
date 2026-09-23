@@ -216,7 +216,8 @@ ar rcsD "${private_runtime_dir}/libeshkol_transformer_k2_private_test.a" \
 for test_hook in et_k2_test_runtime_drop_v1 et_k2_test_fork_v1 \
     et_k2_test_wait_child_v1 et_k2_test_exit_child_v1 \
     et_k2_test_factory_authenticate_override_v1 \
-    et_k2_test_require_count_v1 et_k2_test_fail_require_at_v1 \
+    et_k2_test_require_count_v1 et_k2_test_require_shape_count_v1 \
+    et_k2_test_fail_require_at_v1 \
     et_k2_test_protected_overlap_mask_v1; do
   nm -g --defined-only "${private_runtime_dir}/libeshkol_transformer_k2_private_test.a" | \
     grep -E "[[:space:]]T ${test_hook}$" >/dev/null || \
