@@ -1,0 +1,826 @@
+;;; Bounded CLI3 dispatcher. This source is compiled only inside cli3_root.esk.
+
+(extern i64 cli3-native-fallback-status-set i64
+        :real et_cli3_private_fallback_status_set_v1)
+(extern i64 cli3-native-stdout-write ptr i64
+        :real et_cli3_private_stdout_write_v1)
+
+(define cli3-i64-max 9223372036854775807)
+(define cli3-max-path-bytes 4096)
+(define cli3-tokenizer-limit 1048576)
+(define cli3-document-count-limit 4096)
+(define cli3-document-byte-limit 65536)
+(define cli3-token-limit 65536)
+(define cli3-command-published? #f)
+
+(define cli3-version "eshkol-transformer 0.0.1\n")
+(define cli3-help
+  "Usage: eshkol-transformer GROUP COMMAND [OPTIONS]\n\nGroups:\n  tokenizer   Create and inspect tokenizer artifacts\n  corpus      Build and inspect D1 token corpora\n  checkpoint  Inspect C2 checkpoints\n")
+(define cli3-tokenizer-help
+  "Usage: eshkol-transformer tokenizer COMMAND [OPTIONS]\n\nCommands:\n  byte       Create a canonical byte tokenizer\n  train-bpe  Train a bounded deterministic BPE tokenizer\n  inspect    Validate and inspect a tokenizer artifact\n")
+(define cli3-corpus-help
+  "Usage: eshkol-transformer corpus COMMAND [OPTIONS]\n\nCommands:\n  build    Encode documents into a D1 token corpus\n  inspect  Validate and inspect a D1 token corpus\n")
+(define cli3-checkpoint-help
+  "Usage: eshkol-transformer checkpoint COMMAND [OPTIONS]\n\nCommands:\n  inspect  Validate and inspect a C2 checkpoint\n")
+(define cli3-tokenizer-byte-help
+  "Usage: eshkol-transformer tokenizer byte --config PATH --output PATH [--force]\n")
+(define cli3-tokenizer-train-help
+  "Usage: eshkol-transformer tokenizer train-bpe --document PATH [--document PATH]... --maximum-merges N --minimum-frequency N --utf8-policy raw|strict [--special NAME=omit|error]... [--prefix NAME]... [--suffix NAME]... --output PATH [--force]\n")
+(define cli3-tokenizer-inspect-help
+  "Usage: eshkol-transformer tokenizer inspect --input PATH [--special NAME]... [--max-file-bytes N] [--max-metadata-bytes N]\n")
+(define cli3-corpus-build-help
+  "Usage: eshkol-transformer corpus build --tokenizer PATH --document PATH [--document PATH]... --output-directory DIRECTORY --shard-token-limit N\n")
+(define cli3-corpus-inspect-help
+  "Usage: eshkol-transformer corpus inspect --input-directory DIRECTORY [--max-manifest-bytes N] [--max-shard-bytes N] [--max-total-tokens N]\n")
+(define cli3-checkpoint-inspect-help
+  "Usage: eshkol-transformer checkpoint inspect --input PATH [--max-file-bytes N] [--max-metadata-bytes N] [--max-tensor-bytes N] [--max-tensors N]\n")
+
+(define (cli3-fail-raw category operation message details)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message details #f)))
+    unreachable))
+
+(define-syntax cli3-fail
+  (syntax-rules ()
+    ((_ category operation message details)
+     (let ((result (cli3-fail-raw category operation message details)))
+       result))))
+
+(define (cli3-usage-raw message)
+  (cli3-fail 'invalid-argument 'cli3-usage message '()))
+
+(define-syntax cli3-usage
+  (syntax-rules ()
+    ((_ message)
+     (let ((result (cli3-usage-raw message))) result))))
+
+(define (cli3-reverse values)
+  (let loop ((remaining values) (out '()))
+    (if (null? remaining) out
+        (loop (cdr remaining) (cons (car remaining) out)))))
+
+(define (cli3-concat parts)
+  (let loop ((remaining parts) (out ""))
+    (if (null? remaining) out
+        (loop (cdr remaining) (string-append out (car remaining))))))
+
+(define (cli3-list-length-bounded values maximum)
+  (let loop ((remaining values) (count 0))
+    (cond ((null? remaining) count)
+          ((or (not (pair? remaining)) (>= count maximum)) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+
+(define (cli3-prefix-impl prefix text)
+  (and (<= (string-length prefix) (string-length text))
+       (let loop ((index 0))
+         (if (= index (string-length prefix)) #t
+             (and (char=? (string-ref prefix index) (string-ref text index))
+                  (loop (+ index 1)))))))
+
+(define-syntax cli3-prefix?
+  (syntax-rules ()
+    ((_ prefix text)
+     (let ((result (cli3-prefix-impl prefix text))) result))))
+
+(define (cli3-option? text)
+  (and (string? text) (cli3-prefix? "--" text)))
+
+(define (cli3-path path operation)
+  (if (or (not (string? path)) (= (string-length path) 0)
+          (> (bytevector-length (string->utf8 path)) cli3-max-path-bytes)
+          (let loop ((index 0))
+            (and (< index (string-length path))
+                 (or (char=? (string-ref path index) #\nul)
+                     (loop (+ index 1))))))
+      (cli3-fail 'invalid-argument operation "invalid path" '()))
+  path)
+
+(define (cli3-parse-i64 text option maximum)
+  (if (or (not (string? text)) (= (string-length text) 0)
+          (and (> (string-length text) 1)
+               (char=? (string-ref text 0) #\0)))
+      (cli3-usage (string-append option " requires canonical unsigned decimal")))
+  (let loop ((index 0) (value 0))
+    (if (= index (string-length text))
+        (if (> value maximum)
+            (cli3-usage (string-append option " exceeds its command limit"))
+            value)
+        (let ((digit (- (char->integer (string-ref text index)) 48)))
+          (if (or (< digit 0) (> digit 9)
+                  (> value (quotient (- cli3-i64-max digit) 10)))
+              (cli3-usage
+               (string-append option " requires signed-i64 unsigned decimal")))
+          (loop (+ index 1) (+ (* value 10) digit))))))
+
+(define (cli3-next-value remaining option)
+  (if (or (null? (cdr remaining)) (cli3-option? (car (cdr remaining))))
+      (cli3-usage (string-append option " requires one value")))
+  (car (cdr remaining)))
+
+(define (cli3-read-file path maximum operation)
+  (cli3-path path operation)
+  (let ((size
+         (guard (caught (#t (cli3-fail 'io operation "file size query failed"
+                                       '())))
+           (file-size path))))
+    (if (or (not (integer? size)) (not (exact? size)) (< size 0)
+            (> size maximum))
+        (cli3-fail 'corrupt-data operation "file exceeds command limit"
+                   (list (list 'maximum-bytes maximum))))
+    (let ((bytes (make-bytevector size 0)))
+      (let ((status (t1-native-read-exact path bytes size maximum)))
+        (if (not (= status 0))
+            (t2-wave2-io-fail operation "checked file read failed" status)))
+      bytes)))
+
+(define (cli3-utf8 bytes operation)
+  (guard (caught (#t (cli3-fail 'corrupt-data operation
+                                "file is not valid UTF-8" '())))
+    (utf8->string bytes)))
+
+(define (cli3-publish tokenizer path force?)
+  (let* ((operation 'tokenizer-save!)
+         (bytes (t2-private-tokenizer-serialize tokenizer))
+         (status
+          (t1-native-atomic-write path bytes (bytevector-length bytes)
+                                  (if force? 1 0))))
+    (if (not (= status 0))
+        (t2-wave2-io-fail operation "atomic tokenizer publication failed"
+                          status))
+    (set! cli3-command-published? #t)
+    #t))
+
+(define (cli3-write-output text)
+  (let ((status (cli3-native-stdout-write text (string-length text))))
+    (if (not (= status 0))
+        (cli3-fail
+         'io 'cli-report "stdout write failed"
+         (list (list 'source-domain 'cli-stdout)
+               (list 'source-code status)
+               (list 'published? cli3-command-published?)
+               (list 'durability
+                     (if cli3-command-published? 'known 'not-published)))))
+    #t))
+
+(define (cli3-json-hex4 value)
+  (let ((digits "0123456789abcdef"))
+    (string (string-ref digits (bitwise-and (arithmetic-shift value -12) 15))
+            (string-ref digits (bitwise-and (arithmetic-shift value -8) 15))
+            (string-ref digits (bitwise-and (arithmetic-shift value -4) 15))
+            (string-ref digits (bitwise-and value 15)))))
+
+(define (cli3-json-scalar-piece character)
+  (let ((code (char->integer character)))
+    (cond ((char=? character #\") "\\\"")
+          ((char=? character #\\) "\\\\")
+          ((= code 8) "\\b")
+          ((= code 9) "\\t")
+          ((= code 10) "\\n")
+          ((= code 12) "\\f")
+          ((= code 13) "\\r")
+          ((and (>= code 32) (<= code 126)) (string character))
+          ((<= code 65535) (string-append "\\u" (cli3-json-hex4 code)))
+          (else
+           (let* ((adjusted (- code 65536))
+                  (high (+ 55296 (quotient adjusted 1024)))
+                  (low (+ 56320 (modulo adjusted 1024))))
+             (string-append "\\u" (cli3-json-hex4 high)
+                            "\\u" (cli3-json-hex4 low)))))))
+
+(define (cli3-json-string-limit-impl text maximum)
+  (let loop ((index 0) (count 2) (parts '()))
+    (if (= index (string-length text))
+        (string-append "\""
+                       (cli3-concat (cli3-reverse parts)) "\"")
+        (let* ((piece (cli3-json-scalar-piece (string-ref text index)))
+               (next (+ count (string-length piece))))
+          (if (> (+ next 3) maximum)
+              (string-append "\""
+                             (cli3-concat (cli3-reverse parts))
+                             "...\"")
+              (loop (+ index 1) next (cons piece parts)))))))
+
+(define-syntax cli3-json-string-limit
+  (syntax-rules ()
+    ((_ text maximum)
+     (let ((result (cli3-json-string-limit-impl text maximum))) result))))
+
+(define (cli3-json-string-raw text)
+  (cli3-json-string-limit text 1024))
+
+(define-syntax cli3-json-string
+  (syntax-rules ()
+    ((_ text)
+     (let ((result (cli3-json-string-raw text))) result))))
+
+(define (cli3-json-symbol value)
+  (cli3-json-string (symbol->string value)))
+
+(define (cli3-json-integer value)
+  (number->string value))
+
+(define (cli3-json-scalar value)
+  (cond ((boolean? value) (if value "true" "false"))
+        ((and (integer? value) (exact? value) (real? value)
+              (>= value -9223372036854775808) (<= value cli3-i64-max))
+         (number->string value))
+        ((char? value) (cli3-json-string-limit (string value) 256))
+        ((symbol? value)
+         (cli3-json-string-limit (symbol->string value) 256))
+        ((string? value) (cli3-json-string-limit value 256))
+        (else #f)))
+
+(define (cli3-detail-insert entry sorted)
+  (cond ((null? sorted) (list entry))
+        ((string<? (symbol->string (car entry))
+                   (symbol->string (car (car sorted))))
+         (cons entry sorted))
+        (else (cons (car sorted)
+                    (cli3-detail-insert entry (cdr sorted))))))
+
+(define (cli3-detail-sort details)
+  (let loop ((remaining details) (out '()))
+    (if (null? remaining) out
+        (loop (cdr remaining)
+              (cli3-detail-insert (car remaining) out)))))
+
+(define (cli3-json-details details)
+  (let loop ((remaining (cli3-detail-sort details))
+             (count 0) (bytes 2) (first? #t) (parts '()))
+    (if (or (null? remaining) (= count 64))
+        (string-append "{" (cli3-concat (cli3-reverse parts)) "}")
+        (let* ((entry (car remaining))
+               (key (and (pair? entry) (symbol? (car entry))
+                         (cli3-json-string-limit (symbol->string (car entry))
+                                                 256)))
+               (tail (and (pair? entry) (cdr entry)))
+               (value (and (pair? tail) (null? (cdr tail))
+                           (cli3-json-scalar (car tail))))
+               (piece (and key value
+                           (string-append (if first? "" ",") key ":" value))))
+          (if (or (not piece) (> (+ bytes (string-length piece)) 2050))
+              (loop (cdr remaining) count bytes first? parts)
+              (loop (cdr remaining) (+ count 1)
+                    (+ bytes (string-length piece)) #f
+                    (cons piece parts)))))))
+
+(define (cli3-exit-for-category category)
+  (cond ((or (eq? category 'invalid-argument)
+             (eq? category 'shape-mismatch)
+             (eq? category 'dtype-mismatch)
+             (eq? category 'device-mismatch)
+             (eq? category 'noncontiguous)) 10)
+        ((or (eq? category 'unsupported)
+             (eq? category 'version-mismatch)
+             (eq? category 'determinism-unavailable)) 11)
+        ((eq? category 'corrupt-data) 12)
+        ((eq? category 'io) 13)
+        ((eq? category 'invalid-state) 14)
+        (else 70)))
+
+(define (cli3-result-raw status out err)
+  (vector status out err))
+
+(define-syntax cli3-result
+  (syntax-rules ()
+    ((_ status out err)
+     (let ((result (cli3-result-raw status out err))) result))))
+
+(define (cli3-format-raised raised)
+  (if (not (transformer-error? raised))
+      (begin
+        (cli3-native-fallback-status-set 70)
+        (cli3-result 70 ""
+                     "eshkol-transformer: internal: diagnostic unavailable\n"))
+      (let* ((category (transformer-error-category raised))
+             (status (cli3-exit-for-category category)))
+        ;; Capture the category before any later diagnostic allocation. The
+        ;; native static fallback can therefore retain a known I/O status.
+        (cli3-native-fallback-status-set status)
+        (let* ((operation (transformer-error-operation raised))
+               (message (transformer-error-message raised))
+               (details (transformer-error-details raised)))
+          (if (eq? operation 'cli3-usage)
+              (begin
+                (cli3-native-fallback-status-set 2)
+                (cli3-result
+                 2 ""
+                 (string-append
+                  "eshkol-transformer: usage message="
+                  (cli3-json-string-limit message 3072) "\n")))
+              (let ((line
+                     (string-append
+                      "eshkol-transformer: category="
+                      (cli3-json-string-limit (symbol->string category) 256)
+                      " operation="
+                      (cli3-json-string-limit (symbol->string operation) 256)
+                      " message=" (cli3-json-string-limit message 1024)
+                      " details=" (cli3-json-details details) "\n")))
+                (if (> (string-length line) 4096)
+                    (if (= status 13)
+                        (cli3-result
+                         13 "" "eshkol-transformer: io: publication state unknown; inspect the output path\n")
+                        (cli3-result
+                         70 "" "eshkol-transformer: internal: diagnostic unavailable\n"))
+                    (cli3-result status "" line))))))))
+
+(define (cli3-family fingerprint)
+  (cond ((cli3-prefix? "sha256:eshkol-byte-tokenizer-v1:" fingerprint)
+         "byte")
+        ((cli3-prefix? "sha256:eshkol-bpe-tokenizer-v1:" fingerprint)
+         "byte-bpe")
+        (else (cli3-fail 'corrupt-data 'tokenizer-inspect
+                         "unknown tokenizer fingerprint family" '()))))
+
+(define (cli3-tokenizer-json tokenizer specials)
+  (let* ((fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+         (vocab (t2-private-tokenizer-vocab-size tokenizer))
+         (base
+          (string-append
+           "{\"artifact\":\"tokenizer\",\"family\":"
+           (cli3-json-string (cli3-family fingerprint))
+           ",\"fingerprint\":" (cli3-json-string fingerprint)
+           ",\"vocabulary_size\":" (number->string vocab))))
+    (if (null? specials) (string-append base "}\n")
+        (let loop ((remaining specials) (first? #t) (parts '()) (ids '()))
+          (if (null? remaining)
+              (string-append base ",\"specials\":{"
+                             (cli3-concat (cli3-reverse parts)) "}}\n")
+              (let* ((name (car remaining))
+                     (id (t2-private-tokenizer-special-token-id tokenizer name)))
+                (if (let duplicate ((seen ids))
+                      (and (not (null? seen))
+                           (or (= id (car seen)) (duplicate (cdr seen)))))
+                    (cli3-fail 'corrupt-data 'tokenizer-inspect
+                               "distinct special names share one token ID" '()))
+                (loop (cdr remaining) #f
+                      (cons (string-append (if first? "" ",")
+                                           (cli3-json-string name) ":"
+                                           (number->string id)) parts)
+                      (cons id ids))))))))
+
+(define (cli3-summary-json summary)
+  (string-append
+   "{\"artifact\":\"token-corpus\",\"shard_count\":"
+   (number->string
+    (et-d1-private-token-corpus-summary-shard-count summary))
+   ",\"shard_token_limit\":"
+   (number->string
+    (et-d1-private-token-corpus-summary-shard-token-limit summary))
+   ",\"tokenizer_fingerprint\":"
+   (cli3-json-string
+    (et-d1-private-token-corpus-summary-tokenizer-fingerprint summary))
+   ",\"total_shard_bytes\":"
+   (number->string
+    (et-d1-private-token-corpus-summary-total-shard-bytes summary))
+   ",\"total_tokens\":"
+   (number->string
+    (et-d1-private-token-corpus-summary-total-tokens summary))
+   ",\"vocabulary_size\":"
+   (number->string
+    (et-d1-private-token-corpus-summary-vocab-size summary)) "}\n"))
+
+(define (cli3-checkpoint-json metadata)
+  (let ((api (c2-checkpoint-metadata-ref-internal metadata 'api-version))
+        (config
+         (c2-checkpoint-metadata-ref-internal metadata 'config-fingerprint))
+        (payload (c2-checkpoint-metadata-ref-internal metadata 'payload-bytes))
+        (tensors (c2-checkpoint-metadata-ref-internal metadata 'tensor-count))
+        (tokenizer
+         (c2-checkpoint-metadata-ref-internal metadata
+                                             'tokenizer-fingerprint)))
+    (string-append
+     "{\"api_version\":" (cli3-json-string api)
+     ",\"artifact\":\"checkpoint\",\"checksum_algorithm\":\"sha256\""
+     ",\"config_fingerprint\":" (cli3-json-string config)
+     ",\"config_schema_version\":[1,0]"
+     ",\"format_id\":\"eshkol-training-state\""
+     ",\"format_version\":[1,0],\"payload_bytes\":"
+     (number->string payload)
+     ",\"required_features\":[],\"tensor_count\":"
+     (number->string tensors)
+     ",\"tokenizer_fingerprint\":" (cli3-json-string tokenizer) "}\n")))
+
+(define (cli3-string-member? value values)
+  (and (not (null? values))
+       (or (string=? value (car values))
+           (cli3-string-member? value (cdr values)))))
+
+(define (cli3-string-insert value values)
+  (cond ((null? values) (list value))
+        ((string<? value (car values)) (cons value values))
+        (else (cons (car values) (cli3-string-insert value (cdr values))))))
+
+(define (cli3-sort-unique values option)
+  (let loop ((remaining values) (out '()))
+    (if (null? remaining) out
+        (if (cli3-string-member? (car remaining) out)
+            (cli3-usage (string-append "duplicate " option " value"))
+            (loop (cdr remaining) (cli3-string-insert (car remaining) out))))))
+
+(define (cli3-special-spec text)
+  (let find ((index 0) (equal-index -1))
+    (if (= index (string-length text))
+        (if (or (= equal-index -1) (= equal-index 0)
+                (= equal-index (- (string-length text) 1)))
+            (cli3-usage "--special requires NAME=omit or NAME=error")
+            (let ((name (substring text 0 equal-index))
+                  (policy (substring text (+ equal-index 1)
+                                     (string-length text))))
+              (cond ((string=? policy "omit") (list name 'omit))
+                    ((string=? policy "error") (list name 'error))
+                    (else
+                     (cli3-usage
+                      "--special requires NAME=omit or NAME=error")))))
+        (if (char=? (string-ref text index) #\=)
+            (if (= equal-index -1)
+                (find (+ index 1) index)
+                (cli3-usage "--special contains more than one '='"))
+            (find (+ index 1) equal-index)))))
+
+(define (cli3-special-insert record records)
+  (cond ((null? records) (list record))
+        ((string<? (car record) (car (car records)))
+         (cons record records))
+        ((string=? (car record) (car (car records)))
+         (cli3-usage "duplicate --special name"))
+        (else (cons (car records)
+                    (cli3-special-insert record (cdr records))))))
+
+(define (cli3-special-sort records)
+  (let loop ((remaining records) (out '()))
+    (if (null? remaining) out
+        (loop (cdr remaining)
+              (cli3-special-insert (car remaining) out)))))
+
+(define (cli3-read-documents paths operation)
+  (let ((count (cli3-list-length-bounded paths (+ cli3-document-count-limit 1))))
+    (if (or (not count) (= count 0) (> count cli3-document-count-limit))
+        (cli3-usage "--document must occur between 1 and 4096 times"))
+    (let loop ((remaining paths) (total 0) (out '()))
+      (if (null? remaining) (cli3-reverse out)
+          (let* ((bytes
+                  (cli3-read-file (car remaining)
+                                  (- cli3-document-byte-limit total) operation))
+                 (next (+ total (bytevector-length bytes))))
+            (loop (cdr remaining) next (cons (list bytes) out)))))))
+
+(define (cli3-append-staging-reversed staging reversed total)
+  (let ((count (quotient (bytevector-length staging) 8)))
+    (if (> (+ total count) cli3-token-limit)
+        (cli3-fail 'invalid-argument 'corpus-build
+                   "encoded corpus exceeds 65536 tokens" '()))
+    (let loop ((index 0) (out reversed))
+      (if (= index count) (vector out (+ total count))
+          (let ((id (t1-core-read-u64-le staging (* index 8))))
+            (if (> id cli3-i64-max)
+                (cli3-fail 'internal 'corpus-build
+                           "tokenizer emitted a non-i64 token" '()))
+            (loop (+ index 1) (cons id out)))))))
+
+(define (cli3-encode-documents tokenizer documents)
+  (let loop ((remaining documents) (reversed '()) (total 0))
+    (if (null? remaining) (cli3-reverse reversed)
+        (let* ((staging
+                (t2-private-tokenizer-encode-staging
+                 tokenizer (car (car remaining))))
+               (next (cli3-append-staging-reversed staging reversed total)))
+          (loop (cdr remaining) (vector-ref next 0) (vector-ref next 1))))))
+
+(define (cli3-tokenizer-byte options)
+  (let loop ((remaining options) (config #f) (output #f) (force? #f))
+    (if (null? remaining)
+        (begin
+          (if (or (not config) (not output))
+              (cli3-usage "tokenizer byte requires --config and --output"))
+          (let* ((text (cli3-utf8 (cli3-read-file config 16384
+                                                   'config-parse)
+                                  'config-parse))
+                 (parsed (x1-private-config-parse text))
+                 (resolved (x1-private-config-resolve parsed '())))
+            (x1-private-config-validate resolved)
+            (let ((tokenizer (t2-wave2-tokenizer-byte resolved)))
+              (cli3-publish tokenizer (cli3-path output 'tokenizer-save!) force?)
+              (cli3-tokenizer-json tokenizer '()))))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--force")
+             (if force? (cli3-usage "duplicate --force"))
+             (loop (cdr remaining) config output #t))
+            ((string=? option "--config")
+             (if config (cli3-usage "duplicate --config"))
+             (loop (cdr (cdr remaining))
+                   (cli3-next-value remaining option) output force?))
+            ((string=? option "--output")
+             (if output (cli3-usage "duplicate --output"))
+             (loop (cdr (cdr remaining)) config
+                   (cli3-next-value remaining option) force?))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-tokenizer-train options)
+  (let loop ((remaining options) (documents '()) (maximum #f) (minimum #f)
+             (policy #f) (specials '()) (prefix '()) (suffix '())
+             (output #f) (force? #f))
+    (if (null? remaining)
+        (begin
+          (if (or (null? documents) (not maximum) (not minimum)
+                  (not policy) (not output))
+              (cli3-usage "tokenizer train-bpe is missing a required option"))
+          (let* ((loaded (cli3-read-documents (cli3-reverse documents)
+                                              't2-bpe-train-core))
+                 (core
+                  (t2-bpe-train-core loaded maximum minimum policy
+                                     (cli3-special-sort specials)
+                                     (cli3-reverse prefix)
+                                     (cli3-reverse suffix)))
+                 (tokenizer (t2-private-register-core core)))
+            (cli3-publish tokenizer (cli3-path output 'tokenizer-save!) force?)
+            (cli3-tokenizer-json tokenizer '())))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--force")
+             (if force? (cli3-usage "duplicate --force"))
+             (loop (cdr remaining) documents maximum minimum policy specials
+                   prefix suffix output #t))
+            ((string=? option "--document")
+             (loop (cdr (cdr remaining))
+                   (cons (cli3-next-value remaining option) documents)
+                   maximum minimum policy specials prefix suffix output force?))
+            ((string=? option "--special")
+             (loop (cdr (cdr remaining)) documents maximum minimum policy
+                   (cons (cli3-special-spec
+                          (cli3-next-value remaining option)) specials)
+                   prefix suffix output force?))
+            ((string=? option "--prefix")
+             (loop (cdr (cdr remaining)) documents maximum minimum policy
+                   specials
+                   (cons (cli3-next-value remaining option) prefix)
+                   suffix output force?))
+            ((string=? option "--suffix")
+             (loop (cdr (cdr remaining)) documents maximum minimum policy
+                   specials prefix
+                   (cons (cli3-next-value remaining option) suffix)
+                   output force?))
+            ((string=? option "--maximum-merges")
+             (if maximum (cli3-usage "duplicate --maximum-merges"))
+             (loop (cdr (cdr remaining)) documents
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option 256)
+                   minimum policy specials prefix suffix output force?))
+            ((string=? option "--minimum-frequency")
+             (if minimum (cli3-usage "duplicate --minimum-frequency"))
+             (let ((value
+                    (cli3-parse-i64 (cli3-next-value remaining option)
+                                    option cli3-i64-max)))
+               (if (= value 0)
+                   (cli3-usage "--minimum-frequency must be positive"))
+               (loop (cdr (cdr remaining)) documents maximum value policy
+                     specials prefix suffix output force?)))
+            ((string=? option "--utf8-policy")
+             (if policy (cli3-usage "duplicate --utf8-policy"))
+             (let ((value (cli3-next-value remaining option)))
+               (loop (cdr (cdr remaining)) documents maximum minimum
+                     (cond ((string=? value "raw") 'raw)
+                           ((string=? value "strict") 'strict)
+                           (else
+                            (cli3-usage
+                             "--utf8-policy requires raw or strict")))
+                     specials prefix suffix output force?)))
+            ((string=? option "--output")
+             (if output (cli3-usage "duplicate --output"))
+             (loop (cdr (cdr remaining)) documents maximum minimum policy
+                   specials prefix suffix (cli3-next-value remaining option)
+                   force?))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-tokenizer-inspect options)
+  (let loop ((remaining options) (input #f) (specials '())
+             (max-file cli3-tokenizer-limit)
+             (max-metadata cli3-tokenizer-limit)
+             (seen-file? #f) (seen-metadata? #f))
+    (if (null? remaining)
+        (begin
+          (if (not input) (cli3-usage "tokenizer inspect requires --input"))
+          (let* ((policy
+                  (c2-persistence-policy-internal
+                   max-file max-metadata max-metadata 64 'cpu))
+                 (tokenizer (t2-wave2-tokenizer-load input policy)))
+            (cli3-tokenizer-json tokenizer
+                                 (cli3-sort-unique specials "--special"))))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--input")
+             (if input (cli3-usage "duplicate --input"))
+             (loop (cdr (cdr remaining)) (cli3-next-value remaining option)
+                   specials max-file max-metadata seen-file? seen-metadata?))
+            ((string=? option "--special")
+             (loop (cdr (cdr remaining)) input
+                   (cons (cli3-next-value remaining option) specials)
+                   max-file max-metadata seen-file? seen-metadata?))
+            ((string=? option "--max-file-bytes")
+             (if seen-file? (cli3-usage "duplicate --max-file-bytes"))
+             (loop (cdr (cdr remaining)) input specials
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option cli3-tokenizer-limit)
+                   max-metadata #t seen-metadata?))
+            ((string=? option "--max-metadata-bytes")
+             (if seen-metadata?
+                 (cli3-usage "duplicate --max-metadata-bytes"))
+             (loop (cdr (cdr remaining)) input specials max-file
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option cli3-tokenizer-limit)
+                   seen-file? #t))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-corpus-build options)
+  (let loop ((remaining options) (tokenizer-path #f) (documents '())
+             (directory #f) (shard-limit #f))
+    (if (null? remaining)
+        (begin
+          (if (or (not tokenizer-path) (null? documents)
+                  (not directory) (not shard-limit))
+              (cli3-usage "corpus build is missing a required option"))
+          (let* ((policy
+                  (c2-persistence-policy-internal
+                   cli3-tokenizer-limit cli3-tokenizer-limit
+                   cli3-tokenizer-limit 64 'cpu))
+                 (tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
+                 (loaded (cli3-read-documents (cli3-reverse documents)
+                                              'corpus-build))
+                 (tokens (cli3-encode-documents tokenizer loaded))
+                 (summary
+                  (et-d1-private-token-corpus-write
+                   (cli3-path directory 'token-corpus-write!)
+                   (t2-private-tokenizer-fingerprint tokenizer)
+                   (t2-private-tokenizer-vocab-size tokenizer)
+                   shard-limit tokens)))
+            (set! cli3-command-published? #t)
+            (cli3-summary-json summary)))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--tokenizer")
+             (if tokenizer-path (cli3-usage "duplicate --tokenizer"))
+             (loop (cdr (cdr remaining)) (cli3-next-value remaining option)
+                   documents directory shard-limit))
+            ((string=? option "--document")
+             (loop (cdr (cdr remaining)) tokenizer-path
+                   (cons (cli3-next-value remaining option) documents)
+                   directory shard-limit))
+            ((string=? option "--output-directory")
+             (if directory (cli3-usage "duplicate --output-directory"))
+             (loop (cdr (cdr remaining)) tokenizer-path documents
+                   (cli3-next-value remaining option) shard-limit))
+            ((string=? option "--shard-token-limit")
+             (if shard-limit (cli3-usage "duplicate --shard-token-limit"))
+             (let ((value
+                    (cli3-parse-i64 (cli3-next-value remaining option)
+                                    option cli3-token-limit)))
+               (if (= value 0)
+                   (cli3-usage "--shard-token-limit must be positive"))
+               (loop (cdr (cdr remaining)) tokenizer-path documents directory
+                     value)))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-corpus-inspect options)
+  (let loop ((remaining options) (directory #f)
+             (manifest cli3-tokenizer-limit) (shard cli3-tokenizer-limit)
+             (tokens cli3-token-limit) (seen-manifest? #f)
+             (seen-shard? #f) (seen-tokens? #f))
+    (if (null? remaining)
+        (begin
+          (if (not directory)
+              (cli3-usage "corpus inspect requires --input-directory"))
+          (cli3-summary-json
+           (et-d1-private-token-corpus-validate
+            (cli3-path directory 'token-corpus-validate)
+            manifest shard tokens)))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--input-directory")
+             (if directory (cli3-usage "duplicate --input-directory"))
+             (loop (cdr (cdr remaining)) (cli3-next-value remaining option)
+                   manifest shard tokens seen-manifest? seen-shard?
+                   seen-tokens?))
+            ((string=? option "--max-manifest-bytes")
+             (if seen-manifest?
+                 (cli3-usage "duplicate --max-manifest-bytes"))
+             (loop (cdr (cdr remaining)) directory
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option cli3-tokenizer-limit)
+                   shard tokens #t seen-shard? seen-tokens?))
+            ((string=? option "--max-shard-bytes")
+             (if seen-shard? (cli3-usage "duplicate --max-shard-bytes"))
+             (loop (cdr (cdr remaining)) directory manifest
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option cli3-tokenizer-limit)
+                   tokens seen-manifest? #t seen-tokens?))
+            ((string=? option "--max-total-tokens")
+             (if seen-tokens? (cli3-usage "duplicate --max-total-tokens"))
+             (loop (cdr (cdr remaining)) directory manifest shard
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option cli3-token-limit)
+                   seen-manifest? seen-shard? #t))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-checkpoint-inspect options)
+  (let loop ((remaining options) (input #f) (file 16777216)
+             (metadata 524288) (tensor 8388608) (tensors 64)
+             (seen-file? #f) (seen-metadata? #f) (seen-tensor? #f)
+             (seen-tensors? #f))
+    (if (null? remaining)
+        (begin
+          (if (not input) (cli3-usage "checkpoint inspect requires --input"))
+          (let* ((policy
+                  (c2-persistence-policy-internal
+                   file metadata tensor tensors 'cpu))
+                 (result
+                  (c2-checkpoint-inspect-internal
+                   (cli3-path input 'checkpoint-inspect) policy)))
+            (cli3-checkpoint-json result)))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--input")
+             (if input (cli3-usage "duplicate --input"))
+             (loop (cdr (cdr remaining)) (cli3-next-value remaining option)
+                   file metadata tensor tensors seen-file? seen-metadata?
+                   seen-tensor? seen-tensors?))
+            ((string=? option "--max-file-bytes")
+             (if seen-file? (cli3-usage "duplicate --max-file-bytes"))
+             (loop (cdr (cdr remaining)) input
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option 16777216)
+                   metadata tensor tensors #t seen-metadata? seen-tensor?
+                   seen-tensors?))
+            ((string=? option "--max-metadata-bytes")
+             (if seen-metadata?
+                 (cli3-usage "duplicate --max-metadata-bytes"))
+             (loop (cdr (cdr remaining)) input file
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option 524288)
+                   tensor tensors seen-file? #t seen-tensor? seen-tensors?))
+            ((string=? option "--max-tensor-bytes")
+             (if seen-tensor? (cli3-usage "duplicate --max-tensor-bytes"))
+             (loop (cdr (cdr remaining)) input file metadata
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option 8388608)
+                   tensors seen-file? seen-metadata? #t seen-tensors?))
+            ((string=? option "--max-tensors")
+             (if seen-tensors? (cli3-usage "duplicate --max-tensors"))
+             (loop (cdr (cdr remaining)) input file metadata tensor
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option 64)
+                   seen-file? seen-metadata? seen-tensor? #t))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-dispatch-command arguments)
+  (cond
+    ((equal? arguments '("--help")) cli3-help)
+    ((equal? arguments '("--version")) cli3-version)
+    ((equal? arguments '("tokenizer" "--help")) cli3-tokenizer-help)
+    ((equal? arguments '("corpus" "--help")) cli3-corpus-help)
+    ((equal? arguments '("checkpoint" "--help")) cli3-checkpoint-help)
+    ((equal? arguments '("tokenizer" "byte" "--help"))
+     cli3-tokenizer-byte-help)
+    ((equal? arguments '("tokenizer" "train-bpe" "--help"))
+     cli3-tokenizer-train-help)
+    ((equal? arguments '("tokenizer" "inspect" "--help"))
+     cli3-tokenizer-inspect-help)
+    ((equal? arguments '("corpus" "build" "--help"))
+     cli3-corpus-build-help)
+    ((equal? arguments '("corpus" "inspect" "--help"))
+     cli3-corpus-inspect-help)
+    ((equal? arguments '("checkpoint" "inspect" "--help"))
+     cli3-checkpoint-inspect-help)
+    ((or (null? arguments) (null? (cdr arguments)))
+     (cli3-usage "expected a known group and command"))
+    ((and (string=? (car arguments) "tokenizer")
+          (string=? (car (cdr arguments)) "byte"))
+     (let ((result (cli3-tokenizer-byte (cdr (cdr arguments))))) result))
+    ((and (string=? (car arguments) "tokenizer")
+          (string=? (car (cdr arguments)) "train-bpe"))
+     (let ((result (cli3-tokenizer-train (cdr (cdr arguments))))) result))
+    ((and (string=? (car arguments) "tokenizer")
+          (string=? (car (cdr arguments)) "inspect"))
+     (let ((result (cli3-tokenizer-inspect (cdr (cdr arguments))))) result))
+    ((and (string=? (car arguments) "corpus")
+          (string=? (car (cdr arguments)) "build"))
+     (let ((result (cli3-corpus-build (cdr (cdr arguments))))) result))
+    ((and (string=? (car arguments) "corpus")
+          (string=? (car (cdr arguments)) "inspect"))
+     (let ((result (cli3-corpus-inspect (cdr (cdr arguments))))) result))
+    ((and (string=? (car arguments) "checkpoint")
+          (string=? (car (cdr arguments)) "inspect"))
+     (let ((result (cli3-checkpoint-inspect (cdr (cdr arguments))))) result))
+    (else (cli3-usage "unknown group or command"))))
+
+(define (cli3-private-dispatch arguments)
+  (cli3-native-fallback-status-set 70)
+  (set! cli3-command-published? #f)
+  ;; Reinstall the canonical authenticated C2 projection at the executable
+  ;; entry boundary; no private policy representation crosses into T2.
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+  (guard (raised (#t (cli3-format-raised raised)))
+    (let ((output (cli3-dispatch-command arguments)))
+      (cli3-write-output output)
+      (cli3-native-fallback-status-set 70)
+      (cli3-result 0 "" ""))))

@@ -1,0 +1,4 @@
+;;; CLI3 source-composed successor of the canonical C2 root. Never install.
+
+(load "c2_wave2_root.esk")
+(load "cli3_extension.esk")
