@@ -7,10 +7,11 @@ TR3-B/O plus G3-C4 candidate, SHARED-R2 candidate, nine unregistered E3
 reference files, TR3-O documentation and accepted-main documentation through
 PR #123. The accepted E3 integration successor adds the source-approved bounded
 native-frame leaf, its CI registration and the exact E3-METRICS consumer
-inventory needed for that leaf. This successor adds the reviewed L3S consumer
-inventory repair and the independently approved six-file native parity witness,
-then registers parity against the existing pinned development oracle. It does
-not accept or publish the integrated candidate.
+inventory needed for that leaf. This successor repairs both concrete failures
+from the supported PR #124 run: the reviewed L3S consumer inventory and the
+reviewed TR3-O GNU `nm` query. It also adds the independently approved six-file
+native parity witness and registers parity against the existing pinned
+development oracle. It does not accept or publish the integrated candidate.
 
 ## Authenticated sources
 
@@ -19,13 +20,14 @@ not accept or publish the integrated candidate.
 | Frozen reviewed integration base | `79d71086293ccd51bd569785a19c7409d1e070a9` | `81128ec7c8cb7b4627dad0eeb98e10a624e4fbfd` | exact parent tree; reviewed PR #124 head |
 | TR3-B/O and G3-C4 base | `2006cde9279e52f7d6994ef800a6f1f3cb9c0ec1` | `e1144fec370299b293acfc94e0719d305385a9f2` | prior reviewed implementation union |
 | TR3-B implementation | `071abb72f65fa8286bc49c54eafefe042b8c3576` | `74992144041282953ed465eb3de6b6e77d91ef8e` | implementation/test blobs retained; documentation extended with supported evidence |
-| TR3-O implementation | `783dc576e534b241523e9b1e987933d5c5e433d0` | `67edabf43470b894ff8df3347ad5017889f2e847` | implementation/test blobs retained; shared topology extends the reviewed base union by the E3 command |
-| G3-C4 integration | `637cec09e00d6f9c2414e051836ab50665709606` | `df022486337c92a560147bf1f0d3a9f7a901b5b8` | provider, fixtures and prerequisite hook blobs retained; shared topology extends the reviewed base union by the E3 command |
+| TR3-O implementation | `783dc576e534b241523e9b1e987933d5c5e433d0` | `67edabf43470b894ff8df3347ad5017889f2e847` | nine implementation/test blobs retained; package checker advanced by the scoped portability successor |
+| G3-C4 integration | `637cec09e00d6f9c2414e051836ab50665709606` | `df022486337c92a560147bf1f0d3a9f7a901b5b8` | provider, fixtures and prerequisite hook blobs retained; shared topology extends the reviewed base union by the two E3 gates |
 | SHARED-R2 | `8047cec9ccae8f39ce1e300224659eed3b15fb59` | `e80930797d556edac83fed12ea18c6c4dabcaa2b` | merged with source ancestry |
 | SHARED-R2 evidence | `92c2f5853d1ca3f82c6700f07e47bf9f08052b3e` | `0217c51cdd07e8ec544b02f8a74e8446c2f89063` | evidence-only successor; ROADMAP reconciled |
 | E3 reference toolkit | `37a8078ce756e7f3c22f14a046142d2f09e98807` | `a2767cbb8e22c10ac29d3e18b076de182653264b` | nine `tests/e3_reference` files only |
 | E3 native frame | `38fb9890cd768aad42796d83ec610304b1ee6875` | `43e364b9e9c6efa3856d58b51d0f5376aa3582b6` | five implementation/test/gate paths exact; ROADMAP and CI inventory reconciled |
 | L3S inventory repair | `a6d8851cc334e8ae99b3bde9b6a75e4c2f53aa0a` | `acb1d54b4488d579fe78dfe4568b5e1cff2c6f18` | exact one-line consumer admission; evidence reconciled without replacing E3 rows |
+| TR3-O `nm` portability repair | `2a9f368783ca54b7c7598f0b73126c900ef38361` | `8158bbf34a551db33171fe838df07f2438bbbb2d` | exact test-only two-file delta; no symbol assertion or runtime surface changes |
 | E3 native parity | `e086a61289df13ffcd9778b6cb7f6068a912692d` | `4194e0c8f8af4623959245accd79f46535c594df` | exact six-file parity leaf only; its earlier native-frame import is not replayed |
 | TR3-O documentation | `eef6f420f64c88c3821fbc3a79660e7a2a3e4b8b` | `0c03f85bfde3469dfc18a13dddd34beef1873f48` | exact proposal; integration-ledger and ROADMAP unions |
 | Accepted main documentation | `e899215cff22afeb00b9a5f56bddad9c4cc6c469` | `eb0de48ecfbb0bbe24994b463d7cb9e81c9f72c3` | PR #123 merge; accepted C4 closeout and E3 prerequisite records retained |
@@ -37,8 +39,9 @@ Mode-and-blob comparison against the component heads gives these results:
 - TR3-B: ten implementation/test paths are exact. `docs/ROADMAP.md` is the
   integration status union; `docs/TR3B_OBJECTIVE_BRIDGE.md` differs only by the
   supported focused-evidence record.
-- TR3-O: ten implementation/test paths are exact. Its proposal is now exact to
-  the later documentation source `eef6f420`; `Makefile` and the two CI topology
+- TR3-O: nine implementation/test paths remain exact to `783dc576`; its package
+  checker is the scoped successor from `2a9f368`. Its proposal is exact to the
+  later documentation source `eef6f420`; `Makefile` and the two CI topology
   files extend the reviewed 19-suite/32-command base union only with the two E3
   gates.
 - G3-C4: 36 provider, fixture, workflow and prerequisite-hook paths are exact.
@@ -59,6 +62,10 @@ Mode-and-blob comparison against the component heads gives these results:
   `e086a61`. The accepted native-frame files already present from `38fb9890` are
   not replayed from parity parent `b4ea5fc`. The shared Make/CI inventory and
   ROADMAP are integration unions.
+- TR3-O `nm` portability: the package test and evidence note retain the exact
+  modes and blobs from `2a9f368`. Only the global-defined query changes from the
+  ambiguous `-gU` spelling to `-g --defined-only`; the existing `-gu` query and
+  all symbol assertions remain unchanged.
 - The TR3-O proposal remains byte-for-byte exact to its documentation source.
   Its integration-log record is preserved inside the accepted-main ledger union,
   and its ROADMAP line is combined with TR3-B, accepted G3-C4, SHARED-R2 and the
@@ -103,6 +110,13 @@ The exact E3 native-parity leaf inventory is:
 | `100644` | `b8d1683a1ecf3ab09ec46ff739dd676230f9cec8` | `tests/e3_native_parity/test_frame_parity.c` |
 | `100644` | `118d43a279ecc8725fd24eefd67ce0500e6feb30` | `tests/e3_native_parity/verify_observation.py` |
 
+The exact TR3-O `nm` portability inventory is:
+
+| Mode | Blob | Path |
+|---|---|---|
+| `100644` | `4849a32d268650d8eae1d298f18f60175c04f22f` | `docs/TR3_O_NM_PORTABILITY.md` |
+| `100644` | `1b9da2a9f80ddfb309312142d317d9b1d7a5660d` | `tests/o2/test_tr3_o2_step_clear_package.py` |
+
 ## Conflict and topology audit
 
 The SHARED-R2 merge had no unresolved conflict; Git combined its one-line
@@ -125,6 +139,11 @@ Parity uses `Q0_PYTHON`, which that suite already provisions from pinned Python
 to `tests/q0/requirements-oracle.lock`; Python and PyTorch remain development-test
 dependencies and do not enter the production runtime. The strict inventory is
 therefore 19 suites and 34 unique commands.
+
+The TR3-O `nm` repair changes no CI registration or suite topology. Its package
+test remains in the existing `native-optimizer` command, and the explicit
+`--defined-only` spelling is portable across the supported GNU nm 2.38 host and
+newer compatibility hosts.
 
 The E3-METRICS package audit continues to distinguish its provider source and
 ABI header from compiled dependencies. Its repository-wide source-reference
@@ -156,7 +175,7 @@ The integration-preparation gate passed:
   including exact inventory, sanitizer retention and injected exit-73
   propagation through both aggregates and `model-composition`;
 - `make test-ci-topology`: 19 suites and 34 unique commands;
-- all 128 provenance rows resolve to the declared source and integrated
+- all 130 provenance rows resolve to the declared source and integrated
   modes/blobs, including the five exact E3 native-frame and six exact parity
   paths;
 - all six predecessor manifests verify 118 entries against the integrated tree;
@@ -167,8 +186,8 @@ The integration-preparation gate passed:
   including the exact provider/ABI inventory, reviewed frame consumer, injected
   unknown-consumer rejection, archive/symbol/depfile closures, strict-f32 IR and
   unchanged predecessors;
-- exact source identity passes for the approved E3 native-frame, E3 parity and
-  L3S repair paths;
+- exact source identity passes for the approved E3 native-frame, E3 parity,
+  L3S repair and TR3-O `nm` portability paths;
 - `bash -n scripts/test-e3-native-parity.sh`, `make -n
   test-e3-native-parity`, Python bytecode compilation and `git diff --check`
   pass.
@@ -178,6 +197,12 @@ LLVM 22.1.6 compatibility host. The already authenticated native-frame normal
 and sanitized supported component gate was not duplicated. No full CI,
 expensive native build or component full gate was run for this
 integration-preparation task.
+
+Supported PR #124 full CI run `35916891673` finished with 17 of 19 suites
+passing. Its only failures are the L3S inventory omission and TR3-O GNU `nm`
+option ambiguity addressed by the two reviewed repairs below; the final
+`model-composition` suite passed the genuine compiled D2/M3, M3CG and TR3-B
+gates. This is source evidence for the repairs, not full CI for this successor.
 
 PR #124 head `79d71086293ccd51bd569785a19c7409d1e070a9` exposed the
 missing L3S consumer row in supported full CI run `35916891673`. K1, A2 and L2
@@ -198,6 +223,15 @@ gate ran on the explicitly unsupported CachyOS/LLVM 22.1.6 compatibility host;
 its log SHA-256 is
 `49ab2159e978a360aa547f19f99a05da0545b955c197a6d0372d88e2040f3917`.
 No repair full CI was dispatched.
+
+The second supported PR #124 failure occurred only after the full O2 gate had
+passed, when the TR3-O package test used `nm -gU --format=posix`. GNU nm 2.38
+parses `-U` as `--unicode` and consumes the following option. Reviewed repair
+`2a9f368` replaces the two global-defined queries with explicit `-g
+--defined-only`; it leaves `-gu`, the expected symbols and every runtime source
+unchanged. On supported Ubuntu 22.04/GNU nm 2.38/LLVM 21.1.8, all four focused
+package tests and the full TR3-O transaction, coexistence, regression, privacy
+and sanitizer gate pass.
 
 ## Limits
 
