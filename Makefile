@@ -104,6 +104,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
@@ -133,6 +134,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
@@ -164,6 +166,7 @@ test-ci-core-after-build:
 
 test-ci-optimizer-after-build:
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 
 test-ci-contracts-after-build:
 	/usr/bin/bash scripts/check_a0_api_contract.sh

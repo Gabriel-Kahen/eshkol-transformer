@@ -91,4 +91,4 @@ if grep -Ein 'python|pytorch|torch' \
   die "TR3-O native/source runtime path contains a forbidden Python/PyTorch reference"
 fi
 
-printf 'TR3-O PASS: update+clear transaction, I2 coexistence, O2 regression, privacy, and sanitizers\n'
+printf 'TR3-O PASS: update+clear transaction, I2 coexistence, O2 regression, bridge/package-boundary privacy, and sanitizers\n'

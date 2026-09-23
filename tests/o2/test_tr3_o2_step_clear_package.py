@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -10,7 +11,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BRIDGE = ROOT / "native" / "o2_wave2_package_bridge.c"
 EXTENSION = ROOT / "native" / "tr3_o2_step_clear_extension.esk"
-BASELINE = "35ccace:native/o2_wave2_package_bridge.c"
+BASELINE_SHA256 = "ab2b03ca43ac96b855fade89d77c9468c994e0e445b1ed9f7f5dde78518f428e"
+TR3_BRIDGE_GATE = b"#ifdef ET_TR3_O2_STEP_CLEAR_BRIDGE\n"
+TR3_HEADER_REGION = (
+    TR3_BRIDGE_GATE
+    + b'#include "tr3_o2_step_clear_internal.h"\n'
+    + b"#endif\n"
+)
 
 PRIVATE_BRIDGE_SYMBOLS = {
     "et_tr3_private_o2_trainer_step_clear_prepare_v1",
@@ -61,6 +68,18 @@ def compile_stdin(source: bytes, output: Path, *defines: str) -> None:
 def nm_symbols(obj: Path, flag: str) -> set[str]:
     output = run("nm", flag, "--format=posix", str(obj)).decode()
     return {line.split()[0] for line in output.splitlines() if line.strip()}
+
+
+def reconstruct_pre_tr3_bridge(source: bytes) -> bytes:
+    if source.count(TR3_BRIDGE_GATE) != 2:
+        raise AssertionError("expected exactly two TR3 bridge gate regions")
+    if source.count(TR3_HEADER_REGION) != 1:
+        raise AssertionError("TR3 bridge header gate drifted")
+    reconstructed = source.replace(TR3_HEADER_REGION, b"", 1)
+    body_start = reconstructed.index(TR3_BRIDGE_GATE)
+    body_end = reconstructed.index(b"#endif\n\n", body_start)
+    body_end += len(b"#endif\n\n")
+    return reconstructed[:body_start] + reconstructed[body_end:]
 
 
 class Tr3O2StepClearPackageTests(unittest.TestCase):
@@ -121,8 +140,9 @@ class Tr3O2StepClearPackageTests(unittest.TestCase):
             self.assertEqual(len(entries), expected, name)
 
     def test_gate_absent_o2_and_c2_bridge_objects_match_baseline_bytes(self) -> None:
-        baseline = run("git", "show", BASELINE)
         current = BRIDGE.read_bytes()
+        baseline = reconstruct_pre_tr3_bridge(current)
+        self.assertEqual(hashlib.sha256(baseline).hexdigest(), BASELINE_SHA256)
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             for label, defines in (

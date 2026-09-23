@@ -98,6 +98,7 @@ class TopologyTests(unittest.TestCase):
         text = (ROOT / "Makefile").read_text()
         for command in (
             "/usr/bin/bash scripts/test-o2.sh",
+            "/usr/bin/bash scripts/test-tr3-o.sh",
             "/usr/bin/bash scripts/test-l3s.sh",
             "/usr/bin/bash scripts/test-c2.sh --group c2-operational",
             "/usr/bin/bash scripts/test-t2-boundary.sh",
