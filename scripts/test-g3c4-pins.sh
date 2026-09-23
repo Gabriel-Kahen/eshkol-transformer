@@ -16,7 +16,7 @@ pins_flags=(
 )
 
 git -C "${PROJECT_ROOT}" archive \
-  d5fa9a71b000ab1139a25e9b734b230ab5bda759 | \
+  e20677f2cecd99b5e4aef7b32fa053d5c1ebf5e4 | \
   tar -x -C "${pins_evidence}/base"
 "${pins_cc}" "${pins_flags[@]}" -O2 \
   -c "${pins_evidence}/base/src/eshkol_transformer/m3_call_f32_integration.c" \
