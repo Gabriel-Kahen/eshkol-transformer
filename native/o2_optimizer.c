@@ -6,7 +6,13 @@
 #include <string.h>
 #include <xmmintrin.h>
 
-#if defined(ET_TR3_O2_STEP_CLEAR_NATIVE) &&                                  \
+#if defined(ET_TR3_C_O2_RESTORE_NATIVE) &&                                  \
+    !defined(ET_I2_PRIVATE_OWNED_CLONE_MATCH)
+#error "TR3-C O2 restore requires the shared owned-clone authorizer"
+#endif
+
+#if (defined(ET_TR3_O2_STEP_CLEAR_NATIVE) ||                                 \
+     defined(ET_TR3_C_O2_RESTORE_NATIVE)) &&                                \
     !defined(ET_TR3_O2_PRIVATE_OPERATIONS)
 #define ET_TR3_O2_PRIVATE_OPERATIONS 1
 #define ET_O2_TR3_UNDEFINE_PRIVATE_OPERATIONS 1
@@ -2991,6 +2997,10 @@ int32_t et_o2_test_optimizer_moment_bits_v1(const et_o2_optimizer *candidate,
 
 #ifdef ET_TR3_O2_STEP_CLEAR_NATIVE
 #include "tr3_o2_step_clear.inc"
+#endif
+
+#ifdef ET_TR3_C_O2_RESTORE_NATIVE
+#include "tr3_c_o2_restore.inc"
 #endif
 
 #ifdef ET_O2_TR3_UNDEFINE_PRIVATE_OPERATIONS
