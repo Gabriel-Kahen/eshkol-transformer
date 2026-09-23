@@ -503,10 +503,12 @@ package must not link them into its runtime closure.
 
 ## 8. Required evidence before trainer implementation
 
-The smallest dependency-ready implementation unit is the logical lease registry,
-acquisition preflight, public mutation gates, and fixed internal admissions. It
-does not implement a training step, objective, optimizer transaction, snapshot,
-or restore.
+Evidence is staged by the acyclic units in section 9. The canonical P1
+validators, uninstalled O2 hook infrastructure, and native D2 idle probe are
+independent leaf units. After those pass, the lease-core unit is the one logical
+trainer registry/token, acquisition preflight, overlap/public mutation gates,
+and fixed admissions. Neither stage implements a training step, objective,
+optimizer transaction, snapshot, or restore.
 
 Focused acceptance must cover:
 
@@ -562,18 +564,29 @@ flat total memory or thread synchronization.
 
 ## 9. Dependency disposition
 
-Root must freeze this source-level seam before public trainer implementation.
-Implementation depends on:
+Root must freeze the joint source interfaces and P1 slot numbering before public
+trainer implementation. The accepted #119 O2 exclusion, #120 D2/compositor
+contract, TR3-B bridge, TR3-O transaction, and TR3-C transaction are contract
+inputs. Contract acceptance does not imply that their executable implementations
+must precede the lease core.
 
-- the repaired M3 call guard runtime adoption; this proposal does not duplicate
-  guard ordering;
-- the accepted #119 shared O2 `busy`/`active_operation` invariant;
-- the accepted #120 trainer D2 idle binding and fixed model/O2/D2 compositors;
-- the accepted TR3-B bridge for the unchanged objective/VJP path; and
-- one reviewed aggregate/export manifest proving all raw authorities private;
-- the jointly reviewed canonical P1 slots 64 through 70 and the reviewed O2
-  one-time private hook proving the exact capture and pre-projection-budget
-  overlap boundaries without changing either public ABI.
+Implementation and acceptance proceed in this acyclic order:
+
+1. Implement and test three independent leaf seams against the frozen
+   interfaces: canonical P1 slots 69 and 70 after E3-P1 slots 64 through 68; the
+   O2 hook cell, installer, and standalone-uninstalled call site; and #120's
+   fixed native D2 idle probe. None owns or authenticates a trainer lease.
+2. After repaired M3 call-guard adoption and the #119
+   `busy`/`active_operation` invariant, implement the sole `tr3-trainers`
+   registry/token, acquisition, overlap/public mutation gates, fixed admissions,
+   and installed O2 overlap closure. This lease-core unit consumes the three leaf
+   seams but does not call a #120 compositor.
+3. Implement #120's fixed train-mode checker and model/O2/D2 compositors as
+   consumers of that canonical trainer record, retained fixed vectors, and exact
+   token. They must not create another lease registry, token, or lifetime pin.
+4. Integrate TR3-B, TR3-O, and TR3-C with the full public facade gates. The final
+   aggregate/export manifest must prove all raw authorities private and every
+   component lineage source-composed once.
 
 No additional native lease ABI, P1 handle mutation API, I2 plan kind, optimizer
 state field, D2 cursor field, or C2 representation is required. If implementation
