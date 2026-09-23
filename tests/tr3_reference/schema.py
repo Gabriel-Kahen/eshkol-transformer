@@ -8,13 +8,15 @@ import math
 from pathlib import Path
 import struct
 
-from tests.d2.reference import decode_reference_cursor
+from tests.d2.reference import ReferenceConfig, ReferenceDataset, decode_reference_cursor
+from tests.d2.test_resources import load_d1_resource
 from tests.tr3_reference.constants import (
     FORMAT,
     OPTIMIZER,
     PARAMETER_SHAPES,
     PROFILE,
     PROPOSAL,
+    SOURCE_PATHS,
     TOKENIZER_FINGERPRINT,
     TOLERANCES,
     UPDATE_COUNT,
@@ -62,14 +64,52 @@ def _load(path: Path, maximum: int) -> object:
     return value
 
 
+def _canonical_sha(value: object) -> str:
+    encoded = (json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _f32_word(word: object, where: str) -> float:
+    if not isinstance(word, str) or len(word) != 8 or any(ch not in "0123456789abcdef" for ch in word):
+        _fail(f"{where}: malformed f32 word")
+    value = struct.unpack(">f", bytes.fromhex(word))[0]
+    if not math.isfinite(value):
+        _fail(f"{where}: nonfinite f32 word")
+    return value
+
+
+def _f64_word(word: object, where: str) -> float:
+    if not isinstance(word, str) or len(word) != 16 or any(ch not in "0123456789abcdef" for ch in word):
+        _fail(f"{where}: malformed f64 word")
+    value = struct.unpack(">d", bytes.fromhex(word))[0]
+    if not math.isfinite(value):
+        _fail(f"{where}: nonfinite f64 word")
+    return value
+
+
+def _as_f32(value: float) -> float:
+    return struct.unpack(">f", struct.pack(">f", value))[0]
+
+
+def _gradient_record(record: object, where: str) -> dict[str, list[float]]:
+    if not isinstance(record, dict) or list(record) != list(PATHS):
+        _fail(f"{where}: gradient parameter paths/order mismatch")
+    decoded = {}
+    for path in PATHS:
+        tensor = record[path]
+        _tensor(tensor, SHAPES[path], f"{where}.{path}")
+        decoded[path] = [
+            _f32_word(word, f"{where}.{path}.data[{index}]")
+            for index, word in enumerate(tensor["data"])
+        ]
+    return decoded
+
+
 def _f32_words(values: object, count: int, where: str) -> None:
     if not isinstance(values, list) or len(values) != count:
         _fail(f"{where}: incorrect value count")
     for index, word in enumerate(values):
-        if not isinstance(word, str) or len(word) != 8 or any(ch not in "0123456789abcdef" for ch in word):
-            _fail(f"{where}[{index}]: malformed f32 word")
-        if not math.isfinite(struct.unpack(">f", bytes.fromhex(word))[0]):
-            _fail(f"{where}[{index}]: nonfinite f32 word")
+        _f32_word(word, f"{where}[{index}]")
 
 
 def _tensor(record: object, shape: list[int], where: str) -> None:
@@ -110,6 +150,15 @@ def _batch(record: object, where: str) -> int:
     return weight
 
 
+def _d2_batch(batch) -> dict[str, object]:
+    return {
+        "inputs": list(batch.inputs[0]),
+        "targets": list(batch.targets[0]),
+        "mask": list(batch.loss_mask[0]),
+        "weight": sum(batch.loss_mask[0]),
+    }
+
+
 def _evaluation(record: object, where: str) -> None:
     expected = {
         "batch_count", "batches", "mean", "mean_bits_f64", "numerator",
@@ -121,6 +170,10 @@ def _evaluation(record: object, where: str) -> None:
     if not isinstance(batches, list) or not batches:
         _fail(f"{where}.batches: expected nonempty list")
     weights = [_batch(batch, f"{where}.batches[{index}]") for index, batch in enumerate(batches)]
+    batch_numerators = [
+        _f32_word(batch["numerator_bits"], f"{where}.batches[{index}].numerator_bits")
+        for index, batch in enumerate(batches)
+    ]
     if _exact_int(record["batch_count"], where + ".batch_count", 1) != len(batches):
         _fail(f"{where}: batch count mismatch")
     total = sum(weights)
@@ -128,12 +181,16 @@ def _evaluation(record: object, where: str) -> None:
         _fail(f"{where}: token/weight count mismatch")
     numerator = _finite(record["numerator"], where + ".numerator")
     mean = _finite(record["mean"], where + ".mean")
-    if numerator <= 0 or mean <= 0 or not math.isclose(mean, numerator / total, rel_tol=0, abs_tol=1e-15):
+    expected_numerator = sum(batch_numerators, 0.0)
+    expected_mean = expected_numerator / total
+    if numerator != expected_numerator or mean != expected_mean or numerator <= 0 or mean <= 0:
         _fail(f"{where}: invalid global numerator/weight mean")
-    for field in ("mean_bits_f64", "numerator_bits_after_f64_sum"):
-        word = record[field]
-        if not isinstance(word, str) or len(word) != 16 or any(ch not in "0123456789abcdef" for ch in word):
-            _fail(f"{where}.{field}: malformed f64 word")
+    encoded_numerator = _f64_word(
+        record["numerator_bits_after_f64_sum"], where + ".numerator_bits_after_f64_sum"
+    )
+    encoded_mean = _f64_word(record["mean_bits_f64"], where + ".mean_bits_f64")
+    if encoded_numerator != numerator or encoded_mean != mean:
+        _fail(f"{where}: f64 words differ from numeric accumulation")
 
 
 def validate_trajectory(payload: object) -> None:
@@ -198,6 +255,7 @@ def validate_corpora(payload: object, root: Path) -> None:
     datasets = payload["datasets"]
     if not isinstance(datasets, dict) or set(datasets) != {"train", "heldout", "resume-a1", "resume-a2"}:
         _fail("dataset set mismatch")
+    resources = {}
     for name, record in datasets.items():
         if not isinstance(record, dict) or set(record) != {
             "batches", "end_cursor", "files", "manifest_trailer_sha256", "packing", "shards", "start_cursor"
@@ -220,21 +278,15 @@ def validate_corpora(payload: object, root: Path) -> None:
                 "numerator_bits": "3f800000", "per_token_loss_bits": ["3f800000", "3f800000"],
             }
             _batch(shadow, f"datasets.{name}.batches[{index}]")
-        cursor_fields = {}
-        for cursor_name in ("start_cursor", "end_cursor"):
-            word = record[cursor_name]
-            if not isinstance(word, str) or len(word) % 2 or any(ch not in "0123456789abcdef" for ch in word):
-                _fail(f"datasets.{name}.{cursor_name}: malformed cursor hex")
-            fields = decode_reference_cursor(bytes.fromhex(word))
-            cursor_fields[cursor_name] = fields
-            if fields.vocab_size != 256 or fields.tokenizer_fingerprint != tokenizer["fingerprint"]:
-                _fail(f"datasets.{name}.{cursor_name}: cursor identity mismatch")
-        if cursor_fields["start_cursor"].next_ordinal != 0 or cursor_fields["end_cursor"].next_ordinal != cursor_fields["end_cursor"].total_rows:
-            _fail(f"datasets.{name}: cursor endpoints mismatch")
-        _sha(record["manifest_trailer_sha256"], f"datasets.{name}.manifest_trailer_sha256")
+        trailer = _sha(record["manifest_trailer_sha256"], f"datasets.{name}.manifest_trailer_sha256")
         files = record["files"]
         if not isinstance(files, list) or not files:
             _fail(f"datasets.{name}.files: expected nonempty list")
+        expected_names = ["manifest.etm"] + [
+            f"shard-{index:016d}.ets" for index in range(len(record["shards"]))
+        ]
+        if [item.get("path") if isinstance(item, dict) else None for item in files] != expected_names:
+            _fail(f"datasets.{name}.files: physical filenames mismatch")
         for item in files:
             if not isinstance(item, dict) or set(item) != {"bytes", "path", "sha256"}:
                 _fail(f"datasets.{name}.files: malformed record")
@@ -244,12 +296,37 @@ def validate_corpora(payload: object, root: Path) -> None:
             size = _exact_int(item["bytes"], "file.bytes", 1, 1_048_576)
             if path.stat().st_size != size or hashlib.sha256(path.read_bytes()).hexdigest() != _sha(item["sha256"], "file.sha256"):
                 _fail(f"datasets.{name}.{item['path']}: file metadata mismatch")
+        loaded_shards, digest = load_d1_resource(
+            root / name,
+            expected_fingerprint=TOKENIZER_FINGERPRINT,
+            expected_vocab=256,
+            maximum_total_tokens=sum(map(len, record["shards"])),
+        )
+        normalized_shards = tuple(tuple(shard) for shard in record["shards"])
+        if loaded_shards != normalized_shards or digest.hex() != trailer:
+            _fail(f"datasets.{name}: physical D1 resource differs from schema")
+        config = ReferenceConfig(1, 2, None, 1, record["packing"])
+        dataset = ReferenceDataset(
+            loaded_shards,
+            config,
+            manifest_digest=digest,
+            tokenizer_fingerprint=TOKENIZER_FINGERPRINT,
+            vocab_size=256,
+        )
+        if dataset.snapshot().hex() != record["start_cursor"]:
+            _fail(f"datasets.{name}: start cursor differs from authentic D2 state")
+        replayed = []
+        while (batch := dataset.next_batch()) is not None:
+            replayed.append(_d2_batch(batch))
+        if replayed != record["batches"] or dataset.snapshot().hex() != record["end_cursor"]:
+            _fail(f"datasets.{name}: batches or end cursor differ from authentic D2 replay")
+        resources[name] = (loaded_shards, digest, config)
     cases = payload["resume_cases"]
     if not isinstance(cases, dict) or set(cases) != {"accumulation-1", "accumulation-2-unequal-mask"}:
         _fail("resume case set mismatch")
-    for name, expected_a, expected_weights in (
-        ("accumulation-1", 1, [2]),
-        ("accumulation-2-unequal-mask", 2, [1, 2]),
+    for name, dataset_name, expected_a, expected_weights in (
+        ("accumulation-1", "resume-a1", 1, [2]),
+        ("accumulation-2-unequal-mask", "resume-a2", 2, [1, 2]),
     ):
         case = cases[name]
         if not isinstance(case, dict) or set(case) != {
@@ -257,31 +334,74 @@ def validate_corpora(payload: object, root: Path) -> None:
             "epoch_start_cursor", "saved_cursor", "saved_next_ordinal", "total_weight",
         }:
             _fail(f"resume_cases.{name}: fields differ")
-        if case["K"] != 1 or case["R"] != 3 or case["accumulation_steps"] != expected_a or case["epoch_crossings"] != 1:
+        if (
+            _exact_int(case["K"], f"resume_cases.{name}.K", 1) != 1
+            or _exact_int(case["R"], f"resume_cases.{name}.R", 3) != 3
+            or _exact_int(case["accumulation_steps"], f"resume_cases.{name}.accumulation_steps", 1) != expected_a
+        ):
             _fail(f"resume_cases.{name}: boundary contract mismatch")
         contributions = case["contributions"]
         if not isinstance(contributions, list) or len(contributions) != expected_a:
             _fail(f"resume_cases.{name}: contribution count mismatch")
+        loaded_shards, digest, config = resources[dataset_name]
+        dataset = ReferenceDataset(
+            loaded_shards,
+            config,
+            manifest_digest=digest,
+            tokenizer_fingerprint=TOKENIZER_FINGERPRINT,
+            vocab_size=256,
+        )
+        epoch_start = dataset.snapshot()
+        if case["epoch_start_cursor"] != epoch_start.hex():
+            _fail(f"resume_cases.{name}: epoch-start cursor mismatch")
+        for _ in range(case["K"]):
+            if dataset.next_batch() is None:
+                _fail(f"resume_cases.{name}: saved position exceeds dataset")
+        saved = dataset.snapshot()
+        saved_fields = decode_reference_cursor(saved)
+        if (
+            case["saved_cursor"] != saved.hex()
+            or _exact_int(case["saved_next_ordinal"], f"resume_cases.{name}.saved_next_ordinal")
+            != saved_fields.next_ordinal
+        ):
+            _fail(f"resume_cases.{name}: saved cursor/ordinal mismatch")
         weights = []
-        ordinals = []
+        crossings = 0
+        epoch = 0
         for index, contribution in enumerate(contributions):
             if not isinstance(contribution, dict) or set(contribution) != {"batch", "contribution_ordinal", "epoch"}:
                 _fail(f"resume_cases.{name}.contributions[{index}]: fields differ")
-            if contribution["epoch"] not in (0, 1):
-                _fail(f"resume_cases.{name}.contributions[{index}]: invalid epoch")
-            batch = contribution["batch"]
-            if not isinstance(batch, dict) or set(batch) != {"inputs", "mask", "targets", "weight"}:
+            emitted_batch = dataset.next_batch()
+            if emitted_batch is None:
+                crossings += 1
+                epoch += 1
+                dataset.seek(epoch_start)
+                emitted_batch = dataset.next_batch()
+            if emitted_batch is None:
+                _fail(f"resume_cases.{name}: replay remained exhausted after epoch reset")
+            recorded_batch = contribution["batch"]
+            if not isinstance(recorded_batch, dict) or set(recorded_batch) != {"inputs", "mask", "targets", "weight"}:
                 _fail(f"resume_cases.{name}.contributions[{index}].batch: fields differ")
-            shadow = batch | {
-                "argmax": batch["targets"], "unique_argmax": [True, True],
+            shadow = recorded_batch | {
+                "argmax": recorded_batch["targets"], "unique_argmax": [True, True],
                 "numerator_bits": "3f800000", "per_token_loss_bits": ["3f800000", "3f800000"],
             }
-            weights.append(_batch(shadow, f"resume_cases.{name}.contributions[{index}].batch"))
-            ordinals.append(contribution["contribution_ordinal"])
-        if weights != expected_weights or ordinals != list(range(expected_a)) or case["total_weight"] != sum(weights):
+            weight = _batch(shadow, f"resume_cases.{name}.contributions[{index}].batch")
+            actual = {
+                "batch": _d2_batch(emitted_batch),
+                "contribution_ordinal": index,
+                "epoch": epoch,
+            }
+            if contribution != actual:
+                _fail(f"resume_cases.{name}.contributions[{index}]: authentic replay mismatch")
+            weights.append(weight)
+        if (
+            weights != expected_weights
+            or _exact_int(case["total_weight"], f"resume_cases.{name}.total_weight", 1) != sum(weights)
+            or _exact_int(case["epoch_crossings"], f"resume_cases.{name}.epoch_crossings") != crossings
+            or case["end_cursor"] != dataset.snapshot().hex()
+        ):
             _fail(f"resume_cases.{name}: contribution sequence mismatch")
-        for cursor_name in ("epoch_start_cursor", "saved_cursor", "end_cursor"):
-            decode_reference_cursor(bytes.fromhex(case[cursor_name]))
 
 
 def validate_summary(payload: object) -> None:
@@ -323,20 +443,57 @@ def validate_summary(payload: object) -> None:
         _fail("held-out global loss did not decrease")
     proof = payload["accumulation_reference"]
     if not isinstance(proof, dict) or set(proof) != {
-        "bit_identical", "combined_numerator_gradient_sha256", "contribution_ordinals",
-        "max_abs_difference", "parameter_count", "summed_numerator_gradient_sha256",
-        "total_weight", "weights", "within_parameter_tolerance",
+        "bit_identical", "combined_numerator_gradient_sha256", "combined_numerator_gradients",
+        "contribution_ordinals", "max_abs_difference", "parameter_count",
+        "summed_numerator_gradient_sha256", "summed_numerator_gradients",
+        "total_weight", "weights", "within_parameter_tolerance", "wrong_per_batch_mean_gradients",
         "wrong_per_batch_mean_max_abs_difference",
     }:
         _fail("accumulation proof fields differ")
-    if proof["weights"] != [2, 1] or proof["total_weight"] != 3 or proof["parameter_count"] != 14:
+    weights = proof["weights"]
+    ordinals = proof["contribution_ordinals"]
+    if not isinstance(weights, list) or len(weights) != 2 or not isinstance(ordinals, list) or len(ordinals) != 2:
         _fail("accumulation proof contract mismatch")
-    if proof["within_parameter_tolerance"] is not True or proof["max_abs_difference"] > 2.0e-6:
+    if (
+        [_exact_int(value, f"accumulation.weights[{index}]", 1) for index, value in enumerate(weights)] != [2, 1]
+        or [_exact_int(value, f"accumulation.ordinals[{index}]") for index, value in enumerate(ordinals)] != [0, 1]
+        or _exact_int(proof["total_weight"], "accumulation.total_weight", 1) != 3
+        or _exact_int(proof["parameter_count"], "accumulation.parameter_count", 1) != len(PATHS)
+    ):
+        _fail("accumulation proof contract mismatch")
+    summed = _gradient_record(proof["summed_numerator_gradients"], "accumulation.summed")
+    combined = _gradient_record(proof["combined_numerator_gradients"], "accumulation.combined")
+    wrong = _gradient_record(proof["wrong_per_batch_mean_gradients"], "accumulation.wrong_mean")
+    summed_digest = _canonical_sha(proof["summed_numerator_gradients"])
+    combined_digest = _canonical_sha(proof["combined_numerator_gradients"])
+    reported_summed_digest = _sha(
+        proof["summed_numerator_gradient_sha256"], "accumulation.summed.sha256"
+    )
+    reported_combined_digest = _sha(
+        proof["combined_numerator_gradient_sha256"], "accumulation.combined.sha256"
+    )
+    if reported_summed_digest != summed_digest or reported_combined_digest != combined_digest:
+        _fail("accumulation gradient digest mismatch")
+    bit_identical = proof["summed_numerator_gradients"] == proof["combined_numerator_gradients"]
+    if type(proof["bit_identical"]) is not bool or proof["bit_identical"] != bit_identical:
+        _fail("accumulation bit-identity flag mismatch")
+    differences = []
+    wrong_differences = []
+    for path in PATHS:
+        for left, right, wrong_value in zip(summed[path], combined[path], wrong[path]):
+            differences.append(abs(_as_f32(left - right)))
+            normalized_left = _as_f32(left / 3)
+            normalized_wrong = _as_f32(wrong_value / 2)
+            wrong_differences.append(abs(_as_f32(normalized_left - normalized_wrong)))
+    measured_delta = _finite(proof["max_abs_difference"], "accumulation max delta")
+    if measured_delta < 0 or measured_delta != max(differences):
+        _fail("accumulation max delta differs from gradient records")
+    within = measured_delta <= TOLERANCES["parameter"]["absolute"]
+    if type(proof["within_parameter_tolerance"]) is not bool or proof["within_parameter_tolerance"] != within or not within:
         _fail("combined numerator gradient parity failed")
-    if _finite(proof["wrong_per_batch_mean_max_abs_difference"], "wrong mean delta") <= 0:
+    wrong_delta = _finite(proof["wrong_per_batch_mean_max_abs_difference"], "wrong mean delta")
+    if wrong_delta <= 0 or wrong_delta != max(wrong_differences):
         _fail("wrong mean-seed control did not differ")
-    for field in ("summed_numerator_gradient_sha256", "combined_numerator_gradient_sha256"):
-        _sha(proof[field], "accumulation_reference." + field)
     thresholds = payload["thresholds"]
     if thresholds != {"final_training_mean_ce_strict_upper": 0.05, "tolerances": TOLERANCES}:
         _fail("summary thresholds differ from frozen contract")
@@ -351,7 +508,11 @@ def validate_summary(payload: object) -> None:
         _fail("provenance fields differ")
     if provenance["python"] != "3.14.6" or provenance["torch"] != "2.13.0+cpu" or provenance["environment"] != {"ATEN_CPU_CAPABILITY": "default", "MKL_CBWR": "COMPATIBLE"} or provenance["proposal"] != PROPOSAL:
         _fail("pinned provenance mismatch")
-    for path, digest in provenance["source_sha256"].items():
+    source_hashes = provenance["source_sha256"]
+    if not isinstance(source_hashes, dict) or set(source_hashes) != set(SOURCE_PATHS):
+        _fail("provenance source inventory mismatch")
+    for path in SOURCE_PATHS:
+        digest = source_hashes[path]
         _sha(digest, "provenance.source_sha256")
         candidate = Path(path)
         if candidate.is_absolute() or ".." in candidate.parts or hashlib.sha256((Path(__file__).resolve().parents[2] / candidate).read_bytes()).hexdigest() != digest:

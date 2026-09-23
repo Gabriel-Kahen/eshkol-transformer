@@ -26,6 +26,7 @@ from tests.tr3_reference.constants import (
     OPTIMIZER,
     PROFILE,
     PROPOSAL,
+    SOURCE_PATHS,
     TOLERANCES,
     UPDATE_COUNT,
     VERSION,
@@ -34,18 +35,6 @@ from tests.tr3_reference.corpus import materialize
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_PATHS = (
-    "tests/tr3_reference/constants.py",
-    "tests/tr3_reference/corpus.py",
-    "tests/tr3_reference/schema.py",
-    "tests/tr3_reference/generate_reference.py",
-    "tests/m3/reference.py",
-    "tests/n3k/test_initializer_reference.py",
-    "tests/d2/reference.py",
-    "tests/d2/test_resources.py",
-    "tests/t1/reference.py",
-    "tests/q0/requirements-oracle.lock",
-)
 
 
 def canonical(value: object) -> bytes:
@@ -177,7 +166,6 @@ def _accumulation_proof(batches: list[dict[str, object]]) -> dict[str, object]:
     for batch in batches:
         numerator = _loss(wrong, batch)[2]
         (numerator / batch["weight"]).backward()
-    exact = all(torch.equal(separate[path].grad, combined[path].grad) for path in separate)
     max_abs = max(
         float((separate[path].grad - combined[path].grad).abs().max().item())
         for path in separate
@@ -188,6 +176,8 @@ def _accumulation_proof(batches: list[dict[str, object]]) -> dict[str, object]:
     )
     separate_record = {path: _tensor(value.grad) for path, value in separate.items()}
     combined_record = {path: _tensor(value.grad) for path, value in combined.items()}
+    wrong_record = {path: _tensor(value.grad) for path, value in wrong.items()}
+    exact = separate_record == combined_record
     return {
         "contribution_ordinals": [0, 1],
         "weights": [2, 1],
@@ -195,6 +185,9 @@ def _accumulation_proof(batches: list[dict[str, object]]) -> dict[str, object]:
         "parameter_count": len(separate),
         "summed_numerator_gradient_sha256": _digest_record(separate_record),
         "combined_numerator_gradient_sha256": _digest_record(combined_record),
+        "summed_numerator_gradients": separate_record,
+        "combined_numerator_gradients": combined_record,
+        "wrong_per_batch_mean_gradients": wrong_record,
         "bit_identical": exact,
         "within_parameter_tolerance": max_abs <= TOLERANCES["parameter"]["absolute"],
         "max_abs_difference": max_abs,

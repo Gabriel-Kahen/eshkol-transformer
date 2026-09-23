@@ -61,6 +61,19 @@ PROPOSAL = {
     "section": 13,
 }
 
+SOURCE_PATHS = (
+    "tests/tr3_reference/constants.py",
+    "tests/tr3_reference/corpus.py",
+    "tests/tr3_reference/schema.py",
+    "tests/tr3_reference/generate_reference.py",
+    "tests/m3/reference.py",
+    "tests/n3k/test_initializer_reference.py",
+    "tests/d2/reference.py",
+    "tests/d2/test_resources.py",
+    "tests/t1/reference.py",
+    "tests/q0/requirements-oracle.lock",
+)
+
 PARAMETER_SHAPES = {
     "blocks/0/attention/key/weight": [4, 4],
     "blocks/0/attention/output/weight": [4, 4],

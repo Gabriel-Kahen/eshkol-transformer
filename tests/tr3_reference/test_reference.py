@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
 from tests.tr3_reference.generate_reference import build, canonical
-from tests.tr3_reference.schema import validate_output
+from tests.tr3_reference.schema import validate_output, validate_summary
 
 
 HERE = Path(__file__).resolve().parent
@@ -50,6 +51,44 @@ class TR3ReferenceTests(unittest.TestCase):
             proof = summary["accumulation_reference"]
             self.assertLessEqual(proof["max_abs_difference"], 2.0e-6)
             self.assertGreater(proof["wrong_per_batch_mean_max_abs_difference"], 0.0)
+
+            mutations = []
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["contribution_ordinals"] = [1, 0]
+            mutations.append(("contribution ordinals", changed))
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["contribution_ordinals"] = [0.0, 1.0]
+            mutations.append(("ordinal types", changed))
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["weights"] = [2.0, 1.0]
+            mutations.append(("weight types", changed))
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["bit_identical"] = True
+            mutations.append(("bit identity", changed))
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["max_abs_difference"] = -1.0
+            mutations.append(("negative delta", changed))
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["summed_numerator_gradient_sha256"] = "0" * 64
+            mutations.append(("gradient digest", changed))
+            changed = copy.deepcopy(summary)
+            changed["accumulation_reference"]["within_parameter_tolerance"] = False
+            mutations.append(("tolerance flag", changed))
+            changed = copy.deepcopy(summary)
+            changed["training"]["before"]["numerator_bits_after_f64_sum"] = "0000000000000000"
+            mutations.append(("numerator f64 word", changed))
+            changed = copy.deepcopy(summary)
+            changed["heldout"]["after"]["mean_bits_f64"] = "0000000000000000"
+            mutations.append(("mean f64 word", changed))
+            changed = copy.deepcopy(summary)
+            changed["provenance"]["source_sha256"].pop("tests/d2/reference.py")
+            mutations.append(("provenance omission", changed))
+            changed = copy.deepcopy(summary)
+            changed["provenance"]["source_sha256"]["tests/unexpected.py"] = "0" * 64
+            mutations.append(("provenance addition", changed))
+            for label, changed in mutations:
+                with self.subTest(mutation=label), self.assertRaises(ValueError):
+                    validate_summary(changed)
 
     def test_manifest_detects_generated_artifact_mutation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tr3-tamper-") as raw:

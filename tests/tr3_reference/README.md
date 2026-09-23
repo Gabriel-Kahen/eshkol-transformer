@@ -35,6 +35,12 @@ mathematical tests with the same environment and Python executable as the genera
 The held-out dataset has two batches with mask weights `[2,1]` and active
 transitions disjoint from training. The cursor records also derive an `A=1` case
 and an `A=2` unequal-mask case whose first resumed update crosses dataset EOS.
+The validator reconstructs the authentic D1 resources and D2 datasets, then
+replays the saved position, EOS reset, contribution order, epochs, and end cursor.
+The generated summary retains all three 14-parameter gradient records used to
+recompute the unequal-mask tolerance result, its bit-identity flag, and the wrong
+per-batch-mean control. Those records establish internal evidence consistency;
+the pinned PyTorch regeneration remains the independent mathematical computation.
 These are mathematical cursor/replay references. They do not prove native restore,
 checkpoint equivalence, mode restoration, failure atomicity, or compiled execution.
 Future native TR3 acceptance must compare its complete trajectory within the frozen

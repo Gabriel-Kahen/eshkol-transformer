@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 import struct
 import tempfile
@@ -70,6 +71,36 @@ class TR3SchemaTests(unittest.TestCase):
                 [item["batch"]["weight"] for item in payload["resume_cases"]["accumulation-2-unequal-mask"]["contributions"]],
                 [1, 2],
             )
+            a1 = payload["resume_cases"]["accumulation-1"]
+            mutations = []
+
+            changed = copy.deepcopy(payload)
+            changed["resume_cases"]["accumulation-1"]["saved_next_ordinal"] = 999
+            mutations.append(("saved ordinal", changed))
+            changed = copy.deepcopy(payload)
+            self.assertEqual(a1["end_cursor"], a1["saved_cursor"])
+            changed["resume_cases"]["accumulation-1"]["end_cursor"] = a1[
+                "epoch_start_cursor"
+            ]
+            mutations.append(("end cursor", changed))
+            changed = copy.deepcopy(payload)
+            changed["resume_cases"]["accumulation-1"]["epoch_start_cursor"] = a1["saved_cursor"]
+            mutations.append(("epoch start", changed))
+            changed = copy.deepcopy(payload)
+            changed["resume_cases"]["accumulation-2-unequal-mask"]["saved_cursor"] = a1["saved_cursor"]
+            mutations.append(("cursor identity/config", changed))
+            changed = copy.deepcopy(payload)
+            changed["resume_cases"]["accumulation-2-unequal-mask"]["contributions"][0]["epoch"] = 1
+            mutations.append(("epoch sequence", changed))
+            changed = copy.deepcopy(payload)
+            changed["resume_cases"]["accumulation-2-unequal-mask"]["contributions"][0]["batch"]["targets"][0] ^= 1
+            mutations.append(("contribution replay", changed))
+            changed = copy.deepcopy(payload)
+            changed["resume_cases"]["accumulation-2-unequal-mask"]["epoch_crossings"] = 0
+            mutations.append(("crossing count", changed))
+            for label, changed in mutations:
+                with self.subTest(mutation=label), self.assertRaises(ValueError):
+                    schema.validate_corpora(changed, root)
 
     def test_rejects_cursor_checksum_identity_and_ordinal(self) -> None:
         config = ReferenceConfig(1, 2, None, 1, True)
