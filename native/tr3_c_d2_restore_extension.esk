@@ -1,0 +1,206 @@
+;;; Trainer-private D2 restore binding for TR3-C. Never load or install this
+;;; source as part of the public D2 package. Its trusted caller must first load
+;;; d2_wave2_root.esk.
+
+(extern i64 tr3-d2-native-idle-preflight ptr
+        :real et_tr3_c_d2_dataset_idle_preflight_v1)
+
+(define tr3-d2-restore-plan-tag (vector 'tr3-c-d2-restore-plan-v1))
+(define tr3-d2-restore-shadow-tag (vector 'tr3-c-d2-restore-shadow-v1))
+(define tr3-d2-restore-query (vector 'tr3-c-d2-restore-query-v1))
+(define tr3-d2-restore-plan-factory-kind 3)
+
+;;; Public plan fields:
+;;; [tag self owner outer-state core-state phase generation status
+;;;  precommit-ordinal target-current-ordinal total-rows authority]
+;;; The unary authority closure retains one hidden 13-slot shadow: the same
+;;; first 12 fields plus the source-private query identity in slot 12.
+;;; Its factory code address is authenticated by the feature-gated D2 native
+;;; object before any call, so check never dispatches through caller code.
+(define tr3-d2-restore-plan-length 12)
+
+(define (tr3-d2-make-plan-authority shadow)
+  (lambda (query)
+    (if (eq? query (vector-ref shadow 12)) shadow
+        (error "tr3-c-d2-restore-plan:v1"))))
+
+(define (tr3-d2-plan-invalid operation)
+  (d2-fail 'invalid-argument operation
+           "expected an authentic TR3-C D2 restore plan"))
+
+(define (tr3-d2-plan-shadow candidate operation)
+  (if (or (not (vector? candidate))
+          (not (= (vector-length candidate) tr3-d2-restore-plan-length))
+          (not (eq? (vector-ref candidate 0) tr3-d2-restore-plan-tag))
+          (not (eq? (vector-ref candidate 1) candidate))
+          (not (procedure? (vector-ref candidate 11))))
+      (tr3-d2-plan-invalid operation))
+  (let ((authority (vector-ref candidate 11)))
+    (if (not (= (d2-native-shell-factory-validate
+                 authority tr3-d2-restore-plan-factory-kind) 0))
+        (tr3-d2-plan-invalid operation))
+    (let ((shadow
+           (guard (caught (#t (tr3-d2-plan-invalid operation)))
+             (authority tr3-d2-restore-query))))
+      (if (or (not (vector? shadow))
+              (not (= (vector-length shadow) 13))
+              (not (eq? (vector-ref shadow 0) tr3-d2-restore-shadow-tag))
+              (not (eq? (vector-ref shadow 1) candidate))
+              (not (eq? (vector-ref shadow 2) (vector-ref candidate 2)))
+              (not (eq? (vector-ref shadow 3) (vector-ref candidate 3)))
+              (not (eq? (vector-ref shadow 4) (vector-ref candidate 4)))
+              (not (eq? (vector-ref shadow 5) (vector-ref candidate 5)))
+              (not (equal? (vector-ref shadow 6) (vector-ref candidate 6)))
+              (not (eq? (vector-ref shadow 7) (vector-ref candidate 7)))
+              (not (equal? (vector-ref shadow 8) (vector-ref candidate 8)))
+              (not (equal? (vector-ref shadow 9) (vector-ref candidate 9)))
+              (not (equal? (vector-ref shadow 10) (vector-ref candidate 10)))
+              (not (eq? (vector-ref shadow 11) authority))
+              (not (eq? (vector-ref shadow 12) tr3-d2-restore-query)))
+          (tr3-d2-plan-invalid operation))
+      shadow)))
+
+(define (tr3-d2-plan-admit candidate operation)
+  (let ((shadow (tr3-d2-plan-shadow candidate operation)))
+    (if (not (eq? (vector-ref shadow 5) 'prepared))
+        (d2-fail 'invalid-state operation
+                 "TR3-C D2 restore plan is not prepared"))
+    candidate))
+
+(define (tr3-d2-plan-clear! plan terminal-phase)
+  (vector-set! plan 1 #f)
+  (vector-set! plan 2 #f)
+  (vector-set! plan 3 #f)
+  (vector-set! plan 4 #f)
+  (vector-set! plan 5 terminal-phase)
+  (vector-set! plan 6 #f)
+  (vector-set! plan 7 #f)
+  (vector-set! plan 8 #f)
+  (vector-set! plan 9 #f)
+  (vector-set! plan 10 #f)
+  (vector-set! plan 11 #f)
+  #t)
+
+(define (tr3-d2-decode cursor operation)
+  (guard
+   (caught
+    ((d2-core-error? caught)
+     (d2-fail (d2-core-error-category caught) operation
+              (d2-core-error-message caught)))
+    (else (raise caught)))
+   (d2-core-cursor-decode cursor)))
+
+(define (tr3-d2-cursor-identity=? left right)
+  (and (d2-core-bytes=? (vector-ref left 1) (vector-ref right 1))
+       (string=? (vector-ref left 2) (vector-ref right 2))
+       (let loop ((index 3))
+         (if (= index 15) #t
+             (and (equal? (vector-ref left index)
+                          (vector-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (tr3-d2-native-idle! owner operation)
+  (let ((result (tr3-d2-native-idle-preflight owner)))
+    (if (not (= result (d2-native-last-status)))
+        (d2-fail 'internal operation
+                 "TR3-C D2 idle probe status diverged"))
+    (if (not (= result 0))
+        (d2-fail (if (= result 2) 'invalid-state 'invalid-argument)
+                 operation "TR3-C D2 dataset is not natively idle"))
+    #t))
+
+(define (tr3-d2-source-idle! state operation)
+  (let ((generation (vector-ref state 8))
+        (status (vector-ref state 10))
+        (borrows (vector-ref state 15)))
+    (if (or (not (d2-core-nonnegative-i64? generation))
+            (not (d2-core-nonnegative-i64? borrows))
+            (not (= borrows 0))
+            (not (or (eq? status 'none) (eq? status 'released)))
+            (and (eq? status 'released) (= generation 0)))
+        (d2-fail 'invalid-state operation
+                 "TR3-C D2 dataset is not an exact idle source")))
+  #t)
+
+(define (tr3-d2-restore-prepare-internal
+         dataset current-cursor epoch-start-cursor)
+  (let* ((operation 'trainer-load-state!)
+         (state (d2-open-dataset-state dataset operation))
+         (owner (vector-ref state 1))
+         (core (vector-ref state 6)))
+    (tr3-d2-source-idle! state operation)
+    (tr3-d2-native-idle! owner operation)
+    (let* ((current (tr3-d2-decode current-cursor operation))
+           (epoch (tr3-d2-decode epoch-start-cursor operation))
+           (total (vector-ref current 14))
+           (target (vector-ref current 15))
+           (epoch-start (vector-ref epoch 15)))
+      (if (not (tr3-d2-cursor-identity=? current epoch))
+          (d2-fail 'corrupt-data operation
+                   "TR3-C D2 cursor pair identity is inconsistent"))
+      (if (or (not (d2-core-state-identity=? core current))
+              (not (d2-core-state-identity=? core epoch)))
+          (d2-fail 'invalid-argument operation
+                   "TR3-C D2 cursor pair belongs to another dataset"))
+      (if (or (= epoch-start total) (> epoch-start target) (> target total))
+          (d2-fail 'corrupt-data operation
+                   "TR3-C D2 cursor continuation is inconsistent"))
+      ;; Allocate and parse only in prepare. Neither cursor bytevector nor the
+      ;; decoded epoch-start state is retained by this D2 plan or its shadow.
+      (let* ((generation (vector-ref state 8))
+             (status (vector-ref state 10))
+             (precommit (vector-ref core 15))
+             (shadow
+              (vector tr3-d2-restore-shadow-tag #f owner state core 'prepared
+                      generation status precommit target total #f
+                      tr3-d2-restore-query))
+             (authority (tr3-d2-make-plan-authority shadow))
+             (plan
+              (vector tr3-d2-restore-plan-tag #f owner state core 'prepared
+                      generation status precommit target total authority)))
+        (vector-set! plan 1 plan)
+        (vector-set! shadow 1 plan)
+        (vector-set! shadow 11 authority)
+        (if (not (= (d2-native-shell-factory-register
+                     authority tr3-d2-restore-plan-factory-kind) 0))
+            (d2-fail 'internal operation
+                     "TR3-C D2 restore authority factory diverged"))
+        plan))))
+
+(define (tr3-d2-restore-check-internal candidate)
+  (let* ((operation 'trainer-load-state!)
+         (plan (tr3-d2-plan-admit candidate operation))
+         (owner (vector-ref plan 2))
+         (expected-state (vector-ref plan 3))
+         (expected-core (vector-ref plan 4))
+         (state (d2-open-dataset-state owner operation)))
+    (if (or (not (eq? state expected-state))
+            (not (eq? (vector-ref state 1) owner))
+            (not (eq? (vector-ref state 6) expected-core))
+            (not (equal? (vector-ref state 8) (vector-ref plan 6)))
+            (not (eq? (vector-ref state 10) (vector-ref plan 7)))
+            (not (equal? (vector-ref expected-core 15)
+                         (vector-ref plan 8)))
+            (not (equal? (vector-ref expected-core 14)
+                         (vector-ref plan 10)))
+            (not (d2-core-nonnegative-i64? (vector-ref plan 9)))
+            (not (d2-core-nonnegative-i64? (vector-ref plan 10)))
+            (> (vector-ref plan 9) (vector-ref plan 10)))
+        (d2-fail 'invalid-state operation
+                 "TR3-C D2 restore witnesses changed before commit"))
+    (tr3-d2-source-idle! state operation)
+    (tr3-d2-native-idle! owner operation)
+    #t))
+
+;;; Trusted sealed tail. The caller must have completed the final check before
+;;; sealing. It performs no decode, allocation, callback, public seek, or
+;;; recoverable validation after the first live write.
+(define (tr3-d2-restore-commit-internal! plan)
+  (vector-set! (vector-ref plan 4) 15 (vector-ref plan 9))
+  (vector-set! (vector-ref plan 3) 10 'none)
+  (vector-set! (vector-ref plan 3) 16 #f))
+
+(define (tr3-d2-restore-abort-internal! candidate)
+  (let* ((operation 'trainer-load-state!)
+         (plan (tr3-d2-plan-admit candidate operation)))
+    (tr3-d2-plan-clear! plan 'aborted)))

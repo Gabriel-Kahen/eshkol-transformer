@@ -1,0 +1,338 @@
+(load "d2_wave2_root.esk")
+(load "tr3_c_d2_restore_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "TR3-C D2 RESTORE FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+(define (error-at? category operation thunk)
+  (guard (raised (#t (and (transformer-error? raised)
+                          (eq? category (transformer-error-category raised))
+                          (eq? operation
+                               (transformer-error-operation raised)))))
+    (thunk)
+    #f))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (path root leaf) (string-append root "/" leaf))
+(define (config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 1
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 17
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f))
+(define (open-dataset directory tokenizer)
+  (d2-token-dataset-open (config directory) tokenizer))
+(define (advance dataset)
+  (let ((batch (d2-token-dataset-next-batch dataset)))
+    (if (d2-token-dataset-end? batch) #f
+        (begin
+          (d2-token-batch-release! batch)
+          (d2-token-dataset-cursor dataset)))))
+(define (plan-has-bytevector? plan)
+  (let loop ((index 0))
+    (if (= index (vector-length plan)) #f
+        (or (bytevector? (vector-ref plan index))
+            (loop (+ index 1))))))
+(define (cursor-with-ordinal cursor ordinal)
+  (let* ((copy (bytevector-copy cursor 0 (bytevector-length cursor)))
+         (header-bytes (d2-core-load-unsigned-le copy 12 4)))
+    (d2-core-store-unsigned-le! copy 120 8 ordinal)
+    (let* ((prefix (bytevector-copy copy 0 header-bytes))
+           (digest
+            (c1-sha256
+             (d2-core-concat d2-core-cursor-checksum-domain prefix))))
+      (d2-core-copy-into! copy header-bytes digest))
+    copy))
+(define (plan-field-tamper-rejected? plan index replacement)
+  (let ((original (vector-ref plan index)))
+    (vector-set! plan index replacement)
+    (let ((rejected
+           (error-at? 'invalid-argument 'trainer-load-state!
+             (lambda () (tr3-d2-restore-check-internal plan)))))
+      (vector-set! plan index original)
+      rejected)))
+
+(define args (command-line))
+(define tokenizer-path (car (cdr args)))
+(define resources (car (cdr (cdr args))))
+(define policy (c1-wave2-persistence-policy 1048576 1048576 1048576 1 'cpu))
+(define tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
+
+;;; Detached current and epoch-start cursors come from a separate exact D2
+;;; owner, as they do after the C2 source borrow has shut down.
+(define source (open-dataset (path resources "exact") tokenizer))
+(define start (d2-token-dataset-cursor source))
+(define after-one (advance source))
+(define after-two (advance source))
+(define at-eos (advance source))
+(d2-token-dataset-close! source)
+
+(define receiver (open-dataset (path resources "exact") tokenizer))
+(define receiver-start (d2-token-dataset-cursor receiver))
+(define first-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(check "prepare leaves the current cursor unchanged"
+       (bytes=? receiver-start (d2-token-dataset-cursor receiver)))
+(check "plan retains exact witnesses and current target"
+       (and (= (vector-length first-plan) 12)
+            (eq? (vector-ref first-plan 1) first-plan)
+            (eq? (vector-ref first-plan 2) receiver)
+            (= (vector-ref first-plan 8) 0)
+            (= (vector-ref first-plan 9) 2)
+            (= (vector-ref first-plan 10) 3)))
+(check "D2 plan retains neither current nor epoch cursor bytes"
+       (and (not (plan-has-bytevector? first-plan))
+            (not (eq? first-plan start))
+            (not (eq? first-plan after-two))))
+(check "read-only check preserves current cursor"
+       (and (tr3-d2-restore-check-internal first-plan)
+            (bytes=? receiver-start (d2-token-dataset-cursor receiver))))
+(check "copied plan has no authority"
+       (error-at? 'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-check-internal (vector-copy first-plan)))))
+(check "abort revokes only the private plan"
+       (and (tr3-d2-restore-abort-internal! first-plan)
+            (bytes=? receiver-start (d2-token-dataset-cursor receiver))))
+(check "aborted plan is stale"
+       (error-at? 'invalid-argument 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal first-plan))))
+
+;;; Source fields can claim idle while native current_batch is nonnull. The
+;;; dedicated native probe catches that state without dereferencing the owner.
+(define native-plan
+  (tr3-d2-restore-prepare-internal receiver after-one start))
+(define native-generation (d2-native-batch-create receiver 1 1 17))
+(check "private native batch was created" (> native-generation 0))
+(check "native current batch blocks final check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal native-plan))))
+(check "native-only rejection leaves D2 cursor unchanged"
+       (bytes=? receiver-start (d2-token-dataset-cursor receiver)))
+(d2-native-batch-release receiver native-generation)
+(tr3-d2-restore-abort-internal! native-plan)
+
+;;; A public batch is rejected by source and native idle admission.
+(define live (d2-token-dataset-next-batch receiver))
+(check "live D2 batch rejects prepare"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver after-two start))))
+(d2-token-batch-release! live)
+(vector-set! (d2-dataset-state receiver 'tr3-d2-test) 16 0)
+(check "released state retains a cache for restore clearing"
+       (and (eq? (vector-ref (d2-dataset-state receiver 'tr3-d2-test) 10)
+                 'released)
+            (not (eq? (vector-ref
+                       (d2-dataset-state receiver 'tr3-d2-test) 16)
+                      #f))))
+(define released-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(check "legitimate released idle state passes final check and commit"
+       (and (tr3-d2-restore-check-internal released-plan)
+            (tr3-d2-restore-commit-internal! released-plan)
+            (eq? (vector-ref (d2-dataset-state receiver 'tr3-d2-test) 10)
+                 'none)
+            (eq? (vector-ref (d2-dataset-state receiver 'tr3-d2-test) 16)
+                 #f)
+            (= (d2-core-load-unsigned-le
+                (d2-token-dataset-cursor receiver) 120 8)
+               2)))
+(d2-token-dataset-seek! receiver receiver-start)
+
+;;; Every captured mutable witness is checked again before sealing.
+(define ordinal-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(d2-token-dataset-seek! receiver after-one)
+(check "changed precommit ordinal rejects check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal ordinal-plan))))
+(tr3-d2-restore-abort-internal! ordinal-plan)
+(d2-token-dataset-seek! receiver receiver-start)
+
+(define identity-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(define receiver-state (d2-dataset-state receiver 'tr3-d2-test))
+(define receiver-core (vector-ref receiver-state 6))
+(vector-set! receiver-state 6 (vector-copy receiver-core))
+(check "changed exact core identity rejects check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal identity-plan))))
+(vector-set! receiver-state 6 receiver-core)
+(tr3-d2-restore-abort-internal! identity-plan)
+
+;;; Generation, status, and borrow/view witnesses are independently admitted.
+(define generation-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(define saved-generation (vector-ref receiver-state 8))
+(vector-set! receiver-state 8 (+ saved-generation 1))
+(check "generation-only change rejects final check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal generation-plan))))
+(vector-set! receiver-state 8 saved-generation)
+(tr3-d2-restore-abort-internal! generation-plan)
+
+(define status-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(define saved-status (vector-ref receiver-state 10))
+(vector-set! receiver-state 10 'released)
+(check "status-only change rejects final check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal status-plan))))
+(vector-set! receiver-state 10 saved-status)
+(tr3-d2-restore-abort-internal! status-plan)
+
+(define borrow-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(vector-set! receiver-state 15 1)
+(check "borrow-only change rejects final check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal borrow-plan))))
+(vector-set! receiver-state 15 0)
+(tr3-d2-restore-abort-internal! borrow-plan)
+
+(define malformed-idle-cursor (d2-token-dataset-cursor receiver))
+(vector-set! receiver-state 8 -1)
+(check "negative generation rejects prepare"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver after-two start))))
+(vector-set! receiver-state 8 saved-generation)
+(vector-set! receiver-state 15 -1)
+(check "negative borrow count rejects prepare"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver after-two start))))
+(vector-set! receiver-state 15 0)
+(vector-set! receiver-state 10 'released)
+(vector-set! receiver-state 8 0)
+(check "released status with zero generation rejects prepare"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver after-two start))))
+(vector-set! receiver-state 8 saved-generation)
+(vector-set! receiver-state 10 saved-status)
+(check "independent idle failures preserve receiver cursor"
+       (bytes=? malformed-idle-cursor (d2-token-dataset-cursor receiver)))
+
+;;; The hidden shadow binds every mutable public plan field and authority.
+(define tamper-plan
+  (tr3-d2-restore-prepare-internal receiver after-two start))
+(check "target plan-field tamper rejects"
+       (plan-field-tamper-rejected? tamper-plan 9 1))
+(check "generation plan-field tamper rejects"
+       (plan-field-tamper-rejected? tamper-plan 6 (+ saved-generation 1)))
+(check "status plan-field tamper rejects"
+       (plan-field-tamper-rejected? tamper-plan 7 'released))
+(check "authority plan-field tamper rejects without caller dispatch"
+       (plan-field-tamper-rejected? tamper-plan 11 (lambda (query) query)))
+(tr3-d2-restore-abort-internal! tamper-plan)
+
+;;; Both cursors are decoded and related before any plan publication.
+(define corrupt-current
+  (bytevector-copy after-two 0 (bytevector-length after-two)))
+(bytevector-u8-set! corrupt-current 40
+                    (modulo (+ 1 (bytevector-u8-ref corrupt-current 40)) 256))
+(check "corrupt current cursor rejects without mutation"
+       (and (error-at? 'corrupt-data 'trainer-load-state!
+              (lambda ()
+                (tr3-d2-restore-prepare-internal receiver corrupt-current start)))
+            (bytes=? receiver-start (d2-token-dataset-cursor receiver))))
+(define corrupt-epoch
+  (bytevector-copy start 0 (bytevector-length start)))
+(bytevector-u8-set! corrupt-epoch 40
+                    (modulo (+ 1 (bytevector-u8-ref corrupt-epoch 40)) 256))
+(check "corrupt epoch cursor rejects without mutation"
+       (and (error-at? 'corrupt-data 'trainer-load-state!
+              (lambda ()
+                (tr3-d2-restore-prepare-internal receiver after-two corrupt-epoch)))
+            (bytes=? receiver-start (d2-token-dataset-cursor receiver))))
+(check "reversed cursor interval rejects"
+       (error-at? 'corrupt-data 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver after-one after-two))))
+(check "epoch start at EOS rejects"
+       (error-at? 'corrupt-data 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver at-eos at-eos))))
+(define beyond-eos (cursor-with-ordinal after-two 4))
+(check "current ordinal beyond total rows rejects"
+       (and (error-at? 'corrupt-data 'trainer-load-state!
+              (lambda ()
+                (tr3-d2-restore-prepare-internal receiver beyond-eos start)))
+            (bytes=? receiver-start (d2-token-dataset-cursor receiver))))
+
+(define other-source (open-dataset (path resources "padded") tokenizer))
+(define other-start (d2-token-dataset-cursor other-source))
+(define other-current (advance other-source))
+(check "cross-dataset cursor pair rejects"
+       (error-at? 'corrupt-data 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal receiver after-two other-start))))
+(check "foreign but internally consistent pair rejects receiver identity"
+       (error-at? 'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-d2-restore-prepare-internal
+             receiver other-current other-start))))
+(d2-token-dataset-close! other-source)
+
+;;; Once checked, commit publishes only C and clears status/cache. Mutating the
+;;; trainer-owned epoch bytes after prepare cannot affect the D2 plan or state.
+(define epoch-owned-copy (bytevector-copy start 0 (bytevector-length start)))
+(define commit-plan
+  (tr3-d2-restore-prepare-internal receiver after-two epoch-owned-copy))
+(bytevector-u8-set! epoch-owned-copy 0 0)
+(check "epoch bytes are not a D2 check witness"
+       (tr3-d2-restore-check-internal commit-plan))
+(check "commit succeeds through the sealed-compatible fixed tail"
+       (tr3-d2-restore-commit-internal! commit-plan))
+(check "commit publishes only the current target ordinal"
+       (and (= (d2-core-load-unsigned-le
+                 (d2-token-dataset-cursor receiver) 120 8) 2)
+            (eq? (vector-ref receiver-state 10) 'none)
+            (eq? (vector-ref receiver-state 16) #f)))
+(check "committed plan has stale precommit witnesses"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal commit-plan))))
+(check "restored current cursor resumes exact suffix"
+       (bytes=? (advance receiver) at-eos))
+(d2-token-dataset-close! receiver)
+
+;;; No registry retains plans: repeated prepare/abort stays independent, and a
+;;; closed receiver makes an otherwise authentic plan stale without blocking
+;;; explicit abort cleanup.
+(define repeat-receiver (open-dataset (path resources "exact") tokenizer))
+(define repeat-start (d2-token-dataset-cursor repeat-receiver))
+(let repeat ((remaining 32))
+  (if (> remaining 0)
+      (let ((plan
+             (tr3-d2-restore-prepare-internal
+              repeat-receiver after-one start)))
+        (check "repeated plans retain no cursor bytevectors"
+               (not (plan-has-bytevector? plan)))
+        (tr3-d2-restore-abort-internal! plan)
+        (repeat (- remaining 1)))))
+(check "repeated prepare/abort leaves receiver unchanged"
+       (bytes=? repeat-start (d2-token-dataset-cursor repeat-receiver)))
+(define close-plan
+  (tr3-d2-restore-prepare-internal repeat-receiver after-one start))
+(d2-token-dataset-close! repeat-receiver)
+(check "closed receiver rejects stale plan check"
+       (error-at? 'invalid-state 'trainer-load-state!
+         (lambda () (tr3-d2-restore-check-internal close-plan))))
+(check "closed receiver plan remains explicitly abortable"
+       (tr3-d2-restore-abort-internal! close-plan))
+
+(display "TR3-C D2 RESTORE PASS: ")
+(display checks)
+(display " checks")
+(newline)
