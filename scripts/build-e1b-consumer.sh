@@ -168,6 +168,18 @@ if [[ "${cli3_tuple_requested}" == 1 ]]; then
      "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
      "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/src" ]] || \
     die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
+  for cli3_closure_manifest in \
+      "${cli3_lexical_source_closure}" \
+      "${cli3_lexical_native_source_closure}"; do
+    while IFS= read -r cli3_relative_input; do
+      [[ -n "${cli3_relative_input}" && \
+         "${cli3_relative_input}" != /* && \
+         "${cli3_relative_input}" != *'..'* ]] || \
+        die "CLI3 aggregate policy rejects malformed repository closure input"
+      [[ ! -L "${PROJECT_ROOT}/${cli3_relative_input}" ]] || \
+        die "CLI3 aggregate policy rejects symlinked repository closure inputs"
+    done <"${cli3_closure_manifest}"
+  done
 fi
 private_root="$(realpath -- "$1")"
 package_bridge="$(realpath -- "$2")"
@@ -349,6 +361,18 @@ elif [[ "${private_root}" == "${cli3_private_root}" ]]; then
         "${cli3_lexical_undefined}"; do
       [[ ! -L "${raw_cli3_input}" ]] || \
         die "CLI3 aggregate policy rejects symlinked repository inputs"
+    done
+    for cli3_closure_manifest in \
+        "${cli3_lexical_source_closure}" \
+        "${cli3_lexical_native_source_closure}"; do
+      while IFS= read -r cli3_relative_input; do
+        [[ -n "${cli3_relative_input}" && \
+           "${cli3_relative_input}" != /* && \
+           "${cli3_relative_input}" != *'..'* ]] || \
+          die "CLI3 aggregate policy rejects malformed repository closure input"
+        [[ ! -L "${PROJECT_ROOT}/${cli3_relative_input}" ]] || \
+          die "CLI3 aggregate policy rejects symlinked repository closure inputs"
+      done <"${cli3_closure_manifest}"
     done
     [[ "${package_bridge}" == "${cli3_package_bridge}" && \
        "${package_renames}" == "${cli3_package_renames}" && \
