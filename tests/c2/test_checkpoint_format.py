@@ -23,7 +23,8 @@ C2_MAGIC = bytes.fromhex("894553484b54524e53544154450d0a00")
 C1_MAGIC = bytes.fromhex("894553484b4f4c434b50540d0a1a0a00")
 PROVIDER = b"i2-dense-cpu-f32-v1"
 LIBRARY = b"eshkol-transformer\0" + b"0.1.0-draft\0" + b"eshkol-training-state:1.0\0"
-COMPILER = b"Eshkol Compiler v1.3.4-evolve\0" + b"90cbd7130f47b8184bcc77b8d5c1b0026da980de\0"
+COMPILER = b"Eshkol Compiler v1.3.4-evolve\0" + b"222cad3aac68ddf48d09c1cdf322fa4c4e7b8296\0"
+OLD_COMPILER = b"Eshkol Compiler v1.3.4-evolve\0" + b"90cbd7130f47b8184bcc77b8d5c1b0026da980de\0"
 TOKENIZER = b"sha256:eshkol-byte-tokenizer-v1:" + b"0" * 64
 X1 = (Path(__file__).resolve().parents[1] / "x1" / "fixtures" /
       "resolved_minimal_v1.json").read_bytes()
@@ -443,6 +444,11 @@ class ParserTests(unittest.TestCase):
         item = data.copy(); item[off["library"]] = ord("E"); resign_outer(item)
         self.assertEqual(self.invoke(item)[0], 3)
         item = data.copy(); item[off["compiler"] + 17] = ord("9"); resign_outer(item)
+        self.assertEqual(self.invoke(item, 1)[0], 4)
+        self.assertEqual(self.invoke(item, 2)[0], 5)
+        item = data.copy()
+        item[off["compiler"]:off["compiler"] + len(OLD_COMPILER)] = OLD_COMPILER
+        resign_outer(item)
         self.assertEqual(self.invoke(item, 1)[0], 4)
         self.assertEqual(self.invoke(item, 2)[0], 5)
 

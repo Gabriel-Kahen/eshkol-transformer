@@ -66,6 +66,25 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   unsupported-lane diagnostics. E3 frame ownership, real M3/D2 no-grad traversal,
   restore/staging, shared exclusion, publication, retention and public evaluation
   remain downstream.
+## 2026-09-22 — checked-promotion toolchain adoption candidate
+
+- **Pin:** the isolated adoption candidate changes the active toolchain and serialized
+  compiler identity to
+  `https://github.com/Gabriel-Kahen/eshkol.git@222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`.
+  The fork commit contains reviewed checked promotion and immutable-root continuation
+  support; [upstream PR #714](https://github.com/tsotchke/eshkol/pull/714) remains a
+  conflicting draft against a later upstream head.
+- **Compatibility:** the compiler version and 71-byte identity layout are unchanged.
+  New C2 saves carry the new exact identity. Checkpoints with the former
+  `90cbd7130f47b8184bcc77b8d5c1b0026da980de` identity remain nonexact:
+  inspection reports unsupported and loading reports determinism unavailable.
+  No silent migration or compatibility relaxation is introduced.
+- **Evidence boundary:** prior component evidence remains tied to its recorded pin.
+  The candidate requires a fresh Ubuntu 22.04 / LLVM-Clang 21 toolchain build,
+  regenerated compiler/runtime and package artifacts, focused adoption tests, and
+  final integration review. The separate #117/#121 guard-order repairs must join
+  before final aggregate evidence. No merge, acceptance, or roadmap completion is
+  claimed by this preparation.
 
 ## 2026-09-22 — E3-METRICS implementation candidate
 
