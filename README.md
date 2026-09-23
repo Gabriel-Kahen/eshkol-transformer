@@ -15,10 +15,12 @@ API is stable yet.
 ## Build and test
 
 The initial supported lane is Ubuntu 22.04 x86-64 with Clang/LLVM 21.1.8. The
-Eshkol compiler/runtime is built from commit
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`, which reports version
-`1.3.4-evolve`. Exact compatibility inputs are in `toolchain/eshkol.lock`; package
-requirements and limitations are in `toolchain/README.md`.
+Eshkol compiler/runtime is built from the reviewed `Gabriel-Kahen/eshkol`
+candidate at `222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`, which reports version
+`1.3.4-evolve`. Its checked-promotion implementation is proposed upstream in
+[PR #714](https://github.com/tsotchke/eshkol/pull/714). Exact compatibility inputs
+are in `toolchain/eshkol.lock`; package requirements and limitations are in
+`toolchain/README.md`.
 
 From a clean checkout on the supported lane, run:
 

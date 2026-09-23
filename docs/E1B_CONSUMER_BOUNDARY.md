@@ -6,8 +6,8 @@ The public package is a source stub plus an already-localized relocatable object
 Application source is compiled only after that object has been completed.
 
 This is a private package-building ABI, not an A0 API, K1/I1 ABI, or persistent
-format. It is fixed to canonical `tsotchke/eshkol` commit
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`, x86-64 LP64 SysV, and the supported
+format. It is fixed to the reviewed `Gabriel-Kahen/eshkol` candidate
+`222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`, x86-64 LP64 SysV, and the supported
 Ubuntu 22.04 / LLVM-Clang 21 lane.
 
 ## Raise-only contract
