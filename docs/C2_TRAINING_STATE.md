@@ -156,12 +156,19 @@ per tensor, 6,826 total tensors, 4,096 model entries, 1,365 unique optimizer
 parameters/groups, rank/path depth 64, UTF-8 segment bytes 65,536, D2 cursor
 bytes 400, and canonical X1 bytes 16,384. A caller policy may only lower them.
 
-The current K2 `tensor.f32/storage.copy` capability admits only rank-zero and
-rank-one shapes. Therefore a wire-valid C2 checkpoint containing any rank-two
-through rank-64 tensor fails public `checkpoint-load/3` with `unsupported`
-after complete byte/semantic staging and before reconstruction. There is no
-reshape, scalar, CPU, or other fallback. This is an explicit public capability
-limitation, not a narrower wire-format limit.
+The current K2 `tensor.f32/storage.copy` capability admits rank zero, rank one,
+and exactly `[2,4]`, `[4,4]`, `[4,8]`, `[8,4]`, and `[256,4]`. Every other
+rank-two shape and every rank-three through rank-64 tensor fails public
+`checkpoint-load/3` with `unsupported` after complete byte/semantic staging and
+before reconstruction. There is no reshape, scalar, CPU, or other fallback.
+The operational LOAD gate reconstructs and releases a checksummed M3-schema
+state with 15 logical paths, 14 unique parameters, the head/token-embedding tie,
+and 28 shape-matched O2 moments while asserting the exact admitted shape
+multiset and native lifecycle. A separate installed-facade gate uses public
+`checkpoint-load`, `checkpoint-save!`, and `trainer-state-release!` and proves a
+byte-identical round trip plus idempotent release. A C4 storage-schema witness
+changes only the position table from `[2,4]` to `[4,4]`; it makes no C4 runtime
+claim.
 
 The initial operational target is 16 MiB file bytes, 512 KiB artifact-wide
 metadata, 8 MiB per tensor, and 64 total tensors. This tuple is not a wire

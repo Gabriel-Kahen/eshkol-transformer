@@ -2505,12 +2505,19 @@ static int provider_shape_supported(size_t rank, const uint64_t *shape) {
   if (rank == 0u) {
     return shape == NULL;
   }
-  if (rank != 1u || shape == NULL ||
+  if ((rank != 1u && rank != 2u) || shape == NULL ||
       !aligned_pointer(shape, _Alignof(uint64_t)) ||
-      !pointer_span_fits(shape, sizeof(*shape))) {
+      !pointer_span_fits(shape, rank * sizeof(*shape))) {
     return 0;
   }
-  return shape[0] <= ET_F32_RANK1_MAX;
+  if (rank == 1u) {
+    return shape[0] <= ET_F32_RANK1_MAX;
+  }
+  return (shape[0] == 2u && shape[1] == 4u) ||
+         (shape[0] == 4u && shape[1] == 4u) ||
+         (shape[0] == 4u && shape[1] == 8u) ||
+         (shape[0] == 8u && shape[1] == 4u) ||
+         (shape[0] == 256u && shape[1] == 4u);
 }
 
 static int32_t provider_view(const et_kernel_tensor_view_v1 *view,
@@ -2554,7 +2561,17 @@ static int32_t provider_view(const et_kernel_tensor_view_v1 *view,
       expected = 0u;
     } else {
       for (size_t index = 0u; index < view->rank; index++) {
+        if (view->shape[index] > (uint64_t)(SIZE_MAX / count)) {
+          return set_kernel_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                                  ET_KERNEL_CODE_INTEGER_OVERFLOW,
+                                  "storage.copy shape byte length overflows");
+        }
         count *= (size_t)view->shape[index];
+      }
+      if (count > SIZE_MAX / sizeof(float)) {
+        return set_kernel_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                                ET_KERNEL_CODE_INTEGER_OVERFLOW,
+                                "storage.copy shape byte length overflows");
       }
       expected = count * sizeof(float);
     }
@@ -2636,9 +2653,34 @@ static const et_kernel_dimension_range_v1 provider_rank1_dimensions[] = {
      .maximum_unbounded = 0u,
      .reserved = {0}},
 };
+static const et_kernel_dimension_range_v1 provider_rank2_2x4_dimensions[] = {
+    {.minimum = 2u, .maximum = 2u, .maximum_unbounded = 0u, .reserved = {0}},
+    {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
+};
+static const et_kernel_dimension_range_v1 provider_rank2_4x4_dimensions[] = {
+    {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
+    {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
+};
+static const et_kernel_dimension_range_v1 provider_rank2_4x8_dimensions[] = {
+    {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
+    {.minimum = 8u, .maximum = 8u, .maximum_unbounded = 0u, .reserved = {0}},
+};
+static const et_kernel_dimension_range_v1 provider_rank2_8x4_dimensions[] = {
+    {.minimum = 8u, .maximum = 8u, .maximum_unbounded = 0u, .reserved = {0}},
+    {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
+};
+static const et_kernel_dimension_range_v1 provider_rank2_256x4_dimensions[] = {
+    {.minimum = 256u, .maximum = 256u, .maximum_unbounded = 0u, .reserved = {0}},
+    {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
+};
 static const et_kernel_shape_range_v1 provider_ranges[] = {
     {.rank = 0u, .dimensions = NULL},
     {.rank = 1u, .dimensions = provider_rank1_dimensions},
+    {.rank = 2u, .dimensions = provider_rank2_2x4_dimensions},
+    {.rank = 2u, .dimensions = provider_rank2_4x4_dimensions},
+    {.rank = 2u, .dimensions = provider_rank2_4x8_dimensions},
+    {.rank = 2u, .dimensions = provider_rank2_8x4_dimensions},
+    {.rank = 2u, .dimensions = provider_rank2_256x4_dimensions},
 };
 static const char *const provider_operations[] = {"storage.copy"};
 static const char *const provider_dtypes[] = {"f32"};
@@ -2648,8 +2690,8 @@ static const et_kernel_capability_v1 provider_capability = {
     .name = "tensor.f32",
     .status = ET_KERNEL_CAPABILITY_VERIFIED,
     .implementation = "eshkol-transformer-f32",
-    .version = "1.0",
-    .evidence = "I2:bounded-exact-f32-storage.copy-v1",
+    .version = "1.1",
+    .evidence = "I2:bounded-exact-f32-storage.copy-v2",
     .deterministic = 1u,
     .reserved = {0},
     .operation_count = 1u,
@@ -2658,7 +2700,7 @@ static const et_kernel_capability_v1 provider_capability = {
     .dtypes = provider_dtypes,
     .device_count = 1u,
     .devices = provider_devices,
-    .shape_range_count = 2u,
+    .shape_range_count = 7u,
     .shape_ranges = provider_ranges,
 };
 static const et_kernel_provider_v1 provider = {
@@ -2667,8 +2709,8 @@ static const et_kernel_provider_v1 provider = {
     .abi_minor = ET_KERNEL_ABI_MINOR,
     .required_features = 0u,
     .name = "eshkol-transformer-f32",
-    .version = "1.0",
-    .evidence = "I2:bounded-exact-f32-storage.copy-v1",
+    .version = "1.1",
+    .evidence = "I2:bounded-exact-f32-storage.copy-v2",
     .capability_count = 1u,
     .capability_stride = sizeof(et_kernel_capability_v1),
     .capability_bytes = sizeof(et_kernel_capability_v1),

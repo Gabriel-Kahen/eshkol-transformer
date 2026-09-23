@@ -30,7 +30,8 @@ evidence="${object}.evidence"
 ar p "${library}" c2_wave2.o >"${temporary_dir}/canonical-archive-member.o"
 cmp "${object}" "${temporary_dir}/canonical-archive-member.o"
 if nm -a "${object}" | \
-    rg 'et_k2_test_(require_count|fail_require_at)_v1' >/dev/null; then
+    rg 'et_k2_test_(require_count|require_shape_count|fail_require_at)_v1' \
+      >/dev/null; then
   die "canonical C2 aggregate contains a private K2 test hook"
 fi
 
@@ -116,6 +117,9 @@ for fixture_set in a b; do
     "${temporary_dir}/fixtures-${fixture_set}"
 done
 diff -ru "${temporary_dir}/fixtures-a" "${temporary_dir}/fixtures-b"
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  "${PROJECT_ROOT}/tests/c2/prepare_checkpoint_operational_fixtures.py" \
+  "${temporary_dir}/model-fixtures"
 
 for repetition in 1 2; do
   contract_dir="${temporary_dir}/public-contract-${repetition}"
@@ -146,6 +150,31 @@ for repetition in 1 2; do
   cmp "${temporary_dir}/fixtures-a/valid.c2" \
     "${runtime_dir}/roundtrip.c2"
 done
+
+models_dir="${temporary_dir}/public-models"
+mkdir -p "${models_dir}"
+run_compiler public-models-aot \
+  --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+  -L "${artifact_dir}" --lib eshkol_transformer_wave2 \
+  "${PROJECT_ROOT}/tests/c2/public_models_runtime.esk" \
+  -o "${models_dir}/c2-public-models" \
+  >"${models_dir}/compile.log" 2>&1
+ESHKOL_ARENA_POISON=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 180s \
+  "${models_dir}/c2-public-models" \
+    "${temporary_dir}/model-fixtures/m3-model.c2" \
+    "${models_dir}/m3-roundtrip.c2" \
+    "${temporary_dir}/model-fixtures/c4-schema.c2" \
+    "${models_dir}/c4-roundtrip.c2" \
+    >"${models_dir}/run.stdout" 2>"${models_dir}/run.stderr"
+[[ ! -s "${models_dir}/run.stderr" ]] || \
+  die "C2 installed-facade model witness wrote stderr"
+grep -Fx 'C2 PUBLIC MODELS PASS: 8 checks' \
+  "${models_dir}/run.stdout" >/dev/null
+cmp "${temporary_dir}/model-fixtures/m3-model.c2" \
+  "${models_dir}/m3-roundtrip.c2"
+cmp "${temporary_dir}/model-fixtures/c4-schema.c2" \
+  "${models_dir}/c4-roundtrip.c2"
 
 cmp "${temporary_dir}/public-contract-1/api.o" \
   "${temporary_dir}/public-contract-2/api.o"
@@ -380,7 +409,8 @@ cmp "${library}" \
   "${temporary_dir}/rebuild-a/libeshkol_transformer_wave2.a"
 for rebuild in a b; do
   if nm -a "${temporary_dir}/rebuild-${rebuild}/c2_wave2.o" | \
-      rg 'et_k2_test_(require_count|fail_require_at)_v1' >/dev/null; then
+      rg 'et_k2_test_(require_count|require_shape_count|fail_require_at)_v1' \
+        >/dev/null; then
     die "rebuilt C2 aggregate contains a private K2 test hook"
   fi
 done

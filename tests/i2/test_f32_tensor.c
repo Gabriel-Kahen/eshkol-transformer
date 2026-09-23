@@ -505,7 +505,10 @@ static void test_provider_and_dispatch(void) {
   CHECK(provider->struct_size >= ET_KERNEL_PROVIDER_V1_0_SIZE);
   CHECK(provider->capability_count == 1u);
   CHECK(((const et_kernel_capability_v1 *)provider->capabilities)
-            ->shape_range_count == 2u);
+            ->shape_range_count == 7u);
+  CHECK(strcmp(provider->version, "1.1") == 0);
+  CHECK(strcmp(provider->evidence,
+               "I2:bounded-exact-f32-storage.copy-v2") == 0);
   CHECK(provider->validate_call != NULL && provider->invoke_call != NULL);
   CHECK(et_kernel_runtime_discover(resolve_i2, NULL, &runtime,
                                    &kernel_error) == 0);
@@ -602,6 +605,129 @@ static void test_provider_and_dispatch(void) {
   et_kernel_runtime_destroy(runtime);
   destroy_tensor(&input);
   destroy_tensor(&output);
+}
+
+static void test_provider_rank2_matrix(void) {
+  static const uint64_t supported[5][2] = {
+      {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
+  static const uint64_t unsupported[][2] = {
+      {1u, 4u}, {2u, 5u}, {4u, 7u}, {8u, 5u}, {257u, 4u}, {256u, 5u}};
+  uint32_t input_bits[1024];
+  uint32_t output_bits[1024];
+  uint32_t before[1024];
+  unsigned char misaligned_shape[2u * sizeof(uint64_t) + 1u];
+  et_kernel_error error;
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_request_v1 request = {0};
+  et_kernel_tensor_view_v1 input = {0};
+  et_kernel_tensor_view_v1 output = {0};
+  et_kernel_call_v1 call = {0};
+  const et_kernel_provider_v1 *provider = et_f32_tensor_provider_v1();
+
+  CHECK(et_kernel_runtime_discover(resolve_i2, NULL, &runtime, &error) == 0);
+  request.struct_size = sizeof(request);
+  request.operation = "storage.copy";
+  request.dtype = "f32";
+  request.device = "cpu";
+  request.rank = 2u;
+  request.deterministic = 1u;
+  input.struct_size = sizeof(input);
+  input.data = input_bits;
+  input.dtype = "f32";
+  input.device = "cpu";
+  input.layout = ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR;
+  input.rank = 2u;
+  output = input;
+  output.data = output_bits;
+  call.struct_size = sizeof(call);
+  call.capability = "tensor.f32";
+  call.request = &request;
+  call.input_count = 1u;
+  call.input_stride = sizeof(input);
+  call.input_bytes = sizeof(input);
+  call.inputs = &input;
+  call.output_count = 1u;
+  call.output_stride = sizeof(output);
+  call.output_bytes = sizeof(output);
+  call.outputs = &output;
+
+  for (size_t shape_index = 0u; shape_index < 5u; shape_index++) {
+    const size_t count =
+        (size_t)supported[shape_index][0] * (size_t)supported[shape_index][1];
+    request.shape = supported[shape_index];
+    input.shape = supported[shape_index];
+    output.shape = supported[shape_index];
+    input.byte_length = count * sizeof(uint32_t);
+    output.byte_length = count * sizeof(uint32_t);
+    for (size_t index = 0u; index < count; index++) {
+      input_bits[index] = UINT32_C(0x7fc00000) ^
+                          (uint32_t)(shape_index * 1024u + index);
+      output_bits[index] = UINT32_C(0xa5a5a5a5);
+    }
+    CHECK(et_kernel_runtime_capability_require(runtime, "tensor.f32", &request,
+                                               NULL, &error) == 0);
+    CHECK(et_kernel_runtime_dispatch(runtime, &call, &error) == 0);
+    CHECK(memcmp(input_bits, output_bits, count * sizeof(uint32_t)) == 0);
+  }
+
+  for (size_t index = 0u;
+       index < sizeof(unsupported) / sizeof(unsupported[0]); index++) {
+    request.shape = unsupported[index];
+    expect_k1_error(et_kernel_runtime_capability_require(
+                        runtime, "tensor.f32", &request, NULL, &error),
+                    &error, ET_KERNEL_ERROR_UNSUPPORTED,
+                    ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
+  }
+
+  request.shape = supported[1];
+  input.shape = supported[1];
+  output.shape = supported[1];
+  input.byte_length = 16u * sizeof(uint32_t);
+  output.byte_length = input.byte_length;
+  memset(output_bits, 0xa5, output.byte_length);
+  memcpy(before, output_bits, output.byte_length);
+
+  input.byte_length -= sizeof(uint32_t);
+  expect_k1_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+                  ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                  ET_KERNEL_CODE_INVALID_BUFFER);
+  CHECK(memcmp(before, output_bits, output.byte_length) == 0);
+  input.byte_length = output.byte_length;
+
+  output.shape = supported[0];
+  output.byte_length = 8u * sizeof(uint32_t);
+  expect_k1_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+                  ET_KERNEL_ERROR_SHAPE_MISMATCH,
+                  ET_KERNEL_CODE_INVALID_SHAPE);
+  CHECK(memcmp(before, output_bits, 16u * sizeof(uint32_t)) == 0);
+  output.shape = supported[1];
+  output.byte_length = 16u * sizeof(uint32_t);
+
+  output.data = input.data;
+  expect_k1_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+                  ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                  ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(memcmp(before, output_bits, output.byte_length) == 0);
+  output.data = output_bits;
+
+  input.data = (void *)(uintptr_t)(UINTPTR_MAX - 3u);
+  expect_k1_error(provider->validate_call(&call, &error), &error,
+                  ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                  ET_KERNEL_CODE_INVALID_BUFFER);
+  CHECK(memcmp(before, output_bits, output.byte_length) == 0);
+  expect_k1_error(et_kernel_runtime_dispatch(runtime, &call, &error), &error,
+                  ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                  ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(memcmp(before, output_bits, output.byte_length) == 0);
+  input.data = input_bits;
+
+  memcpy(misaligned_shape + 1u, supported[1], sizeof(supported[1]));
+  request.shape = (const uint64_t *)(const void *)(misaligned_shape + 1u);
+  CHECK(provider->validate_call(&call, &error) == ET_KERNEL_ERROR_UNSUPPORTED);
+  CHECK(error.code == ET_KERNEL_CODE_PROVIDER_REJECTED);
+  CHECK(memcmp(before, output_bits, output.byte_length) == 0);
+
+  et_kernel_runtime_destroy(runtime);
 }
 
 static void expect_retired_shell_alias_rejected(et_f32_tensor *live,
@@ -705,6 +831,7 @@ int main(void) {
   test_shape_and_span_failures();
   test_borrow_lifetime_and_alignment();
   test_provider_and_dispatch();
+  test_provider_rank2_matrix();
   test_released_handle_addresses_never_resurrect();
 #ifdef ET_F32_TENSOR_TESTING
   test_owned_aliases_and_error_clear();

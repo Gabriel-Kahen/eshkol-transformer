@@ -39,8 +39,8 @@ fi
   die "C2_OPERATIONAL_DEVELOPMENT_MODE must name at least one mode"
 for development_mode in "${development_modes[@]}"; do
   case "${development_mode}" in
-    joint|k2-fail|rank|alias) ;;
-    *) die "C2_OPERATIONAL_DEVELOPMENT_MODE accepts joint, k2-fail, rank, and alias" ;;
+    joint|k2-fail|rank|alias|models) ;;
+    *) die "C2_OPERATIONAL_DEVELOPMENT_MODE accepts joint, k2-fail, rank, alias, and models" ;;
   esac
 done
 if [[ "${development}" == 1 ]]; then
@@ -244,7 +244,7 @@ if [[ "${development}" == 0 ]]; then
   -o "${tmp}/k2-production.o"
 if nm -g --defined-only --format=posix "${tmp}/f32-production.o" \
     "${tmp}/i2-production.o" "${tmp}/k2-production.o" | \
-    rg 'et_(f32_tensor_test_control|i2_test_decode_builder_control)_bytes_v1|et_k2_test_(require_count|fail_require_at)_v1' \
+    rg 'et_(f32_tensor_test_control|i2_test_decode_builder_control)_bytes_v1|et_k2_test_(require_count|require_shape_count|fail_require_at)_v1' \
     >/dev/null; then
   die "operational test witnesses escaped a production translation"
 fi
@@ -254,7 +254,8 @@ test "$(nm -g --defined-only --format=posix "${runtime}/f32_tensor.o" | \
 test "$(nm -g --defined-only --format=posix "${runtime}/i2.o" | \
   awk '$1 == "et_i2_test_decode_builder_control_bytes_v1" { count++ } END { print count+0 }')" \
   -eq 1
-for hook in et_k2_test_require_count_v1 et_k2_test_fail_require_at_v1; do
+for hook in et_k2_test_require_count_v1 et_k2_test_require_shape_count_v1 \
+    et_k2_test_fail_require_at_v1; do
   test "$(nm -g --defined-only --format=posix "${runtime}/k2.o" | \
     awk -v hook="${hook}" '$1 == hook { count++ } END { print count+0 }')" \
     -eq 1
@@ -373,6 +374,7 @@ run_runtime() {
       "${fixtures}/count-one.c2" "${fixtures}/joint-corrupt.c2" \
       "${fixtures}/alias-shape.c2" "${fixtures}/rank-two.c2" \
       "${fixtures}/count-exact.c2" \
+      "${fixtures}/m3-model.c2" "${fixtures}/c4-schema.c2" \
       "${output}" "${mode}" \
       >"${tmp}/${label}/${mode}.stdout" \
       2>"${tmp}/${label}/${mode}.stderr"
@@ -426,7 +428,7 @@ fi
 compile_runtime clang-b "${cxx}"
 cmp "${tmp}/clang-a/operational" "${tmp}/clang-b/operational"
 read -r -a operational_modes <<< \
-  "${C2_OPERATIONAL_MODES:-joint k2-fail rank alias file metadata tensor count corrupt}"
+  "${C2_OPERATIONAL_MODES:-joint k2-fail rank alias models file metadata tensor count corrupt}"
 for mode in "${operational_modes[@]}"; do
   run_runtime clang-a "${mode}"
   run_runtime clang-b "${mode}"
@@ -448,8 +450,8 @@ fi
 
 if [[ "${operational_only}" == 0 ]]; then
   printf '%s\n' \
-    'C2 CHECKPOINT OPERATIONAL EVIDENCE PASS: public 64-tensor K2 LOAD/SAVE/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure, affected regressions'
+    'C2 CHECKPOINT OPERATIONAL EVIDENCE PASS: public 64-tensor K2 LOAD/SAVE/release, public M3/C4 schema LOAD/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure, affected regressions'
 else
   printf '%s\n' \
-    'C2 CHECKPOINT OPERATIONAL EVIDENCE FOCUSED PASS: public 64-tensor K2 LOAD/SAVE/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure'
+    'C2 CHECKPOINT OPERATIONAL EVIDENCE FOCUSED PASS: public 64-tensor K2 LOAD/SAVE/release, public M3/C4 schema LOAD/release, exact per-tensor admission count, every nth admission failure and unsupported-rank cleanup, exact/one-over tuple, early/late precedence, deterministic byte-identical lifecycle, two fresh measured runs, strict Clang/GCC/C++, sanitizers, test-only ABI closure'
 fi

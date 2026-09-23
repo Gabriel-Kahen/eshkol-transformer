@@ -93,6 +93,7 @@ typedef struct et_k2_state {
   uint64_t runtime_live_count;
   uint64_t require_count;
   uint64_t require_fail_at;
+  uint64_t require_shape_count[6];
 #endif
 } et_k2_state;
 
@@ -490,12 +491,14 @@ static int reserved_zero(const uint8_t *bytes, size_t count) {
 
 static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
   const uint64_t maximum = (uint64_t)(SIZE_MAX / sizeof(float));
+  static const uint64_t rank2_shapes[5][2] = {
+      {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
   if (entry == NULL || entry->struct_size != ET_KERNEL_CAPABILITY_V1_0_SIZE ||
       !exact_text(entry->name, "tensor.f32") ||
       entry->status != ET_KERNEL_CAPABILITY_VERIFIED ||
       !exact_text(entry->implementation, "eshkol-transformer-f32") ||
-      !exact_text(entry->version, "1.0") ||
-      !exact_text(entry->evidence, "I2:bounded-exact-f32-storage.copy-v1") ||
+      !exact_text(entry->version, "1.1") ||
+      !exact_text(entry->evidence, "I2:bounded-exact-f32-storage.copy-v2") ||
       entry->deterministic != 1u ||
       !reserved_zero(entry->reserved, sizeof(entry->reserved)) ||
       entry->operation_count != 1u || entry->operations == NULL ||
@@ -503,7 +506,7 @@ static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
       entry->dtype_count != 1u || entry->dtypes == NULL ||
       !exact_text(entry->dtypes[0], "f32") || entry->device_count != 1u ||
       entry->devices == NULL || !exact_text(entry->devices[0], "cpu") ||
-      entry->shape_range_count != 2u || entry->shape_ranges == NULL) {
+      entry->shape_range_count != 7u || entry->shape_ranges == NULL) {
     return 0;
   }
   if (entry->shape_ranges[0].rank != 0u ||
@@ -512,11 +515,30 @@ static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
       entry->shape_ranges[1].dimensions == NULL) {
     return 0;
   }
-  return entry->shape_ranges[1].dimensions[0].minimum == 0u &&
-         entry->shape_ranges[1].dimensions[0].maximum == maximum &&
-         entry->shape_ranges[1].dimensions[0].maximum_unbounded == 0u &&
-         reserved_zero(entry->shape_ranges[1].dimensions[0].reserved,
-                       sizeof(entry->shape_ranges[1].dimensions[0].reserved));
+  if (entry->shape_ranges[1].dimensions[0].minimum != 0u ||
+      entry->shape_ranges[1].dimensions[0].maximum != maximum ||
+      entry->shape_ranges[1].dimensions[0].maximum_unbounded != 0u ||
+      !reserved_zero(entry->shape_ranges[1].dimensions[0].reserved,
+                     sizeof(entry->shape_ranges[1].dimensions[0].reserved))) {
+    return 0;
+  }
+  for (size_t shape = 0u; shape < 5u; shape++) {
+    const et_kernel_shape_range_v1 *range = &entry->shape_ranges[shape + 2u];
+    if (range->rank != 2u || range->dimensions == NULL) {
+      return 0;
+    }
+    for (size_t dimension = 0u; dimension < 2u; dimension++) {
+      const et_kernel_dimension_range_v1 *actual =
+          &range->dimensions[dimension];
+      if (actual->minimum != rank2_shapes[shape][dimension] ||
+          actual->maximum != rank2_shapes[shape][dimension] ||
+          actual->maximum_unbounded != 0u ||
+          !reserved_zero(actual->reserved, sizeof(actual->reserved))) {
+        return 0;
+      }
+    }
+  }
+  return 1;
 }
 
 static int exact_i2_provider(const et_kernel_provider_v1 *provider) {
@@ -529,8 +551,8 @@ static int exact_i2_provider(const et_kernel_provider_v1 *provider) {
       provider->required_features !=
           ET_KERNEL_PROVIDER_KNOWN_REQUIRED_FEATURES ||
       !exact_text(provider->name, "eshkol-transformer-f32") ||
-      !exact_text(provider->version, "1.0") ||
-      !exact_text(provider->evidence, "I2:bounded-exact-f32-storage.copy-v1") ||
+      !exact_text(provider->version, "1.1") ||
+      !exact_text(provider->evidence, "I2:bounded-exact-f32-storage.copy-v2") ||
       provider->capability_count != 1u ||
       provider->capability_stride != ET_KERNEL_CAPABILITY_V1_0_SIZE ||
       provider->capability_bytes != ET_KERNEL_CAPABILITY_V1_0_SIZE ||
@@ -560,7 +582,7 @@ audit_i2_provider(const et_kernel_provider_v1 *provider) {
       provider->abi_minor != ET_KERNEL_ABI_MINOR ||
       provider->required_features !=
           ET_KERNEL_PROVIDER_KNOWN_REQUIRED_FEATURES ||
-      !exact_text(provider->version, "1.0")) {
+      !exact_text(provider->version, "1.1")) {
     return ET_K2_PROVIDER_VERSION_MISMATCH;
   }
   if (provider->capability_count == 1u &&
@@ -955,6 +977,19 @@ int64_t et_k2_private_runtime_require_v1(
   state.busy = 1;
 #ifdef ET_K2_TESTING
   state.require_count++;
+  if (request.rank == 1u && request.shape[0] == 4u) {
+    state.require_shape_count[0]++;
+  } else if (request.rank == 2u) {
+    static const uint64_t shapes[5][2] = {
+        {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
+    for (size_t index = 0u; index < 5u; index++) {
+      if (request.shape[0] == shapes[index][0] &&
+          request.shape[1] == shapes[index][1]) {
+        state.require_shape_count[index + 1u]++;
+        break;
+      }
+    }
+  }
   if (state.require_fail_at != 0u &&
       state.require_count == state.require_fail_at) {
     state.require_fail_at = 0u;
@@ -1164,6 +1199,10 @@ uint64_t et_k2_test_runtime_live_count_v1(void) {
 }
 
 uint64_t et_k2_test_require_count_v1(void) { return state.require_count; }
+
+uint64_t et_k2_test_require_shape_count_v1(uint64_t index) {
+  return index < 6u ? state.require_shape_count[index] : 0u;
+}
 
 void et_k2_test_fail_require_at_v1(uint64_t ordinal) {
   state.require_fail_at = ordinal;

@@ -59,6 +59,7 @@
 (define entries (capability-report-entries report))
 (define entries-again (capability-report-entries report))
 (define f32-entry (entry-with-name entries 'tensor.f32))
+(define f32-entry-again (entry-with-name entries-again 'tensor.f32))
 (define baseline-entry (entry-with-name entries 'tensor.i64))
 
 (check "exact eleven sorted rows"
@@ -75,17 +76,20 @@
        (and (eq? (capability-entry-status f32-entry) 'verified)
             (eq? (capability-entry-implementation f32-entry)
                  'eshkol-transformer-f32)
-            (string=? (capability-entry-version f32-entry) "1.0")
+            (string=? (capability-entry-version f32-entry) "1.1")
             (capability-entry-deterministic? f32-entry)
             (string=?
              (capability-entry-evidence f32-entry)
-             "I2:bounded-exact-f32-storage.copy-v1")
+             "I2:bounded-exact-f32-storage.copy-v2")
             (equal?
              (capability-entry-constraints f32-entry)
              '((devices (cpu))
                (dtypes (f32))
                (operations (storage.copy))
-               (shape-ranges (() ((0 4611686018427387903))))))))
+               (shape-ranges
+                (() ((0 4611686018427387903))
+                 ((2 2) (4 4)) ((4 4) (4 4)) ((4 4) (8 8))
+                 ((8 8) (4 4)) ((256 256) (4 4))))))))
 (check "exact baseline metadata"
        (and (eq? (capability-entry-status baseline-entry) 'unverified)
             (eq? (capability-entry-implementation baseline-entry) 'eshkol-core)
@@ -104,6 +108,14 @@
 (define rank1-max
   (capability-request 'storage.copy 'f32 'cpu
                       '(4611686018427387903) #f))
+(define rank2-supported
+  (map (lambda (shape)
+         (capability-request 'storage.copy 'f32 'cpu shape #t))
+       '((2 4) (4 4) (4 8) (8 4) (256 4))))
+(define (all-rank2-supported? requests)
+  (if (null? requests) #t
+      (and (capability-verified? report 'tensor.f32 (car requests))
+           (all-rank2-supported? (cdr requests)))))
 (define (all-unverified-nonmatches? names)
   (if (null? names) #t
       (and
@@ -120,6 +132,8 @@
        (capability-verified? report 'tensor.f32 rank1-zero))
 (check "rank1 maximum matches"
        (capability-verified? report 'tensor.f32 rank1-max))
+(check "exact bounded rank2 matrix matches"
+       (all-rank2-supported? rank2-supported))
 (check "require returns a fresh exact entry"
        (let ((required
               (capability-require report 'tensor.f32 scalar-true)))
@@ -131,10 +145,20 @@
                       '(4611686018427387904) #t))
 (define rank2
   (capability-request 'storage.copy 'f32 'cpu '(1 1) #t))
+(define rank2-near-misses
+  (map (lambda (shape)
+         (capability-request 'storage.copy 'f32 'cpu shape #t))
+       '((1 4) (2 5) (4 7) (8 5) (257 4) (256 5))))
+(define (all-rank2-nonmatches? requests)
+  (if (null? requests) #t
+      (and (not (capability-verified? report 'tensor.f32 (car requests)))
+           (all-rank2-nonmatches? (cdr requests)))))
 (check "rank1 provider one-over is unsupported"
        (not (capability-verified? report 'tensor.f32 rank1-over)))
 (check "rank2 is a genuine K1 nonmatch"
        (not (capability-verified? report 'tensor.f32 rank2)))
+(check "rank2 near-miss and one-over matrix is unsupported"
+       (all-rank2-nonmatches? rank2-near-misses))
 (check "all ten unverified rows stay unsupported"
        (all-unverified-nonmatches? unverified-names))
 (check "unknown valid capability stays unsupported"
@@ -251,15 +275,36 @@
        (and (not (eq? first-constraints second-constraints))
             (equal? second-constraints
                     (capability-entry-constraints f32-entry))))
+(define rank2-constraints
+  (car (cdr (car (cdr (cdr (cdr second-constraints)))))))
+(define (mutate-dimension-pairs! ranges)
+  (if (not (null? ranges))
+      (begin
+        (set-car! (car (car ranges)) 999)
+        (set-car! (car (cdr (car ranges))) 999)
+        (mutate-dimension-pairs! (cdr ranges)))))
+(mutate-dimension-pairs! (cdr (cdr rank2-constraints)))
+(check "every rank2 extent pair is fresh across entries and accessors"
+       (and
+        (equal? (capability-entry-constraints f32-entry)
+                '((devices (cpu))
+                  (dtypes (f32))
+                  (operations (storage.copy))
+                  (shape-ranges
+                   (() ((0 4611686018427387903))
+                    ((2 2) (4 4)) ((4 4) (4 4)) ((4 4) (8 8))
+                    ((8 8) (4 4)) ((256 256) (4 4))))))
+        (equal? (capability-entry-constraints f32-entry-again)
+                (capability-entry-constraints f32-entry))))
 (define first-version (capability-entry-version f32-entry))
 (string-set! first-version 0 #\X)
 (check "version strings are detached fresh copies"
-       (string=? (capability-entry-version f32-entry) "1.0"))
+       (string=? (capability-entry-version f32-entry) "1.1"))
 (define first-evidence (capability-entry-evidence f32-entry))
 (string-set! first-evidence 0 #\X)
 (check "evidence strings are detached fresh copies"
        (string=? (capability-entry-evidence f32-entry)
-                 "I2:bounded-exact-f32-storage.copy-v1"))
+                 "I2:bounded-exact-f32-storage.copy-v2"))
 
 (define captured-query #f)
 (define query-capture
