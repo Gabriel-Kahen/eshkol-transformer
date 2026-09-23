@@ -37,7 +37,7 @@ class TR3SchemaTests(unittest.TestCase):
         }
         schema._tensor(tensor, [4], "tensor")
         for mutation, message in (
-            ({**tensor, "shape": [2, 2]}, "shape mismatch"),
+            ({**tensor, "shape": [2, 2]}, "shape"),
             ({**tensor, "data": tensor["data"][:-1]}, "incorrect value count"),
             ({**tensor, "data": ["00000000"] * 3 + ["7f800000"]}, "nonfinite"),
         ):
@@ -157,7 +157,7 @@ class TR3SchemaTests(unittest.TestCase):
                     for path in sorted(directory.iterdir(), key=lambda item: item.name)
                 ],
             }
-            with self.assertRaisesRegex(ValueError, "frozen profile shards/packing"):
+            with self.assertRaisesRegex(ValueError, "frozen contract"):
                 schema.validate_corpora(payload, root)
 
     def test_rejects_cursor_checksum_identity_and_ordinal(self) -> None:

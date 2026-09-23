@@ -297,7 +297,7 @@ def build(output: Path) -> dict[str, object]:
         "thresholds": {"final_training_mean_ce_strict_upper": 0.05, "tolerances": TOLERANCES},
         "provenance": {
             "python": ".".join(map(str, m3.PINNED_PYTHON)),
-            "torch": torch.__version__,
+            "torch": str(torch.__version__),
             "environment": {name: os.environ[name] for name in ("ATEN_CPU_CAPABILITY", "MKL_CBWR")},
             "proposal": PROPOSAL,
             "source_sha256": _source_hashes(),

@@ -43,6 +43,9 @@ Every summary and trajectory evaluation is bound to those authenticated batches;
 masked per-token f32 losses reconstruct each exact numerator word. Final manifest
 measurements are derived from the validated summary, including the unique active
 argmax and exact train/held-out transition sets.
+Frozen configuration, shape, counter, ordinal, version, and measurement records
+use type-sensitive comparison, so JSON booleans and floats cannot stand in for
+required integers and booleans cannot stand in for required floats.
 The generated summary retains all three 14-parameter gradient records used to
 recompute the unequal-mask tolerance result, its bit-identity flag, and the wrong
 per-batch-mean control. Those records establish internal evidence consistency;

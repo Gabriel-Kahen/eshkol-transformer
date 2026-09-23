@@ -13,6 +13,7 @@ from tests.d2.test_resources import load_d1_resource
 from tests.tr3_reference.constants import (
     FORMAT,
     HELDOUT_SHARDS,
+    INITIALIZER_SEED,
     OPTIMIZER,
     PARAMETER_SHAPES,
     PROFILE,
@@ -25,6 +26,7 @@ from tests.tr3_reference.constants import (
     TRAIN_SHARDS,
     UPDATE_COUNT,
     VERSION,
+    VOCAB_SIZE,
 )
 
 
@@ -43,9 +45,26 @@ def _exact_int(value: object, where: str, low: int = 0, high: int = (1 << 63) - 
 
 
 def _finite(value: object, where: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-        _fail(f"{where}: expected finite number")
-    return float(value)
+    if type(value) is not float or not math.isfinite(value):
+        _fail(f"{where}: expected finite float")
+    return value
+
+
+def _strict_equal(value: object, expected: object, where: str) -> None:
+    if type(value) is not type(expected):
+        _fail(f"{where}: value type differs from frozen contract")
+    if isinstance(expected, dict):
+        if set(value) != set(expected):
+            _fail(f"{where}: mapping fields differ from frozen contract")
+        for key in expected:
+            _strict_equal(value[key], expected[key], f"{where}.{key}")
+    elif isinstance(expected, list):
+        if len(value) != len(expected):
+            _fail(f"{where}: list length differs from frozen contract")
+        for index, (item, expected_item) in enumerate(zip(value, expected)):
+            _strict_equal(item, expected_item, f"{where}[{index}]")
+    elif value != expected:
+        _fail(f"{where}: value differs from frozen contract")
 
 
 def _sha(value: object, where: str) -> str:
@@ -119,8 +138,9 @@ def _f32_words(values: object, count: int, where: str) -> None:
 def _tensor(record: object, shape: list[int], where: str) -> None:
     if not isinstance(record, dict) or set(record) != {"data", "encoding", "shape"}:
         _fail(f"{where}: tensor fields differ from version 1")
-    if record["encoding"] != "ieee754-f32-hex-be" or record["shape"] != shape:
-        _fail(f"{where}: tensor encoding or shape mismatch")
+    if record["encoding"] != "ieee754-f32-hex-be":
+        _fail(f"{where}: tensor encoding mismatch")
+    _strict_equal(record["shape"], shape, where + ".shape")
     count = math.prod(shape)
     _f32_words(record["data"], count, where + ".data")
 
@@ -203,7 +223,10 @@ def _evaluation(
     if _exact_int(record["batch_count"], where + ".batch_count", 1) != len(batches):
         _fail(f"{where}: batch count mismatch")
     total = sum(weights)
-    if record["weight"] != total or record["token_count"] != total:
+    if (
+        _exact_int(record["weight"], where + ".weight", 1) != total
+        or _exact_int(record["token_count"], where + ".token_count", 1) != total
+    ):
         _fail(f"{where}: token/weight count mismatch")
     numerator = _finite(record["numerator"], where + ".numerator")
     mean = _finite(record["mean"], where + ".mean")
@@ -226,12 +249,16 @@ def validate_trajectory(payload: object, training_batches: list[dict[str, object
     }
     if not isinstance(payload, dict) or set(payload) != expected:
         _fail("trajectory fields differ from version 1")
-    if (payload["format"], payload["version"], payload["kind"], payload["profile"]) != (
-        FORMAT, VERSION, "complete-training-trajectory", PROFILE
+    if (
+        payload["format"] != FORMAT
+        or _exact_int(payload["version"], "trajectory.version") != VERSION
+        or payload["kind"] != "complete-training-trajectory"
+        or payload["profile"] != PROFILE
     ):
         _fail("trajectory identity mismatch")
-    if payload["parameter_paths"] != list(PATHS) or payload["parameter_shapes"] != SHAPES:
+    if payload["parameter_paths"] != list(PATHS):
         _fail("trajectory parameter contract mismatch")
+    _strict_equal(payload["parameter_shapes"], SHAPES, "trajectory.parameter_shapes")
     if payload["logical_alias"] != {"token_embedding/weight": "head/weight"}:
         _fail("trajectory logical alias mismatch")
     entries = payload["entries"]
@@ -242,7 +269,7 @@ def validate_trajectory(payload: object, training_batches: list[dict[str, object
             "completed_updates", "optimizer_state", "parameters", "training_evaluation"
         }:
             _fail(f"trajectory.entries[{update}]: fields differ")
-        if entry["completed_updates"] != update:
+        if _exact_int(entry["completed_updates"], f"trajectory.entries[{update}].completed_updates") != update:
             _fail(f"trajectory.entries[{update}]: nonconsecutive update")
         if list(entry["parameters"]) != list(PATHS) or list(entry["optimizer_state"]) != list(PATHS):
             _fail(f"trajectory.entries[{update}]: parameter order/path mismatch")
@@ -254,7 +281,9 @@ def validate_trajectory(payload: object, training_batches: list[dict[str, object
         for path in PATHS:
             _tensor(entry["parameters"][path], SHAPES[path], f"trajectory.entries[{update}].parameters.{path}")
             state = entry["optimizer_state"][path]
-            if not isinstance(state, dict) or set(state) != {"exp_avg", "exp_avg_sq", "step"} or state["step"] != update:
+            if not isinstance(state, dict) or set(state) != {"exp_avg", "exp_avg_sq", "step"}:
+                _fail(f"trajectory.entries[{update}].optimizer_state.{path}: invalid state")
+            if _exact_int(state["step"], f"trajectory.entries[{update}].optimizer_state.{path}.step") != update:
                 _fail(f"trajectory.entries[{update}].optimizer_state.{path}: invalid state")
             _tensor(state["exp_avg"], SHAPES[path], f"trajectory.entries[{update}].optimizer_state.{path}.exp_avg")
             _tensor(state["exp_avg_sq"], SHAPES[path], f"trajectory.entries[{update}].optimizer_state.{path}.exp_avg_sq")
@@ -265,8 +294,11 @@ def validate_corpora(payload: object, root: Path) -> dict[str, list[dict[str, ob
         "datasets", "format", "kind", "profile", "resume_cases", "tokenizer", "version"
     }:
         _fail("corpora fields differ from version 1")
-    if (payload["format"], payload["version"], payload["kind"], payload["profile"]) != (
-        FORMAT, VERSION, "corpora-and-cursors", PROFILE
+    if (
+        payload["format"] != FORMAT
+        or _exact_int(payload["version"], "corpora.version") != VERSION
+        or payload["kind"] != "corpora-and-cursors"
+        or payload["profile"] != PROFILE
     ):
         _fail("corpora identity mismatch")
     tokenizer = payload["tokenizer"]
@@ -274,7 +306,7 @@ def validate_corpora(payload: object, root: Path) -> dict[str, list[dict[str, ob
         _fail("tokenizer record fields differ")
     if (
         tokenizer["path"] != "tokenizer.etok"
-        or tokenizer["vocab_size"] != 256
+        or _exact_int(tokenizer["vocab_size"], "tokenizer.vocab_size", 1) != VOCAB_SIZE
         or tokenizer["fingerprint"] != TOKENIZER_FINGERPRINT
         or tokenizer["identity"] != {"utf8_policy": "raw", "specials": [], "prefix": [], "suffix": []}
     ):
@@ -299,11 +331,13 @@ def validate_corpora(payload: object, root: Path) -> dict[str, list[dict[str, ob
         }:
             _fail(f"datasets.{name}: fields differ")
         expected_shards, expected_packing = dataset_contracts[name]
-        if (
-            record["shards"] != [list(shard) for shard in expected_shards]
-            or record["packing"] is not expected_packing
-        ):
+        if record["packing"] is not expected_packing:
             _fail(f"datasets.{name}: differs from frozen profile shards/packing")
+        _strict_equal(
+            record["shards"],
+            [list(shard) for shard in expected_shards],
+            f"datasets.{name}.shards",
+        )
         if type(record["packing"]) is not bool or not isinstance(record["batches"], list):
             _fail(f"datasets.{name}: invalid packing/batches")
         if not isinstance(record["shards"], list) or not record["shards"]:
@@ -415,6 +449,11 @@ def validate_corpora(payload: object, root: Path) -> dict[str, list[dict[str, ob
         for index, contribution in enumerate(contributions):
             if not isinstance(contribution, dict) or set(contribution) != {"batch", "contribution_ordinal", "epoch"}:
                 _fail(f"resume_cases.{name}.contributions[{index}]: fields differ")
+            if _exact_int(
+                contribution["contribution_ordinal"],
+                f"resume_cases.{name}.contributions[{index}].contribution_ordinal",
+            ) != index:
+                _fail(f"resume_cases.{name}.contributions[{index}]: ordinal mismatch")
             emitted_batch = dataset.next_batch()
             if emitted_batch is None:
                 crossings += 1
@@ -423,6 +462,11 @@ def validate_corpora(payload: object, root: Path) -> dict[str, list[dict[str, ob
                 emitted_batch = dataset.next_batch()
             if emitted_batch is None:
                 _fail(f"resume_cases.{name}: replay remained exhausted after epoch reset")
+            if _exact_int(
+                contribution["epoch"],
+                f"resume_cases.{name}.contributions[{index}].epoch",
+            ) != epoch:
+                _fail(f"resume_cases.{name}.contributions[{index}]: epoch mismatch")
             recorded_batch = contribution["batch"]
             if not isinstance(recorded_batch, dict) or set(recorded_batch) != {"inputs", "mask", "targets", "weight"}:
                 _fail(f"resume_cases.{name}.contributions[{index}].batch: fields differ")
@@ -508,12 +552,24 @@ def validate_summary(
         "profile", "provenance", "scope", "thresholds", "training", "updates", "version",
     }:
         _fail("summary fields differ from version 1")
-    if (payload["format"], payload["version"], payload["kind"], payload["profile"]) != (
-        FORMAT, VERSION, "acceptance-summary", PROFILE
-    ) or payload["optimizer"] != OPTIMIZER or payload["updates"] != UPDATE_COUNT:
+    if (
+        payload["format"] != FORMAT
+        or _exact_int(payload["version"], "summary.version") != VERSION
+        or payload["kind"] != "acceptance-summary"
+        or payload["profile"] != PROFILE
+        or _exact_int(payload["updates"], "summary.updates") != UPDATE_COUNT
+    ):
         _fail("summary identity/configuration mismatch")
-    if not isinstance(payload["initializer"], dict) or set(payload["initializer"]) != {"seed", "successor"} or payload["initializer"]["seed"] != 1729:
+    _strict_equal(payload["optimizer"], OPTIMIZER, "summary.optimizer")
+    if not isinstance(payload["initializer"], dict) or set(payload["initializer"]) != {"seed", "successor"}:
         _fail("summary initializer mismatch")
+    if _exact_int(payload["initializer"]["seed"], "summary.initializer.seed") != INITIALIZER_SEED:
+        _fail("summary initializer mismatch")
+    _strict_equal(
+        payload["initializer"]["successor"],
+        [1, INITIALIZER_SEED, 290, 0],
+        "summary.initializer.successor",
+    )
     if not isinstance(payload["training"], dict) or set(payload["training"]) != {"before", "after"}:
         _fail("summary training fields differ")
     if not isinstance(payload["heldout"], dict) or set(payload["heldout"]) != {"before", "after", "train_transitions", "heldout_transitions"}:
@@ -608,9 +664,11 @@ def validate_summary(
     wrong_delta = _finite(proof["wrong_per_batch_mean_max_abs_difference"], "wrong mean delta")
     if wrong_delta <= 0 or wrong_delta != max(wrong_differences):
         _fail("wrong mean-seed control did not differ")
-    thresholds = payload["thresholds"]
-    if thresholds != {"final_training_mean_ce_strict_upper": 0.05, "tolerances": TOLERANCES}:
-        _fail("summary thresholds differ from frozen contract")
+    _strict_equal(
+        payload["thresholds"],
+        {"final_training_mean_ce_strict_upper": 0.05, "tolerances": TOLERANCES},
+        "summary.thresholds",
+    )
     scope = payload["scope"]
     if not isinstance(scope, dict) or scope.get("development_reference_only") is not True or any(
         scope.get(field) is not False
@@ -620,8 +678,9 @@ def validate_summary(
     provenance = payload["provenance"]
     if not isinstance(provenance, dict) or set(provenance) != {"environment", "proposal", "python", "source_sha256", "torch"}:
         _fail("provenance fields differ")
-    if provenance["python"] != "3.14.6" or provenance["torch"] != "2.13.0+cpu" or provenance["environment"] != {"ATEN_CPU_CAPABILITY": "default", "MKL_CBWR": "COMPATIBLE"} or provenance["proposal"] != PROPOSAL:
+    if provenance["python"] != "3.14.6" or provenance["torch"] != "2.13.0+cpu" or provenance["environment"] != {"ATEN_CPU_CAPABILITY": "default", "MKL_CBWR": "COMPATIBLE"}:
         _fail("pinned provenance mismatch")
+    _strict_equal(provenance["proposal"], PROPOSAL, "summary.provenance.proposal")
     source_hashes = provenance["source_sha256"]
     if not isinstance(source_hashes, dict) or set(source_hashes) != set(SOURCE_PATHS):
         _fail("provenance source inventory mismatch")
@@ -639,10 +698,17 @@ def validate_output(root: Path, manifest: object) -> None:
         "artifacts", "configuration", "format", "measurements", "profile", "provenance", "scope", "version"
     }:
         _fail("manifest fields differ from version 1")
-    if manifest["format"] != "eshkol-tr3-training-reference-manifest" or manifest["version"] != VERSION or manifest["profile"] != PROFILE:
+    if (
+        manifest["format"] != "eshkol-tr3-training-reference-manifest"
+        or _exact_int(manifest["version"], "manifest.version") != VERSION
+        or manifest["profile"] != PROFILE
+    ):
         _fail("manifest identity mismatch")
-    if manifest["configuration"] != {"initializer_seed": 1729, "optimizer": OPTIMIZER, "updates": UPDATE_COUNT}:
-        _fail("manifest configuration mismatch")
+    _strict_equal(
+        manifest["configuration"],
+        {"initializer_seed": INITIALIZER_SEED, "optimizer": OPTIMIZER, "updates": UPDATE_COUNT},
+        "manifest.configuration",
+    )
     artifacts = manifest["artifacts"]
     if not isinstance(artifacts, dict) or set(artifacts) != {"corpora.json", "summary.json", "trajectory.json"}:
         _fail("manifest artifact set mismatch")
@@ -667,7 +733,6 @@ def validate_output(root: Path, manifest: object) -> None:
         or summary["training"]["after"] != trajectory["entries"][-1]["training_evaluation"]
     ):
         _fail("summary training endpoints differ from complete trajectory")
-    if summary["provenance"] != manifest["provenance"] or summary["scope"] != manifest["scope"]:
-        _fail("manifest summary provenance/scope mismatch")
-    if manifest["measurements"] != measurements:
-        _fail("manifest measurements differ from generated summary")
+    _strict_equal(manifest["provenance"], summary["provenance"], "manifest.provenance")
+    _strict_equal(manifest["scope"], summary["scope"], "manifest.scope")
+    _strict_equal(manifest["measurements"], measurements, "manifest.measurements")

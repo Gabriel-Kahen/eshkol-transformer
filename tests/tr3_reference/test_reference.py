@@ -19,10 +19,15 @@ HERE = Path(__file__).resolve().parent
 
 class TR3ReferenceTests(unittest.TestCase):
     @staticmethod
-    def _write_summary(root: Path, manifest: dict[str, object], summary: object) -> None:
-        encoded = canonical(summary)
-        (root / "summary.json").write_bytes(encoded)
-        manifest["artifacts"]["summary.json"] = {
+    def _write_artifact(
+        root: Path,
+        manifest: dict[str, object],
+        name: str,
+        payload: object,
+    ) -> None:
+        encoded = canonical(payload)
+        (root / name).write_bytes(encoded)
+        manifest["artifacts"][name] = {
             "bytes": len(encoded),
             "sha256": hashlib.sha256(encoded).hexdigest(),
         }
@@ -152,8 +157,90 @@ class TR3ReferenceTests(unittest.TestCase):
             mutations.append(("unbound numerator", changed, changed_manifest, "masked per-token"))
 
             for label, changed, changed_manifest, message in mutations:
-                self._write_summary(root, changed_manifest, changed)
+                self._write_artifact(root, changed_manifest, "summary.json", changed)
                 with self.subTest(mutation=label), self.assertRaisesRegex(ValueError, message):
+                    validate_output(root, changed_manifest)
+
+    def test_refreshed_integral_type_lookalikes_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="tr3-integral-types-") as raw:
+            root = Path(raw) / "generated"
+            manifest = build(root)
+            payloads = {
+                name: json.loads((root / name).read_text())
+                for name in ("corpora.json", "summary.json", "trajectory.json")
+            }
+            path = next(iter(payloads["trajectory.json"]["parameter_paths"]))
+            mutations = []
+
+            changed_manifest = copy.deepcopy(manifest)
+            changed_manifest["version"] = True
+            mutations.append(("manifest version bool", None, None, changed_manifest))
+            changed_manifest = copy.deepcopy(manifest)
+            changed_manifest["configuration"]["initializer_seed"] = 1729.0
+            mutations.append(("configuration seed float", None, None, changed_manifest))
+            changed_manifest = copy.deepcopy(manifest)
+            changed_manifest["configuration"]["optimizer"]["schedule"]["factor"] = True
+            mutations.append(("nested float bool", None, None, changed_manifest))
+            changed_manifest = copy.deepcopy(manifest)
+            changed_manifest["measurements"]["heldout_batches"] = 2.0
+            mutations.append(("derived count float", None, None, changed_manifest))
+            changed_manifest = copy.deepcopy(manifest)
+            changed_manifest["measurements"]["final_active_targets"][0] = 197.0
+            mutations.append(("derived token float", None, None, changed_manifest))
+            changed_manifest = copy.deepcopy(manifest)
+            changed_manifest["artifacts"]["summary.json"]["bytes"] = float(
+                changed_manifest["artifacts"]["summary.json"]["bytes"]
+            )
+            mutations.append(("artifact size float", None, None, changed_manifest))
+
+            changed = copy.deepcopy(payloads["summary.json"])
+            changed["version"] = True
+            mutations.append(("summary version bool", "summary.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["summary.json"])
+            changed["updates"] = 32.0
+            mutations.append(("summary updates float", "summary.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["summary.json"])
+            changed["initializer"]["successor"][0] = 1.0
+            mutations.append(("initializer word float", "summary.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["summary.json"])
+            changed["training"]["before"]["token_count"] = 2.0
+            mutations.append(("evaluation count float", "summary.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["summary.json"])
+            changed["provenance"]["proposal"]["section"] = 13.0
+            mutations.append(("proposal section float", "summary.json", changed, copy.deepcopy(manifest)))
+
+            changed = copy.deepcopy(payloads["trajectory.json"])
+            changed["entries"][1]["completed_updates"] = 1.0
+            mutations.append(("completed update float", "trajectory.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["trajectory.json"])
+            changed["parameter_shapes"][path][0] = 4.0
+            mutations.append(("top shape float", "trajectory.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["trajectory.json"])
+            changed["entries"][0]["parameters"][path]["shape"][0] = 4.0
+            mutations.append(("tensor shape float", "trajectory.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["trajectory.json"])
+            changed["entries"][1]["optimizer_state"][path]["step"] = True
+            mutations.append(("optimizer step bool", "trajectory.json", changed, copy.deepcopy(manifest)))
+
+            changed = copy.deepcopy(payloads["corpora.json"])
+            changed["version"] = True
+            mutations.append(("corpora version bool", "corpora.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["corpora.json"])
+            changed["tokenizer"]["vocab_size"] = 256.0
+            mutations.append(("vocab size float", "corpora.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["corpora.json"])
+            changed["datasets"]["train"]["shards"][0][0] = 3.0
+            mutations.append(("corpus token float", "corpora.json", changed, copy.deepcopy(manifest)))
+            changed = copy.deepcopy(payloads["corpora.json"])
+            changed["resume_cases"]["accumulation-1"]["contributions"][0]["epoch"] = 1.0
+            mutations.append(("resume epoch float", "corpora.json", changed, copy.deepcopy(manifest)))
+
+            for label, name, changed, changed_manifest in mutations:
+                for original_name, original in payloads.items():
+                    (root / original_name).write_bytes(canonical(original))
+                if name is not None:
+                    self._write_artifact(root, changed_manifest, name, changed)
+                with self.subTest(mutation=label), self.assertRaises(ValueError):
                     validate_output(root, changed_manifest)
 
     def test_manifest_detects_generated_artifact_mutation(self) -> None:
