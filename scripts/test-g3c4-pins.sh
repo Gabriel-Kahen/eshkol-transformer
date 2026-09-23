@@ -80,6 +80,15 @@ for pins_mode in normal sanitize; do
     >"${pins_evidence}/c2-${pins_mode}.stdout" \
     2>"${pins_evidence}/c2-${pins_mode}.stderr"
   test ! -s "${pins_evidence}/c2-${pins_mode}.stderr"
+
+  "${pins_cc}" "${pins_flags[@]}" "${pins_mode_flags[@]}" \
+    -DET_F32_TENSOR_TESTING -DET_M3_CALL_TESTING \
+    -DET_G3C4_NATIVE_PINS_PRIVATE \
+    "${c2_sources[@]}" -lm -o "${pins_evidence}/c2-private-${pins_mode}"
+  "${pins_environment[@]}" "${pins_evidence}/c2-private-${pins_mode}" \
+    >"${pins_evidence}/c2-private-${pins_mode}.stdout" \
+    2>"${pins_evidence}/c2-private-${pins_mode}.stderr"
+  test ! -s "${pins_evidence}/c2-private-${pins_mode}.stderr"
 done
 "${pins_evidence}/pins-normal" >"${pins_evidence}/pins-repeat.stdout" \
   2>"${pins_evidence}/pins-repeat.stderr"
@@ -90,5 +99,9 @@ cmp "${pins_evidence}/pins-normal.stdout" \
   "${pins_evidence}/pins-sanitize.stdout"
 cmp "${pins_evidence}/c2-normal.stdout" \
   "${pins_evidence}/c2-sanitize.stdout"
+cmp "${pins_evidence}/c2-normal.stdout" \
+  "${pins_evidence}/c2-private-normal.stdout"
+cmp "${pins_evidence}/c2-private-normal.stdout" \
+  "${pins_evidence}/c2-private-sanitize.stdout"
 cat "${pins_evidence}/pins-normal.stdout"
 printf 'G3-C4 pin evidence: %s\n' "${pins_evidence}"

@@ -378,13 +378,6 @@ static m3_call_pin_record m3_call_g3t_record(
     pins, sizeof(*pins), _Alignof(et_g3t_model_pins_internal), NULL, NULL,
     NULL, NULL, NULL
   };
-  if (pins) {
-    record.parameters = pins->parameters;
-    record.identities = pins->identities;
-    record.values = pins->values;
-    record.views = pins->views;
-    record.held_mask = &pins->held_mask;
-  }
   return record;
 }
 
@@ -394,14 +387,23 @@ static m3_call_pin_record m3_call_g3c4_record(
     pins, sizeof(*pins), _Alignof(et_g3c4_model_pins_internal), NULL, NULL,
     NULL, NULL, NULL
   };
-  if (pins) {
-    record.parameters = pins->parameters;
-    record.identities = pins->identities;
-    record.values = pins->values;
-    record.views = pins->views;
-    record.held_mask = &pins->held_mask;
-  }
   return record;
+}
+
+/* Call only after storage validation. Both record types have the asserted
+ * offsets and the addressed array/scalar members have identical C types. */
+static void m3_call_record_bind(m3_call_pin_record *record) {
+  unsigned char *storage = record->storage;
+  record->parameters = (void *)(storage +
+      offsetof(et_g3t_model_pins_internal, parameters));
+  record->identities = (void *)(storage +
+      offsetof(et_g3t_model_pins_internal, identities));
+  record->values = (void *)(storage +
+      offsetof(et_g3t_model_pins_internal, values));
+  record->views = (void *)(storage +
+      offsetof(et_g3t_model_pins_internal, views));
+  record->held_mask = (void *)(storage +
+      offsetof(et_g3t_model_pins_internal, held_mask));
 }
 
 /* Self has a model-specific pointer type. Copy its representation so the shared
@@ -558,6 +560,7 @@ static int32_t m3_call_record_begin(
       ranges_overlap(parameters, 14 * sizeof(*parameters), identities,
                      14 * sizeof(*identities)))
     return m3_call_report(M3_CALL_BUFFER, error, operation);
+  m3_call_record_bind(record);
   if (!m3_call_record_idle(record))
     return m3_call_report(m3_call_record_self(record) != record->storage &&
                           m3_call_record_self(record) ? M3_CALL_HANDLE : M3_CALL_ACTIVE,
@@ -608,6 +611,7 @@ static int32_t m3_call_record_check(m3_call_pin_record *record,
   if (!record->storage) return m3_call_report(M3_CALL_NULL, error, operation);
   if (!m3_call_storage(record->storage, record->size, record->alignment))
     return m3_call_report(M3_CALL_BUFFER, error, operation);
+  m3_call_record_bind(record);
   if (m3_call_record_self(record) != record->storage ||
       *record->held_mask != M3_CALL_FULL_MASK)
     return m3_call_report(M3_CALL_HANDLE, error, operation);
@@ -618,6 +622,7 @@ static int32_t m3_call_record_check(m3_call_pin_record *record,
 static void m3_call_record_end(m3_call_pin_record *record,
     const m3_call_pin_profile *profile) {
   if (!m3_call_storage(record->storage, record->size, record->alignment)) abort();
+  m3_call_record_bind(record);
   if (m3_call_record_idle(record)) return;
   if (m3_call_record_self(record) != record->storage ||
       *record->held_mask != M3_CALL_FULL_MASK ||
