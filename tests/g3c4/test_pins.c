@@ -143,6 +143,8 @@ static void admission(void) {
   f.identities[0]=f.identities[1]; BAD_BEGIN(1,7); f.identities[0]=identity;
   f.p[0]=f.p[1]; f.identities[0]=f.identities[1]; BAD_BEGIN(1,7);
   f.p[0]=saved; f.identities[0]=identity;
+  et_f32_tensor *shared_value=f.p[1]->value;
+  f.p[1]->value=f.p[0]->value; BAD_BEGIN(1,7); f.p[1]->value=shared_value;
   et_f32_tensor *wrong=NULL; et_f32_parameter *other=NULL;
   unsigned char other_identity=0; const uint64_t shape[]={2,8};
   OK(et_f32_tensor_create_v1(2,shape,&wrong,&error));
@@ -163,6 +165,32 @@ static void admission(void) {
   BAD_BEGIN(4,8); OK(et_f32_gradient_reset_plan_release_v1(&reset,&error));
   empty(); preserved();
 #undef BAD_BEGIN
+}
+static void geometry_admission(void) {
+#define BAD_SHAPE() do { \
+  expect(et_g3c4_model_pins_begin_internal(f.p,f.identities,&f.pins,&error), \
+         2,3,"g3c4-model-pins-begin"); \
+  empty(); \
+} while(0)
+  for(size_t i=0;i<14;++i) for(size_t carrier=0;carrier<2;++carrier) {
+    et_f32_tensor *tensor=carrier?f.p[i]->gradient:f.p[i]->value;
+    const size_t rank=shapes[i][1]?2:1;
+    size_t saved=tensor->rank; tensor->rank=0; BAD_SHAPE(); tensor->rank=saved;
+    saved=tensor->element_count; ++tensor->element_count;
+    BAD_SHAPE(); tensor->element_count=saved;
+    saved=tensor->byte_length; tensor->byte_length-=sizeof(float);
+    BAD_SHAPE(); tensor->byte_length=saved;
+    for(size_t dimension=0;dimension<rank;++dimension) {
+      uint64_t extent=tensor->shape[dimension]; ++tensor->shape[dimension];
+      BAD_SHAPE(); tensor->shape[dimension]=extent;
+    }
+    for(size_t dimension=0;dimension<rank;++dimension) {
+      size_t stride=tensor->strides[dimension]; ++tensor->strides[dimension];
+      BAD_SHAPE(); tensor->strides[dimension]=stride;
+    }
+  }
+  empty(); preserved();
+#undef BAD_SHAPE
 }
 static void geometry_separation(void) {
   et_g3t_model_pins_internal c2_pins={0};
@@ -472,7 +500,7 @@ int main(void) {
   setup();
   expect(et_g3c4_model_pins_check_internal(&f.pins,&error),4,7,"g3c4-model-pins-check");
   et_g3c4_model_pins_end_internal(&f.pins);
-  admission(); geometry_separation(); busy_admission(); spans();
+  admission(); geometry_admission(); geometry_separation(); busy_admission(); spans();
   acquisition_failures(); exclusions(0); failstop();
   retention(1024); retention(8192);
   present_gradients(); acquisition_failures(); exclusions(1); retention(1024); retention(8192);
@@ -480,6 +508,6 @@ int main(void) {
   et_f32_test_live_counts_snapshot_v1(&live);
   CHECK(live.tensors==28 && live.parameters==14 && !live.borrows &&
         !live.copy_plans && !live.gradient_plans && !live.reset_plans);
-  puts("g3c4 pins: genuine owner, geometry split, 98 busy controls, 14 failure prefixes, 25 fail-stop cases, absent/present gradient preservation passed");
+  puts("g3c4 pins: genuine owner, geometry split, 98 busy controls, shared-value rejection, 172 geometry defects, 14 failure prefixes, 25 fail-stop cases, absent/present gradient preservation passed");
   return 0;
 }
