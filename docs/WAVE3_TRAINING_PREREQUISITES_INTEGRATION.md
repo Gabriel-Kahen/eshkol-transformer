@@ -19,6 +19,8 @@ publish any candidate.
 | E3 reference toolkit | `37a8078ce756e7f3c22f14a046142d2f09e98807` | `a2767cbb8e22c10ac29d3e18b076de182653264b` | nine `tests/e3_reference` files only |
 | TR3-O documentation | `eef6f420f64c88c3821fbc3a79660e7a2a3e4b8b` | `0c03f85bfde3469dfc18a13dddd34beef1873f48` | two exact documents plus one ROADMAP union |
 
+The complete per-path source and integrated mode/blob comparison is recorded in
+[`WAVE3_TRAINING_PREREQUISITES_BLOBS.tsv`](WAVE3_TRAINING_PREREQUISITES_BLOBS.tsv).
 Mode-and-blob comparison against the component heads gives these results:
 
 - TR3-B: ten implementation/test paths are exact. `docs/ROADMAP.md` is the
