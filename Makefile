@@ -21,7 +21,7 @@ SHELL := /usr/bin/bash
 	test-c2-persistence-policy test-c2-training-state-owner \
 	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
-	test-o2 test-p1 test-p1-native test-python-isolation test-q0 \
+	test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-tr3b test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
 
@@ -107,6 +107,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
@@ -140,6 +141,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
 	/usr/bin/bash scripts/test-p1.sh
 	/usr/bin/bash scripts/test-d1.sh
@@ -175,6 +177,7 @@ test-ci-core-after-build:
 
 test-ci-optimizer-after-build:
 	/usr/bin/bash scripts/test-o2.sh
+	/usr/bin/bash scripts/test-tr3-o.sh
 
 test-ci-contracts-after-build:
 	/usr/bin/bash scripts/check_a0_api_contract.sh
@@ -272,6 +275,10 @@ test-n3k: build
 
 test-o2: build
 	/usr/bin/bash scripts/test-o2.sh
+
+# Private TR3 successor seam; no public trainer aggregate is built here.
+test-tr3-o:
+	/usr/bin/bash scripts/test-tr3-o.sh
 
 test-x1: configure
 	/usr/bin/bash scripts/test-x1.sh

@@ -23,7 +23,8 @@ SUITES = [
 FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
     "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
-    "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-x1.sh",
+    "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-tr3-o.sh",
+    "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
     "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-tr3b.sh", "test-g3n.sh", "test-g3c4.sh",
 )]
