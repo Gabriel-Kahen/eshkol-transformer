@@ -65,26 +65,30 @@ four-key constraint carrier:
 ((devices ()) (dtypes ()) (operations ()) (shape-ranges ()))
 ```
 
-The sole verified row is implementation `eshkol-transformer-f32`, version `"1.0"`,
-evidence `"I2:bounded-exact-f32-storage.copy-v1"`, determinism `#t`, and:
+The sole verified row is implementation `eshkol-transformer-f32`, version `"1.1"`,
+evidence `"I2:bounded-exact-f32-storage.copy-v2"`, determinism `#t`, and:
 
 ```scheme
 ((devices (cpu))
  (dtypes (f32))
  (operations (storage.copy))
- (shape-ranges (() ((0 4611686018427387903)))))
+ (shape-ranges
+  (() ((0 4611686018427387903))
+   ((2 2) (4 4)) ((4 4) (4 4)) ((4 4) (8 8))
+   ((8 8) (4 4)) ((256 256) (4 4)))))
 ```
 
 Both `deterministic? #t` and `#f` requests match this deterministic row. False means
 the caller does not require proof of determinism; it does not request a
 nondeterministic implementation. Rank zero and rank one extents through
-`4611686018427387903` match. Rank two or greater, a one-over extent, another
-operation/dtype/device/capability, and each unverified row do not match. K2 calls
+`4611686018427387903` and the five listed rank-two shapes match. Every other
+rank-two shape, rank three or greater, a one-over extent, another operation,
+dtype, device, capability, and each unverified row do not match. K2 calls
 K1's exact `et_kernel_runtime_capability_require` for every ABI-representable
 decision and never substitutes a source-only matcher.
 
-The exact canonical K1/I2 report is 3,059 bytes with SHA-256
-`742800ea988627d9093f8fe394c8ad2be801e35413e20bbcad816f2431be86cb`.
+The exact canonical K1/I2 report is 3,133 bytes with SHA-256
+`50c7078af4d3e495c4d668b6b8aaab29024cbab6a775fa6e98c9e9d10124389e`.
 The K2 gate discovers the genuine fixed I2 provider, emits this K1 report twice,
 compares the bytes, and asserts both the byte count and digest.
 
