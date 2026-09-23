@@ -88,6 +88,13 @@ other rows in all six repository predecessor manifests retain their reviewed
 values and verify against the integrated tree. These five checksum-row changes
 are recorded separately from source-component byte identity in the per-path TSV.
 
+The integrated TR3-B bridge is also an exact reviewed consumer of the L3S ABI
+and provider accessor. The fail-closed L3S repository scan therefore admits
+`native/tr3b_objective_bridge.c` in `native/l3s_source_closure.txt`. This extends
+only the explicit consumer inventory: the standalone L3S compiler depfile,
+single-member archive, exports, undefined symbols, build recipe and ABI remain
+unchanged.
+
 ## Lightweight validation
 
 The integration-preparation gate passed:
@@ -103,6 +110,26 @@ The integration-preparation gate passed:
 
 No full CI, expensive native build or component full gate was run for this
 integration-preparation task.
+
+PR #124 head `79d71086293ccd51bd569785a19c7409d1e070a9` later exposed the
+missing L3S consumer row in supported full CI run `35916891673`. K1, A2 and L2
+completed before `tests/l3s/test_package_contract.py` stopped at the exact
+repository-inventory comparison; no L3S numerical failure was reported. The
+failure log has SHA-256
+`3fb02f9feb516e6f18085064aaede537f8efb654fea1c75d5d395814185e5c3d`.
+
+The narrow repair passed a fresh network-disabled Clang 21.1.8 package audit:
+the exhaustive three-entry consumer inventory, compiler depfile, one-member
+archive, exports, undefined symbols, traversal and immutable predecessors all
+matched. Its package log SHA-256 is
+`7dba225126db184d38555047cd00b9291b1113f469a8b08ab2b21b44b2cfafed`.
+The genuine pinned-`90cbd713` full L3S gate also passed 9,849 native checks,
+numerical and finite-difference checks, I1/I2 composition, eleven killed
+mutants, private AOT, isolation and ASan/UBSan with leak detection. That full
+gate ran on the explicitly unsupported CachyOS/LLVM 22.1.6 compatibility host;
+its log SHA-256 is
+`49ab2159e978a360aa547f19f99a05da0545b955c197a6d0372d88e2040f3917`.
+No repair full CI was dispatched.
 
 ## Limits
 
