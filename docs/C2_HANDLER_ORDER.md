@@ -1,7 +1,8 @@
 # C2 handler installation and release authority — issue #121
 
-Status: **in progress; final transformer freeze, pin adoption, full affected-gate
-union, and supported integration evidence pending**. This records the current
+Status: **in progress; final transformer candidate frozen and independently
+approved; pin adoption, full affected-gate union, and supported integration
+evidence pending**. This records the current
 source contract and focused final-runtime evidence for the issue #121 correction.
 It is not completion evidence.
 The previously accepted [C2 component evidence](C2_TRAINING_STATE.md) does not
@@ -127,7 +128,7 @@ review. The focused gate expects exactly 290 checks.
 
 | Required evidence | Current record |
 |---|---|
-| Final transformer candidate commit/tree and review | PENDING: commit, tree, review reference |
+| Final transformer candidate commit/tree and review | `beb5821726d704604f8335dd85172b260d9a609f` / `24ca2dda199e5bd60efe8f54911de735cf44e61a`; independent `/root/c2_final_review` APPROVE with production aggregate `d37cc7df927ba8c5a8a7b3f731e035d2695148d70e64170257bf662496e135e2`, witness/test `c3879710159b0cd8bec404643d53d2613fecb09816202f454bf0f1a2b0f45f77`, and documentation `1a5410978cb61201ddd2fe96034843a3465641f86c05c2ea5d65e5a6d7e75096` |
 | Final runtime source commit/tree | `81298b4a9608fb92eb6f351a2eabd8392da7d9ef` / `7669312845a9d8d372006af52271045e69505813`; independently approved runtime review and PR #714 |
 | Runtime library/compiler provenance | `/tmp/eshkol-rethrow-final-81298b4a-20260923T200234Z`; runner `4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1`; archive `c32bb593ac1f365f3cbeaefd581704c4be029a4aa8877db29463d0e12356c168`; network-disabled supported image digest `f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6` |
 | Allocation-failure/recovery witness | PASS twice at exact 5/6/11 plus controlled diagnostic-10 exit 97 on the eleventh LOAD push; `/tmp/c2-handler-dual-final-evidence.7xpz53`, manifest `e76ac1556dd418e36f47d61d9dfb9e56fd1c21a827c1e0ba2eedf0a467140bcd`, repeated stdout `351a1cf1c2625dc7edc275950a8c91542ccd7c5bbddd1e2313acda19db634784`, empty stderr |
