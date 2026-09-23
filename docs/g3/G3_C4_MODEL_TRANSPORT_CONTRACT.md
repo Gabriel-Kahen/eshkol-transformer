@@ -3,10 +3,13 @@
 **Proposed exact contract; implementation requires root acceptance.** This file
 replaces the unresolved model/transport placeholders in
 [the C4 profile proposal](G3_C4_PROFILE_PROPOSAL.md). It is derived from the
-accepted integration tree `637cec09e00d6f9c2414e051836ab50665709606`, the
-checked-promotion runtime contract at `222cad3aac68ddf48d09c1cdf322fa4c4e7b8296`
-over implementation `714d20fea64d97286dde34b841fc0146bfdcc40b`, and the
-pending SHARED-R2 implementation based on `19f404cf21632944e1f2d5d4959e1240f9a79f5f`.
+reviewed C4 integration candidate `637cec09e00d6f9c2414e051836ab50665709606`,
+whose PR #122 acceptance remains pending, the checked-promotion candidate at
+`222cad3aac68ddf48d09c1cdf322fa4c4e7b8296` over implementation
+`714d20fea64d97286dde34b841fc0146bfdcc40b`, the handler-reservation candidate
+checkpoint `b7bb6d8e40e5316943d6c32058eca006b6d01e51`, whose runtime acceptance and
+transformer pin remain pending, and the SHARED-R2 candidate checkpoint
+`0e25452ec3dc7630c295cb6a475ae549c43be8fc`, whose acceptance remains pending.
 It authorizes no implementation by itself. The restricted sampler source remains
 outside this work.
 
@@ -216,6 +219,99 @@ The existing C2 construction source and native seal/abort path remains unchanged
 it performs its current fallible train-mode finalization while open, then invokes
 the legacy native seal directly. It never enters `PREPARED`, so its public
 behavior, direct native tests and M3T owner eligibility remain unchanged.
+
+## Exception-handler reservation boundary
+
+The final reviewed runtime successor must provide this additional
+compiler/runtime-private ABI:
+
+```c
+int64_t eshkol_runtime_reserve_exception_handlers_v1(int64_t free_count);
+```
+
+C4 binds it only through this source-private Eshkol alias. The symbol remains a
+declared, JIT-registered compiler/runtime C ABI, but the alias grants no public
+Eshkol import, provide or package authority:
+
+```scheme
+(extern i64 g3c4-native-reserve-exception-handlers i64
+        :real eshkol_runtime_reserve_exception_handlers_v1)
+```
+
+The call ensures at least `free_count` inactive handler frames for the calling OS
+thread. The count covers additional simultaneously active pushes after the call,
+not handlers already active or the sequential total. Success returns zero, zero
+is a no-op, and reservation never shrinks the thread-local pool. Invalid negative
+or size-overflowing counts transfer canonical condition 4 before mutation;
+allocation failure transfers canonical condition 5 to the previously active
+handler. Any successfully reserved prefix remains reusable. With no active
+handler, the ordinary uncaught-emergency policy applies. The active handler stack,
+current exception and raised value remain process-global, so concurrent Eshkol
+exception execution is unsupported. The long-lived runtime thread retains its
+peak reserved frame storage for its lifetime; that retained peak is part of
+cumulative resource accounting.
+
+Every C4 reservation occurs after entry to `m3-call`, as the first action in the
+guarded body, and before installing a C4 cleanup guard or allocating, publishing,
+reserving, pinning or acquiring any C4 authority. Thus the two already-active
+`m3-call` handlers are not counted, and reservation failure is caught before C4
+has authority to clean up.
+
+The current M3/M3T handlers are not sufficient for that failure path:
+`m3-call` clears its exclusion flag and invokes `m3t-rethrow-raw`, while the
+enclosing `m3t-boundary` invokes the same normalizer again. Today that normalizer
+maps a non-E1 caught value to a newly allocated internal error. The final accepted
+compiler/runtime and M3/M3T successor must instead begin each invocation of
+`m3t-rethrow-raw` by spilling its exact tagged `caught` value once and calling
+`eshkol_runtime_emergency_rethrow_if_v1(&caught)`. A canonical condition 1..5
+therefore transfers unchanged and without allocation before predicates, detail
+construction or E1 normalization; every ordinary value returns from that check
+and follows the existing normalization path. This is compiler-private lowering,
+not a new Eshkol operation or public package authority. It adds no handler, so it
+does not change the high-water counts below. The inner `m3-call` cleanup still
+clears its exclusion flag before this check, and all C4/P1/I2 cleanup guards must
+rethrow through the runtime successor's existing canonical-preserving explicit
+`raise` lowering.
+
+The exact additional high-water reservations are:
+
+- Seeded construction calls
+  `(g3c4-native-reserve-exception-handlers 4)` as the first action in
+  `g3c4-model-create-seeded-internal` after entry to `m3-call`, before the pending
+  constructor graph or native seeded-owner creation. The four
+  simultaneously active future pushes are the C4 transaction cleanup/abort
+  guard, the I2 parameter-registration cleanup guard, P1's `construction-call`
+  guard, and one P1 parameter-registration cleanup guard. The two P1 registration
+  guards execute sequentially and share one frame; the I2/P1 begin path peaks
+  below this registration path. The internal seeded constructor must not add a
+  second `m3t-boundary`.
+- Manual prefill and manual decode each call
+  `(g3c4-native-reserve-exception-handlers 1)` first inside `m3-call`, before
+  logits/result reservation, `call_acquire`, or pins. The one future frame is the
+  C4 lexical call cleanup/abort guard held for the whole call.
+- Generate and continue each call
+  `(g3c4-native-reserve-exception-handlers 1)` first inside `m3-call`, before
+  output-candidate reservation, `call_acquire`, or pins. The same single cleanup
+  guard spans every frame and `g3c4-t1-decode-output!`; there is no per-token or
+  decoder guard.
+- SAVE calls `(g3c4-native-reserve-exception-handlers 1)` first inside `m3-call`,
+  before its call cleanup guard, active tuple, or pins. It releases the full
+  active tuple before detached encoding or file I/O as specified below.
+
+Constructor/accessor clones that root their envelopes before native attachment
+and perform no fallible work after attachment require no additional reservation.
+Any change to this guard topology requires a contract amendment and a fresh
+simultaneous-high-water derivation. Compiled guard-high-water tests and persistent
+handler-allocation-failure tests must exercise the exact four-frame construction
+and one-frame transport/SAVE paths. Neither a 4,096-entry margin nor a previously
+listed downstream count may substitute for this derivation; the separate direct
+P1, C2 and LOAD obligations happen to be 4, 5 and 10 but authorize no C4 call.
+
+The restored R stage/copy/replay/rollback guard topology is not frozen here, so
+its reservation count is not derivable from this contract. Even an intrinsic
+lower bound does not authorize a call count. The restored route remains blocked
+until the separate exact R contract derives and tests its own additional
+simultaneous high-water; the existing LOAD reservation of ten is not reusable.
 
 ## Construction ownership and exact ordering
 
@@ -513,21 +609,34 @@ candidate accessor is authorized by this contract.
 
 ## Dependency pins and implementation hold
 
-SHARED-R2 must be accepted and merged as the genuine I2/K2 successor: provider
+SHARED-R2 checkpoint `0e25452ec3dc7630c295cb6a475ae549c43be8fc` must be
+accepted and merged as the genuine I2/K2 successor: provider
 and verified entry `eshkol-transformer-f32`, version `1.1`, evidence
 `I2:bounded-exact-f32-storage.copy-v2`, with rank0, rank1, and only exact rank2
 `[2,4]`, `[4,4]`, `[4,8]`, `[8,4]`, `[256,4]`. It changes no construction,
-owner, pin, or replay authority. Its inspected implementation is still uncommitted.
+owner, pin, or replay authority. The checkpoint records the bounded rank-two
+implementation and persistence candidate; independent review and root acceptance
+are still pending.
 
 The transformer currently pins compiler `90cbd713`; checked-promotion adoption
-is therefore not present. The complete reviewed Eshkol union at docs commit
-`222cad3a` over implementation `714d20fe` must first be accepted and pinned.
-P1 construction writes must compile through
-`eshkol_region_write_barrier_checked_v1`; status failure must transfer through
+is therefore not present. Runtime docs commit `222cad3a` over implementation
+`714d20fe` alone is insufficient. The final reviewed successor must include the
+exact handler-reservation behavior above; checkpoint
+`b7bb6d8e40e5316943d6c32058eca006b6d01e51` is the current validation candidate,
+not an accepted runtime or transformer pin. Only the complete accepted union may
+replace the transformer pin. That union must also supply the exact
+canonical-emergency check at both `m3t-rethrow-raw` invocations described above;
+the current transformer source does not. P1 construction writes must compile
+through `eshkol_region_write_barrier_checked_v1`; status failure must transfer through
 the fixed emergency condition path so the construction guard executes the abort
-order above. Constructor/handler allocation guards and downstream P1 failure
-tests remain mandatory. Transformer code must not call this compiler-private ABI
-as a substitute for a correctly compiled checked store.
+order above. Transformer code must not call that compiler-private checked-store
+ABI as a substitute for a correctly compiled checked store. It does directly
+call `eshkol_runtime_reserve_exception_handlers_v1` only through the exact private
+alias and at the placements frozen above. Constructor/handler guard adoption,
+compiled high-water evidence, and persistent handler-allocation-failure tests for
+the exact reserve-4 and reserve-1 paths remain mandatory before the final pin.
+Those tests must prove cleanup plus unchanged canonical delivery through both
+nested M3 handlers while allocation failure remains armed.
 
 Implementation remains blocked until root accepts this contract and the two
 dependencies above are accepted. Exact R snapshot/stage native layouts, their
