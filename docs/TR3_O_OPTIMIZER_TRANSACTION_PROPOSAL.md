@@ -1,8 +1,11 @@
 # TR3-O optimizer update-and-clear transaction proposal
 
-Status: proposal for root acceptance; no runtime authority is implemented here.
+Status: private implementation candidate; combined-TR3 aggregate integration,
+supported-platform evidence, independent integration acceptance, and merge are
+pending.
 
-Source baseline: `19f404cf21632944e1f2d5d4959e1240f9a79f5f`.
+Source baseline: merged evaluator-prerequisite main
+`33a54ef7256f43d9e1ce82152915f7bded51bc24`.
 Related work: issue #119, TR3-C issue #120, SHARED-R2 issue #114, and the
 broader trainer proposal at `3e28db6c9d1f97bd9ce9d6f2d05be51182a8bd9d`.
 
@@ -311,7 +314,7 @@ proposal needs no I2 implementation change, it has no source collision with
     horizons, with no retained stage payload or active pin after consume.
 
 No full repository CI, supported-platform claim, public trainer claim, restore
-claim, end-to-end overfit claim, or merge is part of this proposal checkpoint.
+claim, end-to-end overfit claim, or merge is part of this candidate.
 
 ## Independent review disposition
 
@@ -332,5 +335,86 @@ native witness.
   direct opaque value avoids a caller-slot write in the fixed tail, while the
   retained native tombstone provides the same stale/copy rejection.
 
-No reviewer found a remaining need for an I2 API/provider change.  Runtime
-authority still requires root acceptance of this exact proposal.
+No reviewer found a remaining need for an I2 API/provider change.
+
+## Implementation candidate and measured evidence
+
+Root authorized the exact proposal, and the private candidate is implemented by
+the focused commit sequence through `783dc576e534b241523e9b1e987933d5c5e433d0`
+(tree `67edabf43470b894ff8df3347ad5017889f2e847`).  Production changes are
+limited to the conditional optimizer receiver field/helpers, the typed private
+transaction implementation, the gated bridge, and the source-private adapter.
+Without either feature gate, standalone O2 and C2 keep their accepted source,
+symbol, string, wrapper, and closure manifests.
+
+The canonical local command was:
+
+```text
+/usr/bin/bash --noprofile --norc scripts/test-tr3-o.sh
+```
+
+It passed on x86-64 CachyOS with Clang 22.1.6.  This is compatibility evidence,
+not the supported Ubuntu 22.04 / LLVM-Clang 21.1.8 result.  The gate proves:
+
+- 37,264 optimized checks and the same ASan/UBSan/LSan checks with mandatory
+  `detect_leaks=1`;
+- exact private/public parity for AdamW ordering, groups, clipping boundaries,
+  unequal accumulation weights, final counter, and linear-schedule successful
+  updates 1, 2, 6, and 7;
+- first/middle/last N=14 absent, metadata-mismatch, nonfinite-input, and
+  nonfinite-staged-result rejection with unchanged values, moments, gradients,
+  metadata, identities, counters, and live counts;
+- non-vacuous exact allocation-failure prefixes of four outer allocations and
+  24 I2 allocations, publication failure, retry, forged/stale/consumed/reentrant
+  negatives, allocation-disabled commit, and fixed `_Exit(134)` terminal
+  witnesses;
+- actual prepared-plan conflicts for parameter values, both moment classes,
+  gradients, all three stage classes, and parameter/reset ownership, followed by
+  abort-release and successful retries;
+- the 99-check actual I2 copy/reset coexistence witness and the accepted 6,201
+  public O2 adversarial regression;
+- no live I2/outer/stage/pin growth at ordinary, 1,024, or 8,192 updates;
+  registered inert controls grow linearly by measured supported-ABI expectations
+  of 96 outer bytes and 1,112 I2 bytes per update, with repeated-state digest
+  `e40b45e3746140d1`;
+- four package-boundary tests, including self-contained depth-one-checkout
+  predecessor-byte reconstruction authenticated by SHA-256
+  `ab2b03ca43ac96b855fade89d77c9468c994e0e445b1ed9f7f5dde78518f428e`;
+- CI topology registration as the thirtieth command in the existing 19-suite
+  strict union.  All 104 CI unit checks and `make test-ci-topology` pass locally.
+
+The earlier checkpoint reported 49,771 checks.  The final count is lower because
+six repeated scalar walks of the same 1,184 N=14 elements were replaced by exact
+whole-buffer comparisons.  Per-test reconciliation is 392→644 public parity,
+1,372→1,372 wrong-weight retry, 130→194 pin lifetime, 983→1,035 allocation,
+149→149 numeric negatives, 22,004→9,077 N=14 position negatives, 140→140
+fail-stop, and 24,601→24,653 horizon checks.  Arithmetically, 21,828 redundant
+element checks were removed, 8,901 stronger N=14 state checks and 420 other
+checks were added: `49,771 - 21,828 + 8,901 + 420 = 37,264`.  Every parameter
+and moment byte remains covered, while the replacement additionally checks
+gradient bytes/metadata, storage identities, live counts, position-dependent
+staged cleanup, pins, exact allocator endpoints, schedule boundaries, and
+lifetime slopes/digest.  The historical 49,771 result remains valid checkpoint
+evidence; the 37,264 result is the stronger final candidate gate.
+
+Three independent Sol/high exact-head reviews approved the native atomicity and
+lifetime implementation, numerical/adversarial evidence, and package/CI boundary
+without actionable findings.  Review explicitly retains these limitations:
+caller serialization is mandatory; cross-thread, signal-handler, and shared-memory
+post-fork use are unsupported; the 96/1,112 byte constants describe the supported
+64-bit ABI; registered tombstones are intentional reachable control state; and
+TR3-C restore coexistence remains a downstream integration test.
+
+The accepted #119/#120 ownership split is now concrete.  This workstream owns
+the sole conditional `ET_TR3_O2_PRIVATE_OPERATIONS` receiver seam and typed
+update-clear plan.  TR3-C must consume this implementation, add only its distinct
+typed restore plan/registry/tombstones plus minimal include gate, and reuse the
+same `busy` plus `active_operation` ownership.  It may not add a second optimizer
+registry or duplicate the helpers.
+
+Still pending are the authenticated combined-TR3 root/policy, one-lineage source
+closure, localization of all six native/bridge transaction symbols, exact
+aggregate manifests and archive negatives, strict Eshkol AOT and public-source
+resolution tests, final artifact/depfile Python-isolation inspection, supported
+CI, independent integration acceptance, and merge.  Therefore this candidate
+does not complete roadmap TR3 or expose any public operation.
