@@ -5,10 +5,12 @@ This integration-preparation branch starts from frozen reviewed PR #124 head
 `81128ec7c8cb7b4627dad0eeb98e10a624e4fbfd`. That base contains the reviewed
 TR3-B/O plus G3-C4 candidate, SHARED-R2 candidate, nine unregistered E3
 reference files, TR3-O documentation and accepted-main documentation through
-PR #123. This branch adds only the source-approved bounded E3 native-frame leaf,
-its one-command CI registration, the exact E3-METRICS source-consumer inventory
-needed for that leaf, and status/provenance reconciliation. It does not accept
-or publish the integrated candidate.
+PR #123. The accepted E3 integration successor adds the source-approved bounded
+native-frame leaf, its CI registration and the exact E3-METRICS consumer
+inventory needed for that leaf. This successor adds the reviewed L3S consumer
+inventory repair and the independently approved six-file native parity witness,
+then registers parity against the existing pinned development oracle. It does
+not accept or publish the integrated candidate.
 
 ## Authenticated sources
 
@@ -23,6 +25,8 @@ or publish the integrated candidate.
 | SHARED-R2 evidence | `92c2f5853d1ca3f82c6700f07e47bf9f08052b3e` | `0217c51cdd07e8ec544b02f8a74e8446c2f89063` | evidence-only successor; ROADMAP reconciled |
 | E3 reference toolkit | `37a8078ce756e7f3c22f14a046142d2f09e98807` | `a2767cbb8e22c10ac29d3e18b076de182653264b` | nine `tests/e3_reference` files only |
 | E3 native frame | `38fb9890cd768aad42796d83ec610304b1ee6875` | `43e364b9e9c6efa3856d58b51d0f5376aa3582b6` | five implementation/test/gate paths exact; ROADMAP and CI inventory reconciled |
+| L3S inventory repair | `a6d8851cc334e8ae99b3bde9b6a75e4c2f53aa0a` | `acb1d54b4488d579fe78dfe4568b5e1cff2c6f18` | exact one-line consumer admission; evidence reconciled without replacing E3 rows |
+| E3 native parity | `e086a61289df13ffcd9778b6cb7f6068a912692d` | `4194e0c8f8af4623959245accd79f46535c594df` | exact six-file parity leaf only; its earlier native-frame import is not replayed |
 | TR3-O documentation | `eef6f420f64c88c3821fbc3a79660e7a2a3e4b8b` | `0c03f85bfde3469dfc18a13dddd34beef1873f48` | exact proposal; integration-ledger and ROADMAP unions |
 | Accepted main documentation | `e899215cff22afeb00b9a5f56bddad9c4cc6c469` | `eb0de48ecfbb0bbe24994b463d7cb9e81c9f72c3` | PR #123 merge; accepted C4 closeout and E3 prerequisite records retained |
 
@@ -35,10 +39,11 @@ Mode-and-blob comparison against the component heads gives these results:
   supported focused-evidence record.
 - TR3-O: ten implementation/test paths are exact. Its proposal is now exact to
   the later documentation source `eef6f420`; `Makefile` and the two CI topology
-  files extend the reviewed 19-suite/32-command base union only with the E3 gate.
+  files extend the reviewed 19-suite/32-command base union only with the two E3
+  gates.
 - G3-C4: 36 provider, fixture, workflow and prerequisite-hook paths are exact.
   `Makefile`, `docs/ROADMAP.md` and the two topology files are integration unions;
-  the topology delta is only the E3 gate.
+  the topology delta is only the two E3 gates.
 - SHARED-R2: 18 implementation, supporting-document, script and test paths are
   exact to `8047cec`; its evidence document is exact to successor `92c2f585`.
   `docs/ROADMAP.md` and `docs/QUALITY_GATES.md` are documentation unions with
@@ -50,6 +55,10 @@ Mode-and-blob comparison against the component heads gives these results:
   `38fb9890`. The ROADMAP and shared Make/CI inventory are integration unions.
   No public evaluator, production source composition, runtime pin, P1 seam or
   shared-guard file is imported.
+- E3 native parity: all six paths retain the exact modes and blobs from
+  `e086a61`. The accepted native-frame files already present from `38fb9890` are
+  not replayed from parity parent `b4ea5fc`. The shared Make/CI inventory and
+  ROADMAP are integration unions.
 - The TR3-O proposal remains byte-for-byte exact to its documentation source.
   Its integration-log record is preserved inside the accepted-main ledger union,
   and its ROADMAP line is combined with TR3-B, accepted G3-C4, SHARED-R2 and the
@@ -83,6 +92,17 @@ The exact E3 native-frame leaf inventory is:
 | `100644` | `69cdeb391ae83fdc2916e9ddf96ef54b481bad58` | `tests/e3_native/header_cpp.cpp` |
 | `100644` | `01afcf0d23a3793ce6f8f39dbcfb97ee4eba1540` | `tests/e3_native/test_frame.c` |
 
+The exact E3 native-parity leaf inventory is:
+
+| Mode | Blob | Path |
+|---|---|---|
+| `100755` | `8c0c40b3c882a7553530a081af227756e5a9c113` | `scripts/test-e3-native-parity.sh` |
+| `100644` | `c3a3fe1fc9a60ef6ebba9284cbf038746094a8d0` | `tests/e3_native_parity/README.md` |
+| `100644` | `debba6c5203701022a3cfc137fd469704fa86af7` | `tests/e3_native_parity/__init__.py` |
+| `100644` | `39251426281f95b39664b999162a6dc2702b6a77` | `tests/e3_native_parity/generate_fixture_header.py` |
+| `100644` | `b8d1683a1ecf3ab09ec46ff739dd676230f9cec8` | `tests/e3_native_parity/test_frame_parity.c` |
+| `100644` | `118d43a279ecc8725fd24eefd67ce0500e6feb30` | `tests/e3_native_parity/verify_observation.py` |
+
 ## Conflict and topology audit
 
 The SHARED-R2 merge had no unresolved conflict; Git combined its one-line
@@ -96,12 +116,15 @@ accepted E3-METRICS closeout and the complete O2 candidate record in chronologic
 order. No runtime or ABI file was hand resolved.
 
 The reviewed `Makefile`, `tests/ci/topology.py` and `tests/ci/test_topology.py`
-19-suite/32-command union is extended by one command. The exact standalone E3
-native-frame script runs once in each aggregate and in the existing
-`model-composition` suite, whose M3 source tuple it consumes. It compiles its
-private tuple directly and adds no canonical producer or workflow suite. The E3
-reference toolkit remains intentionally unregistered. The strict inventory is
-therefore 19 suites and 33 unique commands.
+19-suite/32-command union is extended by two commands. The exact standalone E3
+native-frame and parity scripts each run once in both aggregates and in the
+existing `model-composition` suite, whose M3 source tuple they consume. Both
+compile private tuples directly and add no canonical producer or workflow suite.
+Parity uses `Q0_PYTHON`, which that suite already provisions from pinned Python
+3.14.6 and `tests/n2/requirements-reference.lock`. That lock is byte-identical
+to `tests/q0/requirements-oracle.lock`; Python and PyTorch remain development-test
+dependencies and do not enter the production runtime. The strict inventory is
+therefore 19 suites and 34 unique commands.
 
 The E3-METRICS package audit continues to distinguish its provider source and
 ABI header from compiled dependencies. Its repository-wide source-reference
@@ -118,26 +141,37 @@ other rows in all six repository predecessor manifests retain their reviewed
 values and verify against the integrated tree. These five checksum-row changes
 are recorded separately from source-component byte identity in the per-path TSV.
 
+The integrated TR3-B bridge is also an exact reviewed consumer of the L3S ABI
+and provider accessor. The fail-closed L3S repository scan therefore admits
+`native/tr3b_objective_bridge.c` in `native/l3s_source_closure.txt`. This extends
+only the explicit consumer inventory: the standalone L3S compiler depfile,
+single-member archive, exports, undefined symbols, build recipe and ABI remain
+unchanged.
+
 ## Lightweight validation
 
 The integration-preparation gate passed:
 
-- `python3 -m unittest discover -v -s tests/ci -p 'test_*.py'`: 106 tests,
-  including exact inventory, sanitizer/header retention and injected exit-73
+- `python3 -m unittest discover -v -s tests/ci -p 'test_*.py'`: 107 tests,
+  including exact inventory, sanitizer retention and injected exit-73
   propagation through both aggregates and `model-composition`;
-- `make test-ci-topology`: 19 suites and 33 unique commands;
-- all 122 provenance rows resolve to the declared source and integrated
-  modes/blobs, including the five exact E3 native-frame paths;
+- `make test-ci-topology`: 19 suites and 34 unique commands;
+- all 128 provenance rows resolve to the declared source and integrated
+  modes/blobs, including the five exact E3 native-frame and six exact parity
+  paths;
 - all six predecessor manifests verify 118 entries against the integrated tree;
 - `python3 -m unittest -v tests.m3cg.test_contract`: five shared-call contract
   and package-boundary tests;
-- `python3 -m unittest -v tests.q0.test_python_isolation`: three tests;
+- three Q0 isolation tests and 12 E3 stdlib corpus/isolation/transcript tests;
 - the actual E3-METRICS package checker passes against a fresh local artifact,
   including the exact provider/ABI inventory, reviewed frame consumer, injected
   unknown-consumer rejection, archive/symbol/depfile closures, strict-f32 IR and
   unchanged predecessors;
-- `bash -n scripts/test-e3-native-frame.sh`, `make -n test-e3-native-frame`
-  and `git diff --check` pass.
+- exact source identity passes for the approved E3 native-frame, E3 parity and
+  L3S repair paths;
+- `bash -n scripts/test-e3-native-parity.sh`, `make -n
+  test-e3-native-parity`, Python bytecode compilation and `git diff --check`
+  pass.
 
 The package-check artifact above was generated on the unsupported local
 LLVM 22.1.6 compatibility host. The already authenticated native-frame normal
@@ -145,15 +179,40 @@ and sanitized supported component gate was not duplicated. No full CI,
 expensive native build or component full gate was run for this
 integration-preparation task.
 
+PR #124 head `79d71086293ccd51bd569785a19c7409d1e070a9` exposed the
+missing L3S consumer row in supported full CI run `35916891673`. K1, A2 and L2
+completed before `tests/l3s/test_package_contract.py` stopped at the exact
+repository-inventory comparison; no L3S numerical failure was reported. The
+failure log has SHA-256
+`3fb02f9feb516e6f18085064aaede537f8efb654fea1c75d5d395814185e5c3d`.
+
+The narrow repair passed a fresh network-disabled Clang 21.1.8 package audit:
+the exhaustive three-entry consumer inventory, compiler depfile, one-member
+archive, exports, undefined symbols, traversal and immutable predecessors all
+matched. Its package log SHA-256 is
+`7dba225126db184d38555047cd00b9291b1113f469a8b08ab2b21b44b2cfafed`.
+The genuine pinned-`90cbd713` full L3S gate also passed 9,849 native checks,
+numerical and finite-difference checks, I1/I2 composition, eleven killed
+mutants, private AOT, isolation and ASan/UBSan with leak detection. That full
+gate ran on the explicitly unsupported CachyOS/LLVM 22.1.6 compatibility host;
+its log SHA-256 is
+`49ab2159e978a360aa547f19f99a05da0545b955c197a6d0372d88e2040f3917`.
+No repair full CI was dispatched.
+
 ## Limits
 
 The E3 native source leaf is independently approved, and root authenticated its
 supported normal and ASan/UBSan/LSan executions, each reporting 4,381 checks.
-Those component results are not integration acceptance. The integrated candidate
-still requires independent exact-tree review, supported full CI and root
-acceptance. It has no public evaluator, production source-composition, final
-runtime-pin, P1/D2 restoration, guard-adoption, parity, public trainer, sampler,
-transport, generation, joint live restore, one-batch overfit, held-out
-improvement or interrupted/resumed equivalence claim. SHARED-R2 owner gates are
-complete only on the unsupported local compatibility host. Full-union supported
-CI remains separate from the focused component evidence.
+The parity leaf is independently approved with supported Ubuntu 22.04/LLVM 21
+evidence for five normal, sanitizer and repeat cases, all 21 roles, 15 strict
+comparisons, the 4,381-check native regression, 12 stdlib checks and four pinned
+PyTorch checks. It explicitly does not exercise a real D2 borrower/cursor, P1
+mode, Eshkol wrapper or public E3 API. Those component results are not integration
+acceptance. The integrated candidate still requires independent exact-tree
+review, supported full CI and root acceptance. It has no public evaluator,
+production source composition, final runtime-pin, P1/D2 restoration,
+guard-adoption, public trainer, sampler, transport, generation, joint live
+restore, one-batch overfit, held-out improvement or interrupted/resumed
+equivalence claim. SHARED-R2 owner gates are complete only on the unsupported
+local compatibility host. Full-union supported CI remains separate from the
+focused component evidence.

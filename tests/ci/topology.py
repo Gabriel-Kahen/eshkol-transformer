@@ -22,7 +22,8 @@ SUITES = [
 ] + [(f"c2-{g}", f"test-ci-c2-{g}-after-build", 240) for g in GROUPS]
 FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
-    "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e3-native-frame.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
+    "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e3-native-frame.sh",
+    "test-e3-native-parity.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-tr3-o.sh",
     "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
@@ -240,13 +241,26 @@ def check(root, overrides=None):
     assert '-fsanitize=address,undefined' in e3_native
     assert 'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1' in e3_native
     assert '"${PROJECT_ROOT}/tests/e3_native/test_frame.c"' in e3_native
+    e3_parity = read("scripts/test-e3-native-parity.sh")
+    assert "verify_supported_host" in e3_parity
+    assert e3_parity.count("require_q0") == 3
+    assert "require_q0() {" in e3_parity
+    assert "[[ \"${versions}\" == $'3.14.6\\n2.13.0+cpu' ]]" in e3_parity
+    assert "ATEN_CPU_CAPABILITY=default" in e3_parity
+    assert "MKL_CBWR=COMPATIBLE" in e3_parity
+    assert "for build_mode in normal sanitize; do" in e3_parity
+    assert "detect_leaks=1" in e3_parity
+    assert '"${PROJECT_ROOT}/tests/e3_native_parity/test_frame_parity.c"' in e3_parity
     assert "e3_frame.c" not in read("scripts/build.sh")
     targets = recipes(make)
     assert targets["test-ci-m3-after-build"] == [
         "/usr/bin/bash scripts/test-m3.sh", "/usr/bin/bash scripts/test-e3-native-frame.sh",
+        "/usr/bin/bash scripts/test-e3-native-parity.sh",
         "/usr/bin/bash scripts/test-tr3b.sh"]
     assert targets["test-e3-native-frame"] == [
         "/usr/bin/bash scripts/test-e3-native-frame.sh"]
+    assert targets["test-e3-native-parity"] == [
+        "/usr/bin/bash scripts/test-e3-native-parity.sh"]
     assert targets["test-tr3b"] == ["/usr/bin/bash scripts/test-tr3b.sh"]
     assert targets["test-ci-g3n-after-build"] == [
         "/usr/bin/bash scripts/test-g3n.sh", "/usr/bin/bash scripts/test-g3c4.sh"]
