@@ -280,9 +280,10 @@
 (observe-gradients 4)
 (release-step late-output late-logits replay)
 
-;; The accepted public module reset must clear every unique parameter gradient.
-;; Snapshot 5 proves exact zero bytes and absent/count=0/weight=0 metadata.
-(check "module-zero-grad" (module-zero-grad! model))
+;; This trusted aggregate calls the exact I2 implementation installed as the
+;; accepted public module-zero-grad! package export. Snapshot 5 proves exact
+;; zero bytes and absent/count=0/weight=0 metadata for all unique parameters.
+(check "module-zero-grad" (i2-public-module-zero-grad! model))
 (observe-gradients 5)
 
 (check "input release" (m3t-public-input-release! input))

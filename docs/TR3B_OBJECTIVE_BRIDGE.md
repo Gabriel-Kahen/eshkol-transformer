@@ -70,8 +70,59 @@ M3 graph, output, logits and I2 plan tombstones remain the accepted cumulative
 controls after release. Evidence reports them separately from live owners and
 makes no flat-total-memory claim.
 
+## Focused evidence
+
+The compiled witness records six complete fourteen-parameter snapshots:
+
+1. the genuine D2 `11` batch contributes once with weight `2`;
+2. the genuine padded D2 `10` batch contributes once with cumulative weight `3`;
+3. every checked preparation rejection preserves snapshot 2 byte-for-byte;
+4. an ordinal mismatch after successful preparation also preserves snapshot 2;
+5. the explicitly test-only `01` case contributes once with cumulative weight `4`;
+6. the accepted I2 implementation exported publicly as `module-zero-grad!`
+   leaves exact zero bytes and `(absent, 0, 0)` metadata for all fourteen rows.
+
+The preparation rejection suite covers an invalid ordinal, observation type and
+length, mismatched output/logits leases, stale seed, stale output and stale D2
+batch, plus malformed private target and mask scratch. Each carrier-bearing case
+checks unchanged observation bytes. The snapshots surrounding the suite check
+unchanged bytes, state, contribution count and normalization weight for every
+gradient. The late VJP failure instead proves the permitted result: preparation
+has changed observation scratch to the successful case-0 bits, while every
+gradient remains unchanged.
+
+The native validation separately proves genuine M3T input staging and bool-mask
+copy success; vocabulary, descriptor and destination rejection; and target-mask,
+target-observation, mask-observation and shared-backing-span alias rejection. It
+uses null opaque graph/seed values in the scratch-validation cases, demonstrating
+that malformed lengths and aliases are rejected before owner dereference. The
+compiled ordinary and injected cases exercise successful objective preparation
+with a genuine graph-logits lease and seed.
+
+The pinned PyTorch 2.13.0+cpu oracle checks finite numerator, weight and mean
+before tolerance comparisons. The gate mutates one observation to a quiet NaN
+and requires this checker to reject it. It captures the weight-2 and weight-1
+contributions separately, accumulates an independent reference in the same
+order, and derives distinct untied embedding/head edges for every case. Each
+successful tied row must equal the matching cumulative edge sum and differ from
+either cumulative edge alone.
+
+After all scoped owners are released, the exact native report has zero live M3
+graphs/logits/frames and zero live I2 borrows/copy plans/gradient plans/reset
+plans. The persistent fixed model and workspace contain exactly 108 f32 tensors,
+32,868 payload bytes and 3,952 metadata bytes; I2 reports the same 108 tensors
+and fourteen parameters. Cumulative accepted controls are reported independently:
+2,912 M3 control bytes, 1,200 M3T registry-control bytes, 10,784 I2 retired bytes,
+120 retired tensors, one retired copy plan, three retired gradient plans and one
+retired reset plan. These exact fields are required in both ordinary and
+sanitizer witness output. They are process-lifetime accounting, not a flat-memory
+claim.
+
 The focused sanitizer build instruments the private native closure and compiled
 Eshkol witness with AddressSanitizer and UndefinedBehaviorSanitizer, enables leak
 detection, and requires byte-identical output to the ordinary build. The live
 owner assertions remain the semantic lifetime proof; sanitizer success does not
 reclassify accepted process-lifetime model storage or cumulative tombstones.
+The local compatibility probe uses CachyOS and LLVM/Clang 22.1.6 against the
+locked Ubuntu 22.04 and LLVM/Clang 21.1.8 support profile; it is evidence for the
+candidate, not supported-platform CI evidence.

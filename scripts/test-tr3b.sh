@@ -112,6 +112,33 @@ EOF
 compile_witness normal
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \
   "${oracle}" -m tests.tr3b.check_witness "${tmp}/normal/witness.stdout"
+# A quiet-NaN numerator used to pass the tolerance comparison because every
+# ordered comparison with NaN is false. Prove that the checker now rejects it.
+python3 - "${tmp}/normal/witness.stdout" "${tmp}/normal/nonfinite.stdout" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+lines = source.read_text().splitlines()
+for index, line in enumerate(lines):
+    fields = line.split()
+    if fields[:2] == ["TR3B-OBSERVATION", "0"]:
+        fields[2:6] = ["0", "0", "192", "127"]  # quiet NaN, little-endian
+        lines[index] = " ".join(fields)
+        break
+else:
+    raise SystemExit("missing case-0 observation")
+destination.write_text("\n".join(lines) + "\n")
+PY
+if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \
+     "${oracle}" -m tests.tr3b.check_witness \
+       "${tmp}/normal/nonfinite.stdout" \
+       >"${tmp}/normal/nonfinite-check.stdout" \
+       2>"${tmp}/normal/nonfinite-check.stderr"; then
+  die "TR3-B checker accepted a nonfinite objective observation"
+fi
+grep -F 'nonfinite observation' \
+  "${tmp}/normal/nonfinite-check.stderr" >/dev/null
 compile_witness sanitize
 cmp "${tmp}/normal/witness.stdout" "${tmp}/sanitize/witness.stdout"
 printf 'TR3-B compiled genuine D2/M3 objective bridge PASS\n'
