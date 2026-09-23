@@ -7,8 +7,9 @@ P1/I2 construction transaction, transport, sampler, package manifest, CI entry,
 or compiler/runtime pin.
 
 The production leaf is
-`src/eshkol_transformer/g3c4_model_owner_internal.{h,c}` with focused native
-tests in `tests/g3c4/test_model_owner.c`. The only shared-source amendment is a
+`src/eshkol_transformer/g3c4_model_owner_internal.h` and
+`src/eshkol_transformer/g3c4_model_owner.c`, with focused native tests in
+`tests/g3c4/test_model_owner.c`. The only shared-source amendment is a
 conditional declaration and definition of
 `et_f32_parameter_idle_preflight_internal` in `m3t_f32_scoped.h` and
 `m3t_f32_integration.c`. It exists only under
