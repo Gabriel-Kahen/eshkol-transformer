@@ -1,7 +1,7 @@
 # TR3-B private objective bridge contract
 
-Status: issue #116 implementation candidate. Nothing in this contract is a
-public facade or an accepted downstream dependency until independent review.
+Status: issue #116 reviewed integration candidate. Nothing in this contract is a
+public facade or an accepted downstream dependency until root acceptance.
 
 The source aggregate `native/tr3b_objective_root.esk` composes one T2-owned T1,
 E1, P1, I1, I2, M3T, M3 and D2 identity universe. It loads the accepted M3
@@ -126,3 +126,26 @@ reclassify accepted process-lifetime model storage or cumulative tombstones.
 The local compatibility probe uses CachyOS and LLVM/Clang 22.1.6 against the
 locked Ubuntu 22.04 and LLVM/Clang 21.1.8 support profile; it is evidence for the
 candidate, not supported-platform CI evidence.
+
+## Supported focused evidence
+
+The exact `071abb72` source was copied without modification into the combined
+TR3-B/O candidate and exercised on Ubuntu 22.04 with LLVM/Clang 21.1.8, pinned
+Eshkol `90cbd7130f47b8184bcc77b8d5c1b0026da980de`, and Python 3.14.6 plus
+PyTorch 2.13.0+cpu. The evidence records source-copy equality both before and
+after the run and reports:
+
+```text
+TR3B-LIFETIME-PASS persistent-f32=108/32868/3952 live-graphs/logits/frames/borrows/copy/gradient/reset=0 retired-tensors/gradient/reset=120/3/1 controls=10784
+TR3B-NUMERICAL-METADATA-PASS
+TR3-B compiled genuine D2/M3 objective bridge PASS
+```
+
+The supported image digest is
+`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`;
+the Eshkol binary digest is
+`2254687917f85a79860b51678fba3ee8ddaaf476b270f317099350716d519a63`.
+This focused proof closes the platform qualification for the exact TR3-B
+component. It does not prove the combined trainer aggregate, optimizer/restore
+coexistence, a public trainer, overfit, held-out improvement, exact resume, or
+full-union supported CI.
