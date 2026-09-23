@@ -294,18 +294,24 @@ The exact additional high-water reservations are:
   output-candidate reservation, `call_acquire`, or pins. The same single cleanup
   guard spans every frame and `g3c4-t1-decode-output!`; there is no per-token or
   decoder guard.
-- SAVE calls `(g3c4-native-reserve-exception-handlers 1)` first inside `m3-call`,
-  before its call cleanup guard, active tuple, or pins. It releases the full
-  active tuple before detached encoding or file I/O as specified below.
+- This predecessor contract gives SAVE's C4-local call path a reserve-1 lower
+  bound before its call cleanup guard, active tuple or pins. The proposed
+  [exact R seam](G3_R_MODEL_RESTORE_CONTRACT.md) derives reserve 3 from the full
+  reverse-clone and detached-state cleanup topology. If root accepts that
+  successor, its one reserve-3 call replaces this placeholder; an implementation
+  never performs both. SAVE releases the full active tuple before detached
+  encoding or file I/O as specified below.
 
 Constructor/accessor clones that root their envelopes before native attachment
 and perform no fallible work after attachment require no additional reservation.
 Any change to this guard topology requires a contract amendment and a fresh
 simultaneous-high-water derivation. Compiled guard-high-water tests and persistent
 handler-allocation-failure tests must exercise the exact four-frame construction
-and one-frame transport/SAVE paths. Neither a 4,096-entry margin nor a previously
-listed downstream count may substitute for this derivation; the separate direct
-P1, C2 and LOAD obligations happen to be 4, 5 and 10 but authorize no C4 call.
+and one-frame transport paths, plus the accepted R-specific SAVE count when that
+successor exists. Neither a 4,096-entry margin nor a previously
+listed downstream count may substitute for this derivation. The separate direct
+P1, C2 and LOAD obligations are under their own corrected dual-fault review and
+authorize no C4 call.
 
 The restored R stage/copy/replay/rollback guard topology is not frozen here, so
 its reservation count is not derivable from this contract. Even an intrinsic
@@ -634,7 +640,8 @@ ABI as a substitute for a correctly compiled checked store. It does directly
 call `eshkol_runtime_reserve_exception_handlers_v1` only through the exact private
 alias and at the placements frozen above. Constructor/handler guard adoption,
 compiled high-water evidence, and persistent handler-allocation-failure tests for
-the exact reserve-4 and reserve-1 paths remain mandatory before the final pin.
+the exact reserve-4 and reserve-1 transport paths, plus any accepted R-specific
+SAVE successor, remain mandatory before the final pin.
 Those tests must prove cleanup plus unchanged canonical delivery through both
 nested M3 handlers while allocation failure remains armed.
 

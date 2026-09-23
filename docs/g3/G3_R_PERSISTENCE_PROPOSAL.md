@@ -1,5 +1,11 @@
 # G3-R model and generation-state persistence proposal
 
+The exact source-private snapshot, stage, restored-copy, replay, rollback and
+handler-reservation successor is proposed in
+[the G3-R seam contract](G3_R_MODEL_RESTORE_CONTRACT.md). This proposal remains
+the wire/public-semantics source; the seam contract grants no implementation
+authority until root accepts it.
+
 Status: **proposed; requires orchestrator decision and prerequisite implementation**.
 Source audit base: `ba0e37d06076d0a16c473ff742ab95723cb2cb89`. No runtime,
 wire format, capability, public API, test result or acceptance is added by this
