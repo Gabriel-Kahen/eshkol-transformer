@@ -291,7 +291,7 @@ cmp "${temporary_dir}/model-lease-hook-1/runtime" \
   "${temporary_dir}/model-lease-hook-2/runtime"
 cmp "${temporary_dir}/model-lease-hook-1/runtime.stdout" \
   "${temporary_dir}/model-lease-hook-2/runtime.stdout"
-grep -Fx 'O2 MODEL LEASE CREATE HOOK PASS: 23 checks' \
+grep -Fx 'O2 MODEL LEASE CREATE HOOK PASS: 27 checks' \
   "${temporary_dir}/model-lease-hook-1/runtime.stdout" >/dev/null
 
 mkdir -p "${temporary_dir}/config-cache"
