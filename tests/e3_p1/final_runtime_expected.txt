@@ -1,0 +1,19 @@
+runtime_source_commit=81298b4a9608fb92eb6f351a2eabd8392da7d9ef
+runtime_source_tree=7669312845a9d8d372006af52271045e69505813
+runner_sha256=4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1
+runtime_archive_sha256=c32bb593ac1f365f3cbeaefd581704c4be029a4aa8877db29463d0e12356c168
+container_digest=sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6
+run_recorded_head=f1cee3a945400ff98e9d3097504a8856170bc5d9
+run_recorded_tree=7e2f1fdd9ff1c81b999c0ba0d130d95a36dadbbd
+o0 E3-P1-MODES-ORDINARY-PASS checks=749
+o2 E3-P1-FINAL-RUNTIME-PASS checks=1075 horizon=1024 operations=3072 arena_used_delta=0 arena_total_delta=0 arena_block_delta=0 native_live_delta=0 native_tombstone_delta=0
+o2 E3-P1-FINAL-RUNTIME-PASS checks=1075 horizon=8192 operations=24576 arena_used_delta=0 arena_total_delta=0 arena_block_delta=0 native_live_delta=0 native_tombstone_delta=0
+o2 global_total_allocated_bytes horizon=1024 value=7405568
+o2 global_total_allocated_bytes horizon=8192 value=7405568
+observed peak_rss_kib horizon=1024 value=39324
+observed peak_rss_kib horizon=8192 value=39128
+observed compile profile=o0 peak_rss_kib=3247036 elapsed_seconds=74.80
+observed compile profile=o2-main peak_rss_kib=4265536 elapsed_seconds=832.83
+observed compile profile=o2-failure peak_rss_kib=3951764 elapsed_seconds=682.59
+constructor condition=1 budgets=0,288,576,864,896,1056 used_deltas=0,288,576,864,896,1056 total_deltas=0 block_deltas=0 checks_per_run=63
+promotion condition=2 budgets=0,48,208,240,528,816 used_deltas=0,48,208,240,528,816 total_deltas=0 block_deltas=0 checks_per_run=63

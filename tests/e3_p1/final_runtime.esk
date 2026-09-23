@@ -1,0 +1,200 @@
+;;; Optimized final-runtime acceptance. This extends, rather than replaces, the
+;;; accepted O0 ordinary smoke profile.
+(load "modes_smoke.esk")
+(require p1_test.tensor_provider)
+
+(extern i64 e3-p1-arena-used :real et_e3_p1_test_arena_used_v1)
+(extern i64 e3-p1-arena-total :real et_e3_p1_test_arena_total_v1)
+(extern i64 e3-p1-arena-blocks :real et_e3_p1_test_arena_blocks_v1)
+(extern i64 e3-p1-disable-allocations
+        :real et_e3_p1_test_disable_allocations_v1)
+(extern i64 e3-p1-enable-allocations
+        :real et_e3_p1_test_enable_allocations_v1)
+(extern i64 p1-test-live-count :real et_p1_test_live_entry_count_v1)
+(extern i64 p1-test-tombstone-count :real et_p1_test_tombstone_count_v1)
+
+;;; Bind from a short region and retain only the canonical token. With arena
+;;; poisoning enabled by the runner, all following reads and reuse occur after
+;;; the source setup box and frame key have been reclaimed and overwritten.
+(define short-token-holder (vector #f))
+(define short-setup-result -1)
+(with-region ('e3-p1-short-bind 4096)
+  (let* ((short-frame (vector 'short-frame))
+         (short-setup (vector short-frame #f)))
+    (set! short-setup-result (p1-e3-mode-bind! fixture short-setup))
+    (if (= short-setup-result 0)
+        (vector-set! short-token-holder 0 (vector-ref short-setup 1))
+        #f)))
+(define runtime-token (vector-ref short-token-holder 0))
+(check-status "short-region bind" short-setup-result 0)
+(check "short-region canonical token shape"
+       (and (vector? runtime-token) (= (vector-length runtime-token) 1)) #t)
+(check-status "poisoned token prepare" (p1-e3-mode-prepare! runtime-token) 0)
+(check-modes "poisoned prepare preserves mixed17" nodes mixed-modes)
+(check-status "poisoned token enter" (p1-e3-mode-enter! runtime-token) 0)
+(check-modes "poisoned enter changes all17" nodes eval-modes)
+(check-status "poisoned token restore" (p1-e3-mode-restore! runtime-token) 0)
+(check-modes "poisoned restore recovers mixed17" nodes mixed-modes)
+
+;;; Drive the real P1 protected-storage comparator and invoke a supplied mode
+;;; wrapper from inside its callback. The outer release is genuine P1 lifetime
+;;; work; only the callback arm/result storage belongs to the test fixture.
+(define comparator-module (module-create-fixture-internal))
+(module-register-buffer-internal!
+  comparator-module "protected"
+  (fixture-tensor-internal '(1) 'i64 'cpu (vector 'protected)))
+(define comparator-state (module-state-dict comparator-module))
+(define comparator-sequence 0)
+(define (run-comparator-reentry thunk)
+  (let* ((candidate
+           (fixture-owned-tensor-internal
+             '(1) 'i64 'cpu (vector comparator-sequence)))
+         (envelope (vector candidate 'buffer 'e3-p1-comparator-reentry #f)))
+    (set! comparator-sequence (+ comparator-sequence 1))
+    (fixture-arm-storage-comparison-reentrant-call-internal! thunk)
+    (check "outer comparator release succeeds"
+           (tensor-provider-release-owned-internal!
+             'fixture-v1 2 0 envelope) #t)
+    (fixture-storage-comparison-reentrant-result-internal)))
+
+(define reentry-bind-setup (vector (vector 'reentry-frame) #f))
+(check-status "comparator reentry bind rejected"
+  (run-comparator-reentry
+    (lambda () (p1-e3-mode-bind! model reentry-bind-setup))) 2)
+(check "reentry bind preserves setup output" (vector-ref reentry-bind-setup 1) #f)
+(check-modes "reentry bind preserves mixed17" nodes mixed-modes)
+
+(check-status "comparator reentry prepare rejected"
+  (run-comparator-reentry
+    (lambda () (p1-e3-mode-prepare! runtime-token))) 2)
+(check-modes "reentry prepare preserves mixed17" nodes mixed-modes)
+
+(check-status "prepare before comparator enter" (p1-e3-mode-prepare! runtime-token) 0)
+(check-status "comparator reentry enter rejected"
+  (run-comparator-reentry
+    (lambda () (p1-e3-mode-enter! runtime-token))) 2)
+(check-modes "reentry enter preserves prepared mixed17" nodes mixed-modes)
+(check-status "comparator reentry prepared restore rejected"
+  (run-comparator-reentry
+    (lambda () (p1-e3-mode-restore! runtime-token))) 2)
+(check-modes "reentry prepared restore preserves mixed17" nodes mixed-modes)
+(check-status "enter after comparator rejection" (p1-e3-mode-enter! runtime-token) 0)
+(check-modes "entered after comparator rejection is all eval" nodes eval-modes)
+(check-status "comparator reentry entered restore rejected"
+  (run-comparator-reentry
+    (lambda () (p1-e3-mode-restore! runtime-token))) 2)
+(check-modes "reentry entered restore preserves all17 eval" nodes eval-modes)
+(check-status "restore after comparator rejection" (p1-e3-mode-restore! runtime-token) 0)
+(check-modes "post-reentry restore recovers mixed17" nodes mixed-modes)
+(check-status "comparator reentry unbind rejected"
+  (run-comparator-reentry
+    (lambda () (p1-e3-mode-unbind! runtime-token))) 2)
+(check-modes "reentry unbind preserves mixed17" nodes mixed-modes)
+(check "comparator fixture cleanup" (state-dict-release! comparator-state) #t)
+
+;;; Exhaust the genuine root arena before each tail. A hidden constructor,
+;;; public mode setter, error object, or planning path now reaches the final
+;;; runtime's allocation-failure condition and cannot be mistaken for success.
+(define disabled-status -1)
+(e3-p1-disable-allocations)
+(set! disabled-status (p1-e3-mode-prepare! runtime-token))
+(e3-p1-enable-allocations)
+(check-status "allocation-disabled prepare" disabled-status 0)
+(check-modes "allocation-disabled prepare preserves mixed17" nodes mixed-modes)
+
+(e3-p1-disable-allocations)
+(set! disabled-status (p1-e3-mode-restore! runtime-token))
+(e3-p1-enable-allocations)
+(check-status "allocation-disabled prepared restore" disabled-status 0)
+(check-modes "allocation-disabled prepared restore exact" nodes mixed-modes)
+
+(e3-p1-disable-allocations)
+(set! disabled-status (p1-e3-mode-prepare! runtime-token))
+(e3-p1-enable-allocations)
+(check-status "allocation-disabled second prepare" disabled-status 0)
+(e3-p1-disable-allocations)
+(set! disabled-status (p1-e3-mode-enter! runtime-token))
+(e3-p1-enable-allocations)
+(check-status "allocation-disabled enter" disabled-status 0)
+(check-modes "allocation-disabled enter all17 eval" nodes eval-modes)
+(e3-p1-disable-allocations)
+(set! disabled-status (p1-e3-mode-restore! runtime-token))
+(e3-p1-enable-allocations)
+(check-status "allocation-disabled entered restore" disabled-status 0)
+(check-modes "allocation-disabled entered restore exact" nodes mixed-modes)
+
+(define arguments (cdr (command-line)))
+(define horizon
+  (if (and (pair? arguments) (string=? (car arguments) "long")) 8192 1024))
+(define loop-arena-used-before (e3-p1-arena-used))
+(define loop-arena-total-before (e3-p1-arena-total))
+(define loop-arena-blocks-before (e3-p1-arena-blocks))
+(define loop-native-live-before (p1-test-live-count))
+(define loop-native-tombstones-before (p1-test-tombstone-count))
+(define loop-status 0)
+(define loop-operations 0)
+(e3-p1-disable-allocations)
+(let reuse ((iteration 0))
+  (if (or (= iteration horizon) (not (= loop-status 0)))
+      #t
+      (begin
+        (set! loop-status (p1-e3-mode-prepare! runtime-token))
+        (if (= loop-status 0)
+            (begin
+              (set! loop-operations (+ loop-operations 1))
+              (set! loop-status (p1-e3-mode-enter! runtime-token)))
+            #f)
+        (if (= loop-status 0)
+            (begin
+              (set! loop-operations (+ loop-operations 1))
+              (set! loop-status (p1-e3-mode-restore! runtime-token)))
+            #f)
+        (if (= loop-status 0)
+            (begin
+              (set! loop-operations (+ loop-operations 1))
+              (reuse (+ iteration 1)))
+            #f))))
+(e3-p1-enable-allocations)
+(define loop-arena-used-after (e3-p1-arena-used))
+(define loop-arena-total-after (e3-p1-arena-total))
+(define loop-arena-blocks-after (e3-p1-arena-blocks))
+(define loop-native-live-after (p1-test-live-count))
+(define loop-native-tombstones-after (p1-test-tombstone-count))
+(check-status "optimized reuse status" loop-status 0)
+(check "optimized reuse exact operation count" loop-operations (* horizon 3))
+(check "optimized reuse arena-used delta"
+       (- loop-arena-used-after loop-arena-used-before) 0)
+(check "optimized reuse cumulative arena delta"
+       (- loop-arena-total-after loop-arena-total-before) 0)
+(check "optimized reuse arena block delta"
+       (- loop-arena-blocks-after loop-arena-blocks-before) 0)
+(check "optimized reuse native live delta"
+       (- loop-native-live-after loop-native-live-before) 0)
+(check "optimized reuse native tombstone delta"
+       (- loop-native-tombstones-after loop-native-tombstones-before) 0)
+(check-modes "optimized reuse restores mixed17" nodes mixed-modes)
+(check "optimized reuse retains exact token"
+       (eq? (vector-ref short-token-holder 0) runtime-token) #t)
+
+(e3-p1-disable-allocations)
+(set! disabled-status (p1-e3-mode-unbind! runtime-token))
+(e3-p1-enable-allocations)
+(check-status "allocation-disabled unbind" disabled-status 0)
+(check-status "allocation-disabled dead unbind"
+  (p1-e3-mode-unbind! runtime-token) 0)
+(check-modes "allocation-disabled unbind preserves mixed17" nodes mixed-modes)
+
+(display "E3-P1-FINAL-RUNTIME-PASS checks=") (display checks)
+(display " horizon=") (display horizon)
+(display " operations=") (display loop-operations)
+(display " arena_used_delta=")
+(display (- loop-arena-used-after loop-arena-used-before))
+(display " arena_total_delta=")
+(display (- loop-arena-total-after loop-arena-total-before))
+(display " arena_block_delta=")
+(display (- loop-arena-blocks-after loop-arena-blocks-before))
+(display " native_live_delta=")
+(display (- loop-native-live-after loop-native-live-before))
+(display " native_tombstone_delta=")
+(display (- loop-native-tombstones-after loop-native-tombstones-before))
+(newline)

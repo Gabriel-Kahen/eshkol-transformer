@@ -25,6 +25,8 @@
          fixture-arm-storage-comparison-defect-internal!
          fixture-arm-storage-comparison-reentrant-state-release-internal!
          fixture-arm-storage-comparison-reentrant-registration-internal!
+         fixture-arm-storage-comparison-reentrant-call-internal!
+         fixture-storage-comparison-reentrant-result-internal
          fixture-arm-ordinary-comparison-reentrant-state-release-internal!
          fixture-arm-ordinary-comparison-reentrant-registration-internal!
          fixture-fail-next-release-internal!
@@ -72,6 +74,8 @@
 (define fixture-storage-comparison-defect #f)
 (define fixture-storage-comparison-release-state #f)
 (define fixture-storage-comparison-registration #f)
+(define fixture-storage-comparison-reentrant-call #f)
+(define fixture-storage-comparison-reentrant-result #f)
 (define fixture-ordinary-comparison-release #f)
 (define fixture-ordinary-comparison-registration #f)
 (define fixture-release-defect #f)
@@ -177,6 +181,16 @@
           mode module tensor)
   (set! fixture-storage-comparison-registration (vector mode module tensor))
   #t)
+
+(define (fixture-arm-storage-comparison-reentrant-call-internal! thunk)
+  ;; Generic test-only callback used to probe other private P1 entry points
+  ;; while the genuine protected-storage comparator lifetime pin is active.
+  (set! fixture-storage-comparison-reentrant-result #f)
+  (set! fixture-storage-comparison-reentrant-call thunk)
+  #t)
+
+(define (fixture-storage-comparison-reentrant-result-internal)
+  fixture-storage-comparison-reentrant-result)
 
 (define (fixture-arm-ordinary-comparison-reentrant-state-release-internal!
           source state)
@@ -558,6 +572,11 @@
                         (module-register-buffer-internal!
                           (vector-ref attack 1) "comparator-attack"
                           (vector-ref attack 2))))
+                  #t)
+              (if fixture-storage-comparison-reentrant-call
+                  (let ((thunk fixture-storage-comparison-reentrant-call))
+                    (set! fixture-storage-comparison-reentrant-call #f)
+                    (set! fixture-storage-comparison-reentrant-result (thunk)))
                   #t)
               (if (and fixture-ordinary-comparison-release
                        (eq? left
