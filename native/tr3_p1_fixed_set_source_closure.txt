@@ -1,0 +1,2 @@
+internal/p1/lib/transformer/module.esk
+native/tr3_p1_fixed_set_extension.esk

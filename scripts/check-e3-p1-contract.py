@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "ba0e37d06076d0a16c473ff742ab95723cb2cb89"
 SOURCE = "internal/p1/lib/transformer/module.esk"
 WRAPPERS = "native/e3_p1_modes_extension.esk"
+TR3_WRAPPERS = "native/tr3_p1_fixed_set_extension.esk"
 INHERITED_CLOSURES = {
     "p1_package": 4, "c1_checkpoint": 8, "t1_wave1": 10,
     "t2_wave2": 12, "t2_wave2_d1_test": 13, "i2_wave2": 13,
@@ -76,10 +77,27 @@ def check():
     require(atom(lexical[2][0]) == "let", "P1 authority must remain lexical")
     vector = lexical[2][-1]
     require(atom(vector[2][0]) == "vector", "P1 surface must end with its vector")
-    require(len(vector[2]) == 70, "expected exactly 69 trusted closure slots")
+    require(len(vector[2]) == 72, "expected exactly 71 trusted closure slots")
     require(digest(text, vector[2][1:65]) ==
             "0f054d3f4e2f5466c77514f98d38aed5421790d8d9a7e6a73a9fc684775326f5",
             "inherited closure 0..63 changed from accepted base")
+    require(digest(text, vector[2][65:70]) ==
+            "f2a34d77e5d6db808dcc7bf5b5eeeacbfcda8da274827aa4b9e94ac0fdfa0097",
+            "accepted E3 closure slots 64..68 changed")
+    e3_definitions = []
+    for node in lexical[2][1:-1]:
+        if not (isinstance(node[2], list) and len(node[2]) > 1
+                and atom(node[2][0]) == "define"):
+            continue
+        target = node[2][1]
+        name = atom(target)
+        if name is None and isinstance(target[2], list) and target[2]:
+            name = atom(target[2][0])
+        if name and name.startswith("e3-mode-"):
+            e3_definitions.append(node)
+    require(len(e3_definitions) == 23 and digest(text, e3_definitions) ==
+            "69d85636fffe58568c649308796a40d870d7fea7d78d54e88d0c0cb20149da02",
+            "accepted E3 lexical definitions changed")
     require(digest(text, (n for n in nodes if n is not surface)) ==
             "0c8621e2248ad188553e25c9a3a6d103d0cfe122617545847eb15e450d90b098",
             "P1 top-level authority/provides/wrappers changed from accepted base")
@@ -106,6 +124,19 @@ def check():
                          [["vector-ref", "p1-trusted-surface", str(slot)], *args]])
     require([signature(n) for n in forms(wrapper_text)] == expected,
             "private wrappers differ from the five exact slot/arity calls")
+    tr3_wrapper_text = (ROOT / TR3_WRAPPERS).read_text()
+    tr3_expected = [
+        ["define", ["tr3-p1-fixed-capture-internal", "model", "handles",
+                    "modules", "retained-handles", "carriers"],
+         [["vector-ref", "p1-trusted-surface", "69"], "model", "handles",
+          "modules", "retained-handles", "carriers"]],
+        ["define", ["tr3-p1-fixed-recheck-internal", "model", "modules",
+                    "retained-handles", "carriers"],
+         [["vector-ref", "p1-trusted-surface", "70"], "model", "modules",
+          "retained-handles", "carriers"]],
+    ]
+    require([signature(n) for n in forms(tr3_wrapper_text)] == tr3_expected,
+            "TR3 private wrappers differ from exact slot69/70 arities")
     for prefix, count in INHERITED_CLOSURES.items():
         path = ROOT / f"native/{prefix}_source_closure.txt"
         paths = path.read_text().splitlines()
@@ -113,8 +144,8 @@ def check():
                 f"predecessor source count/canonical P1 identity drifted: {path.name}")
         require(WRAPPERS not in paths,
                 f"predecessor source closure gained E3-only wrappers: {path.name}")
-    print(f"E3-P1 STRUCTURE PASS: base={BASE} first64=unchanged total=69 public=unchanged")
-    for path in (SOURCE, WRAPPERS):
+    print(f"E3-P1 STRUCTURE PASS: base={BASE} first69=unchanged total=71 public=unchanged")
+    for path in (SOURCE, WRAPPERS, TR3_WRAPPERS):
         print(f"sha256 {sha256((ROOT / path).read_bytes()).hexdigest()} {path}")
 
 
