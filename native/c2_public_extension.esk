@@ -63,16 +63,36 @@
   ;; Byte/semantic staging is complete before any K2 operation. Reconstruction
   ;; starts only after the caller's exact report authenticates the verified
   ;; tensor.f32 storage.copy row for the policy device.
-  (let ((stage (c2-checkpoint-load-stage-internal path policy)))
+  (let ((stage-cell (vector #f)))
     (guard (caught
              (#t
-               (c2-checkpoint-load-staging-release-internal! stage)
+               (let ((stage (vector-ref stage-cell 0)))
+                 (if stage
+                     (begin
+                       (vector-set! stage-cell 0 #f)
+                       (c2-checkpoint-load-staging-release-internal! stage))))
                (raise caught)))
-      (let ((descriptors
-              (c2-checkpoint-load-capability-descriptors-internal
-                stage 'checkpoint-load)))
-        (c2-public-capability-admit-all report descriptors)
-        (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load)))))
+      (let ((stage (c2-checkpoint-load-stage-internal path policy)))
+        ;; Registry publication and this exact-shell enrollment form the
+        ;; assignment-only staging commit tail.
+        (vector-set! stage-cell 0 stage)
+        (let ((descriptors
+                (c2-checkpoint-load-capability-descriptors-internal
+                  (vector-ref stage-cell 0) 'checkpoint-load)))
+          (c2-public-capability-admit-all report descriptors)
+          (let ((result
+                  (c2-checkpoint-load-reconstruct-internal
+                    (vector-ref stage-cell 0) 'checkpoint-load)))
+            (if (not (c2-checkpoint-load-staging-dead-internal?
+                       (vector-ref stage-cell 0)))
+                (let ((unreachable
+                        (et-e1b-private-raise
+                          'internal 'checkpoint-load
+                          "checkpoint reconstruction left staging live"
+                          '() #f)))
+                  unreachable))
+            (vector-set! stage-cell 0 #f)
+            result))))))
 
 (define (c2-public-checkpoint-save! state path policy options)
   (let ((result

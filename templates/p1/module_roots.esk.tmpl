@@ -264,6 +264,8 @@
         :real et_p1_private_state_tensor_validate_v1)
 (extern i64 p1-native-state-release-begin ptr ptr
         :real et_p1_private_state_release_begin_v1)
+(extern i64 p1-runtime-reserve-exception-handlers i64
+        :real eshkol_runtime_reserve_exception_handlers_v1)
 (extern i64 p1-native-live-count ptr
         :real et_p1_private_live_entry_count_v1)
 (extern i64 p1-native-tombstone-count ptr
@@ -917,7 +919,7 @@
 (define (require-live-state operation value)
   (let* ((state (require-state operation value))
          (lifecycle (state-lifecycle state)))
-    (if (and (vector? lifecycle) (= (vector-length lifecycle) 8)
+    (if (and (vector? lifecycle) (= (vector-length lifecycle) 10)
              (eq? (vector-ref lifecycle 0) state-lifecycle-tag)
              (eq? (vector-ref lifecycle 1) 'live))
         state
@@ -2922,7 +2924,8 @@
               (copy-data-for 'state-dict-create-unsafe-internal
                              'invalid-argument aliases)
               (vector state-lifecycle-tag 'live #f #f '()
-                      (vector '() (vector-ref entry-input 2)) #f #f))))
+                      (vector '() (vector-ref entry-input 2)) #f #f
+                      (vector 'empty #f #f #f) (vector #f #f)))))
 
 (define (state-dict-format-internal state)
   (vector-ref (require-live-state 'state-dict-format-internal state) 1))
@@ -3055,7 +3058,8 @@
                     (tensor-provider-identity provider) entries
                     (copy-data aliases)
                     (vector state-lifecycle-tag 'live #t provider '()
-                            ownership #f #f)))
+                            ownership #f #f
+                            (vector 'empty #f #f #f) (vector #f #f))))
       ;; Capture publication so rollback can revoke a shell even when native
       ;; bind fails after shell creation.
       (set! state-shell (shell-for-raw 'state state))
@@ -3801,41 +3805,48 @@
         (state-use-end! operation state operation)
         result))))
 
-(define (state-dict-release-owned! state)
-  (let* ((lifecycle (state-lifecycle state))
-         (provider (vector-ref lifecycle 3))
-         (ownership (vector-ref lifecycle 5))
-         (release-failed? #f)
-         (release-error #f))
-    (if (vector-ref lifecycle 6)
-        (fail 'invalid-state 'state-dict-release!
-              "state dictionary has an active tensor borrow" '())
-        #t)
-    (vector-set! lifecycle 1 'released)
-    (vector-set! lifecycle 4 '())
-    (if (> (vector-length ownership) 1)
-        (vector-set! ownership 1 '())
-        #t)
-    ;; Clear every state entry before invoking provider code. No later path may
-    ;; inspect or compare an opaque carrier after its release callback begins.
-    (let clear ((entries (vector-ref state 6)))
-      (if (null? entries)
-          #t
-          (begin
-            (vector-set! (car entries) 7 #f)
-            (clear (cdr entries)))))
-    (guard (caught
-             (#t
-               (set! release-failed? #t)
-               (set! release-error caught)
-               #f))
+(define (state-dict-release-owned! state release-outcome)
+  ;; [phase, failed?, caught-value, exact-lifecycle]. The record exists before
+  ;; native tombstoning or C2 authority transfer; phase becomes started only
+  ;; after complete admission.
+  (guard (caught
+           (#t
+             (if (not (eq? (vector-ref release-outcome 0) 'started))
+                 (raise caught))
+             (vector-set! release-outcome 1 #t)
+             (vector-set! release-outcome 2 caught)
+             #f))
+    (let* ((lifecycle (state-lifecycle state))
+           (provider (vector-ref lifecycle 3))
+           (ownership (vector-ref lifecycle 5)))
+      (if (vector-ref lifecycle 6)
+          (fail 'invalid-state 'state-dict-release!
+                "state dictionary has an active tensor borrow" '())
+          #t)
+      ;; From the phase write through carrier invalidation, every operation is
+      ;; assignment-only and remains inside the preinstalled handler.
+      (vector-set! release-outcome 3 lifecycle)
+      (vector-set! release-outcome 0 'started)
+      (vector-set! lifecycle 1 'released)
+      (vector-set! lifecycle 4 '())
+      (if (> (vector-length ownership) 1)
+          (vector-set! ownership 1 '())
+          #t)
+      ;; Clear every state entry before invoking provider code. No later path
+      ;; may inspect an opaque carrier after its release callback begins.
+      (let clear ((entries (vector-ref state 6)))
+        (if (null? entries)
+            #t
+            (begin
+              (vector-set! (car entries) 7 #f)
+              (clear (cdr entries)))))
       (if (vector-ref lifecycle 2)
           (release-owned-list! 'state-dict-release! provider ownership)
-          #t))
-    (vector-set! lifecycle 3 #f)
-    (if release-failed?
-        (raise release-error)
-        #t)))
+          #t)))
+  (vector-set! (vector-ref release-outcome 3) 3 #f)
+  (if (vector-ref release-outcome 1)
+      (raise (vector-ref release-outcome 2))
+      #t))
 
 (define (decoded-owned-record? record)
   (and (vector? record) (= (vector-length record) 7)
@@ -4009,7 +4020,8 @@
                      (tensor-provider-identity provider) entries
                      (copy-data aliases)
                      (vector state-lifecycle-tag 'live #f #f '()
-                             adopted-ownership #f #f)))
+                             adopted-ownership #f #f
+                             (vector 'empty #f #f #f) (vector #f #f))))
            (state-shell #f)
            (cleanup-failed? #f)
            (cleanup-error #f)
@@ -4458,6 +4470,768 @@
             device-equal? prepare-load commit-load! release-owned!)))
     (shell-for-raw 'provider raw)))
 
+;;; E3/P1 fixed-profile mode authority. Slots 64..68 are lexical only.
+;;; The ledger owns snapshots; the returned one-slot token carries no authority
+;;; in its contents. Setup is the only allocating operation.
+;;; Fixed write/clear tails are deliberately unrolled: the pinned compiler
+;;; otherwise inserts allocating nursery regions and interrupt polls around
+;;; mutating named-let loops, including between committed writes.
+(define e3-mode-registry-root (vector '()))
+;;; Intern once in root initialization. A long symbol literal lookup constructs
+;;; a host std::string even on its cache-hit path in the pinned runtime.
+(define e3-mode-provider-name 'i2-dense-cpu-f32-v1)
+(define e3-mode-train 'train)
+(define e3-mode-eval 'eval)
+
+(define (e3-mode-i64=? value expected)
+  (and (integer? value) (exact? value) (eq? value expected)))
+
+(define (e3-mode-record token)
+  (let loop ((records (vector-ref e3-mode-registry-root 0)))
+    (cond ((null? records) #f)
+          ((eq? token (vector-ref (car records) 0)) (car records))
+          (else (loop (cdr records))))))
+
+(define (e3-mode-enrolled? frame model)
+  (let loop ((records (vector-ref e3-mode-registry-root 0)))
+    (if (null? records) #f
+        (let ((record (car records)))
+          (if (and (not (e3-mode-i64=? (vector-ref record 1) 3))
+                   (or (eq? frame (vector-ref record 2))
+                       (eq? model (vector-ref record 3))))
+              #t (loop (cdr records)))))))
+
+(define (e3-mode-parent index)
+  (cond ((= index 0) -1)
+        ((or (= index 1) (>= index 13)) 0)
+        ((= index 2) 1)
+        ((or (= index 3) (= index 8) (= index 11) (= index 12)) 2)
+        ((and (>= index 4) (<= index 7)) 3)
+        (else 8)))
+
+(define (e3-mode-name index)
+  (cond ((= index 1) "blocks") ((= index 2) "0")
+        ((= index 3) "attention") ((= index 4) "key")
+        ((= index 5) "output") ((= index 6) "query")
+        ((= index 7) "value") ((= index 8) "ffn")
+        ((= index 9) "down") ((= index 10) "up")
+        ((= index 11) "norm1") ((= index 12) "norm2")
+        ((= index 13) "head") ((= index 14) "norm_final")
+        ((= index 15) "position_embedding") (else "token_embedding")))
+
+(define (e3-mode-child-count index)
+  (cond ((= index 0) 5) ((= index 1) 1)
+        ((or (= index 2) (= index 3)) 4) ((= index 8) 2)
+        (else 0)))
+
+(define (e3-mode-symbol? mode) (or (eq? mode e3-mode-train) (eq? mode e3-mode-eval)))
+
+(define (e3-mode-child-list? children count)
+  ;; Fixed bound also rejects cycles and improper lists before car/cdr access.
+  (if (= count 0) (null? children)
+      (and (pair? children)
+           (let ((binding (car children)))
+             (and (vector? binding) (= (vector-length binding) 3)
+                  (eq? (vector-ref binding 0) 'child-binding)
+                  (string? (vector-ref binding 1))
+                  (e3-mode-child-list? (cdr children) (- count 1)))))))
+
+(define (e3-mode-child children name)
+  (cond ((null? children) #f)
+        ((string=? (vector-ref (car children) 1) name)
+         (vector-ref (car children) 2))
+        (else (e3-mode-child (cdr children) name))))
+
+(define (e3-mode-distinct? nodes node limit)
+  (let loop ((index 0))
+    (cond ((= index limit) #t)
+          ((eq? node (vector-ref nodes index)) #f)
+          (else (loop (+ index 1))))))
+
+(define (e3-mode-fill! root provider nodes heads)
+  (vector-set! nodes 0 root)
+  (let loop ((index 0))
+    (if (= index 17) 0
+        (let* ((parent-index (e3-mode-parent index))
+               (parent (if (= index 0) #f (vector-ref nodes parent-index)))
+               (node (if (= index 0) root
+                         (e3-mode-child (vector-ref parent 4)
+                                        (e3-mode-name index)))))
+          (cond
+            ((not (and (module-value? node)
+                       (eq? (vector-ref node 5) parent)
+                       (eq? (vector-ref node 6) provider)
+                       (eq? (vector-ref node 7) #t)
+                       (e3-mode-distinct? nodes node index)
+                       (e3-mode-child-list? (vector-ref node 4)
+                                            (e3-mode-child-count index)))) 3)
+            ((not (e3-mode-symbol? (vector-ref node 1))) 4)
+            (else
+              (vector-set! nodes index node)
+              (vector-set! heads index (vector-ref node 4))
+              (loop (+ index 1))))))))
+
+(define (e3-mode-retire! record)
+  (vector-set! record 2 #f)
+  (vector-set! record 3 #f)
+  (vector-set! record 4 #f)
+  (vector-set! record 5 #f)
+  (vector-set! record 6 #f)
+  (vector-set! record 7 #f)
+  (vector-set! record 8 0)
+  (vector-set! record 1 3)
+  0)
+
+(define (e3-mode-bind! model setup-box)
+  (cond
+    ((not (and (vector? setup-box) (= (vector-length setup-box) 2)
+               (vector-ref setup-box 0))) 1)
+    ((and (vector-ref setup-box 1)
+          (not (e3-mode-record (vector-ref setup-box 1)))) 1)
+    ((or protected-storage-comparison-active? (vector-ref setup-box 1)
+         (e3-mode-enrolled? (vector-ref setup-box 0) model)) 2)
+    (else
+      (let ((entry (shell-entry model)))
+        (if (not (and entry (eq? (vector-ref entry 1) 'module))) 1
+            (let* ((root (raw-for-shell 'p1-e3-mode-bind! 'module model))
+                   (provider (tensor-provider-find e3-mode-provider-name)))
+              (if (not (and provider (module-value? root)
+                            (eq? (vector-ref root 6) provider)
+                            (eq? (vector-ref root 5) #f)
+                            (e3-mode-i64=? (vector-ref root 10) 17))) 3
+                  (begin
+                    (native-provider-snapshot-check! 'p1-e3-mode-bind! provider)
+                    (let* ((nodes (make-vector 17 #f))
+                           (saved (make-vector 17 #f))
+                           (heads (make-vector 17 #f))
+                           (status (e3-mode-fill! root provider nodes heads)))
+                      (if (not (= status 0)) status
+                          (let* ((token (vector #f))
+                                 (record (vector token 0 (vector-ref setup-box 0)
+                                                 model root nodes saved heads 0))
+                                 (next (cons record (vector-ref e3-mode-registry-root 0)))
+                                 (canonical #f))
+                            ;; Install before the root barrier. Never clean up
+                            ;; a regional copy after canonical publication.
+                            (guard (caught
+                                     (#t (if canonical (e3-mode-retire! canonical))
+                                         (raise caught)))
+                              (vector-set! e3-mode-registry-root 0 next)
+                              (set! canonical (car (vector-ref e3-mode-registry-root 0)))
+                              (vector-set! setup-box 1 (vector-ref canonical 0))
+                              0))))))))))))
+
+(define (e3-mode-check record)
+  ;; This nonallocating path deliberately does not call raw-for-shell,
+  ;; finalization-plan, native/provider callbacks, or an error constructor.
+  (let* ((entry (shell-entry (vector-ref record 3)))
+         (root (vector-ref record 4))
+         (nodes (vector-ref record 5))
+         (saved (vector-ref record 6))
+         (heads (vector-ref record 7))
+         (provider (tensor-provider-find e3-mode-provider-name)))
+    (if (not (and (vector-ref record 2) entry
+                  (eq? (vector-ref entry 1) 'module)
+                  (eq? (vector-ref entry 2) root)
+                  (module-value? root)
+                  (e3-mode-i64=? (vector-ref root 10) 17)
+                  provider (eq? (vector-ref root 6) provider)
+                  (vector? nodes) (= (vector-length nodes) 17)
+                  (vector? saved) (= (vector-length saved) 17)
+                  (vector? heads) (= (vector-length heads) 17)
+                  (eq? (vector-ref nodes 0) root)
+                  (e3-mode-i64=? (vector-ref record 8) 0))) 4
+        (let loop ((index 0))
+          (if (= index 17) 0
+              (let ((node (vector-ref nodes index))
+                    (parent-index (e3-mode-parent index)))
+                (if (and (module-value? node)
+                         (eq? (vector-ref node 5)
+                              (if (= index 0) #f (vector-ref nodes parent-index)))
+                         (eq? (vector-ref node 6) provider)
+                         (eq? (vector-ref node 7) #t)
+                         (eq? (vector-ref node 4) (vector-ref heads index))
+                         (e3-mode-distinct? nodes node index)
+                         (e3-mode-symbol? (vector-ref node 1)))
+                    (loop (+ index 1)) 4)))))))
+
+(define (e3-mode-snapshot-check record entered?)
+  (let ((nodes (vector-ref record 5)) (saved (vector-ref record 6)))
+    (let loop ((index 0))
+      (if (= index 17) 0
+          (if (and (e3-mode-symbol? (vector-ref saved index))
+                   (eq? (vector-ref (vector-ref nodes index) 1)
+                        (if entered? e3-mode-eval (vector-ref saved index))))
+              (loop (+ index 1)) 4)))))
+
+(define (e3-mode-prepare! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          ((or protected-storage-comparison-active?
+               (not (e3-mode-i64=? (vector-ref record 1) 0))) 2)
+          (else
+            (let ((status (e3-mode-check record)))
+              (if (not (= status 0)) status
+                  (let ((nodes (vector-ref record 5)) (saved (vector-ref record 6)))
+                    (vector-set! saved 0 (vector-ref (vector-ref nodes 0) 1))
+                    (vector-set! saved 1 (vector-ref (vector-ref nodes 1) 1))
+                    (vector-set! saved 2 (vector-ref (vector-ref nodes 2) 1))
+                    (vector-set! saved 3 (vector-ref (vector-ref nodes 3) 1))
+                    (vector-set! saved 4 (vector-ref (vector-ref nodes 4) 1))
+                    (vector-set! saved 5 (vector-ref (vector-ref nodes 5) 1))
+                    (vector-set! saved 6 (vector-ref (vector-ref nodes 6) 1))
+                    (vector-set! saved 7 (vector-ref (vector-ref nodes 7) 1))
+                    (vector-set! saved 8 (vector-ref (vector-ref nodes 8) 1))
+                    (vector-set! saved 9 (vector-ref (vector-ref nodes 9) 1))
+                    (vector-set! saved 10 (vector-ref (vector-ref nodes 10) 1))
+                    (vector-set! saved 11 (vector-ref (vector-ref nodes 11) 1))
+                    (vector-set! saved 12 (vector-ref (vector-ref nodes 12) 1))
+                    (vector-set! saved 13 (vector-ref (vector-ref nodes 13) 1))
+                    (vector-set! saved 14 (vector-ref (vector-ref nodes 14) 1))
+                    (vector-set! saved 15 (vector-ref (vector-ref nodes 15) 1))
+                    (vector-set! saved 16 (vector-ref (vector-ref nodes 16) 1))
+                    (vector-set! record 1 1)
+                    0)))))))
+
+(define (e3-mode-enter! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          ((or protected-storage-comparison-active?
+               (not (e3-mode-i64=? (vector-ref record 1) 1))) 2)
+          (else
+            (let ((status (e3-mode-check record)))
+              (if (not (= status 0)) status
+                  (let ((snapshot-status (e3-mode-snapshot-check record #f)))
+                    (if (not (= snapshot-status 0)) snapshot-status
+                        (let ((nodes (vector-ref record 5)))
+                          (vector-set! (vector-ref nodes 0) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 1) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 2) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 3) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 4) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 5) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 6) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 7) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 8) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 9) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 10) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 11) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 12) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 13) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 14) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 15) 1 e3-mode-eval)
+                          (vector-set! (vector-ref nodes 16) 1 e3-mode-eval)
+                          (vector-set! record 1 2)
+                          0)))))))))
+
+(define (e3-mode-restore! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          ((or protected-storage-comparison-active?
+               (not (or (e3-mode-i64=? (vector-ref record 1) 1)
+                        (e3-mode-i64=? (vector-ref record 1) 2)))) 2)
+          (else
+            (let ((status (e3-mode-check record)))
+              (if (not (= status 0)) status
+                  (let* ((entered? (e3-mode-i64=? (vector-ref record 1) 2))
+                         (snapshot-status (e3-mode-snapshot-check record entered?)))
+                    (if (not (= snapshot-status 0)) snapshot-status
+                        (let ((nodes (vector-ref record 5)) (saved (vector-ref record 6)))
+                          (if entered?
+                              (begin
+                                (vector-set! (vector-ref nodes 0) 1 (vector-ref saved 0))
+                                (vector-set! (vector-ref nodes 1) 1 (vector-ref saved 1))
+                                (vector-set! (vector-ref nodes 2) 1 (vector-ref saved 2))
+                                (vector-set! (vector-ref nodes 3) 1 (vector-ref saved 3))
+                                (vector-set! (vector-ref nodes 4) 1 (vector-ref saved 4))
+                                (vector-set! (vector-ref nodes 5) 1 (vector-ref saved 5))
+                                (vector-set! (vector-ref nodes 6) 1 (vector-ref saved 6))
+                                (vector-set! (vector-ref nodes 7) 1 (vector-ref saved 7))
+                                (vector-set! (vector-ref nodes 8) 1 (vector-ref saved 8))
+                                (vector-set! (vector-ref nodes 9) 1 (vector-ref saved 9))
+                                (vector-set! (vector-ref nodes 10) 1 (vector-ref saved 10))
+                                (vector-set! (vector-ref nodes 11) 1 (vector-ref saved 11))
+                                (vector-set! (vector-ref nodes 12) 1 (vector-ref saved 12))
+                                (vector-set! (vector-ref nodes 13) 1 (vector-ref saved 13))
+                                (vector-set! (vector-ref nodes 14) 1 (vector-ref saved 14))
+                                (vector-set! (vector-ref nodes 15) 1 (vector-ref saved 15))
+                                (vector-set! (vector-ref nodes 16) 1 (vector-ref saved 16))))
+                          (vector-set! saved 0 #f)
+                          (vector-set! saved 1 #f)
+                          (vector-set! saved 2 #f)
+                          (vector-set! saved 3 #f)
+                          (vector-set! saved 4 #f)
+                          (vector-set! saved 5 #f)
+                          (vector-set! saved 6 #f)
+                          (vector-set! saved 7 #f)
+                          (vector-set! saved 8 #f)
+                          (vector-set! saved 9 #f)
+                          (vector-set! saved 10 #f)
+                          (vector-set! saved 11 #f)
+                          (vector-set! saved 12 #f)
+                          (vector-set! saved 13 #f)
+                          (vector-set! saved 14 #f)
+                          (vector-set! saved 15 #f)
+                          (vector-set! saved 16 #f)
+                          (vector-set! record 1 0)
+                          0)))))))))
+
+(define (e3-mode-unbind! token)
+  (let ((record (e3-mode-record token)))
+    (cond ((not record) 1)
+          (protected-storage-comparison-active? 2)
+          ((e3-mode-i64=? (vector-ref record 1) 3) 0)
+          ((not (e3-mode-i64=? (vector-ref record 1) 0)) 2)
+          (else (e3-mode-retire! record)))))
+
+;;; TR3 fixed-profile read-only validators. Slots 69..70 allocate no object,
+;;; publish no shell, and own no registry or token. The aggregate lease must
+;;; authenticate the M3T model entry before passing its exact slot-8 handles.
+(define (tr3-fixed-vector? value size)
+  (and (vector? value) (= (vector-length value) size)))
+
+(define (tr3-fixed-capture-arguments? handles modules retained carriers)
+  (and (tr3-fixed-vector? handles 14)
+       (tr3-fixed-vector? modules 17)
+       (tr3-fixed-vector? retained 14)
+       (tr3-fixed-vector? carriers 14)
+       (not (eq? handles modules))
+       (not (eq? handles retained))
+       (not (eq? handles carriers))
+       (not (eq? modules retained))
+       (not (eq? modules carriers))
+       (not (eq? retained carriers))))
+
+(define (tr3-fixed-recheck-arguments? modules handles carriers)
+  (and (tr3-fixed-vector? modules 17)
+       (tr3-fixed-vector? handles 14)
+       (tr3-fixed-vector? carriers 14)
+       (not (eq? modules handles))
+       (not (eq? modules carriers))
+       (not (eq? handles carriers))))
+
+(define (tr3-fixed-shell-raw shell kind)
+  (let ((entry (shell-entry shell)))
+    (if (and entry (eq? (vector-ref entry 1) kind))
+        (vector-ref entry 2) #f)))
+
+(define (tr3-fixed-existing-shell kind raw)
+  (let loop ((entries (shell-registry-current)))
+    (cond ((null? entries) #f)
+          ((and (eq? (vector-ref (car entries) 1) kind)
+                (eq? (vector-ref (car entries) 2) raw))
+           (vector-ref (car entries) 0))
+          (else (loop (cdr entries))))))
+
+(define (tr3-fixed-module-raw modules index)
+  (tr3-fixed-shell-raw (vector-ref modules index) 'module))
+
+(define (tr3-fixed-binding-list? bindings count)
+  (if (= count 0) (null? bindings)
+      (and (pair? bindings)
+           (let ((binding (car bindings)))
+             (and (vector? binding) (= (vector-length binding) 3)
+                  (eq? (vector-ref binding 0) 'parameter-binding)
+                  (string? (vector-ref binding 1))
+                  (handle-value? (vector-ref binding 2))
+                  (tr3-fixed-binding-list? (cdr bindings) (- count 1)))))))
+
+(define (tr3-fixed-parameter-count index)
+  (cond ((or (and (>= index 4) (<= index 7))
+             (= index 9) (= index 10) (= index 13)
+             (= index 15) (= index 16)) 1)
+        ((or (= index 11) (= index 12) (= index 14)) 2)
+        (else 0)))
+
+(define (tr3-fixed-binding-handle module name)
+  (let loop ((bindings (vector-ref module 2)))
+    (cond ((null? bindings) #f)
+          ((string=? (vector-ref (car bindings) 1) name)
+           (vector-ref (car bindings) 2))
+          (else (loop (cdr bindings))))))
+
+(define (tr3-fixed-handle-module-index index)
+  (cond ((<= index 3) (+ index 4))
+        ((<= index 5) (+ index 5))
+        ((<= index 7) 11)
+        ((<= index 9) 12)
+        ((= index 10) 13)
+        ((<= index 12) 14)
+        (else 15)))
+
+(define (tr3-fixed-handle-name index)
+  (if (or (= index 6) (= index 8) (= index 11)) "bias" "weight"))
+
+(define (tr3-fixed-expected-handle modules index)
+  (let ((module
+          (tr3-fixed-module-raw modules
+            (tr3-fixed-handle-module-index index))))
+    (if module
+        (tr3-fixed-binding-handle module (tr3-fixed-handle-name index)) #f)))
+
+(define (tr3-fixed-path-2? value first second)
+  (and (pair? value) (string? (car value)) (string=? (car value) first)
+       (pair? (cdr value)) (string? (car (cdr value)))
+       (string=? (car (cdr value)) second) (null? (cdr (cdr value)))))
+
+(define (tr3-fixed-path-4? value first second third fourth)
+  (and (pair? value) (string? (car value)) (string=? (car value) first)
+       (pair? (cdr value)) (string? (car (cdr value)))
+       (string=? (car (cdr value)) second)
+       (pair? (cdr (cdr value))) (string? (car (cdr (cdr value))))
+       (string=? (car (cdr (cdr value))) third)
+       (pair? (cdr (cdr (cdr value))))
+       (string? (car (cdr (cdr (cdr value)))))
+       (string=? (car (cdr (cdr (cdr value)))) fourth)
+       (null? (cdr (cdr (cdr (cdr value)))))))
+
+(define (tr3-fixed-path-5? value first second third fourth fifth)
+  (and (pair? value) (string? (car value)) (string=? (car value) first)
+       (pair? (cdr value)) (string? (car (cdr value)))
+       (string=? (car (cdr value)) second)
+       (pair? (cdr (cdr value))) (string? (car (cdr (cdr value))))
+       (string=? (car (cdr (cdr value))) third)
+       (pair? (cdr (cdr (cdr value))))
+       (string? (car (cdr (cdr (cdr value)))))
+       (string=? (car (cdr (cdr (cdr value)))) fourth)
+       (pair? (cdr (cdr (cdr (cdr value)))))
+       (string? (car (cdr (cdr (cdr (cdr value))))))
+       (string=? (car (cdr (cdr (cdr (cdr value))))) fifth)
+       (null? (cdr (cdr (cdr (cdr (cdr value))))))))
+
+(define (tr3-fixed-path? path index)
+  (cond
+    ((<= index 3)
+     (tr3-fixed-path-5? path "blocks" "0" "attention"
+       (cond ((= index 0) "key") ((= index 1) "output")
+             ((= index 2) "query") (else "value")) "weight"))
+    ((<= index 5)
+     (tr3-fixed-path-5? path "blocks" "0" "ffn"
+       (if (= index 4) "down" "up") "weight"))
+    ((<= index 7)
+     (tr3-fixed-path-4? path "blocks" "0" "norm1"
+       (if (= index 6) "bias" "weight")))
+    ((<= index 9)
+     (tr3-fixed-path-4? path "blocks" "0" "norm2"
+       (if (= index 8) "bias" "weight")))
+    ((= index 10) (tr3-fixed-path-2? path "head" "weight"))
+    ((<= index 12)
+     (tr3-fixed-path-2? path "norm_final"
+       (if (= index 11) "bias" "weight")))
+    (else (tr3-fixed-path-2? path "position_embedding" "weight"))))
+
+(define (tr3-fixed-dimension=? value expected)
+  (and (integer? value) (exact? value) (= value expected)))
+
+(define (tr3-fixed-shape? shape index)
+  (cond
+    ((or (<= index 3) (= index 5))
+     (and (pair? shape)
+          (tr3-fixed-dimension=? (car shape) (if (= index 5) 8 4))
+          (pair? (cdr shape))
+          (tr3-fixed-dimension=? (car (cdr shape)) 4)
+          (null? (cdr (cdr shape)))))
+    ((= index 4)
+     (and (pair? shape) (tr3-fixed-dimension=? (car shape) 4)
+          (pair? (cdr shape))
+          (tr3-fixed-dimension=? (car (cdr shape)) 8)
+          (null? (cdr (cdr shape)))))
+    ((= index 10)
+     (and (pair? shape) (tr3-fixed-dimension=? (car shape) 256)
+          (pair? (cdr shape))
+          (tr3-fixed-dimension=? (car (cdr shape)) 4)
+          (null? (cdr (cdr shape)))))
+    ((= index 13)
+     (and (pair? shape) (tr3-fixed-dimension=? (car shape) 2)
+          (pair? (cdr shape))
+          (tr3-fixed-dimension=? (car (cdr shape)) 4)
+          (null? (cdr (cdr shape)))))
+    (else
+      (and (pair? shape) (tr3-fixed-dimension=? (car shape) 4)
+           (null? (cdr shape))))))
+
+(define (tr3-fixed-module-distinct? modules raw limit)
+  (let loop ((index 0))
+    (cond ((= index limit) #t)
+          ((eq? raw (tr3-fixed-module-raw modules index)) #f)
+          (else (loop (+ index 1))))))
+
+(define (tr3-fixed-capture-module! root provider modules index)
+  (let* ((parent-index (e3-mode-parent index))
+         (parent (if (= index 0) #f
+                     (tr3-fixed-module-raw modules parent-index)))
+         (node (if (= index 0) root
+                   (if parent
+                       (e3-mode-child (vector-ref parent 4)
+                                      (e3-mode-name index)) #f))))
+    (cond
+      ((not (module-value? node)) 3)
+      ((not (eq? (vector-ref node 7) #t)) 2)
+      ((not (eq? (vector-ref node 1) e3-mode-train)) 2)
+      ((not (and (eq? (vector-ref node 5) parent)
+                 (eq? (vector-ref node 6) provider)
+                 (or (not (= index 0)) (e3-mode-i64=? (vector-ref node 10) 17))
+                 (e3-mode-child-list? (vector-ref node 4)
+                                      (e3-mode-child-count index))
+                 (tr3-fixed-binding-list? (vector-ref node 2)
+                                           (tr3-fixed-parameter-count index))
+                 (null? (vector-ref node 3))
+                 (tr3-fixed-module-distinct? modules node index))) 3)
+      (else
+        (let ((shell (tr3-fixed-existing-shell 'module node)))
+          (if (not shell) 4
+              (begin (vector-set! modules index shell) 0)))))))
+
+(define (tr3-fixed-capture-modules! root provider modules)
+  (let ((status-0 (tr3-fixed-capture-module! root provider modules 0)))
+    (if (not (= status-0 0)) status-0
+    (let ((status-1 (tr3-fixed-capture-module! root provider modules 1)))
+      (if (not (= status-1 0)) status-1
+      (let ((status-2 (tr3-fixed-capture-module! root provider modules 2)))
+        (if (not (= status-2 0)) status-2
+        (let ((status-3 (tr3-fixed-capture-module! root provider modules 3)))
+          (if (not (= status-3 0)) status-3
+          (let ((status-4 (tr3-fixed-capture-module! root provider modules 4)))
+            (if (not (= status-4 0)) status-4
+            (let ((status-5 (tr3-fixed-capture-module! root provider modules 5)))
+              (if (not (= status-5 0)) status-5
+              (let ((status-6 (tr3-fixed-capture-module! root provider modules 6)))
+                (if (not (= status-6 0)) status-6
+                (let ((status-7 (tr3-fixed-capture-module! root provider modules 7)))
+                  (if (not (= status-7 0)) status-7
+                  (let ((status-8 (tr3-fixed-capture-module! root provider modules 8)))
+                    (if (not (= status-8 0)) status-8
+                    (let ((status-9 (tr3-fixed-capture-module! root provider modules 9)))
+                      (if (not (= status-9 0)) status-9
+                      (let ((status-10 (tr3-fixed-capture-module! root provider modules 10)))
+                        (if (not (= status-10 0)) status-10
+                        (let ((status-11 (tr3-fixed-capture-module! root provider modules 11)))
+                          (if (not (= status-11 0)) status-11
+                          (let ((status-12 (tr3-fixed-capture-module! root provider modules 12)))
+                            (if (not (= status-12 0)) status-12
+                            (let ((status-13 (tr3-fixed-capture-module! root provider modules 13)))
+                              (if (not (= status-13 0)) status-13
+                              (let ((status-14 (tr3-fixed-capture-module! root provider modules 14)))
+                                (if (not (= status-14 0)) status-14
+                                (let ((status-15 (tr3-fixed-capture-module! root provider modules 15)))
+                                  (if (not (= status-15 0)) status-15
+                                  (let ((status-16 (tr3-fixed-capture-module! root provider modules 16)))
+                                    (if (not (= status-16 0)) status-16
+                                    0
+                                    ))
+                                  ))
+                                ))
+                              ))
+                            ))
+                          ))
+                        ))
+                      ))
+                    ))
+                  ))
+                ))
+              ))
+            ))
+          ))
+        ))
+      ))
+    )))
+
+(define (tr3-fixed-distinct? values value limit)
+  (let loop ((index 0))
+    (cond ((= index limit) #t)
+          ((eq? value (vector-ref values index)) #f)
+          (else (loop (+ index 1))))))
+
+(define (tr3-fixed-capture-handle!
+          supplied modules handles carriers provider index)
+  (let* ((shell (vector-ref supplied index))
+         (entry (shell-entry shell))
+         (expected (tr3-fixed-expected-handle modules index)))
+    (cond
+      ((not (and entry (eq? (vector-ref entry 1) 'handle)
+                 expected (eq? (vector-ref entry 2) expected))) 1)
+      ((not (handle-value? expected)) 4)
+      ((not (and
+              (eq? (vector-ref expected 1)
+                   (tr3-fixed-module-raw modules
+                     (tr3-fixed-handle-module-index index)))
+              (tr3-fixed-path? (vector-ref expected 2) index)
+              (tr3-fixed-shape? (vector-ref expected 3) index)
+              (eq? (vector-ref expected 4) 'f32)
+              (eq? (vector-ref expected 5) 'cpu)
+              (vector-ref expected 6)
+              (eq? (vector-ref expected 7) provider)
+              (tr3-fixed-distinct? handles shell index)
+              (tr3-fixed-distinct? carriers (vector-ref expected 6) index))) 3)
+      (else
+        (vector-set! handles index shell)
+        (vector-set! carriers index (vector-ref expected 6))
+        0))))
+
+(define (tr3-fixed-capture-handles!
+          supplied modules handles carriers provider)
+  (let ((status-0 (tr3-fixed-capture-handle! supplied modules handles carriers provider 0)))
+    (if (not (= status-0 0)) status-0
+    (let ((status-1 (tr3-fixed-capture-handle! supplied modules handles carriers provider 1)))
+      (if (not (= status-1 0)) status-1
+      (let ((status-2 (tr3-fixed-capture-handle! supplied modules handles carriers provider 2)))
+        (if (not (= status-2 0)) status-2
+        (let ((status-3 (tr3-fixed-capture-handle! supplied modules handles carriers provider 3)))
+          (if (not (= status-3 0)) status-3
+          (let ((status-4 (tr3-fixed-capture-handle! supplied modules handles carriers provider 4)))
+            (if (not (= status-4 0)) status-4
+            (let ((status-5 (tr3-fixed-capture-handle! supplied modules handles carriers provider 5)))
+              (if (not (= status-5 0)) status-5
+              (let ((status-6 (tr3-fixed-capture-handle! supplied modules handles carriers provider 6)))
+                (if (not (= status-6 0)) status-6
+                (let ((status-7 (tr3-fixed-capture-handle! supplied modules handles carriers provider 7)))
+                  (if (not (= status-7 0)) status-7
+                  (let ((status-8 (tr3-fixed-capture-handle! supplied modules handles carriers provider 8)))
+                    (if (not (= status-8 0)) status-8
+                    (let ((status-9 (tr3-fixed-capture-handle! supplied modules handles carriers provider 9)))
+                      (if (not (= status-9 0)) status-9
+                      (let ((status-10 (tr3-fixed-capture-handle! supplied modules handles carriers provider 10)))
+                        (if (not (= status-10 0)) status-10
+                        (let ((status-11 (tr3-fixed-capture-handle! supplied modules handles carriers provider 11)))
+                          (if (not (= status-11 0)) status-11
+                          (let ((status-12 (tr3-fixed-capture-handle! supplied modules handles carriers provider 12)))
+                            (if (not (= status-12 0)) status-12
+                            (let ((status-13 (tr3-fixed-capture-handle! supplied modules handles carriers provider 13)))
+                              (if (not (= status-13 0)) status-13
+                              0
+                              ))
+                            ))
+                          ))
+                        ))
+                      ))
+                    ))
+                  ))
+                ))
+              ))
+            ))
+          ))
+        ))
+      ))
+    )))
+
+(define (tr3-fixed-capture!
+          model supplied modules handles carriers)
+  (cond
+    ((not (tr3-fixed-capture-arguments?
+            supplied modules handles carriers)) 1)
+    (protected-storage-comparison-active? 2)
+    (else
+      (let* ((entry (shell-entry model))
+             (root (if (and entry (eq? (vector-ref entry 1) 'module))
+                       (vector-ref entry 2) #f))
+             (provider (tensor-provider-find e3-mode-provider-name)))
+        (cond
+          ((not (and entry (eq? (vector-ref entry 1) 'module))) 1)
+          ((not (module-value? root)) 4)
+          ((not provider) 3)
+          ((not (and (eq? (vector-ref root 5) #f)
+                     (eq? (vector-ref root 6) provider))) 3)
+          (else
+            (let ((module-status
+                    (tr3-fixed-capture-modules! root provider modules)))
+              (if (not (= module-status 0)) module-status
+                  (let ((token-handle
+                          (tr3-fixed-binding-handle
+                            (tr3-fixed-module-raw modules 16) "weight"))
+                        (head-handle
+                          (tr3-fixed-expected-handle modules 10)))
+                    (if (not (and token-handle head-handle
+                                  (eq? token-handle head-handle))) 3
+                        (tr3-fixed-capture-handles!
+                          supplied modules handles carriers provider)))))))))))
+
+(define (tr3-fixed-recheck-module modules provider index)
+  (let* ((shell (vector-ref modules index))
+         (node (tr3-fixed-shell-raw shell 'module))
+         (parent-index (e3-mode-parent index))
+         (parent (if (= index 0) #f
+                     (tr3-fixed-module-raw modules parent-index))))
+    (cond
+      ((not (module-value? node)) 4)
+      ((not (eq? (vector-ref node 7) #t)) 2)
+      ((not (eq? (vector-ref node 1) e3-mode-train)) 2)
+      ((not (and (eq? (vector-ref node 5) parent)
+                 (eq? (vector-ref node 6) provider)
+                 (eq? (vector-ref node 7) #t)
+                 (or (not (= index 0)) (e3-mode-i64=? (vector-ref node 10) 17))
+                 (e3-mode-child-list? (vector-ref node 4)
+                                      (e3-mode-child-count index))
+                 (or (= index 0)
+                     (eq? (e3-mode-child (vector-ref parent 4)
+                                         (e3-mode-name index)) node))
+                 (tr3-fixed-binding-list? (vector-ref node 2)
+                                           (tr3-fixed-parameter-count index))
+                 (null? (vector-ref node 3))
+                 (tr3-fixed-module-distinct? modules node index)
+                 (eq? (tr3-fixed-existing-shell 'module node) shell))) 4)
+      (else 0))))
+
+(define (tr3-fixed-recheck-modules modules provider)
+  (let loop ((index 0))
+    (if (= index 17) 0
+        (let ((status (tr3-fixed-recheck-module modules provider index)))
+          (if (= status 0) (loop (+ index 1)) status)))))
+
+(define (tr3-fixed-recheck-handle modules handles carriers provider index)
+  (let* ((shell (vector-ref handles index))
+         (raw (tr3-fixed-shell-raw shell 'handle))
+         (expected (tr3-fixed-expected-handle modules index)))
+    (if (and (handle-value? raw) expected (eq? raw expected)
+             (eq? (vector-ref raw 1)
+                  (tr3-fixed-module-raw modules
+                    (tr3-fixed-handle-module-index index)))
+             (tr3-fixed-path? (vector-ref raw 2) index)
+             (tr3-fixed-shape? (vector-ref raw 3) index)
+             (eq? (vector-ref raw 4) 'f32)
+             (eq? (vector-ref raw 5) 'cpu)
+             (vector-ref raw 6)
+             (eq? (vector-ref raw 6) (vector-ref carriers index))
+             (eq? (vector-ref raw 7) provider)
+             (tr3-fixed-distinct? handles shell index)
+             (tr3-fixed-distinct? carriers (vector-ref raw 6) index))
+        0 4)))
+
+(define (tr3-fixed-recheck-handles modules handles carriers provider)
+  (let loop ((index 0))
+    (if (= index 14) 0
+        (let ((status
+                (tr3-fixed-recheck-handle
+                  modules handles carriers provider index)))
+          (if (= status 0) (loop (+ index 1)) status)))))
+
+(define (tr3-fixed-recheck! model modules handles carriers)
+  (cond
+    ((not (tr3-fixed-recheck-arguments? modules handles carriers)) 1)
+    ((not (eq? model (vector-ref modules 0))) 1)
+    (protected-storage-comparison-active? 2)
+    (else
+      (let* ((entry (shell-entry model))
+             (root (if (and entry (eq? (vector-ref entry 1) 'module))
+                       (vector-ref entry 2) #f))
+             (provider (tensor-provider-find e3-mode-provider-name)))
+        (if (not (and entry (eq? (vector-ref entry 1) 'module))) 1
+            (if (not (and (module-value? root) provider
+                          (eq? (vector-ref root 5) #f)
+                          (eq? (vector-ref root 6) provider))) 4
+            (let ((module-status
+                    (tr3-fixed-recheck-modules modules provider)))
+              (if (not (= module-status 0)) module-status
+                  (let ((token-handle
+                          (tr3-fixed-binding-handle
+                            (tr3-fixed-module-raw modules 16) "weight"))
+                        (head-handle
+                          (tr3-fixed-expected-handle modules 10)))
+                    (if (not (and token-handle head-handle
+                                  (eq? token-handle head-handle))) 4
+                        (tr3-fixed-recheck-handles
+                          modules handles carriers provider)))))))))))
+
+
 (vector
   (lambda (module)
     (let* ((observation
@@ -4535,13 +5309,24 @@
                 (fail 'invalid-state 'state-dict-release!
                       "state dictionary ownership was transferred" '())
                 #t)
-            (if (and (not (eq? raw dead-state-raw))
-                     (eq? (vector-ref (state-lifecycle raw) 1) 'live)
-                     (vector-ref (state-lifecycle raw) 6))
-                (fail 'invalid-state 'state-dict-release!
-                      "state dictionary has an active tensor borrow" '())
-                (let* ((outcome (vector #f #f))
-                       (status
+            (if (eq? raw dead-state-raw)
+                #t
+                (begin
+                  (if (and (eq? (vector-ref (state-lifecycle raw) 1) 'live)
+                           (vector-ref (state-lifecycle raw) 6))
+                      (fail 'invalid-state 'state-dict-release!
+                            "state dictionary has an active tensor borrow" '())
+                      #t)
+                  (let* ((release-lifecycle (state-lifecycle raw))
+                       (release-outcome (vector-ref release-lifecycle 8))
+                       (outcome (vector-ref release-lifecycle 9)))
+                  ;; Five frames cover the public caller, state cleanup, item,
+                  ;; provider callback, and E1 shell-construction guards at
+                  ;; their exact peak nesting.
+                  (if (not (= (p1-runtime-reserve-exception-handlers 5) 0))
+                      (fail 'internal 'state-dict-release!
+                            "handler reserve returned an invalid status" '()))
+                (let ((status
                          (p1-native-state-release-begin native-context state)))
                   (native-check 'state-dict-release! status)
                   (if (= (p1-native-result-i64 native-context) 0)
@@ -4564,10 +5349,11 @@
                               (vector-set! outcome 0 #t)
                               (vector-set!
                                 outcome 1
-                                (state-dict-release-owned! raw)))
+                                (state-dict-release-owned!
+                                  raw release-outcome)))
                             (if (vector-ref outcome 0)
                                 (vector-ref outcome 1)
-                                (raise (vector-ref outcome 1))))))))))))
+                                (raise (vector-ref outcome 1))))))))))))))
 
   exposed-tensor-provider-create
   (lambda (provider evidence)
@@ -4805,7 +5591,8 @@
                 "expected an exact claimed P1 state" '()))
       (let ((raw (vector-ref entry 2)))
         (if (eq? raw dead-state-raw) #t
-            (let ((lifecycle (state-lifecycle raw)))
+            (let* ((lifecycle (state-lifecycle raw))
+                   (release-outcome (vector-ref lifecycle 8)))
               (if (or (not (eq? (vector-ref lifecycle 1) 'c2-owned))
                       (not (eq? (vector-ref lifecycle 6) owner-token))
                       (vector-ref lifecycle 7))
@@ -4817,7 +5604,8 @@
                   (begin
                     (compact-released-state-shells! raw)
                     (vector-set! lifecycle 6 #f)
-                    (state-dict-release-owned! raw))))))))
+                    (state-dict-release-owned!
+                      raw release-outcome))))))))
   (lambda (state access-token operation)
     (let* ((marker (c2-owned-active-marker operation state access-token))
            (raw (vector-ref marker 1)))
@@ -4932,6 +5720,15 @@
     (construction-abort! identity))
   (lambda (identity)
     (construction-call 'module-construction-parameters-internal (lambda () (construction-parameters identity))))
+  ;; Append-only source-private E3 mode lifecycle, slots 64..68.
+  e3-mode-bind!
+  e3-mode-prepare!
+  e3-mode-enter!
+  e3-mode-restore!
+  e3-mode-unbind!
+  ;; Append-only source-private TR3 fixed-set validation, slots 69..70.
+  tr3-fixed-capture!
+  tr3-fixed-recheck!
   )))
 
 (define (module-parameters module)

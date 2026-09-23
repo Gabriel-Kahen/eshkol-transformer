@@ -1,8 +1,8 @@
 # First-release public API contract
 
-Status: **A0 reviewed draft; declaration harness passing on the F0-pinned canonical
-`tsotchke/eshkol` compiler at commit
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`**. This document specifies the target
+Status: **A0 reviewed draft; declaration harness targets the F0-pinned
+`Gabriel-Kahen/eshkol` compiler candidate at commit
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`**. This document specifies the target
 first-release contract. It does not
 claim that Eshkol core implements any tensor, autodiff, device, compiler, or
 persistence capability. R0 must verify each runtime capability, and downstream
