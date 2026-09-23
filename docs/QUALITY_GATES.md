@@ -14,7 +14,7 @@ accepted CI-E2 evidence below remains a 16-suite / 23-command measurement; it do
 not establish M3T acceptance. M3T's separate accepted evidence is supported run
 35441033357, independent PR #84 review, and identical-tree merge `f501609`;
 see [transport acceptance](M3T_TRANSPORT.md).
-Accepted M3 adds the model-composition suite, bringing current full coverage to
+Accepted M3 adds the model-composition suite, bringing the then-current full coverage to
 18 suites / 25 commands. Supported run 35465971406, independent PR #88 approval,
 identical-tree merge and focused merged-main checks establish the separate
 [model acceptance](M3_MODEL.md). Earlier 16/23 and 17/24 results retain their
@@ -37,6 +37,14 @@ two fresh deterministic private AOT builds/runs and ASan/UBSan/LSan. The initial
 P1 timeout and sole authorized failed-job retry remain in the provenance; supported
 candidate and merged prose-union trees are distinct. Newer main CI is tracked
 separately and is not inferred green from the local compatibility retest.
+The evaluator prerequisite union in PR #112 adds BOOL metrics to native-numerics
+and the private D2 identity/idle gate to shard-loader. Current accepted main
+`33a54ef7` therefore has 19 suites / 29 top-level commands. Supported run
+[35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879)
+passed the complete union at tree `2256194d2daeb233ec1745d0039b383d4358e3d5`,
+identical to the actual merge. Main run 35798192984 verified and reused that
+result. This accepts bounded prerequisites, not the complete evaluator.
+
 C2 composition invokes each unique leaf gate once instead of repeating regression
 tails nested inside other gates. Standalone core, load, and operational commands
 retain their historical regression tails; explicit focused flags are only used by

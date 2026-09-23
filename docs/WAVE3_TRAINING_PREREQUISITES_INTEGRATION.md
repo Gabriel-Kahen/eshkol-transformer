@@ -4,8 +4,9 @@ This integration-preparation branch starts from the reviewed TR3-B/O plus G3-C4
 candidate `2006cde9279e52f7d6994ef800a6f1f3cb9c0ec1`, tree
 `e1144fec370299b293acfc94e0719d305385a9f2`. It adds only the source-approved
 SHARED-R2 candidate, the nine unregistered E3 reference files, the TR3-O
-documentation delta, and status/provenance reconciliation. It does not accept or
-publish any candidate.
+documentation delta, accepted-main documentation through PR #123, and
+status/provenance reconciliation. It does not accept or publish any remaining
+candidate.
 
 ## Authenticated sources
 
@@ -18,7 +19,8 @@ publish any candidate.
 | SHARED-R2 | `8047cec9ccae8f39ce1e300224659eed3b15fb59` | `e80930797d556edac83fed12ea18c6c4dabcaa2b` | merged with source ancestry |
 | SHARED-R2 evidence | `92c2f5853d1ca3f82c6700f07e47bf9f08052b3e` | `0217c51cdd07e8ec544b02f8a74e8446c2f89063` | evidence-only successor; ROADMAP reconciled |
 | E3 reference toolkit | `37a8078ce756e7f3c22f14a046142d2f09e98807` | `a2767cbb8e22c10ac29d3e18b076de182653264b` | nine `tests/e3_reference` files only |
-| TR3-O documentation | `eef6f420f64c88c3821fbc3a79660e7a2a3e4b8b` | `0c03f85bfde3469dfc18a13dddd34beef1873f48` | two exact documents plus one ROADMAP union |
+| TR3-O documentation | `eef6f420f64c88c3821fbc3a79660e7a2a3e4b8b` | `0c03f85bfde3469dfc18a13dddd34beef1873f48` | exact proposal; integration-ledger and ROADMAP unions |
+| Accepted main documentation | `e899215cff22afeb00b9a5f56bddad9c4cc6c469` | `eb0de48ecfbb0bbe24994b463d7cb9e81c9f72c3` | PR #123 merge; accepted C4 closeout and E3 prerequisite records retained |
 
 The complete per-path source and integrated mode/blob comparison is recorded in
 [`WAVE3_TRAINING_PREREQUISITES_BLOBS.tsv`](WAVE3_TRAINING_PREREQUISITES_BLOBS.tsv).
@@ -32,14 +34,20 @@ Mode-and-blob comparison against the component heads gives these results:
   files are the reviewed 19-suite/32-command base union.
 - G3-C4: 36 provider, fixture, workflow and prerequisite-hook paths are exact.
   `Makefile`, `docs/ROADMAP.md` and the two topology files are integration unions.
-- SHARED-R2: 19 implementation, supporting-document, script and test paths are
-  exact to `8047cec`; its evidence document is exact to successor `92c2f585`,
-  and `docs/ROADMAP.md` is the status union. This preserves I2 rank-two
-  admission, the K2 v1.1 descriptor/report audit, K1 copy semantics and both
-  private I2 plan gates without an ABI change.
-- The TR3-O documentation source matches `docs/INTEGRATION_LOG.md` and
-  `docs/TR3_O_OPTIMIZER_TRANSACTION_PROPOSAL.md` byte for byte. Its ROADMAP line
-  is combined with TR3-B, G3-C4, SHARED-R2 and current evaluator status.
+- SHARED-R2: 18 implementation, supporting-document, script and test paths are
+  exact to `8047cec`; its evidence document is exact to successor `92c2f585`.
+  `docs/ROADMAP.md` and `docs/QUALITY_GATES.md` are documentation unions with
+  accepted main. This preserves I2 rank-two admission, the K2 v1.1
+  descriptor/report audit, K1 copy semantics and both private I2 plan gates
+  without an ABI change.
+- The TR3-O proposal remains byte-for-byte exact to its documentation source.
+  Its integration-log record is preserved inside the accepted-main ledger union,
+  and its ROADMAP line is combined with TR3-B, accepted G3-C4, SHARED-R2 and the
+  current evaluator status.
+- Eight accepted-main documentation paths are byte-for-byte exact to `e899215c`.
+  `docs/INTEGRATION_LOG.md` and `docs/ROADMAP.md` are explicit conflict
+  resolutions; `docs/QUALITY_GATES.md` is Git's clean nonoverlapping union with
+  SHARED-R2. All accepted records from both parents remain present.
 
 The exact E3 reference inventory is:
 
@@ -59,11 +67,13 @@ The exact E3 reference inventory is:
 
 The SHARED-R2 merge had no unresolved conflict; Git combined its one-line
 ROADMAP addition with the reviewed base. Applying the TR3-O documentation delta
-produced the sole content conflict, in `docs/ROADMAP.md`. The resolution retained
-the G3-C4 row and combined the TR3-B and TR3-O evidence into one TR3 row, then the
-same file was reconciled with the accepted E3 prerequisite state and explicit
-incomplete states for E3, G3, TR3 and CLI3. No runtime or ABI file was hand
-resolved.
+produced a `docs/ROADMAP.md` conflict; its resolution retained G3-C4 and combined
+the TR3-B/O evidence. Merging accepted main `e899215c` later conflicted in
+`docs/ROADMAP.md` and `docs/INTEGRATION_LOG.md`. The ROADMAP resolution preserves
+accepted C4 completion and E3/guard state, the SHARED-R2 and TR3-B/O candidates,
+and explicit incomplete E3/G3/TR3/CLI scope. The ledger resolution preserves the
+accepted E3-METRICS closeout and the complete O2 candidate record in chronological
+order. No runtime or ABI file was hand resolved.
 
 `Makefile`, `tests/ci/topology.py` and `tests/ci/test_topology.py` remain byte
 identical to base `2006cde`. SHARED-R2 adds no command, and the E3 reference
@@ -98,7 +108,7 @@ integration-preparation task.
 
 This candidate has no root acceptance, merge, public evaluator, public trainer,
 sampler, transport, generation, joint live restore, one-batch overfit, held-out
-improvement or interrupted/resumed equivalence claim. SHARED-R2 still needs its
-remaining K2/C2 evidence and supported integration disposition. Full-union
-supported CI remains separate from the focused TR3-B supported proof and the
-component-local compatibility evidence.
+improvement or interrupted/resumed equivalence claim. SHARED-R2 owner gates are
+complete only on the unsupported local compatibility host; supported integration
+disposition remains pending. Full-union supported CI remains separate from the
+focused TR3-B supported proof and the component-local compatibility evidence.

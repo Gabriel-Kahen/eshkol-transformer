@@ -3,9 +3,10 @@
 This implements issue [#107](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/107)
 against the accepted [exact BOOL contract](E3_BOOL_METRICS_CONTRACT.md), merged in
 PR #104 at `ba0e37d06076d0a16c473ff742ab95723cb2cb89`, tree
-`221e00c9c258841995195a051b9f44df515679b9`. Independent exact-head review, supported
-candidate CI and root integration are still required. This document does not mark
-E3 or its private composition complete.
+`221e00c9c258841995195a051b9f44df515679b9`. The bounded implementation is accepted
+at merged prerequisite-union commit `33a54ef7256f43d9e1ce82152915f7bded51bc24`,
+tree `2256194d2daeb233ec1745d0039b383d4358e3d5`. This document does not mark E3 or
+its private composition complete.
 
 ## Artifact and explicit discovery
 
@@ -36,8 +37,8 @@ provider retains no pointers and allocates no heap storage. Its result union is
 ## Focused evidence gate
 
 `scripts/test-e3-metrics.sh` consumes the canonical K1/I1/I2/L2/L3S and metrics
-archives from the current build directory. Shared prerequisite and mandatory CI
-registration are coordinated by the root task. It requires the pinned oracle
+archives from the current build directory. The merged union includes the mandatory
+shared-prerequisite and CI registration. The script requires the pinned oracle
 through absolute `Q0_PYTHON` and verifies the compiler/source pin through
 `scripts/common.sh`. No compiler build or shared dependency mutation occurs in
 this focused test script.
@@ -73,14 +74,38 @@ kills.
 
 ## Evidence status and limits
 
-The complete local compatibility gate passed on September 22, 2026:
+The original exact candidate `80d74f8564b39a92e025f8693cdc0cf6d1a224af`,
+tree `2be8c16610052d515fcf62b5237147ede32688ca`, passed supported Ubuntu 22.04 /
+LLVM-Clang 21.1.8 CI run
+[35697784630](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35697784630).
+The complete prerequisite union at PR #112 head
+`b052385e742626fcfc2557b3b5a9f176f6234b29`, tree
+`2256194d2daeb233ec1745d0039b383d4358e3d5`, passed supported run
+[35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879)
+with all 19 suites and 29 commands, suite evidence and final aggregation green.
+PR #112 merged as `33a54ef7256f43d9e1ce82152915f7bded51bc24` with that identical
+tree. Merged-head run
+[35798192984](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35798192984)
+verified the 19-suite/29-command topology and reused the completed exact-tree run.
+
+Independent merged-head review compared all 35 paths changed by the candidate.
+All 29 paths untouched by the union retain identical modes and blobs, including
+every metrics-owned artifact. The six changed shared integration files preserve
+the metrics registration while adding the accepted shared M3 call and E3-D2 union.
+The ABI 1.0 accessor, three operation schemas, discovery, numerical/error rules and
+unsupported boundaries are unchanged. Focused structural checks passed 22 tests,
+the direct topology scripts reported 19 suites and full 29-command coverage, and
+the focused numerical gate below passed again at the merged head.
+
+The complete local compatibility gate passed on the candidate and again at the
+merged head on September 22, 2026. The merged-head invocation was:
 
 ```bash
 ESHKOL_SOURCE_DIR=/home/gabe/.codex/worktrees/7fca/eshkol-transformer/.deps/eshkol-src \
 ESHKOL_BUILD_DIR=/home/gabe/.codex/worktrees/7fca/eshkol-transformer/.deps/eshkol-build \
 ESHKOL_ALLOW_UNSUPPORTED_HOST=1 LLVM_CONFIG_EXECUTABLE=llvm-config \
 Q0_PYTHON=/home/gabe/.codex/worktrees/552e/eshkol-transformer/.tmp/o2-venv/bin/python \
-  /usr/bin/bash scripts/test-e3-metrics.sh
+  make test-e3-metrics
 ```
 
 It passed 70,231 native checks, 135 save/restore-fault checks, five rational model
@@ -93,7 +118,8 @@ ASan/UBSan/LSan runs with `detect_leaks=1` passed. Native and private AOT compil
 were warning-clean. The pinned development PyTorch environment emits its existing
 missing-NumPy warning; this fixture does not use NumPy.
 
-The run took 24.215 seconds wall, 20.580 seconds user and 3.574 seconds system CPU,
+The measured candidate run took 24.215 seconds wall, 20.580 seconds user and
+3.574 seconds system CPU,
 with a peak child-process RSS of 312,424 KiB. `/usr/bin/time` was unavailable: the
 first launch failed before running tests and was preserved. A development-only
 Python wrapper measured `time.monotonic` and Linux
@@ -109,8 +135,8 @@ source/depfile/IR inventories, exact bridge boundary, negative linkage, fresh AO
 comparisons or sanitizer registration. Independent package review inspected
 production alias/control flow, full sentinel coverage and genuine carrier
 borrow/release paths; identified test coverage gaps were fixed before this run.
-The integrating task must record the exact candidate commit/tree and external
-review/CI disposition. No supported-lane result is inferred from local evidence.
+The independent merged-head audit found no blocker. Supported-lane acceptance is
+grounded in the exact-tree CI provenance above, not inferred from local evidence.
 
 The local compiler is the unmodified read-only pinned Eshkol
 `90cbd7130f47b8184bcc77b8d5c1b0026da980de` (`1.3.4-evolve`), built with LLVM/Clang

@@ -35,6 +35,38 @@ Only the integration owner changes a proposed decision to `accepted` after revie
   remain pending. No public trainer, resume, overfit, or roadmap completion is
   claimed.
 
+## 2026-09-22 — E3-METRICS bounded implementation accepted
+
+- **Disposition:** E3-METRICS is accepted at merged prerequisite-union commit
+  `33a54ef7256f43d9e1ce82152915f7bded51bc24`, tree
+  `2256194d2daeb233ec1745d0039b383d4358e3d5`. This accepts only the exact ABI 1.0
+  CPU-f32/BOOL/i64 operations and boundaries recorded in the
+  [implementation evidence](e3/E3_METRICS_IMPLEMENTATION.md). E3 remains active.
+- **Supported evidence:** original candidate
+  `80d74f8564b39a92e025f8693cdc0cf6d1a224af`, tree
+  `2be8c16610052d515fcf62b5237147ede32688ca`, passed run
+  [35697784630](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35697784630).
+  PR #112 head `b052385e742626fcfc2557b3b5a9f176f6234b29` has the same tree as
+  the merge and passed run
+  [35744832879](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35744832879)
+  with all 19 suites / 29 commands, suite evidence and final aggregation green.
+  Merged-head run
+  [35798192984](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/35798192984)
+  verified topology and reused that completed exact-tree evidence.
+- **Independent review:** all 29 candidate paths unaffected by the union retain
+  identical modes and blobs, including every metrics-owned artifact. The six
+  changed shared integration files preserve metrics registration while adding
+  the accepted shared-call/E3-D2 union. ABI 1.0, the sole explicit accessor, all
+  three operation schemas, and numerical/error/unsupported boundaries are unchanged.
+  Direct topology checks reported 19 suites / 29 commands; 22 focused structural
+  tests and the complete merged-head metrics gate passed.
+- **Limits:** local merged-head execution used the explicit CachyOS/LLVM 22
+  compatibility override with unmodified read-only compiler inputs. Its existing
+  I2 LLVM 22 vectorization and pinned PyTorch missing-NumPy warnings remain
+  unsupported-lane diagnostics. E3 frame ownership, real M3/D2 no-grad traversal,
+  restore/staging, shared exclusion, publication, retention and public evaluation
+  remain downstream.
+
 ## 2026-09-22 — E3-METRICS implementation candidate
 
 - **Scope:** issue [#107](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/107),
@@ -2610,3 +2642,54 @@ had not included that then-untracked file. The focused correction admits only
 preserves the manifest prohibition on runtime Python/PyTorch. All three corrected
 isolation tests pass with the generator tracked; no runtime source changes or
 compiler-suite omission is used to fix this registration failure.
+
+
+## 2026-09-22 — E3-CG shared guards and fixed14 pins accepted
+
+[Root decision 5778924718](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/105#issuecomment-5778924718)
+accepts only the private common M3 guards and fixed14 pin mechanics. PR #105
+merged as `19f404cf21632944e1f2d5d4959e1240f9a79f5f`, with parents
+`ba0e37d06076d0a16c473ff742ab95723cb2cb89` and approved candidate
+`9ae35ecbae04031bb655925545d4176681742c3d`. Its exact tree
+`d5e8a801eeaab3ea666f37dfd8d83daaf473f379` matches the candidate and tested
+PR merge `c9e441aace9da4c617ae435923b108d4ce9fe775`.
+
+Independent implementation approval 5772575224 and documentation-delta approval
+preceded the merge. Supported run 35736728847 attempt 1 passed all 19 suites /
+27 commands, topology, evidence and final aggregation. The authenticated unique
+evidence report and actual GitHub commit tree were verified through the existing
+exact-tree selector. Main run 35745000940 attempt 1 passed by verified reuse
+of that completed PR run; its full suites were skipped, not executed again.
+Original run 35693360705 remains historical for the distinct original tree. [Full provenance and measurements](M3_SHARED_CALL.md#integration-provenance)
+retain identities and resource-measurement limits.
+
+Focused merged-head verification passed 7 shared and 2 isolation tests, all 100
+CI checker tests, unchanged topology and the complete optimized normal plus
+ASan/UBSan/LSan native gate with leak detection enabled. Both native stderr files
+were empty; all failure prefixes, fail-stop cases and repeated absent/present-
+gradient checks passed. This was explicitly CachyOS / LLVM 22.1.6 compatibility
+evidence using pinned Eshkol dependencies read-only. The identical tree did not
+justify repeating supported full CI or AOT/package builds.
+
+Acceptance changes no contract, runtime source, test or CI file. E3/P1/D2
+consumer integration, G3 runtime, public evaluation/generation, training and
+Wave 3 completion remain downstream. Issue #101 closeout is prepared for root;
+acceptance-document integration remains root-owned while PR #112 retains its
+exact runtime test candidate.
+
+
+## 2026-09-22 — G3-T readiness planning after G3-N acceptance
+
+The [readiness checklist](g3/G3_T_READINESS.md), based on main `ba0e37d`,
+separates shared-owner proof from G3 consumer integration and enumerates future
+C2 transcripts, lifetime/error/package witnesses, recoverable failure cuts,
+fail-stop cases and live/cumulative retention measurements. Every runtime witness
+remains pending; no contract signature, slot, public count or execution gate changed.
+
+G3-N is complete. Shared contract PR #102 and exact E3 design PR #104 are merged;
+shared implementation PR #105 was owner-reported reviewed/CI-passed at its original
+candidate, then refreshed with unchanged runtime at `9ae35ec`; exact-tree CI was
+running and root acceptance/merge remained pending. G3-S's restricted-review hold remains untouched.
+G3-T implementation awaits accepted/merged prerequisites and explicit root
+dispatch. This docs-only work opens no larger-profile or persistence contract,
+launches no runtime/full-CI campaign and claims no public generation completion.
