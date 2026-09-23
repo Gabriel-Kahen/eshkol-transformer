@@ -51,6 +51,12 @@ enum {
   ET_O2_CODE_OWNER_CONFLICT = 17
 };
 
+#if defined(ET_TR3_O2_STEP_CLEAR_NATIVE) ||                                  \
+    defined(ET_TR3_O2_STEP_CLEAR_BRIDGE) ||                                  \
+    defined(ET_TR3_C_O2_RESTORE_NATIVE)
+enum { ET_O2_CODE_COUNTER_MISMATCH = 18 };
+#endif
+
 enum { ET_O2_CLIP_NONE = 0, ET_O2_CLIP_GLOBAL_L2 = 1 };
 
 enum { ET_O2_SCHEDULE_CONSTANT = 0, ET_O2_SCHEDULE_LINEAR = 1 };

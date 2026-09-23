@@ -23,7 +23,8 @@ SHELL := /usr/bin/bash
 	test-e3-native-parity test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
 	test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore test-tr3-c-i2-restore test-x1 \
+	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
+	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
 
 toolchain:
@@ -305,6 +306,9 @@ test-tr3-c-d2-restore: configure
 
 test-tr3-c-i2-restore:
 	/usr/bin/bash scripts/test-tr3-c-i2-restore.sh
+
+test-tr3-c-o2-restore:
+	/usr/bin/bash scripts/test-tr3-c-o2-restore.sh
 
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh

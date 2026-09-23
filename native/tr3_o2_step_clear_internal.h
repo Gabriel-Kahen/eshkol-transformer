@@ -13,8 +13,6 @@
 extern "C" {
 #endif
 
-enum { ET_O2_CODE_COUNTER_MISMATCH = 18 };
-
 typedef struct et_o2_trainer_step_clear_plan
     et_o2_trainer_step_clear_plan;
 
