@@ -15,6 +15,10 @@ SOURCE = "native/e3_evaluation_metrics_provider.c"
 HEADER = "include/eshkol_transformer/e3_evaluation_metrics_abi.h"
 OBJECT = "e3_evaluation_metrics_provider.o"
 ACCESSOR = "et_e3_metrics_kernel_provider_v1"
+PROVIDER_FILES = (SOURCE, HEADER)
+CONSUMER_FILES = ("src/eshkol_transformer/e3_frame.c",)
+SOURCE_PATTERN = re.compile(
+    r"ET_E3_EVALUATION_METRICS_ABI|et_e3_metrics_kernel_provider_v1")
 
 
 def output(*args: str) -> str:
@@ -52,6 +56,35 @@ def check_order(source: str) -> None:
     assert "if (row[j] > maximum)" in source
 
 
+def source_inventory(root: Path = ROOT) -> list[str]:
+    actual = []
+    for directory in ("include", "native", "src", "lib", "internal"):
+        for path in (root / directory).rglob("*"):
+            if path.suffix in (".c", ".h", ".esk") and SOURCE_PATTERN.search(
+                    path.read_text()):
+                actual.append(path.relative_to(root).as_posix())
+    return actual
+
+
+def check_source_inventory(actual: list[str]) -> None:
+    provider_files = sorted(name for name in actual if name in PROVIDER_FILES)
+    consumer_files = sorted(name for name in actual if name in CONSUMER_FILES)
+    unknown_files = sorted(set(actual) - set(PROVIDER_FILES) - set(CONSUMER_FILES))
+    assert provider_files == sorted(PROVIDER_FILES), provider_files
+    assert consumer_files == sorted(CONSUMER_FILES), consumer_files
+    assert not unknown_files, unknown_files
+
+
+def check_unknown_consumer_rejected(actual: list[str]) -> None:
+    unexpected = "src/eshkol_transformer/unexpected_e3_metrics_consumer.c"
+    try:
+        check_source_inventory([*actual, unexpected])
+    except AssertionError as error:
+        assert error.args == ([unexpected],), error
+    else:
+        raise AssertionError("source inventory admitted an unknown metrics consumer")
+
+
 def check(artifact: Path, ir: Path) -> None:
     obj = artifact / OBJECT
     archive = artifact / "libeshkol_transformer_e3_metrics.a"
@@ -66,14 +99,10 @@ def check(artifact: Path, ir: Path) -> None:
     assert target == OBJECT
     closure = sorted({Path(n).resolve().relative_to(ROOT).as_posix() for n in shlex.split(inputs)})
     assert closure == sorted([SOURCE, HEADER, "include/eshkol_transformer/kernel_abi.h"]), closure
-    actual = []
-    for directory in ("include", "native", "src", "lib", "internal"):
-        for path in (ROOT / directory).rglob("*"):
-            if path.suffix in (".c", ".h", ".esk") and re.search(
-                    r"ET_E3_EVALUATION_METRICS_ABI|et_e3_metrics_kernel_provider_v1", path.read_text()):
-                actual.append(path.relative_to(ROOT).as_posix())
-    assert sorted(actual) == sorted([SOURCE, HEADER]), actual
-    for name in (SOURCE, HEADER):
+    actual = source_inventory()
+    check_source_inventory(actual)
+    check_unknown_consumer_rejected(actual)
+    for name in PROVIDER_FILES:
         source = (ROOT / name).read_text()
         assert not re.search(r"\b(python|pytorch|torch|dlopen|dlsym|getenv|malloc|calloc|realloc|free|double)\b", source, re.I), name
         assert "test_aot" not in source and "eshkol_transformer_kernel_provider_v1" not in source
