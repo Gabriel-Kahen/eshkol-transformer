@@ -6,8 +6,9 @@ This integration-preparation branch starts from frozen reviewed PR #124 head
 TR3-B/O plus G3-C4 candidate, SHARED-R2 candidate, nine unregistered E3
 reference files, TR3-O documentation and accepted-main documentation through
 PR #123. This branch adds only the source-approved bounded E3 native-frame leaf,
-its one-command CI registration, and status/provenance reconciliation. It does
-not accept or publish the integrated candidate.
+its one-command CI registration, the exact E3-METRICS source-consumer inventory
+needed for that leaf, and status/provenance reconciliation. It does not accept
+or publish the integrated candidate.
 
 ## Authenticated sources
 
@@ -102,6 +103,13 @@ private tuple directly and adds no canonical producer or workflow suite. The E3
 reference toolkit remains intentionally unregistered. The strict inventory is
 therefore 19 suites and 33 unique commands.
 
+The E3-METRICS package audit continues to distinguish its provider source and
+ABI header from compiled dependencies. Its repository-wide source-reference
+inventory now separately admits only `src/eshkol_transformer/e3_frame.c` as the
+reviewed consumer. An injected unknown consumer must still fail. Archive
+membership, depfile closure, public exports, undefined symbols, strict-f32
+arithmetic, provider allocation prohibition and predecessor hashes are unchanged.
+
 SHARED-R2 changes the admitted `native/f32_tensor.c` and
 `docs/I2_F32_TENSOR.md` predecessor bytes. Four live predecessor manifests are
 therefore refreshed as part of this integration: one row each in the L3S,
@@ -124,12 +132,18 @@ The integration-preparation gate passed:
 - `python3 -m unittest -v tests.m3cg.test_contract`: five shared-call contract
   and package-boundary tests;
 - `python3 -m unittest -v tests.q0.test_python_isolation`: three tests;
+- the actual E3-METRICS package checker passes against a fresh local artifact,
+  including the exact provider/ABI inventory, reviewed frame consumer, injected
+  unknown-consumer rejection, archive/symbol/depfile closures, strict-f32 IR and
+  unchanged predecessors;
 - `bash -n scripts/test-e3-native-frame.sh`, `make -n test-e3-native-frame`
   and `git diff --check` pass.
 
-The already authenticated native-frame normal and sanitized component gate was
-not duplicated. No full CI, expensive native build or component full gate was
-run for this integration-preparation task.
+The package-check artifact above was generated on the unsupported local
+LLVM 22.1.6 compatibility host. The already authenticated native-frame normal
+and sanitized supported component gate was not duplicated. No full CI,
+expensive native build or component full gate was run for this
+integration-preparation task.
 
 ## Limits
 
