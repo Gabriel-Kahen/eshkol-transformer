@@ -353,7 +353,14 @@
 (define c2-load-compose-owner-internal c2-training-state-compose-internal)
 (define c2-load-release-p1-internal state-dict-release!)
 (define c2-load-release-o2-internal o2-public-optimizer-state-release!)
-(define c2-load-release-c2-internal c2-training-state-release-internal!)
+(define c2-load-release-c2-take-internal!
+  c2-training-state-release-take-authority!)
+(define c2-load-release-c2-p1-internal!
+  c2-training-state-release-record-p1!)
+(define c2-load-release-c2-o2-internal!
+  c2-training-state-release-record-o2!)
+(define c2-load-release-c2-finalize-internal!
+  c2-training-state-release-record-finalize!)
 
 ;;; Extract only dtype/device/shape authorization descriptors from an exact
 ;;; live stage. The model payload is never copied or exposed. Native staging
@@ -546,44 +553,21 @@
           (vector-set! entry 6 #f)
           #t))))
 
-(define (c2-load-cleanup-components!
-          p1-cell o2-cell c2-cell cleanup-outcome)
-  (let ((have-defect #f) (first-defect #f))
-    (let ((p1 (vector-ref p1-cell 0)))
-      (vector-set! p1-cell 0 #f)
-      (if p1
-          (guard (caught
-                   (#t
-                     (set! have-defect #t)
-                     (set! first-defect caught)
-                     #f))
-            (c2-load-release-p1-internal p1))))
-    (let ((o2 (vector-ref o2-cell 0)))
-      (vector-set! o2-cell 0 #f)
-      (if o2
-          (guard (caught
-                   (#t
-                     (if have-defect #t
-                         (begin
-                           (set! have-defect #t)
-                           (set! first-defect caught)))
-                     #f))
-            (c2-load-release-o2-internal o2))))
-    (let ((c2 (vector-ref c2-cell 0)))
-      (vector-set! c2-cell 0 #f)
-      (if c2
-          (guard (caught
-                   (#t
-                     (if have-defect #t
-                         (begin
-                           (set! have-defect #t)
-                           (set! first-defect caught)))
-                     #f))
-            (c2-load-release-c2-internal
-              c2 'trainer-state-release!))))
-    (vector-set! cleanup-outcome 0 have-defect)
-    (vector-set! cleanup-outcome 1 first-defect)
-    have-defect))
+(define (c2-checkpoint-load-staging-dead-internal? shell)
+  (let ((entry (c2-load-find-stage shell)))
+    (and entry (eq? (vector-ref entry 2) 'dead))))
+
+(define (c2-load-note-cleanup-defect-or-rethrow!
+          entry cleanup-outcome caught)
+  ;; Before consuming begins, a caught value can only be a nested handler-setup
+  ;; failure. Preserve the live stage for its already-installed public owner.
+  (if (eq? (vector-ref entry 2) 'live)
+      (raise caught))
+  (if (not (vector-ref cleanup-outcome 0))
+      (begin
+        (vector-set! cleanup-outcome 0 #t)
+        (vector-set! cleanup-outcome 1 caught)))
+  #f)
 
 (define (c2-load-exact-live-owner? value)
   (let ((state (c2-training-state-find value)))
@@ -622,84 +606,137 @@
           (p1-cell (vector #f))
           (o2-cell (vector #f))
           (c2-cell (vector #f))
+          (c2-release-record (c2-training-state-release-record #f))
           (cleanup-outcome (vector #f #f))
           (outcome (vector #f #f)))
-      (vector-set! entry 2 'consuming)
+      ;; Six LOAD guards remain active while decoded P1 adoption owns its
+      ;; rollback ledger. Its dual-fault peak adds C1 ownership, P1 adoption
+      ;; cleanup, item, provider-callback, and E1 shell-construction guards.
+      ;; Reserve that exact eleven-frame maximum while staging is live.
+      (if (not (= (c2-runtime-reserve-exception-handlers 11) 0))
+          (c2-load-fail
+            'internal operation "handler reserve returned invalid status" '()))
+      ;; Every rollback handler, including the two child-release continuations
+      ;; needed if composition has already produced a C2 owner, is installed
+      ;; before the stage becomes consuming or decode acquires P1 authority.
       (guard (caught
                (#t
-                 (vector-set! outcome 0 #f)
-                 (vector-set! outcome 1 caught)
-                 outcome))
-        (let ((p1 (c2-load-decode-model-internal model subpolicy)))
-          (vector-set! p1-cell 0 p1)
-          (let* ((aliases (state-dict-alias-groups p1))
-                 (o2-request
-                   (vector o2-c2-reconstruct-tag
-                           (vector-ref o2-projection 0)
-                           (vector-ref o2-projection 1) aliases
-                           (vector-ref o2-projection 3)
-                           (vector-ref o2-projection 2) operation #f)))
-            (let ((o2-returned
-                    (guard (caught
-                             (#t
-                               (let ((published (vector-ref o2-request 7)))
-                                 (if (c2-load-exact-live-o2? published)
-                                     (vector-set! o2-cell 0 published)))
-                               (raise caught)))
-                      (c2-load-reconstruct-o2-internal o2-request))))
-            (let ((o2 (vector-ref o2-request 7)))
-              ;; If the trusted wrapper substituted its return after commit,
-              ;; the request publication still supplies exact rollback
-              ;; authority before the postcondition failure is raised.
-              (if (c2-load-exact-live-o2? o2)
-                  (vector-set! o2-cell 0 o2))
-              (if (or (not (eq? o2-returned o2-request))
-                      (not (c2-load-exact-live-o2? o2)))
-                  (c2-load-fail
-                    'internal operation
-                    "O2 reconstruction postcondition failed" '()))
-              (vector-set! o2-cell 0 o2)
-              (let ((compose
-                      (vector c2-training-state-compose-tag p1 o2 controls
-                              operation #f)))
-                (let ((returned
-                        (guard (caught
-                                 (#t
-                                   (c2-load-take-compose-authority!
-                                     compose p1-cell o2-cell c2-cell)
-                                   (raise caught)))
-                          (c2-load-compose-owner-internal compose)))
-                      (published (vector-ref compose 5)))
-                  ;; Once the request proves real compose consumption, rollback
-                  ;; authority belongs to the C2 owner even if the injected
-                  ;; wrapper substitutes its return value afterward.
-                  (c2-load-take-compose-authority!
-                    compose p1-cell o2-cell c2-cell)
-                  (if (or (not (eq? returned compose))
-                          (not (eq? (vector-ref compose 1) #f))
-                          (not (eq? (vector-ref compose 2) #f))
-                          (not published)
-                          (not (c2-load-exact-live-owner? published)))
-                      (c2-load-fail
-                        'internal operation
-                        "C2 owner composition postcondition failed" '()))
-                  ;; Exact live-owner admission proves compose consumed both
-                  ;; component authorities before rollback is disabled.
-                  (vector-set! c2-cell 0 #f)
-                  (vector-set! outcome 0 #t)
-                  (vector-set! outcome 1 published))))))))
-      ;; Staging is one-shot on both success and failure. Clear every large
-      ;; reference before a fallible provider cleanup callback.
-      (vector-set! entry 2 'dead)
-      (vector-set! entry 3 #f)
-      (vector-set! entry 4 #f)
-      (vector-set! entry 5 #f)
-      (vector-set! entry 6 #f)
+                 (c2-load-note-cleanup-defect-or-rethrow!
+                   entry cleanup-outcome caught)))
+        (guard (caught
+                 (#t
+                   (c2-load-note-cleanup-defect-or-rethrow!
+                     entry cleanup-outcome caught)))
+          (guard (caught
+                   (#t
+                     (c2-load-note-cleanup-defect-or-rethrow!
+                       entry cleanup-outcome caught)))
+            (guard (caught
+                     (#t
+                       (c2-load-note-cleanup-defect-or-rethrow!
+                         entry cleanup-outcome caught)))
+              (guard (caught
+                       (#t
+                         (c2-load-note-cleanup-defect-or-rethrow!
+                           entry cleanup-outcome caught)))
+                (guard (caught
+                         (#t
+                           (vector-set! outcome 0 #f)
+                           (vector-set! outcome 1 caught)
+                           outcome))
+                  ;; Handler setup failure leaves staging exactly live. Once
+                  ;; this protected transition occurs, reconstruction is one-shot.
+                  (vector-set! entry 2 'consuming)
+                  (let ((p1 (c2-load-decode-model-internal model subpolicy)))
+                    (vector-set! p1-cell 0 p1)
+                    (let* ((aliases (state-dict-alias-groups p1))
+                           (o2-request
+                             (vector o2-c2-reconstruct-tag
+                                     (vector-ref o2-projection 0)
+                                     (vector-ref o2-projection 1) aliases
+                                     (vector-ref o2-projection 3)
+                                     (vector-ref o2-projection 2) operation #f)))
+                      (let ((o2-returned
+                              (guard (caught
+                                       (#t
+                                         (let ((published
+                                                 (vector-ref o2-request 7)))
+                                           (if (c2-load-exact-live-o2? published)
+                                               (vector-set! o2-cell 0 published)))
+                                         (raise caught)))
+                                (c2-load-reconstruct-o2-internal o2-request))))
+                      (let ((o2 (vector-ref o2-request 7)))
+                        ;; Request publication supplies exact rollback authority
+                        ;; even if a trusted wrapper substitutes its return.
+                        (if (c2-load-exact-live-o2? o2)
+                            (vector-set! o2-cell 0 o2))
+                        (if (or (not (eq? o2-returned o2-request))
+                                (not (c2-load-exact-live-o2? o2)))
+                            (c2-load-fail
+                              'internal operation
+                              "O2 reconstruction postcondition failed" '()))
+                        (vector-set! o2-cell 0 o2)
+                        (let ((compose
+                                (vector c2-training-state-compose-tag
+                                        p1 o2 controls operation #f)))
+                          (let ((returned
+                                  (guard (caught
+                                           (#t
+                                             (c2-load-take-compose-authority!
+                                               compose p1-cell o2-cell c2-cell)
+                                             (raise caught)))
+                                    (c2-load-compose-owner-internal compose)))
+                                (published (vector-ref compose 5)))
+                            (c2-load-take-compose-authority!
+                              compose p1-cell o2-cell c2-cell)
+                            (if (or (not (eq? returned compose))
+                                    (not (eq? (vector-ref compose 1) #f))
+                                    (not (eq? (vector-ref compose 2) #f))
+                                    (not published)
+                                    (not (c2-load-exact-live-owner? published)))
+                                (c2-load-fail
+                                  'internal operation
+                                  "C2 owner composition postcondition failed" '()))
+                            (vector-set! c2-cell 0 #f)
+                            (vector-set! outcome 0 #t)
+                            (vector-set! outcome 1 published))))))))
+                ;; Staging is one-shot once consuming starts. Drop every large
+                ;; reference before invoking any provider cleanup callback.
+                (vector-set! entry 2 'dead)
+                (vector-set! entry 3 #f)
+                (vector-set! entry 4 #f)
+                (vector-set! entry 5 #f)
+                (vector-set! entry 6 #f)
+                (if (not (vector-ref outcome 0))
+                    (let ((p1 (vector-ref p1-cell 0)))
+                      (if p1
+                          (begin
+                            (vector-set! p1-cell 0 #f)
+                            (c2-load-release-p1-internal p1))))))
+              (if (not (vector-ref outcome 0))
+                  (let ((o2 (vector-ref o2-cell 0)))
+                    (if o2
+                        (begin
+                          (vector-set! o2-cell 0 #f)
+                          (c2-load-release-o2-internal o2))))))
+            (if (not (vector-ref outcome 0))
+                (let ((c2 (vector-ref c2-cell 0)))
+                  (if c2
+                      (begin
+                        (c2-load-release-c2-take-internal!
+                          c2-release-record c2 c2-cell
+                          'trainer-state-release!)
+                        (c2-load-release-c2-p1-internal!
+                          c2-release-record 'trainer-state-release!))))))
+          (if (eq? (vector-ref c2-release-record 2) 'started)
+              (c2-load-release-c2-o2-internal!
+                c2-release-record 'trainer-state-release!)))
+        (if (eq? (vector-ref c2-release-record 2) 'started)
+            (c2-load-release-c2-finalize-internal!
+              c2-release-record 'trainer-state-release!)))
       (if (vector-ref outcome 0)
           (vector-ref outcome 1)
           (begin
-            (c2-load-cleanup-components!
-              p1-cell o2-cell c2-cell cleanup-outcome)
             (if (vector-ref cleanup-outcome 0)
                 (c2-load-fail
                   'internal operation

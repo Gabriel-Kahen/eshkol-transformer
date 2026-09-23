@@ -456,29 +456,28 @@
   c2-training-state-borrow-begin-internal)
 
 (define (c2-save-with-owner-borrow state limits subpolicy build publish)
-  ;; Borrow-begin publishes through the owner state slot and reads back the
-  ;; canonical promoted graph before this operation creates any SAVE-owned
-  ;; scratch. The guard encloses region establishment itself, so an arena setup
-  ;; failure still cannot strand the owner busy.
-  (let* ((borrow
-           (c2-save-borrow-begin-internal
-             state 'checkpoint-save!))
-         ;; This single outer transaction record survives scratch teardown:
-         ;; [borrow-ended?, failed?, caught-value]. Success crosses as the
-         ;; immediate #t; an explicit failure bit preserves (raise #f).
-         (transaction (vector #f #f #f))
+  ;; Allocate cleanup authority and install the handler before borrow-begin can
+  ;; publish owner busy. Slot 0 receives only the exact canonical borrow returned
+  ;; after promotion: [borrow-or-#f, borrow-ended?, failed?, caught-value].
+  (let* ((transaction (vector #f #f #f #f))
          (outcome
            (guard (caught
                     (#t
-                      (vector-set! transaction 1 #t)
-                      (vector-set! transaction 2 caught)
+                      (vector-set! transaction 2 #t)
+                      (vector-set! transaction 3 caught)
                       #f))
-             (let ((access-token
-                     (c2-training-state-borrow-owner-token-internal
-                       borrow 'checkpoint-save!)))
+             (let ((borrow
+                     (c2-save-borrow-begin-internal
+                       state 'checkpoint-save!)))
+               ;; The borrow is already owner-promoted, so this authority
+               ;; transfer is a nonallocating outer-to-outer write.
+               (vector-set! transaction 0 borrow)
+               (let ((access-token
+                       (c2-training-state-borrow-owner-token-internal
+                         (vector-ref transaction 0) 'checkpoint-save!)))
                (let ((identities-ready?
                        (c2-training-state-borrow-p1-identities-ready-internal?
-                         borrow 'checkpoint-save!)))
+                         (vector-ref transaction 0) 'checkpoint-save!)))
                (let ((p1
                        ;; Revalidate/copy authoritative serialized controls in
                        ;; one sibling region per SAVE. The copy is intentionally
@@ -490,8 +489,8 @@
                        (with-region
                          ('c2-checkpoint-save-preflight 65536)
                          (let ((projection
-                                 (c2-training-state-borrow-projection-internal
-                                   borrow)))
+                             (c2-training-state-borrow-projection-internal
+                                   (vector-ref transaction 0))))
                            (c2-save-controls-copy
                              (vector-ref projection 2))
                            (c2-save-o2-policy-preflight-internal
@@ -511,7 +510,7 @@
                      ;; or exceptional pre-touch leaves readiness false; once
                      ;; true it remains valid across later build/writer errors.
                      (c2-training-state-borrow-mark-p1-identities-ready-internal!
-                       borrow 'checkpoint-save!)))
+                       (vector-ref transaction 0) 'checkpoint-save!)))
                (with-region ('c2-checkpoint-save-scratch 65536)
                  ;; Measure and encode use independent child regions. Each
                  ;; child reconstructs the complete component stage;
@@ -526,7 +525,7 @@
                                      ;; retain even bounded wrapper controls in
                                      ;; the process arena.
                                      (c2-training-state-borrow-projection-internal
-                                       borrow))
+                                       (vector-ref transaction 0)))
                                    (regional-projection
                                      (vector
                                        (vector-ref projection 0)
@@ -551,7 +550,7 @@
                    (with-region ('c2-checkpoint-save-encode-pass 65536)
                      (let* ((projection
                               (c2-training-state-borrow-projection-internal
-                                borrow))
+                                (vector-ref transaction 0)))
                             (regional-projection
                               (vector
                                 (vector-ref projection 0)
@@ -567,16 +566,21 @@
                    ;; Both child stages are gone before borrow end and the
                    ;; first filesystem action. Publication consumes the parent
                    ;; destination synchronously while its scratch is live.
-                   (c2-training-state-borrow-end-internal borrow)
-                   (vector-set! transaction 0 #t)
-                   (publish destination)))))))))
+                   (c2-training-state-borrow-end-internal
+                     (vector-ref transaction 0))
+                   (vector-set! transaction 1 #t)
+                   (publish destination))))))))))
     ;; Build/region exceptions, including #f, arrive with an active borrow.
     ;; Writer exceptions arrive after borrow-ended was set and must not cause a
     ;; second end attempt.
-    (if (not (vector-ref transaction 0))
-        (c2-training-state-borrow-end-internal borrow))
-    (if (vector-ref transaction 1)
-        (raise (vector-ref transaction 2))
+    (if (and (vector-ref transaction 0)
+             (not (vector-ref transaction 1)))
+        (begin
+          (c2-training-state-borrow-end-internal
+            (vector-ref transaction 0))
+          (vector-set! transaction 1 #t)))
+    (if (vector-ref transaction 2)
+        (raise (vector-ref transaction 3))
         outcome)))
 
 (define (c2-checkpoint-save-internal! state path policy options)
