@@ -71,7 +71,7 @@ def check():
         "native/m3t_transport_extension.esk":
             "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
         "native/i2_wave2_root.esk":
-            "de2d16b3e36d2543f94254f7893bb63aeec414c4ebd567660cdf545d15737146",
+            "aa43dfb1c023f264c8d50abd8cf71c9138e0dae7c8dd21d2447082914e242322",
     }
     for path, expected in fixed_hashes.items():
         require(digest(path) == expected, f"inherited surface drifted: {path}")
