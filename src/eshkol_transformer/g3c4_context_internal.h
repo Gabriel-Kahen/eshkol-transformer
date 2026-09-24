@@ -77,6 +77,14 @@ int64_t et_g3c4_private_prefill3_v1(
     void *context, const int64_t token_ids[3], float last_logits[256]);
 #endif
 
+#ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
+/* Samples directly from one exact [1,256] row, then opens the accepted pending
+ * one-token frame. No fabricated full-prefix carrier is constructed. */
+int64_t et_g3c4_private_token_frame_begin_last_v1(
+    void *context, const float last_logits[256],
+    int64_t *speculative_token);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
