@@ -18,6 +18,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-last-logit-frame.py",
         "check-g3c4-model-authority.py",
         "check-g3c4-provider-routes.py",
+        "check-g3c4-prefill1.py",
         "check-g3c4-prefill3.py",
         "check-g3c4-prompt-t1-borrow.py",
         "check-g3c4-sampler-transport.py",
