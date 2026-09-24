@@ -1,6 +1,8 @@
 # TR3 public trainer metrics proposal
 
-Status: **successor design accepted for implementation; runtime implementation and E3 seam missing**.
+Status: **successor design accepted for implementation; E3 exact-bit/counter seam
+implemented source-privately; true-f32 runtime acceptance, metrics authority,
+public trainer and aggregate gates pending**.
 
 This proposal is based on accepted transformer commit
 `d5fa9a71b000ab1139a25e9b734b230ab5bda759`, the original TR3 proposal at
@@ -32,6 +34,16 @@ The generic hash table is also not a usable result carrier: its public
 selected fixed-schema opaque identity avoids requiring a new generic immutable
 map primitive.
 
+The installed `checkpoint-load` returns a detached C2 training-state owner; it
+does not construct a model or trainer. The only accepted live model constructor
+is the fixed-profile `diagnostic-model-create/2`, and the installed
+`transformer.trainer` facade currently exports only `trainer-state-release!`.
+A0 names for `trainer-create`, `trainer-evaluate!`, `trainer-load-state!`, and
+`metrics-ref` are declaration targets, not evidence that those operations run.
+The selected process-lifetime strong metrics registry below remains the
+accepted lifetime contract, including linear successful-call retention and
+measured failed-call slopes; it is not a flat-memory promise.
+
 ## 2. Exact public schemas
 
 A0 requires opaque immutable maps, the exact schemas and types below, newly owned
@@ -58,11 +70,13 @@ tensor allocation, or storage borrow.
 
 ## 3. One authority and one representation
 
-The genuine lease-core source at `73cd89b` and its corrected successor
-`f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5` define `tr3-trainers` as a two-slot
-root: slot 0 contains only exact 17-slot trainer records and slot 1 is its temporary
-promotion root. Admission and overlap scans depend on that layout. Metrics must not
-enter `tr3-trainers`, extend its record kind set, or change the 17-slot contract.
+The integrated private lease defines `tr3-trainers` as a two-slot root: slot 0
+contains only exact 22-slot trainer records and slot 1 is its temporary
+promotion root. Slots 0..16 retain the original lease layout; slots 17..21
+hold epoch-start cursor bytes, RNG, active tokens, completed updates, and
+completed epochs (`native/tr3_lease_core_extension.esk:8-26`). Admission and
+overlap scans depend on that layout. Metrics must not enter `tr3-trainers`,
+extend its record kind set, or change the 22-slot contract.
 
 The selected successor adds exactly one lexically hidden `tr3-metrics` strong
 registry in the same final source aggregate, loaded after the lease core and defined
@@ -218,17 +232,17 @@ Allocate/promote the public entry before invoking E3. E3 retains sole authority 
 its mode/cursor snapshot, no-grad traversal, restoration, and atomic six-output
 private publication. Only after E3 has restored all state and published its private
 destinations and `finish` has returned the frame to idle does the TR3 adapter call
-the proposed E3-owned private seam twice:
+the implemented E3-owned source-private seam twice:
 
 ```c
 int64_t et_e3_private_selected_metric_bits_ref_v1(
     void *frame, int64_t selector);
 ```
 
-The current E3 ABI exposes counters but no destination getter or exact-bit copy, and
-the fixed 17-slot trainer lease retains neither destination. TR3 therefore must not
-call `et_f32_tensor_copy_bits_to_v1` on an assumed pointer or add destination fields
-to the trainer record.
+The current E3 ABI exposes counters and the selected exact-bit accessor, but no
+destination getter; the fixed 22-slot trainer lease retains neither destination.
+TR3 therefore must not call `et_f32_tensor_copy_bits_to_v1` on an assumed
+pointer or add destination fields to the trainer record.
 
 Selector 0 names loss and selector 1 names mask weight. The implementation calls
 `e3_clear` exactly once, then `e3_admit` to authenticate registry membership before
@@ -345,15 +359,15 @@ Genuine runtime source is commit
   the precommit ordering above.
 - Transformer `include/eshkol_transformer/f32_tensor.h:136-142` and
   `native/f32_tensor.c:961-985` define the existing fallible exact-bit copy that the
-  proposed E3-owned seam can use internally; it preflights then `memcpy`s without
+  implemented E3-owned seam uses internally; it preflights then `memcpy`s without
   numeric conversion.
-- Current `src/eshkol_transformer/e3_frame_internal.h:12-36` exposes no destination
-  getter/copy seam. `src/eshkol_transformer/e3_frame.c:1180-1271` publishes four
-  destinations and two counters, then exposes only the two counter values after
-  finish. This is the concrete E3-to-TR3 ownership gap.
-- Lease successor `f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5`,
-  `native/tr3_lease_core_extension.esk:5-8,224-296`, fixes `tr3-trainers` as the
-  two-slot root and its enrolled records as exact 17-slot vectors.
+- The integrated `src/eshkol_transformer/e3_frame_internal.h:36-38` declares
+  authenticated selected metric bits and counter accessors;
+  `src/eshkol_transformer/e3_frame.c:1259-1310` implements them. No public
+  metrics map or trainer adapter is installed.
+- The integrated `native/tr3_lease_core_extension.esk:8-26` fixes
+  `tr3-trainers` as the two-slot root and its enrolled records as exact
+  22-slot vectors, retaining the original slot 0..16 lease layout.
 
 Before the host reboot, runner SHA-256
 `4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1`
@@ -480,7 +494,7 @@ The dependency order is:
 3. SHARED-R2 and the checked-promotion/guard prerequisite for E3-P1 are accepted;
    E3-P1 mode restoration and the E3 private evaluator, including the new
    selected-metric scalar-bits seam, are independently accepted and integrated.
-4. The corrected fixed-17-slot trainer lease successor is independently accepted
+4. The corrected fixed-22-slot trainer lease successor is independently accepted
    and integrated. TR3-A then source-composes exactly one metrics extension after
    that lease core without changing `tr3-trainers`.
 5. TR3-B supplies physical-f32 step/train accumulation and TR3-O supplies the
