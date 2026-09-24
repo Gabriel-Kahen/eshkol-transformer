@@ -33,7 +33,13 @@ fully green; its strict C2 joint peaks were 460,464/461,148 KiB below the
 unchanged 524,288 KiB cap. Reviewed installed E3 fixed-profile evaluation and
 8,192-reservation report-edge proof, plus authentic G3 P1/P2 prompt-to-prefill
 binding, were pushed through `8c13bbf`. Supported focused gates pass; fresh
-exact-head run `36041612097` is queued and must finish before broader acceptance.
+exact-head run `36041612097` is in progress. Its model-composition job reached
+the final M3 source-integrity test and failed because the E3 facade's reviewed
+`build-e1b-consumer.sh` change left one predecessor SHA pin stale. The exact
+current file hash is repinned in `tests/m3cg/predecessor_sources.sha256` with no
+runtime change; all 9 M3 contract tests and the full source checksum list pass
+locally. The remaining hosted jobs and a fresh exact-head rerun are required
+before broader acceptance.
 The subsequent private G3 Step19A output-reservation candidate `06b6fd2` was
 cherry-picked locally at `ee7325d`. Independent review found two failure-
 atomicity gaps: abort could discard a non-idle token frame before a borrowed
