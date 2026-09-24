@@ -30,6 +30,9 @@ jobs:
           - suite: g3n-forward
             test_target: test-ci-g3n-after-build
             timeout: 75
+          - suite: g3s-sampling
+            test_target: test-ci-g3s-after-build
+            timeout: 75
           - suite: contracts-data
             test_target: test-ci-contracts-after-build
             timeout: 75
@@ -85,6 +88,7 @@ jobs:
       O2_ASAN_DETECT_LEAKS: '1'
       N3K_ASAN_DETECT_LEAKS: '1'
       L3S_ASAN_DETECT_LEAKS: '1'
+      G3S_ASAN_DETECT_LEAKS: '1'
       M3T_ASAN_DETECT_LEAKS: '1'
       M3_ASAN_DETECT_LEAKS: '1'
       G3N_ASAN_DETECT_LEAKS: '1'

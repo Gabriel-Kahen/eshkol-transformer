@@ -32,6 +32,7 @@ SUITES = (
     "diagnostic-transport",
     "model-composition",
     "g3n-forward",
+    "g3s-sampling",
     "contracts-data",
     "checkpoint-io",
     "parameter-state",

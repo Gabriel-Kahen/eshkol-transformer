@@ -2779,3 +2779,69 @@ evidence and merges main acceptance records. Contract-only successor `d777d06`
 is integrated at `ed8dac8`; its first P1 prepared-construction dependency is
 dispatched, with downstream C4 implementation still gated. Full package/CI,
 public trainer/evaluator/generation and exact resume remain incomplete.
+
+## 2026-09-20 — G3-S bounded sampler implementation review
+
+Issue [#94](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/94), based
+on merged contract PR #92 commit `4353bd2` and binding decision 5751933660.
+The [G3-S implementation](G3S_SAMPLER.md) preserves the exact ABI 1.0 identities,
+two capabilities/rows, ordered tensor schemas, conditional exhaustion, literal
+sampling/Philox order, alias/fenv/two-phase publication and package ceilings.
+It adds one registry-free provider archive, one public native accessor and zero
+installed Eshkol exports. G3-N and downstream G3-T/M/G/R are untouched.
+
+Three independent Astra/high subagents authored and reviewed numerical/reference,
+adversarial/lifetime and packaging work. Numerical review passes 59,028 checks
+across 48 independently generated literal/Decimal80 fixtures and rejects 23/23
+cleanly compiled production mutations. Adversarial review passes 37,796 checks,
+including exact/adjacent schemas, partial aliases, spans, controls/stickies/traps,
+real I1/I2 borrows and zero allocator attempts during disabled dispatch. Review
+fixed foreign-operation diagnostic text; accepted I2 tombstones are separately
+accounted from released carrier payload. No unresolved source finding remains.
+
+CachyOS / LLVM 22 compatibility evidence: exact source/member/export/report and
+predecessor hashes; seven-symbol normal undefined subset within the nine-symbol
+ceiling; two deterministic fresh native archives; two actual fresh private Eshkol
+AOT executables with identical bytes/stdout. Compiler proof conservatively bounds
+simultaneous normal provider/helper frames including spills at 5,968 bytes; runtime
+painted high-water is 4,504 bytes. The 16,384-byte compiler contract excludes
+caller/K1 and external libc/libm frames; runtime evidence additionally includes
+its callback and external calls. No sanitizer-stack bound is claimed.
+
+The first focused run reached sanitizer execution but LSan failed under sandbox
+ptrace; that failure is retained as environment evidence, not a passing leak test.
+The elevated local rerun was aborted while awaiting approval and produced no
+execution evidence; it is not retried. Supported CI retains mandatory leak
+detection, so LSan remains a required acceptance gate.
+The dedicated 75-minute `g3s-sampling` CI suite adds one focused command by strict
+union: current contract-base main 18 suites / 25 commands becomes 19 / 26. CI topology,
+selection, evidence and prerequisite tests preserve every predecessor command;
+future integration must retain independent L3S/G3-N additions. Supported exact-head
+Ubuntu 22.04 / LLVM 21.1.8 full CI and independent root approval remain pending.
+ROADMAP is review; no merge or full G3 acceptance is claimed.
+
+Final local targeted ASan/UBSan passed the same 59,028 numerical and 37,796
+adversarial checks plus the private transport, explicitly with `detect_leaks=0`.
+This is no LSan claim. Logs are `/tmp/g3s-focused.log` (original focused run,
+including sandbox LSan failure) and
+`/tmp/g3s-sanitizers-no-lsan/result.log` (targeted sanitizer success).
+All 98 CI topology/selection/evidence/prerequisite tests pass. Independent
+numerical, adversarial and packaging reviews approve this candidate for required
+supported CI with no unresolved implementation findings. Reviewed provider
+SHA-256 is `2dc0e4426b6126ecd9abf8e227ab54105403b05b341cb8df7d01f221760635f5`.
+
+## 2026-09-24 — G3-S source review and Wave 3 union preflight
+
+PR #96 retains exact provider commit `4a7ecdc`, tree
+`f3e150f38eb5b221b6d3f5acea292924b73126d4`. Its supported
+Ubuntu 22.04/LLVM 21.1.8 checks, including `g3s-sampling` and final
+aggregation, are green. One independent read-only review approved the
+exact production provider and focused tests with no blocking findings.
+The provider blob is unchanged in the isolated integration candidate.
+
+The candidate combines G3-S with the existing G3-N, G3-C4, L3S, E3,
+TR3 and CLI3 topology. It resolves only documentation/build/CI overlaps;
+73 focused topology, prerequisite and evidence tests pass, and the
+candidate reports 20 suites and 35 full commands. Fresh supported
+combined-source G3-S/package and aggregate CI evidence remains pending.
+This is no public generation or G3 completion claim.

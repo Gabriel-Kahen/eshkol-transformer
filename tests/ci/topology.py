@@ -12,6 +12,7 @@ SUITES = [
     ("diagnostic-transport", "test-ci-m3t-after-build", 105),
     ("model-composition", "test-ci-m3-after-build", 105),
     ("g3n-forward", "test-ci-g3n-after-build", 75),
+    ("g3s-sampling", "test-ci-g3s-after-build", 75),
     ("contracts-data", "test-ci-contracts-after-build", 75),
     ("checkpoint-io", "test-ci-checkpoint-after-build", 75),
     ("parameter-state", "test-ci-parameters-after-build", 75),
@@ -24,7 +25,7 @@ FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
     "test-l2.sh", "test-l3s.sh", "test-e3-metrics.sh", "test-e3-native-frame.sh",
     "test-e3-native-parity.sh", "test-e1.sh", "test-e1b.sh", "test-i1.sh", "test-i2.sh",
-    "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-o2.sh", "test-tr3-o.sh",
+    "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-g3s.sh", "test-o2.sh", "test-tr3-o.sh",
     "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
     "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-tr3b.sh", "test-g3n.sh", "test-g3c4.sh",
@@ -170,7 +171,9 @@ def check(root, overrides=None):
         "LLVM_CONFIG_EXECUTABLE": "llvm-config-21", "A0_COMPILER_TIMEOUT_SECONDS": "'60'",
         **{k: "'1'" for k in ("P1_LSAN", "C1_LSAN", "I2_ASAN_DETECT_LEAKS",
            "K2_ASAN_DETECT_LEAKS", "D2_ASAN_DETECT_LEAKS", "N2_ASAN_DETECT_LEAKS",
-           "O2_ASAN_DETECT_LEAKS", "L3S_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS", "M3T_ASAN_DETECT_LEAKS", "M3_ASAN_DETECT_LEAKS", "G3N_ASAN_DETECT_LEAKS", "G3C4_ASAN_DETECT_LEAKS")}
+           "O2_ASAN_DETECT_LEAKS", "L3S_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS",
+           "G3S_ASAN_DETECT_LEAKS", "M3T_ASAN_DETECT_LEAKS", "M3_ASAN_DETECT_LEAKS",
+           "G3N_ASAN_DETECT_LEAKS", "G3C4_ASAN_DETECT_LEAKS")}
     }.items():
         assert field(suite, 6, name) == value
     ss = steps(suite)
@@ -264,6 +267,8 @@ def check(root, overrides=None):
     assert targets["test-tr3b"] == ["/usr/bin/bash scripts/test-tr3b.sh"]
     assert targets["test-ci-g3n-after-build"] == [
         "/usr/bin/bash scripts/test-g3n.sh", "/usr/bin/bash scripts/test-g3c4.sh"]
+    assert targets["test-ci-g3s-after-build"] == [
+        "/usr/bin/bash scripts/test-g3s.sh"]
     assert targets["test-after-build"] == FULL
     assert targets["test-ci-clean-build-after-build"] == ["$(MAKE) smoke-after-build benchmark-after-build"]
     assert targets["test-acceptance-predecessors-after-build"] == [c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh"]
