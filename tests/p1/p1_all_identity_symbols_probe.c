@@ -6,9 +6,12 @@ typedef void (*et_p1_guessed_function)(void);
 ET_P1_GUESS(et_p1_private_callback_identity_create_v1);
 ET_P1_GUESS(et_p1_private_callback_identity_revoke_v1);
 ET_P1_GUESS(et_p1_private_construction_abort_v1);
+ET_P1_GUESS(et_p1_private_construction_abort_prepared_v1);
 ET_P1_GUESS(et_p1_private_construction_begin_v1);
+ET_P1_GUESS(et_p1_private_construction_commit_prepared_v1);
 ET_P1_GUESS(et_p1_private_construction_handle_create_v1);
 ET_P1_GUESS(et_p1_private_construction_module_create_v1);
+ET_P1_GUESS(et_p1_private_construction_prepare_v1);
 ET_P1_GUESS(et_p1_private_construction_seal_v1);
 ET_P1_GUESS(et_p1_private_context_create_v1);
 ET_P1_GUESS(et_p1_private_context_release_v1);
@@ -45,9 +48,12 @@ et_p1_guessed_function const et_p1_all_private_guesses[] = {
     et_p1_private_callback_identity_create_v1,
     et_p1_private_callback_identity_revoke_v1,
     et_p1_private_construction_abort_v1,
+    et_p1_private_construction_abort_prepared_v1,
     et_p1_private_construction_begin_v1,
+    et_p1_private_construction_commit_prepared_v1,
     et_p1_private_construction_handle_create_v1,
     et_p1_private_construction_module_create_v1,
+    et_p1_private_construction_prepare_v1,
     et_p1_private_construction_seal_v1,
     et_p1_private_context_create_v1,
     et_p1_private_context_release_v1,

@@ -69,7 +69,7 @@
 (check "genuine head/token tie"
   (eq? (parameter-tree-handle observed-tree '("head" "weight"))
        (parameter-tree-handle observed-tree '("token_embedding" "weight"))))
-(check "surface length" (= (vector-length p1-trusted-surface) 71))
+(check "surface length" (= (vector-length p1-trusted-surface) 73))
 
 (define modules (make-vector 17 #f))
 (define handles (make-vector 14 #f))

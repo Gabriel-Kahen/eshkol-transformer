@@ -1,0 +1,7 @@
+;;; G3-C4-only P1 prepared construction wrappers. Never install this source.
+
+(define (module-construction-prepare-eval-internal! identity)
+  ((vector-ref p1-trusted-surface 71) identity))
+
+(define (module-construction-seal-prepared-internal! identity)
+  ((vector-ref p1-trusted-surface 72) identity))

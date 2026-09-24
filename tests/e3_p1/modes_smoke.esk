@@ -84,7 +84,7 @@
 (check "genuine M3 head/token parameter tie"
   (eq? (parameter-tree-handle parameters '("head" "weight"))
        (parameter-tree-handle parameters '("token_embedding" "weight"))) #t)
-(check "surface length" (vector-length p1-trusted-surface) 71)
+(check "surface length" (vector-length p1-trusted-surface) 73)
 
 (define frame (vector #f))
 (define setup (vector frame #f))

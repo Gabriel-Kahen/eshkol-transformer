@@ -86,7 +86,7 @@ typedef struct et_p1_construction {
   et_p1_record **entries;
   size_t count;
   int64_t origin_pid;
-  uint8_t state; /* 0 unpublished, 1 sealed, 2 aborted */
+  uint8_t state; /* 0 open, 1 sealed, 2 aborted, 3 prepared */
 } et_p1_construction;
 static et_p1_construction *constructions;
 static et_p1_construction *active_construction;
@@ -94,6 +94,7 @@ static et_p1_construction *active_construction;
 #if defined(ET_P1_TEST_HOOKS)
 static int64_t test_callback_successes_before_failure = INT64_C(-1);
 static uint8_t test_state_bind_fail_next;
+static uint8_t test_construction_commit_fail_next;
 #endif
 
 static et_p1_record *find_record(const void *candidate) {
@@ -407,13 +408,24 @@ static et_p1_construction *require_construction(et_p1_context *context,
   return ledger;
 }
 
-static int64_t construction_preflight(et_p1_context *context,
-                                      et_p1_construction *ledger,
-                                      const char *operation) {
-  size_t i;
-  if (ledger->state != 0u || active_construction != ledger)
+static int64_t construction_require_state(et_p1_context *context,
+                                          et_p1_construction *ledger,
+                                          uint8_t expected_state,
+                                          const char *operation) {
+  if (ledger->state != expected_state || active_construction != ledger)
     return set_error(context, ET_P1_STATUS_INVALID_STATE,
                      ET_P1_CODE_ALREADY_SEALED, operation, "construction is closed");
+  return ET_P1_STATUS_OK;
+}
+
+static int64_t construction_preflight_state(et_p1_context *context,
+                                            et_p1_construction *ledger,
+                                            uint8_t expected_state,
+                                            const char *operation) {
+  size_t i;
+  const int64_t state_status = construction_require_state(
+      context, ledger, expected_state, operation);
+  if (state_status != ET_P1_STATUS_OK) return state_status;
   for (i = 0u; i < ledger->count; ++i) {
     const et_p1_record *record = ledger->entries[i];
     if (!token_integrity(record) || record->owner != context ||
@@ -424,6 +436,12 @@ static int64_t construction_preflight(et_p1_context *context,
                        "construction enrollment integrity failed");
   }
   return ET_P1_STATUS_OK;
+}
+
+static int64_t construction_preflight(et_p1_context *context,
+                                      et_p1_construction *ledger,
+                                      const char *operation) {
+  return construction_preflight_state(context, ledger, 0u, operation);
 }
 
 ET_P1_PRIVATE int64_t et_p1_private_construction_begin_v1(void *candidate) {
@@ -496,6 +514,73 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_seal_v1(
   active_construction = NULL;
   free(ledger->entries);
   ledger->entries = NULL;
+  return ET_P1_STATUS_OK;
+}
+ET_P1_PRIVATE int64_t et_p1_private_construction_prepare_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  int64_t status;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction, "construction-prepare");
+  if (ledger == NULL) return context->error.category;
+  status = construction_preflight(context, ledger, "construction-prepare");
+  if (status != ET_P1_STATUS_OK) return status;
+  ledger->state = 3u;
+  return ET_P1_STATUS_OK;
+}
+ET_P1_PRIVATE int64_t et_p1_private_construction_commit_prepared_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  int64_t status;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction,
+                                "construction-commit-prepared");
+  if (ledger == NULL) return context->error.category;
+  status = construction_preflight_state(context, ledger, 3u,
+                                        "construction-commit-prepared");
+  if (status != ET_P1_STATUS_OK) return status;
+#if defined(ET_P1_TEST_HOOKS)
+  if (test_construction_commit_fail_next != 0u) {
+    test_construction_commit_fail_next = 0u;
+    return set_error(context, ET_P1_STATUS_INTERNAL,
+                     ET_P1_CODE_BINDING_CONFLICT,
+                     "construction-commit-prepared",
+                     "injected prepared commit failure");
+  }
+#endif
+  free(ledger->entries);
+  ledger->entries = NULL;
+  ledger->state = 1u;
+  active_construction = NULL;
+  return ET_P1_STATUS_OK;
+}
+
+#if defined(ET_P1_TEST_HOOKS)
+ET_P1_PRIVATE int64_t et_p1_test_construction_commit_fail_next_v1(void) {
+  test_construction_commit_fail_next = 1u;
+  return ET_P1_STATUS_OK;
+}
+#endif
+ET_P1_PRIVATE int64_t et_p1_private_construction_abort_prepared_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  size_t i;
+  int64_t status;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction,
+                                "construction-abort-prepared");
+  if (ledger == NULL) return context->error.category;
+  status = construction_preflight_state(context, ledger, 3u,
+                                        "construction-abort-prepared");
+  if (status != ET_P1_STATUS_OK) return status;
+  for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
+  free(ledger->entries);
+  ledger->entries = NULL;
+  ledger->state = 2u;
+  active_construction = NULL;
   return ET_P1_STATUS_OK;
 }
 ET_P1_PRIVATE int64_t et_p1_private_construction_abort_v1(

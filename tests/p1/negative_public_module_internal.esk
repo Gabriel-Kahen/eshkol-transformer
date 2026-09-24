@@ -12,4 +12,6 @@
           module-construction-root-internal
           module-construction-seal-internal!
           module-construction-abort-internal!
-          module-construction-parameters-internal))
+          module-construction-parameters-internal
+          module-construction-prepare-eval-internal!
+          module-construction-seal-prepared-internal!))

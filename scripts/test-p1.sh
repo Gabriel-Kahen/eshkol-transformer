@@ -281,7 +281,7 @@ trusted_private_count="$(readelf -Ws \
   "${p1_trusted_link}/p1_identity.o" | \
   awk '/et_p1_private_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 private symbol visibility changed"
-[[ "${trusted_private_count}" == 36 ]] || \
+[[ "${trusted_private_count}" == 39 ]] || \
   die "P1 trusted ABI symbol count changed: ${trusted_private_count}"
 
 p1_public_cflags=(
@@ -305,6 +305,7 @@ fi
   cat "${PROJECT_ROOT}/native/p1_identity_trusted_symbols.txt"
   printf '%s\n' \
     et_p1_test_callback_fail_after_v1 \
+    et_p1_test_construction_commit_fail_next_v1 \
     et_p1_test_live_entry_count_v1 \
     et_p1_test_state_bind_fail_next_v1 \
     et_p1_test_tombstone_count_v1
@@ -317,7 +318,7 @@ cmp "${p1_tmp}/test-trusted-symbols.expected" \
 test_hook_count="$(readelf -Ws "${p1_test_trusted_link}/p1_identity.o" | \
   awk '/et_p1_test_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 test-hook visibility changed"
-[[ "${test_hook_count}" == 4 ]] || \
+[[ "${test_hook_count}" == 5 ]] || \
   die "P1 test-only hook count changed: ${test_hook_count}"
 "${p1_cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/native" \
