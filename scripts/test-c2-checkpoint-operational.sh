@@ -23,6 +23,8 @@ for command in ar awk cmp diff find nm python3 rg sed sha256sum sort tee timeout
                tr xargs; do
   require_command "${command}"
 done
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+  tests.c2.test_operational_joint_split
 
 cc=
 cxx=
@@ -284,7 +286,7 @@ done
 fi
 
 write_development_manifest() {
-  local depfile=$1 archive=$2
+  local depfile=$1 archive=$2 source=$3 output=$4
   {
     printf 'mode=C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY\n'
     printf 'acceptance=false\n'
@@ -305,10 +307,8 @@ write_development_manifest() {
       "${PROJECT_ROOT}/internal/t1/lib" "${PROJECT_ROOT}/internal/d2/lib" \
       "${PROJECT_ROOT}/src" "${PROJECT_ROOT}/lib" "${PROJECT_ROOT}/native"
     printf ' -L %q --lib eshkol_transformer_c2_operational\n' "${runtime}"
-    printf 'aot-source=%s\n' \
-      "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk"
-    printf 'aot-depfile=%s\naot-output=%s\n' "${depfile}" \
-      "${tmp}/clang-a/operational"
+    printf 'aot-source=%s\n' "${source}"
+    printf 'aot-depfile=%s\naot-output=%s\n' "${depfile}" "${output}"
     printf 'source-and-native-inputs:\n'
     sha256sum "${runtime_native_inputs[@]}"
     if [[ -s "${depfile}" ]]; then
@@ -324,12 +324,11 @@ write_development_manifest() {
 
 compile_runtime() {
   local label=$1 compiler=$2
+  local source=${3:-"${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk"}
+  local output_name=${4:-operational}
   local compile_status=0
-  local depfile_args=()
+  local depfile="${tmp}/${label}/${output_name}.d"
   mkdir -p "${tmp}/${label}/output"
-  if [[ "${development}" == 1 ]]; then
-    depfile_args=(--emit-depfile "${tmp}/${label}/operational.d")
-  fi
   phase_begin aot_compile
   (cd "${tmp}/${label}" &&
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -337,22 +336,23 @@ compile_runtime() {
       ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${compiler}" \
       timeout --foreground --signal=TERM --kill-after=5s 900s "${runner}" \
         --strict-types --optimize 0 --no-stdlib \
-        "${depfile_args[@]}" \
+        --emit-depfile "${depfile}" \
         -I "${PROJECT_ROOT}/internal/p1/lib" \
         -I "${PROJECT_ROOT}/internal/c1/lib" \
         -I "${PROJECT_ROOT}/internal/t2/lib" \
         -I "${PROJECT_ROOT}/internal/t1/lib" \
         -I "${PROJECT_ROOT}/internal/d2/lib" \
+        -I "${PROJECT_ROOT}/tests/c2" \
         -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
         -I "${PROJECT_ROOT}/native" -L "${runtime}" \
         --lib eshkol_transformer_c2_operational \
-        "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk" \
-        -o "${tmp}/${label}/operational" \
+        "${source}" -o "${tmp}/${label}/${output_name}" \
         >"${tmp}/${label}/compile.stdout" \
         2>"${tmp}/${label}/compile.stderr") || compile_status=$?
   if [[ "${development}" == 1 ]]; then
-    write_development_manifest "${tmp}/${label}/operational.d" \
-      "${runtime}/libeshkol_transformer_c2_operational.a"
+    write_development_manifest "${depfile}" \
+      "${runtime}/libeshkol_transformer_c2_operational.a" \
+      "${source}" "${tmp}/${label}/${output_name}"
   fi
   if (( compile_status != 0 )); then
     phase_end "${compile_status}"
@@ -360,6 +360,46 @@ compile_runtime() {
   fi
   test ! -s "${tmp}/${label}/compile.stderr"
   phase_end
+}
+
+write_source_manifest() {
+  local depfile=$1 output=$2
+  python3 - "${PROJECT_ROOT}" "${depfile}" \
+    "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk" \
+    "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_joint_runtime.esk" \
+    >"${output}" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1]).resolve()
+text = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+excluded = {pathlib.Path(value).resolve() for value in sys.argv[3:]}
+payload = text.replace("\\\n", " ").split(":", 1)[1]
+dependencies = sorted({pathlib.Path(value).resolve() for value in payload.split()})
+for dependency in dependencies:
+    if dependency in excluded or not dependency.is_file():
+        continue
+    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
+    try:
+        display = dependency.relative_to(root)
+    except ValueError:
+        display = dependency
+    print(f"{digest}  {display}")
+PY
+}
+
+verify_source_manifests() {
+  write_source_manifest "${tmp}/clang-a/operational.d" \
+    "${tmp}/multi-source-manifest.sha256"
+  write_source_manifest "${tmp}/joint-a/joint-operational.d" \
+    "${tmp}/joint-source-manifest.sha256"
+  cmp "${tmp}/multi-source-manifest.sha256" \
+    "${tmp}/joint-source-manifest.sha256"
+  local manifest_sha
+  manifest_sha=$(sha256sum "${tmp}/joint-source-manifest.sha256" | awk '{print $1}')
+  printf 'C2 OPERATIONAL JOINT SOURCE MANIFEST PASS: entries=%s sha256=%s\n' \
+    "$(wc -l <"${tmp}/joint-source-manifest.sha256")" "${manifest_sha}"
 }
 
 run_runtime() {
@@ -416,6 +456,58 @@ run_runtime() {
     "${tmp}/${label}/${mode}.stdout"
 }
 
+run_joint_runtime() {
+  local label=$1
+  local output="${tmp}/${label}/output/joint"
+  mkdir -p "${output}"
+  phase_begin joint_run
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
+    1800s "${tmp}/${label}/joint-operational" \
+      "${fixtures}/joint-exact.c2" "${output}" \
+      >"${tmp}/${label}/joint.stdout" \
+      2>"${tmp}/${label}/joint.stderr"
+  test ! -s "${tmp}/${label}/joint.stderr"
+  rg -x 'C2 OPERATIONAL RUNTIME PASS: 26 checks mode=joint baseline-kib=[0-9]+ retained-kib=[0-9]+ peak-kib=[0-9]+ elapsed-ms=[0-9]+ f32-retained-bytes=[0-9]+ i2-retained-bytes=[0-9]+ stage-dead-delta=1 c2-dead-delta=1 p1-first-touch=124 p1-tombstone-delta=125 rejected-save-max-arena-delta=0 exact-save-max-arena-delta=[0-9]+' \
+    "${tmp}/${label}/joint.stdout" >/dev/null
+  rg -x 'C2 OPERATIONAL MEASURE: mode=joint baseline-kib=[0-9]+ retained-kib=[0-9]+ peak-kib=[0-9]+ elapsed-ms=[0-9]+ exact-save-max-arena-delta=[0-9]+' \
+    "${tmp}/${label}/joint.stdout" >/dev/null
+  rg -x 'C2 OPERATIONAL PHASE: mode=joint first-save-arena-delta=[0-9]+ second-save-arena-delta=[0-9]+ overwrite-save-arena-delta=[0-9]+( (measure|encode|publish)-(current|peak)-kib-[123]=[0-9]+){18}' \
+    "${tmp}/${label}/joint.stdout" >/dev/null
+  if rg -i 'heap usage at|warning' "${tmp}/${label}/compile.stdout" \
+      "${tmp}/${label}/compile.stderr" "${tmp}/${label}/joint.stdout" \
+      "${tmp}/${label}/joint.stderr" >/dev/null; then
+    die "${label}/joint emitted a heap or compiler warning"
+  fi
+  awk '
+    /^C2 OPERATIONAL MEASURE:/ {
+      for (i = 1; i <= NF; ++i) {
+        split($i, pair, "=")
+        if (pair[1] == "baseline-kib") baseline = pair[2]
+        if (pair[1] == "retained-kib") retained = pair[2]
+        if (pair[1] == "peak-kib") peak = pair[2]
+      }
+    }
+    /^C2 OPERATIONAL PHASE:/ {
+      for (i = 1; i <= NF; ++i) {
+        split($i, pair, "=")
+        if (pair[1] ~ /^measure-current-kib-/ && pair[2] > measure) measure = pair[2]
+        if (pair[1] ~ /^encode-current-kib-/ && pair[2] > encode) encode = pair[2]
+        if (pair[1] ~ /^publish-current-kib-/ && pair[2] > publish) publish = pair[2]
+      }
+    }
+    END {
+      if (baseline <= 0 || retained <= 0 || peak <= 0 || peak >= 524288 ||
+          measure <= 0 || encode <= 0 || publish <= 0) exit 1
+      printf "C2 OPERATIONAL JOINT PHASE PASS: baseline-kib=%d measure-current-max-kib=%d encode-current-max-kib=%d publish-current-max-kib=%d retained-kib=%d peak-kib=%d\n", baseline, measure, encode, publish, retained, peak
+    }
+  ' "${tmp}/${label}/joint.stdout"
+  cmp "${fixtures}/joint-exact.c2" "${output}/joint-a.c2"
+  cmp "${fixtures}/joint-exact.c2" "${output}/joint-b.c2"
+  phase_end
+  sed -n '/^C2 OPERATIONAL RUNTIME PASS:/p' \
+    "${tmp}/${label}/joint.stdout"
+}
+
 compile_runtime clang-a "${cxx}"
 if [[ "${development}" == 1 ]]; then
   for development_mode in "${development_modes[@]}"; do
@@ -427,16 +519,27 @@ if [[ "${development}" == 1 ]]; then
 fi
 compile_runtime clang-b "${cxx}"
 cmp "${tmp}/clang-a/operational" "${tmp}/clang-b/operational"
+compile_runtime joint-a "${cxx}" \
+  "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_joint_runtime.esk" \
+  joint-operational
+compile_runtime joint-b "${cxx}" \
+  "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_joint_runtime.esk" \
+  joint-operational
+cmp "${tmp}/joint-a/joint-operational" \
+  "${tmp}/joint-b/joint-operational"
+verify_source_manifests
+run_joint_runtime joint-a
+run_joint_runtime joint-b
+cmp "${tmp}/joint-a/output/joint/joint-a.c2" \
+  "${tmp}/joint-b/output/joint/joint-a.c2"
 read -r -a operational_modes <<< \
-  "${C2_OPERATIONAL_MODES:-joint k2-fail rank alias models file metadata tensor count corrupt}"
+  "${C2_OPERATIONAL_MODES:-k2-fail rank alias models file metadata tensor count corrupt}"
 for mode in "${operational_modes[@]}"; do
+  [[ "${mode}" != joint ]] || \
+    die "joint mode runs only through the dedicated measured entry"
   run_runtime clang-a "${mode}"
   run_runtime clang-b "${mode}"
 done
-if [[ " ${operational_modes[*]} " == *' joint '* ]]; then
-  cmp "${tmp}/clang-a/output/joint/joint-a.c2" \
-    "${tmp}/clang-b/output/joint/joint-a.c2"
-fi
 if [[ -x /usr/bin/g++ ]]; then
   compile_runtime gcc /usr/bin/g++
 fi

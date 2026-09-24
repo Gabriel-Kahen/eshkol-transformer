@@ -1,0 +1,113 @@
+(load "c2_wave2_root.esk")
+
+(extern i64 c2-operational-counter i64
+        :real et_c2_checkpoint_save_test_counter_v1)
+(extern i64 c2-operational-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 c2-operational-live-readers
+        :real et_c2_checkpoint_reader_test_live_count_v1)
+(extern i64 c2-operational-live-fds
+        :real et_c2_checkpoint_reader_test_fd_live_count_v1)
+(extern i64 c2-operational-current-rss
+        :real et_c2_operational_current_rss_kib_v1)
+(extern i64 c2-operational-peak-rss
+        :real et_c2_operational_peak_rss_kib_v1)
+(extern i64 c2-operational-now
+        :real et_c2_operational_monotonic_millis_v1)
+(extern i64 c2-operational-f32-control-bytes
+        :real et_f32_tensor_test_control_bytes_v1)
+(extern i64 c2-operational-i2-decode-control-bytes
+        :real et_i2_test_decode_builder_control_bytes_v1)
+(extern i64 c2-operational-k2-require-count
+        :real et_k2_test_require_count_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "C2 OPERATIONAL FAIL: ") (display label) (newline)
+        (exit 1))))
+
+(define (snapshot-counts)
+  (let ((result (make-vector 35 0)))
+    (let loop ((index 0))
+      (if (= index 35) result
+          (begin
+            (vector-set! result index (c2-operational-counter index))
+            (loop (+ index 1)))))))
+
+(define (same-live-storage? left right)
+  (and
+    (= (vector-ref left 0) (vector-ref right 0))
+    (= (vector-ref left 1) (vector-ref right 1))
+    (= (vector-ref left 2) (vector-ref right 2))
+    (= (vector-ref left 3) (vector-ref right 3))
+    (= (vector-ref left 4) (vector-ref right 4))
+    (= (vector-ref left 5) (vector-ref right 5))
+    (= (vector-ref left 6) (vector-ref right 6))
+    (= (vector-ref left 17) (vector-ref right 17))
+    (= (vector-ref left 18) (vector-ref right 18))
+    (= (vector-ref left 19) (vector-ref right 19))
+    (= (vector-ref left 24) (vector-ref right 24))
+    (= (vector-ref left 25) (vector-ref right 25))
+    (= (vector-ref left 26) (vector-ref right 26))
+    (= (vector-ref left 28) (vector-ref right 28))
+    (= (vector-ref left 30) (vector-ref right 30))
+    (= (vector-ref left 31) (vector-ref right 31))
+    (= (vector-ref left 32) (vector-ref right 32))
+    (= (vector-ref left 33) (vector-ref right 33))))
+
+(define (same-except-delta? before after changed delta)
+  (let loop ((index 0))
+    (if (= index 35) #t
+        (and (= (vector-ref after index)
+                (+ (vector-ref before index)
+                   (if (= index changed) delta 0)))
+             (loop (+ index 1))))))
+
+(define (native-flat?)
+  (and (= (c2-operational-live-images) 0)
+       (= (c2-operational-live-readers) 0)
+       (= (c2-operational-live-fds) 0)))
+
+(define (argument-at values index)
+  (if (= index 0) (car values)
+      (argument-at (cdr values) (- index 1))))
+(define args (cdr (command-line)))
+(define joint-path (argument-at args 0))
+(define output-root (argument-at args 1))
+
+(define target-policy
+  (c2-persistence-policy-mode-internal
+    16777216 524288 8388608 64 'cpu 'operational-target))
+(define operational-report (k2-public-capability-discover))
+(define start-ms (c2-operational-now))
+(define baseline-rss (c2-operational-current-rss))
+(define rejected-save-max-arena-delta 0)
+(define exact-save-max-arena-delta 0)
+(check "metric baseline is available" (and (>= start-ms 0) (> baseline-rss 0)))
+(define f32-control-bytes (c2-operational-f32-control-bytes))
+(define i2-decode-control-bytes
+  (c2-operational-i2-decode-control-bytes))
+(check "test ABI reports positive f32 tensor control size"
+       (> f32-control-bytes 0))
+(check "test ABI reports positive I2 decode control size"
+       (> i2-decode-control-bytes 0))
+
+;;; Keep the same decode indirections active as the multi-mode predecessor.
+(define saved-decode c2-load-decode-model-internal)
+(define saved-o2 c2-load-reconstruct-o2-internal)
+(define decoder-calls 0)
+(define o2-calls 0)
+(set! c2-load-decode-model-internal
+  (lambda (model policy)
+    (set! decoder-calls (+ decoder-calls 1))
+    (saved-decode model policy)))
+(set! c2-load-reconstruct-o2-internal
+  (lambda (request)
+    (set! o2-calls (+ o2-calls 1))
+    (saved-o2 request)))
+
+(load "c2_checkpoint_operational_joint_body.esk")
+(run-joint-mode)
