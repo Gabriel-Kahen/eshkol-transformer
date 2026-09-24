@@ -1,0 +1,248 @@
+;;; Private TR3-C live snapshot composer.  This source is loaded only by the
+;;; feature-local aggregate and deliberately installs no public facade.
+
+(define tr3-c-snapshot-operation 'trainer-state)
+(define tr3-c-snapshot-i64-max 9223372036854775807)
+
+(define (tr3-c-snapshot-fail category message)
+  (m3t-fail category tr3-c-snapshot-operation message))
+
+(define (tr3-c-snapshot-rethrow caught)
+  (if (transformer-error? caught)
+      (if (eq? (transformer-error-operation caught)
+               tr3-c-snapshot-operation)
+          (raise caught)
+          (tr3-c-snapshot-fail
+            (transformer-error-category caught)
+            "trainer snapshot dependency rejected the request"))
+      (tr3-c-snapshot-fail
+        'internal "trainer snapshot dependency raised a foreign value")))
+
+(define (tr3-c-snapshot-parent trainer result-cell)
+  (let ((parent
+          (vector tr3-lease-snapshot-parent-tag #f trainer 'constructing
+                  (vector #f) (vector #f) (vector #f)
+                  (make-vector 5 #f) (vector #f #f) result-cell)))
+    (vector-set! parent 1 parent)
+    parent))
+
+(define tr3-c-snapshot-p1-call module-state-dict)
+(define tr3-c-snapshot-o2-call o2-public-optimizer-state)
+(define tr3-c-snapshot-cursor-call d2-token-dataset-cursor)
+(define tr3-c-snapshot-compose-call c2-training-state-compose-internal)
+(define tr3-c-snapshot-p1-release! state-dict-release!)
+(define tr3-c-snapshot-o2-release! o2-public-optimizer-state-release!)
+(define tr3-c-snapshot-c2-release! c2-training-state-release-internal!)
+
+(define (tr3-c-snapshot-byte-copy value)
+  (bytevector-copy value 0 (bytevector-length value)))
+
+(define (tr3-c-snapshot-checked-product left right message)
+  (if (and (> left 0) (> right (quotient tr3-c-snapshot-i64-max left)))
+      (tr3-c-snapshot-fail 'invalid-state message))
+  (* left right))
+
+(define (tr3-c-snapshot-controls! record parent)
+  (let* ((controls (vector-ref parent 7))
+         (live-rng (vector-ref record 18))
+         (live-tokenizer (vector-ref record 7))
+         (current
+           (tr3-c-snapshot-byte-copy
+             (tr3-c-snapshot-cursor-call (vector-ref record 15))))
+         (epoch
+           (tr3-c-snapshot-byte-copy (vector-ref record 17)))
+         (rng
+           (vector (vector-ref live-rng 0) (vector-ref live-rng 1)
+                   (vector-ref live-rng 2) (vector-ref live-rng 3)
+                   (vector-ref live-rng 4)))
+         (tokenizer
+           (vector (utf8->string
+                     (string->utf8 (vector-ref live-tokenizer 0)))
+                   (vector-ref live-tokenizer 1)))
+         (canonical
+           (string->utf8
+             (x1-private-config-canonical (vector-ref record 6))))
+         (fingerprint
+           (utf8->string
+             (string->utf8
+               (x1-private-config-fingerprint (vector-ref record 6)))))
+         (resolved (vector canonical fingerprint))
+         (counters
+           (vector (vector-ref record 19) (vector-ref record 20)
+                   (vector-ref record 21))))
+    (vector-set! controls 0 rng)
+    (vector-set! controls 1 tokenizer)
+    (vector-set! controls 2 (vector current epoch))
+    (vector-set! controls 3 resolved)
+    (vector-set! controls 4 counters)
+    (let* ((cursor-request
+             (vector current epoch (vector-ref tokenizer 0)
+                     (vector-ref tokenizer 1) tr3-c-snapshot-operation #f))
+           (x1-request
+             (vector canonical fingerprint tr3-c-snapshot-operation #f)))
+      (c2-d2-cursor-pair-internal cursor-request)
+      (x1-canonical-inspect-internal x1-request)
+      (let* ((cursor-state (vector-ref cursor-request 5))
+             (x1 (vector-ref x1-request 3))
+             (total (vector-ref cursor-state 7))
+             (position (vector-ref cursor-state 8))
+             (start (vector-ref cursor-state 9))
+             (tokens (vector-ref counters 0))
+             (updates (vector-ref counters 1))
+             (epochs (vector-ref counters 2))
+             (accumulation (vector-ref x1 14))
+             (update-contributions
+               (tr3-c-snapshot-checked-product
+                 updates accumulation "snapshot update count overflows"))
+             (epoch-span (- total start))
+             (epoch-contributions
+               (tr3-c-snapshot-checked-product
+                 epochs epoch-span "snapshot epoch count overflows")))
+        ;; `record[6]` is the opaque X1 resolved object, while inspection
+        ;; returns its canonical 15-field projection.  Canonical bytes and the
+        ;; fingerprint above were freshly derived from that exact object.
+        (if (or (not (string=? (vector-ref tokenizer 0)
+                               (vector-ref live-tokenizer 0)))
+                (not (= (vector-ref tokenizer 1)
+                        (vector-ref live-tokenizer 1)))
+                (not (eq? (vector-ref rng 0) 'philox4x32-10))
+                (not (= (vector-ref rng 1) 1))
+                (not (= (vector-ref rng 2) (vector-ref x1 13)))
+                (not (= (vector-ref rng 3) 0))
+                (not (= (vector-ref rng 4) 0))
+                (>= start total) (> start position) (> position total)
+                (> epoch-contributions
+                   (- tr3-c-snapshot-i64-max (- position start)))
+                (not (= update-contributions
+                        (+ epoch-contributions (- position start))))
+                (> update-contributions tokens)
+                (> tokens
+                   (tr3-c-snapshot-checked-product
+                     2 update-contributions
+                     "snapshot token bound overflows")))
+            (tr3-c-snapshot-fail
+              'invalid-state "live controls fail cross-state validation")))
+      controls)))
+
+(define (tr3-c-snapshot-adopt-transfer! parent request)
+  (let ((p1 (vector-ref request 1))
+        (o2 (vector-ref request 2))
+        (output (vector-ref request 5)))
+    (cond
+      ((and (not p1) (not o2) output)
+       (let ((state (c2-training-state-find output)))
+         (if (or (not state) (not (eq? (vector-ref state 0) output))
+                 (not (eq? (vector-ref state 7) 'live))
+                 (not (eq? (vector-ref (vector-ref parent 4) 0)
+                           (vector-ref state 1)))
+                 (not (eq? (vector-ref (vector-ref parent 5) 0)
+                           (vector-ref state 2))))
+             (tr3-c-snapshot-fail
+               'internal "C2 transfer publication is not an exact live owner"))
+         (vector-set! (vector-ref parent 4) 0 #f)
+         (vector-set! (vector-ref parent 5) 0 #f)
+         (vector-set! (vector-ref parent 6) 0 output)
+         output))
+      ((and (eq? p1 (vector-ref (vector-ref parent 4) 0))
+            (eq? o2 (vector-ref (vector-ref parent 5) 0))
+            (not output))
+       #f)
+      (else
+       (tr3-c-snapshot-fail
+         'internal "C2 compose returned a partial ownership transfer")))))
+
+(define (tr3-c-snapshot-cleanup-call! cleanup thunk)
+  (guard (caught
+           (#t
+             (if (not (vector-ref cleanup 0))
+                 (vector-set! cleanup 0 caught))
+             #f))
+    (thunk)
+    #t))
+
+(define (tr3-c-snapshot-release-cell! cleanup cell release operation?)
+  (let ((owner (vector-ref cell 0)))
+    (if owner
+        (begin
+          ;; Clearing the only composer authority precedes provider release.
+          (vector-set! cell 0 #f)
+          (tr3-c-snapshot-cleanup-call!
+            cleanup
+            (if operation?
+                (lambda () (release owner tr3-c-snapshot-operation))
+                (lambda () (release owner))))))))
+
+(define (tr3-c-snapshot-abort! record parent)
+  (vector-set! parent 3 'aborting)
+  (let ((cleanup (vector-ref parent 8)))
+    (tr3-c-snapshot-release-cell!
+      cleanup (vector-ref parent 6) tr3-c-snapshot-c2-release! #t)
+    (tr3-c-snapshot-release-cell!
+      cleanup (vector-ref parent 5) tr3-c-snapshot-o2-release! #f)
+    (tr3-c-snapshot-release-cell!
+      cleanup (vector-ref parent 4) tr3-c-snapshot-p1-release! #f)
+    (tr3-c-snapshot-cleanup-call!
+      cleanup
+      (lambda () (tr3-lease-snapshot-abort-internal! record parent)))
+    (vector-set! cleanup 1 #t)
+    (vector-ref cleanup 0)))
+
+(define (tr3-c-snapshot-compose! record parent)
+  (tr3-lease-snapshot-recheck-internal record parent)
+  (let ((p1 (tr3-c-snapshot-p1-call (vector-ref record 8))))
+    (vector-set! (vector-ref parent 4) 0 p1))
+  (let ((o2 (tr3-c-snapshot-o2-call (vector-ref record 13))))
+    (vector-set! (vector-ref parent 5) 0 o2))
+  (let* ((controls (tr3-c-snapshot-controls! record parent))
+         (request
+           (vector c2-training-state-compose-tag
+                   (vector-ref (vector-ref parent 4) 0)
+                   (vector-ref (vector-ref parent 5) 0)
+                   controls tr3-c-snapshot-operation #f))
+         (outcome
+           (guard (caught (#t (vector #f caught)))
+             (tr3-c-snapshot-compose-call request)
+             (vector #t #t))))
+    ;; The request is the transfer ledger even if a trusted wrapper raises
+    ;; after the genuine composer publishes or substitutes its return value.
+    (let ((owner (tr3-c-snapshot-adopt-transfer! parent request)))
+      (if (not (vector-ref outcome 0))
+          (raise (vector-ref outcome 1)))
+      (if (not owner)
+          (tr3-c-snapshot-fail
+            'internal "C2 compose returned without transferring ownership"))
+      owner)))
+
+(define (tr3-c-trainer-state-internal trainer result-cell)
+  (if (or (not (vector? result-cell))
+          (not (= (vector-length result-cell) 1))
+          (vector-ref result-cell 0))
+      (tr3-c-snapshot-fail
+        'invalid-argument "snapshot result cell must be empty and exact"))
+  (let ((parent (tr3-c-snapshot-parent trainer result-cell))
+        (record-cell (vector #f)))
+    (guard (caught
+             (#t
+               (let ((record (vector-ref record-cell 0)))
+                 (if record
+                     (let ((cleanup-error
+                             (tr3-c-snapshot-abort! record parent)))
+                       (if cleanup-error
+                           (tr3-c-snapshot-fail
+                             'internal "trainer snapshot cleanup failed"))))
+                 (tr3-c-snapshot-rethrow caught))))
+      (let ((record (tr3-lease-snapshot-enter-internal! trainer parent)))
+        ;; This assignment is the only operation between admission publication
+        ;; and outer cleanup authority becoming reachable.
+        (vector-set! record-cell 0 record)
+        (let ((owner (tr3-c-snapshot-compose! record parent)))
+          (vector-set! result-cell 0 owner)
+          (let ((canonical (vector-ref result-cell 0)))
+            (if (not (eq? canonical
+                          (vector-ref (vector-ref parent 6) 0)))
+                (tr3-c-snapshot-fail
+                  'internal "snapshot result publication diverged"))
+            (vector-set! (vector-ref parent 6) 0 #f)
+            (vector-set! parent 3 'dead)
+            (tr3-lease-snapshot-finish-tail-internal! record parent)
+            canonical))))))

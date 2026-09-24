@@ -379,8 +379,11 @@ generation, and Wave 3 remains incomplete.
 
 The bounded [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 candidate adds exact-parent enter/recheck/abort/finish exclusion through the
-existing trainer slot 4. Snapshot composition, public trainer state, and resume
-acceptance remain pending independent review and integration.
+existing trainer slot 4. The bounded [private snapshot composer](TR3_C_SNAPSHOT_COMPOSER.md)
+candidate uses that exact parent with genuine P1/O2/D2/X1/C2 seams, request-led
+ownership transfer, ordered failure cleanup, source preservation, and retry.
+It adds no public trainer state or full-resume claim; independent review and
+integration remain pending.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
