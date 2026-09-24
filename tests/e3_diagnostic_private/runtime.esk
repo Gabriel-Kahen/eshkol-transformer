@@ -106,7 +106,11 @@
             (if failure? 0 (- last-promoted unreachable-staging)))
            (attributed (+ reachable-authority unreachable-staging
                           last-inherited))
-           (witness-other (- arena-delta attributed)))
+           ;; The lazy one-time envelope calibration occurs after arena-before.
+           ;; Remove its exact bytes from the caller-witness remainder while
+           ;; preserving the raw outer arena delta in the report.
+           (calibration-bytes envelope-bytes)
+           (witness-other (- arena-delta attributed calibration-bytes)))
       (check "horizon reservations" (= last-reservations horizon))
       (check "horizon successes"
              (= last-successes (if failure? 0 horizon)))
@@ -143,6 +147,7 @@
       (display " witness_other_bytes=") (display witness-other)
       (display " reserve_promoted_bytes=") (display last-promoted)
       (display " envelope_bytes_per_call=") (display envelope-bytes)
+      (display " calibration_bytes=") (display calibration-bytes)
       (newline))))
 
 (let ((args (command-line)))

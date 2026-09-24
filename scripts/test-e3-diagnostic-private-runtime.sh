@@ -76,11 +76,11 @@ for mode in success-1024 success-2048 success-4096 success-8192 \
   kind=${mode%%-*}
   successes=${horizon}
   [[ "${kind}" == success ]] || successes=0
-  grep -Ex "E3-DIAGNOSTIC-HORIZON-PASS horizon=${horizon} kind=${kind} arena_delta=[0-9]+ reservations=${horizon} successes=${successes} reachable_authority_bytes=[0-9]+ unreachable_staging_bytes=[0-9]+ inherited_transaction_bytes=[0-9]+ witness_other_bytes=[0-9]+ reserve_promoted_bytes=[0-9]+ envelope_bytes_per_call=[0-9]+" \
+  grep -Ex "E3-DIAGNOSTIC-HORIZON-PASS horizon=${horizon} kind=${kind} arena_delta=[0-9]+ reservations=${horizon} successes=${successes} reachable_authority_bytes=[0-9]+ unreachable_staging_bytes=[0-9]+ inherited_transaction_bytes=[0-9]+ witness_other_bytes=[0-9]+ reserve_promoted_bytes=[0-9]+ envelope_bytes_per_call=[0-9]+ calibration_bytes=[0-9]+" \
     "${output}/${mode}.stdout" >/dev/null
 done
 
-printf 'kind\thorizon\tarena_delta\treachable_authority_bytes\tunreachable_staging_bytes\tinherited_transaction_bytes\twitness_other_bytes\treserve_promoted_bytes\tenvelope_bytes_per_call\n' \
+printf 'kind\thorizon\tarena_delta\treachable_authority_bytes\tunreachable_staging_bytes\tinherited_transaction_bytes\twitness_other_bytes\treserve_promoted_bytes\tenvelope_bytes_per_call\tcalibration_bytes\n' \
   >"${output}/retention.tsv"
 for mode in success-1024 success-2048 success-4096 success-8192 \
     failure-1024 failure-8192; do
@@ -96,9 +96,11 @@ for mode in success-1024 success-2048 success-4096 success-8192 \
         if ($i ~ /^witness_other_bytes=/) { witness = value[2] }
         if ($i ~ /^reserve_promoted_bytes=/) { promoted = value[2] }
         if ($i ~ /^envelope_bytes_per_call=/) { envelope = value[2] }
+        if ($i ~ /^calibration_bytes=/) { calibration = value[2] }
       }
       print parts[1] "\t" parts[2] "\t" delta "\t" authority "\t" \
-            staging "\t" inherited "\t" witness "\t" promoted "\t" envelope
+            staging "\t" inherited "\t" witness "\t" promoted "\t" envelope \
+            "\t" calibration
     }
   ' "${output}/${mode}.stdout" >>"${output}/retention.tsv"
 done
