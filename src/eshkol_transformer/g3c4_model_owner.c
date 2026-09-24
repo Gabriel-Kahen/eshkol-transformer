@@ -715,6 +715,16 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #error "ET_G3C4_GENERATOR_PRIVATE requires context, C4 pins, and active call"
 #endif
 
+#if defined(ET_G3C4_PROVIDER_ROUTES_PRIVATE) && \
+    !defined(ET_G3C4_GENERATOR_PRIVATE)
+#error "ET_G3C4_PROVIDER_ROUTES_PRIVATE requires the private generator"
+#endif
+
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+#include "eshkol_transformer/g3c4_primitives_abi.h"
+#include "eshkol_transformer/g3s_sampling_abi.h"
+#endif
+
 #ifdef ET_G3C4_CONTEXT_PRIVATE
 #include "g3c4_context_internal.h"
 #include "eshkol_transformer/a2_kv_cache.h"
@@ -790,6 +800,141 @@ typedef struct et_g3c4_rng_internal {
 } et_g3c4_rng_internal;
 
 static et_g3c4_transport_header_internal *et_g3c4_transport_registry;
+
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+typedef struct et_g3c4_route_requirement {
+  const char *capability;
+  const char *operation;
+  size_t rank;
+  uint64_t shape[6];
+} et_g3c4_route_requirement;
+
+static et_kernel_runtime *et_g3c4_forward_runtime;
+static et_kernel_runtime *et_g3c4_sampler_runtime;
+
+static const et_g3c4_route_requirement et_g3c4_forward_routes[] = {
+  {"g3c4.embedding-forward", "g3c4.embedding.forward", 4u,
+   {1u, 4u, 4u, 4u}},
+  {"g3c4.embedding-forward", "g3c4.embedding.forward", 4u,
+   {1u, 4u, 256u, 4u}},
+  {"g3c4.linear", "g3c4.linear.forward-no-bias", 4u,
+   {1u, 4u, 4u, 4u}},
+  {"g3c4.linear", "g3c4.linear.forward-no-bias", 4u,
+   {1u, 4u, 4u, 8u}},
+  {"g3c4.linear", "g3c4.linear.forward-no-bias", 4u,
+   {1u, 4u, 8u, 4u}},
+  {"g3c4.linear", "g3c4.linear.forward-no-bias", 4u,
+   {1u, 4u, 4u, 256u}},
+  {"g3c4.layer-norm", "g3c4.layer-norm.forward", 3u, {1u, 4u, 4u}},
+  {"g3c4.gelu", "g3c4.gelu.forward", 3u, {1u, 4u, 8u}},
+  {"g3c4.residual", "g3c4.residual.forward", 3u, {1u, 4u, 4u}},
+  {"g3c4.head-layout", "g3c4.heads.split.forward", 4u,
+   {1u, 4u, 2u, 2u}},
+  {"g3c4.head-layout", "g3c4.heads.merge.forward", 4u,
+   {1u, 4u, 2u, 2u}},
+  {"g3c4.causal-attention", "g3c4.causal-attention.forward", 6u,
+   {1u, 2u, 2u, 4u, 4u, 2u}},
+};
+
+static const et_g3c4_route_requirement et_g3c4_sampler_routes[] = {
+  {"g3s.greedy", "g3s.greedy.forward", 2u, {1u, 256u}},
+  {"g3s.categorical", "g3s.categorical.forward", 2u, {1u, 256u}},
+};
+
+static int et_g3c4_require_routes(
+    et_kernel_runtime *runtime,
+    const et_g3c4_route_requirement *routes, size_t count) {
+  size_t index;
+  for (index = 0u; index < count; index++) {
+    et_kernel_request_v1 request = {
+      sizeof(request), routes[index].operation, "f32", "cpu",
+      routes[index].rank, routes[index].shape, 1u, {0}};
+    const et_kernel_capability_v1 *entry = NULL;
+    et_kernel_error error;
+    if (et_g3c4_capture_kernel(
+            et_kernel_runtime_capability_require(
+                runtime, routes[index].capability, &request, &entry, &error),
+            &error) != 0)
+      return (int)et_g3c4_error_state.category;
+    if (entry == NULL || entry->status != ET_KERNEL_CAPABILITY_VERIFIED ||
+        entry->deterministic == 0u)
+      return (int)et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  }
+  return 0;
+}
+
+static int et_g3c4_discover_route_runtime(
+    const et_kernel_provider_v1 *provider, size_t capability_count,
+    const et_g3c4_route_requirement *routes, size_t route_count,
+    et_kernel_runtime **runtime_output) {
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_error error;
+  if (provider == NULL || provider->capability_count != capability_count) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return (int)et_g3c4_error_state.category;
+  }
+  if (et_g3c4_capture_kernel(
+          et_kernel_runtime_discover(et_g3c4_resolve_provider,
+                                     (void *)provider, &runtime, &error),
+          &error) != 0)
+    return (int)et_g3c4_error_state.category;
+  if (et_g3c4_require_routes(runtime, routes, route_count) != 0) {
+    et_kernel_runtime_destroy(runtime);
+    return (int)et_g3c4_error_state.category;
+  }
+  *runtime_output = runtime;
+  return 0;
+}
+
+static void et_g3c4_abort_staged_routes(
+    et_kernel_runtime *forward, et_kernel_runtime *sampler) {
+  if (sampler != NULL && sampler != et_g3c4_sampler_runtime)
+    et_kernel_runtime_destroy(sampler);
+  if (forward != NULL && forward != et_g3c4_forward_runtime)
+    et_kernel_runtime_destroy(forward);
+}
+
+static int et_g3c4_stage_provider_routes(
+    const et_kernel_provider_v1 *forward_provider,
+    const et_kernel_provider_v1 *sampler_provider,
+    et_kernel_runtime **forward_output,
+    et_kernel_runtime **sampler_output) {
+  et_kernel_runtime *forward = et_g3c4_forward_runtime;
+  et_kernel_runtime *sampler = et_g3c4_sampler_runtime;
+  if (forward == NULL &&
+      et_g3c4_discover_route_runtime(
+          forward_provider, 7u, et_g3c4_forward_routes,
+          sizeof(et_g3c4_forward_routes) /
+              sizeof(et_g3c4_forward_routes[0]),
+          &forward) != 0)
+    return (int)et_g3c4_error_state.category;
+  if (forward != NULL && forward == et_g3c4_forward_runtime &&
+      et_g3c4_require_routes(
+          forward, et_g3c4_forward_routes,
+          sizeof(et_g3c4_forward_routes) /
+              sizeof(et_g3c4_forward_routes[0])) != 0)
+    return (int)et_g3c4_error_state.category;
+  if (sampler == NULL &&
+      et_g3c4_discover_route_runtime(
+          sampler_provider, 2u, et_g3c4_sampler_routes,
+          sizeof(et_g3c4_sampler_routes) /
+              sizeof(et_g3c4_sampler_routes[0]),
+          &sampler) != 0) {
+    et_g3c4_abort_staged_routes(forward, sampler);
+    return (int)et_g3c4_error_state.category;
+  }
+  if (sampler != NULL && sampler == et_g3c4_sampler_runtime &&
+      et_g3c4_require_routes(
+          sampler, et_g3c4_sampler_routes,
+          sizeof(et_g3c4_sampler_routes) /
+              sizeof(et_g3c4_sampler_routes[0])) != 0)
+    return (int)et_g3c4_error_state.category;
+  *forward_output = forward;
+  *sampler_output = sampler;
+  return 0;
+}
+#endif
 
 #define ET_G3C4_CONTEXT_MAGIC_FIELD(context) ((context)->transport.magic)
 #define ET_G3C4_CONTEXT_KIND_FIELD(context) ((context)->transport.kind)
@@ -1205,14 +1350,27 @@ static void *et_g3c4_generator_create(
   et_g3c4_context_internal *context;
   et_a2_kv_cache *cache = NULL;
   et_kernel_error error;
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+  et_kernel_runtime *forward_runtime = NULL;
+  et_kernel_runtime *sampler_runtime = NULL;
+#endif
   if (!et_g3c4_valid_generator_policy(
           mode, temperature_bits, k, p_bits, max_new, eos)) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
     return NULL;
   }
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+  if (et_g3c4_stage_provider_routes(
+          et_g3c4_kernel_provider_v1(), et_g3s_kernel_provider_v1(),
+          &forward_runtime, &sampler_runtime) != 0)
+    return NULL;
+#endif
   context = et_g3c4_context_allocate();
   if (context == NULL) {
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+    et_g3c4_abort_staged_routes(forward_runtime, sampler_runtime);
+#endif
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
   }
@@ -1222,6 +1380,9 @@ static void *et_g3c4_generator_create(
           &error) != 0) {
     et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
     free(context);
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+    et_g3c4_abort_staged_routes(forward_runtime, sampler_runtime);
+#endif
     et_g3c4_error_restore_internal(first);
     return NULL;
   }
@@ -1241,6 +1402,10 @@ static void *et_g3c4_generator_create(
   context->generator_policy[5] = eos;
   memcpy(context->generator_rng_words, rng_words,
          sizeof(context->generator_rng_words));
+#ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
+  et_g3c4_forward_runtime = forward_runtime;
+  et_g3c4_sampler_runtime = sampler_runtime;
+#endif
   et_g3c4_enroll_context(context);
   return context;
 }
