@@ -180,6 +180,9 @@ class LeaseSourceContract(unittest.TestCase):
         self.assertIn("tests/d2/public_errors_runtime.esk", gate)
         self.assertIn("artifact-sha256.txt", gate)
         self.assertIn("llvm-config-21 --version", gate)
+        self.assertIn('"${allocation_class}" == all && "${optimize}" == 2', gate)
+        self.assertIn("13f1ab2db5ac94d4a382aa6d03a801e4607ee585e5f34bcc3a1c3b8acfffd0d5", gate)
+        self.assertIn('test ! -s "${evidence_dir}/compile.stderr"', gate)
         match = re.search(
             r"^expected_runner_self_sha256=([0-9a-f]{64})$", gate, re.M
         )

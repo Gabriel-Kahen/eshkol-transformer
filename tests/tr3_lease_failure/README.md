@@ -52,8 +52,12 @@ T2, while preserving T2's typed `internal/tokenizer-fingerprint` failure for an
 admitted tokenizer. A focused O0 ordinal-1053 retry probe passes; the public D2
 boundary still reports operation `token-dataset-open`. The supported public
 D2 aggregate/executable passed 24 compiled rejection and recovery checks with
-empty compile and run diagnostics. Full O0/O2 prefix gates and independent
-review of this successor are still required for acceptance.
+empty compile and run diagnostics. Independent review approved the repaired
+source and runner. Canonical O0 passed all 1,145 cases/54,921 checks and its
+manifest verifies. The first O2 run passed the same runtime matrix, but the
+runner rejected four exact LLVM loop-vectorization warning pairs in compile
+stderr; its failed-gate artifact is sealed separately. A pinned warning
+allowance and passing canonical O2 rerun remain required for acceptance.
 
 The test measures exact component bytes and counters around each failure. It
 does not claim flat process memory, sanitizer coverage, package localization,

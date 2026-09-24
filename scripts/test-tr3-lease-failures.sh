@@ -43,7 +43,7 @@ while (( $# )); do
   esac
 done
 
-for tool in awk cmp docker find git python3 readlink rg sed sha256sum; do
+for tool in awk cmp docker find git python3 readlink rg sed sha256sum wc; do
   command -v "${tool}" >/dev/null || die "required command not found: ${tool}"
 done
 [[ "${runtime_source}" = /* && -d "${runtime_source}" ]] || usage
@@ -80,14 +80,14 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=b7e5820df532a16573169b1f5e9cff4ef694e60b89ace43b23b91089456a17e5
+expected_runner_self_sha256=d85074694d2235503c4c8049ee9402a67b0141ce7a85f495da361da09bbd2510
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
   sha256sum | awk '{print $1}')"
 [[ "${runner_self_sha256}" == "${expected_runner_self_sha256}" ]] || \
   die "canonical lease failure runner changed"
-expected_source_test_sha256=38b59a6db007120d2bca4f56f73282f6cff186c80f24b4f95c167796d50f3e89
+expected_source_test_sha256=35709cdcee39bc1035a886d12bce583bda046f2cc58ac67deda28996f46bace1
 [[ "$(sha256sum \
   "${PROJECT_ROOT}/tests/tr3_lease/test_source_contract.py" | awk '{print $1}')" == \
    "${expected_source_test_sha256}" ]] || \
@@ -459,7 +459,15 @@ if [[ "${allocation_class}" == all ]]; then
 fi
 
 grep -Fx 'OK' "${evidence_dir}/source-test.stderr" >/dev/null
-test ! -s "${evidence_dir}/compile.stderr"
+if [[ "${allocation_class}" == all && "${optimize}" == 2 ]]; then
+  [[ "$(wc -c < "${evidence_dir}/compile.stderr")" == 1200 ]] || \
+    die "O2 compiler diagnostics differ in length from the reviewed warnings"
+  [[ "$(sha256sum "${evidence_dir}/compile.stderr" | awk '{print $1}')" == \
+     13f1ab2db5ac94d4a382aa6d03a801e4607ee585e5f34bcc3a1c3b8acfffd0d5 ]] || \
+    die "O2 compiler diagnostics differ from the reviewed warnings"
+else
+  test ! -s "${evidence_dir}/compile.stderr"
+fi
 test ! -s "${evidence_dir}/shim-compile.stderr"
 test ! -s "${evidence_dir}/link.stderr"
 if rg -n 'fatal signal|TR3 lease failure shim FAIL|TR3 LEASE FAILURE FAIL' \
