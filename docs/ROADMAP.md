@@ -70,7 +70,17 @@ active-borrow, allocation, malformed-length, ownership and retry cuts;
 merged Q0 Python isolation passes 4/4. Root's single independent review
 approved the code and verified
 `g3c4-step21a-merged-f29811e-20260924/SHA256SUMS` (`0151774f...`).
-T1 text decoding, result publication and the generation loop remain pending.
+Reviewed Step21B `f4b00c2`/tree `cada86c` is integrated as identical patch
+`38e7ec5`. The real T1 registry/core decodes G0/G1 raw bytes in place, and
+native private readiness authenticates pending output, binding, I1 and raw
+byte before advancing text readiness once. Supported f31 normal, repeat and
+ASan/UBSan/LSan evidence passed; root verified the source seal
+`g3c4-step21b-f4b00c2-20260924/SHA256SUMS` (`fb36b8f6...`). The candidate's
+precommit Q0 run missed its newly tracked checker; post-integration Q0 found
+that exact development-script admission gap. Test-only `ce4419c` admits the
+checker, and merged Q0 4/4 plus the Step21B checker pass. A rooted Eshkol
+output envelope/coordinator, public result, generation loop and save/reload
+remain pending.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
