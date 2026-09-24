@@ -1,0 +1,207 @@
+;;; Appended to the genuine snapshot runtime after replacing its one root load.
+(extern void snapshot-save-io-reset :real et_checkpoint_io_test_reset_v1)
+(extern void snapshot-save-io-fail i64 i64 i64
+        :real et_checkpoint_io_test_fail_v1)
+
+(define save-policy
+  (c2-persistence-policy-internal
+    16777216 16777216 16777216 64 'cpu))
+(define save-a (string-append corpus-directory "/snapshot-a.c2"))
+(define save-b (string-append corpus-directory "/snapshot-b.c2"))
+(define save-precommit
+  (string-append corpus-directory "/snapshot-precommit.c2"))
+(define save-postcommit
+  (string-append corpus-directory "/snapshot-postcommit.c2"))
+(define (read-file path)
+  (let* ((size (file-size path))
+         (port (open-binary-input-file path))
+         (bytes (read-bytevector size port)))
+    (close-port port)
+    bytes))
+(define (error-details-ref details key)
+  (cond ((null? details) #f)
+        ((eq? (car (car details)) key) (car (cdr (car details))))
+        (else (error-details-ref (cdr details) key))))
+(define (save-error category operation thunk)
+  (guard (caught
+           (#t
+             (if (and (transformer-error? caught)
+                      (eq? category (transformer-error-category caught))
+                      (eq? operation (transformer-error-operation caught)))
+                 caught
+                 (begin (check "save error category and operation" #f) #f))))
+    (thunk)
+    (check "save expected an exception" #f)
+    #f))
+
+(define original-save-release tr3-c-snapshot-save-release!)
+(define save-releases 0)
+(define last-save-owner #f)
+(set! tr3-c-snapshot-save-release!
+  (lambda (owner operation)
+    (set! save-releases (+ save-releases 1))
+    (set! last-save-owner owner)
+    (original-save-release owner operation)))
+(define (released-once? before)
+  (and (= save-releases (+ before 1))
+       last-save-owner
+       (eq? (vector-ref (c2-training-state-find last-save-owner) 7)
+            'dead)))
+
+(define before-save-releases save-releases)
+(check "snapshot-to-checkpoint first publication succeeds"
+       (tr3-c-snapshot-save-internal! trainer save-a save-policy '()))
+(check "successful publication releases exact detached owner once"
+       (released-once? before-save-releases))
+(check "checkpoint exists and is bounded"
+       (and (file-exists? save-a) (> (file-size save-a) 256)
+            (< (file-size save-a) 16777216)))
+(set! before-save-releases save-releases)
+(check "repeat snapshot publication succeeds"
+       (tr3-c-snapshot-save-internal! trainer save-b save-policy '()))
+(check "repeat publication releases owner once"
+       (released-once? before-save-releases))
+(check "same live boundary writes byte-identical C2 checkpoints"
+       (bytes=? (read-file save-a) (read-file save-b)))
+
+(set! before-save-releases save-releases)
+(save-error 'invalid-argument 'checkpoint-save!
+  (lambda ()
+    (tr3-c-snapshot-save-internal! trainer "" save-policy '())))
+(check "malformed path releases snapshot owner once"
+       (released-once? before-save-releases))
+(set! before-save-releases save-releases)
+(save-error 'invalid-argument 'checkpoint-save!
+  (lambda ()
+    (tr3-c-snapshot-save-internal!
+      trainer save-b save-policy '(:overwrite? wrong))))
+(check "malformed options release snapshot owner once"
+       (released-once? before-save-releases))
+(set! before-save-releases save-releases)
+(save-error 'invalid-argument 'trainer-state
+  (lambda ()
+    (tr3-c-snapshot-save-internal! 'forged save-b save-policy '())))
+(check "forged trainer acquired no detached owner"
+       (= save-releases before-save-releases))
+
+(set! before-save-releases save-releases)
+(define no-overwrite-error
+  (save-error 'io 'checkpoint-save!
+    (lambda ()
+      (tr3-c-snapshot-save-internal!
+        trainer save-a save-policy '(:overwrite? #f)))))
+(check "no-overwrite keeps original checkpoint bytes"
+       (bytes=? (read-file save-a) (read-file save-b)))
+(check "no-overwrite preserves C2 unpublished detail"
+       (eq? #f
+         (error-details-ref
+           (transformer-error-details no-overwrite-error) 'published?)))
+(check "no-overwrite releases owner once"
+       (released-once? before-save-releases))
+
+(snapshot-save-io-reset)
+(snapshot-save-io-fail 11 1 5)
+(set! before-save-releases save-releases)
+(define precommit-error
+  (save-error 'io 'checkpoint-save!
+    (lambda ()
+      (tr3-c-snapshot-save-internal!
+        trainer save-precommit save-policy '()))))
+(check "failed precommit publishes no checkpoint"
+       (not (file-exists? save-precommit)))
+(check "failed precommit reports unpublished"
+       (eq? #f
+         (error-details-ref
+           (transformer-error-details precommit-error) 'published?)))
+(check "failed precommit releases owner once"
+       (released-once? before-save-releases))
+(snapshot-save-io-reset)
+
+(snapshot-save-io-fail 14 1 5)
+(set! before-save-releases save-releases)
+(define postcommit-error
+  (save-error 'io 'checkpoint-save!
+    (lambda ()
+      (tr3-c-snapshot-save-internal!
+        trainer save-postcommit save-policy '()))))
+(check "postcommit fault leaves a complete checkpoint"
+       (bytes=? (read-file save-a) (read-file save-postcommit)))
+(check "postcommit fault preserves published and unknown durability"
+       (and
+         (eq? #t
+           (error-details-ref
+             (transformer-error-details postcommit-error) 'published?))
+         (eq? 'unknown
+           (error-details-ref
+             (transformer-error-details postcommit-error) 'durability))))
+(check "postcommit fault releases owner once"
+       (released-once? before-save-releases))
+(snapshot-save-io-reset)
+
+(set! before-save-releases save-releases)
+(check "same trainer retries after writer failures"
+       (tr3-c-snapshot-save-internal!
+         trainer save-a save-policy '(:overwrite? #t)))
+(check "retry owner releases once"
+       (released-once? before-save-releases))
+(check "retry checkpoint matches original"
+       (bytes=? (read-file save-a) (read-file save-b)))
+
+;;; A trusted wrapper may raise after the real writer has published. The cell
+;;; still owns the C2 snapshot and must drain it once.
+(define original-save-call tr3-c-snapshot-save-call)
+(set! tr3-c-snapshot-save-call
+  (lambda (owner path policy options)
+    (original-save-call owner path policy options)
+    (m3t-fail 'internal 'checkpoint-save!
+              "injected post-publication wrapper failure")))
+(set! before-save-releases save-releases)
+(save-error 'internal 'checkpoint-save!
+  (lambda ()
+    (tr3-c-snapshot-save-internal!
+      trainer save-b save-policy '(:overwrite? #t))))
+(set! tr3-c-snapshot-save-call original-save-call)
+(check "post-publication wrapper error still leaves exact file"
+       (bytes=? (read-file save-a) (read-file save-b)))
+(check "post-publication wrapper error releases owner once"
+       (released-once? before-save-releases))
+
+;;; Even a non-transformer raised value is propagated after owner release.
+(set! tr3-c-snapshot-save-call
+  (lambda (owner path policy options) (raise #f)))
+(set! before-save-releases save-releases)
+(define caught-false? #f)
+(guard (caught (#t (set! caught-false? (eq? caught #f)) #f))
+  (tr3-c-snapshot-save-internal!
+    trainer save-b save-policy '(:overwrite? #t)))
+(set! tr3-c-snapshot-save-call original-save-call)
+(check "false exception identity survives cleanup" caught-false?)
+(check "false exception releases owner once"
+       (released-once? before-save-releases))
+
+;;; A trusted release defect may have consumed the owner. The seam clears its
+;;; sole authority first and reports internal without a second release call.
+(set! tr3-c-snapshot-save-release!
+  (lambda (owner operation)
+    (set! save-releases (+ save-releases 1))
+    (set! last-save-owner owner)
+    (original-save-release owner operation)
+    (m3t-fail 'internal 'trainer-state-release!
+              "injected post-release defect")))
+(set! before-save-releases save-releases)
+(save-error 'internal 'trainer-state
+  (lambda ()
+    (tr3-c-snapshot-save-internal!
+      trainer save-b save-policy '(:overwrite? #t))))
+(check "cleanup defect consumes detached owner once"
+       (released-once? before-save-releases))
+(set! tr3-c-snapshot-save-release! original-save-release)
+
+(check "source trainer is idle after publication and failures"
+       (and (eq? (vector-ref record 3) 'idle)
+            (not (vector-ref record 4))))
+
+(display "TR3-C SNAPSHOT SAVE PASS: ")
+(display checks)
+(display " checks, exact C2 bytes and write-failure cleanup")
+(newline)
