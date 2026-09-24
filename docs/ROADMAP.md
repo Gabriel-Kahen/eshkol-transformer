@@ -301,6 +301,17 @@ Public VM unary min/max still leak through generic CALL arity handling, and
 an unchanged VM compiler signed-shift UBSan finding blocks the broader
 sanitized variadic gate. Both are separate follow-ups; the leaf remains
 isolated pending successor-union composition and is not gap-5 acceptance.
+The separate reviewed VM closure arity leaf `e496bec5`/tree `c7bf4c1`
+rejects too-few and too-many fixed calls and calls below a variadic minimum
+at CALL, TAIL_CALL and the native callback bridge. VM prelude `min` and `max`
+now require two arguments, so public direct and first-class unary forms
+reject instead of returning their F32 or DOUBLE seed. Root verified
+`vm-call-arity-e496bec5-20260924/SEAL.sha256` (`e8e5ed0...`), the source
+and selected pinned f31 Release 8/8 and ASan+UBSan+LSan 2/2 evidence. Old
+ESKB variadic metadata and unknown synthetic closures remain permissive;
+the switch fallback compiles but was not dynamically tested on the supported
+Clang dispatch. This leaf is isolated pending successor-union composition,
+not whole-F32 acceptance.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
