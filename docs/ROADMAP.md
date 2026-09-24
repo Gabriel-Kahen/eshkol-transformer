@@ -87,6 +87,15 @@ raw-bit witness. Supported f31 Release poison gates 4/4, real ESKB VM suite
 root verified `f32-vm-hash-keys-c27f85eb-20260924/SHA256SUMS` (`c4cc4c38...`).
 It remains isolated on predecessor `c27f85eb`; the predicate/hash union on
 `d960add`, the type-reflection mapper and whole-F32 acceptance remain pending.
+The sealed generic E3 dependency audit on exact `9bbb3ff`,
+`e3-generic-dependency-audit-9bbb3ff-20260924T184109Z/evidence-files.sha256`
+(`49195ba6...`), confirms the installed diagnostic facade and private E3
+selected-bit seam do not supply A0 `trainer-evaluate!` or `metrics-ref`.
+True-f32 runtime acceptance/repin is the first hard dependency; then TR3 metrics
+authority, public trainer creation, evaluation projection and checkpoint
+admission follow. The [TR3 metrics proposal](TR3_PUBLIC_METRICS_PROPOSAL.md)
+has been reconciled locally with the integrated 22-slot lease and implemented
+E3 seam at `8651c94`; independent document review remains pending.
 
 ## Wave 0 — contracts and verification foundation
 
