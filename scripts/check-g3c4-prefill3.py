@@ -76,9 +76,11 @@ def check():
         "expected_capabilities[21]", "expected_operations[21]",
         "reference + 2u * 256u", "reference + 3u * 256u",
         "replacement_and_dispatch_cuts", "allocation_cuts",
-        "failures == 11u", "et_m3t_test_k1_fail_after(0u)",
+        "owned_alias_rejections", "failures == 14u",
+        "context->pins.views[10].data", "cache_alias",
+        "et_m3t_test_k1_fail_after(0u)",
         "ET_G3C4_CODE_STALE_BINDING", "check_preserved",
-        "output[i] == -123.0f", "roles=21 dispatch-cuts=21 allocation-cuts=11",
+        "output[i] == -123.0f", "roles=21 dispatch-cuts=21 allocation-cuts=14",
     ]:
         require(phrase in test, f"focused test omits {phrase}")
     require("--wrap=et_kernel_runtime_dispatch" in runner,

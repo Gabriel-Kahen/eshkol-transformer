@@ -103,7 +103,7 @@ cmp "${evidence}/prefill3-normal.stdout" \
   "${evidence}/prefill3-repeat.stdout"
 cmp "${evidence}/prefill3-normal.stdout" \
   "${evidence}/prefill3-sanitize.stdout"
-grep -E '^G3-C4 prefill3 PASS: checks=[1-9][0-9]* roles=21 dispatch-cuts=21 allocation-cuts=11$' \
+grep -E '^G3-C4 prefill3 PASS: checks=[1-9][0-9]* roles=21 dispatch-cuts=21 allocation-cuts=14$' \
   "${evidence}/prefill3-normal.stdout" >/dev/null
 
 git -C "${PROJECT_ROOT}" diff --check
