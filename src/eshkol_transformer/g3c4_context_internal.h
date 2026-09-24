@@ -120,6 +120,12 @@ void *et_g3c4_private_output_reserve_v1(
 int64_t et_g3c4_private_output_release_v1(void *output);
 #endif
 
+#ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
+/* Copies the final staged G0/G1 numeric result into its pending output.
+ * Cache, generator RNG, text readiness and result publication are unchanged. */
+int64_t et_g3c4_private_output_prepare_v1(void *context, void *output);
+#endif
+
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
 /* Samples directly from one exact [1,256] row, then opens the accepted pending
  * one-token frame. No fabricated full-prefix carrier is constructed. */
