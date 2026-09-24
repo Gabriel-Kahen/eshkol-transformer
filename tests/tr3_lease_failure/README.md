@@ -34,7 +34,7 @@ observe or catch a condition. A separate preserved bounded-null counterexample
 records exit 139 for all three families.
 
 With `--allocation-class all`, the gate requires the reviewed repaired-runtime
-commit and the exact TR3 source repair `f604e87`; it injects every prefix
+commit and the exact source through `63756bd`; it injects every prefix
 across all eight direct arena allocator symbols in one measured stream. The
 caller selects O0 or O2 with `--optimize`; each level gets separate evidence.
 On the frozen `f602a66` lease source with production-profile `de0b249`, the
@@ -45,7 +45,15 @@ failure there raised an uncaught `std::bad_alloc`. Those original artifacts
 remain preserved. The focused O0 repair probe confirms ordinal 950 now has
 typed E1 category `internal` and operation `config-fingerprint`, while cold
 and repeated post-staging acquisitions have zero wrapped allocations. Full
-O0/O2 prefix gates and independent review are still required for acceptance.
+O0 subsequently reached ordinal 1053, where a real bounded allocation failure
+in T1 fingerprint copying was reclassified as D2 `invalid-argument`. The shared
+D2 identity boundary now rejects foreign and missing tokenizers before calling
+T2, while preserving T2's typed `internal/tokenizer-fingerprint` failure for an
+admitted tokenizer. A focused O0 ordinal-1053 retry probe passes; the public D2
+boundary still reports operation `token-dataset-open`. The supported public
+D2 aggregate/executable passed 24 compiled rejection and recovery checks with
+empty compile and run diagnostics. Full O0/O2 prefix gates and independent
+review of this successor are still required for acceptance.
 
 The test measures exact component bytes and counters around each failure. It
 does not claim flat process memory, sanitizer coverage, package localization,

@@ -58,10 +58,10 @@ if [[ "${allocation_class}" == all ]]; then
   [[ "${runtime_commit}" == de0b24956e34772344dac5e1f2c32b6243aebae8 &&
      "${runtime_tree}" == e1c0d0c4d10d90236df2349fb199c5a234e63900 ]] || \
     die "full allocator matrix requires reviewed repaired runtime"
-  expected_production_base=f604e87aea94486ff46820d50ddb27287988967d
-  expected_production_tree=3c48e4e9208bc4ceee4843e2c7138ff46aea82ab
-  expected_witness_commit=202bd73d40a76a80256ab98728cc00e2da086ec2
-  expected_witness_tree=a564e62f582ed75ddbef083de555aaeb99669319
+  expected_production_base=63756bd921dc5640667c5d2c44b98f777340499d
+  expected_production_tree=d4b7560a5797ebafc461dc5d7a0d317690025437
+  expected_witness_commit=63756bd921dc5640667c5d2c44b98f777340499d
+  expected_witness_tree=d4b7560a5797ebafc461dc5d7a0d317690025437
   [[ "${runner_sha}" == \
      5b6c5cae8872330cf59f47f84535fb9acf0242ece001eb544112ac133280b918 &&
      "${archive_sha}" == \
@@ -80,14 +80,14 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=4564444ea16dc0a79b7adbb43e527b79aea3d3cea74798a912c6d1a1e29bbc98
+expected_runner_self_sha256=3fb59d5ce97b10ef632f9c03fa4be5970cd3c8bcd5184a3418458963d7fad97c
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
   sha256sum | awk '{print $1}')"
 [[ "${runner_self_sha256}" == "${expected_runner_self_sha256}" ]] || \
   die "canonical lease failure runner changed"
-expected_source_test_sha256=384418594fe85270d79193fbe8a11623ef29ee1b8a3db5b7fa5efb62d55c840a
+expected_source_test_sha256=38b59a6db007120d2bca4f56f73282f6cff186c80f24b4f95c167796d50f3e89
 [[ "$(sha256sum \
   "${PROJECT_ROOT}/tests/tr3_lease/test_source_contract.py" | awk '{print $1}')" == \
    "${expected_source_test_sha256}" ]] || \
@@ -109,7 +109,8 @@ if [[ "${allocation_class}" == all ]]; then
     "${expected_witness_commit}" HEAD || \
     die "lease checkout does not descend from the reviewed witness"
   git -C "${PROJECT_ROOT}" diff --quiet "${expected_witness_commit}" -- \
-    include internal lib native src templates tests/tr3_lease_failure || \
+    include internal lib native src templates tests/d2 \
+    tests/tr3_lease_failure || \
     die "reviewed lease source or witness changed"
   while IFS= read -r changed; do
     case "${changed}" in
@@ -219,12 +220,15 @@ cp -- \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/README.md" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
+  "${PROJECT_ROOT}/tests/d2/public_errors_runtime.esk" \
+  "${PROJECT_ROOT}/tests/d2/test_scope.py" \
   "${evidence_dir}/inputs/"
 if [[ "${allocation_class}" == all ]]; then
   mkdir -p "${evidence_dir}/inputs/source"
   cp -- \
     "${PROJECT_ROOT}/native/x1_config_private.esk" \
     "${PROJECT_ROOT}/native/tr3_lease_core_extension.esk" \
+    "${PROJECT_ROOT}/internal/d2/lib/d2_dataset.esk" \
     "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk" \
     "${PROJECT_ROOT}/templates/p1/module_roots.esk.tmpl" \
     "${evidence_dir}/inputs/source/"
@@ -433,10 +437,15 @@ cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${evidence_dir}/inputs/lease_failure_runtime.esk"
 cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
   "${evidence_dir}/inputs/lease_failure_shim.cpp"
+cmp -- "${PROJECT_ROOT}/tests/d2/public_errors_runtime.esk" \
+  "${evidence_dir}/inputs/public_errors_runtime.esk"
+cmp -- "${PROJECT_ROOT}/tests/d2/test_scope.py" \
+  "${evidence_dir}/inputs/test_scope.py"
 if [[ "${allocation_class}" == all ]]; then
   for source in \
     native/x1_config_private.esk \
     native/tr3_lease_core_extension.esk \
+    internal/d2/lib/d2_dataset.esk \
     internal/p1/lib/transformer/module.esk \
     templates/p1/module_roots.esk.tmpl; do
     cmp -- "${PROJECT_ROOT}/${source}" \
