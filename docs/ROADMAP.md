@@ -115,8 +115,9 @@ union `c2df68d`/tree `e043f575` on `d960add` preserves both source patches and
 passes supported f31 Release 11/11, ASan+UBSan+poison 5/5, C API 675/675 and
 standalone VM 77/77; independent review found no blockers. Root verified
 `f32-predicate-hash-union-d960add-20260924/SHA256SUMS` (`c1c4ef59...`). The
-broader sanitizer VM smoke still hits an inherited signed-shift fault in
-`vm_compiler.c:3054`; whole-F32 acceptance remains pending.
+broader sanitizer VM smoke hit an inherited signed-shift fault in
+`vm_compiler.c:3054`; a separate reviewed repair is described below.
+Whole-F32 acceptance remains pending.
 The reviewed upstream runtime type-symbol leaf `d251cb0`/tree `07882ae`
 implements the accepted public pointer API `eshkol_type_of_ref_v1` in the
 runtime archive, covering all declared direct/heap/callable/legacy tags,
@@ -152,8 +153,9 @@ ASan+UBSan matrix 13/13 pass; direct VM C API 675/675, standalone 77/77 plus
 hash-region witness, imported leaf tests and compiled exhaustive dispatch pass
 in both builds. Root verified
 `f32-runtime-union-c2df68d-20260924/SHA256SUMS` (`8965e26e...`). The
-pre-existing source-pattern exhaustive gate and VM compiler UBSan signed shift
-remain separate blockers; this union is not full F32 acceptance and does not
+pre-existing source-pattern exhaustive gate and the inherited VM compiler
+UBSan signed shift remain separate at this exact union tree; this union is not
+full F32 acceptance and does not
 change the transformer runtime pin.
 The separate reviewed native/VM `region-open` F32 size leaf `4cf63f4`/tree
 `774ba8e` promotes canonical F32 like representable DOUBLE in lone and second
@@ -174,6 +176,17 @@ both builds; root verified
 `f32-vm-scalar-activations-d960add-20260924/SHA256SUMS` (`490c9feb...`)
 and approved the single focused review. The existing scalar fallbacks in
 FIDs 463 and 466–468 remain; this isolated leaf is not full F32 acceptance.
+The reviewed isolated unity-VM literal-pack repair `efb6ba0`/tree `146402c`
+uses unsigned 64-bit shifts and byte-preserving constant storage for the
+string, record-name, helper-symbol and ordinary quoted-symbol pack paths;
+FID 100/101 unpack uses logical unsigned shifts. The single independent
+reviewer blocked the first candidate for an omitted quoted-symbol path and
+approved the amended commit after replaying its high-eighth-byte UBSan
+reproducer with exact output and no finding. Supported f31 Release and
+ASan+UBSan+LSan standalone source gates each pass 80/80 plus CTest 1/1;
+root verified `f32-vm-string-pack-ubsan-efb6ba0d-20260924/SHA256SUMS`
+(`1b8cc21d...`). The excluded legacy standalone compiler is outside this
+unity-VM repair, and the leaf has not yet joined the runtime union.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
