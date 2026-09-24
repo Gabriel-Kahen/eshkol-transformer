@@ -1,0 +1,61 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+
+(define checks 0)
+(define (check condition)
+  (if condition (set! checks (+ checks 1)) (exit 1)))
+(define (kind-count kind)
+  (let loop ((entries (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? entries) count
+        (loop (cdr entries)
+              (if (eq? (vector-ref (car entries) 1) kind)
+                  (+ count 1) count)))))
+(define (no-pending-input?)
+  (let loop ((entries (vector-ref g3c4-registry 0)))
+    (if (null? entries) #t
+        (and (not (and (eq? (vector-ref (car entries) 1) 'input)
+                       (eq? (vector-ref (car entries) 2) 'pending)))
+             (loop (cdr entries))))))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define encoded
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255)))
+
+(define (sweep kind)
+  (let loop ((index 0))
+    (if (> index 64) (exit 2))
+    (let ((before (kind-count 'input)) (caught #f) (answer #f))
+      (guard (condition (#t (set! caught #t)))
+        (allocation-arm kind index)
+        (set! answer (generation-input-create-internal encoded)))
+      (if (= (allocation-consumed) 1)
+          (begin
+            (check caught)
+            (check (= (kind-count 'input) before))
+            (check (no-pending-input?))
+            (check (not (vector-ref m3-call-state 0)))
+            (allocation-disarm)
+            (loop (+ index 1)))
+          (begin
+            (check (not caught))
+            (allocation-disarm)
+            (check (= (kind-count 'input) (+ before 1)))
+            (check (generation-tensor-release-internal! answer))
+            index)))))
+
+(define vector-cuts (sweep 1))
+(define cons-cuts (sweep 2))
+(display "G3-C4 prompt/T1 allocation cuts PASS: vector=")
+(display vector-cuts) (display " cons=") (display cons-cuts)
+(display " checks=") (display checks) (newline)

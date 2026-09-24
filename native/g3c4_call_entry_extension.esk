@@ -23,6 +23,10 @@
         :real et_g3c4_private_call_finish_v1)
 (extern i64 g3c4-native-call-abort ptr
         :real et_g3c4_private_call_abort_v1)
+(extern ptr g3c4-native-input-from-t1 ptr
+        :real et_g3c4_private_input_from_t1_v1)
+(extern i64 g3c4-native-tensor-release ptr
+        :real et_g3c4_private_tensor_release_v1)
 
 (define g3c4-registry (vector '()))
 (define g3c4-rng-algorithm 'g3.philox4x32-10.categorical-f32.v1)
@@ -250,6 +254,69 @@
               (else
                 (g3c4-fail 'invalid-argument operation
                            "C4 identity is not an RNG")))))))
+
+(define (g3c4-input-entry-live input operation)
+  (let ((entry (g3c4-registry-find input operation)))
+    (if (not (and (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 1) 'input)
+                  (eq? (vector-ref entry 2) 'live)
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 7) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 input authority is not exact and live"))
+    entry))
+
+(define (generation-input-create-internal encoded)
+  (let ((operation 'generation-input-create-internal))
+    (m3-call operation
+      (if (not (t1-wave1-tensor-admitted? encoded))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 prompt must be a same-aggregate T1 tensor"))
+      (let* ((shell (vector 'g3c4-input-private))
+             (ledger (vector #f))
+             (entry (vector shell 'input 'pending #f #f #f #f #f #f #f
+                            ledger g3c4-model-profile))
+             (next (cons entry (vector-ref g3c4-registry 0)))
+             (native '()))
+        (guard (caught
+                 (#t
+                   (if (not (null? native))
+                       (if (not (= (g3c4-native-tensor-release native) 0))
+                           (exit 134)))
+                   (g3c4-entry-dead! entry)
+                   (raise caught)))
+          (vector-set! g3c4-registry 0 next)
+          (let* ((canonical (car (vector-ref g3c4-registry 0)))
+                 (canonical-ledger (vector-ref canonical 10))
+                 (created (g3c4-native-input-from-t1 encoded)))
+            (set! native created)
+            (if (null? created) (g3c4-native-fail operation))
+            (vector-set! canonical-ledger 0 created)
+            (vector-set! canonical 3 created)
+            (vector-set! canonical 2 'live)
+            (vector-set! canonical 10 #f)
+            (vector-ref canonical 0)))))))
+
+(define (generation-tensor-release-internal! value)
+  (let ((operation 'generation-tensor-release-internal!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find value operation)))
+        (cond ((g3c4-dead-entry? entry 'input) #t)
+              ((eq? (vector-ref entry 1) 'input)
+               (let ((live (g3c4-input-entry-live value operation)))
+                 (g3c4-native-check
+                   (g3c4-native-tensor-release (vector-ref live 3)) operation)
+                 (g3c4-entry-dead! live)))
+              (else
+                (g3c4-fail 'invalid-argument operation
+                           "C4 identity is not a releasable input")))))))
 
 (define (g3c4-positive-finite-f32-bits? bits)
   (and (m3t-exact-i64? bits) (>= bits 0) (<= bits 4294967295)

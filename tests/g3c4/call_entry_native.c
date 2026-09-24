@@ -8,6 +8,7 @@
 #define ET_G3C4_ACTIVE_CALL_PRIVATE 1
 #define ET_G3C4_ACTIVE_CALL_TESTING 1
 #define ET_G3C4_GENERATOR_PRIVATE 1
+#define ET_G3C4_PROMPT_T1_BORROW_PRIVATE 1
 #define ET_A2_KV_CACHE_TESTING 1
 
 #define et_g3c4_private_call_finish_v1 \

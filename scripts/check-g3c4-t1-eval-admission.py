@@ -122,9 +122,13 @@ def check() -> None:
         "(g3c4-native-call-prepare-end",
         "(g3c4-native-call-finish",
     ], "call publication and pre-prepare recheck")
-    require("t1" not in "\n".join(
-                line for line in source.splitlines() if line.startswith("(extern")),
-            "T1 pointer entered the C extern boundary")
+    t1_externs = [
+        line for line in source.splitlines()
+        if line.startswith("(extern") and "t1" in line
+    ]
+    require(t1_externs in (
+                [], ["(extern ptr g3c4-native-input-from-t1 ptr"]),
+            "unexpected T1 pointer entered the C extern boundary")
 
     for phrase in (
         "foreign tokenizer shell", "bare tokenizer core",

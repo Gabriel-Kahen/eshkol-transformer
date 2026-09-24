@@ -1,0 +1,71 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(extern i64 prompt-transport-count i64
+        :real et_g3c4_prompt_test_transport_count_v1)
+(extern i64 prompt-i1-count i64
+        :real et_g3c4_prompt_test_i1_count_v1)
+
+(define arguments (cdr (command-line)))
+(define horizon-text (if (null? arguments) "" (car arguments)))
+(define horizon (cond ((string=? horizon-text "1024") 1024)
+                      ((string=? horizon-text "8192") 8192)
+                      (else (exit 64))))
+(define (check condition) (if condition #t (exit 1)))
+(define (kind-count kind)
+  (let loop ((entries (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? entries) count
+        (loop (cdr entries)
+              (if (eq? (vector-ref (car entries) 1) kind)
+                  (+ count 1) count)))))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+;; Exactly one encoded P2 source is reused. T1 sealed-shell enrollment is
+;; append-only and therefore cannot be placed inside this retention loop.
+(define encoded
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255)))
+(define eshkol-before (kind-count 'input))
+(define native-before (prompt-transport-count 2))
+(define tensors-before (prompt-i1-count 0))
+(define borrows-before (prompt-i1-count 1))
+(define bytes-before (prompt-i1-count 2))
+(define controls-before (prompt-i1-count 3))
+(define metadata-before (prompt-i1-count 4))
+(define peak-extra-i1 0)
+
+(let loop ((index 0))
+  (if (= index horizon) #t
+      (let ((input (generation-input-create-internal encoded)))
+        (let ((extra (- (prompt-i1-count 0) tensors-before)))
+          (if (> extra peak-extra-i1) (set! peak-extra-i1 extra)))
+        (check (= (prompt-i1-count 0) (+ tensors-before 1)))
+        (check (= (prompt-i1-count 1) borrows-before))
+        (check (= (prompt-i1-count 2) (+ bytes-before 16)))
+        (check (> (prompt-i1-count 3) controls-before))
+        (check (> (prompt-i1-count 4) metadata-before))
+        (check (generation-tensor-release-internal! input))
+        (check (= (prompt-i1-count 0) tensors-before))
+        (check (= (prompt-i1-count 1) borrows-before))
+        (check (= (prompt-i1-count 2) bytes-before))
+        (check (= (prompt-i1-count 3) controls-before))
+        (check (= (prompt-i1-count 4) metadata-before))
+        (loop (+ index 1)))))
+
+(define eshkol-added (- (kind-count 'input) eshkol-before))
+(define native-added (- (prompt-transport-count 2) native-before))
+(check (= eshkol-added horizon))
+(check (= native-added horizon))
+(check (= peak-extra-i1 1))
+(display "G3-C4 prompt/T1 retention: horizon=") (display horizon)
+(display " input_entries=") (display eshkol-added)
+(display " native_tombstones=") (display native-added)
+(display " peak_extra_i1=") (display peak-extra-i1)
+(display " live_i1_delta=")
+(display (- (prompt-i1-count 0) tensors-before))
+(display " live_i1_bytes_delta=")
+(display (- (prompt-i1-count 2) bytes-before))
+(newline)

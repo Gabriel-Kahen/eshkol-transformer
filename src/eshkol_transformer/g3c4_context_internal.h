@@ -33,6 +33,15 @@ int64_t et_g3c4_private_rng_word_v1(void *rng, int64_t index);
 int64_t et_g3c4_private_rng_release_v1(void *rng);
 #endif
 
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+/* Authenticates an already-sealed T1 shell through the T1 native registry,
+ * copies one or two byte-token IDs into a new owned dense CPU-i64 [1,P], and
+ * retains no reference to the T1 shell. */
+void *et_g3c4_private_input_from_t1_v1(void *sealed_t1);
+/* The current closed tensor union contains only prompt inputs. */
+int64_t et_g3c4_private_tensor_release_v1(void *input);
+#endif
+
 #ifdef ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE
 /* Synchronous fixed-T4 numerical leaf. token_ids/logits are borrowed only for
  * the call and must address 4 i64 / 1024 f32 elements respectively. */

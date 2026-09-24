@@ -1,0 +1,267 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(extern i64 prompt-test-transport-count i64
+        :real et_g3c4_prompt_test_transport_count_v1)
+(extern i64 prompt-test-length ptr
+        :real et_g3c4_prompt_test_length_v1)
+(extern i64 prompt-test-token ptr i64
+        :real et_g3c4_prompt_test_token_v1)
+(extern i64 prompt-test-i1-count i64
+        :real et_g3c4_prompt_test_i1_count_v1)
+(extern i64 prompt-test-owner-fail-after i64
+        :real et_g3c4_prompt_test_owner_fail_after_v1)
+(extern i64 prompt-test-owner-fail-reset
+        :real et_g3c4_prompt_test_owner_fail_reset_v1)
+(extern i64 prompt-test-i1-fail-after i64
+        :real et_g3c4_prompt_test_i1_fail_after_v1)
+(extern i64 prompt-test-i1-fail-reset
+        :real et_g3c4_prompt_test_i1_fail_reset_v1)
+(extern i64 prompt-test-active-borrow ptr i64
+        :real et_g3c4_prompt_test_active_borrow_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 prompt/T1 borrow FAIL: ")
+        (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (kind-count kind)
+  (let loop ((entries (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? entries) count
+        (loop (cdr entries)
+              (if (eq? (vector-ref (car entries) 1) kind)
+                  (+ count 1) count)))))
+(define (latest kind)
+  (let loop ((entries (vector-ref g3c4-registry 0)))
+    (cond ((null? entries) #f)
+          ((eq? (vector-ref (car entries) 1) kind) (car entries))
+          (else (loop (cdr entries))))))
+(define (dead-only? entry kind)
+  (and entry (eq? (vector-ref entry 1) kind)
+       (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))))
+(define (without-t1-tensor entries shell)
+  (cond ((null? entries) '())
+        ((eq? (vector-ref (car entries) 0) shell) (cdr entries))
+        (else (cons (car entries)
+                    (without-t1-tensor (cdr entries) shell)))))
+(define (exact-live-input? entry shell)
+  (and entry (= (vector-length entry) 12)
+       (eq? (vector-ref entry 0) shell)
+       (eq? (vector-ref entry 1) 'input)
+       (eq? (vector-ref entry 2) 'live)
+       (vector-ref entry 3)
+       (let loop ((index 4))
+         (if (= index 11) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))
+       (eq? (vector-ref entry 11) g3c4-model-profile)))
+(define (i1-state)
+  (vector (prompt-test-i1-count 0) (prompt-test-i1-count 1)
+          (prompt-test-i1-count 2) (prompt-test-i1-count 3)
+          (prompt-test-i1-count 4)))
+(define (number-vector=? left right)
+  (and (= (vector-length left) (vector-length right))
+       (let loop ((index 0))
+         (if (= index (vector-length left)) #t
+             (and (= (vector-ref left index) (vector-ref right index))
+                  (loop (+ index 1)))))))
+(define (direct-native-create candidate operation)
+  (let ((created (g3c4-native-input-from-t1 candidate)))
+    (if (null? created) (g3c4-native-fail operation) created)))
+(define (direct-native-status status operation)
+  (if (= status 0) #t (g3c4-native-fail operation)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define prompt-bytes (bytevector 0 255))
+(define encoded
+  (t1-wave1-tokenizer-encode tokenizer prompt-bytes))
+(define empty-encoded
+  (t1-wave1-tokenizer-encode tokenizer (bytevector)))
+(define long-encoded
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 1 2 3)))
+(define one-byte-source
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 127)))
+
+(check "T1 source is same-aggregate admitted"
+       (t1-wave1-tensor-admitted? encoded))
+(define inputs-before (kind-count 'input))
+(reject "foreign prompt shell" 'invalid-argument
+  (lambda () (generation-input-create-internal (vector 'foreign))))
+(reject "tokenizer is not an encoded prompt" 'invalid-argument
+  (lambda () (generation-input-create-internal tokenizer)))
+(check "foreign values publish no input"
+       (= (kind-count 'input) inputs-before))
+(reject "empty prompt" 'shape-mismatch
+  (lambda () (generation-input-create-internal empty-encoded)))
+(reject "three-token prompt" 'shape-mismatch
+  (lambda () (generation-input-create-internal long-encoded)))
+(define inputs-after-shape-rejections (kind-count 'input))
+(check "native shape rejections leave scrubbed tombstones"
+       (and (= inputs-after-shape-rejections (+ inputs-before 2))
+            (dead-only? (latest 'input) 'input)))
+
+(define input (generation-input-create-internal encoded))
+(define input-entry (latest 'input))
+(define input-native (vector-ref input-entry 3))
+(check "two-token prompt publishes one exact input"
+       (and (= (kind-count 'input) (+ inputs-after-shape-rejections 1))
+            (exact-live-input? input-entry input)))
+(check "two-token prompt copies exact 0/255 values"
+       (and (= (prompt-test-length input-native) 2)
+            (= (prompt-test-token input-native 0) 0)
+            (= (prompt-test-token input-native 1) 255)))
+(check "input retains no T1 shell or generator authority"
+       (and (not (vector-ref input-entry 4))
+            (not (vector-ref input-entry 5))
+            (not (vector-ref input-entry 6))
+            (not (vector-ref input-entry 7))
+            (not (vector-ref input-entry 8))
+            (not (vector-ref input-entry 9))))
+(check "source remains admitted after native copy"
+       (t1-wave1-tensor-admitted? encoded))
+(check "source bytes remain unchanged after native copy"
+       (t1-core-bytes=?
+         (t1-wave1-tokenizer-decode tokenizer encoded) prompt-bytes))
+
+(reject "wrong-kind release" 'invalid-argument
+  (lambda () (generation-tensor-release-internal! encoded)))
+(define t1-registry-before-release t1-wave1-tensor-registry)
+(set! t1-wave1-tensor-registry
+      (without-t1-tensor t1-registry-before-release encoded))
+(check "test withdrawal removes the source authority"
+       (not (t1-wave1-tensor-admitted? encoded)))
+(check "typed release succeeds"
+       (generation-tensor-release-internal! input))
+(check "release scrubs the input entry"
+       (dead-only? input-entry 'input))
+(check "exact dead release is idempotent"
+       (generation-tensor-release-internal! input))
+(set! t1-wave1-tensor-registry t1-registry-before-release)
+(check "source survives input release"
+       (t1-core-bytes=?
+         (t1-wave1-tokenizer-decode tokenizer encoded) prompt-bytes))
+(reject "copied input shell" 'invalid-argument
+  (lambda ()
+    (generation-tensor-release-internal! (vector 'g3c4-input-private))))
+
+(define unsealed (t1-shell-create 1))
+(check "raw T1 unsealed fixture allocation" (not (null? unsealed)))
+(check "raw T1 unsealed fixture write" (= (t1-shell-write unsealed 0 7) 0))
+(reject "direct native unsealed T1 shell" 'invalid-state
+  (lambda () (direct-native-create unsealed 'direct-native-unsealed)))
+(check "raw T1 unsealed fixture abort" (= (t1-shell-abort unsealed) 0))
+(reject "direct native foreign pointer" 'invalid-argument
+  (lambda ()
+    (direct-native-create (vector 'foreign-native) 'direct-native-foreign)))
+(define out-of-range (t1-shell-create 1))
+(check "raw T1 out-of-range fixture allocation" (not (null? out-of-range)))
+(check "raw T1 out-of-range fixture write"
+       (= (t1-shell-write out-of-range 0 256) 0))
+(check "raw T1 out-of-range fixture seal" (= (t1-shell-seal out-of-range) 0))
+(reject "direct native out-of-range token" 'shape-mismatch
+  (lambda ()
+    (direct-native-create out-of-range 'direct-native-out-of-range)))
+(define wrong-kind-rng (g3c4-native-rng-seed 19))
+(check "direct native wrong-kind RNG fixture" (not (null? wrong-kind-rng)))
+(reject "direct native wrong-kind tensor release" 'invalid-argument
+  (lambda ()
+    (direct-native-status
+      (g3c4-native-tensor-release wrong-kind-rng)
+      'direct-native-wrong-kind-release)))
+(check "wrong-kind RNG remains releasable by its owner"
+       (direct-native-status
+         (g3c4-native-rng-release wrong-kind-rng)
+         'direct-native-rng-release))
+
+(define native-inputs-before-failures (prompt-test-transport-count 2))
+(define i1-before-failures (i1-state))
+(check "native owner failpoint configured"
+       (= (prompt-test-owner-fail-after 0) 0))
+(reject "native owner allocation cut0" 'internal
+  (lambda () (generation-input-create-internal encoded)))
+(check "native owner failpoint reset" (= (prompt-test-owner-fail-reset) 0))
+(check "owner allocation failure enrolls no native input"
+       (= (prompt-test-transport-count 2) native-inputs-before-failures))
+(check "owner allocation failure preserves I1 baseline"
+       (number-vector=? (i1-state) i1-before-failures))
+
+(let loop ((cut 0))
+  (if (< cut 4)
+      (begin
+        (check "I1 failpoint configured"
+               (= (prompt-test-i1-fail-after cut) 0))
+        (reject "I1 allocation cut" 'internal
+          (lambda () (generation-input-create-internal encoded)))
+        (check "I1 failpoint reset" (= (prompt-test-i1-fail-reset) 0))
+        (check "I1 failure enrolls no native input"
+               (= (prompt-test-transport-count 2)
+                  native-inputs-before-failures))
+        (check "I1 failure preserves complete baseline"
+               (number-vector=? (i1-state) i1-before-failures))
+        (loop (+ cut 1)))))
+
+(define retry (generation-input-create-internal encoded))
+(define retry-entry (latest 'input))
+(define retry-native (vector-ref retry-entry 3))
+(check "retry after allocation cuts succeeds"
+       (and (exact-live-input? retry-entry retry)
+            (= (prompt-test-length retry-native) 2)
+            (= (prompt-test-token retry-native 0) 0)
+            (= (prompt-test-token retry-native 1) 255)))
+
+(define second (generation-input-create-internal one-byte-source))
+(define second-entry (latest 'input))
+(define second-native (vector-ref second-entry 3))
+(check "one-token prompt creates an independent input"
+       (and (not (eq? second input))
+            (exact-live-input? second-entry second)))
+(check "one-token prompt copies exact token127"
+       (and (= (prompt-test-length second-native) 1)
+            (= (prompt-test-token second-native 0) 127)))
+(check "simultaneous inputs retain independent values"
+       (and (= (prompt-test-token retry-native 0) 0)
+            (= (prompt-test-token retry-native 1) 255)
+            (= (prompt-test-token second-native 0) 127)))
+
+(define i1-before-borrow (i1-state))
+(check "active I1 borrow begins" (= (prompt-test-active-borrow retry-native 1) 0))
+(reject "active I1 borrow blocks Eshkol release" 'invalid-state
+  (lambda () (generation-tensor-release-internal! retry)))
+(check "blocked release leaves Eshkol input live"
+       (and (exact-live-input? retry-entry retry)
+            (eq? (vector-ref retry-entry 3) retry-native)))
+(check "blocked release retains one active I1 borrow"
+       (= (prompt-test-i1-count 1)
+          (+ (vector-ref i1-before-borrow 1) 1)))
+(check "active I1 borrow ends" (= (prompt-test-active-borrow retry-native 0) 0))
+(check "borrow end restores copied token access"
+       (and (= (prompt-test-token retry-native 0) 0)
+            (= (prompt-test-token retry-native 1) 255)))
+(check "release retries after borrow end"
+       (generation-tensor-release-internal! retry))
+(check "retried release scrubs the input"
+       (dead-only? retry-entry 'input))
+(check "second input remains independent after sibling release"
+       (= (prompt-test-token second-native 0) 127))
+(check "second input release succeeds"
+       (generation-tensor-release-internal! second))
+(check "second input becomes an exact tombstone"
+       (dead-only? second-entry 'input))
+(check "all copied I1 payload returns to baseline"
+       (number-vector=? (i1-state) i1-before-failures))
+
+(display "G3-C4 prompt/T1 borrow PASS: checks=")
+(display checks) (newline)
