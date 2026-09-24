@@ -84,6 +84,13 @@ int64_t et_g3c4_private_token_forward_v1(
  * Inputs and last-position logits are borrowed only for this call. */
 int64_t et_g3c4_private_prefill3_v1(
     void *context, const int64_t token_ids[3], float last_logits[256]);
+
+#ifdef ET_G3C4_PREFILL1_PRIVATE
+/* Executes one exact one-token numerical prefill into an unpublished cache,
+ * then atomically replaces the committed cache and parameter-bit snapshot. */
+int64_t et_g3c4_private_prefill1_v1(
+    void *context, int64_t token_id, float last_logits[256]);
+#endif
 #endif
 
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
