@@ -84,6 +84,8 @@ def check():
         "expected_capabilities[21]", "expected_operations[21]",
         "cross_provider_prefix_parity", "reference + position * 256u",
         "dispatch_failure_cuts", "fail_forward_at", "check_snapshot",
+        "check_k1_error(", "ET_KERNEL_CODE_PROVIDER_REJECTED",
+        "ET_KERNEL_CODE_ALLOCATION_FAILED",
         "begin_failure_cuts == 8u",
         "et_m3t_test_k1_fail_after(0u)",
         "et_a2_kv_cache_test_fail_alloc_after_v1(8u)",

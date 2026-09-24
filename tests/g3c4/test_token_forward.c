@@ -36,6 +36,12 @@ static size_t checks;
 } while (0)
 #define OK(expression) CHECK((expression) == 0)
 
+static void check_k1_error(int64_t category, int64_t code) {
+  CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_K1);
+  CHECK(et_g3c4_private_last_error_category_v1() == category);
+  CHECK(et_g3c4_private_last_error_code_v1() == code);
+}
+
 int32_t __real_et_kernel_runtime_dispatch(
     const et_kernel_runtime *, const et_kernel_call_v1 *, et_kernel_error *);
 
@@ -294,6 +300,8 @@ static void dispatch_failure_cuts(et_g3c4_model_owner_internal *owner) {
     CHECK(et_g3c4_private_token_forward_v1(
               context, speculative, output) != 0);
     record_forward = 0;
+    check_k1_error(
+        ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_PROVIDER_REJECTED);
     CHECK(forward_dispatches == cut + 1u);
     CHECK(et_g3c4_token_frame_idle(context));
     CHECK(memcmp(context->generator_rng_words, saved_rng, sizeof(saved_rng)) == 0);
@@ -331,6 +339,8 @@ static void allocation_and_rejection_cuts(
       OK(et_g3c4_private_token_frame_abort_v1(context));
     } else {
       begin_failure_cuts++;
+      check_k1_error(
+          ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_ALLOCATION_FAILED);
       CHECK(speculative == -1);
       CHECK(et_g3c4_token_frame_idle(context));
     }
@@ -353,8 +363,11 @@ static void allocation_and_rejection_cuts(
   CHECK(et_g3c4_private_token_forward_v1(
             context, speculative, output) != 0);
   et_m3t_test_k1_allocator_reset();
+  check_k1_error(
+      ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_ALLOCATION_FAILED);
   CHECK(et_g3c4_token_frame_idle(context));
   CHECK(memcmp(context->generator_rng_words, saved_rng, sizeof(saved_rng)) == 0);
+  for (size_t index = 0u; index < 256u; index++) CHECK(output[index] == -123.0f);
   check_snapshot(context->cache, &before);
   OK(et_g3c4_private_call_abort_v1(context));
   OK(et_g3c4_private_generator_close_v1(context));
@@ -370,8 +383,11 @@ static void allocation_and_rejection_cuts(
   CHECK(et_g3c4_private_token_forward_v1(
             context, speculative, output) != 0);
   et_a2_kv_cache_test_reset_allocator_v1();
+  check_k1_error(
+      ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_ALLOCATION_FAILED);
   CHECK(et_g3c4_token_frame_idle(context));
   CHECK(memcmp(context->generator_rng_words, saved_rng, sizeof(saved_rng)) == 0);
+  for (size_t index = 0u; index < 256u; index++) CHECK(output[index] == -123.0f);
   check_snapshot(context->cache, &before);
   OK(et_g3c4_private_call_abort_v1(context));
   OK(et_g3c4_private_generator_close_v1(context));
