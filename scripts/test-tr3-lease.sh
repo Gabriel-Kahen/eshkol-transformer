@@ -112,6 +112,89 @@ for entry in \
     die "recovered runtime profile field changed: ${entry}"
 done
 
+PYTHONDONTWRITEBYTECODE=1 python3 - \
+  "${PROJECT_ROOT}/tests/tr3_lease/lease_runtime.esk" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+stack = []
+line = 1
+column = 0
+in_string = False
+escaped = False
+in_line_comment = False
+block_comment_depth = 0
+index = 0
+while index < len(text):
+    char = text[index]
+    next_char = text[index + 1] if index + 1 < len(text) else ""
+    if char == "\n":
+        line += 1
+        column = 0
+        in_line_comment = False
+        index += 1
+        continue
+    column += 1
+    if in_line_comment:
+        index += 1
+        continue
+    if block_comment_depth:
+        if char == "#" and next_char == "|":
+            block_comment_depth += 1
+            index += 2
+            column += 1
+        elif char == "|" and next_char == "#":
+            block_comment_depth -= 1
+            index += 2
+            column += 1
+        else:
+            index += 1
+        continue
+    if in_string:
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            in_string = False
+        index += 1
+        continue
+    if char == ";":
+        in_line_comment = True
+    elif char == "#" and next_char == "|":
+        block_comment_depth = 1
+        index += 1
+        column += 1
+    elif char == "#" and next_char == "\\":
+        index += 2
+        column += 1
+        if index < len(text):
+            index += 1
+            column += 1
+        continue
+    elif char == '"':
+        in_string = True
+    elif char == "(":
+        stack.append((line, column))
+    elif char == ")":
+        if not stack:
+            raise SystemExit(f"{path}:{line}:{column}: unexpected closing parenthesis")
+        stack.pop()
+    index += 1
+if in_string:
+    raise SystemExit(f"{path}: unterminated string")
+if block_comment_depth:
+    raise SystemExit(f"{path}: unterminated block comment")
+if stack:
+    open_line, open_column = stack[-1]
+    raise SystemExit(
+        f"{path}:{open_line}:{open_column}: unclosed opening parenthesis"
+    )
+print(f"Eshkol parenthesis preflight PASS: {path}")
+PY
+
 candidate_image="$(tsv_value "${candidate_manifest}" container_image)"
 expected_image="$(tsv_value "${candidate_manifest}" container_digest)"
 [[ "$(docker image inspect "${candidate_image}" --format '{{.Id}}')" == \

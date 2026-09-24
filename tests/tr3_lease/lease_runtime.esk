@@ -293,7 +293,7 @@
          (lambda ()
            (tr3-lease-restore-recheck-internal
              fresh-record (vector-copy canonical-restore-parent)
-             (vector 'copied-o2-plan))))))
+             (vector 'copied-o2-plan)))))
 (check "restore abort rejects copied parent without unlink"
        (and (transformer-error-at-operation? 'invalid-state 'trainer-load-state!
               (lambda ()
