@@ -310,9 +310,37 @@ static void allocation_and_rejection_cuts(
   float sample_logits[1024], output[256];
   int64_t speculative = -1;
   int64_t saved_rng[4];
+  size_t begin_failure_cuts = 0u;
   cache_snapshot before;
   et_g3c4_context_internal *context;
   prepare_sample_logits(sample_logits, 37);
+
+  for (size_t allowed = 0u; allowed <= 8u; allowed++) {
+    context = create_generator(owner);
+    snapshot_cache(context->cache, &before);
+    memcpy(saved_rng, context->generator_rng_words, sizeof(saved_rng));
+    OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+    speculative = -1;
+    et_a2_kv_cache_test_fail_alloc_after_v1(allowed);
+    int64_t status = et_g3c4_private_token_frame_begin_v1(
+        context, sample_logits, &speculative);
+    et_a2_kv_cache_test_reset_allocator_v1();
+    if (status == 0) {
+      CHECK(allowed == 8u);
+      CHECK(speculative == 37);
+      OK(et_g3c4_private_token_frame_abort_v1(context));
+    } else {
+      begin_failure_cuts++;
+      CHECK(speculative == -1);
+      CHECK(et_g3c4_token_frame_idle(context));
+    }
+    CHECK(memcmp(context->generator_rng_words,
+                 saved_rng, sizeof(saved_rng)) == 0);
+    check_snapshot(context->cache, &before);
+    OK(et_g3c4_private_call_abort_v1(context));
+    OK(et_g3c4_private_generator_close_v1(context));
+  }
+  CHECK(begin_failure_cuts == 8u);
 
   context = create_generator(owner);
   snapshot_cache(context->cache, &before);
@@ -410,7 +438,7 @@ int main(void) {
   cross_provider_prefix_parity(owner);
   dispatch_failure_cuts(owner);
   allocation_and_rejection_cuts(owner);
-  printf("G3-C4 token forward PASS: checks=%zu roles=21 cuts=23 positions=2\n",
+  printf("G3-C4 token forward PASS: checks=%zu roles=21 cuts=31 positions=2\n",
          checks);
   return 0;
 }

@@ -106,7 +106,7 @@ cmp "${evidence}/token-forward-normal.stdout" \
   "${evidence}/token-forward-repeat.stdout"
 cmp "${evidence}/token-forward-normal.stdout" \
   "${evidence}/token-forward-sanitize.stdout"
-grep -E '^G3-C4 token forward PASS: checks=[1-9][0-9]* roles=21 cuts=23 positions=2$' \
+grep -E '^G3-C4 token forward PASS: checks=[1-9][0-9]* roles=21 cuts=31 positions=2$' \
   "${evidence}/token-forward-normal.stdout" >/dev/null
 
 git -C "${PROJECT_ROOT}" diff --check

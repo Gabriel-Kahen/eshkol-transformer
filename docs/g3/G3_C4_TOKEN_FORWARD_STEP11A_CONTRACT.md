@@ -49,8 +49,11 @@ accepted G3-C4 `T=4` full-prefix provider for the same token sequence. Separate
 empty-cache and length-three cases prove position, mask, staged K/V publication,
 committed-prefix preservation, determinism, and cache sensitivity.
 
-Each of the 21 dispatch sites has an injected failure cut. K1 runtime-discovery
-allocation and A2 transaction-view allocation are also cut. In every such case,
+Each of the 21 dispatch sites has an injected failure cut. All eight new A2
+allocation cuts across the committed-position borrow and subsequent append
+transaction are exercised before the frame can publish its speculative token.
+K1 runtime-discovery allocation and A2 transaction-view allocation are also cut.
+In every such case,
 the first error survives cleanup, the pending transaction is aborted and
 scrubbed, committed cache and generator RNG remain byte-identical, and caller
 logits remain unchanged. Candidate mismatch and context/output alias rejection

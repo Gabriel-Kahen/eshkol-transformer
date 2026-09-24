@@ -84,9 +84,10 @@ def check():
         "expected_capabilities[21]", "expected_operations[21]",
         "cross_provider_prefix_parity", "reference + position * 256u",
         "dispatch_failure_cuts", "fail_forward_at", "check_snapshot",
+        "begin_failure_cuts == 8u",
         "et_m3t_test_k1_fail_after(0u)",
         "et_a2_kv_cache_test_fail_alloc_after_v1(8u)",
-        "output[index] == -123.0f", "roles=21 cuts=23 positions=2",
+        "output[index] == -123.0f", "roles=21 cuts=31 positions=2",
     ]:
         require(phrase in test, f"focused test omits {phrase}")
     require("--wrap=et_kernel_runtime_dispatch" in runner,
