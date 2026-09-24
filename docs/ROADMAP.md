@@ -245,6 +245,15 @@ This is a composition acceptance, not a runtime repin or whole-F32 acceptance:
 VM callable subtypes still collapse to `procedure` where native reports
 `lambda-sexpr`/`closure`; exhaustive nested-container and operation matrices
 also remain open.
+The separately reviewed test-only direct VM pair/vector transport witness
+`27c2ed84`/tree `8fe4a27` preserves eight exact F32 bit patterns through
+real container storage, regional evacuation and the public raw-bit inspector.
+Wrong-tag, wrong-container and invalid-index controls pass. Supported f31
+Release and ASan+UBSan+LSan focused runs each pass 733/733; root verified
+`f32-vm-transport-witness-27c2ed84-20260924/SHA256SUMS` (`b81ba2e8...`).
+It changes no production API and remains isolated pending successor-union
+composition; closure/upvalue, continuation, exception and hash transport are
+still unwitnessed.
 The sealed read-only operation inventory on reviewed union `602876a` lists
 every source-visible DOUBLE spelling, AOT/JIT and VM routes, result-kind and
 missing witness. It identifies concrete gaps: unary `+`/`*`/min/max can leak
