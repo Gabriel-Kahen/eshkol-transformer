@@ -228,24 +228,34 @@ the fixed 17-slot trainer lease retains neither destination. TR3 therefore must 
 call `et_f32_tensor_copy_bits_to_v1` on an assumed pointer or add destination fields
 to the trainer record.
 
-Selector 0 names loss and selector 1 names mask weight; every other selector returns
-`-1` with the existing E3 invalid-argument diagnostic. The seam
-registry-authenticates before dereference and requires a live frame, `E3_IDLE`,
-`published_valid==1`, `committed==2`, inactive model and no cleanup residue. An
-invariant disagreement returns `-1` with the existing internal diagnostic. For a
-valid selector it copies only that bound private destination through existing
-`et_f32_tensor_copy_bits_to_v1` into a local `uint32_t` and returns the widened word
-as an `int64_t` in `0..UINT32_MAX`. Success therefore cannot collide with `-1`.
-It allocates nothing, exposes no tensor pointer, output pointer, borrow, perplexity
-or accuracy, and retains no TR3 object.
+Selector 0 names loss and selector 1 names mask weight. The implementation calls
+`e3_clear` exactly once, then `e3_admit` to authenticate registry membership before
+any pointer dereference, and only then validates the selector. A foreign pointer
+returns `-1` with `invalid-argument/identity`, a dead authentic frame returns `-1`
+with `invalid-state/phase`, and every selector other than 0 or 1 returns `-1` with
+the existing `invalid-argument/phase` diagnostic.
 
-An unregistered/foreign pointer returns `-1` with E3 `invalid-argument/identity`;
-an authentic dead frame, nonidle or unpublished frame, occupied model, or invalid
-selector returns `-1` with the corresponding existing E3 `invalid-state` or
-`invalid-argument` diagnostic. A published/committed/cleanup invariant disagreement
-returns `-1` with E3 `internal/invariant`. An I2 exact-bit-copy rejection returns
-`-1` while preserving its validated domain-3 category/code in the E3 diagnostic
-triple. No failure changes frame, destination, counter, or caller storage.
+An admitted call requires `E3_IDLE`, `published_valid==1`, `committed==2`, inactive
+model, `cleanup_ready==0`, `next_role==0`, `stage_plane==0`, `sum_bank==0`, zeroed
+`staged_counts`, and idle pins. A nonidle or not-currently-published call returns
+`-1` with `invalid-state/phase`. Once acquire reaches its reset, it clears
+`committed`, so a later failed evaluation rejects the stale earlier metrics. An
+acquire rejection in its preceding fallible storage-check/zeroing prefix can leave
+the prior `committed==2` publication intact. The seam is therefore not a general
+freshness oracle: TR3 calls no result accessor after any failed E3 invocation and
+enters the four-read sequence only after that invocation has succeeded through
+publication, restoration, and `finish`. If the surface state then claims a current
+finished publication but its cleanup, reset, or pin invariants disagree, the seam
+returns `-1` with `internal/invariant`.
+
+For a valid selector it copies only that bound private destination through existing
+`et_f32_tensor_copy_bits_to_v1` into a local `uint32_t`. On rejection it calls
+`e3_f32_error` exactly once, preserving the validated domain-3 category/code in the
+E3 diagnostic triple, and returns `-1`. On success it returns the widened word as an
+`int64_t` in `0..UINT32_MAX`, which cannot collide with `-1`. It allocates nothing,
+exposes no tensor pointer, output pointer, borrow, perplexity or accuracy, and
+retains no TR3 object. No failure changes frame, destination, counter, or caller
+storage.
 
 E3's evaluation `m3-call` guard has ended at this point; the proposal does not
 pretend it remains held. Before any callback, provider dispatch, or user code can
@@ -254,11 +264,22 @@ metrics-construction exclusion held around the closed sequence `bits_ref(0)`,
 `bits_ref(1)`, `counter_ref(0)`, `counter_ref(1)`. There is no second model token or
 new guard API. The existing guard rejects reentry, and this proposal makes no
 concurrent-thread claim. TR3 stages all four returned i64 values locally and writes
-no public entry slot until every call succeeds. It then validates finite loss and
-positive finite weight by binary32 bit classification without widening, validates
-the exact counters, installs the staged words/counters, and publishes through its
-nonfailing tail. Every seam call, check, and diagnostic delivery completes before
-the first public-record store.
+no public entry slot until every call succeeds. The first accessor returning `-1`
+ends the sequence; TR3 snapshots that diagnostic triple immediately and makes no
+later accessor call that could clear or replace it. It then validates finite loss
+and positive finite weight by binary32 bit classification without widening,
+validates the exact counters, installs the staged words/counters, and publishes
+through its nonfailing tail. Every seam call, check, and diagnostic delivery
+completes before the first public-record store.
+
+The seam gate covers success for both selectors plus the existing two counters;
+foreign, dead, new/unpublished, acquired/nonidle, bad-selector, stale-after-failure,
+active-borrow copy-failure, reset-invariant, and pin-invariant negatives. It proves
+exact domain-3 diagnostics, unchanged storage, zero allocation, no pointer escape,
+and one fresh guarded four-read snapshot. `stale-after-failure` covers failure after
+the acquire reset; a separate early-acquire failure test proves zero bits/counter
+accessor calls rather than claiming the native frame can distinguish that old
+publication.
 
 The runtime checked barrier supports this ordering: its checked ABI stages the
 possibly promoted value and reports allocation/layout/overflow/call-state failure
@@ -322,18 +343,22 @@ Genuine runtime source is commit
   `native/tr3_lease_core_extension.esk:5-8,224-296`, fixes `tr3-trainers` as the
   two-slot root and its enrolled records as exact 17-slot vectors.
 
-The accepted E3 proposal's recorded strict-AOT probe found that ordinary `1.25`
-emits tag 2 with binary64 payload `4608308318706860032`, while `metrics-ref` fails
-as an unknown function. A fresh host attempt with the exact cached executable
-failed before compilation because the host lacks `libLLVM.so.21.1` and
-`libopenblas.so.0`; both processes exited 127. No compiler was rebuilt.
+Before the host reboot, runner SHA-256
+`4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1`
+recorded a strict-AOT literal with tag 2 and binary64 payload
+`4608308318706860032`, while `metrics-ref` failed as an unknown function. Its
+temporary artifacts were lost in the reboot, so that observation is historical
+and is not durable final acceptance evidence. A host attempt also failed before
+compilation because the host lacks `libLLVM.so.21.1` and `libopenblas.so.0`; both
+processes exited 127. No compiler was rebuilt.
 
-The supported rerun uses immutable image ID
+A limited rerun uses immutable image ID
 `sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`
-(Ubuntu 22.04/LLVM 21.1.8) and the recovered supported runner SHA-256
+(Ubuntu 22.04/LLVM 21.1.8) and recovered runner SHA-256
 `f4ddddb7e441cdf3002bc374501cff62a508b021fccd99e5365b819e8fed3aeb`.
-Its recorded source is the same clean commit and tree
-`7669312845a9d8d372006af52271045e69505813`. The durable record is
+That runner is rejected as a final `81298b4a` compiler: a separate required lease
+compile fails on `runtime-emergency-rethrow-param`, and its relationship to the
+current clean source checkout is not authenticated. The durable record is
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-metrics-probe-81298-20260923T-final`;
 `command.sh` invokes the image with `--network none`, mounts the recovered build
 read-only, and runs this exact inner form for each probe:
@@ -343,16 +368,22 @@ read-only, and runs this exact inner form for each probe:
   --dump-ir /evidence/<probe>.esk -o /evidence/<probe>.o
 ```
 
-`runtime-provenance.tsv`, `probe-provenance.tsv`, `SHA256SUMS`, the sources,
-stdout/stderr, object/bitcode/IR, and `results.tsv` are retained there. Results were:
+`LIMITATIONS.md`, `runtime-provenance.tsv`, `probe-provenance.tsv`, `SHA256SUMS`,
+the sources, stdout/stderr, object/bitcode/IR, and `results.tsv` are retained there.
+The provenance TSV is preserved as a recovery record, not accepted proof that this
+runner was built from the audited checkout. Results for this exact binary were:
 
 | Probe | Exit/result |
 |---|---|
 | ordinary `1.25` | 0; LLVM IR stores `{ i8 2, i8 32, ..., i64 4608308318706860032 }` |
 | `(metrics-ref #f 'loss)` | 1; `Unknown function: metrics-ref` |
 
-This proves the current tagged behavior on the supported toolchain; it does not
-exercise a trainer, evaluator, metrics owner, or proposed f32 representation.
+These limited observations do not prove the behavior of exact runtime commit
+`81298b4a`. Independently, the clean source audit at the start of this section proves
+that commit has only the binary64 immediate path and lacks `metrics-ref`; it does
+not exercise a trainer, evaluator, metrics owner, or proposed f32 representation.
+Final runtime acceptance still requires a properly authenticated compiler and exact
+source/build/runner identity.
 
 ## 8. Minimal upstream issue/contract candidate
 
