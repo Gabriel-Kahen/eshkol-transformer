@@ -21,6 +21,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-prefill1.py",
         "check-g3c4-prefill2.py",
         "check-g3c4-prefill3.py",
+        "check-g3c4-prompt-prefill.py",
         "check-g3c4-prompt-t1-borrow.py",
         "check-g3c4-sampler-transport.py",
         "check-g3c4-t1-eval-admission.py",
