@@ -137,14 +137,38 @@
       (raise "c1-sha256: expected a bytevector"))
   (if (> (bytevector-length bytes) 2305843009213693951)
       (raise "c1-sha256: input exceeds the SHA-256 length field"))
-  (let* ((padded (c1-pad bytes))
+  (let* ((length (bytevector-length bytes))
+         (complete (- length (modulo length 64)))
+         (remaining (- length complete))
+         (tail-length (if (< remaining 56) 64 128))
+         ;; Hash complete input blocks in place. Only the final padded block
+         ;; is copied, so a checkpoint tensor/container no longer needs a
+         ;; second full-size bytevector solely for SHA padding.
+         (tail (make-bytevector tail-length 0))
+         (bit-length (* length 8))
          (state (vector 1779033703 3144134277 1013904242 2773480762
                         1359893119 2600822924 528734635 1541459225))
          (words (make-vector 64 0)))
-    (let blocks ((offset 0))
-      (if (< offset (bytevector-length padded))
+    (bytevector-copy! tail 0 bytes complete length)
+    (bytevector-u8-set! tail remaining 128)
+    (let length-bytes ((index 0))
+      (if (< index 8)
           (begin
-            (c1-expand! words padded offset)
+            (bytevector-u8-set!
+             tail (+ (- tail-length 8) index)
+             (bitwise-and
+              (arithmetic-shift bit-length (- (* (- 7 index) 8))) 255))
+            (length-bytes (+ index 1)))))
+    (let blocks ((offset 0))
+      (if (< offset complete)
+          (begin
+            (c1-expand! words bytes offset)
             (c1-compress! state words)
             (blocks (+ offset 64)))))
+    (let tail-blocks ((offset 0))
+      (if (< offset tail-length)
+          (begin
+            (c1-expand! words tail offset)
+            (c1-compress! state words)
+            (tail-blocks (+ offset 64)))))
     (let ((result (c1-state-bytes state))) result)))
