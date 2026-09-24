@@ -35,6 +35,15 @@ retention attribution and installed fixed-profile diagnostic facade, genuine
 G3 one-/two-token numerical prefills, and authenticated prompt-to-prefill
 binding are integrated through `73cc31a`. Their supported focused gates pass;
 they still require a fresh exact-head supported union before broader acceptance.
+The subsequent private G3 Step19A output-reservation candidate `06b6fd2` was
+cherry-picked locally at `ee7325d`; its supported normal/repeat/sanitizer gate
+passed 1,283 checks, sealed in
+`g3c4-output-reservation-06b6fd2-20260924T180703Z/SHA256SUMS`
+(`08f36ce...`). Independent review blocked acceptance: abort can discard a
+non-idle token frame before a borrowed output prevents destruction, and prefill
+can write logits into an aliased pending output owner or I1 storage. Focused
+repair and negative witnesses are in progress; this candidate must not be
+treated as accepted or pushed as the final Step19A implementation.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
