@@ -15,6 +15,16 @@ adoption gates pass; the separate #117/#121 guard-order repairs, their combined
 aggregate evidence, full supported CI, and final integration review remain pending.
 No workstream status changes solely from the pin update.
 
+The first supported full-CI attempt on integration head `c27aaf5` exposed a
+shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
+unpublished tail-body entry of the private construction rollback helper. The
+mirrored I2 roots now keep rollback and abort helpers in ordinary call position
+(`c74c267`); their return remains `#t` after the same revocation and cleanup.
+On a clean supported f31/LLVM 21 image, strict I2 aggregate compilation passed
+in 5m12s (2,903,900 KiB peak RSS, zero swaps), and the exact `build-i2.sh`
+package/manifest gate passed in 7m08s (4,645,056 KiB peak RSS, zero swaps).
+Full affected-suite CI and combined-head acceptance remain pending.
+
 ## Wave 0 — contracts and verification foundation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
