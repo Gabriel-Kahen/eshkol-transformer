@@ -744,6 +744,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_TOKEN_FORWARD_PRIVATE)
 #error "ET_G3C4_PREFILL3_PRIVATE requires Step 11A"
 #endif
+#if defined(ET_G3C4_PREFILL3_PRIVATE) && \
+    !defined(ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
+#error "ET_G3C4_PREFILL3_PRIVATE requires the private A2 storage query"
+#endif
 
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
@@ -2266,12 +2270,6 @@ static int et_g3c4_prefill_binding_matches_pins(
 static int et_g3c4_prefill_reject_owned_aliases(
     et_g3c4_context_internal *context, const int64_t token_ids[3],
     float last_logits_output[256]) {
-  et_a2_kv_cache_read_borrow *borrow = NULL;
-  const et_kernel_tensor_view_v1 *keys = NULL;
-  const et_kernel_tensor_view_v1 *values = NULL;
-  const et_kernel_tensor_view_v1 *lengths = NULL;
-  const et_kernel_tensor_view_v1 *keep = NULL;
-  et_kernel_error error;
   size_t index;
   int overlap = 0;
 
@@ -2292,35 +2290,12 @@ static int et_g3c4_prefill_reject_owned_aliases(
             view->data, view->byte_length))
       overlap = 1;
   }
-  if (overlap) {
-    (void)et_g3c4_fail(
-        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
-    return -1;
-  }
-  if (et_g3c4_capture_kernel(
-          et_a2_kv_cache_read_borrow_begin_v1(
-              context->cache, &borrow, &error), &error) != 0)
-    return -1;
-  if (et_g3c4_capture_kernel(
-          et_a2_kv_cache_read_borrow_layer_v1(
-              borrow, 0u, &keys, &values, &lengths, &keep, &error),
-          &error) != 0) {
-    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
-    return -1;
-  }
-#define ET_G3C4_PREFILL3_CACHE_ALIAS(view) \
-  (et_g3c4_ranges_overlap( \
-       token_ids, 3u * sizeof(token_ids[0]), \
-       (view)->data, (view)->byte_length) || \
-   et_g3c4_ranges_overlap( \
-       last_logits_output, 256u * sizeof(last_logits_output[0]), \
-       (view)->data, (view)->byte_length))
-  overlap = ET_G3C4_PREFILL3_CACHE_ALIAS(keys) ||
-            ET_G3C4_PREFILL3_CACHE_ALIAS(values) ||
-            ET_G3C4_PREFILL3_CACHE_ALIAS(lengths) ||
-            ET_G3C4_PREFILL3_CACHE_ALIAS(keep);
-#undef ET_G3C4_PREFILL3_CACHE_ALIAS
-  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  if (et_a2_kv_cache_private_storage_overlap_v1(
+          token_ids, 3u * sizeof(token_ids[0])) != 0 ||
+      et_a2_kv_cache_private_storage_overlap_v1(
+          last_logits_output,
+          256u * sizeof(last_logits_output[0])) != 0)
+    overlap = 1;
   if (overlap) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);

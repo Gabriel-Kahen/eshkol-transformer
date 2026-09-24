@@ -170,6 +170,14 @@ static int live_storage_overlap(const void *p, size_t n) {
   return 0;
 }
 
+#ifdef ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE
+int32_t et_a2_kv_cache_private_storage_overlap_v1(
+    const void *pointer, size_t bytes) {
+  if (!span_fits(pointer, bytes)) return -1;
+  return live_storage_overlap(pointer, bytes) ? 1 : 0;
+}
+#endif
+
 static int32_t raw_reject(void) {
   return (int32_t)ET_KERNEL_ERROR_INVALID_ARGUMENT;
 }

@@ -30,7 +30,8 @@ forward_macros=(
   -DET_G3C4_SAMPLER_TRANSPORT_PRIVATE -DET_G3C4_TOKEN_FRAME_PRIVATE
   -DET_G3C4_TOKEN_FORWARD_PRIVATE
 )
-prefill_macros=("${forward_macros[@]}" -DET_G3C4_PREFILL3_PRIVATE)
+prefill_macros=("${forward_macros[@]}" -DET_G3C4_PREFILL3_PRIVATE
+  -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
 
 "${cc}" "${flags[@]}" -O2 "${forward_macros[@]}" -c \
   "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
@@ -55,10 +56,12 @@ printf '%s\n' et_g3c4_private_prefill3_v1 |
 comm -13 "${evidence}/token-forward-owner-undefined.txt" \
   "${evidence}/prefill3-owner-undefined.txt" \
   >"${evidence}/added-undefined.txt"
-printf '%s\n' bcmp | cmp - "${evidence}/added-undefined.txt"
+printf '%s\n' bcmp et_a2_kv_cache_private_storage_overlap_v1 |
+  LC_ALL=C sort | cmp - "${evidence}/added-undefined.txt"
 
 if "${cc}" "${flags[@]}" -O2 \
-    -DET_G3C4_PREFILL3_PRIVATE -c \
+    -DET_G3C4_PREFILL3_PRIVATE \
+    -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE -c \
     "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
     -o "${evidence}/invalid-prefill-only.o" \
     >"${evidence}/invalid-prefill-only.stdout" \
@@ -88,6 +91,7 @@ for mode in normal sanitize; do
       UBSAN_OPTIONS=halt_on_error=1)
   fi
   "${cc}" "${flags[@]}" "${mode_flags[@]}" -DET_A2_KV_CACHE_TESTING \
+    -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE \
     "${sources[@]}" -Wl,--wrap=et_kernel_runtime_dispatch -lm \
     -o "${evidence}/prefill3-${mode}"
   "${environment[@]}" "${evidence}/prefill3-${mode}" \
@@ -103,7 +107,7 @@ cmp "${evidence}/prefill3-normal.stdout" \
   "${evidence}/prefill3-repeat.stdout"
 cmp "${evidence}/prefill3-normal.stdout" \
   "${evidence}/prefill3-sanitize.stdout"
-grep -E '^G3-C4 prefill3 PASS: checks=[1-9][0-9]* roles=21 dispatch-cuts=21 allocation-cuts=14$' \
+grep -E '^G3-C4 prefill3 PASS: checks=[1-9][0-9]* roles=21 dispatch-cuts=21 allocation-cuts=11$' \
   "${evidence}/prefill3-normal.stdout" >/dev/null
 
 git -C "${PROJECT_ROOT}" diff --check
