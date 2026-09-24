@@ -68,7 +68,7 @@ ar rcsD "${temporary_dir}/libeshkol_transformer_f32.a" \
   "${temporary_dir}/f32_tensor.o"
 
 if [[ "${mode}" == normal ]]; then
-  E1B_COMPILER_TIMEOUT_SECONDS="${I2_COMPILER_TIMEOUT_SECONDS:-360}" \
+  E1B_COMPILER_TIMEOUT_SECONDS="${I2_COMPILER_TIMEOUT_SECONDS:-900}" \
     /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
     "${PROJECT_ROOT}/native/i2_wave2_root.esk" \
     "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
