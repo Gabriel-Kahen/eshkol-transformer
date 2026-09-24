@@ -133,6 +133,13 @@ int64_t et_g3c4_private_output_copy_decode_ids_v1(
     void *context, void *output, void *staging_header);
 #endif
 
+#ifdef ET_G3C4_OUTPUT_TEXT_PRIVATE
+/* Authenticates exact decoded G0/G1 raw bytes against the prepared output IDs
+ * and advances text readiness exactly once. */
+int64_t et_g3c4_private_output_accept_text_v1(
+    void *context, void *output, void *raw_header);
+#endif
+
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
 /* Samples directly from one exact [1,256] row, then opens the accepted pending
  * one-token frame. No fabricated full-prefix carrier is constructed. */

@@ -1,0 +1,103 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 T1 output decode FAIL: ")
+        (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define strict-tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'strict '() '() '())))
+(define special-tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw (list (list 256 "special" 'omit))
+                              '() '())))
+(define staging0 (bytevector))
+(define raw0 (bytevector))
+(define staging1 (bytevector 255 0 0 0 0 0 0 0))
+(define raw1 (bytevector 17))
+(define registry-before t1-private-tokenizer-registry)
+
+(check "G0 decodes in place"
+       (eq? (t1-private-g3-decode-raw-into! tokenizer staging0 raw0) raw0))
+(check "G1 decodes the exact byte"
+       (and (eq? (t1-private-g3-decode-raw-into!
+                   tokenizer staging1 raw1) raw1)
+            (= (bytevector-u8-ref raw1 0) 255)))
+(check "decode enrolls no T1 shell"
+       (eq? registry-before t1-private-tokenizer-registry))
+
+(reject "foreign tokenizer" 'invalid-argument
+  (lambda ()
+    (t1-private-g3-decode-raw-into! (vector 'foreign) staging0 raw0)))
+(reject "strict tokenizer" 'invalid-state
+  (lambda ()
+    (t1-private-g3-decode-raw-into! strict-tokenizer staging0 raw0)))
+(reject "non-V256 tokenizer" 'invalid-state
+  (lambda ()
+    (t1-private-g3-decode-raw-into! special-tokenizer staging0 raw0)))
+(reject "staging type" 'invalid-argument
+  (lambda () (t1-private-g3-decode-raw-into! tokenizer '#() raw0)))
+(reject "raw type" 'invalid-argument
+  (lambda () (t1-private-g3-decode-raw-into! tokenizer staging0 '#())))
+(reject "staging extent" 'shape-mismatch
+  (lambda ()
+    (t1-private-g3-decode-raw-into! tokenizer (bytevector 1) raw0)))
+(reject "G0 raw extent" 'shape-mismatch
+  (lambda ()
+    (t1-private-g3-decode-raw-into! tokenizer staging0 (bytevector 0))))
+(reject "G1 raw extent" 'shape-mismatch
+  (lambda ()
+    (t1-private-g3-decode-raw-into! tokenizer staging1 (bytevector))))
+
+(define invalid-staging (bytevector 0 1 0 0 0 0 0 0))
+(define unchanged (bytevector 93))
+(reject "ID 256" 'invalid-argument
+  (lambda ()
+    (t1-private-g3-decode-raw-into! tokenizer invalid-staging unchanged)))
+(check "ID validation precedes the first raw write"
+       (= (bytevector-u8-ref unchanged 0) 93))
+
+(allocation-arm 1 100)
+(check "G1 vector-allocation-free result"
+       (eq? (t1-private-g3-decode-raw-into! tokenizer staging1 raw1) raw1))
+(check "G1 attempts no vector allocation"
+       (and (= (allocation-consumed) 0) (= (allocation-disarm) 0)))
+(allocation-arm 2 100)
+(check "G0 cons-allocation-free result"
+       (eq? (t1-private-g3-decode-raw-into! tokenizer staging0 raw0) raw0))
+(check "G0 attempts no cons allocation"
+       (and (= (allocation-consumed) 0) (= (allocation-disarm) 0)))
+
+(define public-decoded
+  (t1-private-tokenizer-decode-staging tokenizer staging1))
+(check "allocating public semantic decoder remains unchanged"
+       (and (= (bytevector-length public-decoded) 1)
+            (= (bytevector-u8-ref public-decoded 0) 255)))
+
+(display "G3-C4 T1 output decode PASS: checks=")
+(display checks)
+(display " routes=2 allocation-free=2 mutation-cuts=1")
+(newline)

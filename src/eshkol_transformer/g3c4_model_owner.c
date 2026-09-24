@@ -805,6 +805,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_I64_TENSOR_STORAGE_QUERY_PRIVATE))
 #error "ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE requires Step 20A and the private I1 storage query"
 #endif
+#if defined(ET_G3C4_OUTPUT_TEXT_PRIVATE) && \
+    !defined(ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE)
+#error "ET_G3C4_OUTPUT_TEXT_PRIVATE requires Step 21A output ID staging"
+#endif
 
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
@@ -1280,11 +1284,18 @@ static int et_g3c4_transport_record_valid(
         (output->prompt_length != 1 && output->prompt_length != 2) ||
         (output->generated_length != 0 && output->generated_length != 1) ||
         output->prompt_length + output->generated_length > 2 ||
-        output->ids == NULL || output->text_ready != 0u)
+        output->ids == NULL
+#ifdef ET_G3C4_OUTPUT_TEXT_PRIVATE
+        || output->text_ready > 1u
+#else
+        || output->text_ready != 0u
+#endif
+        )
       return 0;
     if (output->numeric_ready == 0u)
       return output->ids_copied == 0u && output->length == 0 &&
              output->cache_length == 0 &&
+             output->text_ready == 0u &&
              et_g3c4_zero_i64_words(output->rng, 4u);
 #ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
     if (output->numeric_ready == 1u)
@@ -1293,6 +1304,12 @@ static int et_g3c4_transport_record_valid(
              (output->ids_copied == 0u || output->ids_copied == 1u) &&
 #else
              output->ids_copied == 0u &&
+#endif
+#ifdef ET_G3C4_OUTPUT_TEXT_PRIVATE
+             (output->text_ready == 0u ||
+              (output->text_ready == 1u && output->ids_copied == 1u)) &&
+#else
+             output->text_ready == 0u &&
 #endif
              output->length == output->generated_length &&
              output->cache_length ==
@@ -5141,6 +5158,101 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+
+#ifdef ET_G3C4_OUTPUT_TEXT_PRIVATE
+int64_t et_g3c4_private_output_accept_text_v1(
+    void *context_candidate, void *output_candidate,
+    void *raw_header) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
+  et_g3c4_output_internal *pending = NULL;
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  et_g3c4_error_state_internal first;
+  int64_t declared_bytes;
+  int64_t token = 0;
+  size_t payload_bytes;
+  size_t carrier_bytes;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  output = et_g3c4_admit_output(output_candidate, 0);
+  if (output == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending != output || output->parent_ctx != context ||
+      context->call_kind != 2 ||
+      output->generated_length != context->budget ||
+      output->numeric_ready != 1u || output->ids_copied != 1u ||
+      output->text_ready != 0u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (!et_g3c4_prefill_binding_matches_pins(context))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
+
+  payload_bytes = (size_t)output->generated_length;
+  carrier_bytes = sizeof(declared_bytes) + payload_bytes;
+  if (!et_g3c4_range_valid(raw_header, carrier_bytes))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_output_decode_owned_alias(
+          context, raw_header, carrier_bytes))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  memcpy(&declared_bytes, raw_header, sizeof(declared_bytes));
+  if (declared_bytes < 0 || (uint64_t)declared_bytes != payload_bytes)
+    return et_g3c4_fail(
+        ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_borrow_begin_v1(
+              output->ids, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_borrow_view_v1(borrow, &view, &error),
+          &error) != 0)
+    goto accept_fail;
+  if (view == NULL || view->rank != 1u || view->shape == NULL ||
+      view->shape[0] != (uint64_t)output->generated_length ||
+      view->byte_length != payload_bytes * sizeof(int64_t) ||
+      (payload_bytes != 0u && view->data == NULL)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto accept_fail;
+  }
+  if (payload_bytes != 0u &&
+      et_g3c4_ranges_overlap(
+          raw_header, carrier_bytes, view->data, view->byte_length)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+    goto accept_fail;
+  }
+  if (output->generated_length == 1) {
+    token = *(const int64_t *)view->data;
+    if (token < 0 || token > 255 ||
+        ((const unsigned char *)raw_header)[sizeof(declared_bytes)] !=
+            (unsigned char)token) {
+      (void)et_g3c4_fail(
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SHAPE);
+      goto accept_fail;
+    }
+  }
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+
+  output->text_ready = 1u;
+  return 0;
+
+accept_fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (borrow != NULL &&
+      et_i64_tensor_borrow_end_v1(&borrow, &error) != 0)
+    abort();
+  et_g3c4_error_restore_internal(first);
+  return et_g3c4_error_state.category;
+}
+#endif
 #endif
 #endif
 
