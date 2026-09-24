@@ -50,6 +50,21 @@ class JointRestoreContract(unittest.TestCase):
         ):
             self.assertNotIn(receiver_call, stage)
 
+    def test_full_15_path_schedule_precedes_primary_staging(self) -> None:
+        fixed = definition(
+            "tr3-c-joint-fixed-source!", "tr3-c-joint-install-clone!"
+        )
+        self.assertIn("(tr3-c-joint-length entries 16) 15", fixed)
+        self.assertIn("tr3-c-joint-tied-secondary-path", fixed)
+        self.assertIn("tr3-c-joint-tied-secondary-shape", fixed)
+        self.assertIn("(not (null? (cdr remaining)))", fixed)
+        self.assertIn("(tr3-c-joint-list-prefix entries 14)", fixed)
+        self.assertLess(
+            fixed.index("detached tied-secondary P1 entry differs"),
+            fixed.index("(tr3-c-joint-list-prefix entries 14)"),
+        )
+        self.assertNotIn("tr3-c-joint-install-clone!", fixed)
+
     def test_fixed_14_prefix_and_exact_o2_authority(self) -> None:
         prepare = definition(
             "tr3-c-joint-prepare-receiver!", "tr3-c-joint-release-cell!"
@@ -231,7 +246,62 @@ class FailurePrefixModel(unittest.TestCase):
                 live += p1 + moments + writes
             self.assertEqual(live, 0)
             # Accepted I2/O2 terminal control retention is linear: 64 + 1464.
-            self.assertEqual(horizon * 1528, {1024: 1_564_672, 8192: 12_517_376}[horizon])
+            self.assertEqual(
+                horizon * 1528,
+                {1024: 1_564_672, 8192: 12_517_376}[horizon],
+            )
+
+
+class AuthenticScheduleModel(unittest.TestCase):
+    PRIMARY = (
+        ("blocks", "0", "attention", "key", "weight"),
+        ("blocks", "0", "attention", "output", "weight"),
+        ("blocks", "0", "attention", "query", "weight"),
+        ("blocks", "0", "attention", "value", "weight"),
+        ("blocks", "0", "ffn", "down", "weight"),
+        ("blocks", "0", "ffn", "up", "weight"),
+        ("blocks", "0", "norm1", "bias"),
+        ("blocks", "0", "norm1", "weight"),
+        ("blocks", "0", "norm2", "bias"),
+        ("blocks", "0", "norm2", "weight"),
+        ("head", "weight"),
+        ("norm_final", "bias"),
+        ("norm_final", "weight"),
+        ("position_embedding", "weight"),
+    )
+    SECONDARY = ("token_embedding", "weight")
+    ALIAS = (("head", "weight"), SECONDARY)
+
+    @classmethod
+    def admit(cls, entries: tuple[tuple[str, ...], ...], alias: object) -> tuple:
+        if len(entries) != 15 or entries[:14] != cls.PRIMARY:
+            raise ValueError("primary schedule")
+        if entries[14] != cls.SECONDARY or alias != cls.ALIAS:
+            raise ValueError("tied secondary")
+        return entries[:14]
+
+    def test_authentic_15_path_schedule_returns_only_14_primaries(self) -> None:
+        entries = self.PRIMARY + (self.SECONDARY,)
+        self.assertEqual(self.admit(entries, self.ALIAS), self.PRIMARY)
+
+    def test_malformed_secondary_and_tie_reject_before_selection(self) -> None:
+        authentic = self.PRIMARY + (self.SECONDARY,)
+        mutations = (
+            (authentic[:-1], self.ALIAS),
+            (authentic + (("extra",),), self.ALIAS),
+            (
+                authentic[:10]
+                + (authentic[11], authentic[10])
+                + authentic[12:],
+                self.ALIAS,
+            ),
+            (authentic[:-1] + (("token_embedding", "bias"),), self.ALIAS),
+            (authentic, (("head", "weight"), ("position_embedding", "weight"))),
+        )
+        for entries, alias in mutations:
+            with self.subTest(entries=entries, alias=alias):
+                with self.assertRaises(ValueError):
+                    self.admit(entries, alias)
 
 
 if __name__ == "__main__":
