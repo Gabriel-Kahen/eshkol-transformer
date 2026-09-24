@@ -4,6 +4,14 @@ set -euo pipefail
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+tsv_value() {
+  local file=$1 key=$2 value count
+  count=$(awk -F '\t' -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${file}")
+  [[ "${count}" == 1 ]] || die "expected one ${key} entry in ${file}; found ${count}"
+  value=$(awk -F '\t' -v key="${key}" '$1 == key { print $2 }' "${file}")
+  [[ -n "${value}" ]] || die "empty ${key} entry in ${file}"
+  printf '%s\n' "${value}"
+}
 usage() {
   cat >&2 <<'EOF'
 usage: test-tr3-lease-failures.sh \
@@ -12,21 +20,24 @@ usage: test-tr3-lease-failures.sh \
   [--runtime-commit COMMIT --runtime-tree TREE] \
   [--production-base COMMIT] \
   [--allocation-class object|all] [--optimize 0|2] \
-  [--evidence-dir DIR]
+  [--diagnostic-only] [--evidence-dir DIR]
 EOF
   exit 2
 }
 
-runtime_source=""
-runtime_build=""
-runner_sha=""
-archive_sha=""
+failure_manifest="${PROJECT_ROOT}/tests/tr3_lease/failure_runtime_candidate.tsv"
+runtime_root="${TR3_LEASE_FAILURE_RUNTIME_ROOT:-/home/gabe/.codex/evidence/eshkol-transformer/runtime-de0b249-production}"
+runtime_source="${TR3_LEASE_FAILURE_RUNTIME_SOURCE:-/home/gabe/.codex/worktrees/wave3-checked-arena-calls/eshkol}"
+runtime_build="${runtime_root}/build"
+runner_sha="$(tsv_value "${failure_manifest}" runner_sha256)"
+archive_sha="$(tsv_value "${failure_manifest}" runtime_archive_sha256)"
 evidence_dir=""
-runtime_commit=81298b4a9608fb92eb6f351a2eabd8392da7d9ef
-runtime_tree=7669312845a9d8d372006af52271045e69505813
-allocation_class=object
+runtime_commit="$(tsv_value "${failure_manifest}" runtime_source_commit)"
+runtime_tree="$(tsv_value "${failure_manifest}" runtime_source_tree)"
+allocation_class=all
 optimize=0
 production_base=""
+diagnostic_only=0
 while (( $# )); do
   case "$1" in
     --runtime-source) runtime_source=$2; shift 2 ;;
@@ -38,6 +49,7 @@ while (( $# )); do
     --allocation-class) allocation_class=$2; shift 2 ;;
     --optimize) optimize=$2; shift 2 ;;
     --production-base) production_base=$2; shift 2 ;;
+    --diagnostic-only) diagnostic_only=1; shift ;;
     --evidence-dir) evidence_dir=$2; shift 2 ;;
     *) usage ;;
   esac
@@ -55,24 +67,21 @@ done
 [[ "${allocation_class}" == object || "${allocation_class}" == all ]] || usage
 [[ "${optimize}" == 0 || "${optimize}" == 2 ]] || usage
 if [[ "${allocation_class}" == all ]]; then
-  [[ "${runtime_commit}" == de0b24956e34772344dac5e1f2c32b6243aebae8 &&
-     "${runtime_tree}" == e1c0d0c4d10d90236df2349fb199c5a234e63900 ]] || \
-    die "full allocator matrix requires reviewed repaired runtime"
-  expected_production_base=63756bd921dc5640667c5d2c44b98f777340499d
-  expected_production_tree=d4b7560a5797ebafc461dc5d7a0d317690025437
-  expected_witness_commit=63756bd921dc5640667c5d2c44b98f777340499d
-  expected_witness_tree=d4b7560a5797ebafc461dc5d7a0d317690025437
-  [[ "${runner_sha}" == \
-     5b6c5cae8872330cf59f47f84535fb9acf0242ece001eb544112ac133280b918 &&
-     "${archive_sha}" == \
-     4a0a5d5bf51735528fe21849933c2d83be64869f4362e64af0b5d39323fc870c ]] || \
-    die "full matrix requires the reviewed runtime artifacts"
+  [[ "${runtime_commit}" == "$(tsv_value "${failure_manifest}" runtime_source_commit)" &&
+     "${runtime_tree}" == "$(tsv_value "${failure_manifest}" runtime_source_tree)" ]] || \
+    die "full allocator matrix requires the reviewed production-OFF runtime"
+  expected_production_base="$(tsv_value "${failure_manifest}" trainer_source_commit)"
+  expected_production_tree="$(tsv_value "${failure_manifest}" trainer_source_tree)"
+  expected_witness_commit="${expected_production_base}"
+  expected_witness_tree="${expected_production_tree}"
+  [[ "${runner_sha}" == "$(tsv_value "${failure_manifest}" runner_sha256)" &&
+     "${archive_sha}" == "$(tsv_value "${failure_manifest}" runtime_archive_sha256)" ]] || \
+    die "full matrix requires the lease-local reviewed runtime artifacts"
+  [[ "$(tsv_value "${failure_manifest}" runner_role)" == \
+     allocation_prefix_production_off ]] || \
+    die "failure runner role changed"
 else
-  [[ "${runtime_commit}" == 81298b4a9608fb92eb6f351a2eabd8392da7d9ef &&
-     "${runtime_tree}" == 7669312845a9d8d372006af52271045e69505813 ]] || \
-    die "partial allocator matrix requires frozen final81298 runtime"
-  expected_production_base=f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5
-  expected_production_tree=54ba54a815f37bd492f1203b48a8b54e6dfe10dc
+  die "the successor recovery gate supports only the reviewed full allocator matrix"
 fi
 production_base=${production_base:-${expected_production_base}}
 [[ "${production_base}" == "${expected_production_base}" ]] || \
@@ -80,20 +89,44 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=d85074694d2235503c4c8049ee9402a67b0141ce7a85f495da361da09bbd2510
+expected_runner_self_sha256=aabdf0a3b425fcb99e0f24b48ec756c59e35e1242c3e0aacf5acb3e512314030
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
   sha256sum | awk '{print $1}')"
 [[ "${runner_self_sha256}" == "${expected_runner_self_sha256}" ]] || \
   die "canonical lease failure runner changed"
-expected_source_test_sha256=35709cdcee39bc1035a886d12bce583bda046f2cc58ac67deda28996f46bace1
+expected_source_test_sha256="$(tsv_value "${failure_manifest}" source_contract_sha256)"
+expected_successor_test_sha256="$(tsv_value "${failure_manifest}" successor_contract_sha256)"
 [[ "$(sha256sum \
   "${PROJECT_ROOT}/tests/tr3_lease/test_source_contract.py" | awk '{print $1}')" == \
    "${expected_source_test_sha256}" ]] || \
   die "reviewed lease source-contract test changed"
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/tests/tr3_lease/test_restore_successor_contract.py" | awk '{print $1}')" == \
+   "${expected_successor_test_sha256}" ]] || \
+  die "reviewed lease successor-contract test changed"
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/native/tr3_lease_core_extension.esk" | awk '{print $1}')" == \
+   "$(tsv_value "${failure_manifest}" lease_core_sha256)" ]] || \
+  die "reviewed lease core changed"
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" | awk '{print $1}')" == \
+   "$(tsv_value "${failure_manifest}" failure_fixture_sha256)" ]] || \
+  die "reviewed successor failure fixture changed"
 runtime_source="$(readlink -f -- "${runtime_source}")"
 runtime_build="$(readlink -f -- "${runtime_build}")"
+runtime_root="$(readlink -f -- "$(dirname -- "${runtime_build}")")"
+manifest_path() {
+  local key=$1 relative resolved
+  relative="$(tsv_value "${failure_manifest}" "${key}")"
+  [[ "${relative}" != /* && "${relative}" != *../* && "${relative}" != ../* ]] || \
+    die "unsafe ${key} in ${failure_manifest}: ${relative}"
+  resolved="$(readlink -f -- "${runtime_root}/${relative}")"
+  [[ "${resolved}" == "${runtime_root}/"* ]] || \
+    die "${key} escapes the reviewed failure runtime root"
+  printf '%s\n' "${resolved}"
+}
 production_paths=(
   include internal lib native src
 )
@@ -110,12 +143,18 @@ if [[ "${allocation_class}" == all ]]; then
     die "lease checkout does not descend from the reviewed witness"
   git -C "${PROJECT_ROOT}" diff --quiet "${expected_witness_commit}" -- \
     include internal lib native src templates tests/d2 \
-    tests/tr3_lease_failure/lease_failure_runtime.esk \
     tests/tr3_lease_failure/lease_failure_shim.cpp || \
-    die "reviewed lease source or witness changed"
+    die "reviewed lease production source or native witness changed"
   while IFS= read -r changed; do
     case "${changed}" in
-      docs/*|scripts/test-tr3-lease-failures.sh|tests/tr3_lease/test_source_contract.py|tests/tr3_lease_failure/README.md) ;;
+      docs/*|\
+      scripts/test-tr3-lease.sh|\
+      scripts/test-tr3-lease-failures.sh|\
+      tests/tr3_lease/test_source_contract.py|\
+      tests/tr3_lease/runtime_candidate.tsv|\
+      tests/tr3_lease/failure_runtime_candidate.tsv|\
+      tests/tr3_lease_failure/lease_failure_runtime.esk|\
+      tests/tr3_lease_failure/README.md) ;;
       *) die "unreviewed checkout change: ${changed}" ;;
     esac
   done < <(git -C "${PROJECT_ROOT}" diff --name-only \
@@ -125,18 +164,36 @@ fi
   die "successor checkout must be clean"
 [[ -z "$(git -C "${PROJECT_ROOT}" ls-files --others --exclude-standard -- \
   "${production_paths[@]}")" ]] || die "untracked production lease source found"
-runner="${runtime_build}/eshkol-run"
-archive="${runtime_build}/libeshkol-runtime.a"
+runner="$(manifest_path runner_relative_path)"
+archive="$(manifest_path runtime_archive_relative_path)"
+root_provenance="$(manifest_path runtime_provenance_relative_path)"
+build_provenance="$(manifest_path build_provenance_relative_path)"
+cmake_cache="$(manifest_path cmake_cache_relative_path)"
+runtime_manifest="$(manifest_path artifact_manifest_relative_path)"
+[[ "$(dirname -- "${runner}")" == "${runtime_build}" &&
+   "$(dirname -- "${archive}")" == "${runtime_build}" ]] || \
+  die "runtime build does not match the reviewed manifest layout"
 [[ -x "${runner}" && -r "${archive}" ]] || die "runtime artifacts unavailable"
 [[ "$(sha256sum "${runner}" | awk '{print $1}')" == "${runner_sha}" ]] || \
   die "runner hash mismatch"
 [[ "$(sha256sum "${archive}" | awk '{print $1}')" == "${archive_sha}" ]] || \
   die "runtime archive hash mismatch"
-if [[ -r "${runtime_build}/eshkol-transformer-provenance.tsv" ]]; then
+[[ "$(sha256sum "${root_provenance}" | awk '{print $1}')" == \
+   "$(tsv_value "${failure_manifest}" runtime_provenance_sha256)" ]] || \
+  die "reviewed runtime root provenance changed"
+[[ "$(tsv_value "${root_provenance}" source_commit)" == "${runtime_commit}" &&
+   "$(tsv_value "${root_provenance}" source_tree)" == "${runtime_tree}" &&
+   "$(tsv_value "${root_provenance}" runner_sha256)" == "${runner_sha}" &&
+   "$(tsv_value "${root_provenance}" runtime_archive_sha256)" == "${archive_sha}" &&
+   "$(tsv_value "${root_provenance}" container_image_id)" == \
+     "$(tsv_value "${failure_manifest}" container_digest)" &&
+   "$(tsv_value "${root_provenance}" promotion_testing)" == OFF ]] || \
+  die "runtime root provenance disagrees with the failure manifest"
+if [[ -r "${build_provenance}" ]]; then
   build_commit="$(awk -F '\t' '$1 == "eshkol_commit" {print $2}' \
-    "${runtime_build}/eshkol-transformer-provenance.tsv")"
+    "${build_provenance}")"
   build_runner_sha="$(awk -F '\t' '$1 == "eshkol_binary_sha256" {print $2}' \
-    "${runtime_build}/eshkol-transformer-provenance.tsv")"
+    "${build_provenance}")"
 elif [[ -r "${runtime_build}/final-provenance.tsv" ]]; then
   build_commit="$(awk -F '\t' '$1 == "source_commit" {print $2}' \
     "${runtime_build}/final-provenance.tsv")"
@@ -158,21 +215,20 @@ fi
 [[ -z "$(git -C "${runtime_source}" status --porcelain --untracked-files=all)" ]] || \
   die "runtime source is not clean"
 grep -Fx 'ESHKOL_PROMOTION_TESTING:BOOL=OFF' \
-  "${runtime_build}/CMakeCache.txt" >/dev/null || \
+  "${cmake_cache}" >/dev/null || \
   die "runtime build enabled promotion testing"
 if [[ "${allocation_class}" == all ]]; then
-  [[ "$(sha256sum "${runtime_build}/CMakeCache.txt" | awk '{print $1}')" == \
-     50fec56d75320365d42bb733128b94a3c86d1247510c81b13d1365babdd1a96c ]] || \
+  [[ "$(sha256sum "${cmake_cache}" | awk '{print $1}')" == \
+     "$(tsv_value "${failure_manifest}" cmake_cache_sha256)" ]] || \
     die "reviewed runtime build profile changed"
   [[ "$(sha256sum \
-     "${runtime_build}/eshkol-transformer-provenance.tsv" | awk '{print $1}')" == \
-     3f62610bbad899645f9d8fab1cfea5bbae06bfd5f548ccf82975d45e0e69d654 ]] || \
+     "${build_provenance}" | awk '{print $1}')" == \
+     "$(tsv_value "${failure_manifest}" build_provenance_sha256)" ]] || \
     die "runtime build provenance changed"
-  runtime_manifest="$(dirname -- "${runtime_build}")/artifact-sha256.txt"
   [[ "$(sha256sum "${runtime_manifest}" | awk '{print $1}')" == \
-     9a6a739e415133f1dc1132d466831c4471b193088a9531aba4f3d466aeca579d ]] || \
+     "$(tsv_value "${failure_manifest}" artifact_manifest_sha256)" ]] || \
     die "reviewed runtime checksum manifest changed"
-  sha256sum -c "${runtime_manifest}" >/dev/null || \
+  (cd "${runtime_root}" && sha256sum -c "${runtime_manifest}" >/dev/null) || \
     die "reviewed runtime checksum manifest does not verify"
   for entry in \
     'CMAKE_BUILD_TYPE:STRING=Release' \
@@ -181,19 +237,18 @@ if [[ "${allocation_class}" == all ]]; then
     'ESHKOL_REQUIRED_LLVM_MAJOR:UNINITIALIZED=21' \
     'ESHKOL_BUILD_TESTS:BOOL=OFF' \
     'ESHKOL_PROMOTION_TESTING:BOOL=OFF'; do
-    grep -Fx "${entry}" "${runtime_build}/CMakeCache.txt" >/dev/null || \
+    grep -Fx "${entry}" "${cmake_cache}" >/dev/null || \
       die "reviewed runtime profile field changed: ${entry}"
   done
 fi
-container_id="$(docker image inspect eshkol-checked-promotion-llvm21:20260922 \
+container_id="$(docker image inspect "$(tsv_value "${failure_manifest}" container_image)" \
   --format '{{.Id}}')"
-[[ "${container_id}" == \
-   sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6 ]] || \
+[[ "${container_id}" == "$(tsv_value "${failure_manifest}" container_digest)" ]] || \
   die "supported container identity changed"
 if [[ "${allocation_class}" == all ]]; then
   llvm_version="$(docker run --rm --network none "${container_id}" \
     llvm-config-21 --version)"
-  [[ "${llvm_version}" == 21.1.8 ]] || \
+  [[ "${llvm_version}" == "$(tsv_value "${failure_manifest}" llvm_version)" ]] || \
     die "supported LLVM version changed"
   "${PROJECT_ROOT}/scripts/generate-p1-roots.sh" --check || \
     die "generated P1 root differs from its reviewed template"
@@ -218,6 +273,10 @@ cp -- \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" \
   "${PROJECT_ROOT}/docs/ROADMAP.md" \
   "${PROJECT_ROOT}/tests/tr3_lease/test_source_contract.py" \
+  "${PROJECT_ROOT}/tests/tr3_lease/test_restore_successor_contract.py" \
+  "${PROJECT_ROOT}/tests/tr3_lease/lease_runtime.esk" \
+  "${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv" \
+  "${PROJECT_ROOT}/tests/tr3_lease/failure_runtime_candidate.tsv" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/README.md" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
@@ -233,13 +292,19 @@ if [[ "${allocation_class}" == all ]]; then
     "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk" \
     "${PROJECT_ROOT}/templates/p1/module_roots.esk.tmpl" \
     "${evidence_dir}/inputs/source/"
-  cp -- "${runtime_build}/CMakeCache.txt" \
+  cp -- "${cmake_cache}" \
     "${evidence_dir}/inputs/runtime-CMakeCache.txt"
+  cp -- "${root_provenance}" \
+    "${evidence_dir}/inputs/runtime-provenance.tsv"
+  cp -- "${build_provenance}" \
+    "${evidence_dir}/inputs/runtime-build-provenance.tsv"
   cp -- "${runtime_manifest}" \
     "${evidence_dir}/inputs/runtime-artifact-sha256.txt"
 fi
 
-PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3_lease.test_source_contract \
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  tests.tr3_lease.test_source_contract \
+  tests.tr3_lease.test_restore_successor_contract \
   >"${evidence_dir}/source-test.stdout" \
   2>"${evidence_dir}/source-test.stderr"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
@@ -253,6 +318,7 @@ docker run --rm --network none \
   -v "${evidence_dir}:/out" \
   -e "TR3_ALLOCATION_CLASS=${allocation_class}" \
   -e "TR3_OPTIMIZE=${optimize}" \
+  -e "TR3_DIAGNOSTIC_ONLY=${diagnostic_only}" \
   -w /workspace "${container_id}" bash -lc '
 set -euo pipefail
 mkdir -p /out/native /out/cache
@@ -355,6 +421,9 @@ printf "%s\n" \
   __wrap_eshkol_region_write_barrier_checked_v1 \
   __wrap_malloc > /out/expected-wrap-symbols.txt
 cmp /out/expected-wrap-symbols.txt /out/linked-wrap-symbols.txt
+if [[ "${TR3_DIAGNOSTIC_ONLY}" == 1 ]]; then
+  exit 0
+fi
 mkdir -p /out/cases
 : > /out/run.stdout
 : > /out/run.stderr
@@ -432,6 +501,14 @@ cmp -- "${PROJECT_ROOT}/docs/ROADMAP.md" \
   "${evidence_dir}/inputs/ROADMAP.md"
 cmp -- "${PROJECT_ROOT}/tests/tr3_lease/test_source_contract.py" \
   "${evidence_dir}/inputs/test_source_contract.py"
+cmp -- "${PROJECT_ROOT}/tests/tr3_lease/test_restore_successor_contract.py" \
+  "${evidence_dir}/inputs/test_restore_successor_contract.py"
+cmp -- "${PROJECT_ROOT}/tests/tr3_lease/lease_runtime.esk" \
+  "${evidence_dir}/inputs/lease_runtime.esk"
+cmp -- "${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv" \
+  "${evidence_dir}/inputs/runtime_candidate.tsv"
+cmp -- "${failure_manifest}" \
+  "${evidence_dir}/inputs/failure_runtime_candidate.tsv"
 cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/README.md" \
   "${evidence_dir}/inputs/README.md"
 cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
@@ -452,24 +529,65 @@ if [[ "${allocation_class}" == all ]]; then
     cmp -- "${PROJECT_ROOT}/${source}" \
       "${evidence_dir}/inputs/source/${source##*/}"
   done
-  cmp -- "${runtime_build}/CMakeCache.txt" \
+  cmp -- "${cmake_cache}" \
     "${evidence_dir}/inputs/runtime-CMakeCache.txt"
+  cmp -- "${root_provenance}" \
+    "${evidence_dir}/inputs/runtime-provenance.tsv"
+  cmp -- "${build_provenance}" \
+    "${evidence_dir}/inputs/runtime-build-provenance.tsv"
   cmp -- "${runtime_manifest}" \
     "${evidence_dir}/inputs/runtime-artifact-sha256.txt"
 fi
 
 grep -Fx 'OK' "${evidence_dir}/source-test.stderr" >/dev/null
-if [[ "${allocation_class}" == all && "${optimize}" == 2 ]]; then
-  [[ "$(wc -c < "${evidence_dir}/compile.stderr")" == 1200 ]] || \
-    die "O2 compiler diagnostics differ in length from the reviewed warnings"
-  [[ "$(sha256sum "${evidence_dir}/compile.stderr" | awk '{print $1}')" == \
-     13f1ab2db5ac94d4a382aa6d03a801e4607ee585e5f34bcc3a1c3b8acfffd0d5 ]] || \
-    die "O2 compiler diagnostics differ from the reviewed warnings"
+if [[ "${optimize}" == 2 ]]; then
+  expected_o2_bytes="$(tsv_value "${failure_manifest}" o2_compile_stderr_bytes)"
+  expected_o2_sha="$(tsv_value "${failure_manifest}" o2_compile_stderr_sha256)"
+  if (( diagnostic_only == 0 )); then
+    [[ "${expected_o2_bytes}" =~ ^[0-9]+$ && "${expected_o2_sha}" =~ ^[0-9a-f]{64}$ ]] || \
+      die "O2 diagnostics require reviewed byte-count and SHA pins"
+    [[ "$(wc -c < "${evidence_dir}/compile.stderr")" == "${expected_o2_bytes}" ]] || \
+      die "O2 compiler diagnostics differ in length from the reviewed warnings"
+    [[ "$(sha256sum "${evidence_dir}/compile.stderr" | awk '{print $1}')" == \
+       "${expected_o2_sha}" ]] || \
+      die "O2 compiler diagnostics differ from the reviewed warnings"
+  fi
 else
   test ! -s "${evidence_dir}/compile.stderr"
 fi
 test ! -s "${evidence_dir}/shim-compile.stderr"
 test ! -s "${evidence_dir}/link.stderr"
+if (( diagnostic_only == 1 )); then
+  {
+    printf 'frozen_production_base_commit\t%s\n' "${production_base}"
+    printf 'frozen_production_base_tree\t%s\n' "${expected_production_tree}"
+    printf 'runtime_source_commit\t%s\n' "${runtime_commit}"
+    printf 'runtime_source_tree\t%s\n' "${runtime_tree}"
+    printf 'runner_sha256\t%s\n' "${runner_sha}"
+    printf 'runner_role\t%s\n' "$(tsv_value "${failure_manifest}" runner_role)"
+    printf 'runtime_archive_sha256\t%s\n' "${archive_sha}"
+    printf 'runtime_provenance_sha256\t%s\n' \
+      "$(sha256sum "${root_provenance}" | awk '{print $1}')"
+    printf 'failure_runtime_candidate_sha256\t%s\n' \
+      "$(sha256sum "${failure_manifest}" | awk '{print $1}')"
+    printf 'optimization_level\t%s\n' "${optimize}"
+    printf 'diagnostic_only\t1\n'
+    printf 'container_image_id\t%s\n' "${container_id}"
+    while IFS= read -r input; do
+      printf 'input_sha256\t%s\t%s\n' \
+        "$(sha256sum "${input}" | awk '{print $1}')" \
+        "${input#"${evidence_dir}/"}"
+    done < <(find "${evidence_dir}/inputs" -type f | LC_ALL=C sort)
+  } >"${evidence_dir}/provenance.tsv"
+  (
+    cd "${evidence_dir}"
+    find . -type f ! -name SHA256SUMS -print0 | \
+      LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+    sha256sum -c SHA256SUMS >/dev/null
+  )
+  printf 'TR3 lease O%s diagnostic evidence PASS: %s\n' "${optimize}" "${evidence_dir}"
+  exit 0
+fi
 if rg -n 'fatal signal|TR3 lease failure shim FAIL|TR3 LEASE FAILURE FAIL' \
     "${evidence_dir}/run.stderr"; then
   die "runtime witness emitted a fatal diagnostic"
@@ -501,13 +619,17 @@ grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
   printf 'runtime_source_commit\t%s\n' "$(git -C "${runtime_source}" rev-parse HEAD)"
   printf 'runtime_source_tree\t%s\n' "${runtime_tree}"
   printf 'runner_sha256\t%s\n' "${runner_sha}"
+  printf 'runner_role\t%s\n' "$(tsv_value "${failure_manifest}" runner_role)"
   printf 'runtime_archive_sha256\t%s\n' "${archive_sha}"
+  printf 'failure_runtime_candidate_sha256\t%s\n' \
+    "$(sha256sum "${failure_manifest}" | awk '{print $1}')"
+  printf 'diagnostic_only\t%s\n' "${diagnostic_only}"
   printf 'runtime_manifest_sha256\t%s\n' \
     "$(if [[ "${allocation_class}" == all ]]; then \
          sha256sum "${runtime_manifest}" | awk '{print $1}'; \
        else printf 'historical'; fi)"
   printf 'runtime_build_profile_sha256\t%s\n' \
-    "$(sha256sum "${runtime_build}/CMakeCache.txt" | awk '{print $1}')"
+    "$(sha256sum "${cmake_cache}" | awk '{print $1}')"
   printf 'llvm_version\t%s\n' "${llvm_version:-historical}"
   printf 'allocation_class\t%s\n' "${allocation_class}"
   printf 'optimization_level\t%s\n' "${optimize}"

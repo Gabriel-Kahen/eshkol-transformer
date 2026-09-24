@@ -55,6 +55,26 @@
 (define (record-count)
   (let loop ((remaining (vector-ref tr3-trainers 0)) (count 0))
     (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+(define (record-for-shell shell)
+  (let loop ((remaining (vector-ref tr3-trainers 0)))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 2)) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (verify-successor-record! shell enrollment-cursor)
+  (let ((record (record-for-shell shell)))
+    (check "successful enrollment owns a 22-slot idle record"
+           (and (vector? record) (= (vector-length record) 22)
+                (eq? (vector-ref record 3) 'idle)
+                (eq? (vector-ref record 4) #f)))
+    (check "successful enrollment owns exact initial epoch and RNG controls"
+           (and (bytes=? (vector-ref record 17) enrollment-cursor)
+                (equal? (vector-ref record 18)
+                        (vector 'philox4x32-10 1 1729 0 0))))
+    (check "successful enrollment owns zero initial counters"
+           (and (= (vector-ref record 19) 0)
+                (= (vector-ref record 20) 0)
+                (= (vector-ref record 21) 0)))
+    #t))
 
 (define (resolved-config)
   (x1-private-config-resolve
@@ -212,7 +232,8 @@
                         (tuple-create tuple))))
                 (check "same genuine tuple retries successfully" shell)
                 (check "retry enrolls exactly once"
-                       (= (record-count) (+ count-before 1))))
+                       (= (record-count) (+ count-before 1)))
+                (verify-successor-record! shell cursor-before))
               #t)
             (begin
               (check "first uninjected prefix succeeds" (not did-catch))
@@ -282,11 +303,13 @@
                      (vector-ref tuple 4)))))
     (verify-native! tuple)
     (ordinary-mutations! tuple cursor)
-    (check "handler allocation failure retry succeeds"
-           (with-region ('tr3-handler-retry 65536)
-             (tuple-create tuple)))
-    (check "handler allocation failure retry enrolls exactly once"
-           (= (record-count) (+ count 1)))
+    (let ((shell
+            (with-region ('tr3-handler-retry 65536)
+              (tuple-create tuple))))
+      (check "handler allocation failure retry succeeds" shell)
+      (check "handler allocation failure retry enrolls exactly once"
+             (= (record-count) (+ count 1)))
+      (verify-successor-record! shell cursor))
     (check "isolated handler case completes" (= (lf-done) 1))
     (display "TR3-LEASE-CASE class=handler ordinal=0 result=HIT checks=")
     (display checks) (newline)))
@@ -346,6 +369,7 @@
       (check "post-staging success preserves cursor bytes"
              (bytes=? cursor
                       (d2-token-dataset-cursor (vector-ref tuple 2))))
+      (verify-successor-record! shell cursor)
       (verify-native! tuple)
       (check "promoted shell survives short region"
              (eq? shell
