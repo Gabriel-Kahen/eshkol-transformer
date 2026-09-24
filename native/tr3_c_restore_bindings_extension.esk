@@ -1,0 +1,333 @@
+;;; Private TR3-C I2/O2 restore bindings. Load only after tr3_lease_root.esk
+;;; in the feature-local package. This source publishes no public facade.
+
+(extern i64 tr3-c-restore-native-last-category
+        :real et_tr3_c_private_restore_last_category_v1)
+(extern i64 tr3-c-restore-native-request-initialize
+        ptr i64 i64 i64 i64 i64 i64 i64 i64
+        :real et_tr3_c_private_restore_request_initialize_v1)
+(extern i64 tr3-c-restore-native-request-append14
+        ptr i64 i64 i64 i64 i64 ptr ptr
+        :real et_tr3_c_private_restore_request_append14_v1)
+(extern ptr tr3-c-restore-native-o2-prepare ptr ptr
+        :real et_tr3_c_private_o2_restore_prepare_v1)
+(extern i64 tr3-c-restore-native-o2-append ptr ptr
+        :real et_tr3_c_private_o2_restore_append_v1)
+(extern i64 tr3-c-restore-native-o2-check ptr
+        :real et_tr3_c_private_o2_restore_check_v1)
+(extern void tr3-c-restore-native-o2-commit ptr
+        :real et_tr3_c_private_o2_restore_commit_native_v1)
+(extern void tr3-c-restore-native-o2-finalize ptr
+        :real et_tr3_c_private_o2_restore_finalize_v1)
+(extern i64 tr3-c-restore-native-o2-abort ptr
+        :real et_tr3_c_private_o2_restore_abort_v1)
+(extern ptr tr3-c-restore-native-i2-create ptr
+        :real et_tr3_c_private_i2_restore_create_v1)
+(extern i64 tr3-c-restore-native-i2-append ptr ptr ptr ptr ptr
+        :real et_tr3_c_private_i2_restore_append_parameter_v1)
+(extern i64 tr3-c-restore-native-i2-prepare ptr ptr
+        :real et_tr3_c_private_i2_restore_prepare_v1)
+(extern i64 tr3-c-restore-native-i2-commit ptr ptr
+        :real et_tr3_c_private_i2_restore_commit_checked_v1)
+(extern i64 tr3-c-restore-native-i2-abort ptr ptr
+        :real et_tr3_c_private_i2_restore_abort_checked_v1)
+(extern void tr3-c-restore-native-owned-release ptr
+        :real et_tr3_c_private_i2_owned_release_checked_v1)
+
+(define tr3-c-restore-request-bytes 728)
+(define tr3-c-restore-parameter-count 14)
+(define tr3-c-restore-stage-count 28)
+(define tr3-c-restore-o2-tag (vector 'tr3-c-private-o2-restore-ledger-v1))
+(define tr3-c-restore-i2-tag (vector 'tr3-c-private-i2-restore-ledger-v1))
+(define tr3-c-restore-o2-ledgers '())
+(define tr3-c-restore-i2-ledgers '())
+
+(define (tr3-c-restore-native-fail operation)
+  (let ((category (tr3-c-restore-native-last-category)))
+    (o2-fail
+      (cond ((= category 1) 'invalid-argument)
+            ((= category 2) 'shape-mismatch)
+            ((= category 3) 'dtype-mismatch)
+            ((= category 4) 'device-mismatch)
+            ((= category 5) 'noncontiguous)
+            ((= category 6) 'unsupported)
+            ((= category 7) 'invalid-state)
+            ((= category 8) 'version-mismatch)
+            ((= category 10) 'corrupt-data)
+            ((= category 11) 'determinism-unavailable)
+            (else 'internal))
+      operation "TR3-C native restore binding rejected the request")))
+
+(define (tr3-c-restore-find-identity value values)
+  (cond ((null? values) #f)
+        ((eq? value (car values)) (car values))
+        (else (tr3-c-restore-find-identity value (cdr values)))))
+
+(define (tr3-c-restore-list-ref values index)
+  (if (= index 0) (car values)
+      (tr3-c-restore-list-ref (cdr values) (- index 1))))
+
+(define (tr3-c-restore-owned-carrier operation value kind)
+  (let ((carrier (i2-carrier-preflight value kind operation)))
+    (if (or (not (eq? (vector-ref carrier 1) 'owned-clone))
+            (null? (vector-ref carrier 2)))
+        (o2-fail 'invalid-argument operation
+                 "restore source is not a live I2 owned carrier"))
+    carrier))
+
+(define (tr3-c-restore-owned-stage operation value)
+  (tr3-c-restore-owned-carrier operation value 'buffer))
+
+(define (tr3-c-restore-group-for-path operation groups path)
+  (cond
+    ((null? groups)
+     (o2-fail 'shape-mismatch operation
+              "restore configuration omits a canonical optimizer path"))
+    ((o2-path-member? path (vector-ref (car groups) 0)) (car groups))
+    (else (tr3-c-restore-group-for-path
+            operation (cdr groups) path))))
+
+(define (tr3-c-restore-require-o2 operation value phases)
+  (let ((ledger
+          (tr3-c-restore-find-identity value tr3-c-restore-o2-ledgers)))
+    (if (or (not ledger) (not (= (vector-length ledger) 8))
+            (not (eq? (vector-ref ledger 0) tr3-c-restore-o2-tag))
+            (not (eq? (vector-ref ledger 1) ledger))
+            (not (o2-member-identity? (vector-ref ledger 7) phases)))
+        (o2-fail 'invalid-state operation
+                 "O2 restore ledger is foreign, stale, or in the wrong phase"))
+    ledger))
+
+(define (tr3-c-restore-require-i2 operation value phases)
+  (let ((ledger
+          (tr3-c-restore-find-identity value tr3-c-restore-i2-ledgers)))
+    (if (or (not ledger) (not (= (vector-length ledger) 6))
+            (not (eq? (vector-ref ledger 0) tr3-c-restore-i2-tag))
+            (not (eq? (vector-ref ledger 1) ledger))
+            (not (o2-member-identity? (vector-ref ledger 5) phases)))
+        (o2-fail 'invalid-state operation
+                 "I2 restore ledger is foreign, stale, or in the wrong phase"))
+    ledger))
+
+;;; Request: [optimizer-shell, authenticated O2 projection, 28 owned stages,
+;;; target-U, receiver-R, operation, #f-output]. Native publication is the
+;;; ownership boundary. All 28 wrapper raw slots remain intact on failure and
+;;; are cleared exactly once only after the native plan is in the ledger.
+(define (tr3-c-restore-o2-prepare-internal request)
+  (if (or (not (vector? request)) (not (= (vector-length request) 7))
+          (not (vector? (vector-ref request 1)))
+          (not (= (vector-length (vector-ref request 1)) 4))
+          (not (symbol? (vector-ref request 5)))
+          (not (eq? (vector-ref request 6) #f)))
+      (o2-fail 'invalid-argument 'trainer-load-state!
+               "malformed fixed O2 restore request"))
+  (let* ((operation (vector-ref request 5))
+         (optimizer (o2-require-optimizer operation (vector-ref request 0)))
+         (projection (vector-ref request 1))
+         (stages (vector-ref request 2))
+         (target (vector-ref request 3))
+         (receiver (vector-ref request 4))
+         (parsed (o2-parse-config operation (vector-ref projection 0)))
+         (paths (vector-ref projection 1))
+         (groups (vector-ref parsed 3))
+         (clip (vector-ref parsed 1))
+         (schedule (vector-ref parsed 2))
+         (native-request (make-bytevector tr3-c-restore-request-bytes 0))
+         (ledger
+           (vector tr3-c-restore-o2-tag #f #f optimizer
+                   (vector-ref parsed 0) stages #f 'constructing))
+         (next-registry (cons ledger tr3-c-restore-o2-ledgers)))
+    (if (or (not (o2-exact-nonnegative-i64? target))
+            (not (o2-exact-nonnegative-i64? receiver))
+            (not (= target (vector-ref projection 3)))
+            (not (= (i2-bounded-list-length paths 15)
+                    tr3-c-restore-parameter-count))
+            (not (= (i2-bounded-list-length stages 29)
+                    tr3-c-restore-stage-count)))
+        (o2-fail 'invalid-argument operation
+                 "O2 restore projection, counts, or stages are malformed"))
+    (if (not (= (tr3-c-restore-native-request-initialize
+                  native-request target receiver
+                  (vector-ref clip 0) (vector-ref clip 1)
+                  (vector-ref schedule 0) (vector-ref schedule 3)
+                  (vector-ref schedule 1) (vector-ref schedule 2))
+                0))
+        (tr3-c-restore-native-fail operation))
+    (let fill ((remaining paths) (index 0))
+      (if (null? remaining)
+          #t
+          (let* ((group
+                   (tr3-c-restore-group-for-path
+                     operation groups (car remaining)))
+                 (avg
+                   (tr3-c-restore-owned-stage
+                     operation (tr3-c-restore-list-ref stages (* index 2))))
+                 (sq
+                   (tr3-c-restore-owned-stage
+                     operation
+                     (tr3-c-restore-list-ref stages (+ (* index 2) 1)))))
+            (if (not (= (tr3-c-restore-native-request-append14
+                          native-request
+                          (vector-ref group 1) (vector-ref group 2)
+                          (vector-ref group 3) (vector-ref group 4)
+                          (vector-ref group 5)
+                          (vector-ref avg 2) (vector-ref sq 2))
+                        0))
+                (tr3-c-restore-native-fail operation))
+            (fill (cdr remaining) (+ index 1)))))
+    (let ((plan
+            (tr3-c-restore-native-o2-prepare
+              (vector-ref optimizer 1) native-request)))
+      (if (null? plan) (tr3-c-restore-native-fail operation))
+      ;; Canonical publication precedes the 28 assignment-only transfers.
+      (vector-set! ledger 1 ledger)
+      (vector-set! ledger 2 plan)
+      (vector-set! ledger 7 'prepared)
+      (set! tr3-c-restore-o2-ledgers next-registry)
+      (let ((canonical
+              (tr3-c-restore-find-identity
+                ledger tr3-c-restore-o2-ledgers)))
+        (if (or (not canonical)
+                (not (eq? (vector-ref canonical 2) plan)))
+            (tr3-lease-fail-stop 134)))
+      (let transfer ((remaining stages))
+        (if (null? remaining)
+            #t
+            (begin
+              (vector-set! (car remaining) 2 '())
+              (transfer (cdr remaining)))))
+      (vector-set! request 6 ledger)
+      request)))
+
+(define (tr3-c-restore-i2-create-internal o2-value)
+  (let* ((operation 'trainer-load-state!)
+         (o2-ledger
+           (tr3-c-restore-require-o2 operation o2-value '(prepared)))
+         (native (tr3-c-restore-native-i2-create (vector-ref o2-ledger 2)))
+         (ledger
+           (vector tr3-c-restore-i2-tag #f native o2-ledger #f 'prefix))
+         (next-registry (cons ledger tr3-c-restore-i2-ledgers)))
+    (if (null? native) (tr3-c-restore-native-fail operation))
+    (vector-set! ledger 1 ledger)
+    (set! tr3-c-restore-i2-ledgers next-registry)
+    ledger))
+
+(define (tr3-c-restore-i2-append-parameter-internal!
+          i2-value parameter-carrier p1-handle source-carrier)
+  (let* ((operation 'trainer-load-state!)
+         (i2-ledger
+           (tr3-c-restore-require-i2 operation i2-value '(prefix)))
+         (o2-ledger
+           (tr3-c-restore-require-o2
+             operation (vector-ref i2-ledger 3) '(prepared)))
+         (parameter
+           (i2-carrier-preflight parameter-carrier 'parameter operation))
+         (source
+           (tr3-c-restore-owned-carrier
+             operation source-carrier 'parameter)))
+    (if (not (= (tr3-c-restore-native-i2-append
+                  (vector-ref i2-ledger 2) (vector-ref o2-ledger 2)
+                  (vector-ref parameter 2) p1-handle (vector-ref source 2))
+                0))
+        (tr3-c-restore-native-fail operation))
+    i2-ledger))
+
+(define (tr3-c-restore-o2-append-internal! o2-value i2-value)
+  (let* ((operation 'trainer-load-state!)
+         (o2-ledger
+           (tr3-c-restore-require-o2 operation o2-value '(prepared)))
+         (i2-ledger
+           (tr3-c-restore-require-i2 operation i2-value '(prefix))))
+    (if (not (eq? (vector-ref i2-ledger 3) o2-ledger))
+        (o2-fail 'invalid-argument operation
+                 "I2 builder belongs to a different O2 restore plan"))
+    (if (not (= (tr3-c-restore-native-o2-append
+                  (vector-ref o2-ledger 2) (vector-ref i2-ledger 2))
+                0))
+        (tr3-c-restore-native-fail operation))
+    (vector-set! i2-ledger 5 'complete)
+    i2-ledger))
+
+(define (tr3-c-restore-o2-check-internal o2-value)
+  (let* ((operation 'trainer-load-state!)
+         (ledger
+           (tr3-c-restore-require-o2 operation o2-value '(prepared))))
+    (if (not (= (tr3-c-restore-native-o2-check (vector-ref ledger 2)) 0))
+        (tr3-c-restore-native-fail operation))
+    #t))
+
+(define (tr3-c-restore-i2-prepare-internal! i2-value)
+  (let* ((operation 'trainer-load-state!)
+         (ledger
+           (tr3-c-restore-require-i2 operation i2-value '(complete)))
+         (o2-ledger
+           (tr3-c-restore-require-o2
+             operation (vector-ref ledger 3) '(prepared))))
+    (if (not (= (tr3-c-restore-native-i2-prepare
+                  (vector-ref ledger 2) (vector-ref o2-ledger 2))
+                0))
+        (tr3-c-restore-native-fail operation))
+    (vector-set! ledger 5 'prepared)
+    ledger))
+
+(define (tr3-c-restore-i2-abort-internal! i2-value)
+  (let* ((operation 'trainer-load-state!)
+         (ledger
+           (tr3-c-restore-require-i2
+             operation i2-value '(prefix complete prepared)))
+         (o2-ledger
+           (tr3-c-restore-require-o2
+             operation (vector-ref ledger 3) '(prepared))))
+    (if (not (= (tr3-c-restore-native-i2-abort
+                  (vector-ref ledger 2) (vector-ref o2-ledger 2))
+                0))
+        (tr3-c-restore-native-fail operation))
+    (vector-set! ledger 2 '())
+    (vector-set! ledger 5 'aborted)
+    ledger))
+
+;;; First live write. A rejected admitted call is a contract defect and exits;
+;;; no ordinary error construction or lease authentication follows this call.
+(define (tr3-c-restore-i2-commit-tail-internal! i2-value)
+  (let* ((ledger i2-value)
+         (o2-ledger (vector-ref ledger 3))
+         (status
+           (tr3-c-restore-native-i2-commit
+             (vector-ref ledger 2) (vector-ref o2-ledger 2))))
+    (if (not (= status 0)) (tr3-lease-fail-stop 134))
+    (vector-set! ledger 2 '())
+    (vector-set! ledger 5 'committed)
+    ledger))
+
+;;; Native config/options/U, logical optimizer slot 2, then lifecycle marker.
+(define (tr3-c-restore-o2-commit-tail-internal! o2-value)
+  (let ((ledger o2-value))
+    (tr3-c-restore-native-o2-commit (vector-ref ledger 2))
+    (vector-set! (vector-ref ledger 3) 2 (vector-ref ledger 4))
+    (vector-set! ledger 7 'committing)
+    ledger))
+
+(define (tr3-c-restore-o2-finalize-tail-internal! o2-value)
+  (let ((ledger o2-value))
+    (tr3-c-restore-native-o2-finalize (vector-ref ledger 2))
+    (vector-set! ledger 2 '())
+    (vector-set! ledger 5 '())
+    (vector-set! ledger 7 'committed)
+    ledger))
+
+(define (tr3-c-restore-o2-abort-internal! o2-value)
+  (let* ((operation 'trainer-load-state!)
+         (ledger
+           (tr3-c-restore-require-o2 operation o2-value '(prepared))))
+    (if (not (= (tr3-c-restore-native-o2-abort (vector-ref ledger 2)) 0))
+        (tr3-c-restore-native-fail operation))
+    (vector-set! ledger 2 '())
+    (vector-set! ledger 5 '())
+    (vector-set! ledger 7 'aborted)
+    ledger))
+
+(define (tr3-c-restore-owned-release-tail-internal! carrier)
+  (let ((owned carrier))
+    (tr3-c-restore-native-owned-release (vector-ref owned 2))
+    (vector-set! owned 2 '())
+    #t))

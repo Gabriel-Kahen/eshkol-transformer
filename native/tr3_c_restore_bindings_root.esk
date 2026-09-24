@@ -1,0 +1,3 @@
+;;; Private partition-2 package root. It adds no public facade.
+(load "tr3_lease_root.esk")
+(load "tr3_c_restore_bindings_extension.esk")

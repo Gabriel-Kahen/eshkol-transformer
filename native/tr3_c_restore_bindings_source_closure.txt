@@ -1,0 +1,3 @@
+native/tr3_lease_root.esk
+native/tr3_c_restore_bindings_extension.esk
+native/tr3_c_restore_bindings_root.esk
