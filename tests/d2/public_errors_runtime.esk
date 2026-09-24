@@ -39,6 +39,19 @@
   (check "valid UTF-8 directory uses its exact native byte length"
          (token-dataset-close! dataset)))
 
+(check "foreign tokenizer shell retains D2 invalid-argument operation"
+       (structured-error?
+        'invalid-argument 'token-dataset-open
+        (lambda ()
+          (token-dataset-open (config valid #t) (vector 'foreign-tokenizer)))))
+(check "missing tokenizer retains D2 invalid-argument operation"
+       (structured-error?
+        'invalid-argument 'token-dataset-open
+        (lambda () (token-dataset-open (config valid #t) #f))))
+(let ((dataset (token-dataset-open (config valid #t) tokenizer)))
+  (check "foreign tokenizer rejection leaves publication clean"
+         (token-dataset-close! dataset)))
+
 (define (rejects-and-recovers name directory category packing?)
   (check name
          (structured-error?

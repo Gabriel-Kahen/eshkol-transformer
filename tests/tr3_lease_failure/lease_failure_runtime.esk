@@ -169,8 +169,17 @@
                  (and (eq? mode 'all)
                       (eq? (transformer-error-category raised-value)
                            'internal)
-                      (eq? (transformer-error-operation raised-value)
-                           'config-fingerprint))))
+                      (or
+                        (and
+                          (eq? (transformer-error-operation raised-value)
+                               'config-fingerprint)
+                          (string=? (transformer-error-message raised-value)
+                                    "canonical SHA-256 result could not be materialized"))
+                        (and
+                          (eq? (transformer-error-operation raised-value)
+                               'tokenizer-fingerprint)
+                          (string=? (transformer-error-message raised-value)
+                                    "unexpected tokenizer core failure"))))))
       (let ((failed (= (lf-finish (if did-catch 1 0)) 1)))
         (if failed
             (begin

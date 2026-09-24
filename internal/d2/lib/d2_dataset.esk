@@ -641,17 +641,13 @@
               state generation batch-row row-ordinal control))) result)))
 
 (define (d2-tokenizer-identity tokenizer)
-  ;; T2 accessors intentionally name their own operations.  D2 remaps a forged
-  ;; or wrong-aggregate tokenizer at its public boundary without leaking those
-  ;; lower-layer operation names.
-  (guard
-   (caught
-    ((transformer-error? caught)
-     (d2-fail 'invalid-argument 'token-dataset-open
-              "expected a same-aggregate tokenizer"))
-    (else (raise caught)))
-   (vector (t2-private-tokenizer-fingerprint tokenizer)
-           (t2-private-tokenizer-vocab-size tokenizer))))
+  ;; Registry identity alone classifies a foreign tokenizer. Once admitted,
+  ;; preserve the T2 accessor's typed failures, including allocation errors.
+  (if (not (t2-private-entry tokenizer))
+      (d2-fail 'invalid-argument 'token-dataset-open
+               "expected a same-aggregate tokenizer"))
+  (vector (t2-private-tokenizer-fingerprint tokenizer)
+          (t2-private-tokenizer-vocab-size tokenizer)))
 
 (define (d2-token-dataset-open config tokenizer)
   (d2-with-core-errors
