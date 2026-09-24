@@ -11,8 +11,11 @@
         :real et_e3_private_selected_metric_bits_ref_v1)
 
 (define e3-diagnostic-report-tag (vector 'e3-diagnostic-report-v1))
-;;; [published records, active staging envelope, charged invocations, successes].
-(define e3-diagnostic-report-root (vector '() #f 0 0))
+;;; [published records, active staging envelope, charged invocations, successes,
+;;;  promoted staging-graph bytes, post-reservation transaction bytes].
+;;; The last two counters are source-private test instrumentation. They contain
+;;; only immediate integers and grant no report, model, frame or tensor authority.
+(define e3-diagnostic-report-root (vector '() #f 0 0 0 0))
 (define e3-diagnostic-report-limit 8192)
 
 (define (e3-diagnostic-raise category operation message)
@@ -53,38 +56,54 @@
     record))
 
 (define (e3-diagnostic-reserve-report! operation)
-  (if (vector-ref e3-diagnostic-report-root 1)
-      (e3-diagnostic-fail 'invalid-state operation
-                          "evaluation report construction is active"))
-  (let ((reservations (vector-ref e3-diagnostic-report-root 2)))
-    (if (>= reservations e3-diagnostic-report-limit)
-        (e3-diagnostic-fail 'unsupported operation
-                            "evaluation invocation limit reached"))
-    ;; Charge before every per-invocation report/frame/destination allocation.
-    ;; Reservations are deliberately never recycled, including after failure.
-    (vector-set! e3-diagnostic-report-root 2 (+ reservations 1)))
-  (let* ((shell (e3-diagnostic-make-shell))
-         (record (vector e3-diagnostic-report-tag #f shell 'staged
-                         0 0 0 0 0 0))
-         (head (vector-ref e3-diagnostic-report-root 0))
-         (successor (cons record head))
-         (envelope (vector record successor head)))
-    (vector-set! record 1 record)
-    ;; The root barrier promotes the complete unpublished graph before E3 mutates
-    ;; model mode or dataset cursor. Only canonical values reread below are used.
-    (vector-set! e3-diagnostic-report-root 1 envelope)
-    (let* ((canonical-envelope (vector-ref e3-diagnostic-report-root 1))
-           (canonical-record (vector-ref canonical-envelope 0)))
-      (if (or (not (vector? canonical-envelope))
-              (not (= (vector-length canonical-envelope) 3))
-              (not (vector? canonical-record))
-              (not (= (vector-length canonical-record) 10))
-              (not (eq? (vector-ref canonical-record 0)
-                        e3-diagnostic-report-tag))
-              (not (eq? (vector-ref canonical-record 1) canonical-record))
-              (not (eq? (vector-ref canonical-record 3) 'staged)))
-          (e3-native-invariant-fail))
-      canonical-record)))
+  (let ((arena-before (__arena-used)))
+    (if (vector-ref e3-diagnostic-report-root 1)
+        (e3-diagnostic-fail 'invalid-state operation
+                            "evaluation report construction is active"))
+    (let ((reservations (vector-ref e3-diagnostic-report-root 2)))
+      (if (>= reservations e3-diagnostic-report-limit)
+          (e3-diagnostic-fail 'unsupported operation
+                              "evaluation invocation limit reached"))
+      ;; Charge before every per-invocation report/frame/destination allocation.
+      ;; Reservations are deliberately never recycled, including after failure.
+      (vector-set! e3-diagnostic-report-root 2 (+ reservations 1)))
+    (let* ((shell (e3-diagnostic-make-shell))
+           (record (vector e3-diagnostic-report-tag #f shell 'staged
+                           0 0 0 0 0 0))
+           (head (vector-ref e3-diagnostic-report-root 0))
+           (successor (cons record head))
+           (envelope (vector record successor head)))
+      (vector-set! record 1 record)
+      ;; The root barrier promotes the complete unpublished graph before E3 mutates
+      ;; model mode or dataset cursor. Only canonical values reread below are used.
+      (vector-set! e3-diagnostic-report-root 1 envelope)
+      (let* ((canonical-envelope (vector-ref e3-diagnostic-report-root 1))
+             (canonical-record (vector-ref canonical-envelope 0))
+             (promoted-bytes (- (__arena-used) arena-before)))
+        (if (or (not (vector? canonical-envelope))
+                (not (= (vector-length canonical-envelope) 3))
+                (not (vector? canonical-record))
+                (not (= (vector-length canonical-record) 10))
+                (not (eq? (vector-ref canonical-record 0)
+                          e3-diagnostic-report-tag))
+                (not (eq? (vector-ref canonical-record 1) canonical-record))
+                (not (eq? (vector-ref canonical-record 3) 'staged))
+                (<= promoted-bytes 0))
+            (e3-native-invariant-fail))
+        (vector-set! e3-diagnostic-report-root 4
+                     (+ (vector-ref e3-diagnostic-report-root 4)
+                        promoted-bytes))
+        canonical-record))))
+
+(define (e3-diagnostic-record-transaction-retention! arena-after-reserve)
+  ;; This boundary excludes the promoted report/staging graph. It includes only
+  ;; root bytes retained by the inherited E3/P1/I2 transaction after reservation
+  ;; through completed cleanup; failure-side runtime error retention is included.
+  (let ((retained (- (__arena-used) arena-after-reserve)))
+    (if (< retained 0) (e3-native-invariant-fail))
+    (vector-set! e3-diagnostic-report-root 5
+                 (+ (vector-ref e3-diagnostic-report-root 5) retained))
+    retained))
 
 (define (e3-diagnostic-abandon-report!)
   (let ((envelope (vector-ref e3-diagnostic-report-root 1)))
@@ -196,6 +215,7 @@
 (define (e3-diagnostic-evaluate-fixed! model dataset)
   (let* ((operation 'diagnostic-evaluate-fixed!)
          (record (e3-diagnostic-reserve-report! operation))
+         (arena-after-reserve (__arena-used))
          (destinations #f)
          (frame #f))
     (guard
@@ -207,6 +227,7 @@
        (if destinations
            (e3-diagnostic-destinations-destroy! destinations))
        (e3-diagnostic-abandon-report!)
+       (e3-diagnostic-record-transaction-retention! arena-after-reserve)
        (raise caught)))
      (set! destinations (e3-diagnostic-destinations-create operation))
      (set! frame (e3-frame-bind! model destinations))
@@ -216,7 +237,9 @@
      (set! frame #f)
      (e3-diagnostic-destinations-destroy! destinations)
      (set! destinations #f)
-     (e3-diagnostic-publish-report! record))))
+     (let ((report (e3-diagnostic-publish-report! record)))
+       (e3-diagnostic-record-transaction-retention! arena-after-reserve)
+       report))))
 
 (define (e3-diagnostic-f32-bits report key)
   (let* ((operation 'diagnostic-evaluation-f32-bits)
@@ -245,7 +268,10 @@
                                "unknown evaluation count")))))
 
 (define (e3-diagnostic-report-stats-internal)
-  ;; Test-only source-private observation: reservations, successes, active flag.
+  ;; Test-only source-private observation: reservations, successes, active flag,
+  ;; promoted report/staging graph bytes, and inherited transaction bytes.
   (vector (vector-ref e3-diagnostic-report-root 2)
           (vector-ref e3-diagnostic-report-root 3)
-          (if (vector-ref e3-diagnostic-report-root 1) 1 0)))
+          (if (vector-ref e3-diagnostic-report-root 1) 1 0)
+          (vector-ref e3-diagnostic-report-root 4)
+          (vector-ref e3-diagnostic-report-root 5)))

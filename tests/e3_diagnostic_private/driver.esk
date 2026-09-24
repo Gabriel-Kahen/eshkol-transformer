@@ -1,6 +1,37 @@
 ;;; Genuine fixed-model/D2 source-private witness for the diagnostic successor.
 
 (define e3-diagnostic-test-fixture-root (vector #f #f))
+(define e3-diagnostic-test-retention-root (vector #f 0))
+
+(define (e3-diagnostic-test-calibrate-envelope!)
+  ;; Promote one isolated three-slot vector through the same checked root barrier
+  ;; used by the real staging envelope. Its referents already have root lifetime,
+  ;; so the global-arena delta is exactly the envelope object's retained bytes.
+  (let ((arena-before (__arena-used)))
+    (with-region ('e3-diagnostic-envelope-calibration 4096)
+      (vector-set! e3-diagnostic-test-retention-root 0
+                   (vector e3-diagnostic-report-tag #f '())))
+    (let ((envelope-bytes (- (__arena-used) arena-before)))
+      (if (<= envelope-bytes 0) (e3-native-invariant-fail))
+      (vector-set! e3-diagnostic-test-retention-root 0 #f)
+      (vector-set! e3-diagnostic-test-retention-root 1 envelope-bytes)
+      envelope-bytes)))
+
+;;; Run before any installed-caller horizon begins. The unreachable calibration
+;;; vector is therefore excluded from every reported horizon delta.
+(e3-diagnostic-test-calibrate-envelope!)
+
+(define (e3-diagnostic-test-retention-stats)
+  (let ((stats (e3-diagnostic-report-stats-internal)))
+    (if (or (not (= (vector-length stats) 5))
+            (<= (vector-ref e3-diagnostic-test-retention-root 1) 0))
+        (e3-native-invariant-fail))
+    (vector (vector-ref stats 0)
+            (vector-ref stats 1)
+            (vector-ref stats 2)
+            (vector-ref stats 3)
+            (vector-ref stats 4)
+            (vector-ref e3-diagnostic-test-retention-root 1))))
 
 (define (e3-diagnostic-test-expect-error category operation thunk)
   (guard
@@ -50,7 +81,7 @@
         e3-diagnostic-test-fixture-root)))
 
 (define (e3-diagnostic-test-output report before after)
-  (let ((stats (e3-diagnostic-report-stats-internal)))
+  (let ((stats (e3-diagnostic-test-retention-stats)))
     ;; Run foreign/non-symbol/wrong-family negatives once so long retention
     ;; horizons measure report production rather than repeated error retention.
     (if (= (vector-ref stats 1) 1)
@@ -109,14 +140,14 @@
        (raise caught)))
      (e3-test-skip! dataset (vector-ref checked 1))
      (let* ((cursor-before (d2-token-dataset-cursor dataset))
-            (stats-before (e3-diagnostic-report-stats-internal))
+            (stats-before (e3-diagnostic-test-retention-stats))
             (outcome
              (guard
               (caught (#t caught))
               (with-region ('e3-diagnostic-evaluation-failure 262144)
                 (e3-diagnostic-evaluate-fixed! model dataset))))
             (cursor-after (d2-token-dataset-cursor dataset))
-            (stats-after (e3-diagnostic-report-stats-internal))
+            (stats-after (e3-diagnostic-test-retention-stats))
             (caught? (transformer-error? outcome)))
        (if (or (not caught?)
                (not (d2-core-bytes=? cursor-before cursor-after))
