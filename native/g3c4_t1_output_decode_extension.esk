@@ -1,0 +1,51 @@
+;;; Source-private G3-C4 decoder over the actual same-aggregate T1 authority.
+;;; Load only after the canonical T1 registry/core.  Never install this source.
+
+;;; The caller owns both bytevectors; this path neither constructs a decoded
+;;; value nor enrolls another T1 shell.
+(define (t1-private-g3-decode-raw-into! tokenizer staging raw)
+  (let ((operation 't1-private-g3-decode-raw-into!))
+    (let ((entry (t1-private-entry tokenizer)))
+      (if (not entry)
+          (t1-private-raise 'invalid-argument operation
+                            "expected a registered tokenizer"))
+      (if (not (and (pair? entry) (eq? (car entry) tokenizer)
+                    (pair? (cdr entry)) (null? (cdr (cdr entry)))))
+          (t1-private-raise 'internal operation
+                            "tokenizer registry entry is not exact"))
+      (let ((core (car (cdr entry))))
+        (if (not (and (t1-core-tokenizer? core)
+                      (eq? (vector-ref core 1) 'raw)
+                      (null? (vector-ref core 2))
+                      (null? (vector-ref core 3))
+                      (null? (vector-ref core 4))
+                      (= (t1-tokenizer-core-vocab-size core) 256)))
+            (t1-private-raise 'invalid-state operation
+                              "G3 decode requires a raw empty V256 tokenizer"))
+        (if (not (bytevector? staging))
+            (t1-private-raise 'invalid-argument operation
+                              "decode staging must be a bytevector"))
+        (if (not (bytevector? raw))
+            (t1-private-raise 'invalid-argument operation
+                              "raw output must be a bytevector"))
+        (let ((staging-length (bytevector-length staging))
+              (raw-length (bytevector-length raw)))
+          (if (not (or (= staging-length 0) (= staging-length 8)))
+              (t1-private-raise 'shape-mismatch operation
+                                "decode staging must contain zero or one ID"))
+          (if (not (= raw-length (quotient staging-length 8)))
+              (t1-private-raise 'shape-mismatch operation
+                                "raw output length does not match staging"))
+          (if (= staging-length 0)
+              raw
+              (let validate-upper ((index 1))
+                (if (< index 8)
+                    (if (= (bytevector-u8-ref staging index) 0)
+                        (validate-upper (+ index 1))
+                        (t1-private-raise
+                          'invalid-argument operation
+                          "token ID is outside the tokenizer vocabulary"))
+                    (begin
+                      (bytevector-u8-set!
+                        raw 0 (bytevector-u8-ref staging 0))
+                      raw)))))))))
