@@ -21,6 +21,29 @@ def ordered(text, fragments, label):
         position = found
 
 
+def without_conditional_feature(text, macro):
+    """Remove source regions compiled only when a later feature is enabled."""
+    kept = []
+    depth = 0
+    for line in text.splitlines(keepends=True):
+        directive = line.lstrip()
+        opens = (directive.startswith("#if ") or
+                 directive.startswith("#ifdef ") or
+                 directive.startswith("#ifndef "))
+        if depth:
+            if opens:
+                depth += 1
+            elif directive.startswith("#endif"):
+                depth -= 1
+            continue
+        if opens and macro in directive:
+            depth = 1
+            continue
+        kept.append(line)
+    require(depth == 0, f"unterminated conditional feature block: {macro}")
+    return "".join(kept)
+
+
 def check():
     subprocess.run(
         [sys.executable, str(ROOT / "scripts/check-g3c4-model-authority.py")],
@@ -36,6 +59,8 @@ def check():
     require(source.count("#ifdef ET_G3C4_CONTEXT_PRIVATE") == 1,
             "context implementation feature block changed")
     block = source[source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE"):]
+    step4_block = without_conditional_feature(
+        block, "ET_G3C4_ACTIVE_CALL_PRIVATE")
     require(source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE") >
             source.index("et_g3c4_private_model_owner_abort_v1"),
             "context block no longer follows accepted owner implementation")
@@ -54,7 +79,7 @@ def check():
         "et_g3c4_model_pins", "generator_seed", "generator_rng",
         "policy", "sampler", "forward", "owner->active =",
     ]:
-        require(forbidden not in block,
+        require(forbidden not in step4_block,
                 f"Step 4a reaches deferred surface: {forbidden}")
 
     ordered(block, [

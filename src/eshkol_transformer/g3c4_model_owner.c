@@ -702,9 +702,18 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
       ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 }
 
+#if defined(ET_G3C4_ACTIVE_CALL_PRIVATE) && \
+    (!defined(ET_G3C4_CONTEXT_PRIVATE) || \
+     !defined(ET_G3C4_NATIVE_PINS_PRIVATE))
+#error "ET_G3C4_ACTIVE_CALL_PRIVATE requires context and C4 pins"
+#endif
+
 #ifdef ET_G3C4_CONTEXT_PRIVATE
 #include "g3c4_context_internal.h"
 #include "eshkol_transformer/a2_kv_cache.h"
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+#include "m3_call_pins.h"
+#endif
 
 #define ET_G3C4_CONTEXT_MAGIC UINT64_C(0x4733433443545831)
 
@@ -714,6 +723,18 @@ enum {
   ET_G3C4_CONTEXT_DEAD = 2
 };
 
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+enum {
+  ET_G3C4_CALL_IDLE = 0,
+  ET_G3C4_CALL_ACTIVE = 1,
+  ET_G3C4_ACQUIRED_PINS = 1,
+  ET_G3C4_ACQUIRED_METADATA = 2,
+  ET_G3C4_ACQUIRED_BUSY = 4,
+  ET_G3C4_ACQUIRED_OWNER = 8,
+  ET_G3C4_ACQUIRED_FULL = 15
+};
+#endif
+
 typedef struct et_g3c4_context_internal {
   struct et_g3c4_context_internal *registry_next;
   uint64_t magic;
@@ -722,13 +743,29 @@ typedef struct et_g3c4_context_internal {
   uint32_t busy;
   et_g3c4_model_owner_internal *owner;
   et_a2_kv_cache *cache;
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+  et_g3c4_model_pins_internal pins;
+  int64_t call_kind;
+  int64_t budget;
+  uint32_t acquired_mask;
+#endif
 } et_g3c4_context_internal;
 
 static et_g3c4_context_internal *et_g3c4_context_registry;
 
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+static int et_g3c4_pins_idle(
+    const et_g3c4_model_pins_internal *pins);
+#endif
+
 #ifdef ET_G3C4_CONTEXT_TESTING
 static size_t et_g3c4_context_allocation_limit = SIZE_MAX;
 static size_t et_g3c4_context_successful_allocations;
+#endif
+
+#if defined(ET_G3C4_ACTIVE_CALL_PRIVATE) && \
+    defined(ET_G3C4_ACTIVE_CALL_TESTING)
+static size_t et_g3c4_active_call_fail_after = SIZE_MAX;
 #endif
 
 static et_g3c4_context_internal *et_g3c4_admit_context(
@@ -809,11 +846,24 @@ int64_t et_g3c4_private_context_close_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_context(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
-  if (context->state == ET_G3C4_CONTEXT_DEAD) return 0;
+  if (context->state == ET_G3C4_CONTEXT_DEAD) {
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+    if (context->busy != ET_G3C4_CALL_IDLE || context->call_kind != 0 ||
+        context->budget != 0 || context->acquired_mask != 0u ||
+        !et_g3c4_pins_idle(&context->pins))
+      return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+#endif
+    return 0;
+  }
   if (context->state != ET_G3C4_CONTEXT_LIVE || context->busy != 0u ||
       context->owner == NULL || context->cache == NULL)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+  if (context->call_kind != 0 || context->budget != 0 ||
+      context->acquired_mask != 0u || !et_g3c4_pins_idle(&context->pins))
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+#endif
   owner = et_g3c4_admit_owner(context->owner, 0);
   if (owner == NULL) return et_g3c4_error_state.category;
   if (owner != context->owner || owner->state != ET_G3C4_OWNER_SEALED ||
@@ -827,4 +877,212 @@ int64_t et_g3c4_private_context_close_v1(void *candidate) {
   context->state = ET_G3C4_CONTEXT_DEAD;
   return 0;
 }
+
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+static int et_g3c4_valid_call_tuple(int64_t call_kind, int64_t budget) {
+  return (call_kind == 0 && budget == 0) ||
+         (call_kind == 1 && budget == 0) ||
+         (call_kind == 2 && (budget == 0 || budget == 1));
+}
+
+static int et_g3c4_pins_idle(
+    const et_g3c4_model_pins_internal *pins) {
+  size_t index;
+  if (pins->self != NULL || pins->held_mask != 0u) return 0;
+  for (index = 0u; index < 14u; index++) {
+    const et_kernel_tensor_view_v1 *view = &pins->views[index];
+    if (pins->parameters[index] != NULL || pins->identities[index] != NULL ||
+        pins->values[index] != NULL || view->struct_size != 0u ||
+        view->data != NULL || view->byte_length != 0u ||
+        view->dtype != NULL || view->device != NULL || view->layout != 0u ||
+        view->offset_bytes != 0u || view->rank != 0u || view->shape != NULL)
+      return 0;
+  }
+  return 1;
+}
+
+static int64_t et_g3c4_cache_idle_preflight(
+    et_g3c4_context_internal *context) {
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  et_kernel_error error;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_begin_v1(
+              context->cache, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  return 0;
+}
+
+static et_g3c4_context_internal *et_g3c4_admit_idle_call(
+    void *candidate) {
+  et_g3c4_context_internal *context = et_g3c4_admit_context(candidate);
+  et_g3c4_model_owner_internal *model;
+  if (context == NULL) return NULL;
+  if (context->state != ET_G3C4_CONTEXT_LIVE || context->owner == NULL ||
+      context->cache == NULL || context->busy != ET_G3C4_CALL_IDLE) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  model = et_g3c4_admit_owner(context->owner, 0);
+  if (model == NULL) return NULL;
+  if (model->state != ET_G3C4_OWNER_SEALED || model->active != NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (context->acquired_mask != 0u || context->call_kind != 0 ||
+      context->budget != 0 || !et_g3c4_pins_idle(&context->pins)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  return context;
+}
+
+static et_g3c4_context_internal *et_g3c4_admit_active_call(
+    void *candidate) {
+  et_g3c4_context_internal *context = et_g3c4_admit_context(candidate);
+  et_g3c4_model_owner_internal *model;
+  et_f32_tensor_error error;
+  if (context == NULL) return NULL;
+  if (context->state != ET_G3C4_CONTEXT_LIVE || context->owner == NULL ||
+      context->cache == NULL || context->busy != ET_G3C4_CALL_ACTIVE) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  model = et_g3c4_admit_owner(context->owner, 0);
+  if (model == NULL) return NULL;
+  if (model->state != ET_G3C4_OWNER_SEALED || model->active != context) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (context->acquired_mask != ET_G3C4_ACQUIRED_FULL ||
+      !et_g3c4_valid_call_tuple(context->call_kind, context->budget) ||
+      context->pins.self != &context->pins ||
+      context->pins.held_mask != UINT16_C(0x3fff)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (et_g3c4_capture_f32(
+          et_g3c4_model_pins_check_internal(&context->pins, &error),
+          &error) != 0)
+    return NULL;
+  return context;
+}
+
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+static void et_g3c4_active_call_rollback(
+    et_g3c4_context_internal *context,
+    et_g3c4_error_state_internal first) {
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_OWNER) != 0u) {
+    if (context->owner->active != context) abort();
+    context->owner->active = NULL;
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_OWNER;
+  }
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_BUSY) != 0u) {
+    context->busy = ET_G3C4_CALL_IDLE;
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_BUSY;
+  }
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_METADATA) != 0u) {
+    context->call_kind = 0;
+    context->budget = 0;
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_METADATA;
+  }
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_PINS) != 0u) {
+    et_g3c4_model_pins_end_internal(&context->pins);
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_PINS;
+  }
+  et_g3c4_error_restore_internal(first);
+}
+
+static int et_g3c4_active_call_inject(
+    et_g3c4_context_internal *context, size_t completed) {
+  et_g3c4_error_state_internal first;
+  if (et_g3c4_active_call_fail_after != completed) return 0;
+  (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  first = et_g3c4_error_snapshot_internal();
+  et_g3c4_active_call_rollback(context, first);
+  return 1;
+}
+#endif
+
+int64_t et_g3c4_private_call_acquire_v1(
+    void *candidate, int64_t call_kind, int64_t budget) {
+  et_g3c4_context_internal *context;
+  et_f32_tensor_error error;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_idle_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (!et_g3c4_valid_call_tuple(call_kind, budget))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_f32(
+          et_g3c4_model_pins_begin_internal(
+              context->owner->parameters, context->owner->handles,
+              &context->pins, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  context->acquired_mask = ET_G3C4_ACQUIRED_PINS;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 1u))
+    return et_g3c4_error_state.category;
+#endif
+  context->call_kind = call_kind;
+  context->budget = budget;
+  context->acquired_mask |= ET_G3C4_ACQUIRED_METADATA;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 2u))
+    return et_g3c4_error_state.category;
+#endif
+  context->busy = ET_G3C4_CALL_ACTIVE;
+  context->acquired_mask |= ET_G3C4_ACQUIRED_BUSY;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 3u))
+    return et_g3c4_error_state.category;
+#endif
+  context->owner->active = context;
+  context->acquired_mask |= ET_G3C4_ACQUIRED_OWNER;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 4u))
+    return et_g3c4_error_state.category;
+#endif
+  return 0;
+}
+
+int64_t et_g3c4_private_call_prepare_end_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  return et_g3c4_cache_idle_preflight(context);
+}
+
+static int64_t et_g3c4_active_call_drain(
+    et_g3c4_context_internal *context) {
+  et_g3c4_model_pins_end_internal(&context->pins);
+  context->owner->active = NULL;
+  context->call_kind = 0;
+  context->budget = 0;
+  context->busy = ET_G3C4_CALL_IDLE;
+  context->acquired_mask = 0u;
+  return 0;
+}
+
+int64_t et_g3c4_private_call_finish_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  return et_g3c4_active_call_drain(context);
+}
+
+int64_t et_g3c4_private_call_abort_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  return et_g3c4_active_call_drain(context);
+}
+#endif
 #endif

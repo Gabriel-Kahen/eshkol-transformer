@@ -272,6 +272,8 @@ After root acceptance, implementation is limited to:
 - `tests/g3c4/test_active_call.c` — focused intrusive native test;
 - `scripts/check-g3c4-active-call.py` — fast source/closure check;
 - `scripts/test-g3c4-active-call.sh` — supported native gate;
+- `scripts/check-g3c4-context-cache.py` — scope its existing deferred-surface
+  prohibition to source compiled without the accepted Step 5 feature macro;
 - `native/g3c4_active_call_source_closure.txt` — exact closure; and
 - one implementation note under `docs/g3/`.
 
