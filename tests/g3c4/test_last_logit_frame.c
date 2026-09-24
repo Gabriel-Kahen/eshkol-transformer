@@ -10,13 +10,13 @@ static int fail_adapter;
 static size_t adapter_dispatches;
 static size_t total_adapter_dispatches;
 static const float *expected_last_logits;
-static unsigned char additional_identities[2][14];
+static unsigned char additional_identities[3][14];
 static size_t additional_owner_count;
 
 static et_g3c4_model_owner_internal *create_additional_owner(void) {
   unsigned char *owner_identities;
   et_g3c4_model_owner_internal *owner;
-  CHECK(additional_owner_count < 2u);
+  CHECK(additional_owner_count < 3u);
   owner_identities = additional_identities[additional_owner_count++];
   owner = et_g3c4_private_model_owner_create_seeded_v1(1729);
   CHECK(owner != NULL);
@@ -121,35 +121,40 @@ static void exact_prefill_to_committed_token(
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-static void categorical_legacy_parity(
+static void legacy_mode_parity(
     et_g3c4_model_owner_internal *owner) {
   const int64_t prompt[3] = {3, 7, 11};
-  float last_a[256], last_b[256], carrier[1024];
-  int64_t token_a = -1, token_b = -1;
-  et_g3c4_context_internal *a = create_categorical_generator(owner);
-  et_g3c4_context_internal *b =
-      create_categorical_generator(create_additional_owner());
+  for (int categorical = 0; categorical <= 1; categorical++) {
+    float last_a[256], last_b[256], carrier[1024];
+    int64_t token_a = -1, token_b = -1;
+    et_g3c4_context_internal *a = categorical
+        ? create_categorical_generator(owner) : create_generator(owner);
+    et_g3c4_context_internal *b = categorical
+        ? create_categorical_generator(create_additional_owner())
+        : create_generator(create_additional_owner());
 
-  prefill_success(a, prompt, last_a);
-  prefill_success(b, prompt, last_b);
-  CHECK(memcmp(last_a, last_b, sizeof(last_a)) == 0);
-  for (size_t index = 0u; index < 1024u; index++) carrier[index] = -1.0f;
-  memcpy(carrier + 3u * 256u, last_b, sizeof(last_b));
-  expected_last_logits = last_a;
-  adapter_dispatches = 0u;
-  record_adapter = 1;
-  OK(et_g3c4_private_token_frame_begin_last_v1(a, last_a, &token_a));
-  record_adapter = 0;
-  OK(et_g3c4_private_token_frame_begin_v1(b, carrier, &token_b));
-  CHECK(adapter_dispatches == 1u);
-  CHECK(token_a == token_b);
-  CHECK(memcmp(a->token_frame_successor, b->token_frame_successor,
-               sizeof(a->token_frame_successor)) == 0);
-  CHECK(a->token_frame_position == b->token_frame_position);
-  OK(et_g3c4_private_token_frame_abort_v1(a));
-  OK(et_g3c4_private_token_frame_abort_v1(b));
-  close_after_abort(a);
-  close_after_abort(b);
+    prefill_success(a, prompt, last_a);
+    prefill_success(b, prompt, last_b);
+    CHECK(memcmp(last_a, last_b, sizeof(last_a)) == 0);
+    for (size_t index = 0u; index < 1024u; index++)
+      carrier[index] = -1.0f;
+    memcpy(carrier + 3u * 256u, last_b, sizeof(last_b));
+    expected_last_logits = last_a;
+    adapter_dispatches = 0u;
+    record_adapter = 1;
+    OK(et_g3c4_private_token_frame_begin_last_v1(a, last_a, &token_a));
+    record_adapter = 0;
+    OK(et_g3c4_private_token_frame_begin_v1(b, carrier, &token_b));
+    CHECK(adapter_dispatches == 1u);
+    CHECK(token_a == token_b);
+    CHECK(memcmp(a->token_frame_successor, b->token_frame_successor,
+                 sizeof(a->token_frame_successor)) == 0);
+    CHECK(a->token_frame_position == b->token_frame_position);
+    OK(et_g3c4_private_token_frame_abort_v1(a));
+    OK(et_g3c4_private_token_frame_abort_v1(b));
+    close_after_abort(a);
+    close_after_abort(b);
+  }
 }
 
 static void sampler_and_allocation_cuts(
@@ -288,13 +293,16 @@ static void alias_rejections(et_g3c4_model_owner_internal *owner) {
       context->cache, &borrow, &error) == 0);
   CHECK(et_a2_kv_cache_read_borrow_layer_v1(
       borrow, 0u, &keys, &values, &lengths, &keep, &error) == 0);
-  int64_t *cache_alias = (int64_t *)(void *)keys->data;
-  const float *cache_input_alias = (const float *)(const void *)keys->data;
+  void *cache_backings[4] = {
+    keys->data, values->data, lengths->data, keep->data
+  };
   CHECK(et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) == 0);
-  CHECK(et_g3c4_private_token_frame_begin_last_v1(
-      context, last, cache_alias) != 0);
-  CHECK(et_g3c4_private_token_frame_begin_last_v1(
-      context, cache_input_alias, &output) != 0);
+  for (size_t index = 0u; index < 4u; index++) {
+    CHECK(et_g3c4_private_token_frame_begin_last_v1(
+        context, last, (int64_t *)cache_backings[index]) != 0);
+    CHECK(et_g3c4_private_token_frame_begin_last_v1(
+        context, (const float *)cache_backings[index], &output) != 0);
+  }
   CHECK(et_g3c4_token_frame_idle(context));
   CHECK(output == -777);
   close_after_abort(context);
@@ -303,7 +311,7 @@ static void alias_rejections(et_g3c4_model_owner_internal *owner) {
 int main(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   exact_prefill_to_committed_token(owner);
-  categorical_legacy_parity(owner);
+  legacy_mode_parity(owner);
   sampler_and_allocation_cuts(owner);
   stale_nonfinite_and_state_rejections(owner);
   alias_rejections(owner);
