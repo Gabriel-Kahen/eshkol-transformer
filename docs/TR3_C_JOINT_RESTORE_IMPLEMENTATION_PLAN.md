@@ -1,15 +1,15 @@
 # TR3-C joint restore composer implementation plan
 
-Status: **lease successor accepted; private I2/O2 binding partition is a
-focused candidate; composer remains pending**.
+Status: **lease successor and private I2/O2 binding partition accepted;
+composer remains pending**.
 
 The normative restore protocol is the accepted
 [TR3-C live-state contract](TR3_C_LIVE_STATE_CONTRACT.md). This companion maps
-that protocol to the exact component interfaces present at integration head
-`ca26c3c041e25696070817bbd5522b01d1433bdf`, tree
-`e3d6c99ba7c038863b4d407125f80388239da9a0`, and to the intended lease source
-at `f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5`, tree
-`54ba54a815f37bd492f1203b48a8b54e6dfe10dc`.
+that protocol to the accepted component interfaces. Its original source mapping
+used integration head `ca26c3c` and lease candidate `f602a66`; the reviewed
+22-slot lease and private I2/O2 binding leaf are integrated at `b428da3`.
+Exact accepted source pins and evidence are recorded in
+[the integration log](INTEGRATION_LOG.md).
 
 This is not a public trainer, joint restore, or exact-resume acceptance claim.
 The reviewed 22-slot lease successor and rooted D2 allocation repair are now
@@ -34,7 +34,7 @@ The dependency state for the source-level prerequisites is:
 2. trainer-owned restore controls and authenticated restore enter/finish
    transitions are present in the sole lease authority;
 3. feature-local Eshkol bindings for the accepted native I2 and O2 restore
-   entries are implemented as the focused partition-2 candidate; and
+   entries are accepted in the integration branch; and
 4. final source composition, composer failure-prefix evidence, and mandatory #121
    C2 handler-order acceptance evidence.
 
@@ -44,10 +44,10 @@ make a broader claim about unsupported runtime allocation paths.
 
 ## 2. Exact existing component boundaries
 
-### 2.1 Lease candidate: intended authority, not yet accepted
+### 2.1 Accepted lease successor: sole trainer authority
 
-`f602a66:native/tr3_lease_core_extension.esk` owns one enrollment root and an
-exact private token. Its 17-slot record is:
+`native/tr3_lease_core_extension.esk` owns one enrollment root and an exact
+private token. Its accepted 22-slot record is:
 
 ```text
 0 tag                       9 exact M3T model entry
@@ -58,7 +58,11 @@ exact private token. Its 17-slot record is:
 5 private lease token      14 exact O2 record
 6 resolved X1 object       15 dataset shell
 7 tokenizer identity       16 exact D2 state
-8 model shell
+8 model shell             17 epoch-start cursor bytes
+                          18 RNG [algorithm, version, key, low, high]
+                          19 total active tokens T
+                          20 completed updates U
+                          21 completed epochs E
 ```
 
 `tr3-lease-authenticate` revalidates exact record, token, M3T, P1, O2, and D2
@@ -67,8 +71,8 @@ identity. `tr3-lease-restore-internal` admits only an already-published
 clear that state. The lease is logical authority, not a tensor pin, model frame,
 D2 borrow, I2 plan, or optimizer busy owner.
 
-The final lease successor must preserve one registry and the exact private token.
-It must not add a public token, generic phase setter, second trainer registry, or
+The accepted successor preserves one registry and the exact private token. It
+adds no public token, generic phase setter, second trainer registry, or
 component lifetime pin.
 
 ### 2.2 C2 detached source: already source-callable
@@ -438,9 +442,9 @@ The minimal dependency order is:
    trainer
    controls, freeze authenticated restore transitions, selectively compose with
    the accepted integration head, and pass the full failure-prefix matrix.
-2. **Private source binding (focused candidate):** add fixed I2/O2 extern bindings
-   and status mapping;
-   prove public/native symbol isolation and exact ownership transfer.
+2. **Private source binding (accepted):** fixed I2/O2 extern bindings and status
+   mapping pass public/native symbol isolation and exact ownership-transfer
+   evidence; no composer or public entry is implied.
 3. **Composer:** implement detached staging, fixed 14-prefix composition,
    cross-state validation, seal, tail, and phase-dependent abort.
 4. **Focused transaction evidence:** exhaustive allocation/publication prefixes,

@@ -2830,6 +2830,25 @@ numerical, adversarial and packaging reviews approve this candidate for required
 supported CI with no unresolved implementation findings. Reviewed provider
 SHA-256 is `2dc0e4426b6126ecd9abf8e227ab54105403b05b341cb8df7d01f221760635f5`.
 
+## 2026-09-24 — TR3-C private I2/O2 binding acceptance
+
+The fixed hidden I2/O2 restore bindings are integrated as
+`b428da3c70481e839ce55ca27715fb867114e85a`, tree
+`d776557650c70ec18d17ec401e56bb2efe4df0db`. The first reviewed leaf
+`d47beee` passed focused native/source gates but contained recoverable registry
+lookups and carrier preflight in its irreversible tail. The narrowly reviewed
+`5a0b9e6` repair removes those transitive fallible paths; the tail now uses
+direct fixed slots, checked native calls, assignment updates, and fail-stop for
+an impossible checked commit defect. Supported Ubuntu 22.04/LLVM 21.1.8 gates
+passed 25 source contracts, 340 native checks under Clang/GCC and sanitizers,
+exact hidden-symbol isolation, nine source-ledger runtime checks, and strict
+package compilation against authenticated `81298`. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-c-restore-bindings-5a0b9e6-20260924T143000Z`,
+`SHA256SUMS` SHA-256 `cf5e86a41601f34ed891036fcd631b11a49e2a330242f0f0d53dd2ae09cfb473`.
+The merged tree passes 37 focused source/Q0 checks and 20-suite/35-command
+topology. This is private binding authority only; the C2 detached-source
+composer, trajectory, public trainer and exact-resume claims remain pending.
+
 ## 2026-09-24 — C2 #121 focused public acceptance
 
 On exact clean Wave 3 source `7ae5c3765650e56ab1c45eb2c41e6c9925376332`
