@@ -89,7 +89,7 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=aabdf0a3b425fcb99e0f24b48ec756c59e35e1242c3e0aacf5acb3e512314030
+expected_runner_self_sha256=4ec3777707e5b9cfee26048ccf89f7de8d0e0910e00ec48b18e10d85569651c9
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
@@ -151,6 +151,7 @@ if [[ "${allocation_class}" == all ]]; then
       scripts/test-tr3-lease.sh|\
       scripts/test-tr3-lease-failures.sh|\
       tests/tr3_lease/test_source_contract.py|\
+      tests/tr3_lease/lease_runtime.esk|\
       tests/tr3_lease/runtime_candidate.tsv|\
       tests/tr3_lease/failure_runtime_candidate.tsv|\
       tests/tr3_lease_failure/lease_failure_runtime.esk|\
