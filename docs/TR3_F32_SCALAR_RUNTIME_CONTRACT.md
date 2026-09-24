@@ -326,7 +326,7 @@ first-class procedure on native AOT, native JIT, and the bytecode VM. It returns
 a canonical interned Scheme symbol naming the semantic runtime type, never a
 string, native/VM numeric tag, heap/callable subtype ID, or ESKB constant ID.
 Results with the same spelling compare true under `eq?`, including comparison
-with a literal symbol. The public C `eshkol_type_of` returns that same symbol in
+with a literal symbol. Public C reflection returns that same symbol in
 tagged-value form. Internal numeric IDs may differ between substrates.
 
 The current semantic names are `null` for the empty value; `integer` for int64
@@ -344,7 +344,17 @@ classification reports `procedure`. Native exactness/direction flags do not
 change the semantic name.
 
 Only a canonical f32-v1 carrier reports `float32`; malformed f32 carriers and
-undeclared direct tags report `unknown`. A declared heap or callable value with
+undeclared direct tags report `unknown`. The normative full-carrier C entry is
+`eshkol_type_of_ref_v1(const eshkol_tagged_value_t *value)`, which inspects the
+original 16 bytes and reports `unknown` for a null pointer or any malformed
+f32-v1 byte, including implicit padding. The existing by-value
+`eshkol_type_of(eshkol_tagged_value_t value)` remains ABI-compatible and returns
+the same semantic symbols for conveyed fields, but its calling convention can
+erase padding bytes 4–7 before the callee sees them. It cannot certify or reject
+a carrier malformed only in those bytes and is not the canonicality authority.
+Native Scheme lowering must inspect the original carrier, through the pointer
+entry or equivalent full-byte logic, rather than use that legacy wrapper.
+A declared heap or callable value with
 an undeclared subtype reports `heap-object` or `procedure`, respectively.
 Deprecated pointer tags report the semantic name of their consolidated
 replacement. Adding a declared tag or subtype requires a symbolic mapping and

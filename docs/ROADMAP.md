@@ -60,6 +60,15 @@ contract in [TR3_F32_SCALAR_RUNTIME_CONTRACT.md](TR3_F32_SCALAR_RUNTIME_CONTRACT
 cross-substrate implementation, migration and parity gates remain pending. An
 isolated VM F32 hash-key leaf is also in progress. Neither leaf establishes full
 F32 acceptance or changes the transformer runtime pin.
+The first runtime-eligible type-symbol prototype passed exhaustive pointer-based
+classification but exposed a C ABI boundary: the legacy by-value
+`eshkol_type_of` can erase implicit f32 padding bytes before validation. Its
+supported reproducer and independent review are sealed at
+`f32-type-symbol-runtime-blocker-d960add-20260924/SHA256SUMS` (`90c6708f...`).
+The accepted contract now makes versioned pointer-taking
+`eshkol_type_of_ref_v1` authoritative for full-carrier canonicality and records
+the legacy wrapper's padding-only limitation. The upstream implementation and
+supported parity gates remain pending.
 
 ## Wave 0 — contracts and verification foundation
 
