@@ -36,6 +36,18 @@ G3 one-/two-token numerical prefills, and authenticated prompt-to-prefill
 binding are integrated through `73cc31a`. Their supported focused gates pass;
 they still require a fresh exact-head supported union before broader acceptance.
 
+The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
+at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
+53/53, system O0/O2 23/23, and native/AOT/VM sanitizer gates pass; sealed
+evidence is `f32-public-predicate-20260924/SHA256SUMS` (`44b28253...`). A
+separate sealed `type-of` parity audit on that exact tree found an accepted
+contract ambiguity: public native Scheme reports numeric type tags, the C API
+reports interned symbols, and the VM reports strings. Its evidence is
+`f32-typeof-parity-blocker-d960add-20260924/SHA256SUMS` (`41b92f67...`). The
+return-value kind must be selected before changing that public API. An isolated
+VM F32 hash-key leaf and a read-only `type-of` decision audit are in progress;
+neither establishes full F32 acceptance or changes the transformer runtime pin.
+
 ## Wave 0 — contracts and verification foundation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
