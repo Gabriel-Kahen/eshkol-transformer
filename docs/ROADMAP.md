@@ -33,13 +33,17 @@ fully green; its strict C2 joint peaks were 460,464/461,148 KiB below the
 unchanged 524,288 KiB cap. Reviewed installed E3 fixed-profile evaluation and
 8,192-reservation report-edge proof, plus authentic G3 P1/P2 prompt-to-prefill
 binding, were pushed through `8c13bbf`. Supported focused gates pass; fresh
-exact-head run `36041612097` is in progress. Its model-composition job reached
-the final M3 source-integrity test and failed because the E3 facade's reviewed
-`build-e1b-consumer.sh` change left one predecessor SHA pin stale. The exact
-current file hash is repinned in `tests/m3cg/predecessor_sources.sha256` with no
-runtime change; all 9 M3 contract tests and the full source checksum list pass
-locally. The remaining hosted jobs and a fresh exact-head rerun are required
-before broader acceptance.
+exact-head run `36041612097` completed with 20 substantive jobs passing; its
+model-composition job failed only at the stale M3 source pin after E3 facade
+source changed. Test-only `5fa2d4e` repins the exact current hash, and all
+9 M3 tests and predecessor hashes pass locally. Subsequent pushed `38d9c35`
+run `36051266612` passed model-composition, parameter-state and the other
+completed substantive jobs, but four jobs failed at stale G3S/G3N/L3S/E3
+source hashes or the O2 public-header tree pin. Local test-only `af35b1a`
+and `0fdcb8c` repin those exact identities; the predecessor lists and four
+focused O2 package tests pass. Canonical-build was cancelled by the failed
+aggregate. A new exact-head supported CI run is required before broader
+acceptance.
 The subsequent private G3 Step19A output-reservation candidate `06b6fd2` was
 cherry-picked locally at `ee7325d`. Independent review found two failure-
 atomicity gaps: abort could discard a non-idle token frame before a borrowed
@@ -78,9 +82,17 @@ ASan/UBSan/LSan evidence passed; root verified the source seal
 `g3c4-step21b-f4b00c2-20260924/SHA256SUMS` (`fb36b8f6...`). The candidate's
 precommit Q0 run missed its newly tracked checker; post-integration Q0 found
 that exact development-script admission gap. Test-only `ce4419c` admits the
-checker, and merged Q0 4/4 plus the Step21B checker pass. A rooted Eshkol
-output envelope/coordinator, public result, generation loop and save/reload
-remain pending.
+checker, and merged Q0 4/4 plus the Step21B checker pass. The private rooted
+output-envelope/coordinator Step22 `021ef61`/tree `d27bdc0` is independently
+reviewed and integrated with identical source as `23a9dde`. It roots the
+pending output in the active call ledger before native reservation and invokes
+the accepted two-argument real T1 decode coordinator. Supported f31 normal,
+repeat and ASan/UBSan/LSan evidence is byte-identical: 51 real G0/G1 route
+checks and 21 allocation-cut checks pass, with inherited Step21B and call-entry
+regressions. Root verified the source closure and merged Q0 4/4 plus the
+Step22 structural checker. Call finalization deliberately rejects after text
+readiness until frame prepare/commit and publication are implemented. Public
+result, generation loop and save/reload remain pending.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
