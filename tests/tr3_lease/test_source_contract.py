@@ -239,8 +239,11 @@ class LeaseSourceContract(unittest.TestCase):
             failure["runner_role"], "allocation_prefix_production_off"
         )
         self.assertNotEqual(functional["runner_sha256"], failure["runner_sha256"])
-        self.assertEqual(failure["o2_compile_stderr_bytes"], "pending")
-        self.assertEqual(failure["o2_compile_stderr_sha256"], "pending")
+        self.assertEqual(failure["o2_compile_stderr_bytes"], "1200")
+        self.assertEqual(
+            failure["o2_compile_stderr_sha256"],
+            "13f1ab2db5ac94d4a382aa6d03a801e4607ee585e5f34bcc3a1c3b8acfffd0d5",
+        )
         source_test_bytes = Path(__file__).read_bytes()
         source_test_hash = hashlib.sha256(source_test_bytes).hexdigest()
         self.assertEqual(source_test_hash, functional["source_contract_sha256"])
