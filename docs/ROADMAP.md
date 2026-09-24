@@ -265,6 +265,17 @@ reran its exact-source query. A bounded unary route repair is active; the
 inventory is not operation acceptance evidence. The reviewed scalar
 activation leaf exposes an existing VM scalar path but lacks native public
 parity, so it does not close this matrix.
+Root independently approved the isolated unary route leaf `be721d90`/tree
+`3c27466`: native direct/first-class `+`, `*`, `/`, direct unary min/max, and
+VM direct unary `+`, `*`, `/` now promote canonical F32 to the established
+DOUBLE result, with malformed/folded native rejects and non-F32 controls.
+Supported f31 focused Release and ASan+UBSan+LSan gates pass 6/6 each;
+`first_class_variadics_vm_smoke` passes in Release. Root verified
+`f32-unary-routes-be721d90-20260924/SHA256SUMS` (`fb2edd52...`).
+Public VM unary min/max still leak through generic CALL arity handling, and
+an unchanged VM compiler signed-shift UBSan finding blocks the broader
+sanitized variadic gate. Both are separate follow-ups; the leaf remains
+isolated pending successor-union composition and is not gap-5 acceptance.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
