@@ -22,6 +22,9 @@ cleanup() {
     cat "${temporary_dir}/runtime.stdout" >&2 || true
     cat "${temporary_dir}/allocation.stdout" >&2 || true
     cat "${temporary_dir}/publication.stdout" >&2 || true
+    cat "${temporary_dir}"/retention-*.stdout >&2 || true
+    cat "${temporary_dir}"/retention-*.stderr >&2 || true
+    cat "${evidence}/native-affected.stdout" >&2 || true
   fi
   rm -rf -- "${temporary_dir}"
   return "${result}"
