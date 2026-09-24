@@ -61,6 +61,22 @@ def check():
     source = (ROOT / "native/g3c4_model_extension.esk").read_text()
     test = (ROOT / "tests/g3c4/model_authority_test.esk").read_text()
     native = (ROOT / "tests/g3c4/model_authority_native.c").read_text()
+    runner = (ROOT / "scripts/test-g3c4-model-authority.sh").read_text()
+
+    for required in [
+        "-DET_I2_NATIVE_HELPERS_ONLY",
+        'native/i2_wave2_package_bridge.c',
+        "-DET_P1_TRUSTED_BUILD=1",
+        'native/p1_identity.c',
+    ]:
+        require(required in runner,
+                f"focused model archive omits private helper closure: {required}")
+    for forbidden in [
+        'native/m3_package_bridge.c',
+        'native/e1b_error_consumer_bridge.c',
+    ]:
+        require(forbidden not in runner,
+                f"focused model archive includes public package wrapper: {forbidden}")
 
     require(source.count(
         "(define g3c4-model-registry (vector '()))") == 1,

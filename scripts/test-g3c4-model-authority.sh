@@ -33,10 +33,10 @@ cflags=(
   -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/src/eshkol_transformer"
   -I "$(eshkol_source_dir)/inc"
 )
-"${cc}" "${cflags[@]}" -DET_M3T_PACKAGE_BUILD \
+"${cc}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
   -DET_G3C4_I2_CONSTRUCTION_PRIVATE -DET_G3C4_NATIVE_OWNER_PRIVATE \
-  -c "${PROJECT_ROOT}/native/m3_package_bridge.c" \
-  -o "${temporary_dir}/m3_package_bridge.o"
+  -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
+  -o "${temporary_dir}/i2_native_helpers.o"
 "${cc}" "${cflags[@]}" -DET_G3C4_NATIVE_OWNER_PRIVATE \
   -c "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c" \
   -o "${temporary_dir}/m3t_f32_integration.o"
@@ -49,14 +49,14 @@ for source in data_io checkpoint_io kernel_abi t1_i64_shell \
   "${cc}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/${source}.c" \
     -o "${temporary_dir}/${source}.o"
 done
+"${cc}" "${cflags[@]}" -DET_P1_TRUSTED_BUILD=1 \
+  -c "${PROJECT_ROOT}/native/p1_identity.c" \
+  -o "${temporary_dir}/p1_identity.o"
 for source in m3_i64_integration m3_model; do
   "${cc}" "${cflags[@]}" \
     -c "${PROJECT_ROOT}/src/eshkol_transformer/${source}.c" \
     -o "${temporary_dir}/${source}.o"
 done
-"${cc}" "${cflags[@]}" \
-  -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
-  -o "${temporary_dir}/e1b_error_consumer_bridge.o"
 ar rcsD "${temporary_dir}/libg3c4_model_authority.a" \
   "${temporary_dir}"/*.o
 
