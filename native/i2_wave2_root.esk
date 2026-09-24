@@ -664,7 +664,10 @@
   (i2-construction-retained-preflight! record operation)
   ;; Native/P1 revocation precedes restoration and carrier invalidation.
   (module-construction-abort-internal! (vector-ref record 1))
-  (i2-construction-rollback-tail! record))
+  ;; Keep the private rollback helper in call position. The pinned compiler
+  ;; cannot transfer to its unpublished tail-body entry across this aggregate.
+  (i2-construction-rollback-tail! record)
+  #t)
 (define (i2-construction-begin-internal)
   ;; NULL/NULL is only a fixed availability query, never parameter authority.
   (if (= (i2-native-construction-parameter-preflight '() '()) -1)
@@ -736,7 +739,8 @@
           (i2-construction-open-route
             value 'm3t 'i2-construction-abort-internal!)
           (i2-construction-abort-active!
-            record 'i2-construction-abort-internal!)))))
+            record 'i2-construction-abort-internal!)
+          #t))))
 
 ;;; Fixed-purpose trusted construction seams for later source-composed Wave 2
 ;;; consumers and direct integration tests. None is an application export.
