@@ -141,6 +141,35 @@ class LeaseSourceContract(unittest.TestCase):
                 for spelling in private_spellings:
                     self.assertNotIn(spelling, text, str(path))
 
+    def test_failure_witness_uses_real_post_staging_census(self) -> None:
+        witness = (
+            ROOT / "tests" / "tr3_lease_failure" / "lease_failure_runtime.esk"
+        ).read_text()
+        shim = (
+            ROOT / "tests" / "tr3_lease_failure" / "lease_failure_shim.cpp"
+        ).read_text()
+        self.assertNotIn("tr3-failure-after-recheck", witness)
+        self.assertNotIn("(define (tr3-p1-fixed-recheck-internal", witness)
+        self.assertIn("lf-poststage-arm", witness)
+        self.assertIn("lf-poststage-finish", witness)
+        self.assertIn("(guard (raised (#t #t))", witness)
+        self.assertNotIn("(define (caught?", witness)
+        self.assertIn('(string=? case-name "object")', witness)
+        self.assertIn('(string=? case-name "all")', witness)
+        self.assertIn("(+ 1 (handler-scope tuple (+ depth 1)))", witness)
+        self.assertIn("real_region_allocate_quiet", shim)
+        self.assertIn("__wrap_arena_allocate_ad_node_with_header", shim)
+        self.assertIn("real bounded object allocation did not fail", shim)
+        self.assertIn("post-staging interval attempted an allocation", shim)
+        gate = (ROOT / "scripts" / "test-tr3-lease-failures.sh").read_text()
+        self.assertIn("/out/case-status.tsv", gate)
+        self.assertIn('${evidence_dir}/inputs', gate)
+        self.assertIn("container_image_id", gate)
+        self.assertIn("--allocation-class", gate)
+        self.assertIn('"${container_id}" bash -lc', gate)
+        self.assertIn('git -C "${PROJECT_ROOT}" diff --quiet', gate)
+        self.assertIn('inputs/ROADMAP.md', gate)
+
 
 if __name__ == "__main__":
     unittest.main()
