@@ -896,7 +896,17 @@
          (status
           (x1-sha256-raw canonical (string-byte-length canonical) buffer 65))
          (digest (if (= status 0) (substring buffer 0 64) "")))
-    (if (and (= status 0) (x1-lower-hex? digest))
-        (string-append "sha256:eshkol-config-json-v1:" digest)
+    (if (not (= status 0))
         (x1-unsupported 'config-fingerprint
-                        "canonical SHA-256 is unavailable" (list status)))))
+                        "canonical SHA-256 is unavailable" (list status))
+        (if (x1-lower-hex? digest)
+            (string-append "sha256:eshkol-config-json-v1:" digest)
+            ;; The digest implementation succeeded. A failed substring or
+            ;; malformed result is an internal construction failure, not an
+            ;; unavailable SHA-256 implementation.
+            (let ((unreachable
+                    (et-e1b-private-raise
+                      'internal 'config-fingerprint
+                      "canonical SHA-256 result could not be materialized"
+                      '() #f)))
+              unreachable)))))

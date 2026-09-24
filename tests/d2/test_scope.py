@@ -49,6 +49,16 @@ class D2ScopeTests(unittest.TestCase):
         self.assertIn("et_d2_shuffle_window_load_v1", source)
         self.assertNotIn("shuffle-buffer (make-bytevector", source)
 
+    def test_tokenizer_identity_only_remaps_foreign_registry_identity(self) -> None:
+        source = DATASET.read_text(encoding="utf-8")
+        start = source.index("(define (d2-tokenizer-identity tokenizer)")
+        end = source.index("(define (d2-token-dataset-open", start)
+        identity = source[start:end]
+        self.assertIn("(t2-private-entry tokenizer)", identity)
+        self.assertIn("'invalid-argument 'token-dataset-open", identity)
+        self.assertIn("(t2-private-tokenizer-fingerprint tokenizer)", identity)
+        self.assertNotIn("(guard", identity)
+
 
 if __name__ == "__main__":
     unittest.main()

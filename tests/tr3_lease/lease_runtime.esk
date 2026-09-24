@@ -1,0 +1,477 @@
+;;; Focused trusted runtime witness for the source-private TR3 lease core.
+;;; Every component is constructed by the genuine D2/M3T/P1/O2 registries.
+;;; This test composes the production root explicitly so it can interpose two
+;;; test-only callbacks before the lease core resolves its P1 leaf bindings.
+(load "t2_wave2_root.esk")
+(load "i2_wave2_extension.esk")
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+(load "d2_semantic_core.esk")
+(load "d2_dataset.esk")
+(load "o2_wave2_extension.esk")
+(load "tr3_p1_fixed_set_extension.esk")
+
+(define tr3-test-original-capture tr3-p1-fixed-capture-internal)
+(define tr3-test-original-recheck tr3-p1-fixed-recheck-internal)
+(define tr3-test-capture-injection #f)
+(define tr3-test-recheck-injection #f)
+(define (tr3-p1-fixed-capture-internal
+          model handles modules retained-handles carriers)
+  (if tr3-test-capture-injection (tr3-test-capture-injection))
+  (tr3-test-original-capture
+    model handles modules retained-handles carriers))
+(define (tr3-p1-fixed-recheck-internal model modules handles carriers)
+  (let ((status
+          (tr3-test-original-recheck model modules handles carriers)))
+    (if tr3-test-recheck-injection (tr3-test-recheck-injection))
+    status))
+
+(load "tr3_lease_core_extension.esk")
+(load "tr3_lease_public_gates_extension.esk")
+(o2-install-tr3-create-overlap-check-internal!
+  tr3-o2-create-overlap-check-internal)
+
+(extern void o2-test-fail-alloc-after i64
+        :real et_o2_test_fail_alloc_after_v1)
+(extern void o2-test-reset-failpoints
+        :real et_o2_test_reset_failpoints_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "TR3 LEASE FAIL: ") (display label) (newline) (exit 1))))
+(define (transformer-error-at? category thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught)))))
+    (thunk)
+    #f))
+(define (transformer-error-at-operation? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught)))))
+    (thunk)
+    #f))
+(define (record-count)
+  (let loop ((remaining (vector-ref tr3-trainers 0)) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+(define (record-for-shell shell)
+  (let loop ((remaining (vector-ref tr3-trainers 0)))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 2)) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+(define (handle-list handles)
+  (let loop ((index 0))
+    (if (= index (vector-length handles)) '()
+        (cons (vector-ref handles index) (loop (+ index 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+
+;;; Tuple slots: resolved, tokenizer, dataset, model, optimizer, retained tree,
+;;; optimizer config. Keeping the tree proves the post-enrollment O2 hook closes
+;;; the preexisting-handle gap.
+(define corpus-directory (car (cdr (command-line))))
+(define (make-tuple)
+  (let* ((resolved (resolved-config))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset (d2-token-dataset-open
+                    (dataset-config corpus-directory) tokenizer))
+         (model (m3t-public-model-create
+                  resolved (m3t-public-initializer-state 1729)))
+         (handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+         (tree (module-parameters model))
+         (config (optimizer-config handles))
+         (optimizer (o2-public-optimizer-create config tree)))
+    (vector resolved tokenizer dataset model optimizer tree config)))
+(define (tuple-create tuple)
+  (tr3-lease-create-internal
+    (vector-ref tuple 0) (vector-ref tuple 1) (vector-ref tuple 2)
+    (vector-ref tuple 3) (vector-ref tuple 4)))
+(define (tuple-release-one-batch! tuple)
+  (let ((batch (d2-token-dataset-next-batch (vector-ref tuple 2))))
+    (check "fixture obtains a live D2 batch"
+           (not (d2-token-dataset-end? batch)))
+    (check "fixture releases the authentic D2 batch"
+           (d2-token-batch-release! batch))
+    batch))
+
+(define fresh (make-tuple))
+(define released (make-tuple))
+(define live-d2 (make-tuple))
+(define closed-d2 (make-tuple))
+(define live-m3 (make-tuple))
+(define sibling-o2 (make-tuple))
+(define released-batch (tuple-release-one-batch! released))
+(define live-batch
+  (d2-token-dataset-next-batch (vector-ref live-d2 2)))
+(check "live fixture has a non-EOS batch"
+       (not (d2-token-dataset-end? live-batch)))
+(check "closed fixture closes before acquisition"
+       (d2-token-dataset-close! (vector-ref closed-d2 2)))
+(define live-workspace (m3t-public-workspace-create (vector-ref live-m3 3)))
+
+;;; A second genuine optimizer over one model is constructed before any lease.
+;;; Acquisition must reject the competing sibling without publishing a lease.
+(define sibling-second-optimizer
+  (o2-public-optimizer-create
+    (vector-ref sibling-o2 6) (vector-ref sibling-o2 5)))
+(define count-before-idle-negatives (record-count))
+(check "D2 live acquisition rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tuple-create live-d2))))
+(check "D2 closed acquisition rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tuple-create closed-d2))))
+(check "M3 caller workspace acquisition rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tuple-create live-m3))))
+(check "O2 sibling overlap acquisition rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tuple-create sibling-o2))))
+(check "idle negative matrix publishes no trainer"
+       (= (record-count) count-before-idle-negatives))
+
+;;; A changed registry head between capture and final recheck must never be
+;;; overwritten by the outer acquisition.
+(define head-before-injection (vector-ref tr3-trainers 0))
+(define injected-head (cons (vector 'test-registry-head) head-before-injection))
+(set! tr3-test-recheck-injection
+  (lambda () (vector-set! tr3-trainers 0 injected-head)))
+(check "final registry-head substitution rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tuple-create fresh))))
+(check "outer acquisition preserves the substituted head"
+       (eq? (vector-ref tr3-trainers 0) injected-head))
+(vector-set! tr3-trainers 0 head-before-injection)
+(set! tr3-test-recheck-injection #f)
+
+;;; Reenter from a genuine capture dependency. The nested call rejects, the
+;;; outer capture delegates to the original function, and exactly one record is
+;;; committed.
+(define reentry-rejected #f)
+(set! tr3-test-capture-injection
+  (lambda ()
+    (set! reentry-rejected
+      (transformer-error-at? 'invalid-state
+        (lambda () (tuple-create fresh))))))
+(define before-fresh (record-count))
+(define fresh-shell
+  (with-region ('tr3-lease-acquisition 1048576)
+    (tuple-create fresh)))
+(set! tr3-test-capture-injection #f)
+(check "acquisition reentry rejects" reentry-rejected)
+(check "outer acquisition enrolls exactly once"
+       (= (record-count) (+ before-fresh 1)))
+(define fresh-record (car (vector-ref tr3-trainers 0)))
+(check "returned shell is canonical"
+       (eq? fresh-shell (vector-ref fresh-record 2)))
+(check "record fixed tuple fields"
+       (and (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)
+            (eq? (vector-ref fresh-record 6) (vector-ref fresh 0))
+            (eq? (vector-ref fresh-record 8) (vector-ref fresh 3))
+            (eq? (vector-ref fresh-record 13) (vector-ref fresh 4))
+            (eq? (vector-ref fresh-record 15) (vector-ref fresh 2))
+            (= (vector-length (vector-ref fresh-record 10)) 17)
+            (= (vector-length (vector-ref fresh-record 11)) 14)
+            (= (vector-length (vector-ref fresh-record 12)) 14)))
+(check "duplicate exact tuple rejects without another token"
+       (and (transformer-error-at? 'invalid-state
+              (lambda () (tuple-create fresh)))
+            (= (record-count) (+ before-fresh 1))))
+
+;;; Partial model/O2 overlap and partial D2 overlap both reject against the
+;;; enrolled fresh tuple while all genuine components remain unchanged.
+(check "partial model and optimizer overlap rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-lease-create-internal
+             (vector-ref fresh 0) (vector-ref fresh 1) (vector-ref released 2)
+             (vector-ref fresh 3) (vector-ref fresh 4)))))
+(check "partial dataset overlap rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-lease-create-internal
+             (vector-ref released 0) (vector-ref released 1)
+             (vector-ref fresh 2) (vector-ref released 3)
+             (vector-ref released 4)))))
+
+;;; Both D2 idle representations are admitted. Live becomes admissible after
+;;; the exact batch release; an idle M3 owner becomes admissible after the exact
+;;; caller workspace release.
+(define released-shell (tuple-create released))
+(check "released D2 state acquires" released-shell)
+(check "release live D2 negative fixture" (d2-token-batch-release! live-batch))
+(define live-now-released-shell (tuple-create live-d2))
+(check "formerly-live released D2 state acquires" live-now-released-shell)
+(check "release caller M3 workspace"
+       (m3t-public-workspace-release! live-workspace))
+(define live-input (m3t-public-input-create))
+(check "prepare authentic M3 input"
+       (m3t-public-input-copy! live-input '(3 197)))
+(define live-output
+  (m3-public-model-forward (vector-ref live-m3 3) live-input '()))
+(check "live M3 output acquisition rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tuple-create live-m3))))
+(check "release authentic M3 output"
+       (m3-public-model-output-release! live-output))
+(check "release authentic M3 input"
+       (m3t-public-input-release! live-input))
+(define m3-now-idle-shell (tuple-create live-m3))
+(check "M3 owner with idle retained cache acquires after result release"
+       m3-now-idle-shell)
+
+;;; Retaining the pre-enrollment tree does not allow a second optimizer over
+;;; leased handles. Arm the first native-builder allocation: overlap rejection
+;;; must leave it armed, while a disjoint unleased tree reaches that failpoint.
+(define optimizer-list-before-hook o2-optimizers)
+(o2-test-fail-alloc-after 0)
+(check "installed O2 hook rejects retained-tree overlap"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (o2-public-optimizer-create
+             (vector-ref fresh 6) (vector-ref fresh 5)))))
+(check "O2 hook rejection leaves source registry unchanged"
+       (eq? optimizer-list-before-hook o2-optimizers))
+(check "disjoint tree reaches the still-armed O2 builder failpoint"
+       (transformer-error-at? 'internal
+         (lambda ()
+           (o2-public-optimizer-create
+             (vector-ref closed-d2 6) (vector-ref closed-d2 5)))))
+(check "failed disjoint builder publishes no optimizer"
+       (eq? optimizer-list-before-hook o2-optimizers))
+(o2-test-reset-failpoints)
+
+;;; Lease-aware facade gates reject before touching their authentic receiver.
+;;; Read-only observations around each call prove that rejection preserved the
+;;; model mode/frame, optimizer counter, and D2 cursor.
+(define fresh-model-entry
+  (m3t-entry (vector-ref fresh 3) 'model 'trainer-create #t))
+(check "public module eval rejects leased root"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-public-module-eval! (vector-ref fresh 3)))))
+(check "public module train rejects leased root"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-public-module-train! (vector-ref fresh 3)))))
+(check "public module zero-grad rejects leased root"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-public-module-zero-grad! (vector-ref fresh 3)))))
+(check "P1 gate preserves train mode and M3 frame"
+       (and (eq? (module-mode-internal (vector-ref fresh 3)) 'train)
+            (eq? (vector-ref fresh-model-entry 10) #f)))
+(define gate-input (m3t-public-input-create))
+(check "prepare input for model gate"
+       (m3t-public-input-copy! gate-input '(3 197)))
+(check "public model forward rejects leased owner"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-public-model-forward (vector-ref fresh 3) gate-input '()))))
+(check "public workspace create rejects leased owner"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-public-workspace-create (vector-ref fresh 3)))))
+(check "M3 gates preserve inactive frame"
+       (eq? (vector-ref fresh-model-entry 10) #f))
+(check "release gate test input" (m3t-public-input-release! gate-input))
+(define optimizer-updates-before
+  (o2-optimizer-completed-updates-internal (vector-ref fresh 4)))
+(check "public optimizer step rejects leased optimizer"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-public-optimizer-step! (vector-ref fresh 4)))))
+(check "public optimizer zero-grad rejects leased optimizer"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-public-optimizer-zero-grad! (vector-ref fresh 4)))))
+(define detached-o2-state (o2-public-optimizer-state (vector-ref fresh 4)))
+(check "public optimizer load rejects leased optimizer"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-public-optimizer-load-state!
+             (vector-ref fresh 4) detached-o2-state))))
+(check "O2 gates preserve completed-update counter"
+       (= optimizer-updates-before
+          (o2-optimizer-completed-updates-internal (vector-ref fresh 4))))
+(check "release detached O2 observation"
+       (o2-public-optimizer-state-release! detached-o2-state))
+(define cursor-before-gates
+  (d2-token-dataset-cursor (vector-ref fresh 2)))
+(check "public D2 next rejects leased dataset"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-public-token-dataset-next-batch (vector-ref fresh 2)))))
+(check "public D2 seek rejects leased dataset"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-public-token-dataset-seek!
+             (vector-ref fresh 2) cursor-before-gates))))
+(check "public D2 close rejects leased dataset"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-public-token-dataset-close! (vector-ref fresh 2)))))
+(check "public batch release rejects leased released generation"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-public-token-batch-release! released-batch))))
+(check "D2 gates preserve exact cursor bytes"
+       (bytes=? cursor-before-gates
+                (d2-token-dataset-cursor (vector-ref fresh 2))))
+
+;;; Fixed admission matrix over the canonical record and unexported token.
+(define token (vector-ref fresh-record 5))
+(define foreign-token (vector 'foreign-token))
+(define released-record (record-for-shell released-shell))
+(define plan (vector 'o2-plan))
+(define frame (vector 'evaluation-frame))
+(define restore (vector 'restore-parent))
+(define (phase! phase active)
+  (vector-set! fresh-record 3 phase)
+  (vector-set! fresh-record 4 active))
+(define (all-fixed-reject?)
+  (and
+    (transformer-error-at? 'invalid-state
+      (lambda () (tr3-lease-step-model-internal fresh-record token)))
+    (transformer-error-at? 'invalid-state
+      (lambda () (tr3-lease-step-optimizer-internal fresh-record token)))
+    (transformer-error-at? 'invalid-state
+      (lambda () (tr3-lease-step-dataset-internal fresh-record token)))
+    (transformer-error-at? 'invalid-state
+      (lambda ()
+        (tr3-lease-commit-optimizer-internal fresh-record token plan)))
+    (transformer-error-at? 'invalid-state
+      (lambda ()
+        (tr3-lease-evaluation-modes-internal fresh-record token frame)))
+    (transformer-error-at? 'invalid-state
+      (lambda () (tr3-lease-snapshot-internal fresh-record token)))
+    (transformer-error-at? 'invalid-state
+      (lambda ()
+        (tr3-lease-restore-internal fresh-record token restore)))))
+(phase! 'idle #f)
+(check "idle admits no fixed component mutation" (all-fixed-reject?))
+(phase! 'step #f)
+(check "step model admission returns exact M3T entry"
+       (eq? (tr3-lease-step-model-internal fresh-record token)
+            (vector-ref fresh-record 9)))
+(check "step optimizer admission returns exact O2 record"
+       (eq? (tr3-lease-step-optimizer-internal fresh-record token)
+            (vector-ref fresh-record 14)))
+(check "step dataset admission returns exact D2 state"
+       (eq? (tr3-lease-step-dataset-internal fresh-record token)
+            (vector-ref fresh-record 16)))
+(check "foreign token rejects"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-step!
+         (lambda ()
+           (tr3-lease-step-model-internal fresh-record foreign-token))))
+(define authentic-dataset-state (vector-ref fresh-record 16))
+(define substituted-dataset-state (make-vector 19 #f))
+(vector-set! substituted-dataset-state 1 (vector-ref fresh-record 15))
+(vector-set! substituted-dataset-state 2 #t)
+(vector-set! fresh-record 16 substituted-dataset-state)
+(check "substituted D2 state rejects with fixed operation"
+       (transformer-error-at-operation? 'invalid-state 'trainer-step!
+         (lambda ()
+           (tr3-lease-step-dataset-internal fresh-record token))))
+(vector-set! fresh-record 16 authentic-dataset-state)
+(check "record and token substitution rejects"
+       (transformer-error-at? 'invalid-argument
+         (lambda ()
+           (tr3-lease-step-model-internal released-record token))))
+(phase! 'step plan)
+(check "step with active plan rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-lease-step-model-internal fresh-record token))))
+(phase! 'commit plan)
+(check "commit exact active plan admits"
+       (tr3-lease-commit-optimizer-internal fresh-record token plan))
+(check "commit copied plan rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-lease-commit-optimizer-internal
+             fresh-record token (vector-copy plan)))))
+(phase! 'evaluate #f)
+(check "evaluate exact phase admits"
+       (tr3-lease-evaluation-modes-internal fresh-record token frame))
+(check "evaluate foreign token reports public operation"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-evaluate!
+         (lambda ()
+           (tr3-lease-evaluation-modes-internal
+             fresh-record foreign-token frame))))
+(phase! 'evaluate plan)
+(check "evaluate with active plan rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-lease-evaluation-modes-internal fresh-record token frame))))
+(phase! 'snapshotting #f)
+(check "snapshotting exact phase admits"
+       (tr3-lease-snapshot-internal fresh-record token))
+(phase! 'snapshotting plan)
+(check "snapshotting with active plan rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda () (tr3-lease-snapshot-internal fresh-record token))))
+(phase! 'restoring restore)
+(check "restoring exact parent admits"
+       (tr3-lease-restore-internal fresh-record token restore))
+(check "restoring copied parent rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-lease-restore-internal
+             fresh-record token (vector-copy restore)))))
+
+;;; Allocation-free successful admissions and O2 overlap checks are the hot
+;;; lease paths. Run the same binary at 1,024 and 8,192 iterations.
+(define arguments (cdr (cdr (command-line))))
+(define horizon
+  (if (and (pair? arguments) (string=? (car arguments) "long")) 8192 1024))
+(phase! 'step #f)
+(define fixed-handle-list (handle-list (vector-ref fresh-record 11)))
+(define loop-before (__arena-used))
+(let loop ((index 0))
+  (if (= index horizon) #t
+      (begin
+        (tr3-lease-step-model-internal fresh-record token)
+        (tr3-lease-step-optimizer-internal fresh-record token)
+        (tr3-lease-step-dataset-internal fresh-record token)
+        (if (not (= (tr3-o2-create-overlap-check-internal
+                      fixed-handle-list)
+                    1))
+            (exit 1))
+        (loop (+ index 1)))))
+(define loop-after (__arena-used))
+(check "lease admission loop allocates zero arena bytes"
+       (= loop-before loop-after))
+(phase! 'idle #f)
+
+(display "TR3-LEASE-RUNTIME-PASS checks=") (display checks)
+(display " horizon=") (display horizon)
+(display " loop_arena_delta=") (display (- loop-after loop-before))
+(display " trainers=") (display (record-count))
+(newline)

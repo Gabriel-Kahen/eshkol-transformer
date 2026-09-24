@@ -16,7 +16,7 @@ MANIFEST = "native/e3_d2_source_variant.json"
 SOURCE = "internal/d2/lib/d2_dataset.esk"
 OUTPUT = "source/e3_d2_dataset.esk"
 PROVENANCE = "source/e3_d2_source_provenance.json"
-SOURCE_SHA = "d16224de20732fa9eaf4f9be990d33712986d2f94723d7517f7e9b653ebf2fcf"
+SOURCE_SHA = "53c5f1eb1c6a306503036251960607d1800a2d944a2322af6b5240fc5b20d5a9"
 RESULT_SHA = "d102ee50a33140271653f732f9dfea7c1c842c5c0922e99b4509ebffdc46ccaa"
 REPLACEMENT = (b"(define (d2-tokenizer-identity tokenizer)\n"
                b"  (let ((result (e3-d2-byte-identity tokenizer))) result))\n\n")
