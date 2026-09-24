@@ -65,6 +65,29 @@ class JointRestoreContract(unittest.TestCase):
         )
         self.assertNotIn("tr3-c-joint-install-clone!", fixed)
 
+    def test_expanded_c2_cursors_normalize_to_lease_pair(self) -> None:
+        copy = definition(
+            "tr3-c-joint-controls-copy", "tr3-c-joint-fixed-source!"
+        )
+        self.assertIn("(= (vector-length (vector-ref controls 2)) 10)", copy)
+        self.assertEqual(copy.count("(bytevector? (vector-ref (vector-ref controls 2)"), 2)
+        self.assertIn("(copied-dataset (vector-ref copied 2))", copy)
+        self.assertIn("(vector-ref copied-dataset 3)", copy)
+        self.assertIn("(vector-ref copied-dataset 4)", copy)
+        self.assertNotIn("(vector-ref copied-dataset 0)", copy)
+        self.assertNotIn("(vector-ref copied-dataset 1)", copy)
+
+        validate = definition(
+            "tr3-c-joint-validate-controls!", "tr3-c-joint-prepare-receiver!"
+        )
+        prepare = definition(
+            "tr3-c-joint-prepare-receiver!", "tr3-c-joint-release-cell!"
+        )
+        self.assertIn("(cursor (vector-ref cursor-pair 0))", validate)
+        self.assertIn("(epoch (vector-ref cursor-pair 1))", validate)
+        self.assertIn("(vector-ref cursors 0)", prepare)
+        self.assertIn("(vector-ref cursors 1)", prepare)
+
     def test_fixed_14_prefix_and_exact_o2_authority(self) -> None:
         prepare = definition(
             "tr3-c-joint-prepare-receiver!", "tr3-c-joint-release-cell!"
