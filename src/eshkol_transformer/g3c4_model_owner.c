@@ -795,6 +795,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
 #endif
+#if defined(ET_G3C4_OUTPUT_PREPARE_PRIVATE) && \
+    (!defined(ET_G3C4_OUTPUT_RESERVATION_PRIVATE) || \
+     !defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE))
+#error "ET_G3C4_OUTPUT_PREPARE_PRIVATE requires Steps 13A and 19A"
+#endif
 
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
@@ -1266,15 +1271,24 @@ static int et_g3c4_transport_record_valid(
              et_g3c4_zero_i64_words(output->rng, 4u) &&
              output->numeric_ready == 0u && output->ids_copied == 0u &&
              output->text_ready == 0u;
-    return output->parent_ctx != NULL &&
-           (output->prompt_length == 1 || output->prompt_length == 2) &&
-           (output->generated_length == 0 || output->generated_length == 1) &&
-           output->prompt_length + output->generated_length <= 2 &&
-           output->ids != NULL && output->length == 0 &&
-           output->cache_length == 0 &&
-           et_g3c4_zero_i64_words(output->rng, 4u) &&
-           output->numeric_ready == 0u && output->ids_copied == 0u &&
-           output->text_ready == 0u;
+    if (output->parent_ctx == NULL ||
+        (output->prompt_length != 1 && output->prompt_length != 2) ||
+        (output->generated_length != 0 && output->generated_length != 1) ||
+        output->prompt_length + output->generated_length > 2 ||
+        output->ids == NULL || output->ids_copied != 0u ||
+        output->text_ready != 0u)
+      return 0;
+    if (output->numeric_ready == 0u)
+      return output->length == 0 && output->cache_length == 0 &&
+             et_g3c4_zero_i64_words(output->rng, 4u);
+#ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
+    if (output->numeric_ready == 1u)
+      return output->length == output->generated_length &&
+             output->cache_length ==
+                 output->prompt_length + output->generated_length &&
+             output->rng[0] == 1 && output->rng[1] >= 0;
+#endif
+    return 0;
   }
 #endif
   return 0;
@@ -4858,6 +4872,115 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
   return 0;
 }
 #endif
+#endif
+#endif
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+#ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
+static int et_g3c4_output_committed_cache_length(
+    et_g3c4_context_internal *context, int64_t *length_result) {
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL;
+  const et_kernel_tensor_view_v1 *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL;
+  const et_kernel_tensor_view_v1 *keep = NULL;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+  int64_t length;
+
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_begin_v1(
+              context->cache, &borrow, &error), &error) != 0)
+    return -1;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_layer_v1(
+              borrow, 0u, &keys, &values, &lengths, &keep, &error),
+          &error) != 0)
+    goto fail;
+  if (keys == NULL || values == NULL || lengths == NULL || keep == NULL ||
+      lengths->data == NULL || lengths->byte_length != sizeof(int64_t)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto fail;
+  }
+  length = *(const int64_t *)lengths->data;
+  if (length < 0 || length > 2) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto fail;
+  }
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  *length_result = length;
+  return 0;
+
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (borrow != NULL &&
+      et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0)
+    abort();
+  et_g3c4_error_restore_internal(first);
+  return -1;
+}
+
+int64_t et_g3c4_private_output_prepare_v1(
+    void *context_candidate, void *output_candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
+  et_g3c4_output_internal *pending = NULL;
+  et_i64_tensor_error error;
+  int64_t committed_length = 0;
+  int64_t token_candidate;
+  int64_t result_rng[4];
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  output = et_g3c4_admit_output(output_candidate, 0);
+  if (output == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending != output || output->parent_ctx != context ||
+      context->call_kind != 2 ||
+      output->prompt_length + output->generated_length > 2 ||
+      output->generated_length != context->budget ||
+      output->numeric_ready != 0u || output->ids_copied != 0u ||
+      output->text_ready != 0u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (!et_g3c4_prefill_binding_matches_pins(context))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
+
+  if (output->generated_length == 0) {
+    if (!et_g3c4_token_frame_idle(context))
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    if (et_g3c4_output_committed_cache_length(
+            context, &committed_length) != 0)
+      return et_g3c4_error_state.category;
+    if (committed_length != output->prompt_length)
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    memcpy(result_rng, context->generator_rng_words, sizeof(result_rng));
+  } else {
+    if (context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY ||
+        context->token_frame_transaction == NULL ||
+        context->token_frame_position != output->prompt_length)
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    token_candidate = context->token_frame_candidate;
+    memcpy(result_rng, context->token_frame_successor, sizeof(result_rng));
+    if (et_g3c4_capture_i64(
+            et_i64_tensor_copy_from_v1(
+                output->ids, &token_candidate, 1u, &error), &error) != 0)
+      return et_g3c4_error_state.category;
+    committed_length = output->prompt_length + 1;
+  }
+
+  output->length = output->generated_length;
+  output->cache_length = committed_length;
+  memcpy(output->rng, result_rng, sizeof(result_rng));
+  output->numeric_ready = 1u;
+  return 0;
+}
 #endif
 #endif
 

@@ -438,7 +438,11 @@ static void allocation_and_borrow_cuts(
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_OUTPUT_RESERVATION_TEST_MAIN
+#define ET_G3C4_OUTPUT_RESERVATION_TEST_MAIN main
+#endif
+
+int ET_G3C4_OUTPUT_RESERVATION_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   reserved_prefill_abort(owner, 2, 0);
   reserved_prefill_abort(owner, 1, 1);
