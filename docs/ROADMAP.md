@@ -212,6 +212,17 @@ passes. The baseline `region-open` defect is separately repaired by reviewed
 `f32-region-classifier-audit-d960add-20260924/SHA256SUMS` (`81252613...`);
 a separate byte-preservation repair is active. This covers only the two
 indexed source files, not the whole-runtime exhaustive classifier requirement.
+The separate reviewed full-carrier region repair `da9ce5e`/tree `ac497df`
+replaces by-value evacuation with in-place tagged roots and bytewise nested
+slot/publication copies, including one/many-value `region-close`. Supported
+f31 Release and ASan+UBSan focused region/promotion gates pass 3/3 each;
+canonical and malformed mixed-root, nested-cons and close witnesses pass.
+Root independently verified
+`f32-region-full-carrier-20260924/SHA256SUMS` (`d1e6ef67...`) and approved
+the single focused review. A broader Release emergency stable-identity test
+fails identically on exact parent and candidate outside the changed region
+path; the baseline and candidate logs are sealed. Complete nested-container
+coverage, union gates and whole-F32 acceptance remain pending.
 The sealed read-only operation inventory on reviewed union `602876a` lists
 every source-visible DOUBLE spelling, AOT/JIT and VM routes, result-kind and
 missing witness. It identifies concrete gaps: unary `+`/`*`/min/max can leak
