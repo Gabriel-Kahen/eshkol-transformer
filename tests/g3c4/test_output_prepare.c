@@ -332,7 +332,11 @@ static void g1_borrow_cut_and_admission(
   OK(et_g3c4_private_generator_close_v1(foreign_context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_OUTPUT_PREPARE_TEST_MAIN
+#define ET_G3C4_OUTPUT_PREPARE_TEST_MAIN main
+#endif
+
+int ET_G3C4_OUTPUT_PREPARE_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   prepare_g0(owner);
   prepare_g1(owner);

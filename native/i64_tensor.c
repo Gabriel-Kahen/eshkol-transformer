@@ -254,6 +254,16 @@ static int storage_aliases_live_i1(const void *storage, size_t storage_bytes) {
   return 0;
 }
 
+#ifdef ET_I64_TENSOR_STORAGE_QUERY_PRIVATE
+int32_t et_i64_tensor_private_storage_overlap_v1(
+    const void *pointer, size_t bytes) {
+  if (!pointer_span_fits(pointer, bytes)) {
+    return -1;
+  }
+  return storage_aliases_live_i1(pointer, bytes) ? 1 : 0;
+}
+#endif
+
 static int error_aliases_live_i1(const et_i64_tensor_error *error) {
   return error != NULL &&
          storage_aliases_live_i1(error, sizeof(*error));
