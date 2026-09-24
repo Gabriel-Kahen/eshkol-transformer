@@ -1,0 +1,181 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+
+(extern i64 g3c4-model-test-owner-fail-after i64
+        :real et_g3c4_model_test_owner_fail_after_v1)
+(extern i64 g3c4-model-test-owner-reset
+        :real et_g3c4_model_test_owner_reset_v1)
+(extern i64 g3c4-model-test-owner-registry-count
+        :real et_g3c4_model_test_owner_registry_count_v1)
+(extern i64 g3c4-model-test-owner-state ptr
+        :real et_g3c4_model_test_owner_state_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 model authority FAIL: ")
+        (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (registry-count)
+  (let loop ((remaining (vector-ref g3c4-model-registry 0)) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(define (no-pending?)
+  (let loop ((remaining (vector-ref g3c4-model-registry 0)))
+    (if (null? remaining) #t
+        (and (not (eq? (vector-ref (car remaining) 2) 'pending))
+             (loop (cdr remaining))))))
+(define (dead-retains-only-identity? entry)
+  (and (= (vector-length entry) 12)
+       (eq? (vector-ref entry 1) 'c4-model)
+       (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index))
+                  (loop (+ index 1)))))))
+(define (unique-handles? handles)
+  (let outer ((index 0))
+    (if (= index 14) #t
+        (and (vector-ref handles index)
+             (let inner ((prior 0))
+               (if (= prior index) #t
+                   (and (not (eq? (vector-ref handles prior)
+                                  (vector-ref handles index)))
+                        (inner (+ prior 1)))))
+             (outer (+ index 1))))))
+(define (shape-elements shape)
+  (let loop ((remaining shape) (product 1))
+    (if (null? remaining) product
+        (loop (cdr remaining) (* product (car remaining))))))
+(define (exact-shapes-and-size? handles)
+  (let loop ((index 0) (elements 0))
+    (if (= index 14) (= elements 1192)
+        (let ((shape (parameter-handle-shape
+                       (vector-ref handles index))))
+          (and (equal? shape (vector-ref g3c4-model-shapes index))
+               (loop (+ index 1)
+                     (+ elements (shape-elements shape))))))))
+
+(check "fixed model identity"
+       (eq? g3c4-model-identity
+            'eshkol-diagnostic-byte-decoder-c4-v1))
+(reject "negative seed" 'invalid-argument
+        (lambda () (g3c4-model-create-seeded-internal -1)))
+(reject "inexact seed" 'invalid-argument
+        (lambda () (g3c4-model-create-seeded-internal 1.0)))
+(check "invalid seeds publish no model" (= (registry-count) 0))
+
+(define native-registry-baseline
+  (g3c4-model-test-owner-registry-count))
+(g3c4-model-test-owner-fail-after 0)
+(reject "native owner allocation failure" 'internal
+        (lambda () (g3c4-model-create-seeded-internal 11)))
+(g3c4-model-test-owner-reset)
+(check "failed owner never enrolled"
+       (= (g3c4-model-test-owner-registry-count)
+          native-registry-baseline))
+(check "failed transaction leaves one dead tombstone"
+       (and (= (registry-count) 1)
+            (dead-retains-only-identity?
+              (car (vector-ref g3c4-model-registry 0)))))
+(check "failed transaction publishes no pending entry" (no-pending?))
+(check "failed transaction clears cleanup root"
+       (not (vector-ref g3c4-model-cleanup-root 0)))
+(check "failed transaction clears aggregate guard"
+       (not (vector-ref m3-call-state 0)))
+(check "failed transaction clears I2 active construction"
+       (not (vector-ref i2-construction-registry-root 1)))
+
+(define model-root (g3c4-model-create-seeded-internal 1729))
+(define model-entry (car (vector-ref g3c4-model-registry 0)))
+(define handles (vector-ref model-entry 8))
+(define tree (module-parameters model-root))
+(check "exact 12-slot live entry"
+       (and (= (vector-length model-entry) 12)
+            (eq? (vector-ref model-entry 0) model-root)
+            (eq? (vector-ref model-entry 1) 'c4-model)
+            (eq? (vector-ref model-entry 2) 'live)
+            (vector-ref model-entry 3)
+            (eq? (vector-ref model-entry 4) 'seeded)
+            (not (vector-ref model-entry 7))
+            (not (vector-ref model-entry 9))
+            (not (vector-ref model-entry 10))
+            (eq? (vector-ref model-entry 11) 'diagnostic-c4)))
+(check "exact original words"
+       (equal? (vector-ref model-entry 5) '#(1 1729 0 0)))
+(check "exact successor words"
+       (equal? (vector-ref model-entry 6) '#(1 1729 292 0)))
+(check "fourteen unique canonical handles"
+       (and (= (vector-length handles) 14)
+            (unique-handles? handles)))
+(check "exact parameter shapes and 1192 unique values"
+       (exact-shapes-and-size? handles))
+(check "canonical parameter paths"
+       (equal? (parameter-tree-paths tree)
+         '(("blocks" "0" "attention" "key" "weight")
+           ("blocks" "0" "attention" "output" "weight")
+           ("blocks" "0" "attention" "query" "weight")
+           ("blocks" "0" "attention" "value" "weight")
+           ("blocks" "0" "ffn" "down" "weight")
+           ("blocks" "0" "ffn" "up" "weight")
+           ("blocks" "0" "norm1" "bias")
+           ("blocks" "0" "norm1" "weight")
+           ("blocks" "0" "norm2" "bias")
+           ("blocks" "0" "norm2" "weight")
+           ("head" "weight")
+           ("norm_final" "bias")
+           ("norm_final" "weight")
+           ("position_embedding" "weight")
+           ("token_embedding" "weight"))))
+(check "exact tie group"
+       (equal? (parameter-tree-tie-groups tree)
+               '((("head" "weight")
+                  ("token_embedding" "weight")))))
+(check "token and head share canonical handle"
+       (eq? (parameter-tree-handle
+              tree '("token_embedding" "weight"))
+            (vector-ref handles 10)))
+(check "C4 position shape"
+       (equal? (parameter-handle-shape
+                 (vector-ref handles 13))
+               '(4 4)))
+(check "exact eval publication"
+       (eq? (module-mode-internal model-root) 'eval))
+(check "native owner sealed"
+       (= (g3c4-model-test-owner-state
+            (vector-ref model-entry 3)) 2))
+(check "native words remain exact"
+       (and (= (g3c4-native-owner-word
+                 (vector-ref model-entry 3) 0) 1)
+            (= (g3c4-native-owner-word
+                 (vector-ref model-entry 3) 1) 1729)
+            (= (g3c4-native-owner-word
+                 (vector-ref model-entry 3) 6) 292)))
+(check "successful transaction clears cleanup and guards"
+       (and (not (vector-ref g3c4-model-cleanup-root 0))
+            (not (vector-ref m3-call-state 0))
+            (not (vector-ref i2-construction-registry-root 1))
+            (no-pending?)))
+
+(define second-root (g3c4-model-create-seeded-internal 1730))
+(define second-entry (car (vector-ref g3c4-model-registry 0)))
+(check "second process-lifetime model has distinct authority"
+       (and (not (eq? second-root model-root))
+            (not (eq? (vector-ref second-entry 3)
+                      (vector-ref model-entry 3)))
+            (= (registry-count) 3)
+            (= (g3c4-model-test-owner-registry-count)
+               (+ native-registry-baseline 2))
+            (no-pending?)))
+
+(display "G3-C4 model authority PASS: checks=")
+(display checks)
+(newline)
