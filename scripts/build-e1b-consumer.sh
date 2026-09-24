@@ -30,6 +30,16 @@ c2_lexical_public_strings="${PROJECT_ROOT}/native/c2_wave2_public_strings.txt"
 c2_lexical_source_closure="${PROJECT_ROOT}/native/c2_wave2_source_closure.txt"
 c2_lexical_native_source_closure="${PROJECT_ROOT}/native/c2_wave2_native_source_closure.txt"
 c2_lexical_undefined="${PROJECT_ROOT}/native/c2_wave2_undefined_symbols.txt"
+cli3_lexical_root="${PROJECT_ROOT}/native/cli3_root.esk"
+cli3_lexical_formatter_root="${PROJECT_ROOT}/tests/cli3/formatter_private_root.esk"
+cli3_lexical_bridge="${PROJECT_ROOT}/native/cli3_package_bridge.c"
+cli3_lexical_renames="${PROJECT_ROOT}/native/cli3_private_renames.txt"
+cli3_lexical_exports="${PROJECT_ROOT}/native/cli3_public_exports.txt"
+cli3_lexical_public_strings="${PROJECT_ROOT}/native/cli3_public_strings.txt"
+cli3_lexical_source_closure="${PROJECT_ROOT}/native/cli3_source_closure.txt"
+cli3_lexical_formatter_source_closure="${PROJECT_ROOT}/tests/cli3/formatter_source_closure.txt"
+cli3_lexical_native_source_closure="${PROJECT_ROOT}/native/cli3_native_source_closure.txt"
+cli3_lexical_undefined="${PROJECT_ROOT}/native/cli3_undefined_symbols.txt"
 k2_tuple_requested=0
 for raw_k2_input in \
     "${raw_private_root}" "${raw_package_bridge}" \
@@ -120,6 +130,64 @@ if [[ "${c2_tuple_requested}" == 1 ]]; then
       [[ ! -L "${PROJECT_ROOT}/${c2_relative_input}" ]] || \
         die "C2 aggregate policy rejects symlinked repository closure inputs"
     done <"${c2_closure_manifest}"
+  done
+fi
+cli3_tuple_requested=0
+for raw_cli3_input in \
+    "${raw_private_root}" "${raw_package_bridge}" \
+    "${raw_package_renames}" "${raw_public_exports}"; do
+  case "${raw_cli3_input}" in
+    "${cli3_lexical_root}"|native/cli3_root.esk|\
+    "${cli3_lexical_formatter_root}"|tests/cli3/formatter_private_root.esk|\
+    "${cli3_lexical_bridge}"|native/cli3_package_bridge.c|\
+    "${cli3_lexical_renames}"|native/cli3_private_renames.txt|\
+    "${cli3_lexical_exports}"|native/cli3_public_exports.txt)
+      cli3_tuple_requested=1
+      ;;
+  esac
+done
+if [[ "${cli3_tuple_requested}" == 1 ]]; then
+  cli3_requested_lexical_root="${cli3_lexical_root}"
+  cli3_requested_lexical_source_closure="${cli3_lexical_source_closure}"
+  if [[ "${raw_private_root}" == "${cli3_lexical_formatter_root}" ]]; then
+    cli3_requested_lexical_root="${cli3_lexical_formatter_root}"
+    cli3_requested_lexical_source_closure="${cli3_lexical_formatter_source_closure}"
+  fi
+  for raw_cli3_input in \
+      "${raw_private_root}" "${raw_package_bridge}" \
+      "${raw_package_renames}" "${raw_public_exports}" \
+      "${raw_include_dirs[@]}" \
+      "${cli3_lexical_public_strings}" \
+      "${cli3_requested_lexical_source_closure}" \
+      "${cli3_lexical_native_source_closure}" \
+      "${cli3_lexical_undefined}"; do
+    [[ ! -L "${raw_cli3_input}" ]] || \
+      die "CLI3 aggregate policy rejects symlinked repository inputs before canonicalization"
+  done
+  [[ "${raw_private_root}" == "${cli3_requested_lexical_root}" && \
+     "${raw_package_bridge}" == "${cli3_lexical_bridge}" && \
+     "${raw_package_renames}" == "${cli3_lexical_renames}" && \
+     "${raw_public_exports}" == "${cli3_lexical_exports}" ]] || \
+    die "CLI3 aggregate policy requires exact lexical repository inputs"
+  [[ "${#raw_include_dirs[@]}" == 6 && \
+     "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+     "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+     "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+     "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+     "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+     "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/src" ]] || \
+    die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
+  for cli3_closure_manifest in \
+      "${cli3_requested_lexical_source_closure}" \
+      "${cli3_lexical_native_source_closure}"; do
+    while IFS= read -r cli3_relative_input; do
+      [[ -n "${cli3_relative_input}" && \
+         "${cli3_relative_input}" != /* && \
+         "${cli3_relative_input}" != *'..'* ]] || \
+        die "CLI3 aggregate policy rejects malformed repository closure input"
+      [[ ! -L "${PROJECT_ROOT}/${cli3_relative_input}" ]] || \
+        die "CLI3 aggregate policy rejects symlinked repository closure inputs"
+    done <"${cli3_closure_manifest}"
   done
 fi
 private_root="$(realpath -- "$1")"
@@ -230,6 +298,16 @@ c2_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_undefined_s
 c2_public_strings="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_public_strings.txt")"
 c2_source_closure="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_source_closure.txt")"
 c2_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/c2_wave2_native_source_closure.txt")"
+cli3_private_root="$(realpath -- "${PROJECT_ROOT}/native/cli3_root.esk")"
+cli3_formatter_private_root="$(realpath -- "${PROJECT_ROOT}/tests/cli3/formatter_private_root.esk")"
+cli3_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/cli3_package_bridge.c")"
+cli3_package_renames="$(realpath -- "${PROJECT_ROOT}/native/cli3_private_renames.txt")"
+cli3_public_exports="$(realpath -- "${PROJECT_ROOT}/native/cli3_public_exports.txt")"
+cli3_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/cli3_undefined_symbols.txt")"
+cli3_public_strings="$(realpath -- "${PROJECT_ROOT}/native/cli3_public_strings.txt")"
+cli3_source_closure="$(realpath -- "${PROJECT_ROOT}/native/cli3_source_closure.txt")"
+cli3_formatter_source_closure="$(realpath -- "${PROJECT_ROOT}/tests/cli3/formatter_source_closure.txt")"
+cli3_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/cli3_native_source_closure.txt")"
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
   die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
@@ -240,6 +318,7 @@ package_native_define=
 package_public_strings=
 package_source_closure=
 package_native_source_closure=
+cli3_formatter_fixture=0
 if [[ "${m3_tuple_requested}" == 1 ]]; then
     package_policy=m3-model-aggregate
     undefined_symbols="${m3_prefix}_undefined_symbols.txt"
@@ -269,6 +348,89 @@ elif [[ "${m3t_tuple_requested}" == 1 ]]; then
       "${PROJECT_ROOT}/native/t1_i64_shell.c"
       "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c"
       "${PROJECT_ROOT}/src/eshkol_transformer/m3t_transport.c"
+    )
+elif [[ "${private_root}" == "${cli3_private_root}" || \
+        "${private_root}" == "${cli3_formatter_private_root}" ]]; then
+    cli3_selected_lexical_root="${cli3_lexical_root}"
+    cli3_selected_lexical_source_closure="${cli3_lexical_source_closure}"
+    cli3_selected_source_closure="${cli3_source_closure}"
+    if [[ "${private_root}" == "${cli3_formatter_private_root}" ]]; then
+      cli3_formatter_fixture=1
+      cli3_selected_lexical_root="${cli3_lexical_formatter_root}"
+      cli3_selected_lexical_source_closure="${cli3_lexical_formatter_source_closure}"
+      cli3_selected_source_closure="${cli3_formatter_source_closure}"
+    fi
+    [[ "${raw_private_root}" == "${cli3_selected_lexical_root}" && \
+       "${raw_package_bridge}" == "${cli3_lexical_bridge}" && \
+       "${raw_package_renames}" == "${cli3_lexical_renames}" && \
+       "${raw_public_exports}" == "${cli3_lexical_exports}" ]] || \
+      die "CLI3 aggregate policy requires exact lexical repository inputs"
+    [[ "${#raw_include_dirs[@]}" == 6 && \
+       "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+       "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+       "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+       "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+       "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+       "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/src" ]] || \
+      die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
+    for raw_cli3_input in \
+        "${raw_private_root}" "${raw_package_bridge}" \
+        "${raw_package_renames}" "${raw_public_exports}" \
+        "${raw_include_dirs[@]}" \
+        "${cli3_lexical_public_strings}" \
+        "${cli3_selected_lexical_source_closure}" \
+        "${cli3_lexical_native_source_closure}" \
+        "${cli3_lexical_undefined}"; do
+      [[ ! -L "${raw_cli3_input}" ]] || \
+        die "CLI3 aggregate policy rejects symlinked repository inputs"
+    done
+    for cli3_closure_manifest in \
+        "${cli3_selected_lexical_source_closure}" \
+        "${cli3_lexical_native_source_closure}"; do
+      while IFS= read -r cli3_relative_input; do
+        [[ -n "${cli3_relative_input}" && \
+           "${cli3_relative_input}" != /* && \
+           "${cli3_relative_input}" != *'..'* ]] || \
+          die "CLI3 aggregate policy rejects malformed repository closure input"
+        [[ ! -L "${PROJECT_ROOT}/${cli3_relative_input}" ]] || \
+          die "CLI3 aggregate policy rejects symlinked repository closure inputs"
+      done <"${cli3_closure_manifest}"
+    done
+    [[ "${package_bridge}" == "${cli3_package_bridge}" && \
+       "${package_renames}" == "${cli3_package_renames}" && \
+       "${public_exports}" == "${cli3_public_exports}" ]] || \
+      die "CLI3 aggregate policy requires the exact repository tuple"
+    [[ "${#canonical_include_dirs[@]}" == 6 && \
+       "${canonical_include_dirs[0]}" == "${t1_include_p1}" && \
+       "${canonical_include_dirs[1]}" == "${t1_include_c1}" && \
+       "${canonical_include_dirs[2]}" == "${t2_include_t2}" && \
+       "${canonical_include_dirs[3]}" == "${t1_include_t1}" && \
+       "${canonical_include_dirs[4]}" == "${d2_include_d2}" && \
+       "${canonical_include_dirs[5]}" == "${t1_include_src}" ]] || \
+      die "CLI3 aggregate policy requires exact ordered trusted include roots"
+    package_policy=cli3-c2-successor
+    undefined_symbols="${cli3_undefined_symbols}"
+    package_public_strings="${cli3_public_strings}"
+    package_source_closure="${cli3_selected_source_closure}"
+    package_native_source_closure="${cli3_native_source_closure}"
+    package_native_sources=(
+      "${PROJECT_ROOT}/native/data_io.c"
+      "${PROJECT_ROOT}/native/checkpoint_io.c"
+      "${PROJECT_ROOT}/native/kernel_abi.c"
+      "${PROJECT_ROOT}/native/i64_tensor.c"
+      "${PROJECT_ROOT}/native/t1_i64_shell.c"
+      "${PROJECT_ROOT}/native/f32_tensor.c"
+      "${PROJECT_ROOT}/native/d2_native.c"
+      "${PROJECT_ROOT}/native/o2_optimizer.c"
+      "${PROJECT_ROOT}/native/k2_capabilities.c"
+      "${PROJECT_ROOT}/native/c2_x1_canonical.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_codec.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_format.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_save_bridge.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_reader.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_core.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_load_bridge.c"
+      "${PROJECT_ROOT}/native/c2_checkpoint_inspect_bridge.c"
     )
 elif [[ "${private_root}" == "${c2_private_root}" ]]; then
     [[ "${raw_private_root}" == "${c2_lexical_root}" && \
@@ -624,7 +786,9 @@ else
       "${t2_d1_test_public_exports}" \
       "${d2_package_bridge}" "${d2_package_renames}" "${d2_public_exports}" \
       "${d2_test_package_bridge}" "${d2_test_public_exports}" \
-      "${c2_package_bridge}" "${c2_package_renames}" "${c2_public_exports}"; do
+      "${c2_package_bridge}" "${c2_package_renames}" "${c2_public_exports}" \
+      "${cli3_package_bridge}" "${cli3_package_renames}" \
+      "${cli3_public_exports}"; do
     if [[ "${package_bridge}" == "${reserved_input}" || \
           "${package_renames}" == "${reserved_input}" || \
           "${public_exports}" == "${reserved_input}" ]]; then
@@ -658,7 +822,16 @@ if [[ "${package_policy}" == d2-wave2-test-resource ]]; then
       ;;
   esac
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${cli3_formatter_fixture}" == 1 ]]; then
+  canonical_cli3_artifact_dir="$(realpath -m -- "$(project_build_dir)/cli3")"
+  case "${output_object}" in
+    "${canonical_cli3_artifact_dir}"/*)
+      die "CLI3 formatter-test object cannot target the canonical production directory"
+      ;;
+  esac
+fi
+if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == d2-wave2-aggregate ]]; then
   tail -n +6 "${i2_private_root}" >"${output_object}.i2-extension.expected"
   cmp "${PROJECT_ROOT}/native/i2_wave2_extension.esk" \
@@ -762,6 +935,7 @@ run_compiler() {
 
 if [[ "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == cli3-c2-successor || \
       "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
@@ -780,6 +954,7 @@ for include_dir in "${canonical_include_dirs[@]}"; do
 done
 if [[ "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == cli3-c2-successor || \
       "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
@@ -833,7 +1008,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
 
 {
   cat "${PROJECT_ROOT}/native/e1b_private_renames.txt"
-  if [[ "${package_policy}" == c2-wave2-aggregate || \
+  if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
         "${package_policy}" == t1-wave1-aggregate || \
         "${package_policy}" == k2-wave2-aggregate || \
         "${package_policy}" == m3-model-aggregate || \
@@ -845,7 +1021,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
         "${package_policy}" == d2-wave2-aggregate || \
         "${package_policy}" == d2-wave2-test-resource ]]; then
     cat "${PROJECT_ROOT}/native/x1_config_private_renames.txt"
-    if [[ "${package_policy}" == c2-wave2-aggregate || \
+    if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
           "${package_policy}" == k2-wave2-aggregate || \
           "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
@@ -864,7 +1041,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
           "${package_policy}" == i2-wave2-aggregate || \
           "${package_policy}" == o2-wave2-aggregate ]]; then
       cat "${PROJECT_ROOT}/native/t1_wave1_private_renames.txt"
-    elif [[ "${package_policy}" == c2-wave2-aggregate ]]; then
+    elif [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate ]]; then
       grep -v '^c1-wave2-persistence-policy ' \
         "${PROJECT_ROOT}/native/t2_wave2_private_renames.txt"
       cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
@@ -882,6 +1060,9 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
         "${package_policy}" == k2-wave2-aggregate || \
         "${package_policy}" == o2-wave2-aggregate ]]; then
     cat "${PROJECT_ROOT}/native/i2_wave2_private_renames.txt"
+  fi
+  if [[ "${package_policy}" == cli3-c2-successor ]]; then
+    cat "${PROJECT_ROOT}/native/c2_wave2_private_renames.txt"
   fi
   cat "${package_renames}"
 } >"${e1b_tmp}/renames.txt"
@@ -917,7 +1098,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -fPIC -fvisibility=hidden -fno-common
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
   )
-  if [[ "${package_policy}" == c2-wave2-aggregate || \
+  if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
         "${package_policy}" == k2-wave2-aggregate || \
         "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
@@ -929,7 +1111,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       -ffp-contract=off -fexcess-precision=standard -frounding-math
     )
   fi
-  if [[ "${package_policy}" == c2-wave2-aggregate ]]; then
+  if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate ]]; then
     package_native_cflags+=(-DET_C2_CARRIER_FACTORIES)
   fi
   if [[ -n "${package_native_define}" ]]; then
@@ -1027,6 +1210,7 @@ if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-er
 fi
 if [[ "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == cli3-c2-successor || \
       "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
@@ -1037,7 +1221,8 @@ if [[ "${package_policy}" == m3-model-aggregate || \
      "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "tokenizer aggregate retains an unresolved trusted native reference"
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
       "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
@@ -1102,6 +1287,7 @@ if [[ "${package_policy}" == d1 || "${package_policy}" == d1-test-faults ]]; the
 fi
 if [[ "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
+      "${package_policy}" == cli3-c2-successor || \
       "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == t1-wave1-aggregate || \
       "${package_policy}" == t2-wave2-aggregate || \
@@ -1118,7 +1304,8 @@ if [[ "${package_policy}" == m3-model-aggregate || \
       die "tokenizer aggregate required privileged definition is not local: ${privileged}"
   done
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == k2-wave2-aggregate || \
       "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate || \
@@ -1135,7 +1322,8 @@ if [[ "${package_policy}" == c2-wave2-aggregate || \
       die "I2 aggregate required privileged definition is not local: ${privileged}"
   done
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == o2-wave2-aggregate ]]; then
   for privileged in \
     et_o2_optimizer_step_v1 \
@@ -1148,7 +1336,8 @@ if [[ "${package_policy}" == c2-wave2-aggregate || \
       die "O2 aggregate required privileged definition is not local: ${privileged}"
   done
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate || \
+if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == k2-wave2-aggregate ]]; then
   for privileged in \
     et_k2_private_runtime_ensure_v1 \
@@ -1166,7 +1355,8 @@ if [[ "${package_policy}" == c2-wave2-aggregate || \
       die "K2 aggregate required privileged definition is not local: ${privileged}"
   done
 fi
-if [[ "${package_policy}" == c2-wave2-aggregate ]]; then
+if [[ "${package_policy}" == cli3-c2-successor || \
+      "${package_policy}" == c2-wave2-aggregate ]]; then
   for privileged in \
     et_c2_private_checkpoint_inspect_bridge_v1 \
     et_c2_private_checkpoint_load_stage_v1 \
@@ -1181,6 +1371,16 @@ if [[ "${package_policy}" == c2-wave2-aggregate ]]; then
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
       "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
       die "C2 aggregate required privileged definition is not local: ${privileged}"
+  done
+fi
+if [[ "${package_policy}" == cli3-c2-successor ]]; then
+  for privileged in \
+    cli3_private_dispatch_cabi_v1 \
+    et_cli3_private_fallback_status_set_v1 \
+    et_cli3_private_stdout_write_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
+      "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
+      die "CLI3 aggregate required private definition is not local: ${privileged}"
   done
 fi
 
