@@ -735,9 +735,18 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #error "ET_G3C4_TOKEN_FRAME_PRIVATE requires Step 9A"
 #endif
 
+#if defined(ET_G3C4_TOKEN_FORWARD_PRIVATE) && \
+    !defined(ET_G3C4_TOKEN_FRAME_PRIVATE)
+#error "ET_G3C4_TOKEN_FORWARD_PRIVATE requires Step 10A"
+#endif
+
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
 #include "eshkol_transformer/g3s_sampling_abi.h"
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+#include "eshkol_transformer/g3n_primitives_abi.h"
+#include "eshkol_transformer/n2_primitives_abi.h"
+#endif
 #endif
 
 
@@ -820,6 +829,9 @@ typedef struct et_g3c4_context_internal {
   uint32_t token_frame_state;
   int64_t token_frame_candidate;
   int64_t token_frame_successor[4];
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+  int64_t token_frame_position;
+#endif
 #endif
 #endif
 } et_g3c4_context_internal;
@@ -998,7 +1010,11 @@ static int et_g3c4_token_frame_valid(
   if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_IDLE)
     return context->token_frame_transaction == NULL &&
            context->token_frame_candidate == 0 &&
-           et_g3c4_zero_i64_words(context->token_frame_successor, 4u);
+           et_g3c4_zero_i64_words(context->token_frame_successor, 4u)
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+           && context->token_frame_position == 0
+#endif
+           ;
   if (context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED &&
       context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY)
     return 0;
@@ -1007,7 +1023,12 @@ static int et_g3c4_token_frame_valid(
          context->token_frame_candidate <= 255 &&
          context->token_frame_successor[0] == 1 &&
          context->token_frame_successor[1] ==
-             context->generator_rng_words[1];
+             context->generator_rng_words[1]
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+         && context->token_frame_position >= 0 &&
+         context->token_frame_position <= 3
+#endif
+         ;
 }
 
 static int et_g3c4_token_frame_idle(
@@ -1217,7 +1238,10 @@ _Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
                "G3-C4 transport header must be 32 bytes");
 _Static_assert(offsetof(et_g3c4_context_internal, transport) == 0u,
                "G3-C4 context header must be first");
-#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+_Static_assert(sizeof(et_g3c4_context_internal) == 1584u,
+               "G3-C4 token-forward context must be 1584 bytes");
+#elif defined(ET_G3C4_TOKEN_FRAME_PRIVATE)
 _Static_assert(sizeof(et_g3c4_context_internal) == 1576u,
                "G3-C4 token-frame context must be 1576 bytes");
 #else
@@ -2152,6 +2176,9 @@ static void et_g3c4_token_frame_reset(
   context->token_frame_candidate = 0;
   memset(context->token_frame_successor, 0,
          sizeof(context->token_frame_successor));
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+  context->token_frame_position = 0;
+#endif
 }
 
 static void et_g3c4_token_frame_discard(
@@ -2175,6 +2202,15 @@ int64_t et_g3c4_private_token_frame_begin_v1(
   int64_t token_candidate = -1;
   int64_t successor_candidate[4] = {0, 0, 0, 0};
   int64_t append_count = 1;
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *borrowed_keys = NULL;
+  const et_kernel_tensor_view_v1 *borrowed_values = NULL;
+  const et_kernel_tensor_view_v1 *committed_lengths = NULL;
+  const et_kernel_tensor_view_v1 *committed_keep = NULL;
+  int64_t token_position;
+  et_g3c4_error_state_internal first;
+#endif
 
   et_g3c4_error_reset_internal();
   if (!et_g3c4_range_valid(full_logits, 1024u * sizeof(float)) ||
@@ -2208,6 +2244,35 @@ int64_t et_g3c4_private_token_frame_begin_v1(
           context, full_logits, &token_candidate,
           successor_candidate) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_begin_v1(
+              context->cache, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_layer_v1(
+              borrow, 0u, &borrowed_keys, &borrowed_values,
+              &committed_lengths, &committed_keep, &error),
+          &error) != 0) {
+    first = et_g3c4_error_snapshot_internal();
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+    et_g3c4_error_restore_internal(first);
+    return et_g3c4_error_state.category;
+  }
+  if (borrowed_keys == NULL || borrowed_values == NULL ||
+      committed_lengths == NULL || committed_keep == NULL ||
+      committed_lengths->data == NULL ||
+      *(const int64_t *)committed_lengths->data < 0 ||
+      *(const int64_t *)committed_lengths->data > 3) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    first = et_g3c4_error_snapshot_internal();
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+    et_g3c4_error_restore_internal(first);
+    return et_g3c4_error_state.category;
+  }
+  token_position = *(const int64_t *)committed_lengths->data;
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+#endif
   append_counts = et_g3c4_view(
       &append_count, sizeof(append_count), "i64", 1u, append_shape);
   if (et_g3c4_capture_kernel(
@@ -2220,6 +2285,9 @@ int64_t et_g3c4_private_token_frame_begin_v1(
   context->token_frame_candidate = token_candidate;
   memcpy(context->token_frame_successor, successor_candidate,
          sizeof(successor_candidate));
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+  context->token_frame_position = token_position;
+#endif
   memcpy(speculative_token_output, &token_candidate,
          sizeof(token_candidate));
   return 0;
@@ -2333,6 +2401,333 @@ int64_t et_g3c4_private_token_frame_abort_v1(void *candidate) {
   if (et_g3c4_token_frame_idle(context)) return 0;
   et_g3c4_token_frame_discard(context);
   return 0;
+}
+#endif
+
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+typedef struct et_g3c4_token_forward_scratch {
+  float et[4], ep[4], x[4], n1[4];
+  float qt[4], kt[4], vt[4];
+  float qh[4], kh[4], vh[4], ah[4];
+  float at[4], ao[4], r[4], n2[4];
+  float fu[8], fg[8], fd[4], y[4], nf[4], z[256];
+} et_g3c4_token_forward_scratch;
+
+static int et_g3c4_token_runtime_discover(
+    const et_kernel_provider_v1 *provider,
+    et_kernel_runtime **runtime_output) {
+  et_kernel_error error;
+  return et_g3c4_capture_kernel(
+      et_kernel_runtime_discover(
+          et_g3c4_resolve_provider, (void *)provider,
+          runtime_output, &error), &error);
+}
+
+static int et_g3c4_token_dispatch(
+    et_kernel_runtime *runtime, const char *capability,
+    const char *operation, size_t rank, const uint64_t *shape,
+    et_kernel_tensor_view_v1 *inputs, size_t input_count,
+    et_kernel_tensor_view_v1 output) {
+  et_kernel_request_v1 request = {
+    sizeof(request), operation, "f32", "cpu", rank, shape, 1u, {0}};
+  et_kernel_call_v1 call = {
+    sizeof(call), capability, &request,
+    input_count, sizeof(inputs[0]), input_count * sizeof(inputs[0]), inputs,
+    1u, sizeof(output), sizeof(output), &output};
+  et_kernel_error error;
+  return et_g3c4_capture_kernel(
+      et_kernel_runtime_dispatch(runtime, &call, &error), &error);
+}
+
+int64_t et_g3c4_private_token_forward_v1(
+    void *candidate, int64_t speculative_token,
+    float logits_output[256]) {
+  static const uint64_t ids_shape[2] = {1u, 1u};
+  static const uint64_t token_embedding_row[4] = {1u, 1u, 256u, 4u};
+  static const uint64_t position_embedding_row[4] = {1u, 1u, 4u, 4u};
+  static const uint64_t d4_shape[3] = {1u, 1u, 4u};
+  static const uint64_t d8_shape[3] = {1u, 1u, 8u};
+  static const uint64_t heads_shape[4] = {1u, 2u, 1u, 2u};
+  static const uint64_t head_layout_row[4] = {1u, 1u, 2u, 2u};
+  static const uint64_t linear_d4_d4[4] = {1u, 1u, 4u, 4u};
+  static const uint64_t linear_d4_d8[4] = {1u, 1u, 4u, 8u};
+  static const uint64_t linear_d8_d4[4] = {1u, 1u, 8u, 4u};
+  static const uint64_t linear_d4_v256[4] = {1u, 1u, 4u, 256u};
+  static const uint64_t attention_row[6] = {1u, 2u, 2u, 1u, 4u, 2u};
+  static const uint64_t attention_query_shape[2] = {1u, 1u};
+  static const uint64_t attention_key_shape[2] = {1u, 4u};
+  static const uint64_t attention_mask_shape[3] = {1u, 1u, 4u};
+  et_g3c4_context_internal *context;
+  et_g3c4_token_forward_scratch scratch;
+  et_kernel_runtime *g3n_runtime = NULL;
+  et_kernel_runtime *n2_runtime = NULL;
+  et_a2_kv_cache_transaction_view *transaction_view = NULL;
+  const et_kernel_tensor_view_v1 *cached_keys = NULL;
+  const et_kernel_tensor_view_v1 *cached_values = NULL;
+  const et_kernel_tensor_view_v1 *effective_lengths = NULL;
+  const et_kernel_tensor_view_v1 *key_keep = NULL;
+  et_kernel_tensor_view_v1 inputs[6];
+  et_kernel_tensor_view_v1 output;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+  int64_t token_id = speculative_token;
+  int64_t query_position;
+  int64_t key_positions[4] = {0, 1, 2, 3};
+  uint8_t causal_keep[4];
+  uint32_t epsilon_bits = UINT32_C(0x3727c5ac);
+  float epsilon;
+  size_t key;
+
+  et_g3c4_error_reset_internal();
+  if (!et_g3c4_range_valid(logits_output, 256u * sizeof(float)) ||
+      (uintptr_t)logits_output % _Alignof(float) != 0u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 1 ||
+      context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED ||
+      context->token_frame_transaction == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  if (speculative_token != context->token_frame_candidate) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return et_g3c4_error_state.category;
+  }
+  if (et_g3c4_ranges_overlap(
+          logits_output, 256u * sizeof(float), context, sizeof(*context))) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  memset(&scratch, 0, sizeof(scratch));
+  memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
+  if (et_g3c4_token_runtime_discover(
+          et_g3n_kernel_provider_v1(), &g3n_runtime) != 0)
+    goto fail;
+  if (et_g3c4_token_runtime_discover(
+          et_n2_kernel_provider_v1(), &n2_runtime) != 0)
+    goto fail;
+
+  inputs[0] = et_g3c4_view(
+      &token_id, sizeof(token_id), "i64", 2u, ids_shape);
+  inputs[1] = context->pins.views[10];
+  output = et_g3c4_view(
+      scratch.et, sizeof(scratch.et), "f32", 3u, d4_shape);
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.embedding-forward", "g3n.embedding.forward",
+          4u, token_embedding_row, inputs, 2u, output) != 0)
+    goto fail;
+
+  query_position = context->token_frame_position;
+  if (et_g3c4_token_dispatch(
+          et_g3c4_forward_runtime, "g3c4.embedding-forward",
+          "g3c4.embedding.forward", 4u, position_embedding_row,
+          (et_kernel_tensor_view_v1[2]){
+            et_g3c4_view(&query_position, sizeof(query_position),
+                          "i64", 2u, ids_shape),
+            context->pins.views[13]}, 2u,
+          et_g3c4_view(scratch.ep, sizeof(scratch.ep),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.residual-forward", "g3n.residual.forward",
+          3u, d4_shape,
+          (et_kernel_tensor_view_v1[2]){
+            et_g3c4_view(scratch.et, sizeof(scratch.et),
+                          "f32", 3u, d4_shape),
+            et_g3c4_view(scratch.ep, sizeof(scratch.ep),
+                          "f32", 3u, d4_shape)}, 2u,
+          et_g3c4_view(scratch.x, sizeof(scratch.x),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+  inputs[0] = et_g3c4_view(
+      scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
+  inputs[1] = context->pins.views[7];
+  inputs[2] = context->pins.views[6];
+  inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.layer-norm-forward",
+          "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u,
+          et_g3c4_view(scratch.n1, sizeof(scratch.n1),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+
+#define ET_G3C4_TOKEN_LINEAR(weight_index, source, target, row) do { \
+  inputs[0] = et_g3c4_view( \
+      (source), sizeof(source), "f32", 3u, \
+      sizeof(source) == sizeof(scratch.fu) ? d8_shape : d4_shape); \
+  inputs[1] = context->pins.views[(weight_index)]; \
+  output = et_g3c4_view( \
+      (target), sizeof(target), "f32", 3u, \
+      sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
+      (sizeof(target) == sizeof(scratch.z) ? \
+          (const uint64_t[3]){1u, 1u, 256u} : d4_shape)); \
+  if (et_g3c4_token_dispatch( \
+          g3n_runtime, "g3n.linear-forward", \
+          "g3n.linear.forward-no-bias", 4u, (row), \
+          inputs, 2u, output) != 0) \
+    goto fail; \
+} while (0)
+
+  ET_G3C4_TOKEN_LINEAR(2u, scratch.n1, scratch.qt, linear_d4_d4);
+  ET_G3C4_TOKEN_LINEAR(0u, scratch.n1, scratch.kt, linear_d4_d4);
+  ET_G3C4_TOKEN_LINEAR(3u, scratch.n1, scratch.vt, linear_d4_d4);
+
+#define ET_G3C4_TOKEN_LAYOUT(operation, source, source_rank, source_shape, \
+                            target, target_rank, target_shape) do { \
+  inputs[0] = et_g3c4_view( \
+      (source), sizeof(source), "f32", (source_rank), (source_shape)); \
+  output = et_g3c4_view( \
+      (target), sizeof(target), "f32", (target_rank), (target_shape)); \
+  if (et_g3c4_token_dispatch( \
+          g3n_runtime, "g3n.head-layout-forward", (operation), \
+          4u, head_layout_row, inputs, 1u, output) != 0) \
+    goto fail; \
+} while (0)
+
+  ET_G3C4_TOKEN_LAYOUT(
+      "g3n.heads.split.forward", scratch.qt, 3u, d4_shape,
+      scratch.qh, 4u, heads_shape);
+  ET_G3C4_TOKEN_LAYOUT(
+      "g3n.heads.split.forward", scratch.kt, 3u, d4_shape,
+      scratch.kh, 4u, heads_shape);
+  ET_G3C4_TOKEN_LAYOUT(
+      "g3n.heads.split.forward", scratch.vt, 3u, d4_shape,
+      scratch.vh, 4u, heads_shape);
+
+  if (et_g3c4_private_token_frame_stage_v1(
+          context, speculative_token, scratch.kh, scratch.vh) != 0)
+    goto fail;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_view_begin_v1(
+              context->token_frame_transaction, 0u,
+              &transaction_view, &error), &error) != 0)
+    goto fail;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_view_tensors_v1(
+              transaction_view, &cached_keys, &cached_values,
+              &effective_lengths, &key_keep, &error), &error) != 0)
+    goto fail;
+  if (cached_keys == NULL || cached_values == NULL ||
+      effective_lengths == NULL || key_keep == NULL ||
+      effective_lengths->data == NULL || key_keep->data == NULL ||
+      *(const int64_t *)effective_lengths->data < 1 ||
+      *(const int64_t *)effective_lengths->data > 4 ||
+      *(const int64_t *)effective_lengths->data != query_position + 1) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto fail;
+  }
+  for (key = 0u; key < 4u; key++)
+    causal_keep[key] =
+        ((const uint8_t *)key_keep->data)[key] != 0u &&
+        key_positions[key] <= query_position ? 1u : 0u;
+  inputs[0] = et_g3c4_view(
+      scratch.qh, sizeof(scratch.qh), "f32", 4u, heads_shape);
+  inputs[1] = *cached_keys;
+  inputs[2] = *cached_values;
+  inputs[3] = et_g3c4_view(
+      &query_position, sizeof(query_position), "i64", 2u,
+      attention_query_shape);
+  inputs[4] = et_g3c4_view(
+      key_positions, sizeof(key_positions), "i64", 2u,
+      attention_key_shape);
+  inputs[5] = et_g3c4_view(
+      causal_keep, sizeof(causal_keep), "bool", 3u,
+      attention_mask_shape);
+  if (et_g3c4_token_dispatch(
+          et_g3c4_forward_runtime, "g3c4.causal-attention",
+          "g3c4.causal-attention.forward", 6u, attention_row,
+          inputs, 6u,
+          et_g3c4_view(scratch.ah, sizeof(scratch.ah),
+                       "f32", 4u, heads_shape)) != 0)
+    goto fail;
+  if (et_a2_kv_cache_transaction_view_end_v1(
+          &transaction_view, &error) != 0)
+    abort();
+
+  ET_G3C4_TOKEN_LAYOUT(
+      "g3n.heads.merge.forward", scratch.ah, 4u, heads_shape,
+      scratch.at, 3u, d4_shape);
+  ET_G3C4_TOKEN_LINEAR(1u, scratch.at, scratch.ao, linear_d4_d4);
+  inputs[0] = et_g3c4_view(
+      scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
+  inputs[1] = et_g3c4_view(
+      scratch.ao, sizeof(scratch.ao), "f32", 3u, d4_shape);
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.residual-forward", "g3n.residual.forward",
+          3u, d4_shape, inputs, 2u,
+          et_g3c4_view(scratch.r, sizeof(scratch.r),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+  inputs[0] = et_g3c4_view(
+      scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
+  inputs[1] = context->pins.views[9];
+  inputs[2] = context->pins.views[8];
+  inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.layer-norm-forward",
+          "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u,
+          et_g3c4_view(scratch.n2, sizeof(scratch.n2),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+  ET_G3C4_TOKEN_LINEAR(5u, scratch.n2, scratch.fu, linear_d4_d8);
+  inputs[0] = et_g3c4_view(
+      scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
+  if (et_g3c4_token_dispatch(
+          n2_runtime, "kernel.activation", "gelu.forward",
+          3u, d8_shape, inputs, 1u,
+          et_g3c4_view(scratch.fg, sizeof(scratch.fg),
+                       "f32", 3u, d8_shape)) != 0)
+    goto fail;
+  ET_G3C4_TOKEN_LINEAR(4u, scratch.fg, scratch.fd, linear_d8_d4);
+  inputs[0] = et_g3c4_view(
+      scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
+  inputs[1] = et_g3c4_view(
+      scratch.fd, sizeof(scratch.fd), "f32", 3u, d4_shape);
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.residual-forward", "g3n.residual.forward",
+          3u, d4_shape, inputs, 2u,
+          et_g3c4_view(scratch.y, sizeof(scratch.y),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+  inputs[0] = et_g3c4_view(
+      scratch.y, sizeof(scratch.y), "f32", 3u, d4_shape);
+  inputs[1] = context->pins.views[12];
+  inputs[2] = context->pins.views[11];
+  inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+  if (et_g3c4_token_dispatch(
+          g3n_runtime, "g3n.layer-norm-forward",
+          "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u,
+          et_g3c4_view(scratch.nf, sizeof(scratch.nf),
+                       "f32", 3u, d4_shape)) != 0)
+    goto fail;
+  ET_G3C4_TOKEN_LINEAR(10u, scratch.nf, scratch.z, linear_d4_v256);
+
+#undef ET_G3C4_TOKEN_LAYOUT
+#undef ET_G3C4_TOKEN_LINEAR
+  et_kernel_runtime_destroy(n2_runtime);
+  et_kernel_runtime_destroy(g3n_runtime);
+  memcpy(logits_output, scratch.z, sizeof(scratch.z));
+  return 0;
+
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (transaction_view != NULL &&
+      et_a2_kv_cache_transaction_view_end_v1(
+          &transaction_view, &error) != 0)
+    abort();
+  if (!et_g3c4_token_frame_idle(context))
+    et_g3c4_token_frame_discard(context);
+  if (n2_runtime != NULL) et_kernel_runtime_destroy(n2_runtime);
+  if (g3n_runtime != NULL) et_kernel_runtime_destroy(g3n_runtime);
+  et_g3c4_error_restore_internal(first);
+  return et_g3c4_error_state.category;
 }
 #endif
 #endif
