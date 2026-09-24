@@ -60,8 +60,17 @@ passed the same 647 checks; root verified
 `g3c4-output-prepare-ab7ae0a/SHA256SUMS` (`803c7d15...`) and reran the
 647-check gate on the merged tree, with Q0 Python isolation 4/4. It records
 G0/G1 staged numeric IDs, cache length and RNG into a pending output without
-publishing it. ID decoding, text, result publication and the generation loop
-remain pending.
+publishing it. The next reviewed private Step21A `0a3bf2e`/tree `1dfc829`
+is integrated as identical patch `f29811e`. It authenticates the pending
+owner and binding, borrows the exact output I1, validates G0/G1 IDs, then
+copies G1 as eight explicit little-endian bytes to a disjoint caller carrier
+and advances ID readiness once. The supported f31 normal, repeat and
+ASan/UBSan/LSan gates pass identically at 655 checks, including alias,
+active-borrow, allocation, malformed-length, ownership and retry cuts;
+merged Q0 Python isolation passes 4/4. Root's single independent review
+approved the code and verified
+`g3c4-step21a-merged-f29811e-20260924/SHA256SUMS` (`0151774f...`).
+T1 text decoding, result publication and the generation loop remain pending.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
@@ -165,6 +174,15 @@ both builds; root verified
 `f32-vm-scalar-activations-d960add-20260924/SHA256SUMS` (`490c9feb...`)
 and approved the single focused review. The existing scalar fallbacks in
 FIDs 463 and 466–468 remain; this isolated leaf is not full F32 acceptance.
+The separate reviewed native AOT/JIT and VM `conjugate` leaf
+`e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
+result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
+scalar identity and retains complex conjugation. Root's single independent
+review blocked an initial VM scalar-kind mismatch, then approved the revised
+leaf after DOUBLE/INT baseline witnesses. Supported f31 Release and
+ASan+UBSan+LSan focused gates each pass 6/6; root verified
+`f32-conjugate-e1394ee5-final-20260924/SHA256SUMS` (`e0507204...`). The leaf
+has not yet been composed with the runtime union or accepted as full F32.
 The sealed generic E3 dependency audit on exact `9bbb3ff`,
 `e3-generic-dependency-audit-9bbb3ff-20260924T184109Z/evidence-files.sha256`
 (`49195ba6...`), confirms the installed diagnostic facade and private E3
