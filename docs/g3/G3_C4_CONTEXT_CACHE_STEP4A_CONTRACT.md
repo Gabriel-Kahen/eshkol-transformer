@@ -1,6 +1,10 @@
 # G3-C4 Step 4a native context and fixed-cache contract
 
-Status: **draft for root acceptance; implementation is not authorized**.
+Status: **root accepted for bounded Step 4a implementation**. Root accepted the
+independently reviewed draft at commit
+`9d4f97af37c54cc84bf6205c46c3090c32959ba3`, tree
+`41bf7218f74b1f8ec071972ea9e2644dfd2dce3c`, with all three decisions in
+Section 8. That disposition authorizes only the files and behavior below.
 
 This contract narrows Section 4 of
 [`G3_C4_MODEL_CONTEXT_SUCCESSOR_CONTRACT.md`](G3_C4_MODEL_CONTEXT_SUCCESSOR_CONTRACT.md)
@@ -193,7 +197,7 @@ Eshkol generator construction, and package/CI integration are outside Step 4a.
 
 ## 8. Root acceptance decisions
 
-Root acceptance of this draft fixes all three decisions below before code:
+Root acceptance fixed all three decisions below before implementation:
 
 1. authorize the context-only two-function private boundary instead of
    partially implementing or ignoring the later seed/RNG arguments;
@@ -203,6 +207,5 @@ Root acceptance of this draft fixes all three decisions below before code:
 3. allow multiple idle contexts per sealed owner while retaining every closed
    native context as a process-lifetime dead tombstone.
 
-If any decision changes, this draft must be revised and reviewed again. There
-is no implementation authorization merely from the earlier broader Section 4
-text.
+If any decision changes, this contract must be revised and reviewed again. The
+earlier broader Section 4 text alone authorizes no additional implementation.

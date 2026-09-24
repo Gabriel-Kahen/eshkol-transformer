@@ -701,3 +701,130 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
   return et_g3c4_fail(
       ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 }
+
+#ifdef ET_G3C4_CONTEXT_PRIVATE
+#include "g3c4_context_internal.h"
+#include "eshkol_transformer/a2_kv_cache.h"
+
+#define ET_G3C4_CONTEXT_MAGIC UINT64_C(0x4733433443545831)
+
+enum {
+  ET_G3C4_CONTEXT_KIND = 1,
+  ET_G3C4_CONTEXT_LIVE = 1,
+  ET_G3C4_CONTEXT_DEAD = 2
+};
+
+typedef struct et_g3c4_context_internal {
+  struct et_g3c4_context_internal *registry_next;
+  uint64_t magic;
+  uint32_t kind;
+  uint32_t state;
+  uint32_t busy;
+  et_g3c4_model_owner_internal *owner;
+  et_a2_kv_cache *cache;
+} et_g3c4_context_internal;
+
+static et_g3c4_context_internal *et_g3c4_context_registry;
+
+#ifdef ET_G3C4_CONTEXT_TESTING
+static size_t et_g3c4_context_allocation_limit = SIZE_MAX;
+static size_t et_g3c4_context_successful_allocations;
+#endif
+
+static et_g3c4_context_internal *et_g3c4_admit_context(
+    const void *candidate) {
+  et_g3c4_context_internal *context;
+  for (context = et_g3c4_context_registry;
+       context != NULL && (const void *)context != candidate;
+       context = context->registry_next) {}
+  if (context == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (context->magic != ET_G3C4_CONTEXT_MAGIC ||
+      context->kind != ET_G3C4_CONTEXT_KIND) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  return context;
+}
+
+static et_g3c4_context_internal *et_g3c4_context_allocate(void) {
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (et_g3c4_context_successful_allocations >=
+      et_g3c4_context_allocation_limit)
+    return NULL;
+#endif
+  et_g3c4_context_internal *context =
+      (et_g3c4_context_internal *)calloc(1u, sizeof(*context));
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (context != NULL) et_g3c4_context_successful_allocations++;
+#endif
+  return context;
+}
+
+void *et_g3c4_private_context_create_v1(void *candidate) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_context_internal *context;
+  et_a2_kv_cache *cache = NULL;
+  et_kernel_error error;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return NULL;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  context = et_g3c4_context_allocate();
+  if (context == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_create_v1(
+              1u, 1u, 2u, 4u, 2u, &cache, &error),
+          &error) != 0) {
+    et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
+    free(context);
+    et_g3c4_error_restore_internal(first);
+    return NULL;
+  }
+  context->magic = ET_G3C4_CONTEXT_MAGIC;
+  context->kind = ET_G3C4_CONTEXT_KIND;
+  context->state = ET_G3C4_CONTEXT_LIVE;
+  context->busy = 0u;
+  context->owner = owner;
+  context->cache = cache;
+  context->registry_next = et_g3c4_context_registry;
+  et_g3c4_context_registry = context;
+  return context;
+}
+
+int64_t et_g3c4_private_context_close_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_model_owner_internal *owner;
+  et_kernel_error error;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_context(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->state == ET_G3C4_CONTEXT_DEAD) return 0;
+  if (context->state != ET_G3C4_CONTEXT_LIVE || context->busy != 0u ||
+      context->owner == NULL || context->cache == NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  owner = et_g3c4_admit_owner(context->owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner != context->owner || owner->state != ET_G3C4_OWNER_SEALED ||
+      owner->active != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  context->owner = NULL;
+  context->state = ET_G3C4_CONTEXT_DEAD;
+  return 0;
+}
+#endif
