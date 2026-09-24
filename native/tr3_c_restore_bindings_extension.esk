@@ -289,8 +289,7 @@
 ;;; First live write. A rejected admitted call is a contract defect and exits;
 ;;; no ordinary error construction or lease authentication follows this call.
 (define (tr3-c-restore-i2-commit-tail-internal! i2-value)
-  (let* ((ledger (tr3-c-restore-require-i2
-                   'trainer-load-state! i2-value '(prepared)))
+  (let* ((ledger i2-value)
          (o2-ledger (vector-ref ledger 3))
          (status
            (tr3-c-restore-native-i2-commit
@@ -302,16 +301,14 @@
 
 ;;; Native config/options/U, logical optimizer slot 2, then lifecycle marker.
 (define (tr3-c-restore-o2-commit-tail-internal! o2-value)
-  (let ((ledger (tr3-c-restore-require-o2
-                  'trainer-load-state! o2-value '(prepared))))
+  (let ((ledger o2-value))
     (tr3-c-restore-native-o2-commit (vector-ref ledger 2))
     (vector-set! (vector-ref ledger 3) 2 (vector-ref ledger 4))
     (vector-set! ledger 7 'committing)
     ledger))
 
 (define (tr3-c-restore-o2-finalize-tail-internal! o2-value)
-  (let ((ledger (tr3-c-restore-require-o2
-                  'trainer-load-state! o2-value '(committing))))
+  (let ((ledger o2-value))
     (tr3-c-restore-native-o2-finalize (vector-ref ledger 2))
     (vector-set! ledger 2 '())
     (vector-set! ledger 5 '())
@@ -330,20 +327,7 @@
     ledger))
 
 (define (tr3-c-restore-owned-release-tail-internal! carrier)
-  (let* ((operation 'trainer-load-state!)
-         (kind
-           (if (and (vector? carrier) (= (vector-length carrier) 5))
-               (vector-ref carrier 4)
-               'invalid))
-         (owned
-           (if (or (eq? kind 'parameter) (eq? kind 'buffer))
-               (i2-carrier-preflight carrier kind operation)
-               (o2-fail 'invalid-argument operation
-                        "restore owner has an invalid I2 role"))))
-    (if (or (not (eq? (vector-ref owned 1) 'owned-clone))
-            (null? (vector-ref owned 2)))
-        (o2-fail 'invalid-argument operation
-                 "restore owner is not a live I2 clone"))
+  (let ((owned carrier))
     (tr3-c-restore-native-owned-release (vector-ref owned 2))
     (vector-set! owned 2 '())
     #t))

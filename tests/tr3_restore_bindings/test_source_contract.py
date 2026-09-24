@@ -98,10 +98,22 @@ class RestoreBindingContract(unittest.TestCase):
             "tr3-c-restore-o2-finalize-tail-internal!",
             "tr3-c-restore-o2-abort-internal!",
         )
+        release = ESK[ESK.index("(define (tr3-c-restore-owned-release-tail-internal!") :]
         self.assertIn("tr3-lease-fail-stop", i2)
-        for body in (i2, o2, finalize):
-            self.assertNotIn("tr3-c-restore-native-fail", body)
-            self.assertNotIn("o2-fail", body)
+        for body in (i2, o2, finalize, release):
+            for forbidden in (
+                "tr3-c-restore-native-fail",
+                "o2-fail",
+                "tr3-c-restore-require-i2",
+                "tr3-c-restore-require-o2",
+                "tr3-c-restore-find-identity",
+                "i2-carrier-preflight",
+                "tr3-c-restore-owned-carrier",
+                "tr3-c-restore-owned-stage",
+            ):
+                self.assertNotIn(forbidden, body)
+        self.assertEqual(i2.count("(if "), 1)
+        self.assertNotIn("(if ", o2 + finalize + release)
 
     def test_no_public_or_generic_handle_surface(self) -> None:
         symbols = set(re.findall(r"\bet_tr3_c_private_[a-z0-9_]+_v1\b", H))
