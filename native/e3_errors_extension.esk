@@ -1,0 +1,105 @@
+;;; Root-owned, immutable E3 evaluation errors.  This file is loaded exactly
+;;; once by the private aggregate after E1 has initialized its lexical registry.
+
+(define e3-error-categories
+  (vector 'invalid-argument 'shape-mismatch 'dtype-mismatch 'device-mismatch
+          'noncontiguous 'unsupported 'invalid-state 'io 'corrupt-data
+          'version-mismatch 'determinism-unavailable 'internal))
+
+(define (e3-error-stage-message stage)
+  (cond ((= stage 0) "evaluation admission failed")
+        ((= stage 1) "evaluation mode preparation failed")
+        ((= stage 2) "evaluation dataset preparation failed")
+        ((= stage 3) "evaluation model acquisition failed")
+        ((= stage 4) "evaluation mode entry failed")
+        ((= stage 5) "evaluation batch traversal failed")
+        ((= stage 6) "evaluation batch staging failed")
+        ((= stage 7) "evaluation forward schedule failed")
+        ((= stage 8) "evaluation cross entropy failed")
+        ((= stage 9) "evaluation reduction failed")
+        ((= stage 10) "evaluation correctness metric failed")
+        ((= stage 11) "evaluation accumulation failed")
+        (else "evaluation finalization or publication failed")))
+
+(define (e3-error-category-index category)
+  (cond ((eq? category 'invalid-argument) 0)
+        ((eq? category 'shape-mismatch) 1)
+        ((eq? category 'dtype-mismatch) 2)
+        ((eq? category 'device-mismatch) 3)
+        ((eq? category 'noncontiguous) 4)
+        ((eq? category 'unsupported) 5)
+        ((eq? category 'invalid-state) 6)
+        ((eq? category 'io) 7)
+        ((eq? category 'corrupt-data) 8)
+        ((eq? category 'version-mismatch) 9)
+        ((eq? category 'determinism-unavailable) 10)
+        (else 11)))
+
+(define e3-error-table
+  (let ((table (make-vector 156 #f)))
+    (let stages ((stage 0))
+      (if (= stage 13) table
+          (let ((message (e3-error-stage-message stage)))
+            (let categories ((index 0))
+              (if (= index 12)
+                  (stages (+ stage 1))
+                  (begin
+                    (vector-set!
+                     table (+ (* stage 12) index)
+                     (transformer-error-make
+                      (vector-ref e3-error-categories index)
+                      'e3-evaluate-into! message
+                      (list (list 'source-domain 'e3-evaluation)
+                            (list 'source-code stage)
+                            (list 'source-message message))
+                      #f))
+                    (categories (+ index 1))))))))))
+
+(define (e3-error-table-ref stage category)
+  (vector-ref e3-error-table
+              (+ (* stage 12) (e3-error-category-index category))))
+
+(define (e3-error-category-from-native domain category)
+  (cond
+    ((= domain 0)
+     (cond ((= category 1) 'invalid-argument)
+           ((= category 2) 'invalid-state)
+           ((= category 3) 'shape-mismatch)
+           ((= category 4) 'unsupported)
+           (else 'internal)))
+    ((= domain 1)
+     (cond ((= category 1) 'invalid-argument)
+           ((= category 2) 'shape-mismatch)
+           ((= category 3) 'dtype-mismatch)
+           ((= category 4) 'device-mismatch)
+           ((= category 5) 'noncontiguous)
+           ((= category 6) 'unsupported)
+           ((= category 7) 'version-mismatch)
+           (else 'internal)))
+    ((or (= domain 2) (= domain 3))
+     (cond ((= category 1) 'invalid-argument)
+           ((= category 2) 'shape-mismatch)
+           ((= category 3) 'noncontiguous)
+           ((= category 4) 'invalid-state)
+           ((= category 5) 'version-mismatch)
+           (else 'internal)))
+    (else 'internal)))
+
+(define (e3-error-category-from-p1 status)
+  (cond ((= status 1) 'invalid-argument)
+        ((= status 2) 'invalid-state)
+        ((= status 3) 'unsupported)
+        (else 'internal)))
+
+(define (e3-error-category-from-d2-idle status)
+  (if (= status 1) 'invalid-argument
+      (if (= status 2) 'invalid-state 'internal)))
+
+(define (e3-classify-caught caught inspect-args)
+  (set-car! inspect-args caught)
+  (let ((category
+         (if (e1-internal-dispatch 'predicate inspect-args)
+             (e1-internal-dispatch 'category inspect-args)
+             'internal)))
+    (set-car! inspect-args #f)
+    category))

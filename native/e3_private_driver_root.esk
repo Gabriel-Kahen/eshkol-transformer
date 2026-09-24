@@ -1,0 +1,4 @@
+;;; Fixed private test-driver root.  The driver is absent from every installed
+;;; or predecessor artifact and contributes only the one reviewed C entry.
+(load "e3_private_root.esk")
+(load "../tests/e3_private/driver.esk")
