@@ -233,7 +233,7 @@ class LeaseSourceContract(unittest.TestCase):
         )
         self.assertEqual(
             failure["runner_sha256"],
-            "03b89c71c83707933ad101955d011a9990fb2f41018edbe0511757e9190a1ed0",
+            "12d344f9092c85f125ad14c64e2e24c7c18280ae3dd81534fe5718d361423dd6",
         )
         self.assertEqual(
             failure["runner_role"], "allocation_prefix_production_off"
