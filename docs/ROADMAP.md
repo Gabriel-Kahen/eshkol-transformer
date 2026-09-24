@@ -60,7 +60,7 @@ sealed read-only decision audit, `f32-typeof-contract-decision-d960add-20260924`
 recommends canonical interned symbols. The orchestrator accepted that public
 contract in [TR3_F32_SCALAR_RUNTIME_CONTRACT.md](TR3_F32_SCALAR_RUNTIME_CONTRACT.md);
 cross-substrate implementation, migration and parity gates remain pending. An
-isolated VM F32 hash-key leaf is also in progress. Neither leaf establishes full
+isolated VM F32 hash-key leaf is reviewed below. Neither leaf establishes full
 F32 acceptance or changes the transformer runtime pin.
 The first runtime-eligible type-symbol prototype passed exhaustive pointer-based
 classification but exposed a C ABI boundary: the legacy by-value
@@ -69,15 +69,15 @@ supported reproducer and independent review are sealed at
 `f32-type-symbol-runtime-blocker-d960add-20260924/SHA256SUMS` (`90c6708f...`).
 The accepted contract now makes versioned pointer-taking
 `eshkol_type_of_ref_v1` authoritative for full-carrier canonicality and records
-the legacy wrapper's padding-only limitation. The upstream implementation and
-supported parity gates remain pending.
+the legacy wrapper's padding-only limitation. The upstream C implementation is
+reviewed below; Scheme/VM parity gates remain pending.
 A sealed first-pass successor classifier audit on exact `d960add` indexes
 4,628 source sites across 227 files and semantically reviews 36 F32-reachable
 sites; `f32-successor-classifier-audit-d960add-20260924/SHA256SUMS`
 (`80255c0f...`) has a reproducible source-hash verifier. It found a sanitizer-
 reproduced P0 16-byte tagged-cons copy defect, native/VM `type-of` mismatch,
 and AOT/VM `conjugate` mismatch; VM hash, native/VM `region-open`, and VM scalar
-activation gaps also remain. The tagged-cons repair is active in isolation.
+activation gaps also remain. The reviewed tagged-cons repair is recorded below.
 The raw inventory is not an exhaustive semantic classification, so it cannot
 support full F32 acceptance.
 The isolated VM F32 hash-key leaf `ae12e509`/tree `971a4eaa` now passes
@@ -85,8 +85,13 @@ independent focused re-review after adding a 16-entry rehash and nested-region
 raw-bit witness. Supported f31 Release poison gates 4/4, real ESKB VM suite
 666/666, standalone source suite 77/77 and ASan+UBSan+poison VM gates 2/2 pass;
 root verified `f32-vm-hash-keys-c27f85eb-20260924/SHA256SUMS` (`c4cc4c38...`).
-It remains isolated on predecessor `c27f85eb`; the predicate/hash union on
-`d960add`, the type-reflection mapper and whole-F32 acceptance remain pending.
+It remains isolated on predecessor `c27f85eb`. The reviewed predicate/hash
+union `c2df68d`/tree `e043f575` on `d960add` preserves both source patches and
+passes supported f31 Release 11/11, ASan+UBSan+poison 5/5, C API 675/675 and
+standalone VM 77/77; independent review found no blockers. Root verified
+`f32-predicate-hash-union-d960add-20260924/SHA256SUMS` (`c1c4ef59...`). The
+broader sanitizer VM smoke still hits an inherited signed-shift fault in
+`vm_compiler.c:3054`; whole-F32 acceptance remains pending.
 The reviewed upstream runtime type-symbol leaf `d251cb0`/tree `07882ae`
 implements the accepted public pointer API `eshkol_type_of_ref_v1` in the
 runtime archive, covering all declared direct/heap/callable/legacy tags,
@@ -98,6 +103,16 @@ review PASS. Legacy by-value `eshkol_type_of` cannot certify padding bytes 4..7;
 first-intern OOM was not injected. Native Scheme/VM `type-of` still return the
 old types, and the pre-existing source-only exhaustive-dispatch gate remains red
 while its compiled test passes. Native AOT/JIT symbolic lowering is active next.
+The separate reviewed tagged-cons transport repair `2904b94`/tree `01b89bd6`
+copies all 16 tagged-value bytes through construction, setters/getters, batch
+and region escape paths, with overlap-safe self-store. Supported f31 Debug
+ASan+UBSan and Release focused CTests each pass 4/4; an immutable baseline with
+test-only poisoned arena reuse fails as expected. Independent re-review PASS;
+root verified `f32-tagged-cons-transport-20260924/manifest.json`
+(`8dadd5c7...`). Its by-value getter byte proof is specific to the pinned ABI.
+The three reviewed predicate/hash, C type-symbol, and tagged-cons leaves are
+being composed in a clean isolated runtime worktree; no transformer repin has
+occurred.
 The sealed generic E3 dependency audit on exact `9bbb3ff`,
 `e3-generic-dependency-audit-9bbb3ff-20260924T184109Z/evidence-files.sha256`
 (`49195ba6...`), confirms the installed diagnostic facade and private E3
