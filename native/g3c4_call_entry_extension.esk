@@ -540,6 +540,14 @@
         (if (not (= (g3c4-native-call-abort
                       (vector-ref generator-entry 3)) 0))
             (exit 134)))
+    (if (vector-ref ledger 4)
+        (let ((child (vector-ref ledger 4)))
+          (if (not (and (vector? child) (= (vector-length child) 12)
+                        (eq? (vector-ref child 1) 'output)
+                        (eq? (vector-ref child 2) 'pending)))
+              (exit 134))
+          (g3c4-entry-dead! child)
+          (vector-set! ledger 4 #f)))
     (if (vector-ref ledger 1)
         (if (eq? (vector-ref model-entry 10) call-entry)
             (vector-set! model-entry 10 #f)
@@ -553,6 +561,7 @@
 (define (g3c4-call-success! call-entry generator-entry model-entry)
   (if (not (and (eq? (vector-ref model-entry 10) call-entry)
                 (eq? (vector-ref generator-entry 9) call-entry)
+                (not (vector-ref (vector-ref call-entry 10) 4))
                 (eq? (vector-ref call-entry 2) 'live)))
       (exit 134))
   (vector-set! model-entry 10 #f)
@@ -571,7 +580,7 @@
               (model-entry (vector-ref generator-entry 5))
               (tokenizer (vector-ref generator-entry 6))
               (shell (vector 'g3c4-call-private))
-              (ledger (vector #f #f #f #f))
+              (ledger (vector #f #f #f #f #f))
               (call-entry
                 (vector shell 'call 'pending #f generator-entry model-entry
                         tokenizer #f #f #f ledger g3c4-model-profile))

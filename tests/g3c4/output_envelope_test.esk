@@ -1,0 +1,186 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+
+(extern i64 envelope-test-prepare ptr ptr i64
+        :real et_g3c4_output_envelope_test_prepare_v1)
+(extern i64 envelope-test-field ptr i64
+        :real et_g3c4_output_envelope_test_field_v1)
+(extern i64 envelope-test-owner-fail-after i64
+        :real et_g3c4_output_envelope_test_owner_fail_after_v1)
+(extern i64 envelope-test-owner-fail-reset
+        :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 output envelope FAIL: ")
+        (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (latest kind)
+  (let loop ((remaining (vector-ref g3c4-registry 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 1) kind) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (dead-only? entry kind)
+  (and entry (eq? (vector-ref entry 1) kind)
+       (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))))
+(define (config generated seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens generated
+        ':eos #f ':seed seed))
+(define (upper-zero? staging)
+  (let loop ((index 1))
+    (if (= index (bytevector-length staging)) #t
+        (and (= (bytevector-u8-ref staging index) 0)
+             (loop (+ index 1))))))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define strict-tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'strict '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define model-entry (car (vector-ref g3c4-model-registry 0)))
+
+(reject "unregistered call entry" 'invalid-argument
+  (lambda () (g3t-output-reserve (vector 'forged) 1)))
+
+(define (exercise-route generated seed)
+  (let* ((generator
+           (g3c4-generator-create-internal
+             model tokenizer (config generated seed)))
+         (generator-entry (latest 'generator))
+         (registry-before t1-private-tokenizer-registry)
+         (observed-output #f)
+         (observed-native #f)
+         (observed-auxiliary #f)
+         (prompt-length (- 2 generated)))
+    (reject "complete pending route stops before publication" 'invalid-state
+      (lambda ()
+        (g3c4-with-call-internal
+          'g3c4-output-envelope-test generator 2 generated
+          (let* ((call (vector-ref m3-call-state 0))
+                 (output (g3t-output-reserve call prompt-length))
+                 (auxiliary (vector-ref output 8))
+                 (raw (vector-ref auxiliary 0))
+                 (staging (vector-ref auxiliary 1))
+                 (ledger (vector-ref call 10)))
+            (set! observed-output output)
+            (set! observed-native (vector-ref output 3))
+            (set! observed-auxiliary auxiliary)
+            (check "rooted output is canonical registry head"
+                   (eq? output (car (vector-ref g3c4-registry 0))))
+            (check "call ledger roots exact output"
+                   (eq? (vector-ref ledger 4) output))
+            (check "output parent/model/tokenizer links are exact"
+                   (and (eq? (vector-ref output 4) generator-entry)
+                        (eq? (vector-ref output 5) model-entry)
+                        (eq? (vector-ref output 6) tokenizer)))
+            (check "preallocated raw/staging extents"
+                   (and (= (bytevector-length raw) generated)
+                        (= (bytevector-length staging) (* generated 8))))
+            (reject "wrong call kind" 'invalid-state
+              (lambda () (g3t-output-prepare generator-entry output)))
+            (let ((saved (vector-ref ledger 4)))
+              (vector-set! ledger 4 #f)
+              (reject "missing call/output linkage" 'invalid-state
+                (lambda () (g3t-output-prepare call output)))
+              (vector-set! ledger 4 saved))
+            (let ((saved (vector-ref output 6)))
+              (vector-set! output 6 strict-tokenizer)
+              (reject "changed output tokenizer link" 'invalid-state
+                (lambda () (g3t-output-prepare call output)))
+              (vector-set! output 6 saved))
+            (check "real native G0/G1 preparation"
+                   (= (envelope-test-prepare
+                        (vector-ref generator-entry 3)
+                        (vector-ref output 3) generated) 0))
+            (check "numeric preparation wrapper"
+                   (g3t-output-prepare call output))
+            (check "numeric readiness only"
+                   (and (= (envelope-test-field observed-native 1) 1)
+                        (= (envelope-test-field observed-native 2) 0)
+                        (= (envelope-test-field observed-native 3) 0)))
+            (check "two-argument decode coordinator"
+                   (g3t-t1-decode-output! call output))
+            (check "native text readiness complete"
+                   (and (= (envelope-test-field observed-native 1) 1)
+                        (= (envelope-test-field observed-native 2) 1)
+                        (= (envelope-test-field observed-native 3) 1)
+                        (= (envelope-test-field observed-native 4) generated)))
+            (check "decoded bytes and staging are exact"
+                   (if (= generated 0)
+                       (and (= (bytevector-length raw) 0)
+                            (= (bytevector-length staging) 0))
+                       (and (= (bytevector-u8-ref raw 0)
+                               (bytevector-u8-ref staging 0))
+                            (upper-zero? staging))))
+            (check "decode enrolls no T1 shell"
+                   (eq? registry-before t1-private-tokenizer-registry))
+            (let ((saved-byte
+                    (if (= generated 0) 0 (bytevector-u8-ref raw 0))))
+              (reject "coordinator is once-only" 'invalid-state
+                (lambda () (g3t-t1-decode-output! call output)))
+              (check "repeat preserves raw bytes"
+                     (or (= generated 0)
+                         (= (bytevector-u8-ref raw 0) saved-byte))))
+            #t))))
+    (check "rollback tombstones rooted output"
+           (dead-only? observed-output 'output))
+    (check "native pending output is dead after rollback"
+           (= (envelope-test-field observed-native 0) 2))
+    (check "detached witness retains decoded raw bytes"
+           (let ((raw (vector-ref observed-auxiliary 0))
+                 (staging (vector-ref observed-auxiliary 1)))
+             (if (= generated 0)
+                 (and (= (bytevector-length raw) 0)
+                      (= (bytevector-length staging) 0))
+                 (= (bytevector-u8-ref raw 0)
+                    (bytevector-u8-ref staging 0)))))
+    (check "rollback clears generator/model/shared active cells"
+           (and (not (vector-ref generator-entry 9))
+                (not (vector-ref model-entry 10))
+                (not (vector-ref m3-call-state 0))))
+    (check "generator closes after rollback"
+           (g3c4-generator-close-internal! generator))))
+
+(exercise-route 0 31)
+(exercise-route 1 37)
+
+(define failure-generator
+  (g3c4-generator-create-internal model tokenizer (config 1 41)))
+(check "arm native output allocation cut"
+       (= (envelope-test-owner-fail-after 0) 0))
+(reject "rooted native reservation failure" 'internal
+  (lambda ()
+    (g3c4-with-call-internal
+      'g3c4-output-envelope-native-cut failure-generator 2 1
+      (g3t-output-reserve (vector-ref m3-call-state 0) 1))))
+(check "reset native output allocator"
+       (= (envelope-test-owner-fail-reset) 0))
+(check "native failure leaves an exact output tombstone"
+       (dead-only? (latest 'output) 'output))
+(check "native failure leaves an exact call tombstone"
+       (dead-only? (latest 'call) 'call))
+(check "native failure generator remains usable"
+       (g3c4-generator-close-internal! failure-generator))
+
+(display "G3-C4 output envelope PASS: checks=")
+(display checks)
+(display " routes=2 linkage-cuts=3 native-root-cut=1 repeat-cuts=2")
+(newline)
