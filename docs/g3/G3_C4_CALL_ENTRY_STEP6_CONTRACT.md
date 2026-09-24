@@ -10,11 +10,12 @@ source implementation, public facade, model schedule, frame, sampler, tokenizer,
 result, persistence, package, CI, or G3-S work.
 
 This contract is intentionally dependency honest. The call-entry protocol is
-fully specified below, but two prerequisite decisions remain unresolved in the
+fully specified below, but three prerequisite decisions remain unresolved in the
 current source: there is no accepted authenticated G3 RNG owner for the proposed
-RNG constructor, and native abort can fail while the existing aggregate guard's
-outer handler is about to clear itself. Section 8 gives the exact disposition
-required before implementation. No subset may be implemented around either gap.
+RNG constructor; native abort can fail while the existing aggregate guard's
+outer handler is about to clear itself; and the accepted context close has no
+RNG/policy scrubbing transition. Section 8 gives the exact disposition required
+before implementation. No subset may be implemented around any gap.
 
 ## 1. Existing authorities and exact boundary
 
@@ -177,11 +178,13 @@ the pending generator entry, normalized policy, and cleanup ledger. It then
 selects exactly one native seed/RNG constructor, records the returned context,
 marks the entry `live`, and clears its ledger in a no-allocation tail.
 
-On failure after a native context exists, cleanup calls the existing context
-close path, requires success or terminates with exit 134 as an implementation
-invariant, marks the entry dead, clears the ledger, and rethrows the first E1
-error. No pending entry becomes observable. Generator close remains outside
-this unit until the RNG-storage extension and its scrubbing rule are accepted.
+Every failure after pending-entry enrollment marks that entry dead and clears
+its ledger before rethrowing the first E1 error. If a native context was created,
+cleanup first calls the existing context close path and requires success or
+terminates with exit 134 as an implementation invariant. If no native context
+exists, no close is attempted. No pending entry becomes observable. Ordinary
+live-generator close remains unresolved until the RNG-storage extension and its
+scrubbing rule are accepted; this is an implementation hold in Section 8.
 
 ## 5. Aggregate guard and exact call tuple
 
@@ -242,7 +245,9 @@ sampling, or public prefill/decode/generate loop.
 The successful tail must call native `call_prepare_end`, execute only a later
 accepted infallible frame/result/cache commit, and immediately call native
 `call_finish` without allocation, handler installation, callback, observer, or
-recoverable branch between prepare and finish. It then clears model slot 10,
+recoverable branch between prepare and finish. A nonzero finish status after
+commit is an invariant defect and terminates with exit 134; it never enters the
+precommit abort/rethrow path. Successful finish then clears model slot 10,
 clears generator slot 9, marks the call dead, clears the call ledger, and returns
 to `m3-call`, which clears the aggregate guard last. Until a frame contract
 provides that infallible middle commit, the only valid development witness has
@@ -297,18 +302,22 @@ The implementation gate, after Section 8 is accepted, must prove:
 - fresh supported Ubuntu 22.04/LLVM 21 evidence with exact source, runner,
   object, defined/undefined, and dependency manifests.
 
-Retention is intentionally measured rather than hidden. Report exact native
-context/RNG record sizes, Eshkol vector/shell counts, and logical retained bytes
-for 1,024 and 8,192 successful generator create/close cycles and call cycles.
-Call entries are private but still process-lifetime strong-registry tombstones;
-the gate must show their exact linear slope. It must separately report peak live
-native/cache bytes and cumulative tombstone bytes and make no flat-RSS or
-allocator-overhead claim. No arbitrary lifetime cap, entry reuse, weak registry,
-or unreviewed finalizer may be introduced to make the measurement appear bounded.
+Retention is intentionally measured rather than hidden. Call-entry evidence
+must report exact Eshkol vector/shell counts and logical retained bytes for 1,024
+and 8,192 completed call cycles. Private call entries remain process-lifetime
+strong-registry tombstones, and the gate must show their exact linear slope.
+Generator retention cannot claim successful create/close cycles until the third
+Section 8 decision freezes live-generator close and RNG/policy scrubbing. After
+that decision is incorporated into a reviewed revision, report exact native
+context/RNG record sizes, Eshkol vector/shell counts, logical retained bytes, peak
+live native/cache bytes, and cumulative tombstone bytes for 1,024 and 8,192
+successful generator create/close cycles. Make no flat-RSS or allocator-overhead
+claim. No arbitrary lifetime cap, entry reuse, weak registry, or unreviewed
+finalizer may be introduced to make the measurement appear bounded.
 
 ## 8. Unresolved decisions and implementation hold
 
-Two decisions require root acceptance before any implementation from this
+Three decisions require root acceptance before any implementation from this
 contract:
 
 1. **Authenticated RNG carrier.** The proposed
@@ -325,8 +334,16 @@ contract:
    inner handler that treats unsuccessful native abort as exit 134, so inconsistent
    authority never returns to Eshkol. Root must explicitly accept that fail-stop
    rule or require a separately reviewed retryable aggregate-guard protocol.
+3. **Live-generator close and scrubbing.** Existing context close destroys the A2
+   cache and deadens the native context but knows no generator RNG/policy extension.
+   Root must accept an exact native and Eshkol close transition, including idle
+   admission, order of cache destruction, RNG/policy zeroing, model/generator
+   cross-link removal, dead-tombstone contents, idempotence, first-error behavior,
+   and the 1,024/8,192 create/close retention gate. Until then, successful live
+   generators and their caches cannot be claimed released and neither constructor
+   may be implemented.
 
-The contract must be revised if either disposition changes the APIs, registry
+The contract must be revised if any disposition changes the APIs, registry
 shape, publication order, or cleanup semantics. G3-S remains on its existing
 hold. Acceptance of this document alone authorizes no sampler, RNG numerical
 provider, public generation operation, frame implementation, or G3-S work.
