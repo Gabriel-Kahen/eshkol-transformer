@@ -89,18 +89,32 @@ def check() -> None:
         "pending_output == NULL",
         "pending_output->prompt_length != input->length",
         "pending_output->generated_length != context->budget",
+        "et_g3c4_prompt_prefill_reject_output_aliases(",
         "et_g3c4_prompt_prefill_borrow(input, &borrow, &view)",
     ], "reservation-gated prompt prefill")
+    aliases = c_function(
+        source, "static int et_g3c4_prompt_prefill_reject_output_aliases")
+    ordered(aliases, [
+        "output, sizeof(*output)",
+        "et_i64_tensor_borrow_begin_v1(",
+        "et_i64_tensor_borrow_view_v1(",
+        "view->shape[0] != (uint64_t)output->generated_length",
+        "view->data, view->byte_length",
+        "et_i64_tensor_borrow_end_v1(&borrow, &error)",
+    ], "output owner and I1 payload alias rejection")
 
     abort = c_function(source, "int64_t et_g3c4_private_call_abort_v1")
     ordered(abort, [
         "et_g3c4_pending_output_lookup(context, &pending_output)",
+        "et_g3c4_output_discard_preflight(pending_output)",
+        "et_g3c4_token_frame_discard(context)",
         "et_g3c4_cache_idle_preflight(context)",
         "et_g3c4_output_discard_pending(pending_output)",
         "et_g3c4_active_call_drain(context)",
     ], "abort output destruction")
     discard = c_function(source, "static int64_t et_g3c4_output_discard_pending")
     ordered(discard, [
+        "et_g3c4_output_discard_preflight(output)",
         "et_i64_tensor_destroy_v1(&output->ids, &error)",
         "output->parent_ctx = NULL", "output->prompt_length = 0",
         "output->generated_length = 0", "memset(output->rng, 0",
@@ -116,7 +130,9 @@ def check() -> None:
         "prefill2_dispatches == 21u", "g0_cuts == 3u", "g1_cuts == 4u",
         "ET_I64_TENSOR_CODE_ACTIVE_BORROW", "check_dead_output",
         "et_a2_kv_cache_read_borrow_begin_v1", "owner-cuts=1",
-        "borrow-cuts=3",
+        "output_alias_rejection", "nonidle_frame_borrow_atomicity",
+        "prefill1_dispatches == 0u", "prefill-i1-cuts=1",
+        "borrow-cuts=4", "alias-cuts=2",
     ):
         require(phrase in test, f"focused witness omits: {phrase}")
     for phrase in (
@@ -128,6 +144,7 @@ def check() -> None:
     for phrase in (
         "not a public generation API", "before enrolling either object",
         "prerequisite for the first numerical write", "retains the committed prompt cache",
+        "output owner or its I1 payload", "before discarding a token frame",
         "no Eshkol output shell", "numeric output preparation", "EOS behavior",
         "generation loop", "package export",
     ):
@@ -135,6 +152,8 @@ def check() -> None:
 
     prior = (ROOT / "native/g3c4_prompt_prefill_source_closure.txt").read_text().splitlines()
     expected = prior + [
+        "src/eshkol_transformer/m3_model.h",
+        "src/eshkol_transformer/m3_i64_integration.c",
         "native/g3c4_prompt_prefill_source_closure.txt",
         "tests/g3c4/test_output_reservation.c",
         "scripts/check-g3c4-output-reservation.py",

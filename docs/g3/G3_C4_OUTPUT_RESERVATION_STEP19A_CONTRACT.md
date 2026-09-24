@@ -30,14 +30,16 @@ preserving the first error.
 ## Prompt and lifetime linkage
 
 With this leaf enabled, Step 18A prefill requires exactly one pending output
-linked to the same active context with matching `P` and `G`. This makes native
-result capacity a prerequisite for the first numerical write. The accepted
+linked to the same active context with matching `P` and `G`. It rejects a
+caller logits span overlapping the output owner or its I1 payload before
+borrowing prompt IDs or entering a numerical route. This makes native result
+capacity a prerequisite for the first numerical write. The accepted
 P1/P2 numerical routes remain the sole cache and binding publishers; this leaf
 adds no provider dispatch, sampling, RNG mutation, or cache mutation.
 
 A pending output prevents call prepare-end and finish. Before destroying the
-pending output, call abort proves the committed cache has no active view, then
-destroys and scrubs the pending
+pending output, call abort proves its I1 has no active borrow before discarding a token frame,
+then proves the committed cache has no active view and destroys and scrubs the pending
 output before draining the active call. If its I1 storage has an active borrow,
 destruction fails before the output or call is mutated. After successful
 prefill, abort retains the committed prompt cache, parameter binding, and old
@@ -50,7 +52,9 @@ The focused witness covers P2/G0 and P1/G1 reservation before authentic
 21-dispatch prefill, matching linkage, duplicate and shape rejection, one
 native owner allocation cut, all three G0 and four G1 I1 allocation cuts, and
 cache-view and output-borrow destruction cuts. It proves pending flags remain false through
-prefill and that abort scrubs every output field while preserving committed
+prefill, covers output-owner and I1-payload logits aliases before dispatch, and
+proves a non-idle token frame is unchanged when output destruction preflight
+fails. Successful abort scrubs every output field while preserving committed
 prompt state. Normal, repeated, and ASan/UBSan/LSan output must be identical in
 the supported Ubuntu 22.04 / LLVM 21.1.8 image.
 

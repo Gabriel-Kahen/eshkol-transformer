@@ -121,6 +121,8 @@ tests/g3c4/test_prompt_prefill.c
 scripts/check-g3c4-prompt-prefill.py
 scripts/test-g3c4-prompt-prefill.sh
 docs/g3/G3_C4_PROMPT_PREFILL_STEP18A_CONTRACT.md
+src/eshkol_transformer/m3_model.h
+src/eshkol_transformer/m3_i64_integration.c
 native/g3c4_prompt_prefill_source_closure.txt
 tests/g3c4/test_output_reservation.c
 scripts/check-g3c4-output-reservation.py

@@ -209,6 +209,145 @@ static void admission_and_linkage(
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
+static void output_alias_rejection(
+    et_g3c4_model_owner_internal *owner) {
+  const int64_t token[1] = {29};
+  cache_snapshot cache;
+  binding_snapshot binding;
+  int64_t rng[4];
+  float safe_logits[256];
+  et_g3c4_context_internal *context = create_generator(owner);
+  void *input = create_prompt(token, 1);
+
+  OK(et_g3c4_private_prompt_prefill_preflight_v1(context, input, 1));
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  et_g3c4_output_internal *output =
+      et_g3c4_private_output_reserve_v1(context, 1);
+  CHECK(output != NULL);
+  snapshot_cache(context->cache, &cache);
+  snapshot_binding(context, &binding);
+  memcpy(rng, context->generator_rng_words, sizeof(rng));
+
+  et_i64_tensor_test_fail_alloc_after_v1(0u);
+  prefill1_dispatches = 0u;
+  record_prefill1 = 1;
+  CHECK(et_g3c4_private_prompt_prefill_v1(
+      context, input, safe_logits) != 0);
+  record_prefill1 = 0;
+  et_i64_tensor_test_reset_allocator_v1();
+  CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1);
+  CHECK(et_g3c4_private_last_error_code_v1() ==
+        ET_I64_TENSOR_CODE_ALLOCATION_FAILED);
+  CHECK(prefill1_dispatches == 0u);
+  check_preserved(context, &cache, &binding, rng);
+  check_pending_output(output, context, 1, 1);
+
+  prefill1_dispatches = 0u;
+  record_prefill1 = 1;
+  CHECK(et_g3c4_private_prompt_prefill_v1(
+      context, input, (float *)(void *)output) == ET_G3C4_INVALID_ARGUMENT);
+  record_prefill1 = 0;
+  CHECK(prefill1_dispatches == 0u);
+  check_preserved(context, &cache, &binding, rng);
+  check_pending_output(output, context, 1, 1);
+
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  CHECK(et_i64_tensor_borrow_begin_v1(output->ids, &borrow, &error) == 0);
+  CHECK(et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0);
+  float *ids_alias = (float *)(void *)view->data;
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+  prefill1_dispatches = 0u;
+  record_prefill1 = 1;
+  CHECK(et_g3c4_private_prompt_prefill_v1(
+      context, input, ids_alias) == ET_G3C4_INVALID_ARGUMENT);
+  record_prefill1 = 0;
+  CHECK(prefill1_dispatches == 0u);
+  check_preserved(context, &cache, &binding, rng);
+  check_pending_output(output, context, 1, 1);
+
+  OK(et_g3c4_private_call_abort_v1(context));
+  check_dead_output(output);
+  OK(et_g3c4_private_tensor_release_v1(input));
+  OK(et_g3c4_private_generator_close_v1(context));
+}
+
+static void nonidle_frame_borrow_atomicity(
+    et_g3c4_model_owner_internal *owner) {
+  const int64_t token[1] = {31};
+  float logits[256];
+  float full_logits[1024] = {0};
+  cache_snapshot committed_cache, after_abort_cache;
+  binding_snapshot committed_binding, after_abort_binding;
+  int64_t rng[4];
+  int64_t speculative = -1;
+  et_g3c4_context_internal *context = create_generator(owner);
+  void *input = create_prompt(token, 1);
+
+  OK(et_g3c4_private_prompt_prefill_preflight_v1(context, input, 1));
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  et_g3c4_output_internal *output =
+      et_g3c4_private_output_reserve_v1(context, 1);
+  CHECK(output != NULL);
+  OK(et_g3c4_private_prompt_prefill_v1(context, input, logits));
+  snapshot_cache(context->cache, &committed_cache);
+  snapshot_binding(context, &committed_binding);
+  memcpy(rng, context->generator_rng_words, sizeof(rng));
+
+  memcpy(full_logits + 3u * 256u, logits, sizeof(logits));
+  OK(et_g3c4_private_token_frame_begin_v1(
+      context, full_logits, &speculative));
+  CHECK(context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED);
+  et_a2_kv_cache_transaction *saved_transaction =
+      context->token_frame_transaction;
+  int64_t saved_candidate = context->token_frame_candidate;
+  int64_t saved_successor[4];
+  memcpy(saved_successor, context->token_frame_successor,
+         sizeof(saved_successor));
+  int64_t saved_position = context->token_frame_position;
+
+  et_i64_tensor_borrow *borrow = NULL;
+  et_i64_tensor_error error;
+  CHECK(et_i64_tensor_borrow_begin_v1(output->ids, &borrow, &error) == 0);
+  CHECK(et_g3c4_private_call_abort_v1(context) != 0);
+  CHECK(et_g3c4_private_last_error_code_v1() ==
+        ET_I64_TENSOR_CODE_ACTIVE_BORROW);
+  CHECK(context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED);
+  CHECK(context->token_frame_transaction == saved_transaction);
+  CHECK(context->token_frame_candidate == saved_candidate);
+  CHECK(memcmp(context->token_frame_successor, saved_successor,
+               sizeof(saved_successor)) == 0);
+  CHECK(context->token_frame_position == saved_position);
+  CHECK(output->transport.state == 0u);
+  CHECK(output->parent_ctx == context);
+  check_active(context, 1);
+  CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
+
+  OK(et_g3c4_private_call_abort_v1(context));
+  check_idle(context);
+  check_dead_output(output);
+  snapshot_cache(context->cache, &after_abort_cache);
+  snapshot_binding(context, &after_abort_binding);
+  CHECK(memcmp(committed_cache.keys, after_abort_cache.keys,
+               sizeof(committed_cache.keys)) == 0);
+  CHECK(memcmp(committed_cache.values, after_abort_cache.values,
+               sizeof(committed_cache.values)) == 0);
+  CHECK(committed_cache.length == after_abort_cache.length);
+  CHECK(memcmp(committed_cache.keep, after_abort_cache.keep,
+               sizeof(committed_cache.keep)) == 0);
+  CHECK(memcmp(committed_binding.identities, after_abort_binding.identities,
+               sizeof(committed_binding.identities)) == 0);
+  CHECK(memcmp(committed_binding.values, after_abort_binding.values,
+               sizeof(committed_binding.values)) == 0);
+  CHECK(memcmp(committed_binding.tokens, after_abort_binding.tokens,
+               sizeof(committed_binding.tokens)) == 0);
+  CHECK(committed_binding.ready == after_abort_binding.ready);
+  CHECK(memcmp(context->generator_rng_words, rng, sizeof(rng)) == 0);
+  OK(et_g3c4_private_tensor_release_v1(input));
+  OK(et_g3c4_private_generator_close_v1(context));
+}
+
 static size_t i1_allocation_cuts(
     et_g3c4_model_owner_internal *owner, int64_t p, int64_t g) {
   const int64_t tokens[2] = {13, 17};
@@ -304,13 +443,16 @@ int main(void) {
   reserved_prefill_abort(owner, 2, 0);
   reserved_prefill_abort(owner, 1, 1);
   admission_and_linkage(owner);
+  output_alias_rejection(owner);
   size_t g0_cuts = i1_allocation_cuts(owner, 2, 0);
   size_t g1_cuts = i1_allocation_cuts(owner, 1, 1);
   CHECK(g0_cuts == 3u);
   CHECK(g1_cuts == 4u);
   allocation_and_borrow_cuts(owner);
+  nonidle_frame_borrow_atomicity(owner);
   printf("G3-C4 output reservation PASS: checks=%zu routes=2 "
-         "owner-cuts=1 g0-i1-cuts=%zu g1-i1-cuts=%zu borrow-cuts=3\n",
+         "owner-cuts=1 g0-i1-cuts=%zu g1-i1-cuts=%zu "
+         "prefill-i1-cuts=1 borrow-cuts=4 alias-cuts=2\n",
          checks, g0_cuts, g1_cuts);
   return 0;
 }
