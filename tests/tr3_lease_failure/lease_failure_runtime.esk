@@ -158,11 +158,19 @@
           (o2-optimizer-completed-updates-internal (vector-ref tuple 4))))
     (snapshot-native! tuple)
     (check "failpoint arms" (= (arm-failure! mode ordinal) 1))
-    (let ((did-catch
-            (guard (raised (#t #t))
+    (let* ((raised-value
+            (guard (raised (#t raised))
               (with-region ('tr3-lease-short-promotion 65536)
                 (tuple-create tuple))
-              #f)))
+              #f))
+           (did-catch (not (eq? raised-value #f))))
+      (if (and did-catch (transformer-error? raised-value))
+          (check "translated allocation has exact E1 category and operation"
+                 (and (eq? mode 'all)
+                      (eq? (transformer-error-category raised-value)
+                           'internal)
+                      (eq? (transformer-error-operation raised-value)
+                           'config-fingerprint))))
       (let ((failed (= (lf-finish (if did-catch 1 0)) 1)))
         (if failed
             (begin

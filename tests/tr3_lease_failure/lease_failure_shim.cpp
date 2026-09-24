@@ -73,6 +73,7 @@ bool poststage_complete = false;
 bool preparing_handler = false;
 bool fresh_handler = false;
 bool in_push = false;
+bool all_object_armed = false;
 
 constexpr size_t parameter_count = 14;
 constexpr size_t max_elements = 1024;
@@ -116,6 +117,7 @@ void require(bool condition, const char *message) {
 void arm(Mode next, uint64_t ordinal) {
   require(mode == Mode::idle && !hit, "failpoint already active");
   mode = next;
+  all_object_armed = next == Mode::all_object;
   fail_after = ordinal;
   attempts = vector_attempts = cons_attempts = tensor_attempts = 0;
   ad_node_attempts = 0;
@@ -397,7 +399,11 @@ extern "C" void __wrap_eshkol_get_raised_value(eshkol_tagged_value_t *value) {
     const bool promotion =
         std::strcmp(exception->message,
                     "region promotion allocation failed") == 0;
-    require(constructor || promotion,
+    // The E1 shell is opaque here. The Eshkol guard checks its actual
+    // category and operation before treating it as an expected failure.
+    const bool e1_shell =
+        std::strcmp(exception->message, "transformer.error_internal:v1") == 0;
+    require(constructor || promotion || (all_object_armed && e1_shell),
             "unexpected allocation condition");
     observed = true;
   }
@@ -461,6 +467,7 @@ extern "C" int64_t et_tr3_lf_poststage_finish_v1() {
           "post-staging interval attempted an allocation");
   poststage_window = false;
   mode = Mode::idle;
+  all_object_armed = false;
   return 1;
 }
 extern "C" int64_t et_tr3_lf_finish_v1(int64_t caught) {
@@ -547,7 +554,7 @@ extern "C" int64_t et_tr3_lf_verify_optimizer_v1(void *candidate) {
   return std::memcmp(&now, &optimizer, sizeof(now)) == 0 ? 1 : 0;
 }
 extern "C" int64_t et_tr3_lf_done_v1() {
-  require(mode == Mode::idle &&
+  require(mode == Mode::idle && !all_object_armed &&
               !preparing_handler && !promotion_active &&
               !target_active && !poststage_window,
           "unfinished failpoint");

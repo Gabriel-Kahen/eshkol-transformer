@@ -268,6 +268,9 @@ LF. There is no Unicode normalization, newline substitution, or checksum-field
 exclusion step. The canonicalization identifier occurs both in the bytes being
 hashed and in the fingerprint prefix. A digest implementation that is unavailable
 raises `unsupported`; no weaker digest is substituted.
+If SHA-256 succeeds but the digest string cannot be materialized, the operation
+raises `internal`; allocation failure does not mean the implementation is
+unavailable.
 
 The exact example manifest above has fingerprint:
 
