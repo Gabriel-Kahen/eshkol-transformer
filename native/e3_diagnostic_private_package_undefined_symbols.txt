@@ -41,6 +41,7 @@ eshkol_bignum_from_string
 eshkol_bignum_to_double
 eshkol_bignum_to_string
 eshkol_broadcast_elementwise_f64
+eshkol_builtin_arena_used
 eshkol_builtin_file_rename
 eshkol_check_recursion_depth
 eshkol_clear_current_exception
