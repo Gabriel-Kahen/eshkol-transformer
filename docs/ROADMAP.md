@@ -158,6 +158,18 @@ standalone source 77/77 and VM C API 685/685; root verified
 `f32-type-symbol-vm-20260924-r2/SHA256SUMS` (`d16d3d83...`). Both type-symbol
 leaves are still awaiting cross-substrate union gates; no transformer runtime
 pin changed.
+The independently reviewed VM callable-kind follow-on `8295121d`/tree
+`5f73500` records compiler-authored `lambda-sexpr`, captured `closure`, and
+explicit builtin `primitive` kinds, preserving unmarked/legacy callables as
+`procedure`. The kind survives ESKB, region evacuation and parallel clone;
+source lambdas and captured closures now match native type-of semantics in
+focused tests. Supported f31 Release focused 6/6, sanitizer focused 5/5,
+and standalone source 77/77 pass; root verified
+`f32-type-callable-vm-20260924/SHA256SUMS` (`f1b5a8e1...`) and the one
+independent reviewer PASS. Broader `mixed_types_stress` reaches a pre-existing
+undefined `compose` lookup after its callable checks; the broader sanitized
+introspection path hits an unchanged VM compiler signed shift. The leaf is
+isolated pending successor-union composition and does not clear whole-F32.
 The separate reviewed tagged-cons transport repair `2904b94`/tree `01b89bd6`
 copies all 16 tagged-value bytes through construction, setters/getters, batch
 and region escape paths, with overlap-safe self-store. Supported f31 Debug
