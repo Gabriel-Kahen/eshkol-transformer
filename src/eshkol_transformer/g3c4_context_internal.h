@@ -40,6 +40,13 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
     void *context, const int64_t token_ids[4], float logits[1024]);
 #endif
 
+#ifdef ET_G3C4_SAMPLER_TRANSPORT_PRIVATE
+/* Returns speculative token/RNG candidates without mutating generator state. */
+int64_t et_g3c4_private_sample_last_v1(
+    void *context, const float full_logits[1024],
+    int64_t *token, int64_t successor_rng[4]);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

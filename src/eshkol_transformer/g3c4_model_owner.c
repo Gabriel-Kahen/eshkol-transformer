@@ -725,10 +725,17 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #error "ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE requires provider routes"
 #endif
 
+#if defined(ET_G3C4_SAMPLER_TRANSPORT_PRIVATE) && \
+    !defined(ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE)
+#error "ET_G3C4_SAMPLER_TRANSPORT_PRIVATE requires full-prefix forward"
+#endif
+
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
 #include "eshkol_transformer/g3s_sampling_abi.h"
 #endif
+
+
 
 #ifdef ET_G3C4_CONTEXT_PRIVATE
 #include "g3c4_context_internal.h"
@@ -1938,6 +1945,140 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+#endif
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+#ifdef ET_G3C4_SAMPLER_TRANSPORT_PRIVATE
+static int et_g3c4_range_valid(const void *pointer, size_t bytes) {
+  const uintptr_t start = (uintptr_t)pointer;
+  return pointer != NULL && start <= UINTPTR_MAX - bytes;
+}
+
+static int et_g3c4_ranges_overlap(
+    const void *left, size_t left_bytes,
+    const void *right, size_t right_bytes) {
+  const uintptr_t left_start = (uintptr_t)left;
+  const uintptr_t right_start = (uintptr_t)right;
+  return left_start < right_start + right_bytes &&
+         right_start < left_start + left_bytes;
+}
+
+int64_t et_g3c4_private_sample_last_v1(
+    void *candidate, const float full_logits[1024],
+    int64_t *token_output, int64_t successor_output[4]) {
+  static const uint64_t logits_shape[2] = {1u, 256u};
+  static const uint64_t rng_shape[1] = {4u};
+  static const uint64_t token_shape[1] = {1u};
+  et_g3c4_context_internal *context;
+  float last_logits[256];
+  float temperature;
+  float top_p;
+  int64_t top_k;
+  int64_t numeric_rng[4];
+  int64_t token_candidate = -1;
+  int64_t successor_candidate[4] = {0, 0, 0, 0};
+  et_kernel_tensor_view_v1 inputs[5];
+  et_kernel_tensor_view_v1 outputs[2];
+  et_kernel_request_v1 request;
+  et_kernel_call_v1 call;
+  et_kernel_error error;
+  size_t input_count;
+  uint32_t temperature_bits;
+  uint32_t top_p_bits;
+  int categorical;
+
+  et_g3c4_error_reset_internal();
+  if (!et_g3c4_range_valid(full_logits, 1024u * sizeof(float)) ||
+      !et_g3c4_range_valid(token_output, sizeof(*token_output)) ||
+      !et_g3c4_range_valid(successor_output,
+                           4u * sizeof(successor_output[0])) ||
+      (uintptr_t)full_logits % _Alignof(float) != 0u ||
+      (uintptr_t)token_output % _Alignof(int64_t) != 0u ||
+      (uintptr_t)successor_output % _Alignof(int64_t) != 0u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 1 ||
+      et_g3c4_sampler_runtime == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  if (et_g3c4_ranges_overlap(
+          token_output, sizeof(*token_output),
+          successor_output, 4u * sizeof(successor_output[0])) ||
+      et_g3c4_ranges_overlap(
+          token_output, sizeof(*token_output),
+          full_logits, 1024u * sizeof(float)) ||
+      et_g3c4_ranges_overlap(
+          successor_output, 4u * sizeof(successor_output[0]),
+          full_logits, 1024u * sizeof(float)) ||
+      et_g3c4_ranges_overlap(
+          token_output, sizeof(*token_output), context, sizeof(*context)) ||
+      et_g3c4_ranges_overlap(
+          successor_output, 4u * sizeof(successor_output[0]),
+          context, sizeof(*context))) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+
+  memcpy(last_logits, full_logits + 3u * 256u, sizeof(last_logits));
+  memcpy(numeric_rng, context->generator_rng_words, sizeof(numeric_rng));
+  categorical = context->generator_policy[0] == 1;
+  temperature_bits = (uint32_t)context->generator_policy[1];
+  top_k = context->generator_policy[2];
+  top_p_bits = (uint32_t)context->generator_policy[3];
+  memcpy(&temperature, &temperature_bits, sizeof(temperature));
+  memcpy(&top_p, &top_p_bits, sizeof(top_p));
+
+  inputs[0] = et_g3c4_view(
+      last_logits, sizeof(last_logits), "f32", 2u, logits_shape);
+  if (categorical) {
+    inputs[1] = et_g3c4_view(
+        &temperature, sizeof(temperature), "f32", 0u, NULL);
+    inputs[2] = et_g3c4_view(&top_k, sizeof(top_k), "i64", 0u, NULL);
+    inputs[3] = et_g3c4_view(&top_p, sizeof(top_p), "f32", 0u, NULL);
+    inputs[4] = et_g3c4_view(
+        numeric_rng, sizeof(numeric_rng), "i64", 1u, rng_shape);
+    input_count = 5u;
+  } else {
+    inputs[1] = et_g3c4_view(
+        numeric_rng, sizeof(numeric_rng), "i64", 1u, rng_shape);
+    input_count = 2u;
+  }
+  outputs[0] = et_g3c4_view(
+      &token_candidate, sizeof(token_candidate), "i64", 1u, token_shape);
+  outputs[1] = et_g3c4_view(
+      successor_candidate, sizeof(successor_candidate),
+      "i64", 1u, rng_shape);
+  request = (et_kernel_request_v1){
+    sizeof(request),
+    categorical ? "g3s.categorical.forward" : "g3s.greedy.forward",
+    "f32", "cpu", 2u, logits_shape, 1u, {0}};
+  call = (et_kernel_call_v1){
+    sizeof(call), categorical ? "g3s.categorical" : "g3s.greedy",
+    &request, input_count, sizeof(inputs[0]), input_count * sizeof(inputs[0]),
+    inputs, 2u, sizeof(outputs[0]), sizeof(outputs), outputs};
+  if (et_g3c4_capture_kernel(
+          et_kernel_runtime_dispatch(
+              et_g3c4_sampler_runtime, &call, &error),
+          &error) != 0)
+    return et_g3c4_error_state.category;
+  if (token_candidate < 0 || token_candidate > 255 ||
+      successor_candidate[0] != 1 ||
+      successor_candidate[1] != numeric_rng[1]) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return et_g3c4_error_state.category;
+  }
+  memcpy(token_output, &token_candidate, sizeof(token_candidate));
+  memcpy(successor_output, successor_candidate, sizeof(successor_candidate));
+  return 0;
+}
+#endif
 #endif
 
 #ifdef ET_G3C4_ACTIVE_CALL_TESTING

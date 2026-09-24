@@ -17,6 +17,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-i2-prepared-route.py",
         "check-g3c4-model-authority.py",
         "check-g3c4-provider-routes.py",
+        "check-g3c4-sampler-transport.py",
         "check-p1-prepared-split.py",
     )
 })
