@@ -779,6 +779,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_PREFILL1_PRIVATE)
 #error "ET_G3C4_PREFILL2_PRIVATE requires Step 16A"
 #endif
+#if defined(ET_G3C4_PROMPT_PREFILL_PRIVATE) && \
+    (!defined(ET_G3C4_PROMPT_T1_BORROW_PRIVATE) || \
+     !defined(ET_G3C4_PREFILL2_PRIVATE))
+#error "ET_G3C4_PROMPT_PREFILL_PRIVATE requires Steps 15A and 17A"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -4216,6 +4221,130 @@ fail:
     abort();
   if (n2_runtime != NULL) et_kernel_runtime_destroy(n2_runtime);
   if (n3k_runtime != NULL) et_kernel_runtime_destroy(n3k_runtime);
+  et_g3c4_error_restore_internal(first);
+  return et_g3c4_error_state.category;
+}
+#endif
+
+#ifdef ET_G3C4_PROMPT_PREFILL_PRIVATE
+int64_t et_g3c4_private_prompt_prefill_preflight_v1(
+    void *context_candidate, void *input_candidate, int64_t budget) {
+  et_g3c4_context_internal *context;
+  et_g3c4_input_internal *input;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_idle_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL) return et_g3c4_error_state.category;
+  if (input->tensor == NULL || (input->length != 1 && input->length != 2))
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  if ((budget != 0 && budget != 1) || input->length + budget > 2)
+    return et_g3c4_fail(
+        ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  return 0;
+}
+
+static int et_g3c4_prompt_prefill_borrow(
+    et_g3c4_input_internal *input, et_i64_tensor_borrow **borrow_output,
+    const et_kernel_tensor_view_v1 **view_output) {
+  et_i64_tensor_error error;
+  const et_kernel_tensor_view_v1 *view;
+  size_t index;
+
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_borrow_begin_v1(
+              input->tensor, borrow_output, &error), &error) != 0)
+    return -1;
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_borrow_view_v1(
+              *borrow_output, view_output, &error), &error) != 0)
+    return -1;
+  view = *view_output;
+  if (view == NULL || view->struct_size != sizeof(*view) ||
+      view->data == NULL ||
+      !et_g3c4_range_valid(
+          view->data, (size_t)input->length * sizeof(int64_t)) ||
+      (uintptr_t)view->data % _Alignof(int64_t) != 0u ||
+      view->byte_length != (size_t)input->length * sizeof(int64_t) ||
+      view->dtype == NULL || strcmp(view->dtype, "i64") != 0 ||
+      view->device == NULL || strcmp(view->device, "cpu") != 0 ||
+      view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      view->offset_bytes != 0u || view->rank != 2u ||
+      view->shape == NULL || view->shape[0] != 1u ||
+      view->shape[1] != (uint64_t)input->length) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return -1;
+  }
+  for (index = 0u; index < (size_t)input->length; index++)
+    if (((const int64_t *)view->data)[index] < 0 ||
+        ((const int64_t *)view->data)[index] > 255) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return -1;
+    }
+  return 0;
+}
+
+int64_t et_g3c4_private_prompt_prefill_v1(
+    void *context_candidate, void *input_candidate,
+    float last_logits_output[256]) {
+  et_g3c4_context_internal *context;
+  et_g3c4_input_internal *input;
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  et_g3c4_error_state_internal first;
+  int64_t status;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL) return et_g3c4_error_state.category;
+  if (input->tensor == NULL || (input->length != 1 && input->length != 2))
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  if (context->call_kind != 2 ||
+      (context->budget != 0 && context->budget != 1) ||
+      input->length + context->budget > 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (!et_g3c4_range_valid(
+          last_logits_output, 256u * sizeof(last_logits_output[0])) ||
+      (uintptr_t)last_logits_output % _Alignof(float) != 0u ||
+      et_g3c4_ranges_overlap(
+          last_logits_output, 256u * sizeof(last_logits_output[0]),
+          input, sizeof(*input)))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+
+  if (et_g3c4_prompt_prefill_borrow(input, &borrow, &view) != 0)
+    goto fail;
+  if (et_g3c4_ranges_overlap(
+          last_logits_output, 256u * sizeof(last_logits_output[0]),
+          view->data, view->byte_length)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    goto fail;
+  }
+#define ET_G3C4_PROMPT_CAT_INNER(a, b) a##b
+#define ET_G3C4_PROMPT_CAT(a, b) ET_G3C4_PROMPT_CAT_INNER(a, b)
+  if (input->length == 1)
+    status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill1_v1)(
+        context, *(const int64_t *)view->data, last_logits_output);
+  else
+    status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill2_v1)(
+        context, (const int64_t *)view->data, last_logits_output);
+#undef ET_G3C4_PROMPT_CAT
+#undef ET_G3C4_PROMPT_CAT_INNER
+  if (status != 0) goto fail;
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+  return 0;
+
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (borrow != NULL &&
+      et_i64_tensor_borrow_end_v1(&borrow, &error) != 0)
+    abort();
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }

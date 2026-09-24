@@ -100,6 +100,17 @@ int64_t et_g3c4_private_prefill2_v1(
 #endif
 #endif
 
+#ifdef ET_G3C4_PROMPT_PREFILL_PRIVATE
+/* Authenticates an idle generator and Step 15A input, and rejects P+G > 2
+ * before call acquisition or pinning. */
+int64_t et_g3c4_private_prompt_prefill_preflight_v1(
+    void *context, void *input, int64_t budget);
+/* Borrows the exact Step 15A I1 IDs for one synchronous matching P1/P2
+ * numerical prefill. The input owner and borrowed view are never retained. */
+int64_t et_g3c4_private_prompt_prefill_v1(
+    void *context, void *input, float last_logits[256]);
+#endif
+
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
 /* Samples directly from one exact [1,256] row, then opens the accepted pending
  * one-token frame. No fabricated full-prefix carrier is constructed. */
