@@ -270,6 +270,19 @@ static void abort_call(et_e3_frame_internal *frame) {
   CHECK(frame->phase == E3_IDLE && frame->model->active == NULL);
 }
 
+static void expect_metric_bits_error(void *frame, int64_t selector,
+                                     int64_t domain, int64_t category,
+                                     int64_t code) {
+  const int64_t actual =
+      et_e3_private_selected_metric_bits_ref_v1(frame, selector);
+  if (actual != -1)
+    fprintf(stderr, "metric bits selector %lld unexpectedly returned %lld\n",
+            (long long)selector, (long long)actual);
+  CHECK(actual == -1);
+  CHECK(e3_last_domain == domain && e3_last_category == category &&
+        e3_last_code == code);
+}
+
 static void test_create_rejections(owner *model, et_f32_tensor *destination[4]) {
   CHECK(et_e3_private_frame_create_v1((void *)(uintptr_t)1,
       destination[0], destination[1], destination[2], destination[3]) == NULL);
@@ -337,6 +350,12 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
       model, destination[0], destination[1], destination[2], destination[3]);
   CHECK(frame != NULL);
+  expect_metric_bits_error((void *)(uintptr_t)17, 0, 0,
+                           E3_INVALID_ARGUMENT, E3_CODE_IDENTITY);
+  expect_metric_bits_error((void *)(uintptr_t)17, 2, 0,
+                           E3_INVALID_ARGUMENT, E3_CODE_IDENTITY);
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE, E3_CODE_PHASE);
+  expect_metric_bits_error(frame, 2, 0, E3_INVALID_ARGUMENT, E3_CODE_PHASE);
   CHECK(frame->lifecycle == 1 && frame->phase == E3_IDLE);
   CHECK(e3_all_tensors(frame, (et_f32_tensor *[37]){0}) == 37);
   CHECK(et_e3_private_frame_check_v1(frame) == 0);
@@ -357,6 +376,7 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   CHECK(e3_last_category == E3_INVALID_STATE);
 
   OK(et_e3_private_acquire_v1(frame));
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE, E3_CODE_PHASE);
   CHECK(frame->model->active == frame && frame->pins.held_mask == UINT16_C(0x3fff));
   CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
   CHECK(et_e3_private_forward_role_v1(frame, -1) == E3_INVALID_ARGUMENT);
@@ -404,6 +424,80 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   CHECK(fabsf(perplexity - 255.51134f) <= 0.005f);
   CHECK(first[3] == UINT32_C(0x00000000));
   CHECK(first[1] == UINT32_C(0x40a00000));
+  et_f32_test_live_counts_v1 accessor_before = {
+      .struct_size = sizeof(accessor_before),
+  };
+  et_f32_test_live_counts_v1 accessor_after = {
+      .struct_size = sizeof(accessor_after),
+  };
+  et_f32_test_live_counts_snapshot_v1(&accessor_before);
+  et_e3_test_frame_fail_alloc_after_v1(0);
+  et_f32_tensor_test_fail_alloc_after_v1(0);
+  CHECK(et_e3_private_selected_metric_bits_ref_v1(frame, 0) == first[0]);
+  CHECK(et_e3_private_selected_metric_bits_ref_v1(frame, 1) == first[1]);
+  et_f32_tensor_test_reset_allocator_v1();
+  et_e3_test_frame_fail_alloc_after_v1(SIZE_MAX);
+  et_f32_test_live_counts_snapshot_v1(&accessor_after);
+  CHECK(memcmp(&accessor_before, &accessor_after,
+               sizeof(accessor_before)) == 0);
+  expect_metric_bits_error(frame, -1, 0, E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+  expect_metric_bits_error(frame, 2, 0, E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+
+  frame->published_valid = 0;
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE, E3_CODE_PHASE);
+  frame->published_valid = 1;
+  frame->committed = 0;
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE, E3_CODE_PHASE);
+  frame->committed = 2;
+
+  frame->model->active = frame;
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE,
+                           E3_CODE_REENTRANCY);
+  frame->model->active = NULL;
+  frame->cleanup_ready = 1;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->cleanup_ready = 0;
+  frame->next_role = 1;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->next_role = 0;
+  frame->stage_plane = 1;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->stage_plane = 0;
+  frame->sum_bank = 1;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->sum_bank = 0;
+  frame->active = 1;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->active = 0;
+  frame->staged_counts[0] = 1;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->staged_counts[0] = 0;
+  frame->pins.self = &frame->pins;
+  expect_metric_bits_error(frame, 0, 0, E3_INTERNAL, E3_CODE_INVARIANT);
+  frame->pins.self = NULL;
+
+  et_f32_tensor_borrow *metric_borrow = NULL;
+  OK(et_f32_tensor_borrow_begin_v1(destination[0], &metric_borrow,
+                                   &tensor_error));
+  expect_metric_bits_error(frame, 0, 3, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                           ET_F32_TENSOR_CODE_ACTIVE_BORROW);
+  OK(et_f32_tensor_borrow_end_v1(&metric_borrow, &tensor_error));
+  CHECK(et_e3_private_selected_metric_bits_ref_v1(frame, 0) == first[0]);
+
+  et_f32_tensor *metric_source = scalar();
+  et_f32_tensor_copy_assignment_v1 metric_assignment = {
+      .struct_size = sizeof(metric_assignment),
+      .destination = destination[0],
+      .source = metric_source,
+  };
+  et_f32_tensor_copy_plan *metric_plan = NULL;
+  OK(et_f32_tensor_copy_plan_prepare_v1(1, &metric_assignment, &metric_plan,
+                                        &tensor_error));
+  expect_metric_bits_error(frame, 0, 3, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                           ET_F32_TENSOR_CODE_ACTIVE_BORROW);
+  OK(et_f32_tensor_copy_plan_release_v1(&metric_plan, &tensor_error));
+  destroy_tensor(&metric_source);
+  CHECK(et_e3_private_selected_metric_bits_ref_v1(frame, 0) == first[0]);
   CHECK(et_e3_private_counter_ref_v1(frame, 0) == 5);
   CHECK(et_e3_private_counter_ref_v1(frame, 1) == 3);
   CHECK(et_e3_private_counter_ref_v1(frame, 2) == -1);
@@ -418,6 +512,7 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
     read_scalar(destination[i], &bits);
     CHECK(bits == first[i]);
   }
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE, E3_CODE_PHASE);
   CHECK(et_e3_private_counter_ref_v1(frame, 0) == 5);
   CHECK(et_e3_private_counter_ref_v1(frame, 1) == 3);
 
@@ -470,6 +565,7 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   for (size_t i = 0; i < 37; ++i)
     CHECK(destroyed_tensors[i] == creation_order[36 - i]);
   CHECK(et_e3_private_frame_check_v1(frame) == E3_INVALID_STATE);
+  expect_metric_bits_error(frame, 0, 0, E3_INVALID_STATE, E3_CODE_PHASE);
   CHECK(et_e3_private_frame_destroy_preflight_v1(frame) == E3_INVALID_STATE);
 }
 

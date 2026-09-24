@@ -1256,6 +1256,45 @@ void et_e3_private_finish_v1(void *pointer) {
   if (frame->committed != 2) frame->committed = 0;
 }
 
+int64_t et_e3_private_selected_metric_bits_ref_v1(
+    void *pointer, int64_t selector) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return -1;
+  if (selector < 0 || selector > 1) {
+    e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+    return -1;
+  }
+  if (frame->phase != E3_IDLE || !frame->published_valid ||
+      frame->committed != 2) {
+    e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+    return -1;
+  }
+  if (frame->model->active || frame->cleanup_ready || frame->next_role ||
+      frame->stage_plane || frame->sum_bank || frame->active ||
+      frame->staged_counts[0] || frame->staged_counts[1] ||
+      !e3_pins_idle(&frame->pins)) {
+    e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    return -1;
+  }
+  et_f32_scoped_guard_internal guard = {0};
+  uint32_t bits = 0;
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (et_f32_tensor_scoped_begin_internal(frame->destination[selector], &guard,
+                                          &error) != 0) {
+    e3_f32_error(&error);
+    return -1;
+  }
+  if (et_f32_tensor_scoped_end_internal(&guard) != 0) abort();
+  if (et_f32_tensor_copy_bits_to_v1(frame->destination[selector], &bits, 1,
+                                    &error) != 0) {
+    e3_f32_error(&error);
+    return -1;
+  }
+  return (int64_t)bits;
+}
+
 int64_t et_e3_private_counter_ref_v1(void *pointer, int64_t selector) {
   e3_clear();
   et_e3_frame_internal *frame = e3_admit(pointer);
