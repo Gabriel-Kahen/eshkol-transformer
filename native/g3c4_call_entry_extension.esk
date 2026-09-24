@@ -119,6 +119,38 @@
                              "C4 model authority is not exact and live")))
               (loop (cdr entries)))))))
 
+(define g3c4-baseline-tokenizer-fingerprint
+  "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")
+
+(define (g3c4-baseline-tokenizer-entry
+          tokenizer operation missing-category mismatch-category)
+  (let ((entry (t1-private-entry tokenizer)))
+    (if (not entry)
+        (g3c4-fail missing-category operation
+                   "C4 tokenizer identity is not registered"))
+    (if (not (and (pair? entry) (eq? (car entry) tokenizer)
+                  (pair? (cdr entry)) (null? (cdr (cdr entry)))))
+        (g3c4-fail 'invalid-state operation
+                   "C4 tokenizer registry entry is not exact"))
+    (let ((core (car (cdr entry))))
+      (if (not (and (t1-core-tokenizer? core)
+                    (eq? (vector-ref core 1) 'raw)
+                    (null? (vector-ref core 2))
+                    (null? (vector-ref core 3))
+                    (null? (vector-ref core 4))
+                    (= (t1-tokenizer-core-vocab-size core) 256)
+                    (string? (vector-ref core 6))
+                    (string=? (vector-ref core 6)
+                              g3c4-baseline-tokenizer-fingerprint)))
+          (g3c4-fail mismatch-category operation
+                     "C4 requires the baseline raw V256 tokenizer"))
+      entry)))
+
+(define (g3c4-require-model-eval model-entry operation category)
+  (if (not (eq? (module-mode-internal (vector-ref model-entry 0)) 'eval))
+      (g3c4-fail category operation "C4 model must be in eval mode"))
+  #t)
+
 (define (g3c4-native-rng-word-checked native index operation)
   (let ((word (g3c4-native-rng-word native index)))
     (if (not (= (g3c4-native-last-error-category) 0))
@@ -324,14 +356,15 @@
 
 (define (g3c4-generator-entry-live generator operation)
   (let* ((entry (g3c4-registry-find generator operation))
-         (model-entry (vector-ref entry 5)))
+         (model-entry (vector-ref entry 5))
+         (tokenizer (vector-ref entry 6)))
     (if (not (and (= (vector-length entry) 12)
                   (eq? (vector-ref entry 1) 'generator)
                   (eq? (vector-ref entry 2) 'live)
                   (vector-ref entry 3)
                   (eq? (vector-ref entry 4) #f)
                   (vector? model-entry)
-                  (eq? (vector-ref entry 6) #f)
+                  tokenizer
                   (g3c4-policy? (vector-ref entry 7))
                   (eq? (vector-ref entry 8) #f)
                   (eq? (vector-ref entry 9) #f)
@@ -346,7 +379,16 @@
                    "C4 generator model cross-link changed"))
     entry))
 
-(define (g3c4-generator-create-internal model config)
+(define (g3c4-generator-entry-call-ready generator operation)
+  (let* ((entry (g3c4-generator-entry-live generator operation))
+         (model-entry (vector-ref entry 5))
+         (tokenizer (vector-ref entry 6)))
+    (g3c4-baseline-tokenizer-entry
+      tokenizer operation 'invalid-state 'invalid-state)
+    (g3c4-require-model-eval model-entry operation 'invalid-state)
+    entry))
+
+(define (g3c4-generator-create-internal model tokenizer config)
   (let ((operation 'g3c4-generator-create-internal))
     (m3-call operation
       (let* ((normalized (g3c4-normalize-config config operation))
@@ -354,10 +396,17 @@
              (source-kind (vector-ref normalized 1))
              (source (vector-ref normalized 2))
              (model-entry (g3c4-model-entry-live model operation #f))
+             (tokenizer-entry
+               (g3c4-baseline-tokenizer-entry
+                 tokenizer operation 'invalid-argument 'unsupported))
+             (eval-ready
+               (g3c4-require-model-eval
+                 model-entry operation 'invalid-state))
              (shell (vector 'g3c4-generator-private))
              (ledger (vector #f))
-             (entry (vector shell 'generator 'pending #f #f model-entry #f
-                            policy #f #f ledger g3c4-model-profile))
+             (entry (vector shell 'generator 'pending #f #f model-entry
+                            (car tokenizer-entry) policy #f #f ledger
+                            g3c4-model-profile))
              (next (cons entry (vector-ref g3c4-registry 0)))
              (native '()))
         (guard (caught
@@ -451,13 +500,14 @@
            (g3c4-fail 'invalid-argument operation
                       "C4 call kind and budget are invalid"))
        (let* ((generator-entry
-                (g3c4-generator-entry-live generator operation))
+                (g3c4-generator-entry-call-ready generator operation))
               (model-entry (vector-ref generator-entry 5))
+              (tokenizer (vector-ref generator-entry 6))
               (shell (vector 'g3c4-call-private))
               (ledger (vector #f #f #f #f))
               (call-entry
                 (vector shell 'call 'pending #f generator-entry model-entry
-                        #f #f #f #f ledger g3c4-model-profile))
+                        tokenizer #f #f #f ledger g3c4-model-profile))
               (next (cons call-entry (vector-ref g3c4-registry 0)))
               (phase (vector 'precommit)))
          (guard (caught
@@ -485,6 +535,10 @@
              (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
              (vector-set! m3-call-state 0 canonical)
              (let ((answer (begin body ...)))
+               (g3c4-baseline-tokenizer-entry
+                 tokenizer operation 'invalid-state 'invalid-state)
+               (g3c4-require-model-eval
+                 model-entry operation 'invalid-state)
                (g3c4-native-check
                  (g3c4-native-call-prepare-end
                    (vector-ref generator-entry 3)) operation)

@@ -3,6 +3,10 @@
 (load "g3c4_model_extension.esk")
 (load "g3c4_call_entry_extension.esk")
 
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
 (extern i64 live-cache-stat i64
         :real et_g3c4_call_entry_test_live_cache_stat_v1)
 (extern i64 context-bytes
@@ -34,11 +38,11 @@
         (rng-loop (+ index 1)))))
 (let generator-loop ((index 0))
   (if (= index (- horizon 1)) #t
-      (let ((generator (g3c4-generator-create-internal model (config index))))
+      (let ((generator (g3c4-generator-create-internal model tokenizer (config index))))
         (check (g3c4-generator-close-internal! generator))
         (generator-loop (+ index 1)))))
 (define generator
-  (g3c4-generator-create-internal model (config horizon)))
+  (g3c4-generator-create-internal model tokenizer (config horizon)))
 (define peak-caches (live-cache-stat 0))
 (define peak-cache-bytes (live-cache-stat 1))
 (define peak-native-bytes (context-bytes))

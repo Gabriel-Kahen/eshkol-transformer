@@ -12,6 +12,10 @@
 ;; include directory.  The production source contains no fault hook.
 (load "g3c4_call_entry_fault_extension.esk")
 
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
 (extern i64 test-context-field ptr i64
         :real et_g3c4_call_entry_test_context_field_v1)
 
@@ -35,7 +39,7 @@
         ':eos #f ':seed 11))
 (define model (g3c4-model-create-seeded-internal 1729))
 (define model-entry (car (vector-ref g3c4-model-registry 0)))
-(define generator (g3c4-generator-create-internal model config))
+(define generator (g3c4-generator-create-internal model tokenizer config))
 (define generator-entry (car (vector-ref g3c4-registry 0)))
 (define native (vector-ref generator-entry 3))
 
