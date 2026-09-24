@@ -6,13 +6,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 Q0 = ROOT / "tests" / "q0"
+DEVELOPMENT_SCRIPTS = frozenset({
+    ROOT / "scripts" / "generate-e3-d2-source.py",
+    ROOT / "scripts" / "check-e3-p1-contract.py",
+    ROOT / "scripts" / "check-tr3-p1-fixed.py",
+    ROOT / "scripts" / "e3-atomic-publish.py",
+})
 
 
 def development_python(path: Path) -> bool:
-    # Accepted E3-D2 build-only source preparation, never a runtime dependency.
-    return path.is_relative_to(ROOT / "tests") or path == (
-        ROOT / "scripts" / "generate-e3-d2-source.py"
-    )
+    # Exact development-only build/check helpers, never training dependencies.
+    return path.is_relative_to(ROOT / "tests") or path in DEVELOPMENT_SCRIPTS
 
 
 class PythonIsolationTests(unittest.TestCase):
@@ -40,11 +44,15 @@ class PythonIsolationTests(unittest.TestCase):
         self.assertTrue((Q0 / "generate_scalar_add.py").is_file())
         self.assertTrue((Q0 / "requirements-oracle.lock").is_file())
 
-    def test_only_exact_build_generator_is_admitted_outside_tests(self) -> None:
-        self.assertTrue(development_python(ROOT / "scripts/generate-e3-d2-source.py"))
+    def test_only_exact_development_scripts_are_admitted_outside_tests(self) -> None:
+        for path in DEVELOPMENT_SCRIPTS:
+            with self.subTest(path=path):
+                self.assertTrue(development_python(path))
         for relative in (
             "scripts/generate-other-source.py", "scripts/runtime.py",
             "scripts/generate-e3-d2-source.py.extra.py",
+            "scripts/check-e3-p1-contract.py.extra.py",
+            "scripts/e3-atomic-publish.py.extra.py",
             "scripts/nested/generate-e3-d2-source.py",
             "src/generate-e3-d2-source.py", "lib/runtime.py",
             "internal/e3/runtime.py", "native/runtime.py",
