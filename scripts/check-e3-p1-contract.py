@@ -11,6 +11,7 @@ BASE = "dd4f1d4b090fb7d4ace907733a0232575be99997"
 SOURCE = "internal/p1/lib/transformer/module.esk"
 WRAPPERS = "native/e3_p1_modes_extension.esk"
 TR3_WRAPPERS = "native/tr3_p1_fixed_set_extension.esk"
+G3C4_WRAPPERS = "native/g3c4_p1_construction_extension.esk"
 INHERITED_CLOSURES = {
     "p1_package": 4, "c1_checkpoint": 8, "t1_wave1": 10,
     "t2_wave2": 12, "t2_wave2_d1_test": 13, "i2_wave2": 13,
@@ -77,13 +78,24 @@ def check():
     require(atom(lexical[2][0]) == "let", "P1 authority must remain lexical")
     vector = lexical[2][-1]
     require(atom(vector[2][0]) == "vector", "P1 surface must end with its vector")
-    require(len(vector[2]) == 72, "expected exactly 71 trusted closure slots")
+    require(len(vector[2]) == 74, "expected exactly 73 trusted closure slots")
     require(digest(text, vector[2][1:65]) ==
             "d7d3d3a9aff533aa5f3422130d702f730b3cf227c3ecdd0a56423a634fec7d5e",
             "inherited closure 0..63 changed from accepted #121 base")
     require(digest(text, vector[2][65:70]) ==
             "f2a34d77e5d6db808dcc7bf5b5eeeacbfcda8da274827aa4b9e94ac0fdfa0097",
             "accepted E3 closure slots 64..68 changed")
+    require(digest(text, vector[2][70:72]) ==
+            "2bbc3bfad143d3f17ca21db4180cde453622d86cc7dff267a0276b2bd6e66a15",
+            "accepted TR3 closure slots 69..70 changed")
+    g3c4_slots = [
+        ["lambda", ["identity"],
+         ["construction-prepare-eval-guarded!", "identity"]],
+        ["lambda", ["identity"],
+         ["construction-seal-prepared!", "identity"]],
+    ]
+    require([signature(n) for n in vector[2][72:74]] == g3c4_slots,
+            "G3-C4 private closures differ from exact slot71/72 calls")
     e3_definitions = []
     for node in lexical[2][1:-1]:
         if not (isinstance(node[2], list) and len(node[2]) > 1
@@ -98,10 +110,22 @@ def check():
     require(len(e3_definitions) == 23 and digest(text, e3_definitions) ==
             "69d85636fffe58568c649308796a40d870d7fea7d78d54e88d0c0cb20149da02",
             "accepted E3 lexical definitions changed")
-    require(digest(text, (n for n in nodes if n is not surface)) ==
+    g3c4_externs = [
+        ["extern", "i64", "p1-native-construction-prepare", "ptr", "ptr",
+         ":real", "et_p1_private_construction_prepare_v1"],
+        ["extern", "i64", "p1-native-construction-commit-prepared", "ptr",
+         "ptr", ":real", "et_p1_private_construction_commit_prepared_v1"],
+        ["extern", "i64", "p1-native-construction-abort-prepared", "ptr",
+         "ptr", ":real", "et_p1_private_construction_abort_prepared_v1"],
+    ]
+    require(sum(signature(n) in g3c4_externs for n in externs(nodes)) == 3,
+            "G3-C4 native extern delta is missing or duplicated")
+    require(digest(text, (n for n in nodes if n is not surface
+                          and signature(n) not in g3c4_externs)) ==
             "505b1c59f9f2734e4ce457423129ca426fd300c748076e0fac03c9d84762d34f",
             "P1 top-level authority/provides/wrappers changed from accepted #121 base")
-    require(digest(text, externs(nodes)) ==
+    require(digest(text, (n for n in externs(nodes)
+                          if signature(n) not in g3c4_externs)) ==
             "616535438e9ebcb1b5adc240d96a6f837e4d32f45de1ee59983c1b91dd05518e",
             "P1 native extern authority changed from accepted #121 base")
     for path, expected in {
@@ -137,6 +161,15 @@ def check():
     ]
     require([signature(n) for n in forms(tr3_wrapper_text)] == tr3_expected,
             "TR3 private wrappers differ from exact slot69/70 arities")
+    g3c4_wrapper_text = (ROOT / G3C4_WRAPPERS).read_text()
+    g3c4_expected = [
+        ["define", ["module-construction-prepare-eval-internal!", "identity"],
+         [["vector-ref", "p1-trusted-surface", "71"], "identity"]],
+        ["define", ["module-construction-seal-prepared-internal!", "identity"],
+         [["vector-ref", "p1-trusted-surface", "72"], "identity"]],
+    ]
+    require([signature(n) for n in forms(g3c4_wrapper_text)] == g3c4_expected,
+            "G3-C4 private wrappers differ from exact slot71/72 arities")
     for prefix, count in INHERITED_CLOSURES.items():
         path = ROOT / f"native/{prefix}_source_closure.txt"
         paths = path.read_text().splitlines()
@@ -144,8 +177,10 @@ def check():
                 f"predecessor source count/canonical P1 identity drifted: {path.name}")
         require(WRAPPERS not in paths,
                 f"predecessor source closure gained E3-only wrappers: {path.name}")
-    print(f"E3-P1 STRUCTURE PASS: base={BASE} first64=#121-exact first69=E3-exact total=71 public=unchanged")
-    for path in (SOURCE, WRAPPERS, TR3_WRAPPERS):
+        require(G3C4_WRAPPERS not in paths,
+                f"predecessor source closure gained G3-C4-only wrappers: {path.name}")
+    print(f"E3-P1 STRUCTURE PASS: base={BASE} first71=accepted-exact total=73 public=unchanged")
+    for path in (SOURCE, WRAPPERS, TR3_WRAPPERS, G3C4_WRAPPERS):
         print(f"sha256 {sha256((ROOT / path).read_bytes()).hexdigest()} {path}")
 
 

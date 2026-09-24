@@ -701,3 +701,881 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
   return et_g3c4_fail(
       ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 }
+
+#if defined(ET_G3C4_ACTIVE_CALL_PRIVATE) && \
+    (!defined(ET_G3C4_CONTEXT_PRIVATE) || \
+     !defined(ET_G3C4_NATIVE_PINS_PRIVATE))
+#error "ET_G3C4_ACTIVE_CALL_PRIVATE requires context and C4 pins"
+#endif
+
+#if defined(ET_G3C4_GENERATOR_PRIVATE) && \
+    (!defined(ET_G3C4_CONTEXT_PRIVATE) || \
+     !defined(ET_G3C4_NATIVE_PINS_PRIVATE) || \
+     !defined(ET_G3C4_ACTIVE_CALL_PRIVATE))
+#error "ET_G3C4_GENERATOR_PRIVATE requires context, C4 pins, and active call"
+#endif
+
+#ifdef ET_G3C4_CONTEXT_PRIVATE
+#include "g3c4_context_internal.h"
+#include "eshkol_transformer/a2_kv_cache.h"
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+#include "m3_call_pins.h"
+#endif
+
+#define ET_G3C4_CONTEXT_MAGIC UINT64_C(0x4733433443545831)
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+#define ET_G3C4_RNG_MAGIC UINT64_C(0x47334334524e4731)
+#endif
+
+enum {
+  ET_G3C4_CONTEXT_KIND = 1,
+  ET_G3C4_CONTEXT_LIVE = 1,
+  ET_G3C4_CONTEXT_DEAD = 2
+};
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+enum { ET_G3C4_RNG_KIND = 2 };
+
+typedef struct et_g3c4_transport_header_internal {
+  struct et_g3c4_transport_header_internal *registry_next;
+  uint64_t magic;
+  uint32_t kind;
+  uint32_t state;
+  uint32_t busy;
+} et_g3c4_transport_header_internal;
+#endif
+
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+enum {
+  ET_G3C4_CALL_IDLE = 0,
+  ET_G3C4_CALL_ACTIVE = 1,
+  ET_G3C4_ACQUIRED_PINS = 1,
+  ET_G3C4_ACQUIRED_METADATA = 2,
+  ET_G3C4_ACQUIRED_BUSY = 4,
+  ET_G3C4_ACQUIRED_OWNER = 8,
+  ET_G3C4_ACQUIRED_FULL = 15
+};
+#endif
+
+typedef struct et_g3c4_context_internal {
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  et_g3c4_transport_header_internal transport;
+#else
+  struct et_g3c4_context_internal *registry_next;
+  uint64_t magic;
+  uint32_t kind;
+  uint32_t state;
+  uint32_t busy;
+#endif
+  et_g3c4_model_owner_internal *owner;
+  et_a2_kv_cache *cache;
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+  et_g3c4_model_pins_internal pins;
+  int64_t call_kind;
+  int64_t budget;
+  uint32_t acquired_mask;
+#endif
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  uint32_t generator_kind;
+  uint32_t generator_ready;
+  int64_t generator_policy[6];
+  int64_t generator_rng_words[4];
+#endif
+} et_g3c4_context_internal;
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+typedef struct et_g3c4_rng_internal {
+  et_g3c4_transport_header_internal transport;
+  int64_t words[4];
+} et_g3c4_rng_internal;
+
+static et_g3c4_transport_header_internal *et_g3c4_transport_registry;
+
+#define ET_G3C4_CONTEXT_MAGIC_FIELD(context) ((context)->transport.magic)
+#define ET_G3C4_CONTEXT_KIND_FIELD(context) ((context)->transport.kind)
+#define ET_G3C4_CONTEXT_STATE(context) ((context)->transport.state)
+#define ET_G3C4_CONTEXT_BUSY(context) ((context)->transport.busy)
+#else
+static et_g3c4_context_internal *et_g3c4_context_registry;
+
+#define ET_G3C4_CONTEXT_MAGIC_FIELD(context) ((context)->magic)
+#define ET_G3C4_CONTEXT_KIND_FIELD(context) ((context)->kind)
+#define ET_G3C4_CONTEXT_STATE(context) ((context)->state)
+#define ET_G3C4_CONTEXT_BUSY(context) ((context)->busy)
+#endif
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+static int et_g3c4_valid_generator_policy(
+    int64_t mode, int64_t temperature_bits, int64_t k,
+    int64_t p_bits, int64_t max_new, int64_t eos);
+
+static int et_g3c4_zero_i64_words(const int64_t *words, size_t count) {
+  size_t index;
+  for (index = 0u; index < count; index++)
+    if (words[index] != 0) return 0;
+  return 1;
+}
+
+static int et_g3c4_context_subtype_valid(
+    const et_g3c4_context_internal *context) {
+  if (context->generator_kind == 0u)
+    return context->generator_ready == 0u &&
+           et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
+           et_g3c4_zero_i64_words(context->generator_rng_words, 4u);
+  if (context->generator_kind != 1u) return 0;
+  if (ET_G3C4_CONTEXT_STATE(context) == ET_G3C4_CONTEXT_DEAD)
+    return context->generator_ready == 0u &&
+           et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
+           et_g3c4_zero_i64_words(context->generator_rng_words, 4u);
+  return context->generator_ready == 1u &&
+         et_g3c4_valid_generator_policy(
+             context->generator_policy[0], context->generator_policy[1],
+             context->generator_policy[2], context->generator_policy[3],
+             context->generator_policy[4], context->generator_policy[5]) &&
+         context->generator_rng_words[0] == 1 &&
+         context->generator_rng_words[1] >= 0;
+}
+#endif
+
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+static int et_g3c4_pins_idle(
+    const et_g3c4_model_pins_internal *pins);
+#endif
+
+#ifdef ET_G3C4_CONTEXT_TESTING
+static size_t et_g3c4_context_allocation_limit = SIZE_MAX;
+static size_t et_g3c4_context_successful_allocations;
+#endif
+
+#if defined(ET_G3C4_ACTIVE_CALL_PRIVATE) && \
+    defined(ET_G3C4_ACTIVE_CALL_TESTING)
+static size_t et_g3c4_active_call_fail_after = SIZE_MAX;
+#endif
+
+static et_g3c4_context_internal *et_g3c4_admit_context(
+    const void *candidate) {
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  et_g3c4_transport_header_internal *header;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (const void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (header->kind == ET_G3C4_RNG_KIND) {
+    const et_g3c4_rng_internal *rng =
+        (const et_g3c4_rng_internal *)header;
+    int payload_valid =
+        header->state == ET_G3C4_CONTEXT_LIVE
+            ? rng->words[0] == 1 && rng->words[1] >= 0
+            : rng->words[0] == 0 && rng->words[1] == 0 &&
+              rng->words[2] == 0 && rng->words[3] == 0;
+    if (header->magic != ET_G3C4_RNG_MAGIC ||
+        (header->state != ET_G3C4_CONTEXT_LIVE &&
+         header->state != ET_G3C4_CONTEXT_DEAD) ||
+        header->busy != 0u || !payload_valid) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (header->magic != ET_G3C4_CONTEXT_MAGIC ||
+      header->kind != ET_G3C4_CONTEXT_KIND ||
+      (header->state != ET_G3C4_CONTEXT_LIVE &&
+       header->state != ET_G3C4_CONTEXT_DEAD) ||
+      header->busy > ET_G3C4_CALL_ACTIVE) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (!et_g3c4_context_subtype_valid(
+          (const et_g3c4_context_internal *)header)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  return (et_g3c4_context_internal *)header;
+#else
+  et_g3c4_context_internal *context;
+  for (context = et_g3c4_context_registry;
+       context != NULL && (const void *)context != candidate;
+       context = context->registry_next) {}
+  if (context == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (context->magic != ET_G3C4_CONTEXT_MAGIC ||
+      context->kind != ET_G3C4_CONTEXT_KIND) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  return context;
+#endif
+}
+
+static et_g3c4_context_internal *et_g3c4_context_allocate(void) {
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (et_g3c4_context_successful_allocations >=
+      et_g3c4_context_allocation_limit)
+    return NULL;
+#endif
+  et_g3c4_context_internal *context =
+      (et_g3c4_context_internal *)calloc(1u, sizeof(*context));
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (context != NULL) et_g3c4_context_successful_allocations++;
+#endif
+  return context;
+}
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+static et_g3c4_rng_internal *et_g3c4_rng_allocate(void) {
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (et_g3c4_context_successful_allocations >=
+      et_g3c4_context_allocation_limit)
+    return NULL;
+#endif
+  et_g3c4_rng_internal *rng =
+      (et_g3c4_rng_internal *)calloc(1u, sizeof(*rng));
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (rng != NULL) et_g3c4_context_successful_allocations++;
+#endif
+  return rng;
+}
+
+static et_g3c4_rng_internal *et_g3c4_admit_rng(
+    const void *candidate, int allow_dead) {
+  et_g3c4_transport_header_internal *header;
+  et_g3c4_rng_internal *rng;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (const void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (header->kind == ET_G3C4_CONTEXT_KIND) {
+    if (header->magic != ET_G3C4_CONTEXT_MAGIC ||
+        (header->state != ET_G3C4_CONTEXT_LIVE &&
+         header->state != ET_G3C4_CONTEXT_DEAD) ||
+        header->busy > ET_G3C4_CALL_ACTIVE ||
+        !et_g3c4_context_subtype_valid(
+            (const et_g3c4_context_internal *)header)) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (header->magic != ET_G3C4_RNG_MAGIC ||
+      header->kind != ET_G3C4_RNG_KIND ||
+      (header->state != ET_G3C4_CONTEXT_LIVE &&
+       header->state != ET_G3C4_CONTEXT_DEAD) ||
+      header->busy != 0u) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  rng = (et_g3c4_rng_internal *)header;
+  if (rng->transport.state == ET_G3C4_CONTEXT_DEAD) {
+    if (rng->words[0] != 0 || rng->words[1] != 0 ||
+        rng->words[2] != 0 || rng->words[3] != 0) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
+    if (!allow_dead) {
+      (void)et_g3c4_fail(
+          ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+      return NULL;
+    }
+  } else if (rng->words[0] != 1 || rng->words[1] < 0) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  return rng;
+}
+
+static void et_g3c4_enroll_context(et_g3c4_context_internal *context) {
+  context->transport.registry_next = et_g3c4_transport_registry;
+  et_g3c4_transport_registry = &context->transport;
+}
+
+static void et_g3c4_enroll_rng(et_g3c4_rng_internal *rng) {
+  rng->transport.registry_next = et_g3c4_transport_registry;
+  et_g3c4_transport_registry = &rng->transport;
+}
+
+_Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
+               "G3-C4 transport header must be 32 bytes");
+_Static_assert(offsetof(et_g3c4_context_internal, transport) == 0u,
+               "G3-C4 context header must be first");
+_Static_assert(sizeof(et_g3c4_context_internal) == 1520u,
+               "G3-C4 generator context must be 1520 bytes");
+_Static_assert(sizeof(et_g3c4_rng_internal) == 64u,
+               "G3-C4 RNG record must be 64 bytes");
+#endif
+
+void *et_g3c4_private_context_create_v1(void *candidate) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_context_internal *context;
+  et_a2_kv_cache *cache = NULL;
+  et_kernel_error error;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return NULL;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  context = et_g3c4_context_allocate();
+  if (context == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_create_v1(
+              1u, 1u, 2u, 4u, 2u, &cache, &error),
+          &error) != 0) {
+    et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
+    free(context);
+    et_g3c4_error_restore_internal(first);
+    return NULL;
+  }
+  ET_G3C4_CONTEXT_MAGIC_FIELD(context) = ET_G3C4_CONTEXT_MAGIC;
+  ET_G3C4_CONTEXT_KIND_FIELD(context) = ET_G3C4_CONTEXT_KIND;
+  ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_LIVE;
+  ET_G3C4_CONTEXT_BUSY(context) = 0u;
+  context->owner = owner;
+  context->cache = cache;
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  et_g3c4_enroll_context(context);
+#else
+  context->registry_next = et_g3c4_context_registry;
+  et_g3c4_context_registry = context;
+#endif
+  return context;
+}
+
+int64_t et_g3c4_private_context_close_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_model_owner_internal *owner;
+  et_kernel_error error;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_context(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  if (context->generator_kind != 0u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+#endif
+  if (ET_G3C4_CONTEXT_STATE(context) == ET_G3C4_CONTEXT_DEAD) {
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+    if (ET_G3C4_CONTEXT_BUSY(context) != ET_G3C4_CALL_IDLE ||
+        context->call_kind != 0 ||
+        context->budget != 0 || context->acquired_mask != 0u ||
+        !et_g3c4_pins_idle(&context->pins))
+      return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+#endif
+    return 0;
+  }
+  if (ET_G3C4_CONTEXT_STATE(context) != ET_G3C4_CONTEXT_LIVE ||
+      ET_G3C4_CONTEXT_BUSY(context) != 0u ||
+      context->owner == NULL || context->cache == NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+  if (context->call_kind != 0 || context->budget != 0 ||
+      context->acquired_mask != 0u || !et_g3c4_pins_idle(&context->pins))
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+#endif
+  owner = et_g3c4_admit_owner(context->owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner != context->owner || owner->state != ET_G3C4_OWNER_SEALED ||
+      owner->active != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  context->owner = NULL;
+  ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
+  return 0;
+}
+
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+static int et_g3c4_positive_f32_bits(int64_t bits) {
+  uint32_t value;
+  if (bits < 0 || bits > (int64_t)UINT32_MAX) return 0;
+  value = (uint32_t)bits;
+  return (value & UINT32_C(0x80000000)) == 0u &&
+         (value & UINT32_C(0x7f800000)) != UINT32_C(0x7f800000) &&
+         (value & UINT32_C(0x7fffffff)) != 0u;
+}
+
+static int et_g3c4_valid_generator_policy(
+    int64_t mode, int64_t temperature_bits, int64_t k,
+    int64_t p_bits, int64_t max_new, int64_t eos) {
+  if ((mode != 0 && mode != 1) ||
+      !et_g3c4_positive_f32_bits(temperature_bits) ||
+      !et_g3c4_positive_f32_bits(p_bits) ||
+      (uint32_t)p_bits > UINT32_C(0x3f800000) ||
+      k < 1 || k > 256 || max_new < 0 || max_new > 1 ||
+      eos < -1 || eos > 255)
+    return 0;
+  if (mode == 0 &&
+      (temperature_bits != INT64_C(0x3f800000) || k != 256 ||
+       p_bits != INT64_C(0x3f800000)))
+    return 0;
+  return 1;
+}
+
+void *et_g3c4_private_rng_seed_v1(int64_t seed) {
+  et_g3c4_rng_internal *rng;
+  et_g3c4_error_reset_internal();
+  if (seed < 0) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return NULL;
+  }
+  rng = et_g3c4_rng_allocate();
+  if (rng == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  rng->transport.magic = ET_G3C4_RNG_MAGIC;
+  rng->transport.kind = ET_G3C4_RNG_KIND;
+  rng->transport.state = ET_G3C4_CONTEXT_LIVE;
+  rng->words[0] = 1;
+  rng->words[1] = seed;
+  et_g3c4_enroll_rng(rng);
+  return rng;
+}
+
+void *et_g3c4_private_rng_clone_v1(void *candidate) {
+  et_g3c4_rng_internal *source;
+  et_g3c4_rng_internal *clone;
+  et_g3c4_error_reset_internal();
+  source = et_g3c4_admit_rng(candidate, 0);
+  if (source == NULL) return NULL;
+  clone = et_g3c4_rng_allocate();
+  if (clone == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  clone->transport.magic = ET_G3C4_RNG_MAGIC;
+  clone->transport.kind = ET_G3C4_RNG_KIND;
+  clone->transport.state = ET_G3C4_CONTEXT_LIVE;
+  memcpy(clone->words, source->words, sizeof(clone->words));
+  et_g3c4_enroll_rng(clone);
+  return clone;
+}
+
+int64_t et_g3c4_private_rng_word_v1(void *candidate, int64_t index) {
+  et_g3c4_rng_internal *rng;
+  et_g3c4_error_reset_internal();
+  rng = et_g3c4_admit_rng(candidate, 0);
+  if (rng == NULL) return 0;
+  if (index < 0 || index >= 4) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return 0;
+  }
+  return rng->words[index];
+}
+
+int64_t et_g3c4_private_rng_release_v1(void *candidate) {
+  et_g3c4_rng_internal *rng;
+  et_g3c4_error_reset_internal();
+  rng = et_g3c4_admit_rng(candidate, 1);
+  if (rng == NULL) return et_g3c4_error_state.category;
+  if (rng->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
+  memset(rng->words, 0, sizeof(rng->words));
+  rng->transport.state = ET_G3C4_CONTEXT_DEAD;
+  return 0;
+}
+
+static void *et_g3c4_generator_create(
+    et_g3c4_model_owner_internal *owner, const int64_t rng_words[4],
+    int64_t mode, int64_t temperature_bits, int64_t k,
+    int64_t p_bits, int64_t max_new, int64_t eos) {
+  et_g3c4_context_internal *context;
+  et_a2_kv_cache *cache = NULL;
+  et_kernel_error error;
+  if (!et_g3c4_valid_generator_policy(
+          mode, temperature_bits, k, p_bits, max_new, eos)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return NULL;
+  }
+  context = et_g3c4_context_allocate();
+  if (context == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_create_v1(
+              1u, 1u, 2u, 4u, 2u, &cache, &error),
+          &error) != 0) {
+    et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
+    free(context);
+    et_g3c4_error_restore_internal(first);
+    return NULL;
+  }
+  context->transport.magic = ET_G3C4_CONTEXT_MAGIC;
+  context->transport.kind = ET_G3C4_CONTEXT_KIND;
+  context->transport.state = ET_G3C4_CONTEXT_LIVE;
+  context->transport.busy = ET_G3C4_CALL_IDLE;
+  context->owner = owner;
+  context->cache = cache;
+  context->generator_kind = 1u;
+  context->generator_ready = 1u;
+  context->generator_policy[0] = mode;
+  context->generator_policy[1] = temperature_bits;
+  context->generator_policy[2] = k;
+  context->generator_policy[3] = p_bits;
+  context->generator_policy[4] = max_new;
+  context->generator_policy[5] = eos;
+  memcpy(context->generator_rng_words, rng_words,
+         sizeof(context->generator_rng_words));
+  et_g3c4_enroll_context(context);
+  return context;
+}
+
+void *et_g3c4_private_generator_seed_v1(
+    void *candidate, int64_t seed, int64_t mode,
+    int64_t temperature_bits, int64_t k, int64_t p_bits,
+    int64_t max_new, int64_t eos) {
+  et_g3c4_model_owner_internal *owner;
+  int64_t rng_words[4] = {1, seed, 0, 0};
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return NULL;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (seed < 0) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return NULL;
+  }
+  return et_g3c4_generator_create(
+      owner, rng_words, mode, temperature_bits, k, p_bits, max_new, eos);
+}
+
+void *et_g3c4_private_generator_rng_v1(
+    void *candidate, void *rng_candidate, int64_t mode,
+    int64_t temperature_bits, int64_t k, int64_t p_bits,
+    int64_t max_new, int64_t eos) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_rng_internal *rng;
+  int64_t rng_words[4];
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return NULL;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  rng = et_g3c4_admit_rng(rng_candidate, 0);
+  if (rng == NULL) return NULL;
+  if (rng->words[0] != 1 || rng->words[1] < 0) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  memcpy(rng_words, rng->words, sizeof(rng_words));
+  return et_g3c4_generator_create(
+      owner, rng_words, mode, temperature_bits, k, p_bits, max_new, eos);
+}
+
+static int et_g3c4_generator_dead_exact(
+    const et_g3c4_context_internal *context) {
+  return ET_G3C4_CONTEXT_BUSY(context) == ET_G3C4_CALL_IDLE &&
+         context->owner == NULL && context->cache == NULL &&
+         context->generator_ready == 0u &&
+         context->call_kind == 0 && context->budget == 0 &&
+         context->acquired_mask == 0u &&
+         et_g3c4_pins_idle(&context->pins) &&
+         et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
+         et_g3c4_zero_i64_words(context->generator_rng_words, 4u);
+}
+
+int64_t et_g3c4_private_generator_close_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_model_owner_internal *owner;
+  et_kernel_error error;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_context(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->generator_kind != 1u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (ET_G3C4_CONTEXT_STATE(context) == ET_G3C4_CONTEXT_DEAD) {
+    if (!et_g3c4_generator_dead_exact(context))
+      return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return 0;
+  }
+  if (ET_G3C4_CONTEXT_STATE(context) != ET_G3C4_CONTEXT_LIVE ||
+      ET_G3C4_CONTEXT_BUSY(context) != ET_G3C4_CALL_IDLE ||
+      context->generator_ready != 1u || context->owner == NULL ||
+      context->cache == NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (context->call_kind != 0 || context->budget != 0 ||
+      context->acquired_mask != 0u || !et_g3c4_pins_idle(&context->pins) ||
+      !et_g3c4_valid_generator_policy(
+          context->generator_policy[0], context->generator_policy[1],
+          context->generator_policy[2], context->generator_policy[3],
+          context->generator_policy[4], context->generator_policy[5]) ||
+      context->generator_rng_words[0] != 1 ||
+      context->generator_rng_words[1] < 0)
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  owner = et_g3c4_admit_owner(context->owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner != context->owner || owner->state != ET_G3C4_OWNER_SEALED ||
+      owner->active != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  memset(context->generator_policy, 0, sizeof(context->generator_policy));
+  memset(context->generator_rng_words, 0,
+         sizeof(context->generator_rng_words));
+  context->generator_ready = 0u;
+  context->owner = NULL;
+  ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
+  return 0;
+}
+#endif
+
+#ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
+static int et_g3c4_valid_call_tuple(int64_t call_kind, int64_t budget) {
+  return (call_kind == 0 && budget == 0) ||
+         (call_kind == 1 && budget == 0) ||
+         (call_kind == 2 && (budget == 0 || budget == 1));
+}
+
+static int et_g3c4_pins_idle(
+    const et_g3c4_model_pins_internal *pins) {
+  size_t index;
+  if (pins->self != NULL || pins->held_mask != 0u) return 0;
+  for (index = 0u; index < 14u; index++) {
+    const et_kernel_tensor_view_v1 *view = &pins->views[index];
+    if (pins->parameters[index] != NULL || pins->identities[index] != NULL ||
+        pins->values[index] != NULL || view->struct_size != 0u ||
+        view->data != NULL || view->byte_length != 0u ||
+        view->dtype != NULL || view->device != NULL || view->layout != 0u ||
+        view->offset_bytes != 0u || view->rank != 0u || view->shape != NULL)
+      return 0;
+  }
+  return 1;
+}
+
+static int64_t et_g3c4_cache_idle_preflight(
+    et_g3c4_context_internal *context) {
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  et_kernel_error error;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_begin_v1(
+              context->cache, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  return 0;
+}
+
+static et_g3c4_context_internal *et_g3c4_admit_idle_call(
+    void *candidate) {
+  et_g3c4_context_internal *context = et_g3c4_admit_context(candidate);
+  et_g3c4_model_owner_internal *model;
+  if (context == NULL) return NULL;
+  if (ET_G3C4_CONTEXT_STATE(context) != ET_G3C4_CONTEXT_LIVE ||
+      context->owner == NULL || context->cache == NULL ||
+      ET_G3C4_CONTEXT_BUSY(context) != ET_G3C4_CALL_IDLE) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  if (context->generator_kind != 1u || context->generator_ready != 1u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+#endif
+  model = et_g3c4_admit_owner(context->owner, 0);
+  if (model == NULL) return NULL;
+  if (model->state != ET_G3C4_OWNER_SEALED || model->active != NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (context->acquired_mask != 0u || context->call_kind != 0 ||
+      context->budget != 0 || !et_g3c4_pins_idle(&context->pins)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  return context;
+}
+
+static et_g3c4_context_internal *et_g3c4_admit_active_call(
+    void *candidate) {
+  et_g3c4_context_internal *context = et_g3c4_admit_context(candidate);
+  et_g3c4_model_owner_internal *model;
+  et_f32_tensor_error error;
+  if (context == NULL) return NULL;
+  if (ET_G3C4_CONTEXT_STATE(context) != ET_G3C4_CONTEXT_LIVE ||
+      context->owner == NULL || context->cache == NULL ||
+      ET_G3C4_CONTEXT_BUSY(context) != ET_G3C4_CALL_ACTIVE) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+  if (context->generator_kind != 1u || context->generator_ready != 1u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+#endif
+  model = et_g3c4_admit_owner(context->owner, 0);
+  if (model == NULL) return NULL;
+  if (model->state != ET_G3C4_OWNER_SEALED || model->active != context) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (context->acquired_mask != ET_G3C4_ACQUIRED_FULL ||
+      !et_g3c4_valid_call_tuple(context->call_kind, context->budget) ||
+      context->pins.self != &context->pins ||
+      context->pins.held_mask != UINT16_C(0x3fff)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (et_g3c4_capture_f32(
+          et_g3c4_model_pins_check_internal(&context->pins, &error),
+          &error) != 0)
+    return NULL;
+  return context;
+}
+
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+static void et_g3c4_active_call_rollback(
+    et_g3c4_context_internal *context,
+    et_g3c4_error_state_internal first) {
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_OWNER) != 0u) {
+    if (context->owner->active != context) abort();
+    context->owner->active = NULL;
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_OWNER;
+  }
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_BUSY) != 0u) {
+    ET_G3C4_CONTEXT_BUSY(context) = ET_G3C4_CALL_IDLE;
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_BUSY;
+  }
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_METADATA) != 0u) {
+    context->call_kind = 0;
+    context->budget = 0;
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_METADATA;
+  }
+  if ((context->acquired_mask & ET_G3C4_ACQUIRED_PINS) != 0u) {
+    et_g3c4_model_pins_end_internal(&context->pins);
+    context->acquired_mask &= (uint32_t)~ET_G3C4_ACQUIRED_PINS;
+  }
+  et_g3c4_error_restore_internal(first);
+}
+
+static int et_g3c4_active_call_inject(
+    et_g3c4_context_internal *context, size_t completed) {
+  et_g3c4_error_state_internal first;
+  if (et_g3c4_active_call_fail_after != completed) return 0;
+  (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  first = et_g3c4_error_snapshot_internal();
+  et_g3c4_active_call_rollback(context, first);
+  return 1;
+}
+#endif
+
+int64_t et_g3c4_private_call_acquire_v1(
+    void *candidate, int64_t call_kind, int64_t budget) {
+  et_g3c4_context_internal *context;
+  et_f32_tensor_error error;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_idle_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (!et_g3c4_valid_call_tuple(call_kind, budget))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_f32(
+          et_g3c4_model_pins_begin_internal(
+              context->owner->parameters, context->owner->handles,
+              &context->pins, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  context->acquired_mask = ET_G3C4_ACQUIRED_PINS;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 1u))
+    return et_g3c4_error_state.category;
+#endif
+  context->call_kind = call_kind;
+  context->budget = budget;
+  context->acquired_mask |= ET_G3C4_ACQUIRED_METADATA;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 2u))
+    return et_g3c4_error_state.category;
+#endif
+  ET_G3C4_CONTEXT_BUSY(context) = ET_G3C4_CALL_ACTIVE;
+  context->acquired_mask |= ET_G3C4_ACQUIRED_BUSY;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 3u))
+    return et_g3c4_error_state.category;
+#endif
+  context->owner->active = context;
+  context->acquired_mask |= ET_G3C4_ACQUIRED_OWNER;
+#ifdef ET_G3C4_ACTIVE_CALL_TESTING
+  if (et_g3c4_active_call_inject(context, 4u))
+    return et_g3c4_error_state.category;
+#endif
+  return 0;
+}
+
+int64_t et_g3c4_private_call_prepare_end_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  return et_g3c4_cache_idle_preflight(context);
+}
+
+static int64_t et_g3c4_active_call_drain(
+    et_g3c4_context_internal *context) {
+  et_g3c4_model_pins_end_internal(&context->pins);
+  context->owner->active = NULL;
+  context->call_kind = 0;
+  context->budget = 0;
+  ET_G3C4_CONTEXT_BUSY(context) = ET_G3C4_CALL_IDLE;
+  context->acquired_mask = 0u;
+  return 0;
+}
+
+int64_t et_g3c4_private_call_finish_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  return et_g3c4_active_call_drain(context);
+}
+
+int64_t et_g3c4_private_call_abort_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  return et_g3c4_active_call_drain(context);
+}
+#endif
+#endif

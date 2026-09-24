@@ -1,0 +1,125 @@
+(load "i2_wave2_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+
+(extern ptr g3c4-test-owner-create i64
+        :real et_g3c4_private_model_owner_create_seeded_v1)
+(extern i64 g3c4-test-owner-initialize ptr i64
+        :real et_g3c4_private_model_owner_initialize_v1)
+(extern i64 g3c4-test-owner-prepare ptr
+        :real et_g3c4_private_model_owner_prepare_seal_v1)
+(extern i64 g3c4-test-owner-commit ptr
+        :real et_g3c4_private_model_owner_commit_seal_v1)
+(extern i64 g3c4-test-owner-abort ptr
+        :real et_g3c4_private_model_owner_abort_v1)
+
+(define checks 0)
+(define names
+  (vector "p00" "p01" "p02" "p03" "p04" "p05" "p06"
+          "p07" "p08" "p09" "p10" "p11" "p12" "p13"))
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 I2 prepared route FAIL: ")
+        (display label) (newline) (exit 1))))
+
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+
+(define (build seed count initialize?)
+  (let* ((owner (g3c4-test-owner-create seed))
+         (construction (i2-g3c4-construction-begin-internal owner))
+         (root (vector-ref construction 2))
+         (handles (make-vector count #f)))
+    (let register ((index 0))
+      (if (= index count) #t
+          (let ((handle
+                  (i2-module-register-parameter-internal!
+                    root (vector-ref names index)
+                    (i2-carrier
+                      'parameter
+                      (i2-native-g3c4-owner-parameter owner index)
+                      'parameter))))
+            (vector-set! handles index handle)
+            (register (+ index 1)))))
+    ;; The native owner admits initialization only after all fourteen exact
+    ;; handles have been published.
+    (if initialize?
+        (let initialize ((index 0))
+          (if (= index count) #t
+              (begin
+                (check "native initialize"
+                       (= (g3c4-test-owner-initialize owner index) 0))
+                (initialize (+ index 1))))))
+    (vector owner construction root handles)))
+
+;;; P1 prepare failure revokes first; I2 then restores its sole registry.
+(let* ((built (build 101 1 #f))
+       (owner (vector-ref built 0))
+       (construction (vector-ref built 1))
+       (root (vector-ref built 2)))
+  (reject "missing schedule aborts complete I2 route" 'invalid-state
+          (lambda ()
+            (i2-g3c4-construction-prepare-eval-internal! construction)))
+  (check "failed prepare marks I2 aborted"
+         (eq? (vector-ref construction 3) 'aborted))
+  (check "failed prepare clears active record"
+         (not (vector-ref i2-construction-registry-root 1)))
+  (check "failed prepare removes I2 root" (not (i2-module? root)))
+  (check "failed prepare abort is idempotent"
+         (i2-g3c4-construction-abort-internal! construction))
+  (check "native owner survives I2 rollback"
+         (= (g3c4-test-owner-abort owner) 0)))
+
+;;; Prepared abort keeps the exact route/owner through complete preflight,
+;;; including after the native owner has entered its prepared state.
+(let* ((built (build 103 14 #t))
+       (owner (vector-ref built 0))
+       (construction (vector-ref built 1))
+       (root (vector-ref built 2))
+       (p1-construction (vector-ref construction 1)))
+  (check "closed route tag" (eq? (vector-ref construction 9) 'g3c4))
+  (check "exact owner retained" (eq? (vector-ref construction 10) owner))
+  (reject "legacy abort cannot consume C4 route" 'invalid-state
+          (lambda () (i2-construction-abort-internal! construction)))
+  (module-construction-parameters-internal p1-construction)
+  (check "prepare returns exact root"
+         (eq? root
+              (i2-g3c4-construction-prepare-eval-internal! construction)))
+  (check "I2 prepared phase" (eq? (vector-ref construction 3) 'prepared))
+  (check "prepared owner retained" (eq? (vector-ref construction 10) owner))
+  (check "native owner prepare" (= (g3c4-test-owner-prepare owner) 0))
+  (check "prepared abort" (i2-g3c4-construction-abort-internal! construction))
+  (check "prepared abort idempotent"
+         (i2-g3c4-construction-abort-internal! construction))
+  (check "prepared abort clears exact owner"
+         (not (vector-ref construction 10)))
+  (check "native storage outlives I2 abort"
+         (= (g3c4-test-owner-abort owner) 0)))
+
+;;; The successful no-fail tail commits I2/P1 before the native owner.
+(let* ((built (build 107 14 #t))
+       (owner (vector-ref built 0))
+       (construction (vector-ref built 1))
+       (root (vector-ref built 2)))
+  (module-construction-parameters-internal (vector-ref construction 1))
+  (i2-g3c4-construction-prepare-eval-internal! construction)
+  (check "seal owner prepare" (= (g3c4-test-owner-prepare owner) 0))
+  (check "prepared seal returns exact root"
+         (eq? root
+              (i2-g3c4-construction-seal-prepared-internal! construction)))
+  (check "sealed I2 phase" (eq? (vector-ref construction 3) 'sealed))
+  (check "sealed owner cleared" (not (vector-ref construction 10)))
+  (check "native owner commit" (= (g3c4-test-owner-commit owner) 0))
+  (reject "sealed C4 route cannot abort" 'invalid-state
+          (lambda ()
+            (i2-g3c4-construction-abort-internal! construction))))
+
+(display "G3-C4 I2 prepared route PASS: checks=")
+(display checks)
+(newline)

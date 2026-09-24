@@ -78,6 +78,20 @@ timeout --foreground --signal=TERM --kill-after=5s 60s \
   "${temporary_dir}/test-failpoints" >"${temporary_dir}/failpoints.stdout"
 grep -F 'P1 failpoint PASS: 123 checks' "${temporary_dir}/failpoints.stdout" >/dev/null
 
+for run in a b; do
+  "${cc}" "${trusted_cflags[@]}" \
+    "${PROJECT_ROOT}/tests/p1/test_p1_construction.c" \
+    "${trusted_archive}" -Wl,--wrap=calloc \
+    -o "${temporary_dir}/test-construction-${run}"
+  timeout --foreground --signal=TERM --kill-after=5s 60s \
+    "${temporary_dir}/test-construction-${run}" \
+    >"${temporary_dir}/construction-${run}.stdout"
+done
+cmp "${temporary_dir}/construction-a.stdout" \
+  "${temporary_dir}/construction-b.stdout"
+grep -F 'P1 construction PASS: open/prepared split, failure atomicity, exact enrollment, stale/foreign scope, live baseline' \
+  "${temporary_dir}/construction-a.stdout" >/dev/null
+
 for role in public trusted; do
   flags=("${public_cflags[@]}")
   [[ "${role}" == trusted ]] && flags=("${trusted_cflags[@]}")

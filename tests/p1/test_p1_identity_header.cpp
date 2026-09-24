@@ -30,6 +30,12 @@ CHECK_SIGNATURE(et_p1_private_provider_create_v1,
                 int64_t (*)(void *, const void *, int64_t));
 CHECK_SIGNATURE(et_p1_private_provider_abort_v1,
                 int64_t (*)(void *, void *));
+CHECK_SIGNATURE(et_p1_private_construction_prepare_v1,
+                int64_t (*)(void *, void *));
+CHECK_SIGNATURE(et_p1_private_construction_commit_prepared_v1,
+                int64_t (*)(void *, void *));
+CHECK_SIGNATURE(et_p1_private_construction_abort_prepared_v1,
+                int64_t (*)(void *, void *));
 CHECK_SIGNATURE(et_p1_private_module_create_v1, int64_t (*)(void *));
 CHECK_SIGNATURE(et_p1_private_parameter_handle_create_v1,
                 int64_t (*)(void *));
