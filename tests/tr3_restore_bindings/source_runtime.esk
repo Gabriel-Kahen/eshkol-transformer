@@ -1,0 +1,119 @@
+;;; Focused source-ledger witness with a fixed native ABI shim.
+(define (o2-fail category operation message)
+  (error message category operation))
+(define (o2-member-identity? value values)
+  (cond ((null? values) #f)
+        ((eq? value (car values)) #t)
+        (else (o2-member-identity? value (cdr values)))))
+(define (o2-path-member? value values)
+  (cond ((null? values) #f)
+        ((equal? value (car values)) #t)
+        (else (o2-path-member? value (cdr values)))))
+(define (i2-bounded-list-length values limit)
+  (let loop ((remaining values) (count 0))
+    (cond ((null? remaining) count)
+          ((or (not (pair? remaining)) (>= count limit)) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+(define (o2-exact-nonnegative-i64? value)
+  (and (integer? value) (exact? value) (>= value 0)
+       (<= value 9223372036854775807)))
+(define (i2-carrier-preflight value kind operation)
+  (if (or (not (vector? value)) (not (= (vector-length value) 5))
+          (not (eq? (vector-ref value 4) kind)))
+      (o2-fail 'invalid-argument operation "invalid test carrier"))
+  value)
+(define (o2-parse-config operation config)
+  (vector config (vector 0 0) (vector 0 0 0 1065353216)
+          (list (vector tr3-c-test-paths 101 102 103 104 105)) 14))
+(define (o2-require-optimizer operation value) value)
+(define (tr3-lease-fail-stop status) (error "unexpected fail-stop" status))
+
+(extern ptr tr3-c-binding-test-optimizer
+        :real et_tr3_c_binding_test_optimizer_v1)
+(extern ptr tr3-c-binding-test-parameter
+        :real et_tr3_c_binding_test_parameter_v1)
+(extern ptr tr3-c-binding-test-handle
+        :real et_tr3_c_binding_test_handle_v1)
+(extern ptr tr3-c-binding-test-stage i64
+        :real et_tr3_c_binding_test_stage_v1)
+(extern void tr3-c-binding-test-fail-prepare i64
+        :real et_tr3_c_binding_test_fail_prepare_v1)
+(extern i64 tr3-c-binding-test-exact-authority
+        :real et_tr3_c_binding_test_exact_authority_v1)
+
+(define tr3-c-test-paths '(0 1 2 3 4 5 6 7 8 9 10 11 12 13))
+(load "tr3_c_restore_bindings_extension.esk")
+
+(define tr3-c-test-checks 0)
+(define (tr3-c-test-check value message)
+  (set! tr3-c-test-checks (+ tr3-c-test-checks 1))
+  (if (not value) (error message)))
+(define (tr3-c-test-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+(define (tr3-c-test-stages offset)
+  (let loop ((index 0) (result '()))
+    (if (= index 28) (tr3-c-test-reverse result)
+        (loop (+ index 1)
+              (cons (vector (vector 'stage (+ offset index)) 'owned-clone
+                            (tr3-c-binding-test-stage (+ offset index))
+                            '() 'buffer)
+                    result)))))
+(define (tr3-c-test-cleared? stages expected)
+  (if (null? stages) #t
+      (and (if expected (null? (vector-ref (car stages) 2))
+               (not (null? (vector-ref (car stages) 2))))
+           (tr3-c-test-cleared? (cdr stages) expected))))
+
+(let* ((optimizer
+         (vector 'optimizer-shell (tr3-c-binding-test-optimizer)
+                 '(old-config) '() '() '()))
+       (stages (tr3-c-test-stages 0))
+       (projection (vector '(target-config) tr3-c-test-paths '() 5))
+       (request (vector optimizer projection stages 5 0
+                        'trainer-load-state! #f)))
+  (tr3-c-restore-o2-prepare-internal request)
+  (let* ((o2-ledger (vector-ref request 6))
+         (i2-ledger (tr3-c-restore-i2-create-internal o2-ledger))
+         (parameter
+           (vector 'parameter-carrier 'parameter
+                   (tr3-c-binding-test-parameter) '() 'parameter))
+         (source
+           (vector 'source-carrier 'owned-clone
+                   (tr3-c-binding-test-stage 40) '() 'parameter)))
+    (tr3-c-test-check (tr3-c-test-cleared? stages #t)
+                      "published O2 plan did not take all 28 stages")
+    (tr3-c-test-check (= (tr3-c-binding-test-exact-authority) 1)
+                      "I2 create did not use the exact O2 plan")
+    (tr3-c-restore-i2-append-parameter-internal!
+      i2-ledger parameter (tr3-c-binding-test-handle) source)
+    (tr3-c-test-check (= (tr3-c-binding-test-exact-authority) 1)
+                      "I2 append did not use the exact O2 plan")
+    (tr3-c-restore-o2-append-internal! o2-ledger i2-ledger)
+    (tr3-c-restore-o2-check-internal o2-ledger)
+    (tr3-c-restore-i2-prepare-internal! i2-ledger)
+    (tr3-c-restore-i2-abort-internal! i2-ledger)
+    (tr3-c-restore-o2-abort-internal! o2-ledger)
+    (tr3-c-test-check (= (tr3-c-binding-test-exact-authority) 1)
+                      "I2 prepare/abort changed restore authority")))
+
+(let* ((optimizer
+         (vector 'optimizer-shell-2 (tr3-c-binding-test-optimizer)
+                 '(old-config) '() '() '()))
+       (stages (tr3-c-test-stages 28))
+       (projection (vector '(target-config) tr3-c-test-paths '() 5))
+       (request (vector optimizer projection stages 5 0
+                        'trainer-load-state! #f)))
+  (tr3-c-binding-test-fail-prepare 1)
+  (tr3-c-test-check
+    (guard (caught (#t #t))
+      (begin (tr3-c-restore-o2-prepare-internal request) #f))
+    "native prepare rejection did not raise")
+  (tr3-c-test-check (tr3-c-test-cleared? stages #f)
+                    "failed O2 prepare consumed a parent-owned stage")
+  (tr3-c-binding-test-fail-prepare 0))
+
+(display "TR3-C source binding PASS checks=")
+(display tr3-c-test-checks)
+(newline)

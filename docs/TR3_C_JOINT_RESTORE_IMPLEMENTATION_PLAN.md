@@ -1,7 +1,7 @@
 # TR3-C joint restore composer implementation plan
 
-Status: **source-grounded readiness plan; implementation blocked on lease
-acceptance**.
+Status: **lease successor accepted; private I2/O2 binding partition is a
+focused candidate; composer remains pending**.
 
 The normative restore protocol is the accepted
 [TR3-C live-state contract](TR3_C_LIVE_STATE_CONTRACT.md). This companion maps
@@ -11,12 +11,12 @@ that protocol to the exact component interfaces present at integration head
 at `f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5`, tree
 `54ba54a815f37bd492f1203b48a8b54e6dfe10dc`.
 
-This is not a lease, public trainer, joint restore, or exact-resume acceptance
-claim. The lease is on an older, separate lineage and has an unchecked
-allocation-failure blocker in the pinned compiler/runtime. It must be repaired,
-accepted, and selectively composed onto the current integration lineage.
-Wholesale checkout/replacement or replay of the older branch's shared files
-would discard accepted I2/O2/G3/C2 work.
+This is not a public trainer, joint restore, or exact-resume acceptance claim.
+The reviewed 22-slot lease successor and rooted D2 allocation repair are now
+integrated, with byte-identical passing O0/O2 allocation-prefix matrices. The
+private binding partition adds only fixed feature-local adapters over the
+accepted I2/O2 restore entries; final composition and trajectory evidence remain
+separate work.
 
 ## 1. Readiness verdict
 
@@ -27,21 +27,20 @@ authority. No new public API, tensor-provider row, native tensor operation,
 generic handle export, scheduler owner, D2 epoch-start field, or second optimizer
 registry is required.
 
-Implementation is blocked on exactly these source-level prerequisites:
+The dependency state for the source-level prerequisites is:
 
-1. an accepted successor of the lease source, selectively composed with the
-   current integration head;
+1. the accepted lease successor is selectively composed with the current
+   integration head;
 2. trainer-owned restore controls and authenticated restore enter/finish
-   transitions in the sole lease/composer authority;
+   transitions are present in the sole lease authority;
 3. feature-local Eshkol bindings for the accepted native I2 and O2 restore
-   entries; and
-4. final source composition, failure-prefix evidence, and the mandatory #121
+   entries are implemented as the focused partition-2 candidate; and
+4. final source composition, composer failure-prefix evidence, and mandatory #121
    C2 handler-order acceptance evidence.
 
-The runtime allocation repair is a lease prerequisite. The frozen runtime can
-currently null-dereference unchecked raw, closure, or string allocation before a
-language-level `guard` can recover. Normal-path and post-promotion evidence do
-not close that failure-prefix requirement.
+The lease allocation prerequisite is closed by the rooted D2 u64-limit repair
+and the full exact production-OFF O0/O2 failure-prefix matrices. This does not
+make a broader claim about unsupported runtime allocation paths.
 
 ## 2. Exact existing component boundaries
 
@@ -435,10 +434,12 @@ operations remain unsupported and reject before mutation.
 
 The minimal dependency order is:
 
-1. **Lease successor:** repair allocation behavior, extend canonical trainer
+1. **Lease successor (accepted):** repair allocation behavior, extend canonical
+   trainer
    controls, freeze authenticated restore transitions, selectively compose with
    the accepted integration head, and pass the full failure-prefix matrix.
-2. **Private source binding:** add fixed I2/O2 extern bindings and status mapping;
+2. **Private source binding (focused candidate):** add fixed I2/O2 extern bindings
+   and status mapping;
    prove public/native symbol isolation and exact ownership transfer.
 3. **Composer:** implement detached staging, fixed 14-prefix composition,
    cross-state validation, seal, tail, and phase-dependent abort.
