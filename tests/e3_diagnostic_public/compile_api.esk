@@ -1,0 +1,13 @@
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.error_public)
+(require transformer.evaluation)
+(require transformer.model)
+(require transformer.module)
+(require transformer.tokenizer)
+
+(define (compile-e3-surface model dataset report)
+  (vector (diagnostic-evaluate-fixed! model dataset)
+          (diagnostic-evaluation-f32-bits report 'loss)
+          (diagnostic-evaluation-count report 'tokens)))

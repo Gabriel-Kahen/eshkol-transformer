@@ -1,7 +1,8 @@
 # E3 fixed-model exact-report successor
 
-Status: **source-private candidate**. The names below are provisional until an
-independent source/package review and supported gate accept an installed surface.
+Status: **bounded installed-facade candidate**. The source-private evaluator and
+retention boundary are accepted prerequisites. The installed aggregate below still
+requires independent package review and a supported gate before public acceptance.
 This candidate does not complete E3, implement `trainer-evaluate!`, or revive the
 deferred rank-zero scalar report.
 
@@ -124,3 +125,28 @@ unreachable staging, inherited transaction bucket, caller-witness remainder, com
 promoted graph, calibrated envelope bytes, and the explicit one-time calibration
 bytes. The instrumentation exposes no new installed operation and retains only
 immediate counters plus one cleared calibration slot.
+
+## Bounded installed-facade successor
+
+The installed candidate source-composes the accepted evaluator without either
+private test driver. Its public bridge reuses the existing M3, T1, X1, P1 and error
+wrappers, adds the existing eleven D2 wrapper signatures against the same composed
+D2 source variant, and exports exactly three E3 entries. The installed
+`transformer.evaluation` facade provides only the three operations documented
+above. Test entries, retention statistics, destination pointers, frames and private
+Eshkol bindings remain localized.
+
+A caller constructs the fixed model with the existing
+`diagnostic-model-create`, the canonical byte tokenizer with `tokenizer-byte`, and
+the dataset with `token-dataset-open`. All three objects therefore belong to the
+package's one registry-owning aggregate; the package does not accept objects from a
+separately linked M3 or D2 aggregate. The public witness checks the four exact f32
+words and two counts, byte-identical cursor restoration after success and EOS
+failure, structured error propagation, foreign reports, malformed keys, and
+continued validity of a previously published report after failure.
+
+The installed seam does not expose instrumentation for proving that a failed call
+published no new report. That property remains covered by the accepted
+source-private authority witness and unchanged evaluator implementation. Installed
+acceptance also requires exact facade, depfile, export, localization, undefined,
+source and native closure gates on the final package tuple.

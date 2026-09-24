@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Sourced only by E1B. This admits the base private E3 tuple or its exact
-# source-private diagnostic successor. Mixed and partial tuples are rejected.
+# Sourced only by E1B. This admits the base private E3 tuple, its exact
+# source-private diagnostic successor, or the exact installed diagnostic tuple.
+# Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
+e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -15,11 +17,18 @@ e3_diagnostic_inputs=(
   "${e3_diagnostic_prefix}_private_renames.txt"
   "${e3_diagnostic_prefix}_public_exports.txt"
 )
+e3_public_inputs=(
+  "${PROJECT_ROOT}/native/e3_diagnostic_public_root.esk"
+  "${PROJECT_ROOT}/native/e3_diagnostic_public_bridge.c"
+  "${e3_public_prefix}_private_renames.txt"
+  "${e3_public_prefix}_public_exports.txt"
+)
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
 e3_tuple_requested=0
 e3_tuple_kind=
 e3_diagnostic_tuple=0
+e3_public_tuple=0
 for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
     "${raw_package_renames}" "${raw_public_exports}"; do
   for e3_expected in "${e3_base_inputs[@]}"; do
@@ -38,12 +47,24 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_public_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == public ]] || \
+        die "E3 policy rejects mixed private and installed tuples"
+      e3_tuple_kind=public
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
   e3_prefix="${e3_diagnostic_prefix}"
   e3_inputs=("${e3_diagnostic_inputs[@]}")
   e3_diagnostic_tuple=1
+elif [[ "${e3_tuple_kind}" == public ]]; then
+  e3_prefix="${e3_public_prefix}"
+  e3_inputs=("${e3_public_inputs[@]}")
+  e3_public_tuple=1
 fi
 
 e3_check_repository_path() {
@@ -115,4 +136,7 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
       "${e3_prefix}_native_source_closure.txt"; do
     e3_check_repository_path "${e3_path}"
   done
+  if [[ "${e3_public_tuple}" == 1 ]]; then
+    e3_check_repository_path "${e3_prefix}_facades.txt"
+  fi
 fi
