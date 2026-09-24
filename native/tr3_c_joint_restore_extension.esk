@@ -22,6 +22,9 @@
 (define tr3-c-joint-fixed-shapes
   '((4 4) (4 4) (4 4) (4 4) (4 8) (8 4)
     (4) (4) (4) (4) (256 4) (4) (4) (2 4)))
+(define tr3-c-joint-tied-secondary-path
+  '("token_embedding" "weight"))
+(define tr3-c-joint-tied-secondary-shape '(256 4))
 
 (define (tr3-c-joint-fail category message)
   (m3t-fail category tr3-c-joint-operation message))
@@ -35,6 +38,11 @@
 (define (tr3-c-joint-list-ref values index)
   (if (= index 0) (car values)
       (tr3-c-joint-list-ref (cdr values) (- index 1))))
+
+(define (tr3-c-joint-list-prefix values count)
+  (if (= count 0) '()
+      (cons (car values)
+            (tr3-c-joint-list-prefix (cdr values) (- count 1)))))
 
 (define (tr3-c-joint-vector->list value count)
   (let loop ((index (- count 1)) (result '()))
@@ -77,18 +85,29 @@
   (if (or (not (vector? controls)) (not (= (vector-length controls) 5))
           (not (vector? (vector-ref controls 2)))
           (not (= (vector-length (vector-ref controls 2)) 10))
+          (not (bytevector? (vector-ref (vector-ref controls 2) 3)))
+          (not (bytevector? (vector-ref (vector-ref controls 2) 4)))
           (not (vector? (vector-ref controls 3)))
           (not (= (vector-length (vector-ref controls 3)) 3)))
       (tr3-c-joint-fail 'corrupt-data
                        "detached trainer controls are malformed"))
-  (let ((dataset (vector-ref controls 2))
-        (resolved (vector-ref controls 3)))
-    (c2-training-state-controls-copy
-      tr3-c-joint-operation
-      (vector (vector-ref controls 0) (vector-ref controls 1)
-              (vector (vector-ref dataset 3) (vector-ref dataset 4))
-              (vector (vector-ref resolved 0) (vector-ref resolved 1))
-              (vector-ref controls 4)))))
+  (let* ((dataset (vector-ref controls 2))
+         (resolved (vector-ref controls 3))
+         (copied
+           (c2-training-state-controls-copy
+             tr3-c-joint-operation
+             (vector (vector-ref controls 0) (vector-ref controls 1)
+                     (vector (vector-ref dataset 3) (vector-ref dataset 4))
+                     (vector (vector-ref resolved 0) (vector-ref resolved 1))
+                     (vector-ref controls 4))))
+         (copied-dataset (vector-ref copied 2)))
+    ;; C2 returns its authenticated 10-slot cursor projection.  The lease
+    ;; parent owns the two bytevectors required by its frozen control shape;
+    ;; retain those exact copied fields rather than the projection header.
+    (vector (vector-ref copied 0) (vector-ref copied 1)
+            (vector (vector-ref copied-dataset 3)
+                    (vector-ref copied-dataset 4))
+            (vector-ref copied 3) (vector-ref copied 4))))
 
 (define (tr3-c-joint-fixed-source! p1 projection topology)
   (if (or (not (vector? projection)) (not (= (vector-length projection) 6))
@@ -105,7 +124,7 @@
         (paths (vector-ref topology 0))
         (shapes (vector-ref topology 1))
         (aliases (vector-ref topology 2)))
-    (if (or (not (= (tr3-c-joint-length entries 15) 14))
+    (if (or (not (= (tr3-c-joint-length entries 16) 15))
             (not (= (tr3-c-joint-length paths 15) 14))
             (not (= (tr3-c-joint-length shapes 15) 14))
             (not (equal? paths tr3-c-joint-fixed-paths))
@@ -115,10 +134,28 @@
                          '((("head" "weight")
                             ("token_embedding" "weight"))))))
         (tr3-c-joint-fail 'shape-mismatch
-                         "detached P1 topology is not the fixed 14-entry set"))
+                         "detached P1 schedule is not the fixed 15-path tie"))
     (let loop ((index 0) (remaining entries)
                (remaining-paths paths) (remaining-shapes shapes))
-      (if (= index 14) entries
+      (if (= index 14)
+          (let ((secondary (car remaining)))
+            (if (or (not (null? (cdr remaining)))
+                    (not (equal? (state-entry-path-internal secondary)
+                                 tr3-c-joint-tied-secondary-path))
+                    (not (equal? (state-entry-shape-internal secondary)
+                                 tr3-c-joint-tied-secondary-shape))
+                    (not (eq? (state-entry-kind-internal secondary) 'parameter))
+                    (not (eq? (state-entry-dtype-internal secondary) 'f32))
+                    (not (eq? (state-entry-device-internal secondary) 'cpu))
+                    (not (eq? (state-entry-layout-internal secondary)
+                              'dense-row-major-contiguous)))
+                (tr3-c-joint-fail
+                  'shape-mismatch
+                  "detached tied-secondary P1 entry differs from fixed order"))
+            ;; The C2 projection authenticates all 15 canonical paths.  The
+            ;; exact alias graph above proves the final secondary aliases the
+            ;; head row, so only the 14 topology-primary entries are staged.
+            (tr3-c-joint-list-prefix entries 14))
           (let* ((entry (car remaining))
                  (path (state-entry-path-internal entry))
                  (shape (state-entry-shape-internal entry)))
@@ -298,7 +335,7 @@
                            (vector-ref o2-projection 1)))
               (not (equal? (vector-ref topology 2)
                            (vector-ref o2-projection 2)))
-              (not (equal? (vector-ref resolved 0) canonical))
+              (not (d2-core-bytes=? (vector-ref resolved 0) canonical))
               (not (string=? (vector-ref resolved 1) fingerprint))
               (not (equal? source-x1 x1))
               (not (string=? (vector-ref tokenizer 0)

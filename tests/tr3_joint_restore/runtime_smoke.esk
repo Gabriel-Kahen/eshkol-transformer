@@ -1,0 +1,417 @@
+;;; Genuine private TR3-C joint-restore runtime witness.  The source state is
+;;; composed only from the accepted P1/O2/D2/X1 owners, and the receiver is an
+;;; enrolled fixed-profile 22-slot lease.  The aggregate is expanded here only
+;;; to interpose one pre-seal O2 check for the abort/retry witness.
+(load "d2_wave2_root.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_training_state_extension.esk")
+
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+(load "tr3_p1_fixed_set_extension.esk")
+(load "tr3_lease_core_extension.esk")
+(load "tr3_lease_public_gates_extension.esk")
+(o2-install-tr3-create-overlap-check-internal!
+  tr3-o2-create-overlap-check-internal)
+
+(load "tr3_c_d2_restore_extension.esk")
+(load "tr3_c_restore_bindings_extension.esk")
+
+(define tr3-joint-smoke-original-o2-check
+  tr3-c-restore-o2-check-internal)
+(define tr3-joint-smoke-fail-o2-check? #f)
+(define (tr3-c-restore-o2-check-internal ledger)
+  (if tr3-joint-smoke-fail-o2-check?
+      (begin
+        (set! tr3-joint-smoke-fail-o2-check? #f)
+        (m3t-fail 'internal 'trainer-load-state!
+                  "injected pre-seal O2 check failure"))
+      (tr3-joint-smoke-original-o2-check ledger)))
+
+(load "tr3_c_joint_restore_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "TR3-C JOINT RUNTIME FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (transformer-error-at? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught)))))
+    (thunk)
+    #f))
+
+(define (restore-or-report! trainer source)
+  (guard (caught
+           (#t
+             (display "TR3-C JOINT RESTORE ERROR category=")
+             (if (transformer-error? caught)
+                 (begin
+                   (display (transformer-error-category caught))
+                   (display " operation=")
+                   (display (transformer-error-operation caught))
+                   (display " message=")
+                   (display (transformer-error-message caught)))
+                 (display "non-transformer"))
+             (newline)
+             (exit 2)))
+    (tr3-c-joint-restore-internal! trainer source)))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (byte-list=? left right)
+  (cond ((and (null? left) (null? right)) #t)
+        ((or (null? left) (null? right)
+             (not (pair? left)) (not (pair? right))) #f)
+        (else (and (bytes=? (car left) (car right))
+                   (byte-list=? (cdr left) (cdr right))))))
+
+(define (list-length value limit)
+  (let loop ((remaining value) (count 0))
+    (cond ((null? remaining) count)
+          ((or (not (pair? remaining)) (= count limit)) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+
+(define (list-reverse value)
+  (let loop ((remaining value) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (shape-elements shape)
+  (let loop ((remaining shape) (product 1))
+    (if (null? remaining) product
+        (loop (cdr remaining) (* product (car remaining))))))
+
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+
+;;; Tuple: [resolved, tokenizer, dataset, model, optimizer, retained tree,
+;;;         epoch-start cursor].
+(define corpus-directory (car (cdr (command-line))))
+(define (make-tuple initializer-seed)
+  (let* ((resolved (resolved-config))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset
+           (d2-token-dataset-open (dataset-config corpus-directory) tokenizer))
+         (model
+           (m3t-public-model-create
+             resolved (m3t-public-initializer-state initializer-seed)))
+         (handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+         (tree (module-parameters model))
+         (optimizer (o2-public-optimizer-create
+                      (optimizer-config handles) tree))
+         (epoch-start (d2-token-dataset-cursor dataset)))
+    (vector resolved tokenizer dataset model optimizer tree epoch-start)))
+
+(define (record-for-shell shell)
+  (let loop ((remaining (vector-ref tr3-trainers 0)))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 2)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (initial-controls tuple)
+  (let ((cursor (d2-token-dataset-cursor (vector-ref tuple 2)))
+        (identity (d2-tokenizer-identity (vector-ref tuple 1)))
+        (resolved (vector-ref tuple 0)))
+    (vector
+      (vector 'philox4x32-10 1 1729 0 0)
+      identity
+      (vector cursor cursor)
+      (vector (string->utf8 (x1-private-config-canonical resolved))
+              (x1-private-config-fingerprint resolved))
+      (vector 0 0 0))))
+
+(define (advance-source! tuple)
+  (let* ((model (vector-ref tuple 3))
+         (source-handles
+           (vector-ref (m3t-entry model 'model 'trainer-state #t) 8))
+         (modules (make-vector 17 #f))
+         (handles (make-vector 14 #f))
+         (carriers (make-vector 14 #f)))
+    (check "source fixed-set capture succeeds"
+           (= (tr3-p1-fixed-capture-internal
+                model source-handles modules handles carriers)
+              0))
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (begin
+            (i2-parameter-accumulate-uniform-internal!
+              (vector-ref carriers index) 1065353216 0 1065353216)
+            (loop (+ index 1)))))
+    (check "source optimizer performs one authentic update"
+           (o2-public-optimizer-step! (vector-ref tuple 4)))
+    (check "source optimizer clears gradients before snapshot"
+           (o2-public-optimizer-zero-grad! (vector-ref tuple 4)))
+    (let ((batch (d2-token-dataset-next-batch (vector-ref tuple 2))))
+      (check "source advances one authentic D2 batch"
+             (not (d2-token-dataset-end? batch)))
+      (check "source releases the authentic D2 batch"
+             (d2-token-batch-release! batch)))
+    #t))
+
+(define (advanced-controls tuple)
+  (let ((identity (d2-tokenizer-identity (vector-ref tuple 1)))
+        (resolved (vector-ref tuple 0)))
+    (vector
+      (vector 'philox4x32-10 1 1729 0 0)
+      identity
+      (vector (d2-token-dataset-cursor (vector-ref tuple 2))
+              (vector-ref tuple 6))
+      (vector (string->utf8 (x1-private-config-canonical resolved))
+              (x1-private-config-fingerprint resolved))
+      (vector 2 1 0))))
+
+(define (record-controls tuple record)
+  (vector
+    (vector-ref record 18)
+    (vector-ref record 7)
+    (vector (d2-token-dataset-cursor (vector-ref tuple 2))
+            (vector-ref record 17))
+    (vector (string->utf8
+              (x1-private-config-canonical (vector-ref tuple 0)))
+            (x1-private-config-fingerprint (vector-ref tuple 0)))
+    (vector (vector-ref record 19) (vector-ref record 20)
+            (vector-ref record 21))))
+
+(define (compose-owner tuple controls)
+  (let* ((p1 (module-state-dict (vector-ref tuple 3)))
+         (o2 (o2-public-optimizer-state (vector-ref tuple 4)))
+         (request
+           (vector c2-training-state-compose-tag p1 o2 controls
+                   'trainer-state #f)))
+    (c2-training-state-compose-internal request)
+    (check "C2 compose transfers P1 and O2 ownership"
+           (and (not (vector-ref request 1))
+                (not (vector-ref request 2))
+                (vector-ref request 5)))
+    (vector-ref request 5)))
+
+(define (entry-payload p1 token entry)
+  (let ((carrier
+          (state-dict-c2-owned-tensor-borrow-begin-internal
+            p1 token entry 'trainer-state)))
+    (let ((payload
+            (i2-checkpoint-encode
+              (vector carrier
+                      (state-entry-kind-internal entry)
+                      (state-entry-shape-internal entry)
+                      (state-entry-dtype-internal entry)
+                      (state-entry-device-internal entry)
+                      (state-entry-layout-internal entry)
+                      'trainer-state))))
+      (state-dict-c2-owned-tensor-borrow-end-internal
+        p1 token entry 'trainer-state)
+      payload)))
+
+;;; Returns [P1-bytevectors, O2-bytevectors, copied-controls].
+(define (owner-image owner)
+  (let* ((borrow
+           (c2-training-state-borrow-begin-internal owner 'trainer-state))
+         (projection
+           (c2-training-state-borrow-projection-internal borrow))
+         (token
+           (c2-training-state-borrow-owner-token-internal
+             borrow 'trainer-state))
+         (p1 (vector-ref projection 0))
+         (o2 (vector-ref projection 1))
+         (topology (vector-ref projection 3))
+         (p1-projection
+           (state-dict-c2-owned-projection-internal
+             p1 token 'trainer-state))
+         (entries (vector-ref p1-projection 4)))
+    (check "authentic detached P1 has 15 paths and 14 unique tensors"
+           (and (= (list-length entries 16) 15)
+                (= (list-length (vector-ref topology 0) 15) 14)))
+    (check "authentic detached optimizer has 28 moment tensors"
+           (= (* 2 (list-length (vector-ref topology 1) 15)) 28))
+    (let p1-loop ((remaining entries) (index 0) (p1-bytes '()))
+      (if (= index 14)
+          (let moment-loop ((shapes (vector-ref topology 1))
+                            (index 0) (moment-bytes '()))
+            (if (null? shapes)
+                (let ((image
+                        (vector (list-reverse p1-bytes)
+                                (list-reverse moment-bytes)
+                                (tr3-c-joint-controls-copy
+                                  (vector-ref projection 2)))))
+                  (c2-training-state-borrow-end-internal borrow)
+                  image)
+                (let* ((elements (shape-elements (car shapes)))
+                       (avg (make-bytevector (* elements 4) 0))
+                       (sq (make-bytevector (* elements 4) 0)))
+                  (o2-state-copy-moment-bits-c2-owned-internal
+                    (vector o2 index 0 avg elements token 'trainer-state))
+                  (o2-state-copy-moment-bits-c2-owned-internal
+                    (vector o2 index 1 sq elements token 'trainer-state))
+                  (moment-loop (cdr shapes) (+ index 1)
+                               (cons sq (cons avg moment-bytes))))))
+          (p1-loop (cdr remaining) (+ index 1)
+                   (cons (entry-payload p1 token (car remaining))
+                         p1-bytes))))))
+
+(define (image=? left right)
+  (and (byte-list=? (vector-ref left 0) (vector-ref right 0))
+       (byte-list=? (vector-ref left 1) (vector-ref right 1))
+       (let* ((left-controls (vector-ref left 2))
+              (right-controls (vector-ref right 2))
+              (left-dataset (vector-ref left-controls 2))
+              (right-dataset (vector-ref right-controls 2))
+              (left-resolved (vector-ref left-controls 3))
+              (right-resolved (vector-ref right-controls 3)))
+         (and (equal? (vector-ref left-controls 0)
+                      (vector-ref right-controls 0))
+              (equal? (vector-ref left-controls 1)
+                      (vector-ref right-controls 1))
+              (bytes=? (vector-ref left-dataset 0)
+                       (vector-ref right-dataset 0))
+              (bytes=? (vector-ref left-dataset 1)
+                       (vector-ref right-dataset 1))
+              (bytes=? (vector-ref left-resolved 0)
+                       (vector-ref right-resolved 0))
+              (string=? (vector-ref left-resolved 1)
+                        (vector-ref right-resolved 1))
+              (equal? (vector-ref left-resolved 2)
+                      (vector-ref right-resolved 2))
+              (equal? (vector-ref left-controls 4)
+                      (vector-ref right-controls 4))))))
+
+(define (release-owner! label owner)
+  (check label (c2-training-state-release-internal! owner 'trainer-state-release!))
+  (check "C2 owner release is idempotent"
+         (c2-training-state-release-internal! owner 'trainer-state-release!))
+  (check "released C2 owner rejects borrow"
+         (transformer-error-at?
+           'invalid-state 'trainer-state
+           (lambda ()
+             (c2-training-state-borrow-begin-internal owner 'trainer-state)))))
+
+;;; First: an actual successful restore from a distinct initialized model.
+(define source-tuple (make-tuple 1729))
+(advance-source! source-tuple)
+(define receiver-tuple (make-tuple 1729))
+(define receiver-shell
+  (tr3-lease-create-internal
+    (vector-ref receiver-tuple 0) (vector-ref receiver-tuple 1)
+    (vector-ref receiver-tuple 2) (vector-ref receiver-tuple 3)
+    (vector-ref receiver-tuple 4)))
+(define receiver-record (record-for-shell receiver-shell))
+(define source-owner
+  (compose-owner source-tuple (advanced-controls source-tuple)))
+(define source-image (owner-image source-owner))
+(define receiver-before-owner
+  (compose-owner receiver-tuple (record-controls receiver-tuple receiver-record)))
+(define receiver-before-image (owner-image receiver-before-owner))
+(check "source initialization differs from fresh receiver"
+       (not (byte-list=? (vector-ref source-image 0)
+                         (vector-ref receiver-before-image 0))))
+(release-owner! "pre-restore receiver snapshot releases" receiver-before-owner)
+(check "genuine joint restore succeeds"
+       (restore-or-report! receiver-shell source-owner))
+(check "successful receiver returns to idle"
+       (and (eq? (vector-ref receiver-record 3) 'idle)
+            (not (vector-ref receiver-record 4))))
+(define receiver-after-owner
+  (compose-owner receiver-tuple (record-controls receiver-tuple receiver-record)))
+(define receiver-after-image (owner-image receiver-after-owner))
+(check "all 42 tensor bytes and controls match detached source"
+       (image=? source-image receiver-after-image))
+(check "detached source remains live after restore"
+       (image=? source-image (owner-image source-owner)))
+(release-owner! "successful detached source releases" source-owner)
+(release-owner! "post-restore receiver snapshot releases" receiver-after-owner)
+
+;;; Second: fail at the last recoverable O2 check, prove full precommit
+;;; preservation, then retry the same detached authority successfully.
+(define retry-source-tuple (make-tuple 1729))
+(advance-source! retry-source-tuple)
+(define retry-receiver-tuple (make-tuple 1729))
+(define retry-receiver-shell
+  (tr3-lease-create-internal
+    (vector-ref retry-receiver-tuple 0) (vector-ref retry-receiver-tuple 1)
+    (vector-ref retry-receiver-tuple 2) (vector-ref retry-receiver-tuple 3)
+    (vector-ref retry-receiver-tuple 4)))
+(define retry-receiver-record (record-for-shell retry-receiver-shell))
+(define retry-source-owner
+  (compose-owner retry-source-tuple (advanced-controls retry-source-tuple)))
+(define retry-source-image (owner-image retry-source-owner))
+(define preserved-owner
+  (compose-owner retry-receiver-tuple
+                 (record-controls retry-receiver-tuple retry-receiver-record)))
+(define preserved-image (owner-image preserved-owner))
+(release-owner! "pre-abort receiver snapshot releases" preserved-owner)
+(set! tr3-joint-smoke-fail-o2-check? #t)
+(check "pre-seal injected failure is recoverable"
+       (transformer-error-at?
+         'internal 'trainer-load-state!
+         (lambda ()
+           (tr3-c-joint-restore-internal!
+             retry-receiver-shell retry-source-owner))))
+(check "precommit abort returns receiver to idle"
+       (and (eq? (vector-ref retry-receiver-record 3) 'idle)
+            (not (vector-ref retry-receiver-record 4))))
+(define aborted-owner
+  (compose-owner retry-receiver-tuple
+                 (record-controls retry-receiver-tuple retry-receiver-record)))
+(define aborted-image (owner-image aborted-owner))
+(check "precommit abort preserves all receiver tensor/control bytes"
+       (image=? preserved-image aborted-image))
+(release-owner! "post-abort receiver snapshot releases" aborted-owner)
+(check "aborted detached source remains live"
+       (image=? retry-source-image (owner-image retry-source-owner)))
+(check "same detached source retries successfully"
+       (tr3-c-joint-restore-internal!
+         retry-receiver-shell retry-source-owner))
+(define retry-after-owner
+  (compose-owner retry-receiver-tuple
+                 (record-controls retry-receiver-tuple retry-receiver-record)))
+(define retry-after-image (owner-image retry-after-owner))
+(check "retry publishes all 42 source tensors and controls"
+       (image=? retry-source-image retry-after-image))
+(release-owner! "retry detached source releases" retry-source-owner)
+(release-owner! "retry receiver snapshot releases" retry-after-owner)
+
+(display "TR3-C JOINT RUNTIME PASS: ")
+(display checks)
+(display " checks, 42 tensors, abort/retry")
+(newline)

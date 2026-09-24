@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ESK = (ROOT / "native/tr3_c_joint_restore_extension.esk").read_text()
 ROOT_ESK = (ROOT / "native/tr3_c_joint_restore_root.esk").read_text()
+RUNTIME = (ROOT / "tests/tr3_joint_restore/runtime_smoke.esk").read_text()
+RUNTIME_GATE = (ROOT / "scripts/test-tr3-c-joint-runtime.sh").read_text()
 
 
 def definition(name: str, next_name: str | None = None) -> str:
@@ -49,6 +51,44 @@ class JointRestoreContract(unittest.TestCase):
             "tr3-c-restore-i2-create-internal",
         ):
             self.assertNotIn(receiver_call, stage)
+
+    def test_full_15_path_schedule_precedes_primary_staging(self) -> None:
+        fixed = definition(
+            "tr3-c-joint-fixed-source!", "tr3-c-joint-install-clone!"
+        )
+        self.assertIn("(tr3-c-joint-length entries 16) 15", fixed)
+        self.assertIn("tr3-c-joint-tied-secondary-path", fixed)
+        self.assertIn("tr3-c-joint-tied-secondary-shape", fixed)
+        self.assertIn("(not (null? (cdr remaining)))", fixed)
+        self.assertIn("(tr3-c-joint-list-prefix entries 14)", fixed)
+        self.assertLess(
+            fixed.index("detached tied-secondary P1 entry differs"),
+            fixed.index("(tr3-c-joint-list-prefix entries 14)"),
+        )
+        self.assertNotIn("tr3-c-joint-install-clone!", fixed)
+
+    def test_expanded_c2_cursors_normalize_to_lease_pair(self) -> None:
+        copy = definition(
+            "tr3-c-joint-controls-copy", "tr3-c-joint-fixed-source!"
+        )
+        self.assertIn("(= (vector-length (vector-ref controls 2)) 10)", copy)
+        self.assertEqual(copy.count("(bytevector? (vector-ref (vector-ref controls 2)"), 2)
+        self.assertIn("(copied-dataset (vector-ref copied 2))", copy)
+        self.assertIn("(vector-ref copied-dataset 3)", copy)
+        self.assertIn("(vector-ref copied-dataset 4)", copy)
+        self.assertNotIn("(vector-ref copied-dataset 0)", copy)
+        self.assertNotIn("(vector-ref copied-dataset 1)", copy)
+
+        validate = definition(
+            "tr3-c-joint-validate-controls!", "tr3-c-joint-prepare-receiver!"
+        )
+        prepare = definition(
+            "tr3-c-joint-prepare-receiver!", "tr3-c-joint-release-cell!"
+        )
+        self.assertIn("(cursor (vector-ref cursor-pair 0))", validate)
+        self.assertIn("(epoch (vector-ref cursor-pair 1))", validate)
+        self.assertIn("(vector-ref cursors 0)", prepare)
+        self.assertIn("(vector-ref cursors 1)", prepare)
 
     def test_fixed_14_prefix_and_exact_o2_authority(self) -> None:
         prepare = definition(
@@ -90,11 +130,13 @@ class JointRestoreContract(unittest.TestCase):
             "(vector-ref cursor-state 8)",
             "(vector-ref cursor-state 9)",
             "(vector-ref x1 14)",
+            "d2-core-bytes=?",
             "(not (= update-contributions reachable))",
             "(> update-contributions tokens)",
             "(vector-ref o2-projection 3)",
         ):
             self.assertIn(required, validate)
+        self.assertNotIn("(equal? (vector-ref resolved 0) canonical)", validate)
 
     def test_abort_order_preserves_phase_dependent_authority(self) -> None:
         abort = definition("tr3-c-joint-abort!", "tr3-c-joint-commit-tail!")
@@ -185,6 +227,44 @@ class JointRestoreContract(unittest.TestCase):
         self.assertNotIn("c2_wave2_root.esk", ROOT_ESK)
         self.assertNotIn("tr3_lease_root.esk", ROOT_ESK)
 
+    def test_runtime_uses_authentic_detached_and_receiver_owners(self) -> None:
+        for required in (
+            "m3t-public-model-create",
+            "d2-token-dataset-open",
+            "o2-public-optimizer-create",
+            "module-state-dict",
+            "o2-public-optimizer-state",
+            "c2-training-state-compose-internal",
+            "tr3-lease-create-internal",
+            "tr3-c-joint-restore-internal!",
+            "o2-state-copy-moment-bits-c2-owned-internal",
+            "i2-checkpoint-encode",
+            "c2-training-state-release-internal!",
+        ):
+            self.assertIn(required, RUNTIME)
+        first_restore = RUNTIME.index('"genuine joint restore succeeds"')
+        injection = RUNTIME.index("(set! tr3-joint-smoke-fail-o2-check? #t)")
+        retry = RUNTIME.index('"same detached source retries successfully"')
+        self.assertLess(first_restore, injection)
+        self.assertLess(injection, retry)
+        self.assertIn('"all 42 tensor bytes and controls match detached source"', RUNTIME)
+        self.assertIn('"precommit abort preserves all receiver tensor/control bytes"', RUNTIME)
+
+    def test_runtime_gate_pins_supported_runner_and_full_native_union(self) -> None:
+        for required in (
+            "runtime_candidate.tsv",
+            "runner_sha256",
+            "container_digest",
+            "--strict-types --no-stdlib -O 0",
+            "tr3_c_restore_bindings.c",
+            "ET_TR3_C_D2_RESTORE",
+            "ET_TR3_C_I2_RESTORE_PRIVATE",
+            "ET_TR3_C_O2_RESTORE_NATIVE",
+            "ESHKOL_ARENA_POISON=1",
+            "SHA256SUMS",
+        ):
+            self.assertIn(required, RUNTIME_GATE)
+
 
 class FailurePrefixModel(unittest.TestCase):
     """Exhaust the bounded publication model independently of source syntax."""
@@ -231,7 +311,62 @@ class FailurePrefixModel(unittest.TestCase):
                 live += p1 + moments + writes
             self.assertEqual(live, 0)
             # Accepted I2/O2 terminal control retention is linear: 64 + 1464.
-            self.assertEqual(horizon * 1528, {1024: 1_564_672, 8192: 12_517_376}[horizon])
+            self.assertEqual(
+                horizon * 1528,
+                {1024: 1_564_672, 8192: 12_517_376}[horizon],
+            )
+
+
+class AuthenticScheduleModel(unittest.TestCase):
+    PRIMARY = (
+        ("blocks", "0", "attention", "key", "weight"),
+        ("blocks", "0", "attention", "output", "weight"),
+        ("blocks", "0", "attention", "query", "weight"),
+        ("blocks", "0", "attention", "value", "weight"),
+        ("blocks", "0", "ffn", "down", "weight"),
+        ("blocks", "0", "ffn", "up", "weight"),
+        ("blocks", "0", "norm1", "bias"),
+        ("blocks", "0", "norm1", "weight"),
+        ("blocks", "0", "norm2", "bias"),
+        ("blocks", "0", "norm2", "weight"),
+        ("head", "weight"),
+        ("norm_final", "bias"),
+        ("norm_final", "weight"),
+        ("position_embedding", "weight"),
+    )
+    SECONDARY = ("token_embedding", "weight")
+    ALIAS = (("head", "weight"), SECONDARY)
+
+    @classmethod
+    def admit(cls, entries: tuple[tuple[str, ...], ...], alias: object) -> tuple:
+        if len(entries) != 15 or entries[:14] != cls.PRIMARY:
+            raise ValueError("primary schedule")
+        if entries[14] != cls.SECONDARY or alias != cls.ALIAS:
+            raise ValueError("tied secondary")
+        return entries[:14]
+
+    def test_authentic_15_path_schedule_returns_only_14_primaries(self) -> None:
+        entries = self.PRIMARY + (self.SECONDARY,)
+        self.assertEqual(self.admit(entries, self.ALIAS), self.PRIMARY)
+
+    def test_malformed_secondary_and_tie_reject_before_selection(self) -> None:
+        authentic = self.PRIMARY + (self.SECONDARY,)
+        mutations = (
+            (authentic[:-1], self.ALIAS),
+            (authentic + (("extra",),), self.ALIAS),
+            (
+                authentic[:10]
+                + (authentic[11], authentic[10])
+                + authentic[12:],
+                self.ALIAS,
+            ),
+            (authentic[:-1] + (("token_embedding", "bias"),), self.ALIAS),
+            (authentic, (("head", "weight"), ("position_embedding", "weight"))),
+        )
+        for entries, alias in mutations:
+            with self.subTest(entries=entries, alias=alias):
+                with self.assertRaises(ValueError):
+                    self.admit(entries, alias)
 
 
 if __name__ == "__main__":
