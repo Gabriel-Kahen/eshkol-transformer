@@ -467,7 +467,6 @@ extern "C" int64_t et_tr3_lf_poststage_finish_v1() {
           "post-staging interval attempted an allocation");
   poststage_window = false;
   mode = Mode::idle;
-  all_object_armed = false;
   return 1;
 }
 extern "C" int64_t et_tr3_lf_finish_v1(int64_t caught) {
@@ -515,6 +514,7 @@ extern "C" int64_t et_tr3_lf_finish_v1(int64_t caught) {
     }
   }
   mode = Mode::idle;
+  all_object_armed = false;
   hit = observed = promotion_active = target_active = false;
   return failed ? 1 : 0;
 }

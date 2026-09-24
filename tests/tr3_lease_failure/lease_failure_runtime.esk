@@ -286,11 +286,40 @@
 ;;; before enrollment. Observe every wrapped allocator during that exact
 ;;; interval and require zero attempts. A nonzero census is a production
 ;;; counterexample; manufacturing an error here would be a fake prefix.
-(define (run-poststage-case)
+(define (poststage-attempt)
   (let* ((tuple (make-tuple))
          (head (vector-ref tr3-trainers 0))
          (count (record-count))
-         (cursor (d2-token-dataset-cursor (vector-ref tuple 2))))
+         (cursor (d2-token-dataset-cursor (vector-ref tuple 2)))
+         (handles (vector-ref (vector-ref tuple 5) 8))
+         (optimizer-record
+           (o2-require-optimizer 'trainer-create (vector-ref tuple 4)))
+         (handle-list (vector-ref optimizer-record 5)))
+    (check "fixed handle identity accepts the authentic list"
+           (tr3-lease-vector-identical? handles handle-list 14))
+    (check "fixed handle identity rejects a short list"
+           (not (tr3-lease-vector-identical? handles (cdr handle-list) 14)))
+    (check "fixed handle identity rejects an extra element"
+           (not (tr3-lease-vector-identical?
+                  handles (cons #f handle-list) 14)))
+    (check "fixed handle identity rejects a changed first handle"
+           (not (tr3-lease-vector-identical?
+                  handles (cons #f (cdr handle-list)) 14)))
+    (check "TR3 O2 idle query agrees with the O2 helper"
+           (and (= (o2-optimizer-completed-updates-internal
+                     (vector-ref tuple 4)) 0)
+                (tr3-lease-o2-idle! optimizer-record handles)))
+    (let ((forged (vector-copy optimizer-record)))
+      (vector-set! forged 0 #f)
+      (check "TR3 O2 rejection preserves O2 category and operation"
+             (guard (caught
+                      (#t (and (transformer-error? caught)
+                               (eq? (transformer-error-category caught)
+                                    'invalid-argument)
+                               (eq? (transformer-error-operation caught)
+                                    'o2-optimizer-completed-updates-internal))))
+               (tr3-lease-o2-idle! forged handles)
+               #f)))
     (snapshot-native! tuple)
     (check "post-staging census arms" (= (lf-poststage-arm) 1))
     (let ((shell
@@ -311,10 +340,14 @@
       (verify-native! tuple)
       (check "promoted shell survives short region"
              (eq? shell
-                  (vector-ref (car (vector-ref tr3-trainers 0)) 2))))
-    (check "isolated post-staging case completes" (= (lf-done) 1))
-    (display "TR3-LEASE-CASE class=poststage ordinal=0 result=PASS checks=")
-    (display checks) (newline)))
+                  (vector-ref (car (vector-ref tr3-trainers 0)) 2))))))
+(define (run-poststage-case)
+  (poststage-attempt)
+  (poststage-attempt)
+  (check "isolated cold and repeated post-staging cases complete"
+         (= (lf-done) 1))
+  (display "TR3-LEASE-CASE class=poststage ordinal=0 result=PASS checks=")
+  (display checks) (newline))
 
 ;;; The shell gate starts a fresh process for every ordinal. Each process still
 ;;; prepares a complete tuple before arming, verifies the failed state, performs

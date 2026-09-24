@@ -4620,15 +4620,20 @@
 (define (tr3-fixed-module-raw modules index)
   (tr3-fixed-shell-raw (vector-ref modules index) 'module))
 
-(define (tr3-fixed-binding-list? bindings count)
-  (if (= count 0) (null? bindings)
-      (and (pair? bindings)
-           (let ((binding (car bindings)))
-             (and (vector? binding) (= (vector-length binding) 3)
-                  (eq? (vector-ref binding 0) 'parameter-binding)
-                  (string? (vector-ref binding 1))
-                  (handle-value? (vector-ref binding 2))
-                  (tr3-fixed-binding-list? (cdr bindings) (- count 1)))))))
+(define tr3-fixed-binding-list?
+  ;; This identity is resolved when the trusted module loads. Looking up the
+  ;; long symbol literal on every final recheck allocates a C++ string key.
+  (let ((tag 'parameter-binding))
+    (lambda (bindings count)
+      (if (= count 0) (null? bindings)
+          (and (pair? bindings)
+               (let ((binding (car bindings)))
+                 (and (vector? binding) (= (vector-length binding) 3)
+                      (eq? (vector-ref binding 0) tag)
+                      (string? (vector-ref binding 1))
+                      (handle-value? (vector-ref binding 2))
+                      (tr3-fixed-binding-list?
+                        (cdr bindings) (- count 1)))))))))
 
 (define (tr3-fixed-parameter-count index)
   (cond ((or (and (>= index 4) (<= index 7))

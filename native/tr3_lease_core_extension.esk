@@ -15,13 +15,45 @@
 
 (define (tr3-lease-vector-identical? vector-value list-value count)
   (and (vector? vector-value) (= (vector-length vector-value) count)
-       (let loop ((index 0) (remaining list-value))
-         (if (= index count)
-             (null? remaining)
-             (and (pair? remaining)
-                  (eq? (vector-ref vector-value index) (car remaining))
-                  (loop (+ index 1) (cdr remaining)))))))
-
+       (if (= count 14)
+           ;; Preserve every cons/identity/nil check without a named-let
+           ;; scope allocation inside the final lease recheck.
+           (let* ((r0 list-value)
+                  (r1 (and (pair? r0) (cdr r0)))
+                  (r2 (and (pair? r1) (cdr r1)))
+                  (r3 (and (pair? r2) (cdr r2)))
+                  (r4 (and (pair? r3) (cdr r3)))
+                  (r5 (and (pair? r4) (cdr r4)))
+                  (r6 (and (pair? r5) (cdr r5)))
+                  (r7 (and (pair? r6) (cdr r6)))
+                  (r8 (and (pair? r7) (cdr r7)))
+                  (r9 (and (pair? r8) (cdr r8)))
+                  (r10 (and (pair? r9) (cdr r9)))
+                  (r11 (and (pair? r10) (cdr r10)))
+                  (r12 (and (pair? r11) (cdr r11)))
+                  (r13 (and (pair? r12) (cdr r12)))
+                  (r14 (and (pair? r13) (cdr r13))))
+             (and (null? r14)
+                  (eq? (vector-ref vector-value 0) (car r0))
+                  (eq? (vector-ref vector-value 1) (car r1))
+                  (eq? (vector-ref vector-value 2) (car r2))
+                  (eq? (vector-ref vector-value 3) (car r3))
+                  (eq? (vector-ref vector-value 4) (car r4))
+                  (eq? (vector-ref vector-value 5) (car r5))
+                  (eq? (vector-ref vector-value 6) (car r6))
+                  (eq? (vector-ref vector-value 7) (car r7))
+                  (eq? (vector-ref vector-value 8) (car r8))
+                  (eq? (vector-ref vector-value 9) (car r9))
+                  (eq? (vector-ref vector-value 10) (car r10))
+                  (eq? (vector-ref vector-value 11) (car r11))
+                  (eq? (vector-ref vector-value 12) (car r12))
+                  (eq? (vector-ref vector-value 13) (car r13))))
+           (let loop ((index 0) (remaining list-value))
+             (if (= index count)
+                 (null? remaining)
+                 (and (pair? remaining)
+                      (eq? (vector-ref vector-value index) (car remaining))
+                      (loop (+ index 1) (cdr remaining))))))))
 (define (tr3-lease-vector-eq? left right count)
   (and (vector? left) (vector? right)
        (= (vector-length left) count) (= (vector-length right) count)
@@ -165,29 +197,38 @@
                 ((eq? (car remaining-left) (car remaining-right)) #t)
                 (else (inner (cdr remaining-right))))))))
 
-(define (tr3-lease-o2-idle! optimizer-record retained-handles)
-  (if (not (tr3-lease-vector-identical?
-             retained-handles (vector-ref optimizer-record 5) 14))
-      (tr3-lease-fail 'invalid-argument
-                      "optimizer handle order differs from the fixed model"))
-  (if (not (= (o2-optimizer-completed-updates-internal
-                (vector-ref optimizer-record 0)) 0))
-      (tr3-lease-fail 'invalid-state "optimizer has completed updates"))
-  ;; The #119 transaction core proves active_operation is null whenever this
-  ;; exact busy preflight succeeds; do not add a second source registry/probe.
-  (if (not (= (o2-native-optimizer-require-absent-gradients
-                (vector-ref optimizer-record 1)) 0))
-      (o2-native-fail 'trainer-create))
-  (let loop ((remaining o2-optimizers))
-    (if (null? remaining) #t
-        (begin
-          (if (and (not (eq? (car remaining) optimizer-record))
-                   (tr3-lease-o2-record-overlap?
-                     optimizer-record (car remaining)))
-              (tr3-lease-fail 'invalid-state
-                              "another optimizer overlaps the fixed model"))
-          (loop (cdr remaining)))))
-  #t)
+(define tr3-lease-o2-idle!
+  ;; Keep O2's exact error operation without asking the symbol intern table
+  ;; to build a long string key inside the sealed post-staging interval.
+  (let ((completed-operation 'o2-optimizer-completed-updates-internal))
+    (lambda (optimizer-record retained-handles)
+      (if (not (tr3-lease-vector-identical?
+                 retained-handles (vector-ref optimizer-record 5) 14))
+          (tr3-lease-fail 'invalid-argument
+                          "optimizer handle order differs from the fixed model"))
+      (let ((count
+              (o2-native-optimizer-completed-updates
+                (vector-ref
+                  (o2-require-optimizer completed-operation
+                                        (vector-ref optimizer-record 0)) 1))))
+        (if (< count 0) (o2-native-fail completed-operation))
+        (if (not (= count 0))
+            (tr3-lease-fail 'invalid-state "optimizer has completed updates")))
+      ;; The #119 transaction core proves active_operation is null whenever
+      ;; this exact busy preflight succeeds; do not add a second registry.
+      (if (not (= (o2-native-optimizer-require-absent-gradients
+                    (vector-ref optimizer-record 1)) 0))
+          (o2-native-fail 'trainer-create))
+      (let loop ((remaining o2-optimizers))
+        (if (null? remaining) #t
+            (begin
+              (if (and (not (eq? (car remaining) optimizer-record))
+                       (tr3-lease-o2-record-overlap?
+                         optimizer-record (car remaining)))
+                  (tr3-lease-fail 'invalid-state
+                                  "another optimizer overlaps the fixed model"))
+              (loop (cdr remaining)))))
+      #t)))
 
 (define (tr3-lease-recheck!
           observed-head dataset model optimizer
