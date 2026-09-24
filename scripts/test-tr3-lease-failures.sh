@@ -43,7 +43,7 @@ while (( $# )); do
   esac
 done
 
-for tool in awk cmp docker find git python3 readlink rg sha256sum; do
+for tool in awk cmp docker find git python3 readlink rg sed sha256sum; do
   command -v "${tool}" >/dev/null || die "required command not found: ${tool}"
 done
 [[ "${runtime_source}" = /* && -d "${runtime_source}" ]] || usage
@@ -60,6 +60,13 @@ if [[ "${allocation_class}" == all ]]; then
     die "full allocator matrix requires reviewed repaired runtime"
   expected_production_base=f604e87aea94486ff46820d50ddb27287988967d
   expected_production_tree=3c48e4e9208bc4ceee4843e2c7138ff46aea82ab
+  expected_witness_commit=202bd73d40a76a80256ab98728cc00e2da086ec2
+  expected_witness_tree=a564e62f582ed75ddbef083de555aaeb99669319
+  [[ "${runner_sha}" == \
+     5b6c5cae8872330cf59f47f84535fb9acf0242ece001eb544112ac133280b918 &&
+     "${archive_sha}" == \
+     4a0a5d5bf51735528fe21849933c2d83be64869f4362e64af0b5d39323fc870c ]] || \
+    die "full matrix requires the reviewed runtime artifacts"
 else
   [[ "${runtime_commit}" == 81298b4a9608fb92eb6f351a2eabd8392da7d9ef &&
      "${runtime_tree}" == 7669312845a9d8d372006af52271045e69505813 ]] || \
@@ -73,6 +80,13 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
+expected_runner_self_sha256=62f833a8409860abf78dc8f70d65e92451f02bfb9d1d43262cb9548fa47bedfa
+runner_self_sha256="$(sed \
+  's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
+  "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
+  sha256sum | awk '{print $1}')"
+[[ "${runner_self_sha256}" == "${expected_runner_self_sha256}" ]] || \
+  die "canonical lease failure runner changed"
 runtime_source="$(readlink -f -- "${runtime_source}")"
 runtime_build="$(readlink -f -- "${runtime_build}")"
 production_paths=(
@@ -81,6 +95,25 @@ production_paths=(
 git -C "${PROJECT_ROOT}" diff --quiet \
   "${production_base}" -- \
   "${production_paths[@]}" || die "frozen production lease sources changed"
+if [[ "${allocation_class}" == all ]]; then
+  [[ "$(git -C "${PROJECT_ROOT}" rev-parse \
+     "${expected_witness_commit}^{tree}")" == \
+     "${expected_witness_tree}" ]] || \
+    die "reviewed lease witness tree identity changed"
+  git -C "${PROJECT_ROOT}" merge-base --is-ancestor \
+    "${expected_witness_commit}" HEAD || \
+    die "lease checkout does not descend from the reviewed witness"
+  git -C "${PROJECT_ROOT}" diff --quiet "${expected_witness_commit}" -- \
+    include internal lib native src templates tests/tr3_lease_failure || \
+    die "reviewed lease source or witness changed"
+  while IFS= read -r changed; do
+    case "${changed}" in
+      docs/*|scripts/test-tr3-lease-failures.sh|tests/tr3_lease/test_source_contract.py) ;;
+      *) die "unreviewed checkout change: ${changed}" ;;
+    esac
+  done < <(git -C "${PROJECT_ROOT}" diff --name-only \
+           "${expected_witness_commit}" --)
+fi
 [[ -z "$(git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all)" ]] || \
   die "successor checkout must be clean"
 [[ -z "$(git -C "${PROJECT_ROOT}" ls-files --others --exclude-standard -- \
@@ -120,11 +153,46 @@ fi
 grep -Fx 'ESHKOL_PROMOTION_TESTING:BOOL=OFF' \
   "${runtime_build}/CMakeCache.txt" >/dev/null || \
   die "runtime build enabled promotion testing"
+if [[ "${allocation_class}" == all ]]; then
+  [[ "$(sha256sum "${runtime_build}/CMakeCache.txt" | awk '{print $1}')" == \
+     50fec56d75320365d42bb733128b94a3c86d1247510c81b13d1365babdd1a96c ]] || \
+    die "reviewed runtime build profile changed"
+  [[ "$(sha256sum \
+     "${runtime_build}/eshkol-transformer-provenance.tsv" | awk '{print $1}')" == \
+     3f62610bbad899645f9d8fab1cfea5bbae06bfd5f548ccf82975d45e0e69d654 ]] || \
+    die "runtime build provenance changed"
+  runtime_manifest="$(dirname -- "${runtime_build}")/artifact-sha256.txt"
+  [[ "$(sha256sum "${runtime_manifest}" | awk '{print $1}')" == \
+     9a6a739e415133f1dc1132d466831c4471b193088a9531aba4f3d466aeca579d ]] || \
+    die "reviewed runtime checksum manifest changed"
+  sha256sum -c "${runtime_manifest}" >/dev/null || \
+    die "reviewed runtime checksum manifest does not verify"
+  for entry in \
+    'CMAKE_BUILD_TYPE:STRING=Release' \
+    'CMAKE_C_COMPILER:STRING=/usr/bin/clang-21' \
+    'CMAKE_CXX_COMPILER:STRING=/usr/bin/clang++-21' \
+    'ESHKOL_REQUIRED_LLVM_MAJOR:UNINITIALIZED=21' \
+    'ESHKOL_BUILD_TESTS:BOOL=OFF' \
+    'ESHKOL_PROMOTION_TESTING:BOOL=OFF'; do
+    grep -Fx "${entry}" "${runtime_build}/CMakeCache.txt" >/dev/null || \
+      die "reviewed runtime profile field changed: ${entry}"
+  done
+fi
 container_id="$(docker image inspect eshkol-checked-promotion-llvm21:20260922 \
   --format '{{.Id}}')"
 [[ "${container_id}" == \
    sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6 ]] || \
   die "supported container identity changed"
+if [[ "${allocation_class}" == all ]]; then
+  llvm_version="$(docker run --rm --network none "${container_id}" \
+    llvm-config-21 --version)"
+  [[ "${llvm_version}" == 21.1.8 ]] || \
+    die "supported LLVM version changed"
+  "${PROJECT_ROOT}/scripts/generate-p1-roots.sh" --check || \
+    die "generated P1 root differs from its reviewed template"
+  python3 "${PROJECT_ROOT}/scripts/check-tr3-p1-fixed.py" >/dev/null || \
+    die "P1 fixed-set structure check failed"
+fi
 
 automatic=0
 if [[ -z "${evidence_dir}" ]]; then
@@ -147,6 +215,19 @@ cp -- \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
   "${evidence_dir}/inputs/"
+if [[ "${allocation_class}" == all ]]; then
+  mkdir -p "${evidence_dir}/inputs/source"
+  cp -- \
+    "${PROJECT_ROOT}/native/x1_config_private.esk" \
+    "${PROJECT_ROOT}/native/tr3_lease_core_extension.esk" \
+    "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk" \
+    "${PROJECT_ROOT}/templates/p1/module_roots.esk.tmpl" \
+    "${evidence_dir}/inputs/source/"
+  cp -- "${runtime_build}/CMakeCache.txt" \
+    "${evidence_dir}/inputs/runtime-CMakeCache.txt"
+  cp -- "${runtime_manifest}" \
+    "${evidence_dir}/inputs/runtime-artifact-sha256.txt"
+fi
 
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3_lease.test_source_contract \
   >"${evidence_dir}/source-test.stdout" \
@@ -347,6 +428,20 @@ cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${evidence_dir}/inputs/lease_failure_runtime.esk"
 cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
   "${evidence_dir}/inputs/lease_failure_shim.cpp"
+if [[ "${allocation_class}" == all ]]; then
+  for source in \
+    native/x1_config_private.esk \
+    native/tr3_lease_core_extension.esk \
+    internal/p1/lib/transformer/module.esk \
+    templates/p1/module_roots.esk.tmpl; do
+    cmp -- "${PROJECT_ROOT}/${source}" \
+      "${evidence_dir}/inputs/source/${source##*/}"
+  done
+  cmp -- "${runtime_build}/CMakeCache.txt" \
+    "${evidence_dir}/inputs/runtime-CMakeCache.txt"
+  cmp -- "${runtime_manifest}" \
+    "${evidence_dir}/inputs/runtime-artifact-sha256.txt"
+fi
 
 grep -Fx 'OK' "${evidence_dir}/source-test.stderr" >/dev/null
 test ! -s "${evidence_dir}/compile.stderr"
@@ -371,6 +466,9 @@ grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
 {
   printf 'frozen_production_base_commit\t%s\n' "${production_base}"
   printf 'frozen_production_base_tree\t%s\n' "${expected_production_tree}"
+  printf 'reviewed_witness_commit\t%s\n' "${expected_witness_commit:-historical}"
+  printf 'reviewed_witness_tree\t%s\n' "${expected_witness_tree:-historical}"
+  printf 'runner_self_sha256\t%s\n' "${runner_self_sha256}"
   printf 'successor_checkout_head\t%s\n' \
     "$(git -C "${PROJECT_ROOT}" rev-parse HEAD)"
   printf 'successor_checkout_tree\t%s\n' \
@@ -381,6 +479,13 @@ grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
   printf 'runtime_source_tree\t%s\n' "${runtime_tree}"
   printf 'runner_sha256\t%s\n' "${runner_sha}"
   printf 'runtime_archive_sha256\t%s\n' "${archive_sha}"
+  printf 'runtime_manifest_sha256\t%s\n' \
+    "$(if [[ "${allocation_class}" == all ]]; then \
+         sha256sum "${runtime_manifest}" | awk '{print $1}'; \
+       else printf 'historical'; fi)"
+  printf 'runtime_build_profile_sha256\t%s\n' \
+    "$(sha256sum "${runtime_build}/CMakeCache.txt" | awk '{print $1}')"
+  printf 'llvm_version\t%s\n' "${llvm_version:-historical}"
   printf 'allocation_class\t%s\n' "${allocation_class}"
   printf 'optimization_level\t%s\n' "${optimize}"
   printf 'container_image_id\t%s\n' "${container_id}"
@@ -394,9 +499,10 @@ grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
   cd "${evidence_dir}"
   find . -type f ! -name SHA256SUMS -print0 | \
     LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+  sha256sum -c SHA256SUMS >/dev/null
 )
 
-printf 'TR3 lease partial failure evidence PASS: %s\n' "${evidence_dir}"
+printf 'TR3 lease failure evidence PASS: %s\n' "${evidence_dir}"
 if (( automatic )); then
   printf 'automatic evidence retained for review\n'
 fi

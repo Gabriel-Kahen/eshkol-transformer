@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unittest
 from pathlib import Path
@@ -175,6 +176,20 @@ class LeaseSourceContract(unittest.TestCase):
         self.assertIn("3c48e4e9208bc4ceee4843e2c7138ff46aea82ab", gate)
         self.assertIn("--production-base", gate)
         self.assertIn("successor checkout must be clean", gate)
+        self.assertIn("202bd73d40a76a80256ab98728cc00e2da086ec2", gate)
+        self.assertIn("a564e62f582ed75ddbef083de555aaeb99669319", gate)
+        self.assertIn("artifact-sha256.txt", gate)
+        self.assertIn("llvm-config-21 --version", gate)
+        match = re.search(
+            r"^expected_runner_self_sha256=([0-9a-f]{64})$", gate, re.M
+        )
+        self.assertIsNotNone(match)
+        normalized = gate.replace(
+            match.group(0), "expected_runner_self_sha256=__SELF__", 1
+        )
+        self.assertEqual(
+            hashlib.sha256(normalized.encode()).hexdigest(), match.group(1)
+        )
         self.assertIn('inputs/ROADMAP.md', gate)
 
 
