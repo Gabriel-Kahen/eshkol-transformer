@@ -1,0 +1,131 @@
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.error_public)
+(require transformer.evaluation)
+(require transformer.model)
+(require transformer.module)
+(require transformer.tokenizer)
+
+(define (check label value)
+  (if value #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+
+(define args (command-line))
+(define corpus-path (car (cdr args)))
+(define model-config
+  (config-resolve
+   (config-parse
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+   '()))
+(define model
+  (with-region ('e3-public-quota-model 65536)
+    (diagnostic-model-create model-config
+                             (diagnostic-initializer-state 1729))))
+(define tokenizer (tokenizer-byte model-config))
+(define dataset (token-dataset-open (dataset-config corpus-path) tokenizer))
+
+;; Reservation one publishes a report whose authority must survive every later
+;; success, one genuine failed reservation, and the terminal quota rejection.
+(define initial-cursor (token-dataset-cursor dataset))
+(define first-report
+  (with-region ('e3-public-quota-first 262144)
+    (diagnostic-evaluate-fixed! model dataset)))
+(check "first success cursor restoration"
+       (bytes=? initial-cursor (token-dataset-cursor dataset)))
+
+;; Reservation two is a genuine E3 rejection. It must restore the EOS cursor,
+;; return no public report value, and still consume one lifetime reservation.
+(define eos-dataset
+  (token-dataset-open (dataset-config corpus-path) tokenizer))
+(let drain ()
+  (let ((value (token-dataset-next-batch eos-dataset)))
+    (if (token-dataset-end? value) #t
+        (begin (check "EOS batch release" (token-batch-release! value))
+               (drain)))))
+(define eos-before (token-dataset-cursor eos-dataset))
+(define eos-result (vector 'no-public-result))
+(define eos-caught #f)
+(guard
+ (raised
+  (#t (set! eos-caught raised)))
+ (vector-set! eos-result 0
+              (with-region ('e3-public-quota-failure 262144)
+                (diagnostic-evaluate-fixed! model eos-dataset))))
+(check "EOS structured rejection"
+       (and (transformer-error? eos-caught)
+            (eq? (transformer-error-category eos-caught) 'invalid-state)
+            (eq? (transformer-error-operation eos-caught) 'e3-evaluate-into!)))
+(check "failed reservation returns no public result"
+       (eq? (vector-ref eos-result 0) 'no-public-result))
+(check "failed reservation cursor restoration"
+       (bytes=? eos-before (token-dataset-cursor eos-dataset)))
+(let ((caught #f))
+  (guard
+   (raised
+    (#t
+     (set! caught
+           (and (transformer-error? raised)
+                (eq? (transformer-error-category raised) 'invalid-argument)
+                (eq? (transformer-error-operation raised)
+                     'diagnostic-evaluation-count)))))
+   (diagnostic-evaluation-count eos-caught 'batches))
+  (check "failed value is not report authority" caught))
+(check "EOS dataset close" (token-dataset-close! eos-dataset))
+
+;; Fill reservations three through 8,192. The next invocation must reject before
+;; cursor mutation. Checking the oldest report also exercises the full registry.
+(define last-report
+  (let loop ((remaining 8190) (latest first-report))
+    (if (= remaining 0) latest
+        (loop (- remaining 1)
+              (with-region ('e3-public-quota-success 262144)
+                (diagnostic-evaluate-fixed! model dataset))))))
+(check "success horizon cursor restoration"
+       (bytes=? initial-cursor (token-dataset-cursor dataset)))
+(check "oldest report remains readable"
+       (and (= (diagnostic-evaluation-f32-bits first-report 'loss) 1085366897)
+            (= (diagnostic-evaluation-count first-report 'batches) 3)))
+(check "newest report remains readable"
+       (and (= (diagnostic-evaluation-f32-bits last-report 'perplexity) 1132430055)
+            (= (diagnostic-evaluation-count last-report 'tokens) 5)))
+
+(define cap-before (token-dataset-cursor dataset))
+(define cap-result (vector 'no-public-result))
+(define cap-caught #f)
+(guard
+ (raised
+  (#t (set! cap-caught raised)))
+ (vector-set! cap-result 0
+              (with-region ('e3-public-quota-cap 262144)
+                (diagnostic-evaluate-fixed! model dataset))))
+(check "8193rd reservation rejection"
+       (and (transformer-error? cap-caught)
+            (eq? (transformer-error-category cap-caught) 'unsupported)
+            (eq? (transformer-error-operation cap-caught)
+                 'diagnostic-evaluate-fixed!)))
+(check "cap rejection returns no public result"
+       (eq? (vector-ref cap-result 0) 'no-public-result))
+(check "cap rejection cursor unchanged"
+       (bytes=? cap-before (token-dataset-cursor dataset)))
+(check "oldest report survives cap rejection"
+       (= (diagnostic-evaluation-f32-bits first-report 'mask-weight) 1084227584))
+(check "success dataset close" (token-dataset-close! dataset))
+
+(display "E3-DIAGNOSTIC-PUBLIC-QUOTA-PASS reservations=8192 successes=8191 failures=1")
+(newline)
