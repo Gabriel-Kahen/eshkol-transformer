@@ -201,6 +201,15 @@ releases an actually created native RNG, deadens the entry, clears the ledger,
 and rethrows the first E1 error. Release of an exact dead Eshkol RNG is idempotent;
 live release calls native release before retaining only slots 0..2.
 
+Each of `g3c4-rng-create-seeded-internal`, `g3c4-rng-clone-internal`, and
+`g3c4-rng-release-internal!` is a standalone outer operation that enters the
+existing `m3-call` exactly once. Their native seed/clone/word/release routines are
+already-guarded helpers and never enter, clear, or replace the aggregate guard.
+Nested or concurrently busy admission rejects before registry mutation. Every
+success and every recoverable failure restores the aggregate cell to its entry
+baseline; cleanup failure after native enrollment exits 134 rather than returning
+with the guard cleared over a live unowned record.
+
 These internal RNG operations provide an authenticated `:rng` authority without
 adding a numerical provider or public RNG-from-seed operation. A later output
 contract may create nonzero-counter snapshots only through a separately accepted
@@ -398,6 +407,14 @@ After root acceptance, the implementation gate must prove:
   borrow; exact retry after ending the lease; cache destruction before scrubbing;
   all ten words zero, owner/cache cleared, permanent subtype, native and Eshkol
   idempotence, and model/parameters/source RNG unchanged;
+- live and retained-dead generator contexts rejected by base `context_close`;
+  live and retained-dead base contexts plus live and retained-dead RNG records
+  rejected by generator close; generator close rejected while its exact call is
+  published, with the complete aggregate/native tuple unchanged for normal call
+  cleanup;
+- standalone RNG create/clone/release each entering `m3-call` exactly once;
+  nested/busy rejection before mutation and aggregate-cell baseline restoration
+  on every injected recoverable failure;
 - every call publication boundary, full exact aggregate tuple, normal empty-commit
   finish, all precommit failures, accepted exit-134 subprocesses for abort cleanup
   failure, and exit-134 postcommit finish defects;
