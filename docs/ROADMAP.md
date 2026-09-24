@@ -46,6 +46,16 @@ allocation cut. Root verified
 `g3c4-output-reservation-fix-6e60361-20260924T182604Z/SHA256SUMS`
 (`6440cd34...`); merged static, Q0 4/4 and CI 107/107 pass. This remains
 private output capacity and lifetime ownership, not public generation.
+The reviewed Step20A private numeric output preparation `ab7ae0a`/tree
+`bca1cb1` is integrated as identical patch `c8affc1`. Its one independent
+reviewer approved the corrected cross-context, readiness and live-I1-borrow
+witnesses. The supported f31 normal, repeat and ASan/UBSan/LSan runs each
+passed the same 647 checks; root verified
+`g3c4-output-prepare-ab7ae0a/SHA256SUMS` (`803c7d15...`) and reran the
+647-check gate on the merged tree, with Q0 Python isolation 4/4. It records
+G0/G1 staged numeric IDs, cache length and RNG into a pending output without
+publishing it. ID decoding, text, result publication and the generation loop
+remain pending.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
