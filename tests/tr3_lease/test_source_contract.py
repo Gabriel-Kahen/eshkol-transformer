@@ -190,6 +190,19 @@ class LeaseSourceContract(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(normalized.encode()).hexdigest(), match.group(1)
         )
+        source_test_pin = re.search(
+            r"^expected_source_test_sha256=([0-9a-f]{64})$", gate, re.M
+        )
+        self.assertIsNotNone(source_test_pin)
+        source_test_bytes = Path(__file__).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(source_test_bytes).hexdigest(),
+            source_test_pin.group(1),
+        )
+        self.assertNotEqual(
+            hashlib.sha256(source_test_bytes + b"\n").hexdigest(),
+            source_test_pin.group(1),
+        )
         self.assertIn('inputs/ROADMAP.md', gate)
 
 

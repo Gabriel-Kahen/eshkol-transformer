@@ -80,13 +80,18 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=62f833a8409860abf78dc8f70d65e92451f02bfb9d1d43262cb9548fa47bedfa
+expected_runner_self_sha256=4564444ea16dc0a79b7adbb43e527b79aea3d3cea74798a912c6d1a1e29bbc98
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
   sha256sum | awk '{print $1}')"
 [[ "${runner_self_sha256}" == "${expected_runner_self_sha256}" ]] || \
   die "canonical lease failure runner changed"
+expected_source_test_sha256=384418594fe85270d79193fbe8a11623ef29ee1b8a3db5b7fa5efb62d55c840a
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/tests/tr3_lease/test_source_contract.py" | awk '{print $1}')" == \
+   "${expected_source_test_sha256}" ]] || \
+  die "reviewed lease source-contract test changed"
 runtime_source="$(readlink -f -- "${runtime_source}")"
 runtime_build="$(readlink -f -- "${runtime_build}")"
 production_paths=(
