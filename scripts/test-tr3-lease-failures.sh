@@ -72,6 +72,15 @@ done
 [[ -z "${allocation_probes}" || "${allocation_probes}" == 1094,1095 ]] || usage
 [[ -z "${allocation_probes}" || "${allocation_class}" == all ]] || usage
 (( diagnostic_only == 0 )) || [[ -z "${allocation_probes}" ]] || usage
+o0_compile_timeout="$(tsv_value "${failure_manifest}" o0_compile_timeout_seconds)"
+o2_compile_timeout="$(tsv_value "${failure_manifest}" o2_compile_timeout_seconds)"
+[[ "${o0_compile_timeout}" == 900 && "${o2_compile_timeout}" == 1200 ]] || \
+  die "reviewed O0/O2 compiler timeout policy changed"
+if [[ "${optimize}" == 2 ]]; then
+  compile_timeout="${o2_compile_timeout}"
+else
+  compile_timeout="${o0_compile_timeout}"
+fi
 if [[ "${allocation_class}" == all ]]; then
   [[ "${runtime_commit}" == "$(tsv_value "${failure_manifest}" runtime_source_commit)" &&
      "${runtime_tree}" == "$(tsv_value "${failure_manifest}" runtime_source_tree)" ]] || \
@@ -100,7 +109,7 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=bde887e0897c55b92e76be21e6b3a6c5f10a3a025032d35de2e2b035da9c7c27
+expected_runner_self_sha256=2a2a2f04a01031b670fabb5761bae205703bfa41bf0b83f486f9caab154ec9ab
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
@@ -344,6 +353,7 @@ docker run --rm --network none \
   -v "${evidence_dir}:/out" \
   -e "TR3_ALLOCATION_CLASS=${allocation_class}" \
   -e "TR3_ALLOCATION_PROBES=${allocation_probes}" \
+  -e "TR3_COMPILE_TIMEOUT_SECONDS=${compile_timeout}" \
   -e "TR3_OPTIMIZE=${optimize}" \
   -e "TR3_DIAGNOSTIC_ONLY=${diagnostic_only}" \
   -w /workspace "${container_id}" bash -lc '
@@ -386,8 +396,10 @@ ar rcsD /out/native/libtr3_lease_failure_runtime.a /out/native/*.o
 
 export ESHKOL_JIT_CACHE=0 ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
 export ESHKOL_LIB_DIR=/runtime-build XDG_CACHE_HOME=/out/cache
-timeout --foreground --signal=TERM --kill-after=5s 900s \
-  /runtime-build/eshkol-run --strict-types --no-stdlib \
+/usr/bin/time -v -o /out/compile.resource \
+  timeout --foreground --signal=TERM --kill-after=5s \
+    "${TR3_COMPILE_TIMEOUT_SECONDS}s" \
+    /runtime-build/eshkol-run --strict-types --no-stdlib \
     --optimize "${TR3_OPTIMIZE}" \
     --emit-object --emit-depfile /out/lease_failure.d \
     -I native -I internal/p1/lib -I internal/c1/lib \
@@ -597,6 +609,9 @@ else
 fi
 test ! -s "${evidence_dir}/shim-compile.stderr"
 test ! -s "${evidence_dir}/link.stderr"
+test -s "${evidence_dir}/compile.resource"
+grep -F 'Maximum resident set size (kbytes):' \
+  "${evidence_dir}/compile.resource" >/dev/null
 if (( diagnostic_only == 1 )); then
   {
     printf 'frozen_production_base_commit\t%s\n' "${production_base}"
@@ -611,6 +626,7 @@ if (( diagnostic_only == 1 )); then
     printf 'failure_runtime_candidate_sha256\t%s\n' \
       "$(sha256sum "${failure_manifest}" | awk '{print $1}')"
     printf 'optimization_level\t%s\n' "${optimize}"
+    printf 'compile_timeout_seconds\t%s\n' "${compile_timeout}"
     printf 'diagnostic_only\t1\n'
     printf 'container_image_id\t%s\n' "${container_id}"
     while IFS= read -r input; do
@@ -683,6 +699,7 @@ fi
   printf 'allocation_class\t%s\n' "${allocation_class}"
   printf 'allocation_probes\t%s\n' "${allocation_probes:-full-matrix}"
   printf 'optimization_level\t%s\n' "${optimize}"
+  printf 'compile_timeout_seconds\t%s\n' "${compile_timeout}"
   printf 'container_image_id\t%s\n' "${container_id}"
   while IFS= read -r input; do
     printf 'input_sha256\t%s\t%s\n' \
