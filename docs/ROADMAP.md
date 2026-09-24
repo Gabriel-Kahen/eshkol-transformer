@@ -187,6 +187,19 @@ ASan+UBSan+LSan standalone source gates each pass 80/80 plus CTest 1/1;
 root verified `f32-vm-string-pack-ubsan-efb6ba0d-20260924/SHA256SUMS`
 (`1b8cc21d...`). The excluded legacy standalone compiler is outside this
 unity-VM repair, and the leaf has not yet joined the runtime union.
+The bounded read-only classifier audit on immutable `d960add` exhaustively
+disposes 227 raw indexed sites in `runtime_regions.cpp` and
+`runtime_arena_core.cpp` as 224 exact groups: 18 accepted, 201 unreachable and
+five defect rows in three groups. Supported f31 sanitizer reproduction proves
+that mixed-root evacuation at `runtime_regions.cpp:1960-1961` loses canonical
+and malformed F32 carrier bytes while a regional pointer promotes; lone
+controls pass. `region-close` direct struct assignments lack a portable
+full-carrier guarantee even though the pinned poisoned canonical witness
+passes. The baseline `region-open` defect is separately repaired by reviewed
+`4cf63f4`. Root verified
+`f32-region-classifier-audit-d960add-20260924/SHA256SUMS` (`b0c213f5...`);
+a separate byte-preservation repair is active. This covers only the two
+indexed source files, not the whole-runtime exhaustive classifier requirement.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
