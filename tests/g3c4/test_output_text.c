@@ -207,7 +207,11 @@ static void text_ownership_cut(et_g3c4_model_owner_internal *owner) {
   discard_prepared(&prepared);
 }
 
-int main(void) {
+#ifndef ET_G3C4_OUTPUT_TEXT_TEST_MAIN
+#define ET_G3C4_OUTPUT_TEXT_TEST_MAIN main
+#endif
+
+int ET_G3C4_OUTPUT_TEXT_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   g0_text(owner);
   g1_text_failures_and_success(owner);

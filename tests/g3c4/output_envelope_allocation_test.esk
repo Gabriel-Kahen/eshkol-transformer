@@ -1,0 +1,76 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 output envelope allocation FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (kind-count kind)
+  (let loop ((remaining (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining)
+              (if (eq? (vector-ref (car remaining) 1) kind)
+                  (+ count 1) count)))))
+(define (no-pending?)
+  (let loop ((remaining (vector-ref g3c4-registry 0)))
+    (if (null? remaining) #t
+        (and (not (eq? (vector-ref (car remaining) 2) 'pending))
+             (loop (cdr remaining))))))
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define config
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed 43))
+(define generator (g3c4-generator-create-internal model tokenizer config))
+(define sweep-seen 0)
+
+(define (sweep kind)
+  (let loop ((index 0))
+    (if (> index 32) (exit 2))
+    (let ((before (kind-count 'output)))
+      (set! sweep-seen 0)
+      (guard (condition (#t #t))
+        (g3c4-with-call-internal
+          'g3c4-output-envelope-allocation-test generator 2 1
+          (allocation-arm kind index)
+          (g3t-output-reserve (vector-ref m3-call-state 0) 1)
+          (set! sweep-seen (allocation-disarm))
+          (g3c4-fail 'internal 'g3c4-output-envelope-allocation-test
+                     "end allocation probe")))
+      (if (= (allocation-consumed) 1)
+          (begin
+            (check "cut leaves no pending entry" (no-pending?))
+            (check "cut clears shared call" (not (vector-ref m3-call-state 0)))
+            (check "cut enrolls no output" (= (kind-count 'output) before))
+            (allocation-disarm)
+            (loop (+ index 1)))
+          (begin
+            (check "success leaves no pending entry" (no-pending?))
+            (check "success clears shared call" (not (vector-ref m3-call-state 0)))
+            (check "success leaves one tombstone"
+                   (= (kind-count 'output) (+ before 1)))
+            (check "success observed allocation" (> sweep-seen 0))
+            index)))))
+
+(define vector-cuts (sweep 1))
+(define cons-cuts (sweep 2))
+(check "generator closes" (g3c4-generator-close-internal! generator))
+(display "G3-C4 output envelope allocation PASS: vector=")
+(display vector-cuts) (display " cons=") (display cons-cuts)
+(display " checks=") (display checks) (newline)

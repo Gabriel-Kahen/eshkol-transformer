@@ -1,0 +1,176 @@
+;;; Rooted private G3-C4 output envelope and accepted T1 decode coordinator.
+;;; Load after g3c4_call_entry_extension.esk and
+;;; g3c4_t1_output_decode_extension.esk. Never install this source.
+
+(extern ptr g3t-native-output-reserve ptr i64
+        :real et_g3c4_private_output_reserve_v1)
+(extern i64 g3t-native-output-release ptr
+        :real et_g3c4_private_output_release_v1)
+(extern i64 g3t-native-output-prepare ptr ptr
+        :real et_g3c4_private_output_prepare_v1)
+(extern i64 g3t-native-output-copy-decode-ids ptr ptr ptr
+        :real et_g3c4_private_output_copy_decode_ids_v1)
+(extern i64 g3t-native-output-accept-text ptr ptr ptr
+        :real et_g3c4_private_output_accept_text_v1)
+
+(define (g3t-registry-entry candidate operation)
+  (let loop ((remaining (vector-ref g3c4-registry 0)))
+    (cond
+      ((null? remaining)
+       (g3c4-fail 'invalid-argument operation
+                  "C4 private entry identity is not registered"))
+      ((eq? candidate (car remaining)) (car remaining))
+      (else (loop (cdr remaining))))))
+
+(define (g3t-call-entry-live call-entry operation)
+  (let* ((entry (g3t-registry-entry call-entry operation))
+         (generator-entry (vector-ref entry 4))
+         (model-entry (vector-ref entry 5))
+         (tokenizer (vector-ref entry 6))
+         (ledger (vector-ref entry 10)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 1) 'call)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 3) #f)
+                  (vector? generator-entry)
+                  (vector? model-entry)
+                  tokenizer
+                  (eq? (vector-ref entry 7) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (vector? ledger) (= (vector-length ledger) 5)
+                  (vector-ref ledger 0) (vector-ref ledger 1)
+                  (vector-ref ledger 2) (vector-ref ledger 3)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (eq? (vector-ref m3-call-state 0) entry)
+                  (= (vector-length generator-entry) 12)
+                  (eq? (vector-ref generator-entry 1) 'generator)
+                  (eq? (vector-ref generator-entry 2) 'live)
+                  (vector-ref generator-entry 3)
+                  (eq? (vector-ref generator-entry 5) model-entry)
+                  (eq? (vector-ref generator-entry 6) tokenizer)
+                  (g3c4-policy? (vector-ref generator-entry 7))
+                  (eq? (vector-ref generator-entry 9) entry)
+                  (eq? (vector-ref model-entry 10) entry)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 private call entry is not exact and active"))
+    (if (not (eq? model-entry
+                  (g3c4-model-entry-live
+                    (vector-ref model-entry 0) operation entry)))
+        (g3c4-fail 'internal operation
+                   "C4 private call model cross-link changed"))
+    (g3c4-baseline-tokenizer-entry
+      tokenizer operation 'invalid-state 'invalid-state)
+    entry))
+
+(define (g3t-output-entry-pending call-entry output-entry operation)
+  (let* ((call (g3t-call-entry-live call-entry operation))
+         (entry (g3t-registry-entry output-entry operation))
+         (generator-entry (vector-ref call 4))
+         (model-entry (vector-ref call 5))
+         (tokenizer (vector-ref call 6))
+         (ledger (vector-ref call 10))
+         (policy (vector-ref generator-entry 7))
+         (generated (vector-ref policy 5))
+         (auxiliary (vector-ref entry 8)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (vector? (vector-ref entry 0))
+                  (= (vector-length (vector-ref entry 0)) 1)
+                  (eq? (vector-ref entry 1) 'output)
+                  (eq? (vector-ref entry 2) 'pending)
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) generator-entry)
+                  (eq? (vector-ref entry 5) model-entry)
+                  (eq? (vector-ref entry 6) tokenizer)
+                  (eq? (vector-ref entry 7) #f)
+                  (vector? auxiliary) (= (vector-length auxiliary) 2)
+                  (bytevector? (vector-ref auxiliary 0))
+                  (= (bytevector-length (vector-ref auxiliary 0)) generated)
+                  (bytevector? (vector-ref auxiliary 1))
+                  (= (bytevector-length (vector-ref auxiliary 1))
+                     (* generated 8))
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (eq? (vector-ref ledger 4) entry)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 pending output envelope is not exact and linked"))
+    entry))
+
+(define (g3t-output-reserve call-entry prompt-length)
+  (let* ((operation 'g3t-output-reserve)
+         (call (g3t-call-entry-live call-entry operation))
+         (generator-entry (vector-ref call 4))
+         (model-entry (vector-ref call 5))
+         (tokenizer (vector-ref call 6))
+         (ledger (vector-ref call 10))
+         (policy (vector-ref generator-entry 7))
+         (generated (vector-ref policy 5)))
+    (if (not (and (m3t-exact-i64? prompt-length)
+                  (or (= prompt-length 1) (= prompt-length 2))
+                  (<= (+ prompt-length generated) 2)))
+        (g3c4-fail 'shape-mismatch operation
+                   "C4 output prompt/generated lengths exceed C2"))
+    (if (vector-ref ledger 4)
+        (g3c4-fail 'invalid-state operation
+                   "C4 call already owns a pending output"))
+    (let* ((raw (make-bytevector generated 0))
+           (staging (make-bytevector (* generated 8) 0))
+           (shell (vector 'g3c4-output-private))
+           (auxiliary (vector raw staging))
+           (entry (vector shell 'output 'pending #f generator-entry
+                          model-entry tokenizer #f auxiliary #f #f
+                          g3c4-model-profile))
+           (next (cons entry (vector-ref g3c4-registry 0)))
+           (native '()))
+      (guard
+        (caught
+          (#t
+            (if (not (null? native))
+                (if (not (= (g3t-native-output-release native) 0))
+                    (exit 134)))
+            (if (eq? (vector-ref ledger 4) entry)
+                (vector-set! ledger 4 #f))
+            (g3c4-entry-dead! entry)
+            (raise caught)))
+        (vector-set! g3c4-registry 0 next)
+        (let ((canonical (car (vector-ref g3c4-registry 0))))
+          (vector-set! ledger 4 canonical)
+          (let ((created
+                  (g3t-native-output-reserve
+                    (vector-ref generator-entry 3) prompt-length)))
+            (set! native created)
+            (if (null? created) (g3c4-native-fail operation))
+            (vector-set! canonical 3 created)
+            canonical))))))
+
+(define (g3t-output-prepare call-entry output-entry)
+  (let* ((operation 'g3t-output-prepare)
+         (call (g3t-call-entry-live call-entry operation))
+         (output (g3t-output-entry-pending call output-entry operation))
+         (generator-entry (vector-ref call 4)))
+    (g3c4-native-check
+      (g3t-native-output-prepare
+        (vector-ref generator-entry 3) (vector-ref output 3))
+      operation)))
+
+(define (g3t-t1-decode-output! call-entry output-entry)
+  (let* ((operation 'g3t-t1-decode-output!)
+         (call (g3t-call-entry-live call-entry operation))
+         (output (g3t-output-entry-pending call output-entry operation))
+         (generator-entry (vector-ref call 4))
+         (tokenizer (vector-ref call 6))
+         (auxiliary (vector-ref output 8))
+         (raw (vector-ref auxiliary 0))
+         (staging (vector-ref auxiliary 1)))
+    (g3c4-baseline-tokenizer-entry
+      tokenizer operation 'invalid-state 'invalid-state)
+    (g3c4-native-check
+      (g3t-native-output-copy-decode-ids
+        (vector-ref generator-entry 3) (vector-ref output 3) staging)
+      operation)
+    (t1-private-g3-decode-raw-into! tokenizer staging raw)
+    (g3c4-native-check
+      (g3t-native-output-accept-text
+        (vector-ref generator-entry 3) (vector-ref output 3) raw)
+      operation)))

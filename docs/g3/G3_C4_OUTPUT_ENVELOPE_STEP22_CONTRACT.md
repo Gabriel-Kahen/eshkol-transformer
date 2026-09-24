@@ -1,0 +1,11 @@
+# G3-C4 Step 22: rooted private output envelope
+
+This step starts from integration commit `ce4419ce0f272ac8e0ff155e5cfd58a5a1516b41`. It adds a private Eshkol output envelope and the accepted two-argument `(g3t-t1-decode-output! call-entry output-entry)` coordinator. It does not publish an output API.
+
+An output entry is an exact 12-slot registry record. Its native owner is slot 3; slots 4, 5, and 6 retain the exact generator, model, and tokenizer; slot 8 is `#(raw-bytes[G] i64le-staging[8G])`; and the remaining contract slots are false or the diagnostic profile as specified by `G3_T_PRIVATE_CONTRACT.md`. The active call ledger gains slot 4, which roots the sole pending output before native reservation. Reservation preallocates every Eshkol object before enrollment, enrolls and roots the canonical record, and only then calls the native allocator. Failure releases any native owner, clears the ledger root, and leaves an exact dead tombstone. Call rollback tombstones a rooted pending output after native abort; successful call finalization rejects one.
+
+Preparation validates the complete call/output linkage before entering the native numeric-ready transition. The decode coordinator reauthenticates that linkage and tokenizer, copies native IDs into the preallocated staging bytes, invokes the actual allocation-free T1 raw decoder, then asks the native owner to accept the raw bytes. Native state remains the authority for numeric, copied-ID, and text readiness.
+
+The integrated witness exercises real G0 and G1 prompt preparation, token framing and forwarding for G1, native output preparation, the exact two-argument coordinator, repeated-call rejection, linkage cuts, allocation cuts, and rollback of the rooted native and Eshkol output. The successful decode route deliberately reaches the existing call-finalization rejection and rolls back because frame preparation, commit, publication, public accessors, and public release are later dependencies.
+
+The diagnostic C4 witness derives G from the generator policy and uses a matching call budget; broader budget-policy combinations are not claimed. No output shell escapes this private route, and no long-horizon retention or public-output behavior is claimed.
