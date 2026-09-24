@@ -7,6 +7,12 @@ This project is being developed through coordinated Codex tasks.
 - Use `gpt-5.6-sol` with high reasoning for project tasks.
 - Use subagents for independent implementation, tests, review, or documentation when
   the task has separable work.
+- Default to one implementer and one independent reviewer for a bounded change.
+  The reviewer covers source and tests together; add a specialist only for a
+  concrete unresolved risk. Do not repeat an unchanged review.
+- Coordinate long builds by completion-triggered handoff. Use one bounded wait for
+  relevant tasks and avoid repeated polls of unchanged processes or logs. Check
+  a live build only when its result, resource condition, or a decision needs it.
 - Work from the roadmap dependency graph. Do not implement a dependent subsystem
   against an invented upstream API.
 - Keep changes scoped to the assigned workstream. Coordinate contract changes with
@@ -43,3 +49,6 @@ Each implementation task must report:
 4. Follow-up dependencies or risks.
 5. Commit or pull-request reference suitable for integration.
 
+Keep the handoff short: exact contract and changed files, command/result evidence,
+remaining blocker, next gate, and immutable commit/tree. Link to detailed logs
+instead of pasting them or reconstructing the full project history.

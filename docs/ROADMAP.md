@@ -118,8 +118,13 @@ generation, and Wave 3 remains incomplete.
 - Maintain one integration owner and a contract-change log.
 - Create implementation tasks only when their declared dependencies are merged.
 - Require each task to use subagents for at least independent testing/review when the
-  work is non-trivial.
+  work is non-trivial. Default to one independent reviewer for the bounded source
+  and test change; add another only for a named unresolved risk.
 - Prefer several bounded tasks over one cross-cutting task.
+- Prefer completion-triggered handoffs and bounded waits over process polling.
+  Do not repeatedly inspect an unchanged build or request duplicate status.
+- Keep task handoffs to accepted contract, relevant files, exact evidence,
+  unresolved findings, next gate, and commit/tree; link detailed logs.
 - Review and integrate in dependency order; rerun affected downstream gates.
 - Treat Eshkol-core defects as explicit upstream issues or isolated native-extension
   work, never as silent library fallbacks.
