@@ -2830,6 +2830,24 @@ numerical, adversarial and packaging reviews approve this candidate for required
 supported CI with no unresolved implementation findings. Reviewed provider
 SHA-256 is `2dc0e4426b6126ecd9abf8e227ab54105403b05b341cb8df7d01f221760635f5`.
 
+## 2026-09-24 — TR3-C lease successor O0/O2 acceptance
+
+The independently reviewed 22-slot lease successor and rooted D2 u64-limit
+repair are integrated as `8f64aad880d812c8a09db2be863d707d07b285a4`, tree
+`21fcefb383ed437f04834ab75bb458777dbdff45`. On the exact pinned
+production-OFF `de0b249` runtime and Ubuntu 22.04/LLVM 21.1.8 image, both O0
+and O2 allocation-failure matrices passed 1,280 cases and 65,235 checks with
+byte-identical case statuses. O2 compilation took 1,105.48 seconds, peaked at
+5,483,212 KiB RSS, used zero process swaps, and emitted only the exact pinned
+1,200-byte LLVM diagnostic. Sealed O2 evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-c-lease-o2-full-a190ca4-20260924T040000Z`
+with `SHA256SUMS` SHA-256 `16134e0d8abaab269c5c0145dc512a6d4907737d40833ec55c18ee2213c4052c`;
+the sealed O0 evidence is
+`tr3-c-lease-o0-full-8b102ed-20260924T071200Z`. After merge, 104 focused
+source/topology checks and the 20-suite/35-command topology passed. This
+accepts the lease successor and D2 repair only; fixed I2/O2 bindings, joint
+composer, public trainer and exact resume remain open.
+
 ## 2026-09-24 — G3-S supported Wave 3 union acceptance
 
 The reviewed G3-S merge `37d3b054e393200386dc07331d6f59d3b23099b7`, tree
