@@ -108,9 +108,21 @@ printf 'input=%s\n' "${e3_inputs[@]}"
             diagnostic = set(lines(f"{diagnostic_prefix}_{suffix}.txt"))
             self.assertEqual(diagnostic - base, additions)
             self.assertEqual(base - diagnostic, set())
-        for suffix in ("undefined_symbols", "native_objects"):
-            self.assertEqual(lines(f"{base_prefix}_{suffix}.txt"),
-                             lines(f"{diagnostic_prefix}_{suffix}.txt"))
+        base_undefined = set(lines(f"{base_prefix}_undefined_symbols.txt"))
+        diagnostic_undefined = set(
+            lines(f"{diagnostic_prefix}_undefined_symbols.txt")
+        )
+        self.assertEqual(
+            diagnostic_undefined - base_undefined,
+            {"eshkol_builtin_arena_used"},
+        )
+        self.assertEqual(base_undefined - diagnostic_undefined, set())
+        self.assertEqual(
+            lines(f"{diagnostic_prefix}_undefined_symbols.txt"),
+            sorted(diagnostic_undefined),
+        )
+        self.assertEqual(lines(f"{base_prefix}_native_objects.txt"),
+                         lines(f"{diagnostic_prefix}_native_objects.txt"))
 
         source = lines(f"{diagnostic_prefix}_source_closure.txt")
         self.assertEqual(source[0], "native/e3_diagnostic_private_driver_root.esk")
