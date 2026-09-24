@@ -11,6 +11,8 @@
 (define tr3-acquisition-active? #f)
 (define tr3-lease-record-tag (vector 'tr3-lease-record-v2))
 (define tr3-lease-token-tag (vector 'tr3-lease-token-v2))
+(define tr3-lease-snapshot-parent-tag (vector 'tr3-c-snapshot-parent-v1))
+(define tr3-lease-snapshot-parent-length 10)
 (define tr3-lease-restore-parent-tag (vector 'tr3-c-restore-parent-v1))
 (define tr3-lease-restore-parent-length 13)
 
@@ -567,6 +569,124 @@
   (and (vector? candidate) (= (vector-length candidate) 1)
        (not (vector-ref candidate 0))))
 
+;;; Fixed snapshot parent:
+;;;   [tag,self,trainer,phase,P1-cell,O2-cell,C2-cell,
+;;;    copied-controls,cleanup-record,result-cell]
+;;; The future composer owns the cells and phase transitions.  The lease owns
+;;; only exact publication, reauthentication, and unlink authority.
+(define (tr3-lease-snapshot-parent-header! parent trainer operation)
+  (if (or (not (vector? parent))
+          (not (= (vector-length parent) tr3-lease-snapshot-parent-length))
+          (not (eq? (vector-ref parent 0) tr3-lease-snapshot-parent-tag))
+          (not (eq? (vector-ref parent 1) parent))
+          (not (eq? (vector-ref parent 2) trainer)))
+      (tr3-lease-operation-fail
+        'invalid-argument operation "snapshot parent identity is invalid"))
+  parent)
+
+(define (tr3-lease-snapshot-parent-empty! parent trainer operation)
+  (tr3-lease-snapshot-parent-header! parent trainer operation)
+  (let ((p1-cell (vector-ref parent 4))
+        (o2-cell (vector-ref parent 5))
+        (c2-cell (vector-ref parent 6))
+        (controls (vector-ref parent 7))
+        (cleanup (vector-ref parent 8))
+        (result-cell (vector-ref parent 9)))
+    (if (or (not (eq? (vector-ref parent 3) 'constructing))
+            (not (tr3-lease-cell-empty? p1-cell))
+            (not (tr3-lease-cell-empty? o2-cell))
+            (not (tr3-lease-cell-empty? c2-cell))
+            (not (vector? controls))
+            (not (= (vector-length controls) 5))
+            (vector-ref controls 0) (vector-ref controls 1)
+            (vector-ref controls 2) (vector-ref controls 3)
+            (vector-ref controls 4)
+            (not (vector? cleanup))
+            (not (= (vector-length cleanup) 2))
+            (vector-ref cleanup 0) (vector-ref cleanup 1)
+            (not (tr3-lease-cell-empty? result-cell))
+            (eq? p1-cell o2-cell) (eq? p1-cell c2-cell)
+            (eq? p1-cell controls) (eq? p1-cell cleanup)
+            (eq? p1-cell result-cell)
+            (eq? o2-cell c2-cell) (eq? o2-cell controls)
+            (eq? o2-cell cleanup) (eq? o2-cell result-cell)
+            (eq? c2-cell controls) (eq? c2-cell cleanup)
+            (eq? c2-cell result-cell)
+            (eq? controls cleanup) (eq? controls result-cell)
+            (eq? cleanup result-cell))
+        (tr3-lease-operation-fail
+          'invalid-argument operation
+          "snapshot parent is not an empty fixed authority graph")))
+  parent)
+
+(define (tr3-lease-snapshot-enter-internal! trainer parent)
+  (let* ((operation 'trainer-state)
+         (record (tr3-lease-record-for-shell-internal trainer operation)))
+    (tr3-lease-snapshot-parent-empty! parent trainer operation)
+    (if (or (not (eq? (vector-ref record 3) 'idle))
+            (vector-ref record 4))
+        (tr3-lease-operation-fail
+          'invalid-state operation "trainer is not idle and plan-free"))
+    (tr3-lease-restore-enter-admission! record operation)
+    ;; The first store promotes the complete parent graph.  Nothing fallible or
+    ;; allocating follows either publication store.
+    (vector-set! record 4 parent)
+    (vector-set! record 3 'snapshotting)
+    record))
+
+(define (tr3-lease-snapshot-recheck-internal record parent)
+  (let* ((operation 'trainer-state)
+         (minimal (tr3-lease-authenticate-minimal record operation))
+         (enrolled
+           (tr3-lease-authenticate
+             minimal (vector-ref minimal 5) operation)))
+    (if (or (not (eq? (vector-ref enrolled 3) 'snapshotting))
+            (not (eq? (vector-ref enrolled 4) parent)))
+        (tr3-lease-operation-fail
+          'invalid-state operation "snapshot parent is stale or copied"))
+    (tr3-lease-snapshot-parent-header!
+      parent (vector-ref enrolled 2) operation)
+    (if (not (eq? (vector-ref parent 3) 'constructing))
+        (tr3-lease-operation-fail
+          'invalid-state operation "snapshot parent phase is invalid"))
+    (tr3-lease-restore-enter-admission! enrolled operation)
+    enrolled))
+
+(define (tr3-lease-snapshot-abort-internal! record parent)
+  (let* ((operation 'trainer-state)
+         (enrolled (tr3-lease-authenticate-minimal record operation)))
+    (if (or (not (eq? (vector-ref enrolled 3) 'snapshotting))
+            (not (eq? (vector-ref enrolled 4) parent))
+            (not (vector? parent))
+            (not (= (vector-length parent) tr3-lease-snapshot-parent-length))
+            (not (eq? (vector-ref parent 0) tr3-lease-snapshot-parent-tag))
+            (not (eq? (vector-ref parent 1) parent))
+            (not (eq? (vector-ref parent 2) (vector-ref enrolled 2)))
+            (not (or (eq? (vector-ref parent 3) 'constructing)
+                     (eq? (vector-ref parent 3) 'aborting)
+                     (eq? (vector-ref parent 3) 'dead))))
+        (tr3-lease-operation-fail
+          'invalid-state operation "snapshot parent is stale or not abortable"))
+    ;; Minimal authentication is complete before this assignment-only unlink.
+    (vector-set! parent 3 'dead)
+    (vector-set! enrolled 4 #f)
+    (vector-set! enrolled 3 'idle)
+    #t))
+
+(define (tr3-lease-snapshot-finish-tail-internal! record parent)
+  ;; Tail-only after the composer publishes its result and marks the exact
+  ;; rooted parent dead.  Any admitted authority divergence is impossible.
+  (if (or (not (eq? (vector-ref record 3) 'snapshotting))
+          (not (eq? (vector-ref record 4) parent))
+          (not (eq? (vector-ref parent 0) tr3-lease-snapshot-parent-tag))
+          (not (eq? (vector-ref parent 1) parent))
+          (not (eq? (vector-ref parent 2) (vector-ref record 2)))
+          (not (eq? (vector-ref parent 3) 'dead)))
+      (tr3-lease-fail-stop 134))
+  (vector-set! record 4 #f)
+  (vector-set! record 3 'idle)
+  #t)
+
 (define (tr3-lease-restore-parent-header! parent trainer phase operation)
   (if (or (not (vector? parent))
           (not (= (vector-length parent) tr3-lease-restore-parent-length))
@@ -791,9 +911,17 @@
                 "expected an evaluation frame"))
   (vector-ref
     (tr3-lease-phase! trainer-record lease-token 'evaluate #f 'trainer-evaluate!) 9))
-(define (tr3-lease-snapshot-internal trainer-record lease-token)
-  (tr3-lease-phase!
-    trainer-record lease-token 'snapshotting #f 'trainer-state))
+(define (tr3-lease-snapshot-internal trainer-record lease-token snapshot-parent)
+  (let ((record
+          (tr3-lease-phase!
+            trainer-record lease-token 'snapshotting snapshot-parent
+            'trainer-state)))
+    (tr3-lease-snapshot-parent-header!
+      snapshot-parent (vector-ref record 2) 'trainer-state)
+    (if (not (eq? (vector-ref snapshot-parent 3) 'constructing))
+        (tr3-lease-operation-fail
+          'invalid-state 'trainer-state "snapshot parent phase is invalid"))
+    record))
 (define (tr3-lease-restore-internal trainer-record lease-token restore-record)
   (tr3-lease-phase!
     trainer-record lease-token 'restoring restore-record 'trainer-load-state!))

@@ -234,6 +234,118 @@
             (= (vector-ref fresh-record 20) 0)
             (= (vector-ref fresh-record 21) 0)))
 
+;;; Snapshot exclusion owns one exact promoted parent in trainer slot 4.  The
+;;; parent contains only preallocated bookkeeping; this lease test performs no
+;;; P1/O2/C2 snapshot or composition.
+(define (make-snapshot-parent trainer)
+  (let ((parent
+          (vector tr3-lease-snapshot-parent-tag #f trainer 'constructing
+                  (vector #f) (vector #f) (vector #f)
+                  (make-vector 5 #f) (vector #f #f) (vector #f))))
+    (vector-set! parent 1 parent)
+    parent))
+(define snapshot-parent-for-copy (make-snapshot-parent fresh-shell))
+(check "snapshot enter rejects copied trainer shell"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-enter-internal!
+             (vector-copy fresh-shell) snapshot-parent-for-copy))))
+(check "snapshot enter rejects malformed parent"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-enter-internal! fresh-shell #f))))
+(check "snapshot enter rejects copied parent self authority"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-enter-internal!
+             fresh-shell (vector-copy snapshot-parent-for-copy)))))
+(define aliased-snapshot-parent (make-snapshot-parent fresh-shell))
+(vector-set! aliased-snapshot-parent 5
+             (vector-ref aliased-snapshot-parent 4))
+(check "snapshot enter rejects aliased authority cells"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-enter-internal!
+             fresh-shell aliased-snapshot-parent))))
+(vector-set! fresh-record 20 1)
+(check "snapshot enter rejects live O2/trainer count mismatch"
+       (transformer-error-at-operation? 'invalid-state 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-enter-internal!
+             fresh-shell snapshot-parent-for-copy))))
+(check "failed snapshot admission preserves idle exclusion"
+       (and (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)))
+(vector-set! fresh-record 20 0)
+(define canonical-snapshot-parent
+  (with-region ('tr3-snapshot-parent-promotion 65536)
+    (let ((regional-parent (make-snapshot-parent fresh-shell)))
+      (tr3-lease-snapshot-enter-internal! fresh-shell regional-parent)
+      (vector-ref fresh-record 4))))
+(check "snapshot enter promotes and publishes exact parent before phase use"
+       (and (eq? (vector-ref fresh-record 3) 'snapshotting)
+            (eq? (vector-ref fresh-record 4) canonical-snapshot-parent)
+            (eq? (vector-ref canonical-snapshot-parent 1)
+                 canonical-snapshot-parent)
+            (= (vector-length (vector-ref canonical-snapshot-parent 7)) 5)
+            (= (vector-length (vector-ref canonical-snapshot-parent 8)) 2)))
+(check "snapshot same-trainer reentry rejects"
+       (transformer-error-at-operation? 'invalid-state 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-enter-internal!
+             fresh-shell (make-snapshot-parent fresh-shell)))))
+(check "snapshot fixed admission binds the exact parent"
+       (eq? (tr3-lease-snapshot-internal
+              fresh-record (vector-ref fresh-record 5)
+              canonical-snapshot-parent)
+            fresh-record))
+(check "snapshot fixed admission rejects a copied parent"
+       (transformer-error-at-operation? 'invalid-state 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-internal
+             fresh-record (vector-ref fresh-record 5)
+             (vector-copy canonical-snapshot-parent)))))
+(check "snapshot recheck authenticates canonical parent"
+       (eq? (tr3-lease-snapshot-recheck-internal
+              fresh-record canonical-snapshot-parent)
+            fresh-record))
+(check "snapshot recheck rejects foreign exact parent"
+       (transformer-error-at-operation? 'invalid-state 'trainer-state
+         (lambda ()
+           (tr3-lease-snapshot-recheck-internal
+             fresh-record (make-snapshot-parent fresh-shell)))))
+(check "snapshot abort rejects copied parent without unlink"
+       (and (transformer-error-at-operation? 'invalid-state 'trainer-state
+              (lambda ()
+                (tr3-lease-snapshot-abort-internal!
+                  fresh-record (vector-copy canonical-snapshot-parent))))
+            (eq? (vector-ref fresh-record 3) 'snapshotting)
+            (eq? (vector-ref fresh-record 4) canonical-snapshot-parent)))
+(define authentic-model-entry-for-snapshot-abort (vector-ref fresh-record 9))
+(vector-set! fresh-record 9 #f)
+(check "snapshot abort uses minimal authority after component damage"
+       (tr3-lease-snapshot-abort-internal!
+         fresh-record canonical-snapshot-parent))
+(vector-set! fresh-record 9 authentic-model-entry-for-snapshot-abort)
+(check "snapshot abort marks parent dead and restores idle"
+       (and (eq? (vector-ref canonical-snapshot-parent 3) 'dead)
+            (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)))
+(define finishing-snapshot-parent (make-snapshot-parent fresh-shell))
+(tr3-lease-snapshot-enter-internal! fresh-shell finishing-snapshot-parent)
+(define canonical-finishing-snapshot-parent (vector-ref fresh-record 4))
+(check "snapshot success path rechecks exact parent"
+       (eq? (tr3-lease-snapshot-recheck-internal
+              fresh-record canonical-finishing-snapshot-parent)
+            fresh-record))
+(vector-set! canonical-finishing-snapshot-parent 3 'dead)
+(check "snapshot finish unlinks exact dead parent"
+       (tr3-lease-snapshot-finish-tail-internal!
+         fresh-record canonical-finishing-snapshot-parent))
+(check "snapshot finish returns trainer to idle"
+       (and (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)))
+
 ;;; The restore successor owns publication and unlink.  All failures before its
 ;;; first store preserve idle/#f and every durable control identity.
 (define (make-empty-authority-cells count)
@@ -513,6 +625,7 @@
 (define plan (vector 'o2-plan))
 (define frame (vector 'evaluation-frame))
 (define restore (vector 'restore-parent))
+(define snapshot-phase-parent (make-snapshot-parent fresh-shell))
 (define (phase! phase active)
   (vector-set! fresh-record 3 phase)
   (vector-set! fresh-record 4 active))
@@ -531,7 +644,9 @@
       (lambda ()
         (tr3-lease-evaluation-modes-internal fresh-record token frame)))
     (transformer-error-at? 'invalid-state
-      (lambda () (tr3-lease-snapshot-internal fresh-record token)))
+      (lambda ()
+        (tr3-lease-snapshot-internal
+          fresh-record token snapshot-phase-parent)))
     (transformer-error-at? 'invalid-state
       (lambda ()
         (tr3-lease-restore-internal fresh-record token restore)))))
@@ -590,13 +705,21 @@
        (transformer-error-at? 'invalid-state
          (lambda ()
            (tr3-lease-evaluation-modes-internal fresh-record token frame))))
-(phase! 'snapshotting #f)
-(check "snapshotting exact phase admits"
-       (tr3-lease-snapshot-internal fresh-record token))
-(phase! 'snapshotting plan)
-(check "snapshotting with active plan rejects"
+(phase! 'snapshotting snapshot-phase-parent)
+(check "snapshotting exact parent admits"
+       (tr3-lease-snapshot-internal
+         fresh-record token snapshot-phase-parent))
+(check "snapshotting copied parent rejects"
        (transformer-error-at? 'invalid-state
-         (lambda () (tr3-lease-snapshot-internal fresh-record token))))
+         (lambda ()
+           (tr3-lease-snapshot-internal
+             fresh-record token (vector-copy snapshot-phase-parent)))))
+(phase! 'snapshotting #f)
+(check "snapshotting without active parent rejects"
+       (transformer-error-at? 'invalid-state
+         (lambda ()
+           (tr3-lease-snapshot-internal
+             fresh-record token snapshot-phase-parent))))
 (phase! 'restoring restore)
 (check "restoring exact parent admits"
        (tr3-lease-restore-internal fresh-record token restore))
