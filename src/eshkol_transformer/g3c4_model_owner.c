@@ -748,6 +748,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
 #error "ET_G3C4_PREFILL3_PRIVATE requires the private A2 storage query"
 #endif
+#if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
+    !defined(ET_G3C4_PREFILL3_PRIVATE)
+#error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
+#endif
 
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
@@ -3220,6 +3224,200 @@ fail:
   if (n2_runtime != NULL) et_kernel_runtime_destroy(n2_runtime);
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
+}
+#endif
+
+#ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
+int64_t et_g3c4_private_token_frame_begin_last_v1(
+    void *candidate, const float last_logits[256],
+    int64_t *speculative_token_output) {
+  static const uint64_t logits_shape[2] = {1u, 256u};
+  static const uint64_t rng_shape[1] = {4u};
+  static const uint64_t token_shape[1] = {1u};
+  static const uint64_t append_shape[1] = {1u};
+  et_g3c4_context_internal *context;
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *borrowed_keys = NULL;
+  const et_kernel_tensor_view_v1 *borrowed_values = NULL;
+  const et_kernel_tensor_view_v1 *committed_lengths = NULL;
+  const et_kernel_tensor_view_v1 *committed_keep = NULL;
+  et_a2_kv_cache_transaction *transaction = NULL;
+  et_kernel_tensor_view_v1 inputs[5];
+  et_kernel_tensor_view_v1 outputs[2];
+  et_kernel_tensor_view_v1 append_counts;
+  et_kernel_request_v1 request;
+  et_kernel_call_v1 call;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+  float private_logits[256];
+  float temperature;
+  float top_p;
+  int64_t top_k;
+  int64_t numeric_rng[4];
+  int64_t token_candidate = -1;
+  int64_t successor_candidate[4] = {0, 0, 0, 0};
+  int64_t token_position;
+  int64_t append_count = 1;
+  size_t input_count;
+  size_t index;
+  uint32_t temperature_bits;
+  uint32_t top_p_bits;
+  int categorical;
+  int overlap = 0;
+
+  et_g3c4_error_reset_internal();
+  if (!et_g3c4_range_valid(last_logits, sizeof(private_logits)) ||
+      !et_g3c4_range_valid(
+          speculative_token_output, sizeof(*speculative_token_output)) ||
+      (uintptr_t)last_logits % _Alignof(float) != 0u ||
+      (uintptr_t)speculative_token_output % _Alignof(int64_t) != 0u ||
+      et_g3c4_ranges_overlap(
+          last_logits, sizeof(private_logits),
+          speculative_token_output, sizeof(*speculative_token_output))) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 1 ||
+      et_g3c4_sampler_runtime == NULL ||
+      !et_g3c4_token_frame_idle(context)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  if (!et_g3c4_prefill_binding_matches_pins(context)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
+    return et_g3c4_error_state.category;
+  }
+  if (et_g3c4_ranges_overlap(
+          last_logits, sizeof(private_logits), context, sizeof(*context)) ||
+      et_g3c4_ranges_overlap(
+          speculative_token_output, sizeof(*speculative_token_output),
+          context, sizeof(*context)) ||
+      et_g3c4_ranges_overlap(
+          last_logits, sizeof(private_logits),
+          context->owner, sizeof(*context->owner)) ||
+      et_g3c4_ranges_overlap(
+          speculative_token_output, sizeof(*speculative_token_output),
+          context->owner, sizeof(*context->owner)))
+    overlap = 1;
+  for (index = 0u; index < 14u; index++) {
+    const et_kernel_tensor_view_v1 *view = &context->pins.views[index];
+    if (et_g3c4_ranges_overlap(
+            last_logits, sizeof(private_logits),
+            view->data, view->byte_length) ||
+        et_g3c4_ranges_overlap(
+            speculative_token_output, sizeof(*speculative_token_output),
+            view->data, view->byte_length))
+      overlap = 1;
+  }
+  if (et_a2_kv_cache_private_storage_overlap_v1(
+          last_logits, sizeof(private_logits)) != 0 ||
+      et_a2_kv_cache_private_storage_overlap_v1(
+          speculative_token_output,
+          sizeof(*speculative_token_output)) != 0)
+    overlap = 1;
+  if (overlap) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+
+  memcpy(private_logits, last_logits, sizeof(private_logits));
+  memcpy(numeric_rng, context->generator_rng_words, sizeof(numeric_rng));
+  categorical = context->generator_policy[0] == 1;
+  temperature_bits = (uint32_t)context->generator_policy[1];
+  top_k = context->generator_policy[2];
+  top_p_bits = (uint32_t)context->generator_policy[3];
+  memcpy(&temperature, &temperature_bits, sizeof(temperature));
+  memcpy(&top_p, &top_p_bits, sizeof(top_p));
+  inputs[0] = et_g3c4_view(
+      private_logits, sizeof(private_logits), "f32", 2u, logits_shape);
+  if (categorical) {
+    inputs[1] = et_g3c4_view(
+        &temperature, sizeof(temperature), "f32", 0u, NULL);
+    inputs[2] = et_g3c4_view(&top_k, sizeof(top_k), "i64", 0u, NULL);
+    inputs[3] = et_g3c4_view(&top_p, sizeof(top_p), "f32", 0u, NULL);
+    inputs[4] = et_g3c4_view(
+        numeric_rng, sizeof(numeric_rng), "i64", 1u, rng_shape);
+    input_count = 5u;
+  } else {
+    inputs[1] = et_g3c4_view(
+        numeric_rng, sizeof(numeric_rng), "i64", 1u, rng_shape);
+    input_count = 2u;
+  }
+  outputs[0] = et_g3c4_view(
+      &token_candidate, sizeof(token_candidate), "i64", 1u, token_shape);
+  outputs[1] = et_g3c4_view(
+      successor_candidate, sizeof(successor_candidate),
+      "i64", 1u, rng_shape);
+  request = (et_kernel_request_v1){
+    sizeof(request),
+    categorical ? "g3s.categorical.forward" : "g3s.greedy.forward",
+    "f32", "cpu", 2u, logits_shape, 1u, {0}};
+  call = (et_kernel_call_v1){
+    sizeof(call), categorical ? "g3s.categorical" : "g3s.greedy",
+    &request, input_count, sizeof(inputs[0]), input_count * sizeof(inputs[0]),
+    inputs, 2u, sizeof(outputs[0]), sizeof(outputs), outputs};
+  if (et_g3c4_capture_kernel(
+          et_kernel_runtime_dispatch(
+              et_g3c4_sampler_runtime, &call, &error),
+          &error) != 0)
+    return et_g3c4_error_state.category;
+  if (token_candidate < 0 || token_candidate > 255 ||
+      successor_candidate[0] != 1 ||
+      successor_candidate[1] != numeric_rng[1]) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return et_g3c4_error_state.category;
+  }
+
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_begin_v1(
+              context->cache, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_layer_v1(
+              borrow, 0u, &borrowed_keys, &borrowed_values,
+              &committed_lengths, &committed_keep, &error),
+          &error) != 0) {
+    first = et_g3c4_error_snapshot_internal();
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+    et_g3c4_error_restore_internal(first);
+    return et_g3c4_error_state.category;
+  }
+  if (borrowed_keys == NULL || borrowed_values == NULL ||
+      committed_lengths == NULL || committed_keep == NULL ||
+      committed_lengths->data == NULL ||
+      *(const int64_t *)committed_lengths->data < 0 ||
+      *(const int64_t *)committed_lengths->data > 3) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    first = et_g3c4_error_snapshot_internal();
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+    et_g3c4_error_restore_internal(first);
+    return et_g3c4_error_state.category;
+  }
+  token_position = *(const int64_t *)committed_lengths->data;
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  append_counts = et_g3c4_view(
+      &append_count, sizeof(append_count), "i64", 1u, append_shape);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_begin_v1(
+              context->cache, 1u, &append_counts, &transaction, &error),
+          &error) != 0)
+    return et_g3c4_error_state.category;
+
+  context->token_frame_transaction = transaction;
+  context->token_frame_state = ET_G3C4_TOKEN_FRAME_SAMPLED;
+  context->token_frame_candidate = token_candidate;
+  memcpy(context->token_frame_successor, successor_candidate,
+         sizeof(successor_candidate));
+  context->token_frame_position = token_position;
+  memcpy(speculative_token_output, &token_candidate,
+         sizeof(token_candidate));
+  return 0;
 }
 #endif
 #endif
