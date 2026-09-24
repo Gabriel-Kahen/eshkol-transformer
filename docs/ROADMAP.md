@@ -29,9 +29,12 @@ The current draft integration PR #126 passed supported hosted run `36020537251`
 on pushed `8169e68`: all 23 jobs, including topology, canonical build,
 native numerics/optimizer, D2 shard-loader, model composition, G3N/G3S and all
 six C2 groups, succeeded. Its strict C2 joint peaks were 460,464/461,148 KiB
-below the unchanged 524,288 KiB cap. Newer reviewed source-private E3
-retention attribution and G3 two-token prefill are integrated locally and
-require a fresh exact-head supported union before their acceptance is claimed.
+below the unchanged 524,288 KiB cap. The newer pushed `979bd52` union run
+`36030979305` remains in progress. Locally, the independently reviewed E3
+retention attribution and installed fixed-profile diagnostic facade, genuine
+G3 one-/two-token numerical prefills, and authenticated prompt-to-prefill
+binding are integrated through `73cc31a`. Their supported focused gates pass;
+they still require a fresh exact-head supported union before broader acceptance.
 
 ## Wave 0 — contracts and verification foundation
 
