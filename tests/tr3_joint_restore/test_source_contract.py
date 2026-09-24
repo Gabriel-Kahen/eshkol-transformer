@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ESK = (ROOT / "native/tr3_c_joint_restore_extension.esk").read_text()
 ROOT_ESK = (ROOT / "native/tr3_c_joint_restore_root.esk").read_text()
+RUNTIME = (ROOT / "tests/tr3_joint_restore/runtime_smoke.esk").read_text()
+RUNTIME_GATE = (ROOT / "scripts/test-tr3-c-joint-runtime.sh").read_text()
 
 
 def definition(name: str, next_name: str | None = None) -> str:
@@ -128,11 +130,13 @@ class JointRestoreContract(unittest.TestCase):
             "(vector-ref cursor-state 8)",
             "(vector-ref cursor-state 9)",
             "(vector-ref x1 14)",
+            "d2-core-bytes=?",
             "(not (= update-contributions reachable))",
             "(> update-contributions tokens)",
             "(vector-ref o2-projection 3)",
         ):
             self.assertIn(required, validate)
+        self.assertNotIn("(equal? (vector-ref resolved 0) canonical)", validate)
 
     def test_abort_order_preserves_phase_dependent_authority(self) -> None:
         abort = definition("tr3-c-joint-abort!", "tr3-c-joint-commit-tail!")
@@ -222,6 +226,44 @@ class JointRestoreContract(unittest.TestCase):
             self.assertEqual(ROOT_ESK.count(source), 1)
         self.assertNotIn("c2_wave2_root.esk", ROOT_ESK)
         self.assertNotIn("tr3_lease_root.esk", ROOT_ESK)
+
+    def test_runtime_uses_authentic_detached_and_receiver_owners(self) -> None:
+        for required in (
+            "m3t-public-model-create",
+            "d2-token-dataset-open",
+            "o2-public-optimizer-create",
+            "module-state-dict",
+            "o2-public-optimizer-state",
+            "c2-training-state-compose-internal",
+            "tr3-lease-create-internal",
+            "tr3-c-joint-restore-internal!",
+            "o2-state-copy-moment-bits-c2-owned-internal",
+            "i2-checkpoint-encode",
+            "c2-training-state-release-internal!",
+        ):
+            self.assertIn(required, RUNTIME)
+        first_restore = RUNTIME.index('"genuine joint restore succeeds"')
+        injection = RUNTIME.index("(set! tr3-joint-smoke-fail-o2-check? #t)")
+        retry = RUNTIME.index('"same detached source retries successfully"')
+        self.assertLess(first_restore, injection)
+        self.assertLess(injection, retry)
+        self.assertIn('"all 42 tensor bytes and controls match detached source"', RUNTIME)
+        self.assertIn('"precommit abort preserves all receiver tensor/control bytes"', RUNTIME)
+
+    def test_runtime_gate_pins_supported_runner_and_full_native_union(self) -> None:
+        for required in (
+            "runtime_candidate.tsv",
+            "runner_sha256",
+            "container_digest",
+            "--strict-types --no-stdlib -O 0",
+            "tr3_c_restore_bindings.c",
+            "ET_TR3_C_D2_RESTORE",
+            "ET_TR3_C_I2_RESTORE_PRIVATE",
+            "ET_TR3_C_O2_RESTORE_NATIVE",
+            "ESHKOL_ARENA_POISON=1",
+            "SHA256SUMS",
+        ):
+            self.assertIn(required, RUNTIME_GATE)
 
 
 class FailurePrefixModel(unittest.TestCase):

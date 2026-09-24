@@ -335,7 +335,7 @@
                            (vector-ref o2-projection 1)))
               (not (equal? (vector-ref topology 2)
                            (vector-ref o2-projection 2)))
-              (not (equal? (vector-ref resolved 0) canonical))
+              (not (d2-core-bytes=? (vector-ref resolved 0) canonical))
               (not (string=? (vector-ref resolved 1) fingerprint))
               (not (equal? source-x1 x1))
               (not (string=? (vector-ref tokenizer 0)
