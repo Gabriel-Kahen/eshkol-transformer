@@ -233,6 +233,18 @@ the single focused review. A broader Release emergency stable-identity test
 fails identically on exact parent and candidate outside the changed region
 path; the baseline and candidate logs are sealed. Complete nested-container
 coverage, union gates and whole-F32 acceptance remain pending.
+An isolated provisional successor union `8b872aff`/tree `68ebef7` composes
+seven reviewed leaves onto `602876a`, including type symbols, region-open,
+scalar activations, conjugate, VM signed-shift, and full-carrier evacuation.
+Root independently checked the clean tree, source/evidence seals, conflict
+resolutions and integration-only test changes. Supported f31 Release passes
+F32 59/59, focused 7/7 and standalone VM 80/80; sanitizer passes F32 59/59,
+LSan-on focused 11/11 and standalone VM 80/80. The sealed evidence is
+`f32-runtime-successor-union-8b872aff-20260924/SHA256SUMS` (`fd71d433...`).
+This is a composition acceptance, not a runtime repin or whole-F32 acceptance:
+VM callable subtypes still collapse to `procedure` where native reports
+`lambda-sexpr`/`closure`; exhaustive nested-container and operation matrices
+also remain open.
 The sealed read-only operation inventory on reviewed union `602876a` lists
 every source-visible DOUBLE spelling, AOT/JIT and VM routes, result-kind and
 missing witness. It identifies concrete gaps: unary `+`/`*`/min/max can leak
