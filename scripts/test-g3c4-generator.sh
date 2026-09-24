@@ -48,8 +48,14 @@ generator_macros=(
   -MMD -MF "${evidence}/generator-owner.d" -MT generator-owner.o \
   "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
   -o "${evidence}/generator-owner.o"
-sed "s#${PROJECT_ROOT}/##g" "${evidence}/generator-owner.d" \
-  >"${evidence}/generator-owner-normalized.d"
+python3 - "${PROJECT_ROOT}" "${evidence}/generator-owner.d" \
+  "${evidence}/generator-owner-normalized.d" <<'PY'
+from pathlib import Path
+import sys
+root, source, output = sys.argv[1:]
+text = Path(source).read_text().replace(root + "/", "").replace("\\\n", " ")
+Path(output).write_text(" ".join(text.split()) + "\n")
+PY
 cmp "${PROJECT_ROOT}/native/g3c4_generator_owner_deps.txt" \
   "${evidence}/generator-owner-normalized.d"
 for object in current-active generator-owner; do
