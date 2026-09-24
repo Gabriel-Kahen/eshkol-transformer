@@ -152,6 +152,13 @@ int32_t et_i64_tensor_borrow_view_v1(
 int32_t et_i64_tensor_borrow_end_v1(et_i64_tensor_borrow **borrow,
                                     et_i64_tensor_error *error);
 
+#ifdef ET_I64_TENSOR_STORAGE_QUERY_PRIVATE
+/* Source-private admission helper. Returns one iff the complete caller span
+ * overlaps any live I1 control, metadata, element, or borrow allocation. */
+int32_t et_i64_tensor_private_storage_overlap_v1(
+    const void *pointer, size_t bytes);
+#endif
+
 /* Returned provider metadata is static and immutable for process lifetime. */
 const et_kernel_provider_v1 *et_i64_tensor_provider_v1(void);
 

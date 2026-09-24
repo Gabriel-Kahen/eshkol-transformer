@@ -126,6 +126,13 @@ int64_t et_g3c4_private_output_release_v1(void *output);
 int64_t et_g3c4_private_output_prepare_v1(void *context, void *output);
 #endif
 
+#ifdef ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE
+/* Copies a prepared pending output's G0/G1 IDs into an exact 8G-byte
+ * Eshkol bytevector carrier and advances ID readiness exactly once. */
+int64_t et_g3c4_private_output_copy_decode_ids_v1(
+    void *context, void *output, void *staging_header);
+#endif
+
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
 /* Samples directly from one exact [1,256] row, then opens the accepted pending
  * one-token frame. No fabricated full-prefix carrier is constructed. */
