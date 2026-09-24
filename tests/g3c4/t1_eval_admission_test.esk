@@ -1,0 +1,198 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(extern i64 test-transport-count i64
+        :real et_g3c4_call_entry_test_transport_count_v1)
+(extern i64 test-context-field ptr i64
+        :real et_g3c4_call_entry_test_context_field_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 T1/eval admission FAIL: ")
+        (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (kind-count kind)
+  (let loop ((rest (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? rest) count
+        (loop (cdr rest)
+              (if (eq? (vector-ref (car rest) 1) kind)
+                  (+ count 1) count)))))
+(define (latest kind)
+  (let loop ((rest (vector-ref g3c4-registry 0)))
+    (cond ((null? rest) #f)
+          ((eq? (vector-ref (car rest) 1) kind) (car rest))
+          (else (loop (cdr rest))))))
+(define (dead-only? entry kind)
+  (and entry (eq? (vector-ref entry 1) kind)
+       (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))))
+(define (config seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed seed))
+(define (make-tokenizer policy specials prefix suffix)
+  (t1-private-register-core
+    (t1-tokenizer-core-create policy specials prefix suffix)))
+(define (without-tokenizer entries tokenizer)
+  (cond ((null? entries) '())
+        ((eq? (car (car entries)) tokenizer) (cdr entries))
+        (else (cons (car entries)
+                    (without-tokenizer (cdr entries) tokenizer)))))
+
+(define tokenizer (make-tokenizer 'raw '() '() '()))
+(define strict-tokenizer (make-tokenizer 'strict '() '() '()))
+(define prefix-tokenizer
+  (make-tokenizer 'raw (list (list 256 "bos" 'omit))
+                  (list 256) '()))
+(define tokenizer-core
+  (t1-private-require-core tokenizer 'g3c4-t1-eval-test 'internal))
+(check "baseline fingerprint is exact"
+  (string=? (vector-ref tokenizer-core 6)
+            g3c4-baseline-tokenizer-fingerprint))
+(check "baseline vocabulary is V256"
+  (= (t1-tokenizer-core-vocab-size tokenizer-core) 256))
+
+(define model (g3c4-model-create-seeded-internal 1729))
+(define model-entry (car (vector-ref g3c4-model-registry 0)))
+(define context-before (test-transport-count 1))
+(reject "foreign tokenizer shell" 'invalid-argument
+  (lambda ()
+    (g3c4-generator-create-internal
+      model (t1-private-make-shell) (config 1))))
+(reject "bare tokenizer core" 'invalid-argument
+  (lambda ()
+    (g3c4-generator-create-internal model tokenizer-core (config 1))))
+(reject "copied tokenizer entry" 'invalid-argument
+  (lambda ()
+    (g3c4-generator-create-internal
+      model (list tokenizer tokenizer-core) (config 1))))
+(reject "wrong-kind model as tokenizer" 'invalid-argument
+  (lambda ()
+    (g3c4-generator-create-internal model model (config 1))))
+(reject "authentic strict tokenizer" 'unsupported
+  (lambda ()
+    (g3c4-generator-create-internal model strict-tokenizer (config 1))))
+(reject "authentic prefix tokenizer" 'unsupported
+  (lambda ()
+    (g3c4-generator-create-internal model prefix-tokenizer (config 1))))
+(check "tokenizer rejection precedes native context construction"
+  (= (test-transport-count 1) context-before))
+
+(module-train! model)
+(reject "train mode construction" 'invalid-state
+  (lambda ()
+    (g3c4-generator-create-internal model tokenizer (config 2))))
+(check "train rejection precedes native context construction"
+  (= (test-transport-count 1) context-before))
+(module-eval! model)
+
+(define generator
+  (g3c4-generator-create-internal model tokenizer (config 3)))
+(define generator-entry (latest 'generator))
+(define generator-native (vector-ref generator-entry 3))
+(check "generator retains exact tokenizer shell"
+  (and (eq? (vector-ref generator-entry 5) model-entry)
+       (eq? (vector-ref generator-entry 6) tokenizer)))
+
+(define calls-before (kind-count 'call))
+(module-train! model)
+(reject "train mode call admission" 'invalid-state
+  (lambda () (g3c4-call-empty-commit-internal! generator 0 0)))
+(check "train call rejects before call publication and native acquire"
+  (and (= (kind-count 'call) calls-before)
+       (not (vector-ref generator-entry 9))
+       (not (vector-ref model-entry 10))
+       (= (test-context-field generator-native 0) 0)))
+(module-eval! model)
+
+(define registry-before t1-private-tokenizer-registry)
+(set! t1-private-tokenizer-registry
+      (without-tokenizer registry-before tokenizer))
+(reject "withdrawn tokenizer call admission" 'invalid-state
+  (lambda () (g3c4-call-empty-commit-internal! generator 0 0)))
+(check "withdrawn tokenizer rejects before call publication"
+  (= (kind-count 'call) calls-before))
+(set! t1-private-tokenizer-registry registry-before)
+
+(define fingerprint-before (vector-ref tokenizer-core 6))
+(vector-set! tokenizer-core 6 "sha256:eshkol-byte-tokenizer-v1:stale")
+(reject "fingerprint drift call admission" 'invalid-state
+  (lambda () (g3c4-call-empty-commit-internal! generator 0 0)))
+(check "fingerprint drift rejects before native acquire"
+  (and (= (kind-count 'call) calls-before)
+       (= (test-context-field generator-native 0) 0)))
+(vector-set! tokenizer-core 6 fingerprint-before)
+
+(define (train-inside-call generator)
+  (g3c4-with-call-internal 'train-inside-call generator 0 0
+    (module-train! model)))
+(reject "train drift after acquire" 'invalid-state
+  (lambda () (train-inside-call generator)))
+(check "train drift rolls back acquired tuple"
+  (and (= (kind-count 'call) (+ calls-before 1))
+       (dead-only? (latest 'call) 'call)
+       (not (vector-ref generator-entry 9))
+       (not (vector-ref model-entry 10))
+       (not (vector-ref m3-call-state 0))
+       (= (test-context-field generator-native 0) 0)))
+(module-eval! model)
+
+(define calls-after-train (kind-count 'call))
+(define (fingerprint-inside-call generator)
+  (g3c4-with-call-internal 'fingerprint-inside-call generator 0 0
+    (vector-set! tokenizer-core 6
+                 "sha256:eshkol-byte-tokenizer-v1:stale-inside")))
+(reject "fingerprint drift after acquire" 'invalid-state
+  (lambda () (fingerprint-inside-call generator)))
+(check "fingerprint drift rolls back acquired tuple"
+  (and (= (kind-count 'call) (+ calls-after-train 1))
+       (dead-only? (latest 'call) 'call)
+       (not (vector-ref generator-entry 9))
+       (not (vector-ref model-entry 10))
+       (= (test-context-field generator-native 0) 0)))
+(vector-set! tokenizer-core 6 fingerprint-before)
+
+(define (exact-call generator)
+  (g3c4-with-call-internal 'exact-call generator 0 0
+    (let ((call-entry (vector-ref m3-call-state 0)))
+      (check "call inherits exact tokenizer shell"
+        (and (eq? (vector-ref call-entry 4) generator-entry)
+             (eq? (vector-ref call-entry 5) model-entry)
+             (eq? (vector-ref call-entry 6) tokenizer))))))
+(check "restored eval and fingerprint admit call" (exact-call generator))
+(check "successful call scrubs inherited tokenizer"
+  (dead-only? (latest 'call) 'call))
+
+(module-train! model)
+(check "close succeeds in train mode"
+  (g3c4-generator-close-internal! generator))
+(check "close scrubs retained tokenizer"
+  (dead-only? generator-entry 'generator))
+
+(module-eval! model)
+(define stale-close-generator
+  (g3c4-generator-create-internal model tokenizer (config 4)))
+(define stale-close-entry (latest 'generator))
+(define registry-before-close t1-private-tokenizer-registry)
+(set! t1-private-tokenizer-registry
+      (without-tokenizer registry-before-close tokenizer))
+(check "close succeeds after tokenizer withdrawal"
+  (g3c4-generator-close-internal! stale-close-generator))
+(check "stale close scrubs retained tokenizer"
+  (dead-only? stale-close-entry 'generator))
+(set! t1-private-tokenizer-registry registry-before-close)
+
+(display "G3-C4 T1/eval admission PASS: checks=")
+(display checks) (newline)

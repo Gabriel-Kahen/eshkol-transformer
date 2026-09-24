@@ -3,13 +3,16 @@
 (load "g3c4_model_extension.esk")
 (load "g3c4_call_entry_extension.esk")
 
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
 (extern i64 test-failstop i64
         :real et_g3c4_call_entry_test_failstop_v1)
 
 (define model (g3c4-model-create-seeded-internal 1729))
 (define generator
-  (g3c4-generator-create-internal model
-    (list ':profile 'diagnostic-c4
+  (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4
           ':sampling 'greedy
           ':temperature-bits 1065353216
           ':top-k 256

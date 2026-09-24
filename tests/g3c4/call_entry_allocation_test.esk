@@ -3,6 +3,10 @@
 (load "g3c4_model_extension.esk")
 (load "g3c4_call_entry_extension.esk")
 
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
 (extern i64 allocation-arm i64 i64
         :real et_g3c4_call_entry_alloc_arm_v1)
 (extern i64 allocation-consumed
@@ -80,19 +84,19 @@
   (sweep 2 (lambda () (g3c4-rng-clone-internal source-rng))
            (lambda (rng) (g3c4-rng-release-internal! rng))))
 (define generator-seed-vector-cuts
-  (sweep 1 (lambda () (g3c4-generator-create-internal model seed-config))
+  (sweep 1 (lambda () (g3c4-generator-create-internal model tokenizer seed-config))
            (lambda (generator) (g3c4-generator-close-internal! generator))))
 (define generator-seed-cons-cuts
-  (sweep 2 (lambda () (g3c4-generator-create-internal model seed-config))
+  (sweep 2 (lambda () (g3c4-generator-create-internal model tokenizer seed-config))
            (lambda (generator) (g3c4-generator-close-internal! generator))))
 (define generator-rng-vector-cuts
-  (sweep 1 (lambda () (g3c4-generator-create-internal model source-config))
+  (sweep 1 (lambda () (g3c4-generator-create-internal model tokenizer source-config))
            (lambda (generator) (g3c4-generator-close-internal! generator))))
 (define generator-rng-cons-cuts
-  (sweep 2 (lambda () (g3c4-generator-create-internal model source-config))
+  (sweep 2 (lambda () (g3c4-generator-create-internal model tokenizer source-config))
            (lambda (generator) (g3c4-generator-close-internal! generator))))
 
-(define call-generator (g3c4-generator-create-internal model seed-config))
+(define call-generator (g3c4-generator-create-internal model tokenizer seed-config))
 (define call-vector-cuts
   (sweep 1
          (lambda () (g3c4-call-empty-commit-internal! call-generator 0 0))

@@ -3,6 +3,10 @@
 (load "g3c4_model_extension.esk")
 (load "g3c4_call_entry_extension.esk")
 
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
 (extern i64 test-context-fail-after i64
         :real et_g3c4_call_entry_test_context_fail_after_v1)
 (extern i64 test-context-reset
@@ -118,36 +122,32 @@
 (define model-entry (car (vector-ref g3c4-model-registry 0)))
 (define bad-improper (cons ':profile 7))
 (reject "improper config" 'invalid-argument
-        (lambda () (g3c4-generator-create-internal model bad-improper)))
+        (lambda () (g3c4-generator-create-internal model tokenizer bad-improper)))
 (define cyclic (greedy-config 2))
 (set-cdr! (cdr (cdr cyclic)) cyclic)
 (reject "cyclic config" 'invalid-argument
-        (lambda () (g3c4-generator-create-internal model cyclic)))
+        (lambda () (g3c4-generator-create-internal model tokenizer cyclic)))
 (reject "duplicate config key" 'invalid-argument
         (lambda ()
-          (g3c4-generator-create-internal model
-            (list ':profile 'diagnostic-c4 ':profile 'diagnostic-c4
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':profile 'diagnostic-c4
                   ':temperature-bits 1065353216 ':top-k 256
                   ':top-p-bits 1065353216 ':max-new-tokens 1
                   ':eos #f ':seed 2))))
 (reject "greedy controls are canonical" 'invalid-argument
         (lambda ()
-          (g3c4-generator-create-internal model
-            (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':sampling 'greedy
                   ':temperature-bits 1065353216 ':top-k 255
                   ':top-p-bits 1065353216 ':max-new-tokens 1
                   ':eos #f ':seed 2))))
 (reject "temperature infinity" 'invalid-argument
         (lambda ()
-          (g3c4-generator-create-internal model
-            (list ':profile 'diagnostic-c4 ':sampling 'categorical
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':sampling 'categorical
                   ':temperature-bits 2139095040 ':top-k 1
                   ':top-p-bits 1065353216 ':max-new-tokens 0
                   ':eos 0 ':seed 2))))
 (reject "top-p above one" 'invalid-argument
         (lambda ()
-          (g3c4-generator-create-internal model
-            (list ':profile 'diagnostic-c4 ':sampling 'categorical
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':sampling 'categorical
                   ':temperature-bits 1065353216 ':top-k 1
                   ':top-p-bits 1065353217 ':max-new-tokens 0
                   ':eos 0 ':seed 2))))
@@ -156,7 +156,7 @@
 
 (test-context-fail-after 0)
 (reject "native context allocation cut" 'internal
-        (lambda () (g3c4-generator-create-internal model (greedy-config 3))))
+        (lambda () (g3c4-generator-create-internal model tokenizer (greedy-config 3))))
 (test-context-reset)
 (check "failed generator is a dead tombstone"
        (and (dead-only? (latest 'generator) 'generator) (no-pending?)
@@ -168,7 +168,7 @@
         (test-a2-fail-after cut)
         (reject "native fixed-cache allocation cut" 'internal
                 (lambda ()
-                  (g3c4-generator-create-internal model (greedy-config 3))))
+                  (g3c4-generator-create-internal model tokenizer (greedy-config 3))))
         (check "cache cut leaves a dead generator"
                (and (dead-only? (latest 'generator) 'generator)
                     (no-pending?) (not (vector-ref m3-call-state 0))))
@@ -176,7 +176,7 @@
 (test-a2-reset)
 
 (define seeded-generator
-  (g3c4-generator-create-internal model (greedy-config 4)))
+  (g3c4-generator-create-internal model tokenizer (greedy-config 4)))
 (define seeded-generator-entry (latest 'generator))
 (check "seed constructor publishes canonical greedy policy"
        (equal? (vector-ref seeded-generator-entry 7)
@@ -187,8 +187,7 @@
        (dead-only? seeded-generator-entry 'generator))
 
 (define boundary-generator
-  (g3c4-generator-create-internal model
-    (list ':profile 'diagnostic-c4
+  (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4
           ':sampling 'categorical
           ':temperature-bits 2139095039
           ':top-k 1
@@ -204,13 +203,14 @@
        (g3c4-generator-close-internal! boundary-generator))
 
 (define generator
-  (g3c4-generator-create-internal model (categorical-rng-config rng-clone)))
+  (g3c4-generator-create-internal model tokenizer (categorical-rng-config rng-clone)))
 (define generator-entry (latest 'generator))
 (define generator-native (vector-ref generator-entry 3))
 (check "exact live generator entry"
        (and (eq? (vector-ref generator-entry 0) generator)
             (eq? (vector-ref generator-entry 2) 'live)
             (eq? (vector-ref generator-entry 5) model-entry)
+            (eq? (vector-ref generator-entry 6) tokenizer)
             (equal? (vector-ref generator-entry 7)
                     '#(diagnostic-c4 1 1061158912 17 1056964608 0 255))
             (not (vector-ref generator-entry 9))
@@ -230,6 +230,7 @@
              (eq? (vector-ref call-entry 2) 'live)
              (eq? (vector-ref call-entry 4) generator-entry)
              (eq? (vector-ref call-entry 5) model-entry)
+             (eq? (vector-ref call-entry 6) tokenizer)
              (eq? (vector-ref generator-entry 9) call-entry)
              (eq? (vector-ref model-entry 10) call-entry)
              (= (test-context-field generator-native 0) 1)
