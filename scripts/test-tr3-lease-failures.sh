@@ -10,6 +10,7 @@ usage: test-tr3-lease-failures.sh \
   --runtime-source DIR --runtime-build DIR \
   --runner-sha256 SHA256 --archive-sha256 SHA256 \
   [--runtime-commit COMMIT --runtime-tree TREE] \
+  [--production-base COMMIT] \
   [--allocation-class object|all] [--optimize 0|2] \
   [--evidence-dir DIR]
 EOF
@@ -25,6 +26,7 @@ runtime_commit=81298b4a9608fb92eb6f351a2eabd8392da7d9ef
 runtime_tree=7669312845a9d8d372006af52271045e69505813
 allocation_class=object
 optimize=0
+production_base=""
 while (( $# )); do
   case "$1" in
     --runtime-source) runtime_source=$2; shift 2 ;;
@@ -35,6 +37,7 @@ while (( $# )); do
     --runtime-tree) runtime_tree=$2; shift 2 ;;
     --allocation-class) allocation_class=$2; shift 2 ;;
     --optimize) optimize=$2; shift 2 ;;
+    --production-base) production_base=$2; shift 2 ;;
     --evidence-dir) evidence_dir=$2; shift 2 ;;
     *) usage ;;
   esac
@@ -55,19 +58,31 @@ if [[ "${allocation_class}" == all ]]; then
   [[ "${runtime_commit}" == de0b24956e34772344dac5e1f2c32b6243aebae8 &&
      "${runtime_tree}" == e1c0d0c4d10d90236df2349fb199c5a234e63900 ]] || \
     die "full allocator matrix requires reviewed repaired runtime"
+  expected_production_base=f604e87aea94486ff46820d50ddb27287988967d
+  expected_production_tree=3c48e4e9208bc4ceee4843e2c7138ff46aea82ab
 else
   [[ "${runtime_commit}" == 81298b4a9608fb92eb6f351a2eabd8392da7d9ef &&
      "${runtime_tree}" == 7669312845a9d8d372006af52271045e69505813 ]] || \
     die "partial allocator matrix requires frozen final81298 runtime"
+  expected_production_base=f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5
+  expected_production_tree=54ba54a815f37bd492f1203b48a8b54e6dfe10dc
 fi
+production_base=${production_base:-${expected_production_base}}
+[[ "${production_base}" == "${expected_production_base}" ]] || \
+  die "production base is not the reviewed source for this matrix"
+[[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
+   "${expected_production_tree}" ]] || \
+  die "reviewed production tree identity changed"
 runtime_source="$(readlink -f -- "${runtime_source}")"
 runtime_build="$(readlink -f -- "${runtime_build}")"
 production_paths=(
   include internal lib native src
 )
 git -C "${PROJECT_ROOT}" diff --quiet \
-  f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5 -- \
+  "${production_base}" -- \
   "${production_paths[@]}" || die "frozen production lease sources changed"
+[[ -z "$(git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all)" ]] || \
+  die "successor checkout must be clean"
 [[ -z "$(git -C "${PROJECT_ROOT}" ls-files --others --exclude-standard -- \
   "${production_paths[@]}")" ]] || die "untracked production lease source found"
 runner="${runtime_build}/eshkol-run"
@@ -354,10 +369,8 @@ grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
   "${evidence_dir}/run.stdout" >/dev/null
 
 {
-  printf 'frozen_production_base_commit\t%s\n' \
-    f602a66644ed4ce8519d14c9f2142fe5b9a4d3a5
-  printf 'frozen_production_base_tree\t%s\n' \
-    54ba54a815f37bd492f1203b48a8b54e6dfe10dc
+  printf 'frozen_production_base_commit\t%s\n' "${production_base}"
+  printf 'frozen_production_base_tree\t%s\n' "${expected_production_tree}"
   printf 'successor_checkout_head\t%s\n' \
     "$(git -C "${PROJECT_ROOT}" rev-parse HEAD)"
   printf 'successor_checkout_tree\t%s\n' \

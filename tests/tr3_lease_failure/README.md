@@ -34,19 +34,18 @@ observe or catch a condition. A separate preserved bounded-null counterexample
 records exit 139 for all three families.
 
 With `--allocation-class all`, the gate requires the reviewed repaired-runtime
-commit and injects every prefix across all eight direct arena allocator symbols
-in one measured stream. The caller selects O0 or O2 with `--optimize`; each
-optimization level gets a separate artifact and evidence directory. This mode
-must pass before any claim that the upstream repair closes the three crashing
-families for TR3 lease acquisition. On the production-profile `de0b249` runtime,
-the first 950 full-matrix hit cases pass, but ordinal 950 turns a real bounded
-string allocation failure in `eshkol_utf8_substring` into an X1 `unsupported`
-error. The condition check correctly rejects that error. A separate cold
-post-staging census records 31 wrapped allocations, starting with symbol
-interning in P1 final recheck; denying the first real operator-new call there
-raises an uncaught `std::bad_alloc`. The full gate remains blocked. The
-counterexample artifacts and runtime build provenance are recorded in the TR3
-roadmap entry.
+commit and the exact TR3 source repair `f604e87`; it injects every prefix
+across all eight direct arena allocator symbols in one measured stream. The
+caller selects O0 or O2 with `--optimize`; each level gets separate evidence.
+On the frozen `f602a66` lease source with production-profile `de0b249`, the
+first 950 full-matrix hit cases passed, but ordinal 950 translated a genuine
+bounded substring allocation failure to X1 `unsupported`. The cold
+post-staging census also found 31 allocations; the first real operator-new
+failure there raised an uncaught `std::bad_alloc`. Those original artifacts
+remain preserved. The focused O0 repair probe confirms ordinal 950 now has
+typed E1 category `internal` and operation `config-fingerprint`, while cold
+and repeated post-staging acquisitions have zero wrapped allocations. Full
+O0/O2 prefix gates and independent review are still required for acceptance.
 
 The test measures exact component bytes and counters around each failure. It
 does not claim flat process memory, sanitizer coverage, package localization,

@@ -171,6 +171,10 @@ class LeaseSourceContract(unittest.TestCase):
         self.assertIn("--allocation-class", gate)
         self.assertIn('"${container_id}" bash -lc', gate)
         self.assertIn('git -C "${PROJECT_ROOT}" diff --quiet', gate)
+        self.assertIn("f604e87aea94486ff46820d50ddb27287988967d", gate)
+        self.assertIn("3c48e4e9208bc4ceee4843e2c7138ff46aea82ab", gate)
+        self.assertIn("--production-base", gate)
+        self.assertIn("successor checkout must be clean", gate)
         self.assertIn('inputs/ROADMAP.md', gate)
 
 
