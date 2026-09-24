@@ -1,0 +1,64 @@
+;;; Calls the one localized-source E3 test entry through its exported boxed ABI.
+
+(extern void e3-private-test-run ptr ptr ptr :real et_e3_test_run_v1)
+
+(define (check label value)
+  (if value #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+
+(define (argument-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (argument-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted) (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (run-case name packing? skipped path expected)
+  (let ((output (vector #f)))
+    (e3-private-test-run (vector (vector packing? skipped))
+                         (vector path) output)
+    (let ((actual (vector-ref output 0)))
+      (let ((matches?
+             (and (vector? actual)
+                  (= (vector-length actual) 9)
+                  (eq? (vector-ref actual 0) 'e3-private-result-v1)
+                  (= (vector-ref actual 1) (vector-ref expected 0))
+                  (= (vector-ref actual 2) (vector-ref expected 1))
+                  (= (vector-ref actual 3) (vector-ref expected 2))
+                  (= (vector-ref actual 4) (vector-ref expected 3))
+                  (= (vector-ref actual 5) (vector-ref expected 4))
+                  (= (vector-ref actual 6) (vector-ref expected 5))
+                  (bytes=? (vector-ref actual 7) (vector-ref actual 8)))))
+        (if matches? #t
+            (begin (display "ACTUAL: ") (display actual) (newline)))
+        (check name matches?)))))
+
+(let ((args (command-line)))
+  (check "five corpus paths" (= (argument-count args) 6))
+  (run-case "packed-single" #t 0 (argument-ref args 1)
+            (vector 1085366897 1084227584 1132430055 0 5 3))
+  (run-case "packed-sharded" #t 0 (argument-ref args 2)
+            (vector 1085366897 1084227584 1132430055 0 5 3))
+  (run-case "packed-suffix" #t 1 (argument-ref args 3)
+            (vector 1085353893 1077936128 1132326543 0 3 2))
+  ;; Accepted e086a61 native parity observes 40b19c49/4380a934 here;
+  ;; its mathematical verifier admits the +1/+4 ULP error budget.
+  (run-case "unpacked-three" #f 0 (argument-ref args 4)
+            (vector 1085381705 1082130432 1132505396 0 4 2))
+  (run-case "unpacked-pairs" #f 0 (argument-ref args 5)
+            (vector 1085376813 1077936128 1132485749 0 3 3)))
+
+(display "E3-PRIVATE-RUNTIME-PASS")
+(newline)

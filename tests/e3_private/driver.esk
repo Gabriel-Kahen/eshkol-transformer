@@ -4,8 +4,8 @@
         :real et_e3_test_destination_create_v1)
 (extern i64 e3-test-destination-destroy ptr
         :real et_e3_test_destination_destroy_v1)
-(extern i64 e3-test-copy-bits ptr ptr i64 ptr
-        :real et_f32_tensor_copy_bits_to_v1)
+(extern i64 e3-test-destination-bits ptr
+        :real et_e3_test_destination_bits_v1)
 
 (define e3-test-fixture-root (vector #f #f #f #f))
 
@@ -102,17 +102,14 @@
                 unreachable))))))
 
 (define (e3-test-u32-ref destination)
-  (let ((bytes (make-bytevector 4 0)))
-    (if (not (= (e3-test-copy-bits destination bytes 1 '()) 0))
+  (let ((bits (e3-test-destination-bits destination)))
+    (if (< bits 0)
         (let ((unreachable
                (et-e1b-private-raise
                 'internal 'e3-test-run
                 "E3 destination fixture read failed" '() #f)))
           unreachable))
-    (+ (bytevector-u8-ref bytes 0)
-       (* 256 (bytevector-u8-ref bytes 1))
-       (* 65536 (bytevector-u8-ref bytes 2))
-       (* 16777216 (bytevector-u8-ref bytes 3)))))
+    bits))
 
 (define (e3-test-output frame destinations before after)
   (let ((entry (e3-frame-entry-internal frame)))
