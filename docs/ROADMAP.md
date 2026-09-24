@@ -80,6 +80,13 @@ and AOT/VM `conjugate` mismatch; VM hash, native/VM `region-open`, and VM scalar
 activation gaps also remain. The tagged-cons repair is active in isolation.
 The raw inventory is not an exhaustive semantic classification, so it cannot
 support full F32 acceptance.
+The isolated VM F32 hash-key leaf `ae12e509`/tree `971a4eaa` now passes
+independent focused re-review after adding a 16-entry rehash and nested-region
+raw-bit witness. Supported f31 Release poison gates 4/4, real ESKB VM suite
+666/666, standalone source suite 77/77 and ASan+UBSan+poison VM gates 2/2 pass;
+root verified `f32-vm-hash-keys-c27f85eb-20260924/SHA256SUMS` (`c4cc4c38...`).
+It remains isolated on predecessor `c27f85eb`; the predicate/hash union on
+`d960add`, the type-reflection mapper and whole-F32 acceptance remain pending.
 
 ## Wave 0 — contracts and verification foundation
 
