@@ -257,15 +257,28 @@ This is a composition acceptance, not a runtime repin or whole-F32 acceptance:
 VM callable subtypes still collapse to `procedure` where native reports
 `lambda-sexpr`/`closure`; exhaustive nested-container and operation matrices
 also remain open.
+The reviewed pair/vector transport witness was composed onto this successor as
+`9999087d`/tree `035abe7`; the reviewed callable-kind leaf was then composed
+as `2cab6a0c`/tree `85c723b`, so compiler-authored VM closures now retain
+their native callable subtype in this provisional union. Root verified both
+sealed compositions, clean source and supported f31 Release and
+ASan+UBSan+LSan gates. On the callable composition, direct VM C API passes
+815/815, focused gates 7/7 and standalone source tests 80/80 in both modes,
+without sanitizer diagnostics. Evidence:
+`f32-vm-transport-union-compose-9999087d-20260924/SHA256SUMS`
+(`bb994fd...`) and
+`f32-vm-callable-union-compose-2cab6a0c-20260924/SHA256SUMS`
+(`8a8b899c...`). Unary operation composition and whole-F32 acceptance remain
+pending; the transformer runtime pin is unchanged.
 The separately reviewed test-only direct VM pair/vector transport witness
 `27c2ed84`/tree `8fe4a27` preserves eight exact F32 bit patterns through
 real container storage, regional evacuation and the public raw-bit inspector.
 Wrong-tag, wrong-container and invalid-index controls pass. Supported f31
 Release and ASan+UBSan+LSan focused runs each pass 733/733; root verified
 `f32-vm-transport-witness-27c2ed84-20260924/SHA256SUMS` (`b81ba2e8...`).
-It changes no production API and remains isolated pending successor-union
-composition; closure/upvalue, continuation, exception and hash transport are
-still unwitnessed.
+It changes no production API; its reviewed composition is recorded above.
+Closure/upvalue, continuation, exception and hash transport are still
+unwitnessed.
 The sealed read-only operation inventory on reviewed union `602876a` lists
 every source-visible DOUBLE spelling, AOT/JIT and VM routes, result-kind and
 missing witness. It identifies concrete gaps: unary `+`/`*`/min/max can leak
