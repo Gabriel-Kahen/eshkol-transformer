@@ -2830,6 +2830,22 @@ numerical, adversarial and packaging reviews approve this candidate for required
 supported CI with no unresolved implementation findings. Reviewed provider
 SHA-256 is `2dc0e4426b6126ecd9abf8e227ab54105403b05b341cb8df7d01f221760635f5`.
 
+## 2026-09-24 — C2 #121 focused public acceptance
+
+On exact clean Wave 3 source `7ae5c3765650e56ab1c45eb2c41e6c9925376332`
+with authenticated `81298` Eshkol and the pinned Ubuntu 22.04/LLVM 21.1.8
+image, the reviewed C2 #121 handler-order correction passed focused P1/LSan,
+C1 native/sanitizer/AOT, four-image SAVE, and fresh canonical build/public
+package gates. The public gate preserved the exact 81/75/81 surface, one-object
+archive, public load/save/release, deterministic rebuilds, private isolation,
+and 6,356,992-byte retention at both 1,024 and 8,192 iterations (zero slope).
+Build and public gate exited 0 in 8:28.19 and 18:33.84, with respective peak
+RSS 5,717,800 and 5,718,848 KiB and zero process swaps. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/c2-121-public-retry-root-7ae5c37-20260924T074300Z`,
+`SHA256SUMS` SHA-256 `875c371797e69298d7d8d91ce903f344cdb885b1d94aad794148dc0362c0d104`.
+The scoped operational gate and the affected combined-head rerun after the
+new shared D2 repair remain pending; this is not full #121 acceptance.
+
 ## 2026-09-24 — TR3-C lease successor O0/O2 acceptance
 
 The independently reviewed 22-slot lease successor and rooted D2 u64-limit
