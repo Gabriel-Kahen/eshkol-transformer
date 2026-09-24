@@ -41,6 +41,10 @@ int64_t et_e3_private_last_error_domain_v1(void);
 int64_t et_e3_private_last_error_category_v1(void);
 int64_t et_e3_private_last_error_code_v1(void);
 
+#ifdef ET_E3_TESTING
+void et_e3_test_frame_fail_alloc_after_v1(size_t count);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

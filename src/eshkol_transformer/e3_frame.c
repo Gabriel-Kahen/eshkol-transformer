@@ -76,7 +76,7 @@ static int64_t e3_last_domain, e3_last_category, e3_last_code;
 
 #ifdef ET_E3_TESTING
 static size_t e3_test_frame_alloc_remaining = SIZE_MAX;
-static void e3_test_fail_frame_alloc_after(size_t count) {
+void et_e3_test_frame_fail_alloc_after_v1(size_t count) {
   e3_test_frame_alloc_remaining = count;
 }
 #endif

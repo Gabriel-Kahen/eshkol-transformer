@@ -296,12 +296,12 @@ static void test_create_rejections(owner *model, et_f32_tensor *destination[4]) 
         e3_last_code == E3_CODE_DESTINATION);
   OK(et_f32_tensor_borrow_end_v1(&borrow, &tensor_error));
 
-  e3_test_fail_frame_alloc_after(0);
+  et_e3_test_frame_fail_alloc_after_v1(0);
   CHECK(et_e3_private_frame_create_v1(model, destination[0], destination[1],
       destination[2], destination[3]) == NULL);
   CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
         e3_last_code == E3_CODE_ALLOCATION);
-  e3_test_fail_frame_alloc_after(SIZE_MAX);
+  et_e3_test_frame_fail_alloc_after_v1(SIZE_MAX);
 }
 
 static void test_i2_allocation_rollback(owner *model,

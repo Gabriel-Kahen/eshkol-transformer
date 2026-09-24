@@ -20,7 +20,8 @@ SHELL := /usr/bin/bash
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
 	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e3-native-frame \
-	test-e3-native-parity test-e1 test-e1b \
+	test-e3-native-parity test-e3-private-package test-e3-private-runtime \
+	test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
 	test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
@@ -434,6 +435,16 @@ test-g3n: configure
 .PHONY: test-m3cg
 test-m3cg: configure
 	/usr/bin/bash scripts/test-m3cg.sh
+
+.PHONY: test-e3-private-package test-e3-private-runtime
+test-e3-private-package: configure
+	/usr/bin/bash scripts/build-e3-private.sh
+	/usr/bin/bash scripts/test-e3-private-package.sh
+
+test-e3-private-runtime: configure
+	/usr/bin/bash scripts/build-e3-private.sh
+	/usr/bin/bash scripts/test-e3-private-package.sh
+	/usr/bin/bash scripts/test-e3-private-runtime.sh
 
 # Bounded metrics gate shares the canonical numerical prerequisites in CI.
 test-e3-metrics: configure
