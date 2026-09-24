@@ -136,8 +136,18 @@ first-class, `apply` and `map` routes. Its single independent review PASS and
 pinned f31 Release focused 10/10, type suites 21/21/9/9/70/70, native
 sanitizer 6/6 and JIT sanitizer 4/4 pass; root verified
 `f32-type-symbol-native-20260924/SHA256SUMS` (`398e3229...`). VM `type-of`
-and cross-substrate union gates remain pending; the native leaf has not been
-composed onto `602876a` yet.
+and cross-substrate union gates were pending at that leaf. The reviewed VM
+successor `95d86f3`/tree `65bf2df` (following `3cc5a5a` on `069efba`)
+returns a per-VM cached, evacuation-rooted canonical Symbol for all declared
+VM tags 0–34 plus unknown; undifferentiated source/builtin closures report
+`procedure`. Root blocked the first candidate because spelling-allocation
+failure could return NIL without a VM error. The same independent reviewer
+approved the corrected fatal-error path and deterministic injected failure
+witness. Supported f31 Release and ASan+UBSan focused suites pass 4/4 each,
+standalone source 77/77 and VM C API 685/685; root verified
+`f32-type-symbol-vm-20260924-r2/SHA256SUMS` (`d16d3d83...`). Both type-symbol
+leaves are still awaiting cross-substrate union gates; no transformer runtime
+pin changed.
 The separate reviewed tagged-cons transport repair `2904b94`/tree `01b89bd6`
 copies all 16 tagged-value bytes through construction, setters/getters, batch
 and region escape paths, with overlap-safe self-store. Supported f31 Debug
@@ -202,6 +212,17 @@ passes. The baseline `region-open` defect is separately repaired by reviewed
 `f32-region-classifier-audit-d960add-20260924/SHA256SUMS` (`81252613...`);
 a separate byte-preservation repair is active. This covers only the two
 indexed source files, not the whole-runtime exhaustive classifier requirement.
+The sealed read-only operation inventory on reviewed union `602876a` lists
+every source-visible DOUBLE spelling, AOT/JIT and VM routes, result-kind and
+missing witness. It identifies concrete gaps: unary `+`/`*`/min/max can leak
+F32, direct VM unary `/` returns its input, VM `sign` and `numerator` silently
+interpret F32 as zero, native/VM rational operations differ, and some native
+elementary spellings lack VM routes. Root verified
+`f32-operation-matrix-602876af-20260924/SHA256SUMS` (`fea57bf3...`) and
+reran its exact-source query. A bounded unary route repair is active; the
+inventory is not operation acceptance evidence. The reviewed scalar
+activation leaf exposes an existing VM scalar path but lacks native public
+parity, so it does not close this matrix.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
