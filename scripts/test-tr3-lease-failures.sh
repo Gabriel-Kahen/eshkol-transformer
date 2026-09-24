@@ -20,6 +20,7 @@ usage: test-tr3-lease-failures.sh \
   [--runtime-commit COMMIT --runtime-tree TREE] \
   [--production-base COMMIT] \
   [--allocation-class object|all] [--optimize 0|2] \
+  [--allocation-probes 1094,1095] \
   [--diagnostic-only] [--evidence-dir DIR]
 EOF
   exit 2
@@ -38,6 +39,7 @@ allocation_class=all
 optimize=0
 production_base=""
 diagnostic_only=0
+allocation_probes=""
 while (( $# )); do
   case "$1" in
     --runtime-source) runtime_source=$2; shift 2 ;;
@@ -49,6 +51,7 @@ while (( $# )); do
     --allocation-class) allocation_class=$2; shift 2 ;;
     --optimize) optimize=$2; shift 2 ;;
     --production-base) production_base=$2; shift 2 ;;
+    --allocation-probes) allocation_probes=$2; shift 2 ;;
     --diagnostic-only) diagnostic_only=1; shift ;;
     --evidence-dir) evidence_dir=$2; shift 2 ;;
     *) usage ;;
@@ -66,6 +69,9 @@ done
 [[ "${runtime_tree}" =~ ^[0-9a-f]{40}$ ]] || usage
 [[ "${allocation_class}" == object || "${allocation_class}" == all ]] || usage
 [[ "${optimize}" == 0 || "${optimize}" == 2 ]] || usage
+[[ -z "${allocation_probes}" || "${allocation_probes}" == 1094,1095 ]] || usage
+[[ -z "${allocation_probes}" || "${allocation_class}" == all ]] || usage
+(( diagnostic_only == 0 )) || [[ -z "${allocation_probes}" ]] || usage
 if [[ "${allocation_class}" == all ]]; then
   [[ "${runtime_commit}" == "$(tsv_value "${failure_manifest}" runtime_source_commit)" &&
      "${runtime_tree}" == "$(tsv_value "${failure_manifest}" runtime_source_tree)" ]] || \
@@ -89,7 +95,7 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=4ec3777707e5b9cfee26048ccf89f7de8d0e0910e00ec48b18e10d85569651c9
+expected_runner_self_sha256=9e282f14bab3d209c13ca48a11644369d1407f3707d14b1d52783dae7f94fc51
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
@@ -289,6 +295,7 @@ if [[ "${allocation_class}" == all ]]; then
   cp -- \
     "${PROJECT_ROOT}/native/x1_config_private.esk" \
     "${PROJECT_ROOT}/native/tr3_lease_core_extension.esk" \
+    "${PROJECT_ROOT}/internal/d2/lib/d2_semantic_core.esk" \
     "${PROJECT_ROOT}/internal/d2/lib/d2_dataset.esk" \
     "${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk" \
     "${PROJECT_ROOT}/templates/p1/module_roots.esk.tmpl" \
@@ -318,6 +325,7 @@ docker run --rm --network none \
   -v "${runtime_build}:/runtime-build:ro" \
   -v "${evidence_dir}:/out" \
   -e "TR3_ALLOCATION_CLASS=${allocation_class}" \
+  -e "TR3_ALLOCATION_PROBES=${allocation_probes}" \
   -e "TR3_OPTIMIZE=${optimize}" \
   -e "TR3_DIAGNOSTIC_ONLY=${diagnostic_only}" \
   -w /workspace "${container_id}" bash -lc '
@@ -475,25 +483,35 @@ sweep() {
   printf "matrix prefix limit exceeded: %s\n" "${class}" >&2
   return 86
 }
-sweep "${TR3_ALLOCATION_CLASS}"
-sweep promotion
-sweep target
-run_case handler 0
-[[ "${case_result}" == HIT ]]
-run_case poststage 0
-[[ "${case_result}" == PASS ]]
-total_checks=$(awk -F "checks=" "/^TR3-LEASE-CASE / {sum += \$2} END {print sum}" \
-  /out/run.stdout)
-allocation_count_var="${TR3_ALLOCATION_CLASS}_count"
-allocation_count="${!allocation_count_var}"
-total_cases=$((allocation_count + promotion_count + target_count + 5))
-printf "TR3-LEASE-FAILURE-CLASSES %s=%s promotion=%s target=%s " \
-  "${TR3_ALLOCATION_CLASS}" "${allocation_count}" \
-  "${promotion_count}" "${target_count}" \
-  >> /out/run.stdout
-printf "handler=1 PASS\n" >> /out/run.stdout
-printf "TR3-LEASE-FAILURE-PASS checks=%s cases=%s\n" \
-  "${total_checks}" "${total_cases}" >> /out/run.stdout
+if [[ -n "${TR3_ALLOCATION_PROBES}" ]]; then
+  IFS=, read -r -a probe_ordinals <<<"${TR3_ALLOCATION_PROBES}"
+  for ordinal in "${probe_ordinals[@]}"; do
+    run_case "${TR3_ALLOCATION_CLASS}" "${ordinal}"
+    [[ "${case_result}" == HIT ]]
+  done
+  printf "TR3-LEASE-FAILURE-PROBES class=%s ordinals=%s PASS\n" \
+    "${TR3_ALLOCATION_CLASS}" "${TR3_ALLOCATION_PROBES}" >> /out/run.stdout
+else
+  sweep "${TR3_ALLOCATION_CLASS}"
+  sweep promotion
+  sweep target
+  run_case handler 0
+  [[ "${case_result}" == HIT ]]
+  run_case poststage 0
+  [[ "${case_result}" == PASS ]]
+  total_checks=$(awk -F "checks=" "/^TR3-LEASE-CASE / {sum += \$2} END {print sum}" \
+    /out/run.stdout)
+  allocation_count_var="${TR3_ALLOCATION_CLASS}_count"
+  allocation_count="${!allocation_count_var}"
+  total_cases=$((allocation_count + promotion_count + target_count + 5))
+  printf "TR3-LEASE-FAILURE-CLASSES %s=%s promotion=%s target=%s " \
+    "${TR3_ALLOCATION_CLASS}" "${allocation_count}" \
+    "${promotion_count}" "${target_count}" \
+    >> /out/run.stdout
+  printf "handler=1 PASS\n" >> /out/run.stdout
+  printf "TR3-LEASE-FAILURE-PASS checks=%s cases=%s\n" \
+    "${total_checks}" "${total_cases}" >> /out/run.stdout
+fi
 '
 
 cmp -- "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" \
@@ -524,6 +542,7 @@ if [[ "${allocation_class}" == all ]]; then
   for source in \
     native/x1_config_private.esk \
     native/tr3_lease_core_extension.esk \
+    internal/d2/lib/d2_semantic_core.esk \
     internal/d2/lib/d2_dataset.esk \
     internal/p1/lib/transformer/module.esk \
     templates/p1/module_roots.esk.tmpl; do
@@ -593,17 +612,26 @@ if rg -n 'fatal signal|TR3 lease failure shim FAIL|TR3 LEASE FAILURE FAIL' \
     "${evidence_dir}/run.stderr"; then
   die "runtime witness emitted a fatal diagnostic"
 fi
-grep -E "^TR3-LEASE-FAILURE-CLASSES ${allocation_class}=[1-9][0-9]* promotion=[1-9][0-9]* target=[1-9][0-9]* handler=1 PASS$" \
-  "${evidence_dir}/run.stdout" >/dev/null
-if [[ "${allocation_class}" == object ]]; then
-  grep -E '^TR3-LEASE-UNSAFE-ALLOCATOR-CENSUS raw=[1-9][0-9]* header=[0-9]+ closure=[1-9][0-9]* string=[1-9][0-9]* tensor=0 ad-node=0 BLOCKED$' \
+if [[ -n "${allocation_probes}" ]]; then
+  for ordinal in 1094 1095; do
+    grep -E "^TR3-LEASE-CASE class=all ordinal=${ordinal} result=HIT checks=[1-9][0-9]*$" \
+      "${evidence_dir}/run.stdout" >/dev/null
+  done
+  grep -Fx 'TR3-LEASE-FAILURE-PROBES class=all ordinals=1094,1095 PASS' \
     "${evidence_dir}/run.stdout" >/dev/null
 else
-  grep -E '^TR3-LEASE-ALL-ALLOCATOR-CENSUS vector=[1-9][0-9]* cons=[1-9][0-9]* raw=[1-9][0-9]* header=[0-9]+ closure=[1-9][0-9]* string=[1-9][0-9]* tensor=[0-9]+ ad-node=[0-9]+ PASS$' \
+  grep -E "^TR3-LEASE-FAILURE-CLASSES ${allocation_class}=[1-9][0-9]* promotion=[1-9][0-9]* target=[1-9][0-9]* handler=1 PASS$" \
+    "${evidence_dir}/run.stdout" >/dev/null
+  if [[ "${allocation_class}" == object ]]; then
+    grep -E '^TR3-LEASE-UNSAFE-ALLOCATOR-CENSUS raw=[1-9][0-9]* header=[0-9]+ closure=[1-9][0-9]* string=[1-9][0-9]* tensor=0 ad-node=0 BLOCKED$' \
+      "${evidence_dir}/run.stdout" >/dev/null
+  else
+    grep -E '^TR3-LEASE-ALL-ALLOCATOR-CENSUS vector=[1-9][0-9]* cons=[1-9][0-9]* raw=[1-9][0-9]* header=[0-9]+ closure=[1-9][0-9]* string=[1-9][0-9]* tensor=[0-9]+ ad-node=[0-9]+ PASS$' \
+      "${evidence_dir}/run.stdout" >/dev/null
+  fi
+  grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
     "${evidence_dir}/run.stdout" >/dev/null
 fi
-grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
-  "${evidence_dir}/run.stdout" >/dev/null
 
 {
   printf 'frozen_production_base_commit\t%s\n' "${production_base}"
@@ -633,6 +661,7 @@ grep -E '^TR3-LEASE-FAILURE-PASS checks=[1-9][0-9]* cases=[1-9][0-9]*$' \
     "$(sha256sum "${cmake_cache}" | awk '{print $1}')"
   printf 'llvm_version\t%s\n' "${llvm_version:-historical}"
   printf 'allocation_class\t%s\n' "${allocation_class}"
+  printf 'allocation_probes\t%s\n' "${allocation_probes:-full-matrix}"
   printf 'optimization_level\t%s\n' "${optimize}"
   printf 'container_image_id\t%s\n' "${container_id}"
   while IFS= read -r input; do

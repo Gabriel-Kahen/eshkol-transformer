@@ -40,6 +40,15 @@ class D2ScopeTests(unittest.TestCase):
         ):
             self.assertIn(required, source)
 
+    def test_width_eight_store_reuses_rooted_u64_limit(self) -> None:
+        source = CORE.read_text(encoding="utf-8")
+        self.assertEqual(source.count("18446744073709551616"), 1)
+        start = source.index("(define (d2-core-unsigned-field-limit width)")
+        end = source.index("(define (d2-core-store-unsigned-le!", start)
+        limit = source[start:end]
+        self.assertIn("((= width 8) d2-core-u64-space)", limit)
+        self.assertNotIn("18446744073709551616", limit)
+
     def test_production_io_and_shuffle_storage_are_bounded_private_seams(self) -> None:
         source = DATASET.read_text(encoding="utf-8")
         self.assertIn("et_d2_exact_read_v1", source)

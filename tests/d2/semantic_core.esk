@@ -218,6 +218,20 @@
 (check "maximum counter candidate can be accepted"
        (and (= (vector-ref accepted-at-maximum 0) 7)
             (= (vector-ref accepted-at-maximum 1) d2-core-u64-space)))
+
+;;; The width-8 limit must reuse the rooted module-level 2^64 value. Besides
+;;; preserving the unsigned range, this keeps a cursor store from constructing
+;;; a fresh bignum after its destination bytevector has already been allocated.
+(define maximum-u64-bytes (make-bytevector 8 0))
+(d2-core-store-unsigned-le! maximum-u64-bytes 0 8 d2-core-u64-max)
+(check "maximum u64 has canonical little-endian bytes"
+       (d2-core-bytes=? maximum-u64-bytes
+                        (bytevector 255 255 255 255 255 255 255 255)))
+(check "u64 space remains outside the width-8 field"
+       (rejects?
+        (lambda ()
+          (d2-core-store-unsigned-le!
+           (make-bytevector 8 0) 0 8 d2-core-u64-space))))
 (check "draw after accepted maximum is unsupported"
        (rejects? (lambda ()
                    (d2-core-unbiased-draw-with-source
