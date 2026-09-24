@@ -87,6 +87,17 @@ raw-bit witness. Supported f31 Release poison gates 4/4, real ESKB VM suite
 root verified `f32-vm-hash-keys-c27f85eb-20260924/SHA256SUMS` (`c4cc4c38...`).
 It remains isolated on predecessor `c27f85eb`; the predicate/hash union on
 `d960add`, the type-reflection mapper and whole-F32 acceptance remain pending.
+The reviewed upstream runtime type-symbol leaf `d251cb0`/tree `07882ae`
+implements the accepted public pointer API `eshkol_type_of_ref_v1` in the
+runtime archive, covering all declared direct/heap/callable/legacy tags,
+canonical and malformed f32 bytes, null/unknown controls and interned-symbol
+identity. Supported f31/LLVM21 focused CTests 5/5 and ASan+UBSan+LSan
+runtime-only tests 2/2 pass; root verified
+`f32-type-symbol-ref-v1-20260924/SHA256SUMS` (`17792a7a...`) and independent
+review PASS. Legacy by-value `eshkol_type_of` cannot certify padding bytes 4..7;
+first-intern OOM was not injected. Native Scheme/VM `type-of` still return the
+old types, and the pre-existing source-only exhaustive-dispatch gate remains red
+while its compiled test passes. Native AOT/JIT symbolic lowering is active next.
 The sealed generic E3 dependency audit on exact `9bbb3ff`,
 `e3-generic-dependency-audit-9bbb3ff-20260924T184109Z/evidence-files.sha256`
 (`49195ba6...`), confirms the installed diagnostic facade and private E3
@@ -95,7 +106,10 @@ True-f32 runtime acceptance/repin is the first hard dependency; then TR3 metrics
 authority, public trainer creation, evaluation projection and checkpoint
 admission follow. The [TR3 metrics proposal](TR3_PUBLIC_METRICS_PROPOSAL.md)
 has been reconciled locally with the integrated 22-slot lease and implemented
-E3 seam at `8651c94`; independent document review remains pending.
+E3 seam at `8651c94`; independent review approved the exact source/doc facts,
+sealed at `tr3-metrics-doc-review-692b0a9-20260924T184736Z/evidence-files.sha256`
+(`5ef8df83...`). This remains a design and dependency correction, not a public
+metrics implementation.
 
 ## Wave 0 — contracts and verification foundation
 
