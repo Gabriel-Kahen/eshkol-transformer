@@ -1,6 +1,10 @@
 # G3-C4 Step 5 native active-call contract
 
-Status: **draft for root acceptance; implementation is not authorized**.
+Status: **root accepted; implementation remains prohibited until the shared
+slot is released**. Root accepted the independently reviewed draft at commit
+`56737e2ec15b90cad059db853bb47fd04bea5af7`, tree
+`a13dd41fbbf5e9c28903ae80fa2f9ed5b2b8ce47`, with all six decisions in
+Section 10.
 
 This contract is based exactly on the accepted Step 4a implementation at
 commit `58c59699365cce8d0ef3dac1a8141dc481712ec9`, tree
@@ -309,7 +313,8 @@ execution, and G3-S remain outside this unit.
 
 ## 10. Root acceptance decisions
 
-Root acceptance must fix all of these decisions before implementation:
+Root acceptance fixes all of these decisions for implementation after the
+shared slot is released:
 
 1. accept only `(0,0)`, `(1,0)`, `(2,0)`, and `(2,1)` as native
    call-kind/budget pairs;
@@ -326,5 +331,5 @@ Root acceptance must fix all of these decisions before implementation:
    prepare-end-to-finish trusted tail, seed/RNG policy, and all frame semantics
    as explicit later dependencies because no accepted API currently owns them.
 
-If any decision changes, this draft must be revised and reviewed again. The
+If any decision changes, this contract must be revised and reviewed again. The
 broader successor text alone authorizes no Step 5 implementation.
