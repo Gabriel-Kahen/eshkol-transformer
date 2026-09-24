@@ -43,6 +43,21 @@ class PublicSourceContract(unittest.TestCase):
         self.assertIn("(diagnostic-model-create", source)
         self.assertIn("(tokenizer-byte", source)
 
+    def test_installed_quota_witness_uses_exact_mixed_reservation_horizon(self) -> None:
+        source = (ROOT / "tests/e3_diagnostic_public/quota_runtime.esk").read_text()
+        self.assertIn("((remaining 8190)", source)
+        self.assertIn('"failed reservation returns no public result"', source)
+        self.assertIn('"failed reservation cursor restoration"', source)
+        self.assertIn('"failed value is not report authority"', source)
+        self.assertIn('"8193rd reservation rejection"', source)
+        self.assertIn("'unsupported", source)
+        self.assertIn("'diagnostic-evaluate-fixed!", source)
+        self.assertIn('"oldest report survives cap rejection"', source)
+
+        gate = (ROOT / "scripts/test-e3-diagnostic-public.sh").read_text()
+        self.assertIn("E3_PUBLIC_QUOTA_TIMEOUT_SECONDS:-900", gate)
+        self.assertIn("public_runtime quota_runtime", gate)
+
 
 if __name__ == "__main__":
     unittest.main()

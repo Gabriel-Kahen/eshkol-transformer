@@ -1,9 +1,9 @@
 # E3 fixed-model exact-report successor
 
-Status: **bounded installed-facade candidate**. The source-private evaluator and
-retention boundary are accepted prerequisites. The installed aggregate below still
-requires independent package review and a supported gate before public acceptance.
-This candidate does not complete E3, implement `trainer-evaluate!`, or revive the
+Status: **bounded installed fixed-profile facade accepted**. The source-private
+evaluator, retention boundary, exact package closure and single-call installed
+runtime are accepted. The report-edge witness below remains a test-only candidate.
+This facade does not complete E3, implement `trainer-evaluate!`, or revive the
 deferred rank-zero scalar report.
 
 ## Proposed surface and result shape
@@ -147,6 +147,28 @@ continued validity of a previously published report after failure.
 
 The installed seam does not expose instrumentation for proving that a failed call
 published no new report. That property remains covered by the accepted
-source-private authority witness and unchanged evaluator implementation. Installed
-acceptance also requires exact facade, depfile, export, localization, undefined,
-source and native closure gates on the final package tuple.
+source-private authority witness and unchanged evaluator implementation. The
+accepted installed package pins exact facade, depfile, export, localization,
+undefined, source and native closure inventories.
+
+## Installed report-edge witness
+
+The test-only installed witness uses only the three public operations and the
+already installed fixed-model, byte-tokenizer and D2 constructors. In one poisoned
+process it publishes one report, performs one genuine EOS evaluation failure, then
+publishes 8,190 more reports. Those calls consume exactly 8,192 lifetime
+reservations: 8,191 successes and one charged failure. The next call must raise
+`unsupported` at `diagnostic-evaluate-fixed!` without changing cursor bytes or
+returning a public value. The oldest and newest published reports remain readable.
+
+The failure witness leaves its result slot at a caller-owned sentinel, proves the
+caught EOS error does not authenticate as a report, and compares the EOS cursor
+byte-for-byte. Hidden successful-report authority remains observable only to the
+accepted source-private witness; this installed test does not expose statistics or
+weaken report authentication.
+
+Generic evaluation remains dependency-blocked. `transformer.trainer` currently
+provides only `trainer-state-release!`; the public `trainer-create`,
+`trainer-evaluate!`, immutable metrics map and `metrics-ref` construction path are
+not accepted installed APIs. The diagnostic facade cannot substitute its fixed
+model or raw-bit report for those TR3/A0 contracts.

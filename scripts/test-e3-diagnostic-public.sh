@@ -54,7 +54,7 @@ compile() {
     timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
     "${runner}" --strict-types --no-stdlib -I "${artifact}/facades" "$@"
 }
-for source in compile_api public_runtime; do
+for source in compile_api public_runtime quota_runtime; do
   compile --compile-only --emit-depfile "${output}/${source}.d" \
     "${PROJECT_ROOT}/tests/e3_diagnostic_public/${source}.esk" \
     -o "${output}/${source}.o"
@@ -80,6 +80,18 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 600s \
   >"${output}/public-runtime.stdout" \
   2>"${output}/public-runtime.stderr"
 grep -Fx 'E3-DIAGNOSTIC-PUBLIC-PASS' "${output}/public-runtime.stdout" >/dev/null
+
+compile -O 2 -L "${artifact}" --lib eshkol_transformer_e3_diagnostic \
+  "${PROJECT_ROOT}/tests/e3_diagnostic_public/quota_runtime.esk" \
+  -o "${output}/quota-runtime"
+quota_timeout="${E3_PUBLIC_QUOTA_TIMEOUT_SECONDS:-900}"
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
+  "${quota_timeout}s" "${output}/quota-runtime" "${corpus}/packed-single" \
+  >"${output}/quota-runtime.stdout" \
+  2>"${output}/quota-runtime.stderr"
+grep -Fx \
+  'E3-DIAGNOSTIC-PUBLIC-QUOTA-PASS reservations=8192 successes=8191 failures=1' \
+  "${output}/quota-runtime.stdout" >/dev/null
 
 for symbol in \
     et_e1b_private_e3_diagnostic_evaluate_fixed_cabi_v1 \
