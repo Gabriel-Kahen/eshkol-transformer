@@ -118,7 +118,7 @@ def check():
     ], "active drain")
     require(source.count("et_g3c4_cache_idle_preflight(context)") == 3,
             "cache idle proof must occur only in acquire, prepare-end, abort")
-    require("et_a2_kv_cache_read_borrow_layer_v1" not in source,
+    require("et_a2_kv_cache_read_borrow_layer_v1" not in step5_source,
             "idle probe must not inspect cache content")
 
     for phrase in [

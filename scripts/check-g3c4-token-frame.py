@@ -20,6 +20,29 @@ def ordered(text, fragments, label):
         require(position >= 0, f"{label} missing or misordered: {fragment}")
 
 
+def without_conditional_feature(text, macro):
+    """Remove regions compiled only when a later feature is enabled."""
+    kept = []
+    depth = 0
+    for line in text.splitlines(keepends=True):
+        directive = line.lstrip()
+        opens = (directive.startswith("#if ") or
+                 directive.startswith("#ifdef ") or
+                 directive.startswith("#ifndef "))
+        if depth:
+            if opens:
+                depth += 1
+            elif directive.startswith("#endif"):
+                depth -= 1
+            continue
+        if opens and macro in directive:
+            depth = 1
+            continue
+        kept.append(line)
+    require(depth == 0, f"unterminated conditional feature block: {macro}")
+    return "".join(kept)
+
+
 def body(source, symbol, next_symbol=None):
     start = source.index(f"int64_t {symbol}")
     end = source.index(
@@ -32,6 +55,8 @@ def check():
         [sys.executable, str(ROOT / "scripts/check-g3c4-sampler-transport.py")],
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
+    frame_source = without_conditional_feature(
+        source, "ET_G3C4_TOKEN_FORWARD_PRIVATE")
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
     test = (ROOT / "tests/g3c4/test_token_frame_commit.c").read_text()
     contract = (ROOT / "docs/g3/G3_C4_TOKEN_FRAME_STEP10A_CONTRACT.md").read_text()
@@ -46,13 +71,13 @@ def check():
         "et_g3c4_private_token_frame_abort_v1",
     ]
     for symbol in symbols:
-        require(source.count(symbol) == 1 and header.count(symbol) == 1,
+        require(frame_source.count(symbol) == 1 and header.count(symbol) == 1,
                 f"source-private token-frame boundary changed: {symbol}")
 
-    begin = body(source, symbols[0], symbols[1])
-    stage = body(source, symbols[1], symbols[2])
-    publish = body(source, symbols[2], symbols[3])
-    abort = body(source, symbols[3])
+    begin = body(frame_source, symbols[0], symbols[1])
+    stage = body(frame_source, symbols[1], symbols[2])
+    publish = body(frame_source, symbols[2], symbols[3])
+    abort = body(frame_source, symbols[3])
     ordered(begin, [
         "context->call_kind != 2 || context->budget != 1",
         "et_g3c4_private_sample_last_v1(",
@@ -79,15 +104,15 @@ def check():
     ], "joint publication tail")
     require("et_g3c4_token_frame_discard(context)" in abort,
             "explicit frame abort does not own transaction cleanup")
-    require("et_g3c4_token_frame_discard(context);" in source[source.index(
+    require("et_g3c4_token_frame_discard(context);" in frame_source[frame_source.index(
             "int64_t et_g3c4_private_call_abort_v1"):],
             "active-call abort does not own pending frame cleanup")
-    require("!et_g3c4_token_frame_idle(context)" in source[source.index(
-            "int64_t et_g3c4_private_call_finish_v1"):source.index(
+    require("!et_g3c4_token_frame_idle(context)" in frame_source[frame_source.index(
+            "int64_t et_g3c4_private_call_finish_v1"):frame_source.index(
             "int64_t et_g3c4_private_call_abort_v1")],
             "call finish does not reject a pending frame")
-    require("token_frame_successor[1] ==" in source and
-            "context->generator_rng_words[1]" in source,
+    require("token_frame_successor[1] ==" in frame_source and
+            "context->generator_rng_words[1]" in frame_source,
             "frame successor is not bound to the current RNG seed")
 
     for forbidden in ["full_prefix_forward_v1(", "position", "result_publish",

@@ -61,6 +61,14 @@ int64_t et_g3c4_private_token_frame_publish_v1(
 int64_t et_g3c4_private_token_frame_abort_v1(void *context);
 #endif
 
+#ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
+/* Executes the exact one-token numerical schedule for the sampled candidate,
+ * stages its K/V in the pending token frame, and atomically returns next logits.
+ * The frame remains ready and unpublished. */
+int64_t et_g3c4_private_token_forward_v1(
+    void *context, int64_t speculative_token, float logits[256]);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
