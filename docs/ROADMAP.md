@@ -419,8 +419,14 @@ The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSH
 supported f31 strict O0 AOT and 110 runtime checks with a 1,024-iteration
 zero-growth horizon pass. Root verified
 `tr3-c-snapshot-lease-00d17cb-20260924/SHA256SUMS` (`c2a64b13...`), and
-merged source contracts pass 26/26. Snapshot composition, public trainer state,
-and resume acceptance remain pending.
+merged source contracts pass 26/26. The independently reviewed
+[private snapshot composer](TR3_C_SNAPSHOT_COMPOSER.md) is integrated from
+`4534b21`/tree `d5cad25` with genuine P1/O2/D2/X1/C2 seams, request-led
+ownership transfer, ordered failure cleanup, source preservation, and retry.
+Root verified `tr3-c-snapshot-composer-final-4534b21/SHA256SUMS`
+(`3cf350f...`), 18/18 focused source and lease contracts, and pinned f31
+strict O0 AOT runtime with 27 checks and 42 tensors. Public trainer state,
+serialization, restore invocation and resume acceptance remain pending.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
