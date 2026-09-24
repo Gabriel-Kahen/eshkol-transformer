@@ -117,8 +117,17 @@ runtime-only tests 2/2 pass; root verified
 `f32-type-symbol-ref-v1-20260924/SHA256SUMS` (`17792a7a...`) and independent
 review PASS. Legacy by-value `eshkol_type_of` cannot certify padding bytes 4..7;
 first-intern OOM was not injected. Native Scheme/VM `type-of` still return the
-old types, and the pre-existing source-only exhaustive-dispatch gate remains red
-while its compiled test passes. Native AOT/JIT symbolic lowering is active next.
+old types on the `d251cb0` leaf, and the pre-existing source-only
+exhaustive-dispatch gate remains red while its compiled test passes. The
+reviewed native Scheme AOT/JIT successor `069efba`/tree `418cf89e` adds a
+pointer-result adapter around `eshkol_type_of_ref_v1`, stores the original
+16-byte carrier, and returns a typed canonical interned Symbol through direct,
+first-class, `apply` and `map` routes. Its single independent review PASS and
+pinned f31 Release focused 10/10, type suites 21/21/9/9/70/70, native
+sanitizer 6/6 and JIT sanitizer 4/4 pass; root verified
+`f32-type-symbol-native-20260924/SHA256SUMS` (`398e3229...`). VM `type-of`
+and cross-substrate union gates remain pending; the native leaf has not been
+composed onto `602876a` yet.
 The separate reviewed tagged-cons transport repair `2904b94`/tree `01b89bd6`
 copies all 16 tagged-value bytes through construction, setters/getters, batch
 and region escape paths, with overlap-safe self-store. Supported f31 Debug
@@ -137,6 +146,25 @@ in both builds. Root verified
 pre-existing source-pattern exhaustive gate and VM compiler UBSan signed shift
 remain separate blockers; this union is not full F32 acceptance and does not
 change the transformer runtime pin.
+The separate reviewed native/VM `region-open` F32 size leaf `4cf63f4`/tree
+`774ba8e` promotes canonical F32 like representable DOUBLE in lone and second
+size positions, rejects malformed/folded native carriers before handle
+mutation, and rejects non-finite or `>=2^64` float sizes on both substrates
+before the previously undefined integer conversion. Supported f31 Release and
+ASan+UBSan focused gates pass 2/2 each, with VM source 77/77; root verified
+`f32-region-open-parity-20260924/SHA256SUMS` (`28f14c97...`) and approved the
+single focused review. VM bookkeeping handles do not retain accepted size
+hints, so helper and successful dispatch are separate witnesses. This remains
+isolated and does not establish full F32 acceptance.
+The separate reviewed VM scalar activation leaf `e6eba88`/tree `45f8a8f`
+accepts canonical F32 at scalar FIDs 462–468, returns the same result kind as
+binary64, rejects folded unknown tags, and canonicalizes promoted NaNs to the
+accepted binary64 quiet-NaN bits. Supported f31 Release focused gates pass
+3/3, ASan+UBSan 2/2, direct VM C API 734/734 and standalone source 77/77 in
+both builds; root verified
+`f32-vm-scalar-activations-d960add-20260924/SHA256SUMS` (`490c9feb...`)
+and approved the single focused review. The existing scalar fallbacks in
+FIDs 463 and 466–468 remain; this isolated leaf is not full F32 acceptance.
 The sealed generic E3 dependency audit on exact `9bbb3ff`,
 `e3-generic-dependency-audit-9bbb3ff-20260924T184109Z/evidence-files.sha256`
 (`49195ba6...`), confirms the installed diagnostic facade and private E3
