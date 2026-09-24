@@ -1,0 +1,486 @@
+;;; Private G3-C4 generator, RNG, and call-entry ownership authority.
+;;; Load after g3c4_model_extension.esk.  This file adds no public facade.
+
+(extern ptr g3c4-native-rng-seed i64
+        :real et_g3c4_private_rng_seed_v1)
+(extern ptr g3c4-native-rng-clone ptr
+        :real et_g3c4_private_rng_clone_v1)
+(extern i64 g3c4-native-rng-word ptr i64
+        :real et_g3c4_private_rng_word_v1)
+(extern i64 g3c4-native-rng-release ptr
+        :real et_g3c4_private_rng_release_v1)
+(extern ptr g3c4-native-generator-seed ptr i64 i64 i64 i64 i64 i64 i64
+        :real et_g3c4_private_generator_seed_v1)
+(extern ptr g3c4-native-generator-rng ptr ptr i64 i64 i64 i64 i64 i64
+        :real et_g3c4_private_generator_rng_v1)
+(extern i64 g3c4-native-generator-close ptr
+        :real et_g3c4_private_generator_close_v1)
+(extern i64 g3c4-native-call-acquire ptr i64 i64
+        :real et_g3c4_private_call_acquire_v1)
+(extern i64 g3c4-native-call-prepare-end ptr
+        :real et_g3c4_private_call_prepare_end_v1)
+(extern i64 g3c4-native-call-finish ptr
+        :real et_g3c4_private_call_finish_v1)
+(extern i64 g3c4-native-call-abort ptr
+        :real et_g3c4_private_call_abort_v1)
+
+(define g3c4-registry (vector '()))
+(define g3c4-rng-algorithm 'g3.philox4x32-10.categorical-f32.v1)
+
+(define (g3c4-entry-dead! entry)
+  (vector-set! entry 2 'dead)
+  (let clear ((index 3))
+    (if (= index 12) #t
+        (begin (vector-set! entry index #f)
+               (clear (+ index 1))))))
+
+(define (g3c4-dead-entry? entry kind)
+  (and (vector? entry) (= (vector-length entry) 12)
+       (eq? (vector-ref entry 1) kind)
+       (eq? (vector-ref entry 2) 'dead)
+       (let clear? ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index))
+                  (clear? (+ index 1)))))))
+
+(define (g3c4-registry-find shell operation)
+  (let loop ((entries (vector-ref g3c4-registry 0)))
+    (cond ((null? entries)
+           (g3c4-fail 'invalid-argument operation
+                      "C4 transport identity is not registered"))
+          ((eq? (vector-ref (car entries) 0) shell) (car entries))
+          (else (loop (cdr entries))))))
+
+(define (g3c4-model-entry-live model operation active-call)
+  (let loop ((entries (vector-ref g3c4-model-registry 0)))
+    (if (null? entries)
+        (g3c4-fail 'invalid-argument operation
+                   "C4 model identity is not registered")
+        (let ((entry (car entries)))
+          (if (eq? (vector-ref entry 0) model)
+              (let ((original (vector-ref entry 5))
+                    (successor (vector-ref entry 6))
+                    (handles (vector-ref entry 8)))
+                (if (and (vector? entry) (= (vector-length entry) 12)
+                       (eq? (vector-ref entry 1) 'c4-model)
+                       (eq? (vector-ref entry 2) 'live)
+                       (vector-ref entry 3)
+                       (eq? (vector-ref entry 4) 'seeded)
+                       (vector? original) (= (vector-length original) 4)
+                       (m3t-exact-i64? (vector-ref original 0))
+                       (= (vector-ref original 0) 1)
+                       (m3t-exact-i64? (vector-ref original 1))
+                       (>= (vector-ref original 1) 0)
+                       (m3t-exact-i64? (vector-ref original 2))
+                       (= (vector-ref original 2) 0)
+                       (m3t-exact-i64? (vector-ref original 3))
+                       (= (vector-ref original 3) 0)
+                       (vector? successor) (= (vector-length successor) 4)
+                       (m3t-exact-i64? (vector-ref successor 0))
+                       (= (vector-ref successor 0) 1)
+                       (m3t-exact-i64? (vector-ref successor 1))
+                       (= (vector-ref successor 1) (vector-ref original 1))
+                       (m3t-exact-i64? (vector-ref successor 2))
+                       (= (vector-ref successor 2) 292)
+                       (m3t-exact-i64? (vector-ref successor 3))
+                       (= (vector-ref successor 3) 0)
+                       (eq? (vector-ref entry 7) #f)
+                       (vector? handles) (= (vector-length handles) 14)
+                       (let handles-valid ((index 0))
+                         (if (= index 14) #t
+                             (and (vector-ref handles index)
+                                  (let distinct ((prior 0))
+                                    (if (= prior index) #t
+                                        (and
+                                          (not (eq? (vector-ref handles prior)
+                                                    (vector-ref handles index)))
+                                          (distinct (+ prior 1)))))
+                                  (handles-valid (+ index 1)))))
+                       (eq? (vector-ref entry 9) #f)
+                       (eq? (vector-ref entry 10) active-call)
+                       (eq? (vector-ref entry 11) g3c4-model-profile))
+                  entry
+                  (g3c4-fail 'invalid-state operation
+                             "C4 model authority is not exact and live")))
+              (loop (cdr entries)))))))
+
+(define (g3c4-native-rng-word-checked native index operation)
+  (let ((word (g3c4-native-rng-word native index)))
+    (if (not (= (g3c4-native-last-error-category) 0))
+        (g3c4-native-fail operation))
+    word))
+
+(define (g3c4-rng-snapshot? snapshot)
+  (and (vector? snapshot) (= (vector-length snapshot) 5)
+       (eq? (vector-ref snapshot 0) g3c4-rng-algorithm)
+       (m3t-exact-i64? (vector-ref snapshot 1))
+       (= (vector-ref snapshot 1) 1)
+       (m3t-exact-i64? (vector-ref snapshot 2))
+       (>= (vector-ref snapshot 2) 0)
+       (m3t-exact-i64? (vector-ref snapshot 3))
+       (m3t-exact-i64? (vector-ref snapshot 4))))
+
+(define (g3c4-rng-entry-live rng operation)
+  (let* ((entry (g3c4-registry-find rng operation))
+         (snapshot (vector-ref entry 7)))
+    (if (not (and (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 1) 'rng)
+                  (eq? (vector-ref entry 2) 'live)
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (g3c4-rng-snapshot? snapshot)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 RNG authority is not exact and live"))
+    entry))
+
+(define (g3c4-rng-capture native operation)
+  (vector g3c4-rng-algorithm
+          (g3c4-native-rng-word-checked native 0 operation)
+          (g3c4-native-rng-word-checked native 1 operation)
+          (g3c4-native-rng-word-checked native 2 operation)
+          (g3c4-native-rng-word-checked native 3 operation)))
+
+(define (g3c4-rng-publish operation native-constructor)
+  (let* ((shell (vector 'g3c4-rng-private))
+         (ledger (vector #f))
+         (entry (vector shell 'rng 'pending #f #f #f #f #f #f #f
+                        ledger g3c4-model-profile))
+         (next (cons entry (vector-ref g3c4-registry 0)))
+         (native '()))
+    (guard (caught
+             (#t
+               (if (not (null? native))
+                   (if (not (= (g3c4-native-rng-release native) 0))
+                       (exit 134)))
+               (g3c4-entry-dead! entry)
+               (raise caught)))
+      (vector-set! g3c4-registry 0 next)
+      (let* ((canonical (car (vector-ref g3c4-registry 0)))
+             (canonical-ledger (vector-ref canonical 10))
+             (created (native-constructor)))
+        (set! native created)
+        (if (null? created) (g3c4-native-fail operation))
+        (vector-set! canonical-ledger 0 created)
+        (vector-set! canonical 3 created)
+        (vector-set! canonical 7 (g3c4-rng-capture created operation))
+        (vector-set! canonical 2 'live)
+        (vector-set! canonical 10 #f)
+        (vector-ref canonical 0)))))
+
+(define (g3c4-rng-create-seeded-internal seed)
+  (let ((operation 'g3c4-rng-create-seeded-internal))
+    (m3-call operation
+      (if (not (and (m3t-exact-i64? seed) (>= seed 0)))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 RNG seed must be a nonnegative exact int64"))
+      (g3c4-rng-publish operation
+        (lambda () (g3c4-native-rng-seed seed))))))
+
+(define (g3c4-rng-clone-internal rng)
+  (let ((operation 'g3c4-rng-clone-internal))
+    (m3-call operation
+      (let* ((source (g3c4-rng-entry-live rng operation))
+             (native (vector-ref source 3)))
+        (g3c4-rng-publish operation
+          (lambda () (g3c4-native-rng-clone native)))))))
+
+(define (g3c4-rng-release-internal! rng)
+  (let ((operation 'g3c4-rng-release-internal!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find rng operation)))
+        (cond ((g3c4-dead-entry? entry 'rng) #t)
+              ((eq? (vector-ref entry 1) 'rng)
+               (let ((live (g3c4-rng-entry-live rng operation)))
+                 (g3c4-native-check
+                   (g3c4-native-rng-release (vector-ref live 3)) operation)
+                 (g3c4-entry-dead! live)))
+              (else
+                (g3c4-fail 'invalid-argument operation
+                           "C4 identity is not an RNG")))))))
+
+(define (g3c4-positive-finite-f32-bits? bits)
+  (and (m3t-exact-i64? bits) (>= bits 0) (<= bits 4294967295)
+       (= (bitwise-and bits 2147483648) 0)
+       (not (= bits 0))
+       (not (= (bitwise-and bits 2139095040) 2139095040))))
+
+(define (g3c4-policy? policy)
+  (and (vector? policy) (= (vector-length policy) 7)
+       (eq? (vector-ref policy 0) g3c4-model-profile)
+       (m3t-exact-i64? (vector-ref policy 1))
+       (or (= (vector-ref policy 1) 0) (= (vector-ref policy 1) 1))
+       (g3c4-positive-finite-f32-bits? (vector-ref policy 2))
+       (m3t-exact-i64? (vector-ref policy 3))
+       (>= (vector-ref policy 3) 1) (<= (vector-ref policy 3) 256)
+       (g3c4-positive-finite-f32-bits? (vector-ref policy 4))
+       (<= (vector-ref policy 4) 1065353216)
+       (m3t-exact-i64? (vector-ref policy 5))
+       (>= (vector-ref policy 5) 0) (<= (vector-ref policy 5) 1)
+       (or (eq? (vector-ref policy 6) #f)
+           (and (m3t-exact-i64? (vector-ref policy 6))
+                (>= (vector-ref policy 6) 0)
+                (<= (vector-ref policy 6) 255)))
+       (or (= (vector-ref policy 1) 1)
+           (and (= (vector-ref policy 2) 1065353216)
+                (= (vector-ref policy 3) 256)
+                (= (vector-ref policy 4) 1065353216)))))
+
+(define (g3c4-normalize-config config operation)
+  (let ((seen (make-vector 9 #f))
+        (values (make-vector 9 #f)))
+    (let loop ((remaining config) (pairs 0))
+      (cond
+        ((= pairs 8)
+         (if (not (null? remaining))
+             (g3c4-fail 'invalid-argument operation
+                        "C4 config must have exactly eight pairs")))
+        ((not (pair? remaining))
+         (g3c4-fail 'invalid-argument operation
+                    "C4 config must be a proper flat list"))
+        ((not (pair? (cdr remaining)))
+         (g3c4-fail 'invalid-argument operation
+                    "C4 config key has no value"))
+        (else
+          (let* ((key (car remaining))
+                 (value (car (cdr remaining)))
+                 (slot
+                   (cond ((eq? key ':profile) 0)
+                         ((eq? key ':sampling) 1)
+                         ((eq? key ':temperature-bits) 2)
+                         ((eq? key ':top-k) 3)
+                         ((eq? key ':top-p-bits) 4)
+                         ((eq? key ':max-new-tokens) 5)
+                         ((eq? key ':eos) 6)
+                         ((eq? key ':seed) 7)
+                         ((eq? key ':rng) 8)
+                         (else -1))))
+            (if (< slot 0)
+                (g3c4-fail 'invalid-argument operation
+                           "C4 config contains an unknown key"))
+            (if (vector-ref seen slot)
+                (g3c4-fail 'invalid-argument operation
+                           "C4 config contains a duplicate key"))
+            (vector-set! seen slot #t)
+            (vector-set! values slot value)
+            (loop (cdr (cdr remaining)) (+ pairs 1))))))
+    (let required ((slot 0))
+      (if (= slot 7) #t
+          (begin
+            (if (not (vector-ref seen slot))
+                (g3c4-fail 'invalid-argument operation
+                           "C4 config is missing a required key"))
+            (required (+ slot 1)))))
+    (if (eq? (vector-ref seen 7) (vector-ref seen 8))
+        (g3c4-fail 'invalid-argument operation
+                   "C4 config needs exactly one seed or RNG"))
+    (let* ((sampling (vector-ref values 1))
+           (mode (cond ((eq? sampling 'greedy) 0)
+                       ((eq? sampling 'categorical) 1)
+                       (else -1)))
+           (temperature (vector-ref values 2))
+           (top-k (vector-ref values 3))
+           (top-p (vector-ref values 4))
+           (max-new (vector-ref values 5))
+           (eos (vector-ref values 6))
+           (policy
+             (vector g3c4-model-profile mode temperature top-k top-p
+                     max-new eos)))
+      (if (not (eq? (vector-ref values 0) g3c4-model-profile))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 config profile must be diagnostic-c4"))
+      (if (not (g3c4-policy? policy))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 config sampling policy is invalid"))
+      (if (vector-ref seen 7)
+          (let ((seed (vector-ref values 7)))
+            (if (not (and (m3t-exact-i64? seed) (>= seed 0)))
+                (g3c4-fail 'invalid-argument operation
+                           "C4 generator seed is invalid"))
+            (vector policy 'seed seed))
+          (let* ((rng (vector-ref values 8))
+                 (entry (g3c4-rng-entry-live rng operation)))
+            (vector policy 'rng entry))))))
+
+(define (g3c4-generator-entry-live generator operation)
+  (let* ((entry (g3c4-registry-find generator operation))
+         (model-entry (vector-ref entry 5)))
+    (if (not (and (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 1) 'generator)
+                  (eq? (vector-ref entry 2) 'live)
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) #f)
+                  (vector? model-entry)
+                  (eq? (vector-ref entry 6) #f)
+                  (g3c4-policy? (vector-ref entry 7))
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 generator authority is not exact and idle"))
+    (if (not (eq? model-entry
+                  (g3c4-model-entry-live
+                    (vector-ref model-entry 0) operation #f)))
+        (g3c4-fail 'internal operation
+                   "C4 generator model cross-link changed"))
+    entry))
+
+(define (g3c4-generator-create-internal model config)
+  (let ((operation 'g3c4-generator-create-internal))
+    (m3-call operation
+      (let* ((normalized (g3c4-normalize-config config operation))
+             (policy (vector-ref normalized 0))
+             (source-kind (vector-ref normalized 1))
+             (source (vector-ref normalized 2))
+             (model-entry (g3c4-model-entry-live model operation #f))
+             (shell (vector 'g3c4-generator-private))
+             (ledger (vector #f))
+             (entry (vector shell 'generator 'pending #f #f model-entry #f
+                            policy #f #f ledger g3c4-model-profile))
+             (next (cons entry (vector-ref g3c4-registry 0)))
+             (native '()))
+        (guard (caught
+                 (#t
+                   (if (not (null? native))
+                       (if (not (= (g3c4-native-generator-close native) 0))
+                           (exit 134)))
+                   (g3c4-entry-dead! entry)
+                   (raise caught)))
+          (vector-set! g3c4-registry 0 next)
+          (let* ((canonical (car (vector-ref g3c4-registry 0)))
+                 (canonical-policy (vector-ref canonical 7))
+                 (canonical-ledger (vector-ref canonical 10))
+                 (eos (vector-ref canonical-policy 6))
+                 (created
+                   (if (eq? source-kind 'seed)
+                       (g3c4-native-generator-seed
+                         (vector-ref model-entry 3) source
+                         (vector-ref canonical-policy 1)
+                         (vector-ref canonical-policy 2)
+                         (vector-ref canonical-policy 3)
+                         (vector-ref canonical-policy 4)
+                         (vector-ref canonical-policy 5)
+                         (if eos eos -1))
+                       (g3c4-native-generator-rng
+                         (vector-ref model-entry 3) (vector-ref source 3)
+                         (vector-ref canonical-policy 1)
+                         (vector-ref canonical-policy 2)
+                         (vector-ref canonical-policy 3)
+                         (vector-ref canonical-policy 4)
+                         (vector-ref canonical-policy 5)
+                         (if eos eos -1)))))
+            (set! native created)
+            (if (null? created) (g3c4-native-fail operation))
+            (vector-set! canonical-ledger 0 created)
+            (vector-set! canonical 3 created)
+            (vector-set! canonical 2 'live)
+            (vector-set! canonical 10 #f)
+            (vector-ref canonical 0)))))))
+
+(define (g3c4-generator-close-internal! generator)
+  (let ((operation 'g3c4-generator-close-internal!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find generator operation)))
+        (cond ((g3c4-dead-entry? entry 'generator) #t)
+              ((eq? (vector-ref entry 1) 'generator)
+               (let ((live (g3c4-generator-entry-live generator operation)))
+                 (g3c4-native-check
+                   (g3c4-native-generator-close (vector-ref live 3)) operation)
+                 (g3c4-entry-dead! live)))
+              (else
+                (g3c4-fail 'invalid-argument operation
+                           "C4 identity is not a generator")))))))
+
+(define (g3c4-call-tuple? call-kind budget)
+  (and (m3t-exact-i64? call-kind) (m3t-exact-i64? budget)
+       (or (and (= call-kind 0) (= budget 0))
+           (and (= call-kind 1) (= budget 0))
+           (and (= call-kind 2) (or (= budget 0) (= budget 1))))))
+
+(define (g3c4-call-rollback! call-entry generator-entry model-entry operation)
+  (let ((ledger (vector-ref call-entry 10)))
+    (if (vector-ref ledger 0)
+        (if (not (= (g3c4-native-call-abort
+                      (vector-ref generator-entry 3)) 0))
+            (exit 134)))
+    (if (vector-ref ledger 1)
+        (if (eq? (vector-ref model-entry 10) call-entry)
+            (vector-set! model-entry 10 #f)
+            (exit 134)))
+    (if (vector-ref ledger 2)
+        (if (eq? (vector-ref generator-entry 9) call-entry)
+            (vector-set! generator-entry 9 #f)
+            (exit 134)))
+    (g3c4-entry-dead! call-entry)))
+
+(define (g3c4-call-success! call-entry generator-entry model-entry)
+  (if (not (and (eq? (vector-ref model-entry 10) call-entry)
+                (eq? (vector-ref generator-entry 9) call-entry)
+                (eq? (vector-ref call-entry 2) 'live)))
+      (exit 134))
+  (vector-set! model-entry 10 #f)
+  (vector-set! generator-entry 9 #f)
+  (g3c4-entry-dead! call-entry))
+
+(define-syntax g3c4-with-call-internal
+  (syntax-rules ()
+    ((_ operation generator call-kind budget body ...)
+     (m3-call operation
+       (if (not (g3c4-call-tuple? call-kind budget))
+           (g3c4-fail 'invalid-argument operation
+                      "C4 call kind and budget are invalid"))
+       (let* ((generator-entry
+                (g3c4-generator-entry-live generator operation))
+              (model-entry (vector-ref generator-entry 5))
+              (shell (vector 'g3c4-call-private))
+              (ledger (vector #f #f #f #f))
+              (call-entry
+                (vector shell 'call 'pending #f generator-entry model-entry
+                        #f #f #f #f ledger g3c4-model-profile))
+              (next (cons call-entry (vector-ref g3c4-registry 0)))
+              (phase (vector 'precommit)))
+         (vector-set! g3c4-registry 0 next)
+         (let ((canonical (car (vector-ref g3c4-registry 0)))
+               (canonical-ledger
+                 (vector-ref (car (vector-ref g3c4-registry 0)) 10)))
+           (guard (caught
+                    (#t
+                      (if (eq? (vector-ref phase 0) 'precommit)
+                          (g3c4-call-rollback!
+                            canonical generator-entry model-entry operation)
+                          (exit 134))
+                      (raise caught)))
+             (g3c4-native-check
+               (g3c4-native-call-acquire
+                 (vector-ref generator-entry 3) call-kind budget)
+               operation)
+             (vector-set! canonical-ledger 0 #t)
+             (vector-set! model-entry 10 canonical)
+             (vector-set! canonical-ledger 1 #t)
+             (vector-set! generator-entry 9 canonical)
+             (vector-set! canonical-ledger 2 #t)
+             (vector-set! canonical 2 'live)
+             (vector-set! canonical-ledger 3 #t)
+             (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+             (vector-set! m3-call-state 0 canonical)
+             (let ((answer (begin body ...)))
+               (g3c4-native-check
+                 (g3c4-native-call-prepare-end
+                   (vector-ref generator-entry 3)) operation)
+               ;; The development witness commits no frame, cache, token, or result.
+               (vector-set! phase 0 'committed)
+               (if (not (= (g3c4-native-call-finish
+                              (vector-ref generator-entry 3)) 0))
+                   (exit 134))
+               (g3c4-call-success! canonical generator-entry model-entry)
+               answer))))))))
+
+(define (g3c4-call-empty-commit-internal! generator call-kind budget)
+  (g3c4-with-call-internal
+    'g3c4-call-empty-commit-internal! generator call-kind budget #t))
