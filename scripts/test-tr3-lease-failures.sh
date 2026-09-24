@@ -76,8 +76,13 @@ if [[ "${allocation_class}" == all ]]; then
   [[ "${runtime_commit}" == "$(tsv_value "${failure_manifest}" runtime_source_commit)" &&
      "${runtime_tree}" == "$(tsv_value "${failure_manifest}" runtime_source_tree)" ]] || \
     die "full allocator matrix requires the reviewed production-OFF runtime"
-  expected_production_base="$(tsv_value "${failure_manifest}" trainer_source_commit)"
-  expected_production_tree="$(tsv_value "${failure_manifest}" trainer_source_tree)"
+  historical_trainer_commit="$(tsv_value "${failure_manifest}" trainer_source_commit)"
+  historical_trainer_tree="$(tsv_value "${failure_manifest}" trainer_source_tree)"
+  [[ "$(git -C "${PROJECT_ROOT}" rev-parse \
+       "${historical_trainer_commit}^{tree}")" == "${historical_trainer_tree}" ]] || \
+    die "historical failed-matrix trainer identity changed"
+  expected_production_base="$(tsv_value "${failure_manifest}" approved_production_commit)"
+  expected_production_tree="$(tsv_value "${failure_manifest}" approved_production_tree)"
   expected_witness_commit="${expected_production_base}"
   expected_witness_tree="${expected_production_tree}"
   [[ "${runner_sha}" == "$(tsv_value "${failure_manifest}" runner_sha256)" &&
@@ -95,7 +100,7 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=9e282f14bab3d209c13ca48a11644369d1407f3707d14b1d52783dae7f94fc51
+expected_runner_self_sha256=bde887e0897c55b92e76be21e6b3a6c5f10a3a025032d35de2e2b035da9c7c27
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
@@ -116,6 +121,18 @@ expected_successor_test_sha256="$(tsv_value "${failure_manifest}" successor_cont
   "${PROJECT_ROOT}/native/tr3_lease_core_extension.esk" | awk '{print $1}')" == \
    "$(tsv_value "${failure_manifest}" lease_core_sha256)" ]] || \
   die "reviewed lease core changed"
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/internal/d2/lib/d2_semantic_core.esk" | awk '{print $1}')" == \
+   "$(tsv_value "${failure_manifest}" d2_semantic_core_sha256)" ]] || \
+  die "reviewed D2 semantic core changed"
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/tests/d2/semantic_core.esk" | awk '{print $1}')" == \
+   "$(tsv_value "${failure_manifest}" d2_semantic_fixture_sha256)" ]] || \
+  die "reviewed D2 semantic fixture changed"
+[[ "$(sha256sum \
+  "${PROJECT_ROOT}/tests/d2/test_scope.py" | awk '{print $1}')" == \
+   "$(tsv_value "${failure_manifest}" d2_scope_test_sha256)" ]] || \
+  die "reviewed D2 scope test changed"
 [[ "$(sha256sum \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" | awk '{print $1}')" == \
    "$(tsv_value "${failure_manifest}" failure_fixture_sha256)" ]] || \
@@ -287,6 +304,7 @@ cp -- \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/README.md" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
+  "${PROJECT_ROOT}/tests/d2/semantic_core.esk" \
   "${PROJECT_ROOT}/tests/d2/public_errors_runtime.esk" \
   "${PROJECT_ROOT}/tests/d2/test_scope.py" \
   "${evidence_dir}/inputs/"
@@ -534,6 +552,8 @@ cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_runtime.esk" \
   "${evidence_dir}/inputs/lease_failure_runtime.esk"
 cmp -- "${PROJECT_ROOT}/tests/tr3_lease_failure/lease_failure_shim.cpp" \
   "${evidence_dir}/inputs/lease_failure_shim.cpp"
+cmp -- "${PROJECT_ROOT}/tests/d2/semantic_core.esk" \
+  "${evidence_dir}/inputs/semantic_core.esk"
 cmp -- "${PROJECT_ROOT}/tests/d2/public_errors_runtime.esk" \
   "${evidence_dir}/inputs/public_errors_runtime.esk"
 cmp -- "${PROJECT_ROOT}/tests/d2/test_scope.py" \
