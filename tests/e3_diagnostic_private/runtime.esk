@@ -41,7 +41,7 @@
        (= (vector-ref value 5) 5)
        (= (vector-ref value 6) 3)
        (vector? (vector-ref value 9))
-       (= (vector-length (vector-ref value 9)) 3)))
+       (= (vector-length (vector-ref value 9)) 6)))
 
 (define (run-success path)
   (let ((value (call-success path)))
@@ -49,7 +49,11 @@
     (check "success authority stats"
            (and (= (vector-ref (vector-ref value 9) 0) 1)
                 (= (vector-ref (vector-ref value 9) 1) 1)
-                (= (vector-ref (vector-ref value 9) 2) 0)))
+                (= (vector-ref (vector-ref value 9) 2) 0)
+                (> (vector-ref (vector-ref value 9) 3)
+                   (vector-ref (vector-ref value 9) 5))
+                (>= (vector-ref (vector-ref value 9) 4) 0)
+                (> (vector-ref (vector-ref value 9) 5) 0)))
     (display "E3-DIAGNOSTIC-SUCCESS-PASS") (newline)))
 
 (define (run-eos path)
@@ -61,14 +65,22 @@
                 (= (vector-ref (vector-ref value 5) 0) 0)
                 (= (vector-ref (vector-ref value 5) 1) 0)
                 (= (vector-ref (vector-ref value 5) 2) 0)
+                (= (vector-ref (vector-ref value 5) 3) 0)
+                (= (vector-ref (vector-ref value 5) 4) 0)
+                (> (vector-ref (vector-ref value 5) 5) 0)
                 (= (vector-ref (vector-ref value 6) 0) 1)
                 (= (vector-ref (vector-ref value 6) 1) 0)
-                (= (vector-ref (vector-ref value 6) 2) 0)))
+                (= (vector-ref (vector-ref value 6) 2) 0)
+                (> (vector-ref (vector-ref value 6) 3) 0)
+                (>= (vector-ref (vector-ref value 6) 4) 0)
+                (= (vector-ref (vector-ref value 6) 5)
+                   (vector-ref (vector-ref value 5) 5))))
     (display "E3-DIAGNOSTIC-EOS-PASS") (newline)))
 
 (define (run-horizon path horizon failure?)
   (let ((arena-before (__arena-used))
-        (last-reservations 0) (last-successes 0) (last-active 0))
+        (last-reservations 0) (last-successes 0) (last-active 0)
+        (last-promoted 0) (last-inherited 0) (envelope-bytes 0))
     (let loop ((index 0))
       (if (= index horizon) #t
           (begin
@@ -81,13 +93,34 @@
                    (stats (vector-ref value (if failure? 6 9))))
               (set! last-reservations (vector-ref stats 0))
               (set! last-successes (vector-ref stats 1))
-              (set! last-active (vector-ref stats 2)))
+              (set! last-active (vector-ref stats 2))
+              (set! last-promoted (vector-ref stats 3))
+              (set! last-inherited (vector-ref stats 4))
+              (set! envelope-bytes (vector-ref stats 5)))
             (loop (+ index 1)))))
-    (let ((arena-delta (- (__arena-used) arena-before)))
+    (let* ((arena-delta (- (__arena-used) arena-before))
+           (unreachable-staging
+            (if failure? last-promoted
+                (* envelope-bytes last-reservations)))
+           (reachable-authority
+            (if failure? 0 (- last-promoted unreachable-staging)))
+           (attributed (+ reachable-authority unreachable-staging
+                          last-inherited))
+           (witness-other (- arena-delta attributed)))
       (check "horizon reservations" (= last-reservations horizon))
       (check "horizon successes"
              (= last-successes (if failure? 0 horizon)))
       (check "horizon staging idle" (= last-active 0))
+      (check "horizon envelope bytes" (> envelope-bytes 0))
+      (check "horizon promoted bytes" (> last-promoted 0))
+      (check "horizon inherited bytes" (>= last-inherited 0))
+      (check "horizon witness remainder" (>= witness-other 0))
+      (check "horizon promoted byte integral"
+             (= (modulo last-promoted last-reservations) 0))
+      (check "horizon authority attribution"
+             (if failure?
+                 (= reachable-authority 0)
+                 (> reachable-authority 0)))
       (if (and (not failure?) (= horizon 8192))
           (let ((caught
                  (guard
@@ -104,6 +137,12 @@
       (display " arena_delta=") (display arena-delta)
       (display " reservations=") (display last-reservations)
       (display " successes=") (display last-successes)
+      (display " reachable_authority_bytes=") (display reachable-authority)
+      (display " unreachable_staging_bytes=") (display unreachable-staging)
+      (display " inherited_transaction_bytes=") (display last-inherited)
+      (display " witness_other_bytes=") (display witness-other)
+      (display " reserve_promoted_bytes=") (display last-promoted)
+      (display " envelope_bytes_per_call=") (display envelope-bytes)
       (newline))))
 
 (let ((args (command-line)))

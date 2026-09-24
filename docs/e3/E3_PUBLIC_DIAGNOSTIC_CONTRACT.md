@@ -71,12 +71,29 @@ is active. Because the root arena does not reclaim individual promoted objects, 
 envelope may remain as unreachable retained storage after either success or failure;
 failure still publishes no reachable report. Every reservation can also leave the
 already accepted inert E3 frame/P1 mode/I2 identity controls after
-unbind/destruction. The reservation cap bounds all of these per-invocation controls,
-but their exact structural count and retained arena/native bytes remain unmeasured.
-The pinned-runtime gate must report reachable published-report authority separately
-from unreachable promoted staging at both 1,024 and 8,192 success horizons, and must
-measure the corresponding failed-reservation retention separately. Installed/public
-acceptance is blocked on those measurements and on a reviewed exact package closure.
+unbind/destruction. The reservation cap bounds all of these per-invocation controls.
+
+The source-private gate attributes global-arena retention at explicit allocation
+boundaries. It measures the complete promoted report/staging graph at the root
+publication barrier, then measures inherited transaction retention from immediately
+after that reservation through completed unbind, destination destruction and
+publish/abandon. A package-initialization calibration promotes one isolated
+three-slot vector whose referents already have root lifetime; that is the exact
+staging-envelope object size and is excluded from every horizon delta. Therefore a
+successful reservation attributes the promoted graph minus one envelope to reachable
+report authority and one envelope to unreachable staging. A failed reservation
+publishes no authority, so its complete abandoned promoted graph is unreachable
+staging. `inherited_transaction_bytes` is the separately measured post-reservation
+E3/P1/I2 cleanup bucket; on failure it also includes runtime error retention before
+the outer rethrow. `witness_other_bytes` is the nonnegative remainder of the outer
+arena delta, including caller dataset/result controls and the outer failure transfer.
+These are retained global-arena bytes, not native heap totals or per-object live-heap
+reachability from a tracing collector.
+
+The pinned runtime records all four buckets at the 1,024 and 8,192 success and
+failure horizons, with intermediate successful scaling points retained. Installed/
+public acceptance remains blocked on review of the measurements and on a reviewed
+exact package closure.
 
 The intended first consumer is a one-shot CLI evaluation process. The candidate
 does not support f32 masks, other model/dataset shapes, GPU, mixed precision,
@@ -100,7 +117,8 @@ exact source/native dependency closures, symbols, localization, undefined set an
 archive membership. Separate poisoned-runtime processes cover one real success,
 EOS rejection, canonical cursor restoration, foreign/non-symbol/wrong-family keys,
 1,024/8,192 successful reports, 1,024/8,192 failed reservations, and the rejected
-8,193rd success. The retention report records total success and failure arena deltas;
-attribution of exact bytes between reachable report authority, unreachable staging,
-and inherited E3/P1/I2 tombstones remains a required review/gate analysis rather
-than an inferred subtraction.
+8,193rd success. The retention report records the total delta, reachable authority,
+unreachable staging, inherited transaction bucket, caller-witness remainder, complete
+promoted graph, and calibrated envelope bytes. The instrumentation exposes no new
+installed operation and retains only immediate counters plus one cleared calibration
+slot.

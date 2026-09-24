@@ -90,6 +90,58 @@ class DiagnosticSourceContract(unittest.TestCase):
         self.assertIn('(run-horizon path 2048 #f)', runtime)
         self.assertIn('(run-horizon path 4096 #f)', runtime)
 
+    def test_retention_attribution_uses_exact_transaction_boundaries(self) -> None:
+        source = (ROOT / "native/e3_diagnostic_private_extension.esk").read_text()
+        self.assertIn(
+            "(define e3-diagnostic-report-root (vector '() #f 0 0 0 0))",
+            source,
+        )
+        reserve = source[source.index("(define (e3-diagnostic-reserve-report!") :]
+        reserve = reserve[:reserve.index("(define (e3-diagnostic-abandon-report!")]
+        self.assertLess(reserve.index("(let ((arena-before (__arena-used)))"),
+                        reserve.index("(vector-set! e3-diagnostic-report-root 1 envelope)"))
+        self.assertLess(reserve.index("(vector-set! e3-diagnostic-report-root 1 envelope)"),
+                        reserve.index("(promoted-bytes (- (__arena-used) arena-before))"))
+        self.assertIn("(vector-set! e3-diagnostic-report-root 4", reserve)
+
+        evaluate = source[source.index("(define (e3-diagnostic-evaluate-fixed!") :]
+        evaluate = evaluate[:evaluate.index("(define (e3-diagnostic-f32-bits")]
+        self.assertLess(evaluate.index("(e3-diagnostic-abandon-report!)"),
+                        evaluate.index("(e3-diagnostic-record-transaction-retention!"))
+        self.assertLess(evaluate.index("(e3-diagnostic-record-transaction-retention!"),
+                        evaluate.index("(raise caught)"))
+        self.assertLess(evaluate.rindex("(e3-diagnostic-publish-report! record)"),
+                        evaluate.rindex("(e3-diagnostic-record-transaction-retention!"))
+
+        driver = (ROOT / "tests/e3_diagnostic_private/driver.esk").read_text()
+        calibration = driver[
+            driver.index("(define (e3-diagnostic-test-calibrate-envelope!") :
+        ]
+        calibration = calibration[
+            :calibration.index("(define (e3-diagnostic-test-retention-stats")
+        ]
+        self.assertIn("(vector e3-diagnostic-report-tag #f '())", calibration)
+        self.assertIn("(e3-diagnostic-test-calibrate-envelope!)", calibration)
+        self.assertIn("(vector-set! e3-diagnostic-test-retention-root 0 #f)",
+                      calibration)
+
+        runtime = (ROOT / "tests/e3_diagnostic_private/runtime.esk").read_text()
+        for field in (
+            "reachable_authority_bytes=",
+            "unreachable_staging_bytes=",
+            "inherited_transaction_bytes=",
+            "witness_other_bytes=",
+            "reserve_promoted_bytes=",
+            "envelope_bytes_per_call=",
+        ):
+            self.assertIn(field, runtime)
+        self.assertIn("(if failure? last-promoted", runtime)
+        self.assertIn("(* envelope-bytes last-reservations)", runtime)
+
+        script = (ROOT / "scripts/test-e3-diagnostic-private-runtime.sh").read_text()
+        self.assertIn("reachable_authority_bytes\\tunreachable_staging_bytes", script)
+        self.assertIn("inherited_transaction_bytes\\twitness_other_bytes", script)
+
     def test_mode_enrollment_uses_only_the_active_chain(self) -> None:
         source = (ROOT / "internal/p1/lib/transformer/module.esk").read_text()
         enrolled = source[source.index("(define (e3-mode-enrolled?") :]
