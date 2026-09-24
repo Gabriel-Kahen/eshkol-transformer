@@ -102,8 +102,12 @@ if grep -E 'llvm\.(fma|fmuladd)|(^|[,( ])double([, )]|$)' "${g3s_tmp}/provider.l
   die "G3S provider IR contains FMA or binary64 arithmetic"
 fi
 
-if rg -n 'g3s[._-]|et_g3s|ET_G3S' "${PROJECT_ROOT}/lib" "${PROJECT_ROOT}/src"; then
-  die "G3S must add zero installed Eshkol exports or runtime source dependencies"
+# Installed Eshkol source must stay independent of G3S. Native G3-C4's
+# source-private sampler consumer lives under src but is not an installed
+# Eshkol source file; its own package and symbol gates audit that boundary.
+if rg -n --glob '*.esk' 'g3s[._-]|et_g3s|ET_G3S' \
+    "${PROJECT_ROOT}/lib" "${PROJECT_ROOT}/src"; then
+  die "G3S must add zero installed Eshkol exports or source dependencies"
 fi
 
 # An explicitly linked provider does not replace K1's provider-free baseline.
