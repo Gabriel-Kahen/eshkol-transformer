@@ -242,6 +242,9 @@ model, `cleanup_ready==0`, `next_role==0`, `stage_plane==0`, `sum_bank==0`, zero
 `staged_counts`, and idle pins. A nonidle or not-currently-published call returns
 `-1` with `invalid-state/phase`. Once acquire reaches its reset, it clears
 `committed`, so a later failed evaluation rejects the stale earlier metrics. An
+IDLE frame whose model is active is rejected earlier by `e3_admit` with its
+existing `invalid-state/reentrancy` diagnostic; the accessor does not bypass
+admission to relabel it as an invariant failure. An
 acquire rejection in its preceding fallible storage-check/zeroing prefix can leave
 the prior `committed==2` publication intact. The seam is therefore not a general
 freshness oracle: TR3 calls no result accessor after any failed E3 invocation and
