@@ -29,8 +29,8 @@ identifier `sha256:eshkol-config-json-v1`.
 Failures use the shared E1 registry through E1B. Installed `transformer.config`
 requires only `transformer.error_consumer`; a never-installed trusted X1 root
 requires `e1b_error_consumer_private` and passes one of `invalid-argument`,
-`version-mismatch`, or `unsupported`, the failing public operation symbol, a bounded
-message, data-only E1 details, and cause `#f` to the fixed five-value
+`version-mismatch`, `unsupported`, or `internal`, the failing public operation
+symbol, a bounded message, data-only E1 details, and cause `#f` to the fixed five-value
 `et-e1b-private-raise` seam. The combined object localizes that seam, E1 constructors,
 core dispatcher, implementation helpers, and compiler companions before application
 source is compiled. It globally exports only the six A0 error accessors and six
