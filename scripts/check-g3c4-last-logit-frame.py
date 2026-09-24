@@ -63,11 +63,11 @@ def check():
 
     for phrase in [
         "exact_prefill_to_committed_token", "reference + 3u * 256u",
-        "categorical_legacy_parity", "failures == 8u",
+        "legacy_mode_parity", "categorical <= 1", "failures == 8u",
         "fail_adapter = 1", "ET_G3C4_CODE_STALE_BINDING", "last[0] = NAN",
         "et_g3c4_private_call_acquire_v1(context, 2, 0)",
         "for (size_t index = 0u; index < 14u; index++)",
-        "cache_input_alias", "allocation-cuts=8",
+        "void *cache_backings[4]", "index < 4u", "allocation-cuts=8",
     ]:
         require(phrase in test, f"focused test omits {phrase}")
     require("--wrap=et_kernel_runtime_dispatch" in runner,
