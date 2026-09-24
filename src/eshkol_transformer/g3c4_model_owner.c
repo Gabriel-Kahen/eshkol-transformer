@@ -6,6 +6,9 @@
 #include "m3t_f32_scoped.h"
 #include "eshkol_transformer/i64_tensor.h"
 #include "eshkol_transformer/n3k_primitives_abi.h"
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+#include "../../native/t1_i64_shell.h"
+#endif
 
 #include <limits.h>
 #include <math.h>
@@ -133,6 +136,21 @@ static int32_t et_g3c4_capture_f32(
   }
   return status;
 }
+
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+static int32_t et_g3c4_capture_i64(
+    int32_t status, const et_i64_tensor_error *error) {
+  if (status != 0) {
+    if (error == NULL) {
+      et_g3c4_error_set_internal(-1, -1, -1);
+    } else {
+      et_g3c4_error_set_internal(
+          ET_G3C4_DOMAIN_I1, error->category, error->code);
+    }
+  }
+  return status;
+}
+#endif
 
 static int32_t et_g3c4_capture_kernel(
     int32_t status, const et_kernel_error *error) {
@@ -715,6 +733,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #error "ET_G3C4_GENERATOR_PRIVATE requires context, C4 pins, and active call"
 #endif
 
+#if defined(ET_G3C4_PROMPT_T1_BORROW_PRIVATE) && \
+    !defined(ET_G3C4_GENERATOR_PRIVATE)
+#error "ET_G3C4_PROMPT_T1_BORROW_PRIVATE requires the private generator"
+#endif
+
 #if defined(ET_G3C4_PROVIDER_ROUTES_PRIVATE) && \
     !defined(ET_G3C4_GENERATOR_PRIVATE)
 #error "ET_G3C4_PROVIDER_ROUTES_PRIVATE requires the private generator"
@@ -774,6 +797,9 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #define ET_G3C4_CONTEXT_MAGIC UINT64_C(0x4733433443545831)
 #ifdef ET_G3C4_GENERATOR_PRIVATE
 #define ET_G3C4_RNG_MAGIC UINT64_C(0x47334334524e4731)
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+#define ET_G3C4_INPUT_MAGIC UINT64_C(0x47334334494e5031)
+#endif
 #endif
 
 enum {
@@ -783,7 +809,14 @@ enum {
 };
 
 #ifdef ET_G3C4_GENERATOR_PRIVATE
-enum { ET_G3C4_RNG_KIND = 2 };
+enum {
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+  ET_G3C4_INPUT_KIND = 2,
+  ET_G3C4_RNG_KIND = 8
+#else
+  ET_G3C4_RNG_KIND = 2
+#endif
+};
 
 typedef struct et_g3c4_transport_header_internal {
   struct et_g3c4_transport_header_internal *registry_next;
@@ -861,6 +894,14 @@ typedef struct et_g3c4_rng_internal {
   et_g3c4_transport_header_internal transport;
   int64_t words[4];
 } et_g3c4_rng_internal;
+
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+typedef struct et_g3c4_input_internal {
+  et_g3c4_transport_header_internal transport;
+  et_i64_tensor *tensor;
+  int64_t length;
+} et_g3c4_input_internal;
+#endif
 
 static et_g3c4_transport_header_internal *et_g3c4_transport_registry;
 
@@ -1133,6 +1174,44 @@ static int et_g3c4_context_subtype_valid(
 #endif
          ;
 }
+
+static int et_g3c4_transport_record_valid(
+    const et_g3c4_transport_header_internal *header) {
+  if (header->kind == ET_G3C4_CONTEXT_KIND) {
+    return header->magic == ET_G3C4_CONTEXT_MAGIC &&
+           (header->state == ET_G3C4_CONTEXT_LIVE ||
+            header->state == ET_G3C4_CONTEXT_DEAD) &&
+           header->busy <= ET_G3C4_CALL_ACTIVE &&
+           et_g3c4_context_subtype_valid(
+               (const et_g3c4_context_internal *)header);
+  }
+  if (header->kind == ET_G3C4_RNG_KIND) {
+    const et_g3c4_rng_internal *rng =
+        (const et_g3c4_rng_internal *)header;
+    return header->magic == ET_G3C4_RNG_MAGIC &&
+           (header->state == ET_G3C4_CONTEXT_LIVE ||
+            header->state == ET_G3C4_CONTEXT_DEAD) &&
+           header->busy == 0u &&
+           (header->state == ET_G3C4_CONTEXT_LIVE
+                ? rng->words[0] == 1 && rng->words[1] >= 0
+                : et_g3c4_zero_i64_words(rng->words, 4u));
+  }
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+  if (header->kind == ET_G3C4_INPUT_KIND) {
+    const et_g3c4_input_internal *input =
+        (const et_g3c4_input_internal *)header;
+    return header->magic == ET_G3C4_INPUT_MAGIC &&
+           (header->state == ET_G3C4_CONTEXT_LIVE ||
+            header->state == ET_G3C4_CONTEXT_DEAD) &&
+           header->busy == 0u &&
+           (header->state == ET_G3C4_CONTEXT_LIVE
+                ? input->tensor != NULL &&
+                  (input->length == 1 || input->length == 2)
+                : input->tensor == NULL && input->length == 0);
+  }
+#endif
+  return 0;
+}
 #endif
 
 #ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
@@ -1162,36 +1241,13 @@ static et_g3c4_context_internal *et_g3c4_admit_context(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
   }
-  if (header->kind == ET_G3C4_RNG_KIND) {
-    const et_g3c4_rng_internal *rng =
-        (const et_g3c4_rng_internal *)header;
-    int payload_valid =
-        header->state == ET_G3C4_CONTEXT_LIVE
-            ? rng->words[0] == 1 && rng->words[1] >= 0
-            : rng->words[0] == 0 && rng->words[1] == 0 &&
-              rng->words[2] == 0 && rng->words[3] == 0;
-    if (header->magic != ET_G3C4_RNG_MAGIC ||
-        (header->state != ET_G3C4_CONTEXT_LIVE &&
-         header->state != ET_G3C4_CONTEXT_DEAD) ||
-        header->busy != 0u || !payload_valid) {
-      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
-      return NULL;
-    }
+  if (!et_g3c4_transport_record_valid(header)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (header->kind != ET_G3C4_CONTEXT_KIND) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
-    return NULL;
-  }
-  if (header->magic != ET_G3C4_CONTEXT_MAGIC ||
-      header->kind != ET_G3C4_CONTEXT_KIND ||
-      (header->state != ET_G3C4_CONTEXT_LIVE &&
-       header->state != ET_G3C4_CONTEXT_DEAD) ||
-      header->busy > ET_G3C4_CALL_ACTIVE) {
-    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
-    return NULL;
-  }
-  if (!et_g3c4_context_subtype_valid(
-          (const et_g3c4_context_internal *)header)) {
-    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return NULL;
   }
   return (et_g3c4_context_internal *)header;
@@ -1243,6 +1299,22 @@ static et_g3c4_rng_internal *et_g3c4_rng_allocate(void) {
   return rng;
 }
 
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+static et_g3c4_input_internal *et_g3c4_input_allocate(void) {
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (et_g3c4_context_successful_allocations >=
+      et_g3c4_context_allocation_limit)
+    return NULL;
+#endif
+  et_g3c4_input_internal *input =
+      (et_g3c4_input_internal *)calloc(1u, sizeof(*input));
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (input != NULL) et_g3c4_context_successful_allocations++;
+#endif
+  return input;
+}
+#endif
+
 static et_g3c4_rng_internal *et_g3c4_admit_rng(
     const void *candidate, int allow_dead) {
   et_g3c4_transport_header_internal *header;
@@ -1255,26 +1327,13 @@ static et_g3c4_rng_internal *et_g3c4_admit_rng(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
   }
-  if (header->kind == ET_G3C4_CONTEXT_KIND) {
-    if (header->magic != ET_G3C4_CONTEXT_MAGIC ||
-        (header->state != ET_G3C4_CONTEXT_LIVE &&
-         header->state != ET_G3C4_CONTEXT_DEAD) ||
-        header->busy > ET_G3C4_CALL_ACTIVE ||
-        !et_g3c4_context_subtype_valid(
-            (const et_g3c4_context_internal *)header)) {
-      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
-      return NULL;
-    }
-    (void)et_g3c4_fail(
-        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (!et_g3c4_transport_record_valid(header)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return NULL;
   }
-  if (header->magic != ET_G3C4_RNG_MAGIC ||
-      header->kind != ET_G3C4_RNG_KIND ||
-      (header->state != ET_G3C4_CONTEXT_LIVE &&
-       header->state != ET_G3C4_CONTEXT_DEAD) ||
-      header->busy != 0u) {
-    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  if (header->kind != ET_G3C4_RNG_KIND) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
   }
   rng = (et_g3c4_rng_internal *)header;
@@ -1296,6 +1355,38 @@ static et_g3c4_rng_internal *et_g3c4_admit_rng(
   return rng;
 }
 
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+static et_g3c4_input_internal *et_g3c4_admit_input(
+    const void *candidate, int allow_dead) {
+  et_g3c4_transport_header_internal *header;
+  et_g3c4_input_internal *input;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (const void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (!et_g3c4_transport_record_valid(header)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (header->kind != ET_G3C4_INPUT_KIND) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  input = (et_g3c4_input_internal *)header;
+  if (input->transport.state == ET_G3C4_CONTEXT_DEAD && !allow_dead) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  return input;
+}
+#endif
+
 static void et_g3c4_enroll_context(et_g3c4_context_internal *context) {
   context->transport.registry_next = et_g3c4_transport_registry;
   et_g3c4_transport_registry = &context->transport;
@@ -1305,6 +1396,13 @@ static void et_g3c4_enroll_rng(et_g3c4_rng_internal *rng) {
   rng->transport.registry_next = et_g3c4_transport_registry;
   et_g3c4_transport_registry = &rng->transport;
 }
+
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+static void et_g3c4_enroll_input(et_g3c4_input_internal *input) {
+  input->transport.registry_next = et_g3c4_transport_registry;
+  et_g3c4_transport_registry = &input->transport;
+}
+#endif
 
 _Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
                "G3-C4 transport header must be 32 bytes");
@@ -1325,6 +1423,12 @@ _Static_assert(sizeof(et_g3c4_context_internal) == 1520u,
 #endif
 _Static_assert(sizeof(et_g3c4_rng_internal) == 64u,
                "G3-C4 RNG record must be 64 bytes");
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+_Static_assert(sizeof(et_g3c4_input_internal) == 48u,
+               "G3-C4 input record must be 48 bytes");
+_Static_assert(offsetof(et_g3c4_input_internal, transport) == 0u,
+               "G3-C4 input header must be first");
+#endif
 #endif
 
 void *et_g3c4_private_context_create_v1(void *candidate) {
@@ -1506,6 +1610,119 @@ int64_t et_g3c4_private_rng_release_v1(void *candidate) {
   rng->transport.state = ET_G3C4_CONTEXT_DEAD;
   return 0;
 }
+
+#ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
+static int64_t et_g3c4_capture_t1_shell(int64_t status) {
+  switch (status) {
+    case ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT:
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    case ET_T1_I64_SHELL_STATUS_INVALID_STATE:
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    case ET_T1_I64_SHELL_STATUS_RANGE:
+      return et_g3c4_fail(
+          ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+    case ET_T1_I64_SHELL_STATUS_ALLOCATION_FAILED:
+      return et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    default:
+      return et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  }
+}
+
+static void et_g3c4_input_cleanup_unpublished(
+    et_g3c4_input_internal *input) {
+  if (input == NULL) return;
+  if (input->tensor != NULL) {
+    et_i64_tensor_error error;
+    if (et_i64_tensor_destroy_v1(&input->tensor, &error) != 0) abort();
+  }
+  free(input);
+}
+
+void *et_g3c4_private_input_from_t1_v1(void *sealed_t1) {
+  int64_t words[2] = {0, 0};
+  int64_t length;
+  int64_t status;
+  uint64_t shape[2];
+  et_g3c4_input_internal *input;
+  et_i64_tensor_error error;
+  et_g3c4_error_reset_internal();
+
+  length = et_t1_i64_shell_length_v1(sealed_t1);
+  status = et_t1_i64_shell_last_status_v1();
+  if (status != ET_T1_I64_SHELL_STATUS_OK) {
+    (void)et_g3c4_capture_t1_shell(status);
+    return NULL;
+  }
+  if (length != 1 && length != 2) {
+    (void)et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+    return NULL;
+  }
+  for (int64_t index = 0; index < length; index++) {
+    words[index] = et_t1_i64_shell_read_v1(sealed_t1, index);
+    status = et_t1_i64_shell_last_status_v1();
+    if (status != ET_T1_I64_SHELL_STATUS_OK) {
+      (void)et_g3c4_capture_t1_shell(status);
+      return NULL;
+    }
+    if (words[index] < 0 || words[index] > 255) {
+      (void)et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+      return NULL;
+    }
+  }
+
+  input = et_g3c4_input_allocate();
+  if (input == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  shape[0] = 1u;
+  shape[1] = (uint64_t)length;
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_create_v1(2u, shape, &input->tensor, &error),
+          &error) != 0) {
+    et_g3c4_error_state_internal first =
+        et_g3c4_error_snapshot_internal();
+    et_g3c4_input_cleanup_unpublished(input);
+    et_g3c4_error_restore_internal(first);
+    return NULL;
+  }
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_copy_from_v1(
+              input->tensor, words, (size_t)length, &error),
+          &error) != 0) {
+    et_g3c4_error_state_internal first =
+        et_g3c4_error_snapshot_internal();
+    et_g3c4_input_cleanup_unpublished(input);
+    et_g3c4_error_restore_internal(first);
+    return NULL;
+  }
+  input->transport.magic = ET_G3C4_INPUT_MAGIC;
+  input->transport.kind = ET_G3C4_INPUT_KIND;
+  input->transport.state = ET_G3C4_CONTEXT_LIVE;
+  input->length = length;
+  et_g3c4_enroll_input(input);
+  return input;
+}
+
+int64_t et_g3c4_private_tensor_release_v1(void *candidate) {
+  et_g3c4_input_internal *input;
+  et_i64_tensor_error error;
+  et_g3c4_error_reset_internal();
+  input = et_g3c4_admit_input(candidate, 1);
+  if (input == NULL) return et_g3c4_error_state.category;
+  if (input->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_destroy_v1(&input->tensor, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  input->length = 0;
+  input->transport.state = ET_G3C4_CONTEXT_DEAD;
+  return 0;
+}
+#endif
 
 static void *et_g3c4_generator_create(
     et_g3c4_model_owner_internal *owner, const int64_t rng_words[4],
