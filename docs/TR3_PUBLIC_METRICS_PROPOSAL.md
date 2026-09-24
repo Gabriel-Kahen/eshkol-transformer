@@ -1,14 +1,15 @@
 # TR3 public trainer metrics proposal
 
-Status: **decision-ready successor proposal; not accepted; runtime and E3 prerequisites missing**.
+Status: **decision-ready successor proposal; not accepted; runtime implementation and E3 seam missing**.
 
 This proposal is based on accepted transformer commit
 `d5fa9a71b000ab1139a25e9b734b230ab5bda759`, the original TR3 proposal at
 `3e28db6c9d1f97bd9ce9d6f2d05be51182a8bd9d`, the accepted E3 private contract,
 and genuine Eshkol source commit
 `81298b4a9608fb92eb6f351a2eabd8392da7d9ef`. It defines the downstream result
-path only. It implements no trainer, evaluator, scalar representation, registry,
-capability row, C2 change, or completion claim.
+path only and consumes the accepted true-f32 runtime contract at
+`4370dc88afec480d805396e301022677a576af39`. It implements no trainer, evaluator,
+scalar representation, registry, capability row, C2 change, or completion claim.
 
 ## 1. Decision and blocker
 
@@ -17,8 +18,9 @@ The result authority stores physical binary32 words and exact i64 counters; it
 does not store boxed binary64 values, rank-zero tensor shells, or references to
 trainer/E3 storage.
 
-The primary implementation blocker is an upstream runtime contract: an ordinary Eshkol
-value has no true binary32 scalar representation that `metrics-ref` can return.
+The primary implementation blocker is the accepted upstream runtime contract's
+implementation: an ordinary Eshkol value currently has no true binary32 scalar
+representation that `metrics-ref` can return.
 The current floating immediate is `ESHKOL_VALUE_DOUBLE`, backed by a C `double`.
 Relabelling that value as f32 would make the public type claim false. A rank-zero
 I2 tensor would preserve storage precision but would be an owned tensor, not the
@@ -385,16 +387,21 @@ not exercise a trainer, evaluator, metrics owner, or proposed f32 representation
 Final runtime acceptance still requires a properly authenticated compiler and exact
 source/build/runner identity.
 
-## 8. Minimal upstream issue/contract candidate
+## 8. Accepted upstream runtime dependency
 
-Dispatch one runtime-owned prerequisite, **true binary32 tagged scalar**. Its
-acceptance contract should require:
+The authoritative prerequisite is
+`docs/TR3_F32_SCALAR_RUNTIME_CONTRACT.md` at accepted integration commit
+`4370dc88afec480d805396e301022677a576af39` (document SHA-256
+`b53e699ded15c7b1016caf8e4985706095a3feb1026002e684679ae636898f0e`).
+This proposal consumes that contract and does not revise its numeric tower. The
+downstream-relevant requirements are:
 
 1. Freeze native `eshkol_value_type_t` as a pure enum and reserve runtime-owned
    `ESHKOL_VALUE_FLOAT32=11`. Its canonical immediate payload is one IEEE-754
    binary32 word in `data.raw_val[31:0]`; the upper 32 payload bits, `reserved`, and
-   padding are zero. `flags` contains `ESHKOL_VALUE_INEXACT_FLAG` and no exact flag.
-   Every producer and classifier requires `type==11` exactly. The legacy macros
+   padding are zero. `flags==ESHKOL_VALUE_INEXACT_FLAG` exactly. Every producer and
+   classifier requires `type==11` exactly, and checked inspection rejects any
+   noncanonical flags, reserved bytes, padding, or high payload. The legacy macros
    that OR exactness bits into `type` are forbidden for f32 because those bits
    collide with real tags; global cleanup is a separate hardening item unless an
    audited f32 path reaches them.
@@ -402,55 +409,64 @@ acceptance contract should require:
    `VAL_RATIONAL=11`, so append `VAL_FLOAT32=34` carrying raw `uint32_t` bits. FFI
    metadata may name native type 11, but no code copies native tag numbers into VM
    values.
-3. Add a versioned core out-pointer raw-bits ABI for checked construct, inspect and
-   predicate operations (`from_bits`, `to_bits`, `is_f32`, with float conversion
-   helpers optional). Inspection rejects DOUBLE, tensor, integer and foreign values
-   and leaves output unchanged. No transformer public constructor is requested.
+3. Implement the accepted versioned core ABI
+   `eshkol_value_f32_from_bits_v1(out,bits)`,
+   `eshkol_value_f32_to_bits_v1(value,out_bits)`,
+   `eshkol_value_is_f32_v1(value)`, and
+   `eshkol_runtime_has_f32_scalar_v1()`. Construction accepts every binary32 word;
+   inspection rejects DOUBLE, tensor, integer, malformed, and foreign values and
+   leaves output unchanged. No transformer public constructor is requested.
 4. Cover native/AOT pack and unpack, generic native/AOT and VM function-return
    transport, embedding headers, ABI layout assertions, FFI/VM-host raw-bits
    boundaries, and
    byte-preserving region/cons/vector/hash copies. Immediate construction and
    inspection allocate no owner or payload.
-5. Define all classifiers and observational operations. For f32, `number?` and
-   `real?` are true, `rational?` is true exactly when finite, `integer?` is true
-   exactly when finite and integral, `exact?` is false, `inexact?` is true, and
-   `type-of` reports `float32`. Equality/hashing must be mutually consistent across
-   the admitted numeric tower, and display must handle every payload. Raw-bits ABI
-   round-trip is mandatory. Source f32 literals,
-   type-preserving textual read/write syntax and ESKB f32 constants/versioning are
-   optional follow-ups and do not block metrics.
-6. Fix arithmetic promotion rather than inheriting binary64 accidentally:
-   f32-with-f32 and exact-integer-with-f32 produce f32 with actual binary32
-   rounding; any binary64 operand produces binary64. For an exact integer operand,
-   convert the integer to f32 first with round-to-nearest, ties-to-even, then perform
-   the f32 operation with the same rounding mode. Exact-result-then-round is
-   forbidden: `16777217 + f32(-16777216)` must produce positive zero, not one.
-   A mixed nonintegral exact rational and f32 is rejected pending a separately
-   reviewed numeric-tower contract; it must not silently widen or route through
-   binary64. Existing binary64
-   AD/dual/Taylor/complex paths either reject f32 or cross an explicit documented
-   widening boundary.
-7. Add exact-bit tests for normals, signed zero, subnormals and finite extrema;
-   negative tests proving ordinary boxed binary64 never passes f32 inspection;
-   checked type/flags collision tests; and native/AOT/VM/embedding/FFI parity on the
-   supported host.
+5. Use the accepted classifier, equality, hash, and formatting policy exactly.
+   `number?`, `complex?`, and `real?` are true; `rational?` is true exactly when
+   finite; `integer?` is true exactly when finite and mathematically integral;
+   `exact?` is false; `inexact?` is true; and `type-of` reports `float32`. Numeric
+   `=` compares after f64 promotion. `eqv?`, atomic `equal?`, and default hash-key
+   equality require the same representation tag and IEEE numeric equality. Both
+   f32 zero signs compare equal, every NaN compares unequal, and the f32 hash
+   includes the tag while canonicalizing zero signs. Raw-bit inspection alone
+   distinguishes zero signs and NaN payloads. Formatting follows the accepted
+   widened-f64 textual policy; tag-preserving syntax remains deferred.
+6. Promote every f32 operand accepted by ordinary numeric operations to the
+   existing DOUBLE domain before arithmetic. This includes f32/f32, f32/exact
+   integer, f32/DOUBLE, unary operations, min/max, admitted remainder operations,
+   and elementary functions. Arithmetic results carry the DOUBLE tag; comparisons
+   return boolean. Finite binary32 values widen exactly, infinity keeps its sign,
+   and every binary32 NaN promotes to the canonical positive quiet binary64 NaN
+   `0x7ff8000000000000`. No path performs or claims binary32 arithmetic, returns an
+   f32 arithmetic result, or hides promotion as a fallback. F32-preserving
+   arithmetic is deferred. AD, dual, Taylor, complex, and unversioned persistence
+   paths reject f32 as `unsupported` under the accepted contract.
+7. Add exact-bit tests for normals, signed zero, subnormals, finite extrema,
+   infinities, and NaN payloads; negative tests proving ordinary boxed binary64
+   never passes f32 inspection; checked type/flags collision tests; DOUBLE-result
+   tag and canonical-NaN arithmetic-promotion witnesses; classifier/equality/hash/
+   formatting tests; and native/AOT/VM/embedding/FFI parity on the supported host.
 8. Repin the accepted Eshkol runtime only after the implementation and runtime
    contract pass independent review. F0 provenance/build, R0 executable capability
    audit, and A0 declaration/compile fixtures must all consume that exact repin.
 
-After that contract is accepted and implemented, TR3 may add its private result
-entry/lookup implementation and public `metrics-ref`. Until then, all public
+The producer's tensor path still performs the A0-required physical-f32 accumulation
+before result publication. The runtime promotion rule applies only if ordinary
+scalar arithmetic is later requested on the detached returned value; it does not
+alter raw-bit construction, metrics storage, `metrics-ref`, or exact-bit lookup.
+Until the accepted runtime contract is implemented and repinned, all public
 trainer/evaluator wrappers that promise these maps remain blocked.
 
 ## 9. Dependency order and root decisions
 
 The dependency order is:
 
-1. Root accepts the exact true-f32 runtime issue, the unbounded process-lifetime
-   metrics authority with measured per-result retention, and the E3 selected-metric
-   scalar-bits seam.
-2. The runtime owner implements and independently verifies section 8, followed by
-   exact runtime repin and F0/R0/A0 adoption evidence.
+1. Root accepts the unbounded process-lifetime metrics authority with measured
+   per-result retention and the E3 selected-metric scalar-bits seam, with the
+   accepted true-f32 runtime contract as an exact dependency.
+2. The runtime owner implements and independently verifies the accepted contract
+   referenced in section 8, followed by exact runtime repin and F0/R0/A0 adoption
+   evidence.
 3. SHARED-R2 and the checked-promotion/guard prerequisite for E3-P1 are accepted;
    E3-P1 mode restoration and the E3 private evaluator, including the new
    selected-metric scalar-bits seam, are independently accepted and integrated.
@@ -477,9 +493,10 @@ Three decisions remain open for root and are not silently chosen by implementati
   call slopes, or select a separately reviewed release/finalizer contract;
 - accept the E3-owned authenticated selected-metric scalar-bits seam and its exact
   signature/state/error contract;
-- dispatch and accept the runtime representation in section 8. Returning a DOUBLE,
-  rank-zero tensor, bytevector, or transformer-local scalar wrapper is not an
-  admissible substitute.
+- implement and adopt the accepted runtime representation referenced in section 8.
+  Returning a DOUBLE from `metrics-ref`, rank-zero tensor, bytevector, or
+  transformer-local scalar wrapper is not an admissible substitute; DOUBLE is only
+  the accepted result of later ordinary arithmetic on the returned f32 value.
 
 ## 10. Required implementation handoff
 
