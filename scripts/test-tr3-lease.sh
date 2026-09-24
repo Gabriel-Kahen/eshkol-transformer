@@ -6,7 +6,8 @@ for command in docker python3 sha256sum timeout; do require_command "${command}"
 
 cd "${PROJECT_ROOT}"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
-  tests.tr3_lease.test_source_contract
+  tests.tr3_lease.test_source_contract \
+  tests.tr3_lease.test_restore_successor_contract
 
 candidate_manifest="${PROJECT_ROOT}/tests/tr3_p1/runtime_candidate.tsv"
 candidate_dir="${TR3_P1_RUNTIME_CANDIDATE_DIR:-/tmp/eshkol-rethrow-final-81298b4a-20260923T200234Z}"
