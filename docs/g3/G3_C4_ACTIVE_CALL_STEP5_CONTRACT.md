@@ -86,8 +86,9 @@ The production source tuple compiles:
 
 The pin translation unit is the accepted replacement for the ordinary
 `m3t_f32_integration.c` object and must not be linked beside that ordinary
-object. The owner and A2 sources remain separate objects; no production source
-includes another production `.c` file.
+object. Step 5 introduces no new production direct-source inclusion: the
+accepted pin replacement retains its existing inclusion of
+`m3t_f32_integration.c`, while owner and A2 remain separate objects.
 
 Without `ET_G3C4_ACTIVE_CALL_PRIVATE`, the Step 4a context-enabled owner object
 must remain byte-identical to commit `58c5969`. Without
