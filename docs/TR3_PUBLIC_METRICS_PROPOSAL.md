@@ -250,10 +250,17 @@ publication, restoration, and `finish`. If the surface state then claims a curre
 finished publication but its cleanup, reset, or pin invariants disagree, the seam
 returns `-1` with `internal/invariant`.
 
-For a valid selector it copies only that bound private destination through existing
-`et_f32_tensor_copy_bits_to_v1` into a local `uint32_t`. On rejection it calls
-`e3_f32_error` exactly once, preserving the validated domain-3 category/code in the
-E3 diagnostic triple, and returns `-1`. On success it returns the widened word as an
+For a valid selector it first uses the allocation-free
+`et_f32_tensor_scoped_begin_internal`/`et_f32_tensor_scoped_end_internal` pair on
+that bound destination, without reading or exposing the view. This preflight
+rejects an active borrow or plan pin with the existing domain-3 `ACTIVE_BORROW`
+diagnostic; `copy_bits_to` itself permits a concurrent read from a borrowed
+tensor. A failed begin calls `e3_f32_error` exactly once and returns `-1` without
+copying. An impossible end failure is fatal. After a successful end it copies
+through `et_f32_tensor_copy_bits_to_v1` into a local `uint32_t`. A rejected copy
+also calls `e3_f32_error` exactly once, preserving the validated domain-3
+category/code in the E3 diagnostic triple, and returns `-1`. On success it
+returns the widened word as an
 `int64_t` in `0..UINT32_MAX`, which cannot collide with `-1`. It allocates nothing,
 exposes no tensor pointer, output pointer, borrow, perplexity or accuracy, and
 retains no TR3 object. No failure changes frame, destination, counter, or caller
@@ -276,7 +283,7 @@ completes before the first public-record store.
 
 The seam gate covers success for both selectors plus the existing two counters;
 foreign, dead, new/unpublished, acquired/nonidle, bad-selector, stale-after-failure,
-active-borrow copy-failure, reset-invariant, and pin-invariant negatives. It proves
+active-borrow preflight failure, reset-invariant, and pin-invariant negatives. It proves
 exact domain-3 diagnostics, unchanged storage, zero allocation, no pointer escape,
 and one fresh guarded four-read snapshot. `stale-after-failure` covers failure after
 the acquire reset; a separate early-acquire failure test proves zero bits/counter
