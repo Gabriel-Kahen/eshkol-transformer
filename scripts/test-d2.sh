@@ -789,12 +789,9 @@ for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
     "${d2_tmp}/public-b-resource_instrumented_runtime/resource_instrumented_runtime" \
     "${d2_tmp}/private-a/private-view" \
     "${d2_tmp}/private-b/private-view"; do
-  if strings -a "${delivered}" | \
-      grep -Ei 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' >/dev/null || \
-      nm -a "${delivered}" | \
-        grep -Ei 'python|pytorch|torch|libpython|(^|[[:space:]])Py_' >/dev/null || \
-      ldd "${delivered}" 2>/dev/null | \
-        grep -Ei 'python|pytorch|torch|libpython' >/dev/null; then
+  if ! /usr/bin/bash \
+      "${PROJECT_ROOT}/scripts/check-d2-development-dependency.sh" \
+      "${delivered}"; then
     die "D2 delivered candidate contains a development-oracle dependency"
   fi
 done
