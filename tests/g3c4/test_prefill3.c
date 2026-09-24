@@ -295,7 +295,7 @@ static void allocation_cuts(et_g3c4_model_owner_internal *owner) {
   const int64_t first_tokens[3] = {3, 7, 11};
   const int64_t next_tokens[3] = {13, 17, 19};
   size_t failures = 0u;
-  for (size_t allowed = 0u; allowed <= 11u; allowed++) {
+  for (size_t allowed = 0u; allowed <= 14u; allowed++) {
     float first_logits[256], output[256];
     int64_t rng[4];
     cache_snapshot cache;
@@ -313,14 +313,14 @@ static void allocation_cuts(et_g3c4_model_owner_internal *owner) {
     et_a2_kv_cache_test_reset_allocator_v1();
     if (status != 0) {
       failures++;
-      CHECK(allowed < 11u);
+      CHECK(allowed < 14u);
       CHECK(et_g3c4_private_last_error_code_v1() ==
             ET_KERNEL_CODE_ALLOCATION_FAILED);
       for (size_t i = 0u; i < 256u; i++) CHECK(output[i] == -321.0f);
       check_preserved(context, &cache, &binding, rng);
       close_after_abort(context);
     } else {
-      CHECK(allowed == 11u);
+      CHECK(allowed == 14u);
       CHECK(context->prefill_binding_ready == 1u);
       CHECK(memcmp(context->prefill_tokens, next_tokens,
                    sizeof(context->prefill_tokens)) == 0);
@@ -328,7 +328,50 @@ static void allocation_cuts(et_g3c4_model_owner_internal *owner) {
       OK(et_g3c4_private_generator_close_v1(context));
     }
   }
-  CHECK(failures == 11u);
+  CHECK(failures == 14u);
+}
+
+static void owned_alias_rejections(
+    et_g3c4_model_owner_internal *owner) {
+  const int64_t tokens[3] = {3, 7, 11};
+  float logits[256];
+  int64_t rng[4];
+  cache_snapshot cache;
+  binding_snapshot binding;
+  unsigned char parameter[4096];
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *keep = NULL;
+  et_kernel_error error;
+  et_g3c4_context_internal *context = create_generator(owner);
+
+  prefill_success(context, tokens, logits);
+  OK(et_g3c4_private_call_finish_v1(context));
+  snapshot_cache(context->cache, &cache);
+  snapshot_binding(context, &binding);
+  memcpy(rng, context->generator_rng_words, sizeof(rng));
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  memcpy(parameter, context->pins.views[10].data, sizeof(parameter));
+  CHECK(et_g3c4_private_prefill3_v1(
+      context, tokens, (float *)context->pins.views[10].data) != 0);
+  CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INVALID_ARGUMENT);
+  CHECK(memcmp(parameter, context->pins.views[10].data,
+               sizeof(parameter)) == 0);
+  CHECK(et_g3c4_prefill_binding_matches_pins(context));
+  check_preserved(context, &cache, &binding, rng);
+  OK(et_g3c4_private_call_abort_v1(context));
+
+  CHECK(et_a2_kv_cache_read_borrow_begin_v1(
+      context->cache, &borrow, &error) == 0);
+  CHECK(et_a2_kv_cache_read_borrow_layer_v1(
+      borrow, 0u, &keys, &values, &lengths, &keep, &error) == 0);
+  float *cache_alias = (float *)keys->data;
+  CHECK(et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) == 0);
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  CHECK(et_g3c4_private_prefill3_v1(context, tokens, cache_alias) != 0);
+  CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INVALID_ARGUMENT);
+  check_preserved(context, &cache, &binding, rng);
+  close_after_abort(context);
 }
 
 static void runtime_stale_and_rejections(
@@ -386,8 +429,9 @@ int main(void) {
   numerical_parity_and_continuation(owner);
   replacement_and_dispatch_cuts(owner);
   allocation_cuts(owner);
+  owned_alias_rejections(owner);
   runtime_stale_and_rejections(owner);
-  printf("G3-C4 prefill3 PASS: checks=%zu roles=21 dispatch-cuts=21 allocation-cuts=11\n",
+  printf("G3-C4 prefill3 PASS: checks=%zu roles=21 dispatch-cuts=21 allocation-cuts=14\n",
          checks);
   return 0;
 }

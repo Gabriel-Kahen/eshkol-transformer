@@ -2262,6 +2262,72 @@ static int et_g3c4_prefill_binding_matches_pins(
   }
   return offset == sizeof(context->prefill_binding_values);
 }
+
+static int et_g3c4_prefill_reject_owned_aliases(
+    et_g3c4_context_internal *context, const int64_t token_ids[3],
+    float last_logits_output[256]) {
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL;
+  const et_kernel_tensor_view_v1 *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL;
+  const et_kernel_tensor_view_v1 *keep = NULL;
+  et_kernel_error error;
+  size_t index;
+  int overlap = 0;
+
+  if (et_g3c4_ranges_overlap(
+          token_ids, 3u * sizeof(token_ids[0]),
+          context->owner, sizeof(*context->owner)) ||
+      et_g3c4_ranges_overlap(
+          last_logits_output, 256u * sizeof(last_logits_output[0]),
+          context->owner, sizeof(*context->owner)))
+    overlap = 1;
+  for (index = 0u; index < 14u; index++) {
+    const et_kernel_tensor_view_v1 *view = &context->pins.views[index];
+    if (et_g3c4_ranges_overlap(
+            token_ids, 3u * sizeof(token_ids[0]),
+            view->data, view->byte_length) ||
+        et_g3c4_ranges_overlap(
+            last_logits_output, 256u * sizeof(last_logits_output[0]),
+            view->data, view->byte_length))
+      overlap = 1;
+  }
+  if (overlap) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return -1;
+  }
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_begin_v1(
+              context->cache, &borrow, &error), &error) != 0)
+    return -1;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_read_borrow_layer_v1(
+              borrow, 0u, &keys, &values, &lengths, &keep, &error),
+          &error) != 0) {
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+    return -1;
+  }
+#define ET_G3C4_PREFILL3_CACHE_ALIAS(view) \
+  (et_g3c4_ranges_overlap( \
+       token_ids, 3u * sizeof(token_ids[0]), \
+       (view)->data, (view)->byte_length) || \
+   et_g3c4_ranges_overlap( \
+       last_logits_output, 256u * sizeof(last_logits_output[0]), \
+       (view)->data, (view)->byte_length))
+  overlap = ET_G3C4_PREFILL3_CACHE_ALIAS(keys) ||
+            ET_G3C4_PREFILL3_CACHE_ALIAS(values) ||
+            ET_G3C4_PREFILL3_CACHE_ALIAS(lengths) ||
+            ET_G3C4_PREFILL3_CACHE_ALIAS(keep);
+#undef ET_G3C4_PREFILL3_CACHE_ALIAS
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  if (overlap) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return -1;
+  }
+  return 0;
+}
 #endif
 
 static void et_g3c4_token_frame_reset(
@@ -2929,6 +2995,9 @@ int64_t et_g3c4_private_prefill3_v1(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return et_g3c4_error_state.category;
   }
+  if (et_g3c4_prefill_reject_owned_aliases(
+          context, token_ids, last_logits_output) != 0)
+    return et_g3c4_error_state.category;
   memset(&scratch, 0, sizeof(scratch));
   memset(binding_identities, 0, sizeof(binding_identities));
   memset(binding_values, 0, sizeof(binding_values));
