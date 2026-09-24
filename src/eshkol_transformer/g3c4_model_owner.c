@@ -720,6 +720,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #error "ET_G3C4_PROVIDER_ROUTES_PRIVATE requires the private generator"
 #endif
 
+#if defined(ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE) && \
+    !defined(ET_G3C4_PROVIDER_ROUTES_PRIVATE)
+#error "ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE requires provider routes"
+#endif
+
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
 #include "eshkol_transformer/g3s_sampling_abi.h"
@@ -1625,6 +1630,315 @@ static et_g3c4_context_internal *et_g3c4_admit_active_call(
     return NULL;
   return context;
 }
+
+#ifdef ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE
+typedef struct et_g3c4_full_prefix_scratch {
+  float et[16], ep[16], x[16], n1[16];
+  float qt[16], kt[16], vt[16];
+  float qh[16], kh[16], vh[16], ah[16];
+  float at[16], ao[16], r[16], n2[16];
+  float fu[32], fg[32], fd[16], y[16], nf[16], z[1024];
+} et_g3c4_full_prefix_scratch;
+
+static int et_g3c4_dispatch_forward(
+    const char *capability, const char *operation,
+    size_t rank, const uint64_t *shape,
+    et_kernel_tensor_view_v1 *inputs, size_t input_count,
+    et_kernel_tensor_view_v1 output) {
+  et_kernel_request_v1 request = {
+    sizeof(request), operation, "f32", "cpu", rank, shape, 1u, {0}};
+  et_kernel_call_v1 call = {
+    sizeof(call), capability, &request,
+    input_count, sizeof(inputs[0]), input_count * sizeof(inputs[0]), inputs,
+    1u, sizeof(output), sizeof(output), &output};
+  et_kernel_error error;
+  return et_g3c4_capture_kernel(
+      et_kernel_runtime_dispatch(et_g3c4_forward_runtime, &call, &error),
+      &error);
+}
+
+int64_t et_g3c4_private_full_prefix_forward_v1(
+    void *candidate, const int64_t token_ids[4], float logits[1024]) {
+  static const uint64_t ids_shape[2] = {1u, 4u};
+  static const uint64_t token_embedding_row[4] = {1u, 4u, 256u, 4u};
+  static const uint64_t position_embedding_row[4] = {1u, 4u, 4u, 4u};
+  static const uint64_t d4_shape[3] = {1u, 4u, 4u};
+  static const uint64_t d8_shape[3] = {1u, 4u, 8u};
+  static const uint64_t heads_shape[4] = {1u, 2u, 4u, 2u};
+  static const uint64_t head_layout_row[4] = {1u, 4u, 2u, 2u};
+  static const uint64_t linear_d4_d4[4] = {1u, 4u, 4u, 4u};
+  static const uint64_t linear_d4_d8[4] = {1u, 4u, 4u, 8u};
+  static const uint64_t linear_d8_d4[4] = {1u, 4u, 8u, 4u};
+  static const uint64_t linear_d4_v256[4] = {1u, 4u, 4u, 256u};
+  static const uint64_t attention_row[6] = {1u, 2u, 2u, 4u, 4u, 2u};
+  static const uint64_t attention_positions_shape[2] = {1u, 4u};
+  static const uint64_t attention_mask_shape[3] = {1u, 4u, 4u};
+  static const uint64_t append_shape[1] = {1u};
+  et_g3c4_context_internal *context;
+  et_g3c4_full_prefix_scratch scratch;
+  et_a2_kv_cache_transaction *transaction = NULL;
+  et_a2_kv_cache_transaction_view *transaction_view = NULL;
+  const et_kernel_tensor_view_v1 *cached_keys = NULL;
+  const et_kernel_tensor_view_v1 *cached_values = NULL;
+  const et_kernel_tensor_view_v1 *effective_lengths = NULL;
+  const et_kernel_tensor_view_v1 *key_keep = NULL;
+  et_kernel_tensor_view_v1 inputs[6];
+  et_kernel_tensor_view_v1 output;
+  et_kernel_tensor_view_v1 append_counts;
+  et_kernel_tensor_view_v1 staged_keys;
+  et_kernel_tensor_view_v1 staged_values;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+  int64_t positions[4] = {0, 1, 2, 3};
+  int64_t append_count = 4;
+  uint8_t causal_keep[16];
+  uint32_t epsilon_bits = UINT32_C(0x3727c5ac);
+  float epsilon;
+  size_t query;
+  size_t key;
+
+  et_g3c4_error_reset_internal();
+  if (token_ids == NULL || logits == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  for (query = 0u; query < 4u; query++)
+    if (token_ids[query] < 0 || token_ids[query] > 255) {
+      (void)et_g3c4_fail(
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+      return et_g3c4_error_state.category;
+    }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if ((context->call_kind != 0 && context->call_kind != 2) ||
+      et_g3c4_forward_runtime == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  memset(&scratch, 0, sizeof(scratch));
+  memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
+
+  inputs[0] = et_g3c4_view(
+      (void *)token_ids, 4u * sizeof(token_ids[0]), "i64", 2u, ids_shape);
+  inputs[1] = context->pins.views[10];
+  output = et_g3c4_view(
+      scratch.et, sizeof(scratch.et), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.embedding-forward", "g3c4.embedding.forward",
+          4u, token_embedding_row, inputs, 2u, output) != 0)
+    goto fail;
+
+  inputs[0] = et_g3c4_view(
+      positions, sizeof(positions), "i64", 2u, ids_shape);
+  inputs[1] = context->pins.views[13];
+  output = et_g3c4_view(
+      scratch.ep, sizeof(scratch.ep), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.embedding-forward", "g3c4.embedding.forward",
+          4u, position_embedding_row, inputs, 2u, output) != 0)
+    goto fail;
+
+  inputs[0] = et_g3c4_view(
+      scratch.et, sizeof(scratch.et), "f32", 3u, d4_shape);
+  inputs[1] = et_g3c4_view(
+      scratch.ep, sizeof(scratch.ep), "f32", 3u, d4_shape);
+  output = et_g3c4_view(scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.residual", "g3c4.residual.forward",
+          3u, d4_shape, inputs, 2u, output) != 0)
+    goto fail;
+
+  inputs[0] = output;
+  inputs[1] = context->pins.views[7];
+  inputs[2] = context->pins.views[6];
+  inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+  output = et_g3c4_view(
+      scratch.n1, sizeof(scratch.n1), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.layer-norm", "g3c4.layer-norm.forward",
+          3u, d4_shape, inputs, 4u, output) != 0)
+    goto fail;
+
+#define ET_G3C4_FORWARD_LINEAR(weight_index, source, target, row) do { \
+  inputs[0] = et_g3c4_view( \
+      (source), sizeof(source), "f32", 3u, \
+      sizeof(source) == sizeof(scratch.fu) ? d8_shape : d4_shape); \
+  inputs[1] = context->pins.views[(weight_index)]; \
+  output = et_g3c4_view( \
+      (target), sizeof(target), "f32", 3u, \
+      sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
+      (sizeof(target) == sizeof(scratch.z) ? \
+          (const uint64_t[3]){1u, 4u, 256u} : d4_shape)); \
+  if (et_g3c4_dispatch_forward( \
+          "g3c4.linear", "g3c4.linear.forward-no-bias", \
+          4u, (row), inputs, 2u, output) != 0) \
+    goto fail; \
+} while (0)
+
+  ET_G3C4_FORWARD_LINEAR(2u, scratch.n1, scratch.qt, linear_d4_d4);
+  ET_G3C4_FORWARD_LINEAR(0u, scratch.n1, scratch.kt, linear_d4_d4);
+  ET_G3C4_FORWARD_LINEAR(3u, scratch.n1, scratch.vt, linear_d4_d4);
+
+#define ET_G3C4_FORWARD_LAYOUT( \
+    operation, source, source_rank, source_shape, \
+    target, target_rank, target_shape) do { \
+  inputs[0] = et_g3c4_view( \
+      (source), sizeof(source), "f32", (source_rank), (source_shape)); \
+  output = et_g3c4_view( \
+      (target), sizeof(target), "f32", (target_rank), (target_shape)); \
+  if (et_g3c4_dispatch_forward( \
+          "g3c4.head-layout", (operation), 4u, head_layout_row, \
+          inputs, 1u, output) != 0) \
+    goto fail; \
+} while (0)
+
+  ET_G3C4_FORWARD_LAYOUT(
+      "g3c4.heads.split.forward", scratch.qt, 3u, d4_shape,
+      scratch.qh, 4u, heads_shape);
+  ET_G3C4_FORWARD_LAYOUT(
+      "g3c4.heads.split.forward", scratch.kt, 3u, d4_shape,
+      scratch.kh, 4u, heads_shape);
+  ET_G3C4_FORWARD_LAYOUT(
+      "g3c4.heads.split.forward", scratch.vt, 3u, d4_shape,
+      scratch.vh, 4u, heads_shape);
+
+  append_counts = et_g3c4_view(
+      &append_count, sizeof(append_count), "i64", 1u, append_shape);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_begin_v1(
+              context->cache, 4u, &append_counts, &transaction, &error),
+          &error) != 0)
+    goto fail;
+  staged_keys = et_g3c4_view(
+      scratch.kh, sizeof(scratch.kh), "f32", 4u, heads_shape);
+  staged_values = et_g3c4_view(
+      scratch.vh, sizeof(scratch.vh), "f32", 4u, heads_shape);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_stage_layer_v1(
+              transaction, 0u, &staged_keys, &staged_values, &error),
+          &error) != 0)
+    goto fail;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_view_begin_v1(
+              transaction, 0u, &transaction_view, &error),
+          &error) != 0)
+    goto fail;
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_view_tensors_v1(
+              transaction_view, &cached_keys, &cached_values,
+              &effective_lengths, &key_keep, &error),
+          &error) != 0)
+    goto fail;
+  if (effective_lengths == NULL || key_keep == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto fail;
+  }
+  for (query = 0u; query < 4u; query++)
+    for (key = 0u; key < 4u; key++)
+      causal_keep[query * 4u + key] =
+          ((const uint8_t *)key_keep->data)[key] != 0u &&
+          positions[key] <= positions[query] ? 1u : 0u;
+  inputs[0] = et_g3c4_view(
+      scratch.qh, sizeof(scratch.qh), "f32", 4u, heads_shape);
+  inputs[1] = *cached_keys;
+  inputs[2] = *cached_values;
+  inputs[3] = et_g3c4_view(
+      positions, sizeof(positions), "i64", 2u, attention_positions_shape);
+  inputs[4] = inputs[3];
+  inputs[5] = et_g3c4_view(
+      causal_keep, sizeof(causal_keep), "bool", 3u,
+      attention_mask_shape);
+  output = et_g3c4_view(
+      scratch.ah, sizeof(scratch.ah), "f32", 4u, heads_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.causal-attention", "g3c4.causal-attention.forward",
+          6u, attention_row, inputs, 6u, output) != 0)
+    goto fail;
+  if (et_a2_kv_cache_transaction_view_end_v1(
+          &transaction_view, &error) != 0)
+    abort();
+
+  ET_G3C4_FORWARD_LAYOUT(
+      "g3c4.heads.merge.forward", scratch.ah, 4u, heads_shape,
+      scratch.at, 3u, d4_shape);
+  ET_G3C4_FORWARD_LINEAR(1u, scratch.at, scratch.ao, linear_d4_d4);
+
+  inputs[0] = et_g3c4_view(
+      scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
+  inputs[1] = et_g3c4_view(
+      scratch.ao, sizeof(scratch.ao), "f32", 3u, d4_shape);
+  output = et_g3c4_view(scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.residual", "g3c4.residual.forward",
+          3u, d4_shape, inputs, 2u, output) != 0)
+    goto fail;
+
+  inputs[0] = output;
+  inputs[1] = context->pins.views[9];
+  inputs[2] = context->pins.views[8];
+  inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+  output = et_g3c4_view(
+      scratch.n2, sizeof(scratch.n2), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.layer-norm", "g3c4.layer-norm.forward",
+          3u, d4_shape, inputs, 4u, output) != 0)
+    goto fail;
+
+  ET_G3C4_FORWARD_LINEAR(5u, scratch.n2, scratch.fu, linear_d4_d8);
+  inputs[0] = et_g3c4_view(
+      scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
+  output = et_g3c4_view(
+      scratch.fg, sizeof(scratch.fg), "f32", 3u, d8_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.gelu", "g3c4.gelu.forward",
+          3u, d8_shape, inputs, 1u, output) != 0)
+    goto fail;
+  ET_G3C4_FORWARD_LINEAR(4u, scratch.fg, scratch.fd, linear_d8_d4);
+
+  inputs[0] = et_g3c4_view(
+      scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
+  inputs[1] = et_g3c4_view(
+      scratch.fd, sizeof(scratch.fd), "f32", 3u, d4_shape);
+  output = et_g3c4_view(scratch.y, sizeof(scratch.y), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.residual", "g3c4.residual.forward",
+          3u, d4_shape, inputs, 2u, output) != 0)
+    goto fail;
+
+  inputs[0] = output;
+  inputs[1] = context->pins.views[12];
+  inputs[2] = context->pins.views[11];
+  inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+  output = et_g3c4_view(
+      scratch.nf, sizeof(scratch.nf), "f32", 3u, d4_shape);
+  if (et_g3c4_dispatch_forward(
+          "g3c4.layer-norm", "g3c4.layer-norm.forward",
+          3u, d4_shape, inputs, 4u, output) != 0)
+    goto fail;
+  ET_G3C4_FORWARD_LINEAR(10u, scratch.nf, scratch.z, linear_d4_v256);
+
+#undef ET_G3C4_FORWARD_LAYOUT
+#undef ET_G3C4_FORWARD_LINEAR
+  if (et_a2_kv_cache_transaction_abort_v1(&transaction, &error) != 0)
+    abort();
+  memcpy(logits, scratch.z, sizeof(scratch.z));
+  return 0;
+
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (transaction_view != NULL &&
+      et_a2_kv_cache_transaction_view_end_v1(
+          &transaction_view, &error) != 0)
+    abort();
+  if (transaction != NULL &&
+      et_a2_kv_cache_transaction_abort_v1(&transaction, &error) != 0)
+    abort();
+  et_g3c4_error_restore_internal(first);
+  return et_g3c4_error_state.category;
+}
+#endif
 
 #ifdef ET_G3C4_ACTIVE_CALL_TESTING
 static void et_g3c4_active_call_rollback(
