@@ -132,6 +132,7 @@
 (define closed-d2 (make-tuple))
 (define live-m3 (make-tuple))
 (define sibling-o2 (make-tuple))
+(define eos-d2 (make-tuple))
 (define released-batch (tuple-release-one-batch! released))
 (define live-batch
   (d2-token-dataset-next-batch (vector-ref live-d2 2)))
@@ -140,6 +141,20 @@
 (check "closed fixture closes before acquisition"
        (d2-token-dataset-close! (vector-ref closed-d2 2)))
 (define live-workspace (m3t-public-workspace-create (vector-ref live-m3 3)))
+
+(define (tuple-exhaust-dataset! tuple)
+  (let loop ()
+    (let ((batch (d2-token-dataset-next-batch (vector-ref tuple 2))))
+      (if (d2-token-dataset-end? batch) #t
+          (begin (d2-token-batch-release! batch) (loop))))))
+(check "EOS fixture exhausts the authentic dataset"
+       (tuple-exhaust-dataset! eos-d2))
+(define count-before-eos-negative (record-count))
+(check "terminal D2 cursor acquisition rejects"
+       (transformer-error-at-operation? 'invalid-state 'trainer-create
+         (lambda () (tuple-create eos-d2))))
+(check "terminal D2 rejection publishes no trainer"
+       (= (record-count) count-before-eos-negative))
 
 ;;; A second genuine optimizer over one model is constructed before any lease.
 ;;; Acquisition must reject the competing sibling without publishing a lease.
@@ -197,7 +212,8 @@
 (check "returned shell is canonical"
        (eq? fresh-shell (vector-ref fresh-record 2)))
 (check "record fixed tuple fields"
-       (and (eq? (vector-ref fresh-record 3) 'idle)
+       (and (= (vector-length fresh-record) 22)
+            (eq? (vector-ref fresh-record 3) 'idle)
             (eq? (vector-ref fresh-record 4) #f)
             (eq? (vector-ref fresh-record 6) (vector-ref fresh 0))
             (eq? (vector-ref fresh-record 8) (vector-ref fresh 3))
@@ -206,6 +222,150 @@
             (= (vector-length (vector-ref fresh-record 10)) 17)
             (= (vector-length (vector-ref fresh-record 11)) 14)
             (= (vector-length (vector-ref fresh-record 12)) 14)))
+(define fresh-initial-cursor (vector-ref fresh-record 17))
+(define fresh-initial-rng (vector-ref fresh-record 18))
+(check "record owns exact initial restore controls"
+       (and (bytevector? fresh-initial-cursor)
+            (bytes=? fresh-initial-cursor
+                     (d2-token-dataset-cursor (vector-ref fresh 2)))
+            (equal? fresh-initial-rng
+                    (vector 'philox4x32-10 1 1729 0 0))
+            (= (vector-ref fresh-record 19) 0)
+            (= (vector-ref fresh-record 20) 0)
+            (= (vector-ref fresh-record 21) 0)))
+
+;;; The restore successor owns publication and unlink.  All failures before its
+;;; first store preserve idle/#f and every durable control identity.
+(define (make-empty-authority-cells count)
+  (let ((cells (make-vector count #f)))
+    (let loop ((index 0))
+      (if (= index count) cells
+          (begin
+            (vector-set! cells index (vector #f))
+            (loop (+ index 1)))))))
+(define (make-restore-parent trainer)
+  (let ((parent
+          (vector tr3-lease-restore-parent-tag #f trainer 'constructing #f
+                  (make-empty-authority-cells 14) (vector #f) (vector #f)
+                  (make-vector 5 #f) #f #f (vector #f) (vector #f))))
+    (vector-set! parent 1 parent)
+    parent))
+(define restore-parent (make-restore-parent fresh-shell))
+(check "restore enter rejects copied trainer shell"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-enter-internal!
+             (vector-copy fresh-shell) restore-parent))))
+(check "restore enter rejects malformed parent"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-enter-internal! fresh-shell #f))))
+(define copied-restore-parent (vector-copy restore-parent))
+(check "restore enter rejects copied parent self authority"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-enter-internal!
+             fresh-shell copied-restore-parent))))
+(define wrong-phase-parent (make-restore-parent fresh-shell))
+(vector-set! wrong-phase-parent 3 'source-staged)
+(check "restore enter rejects wrong parent phase"
+       (transformer-error-at-operation? 'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-enter-internal! fresh-shell wrong-phase-parent))))
+(vector-set! fresh-record 20 1)
+(check "restore enter rejects live O2/trainer count mismatch"
+       (transformer-error-at-operation? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-enter-internal! fresh-shell restore-parent))))
+(check "failed restore admission preserves idle exclusion"
+       (and (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)))
+(vector-set! fresh-record 20 0)
+(check "restore enter publishes exact parent"
+       (eq? (tr3-lease-restore-enter-internal! fresh-shell restore-parent)
+            fresh-record))
+(define canonical-restore-parent (vector-ref fresh-record 4))
+(check "restore enter publishes restoring/canonical-parent"
+       (and (eq? (vector-ref fresh-record 3) 'restoring)
+            (eq? canonical-restore-parent restore-parent)))
+(check "restore recheck rejects copied parent"
+       (transformer-error-at-operation? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-recheck-internal
+             fresh-record (vector-copy canonical-restore-parent)
+             (vector 'copied-o2-plan)))))
+(check "restore abort rejects copied parent without unlink"
+       (and (transformer-error-at-operation? 'invalid-state 'trainer-load-state!
+              (lambda ()
+                (tr3-lease-restore-abort-internal!
+                  fresh-record (vector-copy canonical-restore-parent))))
+            (eq? (vector-ref fresh-record 3) 'restoring)
+            (eq? (vector-ref fresh-record 4) canonical-restore-parent)))
+(define authentic-model-entry-for-abort (vector-ref fresh-record 9))
+(vector-set! fresh-record 9 #f)
+(check "restore abort uses minimal authority after component damage"
+       (tr3-lease-restore-abort-internal!
+         fresh-record canonical-restore-parent))
+(vector-set! fresh-record 9 authentic-model-entry-for-abort)
+(check "restore abort restores idle and preserves controls"
+       (and (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)
+            (eq? (vector-ref fresh-record 17) fresh-initial-cursor)
+            (eq? (vector-ref fresh-record 18) fresh-initial-rng)
+            (= (vector-ref fresh-record 19) 0)
+            (= (vector-ref fresh-record 20) 0)
+            (= (vector-ref fresh-record 21) 0)))
+
+(define commit-parent (make-restore-parent fresh-shell))
+(tr3-lease-restore-enter-internal! fresh-shell commit-parent)
+(define canonical-commit-parent (vector-ref fresh-record 4))
+(define exact-o2-plan (vector 'test-exact-o2-restore-plan))
+(vector-set! (vector-ref canonical-commit-parent 7) 0 exact-o2-plan)
+(vector-set! canonical-commit-parent 3 'receiver-prepared)
+(check "restore seal rejects malformed bound controls"
+       (transformer-error-at-operation? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-recheck-internal
+             fresh-record canonical-commit-parent exact-o2-plan))))
+(define committed-epoch
+  (d2-token-dataset-cursor (vector-ref fresh 2)))
+(define committed-rng (vector 'philox4x32-10 1 1729 0 0))
+(define committed-controls (vector-ref canonical-commit-parent 8))
+(vector-set! committed-controls 0 committed-rng)
+(vector-set! committed-controls 1 (vector-copy (vector-ref fresh-record 7)))
+(vector-set! committed-controls 2 (vector committed-epoch committed-epoch))
+(vector-set! committed-controls 3
+  (vector (make-bytevector 0 0) "unused" (vector 'resolved-projection)))
+(vector-set! committed-controls 4 (vector 0 0 0))
+(check "restore seal rejects substituted O2 plan"
+       (transformer-error-at-operation? 'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-lease-restore-recheck-internal
+             fresh-record canonical-commit-parent
+             (vector 'test-exact-o2-restore-plan)))))
+(check "restore final recheck authenticates exact parent controls and O2 plan"
+       (eq? (tr3-lease-restore-recheck-internal
+              fresh-record canonical-commit-parent exact-o2-plan)
+            fresh-record))
+(vector-set! canonical-commit-parent 3 'committing)
+(check "restore commit publishes parent-bound controls without unlinking parent"
+       (tr3-lease-restore-commit-controls-tail-internal!
+         fresh-record canonical-commit-parent))
+(check "restore control commit keeps parent rooted"
+       (and (eq? (vector-ref fresh-record 3) 'restoring)
+            (eq? (vector-ref fresh-record 4) canonical-commit-parent)
+            (eq? (vector-ref fresh-record 17) committed-epoch)
+            (eq? (vector-ref fresh-record 18) committed-rng)
+            (= (vector-ref fresh-record 19) 0)
+            (= (vector-ref fresh-record 20) 0)
+            (= (vector-ref fresh-record 21) 0)))
+(vector-set! canonical-commit-parent 3 'dead)
+(check "restore finish unlinks the dead parent"
+       (tr3-lease-restore-finish-tail-internal!
+         fresh-record canonical-commit-parent))
+(check "restore finish returns trainer to idle"
+       (and (eq? (vector-ref fresh-record 3) 'idle)
+            (eq? (vector-ref fresh-record 4) #f)))
 (check "duplicate exact tuple rejects without another token"
        (and (transformer-error-at? 'invalid-state
               (lambda () (tuple-create fresh)))

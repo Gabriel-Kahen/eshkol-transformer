@@ -25,40 +25,29 @@ preserves per-case stdout, stderr, exit status, and input hashes, reports the
 observed prefix counts, and fails if an ordinal is silently skipped. The handler
 failure and post-staging census each run in their own process as well.
 
-With `--allocation-class object`, the final81298 gate injects every vector and
-cons prefix and records the other direct arena calls without injecting them.
-This is partial evidence: final81298 generated O0 code dereferences null results
-from `arena_allocate`, `arena_allocate_closure_with_header`, and
-`arena_allocate_string_with_header` before the installed language guard can
-observe or catch a condition. A separate preserved bounded-null counterexample
-records exit 139 for all three families.
+The successor gate accepts only `--allocation-class all`. It binds the approved
+22-slot lease source and failure fixture to a separate production-OFF
+`de0b249` runner and archive. Their paths, hashes, clean source commit/tree,
+root/build provenance, CMake profile, artifact manifest, container digest, and
+LLVM version are recorded in `failure_runtime_candidate.tsv` and checked before
+compilation. This runner supplies the exhaustive allocation-prefix evidence; it
+is distinct from the recovered final81298 functional runner.
 
-With `--allocation-class all`, the gate requires the reviewed repaired-runtime
-commit and the exact source through `63756bd`; it injects every prefix
-across all eight direct arena allocator symbols in one measured stream. The
-caller selects O0 or O2 with `--optimize`; each level gets separate evidence.
-On the frozen `f602a66` lease source with production-profile `de0b249`, the
-first 950 full-matrix hit cases passed, but ordinal 950 translated a genuine
-bounded substring allocation failure to X1 `unsupported`. The cold
-post-staging census also found 31 allocations; the first real operator-new
-failure there raised an uncaught `std::bad_alloc`. Those original artifacts
-remain preserved. The focused O0 repair probe confirms ordinal 950 now has
-typed E1 category `internal` and operation `config-fingerprint`, while cold
-and repeated post-staging acquisitions have zero wrapped allocations. Full
-O0 subsequently reached ordinal 1053, where a real bounded allocation failure
-in T1 fingerprint copying was reclassified as D2 `invalid-argument`. The shared
-D2 identity boundary now rejects foreign and missing tokenizers before calling
-T2, while preserving T2's typed `internal/tokenizer-fingerprint` failure for an
-admitted tokenizer. A focused O0 ordinal-1053 retry probe passes; the public D2
-boundary still reports operation `token-dataset-open`. The supported public
-D2 aggregate/executable passed 24 compiled rejection and recovery checks with
-empty compile and run diagnostics. Independent review approved the repaired
-source and runner. Canonical O0 and O2 on the same clean `7c83038` tree each
-passed all 1,145 cases/54,921 checks, with byte-identical case-status files
-and verified evidence manifests. O0 compilation emitted no diagnostics; O2
-emitted only four exact LLVM loop-vectorization warning pairs, admitted by a
-reviewed byte-count and SHA-256 pin. The first O2 run that failed the earlier
-empty-diagnostics assertion remains sealed as a separate raw artifact.
+The functional gate uses the accepted recovered final81298 runner with SHA-256
+`d5c23f1a59bf8fa96fd54fe4f1e47ce9ae903db2dd0f93408f41345ab34014fa`.
+Its manifest separately records the unavailable historical runner with SHA-256
+`4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1`;
+the recovered runner is not represented as equivalent to that lost artifact.
+It proves the 1024/8192 functional horizons,
+while this witness proves allocation-prefix rollback and successful retry.
+
+The successor fixture additionally verifies that each successful retry owns a
+22-slot idle record whose epoch-start cursor equals the pre-enrollment cursor,
+whose RNG is `(philox4x32-10, 1, 1729, 0, 0)`, and whose T/U/E counters are zero.
+The O2 diagnostic-only mode exists solely to capture the new compiler warning
+bytes for review. A full O2 matrix refuses to start until the reviewed byte
+count and SHA-256 replace the `pending` manifest fields. Prefix counts are
+discovered by the run and are not inherited from older evidence.
 
 The test measures exact component bytes and counters around each failure. It
 does not claim flat process memory, sanitizer coverage, package localization,

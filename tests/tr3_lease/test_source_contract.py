@@ -172,16 +172,16 @@ class LeaseSourceContract(unittest.TestCase):
         self.assertIn("--allocation-class", gate)
         self.assertIn('"${container_id}" bash -lc', gate)
         self.assertIn('git -C "${PROJECT_ROOT}" diff --quiet', gate)
-        self.assertIn("63756bd921dc5640667c5d2c44b98f777340499d", gate)
-        self.assertIn("d4b7560a5797ebafc461dc5d7a0d317690025437", gate)
+        self.assertIn("trainer_source_commit", gate)
+        self.assertIn("trainer_source_tree", gate)
         self.assertIn("--production-base", gate)
         self.assertIn("successor checkout must be clean", gate)
         self.assertIn("internal/d2/lib/d2_dataset.esk", gate)
         self.assertIn("tests/d2/public_errors_runtime.esk", gate)
-        self.assertIn("artifact-sha256.txt", gate)
+        self.assertIn("artifact_manifest_relative_path", gate)
         self.assertIn("llvm-config-21 --version", gate)
-        self.assertIn('"${allocation_class}" == all && "${optimize}" == 2', gate)
-        self.assertIn("13f1ab2db5ac94d4a382aa6d03a801e4607ee585e5f34bcc3a1c3b8acfffd0d5", gate)
+        self.assertIn("O2 diagnostics require reviewed byte-count and SHA pins", gate)
+        self.assertIn("--diagnostic-only", gate)
         self.assertIn('test ! -s "${evidence_dir}/compile.stderr"', gate)
         match = re.search(
             r"^expected_runner_self_sha256=([0-9a-f]{64})$", gate, re.M
@@ -193,18 +193,64 @@ class LeaseSourceContract(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(normalized.encode()).hexdigest(), match.group(1)
         )
-        source_test_pin = re.search(
-            r"^expected_source_test_sha256=([0-9a-f]{64})$", gate, re.M
-        )
-        self.assertIsNotNone(source_test_pin)
-        source_test_bytes = Path(__file__).read_bytes()
+        def read_manifest(name: str) -> dict[str, str]:
+            lines = (ROOT / "tests" / "tr3_lease" / name).read_text().splitlines()
+            entries = [line.split("\t", 1) for line in lines]
+            self.assertTrue(all(len(entry) == 2 for entry in entries))
+            self.assertEqual(len({key for key, _ in entries}), len(entries))
+            return dict(entries)
+
+        functional = read_manifest("runtime_candidate.tsv")
+        failure = read_manifest("failure_runtime_candidate.tsv")
         self.assertEqual(
-            hashlib.sha256(source_test_bytes).hexdigest(),
-            source_test_pin.group(1),
+            functional["trainer_source_commit"],
+            "3f98cd3f316afa2ab44574e0a85cdbf8b651e31c",
         )
+        self.assertEqual(
+            functional["trainer_source_tree"],
+            "7a64228b447fbfd3f31a7ac42b6d0e588aa9eb34",
+        )
+        self.assertEqual(
+            functional["trainer_source_commit"], failure["trainer_source_commit"]
+        )
+        self.assertEqual(
+            functional["trainer_source_tree"], failure["trainer_source_tree"]
+        )
+        self.assertEqual(
+            functional["runner_sha256"],
+            "d5c23f1a59bf8fa96fd54fe4f1e47ce9ae903db2dd0f93408f41345ab34014fa",
+        )
+        self.assertEqual(
+            functional["lost_runner_sha256"],
+            "4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1",
+        )
+        self.assertEqual(
+            functional["runner_role"], "functional_recovered_final81298"
+        )
+        self.assertEqual(functional["lost_runner_status"], "missing")
+        self.assertNotEqual(
+            functional["runner_sha256"], functional["lost_runner_sha256"]
+        )
+        self.assertEqual(
+            failure["runner_sha256"],
+            "5b6c5cae8872330cf59f47f84535fb9acf0242ece001eb544112ac133280b918",
+        )
+        self.assertEqual(
+            failure["runner_role"], "allocation_prefix_production_off"
+        )
+        self.assertNotEqual(functional["runner_sha256"], failure["runner_sha256"])
+        self.assertEqual(failure["o2_compile_stderr_bytes"], "1200")
+        self.assertEqual(
+            failure["o2_compile_stderr_sha256"],
+            "13f1ab2db5ac94d4a382aa6d03a801e4607ee585e5f34bcc3a1c3b8acfffd0d5",
+        )
+        source_test_bytes = Path(__file__).read_bytes()
+        source_test_hash = hashlib.sha256(source_test_bytes).hexdigest()
+        self.assertEqual(source_test_hash, functional["source_contract_sha256"])
+        self.assertEqual(source_test_hash, failure["source_contract_sha256"])
         self.assertNotEqual(
             hashlib.sha256(source_test_bytes + b"\n").hexdigest(),
-            source_test_pin.group(1),
+            source_test_hash,
         )
         self.assertIn('inputs/ROADMAP.md', gate)
 

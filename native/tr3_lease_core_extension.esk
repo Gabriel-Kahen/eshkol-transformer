@@ -3,15 +3,27 @@
 
 (extern i64 tr3-d2-native-idle-preflight ptr
         :real et_tr3_c_d2_dataset_idle_preflight_v1)
+(extern void tr3-lease-fail-stop i64 :real _Exit)
 
 ;;; Slot 0 is the sole enrolled-record list.  Slot 1 is a temporary promotion
 ;;; root used only while an acquisition is active.
 (define tr3-trainers (vector '() #f))
 (define tr3-acquisition-active? #f)
-(define tr3-lease-record-tag (vector 'tr3-lease-record-v1))
+(define tr3-lease-record-tag (vector 'tr3-lease-record-v2))
+(define tr3-lease-token-tag (vector 'tr3-lease-token-v2))
+(define tr3-lease-restore-parent-tag (vector 'tr3-c-restore-parent-v1))
+(define tr3-lease-restore-parent-length 13)
 
 (define (tr3-lease-fail category message)
   (m3t-fail category 'trainer-create message))
+
+(define (tr3-lease-operation-fail category operation message)
+  (m3t-fail category operation message))
+
+;;; Record slots 17..21 are the only durable trainer-control authority:
+;;; epoch-start cursor bytes, RNG, total active tokens, completed updates, and
+;;; completed epochs.  Slots 0..16 retain the accepted lease layout.
+(define tr3-lease-record-length 22)
 
 (define (tr3-lease-vector-identical? vector-value list-value count)
   (and (vector? vector-value) (= (vector-length vector-value) count)
@@ -135,7 +147,7 @@
                         "tokenizer differs from the dataset identity")))
   #t)
 
-(define (tr3-lease-d2-idle! dataset-state)
+(define (tr3-lease-d2-idle! dataset-state operation)
   (let ((generation (vector-ref dataset-state 8))
         (status (vector-ref dataset-state 10))
         (borrows (vector-ref dataset-state 15)))
@@ -144,15 +156,55 @@
             (not (= borrows 0))
             (not (or (eq? status 'none) (eq? status 'released)))
             (and (eq? status 'released) (= generation 0)))
-        (tr3-lease-fail 'invalid-state "dataset is not at an idle boundary"))
+        (tr3-lease-operation-fail
+          'invalid-state operation "dataset is not at an idle boundary"))
     (let ((native-status
             (tr3-d2-native-idle-preflight (vector-ref dataset-state 1))))
       (if (not (= native-status (d2-native-last-status)))
-          (tr3-lease-fail 'internal "dataset idle status diverged"))
+          (tr3-lease-operation-fail
+            'internal operation "dataset idle status diverged"))
       (if (not (= native-status 0))
-          (tr3-lease-fail
+          (tr3-lease-operation-fail
             (if (= native-status 2) 'invalid-state 'invalid-argument)
-            "dataset is not natively idle"))))
+            operation "dataset is not natively idle"))))
+  #t)
+
+(define (tr3-lease-initial-cursor dataset-state)
+  ;; Translate every D2 cursor failure to the trainer-create boundary.  The
+  ;; returned bytevector is newly encoded and becomes trainer-owned at record
+  ;; publication; D2 retains no reference to it.
+  (guard (caught
+           ((d2-core-error? caught)
+            (tr3-lease-fail
+              (d2-core-error-category caught)
+              (d2-core-error-message caught)))
+           ((transformer-error? caught)
+            (d2-remap-structured-error caught 'trainer-create))
+           (else (raise caught)))
+    (let* ((core (vector-ref dataset-state 6))
+           (total (vector-ref core 14))
+           (current (vector-ref core 15))
+           (cursor (d2-core-cursor-snapshot core))
+           (decoded (d2-core-cursor-decode cursor)))
+      (if (or (not (d2-core-state-identity=? core decoded))
+              (not (= (vector-ref decoded 14) total))
+              (not (= (vector-ref decoded 15) current)))
+          (tr3-lease-fail 'internal
+                          "initial dataset cursor diverged from live state"))
+      (if (>= current total)
+          (tr3-lease-fail 'invalid-state
+                          "trainer dataset is already at end of stream"))
+      (vector cursor total current))))
+
+(define (tr3-lease-cursor-position!
+          dataset-state expected-total expected-current operation)
+  (let ((core (vector-ref dataset-state 6)))
+    (if (or (not (= (vector-ref core 14) expected-total))
+            (not (= (vector-ref core 15) expected-current))
+            (>= expected-current expected-total))
+        (tr3-lease-operation-fail
+          'invalid-state operation
+          "dataset cursor changed during trainer admission")))
   #t)
 
 (define (tr3-lease-m3-cache-workspace model-entry)
@@ -163,11 +215,13 @@
            (vector-ref (car rows) 1))
           (else (loop (cdr rows))))))
 
-(define (tr3-lease-m3-idle! model-entry)
+(define (tr3-lease-m3-idle! model-entry operation)
   (if (vector-ref m3-call-state 0)
-      (tr3-lease-fail 'invalid-state "a model operation is active"))
+      (tr3-lease-operation-fail
+        'invalid-state operation "a model operation is active"))
   (if (vector-ref model-entry 10)
-      (tr3-lease-fail 'invalid-state "model has an active frame"))
+      (tr3-lease-operation-fail
+        'invalid-state operation "model has an active frame"))
   (let ((cache (tr3-lease-m3-cache-workspace model-entry)))
     (let loop ((entries (vector-ref m3t-registry 0)))
       (if (null? entries) #t
@@ -178,14 +232,14 @@
             (if (and live? owned?
                      (or (eq? kind 'model-output)
                          (eq? kind 'model-logits)))
-                (tr3-lease-fail 'invalid-state
-                                "model has a live owned result"))
+                (tr3-lease-operation-fail
+                  'invalid-state operation "model has a live owned result"))
             (if (and live? owned? (eq? kind 'workspace)
                      (or (not cache) (not (eq? entry cache))
                          (not (eq? (vector-ref entry 10) 'idle))
                          (vector-ref entry 5)))
-                (tr3-lease-fail 'invalid-state
-                                "model has a live caller workspace"))
+                (tr3-lease-operation-fail
+                  'invalid-state operation "model has a live caller workspace"))
             (loop (cdr entries))))))
   #t)
 
@@ -230,9 +284,70 @@
               (loop (cdr remaining)))))
       #t)))
 
+(define (tr3-lease-o2-restore-idle! record operation)
+  (let ((optimizer-record (vector-ref record 14))
+        (retained-handles (vector-ref record 11))
+        (expected-completed (vector-ref record 20)))
+    (if (not (tr3-lease-vector-identical?
+               retained-handles (vector-ref optimizer-record 5) 14))
+        (tr3-lease-operation-fail
+          'invalid-state operation
+          "optimizer handle order differs from the fixed model"))
+    (if (not (and (integer? expected-completed)
+                  (exact? expected-completed)
+                  (real? expected-completed)
+                  (>= expected-completed 0)
+                  (<= expected-completed 9223372036854775807)))
+        (tr3-lease-operation-fail
+          'invalid-state operation
+          "trainer completed-update count is malformed"))
+    ;; Both native calls reject a busy optimizer.  The shared O2 invariant then
+    ;; also proves active_operation is null; TR3-C adds no second exclusion.
+    (let ((completed
+            (o2-native-optimizer-completed-updates
+              (vector-ref
+                (o2-require-optimizer operation (vector-ref record 13)) 1))))
+      (if (< completed 0) (o2-native-fail operation))
+      (if (not (= completed expected-completed))
+          (tr3-lease-operation-fail
+            'invalid-state operation
+            "optimizer and trainer update counts differ")))
+    (if (not (= (o2-native-optimizer-require-absent-gradients
+                  (vector-ref optimizer-record 1)) 0))
+        (o2-native-fail operation))
+    #t))
+
+(define (tr3-lease-controls-valid? record)
+  (let ((rng (vector-ref record 18)))
+    (and (bytevector? (vector-ref record 17))
+         (vector? rng) (= (vector-length rng) 5)
+         (eq? (vector-ref rng 0) 'philox4x32-10)
+         (equal? (vector-ref rng 1) 1)
+         (integer? (vector-ref rng 2)) (exact? (vector-ref rng 2))
+         (real? (vector-ref rng 2)) (>= (vector-ref rng 2) 0)
+         (<= (vector-ref rng 2) 9223372036854775807)
+         (equal? (vector-ref rng 3) 0)
+         (equal? (vector-ref rng 4) 0)
+         (integer? (vector-ref record 19))
+         (exact? (vector-ref record 19))
+         (real? (vector-ref record 19))
+         (>= (vector-ref record 19) 0)
+         (<= (vector-ref record 19) 9223372036854775807)
+         (integer? (vector-ref record 20))
+         (exact? (vector-ref record 20))
+         (real? (vector-ref record 20))
+         (>= (vector-ref record 20) 0)
+         (<= (vector-ref record 20) 9223372036854775807)
+         (integer? (vector-ref record 21))
+         (exact? (vector-ref record 21))
+         (real? (vector-ref record 21))
+         (>= (vector-ref record 21) 0)
+         (<= (vector-ref record 21) 9223372036854775807))))
+
 (define (tr3-lease-recheck!
           observed-head dataset model optimizer
-          model-entry optimizer-record dataset-state modules handles carriers)
+          model-entry optimizer-record dataset-state modules handles carriers
+          expected-total expected-current)
   (tr3-lease-p1-status!
     (tr3-p1-fixed-recheck-internal model modules handles carriers)
     'trainer-create)
@@ -247,9 +362,11 @@
   (if (tr3-lease-tuple-overlap?
         observed-head model optimizer dataset modules handles carriers)
       (tr3-lease-fail 'invalid-state "trainer tuple overlaps an enrolled trainer"))
-  (tr3-lease-m3-idle! model-entry)
+  (tr3-lease-m3-idle! model-entry 'trainer-create)
   (tr3-lease-o2-idle! optimizer-record handles)
-  (tr3-lease-d2-idle! dataset-state)
+  (tr3-lease-d2-idle! dataset-state 'trainer-create)
+  (tr3-lease-cursor-position!
+    dataset-state expected-total expected-current 'trainer-create)
   ;; This is deliberately the last fallible observation before the commit
   ;; store. A reentrant dependency cannot make us overwrite a newer head.
   (if (not (eq? observed-head (vector-ref tr3-trainers 0)))
@@ -295,17 +412,25 @@
             observed-head model optimizer dataset modules handles carriers)
           (tr3-lease-fail 'invalid-state
                           "trainer tuple overlaps an enrolled trainer"))
-      (tr3-lease-m3-idle! model-entry)
+      (tr3-lease-m3-idle! model-entry 'trainer-create)
       (tr3-lease-o2-idle! optimizer-record handles)
-      (tr3-lease-d2-idle! dataset-state)
+      (tr3-lease-d2-idle! dataset-state 'trainer-create)
+      (let* ((initial-cursor (tr3-lease-initial-cursor dataset-state))
+             (initial-cursor-bytes (vector-ref initial-cursor 0))
+             (initial-total (vector-ref initial-cursor 1))
+             (initial-current (vector-ref initial-cursor 2))
+             (initial-rng
+               (vector 'philox4x32-10 1
+                       (x1-private-config-ref resolved 'run.seed) 0 0)))
       ;; All allocation is complete before the final dependency and registry
       ;; rechecks.  Staging through the sole root promotes the entire graph.
       (let* ((shell (vector 'trainer))
-             (token (vector 'tr3-lease-token))
+             (token (vector tr3-lease-token-tag))
              (record
                (vector tr3-lease-record-tag #f shell 'idle #f token resolved
                        tokenizer-identity model model-entry modules handles
-                       carriers optimizer optimizer-record dataset dataset-state))
+                       carriers optimizer optimizer-record dataset dataset-state
+                       initial-cursor-bytes initial-rng 0 0 0))
              (successor (cons record observed-head))
              ;; The staging envelope retains every fresh witness used after
              ;; promotion. Final checks never dereference their regional inputs.
@@ -345,7 +470,7 @@
             observed-head canonical-dataset canonical-model canonical-optimizer
             canonical-model-entry canonical-optimizer-record
             canonical-dataset-state canonical-modules canonical-handles
-            canonical-carriers)
+            canonical-carriers initial-total initial-current)
           ;; The promoted graph remains live in root storage.  No fallible
           ;; operation lies between removing its staging edge and enrollment.
           (vector-set! tr3-trainers 1 #f)
@@ -353,7 +478,7 @@
           (let ((canonical-shell
                   (vector-ref (car (vector-ref tr3-trainers 0)) 2)))
             (set! tr3-acquisition-active? #f)
-            canonical-shell))))))
+            canonical-shell)))))))
 
 (define (tr3-lease-authenticate record token operation)
   (let find ((remaining (vector-ref tr3-trainers 0)))
@@ -362,10 +487,12 @@
        (m3t-fail 'invalid-argument operation
                  "expected an enrolled trainer record"))
       ((eq? record (car remaining))
-       (if (or (not (vector? record)) (not (= (vector-length record) 17))
+       (if (or (not (vector? record))
+               (not (= (vector-length record) tr3-lease-record-length))
                (not (eq? (vector-ref record 0) tr3-lease-record-tag))
                (not (eq? (vector-ref record 1) record))
-               (not (eq? (vector-ref record 5) token)))
+               (not (eq? (vector-ref record 5) token))
+               (not (tr3-lease-controls-valid? record)))
            (m3t-fail 'invalid-argument operation
                      "trainer record or lease token is stale"))
        (if (or (not (eq? (m3t-find (vector-ref record 8))
@@ -394,6 +521,249 @@
          operation)
        record)
       (else (find (cdr remaining))))))
+
+(define (tr3-lease-authenticate-minimal record operation)
+  ;; Cleanup admission intentionally avoids component/provider rechecks: once a
+  ;; parent is published, abort must not strand the trainer in restoring state.
+  (let find ((remaining (vector-ref tr3-trainers 0)))
+    (cond
+      ((null? remaining)
+       (tr3-lease-operation-fail
+         'invalid-argument operation "expected an enrolled trainer record"))
+      ((eq? record (car remaining))
+       (if (or (not (vector? record))
+               (not (= (vector-length record) tr3-lease-record-length))
+               (not (eq? (vector-ref record 0) tr3-lease-record-tag))
+               (not (eq? (vector-ref record 1) record))
+               (not (vector? (vector-ref record 2)))
+               (not (vector? (vector-ref record 5)))
+               (not (= (vector-length (vector-ref record 5)) 1))
+               (not (eq? (vector-ref (vector-ref record 5) 0)
+                         tr3-lease-token-tag)))
+           (tr3-lease-operation-fail
+             'invalid-argument operation
+             "trainer record or private token is stale"))
+       record)
+      (else (find (cdr remaining))))))
+
+(define (tr3-lease-record-for-shell-internal trainer operation)
+  (let find ((remaining (vector-ref tr3-trainers 0)))
+    (cond
+      ((null? remaining)
+       (tr3-lease-operation-fail
+         'invalid-argument operation "expected an exact enrolled trainer"))
+      ((eq? trainer (vector-ref (car remaining) 2))
+       (tr3-lease-authenticate
+         (car remaining) (vector-ref (car remaining) 5) operation))
+      (else (find (cdr remaining))))))
+
+(define (tr3-lease-restore-enter-admission! record operation)
+  (tr3-lease-m3-idle! (vector-ref record 9) operation)
+  (tr3-lease-d2-idle! (vector-ref record 16) operation)
+  (tr3-lease-o2-restore-idle! record operation)
+  #t)
+
+(define (tr3-lease-cell-empty? candidate)
+  (and (vector? candidate) (= (vector-length candidate) 1)
+       (not (vector-ref candidate 0))))
+
+(define (tr3-lease-restore-parent-header! parent trainer phase operation)
+  (if (or (not (vector? parent))
+          (not (= (vector-length parent) tr3-lease-restore-parent-length))
+          (not (eq? (vector-ref parent 0) tr3-lease-restore-parent-tag))
+          (not (eq? (vector-ref parent 1) parent))
+          (not (eq? (vector-ref parent 2) trainer))
+          (not (eq? (vector-ref parent 3) phase)))
+      (tr3-lease-operation-fail
+        'invalid-argument operation "restore parent identity or phase is invalid"))
+  parent)
+
+(define (tr3-lease-restore-parent-empty! parent trainer operation)
+  (tr3-lease-restore-parent-header! parent trainer 'constructing operation)
+  (let ((p1-cells (vector-ref parent 5))
+        (controls (vector-ref parent 8)))
+    (if (or (vector-ref parent 4)
+            (not (vector? p1-cells))
+            (not (= (vector-length p1-cells) 14))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 0)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 1)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 2)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 3)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 4)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 5)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 6)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 7)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 8)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 9)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 10)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 11)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 12)))
+            (not (tr3-lease-cell-empty? (vector-ref p1-cells 13)))
+            (not (tr3-lease-cell-empty? (vector-ref parent 6)))
+            (not (tr3-lease-cell-empty? (vector-ref parent 7)))
+            (not (vector? controls))
+            (not (= (vector-length controls) 5))
+            (vector-ref controls 0) (vector-ref controls 1)
+            (vector-ref controls 2) (vector-ref controls 3)
+            (vector-ref controls 4)
+            (vector-ref parent 9) (vector-ref parent 10)
+            (not (vector? (vector-ref parent 11)))
+            (not (tr3-lease-cell-empty? (vector-ref parent 12))))
+        (tr3-lease-operation-fail
+          'invalid-argument operation
+          "restore parent is not an empty fixed authority graph")))
+  parent)
+
+(define (tr3-lease-nonnegative-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value 0) (<= value 9223372036854775807)))
+
+(define (tr3-lease-copied-controls-valid? controls record)
+  (and (vector? controls) (= (vector-length controls) 5)
+       (let ((rng (vector-ref controls 0))
+             (tokenizer (vector-ref controls 1))
+             (cursor-pair (vector-ref controls 2))
+             (resolved (vector-ref controls 3))
+             (counters (vector-ref controls 4)))
+         (and (vector? rng) (= (vector-length rng) 5)
+              (eq? (vector-ref rng 0) 'philox4x32-10)
+              (equal? (vector-ref rng 1) 1)
+              (tr3-lease-nonnegative-i64? (vector-ref rng 2))
+              (equal? (vector-ref rng 2)
+                      (vector-ref (vector-ref record 18) 2))
+              (equal? (vector-ref rng 3) 0)
+              (equal? (vector-ref rng 4) 0)
+              (vector? tokenizer) (= (vector-length tokenizer) 2)
+              (string? (vector-ref tokenizer 0))
+              (tr3-lease-nonnegative-i64? (vector-ref tokenizer 1))
+              (string=? (vector-ref tokenizer 0)
+                        (vector-ref (vector-ref record 7) 0))
+              (= (vector-ref tokenizer 1)
+                 (vector-ref (vector-ref record 7) 1))
+              (vector? cursor-pair) (= (vector-length cursor-pair) 2)
+              (bytevector? (vector-ref cursor-pair 0))
+              (bytevector? (vector-ref cursor-pair 1))
+              (vector? resolved) (= (vector-length resolved) 3)
+              (bytevector? (vector-ref resolved 0))
+              (string? (vector-ref resolved 1))
+              (vector? (vector-ref resolved 2))
+              (vector? counters) (= (vector-length counters) 3)
+              (tr3-lease-nonnegative-i64? (vector-ref counters 0))
+              (tr3-lease-nonnegative-i64? (vector-ref counters 1))
+              (tr3-lease-nonnegative-i64? (vector-ref counters 2))))))
+
+(define (tr3-lease-restore-parent-seal! record parent expected-o2-plan operation)
+  (tr3-lease-restore-parent-header!
+    parent (vector-ref record 2) 'receiver-prepared operation)
+  (let ((o2-plan-cell (vector-ref parent 7))
+        (controls (vector-ref parent 8)))
+    (if (or (not expected-o2-plan)
+            (not (vector? o2-plan-cell))
+            (not (= (vector-length o2-plan-cell) 1))
+            (not (eq? (vector-ref o2-plan-cell 0) expected-o2-plan)))
+        (tr3-lease-operation-fail
+          'invalid-state operation "restore O2 plan identity is stale or copied"))
+    (if (not (tr3-lease-copied-controls-valid? controls record))
+        (tr3-lease-operation-fail
+          'invalid-state operation "restore copied controls are malformed")))
+  parent)
+
+(define (tr3-lease-restore-enter-internal! trainer parent)
+  (let* ((operation 'trainer-load-state!)
+         (record (tr3-lease-record-for-shell-internal trainer operation)))
+    (tr3-lease-restore-parent-empty! parent trainer operation)
+    (if (or (not (eq? (vector-ref record 3) 'idle))
+            (vector-ref record 4))
+        (tr3-lease-operation-fail
+          'invalid-state operation "trainer is not idle and plan-free"))
+    (tr3-lease-restore-enter-admission! record operation)
+    ;; The first store promotes the complete parent graph.  Nothing fallible or
+    ;; allocating follows either publication store.
+    (vector-set! record 4 parent)
+    (vector-set! record 3 'restoring)
+    record))
+
+(define (tr3-lease-restore-recheck-internal record parent expected-o2-plan)
+  (let* ((operation 'trainer-load-state!)
+         (minimal (tr3-lease-authenticate-minimal record operation))
+         (enrolled
+           (tr3-lease-authenticate
+             minimal (vector-ref minimal 5) operation)))
+    (if (or (not (eq? (vector-ref enrolled 3) 'restoring))
+            (not (eq? (vector-ref enrolled 4) parent)))
+        (tr3-lease-operation-fail
+          'invalid-state operation "restore parent is stale or copied"))
+    ;; O2 is deliberately busy with expected-o2-plan here.  Its immediately
+    ;; adjacent authenticated check proves the shared native backreference;
+    ;; this lease seal binds the exact parent cell and rechecks every other live
+    ;; component without invoking an idle-only O2 probe.
+    (tr3-lease-restore-parent-seal!
+      enrolled parent expected-o2-plan operation)
+    (tr3-lease-m3-idle! (vector-ref enrolled 9) operation)
+    (tr3-lease-d2-idle! (vector-ref enrolled 16) operation)
+    enrolled))
+
+(define (tr3-lease-restore-abort-internal! record parent)
+  (let* ((operation 'trainer-load-state!)
+         (enrolled (tr3-lease-authenticate-minimal record operation)))
+    (if (or (not (eq? (vector-ref enrolled 3) 'restoring))
+            (not (eq? (vector-ref enrolled 4) parent))
+            (not (vector? parent))
+            (not (= (vector-length parent) tr3-lease-restore-parent-length))
+            (not (eq? (vector-ref parent 0) tr3-lease-restore-parent-tag))
+            (not (eq? (vector-ref parent 1) parent))
+            (not (eq? (vector-ref parent 2) (vector-ref enrolled 2)))
+            (not (or (eq? (vector-ref parent 3) 'constructing)
+                     (eq? (vector-ref parent 3) 'source-staged)
+                     (eq? (vector-ref parent 3) 'source-closed)
+                     (eq? (vector-ref parent 3) 'receiver-prepared)
+                     (eq? (vector-ref parent 3) 'sealed)
+                     (eq? (vector-ref parent 3) 'aborting)
+                     (eq? (vector-ref parent 3) 'dead))))
+        (tr3-lease-operation-fail
+          'invalid-state operation "restore parent is stale or not abortable"))
+    ;; Minimal authentication is complete before this assignment-only unlink.
+    (vector-set! enrolled 4 #f)
+    (vector-set! enrolled 3 'idle)
+    #t))
+
+(define (tr3-lease-restore-commit-controls-tail-internal! record parent)
+  ;; Sealed-tail only.  The immediately preceding restore recheck authenticates
+  ;; record/parent and binds the exact promoted control envelope in parent slot
+  ;; 8. Deliberately perform no ordinary authentication, provider call,
+  ;; allocation, or error construction after the first live tensor write.
+  (if (or (not (eq? (vector-ref record 3) 'restoring))
+          (not (eq? (vector-ref record 4) parent))
+          (not (eq? (vector-ref parent 0) tr3-lease-restore-parent-tag))
+          (not (eq? (vector-ref parent 1) parent))
+          (not (eq? (vector-ref parent 2) (vector-ref record 2)))
+          (not (eq? (vector-ref parent 3) 'committing)))
+      (tr3-lease-fail-stop 134))
+  (let* ((copied-controls (vector-ref parent 8))
+         (rng (vector-ref copied-controls 0))
+         (cursor-pair (vector-ref copied-controls 2))
+         (counters (vector-ref copied-controls 4)))
+    (vector-set! record 17 (vector-ref cursor-pair 1))
+    (vector-set! record 18 rng)
+    (vector-set! record 19 (vector-ref counters 0))
+    (vector-set! record 20 (vector-ref counters 1))
+    (vector-set! record 21 (vector-ref counters 2))
+    #t))
+
+(define (tr3-lease-restore-finish-tail-internal! record parent)
+  ;; Sealed-tail only, after the composer marks the exact rooted parent dead.
+  ;; An impossible authority divergence fail-stops; admitted mutation is only
+  ;; the fixed assignment sequence below.
+  (if (or (not (eq? (vector-ref record 3) 'restoring))
+          (not (eq? (vector-ref record 4) parent))
+          (not (eq? (vector-ref parent 0) tr3-lease-restore-parent-tag))
+          (not (eq? (vector-ref parent 1) parent))
+          (not (eq? (vector-ref parent 2) (vector-ref record 2)))
+          (not (eq? (vector-ref parent 3) 'dead)))
+      (tr3-lease-fail-stop 134))
+  (vector-set! record 4 #f)
+  (vector-set! record 3 'idle)
+  #t)
 
 (define (tr3-lease-phase! record token phase active operation)
   (let ((enrolled (tr3-lease-authenticate record token operation)))
