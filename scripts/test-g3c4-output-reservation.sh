@@ -61,7 +61,8 @@ printf '%s\n' \
 comm -13 "${evidence}/base-owner-undefined.txt" \
   "${evidence}/output-owner-undefined.txt" \
   >"${evidence}/added-undefined.txt"
-test ! -s "${evidence}/added-undefined.txt"
+printf '%s\n' et_m3_private_i64_unborrowed_v1 |
+  LC_ALL=C sort | cmp - "${evidence}/added-undefined.txt"
 
 if "${cc}" "${flags[@]}" -O2 -DET_G3C4_OUTPUT_RESERVATION_PRIVATE -c \
     "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
@@ -113,7 +114,7 @@ test ! -s "${evidence}/runtime-repeat.stderr"
 compile_mode sanitize
 cmp "${evidence}/normal.stdout" "${evidence}/runtime-repeat.stdout"
 cmp "${evidence}/normal.stdout" "${evidence}/sanitize.stdout"
-grep -E '^G3-C4 output reservation PASS: checks=[1-9][0-9]* routes=2 owner-cuts=1 g0-i1-cuts=3 g1-i1-cuts=4 borrow-cuts=3$' \
+grep -E '^G3-C4 output reservation PASS: checks=[1-9][0-9]* routes=2 owner-cuts=1 g0-i1-cuts=3 g1-i1-cuts=4 prefill-i1-cuts=1 borrow-cuts=4 alias-cuts=2$' \
   "${evidence}/normal.stdout" >/dev/null
 
 git -C "${PROJECT_ROOT}" diff --check

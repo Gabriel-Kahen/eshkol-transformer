@@ -5,6 +5,9 @@
 #include "g3c4_model_owner_internal.h"
 #include "m3t_f32_scoped.h"
 #include "eshkol_transformer/i64_tensor.h"
+#ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
+#include "m3_model.h"
+#endif
 #include "eshkol_transformer/n3k_primitives_abi.h"
 #ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
 #include "../../native/t1_i64_shell.h"
@@ -2186,12 +2189,23 @@ static void et_g3c4_output_cleanup_unpublished(
   free(output);
 }
 
-static int64_t et_g3c4_output_discard_pending(
+static int64_t et_g3c4_output_discard_preflight(
     et_g3c4_output_internal *output) {
   et_i64_tensor_error error;
   if (output->transport.state != 0u || output->parent_ctx == NULL ||
       output->ids == NULL)
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  if (et_g3c4_capture_i64(
+          et_m3_private_i64_unborrowed_v1(output->ids, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  return 0;
+}
+
+static int64_t et_g3c4_output_discard_pending(
+    et_g3c4_output_internal *output) {
+  et_i64_tensor_error error;
+  if (et_g3c4_output_discard_preflight(output) != 0)
+    return et_g3c4_error_state.category;
   if (et_g3c4_capture_i64(
           et_i64_tensor_destroy_v1(&output->ids, &error), &error) != 0)
     return et_g3c4_error_state.category;
@@ -4519,6 +4533,54 @@ static int et_g3c4_prompt_prefill_borrow(
   return 0;
 }
 
+#ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
+static int et_g3c4_prompt_prefill_reject_output_aliases(
+    et_g3c4_output_internal *output, float last_logits_output[256]) {
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  et_g3c4_error_state_internal first;
+  int status = 0;
+
+  if (et_g3c4_ranges_overlap(
+          last_logits_output, 256u * sizeof(last_logits_output[0]),
+          output, sizeof(*output))) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return -1;
+  }
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_borrow_begin_v1(
+              output->ids, &borrow, &error), &error) != 0)
+    return -1;
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_borrow_view_v1(borrow, &view, &error), &error) != 0) {
+    status = -1;
+    goto done;
+  }
+  if (view == NULL || view->rank != 1u || view->shape == NULL ||
+      view->shape[0] != (uint64_t)output->generated_length ||
+      view->byte_length !=
+          (size_t)output->generated_length * sizeof(int64_t)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    status = -1;
+  } else if (et_g3c4_ranges_overlap(
+                 last_logits_output,
+                 256u * sizeof(last_logits_output[0]),
+                 view->data, view->byte_length)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    status = -1;
+  }
+
+done:
+  if (status != 0) first = et_g3c4_error_snapshot_internal();
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+  if (status != 0) et_g3c4_error_restore_internal(first);
+  return status;
+}
+#endif
+
 int64_t et_g3c4_private_prompt_prefill_v1(
     void *context_candidate, void *input_candidate,
     float last_logits_output[256]) {
@@ -4562,6 +4624,11 @@ int64_t et_g3c4_private_prompt_prefill_v1(
           input, sizeof(*input)))
     return et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+#ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
+  if (et_g3c4_prompt_prefill_reject_output_aliases(
+          pending_output, last_logits_output) != 0)
+    return et_g3c4_error_state.category;
+#endif
 
   if (et_g3c4_prompt_prefill_borrow(input, &borrow, &view) != 0)
     goto fail;
@@ -4943,6 +5010,9 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
   if (context == NULL) return et_g3c4_error_state.category;
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   if (et_g3c4_pending_output_lookup(context, &pending_output) != 0)
+    return et_g3c4_error_state.category;
+  if (pending_output != NULL &&
+      et_g3c4_output_discard_preflight(pending_output) != 0)
     return et_g3c4_error_state.category;
 #endif
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
