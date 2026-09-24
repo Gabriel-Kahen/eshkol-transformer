@@ -1,6 +1,6 @@
 # TR3 true-binary32 scalar runtime prerequisite
 
-Status: **decision-ready upstream contract; not implemented or accepted**.
+Status: **upstream contract accepted for implementation; runtime feature not yet implemented or accepted**.
 
 This document freezes the smallest Eshkol runtime addition needed for the A0
 trainer metrics path. It is a requirement on a future runtime successor, not a
