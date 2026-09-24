@@ -24,7 +24,9 @@ cleanup() {
     cat "${temporary_dir}/publication.stdout" >&2 || true
     cat "${temporary_dir}"/retention-*.stdout >&2 || true
     cat "${temporary_dir}"/retention-*.stderr >&2 || true
-    cat "${evidence}/native-affected.stdout" >&2 || true
+    if [[ -f "${evidence}/native-affected.stdout" ]]; then
+      cat "${evidence}/native-affected.stdout" >&2
+    fi
   fi
   rm -rf -- "${temporary_dir}"
   return "${result}"
@@ -165,7 +167,7 @@ for horizon in 1024 8192; do
       "${temporary_dir}/call-entry-retention" "${horizon}" \
       >"${temporary_dir}/retention-${horizon}.stdout" \
       2>"${temporary_dir}/retention-${horizon}.stderr"
-  grep -E "^G3-C4 Eshkol retention: horizon=${horizon} .*peak_live_caches=5 " \
+  grep -E "^G3-C4 Eshkol retention: horizon=${horizon} .*peak_native_bytes=1520 peak_live_caches=1 peak_cache_bytes=64$" \
     "${temporary_dir}/retention-${horizon}.stdout" >/dev/null
   grep -E '^\[eshkol-arena\] global_total_allocated_bytes=[1-9][0-9]*$' \
     "${temporary_dir}/retention-${horizon}.stderr" >/dev/null
