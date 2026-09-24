@@ -121,7 +121,7 @@ class Tr3O2StepClearPackageTests(unittest.TestCase):
             "o2_wave2_public_exports.txt": 47,
             "o2_wave2_public_strings.txt": 53,
             "o2_wave2_private_renames.txt": 6,
-            "o2_wave2_undefined_symbols.txt": 153,
+            "o2_wave2_undefined_symbols.txt": 154,
             "o2_wave2_source_closure.txt": 15,
             "o2_wave2_native_source_closure.txt": 29,
             "c2_wave2_defined_symbols.txt": 81,

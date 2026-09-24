@@ -4,6 +4,7 @@ __errno_location
 __eshkol_register_parallel_workers
 __global_arena
 __stack_chk_fail
+abort
 arena_allocate
 arena_allocate_ad_node_with_header
 arena_allocate_closure_with_header
