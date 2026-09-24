@@ -61,6 +61,8 @@ def check():
     block = source[source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE"):]
     step4_block = without_conditional_feature(
         block, "ET_G3C4_ACTIVE_CALL_PRIVATE")
+    step4_block = without_conditional_feature(
+        step4_block, "ET_G3C4_GENERATOR_PRIVATE")
     require(source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE") >
             source.index("et_g3c4_private_model_owner_abort_v1"),
             "context block no longer follows accepted owner implementation")
@@ -96,13 +98,13 @@ def check():
     ], "context construction")
     ordered(block, [
         "context = et_g3c4_admit_context(candidate)",
-        "context->state == ET_G3C4_CONTEXT_DEAD",
+        "ET_G3C4_CONTEXT_STATE(context) == ET_G3C4_CONTEXT_DEAD",
         "owner = et_g3c4_admit_owner(context->owner, 0)",
         "owner->state != ET_G3C4_OWNER_SEALED",
         "owner->active != NULL",
         "et_a2_kv_cache_destroy_v1(&context->cache, &error)",
         "context->owner = NULL",
-        "context->state = ET_G3C4_CONTEXT_DEAD",
+        "ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD",
     ], "context close")
     require("free(context);\n    et_g3c4_error_restore_internal(first);" in block,
             "constructor failure does not preserve first error")
