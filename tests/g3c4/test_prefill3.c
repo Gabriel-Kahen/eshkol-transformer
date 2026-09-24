@@ -95,6 +95,36 @@ static size_t prefill1_dispatches;
 static size_t fail_prefill1_at = SIZE_MAX;
 static float prefill1_staged_keys[4];
 static float prefill1_staged_values[4];
+
+#ifdef ET_G3C4_PREFILL2_PRIVATE
+static const char *const expected_p2_capabilities[21] = {
+  "n3k.embedding-forward", "g3c4.embedding-forward",
+  "n3k.residual", "kernel.norm",
+  "n3k.linear", "n3k.linear", "n3k.linear",
+  "n3k.head-layout", "n3k.head-layout", "n3k.head-layout",
+  "g3c4.causal-attention", "n3k.head-layout", "n3k.linear",
+  "n3k.residual", "kernel.norm", "n3k.linear", "n3k.gelu",
+  "n3k.linear", "n3k.residual", "kernel.norm", "n3k.linear"
+};
+static const char *const expected_p2_operations[21] = {
+  "n3k.embedding.forward", "g3c4.embedding.forward",
+  "n3k.residual.forward", "layer-norm.forward",
+  "n3k.linear.forward-no-bias", "n3k.linear.forward-no-bias",
+  "n3k.linear.forward-no-bias", "n3k.heads.split.forward",
+  "n3k.heads.split.forward", "n3k.heads.split.forward",
+  "g3c4.causal-attention.forward", "n3k.heads.merge.forward",
+  "n3k.linear.forward-no-bias", "n3k.residual.forward",
+  "layer-norm.forward", "n3k.linear.forward-no-bias",
+  "n3k.gelu.forward", "n3k.linear.forward-no-bias",
+  "n3k.residual.forward", "layer-norm.forward",
+  "n3k.linear.forward-no-bias"
+};
+static int record_prefill2;
+static size_t prefill2_dispatches;
+static size_t fail_prefill2_at = SIZE_MAX;
+static float prefill2_staged_keys[8];
+static float prefill2_staged_values[8];
+#endif
 #endif
 
 static void check_request_shape(size_t index, const et_kernel_request_v1 *r) {
@@ -132,12 +162,72 @@ static void check_p1_request_shape(
   for (size_t dimension = 0u; dimension < ranks[index]; dimension++)
     CHECK(request->shape[dimension] == rows[index][dimension]);
 }
+
+#ifdef ET_G3C4_PREFILL2_PRIVATE
+static void check_p2_request_shape(
+    size_t index, const et_kernel_request_v1 *request) {
+  static const uint64_t rows[21][6] = {
+    {1,2,256,4}, {1,2,4,4}, {1,2,4}, {1,2,4},
+    {1,2,4,4}, {1,2,4,4}, {1,2,4,4},
+    {1,2,2,2}, {1,2,2,2}, {1,2,2,2},
+    {1,2,2,2,4,2}, {1,2,2,2}, {1,2,4,4}, {1,2,4},
+    {1,2,4}, {1,2,4,8}, {1,2,8}, {1,2,8,4},
+    {1,2,4}, {1,2,4}, {1,2,4,256}
+  };
+  static const size_t ranks[21] = {
+    4,4,3,3,4,4,4,4,4,4,6,4,4,3,3,4,3,4,3,3,4
+  };
+  CHECK(request->rank == ranks[index]);
+  for (size_t dimension = 0u; dimension < ranks[index]; dimension++)
+    CHECK(request->shape[dimension] == rows[index][dimension]);
+}
+#endif
 #endif
 
 int32_t __wrap_et_kernel_runtime_dispatch(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
 #ifdef ET_G3C4_PREFILL1_PRIVATE
+#ifdef ET_G3C4_PREFILL2_PRIVATE
+  if (record_prefill2) {
+    const size_t index = prefill2_dispatches++;
+    CHECK(index < 21u);
+    CHECK(strcmp(call->capability, expected_p2_capabilities[index]) == 0);
+    CHECK(strcmp(call->request->operation, expected_p2_operations[index]) == 0);
+    CHECK(call->request->deterministic == 1u);
+    check_p2_request_shape(index, call->request);
+    if (index == 10u) {
+      const et_kernel_tensor_view_v1 *inputs = call->inputs;
+      const int64_t *query = (const int64_t *)inputs[3].data;
+      for (size_t position = 0u; position < 2u; position++) {
+        CHECK(query[position] == (int64_t)position);
+        for (size_t key = 0u; key < 4u; key++) {
+          CHECK(((const int64_t *)inputs[4].data)[key] == (int64_t)key);
+          CHECK(((const uint8_t *)inputs[5].data)[position * 4u + key] ==
+                (key <= position ? 1u : 0u));
+        }
+      }
+      for (size_t head = 0u; head < 2u; head++)
+        for (size_t position = 0u; position < 2u; position++)
+          for (size_t dimension = 0u; dimension < 2u; dimension++) {
+            const size_t cache_index = (head * 4u + position) * 2u + dimension;
+            const size_t local_index = (head * 2u + position) * 2u + dimension;
+            prefill2_staged_keys[local_index] =
+                ((const float *)inputs[1].data)[cache_index];
+            prefill2_staged_values[local_index] =
+                ((const float *)inputs[2].data)[cache_index];
+          }
+    }
+    if (index == fail_prefill2_at) {
+      memset(error, 0, sizeof(*error));
+      error->category = ET_KERNEL_ERROR_INTERNAL;
+      error->code = ET_KERNEL_CODE_PROVIDER_REJECTED;
+      strcpy(error->operation, "g3c4.prefill2-cut");
+      strcpy(error->message, "injected prefill2 failure");
+      return ET_KERNEL_ERROR_INTERNAL;
+    }
+  }
+#endif
   if (record_prefill1) {
     const size_t index = prefill1_dispatches++;
     CHECK(index < 21u);
