@@ -103,8 +103,8 @@ static void ignored_extents(void) {
 static void empty_and_history(void) {
   CHECK(live_tensors == NULL && retired_tensors == NULL);
   CHECK(!f32_allocation_envelope.initialized);
-  CHECK(storage_aliases_live(NULL, 1u) == 0);
-  CHECK(storage_aliases_live((void *)(UINTPTR_MAX - 1u), 4u) == 0);
+  CHECK(storage_aliases_live(NULL, 1u) == 1);
+  CHECK(storage_aliases_live((void *)(UINTPTR_MAX - 1u), 4u) == 1);
   candidates();
   /* A constructor failure after one successful allocation frees its storage,
    * but must not erase address history or change the old empty-scan result. */
@@ -122,8 +122,8 @@ static void empty_and_history(void) {
   CHECK(f32_allocation_envelope.low == old_low);
   CHECK(f32_allocation_envelope.high == old_high);
   CHECK(!f32_allocation_envelope.disabled);
-  CHECK(storage_aliases_live(NULL, 1u) == 0);
-  CHECK(storage_aliases_live((void *)(UINTPTR_MAX - 1u), 4u) == 0);
+  CHECK(storage_aliases_live(NULL, 1u) == 1);
+  CHECK(storage_aliases_live((void *)(UINTPTR_MAX - 1u), 4u) == 1);
   candidates();
   /* Recorded but unregistered storage is a deliberate hole. The envelope is
    * only a negative filter, never an assertion that everything inside aliases. */
@@ -217,8 +217,8 @@ static void disablement(int endpoint) {
   CHECK(f32_allocation_envelope.disabled);
   if (!live_tensors && !retired_tensors) {
     CHECK(!f32_allocation_envelope.initialized);
-    CHECK(storage_aliases_live(NULL, 1u) == 0);
-    CHECK(storage_aliases_live((void *)(UINTPTR_MAX - 1u), 4u) == 0);
+    CHECK(storage_aliases_live(NULL, 1u) == 1);
+    CHECK(storage_aliases_live((void *)(UINTPTR_MAX - 1u), 4u) == 1);
   }
   uintptr_t low = f32_allocation_envelope.low, high = f32_allocation_envelope.high;
   f32_record_allocation((void *)1u, 1u, 1u);

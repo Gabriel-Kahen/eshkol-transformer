@@ -235,6 +235,25 @@ pointer from becoming valid again through allocator address reuse (ABA). This is
 process-local memory-overhead limit proportional to the number of handles ever
 published, not process-lifetime tensor retention.
 
+The six native F32 control kinds share one allocation-free intrusive interval
+index after retirement. Each control keeps its cleared magic and retained-list
+link; the index node overlays only dead live payload fields after tensor payload,
+borrow view, plan table, or parameter ownership has been cleared. Control sizes
+remain exactly tensor 88, borrow 96, copy plan 40, parameter 64, gradient plan 48,
+and reset plan 40 bytes on the supported x86-64 ABI. Retirement inserts each
+published control exactly once and never removes or reuses it. A duplicate,
+overlapping, corrupt-kind, or unrepresentable inserted interval aborts as an
+internal invariant defect. Live controls are never indexed.
+
+Alias admission still scans live controls and their live payloads. It queries the
+balanced retired index for exact, interior, or straddling overlap, rejects an
+unrepresentable nonempty span conservatively even before the first tombstone, and
+treats zero bytes as disjoint. This changes lookup cost, not authority: stale handles are
+authenticated only against the live registry plus the original magic, and remain
+invalid-state; any caller buffer that touches a retained control remains
+invalid-buffer. The index allocates no storage and does not change retained counts
+or bytes. Registries and index remain caller-serialized and are not thread-safe.
+
 The source-composed aggregate reuses the accepted E1B/P1 registry-owning topology,
 localizes once, and exposes the exact existing 47-global E1/X1/P1/D1/C1/T1 surface.
 All I2 and private P1/C1 seams are local; there is no generic privileged dispatcher
@@ -279,8 +298,9 @@ shortcut. Frees, retirement and test allocator reset never shrink, reset or
 re-enable it. Allocation results, failpoints, counters, authentication, stale
 handle protection, ownership and caller serialization are unchanged. There are
 no new exports or heap allocations. The envelope adds 24 local static bytes on
-x86-64, separately from retained shells. Inside-envelope queries still scan the
-cumulative registries; no flat-memory or general performance guarantee follows.
+x86-64, separately from retained shells. Inside-envelope queries still scan live
+registries and use the retired interval index; no flat-memory or general
+performance guarantee follows.
 See [M3 retention evidence](M3_RETENTION_GATE.md) for the original failed gate,
 source hashes, pin audit and required retests.
 

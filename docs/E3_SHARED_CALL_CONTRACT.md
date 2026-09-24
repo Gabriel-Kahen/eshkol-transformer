@@ -324,6 +324,12 @@ available in its signature; whole-context disjointness remains a fixed-adapter
 precondition. Unsafe error storage receives no writes and returns invalid-argument.
 The core performs no numeric work or floating-environment admission.
 
+Retired F32 controls are excluded through I2's shared intrusive interval index.
+That index changes only lookup complexity: it retains all six control classes at
+their original addresses and sizes, allocates nothing at retirement, and grants no
+authority. Exact and partial overlap remain invalid-buffer, while a stale handle
+continues to fail live-registry and magic authentication as invalid-state.
+
 | Failure in begin/check | I2 category/code | Numeric pair |
 |---|---|---|
 | Null required operand/identity | INVALID_ARGUMENT / NULL_ARGUMENT | 1/1 |

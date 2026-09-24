@@ -12,7 +12,7 @@ e3_reviewed_objects=(
   a2/a2_attention_provider.o
 )
 printf '%s\n' "${e3_reviewed_objects[@]}" >"${e1b_tmp}/e3-native-objects.txt"
-cmp "${PROJECT_ROOT}/native/e3_private_package_native_objects.txt" \
+cmp "${e3_prefix}_native_objects.txt" \
   "${e1b_tmp}/e3-native-objects.txt" || die "E3 native object tuple drifted"
 for e3_object in "${e3_reviewed_objects[@]}"; do
   package_native_objects+=("${e1b_tmp}/providers/${e3_object}")

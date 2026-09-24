@@ -27,6 +27,8 @@ arena_tagged_cons_set_tagged_value
 arena_tape_add_node
 calloc
 close
+cosf
+erff
 eshkol_access
 eshkol_ad_point_to_double
 eshkol_ad_seed_flag
@@ -62,6 +64,7 @@ eshkol_jmp_buf_size
 eshkol_lambda_registry_add
 eshkol_lambda_registry_init
 eshkol_limit_poll_interrupt
+eshkol_list_to_vector_sret
 eshkol_make_exception_with_header
 eshkol_mkdir
 eshkol_object_abi_v1_h8_s0_a8
@@ -83,8 +86,10 @@ eshkol_rational_to_string
 eshkol_region_close_builtin
 eshkol_region_enter
 eshkol_region_leave
+eshkol_region_mark
 eshkol_region_open_builtin
 eshkol_region_unwind_for_continuation
+eshkol_region_unwind_to
 eshkol_region_write_barrier_checked_v1
 eshkol_remove
 eshkol_reroot_dynamic_wind
@@ -111,7 +116,11 @@ eshkol_utf8_ref
 eshkol_utf8_strlen
 eshkol_utf8_substring
 exit
+expf
 fclose
+fegetenv
+fegetround
+fesetenv
 fgetc
 floor
 fmod
@@ -125,6 +134,7 @@ g_exception_handler_stack
 get_global_arena_shared
 getpid
 getrandom
+logf
 malloc
 memchr
 memcmp
@@ -133,6 +143,7 @@ memmove
 memset
 open
 openat
+pread
 printf
 qsort
 read
@@ -143,7 +154,9 @@ region_pop
 region_push
 renameat
 setjmp
+sinf
 snprintf
+sqrtf
 strcmp
 strlen
 strrchr

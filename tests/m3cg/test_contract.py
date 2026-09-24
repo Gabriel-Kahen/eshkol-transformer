@@ -189,6 +189,44 @@ class SharedContract(unittest.TestCase):
         for forbidden in ("g3t_transport", "e3_frame", "m3_model.c", "m3-call-state"):
             self.assertNotIn(forbidden, implementation)
 
+    def test_retired_controls_use_one_intrusive_interval_index(self):
+        f32 = (ROOT / "native/f32_tensor.c").read_text()
+        integration = (ROOT / "src/eshkol_transformer/m3_call_f32_integration.c").read_text()
+        reference = f32.split("static int storage_aliases_live_reference", 1)[1].split(
+            "static int storage_aliases_live", 1)[0]
+        foreign = integration.split("static int m3_call_foreign_storage", 1)[1].split(
+            "static int m3_call_add_span", 1)[0]
+        query = f32.split("static int f32_retired_control_overlaps", 1)[1].split(
+            "static int aligned_pointer", 1)[0]
+        retired_lists = ("retired_tensors", "retired_borrows", "retired_copy_plans",
+                         "retired_parameters", "retired_gradient_plans",
+                         "retired_reset_plans")
+        self.assertEqual(f32.count("f32_retired_index_insert("), 7)
+        self.assertLess(query.index("bytes == 0u"), query.index("!pointer_span_fits"))
+        self.assertLess(query.index("!pointer_span_fits"), query.index("node == NULL"))
+        self.assertIn("return f32_retired_control_overlaps(storage, bytes);", reference)
+        self.assertIn("return f32_retired_control_overlaps(p, bytes);", foreign)
+        for name in retired_lists:
+            self.assertNotIn(name, reference)
+            self.assertNotIn(name, foreign)
+        for size in (88, 96, 40, 64, 48, 40):
+            self.assertIn(f"== {size}u", f32)
+
+    def test_retired_index_failstop_dependency_is_exact(self):
+        for name in ("f32_tensor_undefined_symbols.txt",
+                     "i2_wave2_undefined_symbols.txt"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                inventory = ROOT / "native" / name
+                symbols = inventory.read_text().splitlines()
+                self.assertEqual(symbols, sorted(set(symbols)))
+                self.assertIn("abort", symbols)
+                without_abort = Path(directory) / "without-abort.txt"
+                without_abort.write_text(
+                    "\n".join(s for s in symbols if s != "abort") + "\n")
+                result = subprocess.run(
+                    ["cmp", without_abort, inventory], capture_output=True)
+                self.assertEqual(result.returncode, 1)
+
     def test_predecessor_source_bytes_and_public_boundary(self):
         result = subprocess.run(["sha256sum", "--quiet", "-c", "tests/m3cg/predecessor_sources.sha256"],
                                 cwd=ROOT, capture_output=True, text=True)

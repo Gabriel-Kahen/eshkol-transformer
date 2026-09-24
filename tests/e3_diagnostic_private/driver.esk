@@ -1,0 +1,134 @@
+;;; Genuine fixed-model/D2 source-private witness for the diagnostic successor.
+
+(define e3-diagnostic-test-fixture-root (vector #f #f))
+
+(define (e3-diagnostic-test-expect-error category operation thunk)
+  (guard
+   (caught
+    (#t
+     (and (transformer-error? caught)
+          (eq? (transformer-error-category caught) category)
+          (eq? (transformer-error-operation caught) operation))))
+   (thunk)
+   #f))
+
+(define (e3-diagnostic-test-negatives! report)
+  (if (not
+       (and
+        (e3-diagnostic-test-expect-error
+         'invalid-argument 'diagnostic-evaluation-f32-bits
+         (lambda () (e3-diagnostic-f32-bits (vector 'foreign) 'loss)))
+        (e3-diagnostic-test-expect-error
+         'invalid-argument 'diagnostic-evaluation-count
+         (lambda () (e3-diagnostic-count (vector 'foreign) 'tokens)))
+        (e3-diagnostic-test-expect-error
+         'invalid-argument 'diagnostic-evaluation-f32-bits
+         (lambda () (e3-diagnostic-f32-bits report 0)))
+        (e3-diagnostic-test-expect-error
+         'invalid-argument 'diagnostic-evaluation-count
+         (lambda () (e3-diagnostic-count report 0)))
+        (e3-diagnostic-test-expect-error
+         'invalid-argument 'diagnostic-evaluation-f32-bits
+         (lambda () (e3-diagnostic-f32-bits report 'tokens)))
+        (e3-diagnostic-test-expect-error
+         'invalid-argument 'diagnostic-evaluation-count
+         (lambda () (e3-diagnostic-count report 'loss)))))
+      (e3-native-invariant-fail))
+  #t)
+
+(define (e3-diagnostic-test-fixture)
+  (if (vector-ref e3-diagnostic-test-fixture-root 0)
+      e3-diagnostic-test-fixture-root
+      (let* ((config (e3-test-fixed-config))
+             (tokenizer (t1-private-tokenizer-byte config))
+             (initial (g3t-checked-m3t-initializer-state 1729))
+             (model (g3t-checked-m3t-model-create config initial)))
+        ;; This fixture deliberately owns no prebound E3 frame. The candidate
+        ;; evaluator must exercise its real bind/evaluate/unbind path.
+        (vector-set! e3-diagnostic-test-fixture-root 0 model)
+        (vector-set! e3-diagnostic-test-fixture-root 1 tokenizer)
+        e3-diagnostic-test-fixture-root)))
+
+(define (e3-diagnostic-test-output report before after)
+  (let ((stats (e3-diagnostic-report-stats-internal)))
+    ;; Run foreign/non-symbol/wrong-family negatives once so long retention
+    ;; horizons measure report production rather than repeated error retention.
+    (if (= (vector-ref stats 1) 1)
+        (e3-diagnostic-test-negatives! report))
+    (vector 'e3-diagnostic-result-v1
+            (e3-diagnostic-f32-bits report 'loss)
+            (e3-diagnostic-f32-bits report 'mask-weight)
+            (e3-diagnostic-f32-bits report 'perplexity)
+            (e3-diagnostic-f32-bits report 'token-accuracy)
+            (e3-diagnostic-count report 'tokens)
+            (e3-diagnostic-count report 'batches)
+            before after stats)))
+
+(define (e3-diagnostic-test-run scenario corpus-path)
+  (let* ((checked (e3-test-scenario scenario))
+         (fixture (e3-diagnostic-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (dataset
+          (d2-token-dataset-open
+           (e3-test-dataset-config corpus-path (vector-ref checked 0))
+           tokenizer)))
+    (guard
+     (caught
+      (#t
+       (d2-token-dataset-close! dataset)
+       (raise caught)))
+     (e3-test-skip! dataset (vector-ref checked 1))
+     (let* ((before (d2-token-dataset-cursor dataset))
+            (report
+             (with-region ('e3-diagnostic-evaluation 262144)
+               (e3-diagnostic-evaluate-fixed! model dataset)))
+            (after (d2-token-dataset-cursor dataset))
+            (result (e3-diagnostic-test-output report before after)))
+       (if (not (d2-core-bytes=? before after))
+           (e3-native-invariant-fail))
+       (d2-token-dataset-close! dataset)
+       result))))
+
+(define (e3-diagnostic-test-failure scenario corpus-path)
+  ;; The caller supplies a genuine case whose saved cursor is at EOS (or whose
+  ;; evaluation otherwise rejects). The witness observes the report authority
+  ;; without treating the raised value as report data.
+  (let* ((checked (e3-test-scenario scenario))
+         (fixture (e3-diagnostic-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (dataset
+          (d2-token-dataset-open
+           (e3-test-dataset-config corpus-path (vector-ref checked 0))
+           tokenizer)))
+    (guard
+     (caught
+      (#t
+       (d2-token-dataset-close! dataset)
+       (raise caught)))
+     (e3-test-skip! dataset (vector-ref checked 1))
+     (let* ((cursor-before (d2-token-dataset-cursor dataset))
+            (stats-before (e3-diagnostic-report-stats-internal))
+            (outcome
+             (guard
+              (caught (#t caught))
+              (with-region ('e3-diagnostic-evaluation-failure 262144)
+                (e3-diagnostic-evaluate-fixed! model dataset))))
+            (cursor-after (d2-token-dataset-cursor dataset))
+            (stats-after (e3-diagnostic-report-stats-internal))
+            (caught? (transformer-error? outcome)))
+       (if (or (not caught?)
+               (not (d2-core-bytes=? cursor-before cursor-after))
+               (not (= (vector-ref stats-after 0)
+                       (+ (vector-ref stats-before 0) 1)))
+               (not (= (vector-ref stats-after 1)
+                       (vector-ref stats-before 1)))
+               (not (= (vector-ref stats-after 2) 0)))
+           (e3-native-invariant-fail))
+       (let ((result
+              (vector 'e3-diagnostic-failure-v1 #t
+                      (transformer-error-category outcome)
+                      cursor-before cursor-after stats-before stats-after)))
+         (d2-token-dataset-close! dataset)
+         result)))))

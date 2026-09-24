@@ -314,14 +314,14 @@ cli3_public_strings="$(realpath -- "${PROJECT_ROOT}/native/cli3_public_strings.t
 cli3_source_closure="$(realpath -- "${PROJECT_ROOT}/native/cli3_source_closure.txt")"
 cli3_formatter_source_closure="$(realpath -- "${PROJECT_ROOT}/tests/cli3/formatter_source_closure.txt")"
 cli3_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/cli3_native_source_closure.txt")"
-e3_private_root="$(realpath -- "${PROJECT_ROOT}/native/e3_private_driver_root.esk")"
-e3_package_bridge="$(realpath -- "${PROJECT_ROOT}/native/e3_private_bridge.c")"
-e3_package_renames="$(realpath -- "${PROJECT_ROOT}/native/e3_private_package_private_renames.txt")"
-e3_public_exports="$(realpath -- "${PROJECT_ROOT}/native/e3_private_package_public_exports.txt")"
-e3_undefined_symbols="$(realpath -- "${PROJECT_ROOT}/native/e3_private_package_undefined_symbols.txt")"
-e3_public_strings="$(realpath -- "${PROJECT_ROOT}/native/e3_private_package_public_strings.txt")"
-e3_source_closure="$(realpath -- "${PROJECT_ROOT}/native/e3_private_package_source_closure.txt")"
-e3_native_source_closure="$(realpath -- "${PROJECT_ROOT}/native/e3_private_package_native_source_closure.txt")"
+e3_private_root="$(realpath -- "${e3_inputs[0]}")"
+e3_package_bridge="$(realpath -- "${e3_inputs[1]}")"
+e3_package_renames="$(realpath -- "${e3_inputs[2]}")"
+e3_public_exports="$(realpath -- "${e3_inputs[3]}")"
+e3_undefined_symbols="$(realpath -- "${e3_prefix}_undefined_symbols.txt")"
+e3_public_strings="$(realpath -- "${e3_prefix}_public_strings.txt")"
+e3_source_closure="$(realpath -- "${e3_prefix}_source_closure.txt")"
+e3_native_source_closure="$(realpath -- "${e3_prefix}_native_source_closure.txt")"
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
   die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
@@ -358,6 +358,11 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
       "${PROJECT_ROOT}/native/l3s_masked_objective_provider.c"
       "${PROJECT_ROOT}/native/e3_evaluation_metrics_provider.c"
     )
+    if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
+      package_native_sources+=(
+        "${PROJECT_ROOT}/native/e3_diagnostic_destinations.c"
+      )
+    fi
 elif [[ "${m3_tuple_requested}" == 1 ]]; then
     package_policy=m3-model-aggregate
     undefined_symbols="${m3_prefix}_undefined_symbols.txt"
@@ -946,6 +951,9 @@ cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
 export_pattern='^et_e1b_public_[a-z0-9_]+_v1$'
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
+  if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
+    export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+  fi
 fi
 awk -v pattern="${export_pattern}" '
   NF != 1 || $1 !~ pattern { bad = 1; next }
@@ -1543,6 +1551,9 @@ strings "${e1b_tmp}/combined.o" >"${evidence_dir}.tmp.$$/strings.txt"
 public_string_pattern='^et_e1b_(error|public)_[a-z0-9_]+_v1$'
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
+  if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
+    public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+  fi
 fi
 LC_ALL=C grep -E "${public_string_pattern}" \
   "${evidence_dir}.tmp.$$/strings.txt" | LC_ALL=C sort -u \

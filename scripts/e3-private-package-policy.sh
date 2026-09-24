@@ -1,21 +1,50 @@
 #!/usr/bin/env bash
-# Sourced only by E1B. This admits one generated-source private E3 tuple.
-e3_prefix="${PROJECT_ROOT}/native/e3_private_package"
-e3_tuple_requested=0
-e3_inputs=(
+# Sourced only by E1B. This admits the base private E3 tuple or its exact
+# source-private diagnostic successor. Mixed and partial tuples are rejected.
+e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
+e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
+e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
-  "${e3_prefix}_private_renames.txt"
-  "${e3_prefix}_public_exports.txt"
+  "${e3_base_prefix}_private_renames.txt"
+  "${e3_base_prefix}_public_exports.txt"
 )
+e3_diagnostic_inputs=(
+  "${PROJECT_ROOT}/native/e3_diagnostic_private_driver_root.esk"
+  "${PROJECT_ROOT}/native/e3_diagnostic_private_bridge.c"
+  "${e3_diagnostic_prefix}_private_renames.txt"
+  "${e3_diagnostic_prefix}_public_exports.txt"
+)
+e3_prefix="${e3_base_prefix}"
+e3_inputs=("${e3_base_inputs[@]}")
+e3_tuple_requested=0
+e3_tuple_kind=
+e3_diagnostic_tuple=0
 for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
     "${raw_package_renames}" "${raw_public_exports}"; do
-  for e3_expected in "${e3_inputs[@]}"; do
+  for e3_expected in "${e3_base_inputs[@]}"; do
     if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == base ]] || \
+        die "E3 policy rejects mixed base and diagnostic tuples"
+      e3_tuple_kind=base
+      e3_tuple_requested=1
+    fi
+  done
+  for e3_expected in "${e3_diagnostic_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == diagnostic ]] || \
+        die "E3 policy rejects mixed base and diagnostic tuples"
+      e3_tuple_kind=diagnostic
       e3_tuple_requested=1
     fi
   done
 done
+
+if [[ "${e3_tuple_kind}" == diagnostic ]]; then
+  e3_prefix="${e3_diagnostic_prefix}"
+  e3_inputs=("${e3_diagnostic_inputs[@]}")
+  e3_diagnostic_tuple=1
+fi
 
 e3_check_repository_path() {
   local path=$1 part current="${PROJECT_ROOT}"

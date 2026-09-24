@@ -1,0 +1,120 @@
+;;; Installed-caller witness for the source-private E3 diagnostic package.
+
+(require transformer.error_public)
+
+(extern void e3-diagnostic-test-run ptr ptr ptr
+        :real et_e3_diagnostic_test_run_v1)
+(extern void e3-diagnostic-test-failure ptr ptr ptr
+        :real et_e3_diagnostic_test_failure_v1)
+
+(define (check label value)
+  (if value #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+
+(define (argument-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (argument-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted) (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define (call-success path)
+  (let ((output (vector #f)))
+    (e3-diagnostic-test-run (vector (vector #t 0)) (vector path) output)
+    (vector-ref output 0)))
+
+(define (call-failure path)
+  (let ((output (vector #f)))
+    (e3-diagnostic-test-failure (vector (vector #t 3)) (vector path) output)
+    (vector-ref output 0)))
+
+(define (success-shape? value)
+  (and (vector? value) (= (vector-length value) 10)
+       (eq? (vector-ref value 0) 'e3-diagnostic-result-v1)
+       (= (vector-ref value 1) 1085366897)
+       (= (vector-ref value 2) 1084227584)
+       (= (vector-ref value 3) 1132430055)
+       (= (vector-ref value 4) 0)
+       (= (vector-ref value 5) 5)
+       (= (vector-ref value 6) 3)
+       (vector? (vector-ref value 9))
+       (= (vector-length (vector-ref value 9)) 3)))
+
+(define (run-success path)
+  (let ((value (call-success path)))
+    (check "success result" (success-shape? value))
+    (check "success authority stats"
+           (and (= (vector-ref (vector-ref value 9) 0) 1)
+                (= (vector-ref (vector-ref value 9) 1) 1)
+                (= (vector-ref (vector-ref value 9) 2) 0)))
+    (display "E3-DIAGNOSTIC-SUCCESS-PASS") (newline)))
+
+(define (run-eos path)
+  (let ((value (call-failure path)))
+    (check "EOS failure result"
+           (and (vector? value) (= (vector-length value) 7)
+                (eq? (vector-ref value 0) 'e3-diagnostic-failure-v1)
+                (eq? (vector-ref value 2) 'invalid-state)
+                (= (vector-ref (vector-ref value 5) 0) 0)
+                (= (vector-ref (vector-ref value 5) 1) 0)
+                (= (vector-ref (vector-ref value 5) 2) 0)
+                (= (vector-ref (vector-ref value 6) 0) 1)
+                (= (vector-ref (vector-ref value 6) 1) 0)
+                (= (vector-ref (vector-ref value 6) 2) 0)))
+    (display "E3-DIAGNOSTIC-EOS-PASS") (newline)))
+
+(define (run-horizon path horizon failure?)
+  (let ((arena-before (__arena-used))
+        (last-reservations 0) (last-successes 0) (last-active 0))
+    (let loop ((index 0))
+      (if (= index horizon) #t
+          (begin
+            ;; The accepted E3 fixture contract requires each D2 dataset shell,
+            ;; state and core to be constructed in the true root context before
+            ;; the driver's younger evaluation region opens. The measured root
+            ;; delta therefore includes caller witness controls.
+            (let* ((value (if failure?
+                              (call-failure path) (call-success path)))
+                   (stats (vector-ref value (if failure? 6 9))))
+              (set! last-reservations (vector-ref stats 0))
+              (set! last-successes (vector-ref stats 1))
+              (set! last-active (vector-ref stats 2)))
+            (loop (+ index 1)))))
+    (let ((arena-delta (- (__arena-used) arena-before)))
+      (check "horizon reservations" (= last-reservations horizon))
+      (check "horizon successes"
+             (= last-successes (if failure? 0 horizon)))
+      (check "horizon staging idle" (= last-active 0))
+      (if (and (not failure?) (= horizon 8192))
+          (let ((caught
+                 (guard
+                  (condition (#t condition))
+                  (call-success path)
+                  #f)))
+            (check "8193 reservation rejects"
+                   (and caught (transformer-error? caught)
+                        (eq? (transformer-error-category caught) 'unsupported)
+                        (eq? (transformer-error-operation caught)
+                             'diagnostic-evaluate-fixed!)))))
+      (display "E3-DIAGNOSTIC-HORIZON-PASS horizon=") (display horizon)
+      (display " kind=") (display (if failure? 'failure 'success))
+      (display " arena_delta=") (display arena-delta)
+      (display " reservations=") (display last-reservations)
+      (display " successes=") (display last-successes)
+      (newline))))
+
+(let ((args (command-line)))
+  (check "mode and corpus arguments" (= (argument-count args) 3))
+  (let ((mode (argument-ref args 1)) (path (argument-ref args 2)))
+    (cond ((string=? mode "success") (run-success path))
+          ((string=? mode "eos") (run-eos path))
+          ((string=? mode "success-1024") (run-horizon path 1024 #f))
+          ((string=? mode "success-2048") (run-horizon path 2048 #f))
+          ((string=? mode "success-4096") (run-horizon path 4096 #f))
+          ((string=? mode "success-8192") (run-horizon path 8192 #f))
+          ((string=? mode "failure-1024") (run-horizon path 1024 #t))
+          ((string=? mode "failure-8192") (run-horizon path 8192 #t))
+          (else (begin (display "unknown mode") (newline) (exit 1))))))

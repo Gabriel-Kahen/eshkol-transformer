@@ -204,6 +204,81 @@ static void spans(void) {
   CHECK(et_g3t_model_pins_check_internal(&f.pins,(void *)&f.pins)==1);
   CHECK(!memcmp(&before,&f.pins,sizeof(before))); end();
 }
+static uint8_t validate_retired_index(const f32_retired_index_node *node,
+                                      uintptr_t low,uintptr_t high,size_t *count) {
+  if(!node) return 0;
+  uintptr_t start=(uintptr_t)f32_retired_control(node);
+  size_t bytes=f32_retired_control_size(node->kind);
+  CHECK(start>=low && start<=UINTPTR_MAX-bytes && start+bytes<=high);
+  uint8_t left=validate_retired_index(node->left,low,start,count);
+  uint8_t right=validate_retired_index(node->right,start+bytes,high,count);
+  CHECK((left>right?left-right:right-left)<=1);
+  CHECK(node->height==(uint8_t)((left>right?left:right)+1));
+  ++*count;
+  return node->height;
+}
+static void retired_index(void) {
+  et_f32_tensor *source=NULL,*destination=NULL;
+  et_f32_tensor_copy_plan *copy=NULL;
+  et_f32_tensor_copy_assignment_v1 assignment;
+  OK(et_f32_tensor_clone_v1(f.p[0]->value,&source,&error));
+  OK(et_f32_tensor_clone_v1(f.p[0]->value,&destination,&error));
+  assignment=(et_f32_tensor_copy_assignment_v1){sizeof(assignment),destination,source};
+  OK(et_f32_tensor_copy_plan_prepare_v1(1,&assignment,&copy,&error));
+  OK(et_f32_tensor_copy_plan_release_v1(&copy,&error));
+  OK(et_f32_tensor_destroy_v1(&source,&error));
+  OK(et_f32_tensor_destroy_v1(&destination,&error));
+
+  for(size_t i=0;i<4096;++i) {
+    et_f32_tensor *temporary=NULL;
+    OK(et_f32_tensor_create_v1(0,NULL,&temporary,&error));
+    size_t allocations=allocation_calls;
+    allocation_disabled=1;
+    OK(et_f32_tensor_destroy_v1(&temporary,&error));
+    allocation_disabled=0;
+    CHECK(allocation_calls==allocations);
+  }
+
+  et_f32_test_retired_counts_v1 retired={.struct_size=sizeof(retired)};
+  et_f32_test_retired_counts_snapshot_v1(&retired);
+  size_t indexed=0;
+  CHECK(validate_retired_index(f32_retired_index_root,0,UINTPTR_MAX,&indexed)>0);
+  CHECK(indexed==retired.tensors+retired.borrows+retired.copy_plans+
+                 retired.parameters+retired.gradient_plans+retired.reset_plans);
+
+  const void *controls[]={retired_tensors,retired_borrows,retired_copy_plans,
+                          retired_parameters,retired_gradient_plans,retired_reset_plans};
+  const size_t sizes[]={sizeof(*retired_tensors),sizeof(*retired_borrows),
+                        sizeof(*retired_copy_plans),sizeof(*retired_parameters),
+                        sizeof(*retired_gradient_plans),sizeof(*retired_reset_plans)};
+  unsigned char disjoint=0;
+  CHECK(!f32_retired_control_overlaps(NULL,0));
+  CHECK(f32_retired_control_overlaps((void *)(uintptr_t)(UINTPTR_MAX-1),4));
+  f32_retired_index_query_steps=0;
+  CHECK(!f32_retired_control_overlaps(&disjoint,sizeof(disjoint)));
+  CHECK(f32_retired_index_query_steps<=64);
+  for(size_t i=0;i<sizeof(controls)/sizeof(controls[0]);++i) {
+    uintptr_t address=(uintptr_t)controls[i];
+    CHECK(address>0 && controls[i]!=NULL);
+    f32_retired_index_query_steps=0;
+    CHECK(f32_retired_control_overlaps(controls[i],sizes[i]));
+    CHECK(f32_retired_index_query_steps<=64);
+    CHECK(f32_retired_control_overlaps((const void *)(address+1),1));
+    CHECK(f32_retired_control_overlaps((const void *)(address-1),2));
+    CHECK(f32_retired_control_overlaps(
+        (const void *)(address+sizes[i]-1),2));
+  }
+
+  float *data=f.p[0]->gradient->data;
+  for(size_t i=0;i<sizeof(controls)/sizeof(controls[0]);++i) {
+    f.p[0]->gradient->data=(float *)controls[i];
+    expect(et_g3t_model_pins_begin_internal(f.p,f.identities,&f.pins,&error),
+           1,4,"m3-call-pins-begin");
+    empty();
+  }
+  f.p[0]->gradient->data=data;
+  preserved();
+}
 static void acquisition_failures(void) {
   for(size_t n=0;n<14;++n) {
     m3_call_test_fail_after=n; m3_call_test_release_count=0;
@@ -393,7 +468,7 @@ int main(void) {
   et_g3t_model_pins_end_internal(&f.pins);
   admission(); spans(); acquisition_failures(); exclusions(0); failstop();
   retention(1024); retention(8192);
-  present_gradients(); acquisition_failures(); exclusions(1); retention(1024); retention(8192);
+  present_gradients(); retired_index(); acquisition_failures(); exclusions(1); retention(1024); retention(8192);
   for(size_t i=0;i<14;++i) OK(et_f32_parameter_destroy_v1(&f.p[i],&error));
   et_f32_test_live_counts_v1 live={.struct_size=sizeof(live)};
   et_f32_test_live_counts_snapshot_v1(&live);

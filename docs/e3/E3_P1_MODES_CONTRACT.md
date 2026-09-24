@@ -33,7 +33,7 @@ Status table:0 OK;1 INVALID_IDENTITY (wrong/copy/foreign token, malformed setup 
 
 ## 3. Token/ledger and root-region ownership
 
-Add lexical `e3-mode-registry-root = (vector '())`. One setup allocates one inert token vector, one ledger record and three fixed vectors[17] (nodes, saved modes, child-list identities), plus one list cell. The token is the only returned value; raw-node/snapshot arrays stay lexical ledger-owned. Token contents are inert; every slot65..68 first exact-eq scans the ledger for its token, then reads the record. This is a mode-authority ledger, not a result/report registry.
+Add lexical `e3-mode-registry-root = (vector '() #f)`. Slot0 retains the complete tombstone ledger; slot1 heads an intrusive chain containing only active records. One setup allocates one inert token vector, one ledger record and three fixed vectors[17] (nodes, saved modes, child-list identities), plus one ledger list cell. The token is the only returned value; raw-node/snapshot arrays stay lexical ledger-owned. Token contents are inert; slots65..68 exact-eq scan the complete ledger for authentication, while duplicate frame/model admission scans only the active chain. This is a mode-authority ledger, not a result/report registry.
 
 Proposed ledger record exact slots:
 
@@ -48,12 +48,14 @@ Proposed ledger record exact slots:
 | 6 | fixed vector[17] saved `train`/`eval` symbols, initially all#f; #f dead |
 | 7 | fixed vector[17] exact original child-list heads; #f dead |
 | 8 | preallocated mode-check scratch/status immediate i64, initially0; reset0 |
+| 9 | next active record while live, #f at active-chain tail or after unbind |
+| 10 | previous active record while live, #f at active-chain head or after unbind |
 
 All allocation, fixed-tree traversal and validation finishes before ledger publication. Publish staged ledger graph through the root holder's existing region write-barrier discipline, then reread the canonical first ledger record/token. Only that token is stored into setup-box[1]. The setup-box/frame-key must themselves already have stable root lifetime before native frame code retains Eshkol identities; never store a pre-promotion pointer in native control. If setup-box publication can allocate/promote, that is still setup: no model mutation occurs, and failed outer setup consumes cleanup of any published token through slot68.
 
 Slots65..67 write only existing fixed slots with immediate phase/status and existing root-lifetime mode symbols. They allocate no list/vector/string/exception or closure-registration record. Post-preflight mode writes cannot trigger graph promotion because mode symbols and all targets are already root-owned. This still requires pinned optimized/poisoned AOT allocation-counter proof before claiming the tail infallible.
 
-Unbind idle only clears slots2..7 and sets phase3; keep slots0/1/8 and the ledger cell as an inert identity tombstone. Exact dead unbind returns0; all other dead use returns2. No per-call enrollment or tombstone is created. One-time successful/failed frame-setup costs and released token/control retention are measured separately; repeated evaluation reuses the exact same token/arrays. This design makes no flat process-lifetime claim across arbitrarily many frame bindings and introduces no report quota. If a total frame-creation bound is required, root must add it explicitly; do not hide an unbounded setup history behind per-call flatness.
+Unbind idle removes the record from the doubly linked active chain with fixed nonallocating writes, clears slots2..7/9/10 and sets phase3; keep slots0/1/8 and the ledger cell as an inert identity tombstone. Exact dead unbind returns0; all other dead use returns2. No per-call enrollment or tombstone is created. One-time successful/failed frame-setup costs and released token/control retention are measured separately; repeated evaluation reuses the exact same token/arrays. This design makes no flat process-lifetime claim across arbitrarily many frame bindings and introduces no report quota. If a total frame-creation bound is required, root must add it explicitly; do not hide an unbounded setup history behind per-call flatness.
 
 ## 4. Exact fixed-node validation
 

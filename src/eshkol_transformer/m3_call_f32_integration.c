@@ -125,19 +125,7 @@ static int m3_call_foreign_storage(const void *p, size_t bytes, const void *own)
   for (const et_f32_gradient_reset_plan *v = live_reset_plans; v; v = v->registry_next)
     if (ranges_overlap(p, bytes, v, sizeof(*v)) ||
         m3_call_array_overlap(p, bytes, v->parameters, v->count, sizeof(*v->parameters))) return 1;
-  for (const et_f32_tensor *v = retired_tensors; v; v = v->registry_next)
-    if (ranges_overlap(p, bytes, v, sizeof(*v))) return 1;
-  for (const et_f32_parameter *v = retired_parameters; v; v = v->registry_next)
-    if (ranges_overlap(p, bytes, v, sizeof(*v))) return 1;
-  for (const et_f32_tensor_borrow *v = retired_borrows; v; v = v->registry_next)
-    if (ranges_overlap(p, bytes, v, sizeof(*v))) return 1;
-  for (const et_f32_tensor_copy_plan *v = retired_copy_plans; v; v = v->registry_next)
-    if (ranges_overlap(p, bytes, v, sizeof(*v))) return 1;
-  for (const et_f32_gradient_plan *v = retired_gradient_plans; v; v = v->registry_next)
-    if (ranges_overlap(p, bytes, v, sizeof(*v))) return 1;
-  for (const et_f32_gradient_reset_plan *v = retired_reset_plans; v; v = v->registry_next)
-    if (ranges_overlap(p, bytes, v, sizeof(*v))) return 1;
-  return 0;
+  return f32_retired_control_overlaps(p, bytes);
 }
 
 static int m3_call_add_span(m3_call_span spans[130], size_t *count,
