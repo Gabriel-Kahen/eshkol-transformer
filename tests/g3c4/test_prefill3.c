@@ -65,6 +65,38 @@ static int record_prefill;
 static size_t prefill_dispatches;
 static size_t fail_prefill_at = SIZE_MAX;
 
+#ifdef ET_G3C4_PREFILL1_PRIVATE
+static const char *const expected_p1_capabilities[21] = {
+  "g3n.embedding-forward", "g3c4.embedding-forward",
+  "g3n.residual-forward", "g3n.layer-norm-forward",
+  "g3n.linear-forward", "g3n.linear-forward", "g3n.linear-forward",
+  "g3n.head-layout-forward", "g3n.head-layout-forward",
+  "g3n.head-layout-forward", "g3c4.causal-attention",
+  "g3n.head-layout-forward", "g3n.linear-forward",
+  "g3n.residual-forward", "g3n.layer-norm-forward",
+  "g3n.linear-forward", "kernel.activation", "g3n.linear-forward",
+  "g3n.residual-forward", "g3n.layer-norm-forward", "g3n.linear-forward"
+};
+static const char *const expected_p1_operations[21] = {
+  "g3n.embedding.forward", "g3c4.embedding.forward",
+  "g3n.residual.forward", "g3n.layer-norm.forward",
+  "g3n.linear.forward-no-bias", "g3n.linear.forward-no-bias",
+  "g3n.linear.forward-no-bias", "g3n.heads.split.forward",
+  "g3n.heads.split.forward", "g3n.heads.split.forward",
+  "g3c4.causal-attention.forward", "g3n.heads.merge.forward",
+  "g3n.linear.forward-no-bias", "g3n.residual.forward",
+  "g3n.layer-norm.forward", "g3n.linear.forward-no-bias",
+  "gelu.forward", "g3n.linear.forward-no-bias",
+  "g3n.residual.forward", "g3n.layer-norm.forward",
+  "g3n.linear.forward-no-bias"
+};
+static int record_prefill1;
+static size_t prefill1_dispatches;
+static size_t fail_prefill1_at = SIZE_MAX;
+static float prefill1_staged_keys[4];
+static float prefill1_staged_values[4];
+#endif
+
 static void check_request_shape(size_t index, const et_kernel_request_v1 *r) {
   static const uint64_t rows[21][6] = {
     {1,3,256,4}, {1,3,4,4}, {1,3,4}, {1,3,4},
@@ -82,9 +114,65 @@ static void check_request_shape(size_t index, const et_kernel_request_v1 *r) {
     CHECK(r->shape[dim] == rows[index][dim]);
 }
 
+#ifdef ET_G3C4_PREFILL1_PRIVATE
+static void check_p1_request_shape(
+    size_t index, const et_kernel_request_v1 *request) {
+  static const uint64_t rows[21][6] = {
+    {1,1,256,4}, {1,1,4,4}, {1,1,4}, {1,1,4},
+    {1,1,4,4}, {1,1,4,4}, {1,1,4,4},
+    {1,1,2,2}, {1,1,2,2}, {1,1,2,2},
+    {1,2,2,1,4,2}, {1,1,2,2}, {1,1,4,4}, {1,1,4},
+    {1,1,4}, {1,1,4,8}, {1,1,8}, {1,1,8,4},
+    {1,1,4}, {1,1,4}, {1,1,4,256}
+  };
+  static const size_t ranks[21] = {
+    4,4,3,3,4,4,4,4,4,4,6,4,4,3,3,4,3,4,3,3,4
+  };
+  CHECK(request->rank == ranks[index]);
+  for (size_t dimension = 0u; dimension < ranks[index]; dimension++)
+    CHECK(request->shape[dimension] == rows[index][dimension]);
+}
+#endif
+
 int32_t __wrap_et_kernel_runtime_dispatch(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
+#ifdef ET_G3C4_PREFILL1_PRIVATE
+  if (record_prefill1) {
+    const size_t index = prefill1_dispatches++;
+    CHECK(index < 21u);
+    CHECK(strcmp(call->capability, expected_p1_capabilities[index]) == 0);
+    CHECK(strcmp(call->request->operation, expected_p1_operations[index]) == 0);
+    CHECK(call->request->deterministic == 1u);
+    check_p1_request_shape(index, call->request);
+    if (index == 10u) {
+      const et_kernel_tensor_view_v1 *inputs = call->inputs;
+      CHECK(*(const int64_t *)inputs[3].data == 0);
+      for (size_t key = 0u; key < 4u; key++) {
+        CHECK(((const int64_t *)inputs[4].data)[key] == (int64_t)key);
+        CHECK(((const uint8_t *)inputs[5].data)[key] ==
+              (key == 0u ? 1u : 0u));
+      }
+      for (size_t head = 0u; head < 2u; head++)
+        for (size_t dimension = 0u; dimension < 2u; dimension++) {
+          const size_t cache_index = head * 8u + dimension;
+          const size_t local_index = head * 2u + dimension;
+          prefill1_staged_keys[local_index] =
+              ((const float *)inputs[1].data)[cache_index];
+          prefill1_staged_values[local_index] =
+              ((const float *)inputs[2].data)[cache_index];
+        }
+    }
+    if (index == fail_prefill1_at) {
+      memset(error, 0, sizeof(*error));
+      error->category = ET_KERNEL_ERROR_INTERNAL;
+      error->code = ET_KERNEL_CODE_PROVIDER_REJECTED;
+      strcpy(error->operation, "g3c4.prefill1-cut");
+      strcpy(error->message, "injected prefill1 failure");
+      return ET_KERNEL_ERROR_INTERNAL;
+    }
+  }
+#endif
   if (record_prefill) {
     const size_t index = prefill_dispatches++;
     CHECK(index < 21u);
