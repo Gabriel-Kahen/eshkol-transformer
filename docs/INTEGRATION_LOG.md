@@ -2830,6 +2830,22 @@ numerical, adversarial and packaging reviews approve this candidate for required
 supported CI with no unresolved implementation findings. Reviewed provider
 SHA-256 is `2dc0e4426b6126ecd9abf8e227ab54105403b05b341cb8df7d01f221760635f5`.
 
+## 2026-09-24 — G3-S supported Wave 3 union acceptance
+
+The reviewed G3-S merge `37d3b054e393200386dc07331d6f59d3b23099b7`, tree
+`551c1921d39a3e21bbd5e15f91047076ddc1771f`, is now the Wave 3 integration
+head. Its provider and header blobs match PR #96 head `4a7ecdc` exactly; the
+only G3-S source-test adjustment is the predecessor hash for the already
+accepted `native/f32_tensor.c`. An independent reviewer approved both the
+source and exact merge. The supported Ubuntu 22.04/LLVM 21.1.8 combined-source
+gate passed fresh K1/I1/I2/G3-S builds, 59,028 numerical checks, 37,796
+adversarial checks, 23/23 numerical mutation rejects, private AOT/package/ABI
+and stack checks, and ASan/UBSan with leak detection. The worktree was clean;
+sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/g3s-merge-37d3b05-20260924T074900Z`
+with `SHA256SUMS` SHA-256 `f95d0106d3e9da415a7bba97d00b4303b08d5082eab002207805c71ed4183de8`.
+This accepts the bounded native sampler, not G3-T or public generation.
+
 ## 2026-09-24 — G3-S source review and Wave 3 union preflight
 
 PR #96 retains exact provider commit `4a7ecdc`, tree
