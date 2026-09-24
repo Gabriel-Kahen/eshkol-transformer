@@ -321,6 +321,37 @@ arithmetic executes binary32 operations.
   only for the canonical tag. These are Eshkol runtime names, not transformer A0
   names.
 
+**Public type reflection decision.** `(type-of value)` is a total unary,
+first-class procedure on native AOT, native JIT, and the bytecode VM. It returns
+a canonical interned Scheme symbol naming the semantic runtime type, never a
+string, native/VM numeric tag, heap/callable subtype ID, or ESKB constant ID.
+Results with the same spelling compare true under `eq?`, including comparison
+with a literal symbol. The public C `eshkol_type_of` returns that same symbol in
+tagged-value form. Internal numeric IDs may differ between substrates.
+
+The current semantic names are `null` for the empty value; `integer` for int64
+and bignum; `real` for binary64; `float32` for canonical binary32; `boolean`,
+`char`, and `symbol`; `complex`, `rational`, `dual-number`, `hyper-dual-number`,
+and `i128`; `pair`, `string`, `vector`, `tensor`, `hash-table`, `bytevector`,
+`record`, `values`, `exception`, `port`, `promise`, `future`, and `eof-object`;
+`closure`, `primitive`, `continuation`, `lambda-sexpr`, and `ad-node` for the
+declared callable kinds; `substitution`, `fact`, `knowledge-base`,
+`factor-graph`, `workspace`, `logic-variable`, `prng`, `parameter`, `ad-tape`,
+`manifold`, `riemannian-adam-state`, `dnc`, `sdnc`, and `taylor` for the declared
+domain kinds; `handle`, `buffer`, `stream`, and `event` for resource kinds; and
+`void` for an unspecified result. A valid callable without a more specific
+classification reports `procedure`. Native exactness/direction flags do not
+change the semantic name.
+
+Only a canonical f32-v1 carrier reports `float32`; malformed f32 carriers and
+undeclared direct tags report `unknown`. A declared heap or callable value with
+an undeclared subtype reports `heap-object` or `procedure`, respectively.
+Deprecated pointer tags report the semantic name of their consolidated
+replacement. Adding a declared tag or subtype requires a symbolic mapping and
+cross-substrate tests in the same change. This decision supersedes the current
+native integer-tag and VM string implementations; their observable results are
+not accepted type-reflection behavior.
+
 Every ordinary numeric operation that currently accepts DOUBLE must accept f32 by
 the promotion rule below and return the same result kind as its DOUBLE path. This
 includes f32/f32, f32/integer, f32/DOUBLE, unary negation/absolute value, min/max,

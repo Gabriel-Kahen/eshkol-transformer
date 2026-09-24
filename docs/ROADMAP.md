@@ -43,10 +43,14 @@ evidence is `f32-public-predicate-20260924/SHA256SUMS` (`44b28253...`). A
 separate sealed `type-of` parity audit on that exact tree found an accepted
 contract ambiguity: public native Scheme reports numeric type tags, the C API
 reports interned symbols, and the VM reports strings. Its evidence is
-`f32-typeof-parity-blocker-d960add-20260924/SHA256SUMS` (`41b92f67...`). The
-return-value kind must be selected before changing that public API. An isolated
-VM F32 hash-key leaf and a read-only `type-of` decision audit are in progress;
-neither establishes full F32 acceptance or changes the transformer runtime pin.
+`f32-typeof-parity-blocker-d960add-20260924/SHA256SUMS` (`41b92f67...`). A
+sealed read-only decision audit, `f32-typeof-contract-decision-d960add-20260924`
+(`SHA256SUMS` `c60eef12...`), maps the complete current value surface and
+recommends canonical interned symbols. The orchestrator accepted that public
+contract in [TR3_F32_SCALAR_RUNTIME_CONTRACT.md](TR3_F32_SCALAR_RUNTIME_CONTRACT.md);
+cross-substrate implementation, migration and parity gates remain pending. An
+isolated VM F32 hash-key leaf is also in progress. Neither leaf establishes full
+F32 acceptance or changes the transformer runtime pin.
 
 ## Wave 0 — contracts and verification foundation
 
