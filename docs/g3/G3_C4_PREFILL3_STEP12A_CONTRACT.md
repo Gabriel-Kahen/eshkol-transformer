@@ -37,15 +37,16 @@ bit-exact with row three of that same T4 reference. The committed cache advances
 from exact keep mask `1110` and length three to length four without changing RNG
 during prefill or numerical forward.
 
-Each of the 21 provider dispatch sites and all 14 A2 committed-cache borrow,
-candidate-cache, transaction, and transaction-view allocation sites has an
-injected failure cut.
+Each of the 21 provider dispatch sites and all 11 A2 candidate-cache,
+transaction, and transaction-view allocation sites has an injected failure cut.
 K1 runtime-discovery allocation also fails independently. Every failure retains
 the prior cache, 14 identities, 4,768 snapshot bytes, prompt-token copy, RNG, and
 caller output, while preserving the first error. Parameter mutation after call
 acquisition proves stale continuation rejection; exact restoration permits the
-same frame to begin. Parameter-output and committed-cache-output aliases are
-rejected before numerical work, preserving the prior binding and owned bytes.
+same frame to begin. A source-private A2 storage query rejects output overlap
+with the committed cache handle or any backing allocation; parameter-output
+aliases are likewise rejected before numerical work, preserving the prior
+binding and owned bytes.
 Normal, repeated, ASan, UBSan, and leak-detection runs use the same focused test.
 
 ## Explicit limits
