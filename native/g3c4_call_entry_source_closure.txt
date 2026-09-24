@@ -44,6 +44,7 @@ native/t1_i64_shell.h
 native/t1_wave1_root.esk
 native/x1_config_private.esk
 scripts/check-g3c4-call-entry.py
+scripts/common.sh
 scripts/test-g3c4-call-entry.sh
 src/eshkol_transformer/g3c4_context_internal.h
 src/eshkol_transformer/g3c4_model_owner.c
@@ -58,6 +59,11 @@ src/eshkol_transformer/m3t_f32_scoped.h
 src/eshkol_transformer/m3t_transport.c
 src/eshkol_transformer/m3t_transport.h
 src/eshkol_transformer/token_shard.esk
+tests/g3c4/call_entry_a2_stats.c
+tests/g3c4/call_entry_allocation_shim.cpp
+tests/g3c4/call_entry_allocation_test.esk
 tests/g3c4/call_entry_failstop_test.esk
 tests/g3c4/call_entry_native.c
+tests/g3c4/call_entry_publication_test.esk
+tests/g3c4/call_entry_retention.esk
 tests/g3c4/call_entry_test.esk

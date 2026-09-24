@@ -121,3 +121,7 @@ int64_t et_g3c4_call_entry_test_owner_state_v1(void *candidate) {
     if ((void *)owner == candidate) return (int64_t)owner->state;
   return -1;
 }
+
+int64_t et_g3c4_call_entry_test_context_bytes_v1(void) {
+  return (int64_t)sizeof(et_g3c4_context_internal);
+}

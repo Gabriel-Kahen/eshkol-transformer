@@ -67,7 +67,13 @@ def main() -> int:
     require(all((ROOT / path).is_file() for path in closure),
             "source closure contains a missing file")
     for required in ("native/g3c4_call_entry_extension.esk",
+                     "scripts/common.sh",
                      "tests/g3c4/call_entry_native.c",
+                     "tests/g3c4/call_entry_a2_stats.c",
+                     "tests/g3c4/call_entry_allocation_shim.cpp",
+                     "tests/g3c4/call_entry_allocation_test.esk",
+                     "tests/g3c4/call_entry_publication_test.esk",
+                     "tests/g3c4/call_entry_retention.esk",
                      "tests/g3c4/call_entry_test.esk",
                      "tests/g3c4/call_entry_failstop_test.esk",
                      "scripts/test-g3c4-call-entry.sh"):
@@ -79,6 +85,22 @@ def main() -> int:
     for forbidden in ("generate-internal", "forward-internal", "result-entry",
                       "frame-commit", "counter-advance", "philox-round"):
         require(forbidden not in text, f"premature behavior present: {forbidden}")
+
+    deaden = form("g3c4-entry-dead!")
+    ordered(deaden,
+            [f"(vector-set! entry {index} #f)" for index in range(3, 12)] +
+            ["(vector-set! entry 2 'dead)"],
+            "dead tombstone publication")
+    dead_test = form("g3c4-dead-entry?")
+    require(not re.search(r"vector-ref entry (?:[3-9]|1[01])", dead_test),
+            "dead idempotence reads cleared payload slots")
+    call_deaden = form("g3c4-call-dead!")
+    ordered(call_deaden,
+            [f"(vector-set! entry {index} #f)"
+             for index in list(range(3, 10)) + [11]] +
+            ["(vector-set! entry 2 'dead)",
+             "(vector-set! entry 10 #f)"],
+            "call tombstone/ledger publication")
 
     operations = (
         "g3c4-rng-create-seeded-internal",
@@ -122,6 +144,7 @@ def main() -> int:
     require(macro.count("(m3-call operation") == 1,
             "call wrapper must enter m3-call exactly once")
     ordered(macro, [
+        "(guard (caught",
         "(vector-set! g3c4-registry 0 next)",
         "(g3c4-native-call-acquire",
         "(vector-set! canonical-ledger 0 #t)",
@@ -145,7 +168,7 @@ def main() -> int:
     ordered(rollback, ["(g3c4-native-call-abort",
                         "(vector-set! model-entry 10 #f)",
                         "(vector-set! generator-entry 9 #f)",
-                        "(g3c4-entry-dead! call-entry)"],
+                        "(g3c4-call-dead! call-entry)"],
             "call rollback")
     require("(exit 134)" in rollback,
             "native abort cleanup failure is not fail-stop")

@@ -1,0 +1,140 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 handler-prepare
+        :real et_g3c4_call_entry_handler_prepare_v1)
+(extern i64 handler-fresh
+        :real et_g3c4_call_entry_handler_fresh_v1)
+(extern i64 handler-arm
+        :real et_g3c4_call_entry_handler_arm_v1)
+(extern i64 handler-caught i64
+        :real et_g3c4_call_entry_handler_caught_v1)
+
+(define checks 0)
+(define (check value)
+  (if value (set! checks (+ checks 1)) (exit 1)))
+(define (registry-count)
+  (let loop ((rest (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? rest) count (loop (cdr rest) (+ count 1)))))
+(define (no-pending?)
+  (let loop ((rest (vector-ref g3c4-registry 0)))
+    (if (null? rest) #t
+        (and (not (eq? (vector-ref (car rest) 2) 'pending))
+             (loop (cdr rest))))))
+(define (greedy-config seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed seed))
+(define (rng-config rng)
+  (list ':profile 'diagnostic-c4 ':sampling 'categorical
+        ':temperature-bits 1065353216 ':top-k 1
+        ':top-p-bits 1065353216 ':max-new-tokens 0
+        ':eos 0 ':rng rng))
+
+;; Each series fails the nth matching constructor, starting at zero.  The first
+;; unconsumed index is the exact constructor count for that operation.
+(define (sweep kind thunk cleanup)
+  (let loop ((index 0))
+    (if (> index 64) (exit 2))
+    (let ((caught #f) (answer #f))
+      (guard (condition (#t (set! caught #t)))
+        (allocation-arm kind index)
+        (set! answer (thunk)))
+      (if (= (allocation-consumed) 1)
+          (begin
+            (check caught)
+            (check (no-pending?))
+            (check (not (vector-ref m3-call-state 0)))
+            (allocation-disarm)
+            (loop (+ index 1)))
+          (begin
+            (check (not caught))
+            (allocation-disarm)
+            (cleanup answer)
+            index)))))
+
+(define model (g3c4-model-create-seeded-internal 1729))
+(define source-rng (g3c4-rng-create-seeded-internal 7))
+(define seed-config (greedy-config 9))
+(define source-config (rng-config source-rng))
+
+(define rng-vector-cuts
+  (sweep 1 (lambda () (g3c4-rng-create-seeded-internal 1))
+           (lambda (rng) (g3c4-rng-release-internal! rng))))
+(define rng-cons-cuts
+  (sweep 2 (lambda () (g3c4-rng-create-seeded-internal 1))
+           (lambda (rng) (g3c4-rng-release-internal! rng))))
+(define clone-vector-cuts
+  (sweep 1 (lambda () (g3c4-rng-clone-internal source-rng))
+           (lambda (rng) (g3c4-rng-release-internal! rng))))
+(define clone-cons-cuts
+  (sweep 2 (lambda () (g3c4-rng-clone-internal source-rng))
+           (lambda (rng) (g3c4-rng-release-internal! rng))))
+(define generator-seed-vector-cuts
+  (sweep 1 (lambda () (g3c4-generator-create-internal model seed-config))
+           (lambda (generator) (g3c4-generator-close-internal! generator))))
+(define generator-seed-cons-cuts
+  (sweep 2 (lambda () (g3c4-generator-create-internal model seed-config))
+           (lambda (generator) (g3c4-generator-close-internal! generator))))
+(define generator-rng-vector-cuts
+  (sweep 1 (lambda () (g3c4-generator-create-internal model source-config))
+           (lambda (generator) (g3c4-generator-close-internal! generator))))
+(define generator-rng-cons-cuts
+  (sweep 2 (lambda () (g3c4-generator-create-internal model source-config))
+           (lambda (generator) (g3c4-generator-close-internal! generator))))
+
+(define call-generator (g3c4-generator-create-internal model seed-config))
+(define call-vector-cuts
+  (sweep 1
+         (lambda () (g3c4-call-empty-commit-internal! call-generator 0 0))
+         (lambda (ignored) #t)))
+(define call-cons-cuts
+  (sweep 2
+         (lambda () (g3c4-call-empty-commit-internal! call-generator 0 0))
+         (lambda (ignored) #t)))
+
+;; Exhaust the runtime's recycled handler frames, then fail the third production
+;; guard allocation: m3t boundary, m3-call cleanup, and the call rollback guard.
+;; The call entry must not have been enrolled when that third guard fails.
+(define handler-baseline (registry-count))
+(handler-prepare)
+(define (handler-scope depth)
+  (guard (caught
+           (#t
+             (handler-caught
+               (if (and (not (vector-ref m3-call-state 0))
+                        (= (registry-count) handler-baseline)
+                        (no-pending?))
+                   1 0))))
+    (if (= (handler-fresh) 0)
+        (if (< depth 128)
+            (begin (handler-scope (+ depth 1)) (handler-fresh))
+            (exit 3))
+        (begin
+          (handler-arm)
+          (g3c4-call-empty-commit-internal! call-generator 0 0)
+          (exit 4)))))
+(handler-scope 0)
+
+(check (g3c4-generator-close-internal! call-generator))
+(check (g3c4-rng-release-internal! source-rng))
+(display "G3-C4 allocation cuts PASS: rng=")
+(display rng-vector-cuts) (display "/") (display rng-cons-cuts)
+(display " clone=") (display clone-vector-cuts) (display "/")
+(display clone-cons-cuts)
+(display " generator-seed=") (display generator-seed-vector-cuts)
+(display "/") (display generator-seed-cons-cuts)
+(display " generator-rng=") (display generator-rng-vector-cuts)
+(display "/") (display generator-rng-cons-cuts)
+(display " call=") (display call-vector-cuts) (display "/")
+(display call-cons-cuts) (display " handler=3 checks=")
+(display checks) (newline)

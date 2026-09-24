@@ -28,20 +28,35 @@
 (define g3c4-rng-algorithm 'g3.philox4x32-10.categorical-f32.v1)
 
 (define (g3c4-entry-dead! entry)
+  (vector-set! entry 3 #f)
+  (vector-set! entry 4 #f)
+  (vector-set! entry 5 #f)
+  (vector-set! entry 6 #f)
+  (vector-set! entry 7 #f)
+  (vector-set! entry 8 #f)
+  (vector-set! entry 9 #f)
+  (vector-set! entry 10 #f)
+  (vector-set! entry 11 #f)
   (vector-set! entry 2 'dead)
-  (let clear ((index 3))
-    (if (= index 12) #t
-        (begin (vector-set! entry index #f)
-               (clear (+ index 1))))))
+  #t)
 
 (define (g3c4-dead-entry? entry kind)
   (and (vector? entry) (= (vector-length entry) 12)
        (eq? (vector-ref entry 1) kind)
-       (eq? (vector-ref entry 2) 'dead)
-       (let clear? ((index 3))
-         (if (= index 12) #t
-             (and (not (vector-ref entry index))
-                  (clear? (+ index 1)))))))
+       (eq? (vector-ref entry 2) 'dead)))
+
+(define (g3c4-call-dead! entry)
+  (vector-set! entry 3 #f)
+  (vector-set! entry 4 #f)
+  (vector-set! entry 5 #f)
+  (vector-set! entry 6 #f)
+  (vector-set! entry 7 #f)
+  (vector-set! entry 8 #f)
+  (vector-set! entry 9 #f)
+  (vector-set! entry 11 #f)
+  (vector-set! entry 2 'dead)
+  (vector-set! entry 10 #f)
+  #t)
 
 (define (g3c4-registry-find shell operation)
   (let loop ((entries (vector-ref g3c4-registry 0)))
@@ -417,7 +432,7 @@
         (if (eq? (vector-ref generator-entry 9) call-entry)
             (vector-set! generator-entry 9 #f)
             (exit 134)))
-    (g3c4-entry-dead! call-entry)))
+    (g3c4-call-dead! call-entry)))
 
 (define (g3c4-call-success! call-entry generator-entry model-entry)
   (if (not (and (eq? (vector-ref model-entry 10) call-entry)
@@ -426,7 +441,7 @@
       (exit 134))
   (vector-set! model-entry 10 #f)
   (vector-set! generator-entry 9 #f)
-  (g3c4-entry-dead! call-entry))
+  (g3c4-call-dead! call-entry))
 
 (define-syntax g3c4-with-call-internal
   (syntax-rules ()
@@ -445,17 +460,17 @@
                         #f #f #f #f ledger g3c4-model-profile))
               (next (cons call-entry (vector-ref g3c4-registry 0)))
               (phase (vector 'precommit)))
-         (vector-set! g3c4-registry 0 next)
-         (let ((canonical (car (vector-ref g3c4-registry 0)))
-               (canonical-ledger
-                 (vector-ref (car (vector-ref g3c4-registry 0)) 10)))
-           (guard (caught
-                    (#t
-                      (if (eq? (vector-ref phase 0) 'precommit)
-                          (g3c4-call-rollback!
-                            canonical generator-entry model-entry operation)
-                          (exit 134))
-                      (raise caught)))
+         (guard (caught
+                  (#t
+                    (if (eq? (vector-ref phase 0) 'precommit)
+                        (g3c4-call-rollback!
+                          call-entry generator-entry model-entry operation)
+                        (exit 134))
+                    (raise caught)))
+           (vector-set! g3c4-registry 0 next)
+           (let ((canonical (car (vector-ref g3c4-registry 0)))
+                 (canonical-ledger
+                   (vector-ref (car (vector-ref g3c4-registry 0)) 10)))
              (g3c4-native-check
                (g3c4-native-call-acquire
                  (vector-ref generator-entry 3) call-kind budget)
