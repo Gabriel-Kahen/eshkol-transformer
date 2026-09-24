@@ -121,8 +121,16 @@ test-only poisoned arena reuse fails as expected. Independent re-review PASS;
 root verified `f32-tagged-cons-transport-20260924/manifest.json`
 (`8dadd5c7...`). Its by-value getter byte proof is specific to the pinned ABI.
 The three reviewed predicate/hash, C type-symbol, and tagged-cons leaves are
-being composed in a clean isolated runtime worktree; no transformer repin has
-occurred.
+composed in clean isolated Eshkol commit `602876a`/tree `24cc0a1`. Both imported
+leaf patch IDs match exactly; the sole independent union review approved the
+combined changes. Supported f31/LLVM21 poisoned Release matrix 19/19 and
+ASan+UBSan matrix 13/13 pass; direct VM C API 675/675, standalone 77/77 plus
+hash-region witness, imported leaf tests and compiled exhaustive dispatch pass
+in both builds. Root verified
+`f32-runtime-union-c2df68d-20260924/SHA256SUMS` (`8965e26e...`). The
+pre-existing source-pattern exhaustive gate and VM compiler UBSan signed shift
+remain separate blockers; this union is not full F32 acceptance and does not
+change the transformer runtime pin.
 The sealed generic E3 dependency audit on exact `9bbb3ff`,
 `e3-generic-dependency-audit-9bbb3ff-20260924T184109Z/evidence-files.sha256`
 (`49195ba6...`), confirms the installed diagnostic facade and private E3
