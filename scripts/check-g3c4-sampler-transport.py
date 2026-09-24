@@ -20,11 +20,36 @@ def ordered(text, fragments, label):
         require(position >= 0, f"{label} missing or misordered: {fragment}")
 
 
+def without_conditional_feature(text, macro):
+    """Remove regions compiled only when a later feature is enabled."""
+    kept = []
+    depth = 0
+    for line in text.splitlines(keepends=True):
+        directive = line.lstrip()
+        opens = (directive.startswith("#if ") or
+                 directive.startswith("#ifdef ") or
+                 directive.startswith("#ifndef "))
+        if depth:
+            if opens:
+                depth += 1
+            elif directive.startswith("#endif"):
+                depth -= 1
+            continue
+        if opens and macro in directive:
+            depth = 1
+            continue
+        kept.append(line)
+    require(depth == 0, f"unterminated conditional feature block: {macro}")
+    return "".join(kept)
+
+
 def check():
     subprocess.run(
         [sys.executable, str(ROOT / "scripts/check-g3c4-full-prefix-forward.py")],
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
+    sampler_source = without_conditional_feature(
+        source, "ET_G3C4_TOKEN_FRAME_PRIVATE")
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
     test = (ROOT / "tests/g3c4/test_sampler_transport.c").read_text()
     contract = (ROOT / "docs/g3/G3_C4_SAMPLER_TRANSPORT_STEP9A_CONTRACT.md").read_text()
@@ -33,11 +58,11 @@ def check():
     require("ET_G3C4_SAMPLER_TRANSPORT_PRIVATE requires full-prefix forward"
             in source, "sampler macro is not nested under full-prefix forward")
     symbol = "et_g3c4_private_sample_last_v1"
-    require(source.count(symbol) == 1 and header.count(symbol) == 1,
+    require(sampler_source.count(symbol) == 1 and header.count(symbol) == 1,
             "source-private sampler boundary changed")
-    start = source.index(f"int64_t {symbol}")
-    end = source.index("\n#endif", start)
-    body = source[start:end]
+    start = sampler_source.index(f"int64_t {symbol}")
+    end = sampler_source.index("\n#endif", start)
+    body = sampler_source[start:end]
 
     for fragment in [
         "full_logits + 3u * 256u",

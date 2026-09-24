@@ -47,6 +47,20 @@ int64_t et_g3c4_private_sample_last_v1(
     int64_t *token, int64_t successor_rng[4]);
 #endif
 
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+/* Owns one pending A2 append from sampling through joint cache/RNG/token commit.
+ * K/V are exact dense CPU-f32 [1,2,1,2] outputs for speculative_token. */
+int64_t et_g3c4_private_token_frame_begin_v1(
+    void *context, const float full_logits[1024],
+    int64_t *speculative_token);
+int64_t et_g3c4_private_token_frame_stage_v1(
+    void *context, int64_t speculative_token,
+    const float keys[4], const float values[4]);
+int64_t et_g3c4_private_token_frame_publish_v1(
+    void *context, int64_t *token);
+int64_t et_g3c4_private_token_frame_abort_v1(void *context);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
