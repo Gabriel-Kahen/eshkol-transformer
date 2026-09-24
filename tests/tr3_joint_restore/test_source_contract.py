@@ -12,6 +12,13 @@ ESK = (ROOT / "native/tr3_c_joint_restore_extension.esk").read_text()
 ROOT_ESK = (ROOT / "native/tr3_c_joint_restore_root.esk").read_text()
 RUNTIME = (ROOT / "tests/tr3_joint_restore/runtime_smoke.esk").read_text()
 RUNTIME_GATE = (ROOT / "scripts/test-tr3-c-joint-runtime.sh").read_text()
+FAILURE_RUNTIME = (
+    ROOT / "tests/tr3_joint_restore/allocation_failure_runtime.esk"
+).read_text()
+FAILURE_SHIM = (
+    ROOT / "tests/tr3_joint_restore/allocation_failure_shim.cpp"
+).read_text()
+FAILURE_GATE = (ROOT / "scripts/test-tr3-c-joint-failures.sh").read_text()
 
 
 def definition(name: str, next_name: str | None = None) -> str:
@@ -264,6 +271,47 @@ class JointRestoreContract(unittest.TestCase):
             "SHA256SUMS",
         ):
             self.assertIn(required, RUNTIME_GATE)
+
+    def test_allocation_gate_uses_actual_transaction_and_same_owner_retry(self) -> None:
+        for required in (
+            "tr3-c-joint-restore-internal!",
+            "joint-allocation-arm",
+            "joint-allocation-stage 13",
+            '"allocation cut preserves all receiver bytes and controls"',
+            '"allocation cut preserves detached source bytes and ownership"',
+            '"same detached authority retries after allocation cut"',
+            '"retry publishes all 42 source tensors and controls"',
+        ):
+            self.assertIn(required, FAILURE_RUNTIME)
+        self.assertLess(
+            FAILURE_RUNTIME.index("(arm-case! case-class case-ordinal)"),
+            FAILURE_RUNTIME.index("(tr3-c-joint-restore-internal! receiver-shell"),
+        )
+
+    def test_allocation_gate_attributes_and_denies_real_allocators(self) -> None:
+        for required in (
+            "bounded_arena_failure",
+            "TR3-JOINT-ALLOC-CUT",
+            "TR3-JOINT-ALLOC-DENY",
+            "irreversible-tail",
+        ):
+            self.assertIn(required, FAILURE_SHIM)
+        for required in (
+            "joint-f32-fail-after",
+            "joint-i2-fail-after",
+            "joint-o2-fail-after",
+        ):
+            self.assertIn(required, FAILURE_RUNTIME)
+        for required in (
+            "failure_runtime_candidate.tsv",
+            "allocation_prefix_production_off",
+            "--strict-types --no-stdlib --optimize 0",
+            "--emit-object",
+            "8192",
+            "PROCESS-FAIL",
+            "SHA256SUMS",
+        ):
+            self.assertIn(required, FAILURE_GATE)
 
 
 class FailurePrefixModel(unittest.TestCase):
