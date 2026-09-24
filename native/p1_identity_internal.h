@@ -104,6 +104,11 @@ int64_t et_p1_private_construction_module_create_v1(void *context, void *constru
 int64_t et_p1_private_construction_handle_create_v1(void *context, void *construction);
 int64_t et_p1_private_construction_seal_v1(void *context, void *construction);
 int64_t et_p1_private_construction_abort_v1(void *context, void *construction);
+int64_t et_p1_private_construction_prepare_v1(void *context, void *construction);
+int64_t et_p1_private_construction_commit_prepared_v1(void *context,
+                                                       void *construction);
+int64_t et_p1_private_construction_abort_prepared_v1(void *context,
+                                                      void *construction);
 int64_t et_p1_private_module_create_v1(void *context);
 int64_t et_p1_private_parameter_handle_create_v1(void *context);
 int64_t et_p1_private_parameter_tree_create_v1(void *context);

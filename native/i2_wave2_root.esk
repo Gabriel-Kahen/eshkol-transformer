@@ -87,6 +87,12 @@
 (define i2-module-registry-root (vector '()))
 (define (i2-modules-current) (vector-ref i2-module-registry-root 0))
 (define i2-construction-registry-root (vector '() #f))
+(define (i2-g3c4-preflight-unavailable owner parameter handle)
+  -1)
+;;; The C4 aggregate installs these two fixed adapters from its private source.
+;;; They are never stored in a construction and no caller can select a route.
+(define i2-g3c4-preflight-private i2-g3c4-preflight-unavailable)
+(define i2-g3c4-bind-preflight-private i2-g3c4-preflight-unavailable)
 (define i2-module-count 0)
 
 (define (i2-fail-raw category operation message)
@@ -575,6 +581,90 @@
             i2-parameter-admission-carrier)
         (i2-fail 'invalid-state operation "I2 construction is closed or busy"))
     record))
+(define (i2-construction-open-route value route operation)
+  (let ((record (i2-construction-open value operation)))
+    (if (not (eq? (vector-ref record 9) route))
+        (i2-fail 'invalid-state operation "I2 construction route is closed"))
+    record))
+(define (i2-construction-preflight! record parameter handle operation)
+  (let ((route (vector-ref record 9)))
+    (let ((status
+            (cond ((eq? route 'm3t)
+                   (i2-native-construction-parameter-preflight parameter handle))
+                  ((eq? route 'g3c4)
+                   (i2-g3c4-preflight-private
+                     (vector-ref record 10) parameter handle))
+                  (else
+                    (i2-fail 'invalid-state operation
+                             "I2 construction route is invalid")))))
+      (if (= status -1)
+          (i2-fail 'unsupported operation
+                   "construction preflight is unavailable")
+          (if (not (= status 0)) (i2-native-fail operation)))
+      #t)))
+(define (i2-construction-bound-registration-preflight!
+          record parameter handle operation)
+  ;; M3T keeps its accepted two-argument registration path unchanged. The C4
+  ;; adapter binds the retained owner's matching slot, then performs the
+  ;; required bound three-argument preflight.
+  (if (eq? (vector-ref record 9) 'g3c4)
+      (let ((status
+              (i2-g3c4-bind-preflight-private
+                (vector-ref record 10) parameter handle)))
+        (if (= status -1)
+            (i2-fail 'unsupported operation
+                     "C4 bound construction preflight is unavailable")
+            (if (not (= status 0)) (i2-native-fail operation)))))
+  #t)
+(define (i2-construction-retained-preflight! record operation)
+  (let ((anchor (vector-ref record 8)))
+    (if (not (null? (vector-ref anchor 2)))
+        (i2-construction-preflight!
+          record (vector-ref anchor 2) (vector-ref anchor 3) operation))
+    (let preflight ((remaining (vector-ref record 5)))
+      (if (null? remaining) #t
+          (let* ((carrier (car remaining))
+                 (handle (vector-ref carrier 3)))
+            (if (or (not (i2-carrier-shape? carrier))
+                    (not (eq? (vector-ref carrier 1) 'parameter))
+                    ;; P1 deliberately makes prepared handles opaque. The C4
+                    ;; bridge still authenticates the retained exact pair.
+                    (and (eq? (vector-ref record 3) 'open)
+                         (not (null? handle))
+                         (not (eq? carrier
+                           (parameter-handle-tensor-identity-internal handle)))))
+                (i2-fail 'invalid-argument operation
+                         "construction carrier identity changed"))
+            (i2-construction-preflight!
+              record (vector-ref carrier 2) handle operation)
+            (preflight (cdr remaining)))))))
+(define (i2-construction-rollback-tail! record)
+  ;; P1 authority has already been revoked before this nonallocating tail.
+  (vector-set! i2-module-registry-root 0 (vector-ref record 6))
+  (set! i2-module-count (vector-ref record 7))
+  (let loop ((remaining (vector-ref record 5)))
+    (if (null? remaining) #t
+        (begin
+          (vector-set! (car remaining) 2 '())
+          (vector-set! (car remaining) 3 '())
+          (loop (cdr remaining)))))
+  (let ((anchor (vector-ref record 8)))
+    (vector-set! record 2 #f)
+    (vector-set! record 3 'aborted)
+    (vector-set! record 4 '())
+    (vector-set! record 5 '())
+    (vector-set! anchor 2 '())
+    (vector-set! anchor 3 '())
+    (vector-set! record 6 '())
+    (vector-set! record 8 #f)
+    (vector-set! record 10 #f)
+    (vector-set! i2-construction-registry-root 1 #f)
+    #t))
+(define (i2-construction-abort-active! record operation)
+  (i2-construction-retained-preflight! record operation)
+  ;; Native/P1 revocation precedes restoration and carrier invalidation.
+  (module-construction-abort-internal! (vector-ref record 1))
+  (i2-construction-rollback-tail! record))
 (define (i2-construction-begin-internal)
   ;; NULL/NULL is only a fixed availability query, never parameter authority.
   (if (= (i2-native-construction-parameter-preflight '() '()) -1)
@@ -589,7 +679,7 @@
   (let* ((membership (vector #f))
          (record (vector 'i2-construction #f #f 'aborted (list membership) '()
                          (i2-modules-current) i2-module-count
-                         (i2-carrier 'parameter '() 'parameter)))
+                         (i2-carrier 'parameter '() 'parameter) 'm3t #f))
          (next (cons record (vector-ref i2-construction-registry-root 0))))
     ;; Complete promotion precedes P1 begin. The rooted aborted record has no
     ;; native authority if this initial write barrier itself fails.
@@ -608,6 +698,7 @@
                  (vector-set! canonical 4 '())
                  (vector-set! canonical 6 '())
                  (vector-set! canonical 8 #f)
+                 (vector-set! canonical 10 #f)
                  (vector-set! i2-construction-registry-root 1 #f)
                  (raise caught)))
         (vector-set! i2-module-registry-root 0
@@ -622,71 +713,30 @@
             (vector-set! canonical 3 'open)
             canonical))))))
 (define (i2-construction-seal-internal! value)
-  (let* ((record (i2-construction-open value 'i2-construction-seal-internal!))
+  (let* ((record
+           (i2-construction-open-route
+             value 'm3t 'i2-construction-seal-internal!))
          (root (module-construction-seal-internal! (vector-ref record 1))))
     (vector-set! record 3 'sealed)
     (vector-set! record 4 '())
     (vector-set! record 5 '())
     (vector-set! record 6 '())
     (vector-set! record 8 #f)
+    (vector-set! record 10 #f)
     (vector-set! i2-construction-registry-root 1 #f)
     root))
 (define (i2-construction-abort-internal! value)
   (let ((record (i2-construction-record value 'i2-construction-abort-internal!)))
+    (if (not (eq? (vector-ref record 9) 'm3t))
+        (i2-fail 'invalid-state 'i2-construction-abort-internal!
+                 "I2 construction route is closed"))
     (if (eq? (vector-ref record 3) 'aborted)
         #t
         (begin
-          (i2-construction-open value 'i2-construction-abort-internal!)
-          ;; Begin retained the exact old registry/count in the persistent
-          ;; ledger. One serialized scope owns every subsequent membership;
-          ;; abort can restore that baseline without allocation or promotion.
-          (let ((anchor (vector-ref record 8)))
-            (if (not (null? (vector-ref anchor 2)))
-                (if (not (= (i2-native-construction-parameter-preflight
-                              (vector-ref anchor 2) (vector-ref anchor 3)) 0))
-                    (i2-native-fail 'i2-construction-abort-internal!)))
-            ;; Each carrier is retained by this exact active construction; bound
-            ;; handles must resolve back to that canonical carrier in P1.
-            (let preflight ((remaining (vector-ref record 5)))
-              (if (null? remaining) #t
-                  (let* ((carrier (car remaining))
-                         (handle (vector-ref carrier 3)))
-                    (if (or (not (i2-carrier-shape? carrier))
-                            (not (eq? (vector-ref carrier 1) 'parameter))
-                            (and (not (null? handle))
-                                 (not (eq? carrier
-                                   (parameter-handle-tensor-identity-internal handle)))))
-                        (i2-fail 'invalid-argument 'i2-construction-abort-internal!
-                                 "construction carrier identity changed"))
-                    (let ((status (i2-native-construction-parameter-preflight
-                                    (vector-ref carrier 2) handle)))
-                      (if (= status -1)
-                          (i2-fail 'unsupported 'i2-construction-abort-internal!
-                                   "construction preflight is unavailable")
-                          (if (not (= status 0))
-                              (i2-native-fail 'i2-construction-abort-internal!))))
-                    (preflight (cdr remaining)))))
-            ;; Serialized exact-ledger native revocation and the remaining tail
-            ;; cannot fail after the enrolled set has passed preflight.
-            (module-construction-abort-internal! (vector-ref record 1))
-            (vector-set! i2-module-registry-root 0 (vector-ref record 6))
-            (set! i2-module-count (vector-ref record 7))
-            (let loop ((remaining (vector-ref record 5)))
-              (if (null? remaining) #t
-                  (begin
-                    (vector-set! (car remaining) 2 '())
-                    (vector-set! (car remaining) 3 '())
-                    (loop (cdr remaining)))))
-            (vector-set! record 2 #f)
-            (vector-set! record 3 'aborted)
-            (vector-set! record 4 '())
-            (vector-set! record 5 '())
-            (vector-set! anchor 2 '())
-            (vector-set! anchor 3 '())
-            (vector-set! record 6 '())
-            (vector-set! record 8 #f)
-            (vector-set! i2-construction-registry-root 1 #f)
-            #t)))))
+          (i2-construction-open-route
+            value 'm3t 'i2-construction-abort-internal!)
+          (i2-construction-abort-active!
+            record 'i2-construction-abort-internal!)))))
 
 ;;; Fixed-purpose trusted construction seams for later source-composed Wave 2
 ;;; consumers and direct integration tests. None is an application export.
@@ -754,9 +804,9 @@
           (if (not (i2-construction-module-member? module (vector-ref active 4)))
               (i2-fail 'invalid-argument 'i2-module-register-parameter-internal!
                        "module is outside the active I2 construction"))
-          (if (not (= (i2-native-construction-parameter-preflight
-                        (vector-ref carrier 2) '()) 0))
-              (i2-native-fail 'i2-module-register-parameter-internal!))
+          (i2-construction-preflight!
+            active (vector-ref carrier 2) '()
+            'i2-module-register-parameter-internal!)
           (vector-set! active 5 (cons carrier (vector-ref active 5)))
           (set! carrier (car (vector-ref active 5))))))
   (set! i2-parameter-admission-carrier carrier)
@@ -776,6 +826,9 @@
         (let ((active (vector-ref i2-construction-registry-root 1)))
           (if active
               (let ((anchor (vector-ref active 8)))
+                (i2-construction-bound-registration-preflight!
+                  active (vector-ref canonical 2) handle
+                  'i2-module-register-parameter-internal!)
                 (if (eq? (vector-ref anchor 2) (vector-ref canonical 2))
                     (vector-set! anchor 3 handle)))))
         handle))))

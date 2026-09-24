@@ -1,0 +1,149 @@
+;;; G3-C4-only prepared route through the sole I2 construction ledger.
+;;; Load after i2_wave2_root.esk. Never install this source independently.
+
+(load "g3c4_p1_construction_extension.esk")
+
+(extern i64 i2-native-g3c4-construction-available
+        :real et_i2_private_g3c4_construction_available_v1)
+(extern i64 i2-native-g3c4-construction-preflight ptr ptr ptr
+        :real et_i2_private_g3c4_construction_parameter_preflight_v1)
+(extern ptr i2-native-g3c4-owner-parameter ptr i64
+        :real et_g3c4_private_model_owner_parameter_v1)
+(extern i64 i2-native-g3c4-owner-bind ptr i64 ptr
+        :real et_g3c4_private_model_owner_bind_v1)
+
+;;; These adapters are fixed by this aggregate. They are not construction
+;;; fields, operation arguments, or application-visible route selectors.
+(set! i2-g3c4-preflight-private
+  (lambda (owner parameter handle)
+    (i2-native-g3c4-construction-preflight owner parameter handle)))
+
+(set! i2-g3c4-bind-preflight-private
+  (lambda (owner parameter handle)
+    (let find ((index 0))
+      (if (= index 14)
+          ;; The accepted bridge supplies the canonical I2 diagnostic.
+          (i2-native-g3c4-construction-preflight owner parameter handle)
+          (if (eq? parameter
+                   (i2-native-g3c4-owner-parameter owner index))
+              (begin
+                ;; The I2 identity bind is already complete and idempotent.
+                ;; Publish the same exact handle in the native owner, then
+                ;; authenticate the resulting bound registration.
+                (if (not (= (i2-native-g3c4-owner-bind
+                              owner index handle) 0))
+                    (i2-native-g3c4-construction-preflight
+                      owner parameter handle)
+                    (i2-native-g3c4-construction-preflight
+                      owner parameter handle)))
+              (find (+ index 1)))))))
+
+(define (i2-g3c4-construction-begin-internal native-owner)
+  (let ((operation 'i2-g3c4-construction-begin-internal))
+    (if (not (= (i2-native-g3c4-construction-available) 0))
+        (i2-fail 'unsupported operation
+                 "C4 I2 construction bridge is unavailable"))
+    (if (vector-ref i2-construction-registry-root 1)
+        (i2-fail 'invalid-state operation
+                 "nested I2 construction is forbidden"))
+    (if (>= i2-module-count 4096)
+        (i2-fail 'invalid-state operation
+                 "I2 aggregate module provenance limit reached"))
+    (let* ((membership (vector #f))
+           (record
+             (vector 'i2-construction #f #f 'aborted (list membership) '()
+                     (i2-modules-current) i2-module-count
+                     (i2-carrier 'parameter '() 'parameter)
+                     'g3c4 native-owner))
+           (next
+             (cons record (vector-ref i2-construction-registry-root 0))))
+      ;; Root the closed route and exact owner before P1 can publish authority.
+      (vector-set! i2-construction-registry-root 0 next)
+      (let* ((canonical (car (vector-ref i2-construction-registry-root 0)))
+             (canonical-membership (car (vector-ref canonical 4))))
+        (guard (caught
+                 (#t
+                   (if (vector-ref canonical 1)
+                       (module-construction-abort-internal!
+                         (vector-ref canonical 1)))
+                   (i2-construction-rollback-tail! canonical)
+                   (vector-set! canonical 1 #f)
+                   (vector-set! canonical 7 0)
+                   (raise caught)))
+          (vector-set! i2-module-registry-root 0
+                       (cons canonical-membership (vector-ref canonical 6)))
+          (set! i2-module-count (+ (vector-ref canonical 7) 1))
+          (vector-set! i2-construction-registry-root 1 canonical)
+          (let ((construction
+                  (module-construction-begin-internal i2-provider-name)))
+            (vector-set! canonical 1 construction)
+            (let ((root
+                    (module-construction-root-internal construction)))
+              (vector-set! canonical 2 root)
+              (vector-set! canonical-membership 0 root)
+              (vector-set! canonical 3 'open)
+              canonical)))))))
+
+(define (i2-g3c4-construction-prepare-eval-internal! value)
+  (let* ((operation 'i2-g3c4-construction-prepare-eval-internal!)
+         (record (i2-construction-open-route value 'g3c4 operation)))
+    (i2-construction-retained-preflight! record operation)
+    (guard (caught
+             (#t
+               ;; P1 prepare failure has already revoked its complete ledger.
+               (i2-construction-rollback-tail! record)
+               (vector-set! record 1 #f)
+               (vector-set! record 7 0)
+               (raise caught)))
+      (let ((root
+              (module-construction-prepare-eval-internal!
+                (vector-ref record 1))))
+        (vector-set! record 3 'prepared)
+        root))))
+
+(define (i2-g3c4-construction-seal-prepared-internal! value)
+  (let* ((operation 'i2-g3c4-construction-seal-prepared-internal!)
+         (record (i2-construction-record value operation)))
+    (if (or (not (eq? (vector-ref record 9) 'g3c4))
+            (not (eq? (vector-ref record 3) 'prepared))
+            (not (eq? record
+                      (vector-ref i2-construction-registry-root 1)))
+            i2-parameter-admission-carrier)
+        (i2-fail 'invalid-state operation
+                 "C4 I2 construction is not prepared"))
+    (let ((root
+            (module-construction-seal-prepared-internal!
+              (vector-ref record 1))))
+      ;; The P1 commit boundary is complete. This tail only clears rooted
+      ;; rollback authority and publishes no model.
+      (vector-set! record 1 #f)
+      (vector-set! record 3 'sealed)
+      (vector-set! record 4 '())
+      (vector-set! record 5 '())
+      (vector-set! record 6 '())
+      (vector-set! record 7 0)
+      (vector-set! record 8 #f)
+      (vector-set! record 10 #f)
+      (vector-set! i2-construction-registry-root 1 #f)
+      root)))
+
+(define (i2-g3c4-construction-abort-internal! value)
+  (let* ((operation 'i2-g3c4-construction-abort-internal!)
+         (record (i2-construction-record value operation)))
+    (if (not (eq? (vector-ref record 9) 'g3c4))
+        (i2-fail 'invalid-state operation
+                 "I2 construction route is closed"))
+    (if (eq? (vector-ref record 3) 'aborted)
+        #t
+        (begin
+          (if (or (not (or (eq? (vector-ref record 3) 'open)
+                           (eq? (vector-ref record 3) 'prepared)))
+                  (not (eq? record
+                            (vector-ref i2-construction-registry-root 1)))
+                  i2-parameter-admission-carrier)
+              (i2-fail 'invalid-state operation
+                       "C4 I2 construction is closed or busy"))
+          (i2-construction-abort-active! record operation)
+          (vector-set! record 1 #f)
+          (vector-set! record 7 0)
+          #t))))

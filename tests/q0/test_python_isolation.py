@@ -6,12 +6,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 Q0 = ROOT / "tests" / "q0"
+G3C4_DEVELOPMENT_SCRIPTS = frozenset({
+    ROOT / "scripts" / name
+    for name in (
+        "check-g3c4-active-call.py",
+        "check-g3c4-call-entry.py",
+        "check-g3c4-context-cache.py",
+        "check-g3c4-generator.py",
+        "check-g3c4-i2-prepared-route.py",
+        "check-g3c4-model-authority.py",
+        "check-p1-prepared-split.py",
+    )
+})
 DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "generate-e3-d2-source.py",
     ROOT / "scripts" / "check-e3-p1-contract.py",
     ROOT / "scripts" / "check-tr3-p1-fixed.py",
     ROOT / "scripts" / "e3-atomic-publish.py",
-})
+}) | G3C4_DEVELOPMENT_SCRIPTS
 
 
 def development_python(path: Path) -> bool:
@@ -59,6 +71,17 @@ class PythonIsolationTests(unittest.TestCase):
         ):
             with self.subTest(path=relative):
                 self.assertFalse(development_python(ROOT / relative))
+
+    def test_g3c4_checker_near_misses_are_rejected(self) -> None:
+        for admitted in G3C4_DEVELOPMENT_SCRIPTS:
+            for path in (
+                admitted.with_name(admitted.name + ".extra.py"),
+                ROOT / "scripts" / "nested" / admitted.name,
+                ROOT / "src" / admitted.name,
+                ROOT / "native" / admitted.name,
+            ):
+                with self.subTest(path=path.relative_to(ROOT)):
+                    self.assertFalse(development_python(path))
 
     def test_fixture_reader_has_no_executable_deserialization(self) -> None:
         source = (Q0 / "oracle_format.py").read_text(encoding="utf-8").lower()
