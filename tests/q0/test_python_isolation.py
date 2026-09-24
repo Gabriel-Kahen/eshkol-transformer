@@ -13,6 +13,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-call-entry.py",
         "check-g3c4-context-cache.py",
         "check-g3c4-generator.py",
+        "check-g3c4-full-prefix-forward.py",
         "check-g3c4-i2-prepared-route.py",
         "check-g3c4-model-authority.py",
         "check-g3c4-provider-routes.py",

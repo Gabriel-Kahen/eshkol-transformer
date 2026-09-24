@@ -33,6 +33,13 @@ int64_t et_g3c4_private_rng_word_v1(void *rng, int64_t index);
 int64_t et_g3c4_private_rng_release_v1(void *rng);
 #endif
 
+#ifdef ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE
+/* Synchronous fixed-T4 numerical leaf. token_ids/logits are borrowed only for
+ * the call and must address 4 i64 / 1024 f32 elements respectively. */
+int64_t et_g3c4_private_full_prefix_forward_v1(
+    void *context, const int64_t token_ids[4], float logits[1024]);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
