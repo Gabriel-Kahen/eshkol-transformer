@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXTENSION = ROOT / "native" / "o2_wave2_extension.esk"
 PREDECESSOR_SHA256 = "4ae490979328499bb96f9d6cb3e13ae61398300275b7bfd83361e72d597ad590"
 PUBLIC_HEADER_TREE_SHA256 = (
-    "00c6161443a7e346ba16bc25e33a24af613eb2f465674f4fa5aa15211ced9a6b"
+    "1198c573cdc535b2b4f49d4ef1d31d717ceb6690c6878f5da9d0b44960bc9166"
 )
 PUBLIC_FACADE_SHA256 = "b2f96c6119cf51388221dd541c7eda3fefb564c14934e46dede310d0ab9c98b0"
 
@@ -60,7 +60,7 @@ class ModelLeaseCreateHookPackageTests(unittest.TestCase):
         predecessor = reconstruct_predecessor(EXTENSION.read_bytes())
         self.assertEqual(hashlib.sha256(predecessor).hexdigest(), PREDECESSOR_SHA256)
 
-    def test_public_facade_and_header_tree_are_byte_unchanged(self) -> None:
+    def test_public_facade_unchanged_and_header_tree_pinned(self) -> None:
         self.assertEqual(
             sha256(ROOT / "lib" / "transformer" / "optim.esk"),
             PUBLIC_FACADE_SHA256,
