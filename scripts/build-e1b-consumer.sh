@@ -344,7 +344,9 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
     package_public_strings="${e3_public_strings}"
     package_source_closure="${e3_source_closure}"
     package_native_source_closure="${e3_native_source_closure}"
-    package_native_define=-DET_E3_TESTING
+    if [[ "${e3_public_tuple:-0}" != 1 ]]; then
+      package_native_define=-DET_E3_TESTING
+    fi
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
       "${PROJECT_ROOT}/native/checkpoint_io.c"
@@ -358,7 +360,7 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
       "${PROJECT_ROOT}/native/l3s_masked_objective_provider.c"
       "${PROJECT_ROOT}/native/e3_evaluation_metrics_provider.c"
     )
-    if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
+    if [[ "${e3_diagnostic_tuple}" == 1 || "${e3_public_tuple}" == 1 ]]; then
       package_native_sources+=(
         "${PROJECT_ROOT}/native/e3_diagnostic_destinations.c"
       )
@@ -950,9 +952,11 @@ cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
 
 export_pattern='^et_e1b_public_[a-z0-9_]+_v1$'
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
-  export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
-  if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
-    export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+  if [[ "${e3_public_tuple:-0}" != 1 ]]; then
+    export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
+    if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    fi
   fi
 fi
 awk -v pattern="${export_pattern}" '
@@ -1152,8 +1156,11 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 package_bridge_flags=()
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   package_bridge_flags+=(
-    -DET_M3T_PACKAGE_BUILD -DET_E3_TESTING -I "${PROJECT_ROOT}/src"
+    -DET_M3T_PACKAGE_BUILD -I "${PROJECT_ROOT}/src"
   )
+  if [[ "${e3_public_tuple:-0}" != 1 ]]; then
+    package_bridge_flags+=(-DET_E3_TESTING)
+  fi
 elif [[ "${package_policy}" == m3-model-aggregate || \
       "${package_policy}" == m3t-diagnostic-aggregate ]]; then
   package_bridge_flags+=(-DET_M3T_PACKAGE_BUILD -I "${PROJECT_ROOT}/src")
@@ -1477,19 +1484,32 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       "${e1b_tmp}/undefined.txt" >/dev/null; then
     die "E3 aggregate retains unresolved private native authority"
   fi
-  for privileged in \
-      et_e3_private_frame_create_v1 et_e3_private_acquire_v1 \
-      et_e3_private_stage_inputs_v1 et_e3_private_forward_role_v1 \
-      et_e3_private_publish_v1 \
-      et_e3_private_selected_metric_bits_ref_v1 \
-      et_e3_d2_dataset_idle_preflight_v1 \
-      et_l3s_kernel_provider_v1 \
-      et_e3_metrics_kernel_provider_v1 \
-      et_e3_private_test_run_cabi_v1 \
-      et_e3_test_destination_create_v1 \
-      et_e3_test_destination_destroy_v1 \
-      et_e3_test_destination_bits_v1 \
-      et_e3_test_frame_fail_alloc_after_v1; do
+  e3_required_private=(
+    et_e3_private_frame_create_v1 et_e3_private_acquire_v1
+    et_e3_private_stage_inputs_v1 et_e3_private_forward_role_v1
+    et_e3_private_publish_v1 et_e3_private_selected_metric_bits_ref_v1
+    et_e3_d2_dataset_idle_preflight_v1 et_l3s_kernel_provider_v1
+    et_e3_metrics_kernel_provider_v1
+  )
+  if [[ "${e3_public_tuple:-0}" == 1 ]]; then
+    e3_required_private+=(
+      et_e1b_private_e3_diagnostic_evaluate_fixed_cabi_v1
+      et_e1b_private_e3_diagnostic_evaluation_f32_bits_cabi_v1
+      et_e1b_private_e3_diagnostic_evaluation_count_cabi_v1
+      et_e3_diagnostic_destination_create_v1
+      et_e3_diagnostic_destination_destroy_v1
+      et_e3_diagnostic_destination_bits_v1
+    )
+  else
+    e3_required_private+=(
+      et_e3_private_test_run_cabi_v1
+      et_e3_test_destination_create_v1
+      et_e3_test_destination_destroy_v1
+      et_e3_test_destination_bits_v1
+      et_e3_test_frame_fail_alloc_after_v1
+    )
+  fi
+  for privileged in "${e3_required_private[@]}"; do
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
       "${e1b_tmp}/readelf-symbols.txt" >/dev/null || \
       die "E3 required private definition is not local: ${privileged}"
@@ -1550,9 +1570,11 @@ fi
 strings "${e1b_tmp}/combined.o" >"${evidence_dir}.tmp.$$/strings.txt"
 public_string_pattern='^et_e1b_(error|public)_[a-z0-9_]+_v1$'
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
-  public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
-  if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
-    public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+  if [[ "${e3_public_tuple:-0}" != 1 ]]; then
+    public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
+    if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    fi
   fi
 fi
 LC_ALL=C grep -E "${public_string_pattern}" \

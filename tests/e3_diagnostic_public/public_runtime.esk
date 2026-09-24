@@ -1,0 +1,102 @@
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.error_public)
+(require transformer.evaluation)
+(require transformer.module)
+(require transformer.model)
+(require transformer.tokenizer)
+
+(define (check label value)
+  (if value #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (expect-error label category operation thunk)
+  (let ((caught #f))
+    (guard
+     (raised
+      (#t
+       (set! caught
+             (and (transformer-error? raised)
+                  (eq? (transformer-error-category raised) category)
+                  (eq? (transformer-error-operation raised) operation)))))
+     (thunk))
+    (check label caught)))
+
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+
+(define args (command-line))
+(define corpus-path (car (cdr args)))
+(define model-config
+  (config-resolve
+   (config-parse
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+   '()))
+(define model
+  (with-region ('e3-public-model 65536)
+    (diagnostic-model-create model-config
+                             (diagnostic-initializer-state 1729))))
+(define tokenizer (tokenizer-byte model-config))
+(define dataset (token-dataset-open (dataset-config corpus-path) tokenizer))
+
+(define before (token-dataset-cursor dataset))
+(define report
+  (with-region ('e3-public-evaluation 262144)
+    (diagnostic-evaluate-fixed! model dataset)))
+(define after (token-dataset-cursor dataset))
+(check "success cursor restoration" (bytes=? before after))
+(check "loss bits"
+       (= (diagnostic-evaluation-f32-bits report 'loss) 1085366897))
+(check "mask weight bits"
+       (= (diagnostic-evaluation-f32-bits report 'mask-weight) 1084227584))
+(check "perplexity bits"
+       (= (diagnostic-evaluation-f32-bits report 'perplexity) 1132430055))
+(check "accuracy bits"
+       (= (diagnostic-evaluation-f32-bits report 'token-accuracy) 0))
+(check "token count" (= (diagnostic-evaluation-count report 'tokens) 5))
+(check "batch count" (= (diagnostic-evaluation-count report 'batches) 3))
+
+(expect-error "foreign report" 'invalid-argument
+              'diagnostic-evaluation-f32-bits
+  (lambda () (diagnostic-evaluation-f32-bits (vector 'foreign) 'loss)))
+(expect-error "non-symbol key" 'invalid-argument
+              'diagnostic-evaluation-f32-bits
+  (lambda () (diagnostic-evaluation-f32-bits report 0)))
+(expect-error "wrong key family" 'invalid-argument
+              'diagnostic-evaluation-count
+  (lambda () (diagnostic-evaluation-count report 'loss)))
+
+;; Advance the genuine dataset to EOS through its installed D2 surface.
+(let drain ()
+  (let ((value (token-dataset-next-batch dataset)))
+    (if (token-dataset-end? value) #t
+        (begin (check "batch release" (token-batch-release! value))
+               (drain)))))
+(define eos-before (token-dataset-cursor dataset))
+(expect-error "EOS evaluation" 'invalid-state 'e3-evaluate-into!
+  (lambda ()
+    (with-region ('e3-public-eos 262144)
+      (diagnostic-evaluate-fixed! model dataset))))
+(define eos-after (token-dataset-cursor dataset))
+(check "failure cursor restoration" (bytes=? eos-before eos-after))
+;; A failed call cannot mutate or revoke previously published report authority.
+(check "prior report after failure"
+       (and (= (diagnostic-evaluation-f32-bits report 'loss) 1085366897)
+            (= (diagnostic-evaluation-count report 'batches) 3)))
+(check "dataset close" (token-dataset-close! dataset))
+
+(display "E3-DIAGNOSTIC-PUBLIC-PASS")
+(newline)

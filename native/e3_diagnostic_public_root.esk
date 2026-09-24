@@ -1,0 +1,4 @@
+;;; Installed fixed-model E3 diagnostic aggregate. Trusted source is localized;
+;;; only the boxed public package bridge is exported.
+(load "e3_private_root.esk")
+(load "e3_diagnostic_private_extension.esk")
