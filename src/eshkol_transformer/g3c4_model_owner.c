@@ -730,6 +730,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #error "ET_G3C4_SAMPLER_TRANSPORT_PRIVATE requires full-prefix forward"
 #endif
 
+#if defined(ET_G3C4_TOKEN_FRAME_PRIVATE) && \
+    !defined(ET_G3C4_SAMPLER_TRANSPORT_PRIVATE)
+#error "ET_G3C4_TOKEN_FRAME_PRIVATE requires Step 9A"
+#endif
+
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
 #include "eshkol_transformer/g3c4_primitives_abi.h"
 #include "eshkol_transformer/g3s_sampling_abi.h"
@@ -779,6 +784,14 @@ enum {
 };
 #endif
 
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+enum {
+  ET_G3C4_TOKEN_FRAME_IDLE = 0,
+  ET_G3C4_TOKEN_FRAME_SAMPLED = 1,
+  ET_G3C4_TOKEN_FRAME_READY = 2
+};
+#endif
+
 typedef struct et_g3c4_context_internal {
 #ifdef ET_G3C4_GENERATOR_PRIVATE
   et_g3c4_transport_header_internal transport;
@@ -802,6 +815,12 @@ typedef struct et_g3c4_context_internal {
   uint32_t generator_ready;
   int64_t generator_policy[6];
   int64_t generator_rng_words[4];
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+  et_a2_kv_cache_transaction *token_frame_transaction;
+  uint32_t token_frame_state;
+  int64_t token_frame_candidate;
+  int64_t token_frame_successor[4];
+#endif
 #endif
 } et_g3c4_context_internal;
 
@@ -973,6 +992,31 @@ static int et_g3c4_zero_i64_words(const int64_t *words, size_t count) {
   return 1;
 }
 
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+static int et_g3c4_token_frame_valid(
+    const et_g3c4_context_internal *context) {
+  if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_IDLE)
+    return context->token_frame_transaction == NULL &&
+           context->token_frame_candidate == 0 &&
+           et_g3c4_zero_i64_words(context->token_frame_successor, 4u);
+  if (context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED &&
+      context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY)
+    return 0;
+  return context->token_frame_transaction != NULL &&
+         context->token_frame_candidate >= 0 &&
+         context->token_frame_candidate <= 255 &&
+         context->token_frame_successor[0] == 1 &&
+         context->token_frame_successor[1] ==
+             context->generator_rng_words[1];
+}
+
+static int et_g3c4_token_frame_idle(
+    const et_g3c4_context_internal *context) {
+  return context->token_frame_state == ET_G3C4_TOKEN_FRAME_IDLE &&
+         et_g3c4_token_frame_valid(context);
+}
+#endif
+
 static int et_g3c4_context_subtype_valid(
     const et_g3c4_context_internal *context) {
   if (context->generator_kind == 0u)
@@ -990,7 +1034,11 @@ static int et_g3c4_context_subtype_valid(
              context->generator_policy[2], context->generator_policy[3],
              context->generator_policy[4], context->generator_policy[5]) &&
          context->generator_rng_words[0] == 1 &&
-         context->generator_rng_words[1] >= 0;
+         context->generator_rng_words[1] >= 0
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+         && et_g3c4_token_frame_valid(context)
+#endif
+         ;
 }
 #endif
 
@@ -1169,8 +1217,13 @@ _Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
                "G3-C4 transport header must be 32 bytes");
 _Static_assert(offsetof(et_g3c4_context_internal, transport) == 0u,
                "G3-C4 context header must be first");
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+_Static_assert(sizeof(et_g3c4_context_internal) == 1576u,
+               "G3-C4 token-frame context must be 1576 bytes");
+#else
 _Static_assert(sizeof(et_g3c4_context_internal) == 1520u,
                "G3-C4 generator context must be 1520 bytes");
+#endif
 _Static_assert(sizeof(et_g3c4_rng_internal) == 64u,
                "G3-C4 RNG record must be 64 bytes");
 #endif
@@ -1480,7 +1533,11 @@ static int et_g3c4_generator_dead_exact(
          context->acquired_mask == 0u &&
          et_g3c4_pins_idle(&context->pins) &&
          et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
-         et_g3c4_zero_i64_words(context->generator_rng_words, 4u);
+         et_g3c4_zero_i64_words(context->generator_rng_words, 4u)
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+         && et_g3c4_token_frame_idle(context)
+#endif
+         ;
 }
 
 int64_t et_g3c4_private_generator_close_v1(void *candidate) {
@@ -1506,6 +1563,9 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   if (context->call_kind != 0 || context->budget != 0 ||
       context->acquired_mask != 0u || !et_g3c4_pins_idle(&context->pins) ||
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+      !et_g3c4_token_frame_idle(context) ||
+#endif
       !et_g3c4_valid_generator_policy(
           context->generator_policy[0], context->generator_policy[1],
           context->generator_policy[2], context->generator_policy[3],
@@ -1592,7 +1652,11 @@ static et_g3c4_context_internal *et_g3c4_admit_idle_call(
     return NULL;
   }
   if (context->acquired_mask != 0u || context->call_kind != 0 ||
-      context->budget != 0 || !et_g3c4_pins_idle(&context->pins)) {
+      context->budget != 0 || !et_g3c4_pins_idle(&context->pins)
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+      || !et_g3c4_token_frame_idle(context)
+#endif
+      ) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return NULL;
   }
@@ -2079,6 +2143,198 @@ int64_t et_g3c4_private_sample_last_v1(
   return 0;
 }
 #endif
+
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+static void et_g3c4_token_frame_reset(
+    et_g3c4_context_internal *context) {
+  context->token_frame_transaction = NULL;
+  context->token_frame_state = ET_G3C4_TOKEN_FRAME_IDLE;
+  context->token_frame_candidate = 0;
+  memset(context->token_frame_successor, 0,
+         sizeof(context->token_frame_successor));
+}
+
+static void et_g3c4_token_frame_discard(
+    et_g3c4_context_internal *context) {
+  et_kernel_error error;
+  if (context->token_frame_transaction != NULL &&
+      et_a2_kv_cache_transaction_abort_v1(
+          &context->token_frame_transaction, &error) != 0)
+    abort();
+  et_g3c4_token_frame_reset(context);
+}
+
+int64_t et_g3c4_private_token_frame_begin_v1(
+    void *candidate, const float full_logits[1024],
+    int64_t *speculative_token_output) {
+  static const uint64_t append_shape[1] = {1u};
+  et_g3c4_context_internal *context;
+  et_a2_kv_cache_transaction *transaction = NULL;
+  et_kernel_tensor_view_v1 append_counts;
+  et_kernel_error error;
+  int64_t token_candidate = -1;
+  int64_t successor_candidate[4] = {0, 0, 0, 0};
+  int64_t append_count = 1;
+
+  et_g3c4_error_reset_internal();
+  if (!et_g3c4_range_valid(full_logits, 1024u * sizeof(float)) ||
+      !et_g3c4_range_valid(
+          speculative_token_output, sizeof(*speculative_token_output)) ||
+      (uintptr_t)full_logits % _Alignof(float) != 0u ||
+      (uintptr_t)speculative_token_output % _Alignof(int64_t) != 0u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 1 ||
+      !et_g3c4_token_frame_idle(context)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  if (et_g3c4_ranges_overlap(
+          speculative_token_output, sizeof(*speculative_token_output),
+          full_logits, 1024u * sizeof(float)) ||
+      et_g3c4_ranges_overlap(
+          speculative_token_output, sizeof(*speculative_token_output),
+          context, sizeof(*context))) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  if (et_g3c4_private_sample_last_v1(
+          context, full_logits, &token_candidate,
+          successor_candidate) != 0)
+    return et_g3c4_error_state.category;
+  append_counts = et_g3c4_view(
+      &append_count, sizeof(append_count), "i64", 1u, append_shape);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_begin_v1(
+              context->cache, 1u, &append_counts, &transaction, &error),
+          &error) != 0)
+    return et_g3c4_error_state.category;
+  context->token_frame_transaction = transaction;
+  context->token_frame_state = ET_G3C4_TOKEN_FRAME_SAMPLED;
+  context->token_frame_candidate = token_candidate;
+  memcpy(context->token_frame_successor, successor_candidate,
+         sizeof(successor_candidate));
+  memcpy(speculative_token_output, &token_candidate,
+         sizeof(token_candidate));
+  return 0;
+}
+
+int64_t et_g3c4_private_token_frame_stage_v1(
+    void *candidate, int64_t speculative_token,
+    const float keys[4], const float values[4]) {
+  static const uint64_t kv_shape[4] = {1u, 2u, 1u, 2u};
+  et_g3c4_context_internal *context;
+  et_kernel_tensor_view_v1 key_view;
+  et_kernel_tensor_view_v1 value_view;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+
+  et_g3c4_error_reset_internal();
+  if (!et_g3c4_range_valid(keys, 4u * sizeof(float)) ||
+      !et_g3c4_range_valid(values, 4u * sizeof(float)) ||
+      (uintptr_t)keys % _Alignof(float) != 0u ||
+      (uintptr_t)values % _Alignof(float) != 0u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 1 ||
+      context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED ||
+      context->token_frame_transaction == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  if (speculative_token != context->token_frame_candidate) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return et_g3c4_error_state.category;
+  }
+  key_view = et_g3c4_view(
+      (void *)keys, 4u * sizeof(float), "f32", 4u, kv_shape);
+  value_view = et_g3c4_view(
+      (void *)values, 4u * sizeof(float), "f32", 4u, kv_shape);
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_stage_layer_v1(
+              context->token_frame_transaction, 0u,
+              &key_view, &value_view, &error),
+          &error) != 0) {
+    first = et_g3c4_error_snapshot_internal();
+    et_g3c4_token_frame_discard(context);
+    et_g3c4_error_restore_internal(first);
+    return et_g3c4_error_state.category;
+  }
+  context->token_frame_state = ET_G3C4_TOKEN_FRAME_READY;
+  return 0;
+}
+
+int64_t et_g3c4_private_token_frame_publish_v1(
+    void *candidate, int64_t *token_output) {
+  et_g3c4_context_internal *context;
+  et_kernel_error error;
+  int64_t token_candidate;
+  int64_t successor_candidate[4];
+
+  et_g3c4_error_reset_internal();
+  if (!et_g3c4_range_valid(token_output, sizeof(*token_output)) ||
+      (uintptr_t)token_output % _Alignof(int64_t) != 0u) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 1 ||
+      context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY ||
+      context->token_frame_transaction == NULL) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
+  if (et_g3c4_ranges_overlap(
+          token_output, sizeof(*token_output), context, sizeof(*context))) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return et_g3c4_error_state.category;
+  }
+  token_candidate = context->token_frame_candidate;
+  memcpy(successor_candidate, context->token_frame_successor,
+         sizeof(successor_candidate));
+  if (et_g3c4_capture_kernel(
+          et_a2_kv_cache_transaction_commit_v1(
+              &context->token_frame_transaction, &error),
+          &error) != 0)
+    return et_g3c4_error_state.category;
+
+  memcpy(context->generator_rng_words, successor_candidate,
+         sizeof(successor_candidate));
+  memcpy(token_output, &token_candidate, sizeof(token_candidate));
+  context->budget = 0;
+  et_g3c4_token_frame_reset(context);
+  return 0;
+}
+
+int64_t et_g3c4_private_token_frame_abort_v1(void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_token_frame_idle(context)) return 0;
+  et_g3c4_token_frame_discard(context);
+  return 0;
+}
+#endif
 #endif
 
 #ifdef ET_G3C4_ACTIVE_CALL_TESTING
@@ -2166,6 +2422,13 @@ int64_t et_g3c4_private_call_prepare_end_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+  if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY)
+    return 0;
+  if (!et_g3c4_token_frame_idle(context))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   return et_g3c4_cache_idle_preflight(context);
 }
 
@@ -2185,6 +2448,11 @@ int64_t et_g3c4_private_call_finish_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+  if (!et_g3c4_token_frame_idle(context))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   return et_g3c4_active_call_drain(context);
 }
 
@@ -2193,6 +2461,10 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+  if (!et_g3c4_token_frame_idle(context))
+    et_g3c4_token_frame_discard(context);
+#endif
   if (et_g3c4_cache_idle_preflight(context) != 0)
     return et_g3c4_error_state.category;
   return et_g3c4_active_call_drain(context);
