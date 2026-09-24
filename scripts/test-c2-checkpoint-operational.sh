@@ -328,7 +328,11 @@ compile_runtime() {
   local output_name=${4:-operational}
   local compile_status=0
   local depfile="${tmp}/${label}/${output_name}.d"
+  local depfile_args=()
   mkdir -p "${tmp}/${label}/output"
+  if [[ "${development}" == 1 ]]; then
+    depfile_args=(--emit-depfile "${depfile}")
+  fi
   phase_begin aot_compile
   (cd "${tmp}/${label}" &&
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -336,7 +340,7 @@ compile_runtime() {
       ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${compiler}" \
       timeout --foreground --signal=TERM --kill-after=5s 900s "${runner}" \
         --strict-types --optimize 0 --no-stdlib \
-        --emit-depfile "${depfile}" \
+        "${depfile_args[@]}" \
         -I "${PROJECT_ROOT}/internal/p1/lib" \
         -I "${PROJECT_ROOT}/internal/c1/lib" \
         -I "${PROJECT_ROOT}/internal/t2/lib" \
@@ -362,44 +366,29 @@ compile_runtime() {
   phase_end
 }
 
-write_source_manifest() {
-  local depfile=$1 output=$2
-  python3 - "${PROJECT_ROOT}" "${depfile}" \
-    "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk" \
-    "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_joint_runtime.esk" \
-    >"${output}" <<'PY'
-import hashlib
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1]).resolve()
-text = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
-excluded = {pathlib.Path(value).resolve() for value in sys.argv[3:]}
-payload = text.replace("\\\n", " ").split(":", 1)[1]
-dependencies = sorted({pathlib.Path(value).resolve() for value in payload.split()})
-for dependency in dependencies:
-    if dependency in excluded or not dependency.is_file():
-        continue
-    digest = hashlib.sha256(dependency.read_bytes()).hexdigest()
-    try:
-        display = dependency.relative_to(root)
-    except ValueError:
-        display = dependency
-    print(f"{digest}  {display}")
-PY
-}
-
 verify_source_manifests() {
-  write_source_manifest "${tmp}/clang-a/operational.d" \
-    "${tmp}/multi-source-manifest.sha256"
-  write_source_manifest "${tmp}/joint-a/joint-operational.d" \
-    "${tmp}/joint-source-manifest.sha256"
-  cmp "${tmp}/multi-source-manifest.sha256" \
-    "${tmp}/joint-source-manifest.sha256"
-  local manifest_sha
-  manifest_sha=$(sha256sum "${tmp}/joint-source-manifest.sha256" | awk '{print $1}')
-  printf 'C2 OPERATIONAL JOINT SOURCE MANIFEST PASS: entries=%s sha256=%s\n' \
-    "$(wc -l <"${tmp}/joint-source-manifest.sha256")" "${manifest_sha}"
+  python3 "${PROJECT_ROOT}/tests/c2/c2_operational_source_manifest.py" \
+    --project-root "${PROJECT_ROOT}" \
+    --entry "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk" \
+    --exclude-entry >"${tmp}/multi-explicit-source-manifest.sha256"
+  python3 "${PROJECT_ROOT}/tests/c2/c2_operational_source_manifest.py" \
+    --project-root "${PROJECT_ROOT}" \
+    --entry "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_joint_runtime.esk" \
+    --exclude-entry >"${tmp}/joint-explicit-source-manifest.sha256"
+  cmp "${tmp}/multi-explicit-source-manifest.sha256" \
+    "${tmp}/joint-explicit-source-manifest.sha256"
+  local body_sha manifest_sha
+  body_sha=$(sha256sum \
+    "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_joint_body.esk" | \
+    awk '{print $1}')
+  manifest_sha=$(sha256sum \
+    "${tmp}/joint-explicit-source-manifest.sha256" | awk '{print $1}')
+  rg -F "${body_sha}  tests/c2/c2_checkpoint_operational_joint_body.esk" \
+    "${tmp}/joint-explicit-source-manifest.sha256" >/dev/null
+  printf '%s entries=%s sha256=%s joint-body-sha256=%s\n' \
+    'C2 OPERATIONAL JOINT EXPLICIT-SOURCE MANIFEST PASS:' \
+    "$(wc -l <"${tmp}/joint-explicit-source-manifest.sha256")" \
+    "${manifest_sha}" "${body_sha}"
 }
 
 run_runtime() {

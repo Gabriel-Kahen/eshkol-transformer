@@ -6,6 +6,8 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.c2.c2_operational_source_manifest import closure
+
 ROOT = Path(__file__).resolve().parents[2]
 MULTI = ROOT / "tests/c2/c2_checkpoint_operational_runtime.esk"
 JOINT = ROOT / "tests/c2/c2_checkpoint_operational_joint_runtime.esk"
@@ -59,6 +61,26 @@ class OperationalJointSplitTests(unittest.TestCase):
             self.assertEqual(source.count(BODY_LOAD), 1)
         self.assertNotIn(ROOT_LOAD, self.body)
         self.assertNotIn(BODY_LOAD, self.body)
+
+        roots = tuple(
+            ROOT / path
+            for path in (
+                "internal/p1/lib",
+                "internal/c1/lib",
+                "internal/t2/lib",
+                "internal/t1/lib",
+                "internal/d2/lib",
+                "tests/c2",
+                "src",
+                "lib",
+                "native",
+            )
+        )
+        multi_closure = closure(MULTI, roots) - {MULTI.resolve()}
+        joint_closure = closure(JOINT, roots) - {JOINT.resolve()}
+        self.assertEqual(multi_closure, joint_closure)
+        self.assertIn(BODY.resolve(), joint_closure)
+        self.assertIn((ROOT / "native/c2_wave2_root.esk").resolve(), joint_closure)
 
     def test_joint_entry_runs_only_the_shared_joint_body(self) -> None:
         self.assertEqual(self.joint.count("(run-joint-mode)"), 1)
