@@ -16,6 +16,13 @@ runtime_build="${runtime_root}/build"
 runner="${runtime_root}/$(tsv_value "${manifest}" runner_relative_path)"
 archive="${runtime_root}/$(tsv_value "${manifest}" runtime_archive_relative_path)"
 image="$(tsv_value "${manifest}" container_image)"
+optimization_level="${TR3_JOINT_OPTIMIZATION_LEVEL:-0}"
+case "${optimization_level}" in
+  0) compiler_timeout="$(tsv_value "${manifest}" o0_compile_timeout_seconds)" ;;
+  2) compiler_timeout="$(tsv_value "${manifest}" o2_compile_timeout_seconds)" ;;
+  *) die "joint restore optimization level must be 0 or 2" ;;
+esac
+[[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || die "invalid compiler timeout"
 
 [[ -x "${runner}" && -r "${archive}" ]] || \
   die "pinned production-OFF runtime is unavailable"
@@ -71,6 +78,8 @@ docker run --rm --network none \
   -v "${runtime_build}:/runtime-build:ro" \
   -v "${evidence}:/out" \
   -e "TR3_PROBES=${TR3_JOINT_ALLOCATION_PROBES:-}" \
+  -e "TR3_OPTIMIZATION_LEVEL=${optimization_level}" \
+  -e "TR3_COMPILER_TIMEOUT_SECONDS=${compiler_timeout}" \
   -w /workspace "${image}" bash -lc '
 set -euo pipefail
 mkdir -p /out/native /out/cache /out/cases
@@ -120,8 +129,10 @@ ar rcsD /out/native/libtr3_joint_failure.a /out/native/*.o
 export ESHKOL_JIT_CACHE=0 ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
 export ESHKOL_LIB_DIR=/runtime-build XDG_CACHE_HOME=/out/cache
 /usr/bin/time -v -o /out/compile.time \
-  timeout --foreground --signal=TERM --kill-after=5s 900s \
-  /runtime-build/eshkol-run --strict-types --no-stdlib --optimize 0 \
+  timeout --foreground --signal=TERM --kill-after=5s \
+    "${TR3_COMPILER_TIMEOUT_SECONDS}s" \
+  /runtime-build/eshkol-run --strict-types --no-stdlib \
+    --optimize "${TR3_OPTIMIZATION_LEVEL}" \
     --emit-object --emit-depfile /out/joint-failure.d \
     -I native -I internal/p1/lib -I internal/c1/lib \
     -I internal/t2/lib -I internal/t1/lib -I internal/d2/lib \
@@ -253,7 +264,8 @@ set -e
     "$(tsv_value "${manifest}" runtime_archive_sha256)"
   printf 'runner_role\t%s\n' "$(tsv_value "${manifest}" runner_role)"
   printf 'container_digest\t%s\n' "$(tsv_value "${manifest}" container_digest)"
-  printf 'optimization_level\t0\n'
+  printf 'optimization_level\t%s\n' "${optimization_level}"
+  printf 'compiler_timeout_seconds\t%s\n' "${compiler_timeout}"
   printf 'allocation_probes\t%s\n' "${TR3_JOINT_ALLOCATION_PROBES:-full-prefix}"
   printf 'container_status\t%s\n' "${container_status}"
   for input in "${evidence}"/inputs/*; do
@@ -276,7 +288,14 @@ if (( container_status != 0 )); then
   exit "${container_status}"
 fi
 
-test ! -s "${evidence}/compile.stderr"
+if [[ "${optimization_level}" == 0 ]]; then
+  test ! -s "${evidence}/compile.stderr"
+else
+  [[ "$(wc -c <"${evidence}/compile.stderr")" == \
+     "$(tsv_value "${manifest}" o2_compile_stderr_bytes)" ]]
+  [[ "$(sha256sum "${evidence}/compile.stderr" | awk '{print $1}')" == \
+     "$(tsv_value "${manifest}" o2_compile_stderr_sha256)" ]]
+fi
 test ! -s "${evidence}/shim-compile.stderr"
 test ! -s "${evidence}/link.stderr"
 if rg -n 'fatal signal|TR3 joint allocation shim FAIL|TR3-C JOINT RUNTIME FAIL' \

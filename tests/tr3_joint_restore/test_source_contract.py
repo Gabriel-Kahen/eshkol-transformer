@@ -305,7 +305,11 @@ class JointRestoreContract(unittest.TestCase):
         for required in (
             "failure_runtime_candidate.tsv",
             "allocation_prefix_production_off",
-            "--strict-types --no-stdlib --optimize 0",
+            'optimization_level="${TR3_JOINT_OPTIMIZATION_LEVEL:-0}"',
+            '0) compiler_timeout="$(tsv_value "${manifest}" o0_compile_timeout_seconds)"',
+            '2) compiler_timeout="$(tsv_value "${manifest}" o2_compile_timeout_seconds)"',
+            '--optimize "${TR3_OPTIMIZATION_LEVEL}"',
+            "o2_compile_stderr_sha256",
             "--emit-object",
             "8192",
             "PROCESS-FAIL",
