@@ -17,11 +17,13 @@
       (vector-set! e3-diagnostic-test-retention-root 1 envelope-bytes)
       envelope-bytes)))
 
-;;; Run before any installed-caller horizon begins. The unreachable calibration
-;;; vector is therefore excluded from every reported horizon delta.
-(e3-diagnostic-test-calibrate-envelope!)
-
 (define (e3-diagnostic-test-retention-stats)
+  ;; Composite shared-library initialization retains definitions but does not run
+  ;; a standalone source expression. Calibrate lazily at the first stats read and
+  ;; report the exact one-time bytes so the caller can remove them from its outer
+  ;; horizon remainder.
+  (if (= (vector-ref e3-diagnostic-test-retention-root 1) 0)
+      (e3-diagnostic-test-calibrate-envelope!))
   (let ((stats (e3-diagnostic-report-stats-internal)))
     (if (or (not (= (vector-length stats) 5))
             (<= (vector-ref e3-diagnostic-test-retention-root 1) 0))

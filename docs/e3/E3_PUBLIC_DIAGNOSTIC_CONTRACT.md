@@ -77,9 +77,11 @@ The source-private gate attributes global-arena retention at explicit allocation
 boundaries. It measures the complete promoted report/staging graph at the root
 publication barrier, then measures inherited transaction retention from immediately
 after that reservation through completed unbind, destination destruction and
-publish/abandon. A package-initialization calibration promotes one isolated
+publish/abandon. The first source-private stats read lazily promotes one isolated
 three-slot vector whose referents already have root lifetime; that is the exact
-staging-envelope object size and is excluded from every horizon delta. Therefore a
+staging-envelope object size. Its one-time bytes remain in the raw outer horizon
+delta and are reported separately, then excluded from the caller-witness remainder.
+Therefore a
 successful reservation attributes the promoted graph minus one envelope to reachable
 report authority and one envelope to unreachable staging. A failed reservation
 publishes no authority, so its complete abandoned promoted graph is unreachable
@@ -119,6 +121,6 @@ EOS rejection, canonical cursor restoration, foreign/non-symbol/wrong-family key
 1,024/8,192 successful reports, 1,024/8,192 failed reservations, and the rejected
 8,193rd success. The retention report records the total delta, reachable authority,
 unreachable staging, inherited transaction bucket, caller-witness remainder, complete
-promoted graph, and calibrated envelope bytes. The instrumentation exposes no new
-installed operation and retains only immediate counters plus one cleared calibration
-slot.
+promoted graph, calibrated envelope bytes, and the explicit one-time calibration
+bytes. The instrumentation exposes no new installed operation and retains only
+immediate counters plus one cleared calibration slot.

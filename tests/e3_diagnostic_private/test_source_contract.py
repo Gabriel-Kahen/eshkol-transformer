@@ -121,9 +121,17 @@ class DiagnosticSourceContract(unittest.TestCase):
             :calibration.index("(define (e3-diagnostic-test-retention-stats")
         ]
         self.assertIn("(vector e3-diagnostic-report-tag #f '())", calibration)
-        self.assertIn("(e3-diagnostic-test-calibrate-envelope!)", calibration)
         self.assertIn("(vector-set! e3-diagnostic-test-retention-root 0 #f)",
                       calibration)
+        stats = driver[
+            driver.index("(define (e3-diagnostic-test-retention-stats") :
+        ]
+        stats = stats[:stats.index("(define (e3-diagnostic-test-expect-error")]
+        self.assertIn(
+            "(if (= (vector-ref e3-diagnostic-test-retention-root 1) 0)",
+            stats,
+        )
+        self.assertIn("(e3-diagnostic-test-calibrate-envelope!)", stats)
 
         runtime = (ROOT / "tests/e3_diagnostic_private/runtime.esk").read_text()
         for field in (
@@ -133,14 +141,17 @@ class DiagnosticSourceContract(unittest.TestCase):
             "witness_other_bytes=",
             "reserve_promoted_bytes=",
             "envelope_bytes_per_call=",
+            "calibration_bytes=",
         ):
             self.assertIn(field, runtime)
         self.assertIn("(if failure? last-promoted", runtime)
         self.assertIn("(* envelope-bytes last-reservations)", runtime)
+        self.assertIn("(- arena-delta attributed calibration-bytes)", runtime)
 
         script = (ROOT / "scripts/test-e3-diagnostic-private-runtime.sh").read_text()
         self.assertIn("reachable_authority_bytes\\tunreachable_staging_bytes", script)
         self.assertIn("inherited_transaction_bytes\\twitness_other_bytes", script)
+        self.assertIn("envelope_bytes_per_call\\tcalibration_bytes", script)
 
     def test_mode_enrollment_uses_only_the_active_chain(self) -> None:
         source = (ROOT / "internal/p1/lib/transformer/module.esk").read_text()
