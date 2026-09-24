@@ -1472,7 +1472,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   for privileged in \
       et_e3_private_frame_create_v1 et_e3_private_acquire_v1 \
       et_e3_private_stage_inputs_v1 et_e3_private_forward_role_v1 \
-      et_e3_private_publish_v1 et_e3_d2_dataset_idle_preflight_v1 \
+      et_e3_private_publish_v1 \
+      et_e3_private_selected_metric_bits_ref_v1 \
+      et_e3_d2_dataset_idle_preflight_v1 \
       et_l3s_kernel_provider_v1 \
       et_e3_metrics_kernel_provider_v1 \
       et_e3_private_test_run_cabi_v1 \
