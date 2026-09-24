@@ -36,7 +36,8 @@ def check():
     require(source.count(symbol) == 1 and header.count(symbol) == 1,
             "source-private token-forward boundary changed")
     start = source.index(f"int64_t {symbol}")
-    end = source.index("\n#endif", start)
+    future = source.find("\n#ifdef ET_G3C4_PREFILL3_PRIVATE", start)
+    end = future if future >= 0 else source.index("\n#endif", start)
     body = source[start:end]
 
     ordered(source[source.index("int64_t et_g3c4_private_token_frame_begin_v1"):start], [
