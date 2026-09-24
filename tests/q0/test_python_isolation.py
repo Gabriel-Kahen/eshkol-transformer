@@ -17,6 +17,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-i2-prepared-route.py",
         "check-g3c4-last-logit-frame.py",
         "check-g3c4-model-authority.py",
+        "check-g3c4-output-reservation.py",
         "check-g3c4-provider-routes.py",
         "check-g3c4-prefill1.py",
         "check-g3c4-prefill2.py",

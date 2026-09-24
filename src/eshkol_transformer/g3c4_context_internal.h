@@ -111,6 +111,15 @@ int64_t et_g3c4_private_prompt_prefill_v1(
     void *context, void *input, float last_logits[256]);
 #endif
 
+#ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
+/* Reserves the exact native G0/G1 output payload during an active generation
+ * call, before bound prefill. No numeric result or text is published. */
+void *et_g3c4_private_output_reserve_v1(
+    void *context, int64_t prompt_length);
+/* Releases a pending reservation. Exact dead release is idempotent. */
+int64_t et_g3c4_private_output_release_v1(void *output);
+#endif
+
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
 /* Samples directly from one exact [1,256] row, then opens the accepted pending
  * one-token frame. No fabricated full-prefix carrier is constructed. */
