@@ -32,7 +32,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
   tests.tr3_lease.test_restore_successor_contract \
   tests.tr3_lease.test_snapshot_authority_contract
 
-evidence="${TR3_SNAPSHOT_LEASE_EVIDENCE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/tr3-snapshot-lease.XXXXXX")}" 
+evidence="${TR3_SNAPSHOT_LEASE_EVIDENCE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/tr3-snapshot-lease.XXXXXX")}"
 mkdir -p -- "${evidence}"
 evidence="$(readlink -f -- "${evidence}")"
 [[ "${evidence}" != "${PROJECT_ROOT}" && "${evidence}" != "${PROJECT_ROOT}/"* ]] || \
