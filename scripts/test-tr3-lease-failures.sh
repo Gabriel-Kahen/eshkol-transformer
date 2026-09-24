@@ -80,7 +80,7 @@ production_base=${production_base:-${expected_production_base}}
 [[ "$(git -C "${PROJECT_ROOT}" rev-parse "${production_base}^{tree}")" == \
    "${expected_production_tree}" ]] || \
   die "reviewed production tree identity changed"
-expected_runner_self_sha256=3fb59d5ce97b10ef632f9c03fa4be5970cd3c8bcd5184a3418458963d7fad97c
+expected_runner_self_sha256=b7e5820df532a16573169b1f5e9cff4ef694e60b89ace43b23b91089456a17e5
 runner_self_sha256="$(sed \
   's/^expected_runner_self_sha256=.*/expected_runner_self_sha256=__SELF__/' \
   "${PROJECT_ROOT}/scripts/test-tr3-lease-failures.sh" | \
@@ -110,11 +110,12 @@ if [[ "${allocation_class}" == all ]]; then
     die "lease checkout does not descend from the reviewed witness"
   git -C "${PROJECT_ROOT}" diff --quiet "${expected_witness_commit}" -- \
     include internal lib native src templates tests/d2 \
-    tests/tr3_lease_failure || \
+    tests/tr3_lease_failure/lease_failure_runtime.esk \
+    tests/tr3_lease_failure/lease_failure_shim.cpp || \
     die "reviewed lease source or witness changed"
   while IFS= read -r changed; do
     case "${changed}" in
-      docs/*|scripts/test-tr3-lease-failures.sh|tests/tr3_lease/test_source_contract.py) ;;
+      docs/*|scripts/test-tr3-lease-failures.sh|tests/tr3_lease/test_source_contract.py|tests/tr3_lease_failure/README.md) ;;
       *) die "unreviewed checkout change: ${changed}" ;;
     esac
   done < <(git -C "${PROJECT_ROOT}" diff --name-only \
