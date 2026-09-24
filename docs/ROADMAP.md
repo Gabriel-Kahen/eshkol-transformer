@@ -309,10 +309,19 @@ DOUBLE result, with malformed/folded native rejects and non-F32 controls.
 Supported f31 focused Release and ASan+UBSan+LSan gates pass 6/6 each;
 `first_class_variadics_vm_smoke` passes in Release. Root verified
 `f32-unary-routes-be721d90-20260924/SHA256SUMS` (`fb2edd52...`).
-Public VM unary min/max still leak through generic CALL arity handling, and
-an unchanged VM compiler signed-shift UBSan finding blocks the broader
-sanitized variadic gate. Both are separate follow-ups; the leaf remains
-isolated pending successor-union composition and is not gap-5 acceptance.
+The reviewed unary leaf is composed onto the provisional F32 successor as
+`1240e906`/tree `4a58de1`. The first composed test run found three DOUBLE
+baseline controls supplying 2.5 while expecting unary results for 2.0; the
+narrow correction changes only those selectors, not production code. Root
+verified `f32-unary-union-1240e906-final-20260924/SHA256SUMS`
+(`0156a261...`) and pinned f31 Release and ASan+UBSan+LSan: direct VM C API
+916/916, standalone source 80/80 and focused AOT/JIT/VM 6/6 in both modes.
+Build-time AOT generation initially exposed pre-existing frontend AST leaks;
+final test execution used leak detection with the repository's scoped
+suppression file and produced no sanitizer finding. Public VM unary min/max
+still leak through generic CALL arity handling, and the known VM compiler
+signed-shift repair remains a separate reviewed leaf. This composition is
+not gap-5 or whole-F32 acceptance and does not change the transformer pin.
 The separate reviewed VM closure arity leaf `e496bec5`/tree `c7bf4c1`
 rejects too-few and too-many fixed calls and calls below a variadic minimum
 at CALL, TAIL_CALL and the native callback bridge. VM prelude `min` and `max`
@@ -322,8 +331,8 @@ reject instead of returning their F32 or DOUBLE seed. Root verified
 and selected pinned f31 Release 8/8 and ASan+UBSan+LSan 2/2 evidence. Old
 ESKB variadic metadata and unknown synthetic closures remain permissive;
 the switch fallback compiles but was not dynamically tested on the supported
-Clang dispatch. This leaf is isolated pending successor-union composition,
-not whole-F32 acceptance.
+Clang dispatch. This leaf is being composed onto the unary successor union;
+no whole-F32 acceptance is claimed.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
