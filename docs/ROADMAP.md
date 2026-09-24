@@ -68,6 +68,15 @@ The accepted contract now makes versioned pointer-taking
 `eshkol_type_of_ref_v1` authoritative for full-carrier canonicality and records
 the legacy wrapper's padding-only limitation. The upstream implementation and
 supported parity gates remain pending.
+A sealed first-pass successor classifier audit on exact `d960add` indexes
+4,628 source sites across 227 files and semantically reviews 36 F32-reachable
+sites; `f32-successor-classifier-audit-d960add-20260924/SHA256SUMS`
+(`80255c0f...`) has a reproducible source-hash verifier. It found a sanitizer-
+reproduced P0 16-byte tagged-cons copy defect, native/VM `type-of` mismatch,
+and AOT/VM `conjugate` mismatch; VM hash, native/VM `region-open`, and VM scalar
+activation gaps also remain. The tagged-cons repair is active in isolation.
+The raw inventory is not an exhaustive semantic classification, so it cannot
+support full F32 acceptance.
 
 ## Wave 0 — contracts and verification foundation
 
