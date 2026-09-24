@@ -130,9 +130,15 @@ static void rng_lifetime(void) {
   CHECK(et_g3c4_private_rng_clone_v1(rng) == NULL);
   expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
                ET_G3C4_CODE_INVARIANT);
+  CHECK(et_g3c4_private_generator_close_v1(rng) != 0);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
   rng->transport.magic ^= UINT64_C(1);
   rng->transport.busy = 1u;
   CHECK(et_g3c4_private_rng_clone_v1(rng) == NULL);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
+  CHECK(et_g3c4_private_generator_close_v1(rng) != 0);
   expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
                ET_G3C4_CODE_INVARIANT);
   rng->transport.busy = 0u;
@@ -191,10 +197,16 @@ static void policy_and_construction(
     {2, INT64_C(0x3f800000), 256, INT64_C(0x3f800000), 1, -1},
     {0, 0, 256, INT64_C(0x3f800000), 1, -1},
     {0, INT64_C(0x7f800000), 256, INT64_C(0x3f800000), 1, -1},
+    {1, INT64_C(0x80000001), 1, INT64_C(0x3f000000), 1, -1},
+    {1, INT64_C(0x7fc00000), 1, INT64_C(0x3f000000), 1, -1},
+    {1, INT64_C(0x100000000), 1, INT64_C(0x3f000000), 1, -1},
     {0, INT64_C(0x3f800000), 255, INT64_C(0x3f800000), 1, -1},
     {1, INT64_C(0x3f800000), 0, INT64_C(0x3f800000), 1, -1},
     {1, INT64_C(0x3f800000), 257, INT64_C(0x3f800000), 1, -1},
     {1, INT64_C(0x3f800000), 1, 0, 1, -1},
+    {1, INT64_C(0x3f800000), 1, INT64_C(0x80000001), 1, -1},
+    {1, INT64_C(0x3f800000), 1, INT64_C(0x7fc00000), 1, -1},
+    {1, INT64_C(0x3f800000), 1, INT64_C(0x100000000), 1, -1},
     {1, INT64_C(0x3f800000), 1, INT64_C(0x3f800001), 1, -1},
     {1, INT64_C(0x3f800000), 1, INT64_C(0x3f000000), -1, -1},
     {1, INT64_C(0x3f800000), 1, INT64_C(0x3f000000), 2, -1},
@@ -214,6 +226,18 @@ static void policy_and_construction(
             INT64_C(0x3f800000), 1, -1) == NULL);
   expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INVALID_ARGUMENT,
                ET_G3C4_CODE_SELECTOR);
+
+  et_g3c4_context_internal *boundary = seed_generator(owner, 0);
+  OK(et_g3c4_private_generator_close_v1(boundary));
+  boundary = seed_generator(owner, INT64_MAX);
+  OK(et_g3c4_private_generator_close_v1(boundary));
+  boundary = (et_g3c4_context_internal *)et_g3c4_private_generator_seed_v1(
+      owner, 0, 1, 1, 256, 1, 1, 0);
+  CHECK(boundary != NULL);
+  CHECK(boundary->generator_policy[1] == 1);
+  CHECK(boundary->generator_policy[3] == 1);
+  CHECK(boundary->generator_policy[5] == 0);
+  OK(et_g3c4_private_generator_close_v1(boundary));
 
   const size_t contexts = transport_count(ET_G3C4_CONTEXT_KIND);
   const size_t caches = et_g3c4_generator_test_a2_cache_count();
@@ -276,6 +300,14 @@ static void type_boundaries(et_g3c4_model_owner_internal *owner) {
       (et_g3c4_context_internal *)et_g3c4_private_context_create_v1(owner);
   CHECK(base != NULL);
   CHECK(base->generator_kind == 0u && base->generator_ready == 0u);
+  base->generator_kind = 2u;
+  CHECK(et_g3c4_private_context_close_v1(base) != 0);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
+  CHECK(et_g3c4_private_rng_clone_v1(base) == NULL);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
+  base->generator_kind = 0u;
   CHECK(et_g3c4_private_generator_close_v1(base) != 0);
   expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INVALID_ARGUMENT,
                ET_G3C4_CODE_IDENTITY);
@@ -291,6 +323,14 @@ static void type_boundaries(et_g3c4_model_owner_internal *owner) {
                ET_G3C4_CODE_IDENTITY);
 
   et_g3c4_context_internal *generator = seed_generator(owner, 3);
+  generator->generator_kind = 2u;
+  CHECK(et_g3c4_private_context_close_v1(generator) != 0);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
+  CHECK(et_g3c4_private_generator_close_v1(generator) != 0);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
+  generator->generator_kind = 1u;
   CHECK(et_g3c4_private_context_close_v1(generator) != 0);
   expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INVALID_ARGUMENT,
                ET_G3C4_CODE_IDENTITY);
@@ -334,6 +374,9 @@ static void close_retry_and_scrub(et_g3c4_model_owner_internal *owner) {
   et_g3c4_context_internal *context = seed_generator(owner, 11);
   context->transport.magic ^= UINT64_C(1);
   CHECK(et_g3c4_private_generator_close_v1(context) != 0);
+  expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
+               ET_G3C4_CODE_INVARIANT);
+  CHECK(et_g3c4_private_rng_clone_v1(context) == NULL);
   expect_error(ET_G3C4_DOMAIN_C4, ET_G3C4_INTERNAL,
                ET_G3C4_CODE_INVARIANT);
   context->transport.magic ^= UINT64_C(1);

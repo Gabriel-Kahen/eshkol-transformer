@@ -104,13 +104,43 @@ def check():
     ]:
         require(phrase in test, f"focused native test omits {phrase}")
 
-    expected = [
-        line for line in (ROOT / "native/g3c4_generator_source_closure.txt")
-        .read_text().splitlines() if line
+    expected = (ROOT / "native/g3c4_active_call_source_closure.txt"
+                ).read_text().splitlines() + [
+        "native/g3c4_active_call_source_closure.txt",
+        "native/g3c4_context_source_closure.txt",
+        "native/g3c4_model_source_closure.txt",
+        "native/g3c4_generator_owner_deps.txt",
+        "tests/g3c4/test_generator_native.c",
+        "tests/g3c4/test_model_owner.c",
+        "tests/m3cg/test_pins.c",
+        "scripts/check-g3c4-generator.py",
+        "scripts/check-g3c4-model-authority.py",
+        "scripts/check-g3c4-i2-prepared-route.py",
+        "scripts/test-g3c4-generator.sh",
+        "scripts/test-g3c4-native-owner.sh",
+        "scripts/common.sh",
+        "docs/g3/G3_C4_CALL_ENTRY_STEP6_CONTRACT.md",
     ]
-    require(len(expected) == len(set(expected)), "source closure has duplicates")
-    for path in expected:
+    actual = (ROOT / "native/g3c4_generator_source_closure.txt"
+              ).read_text().splitlines()
+    require(actual == expected, "native generator source closure changed")
+    require(len(actual) == len(set(actual)), "source closure has duplicates")
+    for path in actual:
         require((ROOT / path).is_file(), f"closure path is missing: {path}")
+    depfile = (ROOT / "native/g3c4_generator_owner_deps.txt").read_text()
+    for path in [
+        "src/eshkol_transformer/g3c4_model_owner.c",
+        "src/eshkol_transformer/g3c4_model_owner_internal.h",
+        "native/f32_parameter_internal.h",
+        "src/eshkol_transformer/g3c4_context_internal.h",
+        "include/eshkol_transformer/a2_kv_cache.h",
+        "src/eshkol_transformer/m3_call_pins.h",
+    ]:
+        require(path in depfile or path.replace(
+                    "native/f32_parameter_internal.h",
+                    "src/eshkol_transformer/../../native/f32_parameter_internal.h")
+                in depfile,
+                f"owner depfile omits {path}")
 
 
 if __name__ == "__main__":

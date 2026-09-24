@@ -804,6 +804,39 @@ static et_g3c4_context_internal *et_g3c4_context_registry;
 #define ET_G3C4_CONTEXT_BUSY(context) ((context)->busy)
 #endif
 
+#ifdef ET_G3C4_GENERATOR_PRIVATE
+static int et_g3c4_valid_generator_policy(
+    int64_t mode, int64_t temperature_bits, int64_t k,
+    int64_t p_bits, int64_t max_new, int64_t eos);
+
+static int et_g3c4_zero_i64_words(const int64_t *words, size_t count) {
+  size_t index;
+  for (index = 0u; index < count; index++)
+    if (words[index] != 0) return 0;
+  return 1;
+}
+
+static int et_g3c4_context_subtype_valid(
+    const et_g3c4_context_internal *context) {
+  if (context->generator_kind == 0u)
+    return context->generator_ready == 0u &&
+           et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
+           et_g3c4_zero_i64_words(context->generator_rng_words, 4u);
+  if (context->generator_kind != 1u) return 0;
+  if (ET_G3C4_CONTEXT_STATE(context) == ET_G3C4_CONTEXT_DEAD)
+    return context->generator_ready == 0u &&
+           et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
+           et_g3c4_zero_i64_words(context->generator_rng_words, 4u);
+  return context->generator_ready == 1u &&
+         et_g3c4_valid_generator_policy(
+             context->generator_policy[0], context->generator_policy[1],
+             context->generator_policy[2], context->generator_policy[3],
+             context->generator_policy[4], context->generator_policy[5]) &&
+         context->generator_rng_words[0] == 1 &&
+         context->generator_rng_words[1] >= 0;
+}
+#endif
+
 #ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
 static int et_g3c4_pins_idle(
     const et_g3c4_model_pins_internal *pins);
@@ -832,6 +865,20 @@ static et_g3c4_context_internal *et_g3c4_admit_context(
     return NULL;
   }
   if (header->kind == ET_G3C4_RNG_KIND) {
+    const et_g3c4_rng_internal *rng =
+        (const et_g3c4_rng_internal *)header;
+    int payload_valid =
+        header->state == ET_G3C4_CONTEXT_LIVE
+            ? rng->words[0] == 1 && rng->words[1] >= 0
+            : rng->words[0] == 0 && rng->words[1] == 0 &&
+              rng->words[2] == 0 && rng->words[3] == 0;
+    if (header->magic != ET_G3C4_RNG_MAGIC ||
+        (header->state != ET_G3C4_CONTEXT_LIVE &&
+         header->state != ET_G3C4_CONTEXT_DEAD) ||
+        header->busy != 0u || !payload_valid) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
@@ -841,6 +888,11 @@ static et_g3c4_context_internal *et_g3c4_admit_context(
       (header->state != ET_G3C4_CONTEXT_LIVE &&
        header->state != ET_G3C4_CONTEXT_DEAD) ||
       header->busy > ET_G3C4_CALL_ACTIVE) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (!et_g3c4_context_subtype_valid(
+          (const et_g3c4_context_internal *)header)) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return NULL;
   }
@@ -906,6 +958,15 @@ static et_g3c4_rng_internal *et_g3c4_admit_rng(
     return NULL;
   }
   if (header->kind == ET_G3C4_CONTEXT_KIND) {
+    if (header->magic != ET_G3C4_CONTEXT_MAGIC ||
+        (header->state != ET_G3C4_CONTEXT_LIVE &&
+         header->state != ET_G3C4_CONTEXT_DEAD) ||
+        header->busy > ET_G3C4_CALL_ACTIVE ||
+        !et_g3c4_context_subtype_valid(
+            (const et_g3c4_context_internal *)header)) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
@@ -1010,12 +1071,6 @@ int64_t et_g3c4_private_context_close_v1(void *candidate) {
   if (context->generator_kind != 0u)
     return et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
-  if (context->generator_ready != 0u ||
-      memcmp(context->generator_policy, (int64_t[6]){0},
-             sizeof(context->generator_policy)) != 0 ||
-      memcmp(context->generator_rng_words, (int64_t[4]){0},
-             sizeof(context->generator_rng_words)) != 0)
-    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
 #endif
   if (ET_G3C4_CONTEXT_STATE(context) == ET_G3C4_CONTEXT_DEAD) {
 #ifdef ET_G3C4_ACTIVE_CALL_PRIVATE
@@ -1075,13 +1130,6 @@ static int et_g3c4_valid_generator_policy(
       (temperature_bits != INT64_C(0x3f800000) || k != 256 ||
        p_bits != INT64_C(0x3f800000)))
     return 0;
-  return 1;
-}
-
-static int et_g3c4_zero_i64_words(const int64_t *words, size_t count) {
-  size_t index;
-  for (index = 0u; index < count; index++)
-    if (words[index] != 0) return 0;
   return 1;
 }
 

@@ -45,12 +45,20 @@ generator_macros=(
   -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE
 )
 "${generator_cc}" "${flags[@]}" -O2 "${generator_macros[@]}" -c \
+  -MMD -MF "${evidence}/generator-owner.d" -MT generator-owner.o \
   "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
   -o "${evidence}/generator-owner.o"
+sed "s#${PROJECT_ROOT}/##g" "${evidence}/generator-owner.d" \
+  >"${evidence}/generator-owner-normalized.d"
+cmp "${PROJECT_ROOT}/native/g3c4_generator_owner_deps.txt" \
+  "${evidence}/generator-owner-normalized.d"
 for object in current-active generator-owner; do
   nm -g --defined-only --format=posix "${evidence}/${object}.o" |
     awk 'NF >= 2 { print $1 }' | LC_ALL=C sort -u \
     >"${evidence}/${object}-defined.txt"
+  nm -u --format=posix "${evidence}/${object}.o" |
+    awk 'NF >= 1 { print $1 }' | LC_ALL=C sort -u \
+    >"${evidence}/${object}-undefined.txt"
 done
 comm -13 "${evidence}/current-active-defined.txt" \
   "${evidence}/generator-owner-defined.txt" >"${evidence}/added-defined.txt"
@@ -59,15 +67,25 @@ printf '%s\n' et_g3c4_private_generator_close_v1 \
   et_g3c4_private_rng_clone_v1 et_g3c4_private_rng_release_v1 \
   et_g3c4_private_rng_seed_v1 et_g3c4_private_rng_word_v1 |
   LC_ALL=C sort | cmp - "${evidence}/added-defined.txt"
+comm -13 "${evidence}/current-active-undefined.txt" \
+  "${evidence}/generator-owner-undefined.txt" \
+  >"${evidence}/added-undefined.txt"
+test ! -s "${evidence}/added-undefined.txt"
 
-invalid_names=(generator_only generator_context generator_pins generator_active)
+invalid_names=(
+  generator_only generator_context generator_pins generator_active
+  generator_context_pins generator_context_active generator_pins_active
+)
 invalid_flags=(
   '-DET_G3C4_GENERATOR_PRIVATE'
   '-DET_G3C4_GENERATOR_PRIVATE -DET_G3C4_CONTEXT_PRIVATE'
   '-DET_G3C4_GENERATOR_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE'
   '-DET_G3C4_GENERATOR_PRIVATE -DET_G3C4_ACTIVE_CALL_PRIVATE'
+  '-DET_G3C4_GENERATOR_PRIVATE -DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE'
+  '-DET_G3C4_GENERATOR_PRIVATE -DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_ACTIVE_CALL_PRIVATE'
+  '-DET_G3C4_GENERATOR_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE -DET_G3C4_ACTIVE_CALL_PRIVATE'
 )
-for index in 0 1 2 3; do
+for index in 0 1 2 3 4 5 6; do
   read -r -a tuple_flags <<<"${invalid_flags[index]}"
   if "${generator_cc}" "${flags[@]}" -O2 "${tuple_flags[@]}" -c \
       "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
