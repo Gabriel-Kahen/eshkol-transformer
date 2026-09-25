@@ -1,3 +1,4 @@
 (require transformer.public)
-(provide trainer-create trainer-step! trainer-stop-policy trainer-train! trainer-evaluate!
+(provide trainer-create trainer-release! trainer-step! trainer-stop-policy
+         trainer-train! trainer-evaluate!
          trainer-state trainer-load-state! trainer-state-release! metrics-ref)

@@ -534,9 +534,13 @@ call with X1/T2/D2/M3T/P1/O2 producers in one
 non-installed linked package. Its exact `3b0f38d` f31/LLVM21 gate passed with
 47 Eshkol sources, 30 native objects, 18 candidate exports, 173 undefined
 runtime symbols, and a poisoned genuine caller; the `SHA256SUMS` seal is
-`1b12fc91...`. The strong trainer registry does not yet satisfy A0's
-unreachable-lifetime lease rule; public `trainer-create` remains blocked on an
-accepted lifetime mechanism or an explicit release-contract revision.
+`1b12fc91...`. A0 now specifies explicit idle `trainer-release!` as the lease
+end: dropping a trainer reference alone does not release, and all five
+receivers remain caller-owned and live. A separate non-installed
+same-aggregate [release candidate](TR3_PUBLIC_RELEASE_CANDIDATE.md) is being
+checked for exact-shell release, busy/forged/repeated errors, re-lease, and
+public E1 operation mapping. Public
+facade installation and broader trainer acceptance remain pending.
 
 The private G3-C4 ordinal-10 A2 candidate transaction is integrated from
 `4f3f5e1` and the handle-pair correction `6e00c29` as `6d36e1b` and

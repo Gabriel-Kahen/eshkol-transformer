@@ -39,7 +39,7 @@
          diagnostic-model-logits-bits diagnostic-model-logits-release!
          optimizer-create optimizer-step! optimizer-zero-grad! optimizer-state
          optimizer-load-state! optimizer-state-release!
-         trainer-create trainer-step! trainer-stop-policy trainer-train!
+         trainer-create trainer-release! trainer-step! trainer-stop-policy trainer-train!
          trainer-evaluate!
          trainer-state trainer-load-state! trainer-state-release! metrics-ref
          generator-create generator-prefill! generator-decode-step!
@@ -160,6 +160,7 @@
 
 (define (trainer-create resolved tokenizer dataset model optimizer)
   (a0-declaration-only 'trainer-create))
+(define (trainer-release! trainer) (a0-declaration-only 'trainer-release!))
 (define (trainer-step! trainer) (a0-declaration-only 'trainer-step!))
 (define (trainer-stop-policy max-tokens max-updates max-epochs)
   (a0-declaration-only 'trainer-stop-policy))
