@@ -24,3 +24,13 @@ They cover both manual call kinds with G0 and exhausted G1 configurations,
 duplicate/wrong-kind/stale admission, typed release, borrowed release/abort,
 and header plus I2 allocation cuts. No Eshkol
 shell, numerical schedule, public facade/package, N>1 route, or CLI is added.
+
+The pinned f31/LLVM21 network-none aggregate on source commit `983e424`
+passed normal, repeat, and ASan+UBSan+LSan with byte-identical 46,777 checks,
+empty stderr, fifteen source contracts, Q0 4/4, and production-object symbol
+exclusion of all testing hooks. One sanitizer launch used `detect_leaks=1`.
+External evidence is `/tmp/g3t-manual-logits-983e424-sealed/SEAL.sha256`
+(SHA256 `378542136c2f6e8205f4c0e853ca1eb84995f3169d3e01a386ebb1e500e2a7a3`).
+The retained first attempt stopped in normal runtime because its testing-only
+borrow hook rejected a pending owner; `983e424` corrected that hook before the
+passing pinned run.
