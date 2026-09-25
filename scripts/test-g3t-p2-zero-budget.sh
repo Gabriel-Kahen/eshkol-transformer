@@ -21,6 +21,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3t-ids-owner.py" >>"$evidence/static.stdou
 python3 "$PROJECT_ROOT/scripts/check-g3t-length-owners.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-text-result.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-full-request-preflight.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3t-manual-logits.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 temporary="$(mktemp -d "$evidence/tmp.XXXXXX")"
@@ -54,11 +55,13 @@ build_mode() {
     stem="$(basename "$source" .c)"
     extra=()
     [[ "$stem" == g3t_transport ]] && extra=(-DET_G3T_TESTING
+      -DET_F32_TENSOR_TESTING
       -DET_A2_KV_CACHE_TESTING -DET_I64_TENSOR_TESTING
       -DET_G3T_PREFILL_SAMPLE_PRIVATE -DET_G3T_OUTPUT_TEXT_PRIVATE
       -DET_G3T_FINAL_PUBLICATION_PRIVATE -DET_G3T_ZERO_BUDGET_PRIVATE
       -DET_G3T_P2_ZERO_BUDGET_PRIVATE
       -DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
+      -DET_G3T_MANUAL_LOGITS_PRIVATE
       -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
@@ -68,6 +71,7 @@ build_mode() {
       -DET_G3T_OWNED_TOKEN_INPUT_PRIVATE
       -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
     [[ "$stem" == m3_i64_integration ]] && extra=(-DET_M3_TESTING -DET_I64_TENSOR_TESTING -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
+    [[ "$stem" == m3_call_f32_integration ]] && extra=(-DET_F32_TENSOR_TESTING)
     [[ "$stem" == a2_kv_cache ]] && extra=(-DET_A2_KV_CACHE_TESTING -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
     "$cc" "${common[@]}" "${flags[@]}" "${extra[@]}" \
       -MMD -MF "$directory/objects/$stem.d" \
@@ -138,6 +142,7 @@ done
   -DET_G3T_FINAL_PUBLICATION_PRIVATE -DET_G3T_ZERO_BUDGET_PRIVATE \
   -DET_G3T_P2_ZERO_BUDGET_PRIVATE \
   -DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE \
+  -DET_G3T_MANUAL_LOGITS_PRIVATE \
   -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE \
   -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE \
   -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE \
@@ -161,6 +166,8 @@ sha256sum "$PROJECT_ROOT/native/g3t_p2_zero_budget_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_length_owners_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_text_result_source_closure.txt" >"$evidence/closure.sha256"
 sha256sum "$PROJECT_ROOT/native/g3t_full_request_preflight_source_closure.txt" \
+  >>"$evidence/closure.sha256"
+sha256sum "$PROJECT_ROOT/native/g3t_manual_logits_source_closure.txt" \
   >>"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"

@@ -30,7 +30,10 @@ int64_t et_g3t_private_prompt_preflight_v1(
 int64_t et_g3t_private_full_request_preflight_v1(
     void *context, void *input);
 #endif
-int64_t et_g3t_private_tensor_release_v1(void *input);
+int64_t et_g3t_private_tensor_release_v1(void *owner);
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+void *et_g3t_private_logits_reserve_v1(void *context);
+#endif
 void *et_g3t_private_output_reserve_v1(void *context, int64_t prompt_length);
 int64_t et_g3t_private_output_release_v1(void *output);
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
@@ -65,6 +68,17 @@ int64_t et_g3t_private_last_error_domain_v1(void);
 int64_t et_g3t_private_last_error_category_v1(void);
 int64_t et_g3t_private_last_error_code_v1(void);
 #ifdef ET_G3T_TESTING
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+int64_t et_g3t_test_logits_state_v1(void *logits);
+int64_t et_g3t_test_logits_shape_v1(void *logits);
+void *et_g3t_test_logits_borrow_begin_v1(void *logits);
+int64_t et_g3t_test_logits_borrow_end_v1(void *borrow);
+int64_t et_g3t_test_pending_logits_v1(void);
+#ifdef ET_F32_TENSOR_TESTING
+int64_t et_g3t_test_fail_f32_after_v1(uint64_t successful_allocations);
+int64_t et_g3t_test_f32_tensors_v1(void);
+#endif
+#endif
 int64_t et_g3t_test_fail_alloc_after_v1(uint64_t successful_allocations);
 int64_t et_g3t_test_fail_a2_after_v1(uint64_t successful_allocations);
 #ifdef ET_I64_TENSOR_TESTING

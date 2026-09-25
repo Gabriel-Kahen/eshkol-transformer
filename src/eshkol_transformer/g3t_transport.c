@@ -75,7 +75,11 @@
 #endif
 #endif
 
-enum { G3T_GENERATOR = 1, G3T_INPUT = 2, G3T_OUTPUT = 4,
+enum { G3T_GENERATOR = 1, G3T_INPUT = 2,
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+       G3T_LOGITS = 3,
+#endif
+       G3T_OUTPUT = 4,
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
        G3T_IDS_CLONE = 5,
 #endif
@@ -126,6 +130,13 @@ typedef struct g3t_input {
 #endif
 } g3t_input;
 struct g3t_context;
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+typedef struct g3t_logits {
+  g3t_record h;
+  struct g3t_context *parent_ctx;
+  et_f32_tensor *tensor;
+} g3t_logits;
+#endif
 typedef struct g3t_output {
   g3t_record h;
   struct g3t_context *parent_ctx;
@@ -167,6 +178,9 @@ typedef struct g3t_context {
   et_a2_kv_cache *cache;
   int64_t policy[6], rng[4];
   et_g3t_model_pins_internal pins;
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+  g3t_logits *pending_logits;
+#endif
   g3t_output *pending_output;
   g3t_frame frame;
   float last_logits[256];
@@ -308,6 +322,18 @@ static g3t_context *g3t_allocate(void) {
 #endif
   return c;
 }
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+static g3t_logits *g3t_logits_allocate(void) {
+#ifdef ET_G3T_TESTING
+  if (g3t_allocations >= g3t_allocation_limit) return NULL;
+#endif
+  g3t_logits *logits = calloc(1, sizeof(*logits));
+#ifdef ET_G3T_TESTING
+  if (logits) ++g3t_allocations;
+#endif
+  return logits;
+}
+#endif
 /* Search by address before reading any candidate bytes. Dead headers remain
  * enrolled, so an old pointer cannot gain authority through address reuse. */
 static g3t_record *g3t_admit_record(void *candidate, int kind, int allow_dead) {
@@ -721,6 +747,9 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
   g3t_record *record = g3t_registry;
   while (record && record != candidate) record = record->next;
   if (!record || (record->kind != G3T_INPUT
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+                  && record->kind != G3T_LOGITS
+#endif
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
                   && record->kind != G3T_IDS_CLONE
 #endif
@@ -732,8 +761,30 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
 #endif
                   )) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
   if (record->state == G3T_DEAD) return 0;
-  if (record->state != G3T_LIVE || record->busy)
+  if ((record->state != G3T_LIVE
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+       && !(record->kind == G3T_LOGITS && record->state == G3T_PENDING)
+#endif
+       ) || record->busy)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+  if (record->kind == G3T_LOGITS) {
+    g3t_logits *logits = (g3t_logits *)record;
+    g3t_context *parent = logits->parent_ctx;
+    if (!logits->tensor ||
+        (record->state == G3T_PENDING &&
+         (!parent || !parent->h.busy || parent->pending_logits != logits ||
+          parent->frame.active)))
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    et_f32_tensor_error error;
+    if (et_f32_tensor_destroy_v1(&logits->tensor, &error))
+      return g3t_f32_failure(&error);
+    if (parent) parent->pending_logits = NULL;
+    logits->parent_ctx = NULL;
+    record->state = G3T_DEAD;
+    return 0;
+  }
+#endif
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
   if (record->kind == G3T_IDS_CLONE) {
     g3t_ids_clone *clone = (g3t_ids_clone *)record;
@@ -786,6 +837,39 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
   record->state = G3T_DEAD;
   return 0;
 }
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+void *et_g3t_private_logits_reserve_v1(void *candidate) {
+  static const uint64_t shape[2] = {1, 256};
+  g3t_clear();
+  g3t_context *c = g3t_active(candidate);
+  if (!c) return NULL;
+  if ((c->call_kind != 0 && c->call_kind != 1) ||
+      c->pending_logits || c->pending_output || c->frame.active) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  g3t_logits *logits = g3t_logits_allocate();
+  if (!logits) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+  et_f32_tensor_error error;
+  if (et_f32_tensor_create_v1(2, shape, &logits->tensor, &error)) {
+    g3t_f32_failure(&error);
+    free(logits);
+    return NULL;
+  }
+  logits->h.kind = G3T_LOGITS;
+  logits->h.state = G3T_PENDING;
+  logits->h.busy = 1;
+  logits->parent_ctx = c;
+  logits->h.next = g3t_registry;
+  g3t_registry = &logits->h;
+  c->pending_logits = logits;
+  logits->h.busy = 0;
+  return logits;
+}
+#endif
 void *et_g3t_private_output_reserve_v1(void *candidate, int64_t prompt_length) {
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
@@ -1775,6 +1859,16 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
             c->pending_output->ids, &i64_error))
       return g3t_i64_failure(&i64_error);
   }
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+  if (c->pending_logits) {
+    et_f32_scoped_guard_internal guard = {0};
+    et_f32_tensor_error f32_error;
+    if (et_f32_tensor_scoped_begin_internal(
+            c->pending_logits->tensor, &guard, &f32_error))
+      return g3t_f32_failure(&f32_error);
+    if (et_f32_tensor_scoped_end_internal(&guard)) abort();
+  }
+#endif
   et_kernel_error kernel_error;
   if (c->frame.transaction && et_a2_kv_cache_transaction_abort_v1(
           &c->frame.transaction, &kernel_error)) abort();
@@ -1794,6 +1888,17 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
     output->h.state = G3T_DEAD;
     c->pending_output = NULL;
   }
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+  if (c->pending_logits) {
+    g3t_logits *logits = c->pending_logits;
+    et_f32_tensor_error f32_error;
+    if (et_f32_tensor_destroy_v1(&logits->tensor, &f32_error)) abort();
+    logits->parent_ctx = NULL;
+    logits->h.busy = 0;
+    logits->h.state = G3T_DEAD;
+    c->pending_logits = NULL;
+  }
+#endif
   c->sampled = 0;
   c->sample_token = 0;
   memset(c->successor_rng, 0, sizeof(c->successor_rng));
@@ -1804,6 +1909,56 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
   return 0;
 }
 #ifdef ET_G3T_TESTING
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+int64_t et_g3t_test_logits_state_v1(void *candidate) {
+  g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+      candidate, G3T_LOGITS, 1);
+  return logits ? logits->h.state : -2;
+}
+int64_t et_g3t_test_logits_shape_v1(void *candidate) {
+  g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+      candidate, G3T_LOGITS, 1);
+  if (!logits || !logits->tensor) return 0;
+  size_t rank = 0;
+  uint64_t first = 0, second = 0;
+  et_f32_tensor_error error;
+  return !et_f32_tensor_rank_v1(logits->tensor, &rank, &error) &&
+         !et_f32_tensor_shape_at_v1(logits->tensor, 0, &first, &error) &&
+         !et_f32_tensor_shape_at_v1(logits->tensor, 1, &second, &error) &&
+         rank == 2 && first == 1 && second == 256;
+}
+void *et_g3t_test_logits_borrow_begin_v1(void *candidate) {
+  g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+      candidate, G3T_LOGITS, 0);
+  et_f32_tensor_borrow *borrow = NULL;
+  et_f32_tensor_error error;
+  return logits && !et_f32_tensor_borrow_begin_v1(
+      logits->tensor, &borrow, &error) ? borrow : NULL;
+}
+int64_t et_g3t_test_logits_borrow_end_v1(void *candidate) {
+  et_f32_tensor_borrow *borrow = candidate;
+  et_f32_tensor_error error;
+  return et_f32_tensor_borrow_end_v1(&borrow, &error);
+}
+int64_t et_g3t_test_pending_logits_v1(void) {
+  int64_t count = 0;
+  for (g3t_record *r = g3t_registry; r; r = r->next)
+    if (r->kind == G3T_LOGITS && r->state == G3T_PENDING) ++count;
+  return count;
+}
+#ifdef ET_F32_TENSOR_TESTING
+int64_t et_g3t_test_fail_f32_after_v1(uint64_t count) {
+  et_f32_tensor_test_fail_alloc_after_v1((size_t)count);
+  return 0;
+}
+int64_t et_g3t_test_f32_tensors_v1(void) {
+  et_f32_test_live_counts_v1 counts = {0};
+  counts.struct_size = sizeof(counts);
+  et_f32_test_live_counts_snapshot_v1(&counts);
+  return (int64_t)counts.tensors;
+}
+#endif
+#endif
 int64_t et_g3t_test_pin_count_v1(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);
   if (!c) return -1;

@@ -99,6 +99,23 @@
 (extern i64 g3t-test-i1-count i64
         :real et_m3_test_i64_counts_v1)
 
+(extern ptr g3t-native-logits-reserve ptr
+        :real et_g3t_private_logits_reserve_v1)
+(extern i64 g3t-test-logits-state ptr
+        :real et_g3t_test_logits_state_v1)
+(extern i64 g3t-test-logits-shape ptr
+        :real et_g3t_test_logits_shape_v1)
+(extern ptr g3t-test-logits-borrow-begin ptr
+        :real et_g3t_test_logits_borrow_begin_v1)
+(extern i64 g3t-test-logits-borrow-end ptr
+        :real et_g3t_test_logits_borrow_end_v1)
+(extern i64 g3t-test-pending-logits
+        :real et_g3t_test_pending_logits_v1)
+(extern i64 g3t-test-fail-f32-after i64
+        :real et_g3t_test_fail_f32_after_v1)
+(extern i64 g3t-test-f32-tensors
+        :real et_g3t_test_f32_tensors_v1)
+
 (define checks 0)
 (define (check label value)
   (if value (set! checks (+ checks 1))
@@ -2023,6 +2040,172 @@
        (and (= 0 (live-rng-shells))
             (= 0 (g3t-test-live-rng-clones))
             (= 0 (g3t-test-live-contexts))))
+;; Source-private native manual kind-3 result reservation only; no frame schedule.
+(define manual-f32-baseline (g3t-test-f32-tensors))
+(define manual-generator (g3t-generator-create model tokenizer policy))
+(define manual-native
+  (vector-ref (g3t-generator-find manual-generator 'manual-logits) 3))
+(check "manual logits forged context rejected"
+       (and (null? (g3t-native-logits-reserve (vector 'foreign)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "manual logits idle context rejected"
+       (and (null? (g3t-native-logits-reserve manual-native))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual logits acquire kind0"
+       (and (= 0 (g3t-native-call-acquire manual-native 0))
+            (= 14 (g3t-test-pin-count manual-native))))
+(check "manual logits wrong kind release rejected"
+       (and (not (= 0 (g3t-native-tensor-release manual-native)))
+            (= 1 (g3t-test-last-error-category))))
+(define manual-logits (g3t-native-logits-reserve manual-native))
+(check "manual logits pending owned f32 [1,256]"
+       (and (not (null? manual-logits))
+            (= 0 (g3t-test-logits-state manual-logits))
+            (= 1 (g3t-test-logits-shape manual-logits))
+            (= 1 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))))
+(check "manual logits wrong-kind context rejected"
+       (and (null? (g3t-native-logits-reserve manual-logits))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits wrong-kind output release rejected"
+       (and (not (= 0 (g3t-native-output-release manual-logits)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits duplicate reserve rejected atomically"
+       (and (null? (g3t-native-logits-reserve manual-native))
+            (= 1 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))
+            (= 14 (g3t-test-pin-count manual-native))))
+(define manual-logits-borrow
+  (g3t-test-logits-borrow-begin manual-logits))
+(check "manual logits borrow begins" (not (null? manual-logits-borrow)))
+(check "manual logits borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release manual-logits)))
+            (= 0 (g3t-test-logits-state manual-logits))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits borrow blocks abort before pin drain"
+       (and (not (= 0 (g3t-native-call-abort manual-native)))
+            (= 14 (g3t-test-pin-count manual-native))
+            (= 1 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))))
+(check "manual logits borrow ends"
+       (= 0 (g3t-test-logits-borrow-end manual-logits-borrow)))
+(check "manual logits pending typed release and tombstone"
+       (and (= 0 (g3t-native-tensor-release manual-logits))
+            (= 0 (g3t-native-tensor-release manual-logits))
+            (= -1 (g3t-test-logits-state manual-logits))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(define manual-logits-again (g3t-native-logits-reserve manual-native))
+(check "manual logits slot reusable after typed release"
+       (and (not (null? manual-logits-again))
+            (= 0 (g3t-test-logits-state manual-logits-again))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits abort destroys pending I2 once"
+       (and (= 0 (g3t-native-call-abort manual-native))
+            (= -1 (g3t-test-logits-state manual-logits-again))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (= 0 (g3t-test-pin-count manual-native))
+            (= 0 (g3t-native-tensor-release manual-logits-again))))
+(check "manual logits acquire kind1"
+       (= 0 (g3t-native-call-acquire manual-native 1)))
+(define manual-decode-logits (g3t-native-logits-reserve manual-native))
+(check "manual decode logits reserve"
+       (and (not (null? manual-decode-logits))
+            (= 1 (g3t-test-logits-shape manual-decode-logits))))
+(check "manual decode logits abort"
+       (and (= 0 (g3t-native-call-abort manual-native))
+            (= -1 (g3t-test-logits-state manual-decode-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "generate kind2 does not reserve manual logits"
+       (and (= 0 (g3t-native-call-acquire manual-native 2))
+            (null? (g3t-native-logits-reserve manual-native))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (= 0 (g3t-native-call-abort manual-native))))
+(check "manual logits generator close"
+       (g3t-generator-close! manual-generator))
+(check "dead manual generator rejects reservation"
+       (and (null? (g3t-native-logits-reserve manual-native))
+            (= 2 (g3t-test-last-error-category))))
+
+(define manual-fault-generator (g3t-generator-create model tokenizer policy))
+(define manual-fault-native
+  (vector-ref (g3t-generator-find manual-fault-generator 'manual-fault) 3))
+(check "manual fault call acquire"
+       (= 0 (g3t-native-call-acquire manual-fault-native 0)))
+(check "manual logits header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "manual logits header cut preserves call and owners"
+       (and (null? (g3t-native-logits-reserve manual-fault-native))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (= 14 (g3t-test-pin-count manual-fault-native))
+            (= 0 (g3t-test-cache-length manual-fault-native))
+            (= 0 (g3t-test-rng-word manual-fault-native 2))))
+(check "manual logits header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "manual logits I2 cut armed"
+               (= 0 (g3t-test-fail-f32-after index)))
+        (check "manual logits I2 cut preserves call and owners"
+               (and (null? (g3t-native-logits-reserve manual-fault-native))
+                    (= 0 (g3t-test-pending-logits))
+                    (= manual-f32-baseline (g3t-test-f32-tensors))
+                    (= 14 (g3t-test-pin-count manual-fault-native))
+                    (= 0 (g3t-test-cache-length manual-fault-native))
+                    (= 0 (g3t-test-rng-word manual-fault-native 2))))
+        (cuts (+ index 1)))))
+(check "manual logits I2 cuts disarmed"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(define manual-after-cuts (g3t-native-logits-reserve manual-fault-native))
+(check "manual logits succeeds after allocation cuts"
+       (and (not (null? manual-after-cuts))
+            (= 1 (g3t-test-logits-shape manual-after-cuts))))
+(check "manual logits fault call abort"
+       (and (= 0 (g3t-native-call-abort manual-fault-native))
+            (= -1 (g3t-test-logits-state manual-after-cuts))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual logits fault generator close"
+       (g3t-generator-close! manual-fault-generator))
+(define manual-budget-generator
+  (g3t-generator-create model tokenizer policy-g1))
+(define manual-budget-native
+  (vector-ref (g3t-generator-find manual-budget-generator 'manual-budget) 3))
+(check "manual G1 exhausted counter fixture"
+       (= 0 (g3t-test-rng-counter-set manual-budget-native -1 -1)))
+(check "manual G1-budget prefill acquire"
+       (= 0 (g3t-native-call-acquire manual-budget-native 0)))
+(define manual-budget-prefill-logits
+  (g3t-native-logits-reserve manual-budget-native))
+(check "manual G1 exhausted prefill logits reserve"
+       (and (not (null? manual-budget-prefill-logits))
+            (= 1 (g3t-test-logits-shape manual-budget-prefill-logits))
+            (= -1 (g3t-test-rng-word manual-budget-native 2))))
+(check "manual G1 exhausted prefill abort"
+       (and (= 0 (g3t-native-call-abort manual-budget-native))
+            (= -1 (g3t-test-logits-state manual-budget-prefill-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual G1-budget decode acquire"
+       (= 0 (g3t-native-call-acquire manual-budget-native 1)))
+(define manual-budget-decode-logits
+  (g3t-native-logits-reserve manual-budget-native))
+(check "manual G1 exhausted decode logits reserve"
+       (and (not (null? manual-budget-decode-logits))
+            (= 1 (g3t-test-logits-shape manual-budget-decode-logits))
+            (= -1 (g3t-test-rng-word manual-budget-native 2))))
+(check "manual G1 exhausted decode abort and close"
+       (and (= 0 (g3t-native-call-abort manual-budget-native))
+            (= -1 (g3t-test-logits-state manual-budget-decode-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (g3t-generator-close! manual-budget-generator)))
+
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)
 (newline)

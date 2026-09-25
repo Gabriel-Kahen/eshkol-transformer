@@ -880,6 +880,13 @@ sealed evidence is `g3t-full-request-preflight-cfab282-sealed/SEAL.sha256`
 (`dd89fad3...`). This remains a private C2 seam; no G3-G package or public
 generation is accepted.
 
+The [source-private native manual logits owner leaf](g3/G3_T_MANUAL_LOGITS_LEAF.md)
+adds the accepted kind-3 pending I2 f32 `[1,256]` reservation for active
+kind-0/1 manual calls regardless of generation budget, typed release,
+borrow-safe abort cleanup, and header/I2
+allocation-cut evidence. It does not implement manual numerical scheduling or
+successful result publication, public G3-G, package exports or CLI.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/

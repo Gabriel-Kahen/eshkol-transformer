@@ -68,6 +68,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3t-length-owners.py",
     ROOT / "scripts" / "check-g3t-text-result.py",
     ROOT / "scripts" / "check-g3t-full-request-preflight.py",
+    ROOT / "scripts" / "check-g3t-manual-logits.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
