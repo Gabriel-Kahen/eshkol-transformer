@@ -1,0 +1,125 @@
+;;; Appended to the genuine joint-restore runtime fixture.
+(define load-entry-source
+  (compose-owner retry-source-tuple
+                 (advanced-controls retry-source-tuple)))
+(define load-entry-source-image (owner-image load-entry-source))
+(define load-entry-receiver-tuple (make-tuple 1729))
+(define load-entry-receiver
+  (tr3-lease-create-internal
+    (vector-ref load-entry-receiver-tuple 0)
+    (vector-ref load-entry-receiver-tuple 1)
+    (vector-ref load-entry-receiver-tuple 2)
+    (vector-ref load-entry-receiver-tuple 3)
+    (vector-ref load-entry-receiver-tuple 4)))
+(define load-entry-record (record-for-shell load-entry-receiver))
+(define (load-entry-receiver-image)
+  (let ((owner
+          (compose-owner
+            load-entry-receiver-tuple
+            (record-controls load-entry-receiver-tuple load-entry-record))))
+    (let ((image (owner-image owner)))
+      (release-owner! "private entry receiver image releases" owner)
+      image)))
+(define load-entry-before (load-entry-receiver-image))
+(check "private entry starts with distinct 42-tensor source"
+       (not (byte-list=? (vector-ref load-entry-before 0)
+                         (vector-ref load-entry-source-image 0))))
+
+(check "nonvector result cell is rejected before restore"
+       (transformer-error-at?
+         'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver load-entry-source #f))))
+(check "short result cell is rejected before restore"
+       (transformer-error-at?
+         'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver load-entry-source (vector)))))
+(check "long result cell is rejected before restore"
+       (transformer-error-at?
+         'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver load-entry-source (vector #f #f)))))
+(define occupied-result (vector 'occupied))
+(check "occupied result cell is rejected before restore"
+       (transformer-error-at?
+         'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver load-entry-source occupied-result))))
+(check "malformed result admission does not change occupied cell"
+       (eq? (vector-ref occupied-result 0) 'occupied))
+(check "malformed result admission preserves receiver"
+       (image=? load-entry-before (load-entry-receiver-image)))
+
+(define forged-result (vector #f))
+(check "forged detached source rejects"
+       (transformer-error-at?
+         'invalid-argument 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver 'forged forged-result))))
+(check "forged source publishes no result"
+       (not (vector-ref forged-result 0)))
+(check "forged source preserves receiver"
+       (image=? load-entry-before (load-entry-receiver-image)))
+
+(define busy-borrow
+  (c2-training-state-borrow-begin-internal
+    load-entry-source 'trainer-load-state!))
+(define busy-result (vector #f))
+(check "busy detached source rejects"
+       (transformer-error-at?
+         'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver load-entry-source busy-result))))
+(check "busy source publishes no result"
+       (not (vector-ref busy-result 0)))
+(check "busy source preserves receiver and returns it idle"
+       (and (image=? load-entry-before (load-entry-receiver-image))
+            (eq? (vector-ref load-entry-record 3) 'idle)
+            (not (vector-ref load-entry-record 4))))
+(check "busy source borrow ends"
+       (c2-training-state-borrow-end-internal busy-borrow))
+
+(set! tr3-joint-smoke-fail-o2-check? #t)
+(define rollback-result (vector #f))
+(check "injected last recoverable O2 check aborts"
+       (transformer-error-at?
+         'internal 'trainer-load-state!
+         (lambda ()
+           (tr3-c-trainer-load-state-internal!
+             load-entry-receiver load-entry-source rollback-result))))
+(check "rollback publishes no result"
+       (not (vector-ref rollback-result 0)))
+(check "rollback preserves all receiver tensor/control bytes"
+       (image=? load-entry-before (load-entry-receiver-image)))
+(check "rollback leaves detached source live and unchanged"
+       (image=? load-entry-source-image (owner-image load-entry-source)))
+(check "rollback returns live receiver to idle"
+       (and (eq? (vector-ref load-entry-record 3) 'idle)
+            (not (vector-ref load-entry-record 4))))
+
+(define success-result (vector #f))
+(check "private result-cell restore succeeds"
+       (tr3-c-trainer-load-state-internal!
+         load-entry-receiver load-entry-source success-result))
+(check "success publishes exact true result"
+       (eq? (vector-ref success-result 0) #t))
+(check "success restores all 42 tensor bytes and controls"
+       (image=? load-entry-source-image (load-entry-receiver-image)))
+(check "success preserves detached source ownership"
+       (image=? load-entry-source-image (owner-image load-entry-source)))
+(check "success returns receiver to idle"
+       (and (eq? (vector-ref load-entry-record 3) 'idle)
+            (not (vector-ref load-entry-record 4))))
+(release-owner! "private entry source releases" load-entry-source)
+
+(display "TR3-C PRIVATE LOAD ENTRY PASS: ")
+(display checks)
+(display " checks, result cell, rollback, exact 42-image restore")
+(newline)
