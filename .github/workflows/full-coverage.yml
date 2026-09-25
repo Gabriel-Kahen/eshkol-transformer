@@ -14,7 +14,7 @@ jobs:
         include:
           - suite: canonical-build
             test_target: test-ci-clean-build-after-build
-            timeout: 75
+            timeout: 120
           - suite: native-numerics
             test_target: test-ci-core-after-build
             timeout: 105

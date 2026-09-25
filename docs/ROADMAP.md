@@ -44,6 +44,13 @@ and `0fdcb8c` repin those exact identities; the predecessor lists and four
 focused O2 package tests pass. Canonical-build was cancelled by the failed
 aggregate. A new exact-head supported CI run is required before broader
 acceptance.
+Pushed `a9edb9f` run `36074614278` passed 20 jobs, including model
+composition, native numerics/optimizer and all six C2 groups. Its canonical
+clean-build job reached the final G3-C4 provider but was cancelled at the
+configured 75-minute job limit before the smoke/benchmark step; the two
+aggregate jobs therefore failed. The measured log shows no compiler/test
+failure in that job. The canonical job budget is raised to 120 minutes for
+the next exact-head run; full combined acceptance remains pending.
 The subsequent private G3 Step19A output-reservation candidate `06b6fd2` was
 cherry-picked locally at `ee7325d`. Independent review found two failure-
 atomicity gaps: abort could discard a non-idle token frame before a borrowed

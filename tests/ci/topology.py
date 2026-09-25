@@ -6,7 +6,7 @@ import re
 
 GROUPS = ("format", "state", "save", "load", "public", "operational")
 SUITES = [
-    ("canonical-build", "test-ci-clean-build-after-build", 75),
+    ("canonical-build", "test-ci-clean-build-after-build", 120),
     ("native-numerics", "test-ci-core-after-build", 105),
     ("native-optimizer", "test-ci-optimizer-after-build", 105),
     ("diagnostic-transport", "test-ci-m3t-after-build", 105),
