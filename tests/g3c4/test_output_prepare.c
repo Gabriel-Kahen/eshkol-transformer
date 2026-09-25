@@ -10,7 +10,10 @@
 static int record_token_forward;
 static size_t token_forward_dispatches;
 
-int32_t __wrap_et_kernel_runtime_dispatch(
+#ifndef ET_G3C4_OUTPUT_PREPARE_FINAL_DISPATCH
+#define ET_G3C4_OUTPUT_PREPARE_FINAL_DISPATCH __wrap_et_kernel_runtime_dispatch
+#endif
+int32_t ET_G3C4_OUTPUT_PREPARE_FINAL_DISPATCH(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
   if (record_token_forward) token_forward_dispatches++;
