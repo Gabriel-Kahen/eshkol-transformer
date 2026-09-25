@@ -46,3 +46,41 @@ permits linear terminal records and explicitly forbids a flat-total-retention
 claim. This test establishes the shorter live-authority result and measures the
 terminal cost. It does not establish either required long horizon or a bound on
 total process memory.
+
+## Integrated cost investigation
+
+Test-only successor `b9824e9` adds monotonic timing around the genuine
+overwrite SAVE and C2 LOAD/joint restore calls. It changes no accepted runtime
+source and preserves the live-authority, exact-image, and terminal-count checks.
+The pinned ASan/UBSan/LSan gate passes again:
+
+| Cycles | Wall time | SAVE | LOAD/restore | Peak RSS | Arena increase |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 32 | 13.53 s | 7.284 s | 5.133 s | 277,292 KiB | 38,848,192 bytes |
+| 128 | 71.63 s | 37.721 s | 32.418 s | 638,752 KiB | 155,392,704 bytes |
+
+The source/test evidence is sealed at
+`tr3-retention-phase-b9824e9-20260925/SHA256SUMS` (`392787c0...`).
+Both real phases get slower as terminal identities accumulate. The prior
+1,024-cycle timeout is CPU-bound (1,183.89 user seconds in 1,205.12 wall
+seconds), with no sanitizer completion or final authority census.
+
+A separate `-pg` diagnostic build of the same test source passed 128 cycles.
+Its largest generated function took 15.58 of 65.95 sampled CPU seconds
+(23.62%). A breakpoint at its 20,001st invocation, inside a measured joint
+restore, shows the path through TR3 lease authentication and the accepted P1
+fixed-set recheck. Source inspection attributes the loop to traversal of P1's
+append-only shell registry; this attribution uses the call stack and source,
+not a compiler line mapping. The P1 `scan-states` and `scan-modules` loops
+account for another 5.20% self samples. Scheme C1 SHA arithmetic is also a
+substantial fixed cost. Native P1 `find_record` is 1.33% self samples. The
+profile and stack are sealed at
+`tr3-retention-gprof-b9824e9-20260925/SHA256SUMS` (`4639f62b...`).
+
+The horizon cannot be made equivalent by clearing terminal registries,
+restarting processes, skipping real SAVE/LOAD/restore, or bypassing P1
+authentication: each removes the growing retained state under test. The
+current 1,200-second gate does not establish 1,024, and 8,192 remains unrun.
+An accepted P1 identity-indexing contract and implementation, or a separately
+measured larger runtime budget, is the next dependency. Neither long-horizon
+live-authority result nor flat total retention is claimed.
