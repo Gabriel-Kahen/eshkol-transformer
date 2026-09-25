@@ -904,6 +904,14 @@ test-symbol exclusion. The evidence is sealed at
 Independent integration review remains pending; no public G3-G/package/CLI
 claim follows.
 
+The [source-private G3-M P1 orchestration leaf](g3/G3_M_PREFILL_P1_LEAF.md)
+is a separate bounded candidate. The accepted `(g3m-prefill-p1! generator
+input)` arity-two seam runs the production 21-role P1 schedule through the
+reviewed G3-T native frame, returns detached kind-3 logits, and aborts all
+uncommitted failures. Its focused production-operation witness, exact source
+closure, independent review and pinned normal/repeat/sanitizer gate are
+pending. It does not add manual P2/decode or a public G3-G facade/package.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/

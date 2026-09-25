@@ -1,0 +1,48 @@
+;;; Proposed G3-M source-private P1 orchestration. The G3-T native frame
+;;; retains numerical and publication authority; no facade is installed.
+(define (g3m-prefill-p1! generator input)
+  (let ((operation 'g3m-prefill-p1!))
+    (m3-call operation
+      (let* ((generator-entry (g3t-generator-find generator operation))
+             (input-entry (g3t-prefill-entry input 'input operation)))
+        (if (not (eq? (vector-ref input-entry 2) 'live))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-M input must be live"))
+        ;; Install rollback before native acquisition. A successful acquire
+        ;; publishes its call links only after all fourteen pins are held.
+        (let ((call #f) (committed #f))
+          (guard (caught
+                   (#t (if committed (exit 134))
+                       (if call (g3t-call-abort call))
+                       (raise caught)))
+            (set! call (g3t-call-acquire generator-entry 0))
+            (let ((logits (g3t-logits-reserve call)))
+              (g3t-frame-begin call input 1)
+              (g3t-role-step call 0)
+              (g3t-role-step call 1)
+              (g3t-role-step call 2)
+              (g3t-role-step call 3)
+              (g3t-role-step call 4)
+              (g3t-role-step call 5)
+              (g3t-role-step call 6)
+              (g3t-role-step call 7)
+              (g3t-role-step call 8)
+              (g3t-role-step call 9)
+              (g3t-role-step call 10)
+              (g3t-role-step call 11)
+              (g3t-role-step call 12)
+              (g3t-role-step call 13)
+              (g3t-role-step call 14)
+              (g3t-role-step call 15)
+              (g3t-role-step call 16)
+              (g3t-role-step call 17)
+              (g3t-role-step call 18)
+              (g3t-role-step call 19)
+              (g3t-role-step call 20)
+              (g3t-frame-prepare call logits)
+              (g3t-call-prepare-end call)
+              (g3t-frame-commit call)
+              ;; No allocation or recoverable action separates commit/finish.
+              (set! committed #t)
+              (g3t-call-finish call)
+              logits)))))))
