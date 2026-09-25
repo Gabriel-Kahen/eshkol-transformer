@@ -1159,7 +1159,12 @@ The next isolated TR3 installed X1 leaf adds the unchanged six-operation
 already present, while validate/canonical/fingerprint/ref receive reviewed
 same-package boxed wrappers and private renames. A compile-only public caller
 now references all six X1 C entries and the trainer facet; linked gate and
-exact package measurements remain pending.
+exact package measurements passed on `f3827a4` with 49 Eshkol sources,
+30 native objects, 69 native paths, 26 exports and 173 undefined symbols.
+The poisoned public caller passed all six X1 operations, malformed/forged
+negatives and authentic resolved-to-trainer construction. Sealed evidence is
+`tr3-public-x1-linked-f3827a4-20260925`; T2/D2/M3T/P1/O2 installed
+producer facades remain separate.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

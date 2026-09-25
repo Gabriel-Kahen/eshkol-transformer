@@ -69,4 +69,13 @@ derives the M3T initializer seed from the genuine resolved configuration,
 and passes that same receiver to the installed trainer constructor. T2, D2,
 M3T, P1 and O2 creation remain test-local direct entries. The C2 versioned
 tuple and the prior sealed `57ca36b` package evidence remain unchanged.
-This successor is pending its full linked gate and exact manifest measurement.
+The pinned full linked gate on `f3827a4` passed with an empty caller stderr
+under arena poison. Its exact boundary has 49 Eshkol sources, 30 native
+objects, 69 native source/header paths, 26 localized public exports and 173
+undefined runtime symbols. The caller exercises all six installed X1
+operations, E1 malformed/forged negatives, X1-derived initializer seed,
+and successful trainer create/release with the other four operands built
+through test-local T2/D2/M3T/P1/O2 entries. Evidence is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-x1-linked-f3827a4-20260925/`
+(`SHA256SUMS` SHA-256 `3bade2aff04fef1b0c2e466a93203ce32e93f435d2c6b80349b38982b44349d7`),
+and `sha256sum -c` passed.
