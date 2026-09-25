@@ -502,6 +502,17 @@ gates pass. Root sealed the exact candidate evidence at
 `g3c4-manual-a2-6e00c296-20260925/SHA256SUMS` (`d82b1804...`). Ordinals
 11–20, public role stepping, frame commit, and generation remain pending.
 
+The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
+reviewed and composed onto the provisional compiler/runtime line at
+`8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
+quotient reject F32 before unsafe or unreviewed integer-domain paths; the
+supported focused Release and sanitizer gates each pass 6/6 on the combined
+source. Root sealed the combined logs at
+`f32-integer-rational-combined-8b937b67-20260925/SHA256SUMS`
+(`89fe8f98...`). Native/VM DOUBLE modulo/quotient semantics and inexact
+remainder-zero policy still differ, so whole-F32 acceptance and the
+transformer runtime repin remain pending.
+
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
 `c35bf99`. Exact-parent enter/recheck/abort/finish uses existing trainer slot 4;
