@@ -1,0 +1,6 @@
+;;; Candidate-only A0 trainer constructor in the one TR3/C2 identity universe.
+;;; Do not install this trusted root or combine it with a sibling archive.
+(load "tr3_c_private_package_root.esk")
+
+(define (trainer-create resolved tokenizer dataset model optimizer)
+  (tr3-lease-create-internal resolved tokenizer dataset model optimizer))
