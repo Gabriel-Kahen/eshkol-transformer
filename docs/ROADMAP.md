@@ -857,6 +857,11 @@ The same-package primitive-ingress audit found runtime string/integer tagging
 and localized source thunks, but no reviewed factory wrapper or per-call E1
 scope. A bounded one-attempt private factory is now the candidate proof seam;
 its ownership policy, C handle, linked gate and public generalization remain open.
+The [proposed private factory/close contract](TR3_C_PRIVATE_FACTORY_CONTRACT.md)
+specifies the one-attempt data-only request, X1-derived M3T seed, D2 corpus
+identity, fixed O2 paths, failure retention and exact C handle/status behavior.
+It is a review candidate only; the initializer-only export manifest and public
+trainer/resume status remain unchanged until a genuine linked-package gate passes.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
