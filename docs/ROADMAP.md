@@ -837,8 +837,10 @@ The [source-private generated-ID wrapper](g3/G3_T_IDS_OWNER_LEAF.md) is an
 isolated candidate after the accepted native kind-5 clone. It authenticates
 live output, preallocates/root-registers a detached shell and one-element
 result list before cloning, and extends typed tensor release to kind-5 IDs.
-Focused pinned evidence is pending. No public G3-G facade, package tuple or
-CLI is accepted by this candidate.
+Strict type preflight and pinned normal/repeat/ASan+UBSan+LSan evidence is
+sealed as `g3t-ids-owner-969a348`: 46,626 checks per mode, eleven source
+contracts and Q0 4/4. No public G3-G facade, package tuple or CLI is
+accepted by this candidate.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
