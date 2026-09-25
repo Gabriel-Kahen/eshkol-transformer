@@ -601,7 +601,10 @@ ASan/UBSan/LSan fresh-process failures. A focused P1 witness rejects a
 different authentic handle with equal metadata and changed metadata with the
 same handle. Audit traces are sealed at
 `g3t-constructor-sanitizer-audit-824f91e-20260925/SHA256SUMS`; repair
-evidence is at `g3t-model-seal-fix-20260925/SHA256SUMS`.
+evidence is at `g3t-model-seal-fix-20260925/SHA256SUMS`. Root reviewed the
+opaque-handle identity contract and integrated the four implementation/test
+blobs byte-identically at `cf5e394`; the verified 21-file seal is
+`567a4d36...`.
 RNG ownership, authentic frames/results, sampling, and public generation
 remain pending.
 
