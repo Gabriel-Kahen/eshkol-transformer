@@ -669,8 +669,19 @@ fixture executions. Root reviewed the source, verified the exact-tree seal
 `f32-exact-wide-lcm-4e7f26bd-20260925/SHA256SUMS` (`9ab09ac5...`), and
 repeated both pinned focused CTest groups at 8/8. INT64-only overflow still
 rejects, mixed wide/DOUBLE and F32 still reject, and allocation faults were
-not injected. Native/VM arity and AD policy, whole-F32 acceptance, and
-transformer runtime repin remain pending.
+not injected. At that exact LCM commit, native/VM arity and AD policy,
+whole-F32 acceptance, and transformer runtime repin remained pending.
+The bounded non-F32 variadic/AD prerequisite `065766e0` then `c8069863`/tree
+`f888ff27` is composed byte-identically at provisional Eshkol `d432dc11`.
+Native stored and VM direct/stored GCD/LCM now accept zero, one, and three or
+more operands without truncation; native duals explicitly reject instead of
+fabricating a zero tangent. The first-class native wrapper reads the complete
+16-byte tagged cons car at offset zero. Root's merged pinned LLVM21 Release
+and ASan+UBSan+LSan focused CTest each pass 17/17, plus six native JIT O0/O2
+fixtures in each mode. Evidence is sealed at
+`f32-gcd-lcm-root-d432dc11-20260925/SHA256SUMS` (`0eed9b20...`). Canonical
+F32 is still rejected; all-INT64 `INT64_MIN`, mixed wide/inexact, reverse-tape
+AD-node policy, whole-F32 acceptance, and transformer repin remain open.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
