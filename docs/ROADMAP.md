@@ -63,6 +63,12 @@ successfully: all 21 jobs passed, including canonical build, native
 numerics/optimizer, model composition, parameter state, G3N/G3S, and all C2
 groups. This accepts that pushed tree only. Subsequent local P1 indexing and
 profile commits require their own exact-head CI after the full P1 package gate.
+The subsequent pushed `7fcb46f` passed all 21 hosted CI jobs in run
+`36144210873`, including the long native numerics and model composition
+jobs. This accepts that exact tree only. Pushed successor `7811ea6` includes
+the four private G3 output clones, authenticated T1 input copy and TR3 factory
+fault witnesses; its exact-head run `36154027055` is in progress. Neither run
+accepts a public trainer, evaluator, generator or CLI.
 The private G3 Step19A output-reservation candidate `06b6fd2` was
 cherry-picked locally at `ee7325d`. Independent review found two failure-
 atomicity gaps: abort could discard a non-idle token frame before a borrowed
