@@ -879,6 +879,10 @@ specifies the one-attempt data-only request, X1-derived M3T seed, D2 corpus
 identity, fixed O2 paths, failure retention and exact C handle/status behavior.
 It is a review candidate only; the initializer-only export manifest and public
 trainer/resume status remain unchanged until a genuine linked-package gate passes.
+An isolated source/private implementation candidate now adds the same-package
+producer wrapper, C ingress/handle bridge, and a linked lifecycle gate. Its
+lightweight bridge fixture passes; strict linked compilation, exact symbol
+manifests, cleanup/failure-cut evidence and independent review are pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
