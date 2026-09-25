@@ -76,7 +76,7 @@ ar rcsD "${test_hook_dir}/libeshkol_transformer_p1_identity.a" \
   -Wl,--wrap=calloc -Wl,--wrap=getrandom -o "${temporary_dir}/test-failpoints"
 timeout --foreground --signal=TERM --kill-after=5s 60s \
   "${temporary_dir}/test-failpoints" >"${temporary_dir}/failpoints.stdout"
-grep -F 'P1 failpoint PASS: 123 checks' "${temporary_dir}/failpoints.stdout" >/dev/null
+grep -F 'P1 failpoint PASS: 139 checks' "${temporary_dir}/failpoints.stdout" >/dev/null
 
 for run in a b; do
   "${cc}" "${trusted_cflags[@]}" \

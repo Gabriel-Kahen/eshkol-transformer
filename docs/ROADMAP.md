@@ -1032,6 +1032,14 @@ implements that contract for state/module ownership scans. Focused pinned
 behavioral and 128/256-cycle performance evidence are sealed; E3/P1, TR3
 fixed-set, and prepared-split source-hash checkers are repinned and pass.
 Independent review, the full package gate, and the 8,192 horizon remain open.
+The isolated [state-tensor/entry raw-identity leaf](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md#state-tensor-and-entry-lookup-leaf)
+adds two live advisory record heads for the two largest measured shell lookups,
+with exact registry fallback and no native `find_record` change. Its pinned
+strict-O0 IR/poisoned publication proof passes 24 checks, the test-only
+invalid-index/stage-failure overlay passes 11, and the native normal/sanitized
+suite passes 139 failpoint checks; E3/P1, TR3 fixed-set, prepared-split and
+generated-root checks pass. The full package and 1,024/8,192 genuine-cycle
+horizons remain pending on this leaf.
 
 ## Wave 4 — practical pretraining and performance
 

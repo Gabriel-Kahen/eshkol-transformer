@@ -342,7 +342,7 @@ grep -F 'P1 identity PASS: 274 checks' "${p1_tmp}/identity.stdout" >/dev/null
   -o "${p1_tmp}/test-p1-identity-failpoints"
 "${p1_tmp}/test-p1-identity-failpoints" \
   >"${p1_tmp}/failpoints.stdout"
-grep -F 'P1 failpoint PASS: 123 checks' \
+grep -F 'P1 failpoint PASS: 139 checks' \
   "${p1_tmp}/failpoints.stdout" >/dev/null
 
 "${p1_cc}" "${p1_public_cflags[@]}" -c \
