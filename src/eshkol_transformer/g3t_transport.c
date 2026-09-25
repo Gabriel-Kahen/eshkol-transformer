@@ -1929,10 +1929,11 @@ int64_t et_g3t_test_logits_shape_v1(void *candidate) {
 }
 void *et_g3t_test_logits_borrow_begin_v1(void *candidate) {
   g3t_logits *logits = (g3t_logits *)g3t_admit_record(
-      candidate, G3T_LOGITS, 0);
+      candidate, G3T_LOGITS, 1);
   et_f32_tensor_borrow *borrow = NULL;
   et_f32_tensor_error error;
-  return logits && !et_f32_tensor_borrow_begin_v1(
+  return logits && logits->h.state == G3T_PENDING &&
+         !et_f32_tensor_borrow_begin_v1(
       logits->tensor, &borrow, &error) ? borrow : NULL;
 }
 int64_t et_g3t_test_logits_borrow_end_v1(void *candidate) {
