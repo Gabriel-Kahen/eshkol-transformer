@@ -600,7 +600,16 @@ INT64 behavior and F32 refusal remain; independent pinned Release and
 ASan+UBSan+LSan focused gates each pass 2/2. Root verified
 `f32-vm-gcd-lcm-guards-46e97186-20260924/SHA256SUMS`
 (`b56b0c32...`). Native parity, wide integer semantics and inexact result
-kind remain open; no transformer runtime repin is made.
+kind remain open. The bounded native safety leaf `fcfb14a6`/tree `f31d63f`
+is composed byte-identically on the provisional runtime line at
+`09e65bf8`. Raw, tagged/stored, and dual-primal GCD/LCM reject invalid
+DOUBLE/type/magnitude before conversion, integral stored GCD no longer
+fabricates zero, and LCM rejects int64 overflow. Independent pinned
+Release and ASan+UBSan+LSan JIT/AOT O0/O2 source matrices pass, as do the
+four host-bit F32 route tests in each build; root verified
+`f32-native-gcd-lcm-guards-fcfb14a6-20260924/SHA256SUMS`
+(`1ce5f97c...`). Wide LCM, R7RS inexact result kind, whole-F32 acceptance
+and transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
