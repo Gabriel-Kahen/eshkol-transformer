@@ -1,8 +1,11 @@
 # TR3-C private same-package trainer factory and close contract
 
-Status: **proposed contract for review; no implementation, export, public trainer,
-or resume acceptance**. Source base: integration commit `76299fd`. This freezes a
-bounded linked-package proof seam, not CLI3 policy or a general training API.
+Status: **source/private implementation candidate with a passing bounded linked
+lifecycle gate; full contract acceptance, production exports, public trainer,
+and resume remain pending**. Source base for this contract: integration commit
+`76299fd`. The candidate source is `5558c08` and its sealed linked evidence is
+`/tmp/tr3-factory-linked-5558c08-20260925/SHA256SUMS`. This freezes a bounded
+linked-package proof seam, not CLI3 policy or a general training API.
 
 ## Accepted source and missing boundary
 
@@ -173,12 +176,22 @@ claimed beyond immediate busy rejection.
 
 ## Acceptance gate and decision
 
-Keep the dynamic manifest initializer-only until one linked-library test
-compiles the proposed wrapper and invokes these exact C functions through
-`dlopen`/`dlsym`. It must cover malformed bytes/lengths/version, fixed-profile
+The production dynamic manifest remains initializer-only while full acceptance
+is pending. The candidate linked-library test compiles the wrapper and invokes
+the private C functions through `dlopen`/`dlsym`. Full acceptance must cover
+malformed bytes/lengths/version, fixed-profile
 and seed derivation, digest mismatch, each producer and lease failure cut,
 cleanup failure, no partial handle, exact idle unlink, busy/forged/repeated
 close, process-root retention, per-call E1 categorization, and hostile-link
-negatives for every localized source operation. This proposal permits a
+negatives for every localized source operation. This contract permits a
 bounded private C construct/close proof; it does not justify public trainer
 exports or exact-resume claims.
+
+The candidate linked gate on `5558c08` proves real same-package construction,
+success/close, X1 parse, D2 missing-corpus and digest-mismatch negatives,
+initializer behavior, opaque-handle forged/repeated close, and hostile-link
+localization. Its fixture covers C admission and unclassified-return status
+tuples. Exact raw/undefined/dynamic symbol lists are pinned from the run,
+including P1's three hash references. The remaining full acceptance matrix is
+the fixed-profile/seed derivation witness, every producer and lease failure cut,
+cleanup failure, process-root retention, and broader E1 category evidence.
