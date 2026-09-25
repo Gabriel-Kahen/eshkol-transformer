@@ -550,7 +550,15 @@ numerical route or cursor mutation. Independent pinned normal, repeat,
 and sanitizer gates each pass 6,199 checks across T1/T2/decode, including
 21 provider failure/retry cases; Q0 4/4 and the merged focused gate pass.
 Root sealed `g3c4-manual-role-step-1a4af6f-20260925/SHA256SUMS`
-(`6bd0b5db...`). Public Eshkol role stepping, generation loop,
+(`6bd0b5db...`). The source-private Eshkol manual transport witness from
+`4418a0c`/tree `e0953cdc` is integrated byte-identically at `55c9311`.
+It composes the accepted C4 owner, call ledger, T1 input and 21 explicit
+native role steps through frame prepare/commit, without claiming the authentic
+G3-T M3T/C2 package root. Root's pinned normal/repeat/ASan+UBSan runs each
+pass 36 checks across P1/P2 prefill, decode and three rollback cases; merged
+static and Q0 isolation gates pass. Root sealed
+`g3c4-manual-transport-root-4418a0c-20260925/SHA256SUMS`
+(`a8a84bd1...`). Public Eshkol role stepping, generation loop,
 output/text publication, and save/reload remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
