@@ -48,7 +48,7 @@ cmp "${n3k_expect}/n3k_defined_symbols.txt" "${n3k_tmp}/defined.txt"
 nm -u "${n3k_dir}/n3k_primitives_provider.o" | \
   awk 'NF != 0 && $NF !~ /:$/ { print $NF }' | LC_ALL=C sort -u >"${n3k_tmp}/undefined.txt"
 cmp "${n3k_expect}/n3k_allowed_undefined_symbols.txt" "${n3k_tmp}/undefined.txt"
-rg -l 'ET_N3K_PRIMITIVES_ABI|et_n3k_kernel_provider_v1' \
+rg -l -g '*.c' -g '*.h' 'ET_N3K_PRIMITIVES_ABI|et_n3k_kernel_provider_v1' \
   "${PROJECT_ROOT}/include" "${PROJECT_ROOT}/native" | \
   sed "s#^${PROJECT_ROOT}/##" | LC_ALL=C sort >"${n3k_tmp}/source-closure.txt"
 cmp "${n3k_expect}/n3k_source_closure.txt" "${n3k_tmp}/source-closure.txt"
