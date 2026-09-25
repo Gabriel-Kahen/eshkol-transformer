@@ -591,7 +591,16 @@ F32 remains explicitly rejected on these operations until the non-F32
 integer domain, result kind, direct/stored parity, and overflow contract
 are repaired. Root verified
 `f32-gcd-lcm-domain-blocker-4e483c89-20260924/SHA256SUMS`
-(`5aa474e5...`); no transformer runtime repin is made.
+(`5aa474e5...`). The bounded VM safety prerequisite `46e97186`/tree
+`21cf93e` is composed byte-identically on the provisional runtime line
+at `312af5e0`: VM direct/stored GCD/LCM now raise catchable errors before
+coercing invalid types, fractional/nonfinite/out-of-range DOUBLE,
+`INT64_MIN`, unsupported bignums, or overflowing LCM. Valid supported
+INT64 behavior and F32 refusal remain; independent pinned Release and
+ASan+UBSan+LSan focused gates each pass 2/2. Root verified
+`f32-vm-gcd-lcm-guards-46e97186-20260924/SHA256SUMS`
+(`b56b0c32...`). Native parity, wide integer semantics and inexact result
+kind remain open; no transformer runtime repin is made.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
