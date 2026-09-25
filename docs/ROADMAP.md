@@ -1164,20 +1164,20 @@ exact package measurements passed on `f3827a4` with 49 Eshkol sources,
 30 native objects, 69 native paths, 26 exports and 173 undefined symbols.
 The poisoned public caller passed all six X1 operations, malformed/forged
 negatives and authentic resolved-to-trainer construction. Sealed evidence is
-`tr3-public-x1-linked-f3827a4-20260925`; T2/D2/M3T/P1/O2 installed
-producer facades remain separate.
-The next isolated T2 operand leaf adds the unchanged eight-method
+`tr3-public-x1-linked-f3827a4-20260925`. That X1 gate preceded the
+T2 and D1/D2 facets below; M3T/P1/O2 installed producers remain separate.
+The T2 operand leaf integrated at `189d6ca` adds the unchanged eight-method
 `transformer.tokenizer` facade to the same TR3 aggregate. The seven newly
 wrapped T2 operations reuse accepted same-package implementations; the
 installed caller constructs a byte tokenizer, round-trips bytes, checks
 accessors and typed forged-policy load/save failures, then passes that
 receiver to `trainer-create`. Successful load/save awaits an installed
-same-aggregate C1 policy producer. D2/M3T/P1/O2 remain test-local, and
-the pinned `bd5dc8f` linked gate passed with 49 Eshkol sources, 30 native
-objects, 69 native paths, 4,156 raw definitions, 33 exports and 173
+same-aggregate C1 policy producer. At the T2 gate, D2/M3T/P1/O2 were
+test-local. The pinned `bd5dc8f` linked gate passed with 49 Eshkol sources,
+30 native objects, 69 native paths, 4,156 raw definitions, 33 exports and 173
 undefined symbols. The poisoned public caller passed with empty stderr;
 `tr3-public-t2-linked-bd5dc8f-20260925/SHA256SUMS` is verified.
-The next isolated D1/D2 installed leaf copies the unchanged canonical
+The D1/D2 installed leaf integrated at `b744e66` copies the unchanged canonical
 `transformer.data` facade into the same aggregate, bringing its eight D1
 corpus methods and eleven D2 dataset/batch methods through accepted private
 renames and boxed wrappers. The caller writes/validates a D1 corpus, opens
