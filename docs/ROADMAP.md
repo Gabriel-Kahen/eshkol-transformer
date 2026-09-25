@@ -550,6 +550,14 @@ trainer or C ABI thunk. A focused negative gate reproduces all 52 linked-mode
 tail-transfer failures. The pinned compiler must bind each tail-body forwarder
 to its renamed internal implementation before a C-callable package can be
 admitted; public trainer and resume claims remain pending.
+The reviewed isolated Eshkol `97c40c9d` fix now permits a
+[linked private TR3 package boundary](TR3_C_LINKED_PRIVATE_PACKAGE.md) without
+changing the transformer pin. The bounded gate composes the accepted 46-source
+root and exact 28-object/64-path native closure, localizes all but the package
+initializer, links with no unresolved trusted authority, and rejects hostile
+external links to private TR3/native symbols. It does not yet invoke the
+initializer or expose a C-callable trainer bridge; public trainer and resume
+acceptance remain pending.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
