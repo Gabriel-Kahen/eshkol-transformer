@@ -828,6 +828,10 @@ after restore, and after every suffix update, and checks corruption, X1
 mismatch, and prewrite failure followed by exact retry. Public next-step
 metrics/effective-rate observations and the remaining TR3-C §13
 failure/environment gates remain pending.
+The pinned f31/LLVM21 network-disabled run on clean `15a7c8a`/tree
+`68b2d56` passed 246 checks in nine distinct processes and 15 C2 byte
+comparisons; its seal is
+`tr3-fresh-resume-15a7c8a-20260925/SHA256SUMS` (`f11dc3a6...`).
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
