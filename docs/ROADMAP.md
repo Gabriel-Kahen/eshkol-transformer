@@ -583,8 +583,19 @@ ASan/UBSan gates each pass 47 checks, with genuine model construction,
 wrong-owner/policy rejection, allocation retry, same-model exclusion,
 pin drain, and source/Q0 isolation. Evidence is sealed at
 `g3t-native-context-root-234a520-20260925/SHA256SUMS` (`fcc2dcfe...`).
-The rooted Eshkol constructor, RNG owner, frame/result state machine, and
-public generation remain pending.
+The source-private seeded G3-T constructor `824f91e`/tree `5a98260` is
+integrated byte-identically at `f8c359e`. It authenticates the fixed M3T
+model and raw V256 tokenizer, validates a bounded C2 seed policy, roots the
+native context and closes idle generators. Root's pinned normal/repeat/
+sanitizer gates each pass 53 checks, sealed at
+`g3t-generator-constructor-root-f8c359e-20260925/SHA256SUMS`
+(`2e411a88...`). A repeated sanitizer audit observed model-seal failures
+before any constructor call in both predecessor (17/100) and candidate
+(2/100) binaries; the candidate normal binary passed 100/100. The invalid
+value's origin remains unresolved; audit traces are sealed at
+`g3t-constructor-sanitizer-audit-824f91e-20260925/SHA256SUMS`.
+RNG ownership, authentic frames/results, sampling, and public generation
+remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
