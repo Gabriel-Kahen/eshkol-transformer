@@ -732,6 +732,11 @@ first-write boundary, then performs only primitive no-fail writes after O2
 success. Its pinned genuine two-microbatch numerical witness passes, while
 EOS/epoch replay, automatic whole-step error cleanup, metrics, public trainer,
 and resume remain pending.
+Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
+Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
+cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
+`1.86e-9`, and a rejected nonfinite mutant. Evidence is sealed at
+`tr3-step-commit-tail-root-4d56381-20260925/SHA256SUMS` (`ba79c74d...`).
 Source `25673ef`/tree `5cd4abb` is integrated byte-identically at `c7cdf00`.
 Root's pinned merged gate passes 63 runtime checks with 23 source loads;
 `tr3-step-transaction-root-c7cdf00-20260925/SHA256SUMS` is sealed at
