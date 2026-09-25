@@ -118,8 +118,12 @@ script = script.replace(runtime_check, '''for accumulation in 1 2 3; do
 done''')
 script = script.replace('"${evidence}/runtime.stdout"',
                         '"${evidence}/receiver-3.stdout"')
-script = script.replace('"${evidence}/runtime_fresh_resume.esk"',
-                        '"${evidence}/runtime_fresh_resume.esk"')
+script = script.replace('sha256sum /out/runtime_fresh_resume.esk',
+                        'sha256sum "${evidence}/runtime_fresh_resume.esk"')
+script = script.replace('TR3-C joint runtime evidence:',
+                        'TR3-C fresh-process evidence:')
+script = script.replace('TR3-C joint runtime seal:',
+                        'TR3-C fresh-process seal:')
 (evidence / "fresh-gate.generated.sh").write_text(script)
 PY
 chmod +x "${evidence}/fresh-gate.generated.sh"

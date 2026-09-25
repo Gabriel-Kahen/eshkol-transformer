@@ -821,8 +821,13 @@ numerical oracles, sealed at
 Root's merged trajectory gate repeats 167 checks and final C2 byte equality,
 sealed at `tr3-general-resume-root-c07068a-20260925/SHA256SUMS`
 (`b75ff3a1...`).
-Fresh-process continuation, public metrics/effective-rate observations, and
-the remaining TR3-C §13 failure/environment gates remain pending.
+The [private fresh-process continuation gate](TR3_FRESH_PROCESS_RESUME.md)
+runs separate uninterrupted, K-checkpoint producer, and fresh LOAD/restore
+processes for `A=1,2,3`, `K=1`, and `R=3`. It compares canonical C2 bytes at K,
+after restore, and after every suffix update, and checks corruption, X1
+mismatch, and prewrite failure followed by exact retry. Public next-step
+metrics/effective-rate observations and the remaining TR3-C §13
+failure/environment gates remain pending.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
