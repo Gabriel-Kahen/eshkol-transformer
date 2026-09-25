@@ -1,0 +1,43 @@
+;;; Private checkpoint-to-live-restore seam. The loaded C2 owner remains in
+;;; this cell across the joint transaction; joint restore only borrows it.
+
+(define tr3-c-checkpoint-restore-load c2-public-checkpoint-load)
+(define tr3-c-checkpoint-restore-apply! tr3-c-joint-restore-internal!)
+(define tr3-c-checkpoint-restore-release! c2-training-state-release-internal!)
+
+(define (tr3-c-checkpoint-restore-internal! trainer path policy report)
+  (let ((owner-cell (vector #f))
+        (failure (vector #f #f))
+        (cleanup (vector #f #f)))
+    (let ((result
+            (guard (caught
+                     (#t
+                       (vector-set! failure 0 #t)
+                       (vector-set! failure 1 caught)
+                       #f))
+              (let ((owner
+                      (tr3-c-checkpoint-restore-load path policy report)))
+                ;; LOAD returns the exact owned shell. Enrollment is the
+                ;; assignment-only successor to its publication.
+                (vector-set! owner-cell 0 owner)
+                (tr3-c-checkpoint-restore-apply! trainer owner)))))
+      (let ((owner (vector-ref owner-cell 0)))
+        (if owner
+            (begin
+              (vector-set! owner-cell 0 #f)
+              (guard (caught
+                       (#t
+                         (vector-set! cleanup 0 #t)
+                         (vector-set! cleanup 1 caught)
+                         #f))
+                (tr3-c-checkpoint-restore-release!
+                  owner 'trainer-state-release!)))))
+      (if (vector-ref cleanup 0)
+          (m3t-fail 'internal 'trainer-load-state!
+                    "loaded checkpoint owner cleanup failed"))
+      (if (vector-ref failure 0)
+          (raise (vector-ref failure 1)))
+      (if (not (eq? result #t))
+          (m3t-fail 'internal 'trainer-load-state!
+                    "joint restore returned without success"))
+      #t)))

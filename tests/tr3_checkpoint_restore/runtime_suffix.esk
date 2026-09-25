@@ -1,0 +1,197 @@
+;;; Appended after genuine snapshot and snapshot-SAVE witnesses. The report
+;;; was created immediately after the shared private aggregate loaded.
+(define corrupt-path (string-append corpus-directory "/checksum-bad.c2"))
+(define torn-path (string-append corpus-directory "/torn.c2"))
+(define (write-file path bytes)
+  (let ((port (open-binary-output-file path)))
+    (write-bytevector bytes port)
+    (close-port port)))
+(define valid-image (read-file save-a))
+(define corrupted (bytevector-copy valid-image 0 (bytevector-length valid-image)))
+(bytevector-u8-set!
+  corrupted (- (bytevector-length corrupted) 1)
+  (if (= (bytevector-u8-ref corrupted (- (bytevector-length corrupted) 1)) 0)
+      1 0))
+(write-file corrupt-path corrupted)
+(write-file torn-path (bytevector-copy valid-image 0 100))
+
+(define original-restore-release tr3-c-checkpoint-restore-release!)
+(define restore-release-count 0)
+(define last-restored-owner #f)
+(set! tr3-c-checkpoint-restore-release!
+  (lambda (owner operation)
+    (set! restore-release-count (+ restore-release-count 1))
+    (set! last-restored-owner owner)
+    (original-restore-release owner operation)))
+(define (restore-released-once? before)
+  (and (= restore-release-count (+ before 1))
+       last-restored-owner
+       (eq? (vector-ref (c2-training-state-find last-restored-owner) 7)
+            'dead)))
+(define (restore-error category operation thunk)
+  (guard (caught
+           (#t
+             (check "restore error category and operation"
+                    (and (transformer-error? caught)
+                         (eq? category (transformer-error-category caught))
+                         (eq? operation (transformer-error-operation caught))))
+             caught))
+    (thunk)
+    (check "restore expected an exception" #f)
+    #f))
+
+(define load-receiver-tuple (make-tuple 1729))
+(define load-receiver
+  (tr3-lease-create-internal
+    (vector-ref load-receiver-tuple 0)
+    (vector-ref load-receiver-tuple 1)
+    (vector-ref load-receiver-tuple 2)
+    (vector-ref load-receiver-tuple 3)
+    (vector-ref load-receiver-tuple 4)))
+(define load-receiver-record (record-for-shell load-receiver))
+(define (load-receiver-image)
+  (let ((owner
+          (compose-owner
+            load-receiver-tuple
+            (record-controls load-receiver-tuple load-receiver-record))))
+    (let ((image (owner-image owner)))
+      (c2-training-state-release-internal! owner 'trainer-state-release!)
+      image)))
+(define (source-trainer-unchanged?)
+  (let ((owner (tr3-c-trainer-state-internal trainer (vector #f))))
+    (let ((same (image=? reference-image (owner-image owner))))
+      (c2-training-state-release-internal! owner 'trainer-state-release!)
+      same)))
+(define load-before (load-receiver-image))
+(check "compatible receiver snapshot is available"
+       (vector? load-before))
+
+(define before-restore-releases restore-release-count)
+(restore-error 'corrupt-data 'checkpoint-load
+  (lambda ()
+    (tr3-c-checkpoint-restore-internal!
+      load-receiver corrupt-path save-policy restore-report)))
+(check "checksum rejection builds no detached owner"
+       (= restore-release-count before-restore-releases))
+(check "checksum rejection preserves receiver"
+       (image=? load-before (load-receiver-image)))
+(check "checksum rejection preserves source trainer"
+       (source-trainer-unchanged?))
+(restore-error 'corrupt-data 'checkpoint-load
+  (lambda ()
+    (tr3-c-checkpoint-restore-internal!
+      load-receiver torn-path save-policy restore-report)))
+(check "torn checkpoint builds no detached owner"
+       (= restore-release-count before-restore-releases))
+(check "torn checkpoint preserves receiver"
+       (image=? load-before (load-receiver-image)))
+(check "torn checkpoint preserves source trainer"
+       (source-trainer-unchanged?))
+(restore-error 'invalid-argument 'checkpoint-load
+  (lambda ()
+    (tr3-c-checkpoint-restore-internal!
+      load-receiver "" save-policy restore-report)))
+(check "malformed path builds no detached owner"
+       (= restore-release-count before-restore-releases))
+(check "malformed path preserves receiver"
+       (image=? load-before (load-receiver-image)))
+(check "malformed path preserves source trainer"
+       (source-trainer-unchanged?))
+
+(restore-error 'invalid-argument 'checkpoint-load
+  (lambda ()
+    (tr3-c-checkpoint-restore-internal!
+      load-receiver save-a save-policy 'forged-report)))
+(check "forged K2 report produces no detached owner"
+       (= restore-release-count before-restore-releases))
+(check "forged K2 report preserves receiver"
+       (image=? load-before (load-receiver-image)))
+(check "forged K2 report preserves source trainer"
+       (source-trainer-unchanged?))
+
+;;; A different canonical X1 run seed is an authentic but incompatible
+;;; receiver. The fixed model profile and tokenizer remain otherwise equal.
+(define (mismatch-tuple)
+  (let* ((resolved
+           (x1-private-config-resolve
+             (x1-private-config-parse
+               "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":9876}")
+             '()))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset
+           (d2-token-dataset-open
+             (dataset-config corpus-directory) tokenizer))
+         (model
+           (m3t-public-model-create
+             resolved (m3t-public-initializer-state 9876)))
+         (handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+         (tree (module-parameters model))
+         (optimizer
+           (o2-public-optimizer-create (optimizer-config handles) tree))
+         (epoch-start (d2-token-dataset-cursor dataset)))
+    (vector resolved tokenizer dataset model optimizer tree epoch-start)))
+(define mismatch-receiver-tuple (mismatch-tuple))
+(define mismatch-receiver
+  (tr3-lease-create-internal
+    (vector-ref mismatch-receiver-tuple 0)
+    (vector-ref mismatch-receiver-tuple 1)
+    (vector-ref mismatch-receiver-tuple 2)
+    (vector-ref mismatch-receiver-tuple 3)
+    (vector-ref mismatch-receiver-tuple 4)))
+(define mismatch-record (record-for-shell mismatch-receiver))
+(define (mismatch-image)
+  (let ((owner
+          (compose-owner
+            mismatch-receiver-tuple
+            (record-controls mismatch-receiver-tuple mismatch-record))))
+    (let ((image (owner-image owner)))
+      (c2-training-state-release-internal! owner 'trainer-state-release!)
+      image)))
+(define mismatch-before (mismatch-image))
+(check "incompatible initialized model differs in tensor bytes"
+       (not (byte-list=? (vector-ref mismatch-before 0)
+                         (vector-ref reference-image 0))))
+(set! before-restore-releases restore-release-count)
+(restore-error 'invalid-state 'trainer-load-state!
+  (lambda ()
+    (tr3-c-checkpoint-restore-internal!
+      mismatch-receiver save-a save-policy restore-report)))
+(check "X1 compatibility rejection releases loaded owner once"
+       (restore-released-once? before-restore-releases))
+(check "X1 compatibility rejection preserves receiver"
+       (image=? mismatch-before (mismatch-image)))
+(check "X1 compatibility rejection preserves source trainer"
+       (source-trainer-unchanged?))
+(check "incompatible receiver returns to idle"
+       (and (eq? (vector-ref mismatch-record 3) 'idle)
+            (not (vector-ref mismatch-record 4))))
+
+(set! before-restore-releases restore-release-count)
+(restore-error 'invalid-argument 'trainer-load-state!
+  (lambda ()
+    (tr3-c-checkpoint-restore-internal!
+      'forged-trainer save-a save-policy restore-report)))
+(check "forged trainer releases loaded owner once"
+       (restore-released-once? before-restore-releases))
+(check "forged trainer preserves source trainer"
+       (source-trainer-unchanged?))
+
+(set! before-restore-releases restore-release-count)
+(check "valid checkpoint restores live receiver"
+       (tr3-c-checkpoint-restore-internal!
+         load-receiver save-a save-policy restore-report))
+(check "successful restore releases loaded owner once"
+       (restore-released-once? before-restore-releases))
+(check "all 42 restored tensor bytes and controls match saved source"
+       (image=? reference-image (load-receiver-image)))
+(check "restored receiver is idle"
+       (and (eq? (vector-ref load-receiver-record 3) 'idle)
+            (not (vector-ref load-receiver-record 4))))
+(check "successful file restore preserves source trainer"
+       (source-trainer-unchanged?))
+
+(set! tr3-c-checkpoint-restore-release! original-restore-release)
+(display "TR3-C CHECKPOINT RESTORE PASS: ")
+(display checks)
+(display " checks, C2 LOAD and exact live restore")
+(newline)
