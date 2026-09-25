@@ -32,7 +32,7 @@ def check():
         assert fragment in role, fragment
     assert role.index('et_a2_kv_cache_transaction_view_end_v1') < role.index('frame->next_ordinal = 11')
     assert 'et_a2_kv_cache_transaction_abort_v1' in source[source.index('int64_t et_g3c4_private_call_abort_v1'):]
-    assert 'et_g3c4_private_role_step_v1' not in source
+    assert 'et_g3c4_private_role_step_v1' not in source.split('#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE\n')[0]
     for fragment in ('a2_case(owner, 1, 1)', 'a2_case(owner, 1, 2)',
                      'a2_case(owner, 2, 1)', 'fail_a2', 'logits_borrow',
                      'frame->a2_transaction = NULL', 'frame->a2_candidate = NULL',

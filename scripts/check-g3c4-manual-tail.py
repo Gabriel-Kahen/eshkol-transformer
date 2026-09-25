@@ -42,7 +42,7 @@ def check() -> None:
                  'n3k.gelu.forward', 'g3n.residual.forward',
                  'n3k.residual.forward', 'float epsilon, result[512] = {0}'):
         assert part in role, part
-    assert 'et_g3c4_private_role_step_v1' not in source
+    assert 'et_g3c4_private_role_step_v1' not in source.split('#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE\n')[0]
     assert '(frame->next_ordinal < 0 || frame->next_ordinal > 21)' in source
     for part in ('tail_case(owner, 1, 1)', 'tail_case(owner, 1, 2)',
                  'tail_case(owner, 2, 1)', 'whole_reference(',

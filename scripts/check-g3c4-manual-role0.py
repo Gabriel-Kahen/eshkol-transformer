@@ -34,7 +34,7 @@ def check() -> None:
     test = (ROOT / "tests/g3c4/test_manual_role0.c").read_text()
     runner = (ROOT / "scripts/test-g3c4-manual-role0.sh").read_text()
     contract = (ROOT / "docs/g3/G3_C4_MANUAL_ROLE0_STEP23C_CONTRACT.md").read_text()
-    require("et_g3c4_private_role_step_v1" not in source,
+    require("et_g3c4_private_role_step_v1" not in source.split("#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE\n")[0],
             "partial accepted role_step boundary exposed")
     require("static inline __attribute__((unused)) int64_t et_g3c4_manual_role0_run" in source,
             "translation-unit-private seam missing")

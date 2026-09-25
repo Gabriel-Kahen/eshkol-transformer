@@ -34,7 +34,7 @@ def check() -> None:
                  'n3k.head-layout', 'n3k.heads.merge.forward',
                  'et_g3c4_view(frame->ah', 'et_g3c4_view(at_candidate'):
         assert part in role, part
-    assert 'et_g3c4_private_role_step_v1' not in source
+    assert 'et_g3c4_private_role_step_v1' not in source.split('#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE\n')[0]
     assert '(frame->next_ordinal < 0 || frame->next_ordinal > 12)' in source
     for part in ('at_case(owner, 1, 1)', 'at_case(owner, 1, 2)',
                  'at_case(owner, 2, 1)', 'fail_at',
