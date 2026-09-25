@@ -335,15 +335,27 @@ signed-shift repair remains a separate reviewed leaf. This composition is
 not gap-5 or whole-F32 acceptance and does not change the transformer pin.
 The separate reviewed VM closure arity leaf `e496bec5`/tree `c7bf4c1`
 rejects too-few and too-many fixed calls and calls below a variadic minimum
-at CALL, TAIL_CALL and the native callback bridge. VM prelude `min` and `max`
-now require two arguments, so public direct and first-class unary forms
-reject instead of returning their F32 or DOUBLE seed. Root verified
-`vm-call-arity-e496bec5-20260924/SEAL.sha256` (`e8e5ed0...`), the source
-and selected pinned f31 Release 8/8 and ASan+UBSan+LSan 2/2 evidence. Old
-ESKB variadic metadata and unknown synthetic closures remain permissive;
-the switch fallback compiles but was not dynamically tested on the supported
-Clang dispatch. This leaf is being composed onto the unary successor union;
-no whole-F32 acceptance is claimed.
+at CALL, TAIL_CALL and the native callback bridge. Root verified its sealed
+selected pinned f31 Release 8/8 and ASan+UBSan+LSan 2/2 evidence. Its
+composition `2f145974` onto `1240e906` introduced two demonstrated
+compatibility regressions: fixed 256-parameter calls decoded as arity zero,
+and previously legal unary DOUBLE `min`/`max` calls rejected. The first is
+repaired in isolated successor `c4769a96`/tree `cf4a081`: source and ESKB
+fixed/dotted 255/256/512 boundaries, legacy sentinel, Release/sanitizer
+916/916 direct VM C API, 80/80 standalone and 12/12 focused gates pass;
+root verified `f32-unary-arity-width-20260924/SEAL.sha256` (`e795c644...`
+for the preceding composition; width successor seal `3866e3c...`). Public
+unary compatibility remains under repair, so this arity composition is held.
+Unknown synthetic closures remain permissive; the switch fallback compiles
+but has not been dynamically tested on supported Clang dispatch. The
+separate VM unary F32 `min`/`max` promotion leaf `af2f4e79`/tree `633cd23`
+from `1240e906` is root-reviewed and sealed at
+`f32-vm-unary-minmax-af2f4e79/SHA256SUMS` (`8ce5cbf...`): genuine host-bit
+F32 direct and stored first-class calls return DOUBLE with signed-zero and
+NaN controls, while INTEGER/DOUBLE unary controls remain unchanged; pinned
+f31 Release 5/5 and ASan+UBSan+LSan 4/4 pass. It awaits composition with
+the compatible arity successor. No whole-F32 acceptance or transformer repin
+is claimed.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
