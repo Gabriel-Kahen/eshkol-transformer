@@ -78,6 +78,12 @@
         :real et_g3t_test_rng_clone_word_v1)
 (extern i64 g3t-test-live-rng-clones
         :real et_g3t_test_live_rng_clones_v1)
+(extern ptr g3t-native-generator-rng ptr ptr i64 i64 i64 i64 i64 i64
+        :real et_g3t_private_generator_rng_v1)
+(extern i64 g3t-test-rng-clone-busy-set ptr i64
+        :real et_g3t_test_rng_clone_busy_set_v1)
+(extern i64 g3t-test-live-contexts
+        :real et_g3t_test_live_contexts_v1)
 (extern i64 g3t-test-last-error-category
         :real et_g3t_private_last_error_category_v1)
 (extern i64 g3t-test-last-error-code
@@ -122,8 +128,12 @@
 (define model
   (with-region ('g3t-p2-model 65536)
     (g3t-checked-m3t-model-create config initial)))
-(define tokenizer (t1-private-tokenizer-byte config))
 (check "eval" (module-eval! model))
+(define native-model (vector-ref (g3t-model-entry-live model 'g3t-rng-test #f) 3))
+(define (generator-from-rng source budget)
+  (g3t-native-generator-rng native-model source 1 #x3f800000 256
+                            #x3f800000 budget -1))
+(define tokenizer (t1-private-tokenizer-byte config))
 (define t1-p2 (t1-wave1-tokenizer-encode tokenizer (bytevector 65 66)))
 (define t1-p1 (t1-wave1-tokenizer-encode tokenizer (bytevector 255)))
 (define t1-empty (t1-wave1-tokenizer-encode tokenizer (bytevector)))
@@ -499,6 +509,69 @@
             (= 1 (g3t-test-live-rng-clones))))
 (check "P2/G0 ID borrow ends"
        (= 0 (g3t-test-output-borrow-end p2-source-borrow)))
+(define rng-context-baseline (g3t-test-live-contexts))
+(check "RNG constructor rejects forged source before read"
+       (and (null? (generator-from-rng (vector 'forged) 0))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))))
+(check "RNG constructor rejects wrong-kind source"
+       (and (null? (generator-from-rng output 0))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))))
+(check "RNG constructor rejects forged model"
+       (and (null? (g3t-native-generator-rng (vector 'forged)
+                  p2-rng-clone 1 #x3f800000 256 #x3f800000 0 -1))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "RNG busy fixture armed" (= 0 (g3t-test-rng-clone-busy-set p2-rng-clone 1)))
+(check "RNG constructor rejects busy source before copy"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "RNG busy fixture disarmed" (= 0 (g3t-test-rng-clone-busy-set p2-rng-clone 0)))
+(check "RNG constructor rejects invalid policy atomically"
+       (and (null? (g3t-native-generator-rng native-model p2-rng-clone
+                                               1 #x3f800000 256 #x3f800000 2 -1))
+            (= 1 (g3t-test-last-error-category))
+            (= 3 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))))
+(check "RNG context header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "RNG context header cut atomic"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "RNG context header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "RNG context A2 cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(check "RNG context A2 cut atomic"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (g3t-test-output-state output))
+            (= 0 (g3t-test-rng-word native 2))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "RNG context A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "RNG A2 cut preserves source cache"
+       (= 2 (g3t-test-cache-length native)))
+(define p2-rng-context (generator-from-rng p2-rng-clone 0))
+(check "P2/G0 RNG constructor exact copy without draw"
+       (and (not (null? p2-rng-context))
+            (= (+ rng-context-baseline 1) (g3t-test-live-contexts))
+            (= 1 (g3t-test-rng-word p2-rng-context 0))
+            (= 1729 (g3t-test-rng-word p2-rng-context 1))
+            (= 0 (g3t-test-rng-word p2-rng-context 2))
+            (= 0 (g3t-test-rng-word p2-rng-context 3))
+            (= 0 (g3t-test-cache-length p2-rng-context))
+            (= 0 (g3t-test-pin-count p2-rng-context))))
 (check "P2/G0 typed RNG release rejects output"
        (and (not (= 0 (g3t-native-rng-release output)))
             (= 1 (g3t-test-last-error-category))
@@ -545,6 +618,19 @@
             (rng-clone-words? p2-rng-clone 0 0 0 0)
             (= 0 (g3t-native-rng-release p2-rng-clone))
             (= 0 (g3t-test-live-rng-clones))))
+(check "P2/G0 new context survives source and parent release"
+       (and (= 1 (g3t-test-rng-word p2-rng-context 0))
+            (= 1729 (g3t-test-rng-word p2-rng-context 1))
+            (= 0 (g3t-test-rng-word p2-rng-context 2))
+            (= 0 (g3t-test-rng-word p2-rng-context 3))
+            (= 0 (g3t-test-cache-length p2-rng-context))))
+(check "RNG constructor rejects released source"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "P2/G0 RNG context close"
+       (and (= 0 (g3t-native-generator-close p2-rng-context))
+            (= (- rng-context-baseline 1) (g3t-test-live-contexts))))
 (check "P2/G0 dead output cannot clone RNG"
        (and (null? (g3t-native-output-rng-clone output))
             (= 2 (g3t-test-last-error-category))
@@ -641,6 +727,16 @@
 (check "P1/G0 exact final RNG clone"
        (and (not (null? p1-zero-rng))
             (rng-clone-words? p1-zero-rng 1 1729 0 0)))
+(define p1-zero-rng-context (generator-from-rng p1-zero-rng 0))
+(check "P1/G0 RNG constructor copies without draw"
+       (and (not (null? p1-zero-rng-context))
+            (= 1 (g3t-test-rng-word p1-zero-rng-context 0))
+            (= 1729 (g3t-test-rng-word p1-zero-rng-context 1))
+            (= 0 (g3t-test-rng-word p1-zero-rng-context 2))
+            (= 0 (g3t-test-rng-word p1-zero-rng-context 3))
+            (= 0 (g3t-test-cache-length p1-zero-rng-context))))
+(check "P1/G0 RNG context close"
+       (= 0 (g3t-native-generator-close p1-zero-rng-context)))
 (check "P1/G0 output release" (g3t-output-release! p1-zero-output))
 (check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
 (check "P1/G0 detached clone survives" (= 0 (g3t-test-clone-length p1-zero-clone)))
@@ -797,6 +893,15 @@
        (and (not (null? g1-rng-clone))
             (rng-clone-words? g1-rng-clone 1 1729 1 0)
             (= 1 (g3t-test-live-rng-clones))))
+(define g1-rng-context (generator-from-rng g1-rng-clone 1))
+(check "P1/G1 RNG constructor copies exact successor without draw"
+       (and (not (null? g1-rng-context))
+            (= 1 (g3t-test-rng-word g1-rng-context 0))
+            (= 1729 (g3t-test-rng-word g1-rng-context 1))
+            (= 1 (g3t-test-rng-word g1-rng-context 2))
+            (= 0 (g3t-test-rng-word g1-rng-context 3))
+            (= 0 (g3t-test-cache-length g1-rng-context))))
+(check "P1/G1 RNG context close" (= 0 (g3t-native-generator-close g1-rng-context)))
 (check "G1 source borrow ends" (= 0 (g3t-test-output-borrow-end g1-source-borrow)))
 (check "G1 RNG header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
 (check "G1 RNG header cut atomic"

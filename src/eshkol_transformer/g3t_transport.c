@@ -52,6 +52,11 @@
 #error "G3-T RNG clones require live final output publication"
 #endif
 #endif
+#ifdef ET_G3T_GENERATOR_RNG_PRIVATE
+#ifndef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+#error "G3-T RNG constructor requires kind-8 RNG clone authority"
+#endif
+#endif
 #ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
 #ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #error "G3-T T1 input requires private input transport"
@@ -441,6 +446,54 @@ void *et_g3t_private_generator_seed_v1(
   g3t_registry = &c->h;
   return c;
 }
+#ifdef ET_G3T_GENERATOR_RNG_PRIVATE
+void *et_g3t_private_generator_rng_v1(
+    void *model_owner, void *rng, int64_t mode, int64_t temperature_bits,
+    int64_t k, int64_t p_bits, int64_t max_new, int64_t eos) {
+  g3t_clear();
+  owner *o = g3t_model(model_owner);
+  if (!o) return NULL;
+  g3t_rng_clone *source = (g3t_rng_clone *)g3t_admit_record(
+      rng, G3T_RNG_CLONE, 0);
+  if (!source) return NULL;
+  if (source->h.busy) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  if (!g3t_policy_valid(mode, temperature_bits, k, p_bits, max_new, eos)) {
+    g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+    return NULL;
+  }
+  if (o->active) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  g3t_context *c = g3t_allocate();
+  if (!c) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+  et_kernel_error error;
+  if (et_a2_kv_cache_create_v1(1, 1, 2, 2, 2, &c->cache, &error)) {
+    g3t_a2_failure(&error);
+    free(c);
+    return NULL;
+  }
+  c->h.kind = G3T_GENERATOR;
+  c->h.state = G3T_LIVE;
+  c->model = o;
+  c->policy[0] = mode;
+  c->policy[1] = temperature_bits;
+  c->policy[2] = k;
+  c->policy[3] = p_bits;
+  c->policy[4] = max_new;
+  c->policy[5] = eos;
+  memcpy(c->rng, source->words, sizeof(c->rng));
+  c->h.next = g3t_registry;
+  g3t_registry = &c->h;
+  return c;
+}
+#endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();
   g3t_context *c = g3t_admit(candidate, 1);
@@ -1925,6 +1978,15 @@ int64_t et_g3t_test_live_rng_clones_v1(void) {
     if (r->kind == G3T_RNG_CLONE && r->state == G3T_LIVE) ++count;
   return count;
 }
+#ifdef ET_G3T_GENERATOR_RNG_PRIVATE
+int64_t et_g3t_test_rng_clone_busy_set_v1(void *candidate, int64_t busy) {
+  g3t_rng_clone *clone = (g3t_rng_clone *)g3t_admit_record(
+      candidate, G3T_RNG_CLONE, 0);
+  if (!clone || (busy != 0 && busy != 1)) return -1;
+  clone->h.busy = (int)busy;
+  return 0;
+}
+#endif
 #endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 int64_t et_g3t_test_input_length_set_v1(void *candidate, int64_t length) {

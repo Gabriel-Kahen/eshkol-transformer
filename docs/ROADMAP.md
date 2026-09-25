@@ -771,6 +771,14 @@ normal/repeat/ASan+UBSan+LSan focused gate passes 46,469 checks each, including
 on the integrated tree. The public G3-G adapter and package remain separate
 review gates.
 
+The [private RNG constructor leaf](g3/G3_T_GENERATOR_RNG_LEAF.md) is an
+isolated candidate from `0b20801`. It authenticates a live kind-8 RNG clone
+and M3T owner, copies four words into an independent idle generator, and
+preserves the seeded route. The pinned normal/repeat/ASan+UBSan+LSan gate
+passes 46,491 checks each, with seven source contracts and Q0 4/4;
+sealed evidence is `g3t-generator-rng-0b20801-r2`. An Eshkol RNG-owner
+registry entry and the G3-G public facade remain separate review gates.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
