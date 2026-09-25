@@ -1166,6 +1166,14 @@ The poisoned public caller passed all six X1 operations, malformed/forged
 negatives and authentic resolved-to-trainer construction. Sealed evidence is
 `tr3-public-x1-linked-f3827a4-20260925`; T2/D2/M3T/P1/O2 installed
 producer facades remain separate.
+The next isolated T2 operand leaf adds the unchanged eight-method
+`transformer.tokenizer` facade to the same TR3 aggregate. The seven newly
+wrapped T2 operations reuse accepted same-package implementations; the
+installed caller constructs a byte tokenizer, round-trips bytes, checks
+accessors and typed forged-policy load/save failures, then passes that
+receiver to `trainer-create`. Successful load/save awaits an installed
+same-aggregate C1 policy producer. D2/M3T/P1/O2 remain test-local, and
+the T2 linked gate and exact package measurements are pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

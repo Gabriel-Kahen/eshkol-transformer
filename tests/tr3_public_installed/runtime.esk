@@ -1,10 +1,10 @@
-;;; Installed X1/trainer facet caller. Other operands use test-only same-package
-;;; boxed entries; config and trainer names come from exact installed facades.
+;;; Installed X1/T2/trainer facet caller. Other operands use test-only
+;;; same-package boxed entries; public names come from installed facades.
 (require transformer.config)
+(require transformer.tokenizer)
 (require transformer.trainer)
 (require transformer.error_consumer)
 
-(extern void t1-byte ptr ptr :real et_e1b_public_t1_tokenizer_byte_v1)
 (extern void d2-open ptr ptr ptr :real et_e1b_public_d2_token_dataset_open_v1)
 (extern void d2-close ptr ptr :real et_e1b_public_d2_token_dataset_close_v1)
 (extern void d2-next ptr ptr
@@ -23,10 +23,6 @@
 (extern void o2-create ptr ptr ptr
         :real et_e1b_public_o2_optimizer_create_v1)
 
-(define (tokenizer-byte resolved)
-  (let ((output (vector #f)))
-    (t1-byte (vector resolved) output)
-    (vector-ref output 0)))
 (define (token-dataset-open options tokenizer)
   (let ((output (vector #f)))
     (d2-open (vector options) (vector tokenizer) output)
@@ -121,6 +117,14 @@
                     (cons (car remaining) result)))))))
 (define (list-length value)
   (if (null? value) 0 (+ 1 (list-length (cdr value)))))
+(define (bytes-equal? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
 
 (define corpus-directory (car (cdr (command-line))))
 (expect-error "malformed config keeps X1 public operation"
@@ -156,6 +160,31 @@
               'invalid-argument 'config-fingerprint
   (lambda () (config-fingerprint parsed)))
 (define tokenizer (tokenizer-byte resolved))
+(check "installed T2 byte vocabulary" (= (tokenizer-vocab-size tokenizer) 256))
+(check "installed T2 byte fingerprint"
+       (string=? (tokenizer-fingerprint tokenizer)
+                 "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"))
+(define sample-bytes (bytevector 0 65 0 255))
+(define encoded (tokenizer-encode tokenizer sample-bytes))
+(check "installed T2 encode/decode round trip"
+       (bytes-equal? (tokenizer-decode tokenizer encoded) sample-bytes))
+(expect-error "byte tokenizer has no named special token"
+              'invalid-argument 'tokenizer-special-token-id
+  (lambda () (tokenizer-special-token-id tokenizer "absent")))
+(expect-error "forged T2 ID carrier rejected"
+              'invalid-argument 'tokenizer-decode
+  (lambda () (tokenizer-decode tokenizer #(1 2 3))))
+(expect-error "forged C1 policy rejects tokenizer load"
+              'invalid-argument 'tokenizer-load
+  (lambda ()
+    (tokenizer-load (string-append corpus-directory "/unused-tokenizer.t1")
+                    (vector 'forged-policy))))
+(expect-error "forged C1 policy rejects tokenizer save"
+              'invalid-argument 'tokenizer-save!
+  (lambda ()
+    (tokenizer-save! tokenizer
+                     (string-append corpus-directory "/unused-tokenizer.t1")
+                     (vector 'forged-policy))))
 (define (dataset-options)
     (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
           ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
@@ -227,5 +256,5 @@
 (expect-error "C2 detached-state release retains public error mapping"
               'invalid-argument 'trainer-state-release!
   (lambda () (trainer-state-release! (vector 'forged))))
-(display "TR3-PUBLIC-X1-FACET-PASS")
+(display "TR3-PUBLIC-T2-FACET-PASS")
 (newline)

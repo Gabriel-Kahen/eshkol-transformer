@@ -79,3 +79,19 @@ through test-local T2/D2/M3T/P1/O2 entries. Evidence is sealed at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-x1-linked-f3827a4-20260925/`
 (`SHA256SUMS` SHA-256 `3bade2aff04fef1b0c2e466a93203ce32e93f435d2c6b80349b38982b44349d7`),
 and `sha256sum -c` passed.
+
+## T2 operand facade successor candidate
+
+The next isolated candidate adds the unchanged eight-operation
+`lib/transformer/tokenizer.esk` to that same aggregate. Its byte constructor
+was already linked; the seven accepted T2 load/save/encode/decode/vocabulary/
+fingerprint/special-token methods now use their existing private definitions,
+the exact T2 package renames, and boxed wrappers in the same native bridge.
+An ordinary installed caller constructs a byte tokenizer from its X1 resolved
+configuration, uses encode/decode and accessors, then passes that authentic
+receiver to `trainer-create`. The linked caller also checks typed forged-policy
+rejections for load/save. Successful load/save requires an authentic C1 policy;
+its producer is not yet installed in this aggregate. D2, M3T, P1 and O2
+creation remain test-local direct entries. The C2 tuple and prior sealed X1
+package evidence remain unchanged. The full linked gate and exact compiled
+boundary for this candidate are pending.
