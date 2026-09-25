@@ -23,7 +23,7 @@ oracle="${TR3_STEP_ORACLE_PYTHON:-${M3_ORACLE_PYTHON:-}}"
   die "TR3_STEP_ORACLE_PYTHON must name the pinned PyTorch oracle"
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || \
   die "step leaf gate requires a clean committed checkout"
-evidence="${TR3_STEP_EVIDENCE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/tr3-step-leaf.XXXXXX")}" 
+evidence="${TR3_STEP_EVIDENCE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/tr3-step-leaf.XXXXXX")}"
 mkdir -p -- "${evidence}"
 evidence="$(readlink -f -- "${evidence}")"
 [[ "${evidence}" != "${PROJECT_ROOT}" && "${evidence}" != "${PROJECT_ROOT}/"* ]] || \
