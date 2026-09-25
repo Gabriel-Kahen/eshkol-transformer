@@ -154,6 +154,34 @@ assert len(paths) == len(set(paths))
 Path(sys.argv[2]).write_text(''.join(path + '\n' for path in paths))
 PY
 cmp native/tr3_public_candidate_source_closure.txt "${evidence}/source-closure.txt"
+python3 - "${PROJECT_ROOT}" "${evidence}" <<'PY'
+from pathlib import Path
+import sys
+root, evidence = map(Path, sys.argv[1:])
+deps = sorted((evidence / 'native').glob('*.d'))
+assert len(deps) == 30
+paths = set()
+for dep in deps:
+    text = dep.read_text().replace('\\\n', ' ')
+    for item in text.split(':', 1)[1].split():
+        if item.startswith('/workspace/'):
+            item = item.removeprefix('/workspace/')
+        elif item.startswith('/'):
+            continue
+        path = (root / item).resolve(strict=True)
+        assert path.is_relative_to(root), item
+        paths.add(path.relative_to(root).as_posix())
+(evidence / 'native-source-closure.txt').write_text(
+    ''.join(path + '\n' for path in sorted(paths)))
+(evidence / 'native-objects.txt').write_text(
+    ''.join(dep.name.removesuffix('.d') + '\n' for dep in deps))
+PY
+cmp native/tr3_public_candidate_native_source_closure.txt \
+  "${evidence}/native-source-closure.txt"
+cmp native/tr3_public_candidate_native_objects.txt \
+  "${evidence}/native-objects.txt"
+cmp native/tr3_public_candidate_undefined_symbols.txt \
+  "${evidence}/undefined-symbols.txt"
 python3 - "${evidence}/caller.d" <<'PY'
 from pathlib import Path
 import sys
