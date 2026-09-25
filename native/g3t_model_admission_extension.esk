@@ -1,0 +1,60 @@
+;;; Source-private G3-T M3T/C2 model admission precursor.
+;;; Load after m3_package_root.esk and m3_call_adapters.esk.
+;;; No generator or public generation operation is defined here.
+
+(define g3t-registry (vector '()))
+
+(define (g3t-model-entry-live model operation active-call)
+  (let ((entry (m3t-find model)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 0) model)
+                  (eq? (vector-ref entry 1) 'model)))
+        (m3t-fail 'invalid-argument operation
+                  "G3-T requires an exact M3T model shell"))
+    (let ((original (vector-ref entry 5))
+          (successor (vector-ref entry 6))
+          (config (vector-ref entry 7))
+          (handles (vector-ref entry 8)))
+      (if (not (and (eq? (vector-ref entry 2) 'live)
+                    (not (null? (vector-ref entry 3)))
+                    (eq? (vector-ref entry 4) #f)
+                    (vector? original) (= (vector-length original) 12)
+                    (vector? successor) (= (vector-length successor) 12)
+                    (eq? (m3t-find (vector-ref original 0)) original)
+                    (eq? (m3t-find (vector-ref successor 0)) successor)
+                    (eq? (vector-ref original 1) 'initializer)
+                    (eq? (vector-ref successor 1) 'initializer)
+                    (eq? (vector-ref original 2) 'live)
+                    (eq? (vector-ref successor 2) 'live)
+                    (not (null? (vector-ref original 3)))
+                    (not (null? (vector-ref successor 3)))
+                    (vector? config) (= (vector-length config) 2)
+                    (string? (vector-ref config 0))
+                    (string? (vector-ref config 1))
+                    (vector? handles) (= (vector-length handles) 14)
+                    (eq? (vector-ref entry 9) #f)
+                    (eq? (vector-ref entry 10) active-call)
+                    (eq? (vector-ref entry 11) m3t-profile)))
+          (m3t-fail 'invalid-state operation
+                    "G3-T M3T model entry is not exact and live"))
+      (let validate ((index 0))
+        (if (= index 14) #t
+            (let ((handle (vector-ref handles index)))
+              (if (not (and handle
+                            (equal? (parameter-handle-path handle)
+                                    (vector-ref m3t-paths index))
+                            (equal? (parameter-handle-shape handle)
+                                    (vector-ref m3t-shapes index))
+                            (eq? (parameter-handle-dtype handle) 'f32)
+                            (eq? (parameter-handle-device handle) 'cpu)
+                            (let distinct ((prior 0))
+                              (if (= prior index) #t
+                                  (and (not (eq? handle (vector-ref handles prior)))
+                                       (distinct (+ prior 1)))))))
+                  (m3t-fail 'invalid-state operation
+                            "G3-T M3T canonical handles changed"))
+              (validate (+ index 1)))))
+      (if (not (eq? (module-mode-internal model) 'eval))
+          (m3t-fail 'invalid-state operation
+                    "G3-T requires an eval-mode M3T model"))
+      entry)))
