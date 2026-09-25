@@ -574,17 +574,43 @@ eval mode, and absence of an active workspace without enrolling a generator.
 Root's pinned normal/repeat/sanitizer witness passes 24 checks, the source
 closure and merged Q0 4/4 pass, and evidence is sealed at
 `g3t-model-admission-root-59558ba-20260925/SHA256SUMS` (`ab03f8e1...`).
-The native G3-T context/pins and seeded constructor are now the accepted
-private predecessor `824f91e` (see
-[constructor leaf](g3/G3_T_GENERATOR_CONSTRUCTOR_LEAF.md)). This isolated
-[P1/G1 prefill/sample leaf](g3/G3_T_PREFILL_SAMPLE_LEAF.md) adds a guarded,
-source-private 21-role prefill, prepared prompt/cache/model binding commit,
+The source-private native G3-T generator-context leaf `5a8d6c5`/tree
+`cfeccbf` is integrated byte-identically at `234a520`. It authenticates
+the actual M3T owner, enrolls an empty A2 cache only after allocation,
+holds the shared fixed-14 pins during acquired calls, and retains dead
+context tombstones after close. Root's pinned merged normal, repeat, and
+ASan/UBSan gates each pass 47 checks, with genuine model construction,
+wrong-owner/policy rejection, allocation retry, same-model exclusion,
+pin drain, and source/Q0 isolation. Evidence is sealed at
+`g3t-native-context-root-234a520-20260925/SHA256SUMS` (`fcc2dcfe...`).
+The source-private seeded G3-T constructor `824f91e`/tree `5a98260` is
+integrated byte-identically at `f8c359e`. It authenticates the fixed M3T
+model and raw V256 tokenizer, validates a bounded C2 seed policy, roots the
+native context and closes idle generators. Root's pinned normal/repeat/
+sanitizer gates each pass 53 checks, sealed at
+`g3t-generator-constructor-root-f8c359e-20260925/SHA256SUMS`
+(`2e411a88...`). A repeated sanitizer audit observed model-seal failures
+before any constructor call in both predecessor (17/100) and candidate
+(2/100) binaries; the candidate normal binary passed 100/100. P1's seal and
+prepare-eval compared parameter schedule rows structurally, including opaque
+native handle pointers. Eshkol deep equality could interpret a handle's nonce
+as a bignum limb count. The isolated P1 repair compares handles by identity
+and compares path, shape, dtype, device, and ties by value. Its pinned G3-T
+constructor gate passes 53 checks, with 0/100 normal and 0/300
+ASan/UBSan/LSan fresh-process failures. A focused P1 witness rejects a
+different authentic handle with equal metadata and changed metadata with the
+same handle. Audit traces are sealed at
+`g3t-constructor-sanitizer-audit-824f91e-20260925/SHA256SUMS`; repair
+evidence is at `g3t-model-seal-fix-20260925/SHA256SUMS`.
+The isolated [P1/G1 prefill/sample leaf](g3/G3_T_PREFILL_SAMPLE_LEAF.md)
+adds a guarded 21-role prefill, prepared prompt/cache/model binding commit,
 and speculative G3-S greedy/categorical output. Its pinned normal/repeat/
 sanitizer witness compares all 256 logits bitwise with M3T and exercises
-precommit, attention, and stale-profile rollback. A token frame, text/result
-publication, continuation binding validation and public generation remain
-pending. The predecessor's intermittent sanitizer model-seal crash remains a
-separate limitation.
+precommit, attention, and stale-profile rollback. It carries the exact P1
+repair above; the predecessor's intermittent model-seal crash remains part of
+the audit history. RNG-owner construction, the token frame, text/result
+publication, continuation binding validation, and public generation remain
+pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
