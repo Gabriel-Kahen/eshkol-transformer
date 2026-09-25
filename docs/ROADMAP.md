@@ -884,11 +884,14 @@ producer wrapper, C ingress/handle bridge, and a linked lifecycle gate. The
 first pinned 47-source/30-native strict linked run on `1e45393` passed genuine
 `dlopen` create/close, X1/D2/digest negatives, initializer and hostile-link
 probes; its sealed evidence is `tr3-factory-linked-1e45393-20260925`.
-The candidate exact raw/undefined/dynamic symbol manifests are pinned from
-that run, including the three newly indexed P1 hash references. Final
-same-tree linked rerun, broader cleanup/failure-cut evidence and independent
-review remain pending; the production initializer-only export manifest and
-public trainer/resume status are unchanged.
+The final same-tree linked rerun on `5558c08` passes with exact
+raw/undefined/dynamic symbol manifests, including the three newly indexed P1
+hash references; its sealed evidence is `tr3-factory-linked-5558c08-20260925`.
+The full contract matrix still needs a fixed-profile and X1-seed derivation
+witness, every producer/lease failure cut, cleanup-failure behavior,
+process-lifetime retention, broader E1 category evidence and independent
+review. The production initializer-only export manifest and public
+trainer/resume status are unchanged.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
