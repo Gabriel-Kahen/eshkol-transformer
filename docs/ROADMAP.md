@@ -792,8 +792,10 @@ The [source-private RNG owner mapping](g3/G3_T_RNG_OWNER_LEAF.md) is an
 isolated candidate after the native constructor leaf. It uses the accepted
 G3-T registry to expose a detached kind-8 output clone and typed release,
 with preallocated wrapper publication and cleanup after any post-clone
-failure. Focused pinned evidence is pending; `generator-create` RNG input
-admission, G3-G public facade, and package exports remain separate gates.
+failure. The pinned normal/repeat/ASan+UBSan+LSan gate passes 46,508 checks
+each, with eight source contracts and Q0 4/4; sealed evidence is
+`g3t-rng-owner-20e1a1a`. `generator-create` RNG input admission, G3-G
+public facade, and package exports remain separate gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

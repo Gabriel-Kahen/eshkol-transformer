@@ -16,6 +16,13 @@ generic tensor and output release reject the wrong kind. The native clone
 copies inline words and is independent of an ID-tensor borrow. A native
 allocation cut leaves the source output and both live registries unchanged.
 
+The pinned, network-disabled Ubuntu 22.04/LLVM 21 gate passes 46,508 checks
+each in normal, repeat, and ASan/UBSan/LSan modes with identical stdout and
+empty compile/runtime stderr. Eight G3-T source contracts and Q0 4/4 pass;
+the production object excludes test hooks. Sanitizer settings include
+`detect_leaks=1`, `halt_on_error=1`, and arena poisoning. The corrected test
+and loaded extension also passed strict Eshkol parse/type preflight.
+
 The focused witness covers P2/G0 detached lifetime, P1/G0 exact words,
 forged/wrong-kind/dead identities, wrong typed release, allocation failure,
 borrowed output IDs, zeroization, and idempotence. P1/G1 retains a native
