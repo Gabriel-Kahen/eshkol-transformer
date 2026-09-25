@@ -27,6 +27,9 @@ void *et_g3t_private_output_ids_clone_v1(void *output);
 #ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
 void *et_g3t_private_output_lengths_clone_v1(void *output);
 #endif
+#ifdef ET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
+void *et_g3t_private_output_cache_lengths_clone_v1(void *output);
+#endif
 int64_t et_g3t_private_output_prepare_v1(void *context, void *output);
 int64_t et_g3t_private_output_copy_decode_ids_v1(
     void *context, void *output, void *staging_header);
@@ -82,6 +85,13 @@ int64_t et_g3t_test_lengths_clone_value_v1(void *clone);
 void *et_g3t_test_lengths_clone_borrow_begin_v1(void *clone);
 int64_t et_g3t_test_lengths_clone_borrow_end_v1(void *borrow);
 int64_t et_g3t_test_live_lengths_clones_v1(void);
+#endif
+#ifdef ET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
+int64_t et_g3t_test_cache_lengths_clone_state_v1(void *clone);
+int64_t et_g3t_test_cache_lengths_clone_value_v1(void *clone);
+void *et_g3t_test_cache_lengths_clone_borrow_begin_v1(void *clone);
+int64_t et_g3t_test_cache_lengths_clone_borrow_end_v1(void *borrow);
+int64_t et_g3t_test_live_cache_lengths_clones_v1(void);
 #endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 int64_t et_g3t_test_input_length_set_v1(void *input, int64_t length);
