@@ -21,3 +21,14 @@ borrow-guarded release, exact owned singleton word and I1 count, and P1/G0
 and P1/G1 prefill through the owned scalar input. It preserves the separate
 T1-backed P1/P2 input witnesses. No public G3-G facade, export, package or
 CLI is added; P2/G1 still requires a capacity-three contract.
+
+The supported network-disabled image
+`eshkol-checked-promotion-llvm21:20260922`
+(`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`)
+strictly compiled the P2 test and ran its normal, repeat and
+ASan+UBSan+LSan gate against source commit
+`6bbc14a4e58afbae6112e750846db52486daa2ff` (tree
+`6a2c76b156285ea6c2a0705c545bdd7c6f259808`). All three reported
+46,586 checks with matching output and empty compiler/runtime stderr.
+Ten source contracts and Q0 4/4 passed. The sealed external evidence is
+`g3t-owned-token-input-6bbc14a`.
