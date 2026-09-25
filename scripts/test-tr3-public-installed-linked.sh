@@ -126,7 +126,7 @@ nm -u --format=posix /out/combined.o | awk "{print \$1}" | \
 ar rcsD /out/libeshkol_transformer_tr3_public_installed.a /out/combined.o
 test "$(ar t /out/libeshkol_transformer_tr3_public_installed.a)" = combined.o
 
-python3 -m tests.e3_reference.corpus --output /out/corpus
+mkdir -p /out/corpus/installed-d1
 mkdir -p /out/facades/transformer
 while IFS= read -r facade; do
   test -f "lib/${facade}" && test ! -L "lib/${facade}"
@@ -145,9 +145,9 @@ timeout --foreground --signal=TERM --kill-after=5s 120s \
     tests/tr3_public_installed/runtime.esk \
     -o /out/caller > /out/caller-compile.stdout 2> /out/caller-compile.stderr
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
-  /out/caller /out/corpus/packed-single \
+  /out/caller /out/corpus/installed-d1 \
   > /out/caller.stdout 2> /out/caller.stderr
-grep -Fx TR3-PUBLIC-T2-FACET-PASS /out/caller.stdout >/dev/null
+grep -Fx TR3-PUBLIC-D2-FACET-PASS /out/caller.stdout >/dev/null
 test ! -s /out/caller.stderr
 '
 
@@ -199,6 +199,7 @@ paths = [path.removeprefix('/workspace/') for path in dep.split(':', 1)[1].split
 assert paths == ['tests/tr3_public_installed/runtime.esk',
                  '/out/facades/transformer/config.esk',
                  '/out/facades/transformer/error_consumer.esk',
+                 '/out/facades/transformer/data.esk',
                  '/out/facades/transformer/tokenizer.esk',
                  '/out/facades/transformer/trainer.esk'], paths
 PY

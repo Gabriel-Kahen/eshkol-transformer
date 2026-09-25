@@ -25,6 +25,7 @@ native/c2_x1_canonical.c
 native/c2_x1_canonical.h
 native/checkpoint_io.c
 native/checkpoint_io.h
+native/d1_e1b_package_bridge.c
 native/d2_native.c
 native/d2_native.h
 native/data_io.c

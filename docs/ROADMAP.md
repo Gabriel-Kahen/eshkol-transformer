@@ -1177,6 +1177,13 @@ the pinned `bd5dc8f` linked gate passed with 49 Eshkol sources, 30 native
 objects, 69 native paths, 4,156 raw definitions, 33 exports and 173
 undefined symbols. The poisoned public caller passed with empty stderr;
 `tr3-public-t2-linked-bd5dc8f-20260925/SHA256SUMS` is verified.
+The next isolated D1/D2 installed leaf copies the unchanged canonical
+`transformer.data` facade into the same aggregate, bringing its eight D1
+corpus methods and eleven D2 dataset/batch methods through accepted private
+renames and boxed wrappers. The caller writes/validates a D1 corpus, opens
+and exercises D2 with its installed tokenizer, then passes that authentic
+dataset to `trainer-create`. M3T/P1/O2 stay test-local; exact linked
+measurements are pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

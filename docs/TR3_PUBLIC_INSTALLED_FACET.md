@@ -101,3 +101,22 @@ sealed at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-t2-linked-bd5dc8f-20260925/`
 (`SHA256SUMS` SHA-256 `cf7a25fade2c06c62395302599cbccccb9ec9bb2a7338ba9afa47d81b46e4e40`);
 `sha256sum -c` passed.
+
+## D1/D2 operand facade successor candidate
+
+The next isolated candidate copies the unchanged canonical
+`lib/transformer/data.esk` into the same TR3 aggregate. That facade contains
+the eight accepted D1 corpus methods as prerequisites to its eleven D2
+dataset/batch methods. The aggregate already compiles their private sources;
+the candidate adds exact D1/D2 renames and boxed public wrappers while reusing
+the four D2 entries previously linked for the trainer caller. No separate
+registry-owning archive is linked. The D2 callable batch accessors and
+wrong-kind selector retain the Wave 2 bridge convention.
+
+The linked caller writes and validates a deterministic D1 corpus, opens an
+authentic D2 dataset with its installed T2 tokenizer, checks cursor, batch,
+seek, release, close and typed negative behavior, then passes a D2 dataset
+from that corpus to `trainer-create`. M3T, P1 and O2 construction remain
+test-local direct entries. The full linked gate and exact compiled boundary
+for this candidate are pending; the C2 versioned tuple and earlier sealed
+TR3 evidence remain unchanged.
