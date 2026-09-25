@@ -542,8 +542,16 @@ commit and drain the active call. Independent pinned normal, repeat, and
 sanitizer gates each pass 6,055 checks across four routes, including failure
 and retry before commit; Q0 passes 4/4 and the merged focused gate passes.
 Root sealed `g3c4-manual-frame-commit-7382b41-20260925/SHA256SUMS`
-(`417948bd...`). Public role stepping, generation loop, output/text
-publication, and save/reload remain pending.
+(`417948bd...`). The source-private native 21-role dispatcher
+`1a4af6f`/tree `30ad88f` is integrated byte-identically at `fd3534c`.
+It authenticates the active manual frame, requires the exact next ordinal,
+and delegates to the accepted seven helper groups without owning a new
+numerical route or cursor mutation. Independent pinned normal, repeat,
+and sanitizer gates each pass 6,199 checks across T1/T2/decode, including
+21 provider failure/retry cases; Q0 4/4 and the merged focused gate pass.
+Root sealed `g3c4-manual-role-step-1a4af6f-20260925/SHA256SUMS`
+(`6bd0b5db...`). Public Eshkol role stepping, generation loop,
+output/text publication, and save/reload remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
