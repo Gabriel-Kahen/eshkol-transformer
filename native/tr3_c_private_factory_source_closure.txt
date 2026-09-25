@@ -1,3 +1,4 @@
+native/tr3_c_private_factory_root.esk
 native/tr3_c_private_package_root.esk
 native/tr3_c_checkpoint_restore_root.esk
 native/d2_wave2_root.esk

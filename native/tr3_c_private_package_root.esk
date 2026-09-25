@@ -3,4 +3,3 @@
 ;;; installs no public trainer facade.
 (load "tr3_c_checkpoint_restore_root.esk")
 (load "tr3_c_trainer_load_state_extension.esk")
-(load "tr3_c_private_factory_extension.esk")

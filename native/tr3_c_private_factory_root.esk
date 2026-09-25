@@ -1,0 +1,4 @@
+;;; Candidate-only factory aggregate. Preserve the production private root
+;;; and add the same-package data-only trainer constructor/close seam.
+(load "tr3_c_private_package_root.esk")
+(load "tr3_c_private_factory_extension.esk")
