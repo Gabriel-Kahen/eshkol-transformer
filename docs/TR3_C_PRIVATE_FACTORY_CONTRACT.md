@@ -155,7 +155,8 @@ one-to-one to C statuses, in this fixed numeric order: `ok=0`,
 `m3t-initializer=6`, `m3t-model=7`, `o2=8`, `lease=9`, or `close=10`.
 `reason` is `raised-e1=0`, `not-ready=1`, `busy=2`, `attempt-used=3`,
 `bad-handle=4`, `already-closed=5`, `digest-mismatch=6`,
-`cleanup-failed=7`, or `foreign-exception=8`. `original_category` is zero
+`cleanup-failed=7`, `foreign-exception=8`, or `malformed-request=9` for
+pre-admission C validation. `original_category` is zero
 except on cleanup failure, when it holds the first failing E1 category. A foreign
 or unclassifiable raise maps to `internal` with `foreign-exception`; it never
 becomes `ok` or a partial handle. C readiness/busy/attempt exhaustion and
