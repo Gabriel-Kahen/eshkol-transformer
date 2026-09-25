@@ -932,6 +932,21 @@ the next dependency is an accepted runtime identity-indexing contract or a
 measured larger runtime budget.
 Root integrated that timing and diagnosis at `dc965bc`/`7acfd66`, without
 changing the accepted SAVE, LOAD or joint restore path.
+An isolated P1 identity-index candidate `fd25f0c` keeps the append-only shell
+registry authoritative and indexes published native shell pointer bits for
+exact-identity lookup. It changes no public or native API. Pinned f31/LLVM21
+sanitizer retention passes 32/128 genuine cycles with 91/283 checks, flat live
+authority counts and exact images; 128-cycle wall time is 54.90 seconds versus
+the preceding 71.63-second diagnosis. Focused P1 structural, registry, and
+construction AOT tests pass 419, 169, and 23 checks. The canonical generated
+root check passes. A direct 1,024-cycle reuse of the same sanitized binary
+did not reach the horizon: the pinned runtime reported its 1,024 MiB heap
+ceiling, then the 1,200-second bound exited 124 at 1,468,752 KiB peak RSS.
+No final authority/image census or 1,024 phase timing was emitted. This
+isolated candidate has not been integrated; the 1,024/8,192 horizon remains
+an acceptance gate, now with both time and default-heap resource blockers.
+The measured logs are sealed at
+`/tmp/p1-index-retention-evidence/SHA256SUMS` (`c6d91e9f...`).
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
