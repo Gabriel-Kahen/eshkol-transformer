@@ -4462,6 +4462,22 @@
          (retained (construction-rows record 'module-construction-parameters-internal)))
     (vector-set! record 4 retained)
     snapshot))
+(define (construction-schedule-equal? actual retained)
+  ;; Row slot 1 is an opaque native handle. Structural equality may inspect
+  ;; its nonce bytes as an Eshkol heap header, so compare that slot by identity.
+  (let rows ((left (vector-ref actual 0)) (right (vector-ref retained 0)))
+    (cond
+      ((null? left) (and (null? right)
+                         (equal? (vector-ref actual 1) (vector-ref retained 1))))
+      ((null? right) #f)
+      (else
+        (let ((a (car left)) (b (car right)))
+          (and (equal? (vector-ref a 0) (vector-ref b 0))
+               (eq? (vector-ref a 1) (vector-ref b 1))
+               (equal? (vector-ref a 2) (vector-ref b 2))
+               (eq? (vector-ref a 3) (vector-ref b 3))
+               (equal? (vector-ref a 4) (vector-ref b 4))
+               (rows (cdr left) (cdr right))))))))
 (define (construction-seal! identity)
   (let* ((operation 'module-construction-seal-internal!)
          (record (construction-open operation identity))
@@ -4471,7 +4487,7 @@
          (schedule (vector-ref record 4))
          (finalizers (finalization-plan operation root))
          (updates (canonical-path-updates (sort-entries (flatten-parameters root '())))))
-    (if (or (not schedule) (not (equal? actual schedule)))
+    (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation "construction changed after parameter schedule" '()))
     (let scan ((remaining (shell-registry-current)))
       (if (null? remaining) #t
@@ -4511,7 +4527,7 @@
          (updates
            (canonical-path-updates
              (sort-entries (flatten-parameters root '())))))
-    (if (or (not schedule) (not (equal? actual schedule)))
+    (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation
               "construction changed after parameter schedule" '()))
     (let scan ((remaining (shell-registry-current)))

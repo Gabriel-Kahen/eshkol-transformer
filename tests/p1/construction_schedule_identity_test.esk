@@ -1,0 +1,26 @@
+;;; Appended to a test-only trusted P1 root with two private probe slots.
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P1 construction schedule FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (schedule handle shape)
+  (vector (list (vector '("weight") handle shape 'f32 'cpu)) '()))
+
+(define compare-schedules (vector-ref p1-trusted-surface 73))
+(define create-handle (vector-ref p1-trusted-surface 74))
+(define first-handle (create-handle))
+(check "first native handle" (not (null? first-handle)))
+(define second-handle (create-handle))
+(check "second native handle" (not (null? second-handle)))
+(check "distinct native handles" (not (eq? first-handle second-handle)))
+(check "same handle and metadata"
+       (compare-schedules (schedule first-handle '(2))
+                          (schedule first-handle '(2))))
+(check "different handle with equal metadata"
+       (not (compare-schedules (schedule first-handle '(2))
+                               (schedule second-handle '(2)))))
+(check "same handle with changed metadata"
+       (not (compare-schedules (schedule first-handle '(2))
+                               (schedule first-handle '(3)))))
+(display "P1 construction schedule PASS: ") (display checks) (newline)

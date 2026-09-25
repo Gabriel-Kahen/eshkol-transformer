@@ -591,9 +591,17 @@ sanitizer gates each pass 53 checks, sealed at
 `g3t-generator-constructor-root-f8c359e-20260925/SHA256SUMS`
 (`2e411a88...`). A repeated sanitizer audit observed model-seal failures
 before any constructor call in both predecessor (17/100) and candidate
-(2/100) binaries; the candidate normal binary passed 100/100. The invalid
-value's origin remains unresolved; audit traces are sealed at
-`g3t-constructor-sanitizer-audit-824f91e-20260925/SHA256SUMS`.
+(2/100) binaries; the candidate normal binary passed 100/100. P1's seal and
+prepare-eval compared parameter schedule rows structurally, including opaque
+native handle pointers. Eshkol deep equality could interpret a handle's nonce
+as a bignum limb count. The isolated P1 repair compares handles by identity
+and compares path, shape, dtype, device, and ties by value. Its pinned G3-T
+constructor gate passes 53 checks, with 0/100 normal and 0/300
+ASan/UBSan/LSan fresh-process failures. A focused P1 witness rejects a
+different authentic handle with equal metadata and changed metadata with the
+same handle. Audit traces are sealed at
+`g3t-constructor-sanitizer-audit-824f91e-20260925/SHA256SUMS`; repair
+evidence is at `g3t-model-seal-fix-20260925/SHA256SUMS`.
 RNG ownership, authentic frames/results, sampling, and public generation
 remain pending.
 
