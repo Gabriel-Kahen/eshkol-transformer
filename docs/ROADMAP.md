@@ -1154,6 +1154,12 @@ and public trainer caller. Both evidence sets are sealed at
 `tr3-public-installed-linked-57ca36b-20260925`. Ordinary
 installed operand producers, step/train/evaluate, state/load and resume
 remain outside this facet.
+The next isolated TR3 installed X1 leaf adds the unchanged six-operation
+`transformer.config` facade to that same aggregate: parse/resolve were
+already present, while validate/canonical/fingerprint/ref receive reviewed
+same-package boxed wrappers and private renames. A compile-only public caller
+now references all six X1 C entries and the trainer facet; linked gate and
+exact package measurements remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

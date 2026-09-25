@@ -1,2 +1,3 @@
+transformer/config.esk
 transformer/error_consumer.esk
 transformer/trainer.esk
