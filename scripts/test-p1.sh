@@ -12,6 +12,7 @@ require_command rg
 require_command strings
 require_command timeout
 verify_toolchain
+python3 "${PROJECT_ROOT}/scripts/check-p1-native-index.py"
 
 p1_runner="$(eshkol_build_dir)/eshkol-run"
 p1_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
@@ -344,6 +345,13 @@ grep -F 'P1 identity PASS: 274 checks' "${p1_tmp}/identity.stdout" >/dev/null
   >"${p1_tmp}/failpoints.stdout"
 grep -F 'P1 failpoint PASS: 139 checks' \
   "${p1_tmp}/failpoints.stdout" >/dev/null
+
+"${p1_cc}" "${p1_cflags[@]}" \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity_index.c" \
+  "${p1_test_trusted_archive}" -o "${p1_tmp}/test-p1-identity-index"
+"${p1_tmp}/test-p1-identity-index" >"${p1_tmp}/index.stdout"
+grep -F 'P1 native index PASS: 2828 checks' \
+  "${p1_tmp}/index.stdout" >/dev/null
 
 "${p1_cc}" "${p1_public_cflags[@]}" -c \
   "${PROJECT_ROOT}/tests/p1/p1_public_identity_probe.c" \

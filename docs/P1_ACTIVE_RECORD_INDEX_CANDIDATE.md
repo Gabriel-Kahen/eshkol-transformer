@@ -69,5 +69,31 @@ slot or public ABI change. The native normal/sanitized suite passes, including
 creation. E3/P1, TR3 fixed-set, prepared-split and generated-root checks pass.
 Evidence is under
 `/home/gabe/.codex/evidence/eshkol-transformer/p1-raw-identity-focused-20260925/`.
-The full P1 package gate and genuine 1,024/8,192-cycle performance and memory
-horizons have not been run on this leaf.
+The full pinned P1 package gate passed on `83eedb2` in 3,701 seconds at
+3,983,988 KiB peak RSS; evidence is
+`p1-raw-identity-full-package-83eedb2-20260925`. The genuine 1,024-cycle
+SAVE/LOAD/joint restore also passed 2,075 checks, exact images, and flat live
+authorities in 17:17.86 at 1,988,812 KiB peak RSS, with 1,258,757,248 B
+global-arena growth; evidence is `p1-raw-identity-1024-83eedb2-20260925`.
+The 8,192-cycle horizon remains open.
+
+## Native exact-token lookup leaf
+
+The next isolated leaf adds an intrusive address-ordered AVL to P1's private
+native records. It accelerates exact lookup of registered token addresses;
+the permanent newest-first `records` chain still owns every record and all
+tombstones. Lookup compares only integer forms of pointers until an exact
+registered address matches, so forged pointers are never dereferenced. A
+missing address or invalid index takes the full chain. Node insertion and
+rotation allocate nothing and follow authoritative record publication, before
+the result token is returned. Any unexpected duplicate address invalidates
+the index and restores full-chain lookup.
+
+This changes only private record size and test-only invalidation API. Public
+token layout, status categories, native symbol manifests, and opaque surface
+slots remain unchanged. The focused native suite covers 2,828 indexed and
+fallback identity checks plus its inherited forged/stale, 139 allocation
+failpoints, construction rollback, deterministic builds, and sanitizer checks.
+It does not change the separate live-capacity or nonce-uniqueness scans in
+`create_token`; terminal record retention and the Eshkol global-arena slope
+are expected to remain.

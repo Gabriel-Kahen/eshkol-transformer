@@ -152,6 +152,7 @@ int64_t et_p1_private_live_entry_count_v1(void *context);
 int64_t et_p1_private_tombstone_count_v1(void *context);
 #if defined(ET_P1_TEST_HOOKS)
 int64_t et_p1_test_state_bind_fail_next_v1(void);
+int64_t et_p1_test_record_index_invalidate_v1(void);
 #endif
 #endif
 

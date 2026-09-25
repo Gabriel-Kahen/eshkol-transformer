@@ -1031,15 +1031,26 @@ An isolated [active-record candidate](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md)
 implements that contract for state/module ownership scans. Focused pinned
 behavioral and 128/256-cycle performance evidence are sealed; E3/P1, TR3
 fixed-set, and prepared-split source-hash checkers are repinned and pass.
-Independent review, the full package gate, and the 8,192 horizon remain open.
+Independent review and the 8,192 horizon remain open for that earlier scope;
+the full package gate passed on `4a820c1`.
 The isolated [state-tensor/entry raw-identity leaf](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md#state-tensor-and-entry-lookup-leaf)
 adds two live advisory record heads for the two largest measured shell lookups,
 with exact registry fallback and no native `find_record` change. Its pinned
 strict-O0 IR/poisoned publication proof passes 24 checks, the test-only
 invalid-index/stage-failure overlay passes 11, and the native normal/sanitized
 suite passes 139 failpoint checks; E3/P1, TR3 fixed-set, prepared-split and
-generated-root checks pass. The full package and 1,024/8,192 genuine-cycle
-horizons remain pending on this leaf.
+generated-root checks pass. The full pinned P1 package gate passes on exact
+`83eedb2` in 3,701 seconds/3,983,988 KiB, and the genuine 1,024-cycle
+SAVE/LOAD/joint restore passes 2,075 checks, exact images, and flat live
+authorities in 17:17.86/1,988,812 KiB. Sealed evidence is
+`p1-raw-identity-full-package-83eedb2-20260925` and
+`p1-raw-identity-1024-83eedb2-20260925`; 8,192 remains open.
+The next isolated native P1 leaf indexes exact token addresses with an
+allocation-free intrusive AVL while leaving the permanent record chain and
+tombstones authoritative; foreign/missing and invalid-index lookups fall back
+to that chain. Focused native source/ABI, status/failpoint, and 128/256 genuine
+cycle gates are its candidate checks. Full P1 package and 1,024/8,192 cycles
+require separate scheduling on the resulting exact head.
 
 ## Wave 4 — practical pretraining and performance
 

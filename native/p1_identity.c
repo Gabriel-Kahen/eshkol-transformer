@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/random.h>
@@ -42,6 +43,10 @@ typedef struct et_p1_record {
   uint8_t sealed;
   uint8_t reserved[2];
   uint8_t provider_id[ET_P1_IDENTITY_MAX_PROVIDER_ID_BYTES];
+  /* Advisory address index; the append-only next chain remains authority. */
+  struct et_p1_record *index_left;
+  struct et_p1_record *index_right;
+  uint8_t index_height;
 } et_p1_record;
 
 #if defined(ET_P1_TRUSTED_BUILD)
@@ -64,7 +69,7 @@ _Static_assert(sizeof(et_p1_token) == 264u, "P1 token layout changed");
 _Static_assert(offsetof(et_p1_token, nonce_lo) == 0u &&
                    offsetof(et_p1_token, nonce_hi) == 8u,
                "P1 caller token nonce layout changed");
-_Static_assert(sizeof(et_p1_record) == 256u,
+_Static_assert(sizeof(et_p1_record) == 280u,
                "P1 private registry record layout changed");
 _Static_assert(offsetof(et_p1_record, binding) == 24u &&
                    offsetof(et_p1_record, callbacks) == 32u &&
@@ -77,6 +82,8 @@ _Static_assert(sizeof(et_p1_context) == 344u, "P1 context layout changed");
 
 static et_p1_record *records;
 #if defined(ET_P1_TRUSTED_BUILD)
+static et_p1_record *record_index_root;
+static uint8_t record_index_valid = 1u;
 static et_p1_context *contexts;
 static uint8_t private_context_claimed;
 #define ET_P1_CONSTRUCTION_CAPACITY 8192u
@@ -96,17 +103,6 @@ static int64_t test_callback_successes_before_failure = INT64_C(-1);
 static uint8_t test_state_bind_fail_next;
 static uint8_t test_construction_commit_fail_next;
 #endif
-
-static et_p1_record *find_record(const void *candidate) {
-  et_p1_record *cursor = records;
-  while (cursor != NULL) {
-    if ((const void *)cursor->token == candidate) {
-      return cursor;
-    }
-    cursor = cursor->next;
-  }
-  return NULL;
-}
 
 static int fill_entropy(void *destination, size_t size) {
   unsigned char *cursor = (unsigned char *)destination;
@@ -146,9 +142,96 @@ static int token_integrity(const et_p1_record *record) {
          record->origin_pid == (int64_t)getpid();
 }
 
-#if !defined(ET_P1_TRUSTED_BUILD)
+#if defined(ET_P1_TRUSTED_BUILD)
+static uint8_t record_index_height(const et_p1_record *record) {
+  return record == NULL ? 0u : record->index_height;
+}
+
+static void record_index_update_height(et_p1_record *record) {
+  uint8_t left = record_index_height(record->index_left);
+  uint8_t right = record_index_height(record->index_right);
+  record->index_height = (uint8_t)(1u + (left > right ? left : right));
+}
+
+static et_p1_record *record_index_rotate_left(et_p1_record *root) {
+  et_p1_record *next = root->index_right;
+  root->index_right = next->index_left;
+  next->index_left = root;
+  record_index_update_height(root);
+  record_index_update_height(next);
+  return next;
+}
+
+static et_p1_record *record_index_rotate_right(et_p1_record *root) {
+  et_p1_record *next = root->index_left;
+  root->index_left = next->index_right;
+  next->index_right = root;
+  record_index_update_height(root);
+  record_index_update_height(next);
+  return next;
+}
+
+static et_p1_record *record_index_insert(et_p1_record *root,
+                                         et_p1_record *record,
+                                         int *distinct) {
+  uintptr_t key = (uintptr_t)record->token;
+  uintptr_t root_key;
+  int balance;
+  if (root == NULL) {
+    record->index_height = 1u;
+    return record;
+  }
+  root_key = (uintptr_t)root->token;
+  if (key < root_key) {
+    root->index_left = record_index_insert(root->index_left, record, distinct);
+  } else if (key > root_key) {
+    root->index_right = record_index_insert(root->index_right, record, distinct);
+  } else {
+    *distinct = 0;
+    return root;
+  }
+  if (*distinct == 0) {
+    return root;
+  }
+  record_index_update_height(root);
+  balance = (int)record_index_height(root->index_left) -
+            (int)record_index_height(root->index_right);
+  if (balance > 1) {
+    if (key > (uintptr_t)root->index_left->token) {
+      root->index_left = record_index_rotate_left(root->index_left);
+    }
+    return record_index_rotate_right(root);
+  }
+  if (balance < -1) {
+    if (key < (uintptr_t)root->index_right->token) {
+      root->index_right = record_index_rotate_right(root->index_right);
+    }
+    return record_index_rotate_left(root);
+  }
+  return root;
+}
+#endif
+
 static et_p1_record *find_record(const void *candidate) {
-  et_p1_record *cursor = records;
+  et_p1_record *cursor;
+#if defined(ET_P1_TRUSTED_BUILD)
+  if (record_index_valid != 0u) {
+    uintptr_t key = (uintptr_t)candidate;
+    et_p1_record *indexed = record_index_root;
+    while (indexed != NULL) {
+      uintptr_t current = (uintptr_t)indexed->token;
+      if (key == current) {
+        /* Exact identity only; no untrusted pointer is dereferenced. */
+        if ((const void *)indexed->token == candidate) {
+          return indexed;
+        }
+        break;
+      }
+      indexed = key < current ? indexed->index_left : indexed->index_right;
+    }
+  }
+#endif
+  cursor = records;
   while (cursor != NULL) {
     if ((const void *)cursor->token == candidate) {
       return cursor;
@@ -157,7 +240,6 @@ static et_p1_record *find_record(const void *candidate) {
   }
   return NULL;
 }
-#endif
 
 #if defined(ET_P1_TRUSTED_BUILD)
 static int token_nonce_exists(uint64_t lo, uint64_t hi) {
@@ -335,6 +417,17 @@ static int64_t create_token(void *candidate, int64_t kind,
   record->provider_id_bytes = (uint32_t)provider_id_bytes;
   record->next = records;
   records = record;
+  /* The indexed node is already an authoritative record. Rotations allocate
+   * nothing and cannot fail; a duplicate address invalidates the advisory
+   * tree so every lookup falls back to the newest-first registry chain. */
+  if (record_index_valid != 0u) {
+    int distinct = 1;
+    record_index_root = record_index_insert(record_index_root, record,
+                                            &distinct);
+    if (distinct == 0) {
+      record_index_valid = 0u;
+    }
+  }
   context->result_ptr = token;
   return ET_P1_STATUS_OK;
 }
@@ -739,6 +832,11 @@ et_p1_private_callback_identity_create_v1(void *candidate) {
 }
 
 #if defined(ET_P1_TEST_HOOKS)
+ET_P1_PRIVATE int64_t et_p1_test_record_index_invalidate_v1(void) {
+  record_index_valid = 0u;
+  return ET_P1_STATUS_OK;
+}
+
 ET_P1_PRIVATE int64_t
 et_p1_test_callback_fail_after_v1(int64_t successful_creations) {
   test_callback_successes_before_failure = successful_creations;

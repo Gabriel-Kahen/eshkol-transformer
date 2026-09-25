@@ -4,6 +4,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
+python3 "${PROJECT_ROOT}/scripts/check-p1-native-index.py"
 for command in ar cmp nm readelf rg strings timeout; do
   require_command "${command}"
 done
@@ -78,6 +79,15 @@ timeout --foreground --signal=TERM --kill-after=5s 60s \
   "${temporary_dir}/test-failpoints" >"${temporary_dir}/failpoints.stdout"
 grep -F 'P1 failpoint PASS: 139 checks' "${temporary_dir}/failpoints.stdout" >/dev/null
 
+"${cc}" "${trusted_cflags[@]}" \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity_index.c" \
+  "${test_hook_dir}/libeshkol_transformer_p1_identity.a" \
+  -o "${temporary_dir}/test-index"
+timeout --foreground --signal=TERM --kill-after=5s 60s \
+  "${temporary_dir}/test-index" >"${temporary_dir}/index.stdout"
+grep -F 'P1 native index PASS: 2828 checks' \
+  "${temporary_dir}/index.stdout" >/dev/null
+
 for run in a b; do
   "${cc}" "${trusted_cflags[@]}" \
     "${PROJECT_ROOT}/tests/p1/test_p1_construction.c" \
@@ -137,6 +147,16 @@ ASAN_OPTIONS=detect_leaks="${P1_LSAN:-0}":halt_on_error=1 \
 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 60s \
     "${temporary_dir}/test-failpoints-sanitized" >/dev/null
+
+"${cc}" "${trusted_cflags[@]}" -fsanitize=address,undefined \
+  -fno-omit-frame-pointer \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity_index.c" \
+  "${sanitized_hook_dir}/libeshkol_transformer_p1_identity.a" \
+  -o "${temporary_dir}/test-index-sanitized"
+ASAN_OPTIONS=detect_leaks="${P1_LSAN:-0}":halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 60s \
+    "${temporary_dir}/test-index-sanitized" >/dev/null
 
 "${cc}" "${trusted_cflags[@]}" -fsanitize=address,undefined \
   -fno-omit-frame-pointer "${PROJECT_ROOT}/tests/p1/test_p1_construction.c" \
