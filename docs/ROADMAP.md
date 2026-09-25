@@ -1254,7 +1254,14 @@ gate in 3,294 seconds with the 900-second per-compile bound. Root verified its
 the trusted P1 source, template, registry test and publication checker match
 this integration tree byte for byte. Three inherited structural checkers differ
 only in comments or diagnostic wording and pass on integration. This repeat
-does not close the genuine 8,192 SAVE/LOAD/joint-restore horizon.
+does not close the genuine 8,192 SAVE/LOAD/joint-restore horizon. A subsequent
+1,024 genuine-cycle diagnostic reused the sealed sanitized and profiled binary
+without recompilation: 2,075 checks and exact images passed in 16:41.49 at
+2,131,032 KiB peak RSS, with 1,251,987,848 arena bytes added. The largest
+verified growing self-time samples are P1 raw-to-shell lookup (159.02 s),
+state-entry lookup (87.85 s), and native record lookup (85.74 s). The 16-file
+seal is `p1-active-record-1024-c4cea48-20260925/SHA256SUMS` (`3a309482...`).
+The 8,192 horizon remains unrun pending bounded lookup and resource work.
 Hosted CI run `36125833885` on PR #126 exposed three new P1 hash-table
 runtime references in the I2 aggregate that its exact undefined-symbol
 manifest did not yet admit. The standalone P1 object at `76299fd` matches
@@ -1263,10 +1270,9 @@ admit those same three runtime references. The exact I2 aggregate rebuilt
 at `8dc1e97` and its 157-symbol generated evidence and fresh `nm -u` output
 match the manifest byte for byte; sealed evidence is
 `i2-index-symbols-8dc1e97-20260925/SHA256SUMS` (`0c20051f...`). Other
-aggregate and CI verification remain pending. The local full P1 gate reached trusted test
-compilation, then hit its default 360-second per-compile timeout. Its
-earlier package and sanitizer gates passed; a full 900-second-bound rerun
-remains open.
+aggregate and CI verification remain pending. The earlier integration full P1
+gate hit its default 360-second per-compile timeout; the clean candidate's
+supported 900-second-bound full rerun above passed.
 
 ## Wave 4 — practical pretraining and performance
 
