@@ -638,9 +638,11 @@ root verified `tr3-dynamic-init-bridge-4675500-20260924/SHA256SUMS`
 (`0bf88f01...`) and exact integrated source blobs.
 The [private C trainer entry audit](TR3_C_PRIVATE_TRAINER_ENTRY_BLOCKER.md)
 finds the real five-operand lease constructor in the compiled root, but no
-same-package C producer for its operands and no trainer unenroll/close. The
-rooted registry retains every successful trainer and its receivers. Freeze
-those lifecycle and ownership contracts before a C construct/close seam.
+same-package C producer for its operands. The
+[private lease-unenroll seam](TR3_C_PRIVATE_LEASE_UNENROLL.md) removes one
+authenticated idle trainer record and returns its five receivers to their
+callers without destroying them. A C construct/handle contract remains
+pending; no public trainer or resume claim follows from unenrollment.
 The source-backed audit `6293a30` is integrated at `858ce0d`, with seal
 `tr3-private-trainer-entry-blocker-6293a30-20260924/SHA256SUMS`
 (`c52bba5d...`); it adds no runtime entry.

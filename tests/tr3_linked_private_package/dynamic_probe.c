@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
   if (dlsym(library, "get_global_arena_shared")) return 9;
   if (dlsym(library, "__repl_shared_arena")) return 10;
   if (dlsym(library, "tr3-lease-create-internal")) return 5;
+  if (dlsym(library, "tr3-lease-unenroll-internal!")) return 14;
   if (dlsym(library, "tr3-c-trainer-load-state-internal!")) return 6;
   if (dlsym(library, "et_tr3_c_private_i2_restore_create_v1")) return 7;
   if (initialize() != ET_TR3_C_INIT_READY_V1) return 12;

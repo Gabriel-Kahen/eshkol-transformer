@@ -3711,6 +3711,10 @@ tr3-lease-tokenizer-dataset!_sexpr
 tr3-lease-tuple-overlap?
 tr3-lease-tuple-overlap?__eshkol_internal_abi
 tr3-lease-tuple-overlap?_sexpr
+tr3-lease-unenroll-active?
+tr3-lease-unenroll-internal!
+tr3-lease-unenroll-internal!__eshkol_internal_abi
+tr3-lease-unenroll-internal!_sexpr
 tr3-lease-vector-eq?
 tr3-lease-vector-eq?__eshkol_internal_abi
 tr3-lease-vector-eq?_sexpr
