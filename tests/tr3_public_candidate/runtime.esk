@@ -1,0 +1,132 @@
+;;; Linked candidate caller: only boxed package operations construct operands.
+(require transformer.error_consumer)
+
+(define (boxed-unary name value)
+  (let ((output (vector #f)))
+    (name (vector value) output)
+    (vector-ref output 0)))
+(define (boxed-binary name first second)
+  (let ((output (vector #f)))
+    (name (vector first) (vector second) output)
+    (vector-ref output 0)))
+
+(extern void x1-parse ptr ptr :real et_e1b_public_x1_config_parse_v1)
+(extern void x1-resolve ptr ptr ptr :real et_e1b_public_x1_config_resolve_v1)
+(extern void t1-byte ptr ptr :real et_e1b_public_t1_tokenizer_byte_v1)
+(extern void d2-open ptr ptr ptr :real et_e1b_public_d2_token_dataset_open_v1)
+(extern void d2-close ptr ptr :real et_e1b_public_d2_token_dataset_close_v1)
+(extern void m3t-initializer ptr ptr
+        :real et_e1b_public_m3t_initializer_state_v1)
+(extern void m3t-model ptr ptr ptr :real et_e1b_public_m3t_model_create_v1)
+(extern void p1-parameters ptr ptr
+        :real et_e1b_public_p1_module_parameters_v1)
+(extern void p1-paths ptr ptr
+        :real et_e1b_public_p1_parameter_tree_paths_v1)
+(extern void p1-handle ptr ptr ptr
+        :real et_e1b_public_p1_parameter_tree_handle_v1)
+(extern void o2-create ptr ptr ptr
+        :real et_e1b_public_o2_optimizer_create_v1)
+(extern void tr3-create ptr ptr ptr ptr ptr ptr
+        :real et_e1b_public_tr3_trainer_create_v1)
+
+(define (config-parse text) (boxed-unary x1-parse text))
+(define (config-resolve parsed overrides)
+  (boxed-binary x1-resolve parsed overrides))
+(define (tokenizer-byte resolved) (boxed-unary t1-byte resolved))
+(define (token-dataset-open options tokenizer)
+  (boxed-binary d2-open options tokenizer))
+(define (token-dataset-close! dataset) (boxed-unary d2-close dataset))
+(define (diagnostic-initializer-state seed)
+  (boxed-unary m3t-initializer seed))
+(define (diagnostic-model-create resolved initializer)
+  (boxed-binary m3t-model resolved initializer))
+(define (module-parameters model) (boxed-unary p1-parameters model))
+(define (parameter-tree-paths tree) (boxed-unary p1-paths tree))
+(define (parameter-tree-handle tree path)
+  (boxed-binary p1-handle tree path))
+(define (optimizer-create config tree) (boxed-binary o2-create config tree))
+(define (trainer-create resolved tokenizer dataset model optimizer)
+  (let ((output (vector #f)))
+    (tr3-create (vector resolved) (vector tokenizer) (vector dataset)
+                (vector model) (vector optimizer) output)
+    (vector-ref output 0)))
+
+(define (check label success)
+  (if success #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (let ((caught #f))
+    (guard (raised
+             (#t (set! caught
+                        (and (transformer-error? raised)
+                             (eq? (transformer-error-category raised)
+                                  category)
+                             (eq? (transformer-error-operation raised)
+                                  operation)))))
+      (thunk))
+    (check label caught)))
+
+(define (seen-handle? handle seen)
+  (if (null? seen) #f
+      (or (eq? handle (car seen))
+          (seen-handle? handle (cdr seen)))))
+(define (reverse-list source)
+  (let loop ((remaining source) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+(define (unique-paths tree)
+  (let loop ((remaining (parameter-tree-paths tree))
+             (seen '()) (result '()))
+    (if (null? remaining) (reverse-list result)
+        (let ((handle (parameter-tree-handle tree (car remaining))))
+          (if (seen-handle? handle seen)
+              (loop (cdr remaining) seen result)
+              (loop (cdr remaining) (cons handle seen)
+                    (cons (car remaining) result)))))))
+(define (list-length value)
+  (if (null? value) 0 (+ 1 (list-length (cdr value)))))
+
+(define corpus-directory (car (cdr (command-line))))
+(define resolved
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (tokenizer-byte resolved))
+(define (dataset-options)
+    (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define failure-dataset (token-dataset-open (dataset-options) tokenizer))
+(define model
+  (with-region ('tr3-public-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define tree (module-parameters model))
+(define paths (unique-paths tree))
+(check "exact fixed unique parameter set" (= (list-length paths) 14))
+(define optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group paths "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    tree))
+
+(expect-error "forged model rejects before enrollment"
+              'invalid-argument 'trainer-create
+  (lambda ()
+    (trainer-create resolved tokenizer failure-dataset
+                    (vector 'forged) optimizer)))
+(check "failed create leaves D2 child caller-owned"
+       (token-dataset-close! failure-dataset))
+(define dataset (token-dataset-open (dataset-options) tokenizer))
+(define trainer (trainer-create resolved tokenizer dataset model optimizer))
+(check "genuine trainer shell" (and (vector? trainer)
+                                    (= (vector-length trainer) 1)))
+(expect-error "second lease overlaps retained five receivers"
+              'invalid-state 'trainer-create
+  (lambda ()
+    (trainer-create resolved tokenizer dataset model optimizer)))
+(display "TR3-PUBLIC-CANDIDATE-PASS")
+(newline)
