@@ -75,8 +75,6 @@
         :real et_g3t_test_rng_clone_word_v1)
 (extern i64 g3t-test-live-rng-clones
         :real et_g3t_test_live_rng_clones_v1)
-(extern ptr g3t-native-generator-rng ptr ptr i64 i64 i64 i64 i64 i64
-        :real et_g3t_private_generator_rng_v1)
 (extern i64 g3t-test-rng-clone-busy-set ptr i64
         :real et_g3t_test_rng_clone_busy_set_v1)
 (extern i64 g3t-test-live-contexts
@@ -110,6 +108,10 @@
        (= b (g3t-test-rng-clone-word clone 1))
        (= c (g3t-test-rng-clone-word clone 2))
        (= d (g3t-test-rng-clone-word clone 3))))
+(define (rooted-roles call)
+  (let step ((ordinal 0))
+    (if (= ordinal 21) #t
+        (begin (g3t-role-step call ordinal) (step (+ ordinal 1))))))
 (define (live-rng-shells)
   (let walk ((entries (vector-ref g3t-registry 0)) (count 0))
     (if (null? entries) count
@@ -281,6 +283,11 @@
         ':temperature-bits #x3f800000 ':top-k 256
         ':top-p-bits #x3f800000 ':max-new-tokens 1
         ':eos #f ':seed 1729))
+(define (rng-policy source budget)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens budget
+        ':eos #f ':rng source))
 
 (define generator (g3t-generator-create model tokenizer policy))
 (define native (vector-ref (g3t-generator-find generator 'g3t-p2) 3))
@@ -748,6 +755,65 @@
             (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
 (reject-category "RNG wrapper rejects dead output" 'invalid-state
   (lambda () (g3t-generation-output-rng wrapped-output)))
+(reject-category "RNG constructor rejects forged shell" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy (vector 'g3t-rng-private) 0))))
+(reject-category "RNG constructor rejects wrong-kind output" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-output 0))))
+(reject-category "RNG constructor rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-input 0))))
+(reject-category "RNG constructor rejects malformed greedy policy" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (list ':profile 'diagnostic-c2 ':sampling 'greedy
+                     ':temperature-bits #x40000000 ':top-k 256
+                     ':top-p-bits #x3f800000 ':max-new-tokens 0
+                     ':eos #f ':rng wrapped-rng))))
+(check "RNG constructor busy source armed"
+       (= 0 (g3t-test-rng-clone-busy-set wrapped-rng-native 1)))
+(reject-category "RNG constructor rejects busy source" 'invalid-state
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "RNG constructor busy rejection preserves source"
+       (and (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG constructor busy source disarmed"
+       (= 0 (g3t-test-rng-clone-busy-set wrapped-rng-native 0)))
+(define wrapped-rng-context-baseline (g3t-test-live-contexts))
+(check "RNG wrapper constructor header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "RNG wrapper constructor header cut" 'internal
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "RNG wrapper constructor header cut atomic"
+       (and (= wrapped-rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG wrapper constructor header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "RNG wrapper constructor A2 cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(reject-category "RNG wrapper constructor A2 cut" 'internal
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "RNG wrapper constructor A2 cut atomic"
+       (and (= wrapped-rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG wrapper constructor A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(define wrapped-rng-derived
+  (g3t-generator-create model tokenizer (rng-policy wrapped-rng 0)))
+(define wrapped-rng-derived-native
+  (vector-ref (g3t-generator-find wrapped-rng-derived 'g3t-rng-derived) 3))
+(check "P2/G0 Eshkol RNG constructor exact copy without draw"
+       (and (= (+ wrapped-rng-context-baseline 1) (g3t-test-live-contexts))
+            (= 1 (g3t-test-rng-word wrapped-rng-derived-native 0))
+            (= 1729 (g3t-test-rng-word wrapped-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word wrapped-rng-derived-native 2))
+            (= 0 (g3t-test-rng-word wrapped-rng-derived-native 3))
+            (= 0 (g3t-test-cache-length wrapped-rng-derived-native))))
 (check "RNG wrapper typed release and tombstone"
        (and (g3t-generation-rng-release! wrapped-rng)
             (= 0 (live-rng-shells))
@@ -755,6 +821,14 @@
             (= -1 (g3t-test-rng-clone-state wrapped-rng-native))
             (rng-clone-words? wrapped-rng-native 0 0 0 0)
             (g3t-generation-rng-release! wrapped-rng)))
+(check "P2/G0 copied RNG survives source release"
+       (and (= 1729 (g3t-test-rng-word wrapped-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word wrapped-rng-derived-native 2))))
+(reject-category "RNG constructor rejects released shell" 'invalid-state
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "P2/G0 derived RNG generator close"
+       (g3t-generator-close! wrapped-rng-derived))
 (check "wrapped input release" (g3t-generation-tensor-release! wrapped-input))
 
 ;; The same zero-budget envelope remains valid for a one-token prompt.
@@ -809,9 +883,22 @@
        (rng-clone-words? p1-zero-rng 1 1729 0 0))
 (check "P1/G0 RNG shell survives parent releases"
        (rng-clone-words? p1-zero-rng-shell-native 1 1729 0 0))
+(define p1-zero-rng-derived
+  (g3t-generator-create model tokenizer (rng-policy p1-zero-rng-shell 0)))
+(define p1-zero-rng-derived-native
+  (vector-ref (g3t-generator-find p1-zero-rng-derived 'g3t-p1-rng-derived) 3))
+(check "P1/G0 Eshkol RNG constructor exact copy"
+       (and (= 1729 (g3t-test-rng-word p1-zero-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word p1-zero-rng-derived-native 2))
+            (= 0 (g3t-test-cache-length p1-zero-rng-derived-native))))
 (check "P1/G0 RNG shell typed release"
        (and (g3t-generation-rng-release! p1-zero-rng-shell)
             (= -1 (g3t-test-rng-clone-state p1-zero-rng-shell-native))))
+(check "P1/G0 derived RNG survives shell release"
+       (and (= 1729 (g3t-test-rng-word p1-zero-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word p1-zero-rng-derived-native 2))))
+(check "P1/G0 derived RNG generator close"
+       (g3t-generator-close! p1-zero-rng-derived))
 (check "P1/G0 clone release" (= 0 (g3t-native-tensor-release p1-zero-clone)))
 (check "P1/G0 lengths release"
        (= 0 (g3t-native-tensor-release p1-zero-lengths)))
@@ -1119,6 +1206,57 @@
             (= 0 (g3t-test-live-rng-clones))))
 (check "G1 regression input release"
        (= 0 (g3t-native-tensor-release g1-regression-input)))
+(define g1-rooted-generator (g3t-generator-create model tokenizer policy-g1))
+(define g1-rooted-input (g3t-generation-token-input-create 65))
+(define g1-rooted-output
+  (g3t-with-final-call 'g3t-rng-g1-rooted g1-rooted-generator (call)
+    (define out (g3t-output-reserve call 1))
+    (g3t-frame-begin call g1-rooted-input 1)
+    (rooted-roles call)
+    (g3t-frame-prepare call #f)
+    (g3t-frame-commit call)
+    (g3t-sample call)
+    (g3t-frame-begin call #f 2)
+    (rooted-roles call)
+    (g3t-output-prepare call out)
+    (g3t-t1-decode-output! call out)
+    (g3t-final-commit! call out)))
+(define g1-rooted-native-output
+  (vector-ref (g3t-prefill-entry g1-rooted-output 'output 'g3t-rng-g1) 3))
+(check "P1/G1 rooted output exact prior ID and RNG"
+       (and (= g1-id (g3t-test-output-word g1-rooted-native-output 6))
+            (= 1 (g3t-test-output-word g1-rooted-native-output 9))))
+(define g1-rooted-rng (g3t-generation-output-rng g1-rooted-output))
+(define g1-rooted-rng-native
+  (vector-ref (g3t-prefill-entry g1-rooted-rng 'rng 'g3t-rng-g1) 3))
+(define g1-rooted-derived
+  (g3t-generator-create model tokenizer (rng-policy g1-rooted-rng 1)))
+(define g1-rooted-derived-native
+  (vector-ref (g3t-generator-find g1-rooted-derived 'g3t-rng-g1-derived) 3))
+(check "P1/G1 Eshkol RNG constructor copies final successor without draw"
+       (and (rng-clone-words? g1-rooted-rng-native 1 1729 1 0)
+            (= 1 (g3t-test-rng-word g1-rooted-derived-native 0))
+            (= 1729 (g3t-test-rng-word g1-rooted-derived-native 1))
+            (= 1 (g3t-test-rng-word g1-rooted-derived-native 2))
+            (= 0 (g3t-test-rng-word g1-rooted-derived-native 3))
+            (= 0 (g3t-test-cache-length g1-rooted-derived-native))))
+(check "P1/G1 rooted generator close"
+       (g3t-generator-close! g1-rooted-generator))
+(check "P1/G1 rooted output release"
+       (g3t-output-release! g1-rooted-output))
+(check "P1/G1 RNG shell typed release"
+       (g3t-generation-rng-release! g1-rooted-rng))
+(check "P1/G1 derived generator survives all source releases"
+       (and (= 1729 (g3t-test-rng-word g1-rooted-derived-native 1))
+            (= 1 (g3t-test-rng-word g1-rooted-derived-native 2))))
+(check "P1/G1 derived generator close"
+       (g3t-generator-close! g1-rooted-derived))
+(check "P1/G1 rooted input release"
+       (g3t-generation-tensor-release! g1-rooted-input))
+(check "RNG input admission leaves no live private owners"
+       (and (= 0 (live-rng-shells))
+            (= 0 (g3t-test-live-rng-clones))
+            (= 0 (g3t-test-live-contexts))))
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)
 (newline)

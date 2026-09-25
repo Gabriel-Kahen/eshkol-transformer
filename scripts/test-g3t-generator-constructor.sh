@@ -17,7 +17,8 @@ sources=(native/data_io.c native/checkpoint_io.c native/kernel_abi.c
   src/eshkol_transformer/m3_call_f32_integration.c
   src/eshkol_transformer/g3t_transport.c native/a2_kv_cache.c
   native/n2_primitives_provider.c native/n3k_primitives_provider.c
-  native/a2_attention_provider.c)
+  native/a2_attention_provider.c native/g3n_primitives_provider.c
+  native/g3s_sampling_provider.c)
 build_mode() {
   local mode="$1" directory="$temporary/$1" source stem
   local -a flags=(-O2) runtime=(env)
@@ -39,8 +40,15 @@ build_mode() {
   for source in "${sources[@]}"; do
     stem="$(basename "$source" .c)"
     extra=()
-    [[ "$stem" == g3t_transport ]] && extra=(-DET_G3T_TESTING -DET_A2_KV_CACHE_TESTING)
-    [[ "$stem" == a2_kv_cache ]] && extra=(-DET_A2_KV_CACHE_TESTING)
+    [[ "$stem" == g3t_transport ]] && extra=(-DET_G3T_TESTING
+      -DET_A2_KV_CACHE_TESTING -DET_G3T_PREFILL_SAMPLE_PRIVATE
+      -DET_G3T_OUTPUT_TEXT_PRIVATE -DET_G3T_FINAL_PUBLICATION_PRIVATE
+      -DET_G3T_OUTPUT_RNG_CLONE_PRIVATE -DET_G3T_GENERATOR_RNG_PRIVATE
+      -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
+      -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
+    [[ "$stem" == m3_i64_integration ]] && extra=(-DET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
+    [[ "$stem" == a2_kv_cache ]] && extra=(-DET_A2_KV_CACHE_TESTING
+      -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
     "$cc" "${common[@]}" "${flags[@]}" "${extra[@]}" \
       -MMD -MF "$directory/objects/$stem.d" \
       -c "$PROJECT_ROOT/$source" -o "$directory/objects/$stem.o"
@@ -93,7 +101,7 @@ if nm -g --defined-only "$temporary/production.o" | grep 'et_g3t_test_'; then
   die "test hook escaped production native object"
 fi
 git -C "$PROJECT_ROOT" diff --check
-sha256sum "$PROJECT_ROOT/native/g3t_generator_constructor_source_closure.txt" >"$evidence/closure.sha256"
+sha256sum "$PROJECT_ROOT/native/g3t_generator_constructor_rng_source_closure.txt" >"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"
 printf 'G3-T generator constructor evidence: %s\n' "$evidence"

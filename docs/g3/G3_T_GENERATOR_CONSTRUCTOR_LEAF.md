@@ -10,9 +10,9 @@ trusted source aggregate. It installs no public generation API or package.
 `g3t-generator-create(model, tokenizer, config)` enters the shared `m3-call`
 guard once. It accepts exactly eight flat option pairs: `:profile` set to
 `diagnostic-c2`, `:sampling` set to `greedy` or `categorical`, `:temperature-bits`,
-`:top-k`, `:top-p-bits`, `:max-new-tokens`, `:eos`, and `:seed`. The accepted
-`:rng` alternative is recognized but reports unsupported because no G3-T
-kind-8 RNG owner exists in this leaf. Policy values are checked as exact i64
+`:top-k`, `:top-p-bits`, `:max-new-tokens`, `:eos`, and exactly one of `:seed`
+or `:rng`. The later private RNG-input leaf authenticates a live same-aggregate
+kind-8 owner and copies its words into the generator. Policy values are checked as exact i64
 and binary32 bit patterns, including greedy's exact 1/256/1 settings. The
 result is a detached seven-slot C2 policy vector; no source option list or
 raw tokenizer pointer enters native code.
@@ -23,7 +23,8 @@ requires the baseline raw tokenizer with V256, empty specials/prefix/suffix,
 and the canonical T1 byte-tokenizer fingerprint. Before native allocation it
 roots a pending 12-slot G3-T entry in `g3t-registry` and reads back the
 canonical entry. Native `generator_seed` receives only the authenticated
-M3T owner pointer and normalized scalars. Failure closes any created native
+M3T owner pointer and normalized scalars; the RNG route passes the admitted
+kind-8 pointer to native `generator_rng`. Failure closes any created native
 context and leaves only an inert Eshkol tombstone; success publishes a live
 generator with model/tokenizer/policy roots. Native error domain/category/code
 are snapped before cleanup and mapped to bounded E1 details under the invoking
@@ -44,5 +45,5 @@ publication, busy close, tombstones, and post-close reuse in normal/repeat/
 sanitizer modes. The source/AOT witness checks native E1 category, operation,
 domain, and code mapping alongside rejection and guard cleanup;
 it does not claim a public error envelope. The Eshkol registry is not yet
-packaged or installed. RNG owner, frame transcript, prefill/decode/sample,
-result publication, and public generation remain separate dependencies.
+packaged or installed. Frame transcript, prefill/decode/sample, result
+publication, and public generation remain separate dependencies.

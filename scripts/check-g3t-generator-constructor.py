@@ -19,7 +19,7 @@ def check() -> None:
     note = (ROOT / "docs/g3/G3_T_GENERATOR_CONSTRUCTOR_LEAF.md").read_text()
     assert "g3c4" not in source.lower()
     assert "(provide" not in source
-    for stem in ("generator-seed", "generator-close", "last-error-domain",
+    for stem in ("generator-seed", "generator-rng", "generator-close", "last-error-domain",
                  "last-error-category", "last-error-code"):
         assert f"g3t-native-{stem}" in source, stem
     for phrase in ("(define (g3t-generator-create model tokenizer config)",
@@ -28,12 +28,16 @@ def check() -> None:
                    "(t1-private-entry tokenizer)", "(t1-core-tokenizer? core)",
                    "(t1-tokenizer-core-vocab-size core) 256",
                    "G3-T config must have exactly eight pairs",
-                   "G3-T RNG owner is not in this private leaf",
+                   "expected an exact G3-T RNG owner",
                    "(vector shell 'generator 'pending", "(vector-set! g3t-registry 0 next)",
                    "(car (vector-ref g3t-registry 0))", "(g3t-native-generator-seed",
                    "(vector-set! canonical 2 'live)", "(vector-set! canonical 2 'dead)",
                    "(g3t-native-generator-close", "(vector-set! entry 2 'dead)"):
         assert phrase in source, phrase
+    constructor = source.split("(define (g3t-generator-create model tokenizer config)", 1)[1]
+    ordered(constructor, ("(g3t-generator-find source operation)",
+                          "(vector-set! g3t-registry 0 next)",
+                          "(g3t-native-generator-rng"), "RNG admission before copy")
     assert source.count("sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704") == 1
     assert "(let* ((domain (g3t-native-last-error-domain))" in source
     assert "(list 'source-code (if valid code 10))" in source
@@ -60,7 +64,7 @@ def check() -> None:
     for phrase in ("build_mode normal", "build_mode sanitize", "repeat.stdout",
                    "detect_leaks=1", "production.o", "test hook escaped"):
         assert phrase in runner, phrase
-    assert "RNG owner, frame transcript" in note
+    assert "Frame transcript" in note
     dependency = (ROOT / "native/g3t_native_context_source_closure.txt").read_text().splitlines()
     additions = ["native/g3t_generator_constructor_extension.esk",
                  "native/g3t_generator_local_symbols.txt",
