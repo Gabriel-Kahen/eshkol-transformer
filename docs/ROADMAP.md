@@ -533,8 +533,17 @@ each pass 10,765 checks across T1/T2/decode with 21 provider failure/retry
 cuts; root independently reran the focused gate and verified predecessor
 hashes, Q0, structural checks, and identical integration blobs. Sealed root
 evidence is `g3c4-manual-tail-c398b2e-20260925/SHA256SUMS`
-(`e3e04058...`). Public role stepping, frame commit, and generation remain
-pending.
+(`e3e04058...`). The private manual frame prepare/commit continuation from
+`a374fc0`/tree `ae5318bb` and exact Q0 allowlist correction `7382b41`/tree
+`64460236` are integrated byte-identically at `c99e684` and `0cc147b`.
+T1/T2/decode prepare the last 256 logits, recheck pinned bindings and the
+staged A2 transaction, then publish the cache/result through a terminal
+commit and drain the active call. Independent pinned normal, repeat, and
+sanitizer gates each pass 6,055 checks across four routes, including failure
+and retry before commit; Q0 passes 4/4 and the merged focused gate passes.
+Root sealed `g3c4-manual-frame-commit-7382b41-20260925/SHA256SUMS`
+(`417948bd...`). Public role stepping, generation loop, output/text
+publication, and save/reload remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
