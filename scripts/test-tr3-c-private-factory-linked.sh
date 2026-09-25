@@ -224,6 +224,40 @@ for mode in success seed-2718 profile d2-limit digest x1 missing tokenizer-misma
     > "/out/factory-${mode}.stdout" \
     2> "/out/factory-${mode}.stderr"
 done
+# Test-only variants expose the existing native allocation control and D2 live
+# count. Link raw source/native objects so the established arena --wrap pattern
+# still intercepts genuine source-to-runtime allocation calls.
+mkdir -p /out/fault
+clang-21 "${flags[@]}" -DET_M3T_TESTING \
+  -c src/eshkol_transformer/m3_model.c -o /out/fault/m3_model.o
+clang-21 "${flags[@]}" -DET_TR3_C_D2_RESTORE -DET_D2_NATIVE_TESTING \
+  -c native/d2_native.c -o /out/fault/d2_native.o
+clang++-21 -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic \
+  -fno-exceptions -fno-rtti \
+  -isystem /fixed-source/inc -isystem /fixed-source/lib/core \
+  -I include -I native \
+  -c tests/tr3_private_factory/fault_probe.cpp -o /out/fault/probe.o
+fault_objects=()
+for object in /out/native/*.o; do
+  case "${object}" in
+    */m3_model.o|*/d2_native.o) ;;
+    *) fault_objects+=("${object}") ;;
+  esac
+done
+clang++-21 -fPIE -fuse-ld=bfd /out/private.o "${fault_objects[@]}" \
+  /out/fault/m3_model.o /out/fault/d2_native.o /out/fault/probe.o \
+  /candidate/eshkol-build-canonical/libeshkol-runtime.a \
+  -Wl,--wrap=et_tr3_c_factory_stage_v1 \
+  -Wl,--wrap=arena_allocate_vector_with_header \
+  -Wl,--wrap=et_d2_dataset_open_v1 \
+  -Wl,--wrap=et_d2_dataset_close_v1 \
+  -Wl,-z,stack-size=536870912 \
+  -pthread -ldl -lm -lcrypto -lpng -ljpeg -lwebp -lz -lopenblas \
+  -o /out/fault/probe > /out/fault/link.stdout 2> /out/fault/link.stderr
+for mode in t2 m3t; do
+  timeout 60s /out/fault/probe "${mode}" /out/corpus \
+    > "/out/fault/${mode}.stdout" 2> "/out/fault/${mode}.stderr"
+done
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -c tests/tr3_linked_private_package/link_probe.c -o /out/link-control.o
 link_probe() {
@@ -331,6 +365,16 @@ grep -Fx 'TR3 private factory tokenizer-mismatch status=1 stage=4 reason=0 origi
   "${evidence}/factory-tokenizer-mismatch.stdout" >/dev/null
 grep -Fx 'TR3 private factory tokenizer-mismatch close=1/10/4/0 PASS' \
   "${evidence}/factory-tokenizer-mismatch.stdout" >/dev/null
+grep -Fx 'TR3 factory fault t2 first=12/3/0/0 again=7/1/3/0 D2=0/0/0 PASS' \
+  "${evidence}/fault/t2.stdout" >/dev/null
+grep -Fx 'TR3 factory fault m3t first=12/6/0/0 again=7/1/3/0 D2=1/1/0 PASS' \
+  "${evidence}/fault/m3t.stdout" >/dev/null
+grep -F 'Bounded arena exhausted: request 144 bytes exceeds remaining capacity' \
+  "${evidence}/fault/t2.stderr" >/dev/null
+grep -F 'Failed to allocate vector with header (capacity=8)' \
+  "${evidence}/fault/t2.stderr" >/dev/null
+test ! -s "${evidence}/fault/m3t.stderr"
+test ! -s "${evidence}/fault/link.stderr"
 for mode in success seed-2718; do
   grep -Fx "TR3 private factory ${mode} close=0/0/0/0 repeat=7/10/5/0 PASS" \
     "${evidence}/factory-${mode}.stdout" >/dev/null
