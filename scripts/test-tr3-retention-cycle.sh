@@ -26,7 +26,7 @@ base = (root / "tests/tr3_snapshot/runtime_smoke.esk").read_text()
 base = base.split('(define tuple (make-tuple 1729))', 1)[0]
 base = base.replace(
     '(load "tr3_c_snapshot_root.esk")',
-    '(load "tr3_c_private_resume_trajectory_root.esk")',
+    '(load "tr3_c_retention_cycle_root.esk")',
     1,
 )
 assert '(load "tr3_c_snapshot_root.esk")' not in base
@@ -49,10 +49,9 @@ def visit(path):
         if found is None:
             raise ValueError(f'missing static load: {name}')
         visit(found)
-visit(root / 'native/tr3_c_private_resume_trajectory_root.esk')
+visit(root / 'native/tr3_c_retention_cycle_root.esk')
 paths = sorted(str(path.relative_to(root)) for path in seen)
-for required in ('native/tr3_c_checkpoint_restore_root.esk',
-                 'native/tr3_c_snapshot_save_extension.esk',
+for required in ('native/tr3_c_snapshot_save_extension.esk',
                  'native/tr3_c_checkpoint_restore_extension.esk',
                  'native/tr3_c_joint_restore_extension.esk',
                  'native/tr3_step_composer_extension.esk',
@@ -152,8 +151,8 @@ TR3_RETENTION_EVIDENCE_DIR="${evidence}" "${evidence}/retention-gate.generated.s
 {
   printf 'retention_gate_sha256\t%s\n' \
     "$(sha256sum scripts/test-tr3-retention-cycle.sh | awk '{print $1}')"
-  printf 'trajectory_root_sha256\t%s\n' \
-    "$(sha256sum native/tr3_c_private_resume_trajectory_root.esk | awk '{print $1}')"
+  printf 'retention_root_sha256\t%s\n' \
+    "$(sha256sum native/tr3_c_retention_cycle_root.esk | awk '{print $1}')"
   printf 'retention_suffix_sha256\t%s\n' \
     "$(sha256sum tests/tr3_resume_trajectory/retention_cycle_suffix.esk | awk '{print $1}')"
   printf 'source_count\t%s\n' "$(wc -l <"${evidence}/source-closure.txt")"

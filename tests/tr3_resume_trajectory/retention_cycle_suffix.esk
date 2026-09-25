@@ -95,18 +95,14 @@
 
 ;;; Accepted pre-seal O2 check is interposed once, then the exact same path
 ;;; and receiver retry. This is after native prepare but before live writes.
-(define cycle-original-o2-check tr3-c-restore-o2-check-internal)
-(set! tr3-c-restore-o2-check-internal
-  (lambda (ledger)
-    (m3t-fail 'internal 'trainer-load-state!
-              "injected pre-seal O2 check failure")))
+(set! tr3-cycle-fail-o2-check? #t)
 (check "one pre-seal failure is recoverable"
        (transformer-error-at?
          'internal 'trainer-load-state!
          (lambda ()
            (tr3-c-checkpoint-restore-internal!
              cycle-receiver cycle-path trajectory-policy trajectory-report))))
-(set! tr3-c-restore-o2-check-internal cycle-original-o2-check)
+(check "injected check was consumed" (not tr3-cycle-fail-o2-check?))
 (check "failure preserves source and receiver exactly"
        (and (image=? cycle-k-image (trajectory-image cycle-source))
             (image=? cycle-k-image (trajectory-image cycle-receiver))
