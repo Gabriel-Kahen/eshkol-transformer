@@ -68,5 +68,16 @@ slot or public ABI change. The native normal/sanitized suite passes, including
 creation. E3/P1, TR3 fixed-set, prepared-split and generated-root checks pass.
 Evidence is under
 `/home/gabe/.codex/evidence/eshkol-transformer/p1-raw-identity-focused-20260925/`.
-The full P1 package gate and genuine 1,024/8,192-cycle performance and memory
-horizons have not been run on this leaf.
+The clean `83eedb2` full P1 package gate passed in 3,701 seconds with
+3,983,988 KiB peak RSS; its 232-file seal is
+`p1-raw-identity-full-package-83eedb2-20260925/SHA256SUMS` (`44071bc6...`).
+The genuine 1,024-cycle SAVE/LOAD/joint-restore continuation passed 2,075
+exact-image and ownership checks with no sanitizer diagnostic. It took
+17:17.86 at 1,988,812 KiB peak RSS and grew the arena by 1,258,757,248
+bytes. Native `find_record` still consumed 128.16 seconds. This does not show
+an overall speed gain against the earlier 16:41.49 diagnostic, which was a
+different run. Its 53-file seal is
+`p1-raw-identity-1024-83eedb2-20260925/SHA256SUMS` (`b92b7967...`).
+The 8,192-cycle run was not started: linear projection exceeds the 4 GiB
+heap and the 2,400-second runtime cap. A measured retention/time improvement
+or separately justified resource bound is needed before that horizon.

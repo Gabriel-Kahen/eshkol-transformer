@@ -1369,8 +1369,15 @@ P1 runs, two 169-check registry-atomicity runs, 274 native identity checks,
 139 failpoints, 23 construction checks, 24 poisoned publication checks and
 11 invalid-index/stage-failure fallback checks. The 232-file seal is
 `p1-raw-identity-full-package-83eedb2-20260925/SHA256SUMS` (`44071bc6...`).
-The genuine 1,024/8,192-cycle continuation horizons and integrated exact-head
-CI remain pending on this leaf.
+The genuine 1,024-cycle SAVE/LOAD/joint-restore continuation passed 2,075
+exact-image and flat-live-authority checks in 17:17.86 at 1,988,812 KiB
+peak RSS, with 1,258,757,248 arena bytes added and 128.16 seconds in native
+`find_record`; the 53-file seal is
+`p1-raw-identity-1024-83eedb2-20260925/SHA256SUMS` (`b92b7967...`).
+The prior 16:41.49 run provides no overall speed-gain evidence. The 8,192
+horizon was held because projected growth exceeds the 4 GiB heap and linear
+time exceeds the 2,400-second cap. Further measured retention/lookup work
+and integrated exact-head CI remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
