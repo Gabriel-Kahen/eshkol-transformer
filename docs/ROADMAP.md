@@ -640,8 +640,17 @@ fitting answer back to INT64; mixed wide/inexact operands explicitly reject.
 Independent pinned Release and ASan+UBSan+LSan CTest each pass 4/4, with
 worker JIT/AOT O0/O2 parity in both builds. Root verified
 `f32-gcd-lcm-result-contract-95697c0f-20260924/SHA256SUMS`
-(`3487a9c3...`). Wide LCM, R7RS inexact result kind, native/VM arity and
-AD policy, whole-F32 acceptance and transformer runtime repin remain pending.
+(`3487a9c3...`). The bounded non-F32 result-kind leaf `e460d26f`/tree
+`8bf82ecd` is composed byte-identically at provisional Eshkol `861f4398`:
+accepted integral DOUBLE GCD/LCM now yields inexact DOUBLE across native/VM
+direct/stored routes, while exact INT/bignum stays exact. Both substrates
+reject mixed bignum/DOUBLE GCD, including the huge-integer/zero case that
+previously split into NaN versus infinity. Root's pinned Release and
+ASan+UBSan+LSan focused CTest each pass 8/8; worker source JIT/AOT O0/O2
+matrices pass 16/16. Root verified
+`f32-gcd-lcm-inexact-result-e460d26f-20260925/SHA256SUMS`
+(`4e824bea...`). Wide LCM, native/VM arity and AD policy, whole-F32
+acceptance and transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
