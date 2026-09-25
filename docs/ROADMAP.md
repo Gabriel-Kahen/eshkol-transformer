@@ -872,14 +872,13 @@ The linked package therefore retains only its initializer export until those
 contracts are accepted.
 The same-package primitive-ingress audit found runtime string/integer tagging
 and localized source thunks, but no reviewed factory wrapper or per-call E1
-scope. A bounded one-attempt private factory is now the candidate proof seam;
-its ownership policy, C handle, linked gate and public generalization remain open.
-The [proposed private factory/close contract](TR3_C_PRIVATE_FACTORY_CONTRACT.md)
+scope. A bounded one-attempt private factory is the current proof seam;
+its public generalization remains open.
+The [private factory/close contract](TR3_C_PRIVATE_FACTORY_CONTRACT.md)
 specifies the one-attempt data-only request, X1-derived M3T seed, D2 corpus
 identity, fixed O2 paths, failure retention and exact C handle/status behavior.
-It is a review candidate only; the initializer-only export manifest and public
-trainer/resume status remain unchanged until a genuine linked-package gate passes.
-An isolated source/private implementation candidate now adds the same-package
+The initializer-only production export manifest and public trainer/resume status
+remain unchanged. An isolated source/private implementation candidate adds the same-package
 producer wrapper, C ingress/handle bridge, and a linked lifecycle gate. The
 first pinned 47-source/30-native strict linked run on `1e45393` passed genuine
 `dlopen` create/close, X1/D2/digest negatives, initializer and hostile-link
@@ -889,8 +888,10 @@ raw/undefined/dynamic symbol manifests, including the three newly indexed P1
 hash references; its sealed evidence is `tr3-factory-linked-5558c08-20260925`.
 The full contract matrix still needs a fixed-profile and X1-seed derivation
 witness, every producer/lease failure cut, cleanup-failure behavior,
-process-lifetime retention, broader E1 category evidence and independent
-review. The production initializer-only export manifest and public
+process-lifetime retention, broader E1 category evidence and an exact merged
+union gate. Root independently reviewed the bridge, source wrapper, linked
+script, fixture, runtime lifetime and sealed candidate evidence without finding
+a blocker. The production initializer-only export manifest and public
 trainer/resume status are unchanged.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2

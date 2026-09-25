@@ -4,7 +4,7 @@ Status: **source/private implementation candidate with a passing bounded linked
 lifecycle gate; full contract acceptance, production exports, public trainer,
 and resume remain pending**. Source base for this contract: integration commit
 `76299fd`. The candidate source is `5558c08` and its sealed linked evidence is
-`/tmp/tr3-factory-linked-5558c08-20260925/SHA256SUMS`. This freezes a bounded
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-linked-5558c08-20260925/SHA256SUMS`. This freezes a bounded
 linked-package proof seam, not CLI3 policy or a general training API.
 
 ## Accepted source and missing boundary
