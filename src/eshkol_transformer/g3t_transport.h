@@ -21,6 +21,9 @@ int64_t et_g3t_private_prompt_preflight_v1(
 int64_t et_g3t_private_tensor_release_v1(void *input);
 void *et_g3t_private_output_reserve_v1(void *context, int64_t prompt_length);
 int64_t et_g3t_private_output_release_v1(void *output);
+#ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
+void *et_g3t_private_output_ids_clone_v1(void *output);
+#endif
 int64_t et_g3t_private_output_prepare_v1(void *context, void *output);
 int64_t et_g3t_private_output_copy_decode_ids_v1(
     void *context, void *output, void *staging_header);
@@ -62,6 +65,14 @@ int64_t et_g3t_test_output_borrow_end_v1(void *borrow);
 int64_t et_g3t_test_output_id_set_v1(void *output, int64_t token);
 int64_t et_g3t_test_binding_flip_v1(void *context);
 int64_t et_g3t_test_output_state_v1(void *output);
+#ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
+int64_t et_g3t_test_ids_clone_state_v1(void *clone);
+int64_t et_g3t_test_ids_clone_length_v1(void *clone);
+int64_t et_g3t_test_ids_clone_word_v1(void *clone);
+void *et_g3t_test_ids_clone_borrow_begin_v1(void *clone);
+int64_t et_g3t_test_ids_clone_borrow_end_v1(void *borrow);
+int64_t et_g3t_test_live_ids_clones_v1(void);
+#endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 int64_t et_g3t_test_input_length_set_v1(void *input, int64_t length);
 #endif
