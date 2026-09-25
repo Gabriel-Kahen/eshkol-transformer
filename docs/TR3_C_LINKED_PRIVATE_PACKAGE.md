@@ -8,12 +8,12 @@ every combined definition except the versioned private initializer bridge,
 then links one private archive and a shared library with `--no-undefined`.
 No predecessor package or runtime pin changes.
 
-The exact boundary is 4,111 raw global definitions, 172 unresolved
+The exact boundary is 4,115 raw global definitions, 172 unresolved
 runtime/system symbols in the localized object, one archive member, and two
 dynamic entries: the version marker and `et_tr3_c_private_initialize_v1`.
 The linked library has no unresolved trusted `et_*`, TR3 or C2 references.
 Whole-archive linking and `dlopen` succeed; external static links to the raw
-initializer, private TR3 lease and native restore symbols fail by name.
+initializer, private TR3 lease create/unenroll and native restore symbols fail by name.
 `dlsym` sees the bridge but cannot see those private symbols or the result-cell
 restore entry.
 
@@ -32,7 +32,7 @@ nor claims to roll back allocations made before an exception.
 
 Actual `dlopen` invocation and repeat complete without stderr. The static
 witness verifies restored handler and shared-arena identity, unchanged root
-use on repeat, and root use rising from 0 to 7,234,848 bytes. An injected
+use on repeat, and root use rising from 0 to 7,236,528 bytes. An injected
 initializer fixture verifies every error status, raised-value retention,
 handler and scope cleanup, reentrant busy behavior, failure retry and repeat
 without rerunning initialization. The real TR3 initializer has no accepted

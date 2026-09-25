@@ -1,0 +1,150 @@
+;;; Extend the accepted authentic lease witness with private unenrollment.
+(load "lease_runtime.esk")
+
+(define unenroll-operation 'tr3-lease-unenroll-internal!)
+(define count-before-unenroll (record-count))
+(define head-before-unenroll (vector-ref tr3-trainers 0))
+(define released-node (cdr head-before-unenroll))
+(check "fixture has an interior enrolled trainer"
+       (and (> count-before-unenroll 3)
+            (record-for-shell released-shell)
+            (not (eq? released-node head-before-unenroll))))
+
+(check "malformed shell rejects before registry mutation"
+       (transformer-error-at-operation?
+         'invalid-argument unenroll-operation
+         (lambda () (tr3-lease-unenroll-internal! #f))))
+(check "copied shell rejects before registry mutation"
+       (transformer-error-at-operation?
+         'invalid-argument unenroll-operation
+         (lambda ()
+           (tr3-lease-unenroll-internal! (vector-copy released-shell)))))
+(check "malformed and copied shells preserve exact head"
+       (eq? (vector-ref tr3-trainers 0) head-before-unenroll))
+
+(phase! 'snapshotting snapshot-phase-parent)
+(check "active snapshot rejects unenroll"
+       (transformer-error-at-operation?
+         'invalid-state unenroll-operation
+         (lambda () (tr3-lease-unenroll-internal! fresh-shell))))
+(phase! 'restoring restore-parent)
+(check "active restore rejects unenroll"
+       (transformer-error-at-operation?
+         'invalid-state unenroll-operation
+         (lambda () (tr3-lease-unenroll-internal! fresh-shell))))
+(phase! 'idle #f)
+(set! tr3-acquisition-active? #t)
+(check "active acquisition rejects unenroll"
+       (transformer-error-at-operation?
+         'invalid-state unenroll-operation
+         (lambda () (tr3-lease-unenroll-internal! released-shell))))
+(set! tr3-acquisition-active? #f)
+(check "busy cuts preserve registry"
+       (and (eq? (vector-ref tr3-trainers 0) head-before-unenroll)
+            (= (record-count) count-before-unenroll)))
+
+(define substituted-unenroll-head
+  (cons (vector 'test-unenroll-head) head-before-unenroll))
+(set! tr3-test-recheck-injection
+  (lambda () (vector-set! tr3-trainers 0 substituted-unenroll-head)))
+(check "final head substitution rejects before unlink"
+       (transformer-error-at-operation?
+         'invalid-state unenroll-operation
+         (lambda () (tr3-lease-unenroll-internal! released-shell))))
+(set! tr3-test-recheck-injection #f)
+(check "failed unlink retains original list and clears guard"
+       (and (eq? (vector-ref tr3-trainers 0) substituted-unenroll-head)
+            (eq? (cdr substituted-unenroll-head) head-before-unenroll)
+            (not tr3-lease-unenroll-active?)))
+(vector-set! tr3-trainers 0 head-before-unenroll)
+
+(set! tr3-test-recheck-injection
+  (lambda () (vector-set! released-record 2 (vector 'substituted-shell))))
+(check "final shell substitution rejects before unlink"
+       (transformer-error-at-operation?
+         'invalid-state unenroll-operation
+         (lambda () (tr3-lease-unenroll-internal! released-shell))))
+(set! tr3-test-recheck-injection #f)
+(vector-set! released-record 2 released-shell)
+(check "shell substitution failure preserves registry and guard"
+       (and (eq? (vector-ref tr3-trainers 0) head-before-unenroll)
+            (= (record-count) count-before-unenroll)
+            (not tr3-lease-unenroll-active?)))
+
+(define nested-unenroll-rejected #f)
+(define nested-create-rejected #f)
+(set! tr3-test-recheck-injection
+  (lambda ()
+    (set! nested-unenroll-rejected
+      (transformer-error-at-operation?
+        'invalid-state unenroll-operation
+        (lambda () (tr3-lease-unenroll-internal! fresh-shell))))
+    (set! nested-create-rejected
+      (transformer-error-at-operation?
+        'invalid-state 'trainer-create
+        (lambda () (tuple-create released))))))
+(check "interior unenroll succeeds after reentrant negatives"
+       (tr3-lease-unenroll-internal! released-shell))
+(set! tr3-test-recheck-injection #f)
+(check "reentrant create and unenroll both reject"
+       (and nested-unenroll-rejected nested-create-rejected))
+(check "interior unlink removes exactly one record"
+       (and (= (record-count) (- count-before-unenroll 1))
+            (not (record-for-shell released-shell))
+            (eq? (vector-ref tr3-trainers 0) head-before-unenroll)
+            (not tr3-lease-unenroll-active?)))
+(check "other enrolled trainer retains exact authority"
+       (eq? (tr3-lease-record-for-shell-internal
+                   fresh-shell unenroll-operation)
+             fresh-record))
+(check "released shell and copied shell remain unusable"
+       (and
+         (transformer-error-at-operation?
+           'invalid-argument unenroll-operation
+           (lambda () (tr3-lease-unenroll-internal! released-shell)))
+         (transformer-error-at-operation?
+           'invalid-argument 'trainer-state
+           (lambda ()
+             (tr3-lease-record-for-shell-internal
+               released-shell 'trainer-state)))))
+(check "former receivers remain live and caller-owned"
+       (and (bytevector? (d2-token-dataset-cursor (vector-ref released 2)))
+            (eq? (m3t-entry (vector-ref released 3)
+                            'model unenroll-operation #t)
+                 (vector-ref released-record 9))
+            (eq? (o2-require-optimizer
+                   unenroll-operation (vector-ref released 4))
+                 (vector-ref released-record 14))))
+(define released-new-shell (tuple-create released))
+(check "former tuple can lease again as a distinct shell"
+       (and (not (eq? released-new-shell released-shell))
+            (= (record-count) count-before-unenroll)
+            (record-for-shell released-new-shell)
+            (not (record-for-shell released-shell))))
+
+(check "head unenroll succeeds"
+       (tr3-lease-unenroll-internal! released-new-shell))
+(check "tail unenroll succeeds"
+       (tr3-lease-unenroll-internal! fresh-shell))
+(check "head and tail unlink retain other trainers"
+       (and (= (record-count) (- count-before-unenroll 2))
+            (record-for-shell live-now-released-shell)
+            (record-for-shell m3-now-idle-shell)))
+
+(define retained-count (record-count))
+(let cycle ((index 0))
+  (if (= index 128) #t
+      (begin
+        (with-region ('tr3-unenroll-cycle 1048576)
+          (let ((shell (tuple-create released)))
+            (tr3-lease-unenroll-internal! shell)))
+        (if (not (= (record-count) retained-count)) (exit 1))
+        (cycle (+ index 1)))))
+(check "128 acquire/unlink cycles retain no registry records"
+       (= (record-count) retained-count))
+
+(display "TR3-LEASE-UNENROLL-PASS checks=")
+(display checks)
+(display " trainers=")
+(display (record-count))
+(newline)

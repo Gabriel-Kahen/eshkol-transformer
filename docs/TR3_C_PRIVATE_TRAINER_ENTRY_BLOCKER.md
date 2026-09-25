@@ -1,6 +1,7 @@
 # TR3-C private C trainer entry: contract blocker
 
-Status: source-backed proposal only. No constructor, closer, C handle or public
+Status: source-backed C-entry blocker. A separate private lease-unenroll
+operation now ends registry retention; no C constructor, C handle or public
 trainer facade is accepted by this note.
 
 The accepted 46-source root in `native/tr3_c_private_package_root.esk`
@@ -25,24 +26,22 @@ valid tagged values from **this same compiled identity universe**. It would
 not provide a constructible package API. Raw addresses or objects made by a
 separately compiled Eshkol package are not substitutes for those identities.
 
-There is no accepted trainer close or unenrollment. `tr3-trainers` begins as
-a rooted registry in `native/tr3_lease_core_extension.esk:9`; acquisition
-prepends its record to slot 0, and no other source store removes one. The
-registry retains the shell, all five receivers and captured handles after
+`tr3-trainers` is a rooted registry in
+`native/tr3_lease_core_extension.esk:9`; acquisition prepends its record to
+slot 0. It retains the shell, all five receivers and captured handles after
 the caller drops its shell. The public ownership rule says the exclusive
-lease lasts until the trainer is unreachable, but this private registry makes
-that condition unreachable in the current runtime. D2 has an idempotent
+lease lasts until the trainer is unreachable. The
+[private lease-unenroll seam](TR3_C_PRIVATE_LEASE_UNENROLL.md) now removes an
+authenticated idle record so the registry no longer retains it; release is
+explicit and does not infer collector reachability. D2 has an idempotent
 dataset close; `docs/PUBLIC_API_CONTRACT.md` explicitly says O2 v1 has no
 optimizer-destroy operation and keeps live optimizer moments process-local
 until exit. The accepted M3T model path likewise has no trainer-owned close.
 Snapshot-state release is a different operation and cannot close the trainer.
 
-The minimum upstream decision is an authenticated private lease-unenroll
-operation with a precise lifecycle contract: admit only an exact idle enrolled
-shell with no active snapshot/restore, remove exactly its registry record,
-invalidate the lease token and shell, and specify repeat/malformed/busy
-results. It must also state whether the five retained receivers return to
-their original owners or a package-owned constructor must close them. A
+The remaining upstream decision is how a same-package C producer obtains the
+five operands and which C handle owns them. Unenrollment returns the five
+retained receivers to their existing callers without destroying them. A
 package-owned C factory additionally needs an accepted data-only input schema
 and a same-package producer for all five operands, including failure cleanup
 for each producer. Neither schema nor child teardown may be inferred from the

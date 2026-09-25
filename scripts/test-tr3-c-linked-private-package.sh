@@ -174,7 +174,7 @@ link_probe() {
 link_probe /out/link-control.o /out/link-control \
   > /out/link-control.stdout 2> /out/link-control.stderr
 /out/link-control
-for mode in LEASE NATIVE INIT; do
+for mode in LEASE UNENROLL NATIVE INIT; do
   clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
     "-DTR3_HOSTILE_${mode}" \
     -c tests/tr3_linked_private_package/link_probe.c \
@@ -189,6 +189,8 @@ for mode in LEASE NATIVE INIT; do
 done
 grep -F "undefined reference" /out/hostile-LEASE.stderr >/dev/null
 grep -F "tr3-lease-create-internal" /out/hostile-LEASE.stderr >/dev/null
+grep -F "undefined reference" /out/hostile-UNENROLL.stderr >/dev/null
+grep -F "tr3-lease-unenroll-internal!" /out/hostile-UNENROLL.stderr >/dev/null
 grep -F "undefined reference" /out/hostile-NATIVE.stderr >/dev/null
 grep -F "et_tr3_c_private_i2_restore_create_v1" \
   /out/hostile-NATIVE.stderr >/dev/null

@@ -9,6 +9,7 @@
 ;;; root used only while an acquisition is active.
 (define tr3-trainers (vector '() #f))
 (define tr3-acquisition-active? #f)
+(define tr3-lease-unenroll-active? #f)
 (define tr3-lease-record-tag (vector 'tr3-lease-record-v2))
 (define tr3-lease-token-tag (vector 'tr3-lease-token-v2))
 (define tr3-lease-snapshot-parent-tag (vector 'tr3-c-snapshot-parent-v1))
@@ -376,7 +377,7 @@
   #t)
 
 (define (tr3-lease-create-internal resolved tokenizer dataset model optimizer)
-  (if tr3-acquisition-active?
+  (if (or tr3-acquisition-active? tr3-lease-unenroll-active?)
       (tr3-lease-fail 'invalid-state "trainer acquisition is already active"))
   ;; The handler is installed before the global guard.  Every recoverable exit
   ;; clears both the staging root and the guard without changing registry head.
@@ -558,6 +559,55 @@
        (tr3-lease-authenticate
          (car remaining) (vector-ref (car remaining) 5) operation))
       (else (find (cdr remaining))))))
+
+;;; Ends only the exclusive trainer lease.  The five input receivers remain
+;;; caller-owned and live.  The exact shell is invalid after its sole registry
+;;; node is unlinked; no native owner or arena block is reclaimed here.
+(define (tr3-lease-unenroll-internal! trainer)
+  (let ((operation 'tr3-lease-unenroll-internal!))
+    (if (or tr3-acquisition-active? tr3-lease-unenroll-active?
+            (vector-ref tr3-trainers 1))
+        (tr3-lease-operation-fail
+          'invalid-state operation "trainer lease registry is busy"))
+    (guard (caught
+             (#t (begin
+                   (set! tr3-lease-unenroll-active? #f)
+                   (raise caught))))
+      (set! tr3-lease-unenroll-active? #t)
+      (let* ((observed-head (vector-ref tr3-trainers 0))
+             (record (tr3-lease-record-for-shell-internal trainer operation)))
+        (let find ((previous #f) (remaining observed-head))
+          (cond
+            ((null? remaining)
+             (tr3-lease-operation-fail
+               'invalid-state operation "trainer registry changed"))
+            ((eq? (car remaining) record)
+             (if (or (not (eq? (vector-ref record 3) 'idle))
+                     (vector-ref record 4))
+                 (tr3-lease-operation-fail
+                   'invalid-state operation "trainer is not idle"))
+             (tr3-lease-restore-enter-admission! record operation)
+             ;; This recheck may call providers.  Every check after it is a
+             ;; primitive observation before the single unlink write.
+             (tr3-lease-authenticate
+               record (vector-ref record 5) operation)
+             (if (or tr3-acquisition-active?
+                     (vector-ref tr3-trainers 1)
+                     (not (eq? observed-head (vector-ref tr3-trainers 0)))
+                     (not (eq? (car remaining) record))
+                     (not (eq? (vector-ref record 2) trainer))
+                     (and previous
+                          (not (eq? (cdr previous) remaining)))
+                     (not (eq? (vector-ref record 3) 'idle))
+                     (vector-ref record 4))
+                 (tr3-lease-operation-fail
+                   'invalid-state operation "trainer changed before unlink"))
+             (if previous
+                 (set-cdr! previous (cdr remaining))
+                 (vector-set! tr3-trainers 0 (cdr remaining)))
+             (set! tr3-lease-unenroll-active? #f)
+             #t)
+            (else (find remaining (cdr remaining)))))))))
 
 (define (tr3-lease-restore-enter-admission! record operation)
   (tr3-lease-m3-idle! (vector-ref record 9) operation)
