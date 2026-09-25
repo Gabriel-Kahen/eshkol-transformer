@@ -836,6 +836,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_MANUAL_TAIL_PRIVATE)
 #error "ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE requires the completed manual tail"
 #endif
+#if defined(ET_G3C4_MANUAL_ROLE_STEP_PRIVATE) && \
+    !defined(ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE)
+#error "ET_G3C4_MANUAL_ROLE_STEP_PRIVATE requires manual frame publication"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -6093,6 +6097,29 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_tail_run(
   return 0;
 }
 #endif
+#endif
+
+#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE
+int64_t et_g3c4_private_role_step_v1(void *candidate, int64_t ordinal) {
+  et_g3c4_context_internal *context;
+  et_g3c4_manual_frame_internal *frame;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (ordinal < 0 || ordinal > 20)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  frame = context->manual_frame;
+  if (frame == NULL || frame->publication_state != 0u ||
+      frame->next_ordinal != ordinal)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (ordinal == 0) return et_g3c4_manual_role0_run(context);
+  if (ordinal <= 9) return et_g3c4_manual_pre_a2_run(context, ordinal);
+  if (ordinal == 10) return et_g3c4_manual_a2_run(context);
+  if (ordinal == 11) return et_g3c4_manual_at_run(context);
+  if (ordinal == 12) return et_g3c4_manual_ao_run(context);
+  if (ordinal == 13) return et_g3c4_manual_r_run(context);
+  return et_g3c4_manual_tail_run(context, ordinal);
+}
 #endif
 
 #ifdef ET_G3C4_GENERATOR_PRIVATE

@@ -140,6 +140,12 @@ int64_t et_g3c4_private_frame_prepare_v1(void *context, void *logits);
 int64_t et_g3c4_private_frame_commit_v1(void *context);
 #endif
 
+#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE
+/* Exact private 0..20 manual role dispatch. Each accepted helper advances
+ * next_ordinal only after its provider route succeeds. */
+int64_t et_g3c4_private_role_step_v1(void *context, int64_t ordinal);
+#endif
+
 #ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
 /* Copies the final staged G0/G1 numeric result into its pending output.
  * Cache, generator RNG, text readiness and result publication are unchanged. */

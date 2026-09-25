@@ -134,6 +134,7 @@ static void publication_case(et_g3c4_model_owner_internal *owner,
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
+#ifndef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE
 int main(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   tail_case(owner, 1, 1);
@@ -144,3 +145,4 @@ int main(void) {
   printf("G3-C4 private manual frame commit PASS: checks=%zu routes=4\n", checks);
   return 0;
 }
+#endif

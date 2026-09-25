@@ -36,7 +36,7 @@ def check() -> None:
                  'n3k.residual', 'n3k.residual.forward',
                  'uint64_t shape[3] = {1u, 0u, 4u}'):
         assert part in role, part
-    assert 'et_g3c4_private_role_step_v1' not in source
+    assert 'et_g3c4_private_role_step_v1' not in source.split('#ifdef ET_G3C4_MANUAL_ROLE_STEP_PRIVATE\n')[0]
     assert '(frame->next_ordinal < 0 || frame->next_ordinal > 14)' in source
     for part in ('r_case(owner, 1, 1)', 'r_case(owner, 1, 2)',
                  'r_case(owner, 2, 1)', 'fail_r', 'snapshot_at_candidate',
