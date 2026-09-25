@@ -704,6 +704,12 @@ and G1 evidence (`2b282e30...` and `52f55d93...`), and integrated identical
 source at `490b1fd`. Once the new Python source checker became Git-tracked,
 Q0 correctly required its exact development-only admission; `c245550`
 adds that admission, and the merged Q0 4/4 and P2 static contract pass.
+An exact dependency audit at `7ace598` confirms P2/G1 must remain a pre-pin
+rejection: the accepted C2 boundary requires `P+G<=2`, A2 holds two positions,
+and the G1 append uses absolute position one. P2/G1 needs a reviewed
+capacity-three cache/position/attention and output transaction contract before
+implementation; sampling without that append would not satisfy G1. No
+P2/G1 implementation or compiler proof is claimed from this audit.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
