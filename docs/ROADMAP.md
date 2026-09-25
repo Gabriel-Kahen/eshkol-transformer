@@ -993,6 +993,15 @@ hashes are recorded in
 This accepts only the bounded root package/runtime union; registered aggregate
 CI, public E3 and full CLI3 remain pending.
 
+The bounded [P1 post-index retention profile](P1_POST_INDEX_RETENTION_PROFILE.md)
+on `07dbc6e` passes pinned f31/LLVM 21 sanitizer/gprof 128/256 genuine-cycle
+gates with 283/539 checks, exact images, and flat live authorities. Wall time
+grows 60.03 to 147.59 seconds for twice the cycles; state/module registry
+scans and raw-shell/native record lookups all grow superlinearly. No P1 runtime
+optimization is accepted from this profile. An active-only record index needs
+a publication/release/rollback and authoritative-fallback contract before
+implementation; the 8,192-cycle horizon remains open.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
