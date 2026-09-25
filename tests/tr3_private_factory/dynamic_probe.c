@@ -44,7 +44,23 @@ int main(int argc, char **argv) {
       "\"model.context-length\":2,\"model.hidden-size\":4,"
       "\"model.layer-count\":1,\"model.query-head-count\":2,"
       "\"model.vocabulary-size\":256,\"run.seed\":1729}";
+  static const uint8_t alternate_seed_json[] =
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+      "\"model.context-length\":2,\"model.hidden-size\":4,"
+      "\"model.layer-count\":1,\"model.query-head-count\":2,"
+      "\"model.vocabulary-size\":256,\"run.seed\":2718}";
+  static const uint8_t wrong_profile_json[] =
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+      "\"model.context-length\":2,\"model.hidden-size\":8,"
+      "\"model.layer-count\":1,\"model.query-head-count\":2,"
+      "\"model.kv-head-count\":2,\"model.head-size\":4,"
+      "\"model.vocabulary-size\":256,\"run.seed\":1729}";
   static const uint8_t bad_json[] = "{bad}";
+  static const char absent[] = "/out/corpus-missing";
+  const int alternate_seed = strcmp(argv[3], "seed-2718") == 0;
+  const int wrong_profile = strcmp(argv[3], "profile") == 0;
+  const int d2_limit = strcmp(argv[3], "d2-limit") == 0;
+  const int success_mode = strcmp(argv[3], "success") == 0 || alternate_seed;
   et_tr3_c_create_request_v1 request = {0};
   request.size = sizeof(request);
   request.major = 1;
@@ -76,18 +92,26 @@ int main(int argc, char **argv) {
     request.x1_json = bad_json;
     request.x1_len = sizeof(bad_json) - 1;
   }
-  if (strcmp(argv[3], "missing") == 0) {
-    static const char absent[] = "/out/corpus-missing";
+  if (alternate_seed) {
+    request.x1_json = alternate_seed_json;
+    request.x1_len = sizeof(alternate_seed_json) - 1;
+  }
+  if (wrong_profile) {
+    request.x1_json = wrong_profile_json;
+    request.x1_len = sizeof(wrong_profile_json) - 1;
+  }
+  if (strcmp(argv[3], "missing") == 0 || wrong_profile || d2_limit) {
     request.directory = (const uint8_t *)absent;
     request.directory_len = sizeof(absent) - 1;
   }
+  if (d2_limit) request.maximum_batch_bytes = 1;
 
   et_tr3_c_result_v1 first = create(&request);
-  if (strcmp(argv[3], "success") == 0) {
+  if (success_mode) {
     if (first.status != ET_TR3_C_OK || first.stage != ET_TR3_C_STAGE_NONE ||
         first.handle == NULL) return 8;
   } else {
-    uint32_t expected_stage = strcmp(argv[3], "x1") == 0
+    uint32_t expected_stage = strcmp(argv[3], "x1") == 0 || wrong_profile
                                   ? ET_TR3_C_STAGE_X1
                                   : strcmp(argv[3], "digest") == 0
                                         ? ET_TR3_C_STAGE_CORPUS_IDENTITY
@@ -100,11 +124,18 @@ int main(int argc, char **argv) {
     if (strcmp(argv[3], "x1") == 0 &&
         (first.status != ET_TR3_C_INVALID_ARGUMENT ||
          first.reason != ET_TR3_C_REASON_RAISED_E1)) return 11;
+    if (wrong_profile &&
+        (first.status != ET_TR3_C_UNSUPPORTED ||
+         first.reason != ET_TR3_C_REASON_RAISED_E1)) return 16;
+    if (d2_limit &&
+        (first.status != ET_TR3_C_INVALID_ARGUMENT ||
+         first.reason != ET_TR3_C_REASON_RAISED_E1)) return 17;
   }
+  if (first.original_category != 0) return 18;
   et_tr3_c_result_v1 again = create(&request);
   if (again.status != ET_TR3_C_INVALID_STATE ||
       again.reason != ET_TR3_C_REASON_ATTEMPT_USED || again.handle) return 12;
-  if (strcmp(argv[3], "success") == 0) {
+  if (success_mode) {
     et_tr3_c_result_v1 forged = close(NULL);
     if (forged.status != ET_TR3_C_INVALID_ARGUMENT ||
         forged.reason != ET_TR3_C_REASON_BAD_HANDLE) return 13;
@@ -114,6 +145,11 @@ int main(int argc, char **argv) {
     if (repeated.status != ET_TR3_C_INVALID_STATE ||
         repeated.reason != ET_TR3_C_REASON_ALREADY_CLOSED) return 15;
   }
-  printf("TR3 private factory %s PASS\n", argv[3]);
+  if (alternate_seed || wrong_profile || d2_limit)
+    printf("TR3 private factory %s status=%u stage=%u reason=%u original=%u PASS\n",
+           argv[3], first.status, first.stage, first.reason,
+           first.original_category);
+  else
+    printf("TR3 private factory %s PASS\n", argv[3]);
   return 0;
 }

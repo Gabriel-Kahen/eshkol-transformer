@@ -207,7 +207,7 @@ directory.mkdir()
 write_d1_resource(directory, ((1, 2, 3, 4),),
                   fingerprint=TOKENIZER_FINGERPRINT, vocab=256)
 PY
-for mode in success digest x1 missing; do
+for mode in success seed-2718 profile d2-limit digest x1 missing; do
   /out/factory-dynamic-probe /out/libtr3_private.so /out/corpus "${mode}" \
     > "/out/factory-${mode}.stdout" \
     2> "/out/factory-${mode}.stderr"
@@ -307,6 +307,15 @@ grep -Fx 'TR3 linked private dynamic boundary PASS' \
 for mode in success digest x1 missing; do
   grep -Fx "TR3 private factory ${mode} PASS" \
     "${evidence}/factory-${mode}.stdout" >/dev/null
+  test ! -s "${evidence}/factory-${mode}.stderr"
+done
+grep -Fx 'TR3 private factory seed-2718 status=0 stage=0 reason=0 original=0 PASS' \
+  "${evidence}/factory-seed-2718.stdout" >/dev/null
+grep -Fx 'TR3 private factory profile status=6 stage=2 reason=0 original=0 PASS' \
+  "${evidence}/factory-profile.stdout" >/dev/null
+grep -Fx 'TR3 private factory d2-limit status=1 stage=4 reason=0 original=0 PASS' \
+  "${evidence}/factory-d2-limit.stdout" >/dev/null
+for mode in seed-2718 profile d2-limit; do
   test ! -s "${evidence}/factory-${mode}.stderr"
 done
 grep -E '^TR3 linked private initializer PASS: root_used_before=[0-9]+ root_used_after=[0-9]+$' \
