@@ -29,10 +29,11 @@ fixture creates its modules before its SAVE/restore cycle loop.
 
 This does not accelerate raw-to-shell creation, native `find_record`, or the
 terminal-registry compaction scan. The inherited E3/P1 structural checker
-already rejects the unmodified `49dcaed` base at its E3 lexical-definition
-hash, so it cannot serve as this candidate's gate until separately repaired.
-Integration also requires reviewed repinning of source-hash checks after
-focused behavioral and performance evidence.
+rejected the unmodified `49dcaed` base at its E3 lexical-definition hash. A
+separate checker change repins that accepted base, the current P1
+symbol/I2 source hashes, and the composed P1 source hash for this candidate.
+E3, TR3 fixed-set, and prepared-split structural checks now pass without
+changing their source predicates.
 The candidate is not a claim of near-linear end-to-end performance or of the
 open 8,192-cycle horizon.
 

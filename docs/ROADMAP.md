@@ -1029,8 +1029,9 @@ a publication/release/rollback and authoritative-fallback contract before
 implementation; the 8,192-cycle horizon remains open.
 An isolated [active-record candidate](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md)
 implements that contract for state/module ownership scans. Focused pinned
-behavioral and performance evidence, independent review, and source-hash
-checker repinning remain integration gates; the 8,192 horizon is still open.
+behavioral and 128/256-cycle performance evidence are sealed; E3/P1, TR3
+fixed-set, and prepared-split source-hash checkers are repinned and pass.
+Independent review, the full package gate, and the 8,192 horizon remain open.
 
 ## Wave 4 — practical pretraining and performance
 
