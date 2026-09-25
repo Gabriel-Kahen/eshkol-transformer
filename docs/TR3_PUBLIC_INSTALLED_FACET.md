@@ -93,5 +93,11 @@ receiver to `trainer-create`. The linked caller also checks typed forged-policy
 rejections for load/save. Successful load/save requires an authentic C1 policy;
 its producer is not yet installed in this aggregate. D2, M3T, P1 and O2
 creation remain test-local direct entries. The C2 tuple and prior sealed X1
-package evidence remain unchanged. The full linked gate and exact compiled
-boundary for this candidate are pending.
+package evidence remain unchanged. The pinned linked gate on `bd5dc8f` passed
+with 49 Eshkol sources, 30 native objects, 69 native source/header paths,
+4,156 raw definitions, 33 localized public exports and 173 undefined runtime
+symbols. Its poisoned public caller passed with empty stderr. Evidence is
+sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-t2-linked-bd5dc8f-20260925/`
+(`SHA256SUMS` SHA-256 `cf7a25fade2c06c62395302599cbccccb9ec9bb2a7338ba9afa47d81b46e4e40`);
+`sha256sum -c` passed.
