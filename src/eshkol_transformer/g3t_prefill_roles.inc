@@ -1,4 +1,4 @@
-/* Fixed P1 numerical roles. Included after the G3-T context and dispatch helpers. */
+/* Fixed P1 prefill and one-token append roles. */
 static int64_t g3t_prefill_attention(g3t_context *c) {
   et_a2_kv_cache_transaction *transaction = NULL;
   et_a2_kv_cache_transaction_view *lease = NULL;
@@ -10,16 +10,19 @@ static int64_t g3t_prefill_attention(g3t_context *c) {
   uint64_t head_shape[4] = {1,2,1,2}, query_shape[2] = {1,1};
   uint64_t key_shape[2] = {1,2}, mask_shape[3] = {1,1,2};
   uint64_t request[6] = {1,2,2,1,2,2};
-  int64_t count = 1, query_position[1] = {0}, key_positions[2] = {0,1};
+  int64_t count = 1, query_position[1] = {c->frame.kind == 2 ? 1 : 0};
+  int64_t key_positions[2] = {0,1};
   uint8_t mask[2] = {0,0};
   float result[4] = {0};
   int64_t first_domain, first_category, first_code;
 
-  if (!c->frame.candidate_cache || c->frame.transaction)
+  et_a2_kv_cache *cache = c->frame.kind == 1 ?
+                           c->frame.candidate_cache : c->cache;
+  if (!cache || c->frame.transaction)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
   count_view = g3t_view(&count, sizeof(count), "i64", 1u, one_shape);
   if (g3t_capture_kernel(et_a2_kv_cache_transaction_begin_v1(
-          c->frame.candidate_cache, 1u, &count_view, &transaction, &error),
+          cache, 1u, &count_view, &transaction, &error),
           &error)) goto fail;
   inputs[0] = g3t_view(c->frame.kh, sizeof(c->frame.kh), "f32", 4u,
                        stage_shape);
@@ -31,9 +34,9 @@ static int64_t g3t_prefill_attention(g3t_context *c) {
           transaction, 0u, &lease, &error), &error)) goto fail;
   if (g3t_capture_kernel(et_a2_kv_cache_transaction_view_tensors_v1(
           lease, &keys, &values, &lengths, &keep, &error), &error)) goto fail;
-  if (((const int64_t *)lengths->data)[0] != 1 ||
+  if (((const int64_t *)lengths->data)[0] != query_position[0] + 1 ||
       ((const uint8_t *)keep->data)[0] != 1u ||
-      ((const uint8_t *)keep->data)[1] != 0u) {
+      ((const uint8_t *)keep->data)[1] != (uint8_t)(c->frame.kind == 2)) {
     g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
     goto fail;
   }
@@ -84,7 +87,8 @@ static int64_t g3t_prefill_plain(g3t_context *c, int64_t ordinal) {
   uint64_t heads[4] = {1,2,1,2};
   const uint64_t *request = d4, *output_shape = d4;
   size_t request_rank = 3u, output_rank = 3u, input_count = 0u, bytes = 16u;
-  int64_t token[1] = {c->frame.token}, position[1] = {0};
+  int64_t token[1] = {c->frame.token};
+  int64_t position[1] = {c->frame.kind == 2 ? 1 : 0};
   uint32_t epsilon_bits = UINT32_C(0x3727c5ac);
   float epsilon, result[256] = {0};
   float *destination = NULL;
@@ -213,7 +217,9 @@ int64_t et_g3t_private_role_step_v1(void *candidate, int64_t ordinal) {
   if (ordinal < 0 || ordinal > 20)
     return g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
   if (!c->h.busy || c->call_kind != 2 || !c->pending_output ||
-      !c->frame.active || c->frame.next_ordinal != ordinal || c->sampled)
+      !c->frame.active || c->frame.next_ordinal != ordinal ||
+      (c->frame.kind == 1 ? c->sampled :
+       (c->frame.kind != 2 || !c->sampled || !c->prefill_committed)))
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
   return ordinal == 10 ? g3t_prefill_attention(c) :
                          g3t_prefill_plain(c, ordinal);

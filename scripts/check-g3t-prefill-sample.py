@@ -45,9 +45,16 @@ for name in ("input_from_token", "tensor_release", "output_reserve",
 for symbol in ("g3t-with-call", "g3t-frame-begin", "g3t-role-step",
                "g3t-frame-prepare", "g3t-frame-commit", "g3t-sample"):
     assert symbol in source and symbol in test
-assert test.count("(g3t-native-role-step native ") == 22
+assert test.count("(g3t-native-role-step native ") >= 22
 assert test.count("(g3t-native-role-step partial-native ") == 12
 assert "all 256 prefill logits equal independent M3T" in test
+assert "all 256 token-frame logits equal independent M3T" in test
+assert "sampled attention failure preserves cache length" in test
+assert "profile drift rejects sampled frame" in test
+assert "if (c->frame.kind == 2)" in core
+assert "return g3t_bad(G3T_STATE, G3T_LIFECYCLE);" in core
+assert "c->frame.kind == 2 ? 1 : 0" in roles
+assert (ROOT / "docs/g3/G3_T_TOKEN_FRAME_LEAF.md").is_file()
 assert "G3T_ONLY_NORMAL" in (ROOT / "scripts/test-g3t-prefill-sample.sh").read_text()
 assert "-DET_G3T_PREFILL_SAMPLE_PRIVATE" in (
     ROOT / "scripts/test-g3t-prefill-sample.sh").read_text()

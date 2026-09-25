@@ -39,6 +39,8 @@ int64_t et_g3t_test_sample_token_v1(void *context);
 int64_t et_g3t_test_rng_word_v1(void *context, int64_t index);
 int64_t et_g3t_test_successor_word_v1(void *context, int64_t index);
 int64_t et_g3t_test_greedy_argmax_v1(void *context);
+int64_t et_g3t_test_frame_logit_bits_v1(void *context, int64_t index);
+int64_t et_g3t_test_cache_length_v1(void *context);
 #endif
 #endif
 #ifdef __cplusplus
