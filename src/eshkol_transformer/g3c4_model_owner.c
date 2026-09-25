@@ -812,6 +812,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_MANUAL_ROLE0_PRIVATE)
 #error "ET_G3C4_MANUAL_PRE_A2_PRIVATE requires the first manual role"
 #endif
+#if defined(ET_G3C4_MANUAL_A2_PRIVATE) && \
+    !defined(ET_G3C4_MANUAL_PRE_A2_PRIVATE)
+#error "ET_G3C4_MANUAL_A2_PRIVATE requires manual pre-A2 roles"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -837,6 +841,9 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
 #include "eshkol_transformer/g3n_primitives_abi.h"
 #include "eshkol_transformer/n2_primitives_abi.h"
+#endif
+#ifdef ET_G3C4_MANUAL_A2_PRIVATE
+#include "eshkol_transformer/a2_attention_abi.h"
 #endif
 #endif
 
@@ -928,6 +935,11 @@ typedef struct et_g3c4_manual_frame_internal {
   float qt[8], kt[8], vt[8];
   float qh[8], kh[8], vh[8];
 #endif
+#ifdef ET_G3C4_MANUAL_A2_PRIVATE
+  float ah[8];
+  et_a2_kv_cache *a2_candidate;
+  et_a2_kv_cache_transaction *a2_transaction;
+#endif
 } et_g3c4_manual_frame_internal;
 #endif
 
@@ -987,7 +999,12 @@ static int et_g3c4_manual_frame_valid(
       context->budget != 0 || frame->frame_kind < 1 ||
       frame->frame_kind > 2 ||
       context->call_kind != frame->frame_kind - 1 ||
-#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+#ifdef ET_G3C4_MANUAL_A2_PRIVATE
+      (frame->next_ordinal < 0 || frame->next_ordinal > 11) ||
+      (frame->next_ordinal < 11 &&
+       (frame->a2_candidate != NULL || frame->a2_transaction != NULL)) ||
+      (frame->next_ordinal == 11 && frame->a2_candidate == NULL) ||
+#elif defined(ET_G3C4_MANUAL_PRE_A2_PRIVATE)
       (frame->next_ordinal < 0 || frame->next_ordinal > 10) ||
 #elif defined(ET_G3C4_MANUAL_ROLE0_PRIVATE)
       (frame->next_ordinal != 0 && frame->next_ordinal != 1) ||
@@ -5540,6 +5557,171 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_pre_a2_run(
 }
 #endif
 
+#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+#ifdef ET_G3C4_MANUAL_A2_PRIVATE
+/* One authentic ordinal-10 call; its cache remains a frame-owned candidate. */
+static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
+    void *candidate_context) {
+  et_g3c4_context_internal *context;
+  et_g3c4_manual_frame_internal *frame;
+  et_g3c4_logits_internal *pending = NULL;
+  et_a2_kv_cache *candidate = NULL;
+  et_a2_kv_cache_transaction *transaction = NULL, *prefix = NULL;
+  et_a2_kv_cache_transaction_view *view = NULL;
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *keep = NULL;
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_tensor_view_v1 inputs[6];
+  et_kernel_tensor_view_v1 count_view;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+  uint64_t count_shape[1] = {1u}, stage_shape[4] = {1u, 2u, 0u, 2u};
+  uint64_t head_shape[4] = {1u, 2u, 0u, 2u};
+  uint64_t query_shape[2] = {1u, 0u}, key_shape[2] = {1u, 2u};
+  uint64_t mask_shape[3] = {1u, 0u, 2u};
+  uint64_t request_shape[6] = {1u, 2u, 2u, 0u, 2u, 2u};
+  int64_t count, positions[2] = {0, 1}, key_positions[2] = {0, 1};
+  uint8_t mask[4] = {0};
+  float ah[8] = {0};
+  float prefix_keys[4] = {0}, prefix_values[4] = {0};
+  size_t bytes;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate_context);
+  if (context == NULL) return et_g3c4_error_state.category;
+  frame = context->manual_frame;
+  if (frame == NULL || frame->next_ordinal != 10)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_logits_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+
+  count = frame->input_length;
+  stage_shape[2] = head_shape[2] = query_shape[1] = mask_shape[1] =
+      request_shape[3] = (uint64_t)count;
+  bytes = (size_t)count * 4u * sizeof(float);
+  if (frame->frame_kind == 2) positions[0] = 1;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_create_v1(
+          1u, 1u, 2u, 2u, 2u, &candidate, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+
+  if (frame->frame_kind == 2) {
+    uint64_t prefix_shape[4] = {1u, 2u, 1u, 2u};
+    int64_t one = 1;
+    if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+            context->cache, &borrow, &error), &error) != 0)
+      goto fail;
+    if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+            borrow, 0u, &keys, &values, &lengths, &keep, &error),
+            &error) != 0)
+      goto fail;
+    if (((const int64_t *)lengths->data)[0] != 1 ||
+        ((const uint8_t *)keep->data)[0] != 1u) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      goto fail;
+    }
+    for (size_t head = 0u; head < 2u; head++) {
+      memcpy(prefix_keys + head * 2u,
+             (const float *)keys->data + head * 8u, 2u * sizeof(float));
+      memcpy(prefix_values + head * 2u,
+             (const float *)values->data + head * 8u, 2u * sizeof(float));
+    }
+    if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_end_v1(
+            &borrow, &error), &error) != 0)
+      goto fail;
+    keys = values = lengths = keep = NULL;
+    count_view = et_g3c4_view(&one, sizeof(one), "i64", 1u, count_shape);
+    if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_begin_v1(
+            candidate, 1u, &count_view, &prefix, &error), &error) != 0)
+      goto fail;
+    inputs[0] = et_g3c4_view(prefix_keys, sizeof(prefix_keys), "f32", 4u,
+                               prefix_shape);
+    inputs[1] = et_g3c4_view(prefix_values, sizeof(prefix_values), "f32", 4u,
+                               prefix_shape);
+    if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_stage_layer_v1(
+            prefix, 0u, &inputs[0], &inputs[1], &error), &error) != 0)
+      goto fail;
+    if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_commit_v1(
+            &prefix, &error), &error) != 0)
+      goto fail;
+  }
+
+  count_view = et_g3c4_view(&count, sizeof(count), "i64", 1u, count_shape);
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_begin_v1(
+          candidate, (uint64_t)count, &count_view,
+          &transaction, &error), &error) != 0)
+    goto fail;
+  inputs[0] = et_g3c4_view(frame->kh, bytes, "f32", 4u, stage_shape);
+  inputs[1] = et_g3c4_view(frame->vh, bytes, "f32", 4u, stage_shape);
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_stage_layer_v1(
+          transaction, 0u, &inputs[0], &inputs[1], &error), &error) != 0)
+    goto fail;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_view_begin_v1(
+          transaction, 0u, &view, &error), &error) != 0)
+    goto fail;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_view_tensors_v1(
+          view, &keys, &values, &lengths, &keep, &error), &error) != 0)
+    goto fail;
+  if (((const int64_t *)lengths->data)[0] !=
+      (frame->frame_kind == 2 ? 2 : count)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto fail;
+  }
+  for (size_t row = 0u; row < (size_t)count; row++)
+    for (size_t key = 0u; key < 2u; key++)
+      mask[row * 2u + key] = (uint8_t)(
+          ((const uint8_t *)keep->data)[key] != 0u &&
+          key_positions[key] <= positions[row]);
+  if (et_g3c4_token_runtime_discover(et_a2_kernel_provider_v1(),
+                                       &runtime) != 0)
+    goto fail;
+  inputs[0] = et_g3c4_view(frame->qh, bytes, "f32", 4u, head_shape);
+  inputs[1] = *keys;
+  inputs[2] = *values;
+  inputs[3] = et_g3c4_view(positions, (size_t)count * sizeof(int64_t),
+                             "i64", 2u, query_shape);
+  inputs[4] = et_g3c4_view(key_positions, sizeof(key_positions),
+                             "i64", 2u, key_shape);
+  inputs[5] = et_g3c4_view(mask, (size_t)count * 2u, "bool", 3u,
+                             mask_shape);
+  if (et_g3c4_token_dispatch(runtime, "kernel.causal-attention",
+          "causal-attention.forward", 6u, request_shape, inputs, 6u,
+          et_g3c4_view(ah, bytes, "f32", 4u, head_shape)) != 0)
+    goto fail;
+  et_kernel_runtime_destroy(runtime);
+  runtime = NULL;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_view_end_v1(
+          &view, &error), &error) != 0)
+    goto fail;
+  memcpy(frame->ah, ah, bytes);
+  frame->a2_candidate = candidate;
+  frame->a2_transaction = transaction;
+  frame->next_ordinal = 11;
+  return 0;
+
+fail:
+  first = et_g3c4_error_state;
+  if (runtime != NULL) et_kernel_runtime_destroy(runtime);
+  if (view != NULL && et_a2_kv_cache_transaction_view_end_v1(
+          &view, &error) != 0) abort();
+  if (borrow != NULL && et_a2_kv_cache_read_borrow_end_v1(
+          &borrow, &error) != 0) abort();
+  if (transaction != NULL && et_a2_kv_cache_transaction_abort_v1(
+          &transaction, &error) != 0) abort();
+  if (prefix != NULL && et_a2_kv_cache_transaction_abort_v1(
+          &prefix, &error) != 0) abort();
+  if (candidate != NULL && et_a2_kv_cache_destroy_v1(
+          &candidate, &error) != 0) abort();
+  et_g3c4_error_state = first;
+  return first.category;
+}
+#endif
+#endif
+
 #ifdef ET_G3C4_GENERATOR_PRIVATE
 #ifdef ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE
 static size_t et_g3c4_transport_record_bytes(
@@ -6005,6 +6187,20 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
     return et_g3c4_error_state.category;
 #endif
 #ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE
+#ifdef ET_G3C4_MANUAL_A2_PRIVATE
+  if (context->manual_frame != NULL) {
+    et_kernel_error error;
+    et_g3c4_manual_frame_internal *frame = context->manual_frame;
+    if (frame->a2_transaction != NULL &&
+        et_g3c4_capture_kernel(et_a2_kv_cache_transaction_abort_v1(
+            &frame->a2_transaction, &error), &error) != 0)
+      return et_g3c4_error_state.category;
+    if (frame->a2_candidate != NULL &&
+        et_g3c4_capture_kernel(et_a2_kv_cache_destroy_v1(
+            &frame->a2_candidate, &error), &error) != 0)
+      return et_g3c4_error_state.category;
+  }
+#endif
   free(context->manual_frame);
   context->manual_frame = NULL;
 #endif
