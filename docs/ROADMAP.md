@@ -643,6 +643,12 @@ same-package C producer for its operands. The
 authenticated idle trainer record and returns its five receivers to their
 callers without destroying them. A C construct/handle contract remains
 pending; no public trainer or resume claim follows from unenrollment.
+The follow-on [producer/ownership decision](TR3_C_PRIVATE_TRAINER_ENTRY_BLOCKER.md#producer-and-c-ownership-decision-at-ccf1ab4)
+maps all five genuine X1/T2/D2/M3T/O2 source producers. Their separate
+contracts do not define one data-only C request, child ownership/cleanup, or
+trainer handle/status ABI; CLI3 deliberately leaves `pretrain` flags undefined.
+The linked package therefore retains only its initializer export until those
+contracts are accepted.
 The exact private source `8a29dcf`/tree `43bff41` is integrated with
 identical runtime, test, and script blobs at `cc84b49`. The worker's pinned
 normal 1,024/8,192 and sanitizer 1,024 runtime gates each pass 133
