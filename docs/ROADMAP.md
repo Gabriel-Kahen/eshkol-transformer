@@ -1183,7 +1183,10 @@ corpus methods and eleven D2 dataset/batch methods through accepted private
 renames and boxed wrappers. The caller writes/validates a D1 corpus, opens
 and exercises D2 with its installed tokenizer, then passes that authentic
 dataset to `trainer-create`. M3T/P1/O2 stay test-local; exact linked
-measurements are pending.
+measurements passed on `1a44e42`: 49 Eshkol sources, 30 native objects,
+70 native paths, 4,171 raw definitions, 48 exports and 173 undefined
+symbols. The poisoned caller passed with empty stderr; sealed evidence is
+`tr3-public-d2-linked-1a44e42-20260925/SHA256SUMS`.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

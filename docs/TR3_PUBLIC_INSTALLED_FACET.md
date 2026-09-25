@@ -117,6 +117,11 @@ The linked caller writes and validates a deterministic D1 corpus, opens an
 authentic D2 dataset with its installed T2 tokenizer, checks cursor, batch,
 seek, release, close and typed negative behavior, then passes a D2 dataset
 from that corpus to `trainer-create`. M3T, P1 and O2 construction remain
-test-local direct entries. The full linked gate and exact compiled boundary
-for this candidate are pending; the C2 versioned tuple and earlier sealed
-TR3 evidence remain unchanged.
+test-local direct entries. The pinned `1a44e42` linked gate passed with 49
+Eshkol sources, 30 native objects, 70 native source/header paths, 4,171 raw
+definitions, 48 localized public exports and 173 undefined runtime symbols.
+Its poisoned public caller passed with empty stderr. Evidence is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-d2-linked-1a44e42-20260925/`
+(`SHA256SUMS` SHA-256 `2449a18ab13f5c2b5c1e4fc5e793011762ead0515422d726d8a1a2cf41892760`);
+`sha256sum -c` passed. The C2 versioned tuple and earlier sealed TR3
+evidence remain unchanged.
