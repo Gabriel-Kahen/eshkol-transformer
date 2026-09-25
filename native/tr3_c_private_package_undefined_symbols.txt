@@ -11,6 +11,7 @@ arena_allocate_string_with_header
 arena_allocate_tensor_with_header
 arena_allocate_vector_with_header
 arena_allocate_with_header
+arena_hash_table_create_with_header
 arena_push_scope
 arena_tagged_cons_get_double
 arena_tagged_cons_get_flags
@@ -318,6 +319,8 @@ fread
 fseek
 ftell
 get_global_arena
+hash_table_get
+hash_table_set
 memcpy
 memmove
 memset
