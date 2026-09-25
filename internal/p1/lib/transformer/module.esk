@@ -148,6 +148,7 @@
 ;;; region write barrier; every read then starts from the canonical promoted
 ;;; graph stored back into this holder.
 (define shell-registry-root (vector '()))
+(define shell-identity-index (make-hash-table))
 
 (define (shell-registry-current)
   (vector-ref shell-registry-root 0))
@@ -362,14 +363,27 @@
               "unknown private identity kind" '()))))
   (p1-native-result-ptr native-context))
 
-(define (shell-entry value)
-  (let loop ((entries (shell-registry-current)))
-    (cond
-      ((null? entries) #f)
-      ((eq? value (vector-ref (car entries) 0)) (car entries))
-      (else (loop (cdr entries))))))
+(define (shell-entry (value : ptr))
+  ;; Hash only the pointer bits: hashing an opaque native token as an Eshkol
+  ;; heap object would inspect foreign memory.  A forged or stale key is never
+  ;; authority: the cached record still has to match by exact shell identity.
+  ;; The registry scan remains authoritative if a table resize cannot allocate.
+  (let ((cached (hash-table-ref shell-identity-index (ptr->usize value) #f)))
+    (if (and cached (eq? value (vector-ref cached 0)))
+        cached
+        (let loop ((entries (shell-registry-current)))
+          (cond
+            ((null? entries) #f)
+            ((eq? value (vector-ref (car entries) 0)) (car entries))
+            (else (loop (cdr entries))))))))
 
-(define (shell-for-raw kind raw)
+(define (index-published-shell! (shell : ptr) entry)
+  ;; Publication through the registry holder promotes the canonical record
+  ;; before this advisory lookup is filled. A failed hash-table resize leaves
+  ;; the registry authoritative and the lookup above falls back to its scan.
+  (hash-table-set! shell-identity-index (ptr->usize shell) entry))
+
+(define (shell-for-raw kind raw) : ptr
   (if (or (eq? raw dead-construction-raw)
           (eq? raw dead-state-raw)
           (eq? raw dead-state-tensor-raw)
@@ -386,6 +400,7 @@
               (shell (native-create-shell kind raw)))
          (vector-set! entry 0 shell)
          (vector-set! shell-registry-root 0 next-registry)
+         (index-published-shell! shell (car (shell-registry-current)))
          ;; Return only the canonical post-barrier identity.
          (vector-ref (car (shell-registry-current)) 0)))
       ((and (eq? kind (vector-ref (car entries) 1))
@@ -393,7 +408,7 @@
        (vector-ref (car entries) 0))
       (else (find (cdr entries)))))))
 
-(define (state-entry-shell-for-raw state-shell state raw)
+(define (state-entry-shell-for-raw state-shell state raw) : ptr
   ;; Trusted entry identities are state-owned.  Keying the registry by both
   ;; state and raw entry prevents a temporary unsafe state from sharing the
   ;; source state's native identity before clone-on-bind replaces its entries.
@@ -413,6 +428,7 @@
              (let ((shell (p1-native-result-ptr native-context)))
                (vector-set! record 0 shell)
                (vector-set! shell-registry-root 0 next-registry)
+               (index-published-shell! shell (car (shell-registry-current)))
                ;; Return only the canonical post-barrier identity.
                (vector-ref (car (shell-registry-current)) 0))))
           ((and (eq? (vector-ref (car records) 1) 'entry)
