@@ -44,6 +44,11 @@
 #error "G3-T cache-length clones require live final output publication"
 #endif
 #endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+#ifndef ET_G3T_FINAL_PUBLICATION_PRIVATE
+#error "G3-T RNG clones require live final output publication"
+#endif
+#endif
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -66,6 +71,9 @@ enum { G3T_GENERATOR = 1, G3T_INPUT = 2, G3T_OUTPUT = 4,
 #endif
 #ifdef ET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
        G3T_CACHE_LENGTHS_CLONE = 7,
+#endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+       G3T_RNG_CLONE = 8,
 #endif
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
@@ -127,6 +135,12 @@ typedef struct g3t_cache_lengths_clone {
   g3t_record h;
   et_i64_tensor *value;
 } g3t_cache_lengths_clone;
+#endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+typedef struct g3t_rng_clone {
+  g3t_record h;
+  int64_t words[4];
+} g3t_rng_clone;
 #endif
 typedef struct g3t_context {
   g3t_record h;
@@ -786,6 +800,55 @@ void *et_g3t_private_output_cache_lengths_clone_v1(void *candidate) {
   clone->h.next = g3t_registry;
   g3t_registry = &clone->h;
   return clone;
+}
+#endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+void *et_g3t_private_output_rng_clone_v1(void *candidate) {
+  g3t_clear();
+  g3t_output *output = (g3t_output *)g3t_admit_record(
+      candidate, G3T_OUTPUT, 0);
+  if (!output) return NULL;
+  if (output->h.busy || output->parent_ctx || !output->ids ||
+      output->length != output->G || output->G < 0 || output->G > 1 ||
+      output->P < 1 || output->P > 2 ||
+      output->cache_length != output->P + output->G ||
+      output->cache_length > 2 || !output->numeric_ready ||
+      !output->ids_copied || !output->text_ready) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  if (g3t_allocations >= g3t_allocation_limit) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#endif
+  g3t_rng_clone *clone = calloc(1, sizeof(*clone));
+  if (!clone) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  ++g3t_allocations;
+#endif
+  memcpy(clone->words, output->rng, sizeof(clone->words));
+  clone->h.kind = G3T_RNG_CLONE;
+  clone->h.state = G3T_LIVE;
+  clone->h.next = g3t_registry;
+  g3t_registry = &clone->h;
+  return clone;
+}
+int64_t et_g3t_private_rng_release_v1(void *candidate) {
+  g3t_clear();
+  g3t_rng_clone *clone = (g3t_rng_clone *)g3t_admit_record(
+      candidate, G3T_RNG_CLONE, 1);
+  if (!clone) return g3t_error_category;
+  if (clone->h.state == G3T_DEAD) return 0;
+  if (clone->h.state != G3T_LIVE || clone->h.busy)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  memset(clone->words, 0, sizeof(clone->words));
+  clone->h.state = G3T_DEAD;
+  return 0;
 }
 #endif
 int64_t et_g3t_private_output_prepare_v1(
@@ -1704,6 +1767,24 @@ int64_t et_g3t_test_live_cache_lengths_clones_v1(void) {
   int64_t count = 0;
   for (g3t_record *r = g3t_registry; r; r = r->next)
     if (r->kind == G3T_CACHE_LENGTHS_CLONE && r->state == G3T_LIVE) ++count;
+  return count;
+}
+#endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+int64_t et_g3t_test_rng_clone_state_v1(void *candidate) {
+  g3t_rng_clone *clone = (g3t_rng_clone *)g3t_admit_record(
+      candidate, G3T_RNG_CLONE, 1);
+  return clone ? clone->h.state : -2;
+}
+int64_t et_g3t_test_rng_clone_word_v1(void *candidate, int64_t index) {
+  g3t_rng_clone *clone = (g3t_rng_clone *)g3t_admit_record(
+      candidate, G3T_RNG_CLONE, 1);
+  return clone && index >= 0 && index < 4 ? clone->words[index] : -1;
+}
+int64_t et_g3t_test_live_rng_clones_v1(void) {
+  int64_t count = 0;
+  for (g3t_record *r = g3t_registry; r; r = r->next)
+    if (r->kind == G3T_RNG_CLONE && r->state == G3T_LIVE) ++count;
   return count;
 }
 #endif

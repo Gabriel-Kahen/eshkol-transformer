@@ -750,6 +750,13 @@ and typed release. Pinned normal/repeat/ASan+UBSan+LSan passes 320 checks each,
 plus six source contracts and Q0 4/4; sealed evidence is
 `g3t-output-cache-lengths-clone-d3dfab0`. Public result wrapping and RNG
 cloning stay pending.
+The [private output RNG clone leaf](g3/G3_T_OUTPUT_RNG_CLONE_LEAF.md) is an
+isolated candidate from `f7b8362`. It adds only the accepted kind-8 inline
+i64[4] final RNG snapshot and separate typed release. Its pinned
+normal/repeat/ASan+UBSan+LSan gate passes 345 checks each, plus six source
+contracts and Q0 4/4; sealed evidence is
+`g3t-output-rng-clone-f7b8362`. Public result wrapping and G3-G remain
+unaccepted.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

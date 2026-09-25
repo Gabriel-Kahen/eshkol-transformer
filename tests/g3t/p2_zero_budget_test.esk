@@ -67,12 +67,31 @@
         :real et_g3t_test_cache_lengths_clone_borrow_end_v1)
 (extern i64 g3t-test-live-cache-lengths-clones
         :real et_g3t_test_live_cache_lengths_clones_v1)
+(extern ptr g3t-native-output-rng-clone ptr
+        :real et_g3t_private_output_rng_clone_v1)
+(extern i64 g3t-native-rng-release ptr
+        :real et_g3t_private_rng_release_v1)
+(extern i64 g3t-test-rng-clone-state ptr
+        :real et_g3t_test_rng_clone_state_v1)
+(extern i64 g3t-test-rng-clone-word ptr i64
+        :real et_g3t_test_rng_clone_word_v1)
+(extern i64 g3t-test-live-rng-clones
+        :real et_g3t_test_live_rng_clones_v1)
+(extern i64 g3t-test-last-error-category
+        :real et_g3t_private_last_error_category_v1)
+(extern i64 g3t-test-last-error-code
+        :real et_g3t_private_last_error_code_v1)
 
 (define checks 0)
 (define (check label value)
   (if value (set! checks (+ checks 1))
       (begin (display "G3-T P2 zero budget FAIL: ")
              (display label) (newline) (exit 1))))
+(define (rng-clone-words? clone a b c d)
+  (and (= a (g3t-test-rng-clone-word clone 0))
+       (= b (g3t-test-rng-clone-word clone 1))
+       (= c (g3t-test-rng-clone-word clone 2))
+       (= d (g3t-test-rng-clone-word clone 3))))
 (define config
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -123,6 +142,9 @@
 (check "pending output cannot clone cache length"
        (and (null? (g3t-native-output-cache-lengths-clone output))
             (= 0 (g3t-test-live-cache-lengths-clones))))
+(check "pending output cannot clone RNG"
+       (and (null? (g3t-native-output-rng-clone output))
+            (= 0 (g3t-test-live-rng-clones))))
 (define wrong-input (g3t-native-input-from-token 65))
 (check "wrong length frame rejected"
        (not (= 0 (g3t-native-frame-begin native wrong-input 1))))
@@ -302,6 +324,38 @@
        (and (not (null? p2-cache-lengths-clone))
             (= 1 (g3t-test-cache-lengths-clone-state p2-cache-lengths-clone))
             (= 2 (g3t-test-cache-lengths-clone-value p2-cache-lengths-clone))))
+(check "P2/G0 RNG header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "P2/G0 RNG header cut atomic"
+       (and (null? (g3t-native-output-rng-clone output))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-rng-clones))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))))
+(check "P2/G0 RNG header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(define p2-source-borrow (g3t-test-output-borrow-begin output))
+(check "P2/G0 ID borrow begins" (not (null? p2-source-borrow)))
+(define p2-rng-clone (g3t-native-output-rng-clone output))
+(check "P2/G0 RNG clone permits ID borrow"
+       (and (not (null? p2-rng-clone))
+            (= 1 (g3t-test-rng-clone-state p2-rng-clone))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)
+            (= 1 (g3t-test-live-rng-clones))))
+(check "P2/G0 ID borrow ends"
+       (= 0 (g3t-test-output-borrow-end p2-source-borrow)))
+(check "P2/G0 typed RNG release rejects output"
+       (and (not (= 0 (g3t-native-rng-release output)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= 1 (g3t-test-output-state output))))
+(check "P2/G0 tensor release rejects RNG"
+       (and (not (= 0 (g3t-native-tensor-release p2-rng-clone)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
 (check "generator close" (g3t-generator-close! generator))
 (check "output release" (= 0 (g3t-native-output-release output)))
 (check "output tombstone" (= -1 (g3t-test-output-state output)))
@@ -329,6 +383,19 @@
        (and (= -1 (g3t-test-cache-lengths-clone-state p2-cache-lengths-clone))
             (= 0 (g3t-native-tensor-release p2-cache-lengths-clone))
             (= 0 (g3t-test-live-cache-lengths-clones))))
+(check "P2/G0 RNG survives parent release"
+       (rng-clone-words? p2-rng-clone 1 1729 0 0))
+(check "P2/G0 RNG typed release"
+       (= 0 (g3t-native-rng-release p2-rng-clone)))
+(check "P2/G0 RNG tombstone and zeroization"
+       (and (= -1 (g3t-test-rng-clone-state p2-rng-clone))
+            (rng-clone-words? p2-rng-clone 0 0 0 0)
+            (= 0 (g3t-native-rng-release p2-rng-clone))
+            (= 0 (g3t-test-live-rng-clones))))
+(check "P2/G0 dead output cannot clone RNG"
+       (and (null? (g3t-native-output-rng-clone output))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
 (check "input release" (= 0 (g3t-native-tensor-release input)))
 
 (define reference-input (g3t-checked-m3t-input-create))
@@ -400,6 +467,7 @@
   (g3t-native-output-lengths-clone p1-zero-native-output))
 (define p1-zero-cache-lengths
   (g3t-native-output-cache-lengths-clone p1-zero-native-output))
+(define p1-zero-rng (g3t-native-output-rng-clone p1-zero-native-output))
 (check "P1/G0 empty ID clone"
        (and (not (null? p1-zero-clone))
             (= 0 (g3t-test-clone-length p1-zero-clone))
@@ -411,6 +479,9 @@
        (and (not (null? p1-zero-cache-lengths))
             (= 1 (g3t-test-cache-lengths-clone-value
                    p1-zero-cache-lengths))))
+(check "P1/G0 exact final RNG clone"
+       (and (not (null? p1-zero-rng))
+            (rng-clone-words? p1-zero-rng 1 1729 0 0)))
 (check "P1/G0 output release" (g3t-output-release! p1-zero-output))
 (check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
 (check "P1/G0 detached clone survives" (= 0 (g3t-test-clone-length p1-zero-clone)))
@@ -418,11 +489,17 @@
        (= 0 (g3t-test-lengths-clone-value p1-zero-lengths)))
 (check "P1/G0 detached cache length survives"
        (= 1 (g3t-test-cache-lengths-clone-value p1-zero-cache-lengths)))
+(check "P1/G0 detached RNG survives"
+       (rng-clone-words? p1-zero-rng 1 1729 0 0))
 (check "P1/G0 clone release" (= 0 (g3t-native-tensor-release p1-zero-clone)))
 (check "P1/G0 lengths release"
        (= 0 (g3t-native-tensor-release p1-zero-lengths)))
 (check "P1/G0 cache-length release"
        (= 0 (g3t-native-tensor-release p1-zero-cache-lengths)))
+(check "P1/G0 RNG release"
+       (and (= 0 (g3t-native-rng-release p1-zero-rng))
+            (rng-clone-words? p1-zero-rng 0 0 0 0)
+            (= 0 (g3t-native-rng-release p1-zero-rng))))
 (check "P1/G0 input release" (g3t-generation-tensor-release! p1-zero-input))
 
 (define abort-generator (g3t-generator-create model tokenizer policy))
@@ -534,6 +611,17 @@
        (= 0 (g3t-native-call-finish g1-regression-native)))
 (check "G1 regression pins drained"
        (= 0 (g3t-test-pin-count g1-regression-native)))
+(check "G1 exact final RNG published"
+       (and (= 1 (g3t-test-output-word g1-regression-output 7))
+            (= 1729 (g3t-test-output-word g1-regression-output 8))
+            (= 1 (g3t-test-output-word g1-regression-output 9))
+            (= 0 (g3t-test-output-word g1-regression-output 10))
+            (= 1 (g3t-test-rng-word g1-regression-native 2))))
+(check "wrong-kind RNG clone source rejected"
+       (and (null? (g3t-native-output-rng-clone g1-regression-input))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-rng-clones))))
 (define g1-id (g3t-test-output-word g1-regression-output 6))
 (define g1-source-borrow (g3t-test-output-borrow-begin g1-regression-output))
 (check "G1 source borrow begins" (not (null? g1-source-borrow)))
@@ -545,7 +633,23 @@
             (= 0 (g3t-test-live-clones))
             (= 0 (g3t-test-live-lengths-clones))
             (= 0 (g3t-test-live-cache-lengths-clones))))
+(define g1-rng-clone (g3t-native-output-rng-clone g1-regression-output))
+(check "G1 RNG clone permits borrowed IDs"
+       (and (not (null? g1-rng-clone))
+            (rng-clone-words? g1-rng-clone 1 1729 1 0)
+            (= 1 (g3t-test-live-rng-clones))))
 (check "G1 source borrow ends" (= 0 (g3t-test-output-borrow-end g1-source-borrow)))
+(check "G1 RNG header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "G1 RNG header cut atomic"
+       (and (null? (g3t-native-output-rng-clone g1-regression-output))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 1 (g3t-test-live-rng-clones))
+            (= 1 (g3t-test-output-state g1-regression-output))
+            (= g1-id (g3t-test-output-word g1-regression-output 6))
+            (= 1 (g3t-test-rng-word g1-regression-native 2))))
+(check "G1 RNG header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
 (let cuts ((index 0))
   (if (= index 4) #t
       (begin
@@ -657,11 +761,15 @@
        (= 1 (g3t-test-lengths-clone-value g1-lengths-clone)))
 (check "G1 cache length survives parent releases"
        (= 2 (g3t-test-cache-lengths-clone-value g1-cache-lengths-clone)))
+(check "G1 RNG survives parent releases"
+       (rng-clone-words? g1-rng-clone 1 1729 1 0))
 (check "G1 clone typed release" (= 0 (g3t-native-tensor-release g1-clone)))
 (check "G1 length typed release"
        (= 0 (g3t-native-tensor-release g1-lengths-clone)))
 (check "G1 cache-length typed release"
        (= 0 (g3t-native-tensor-release g1-cache-lengths-clone)))
+(check "G1 RNG typed release"
+       (= 0 (g3t-native-rng-release g1-rng-clone)))
 (check "G1 clone tombstone"
        (and (= -1 (g3t-test-clone-state g1-clone))
             (= 0 (g3t-native-tensor-release g1-clone))
@@ -674,6 +782,11 @@
        (and (= -1 (g3t-test-cache-lengths-clone-state g1-cache-lengths-clone))
             (= 0 (g3t-native-tensor-release g1-cache-lengths-clone))
             (= 0 (g3t-test-live-cache-lengths-clones))))
+(check "G1 RNG tombstone"
+       (and (= -1 (g3t-test-rng-clone-state g1-rng-clone))
+            (rng-clone-words? g1-rng-clone 0 0 0 0)
+            (= 0 (g3t-native-rng-release g1-rng-clone))
+            (= 0 (g3t-test-live-rng-clones))))
 (check "G1 regression input release"
        (= 0 (g3t-native-tensor-release g1-regression-input)))
 (display "G3-T P2 zero budget PASS: checks=")
