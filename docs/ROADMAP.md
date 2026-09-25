@@ -873,7 +873,12 @@ P2/G0 before native pins. It preserves the accepted P2-only helper and rejects
 P2/G1, overlength prompts, busy owners, and exhausted required categorical
 G1 draws without changing cache/RNG/output/call state. The defensive native
 acquire path uses the accepted category 2/code 12 for draw exhaustion. This
-remains a private C2 seam; no G3-G package or public generation is accepted.
+source candidate `cfab282` passed the pinned network-none normal/repeat/
+ASan+UBSan+LSan P2 aggregate with byte-identical 46,733 checks, fourteen
+source contracts, Q0 4/4, and production-symbol exclusion of the test hook;
+sealed evidence is `g3t-full-request-preflight-cfab282-sealed/SEAL.sha256`
+(`dd89fad3...`). This remains a private C2 seam; no G3-G package or public
+generation is accepted.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
