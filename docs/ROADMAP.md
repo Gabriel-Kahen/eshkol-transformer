@@ -867,6 +867,14 @@ enrollment. The pinned P2 aggregate passed 46,702 checks per normal, repeat
 and ASan+UBSan+LSan mode, thirteen source contracts and Q0 4/4. No public
 G3-G facade, package, N>1 claim or CLI is accepted by this leaf.
 
+The [source-private C2 full-request preflight leaf](g3/G3_T_FULL_REQUEST_PREFLIGHT_LEAF.md)
+adds a distinct two-argument P1/P2 admission check for P1/G0, P1/G1 and
+P2/G0 before native pins. It preserves the accepted P2-only helper and rejects
+P2/G1, overlength prompts, busy owners, and exhausted required categorical
+G1 draws without changing cache/RNG/output/call state. The defensive native
+acquire path uses the accepted category 2/code 12 for draw exhaustion. This
+remains a private C2 seam; no G3-G package or public generation is accepted.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/

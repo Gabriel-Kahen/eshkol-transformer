@@ -93,7 +93,7 @@ enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
        G3T_INTERNAL = 5 };
 enum { G3T_IDENTITY = 1, G3T_LIFECYCLE = 2, G3T_CONFIG = 3,
        G3T_TOKEN_RANGE = 4, G3T_TOPOLOGY = 6, G3T_ALLOCATION = 7,
-       G3T_INVARIANT = 10 };
+       G3T_INVARIANT = 10, G3T_DRAW_EXHAUSTION = 12 };
 typedef struct g3t_record {
   struct g3t_record *next;
   int kind, state, busy;
@@ -530,10 +530,11 @@ int64_t et_g3t_private_call_acquire_v1(void *candidate, int64_t call_kind) {
 #else
        c->policy[4] != 1 ||
 #endif
-       c->prefill_committed ||
-       (c->policy[4] == 1 && c->policy[0] == 1 &&
-        c->rng[2] == -1 && c->rng[3] == -1)))
+       c->prefill_committed))
     return g3t_bad(G3T_STATE, G3T_CONFIG);
+  if (call_kind == 2 && c->policy[4] == 1 && c->policy[0] == 1 &&
+      c->rng[2] == -1 && c->rng[3] == -1)
+    return g3t_bad(G3T_STATE, G3T_DRAW_EXHAUSTION);
   et_f32_tensor_error error;
   if (et_g3t_model_pins_begin_internal(o->p, (const void *const *)o->handles,
                                        &c->pins, &error)) return g3t_f32_failure(&error);
@@ -543,6 +544,33 @@ int64_t et_g3t_private_call_acquire_v1(void *candidate, int64_t call_kind) {
   return 0;
 }
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
+#ifdef ET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
+/* Pure admission: no pins, output, RNG draw, cache transaction, or enrollment. */
+int64_t et_g3t_private_full_request_preflight_v1(
+    void *context_candidate, void *input_candidate) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(context_candidate, 0);
+  if (!c) return g3t_error_category;
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      input_candidate, G3T_INPUT, 0);
+  if (!input) return g3t_error_category;
+  if (input->length < 1 || input->length > 2 ||
+      c->policy[4] < 0 || c->policy[4] > 2 - input->length)
+    return g3t_bad(G3T_SHAPE, G3T_CONFIG);
+  for (int64_t i = 0; i < input->length; ++i)
+    if (input->ids[i] < 0 || input->ids[i] > 255)
+      return g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+  owner *o = g3t_model(c->model);
+  if (!o) return g3t_error_category;
+  if (c->h.busy || o->active || c->pins.held_mask || !c->cache ||
+      c->prefill_committed || input->h.busy)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (c->policy[4] == 1 && c->policy[0] == 1 &&
+      c->rng[2] == -1 && c->rng[3] == -1)
+    return g3t_bad(G3T_STATE, G3T_DRAW_EXHAUSTION);
+  return 0;
+}
+#endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 int64_t et_g3t_private_prompt_preflight_v1(
     void *context_candidate, void *input_candidate) {
@@ -2020,6 +2048,18 @@ int64_t et_g3t_test_input_length_set_v1(void *candidate, int64_t length) {
       candidate, G3T_INPUT, 0);
   if (!input || input->h.busy || length < 1 || length > 3) return -1;
   input->length = length;
+  return 0;
+}
+#endif
+#ifdef ET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
+int64_t et_g3t_test_rng_counter_set_v1(
+    void *candidate, int64_t low, int64_t high) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || c->h.busy || c->pins.held_mask || c->prefill_committed) return -1;
+  owner *o = g3t_model(c->model);
+  if (!o || o->active) return -1;
+  c->rng[2] = low;
+  c->rng[3] = high;
   return 0;
 }
 #endif
