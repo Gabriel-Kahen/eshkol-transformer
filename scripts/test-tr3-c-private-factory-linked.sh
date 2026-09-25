@@ -50,7 +50,7 @@ export ESHKOL_LIB_DIR=/workspace/lib ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
     -I src -I lib -L /candidate/eshkol-build-canonical \
     --shared-lib --dump-ir \
     --emit-depfile /out/private.d \
-    native/tr3_c_private_package_root.esk -o /out/private \
+    native/tr3_c_private_factory_root.esk -o /out/private \
     > /out/source-compile.stdout 2> /out/source-compile.stderr
 test -s /out/private.ll
 clang-21 -fPIC -c -x ir /out/private.ll -o /out/private.o
@@ -253,7 +253,8 @@ import sys
 
 dep = Path(sys.argv[1]).read_text().replace('\\\n', ' ')
 paths = [path.removeprefix('/workspace/') for path in dep.split(':', 1)[1].split()]
-assert paths[0] == 'native/tr3_c_private_package_root.esk'
+assert paths[:2] == ['native/tr3_c_private_factory_root.esk',
+                     'native/tr3_c_private_package_root.esk']
 assert all(path.startswith(('native/', 'internal/', 'src/', 'lib/')) for path in paths)
 assert len(paths) == len(set(paths))
 Path(sys.argv[2]).write_text(''.join(path + '\n' for path in paths))
