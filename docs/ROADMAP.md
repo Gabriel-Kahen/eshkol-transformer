@@ -952,7 +952,7 @@ the next dependency is an accepted runtime identity-indexing contract or a
 measured larger runtime budget.
 Root integrated that timing and diagnosis at `dc965bc`/`7acfd66`, without
 changing the accepted SAVE, LOAD or joint restore path.
-An isolated P1 identity-index candidate `fd25f0c` keeps the append-only shell
+An isolated P1 identity-index candidate keeps the append-only shell
 registry authoritative and indexes published native shell pointer bits for
 exact-identity lookup. It changes no public or native API. Pinned f31/LLVM21
 sanitizer retention passes 32/128 genuine cycles with 91/283 checks, flat live
@@ -960,6 +960,8 @@ authority counts and exact images; 128-cycle wall time is 54.90 seconds versus
 the preceding 71.63-second diagnosis. Focused P1 structural, registry, and
 construction AOT tests pass 419, 169, and 23 checks. The canonical generated
 root check passes. Root integrated the index at `6027c01`/`223085f`/`07dbc6e`.
+The pinned registry-publication IR and poison proof passes after both
+publication paths index only the canonical post-barrier shell (`3b81bd5`).
 Its first direct 1,024-cycle reuse of the same sanitized binary hit the
 pinned runtime's default 1,024 MiB heap ceiling and the 1,200-second time
 bound, so it emitted no final census. With `ESHKOL_MAX_HEAP=4G` and a
@@ -967,8 +969,9 @@ bound, so it emitted no final census. With `ESHKOL_MAX_HEAP=4G` and a
 checks: flat live authorities, exact final images, 1,251,758,464 arena bytes,
 728.239 seconds SAVE, 872.951 seconds LOAD/restore, 26:45.61 wall, and
 2,139,608 KiB peak RSS, with no sanitizer diagnostic. The 8,192 horizon and
-practical runtime budget remain open. The full pinned P1 package gate is being
-rerun with hosted CI's 900-second compiler bound. Evidence is sealed at
+practical runtime budget remain open. The full pinned P1 package gate exposed
+pre-barrier shell reuse in the original index; the canonical-readback fix
+passes focused proof, with a fresh exact-head package gate pending. Evidence is sealed at
 `/tmp/p1-index-retention-evidence/SHA256SUMS` (`c6d91e9f...`) for the
 default-limit attempt and
 `/home/gabe/.codex/evidence/eshkol-transformer/p1-index-retention-1024-4g-20260925/SHA256SUMS`

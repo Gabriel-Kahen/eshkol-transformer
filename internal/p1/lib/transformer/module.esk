@@ -383,6 +383,9 @@
   ;; the registry authoritative and the lookup above falls back to its scan.
   (hash-table-set! shell-identity-index (ptr->usize shell) entry))
 
+(define (canonical-published-shell entry) : ptr
+  (vector-ref entry 0))
+
 (define (shell-for-raw kind raw) : ptr
   (if (or (eq? raw dead-construction-raw)
           (eq? raw dead-state-raw)
@@ -400,7 +403,9 @@
               (shell (native-create-shell kind raw)))
          (vector-set! entry 0 shell)
          (vector-set! shell-registry-root 0 next-registry)
-         (index-published-shell! shell (car (shell-registry-current)))
+         (index-published-shell!
+           (canonical-published-shell (car (shell-registry-current)))
+           (car (shell-registry-current)))
          ;; Return only the canonical post-barrier identity.
          (vector-ref (car (shell-registry-current)) 0)))
       ((and (eq? kind (vector-ref (car entries) 1))
@@ -428,7 +433,9 @@
              (let ((shell (p1-native-result-ptr native-context)))
                (vector-set! record 0 shell)
                (vector-set! shell-registry-root 0 next-registry)
-               (index-published-shell! shell (car (shell-registry-current)))
+               (index-published-shell!
+                 (canonical-published-shell (car (shell-registry-current)))
+                 (car (shell-registry-current)))
                ;; Return only the canonical post-barrier identity.
                (vector-ref (car (shell-registry-current)) 0))))
           ((and (eq? (vector-ref (car records) 1) 'entry)

@@ -242,6 +242,8 @@ the pre-loop baseline.
 The private shell registry remains the authority for every opaque value. A
 process-local hash table indexes published shell pointer bits to registry records;
 lookup accepts a hit only when the record's shell is `eq?` to the supplied value.
+The key is read from the canonical rooted record after the registry write barrier;
+the pre-barrier local shell is never reused for indexing or return.
 Missing entries, including a failed table resize, fall back to the registry scan.
 The index never hashes a native token as an Eshkol heap object, adds no public or
 native identity operation, and retains only records already retained by the
