@@ -60,6 +60,8 @@ int main(int argc, char **argv) {
   const int alternate_seed = strcmp(argv[3], "seed-2718") == 0;
   const int wrong_profile = strcmp(argv[3], "profile") == 0;
   const int d2_limit = strcmp(argv[3], "d2-limit") == 0;
+  const int tokenizer_mismatch =
+      strcmp(argv[3], "tokenizer-mismatch") == 0;
   const int success_mode = strcmp(argv[3], "success") == 0 || alternate_seed;
   et_tr3_c_create_request_v1 request = {0};
   request.size = sizeof(request);
@@ -130,22 +132,44 @@ int main(int argc, char **argv) {
     if (d2_limit &&
         (first.status != ET_TR3_C_INVALID_ARGUMENT ||
          first.reason != ET_TR3_C_REASON_RAISED_E1)) return 17;
+    if (tokenizer_mismatch &&
+        (first.status != ET_TR3_C_INVALID_ARGUMENT ||
+         first.reason != ET_TR3_C_REASON_RAISED_E1)) return 19;
   }
   if (first.original_category != 0) return 18;
   et_tr3_c_result_v1 again = create(&request);
   if (again.status != ET_TR3_C_INVALID_STATE ||
-      again.reason != ET_TR3_C_REASON_ATTEMPT_USED || again.handle) return 12;
+      again.stage != ET_TR3_C_STAGE_ADMISSION ||
+      again.reason != ET_TR3_C_REASON_ATTEMPT_USED ||
+      again.original_category != 0 || again.handle) return 12;
+  if (tokenizer_mismatch) {
+    et_tr3_c_result_v1 absent_close = close(first.handle);
+    if (absent_close.status != ET_TR3_C_INVALID_ARGUMENT ||
+        absent_close.stage != ET_TR3_C_STAGE_CLOSE ||
+        absent_close.reason != ET_TR3_C_REASON_BAD_HANDLE ||
+        absent_close.original_category != 0 || absent_close.handle) return 20;
+    printf("TR3 private factory tokenizer-mismatch close=1/10/4/0 PASS\n");
+  }
   if (success_mode) {
-    et_tr3_c_result_v1 forged = close(NULL);
+    et_tr3_c_result_v1 forged = close((et_tr3_c_handle_v1 *)&request);
     if (forged.status != ET_TR3_C_INVALID_ARGUMENT ||
-        forged.reason != ET_TR3_C_REASON_BAD_HANDLE) return 13;
-    et_tr3_c_result_v1 ended = close(first.handle);
-    if (ended.status != ET_TR3_C_OK || ended.handle) return 14;
+        forged.stage != ET_TR3_C_STAGE_CLOSE ||
+        forged.reason != ET_TR3_C_REASON_BAD_HANDLE ||
+        forged.original_category != 0 || forged.handle) return 13;
+    et_tr3_c_handle_v1 *alias = first.handle;
+    et_tr3_c_result_v1 ended = close(alias);
+    if (ended.status != ET_TR3_C_OK || ended.stage != ET_TR3_C_STAGE_NONE ||
+        ended.reason != ET_TR3_C_REASON_RAISED_E1 ||
+        ended.original_category != 0 || ended.handle) return 14;
     et_tr3_c_result_v1 repeated = close(first.handle);
     if (repeated.status != ET_TR3_C_INVALID_STATE ||
-        repeated.reason != ET_TR3_C_REASON_ALREADY_CLOSED) return 15;
+        repeated.stage != ET_TR3_C_STAGE_CLOSE ||
+        repeated.reason != ET_TR3_C_REASON_ALREADY_CLOSED ||
+        repeated.original_category != 0 || repeated.handle) return 15;
+    printf("TR3 private factory %s close=0/0/0/0 repeat=7/10/5/0 PASS\n",
+           argv[3]);
   }
-  if (alternate_seed || wrong_profile || d2_limit)
+  if (alternate_seed || wrong_profile || d2_limit || tokenizer_mismatch)
     printf("TR3 private factory %s status=%u stage=%u reason=%u original=%u PASS\n",
            argv[3], first.status, first.stage, first.reason,
            first.original_category);
