@@ -24,6 +24,7 @@ additions = [
     "scripts/test-g3t-prefill-sample.sh",
     "docs/g3/G3_T_PREFILL_SAMPLE_LEAF.md",
     "docs/ROADMAP.md",
+    "docs/g3/G3_T_OUTPUT_PREPARE_LEAF.md",
 ]
 closure = (ROOT / "native/g3t_prefill_sample_source_closure.txt").read_text().splitlines()
 assert closure == base + [path for path in additions if path not in base]
@@ -56,6 +57,11 @@ assert "return g3t_bad(G3T_STATE, G3T_LIFECYCLE);" in core
 assert "c->frame.kind == 2 ? 1 : 0" in roles
 assert (ROOT / "docs/g3/G3_T_TOKEN_FRAME_LEAF.md").is_file()
 assert "G3T_ONLY_NORMAL" in (ROOT / "scripts/test-g3t-prefill-sample.sh").read_text()
+assert "et_i64_tensor_create_v1" in core
+assert "et_i64_tensor_copy_from_v1(output->ids, &token, 1, &error)" in core
+assert "et_m3_private_i64_unborrowed_v1" in core
+assert "output->numeric_ready = 1" in core
+assert "g3t-output-prepare" in source and "g3t-output-prepare" in test
 assert "-DET_G3T_PREFILL_SAMPLE_PRIVATE" in (
     ROOT / "scripts/test-g3t-prefill-sample.sh").read_text()
 assert "construction-schedule-equal?" in (

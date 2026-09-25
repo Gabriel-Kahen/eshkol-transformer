@@ -42,7 +42,9 @@ build_mode() {
     stem="$(basename "$source" .c)"
     extra=()
     [[ "$stem" == g3t_transport ]] && extra=(-DET_G3T_TESTING
-      -DET_A2_KV_CACHE_TESTING -DET_G3T_PREFILL_SAMPLE_PRIVATE)
+      -DET_A2_KV_CACHE_TESTING -DET_I64_TENSOR_TESTING
+      -DET_G3T_PREFILL_SAMPLE_PRIVATE)
+    [[ "$stem" == m3_i64_integration ]] && extra=(-DET_I64_TENSOR_TESTING)
     [[ "$stem" == a2_kv_cache ]] && extra=(-DET_A2_KV_CACHE_TESTING)
     "$cc" "${common[@]}" "${flags[@]}" "${extra[@]}" \
       -MMD -MF "$directory/objects/$stem.d" \

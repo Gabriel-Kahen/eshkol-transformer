@@ -13,6 +13,8 @@
         :real et_g3t_private_output_reserve_v1)
 (extern i64 g3t-native-output-release ptr
         :real et_g3t_private_output_release_v1)
+(extern i64 g3t-native-output-prepare ptr ptr
+        :real et_g3t_private_output_prepare_v1)
 (extern i64 g3t-native-frame-begin ptr ptr i64
         :real et_g3t_private_frame_begin_v1)
 (extern i64 g3t-native-role-step ptr i64
@@ -188,6 +190,20 @@
         (vector-set! output 2 'pending)
         (vector-set! entry 8 output)
         shell))))
+
+(define (g3t-output-prepare call output)
+  (let* ((operation 'g3t-output-prepare)
+         (entry (g3t-prefill-call-entry call operation))
+         (output-entry (g3t-prefill-entry output 'output operation)))
+    (if (not (and (eq? (vector-ref output-entry 2) 'pending)
+                  (eq? (vector-ref output-entry 4) entry)
+                  (eq? (vector-ref entry 8) output-entry)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T pending output belongs to another call"))
+    (if (not (= 0 (g3t-native-output-prepare
+                    (vector-ref entry 3) (vector-ref output-entry 3))))
+        (g3t-native-fail-raw operation))
+    #t))
 
 (define (g3t-frame-begin call input frame-kind)
   (let* ((operation 'g3t-frame-begin)

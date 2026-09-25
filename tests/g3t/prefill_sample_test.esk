@@ -18,6 +18,12 @@
 (extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
 (extern i64 g3t-test-cache-empty ptr :real et_g3t_test_cache_empty_v1)
 (extern i64 g3t-test-fail-a2-after i64 :real et_g3t_test_fail_a2_after_v1)
+(extern i64 g3t-test-fail-i1-after i64 :real et_g3t_test_fail_i1_after_v1)
+(extern i64 g3t-test-output-word ptr i64 :real et_g3t_test_output_word_v1)
+(extern ptr g3t-test-output-borrow-begin ptr
+        :real et_g3t_test_output_borrow_begin_v1)
+(extern i64 g3t-test-output-borrow-end ptr
+        :real et_g3t_test_output_borrow_end_v1)
 
 (define checks 0)
 (define (check label value)
@@ -50,6 +56,13 @@
 (check "sample before prefill rejected" (not (= 0 (g3t-native-sample native))))
 (define output (g3t-native-output-reserve native 1))
 (check "reserved output" (not (null? output)))
+(check "reserved exact I1 and empty readiness"
+       (and (= 1 (g3t-test-output-word output 5))
+            (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 1))
+            (= 0 (g3t-test-output-word output 2))))
+(check "numeric prepare before prefill rejected"
+       (not (= 0 (g3t-native-output-prepare native output))))
 (check "begin" (= 0 (g3t-native-frame-begin native input 1)))
 (check "commit before roles rejected"
        (not (= 0 (g3t-native-frame-commit native))))
@@ -82,6 +95,8 @@
 (check "prepare" (= 0 (g3t-native-frame-prepare native #f)))
 (check "commit" (= 0 (g3t-native-frame-commit native)))
 (check "sample" (= 0 (g3t-native-sample native)))
+(check "numeric prepare before token frame rejected"
+       (not (= 0 (g3t-native-output-prepare native output))))
 (check "duplicate sample rejected" (not (= 0 (g3t-native-sample native))))
 (define token (g3t-test-sample-token native))
 (check "sample token byte" (and (>= token 0) (< token 256)))
@@ -131,6 +146,32 @@
         (capture (+ index 1)))))
 (check "append remains speculative before publication"
        (= -1 (g3t-test-cache-length native)))
+(check "wrong context rejected before output writes"
+       (not (= 0 (g3t-native-output-prepare output output))))
+(define output-borrow (g3t-test-output-borrow-begin output))
+(check "output I1 borrow opened" (not (null? output-borrow)))
+(check "borrowed ID copy rejects atomically"
+       (and (not (= 0 (g3t-native-output-prepare native output)))
+            (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 1))
+            (= 0 (g3t-test-output-word output 2))))
+(check "borrow blocks abort before frame mutation"
+       (not (= 0 (g3t-native-call-abort native))))
+(check "borrow released" (= 0 (g3t-test-output-borrow-end output-borrow)))
+(check "numeric output preparation" (= 0 (g3t-native-output-prepare native output)))
+(check "numeric output copies token, length, cache length, RNG"
+       (and (= 1 (g3t-test-output-word output 0))
+            (= 1 (g3t-test-output-word output 1))
+            (= 2 (g3t-test-output-word output 2))
+            (= token (g3t-test-output-word output 6))
+            (= (g3t-test-successor-word native 0)
+               (g3t-test-output-word output 7))
+            (= (g3t-test-successor-word native 3)
+               (g3t-test-output-word output 10))
+            (= 0 (g3t-test-output-word output 3))
+            (= 0 (g3t-test-output-word output 4))))
+(check "numeric preparation is once-only"
+       (not (= 0 (g3t-native-output-prepare native output))))
 (check "sampled frame prepare waits for output readiness"
        (not (= 0 (g3t-native-frame-prepare native #f))))
 (check "sampled frame commit gated on output publication"
@@ -139,6 +180,12 @@
 (check "pins drained" (= 0 (g3t-test-pin-count native)))
 (check "prompt retained without append" (= 1 (g3t-test-cache-length native)))
 (check "output tombstone" (= 0 (g3t-native-output-release output)))
+(check "abort scrubs unpublished output"
+       (and (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 1))
+            (= 0 (g3t-test-output-word output 2))
+            (= 0 (g3t-test-output-word output 5))
+            (= 0 (g3t-test-output-word output 10))))
 (check "second initial prefill unavailable"
        (not (= 0 (g3t-native-call-acquire native 2))))
 (check "close" (g3t-generator-close! generator))
@@ -220,7 +267,7 @@
   (g3t-role-step call 20))
 (define wrapped-token
   (g3t-with-call 'g3t-prefill-witness wrapped-generator (call)
-    (g3t-output-reserve call 1)
+    (define wrapped-output (g3t-output-reserve call 1))
     (g3t-frame-begin call wrapped-input 1)
     (wrapped-roles call)
     (g3t-frame-prepare call #f)
@@ -236,6 +283,8 @@
       (vector-set! entry 11 profile))
     (g3t-frame-begin call #f 2)
     (wrapped-roles call)
+    (check "source-rooted numeric output prepare"
+           (g3t-output-prepare call wrapped-output))
     (g3t-test-sample-token
       (vector-ref (g3t-generator-find wrapped-generator
                                       'g3t-prefill-witness) 3))))
@@ -243,6 +292,34 @@
 (check "shared M3 guard drained" (not (vector-ref m3-call-state 0)))
 (check "source input release" (g3t-generation-tensor-release! wrapped-input))
 (check "source generator close" (g3t-generator-close! wrapped-generator))
+
+(define i1-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define i1-native
+  (vector-ref (g3t-generator-find i1-generator 'g3t-i1-cuts) 3))
+(check "I1 cuts acquire" (= 0 (g3t-native-call-acquire i1-native 2)))
+(let cuts ((cut 0))
+  (if (= cut 4) #t
+      (begin
+        (g3t-test-fail-i1-after cut)
+        (check "I1 reservation allocation cut"
+               (null? (g3t-native-output-reserve i1-native 1)))
+        (cuts (+ cut 1)))))
+(check "I1 allocation cuts leave call active"
+       (= 14 (g3t-test-pin-count i1-native)))
+(check "disarm I1 faults"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define i1-output (g3t-native-output-reserve i1-native 1))
+(check "I1 reservation retries after all cuts"
+       (and (not (null? i1-output))
+            (= 1 (g3t-test-output-word i1-output 5))))
+(check "I1 cut call abort" (= 0 (g3t-native-call-abort i1-native)))
+(check "I1 cut output tombstone" (= 0 (g3t-native-output-release i1-output)))
+(check "I1 cut generator close" (g3t-generator-close! i1-generator))
 
 (define failure-input (g3t-generation-token-input-create 65))
 (define failure-generator

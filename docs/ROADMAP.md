@@ -632,6 +632,11 @@ Candidate `4a82887` and root integration `02c7b3f` have identical tree
 repeat and ASan/UBSan/LSan witnesses each pass 146 checks with identical
 stdout and empty stderr; Q0 passes 4/4. The exact-tree evidence is sealed at
 `g3t-token-frame-root-02c7b3f-20260925/SHA256SUMS`.
+The isolated [G1 numeric output preparation leaf](g3/G3_T_OUTPUT_PREPARE_LEAF.md)
+reserves exact I1 `[1]` ID storage and copies the completed speculative token
+there before recording lengths and successor RNG. Abort checks active I1 borrows
+before unwinding the frame and scrubs the unpublished output. G0 admission,
+ID-byte staging, T1 decode, text readiness and joint publication remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

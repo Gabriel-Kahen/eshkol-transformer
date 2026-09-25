@@ -95,3 +95,4 @@ scripts/check-g3t-prefill-sample.py
 scripts/test-g3t-prefill-sample.sh
 docs/g3/G3_T_PREFILL_SAMPLE_LEAF.md
 docs/ROADMAP.md
+docs/g3/G3_T_OUTPUT_PREPARE_LEAF.md
