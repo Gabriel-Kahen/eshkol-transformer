@@ -802,7 +802,10 @@ is an isolated candidate after the kind-8 owner mapping. It accepts the
 eight-pair `:rng` alternative in `g3t-generator-create`, authenticates the
 same-aggregate live owner and copies its words through the accepted native
 constructor while preserving the seeded route. Focused pinned evidence is
-pending. The public G3-G facade and package remain separate gates.
+sealed as `g3t-generator-rng-input-750f7c7`: strict type preflight passed;
+the constructor and P2 aggregate each passed normal/repeat/ASan+UBSan+LSan
+with 53 and 46,540 checks, nine source contracts, and Q0 4/4. The public
+G3-G facade and package remain separate gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
