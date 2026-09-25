@@ -1237,6 +1237,13 @@ IR and poison proof, sanitizers, negatives, atomicity and determinism. It took
 `p1-full-package-8b5b125-900-20260925/SHA256SUMS` (`ab2fbb1e...`). The
 8,192-cycle resource horizon remains open; the cross-commit timing comparison
 is not an exact-base performance proof.
+The later clean P1 candidate `4a820c1` passed the same full supported package
+gate in 3,294 seconds with the 900-second per-compile bound. Root verified its
+231-file seal at `p1-active-record-full-package-4a820c1-20260925/SHA256SUMS`;
+the trusted P1 source, template, registry test and publication checker match
+this integration tree byte for byte. Three inherited structural checkers differ
+only in comments or diagnostic wording and pass on integration. This repeat
+does not close the genuine 8,192 SAVE/LOAD/joint-restore horizon.
 Hosted CI run `36125833885` on PR #126 exposed three new P1 hash-table
 runtime references in the I2 aggregate that its exact undefined-symbol
 manifest did not yet admit. The standalone P1 object at `76299fd` matches
