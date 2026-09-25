@@ -111,9 +111,17 @@ prepare-end and finish reject incomplete work. Pinned f31 normal, repeat and
 ASan/UBSan/LSan passed 745 checks with allocation and borrow cuts, inherited
 Step23A 1,196 checks and Step22 affected gates. Root verified
 `g3c4-step23b-b3295e1/seal.txt`, the exact source closure, merged Q0 4/4
-and structural checker. The accepted numerical helpers still execute whole
-schedules, so a separate 21-role decomposition/scratch seam must precede
-manual `role_step`; frame prepare/commit and public result remain downstream.
+and structural checker. The reviewed Step23C source-private ordinal-zero
+token-embedding precursor `af9626a`/tree `31f8d0f` is integrated byte-identically
+as `9f614fc`. It uses frame-owned `[1,T,4]` scratch, routes T1/decode through
+G3-N and T2 through N3K, advances only after successful dispatch, and preserves
+the committed cache, pending logits, binding and RNG on a provider failure.
+Pinned f31 normal, repeat and ASan/UBSan/LSan each passed 246 checks, with
+inherited Step23B (745) and Step23A (1,196) regressions. Root verified
+`g3c4-step23c-cf97072/seal.txt`, its exact 170-source closure, structural
+checker and Q0 4/4. The remaining 20 numerical roles and candidate A2 scratch
+must precede manual `role_step`; frame prepare/commit and public result remain
+downstream.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
