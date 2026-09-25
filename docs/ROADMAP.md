@@ -770,7 +770,7 @@ stages epoch rewinds and proves the accepted global update/epoch/cursor
 equation before the first O2 write. Its genuine one- and two-row fixtures
 exercise EOS before and between microbatches, multiple boundaries per update,
 empty-D2 constructor rejection, and rollback after rewind. Public trainer,
-streaming EOS, metrics, C ownership, and resume proof remain pending.
+streaming EOS, metrics, C ownership, and full resume equivalence remain pending.
 Source `848a143`/tree `45462cb` is integrated byte-identically at `ba726a1`.
 Root's pinned merged f31/LLVM21 network-disabled composer gate passes 33
 compiled checks with 27 source loads, including an independent two-update
@@ -778,6 +778,13 @@ PyTorch key-weight trajectory (maximum absolute error `1.86e-9`) and a
 nonfinite mutant rejection. The worker's exact-tree transaction and commit-tail
 gates pass 63 and 91 checks. Root evidence is sealed at
 `tr3-finite-eos-root-ba726a1-20260925/SHA256SUMS` (`0e092f6a...`).
+The bounded [private checkpoint trajectory witness](TR3_PRIVATE_RESUME_TRAJECTORY.md)
+now composes accepted TR3-C SAVE, C2 LOAD/joint restore, and the finite-D2
+step composer in one source identity. At `K=1, R=1`, a fresh restored trainer's
+next EOS-crossing update matches the uninterrupted trainer's 42 tensor images,
+RNG/cursors/counters, and final canonical C2 bytes; corruption, X1 mismatch,
+and post-rewind retry are negative-tested. The longer supported resume gate
+in the TR3-C contract and public trainer remain pending.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
