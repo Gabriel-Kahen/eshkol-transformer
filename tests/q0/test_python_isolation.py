@@ -27,6 +27,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-manual-role0.py",
         "check-g3c4-manual-pre-a2.py",
         "check-g3c4-manual-a2.py",
+        "check-g3c4-manual-at.py",
         "check-g3c4-provider-routes.py",
         "check-g3c4-prefill1.py",
         "check-g3c4-prefill2.py",
