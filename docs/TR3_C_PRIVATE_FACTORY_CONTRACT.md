@@ -195,6 +195,18 @@ success/close, X1 parse, D2 missing-corpus and digest-mismatch negatives,
 initializer behavior, opaque-handle forged/repeated close, and hostile-link
 localization. Its fixture covers C admission and unclassified-return status
 tuples. Exact raw/undefined/dynamic symbol lists are pinned from the run,
-including P1's three hash references. The remaining full acceptance matrix is
-the fixed-profile/seed derivation witness, every producer and lease failure cut,
-cleanup failure, process-root retention, and broader E1 category evidence.
+including P1's three hash references. A further exact linked gate on `28cc85a`
+adds three fresh-process witnesses: X1-valid hidden size 8/head size 4 rejects
+as `unsupported/X1/raised-e1` before a deliberately missing corpus directory;
+two otherwise identical profiles with `run.seed` 1729 and 2718 both construct
+and close; and a C-admitted one-byte maximum batch payload rejects as
+`invalid-argument/D2/raised-e1` before that missing directory is accessed.
+The seed witness relies on the accepted `m3t-config-check` inside genuine model
+creation, which compares resolved X1 `run.seed` with native initializer word 1;
+it does not compare model-state bytes or expose initializer words. T2's ordinary
+vocabulary/identity failures are precluded by the fixed X1 profile, so the D2
+config rejection is the earliest source-backed T2/D2 cut reachable without
+allocation injection. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-profile-seed-d2-28cc85a-20260925/SHA256SUMS`.
+Other producer and lease failure cuts, cleanup failure, process-root retention,
+broader E1 category evidence, and exact merged-union acceptance remain open.
