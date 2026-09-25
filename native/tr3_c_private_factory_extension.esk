@@ -9,9 +9,9 @@
         :real et_tr3_c_factory_report_v1)
 (extern i64 tr3-c-factory-reason :real et_tr3_c_factory_reason_v1)
 
-;;; [resolved,tokenizer,dataset,initializer,model,optimizer,trainer].
+;;; [resolved,tokenizer,dataset,initializer,model,optimizer].
 ;;; Successful children are promoted here before another fallible producer.
-(define tr3-c-factory-retained (make-vector 7 #f))
+(define tr3-c-factory-retained (make-vector 6 #f))
 
 (define (tr3-c-factory-category caught)
   (if (not (transformer-error? caught)) 12
@@ -139,13 +139,12 @@
                          tree)))
                 (vector-set! tr3-c-factory-retained 5 optimizer)
                 (tr3-c-factory-stage 9)
-                (let ((trainer
-                        (tr3-lease-create-internal
-                          resolved tokenizer dataset model optimizer)))
-                  (vector-set! tr3-c-factory-retained 6 trainer)
-                  #t)))))))))
+                ;; Lease enrollment itself roots the fresh shell. Return it
+                ;; directly to C; no fallible Eshkol store follows enrollment.
+                (tr3-lease-create-internal
+                  resolved tokenizer dataset model optimizer)))))))))
 
-(define (tr3-c-factory-close-source)
+(define (tr3-c-factory-close-source trainer)
   (guard (caught
            (#t (let ((authentic (transformer-error? caught))
                      (category (tr3-c-factory-category caught)))
@@ -154,5 +153,5 @@
                                   ((= category 7) 2)
                                   (else 0)) 0)
                  #f)))
-    (tr3-lease-unenroll-internal! (vector-ref tr3-c-factory-retained 6))
+    (tr3-lease-unenroll-internal! trainer)
     #t))

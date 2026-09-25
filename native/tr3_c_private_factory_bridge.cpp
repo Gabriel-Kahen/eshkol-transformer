@@ -19,7 +19,8 @@ extern "C" eshkol_tagged_value_t tr3_c_factory_create_source(
     eshkol_tagged_value_t, eshkol_tagged_value_t, eshkol_tagged_value_t,
     eshkol_tagged_value_t, eshkol_tagged_value_t, eshkol_tagged_value_t,
     eshkol_tagged_value_t) __asm__("tr3-c-factory-create-source");
-extern "C" eshkol_tagged_value_t tr3_c_factory_close_source(void)
+extern "C" eshkol_tagged_value_t tr3_c_factory_close_source(
+    eshkol_tagged_value_t)
     __asm__("tr3-c-factory-close-source");
 
 static_assert(sizeof(et_tr3_c_create_request_v1) == 176);
@@ -36,6 +37,7 @@ bool attempted = false;
 bool live = false;
 bool closed = false;
 et_tr3_c_private_trainer_handle_v1 handle{UINT64_C(0x4553484b54523343)};
+eshkol_tagged_value_t trainer_shell{};
 et_tr3_c_create_request_v1 staged{};
 char json_bytes[16385]{};
 char directory_bytes[4097]{};
@@ -172,7 +174,10 @@ bool invoke_create() {
       args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
   eshkol_parallel_scope_end();
   eshkol_pop_exception_handler();
-  return source_true(answer);
+  if (answer.type != ESHKOL_VALUE_HEAP_PTR || answer.data.ptr_val == 0)
+    return false;
+  trainer_shell = answer;
+  return true;
 }
 
 bool invoke_close() {
@@ -195,7 +200,7 @@ bool invoke_close() {
     return false;
   }
   eshkol_parallel_scope_begin();
-  const eshkol_tagged_value_t answer = tr3_c_factory_close_source();
+  const eshkol_tagged_value_t answer = tr3_c_factory_close_source(trainer_shell);
   eshkol_parallel_scope_end();
   eshkol_pop_exception_handler();
   return source_true(answer);
@@ -247,6 +252,11 @@ extern "C" et_tr3_c_result_v1 et_tr3_c_private_trainer_create_v1(
   if (operation.test_and_set(std::memory_order_acquire))
     return result(ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_ADMISSION,
                   ET_TR3_C_REASON_BUSY);
+  if (region_get_depth() != 0) {
+    operation.clear(std::memory_order_release);
+    return result(ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_ADMISSION,
+                  ET_TR3_C_REASON_BUSY);
+  }
   if (!valid_request(request)) {
     operation.clear(std::memory_order_release);
     return result(ET_TR3_C_INVALID_ARGUMENT, ET_TR3_C_STAGE_ADMISSION,
@@ -292,6 +302,11 @@ extern "C" et_tr3_c_result_v1 et_tr3_c_private_trainer_close_v1(
   if (operation.test_and_set(std::memory_order_acquire))
     return result(ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_CLOSE,
                   ET_TR3_C_REASON_BUSY);
+  if (region_get_depth() != 0) {
+    operation.clear(std::memory_order_release);
+    return result(ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_CLOSE,
+                  ET_TR3_C_REASON_BUSY);
+  }
   if (candidate != &handle || !attempted || (!live && !closed)) {
     operation.clear(std::memory_order_release);
     return result(ET_TR3_C_INVALID_ARGUMENT, ET_TR3_C_STAGE_CLOSE,
