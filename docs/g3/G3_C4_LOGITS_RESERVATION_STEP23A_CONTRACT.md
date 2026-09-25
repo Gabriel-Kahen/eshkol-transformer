@@ -1,0 +1,9 @@
+# G3-C4 Step 23A: pending manual logits reservation
+
+This source-private leaf starts from integration commit `23a9dde622f94090073d4d8b193d313b0f615244`. It implements only the accepted native `logits_reserve(ptr ctx)` inventory row and its release/abort ownership. The full 29-row boundary inventory in `G3_T_PRIVATE_CONTRACT.md` was audited before choosing this seam; frame begin, role step, frame prepare, and frame commit remain absent.
+
+An authenticated active manual call (kind 0 prefill or kind 1 decode, budget 0) may reserve one pending kind-3 `LAST_LOGITS_F32_R2` record. The record owns an exact, initially zeroed I2 f32 `[1,256]` tensor and retains the generator context as its parent. It is enrolled in the native transport registry only after both the record and tensor are complete. A second pending reservation, a generate call, idle/dead/forged context, or wrong kind rejects before allocation or mutation. Failed record or I2 allocations enroll nothing and preserve the first error.
+
+The existing typed `tensor_release(ptr owner)` admits the kind-3 record, rejects a borrowed I2 without mutation, and leaves an exact unreused dead tombstone on success. Native call abort destroys a pending manual result before draining the call; a borrowed result rejects abort while the call and result remain intact. Pending manual results block `call_prepare_end` and `call_finish`. The allocator and ownership witness exercises both manual call kinds, explicit release, rollback, wrong-kind calls, one owner cut, four I2 allocation cuts, and active borrow rejection.
+
+The result stays pending and has no logits values from a frame. No Eshkol entry, frame transcript, numerical publication, completed manual result, or public generation API is added. The next dependency is native `frame_begin`/`role_step` with an accepted manual transcript, followed by frame prepare/commit and Eshkol sealing.

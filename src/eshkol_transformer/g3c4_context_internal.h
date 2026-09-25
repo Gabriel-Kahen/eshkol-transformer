@@ -120,6 +120,12 @@ void *et_g3c4_private_output_reserve_v1(
 int64_t et_g3c4_private_output_release_v1(void *output);
 #endif
 
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+/* Reserves one pending manual [1,256] result for the active manual call.
+ * The result is empty until a later frame preparation publishes its logits. */
+void *et_g3c4_private_logits_reserve_v1(void *context);
+#endif
+
 #ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
 /* Copies the final staged G0/G1 numeric result into its pending output.
  * Cache, generator RNG, text readiness and result publication are unchanged. */
