@@ -58,7 +58,12 @@ the broad source scan; the aggregate jobs consequently failed. Test-only
 `65136dd` restricts N2 and N3K closure scans to C source/header files, and
 both expected closure fixtures plus shell syntax pass locally. A fresh
 exact-head run is needed for acceptance of the combined branch.
-The subsequent private G3 Step19A output-reservation candidate `06b6fd2` was
+The later pushed `ef045da` completed exact-head hosted run `36115680360`
+successfully: all 21 jobs passed, including canonical build, native
+numerics/optimizer, model composition, parameter state, G3N/G3S, and all C2
+groups. This accepts that pushed tree only. Subsequent local P1 indexing and
+profile commits require their own exact-head CI after the full P1 package gate.
+The private G3 Step19A output-reservation candidate `06b6fd2` was
 cherry-picked locally at `ee7325d`. Independent review found two failure-
 atomicity gaps: abort could discard a non-idle token frame before a borrowed
 output prevented destruction, and logits could alias pending owner/I1 storage.
