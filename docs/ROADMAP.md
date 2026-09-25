@@ -529,7 +529,8 @@ generation, and Wave 3 remains incomplete.
 | CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | The bounded six-command CLI3-A source from clean `392fac8` is selectively integrated at `62fa411`: tokenizer byte/train-bpe/inspect, corpus build/inspect and checkpoint inspect. Root verified all 21 CLI paths against that candidate and the 1,204 non-CLI base paths against `fc924df`. On the supported immutable Ubuntu 22/Clang 21 image with authenticated runtime `81298`, two fresh network-disabled builds produced 16 byte-identical regular files. The exact 8-global/2-export/83-string/34-source/36-formatter/54-native/157-undefined boundary, 35 public E1B AOT checks, six-command behavior/artifact/grammar/I/O tests, formatter-to-production negative, and genuine condition-5 handler-allocation plus published-shard rollback/static-fallback witness passed; root verified the 83-file evidence manifest. This accepts the bounded CLI3-A source and gate, not the root aggregate CI or full CLI3. Pretrain/evaluate/generate await their actual upstream APIs and end-to-end evidence | active |
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
-proves an A0 five-receiver call with X1/T2/D2/M3T/P1/O2 producers in one
+is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
+call with X1/T2/D2/M3T/P1/O2 producers in one
 non-installed linked package. Its exact `3b0f38d` f31/LLVM21 gate passed with
 47 Eshkol sources, 30 native objects, 18 candidate exports, 173 undefined
 runtime symbols, and a poisoned genuine caller; the `SHA256SUMS` seal is
@@ -817,7 +818,8 @@ with 53 and 46,540 checks, nine source contracts, and Q0 4/4. The public
 G3-G facade and package remain separate gates.
 
 The [source-private owned scalar token input](g3/G3_T_OWNED_TOKEN_INPUT_LEAF.md)
-is an isolated candidate after the accepted T1-backed I1 route. It makes the
+is integrated at `860325a` with evidence note `8b800e6` after the accepted
+T1-backed I1 route. It makes the
 exact byte-ID `input_from_token` branch own a distinct CPU I1[1,1], hardens
 the Eshkol shell publication/cleanup path, and retains inline IDs only as
 validated frame staging. Pinned strict type preflight and normal/repeat/
