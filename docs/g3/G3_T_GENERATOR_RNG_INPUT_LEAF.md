@@ -21,3 +21,13 @@ closure is `native/g3t_generator_constructor_rng_source_closure.txt`;
 `native/g3t_generator_constructor_source_closure.txt` records the historical
 seed-only predecessor and is not the complete RNG-enabled link closure. No public facade,
 package export, CLI, or general generation claim is added.
+
+The supported pinned image `eshkol-checked-promotion-llvm21:20260922`
+(`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`)
+strictly compiled both touched test units, then ran the focused constructor
+and P2 aggregate gates against source commit `750f7c7aedb852e033d9b9526ecbfe291c9aa8b0`
+(tree `08073dd11dcd97e768701a850d365c681bbfb6f3`). The constructor
+reported 53 checks, and P2 reported 46,540; normal, repeat, and
+ASan+UBSan+LSan outputs matched with empty compiler and runtime stderr.
+Nine P2 source contracts and Q0 4/4 passed. The sealed evidence is
+`g3t-generator-rng-input-750f7c7`.
