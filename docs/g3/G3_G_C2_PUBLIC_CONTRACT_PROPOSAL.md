@@ -20,7 +20,7 @@ provided names and arities are:
 | `generator-create` | 3 | live generator retaining authentic model and tokenizer, with owned RNG and no cache |
 | `generator-prefill!` | 2 | new owned, no-grad CPU f32[1,256] last logits; cache replacement, no draw |
 | `generator-decode-step!` | 2 | new owned, no-grad CPU f32[1,256] last logits; one manual append, no draw |
-| `generator-generate!` | 2 | opaque live output after P1/G1 or P1/P2/G0 |
+| `generator-generate!` | 2 | opaque live output after P1/G1, P1/G0 or P2/G0 |
 | `generation-output-ids` | 1 | new one-element list of owned CPU i64[G], G=0 or 1 |
 | `generation-output-lengths` | 1 | new owned CPU i64[1], value G |
 | `generation-output-text` | 1 | new one-element list of detached raw bytevectors of length G |
@@ -74,12 +74,15 @@ candidate; the counts above are an acceptance target, not build evidence.
 `generation-input-create` first authenticates the exact same-aggregate T1 shell
 and sealed rank-one raw-byte IDs through T1's registry, then checks P in {1,2}
 and every ID in 0..255. It copies synchronously into a distinct G3-owned I1
-i64[1,P] and ends the T1 borrow before returning. A copied/tagged T1 shell,
+i64[1,P] and retains no additional T1 borrow; the sealed T1 shell keeps its
+own internal borrow. A copied/tagged T1 shell,
 foreign aggregate, M3T input, output clone or shape-compatible generic tensor
-cannot acquire G3 input authority. The accepted private `input_from_t1` stem is
-the proposed native implementation target; existing scalar and pair constructors
-are private witnesses, not alternate public constructors. Manual scalar token
-input has the same G3 input authority at shape [1,1].
+cannot acquire G3 input authority. The accepted private `input_from_t1` stem
+and same-aggregate wrapper now have focused source-private evidence; their
+public mapping remains proposed. Existing scalar and pair constructors are
+private witnesses, not alternate public constructors. Manual scalar token
+input still requires an owned I1[1,1] implementation to meet this proposed
+public result contract: the current private scalar witness stores inline IDs.
 
 Output is a separately authenticated live owner with no parent-call, model or
 tokenizer roots after publication. It holds the exact generated IDs, G and P+G
@@ -180,9 +183,10 @@ identity authentication precedes a dead-owner idempotent return, then busy/borro
 preflight. Errors are E1 with the **invoked public operation**, bounded data-only
 source domain/category/code/message and `cause #f`; no pointer, raw hidden owner
 or earlier private operation leaks. The accepted G3-T bounded native mapping
-applies: wrong-kind/forgery/config `invalid-argument`; dead/busy/stale and
-required categorical draw exhaustion `invalid-state`; shape/ID/context
-`shape-mismatch`; dtype/device/layout their dedicated categories; unavailable
+applies: wrong-kind/forgery/config and scalar token range `invalid-argument`;
+dead/busy/stale and required categorical draw exhaustion `invalid-state`;
+T1 tensor shape/ID and context shape `shape-mismatch`;
+dtype/device/layout their dedicated categories; unavailable
 profile/provider `unsupported`; explicit FP determinism failure
 `determinism-unavailable`; allocation/invariant `internal`. Output storage
 inconsistency preserves A0 `device-mismatch`. Snapshot the first native error
