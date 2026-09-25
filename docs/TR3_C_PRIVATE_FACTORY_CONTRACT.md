@@ -232,6 +232,22 @@ The pinned factory gate has no sanitizer mode; this witness is a normal linked
 run, not a sanitizer result. Sealed evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-fault-4911711-20260925/SHA256SUMS`
 (`eff4c19e2ad86182edb867d7cba7588b51d4f0cda47b8362a13aab55f9db4d74`).
-Other producer and lease failure cuts, cleanup
-failure, process-root retention, broader E1 category evidence, and exact
-merged-union acceptance remain open.
+The follow-on linked `e97c3ea` test variant uses O2's existing native allocation
+limit to witness authenticated `internal/O2/raised-e1` with D2 closed and no O2
+receiver. A real bounded vector denial at lease stage 9 yields
+`internal/lease/foreign-exception`, preserving the completed O2 receiver while
+closing D2; the foreign runtime raise is not counted as an authenticated E1
+category. A separate M3T failure process stages an active native D2 borrow on
+the exact opened dataset owner. Native close then refuses for its accepted
+`invalid-state` reason, and the factory returns
+`internal/M3T-initializer/cleanup-failed`, with the first `internal` category in
+`original_category`, null handle, consumed attempt, and the native D2 child
+still live. The successful process checks all six existing source-root children
+before and after alias close, native D2/O2 receivers still live, forged-pointer
+rejection, and exact-handle repeat-close tombstone. These are linked-only fault
+objects and raw source-global observations, not package exports or physical
+reclamation evidence. Sealed linked evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-o2-lease-cleanup-e97c3ea-20260925/SHA256SUMS`
+(`82c16e57b2e18050c7f8073d755ce2171f06d04e0df23baf7342c81ddaa294b2`).
+Other producer failure cuts, broader E1 category evidence, close/lease busy
+failures, and exact merged-union acceptance remain open.
