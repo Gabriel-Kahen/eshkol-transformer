@@ -750,14 +750,21 @@ The bounded [private no-EOS commit tail](TR3_STEP_PRIVATE_COMMIT_TAIL.md)
 stages exact token/update controls and frame retirement before O2's accepted
 first-write boundary, then performs only primitive no-fail writes after O2
 success. Its pinned genuine two-microbatch numerical witness passes, while
-EOS/epoch replay, automatic whole-step error cleanup, metrics, public trainer,
-and resume remain pending.
+EOS/epoch replay, whole-step cleanup beyond the fixed profile, metrics,
+public trainer, and resume remain pending.
 The [private fixed-profile no-EOS step composer](TR3_STEP_PRIVATE_COMPOSER.md)
 now owns the two D2/M3 microbatches, transient releases, pre-write failure
 abort, O2 prepare, and the accepted no-fail commit tail in one source-private
 operation. Its injected early/mid/precommit and same-trainer retry witness is
 bounded to context/accumulation two; EOS replay, general trainer metrics,
 public trainer packaging and resume remain pending.
+Source `1d0057f`/tree `7a1b3cf` is integrated byte-identically at `f5649ab`.
+Root's pinned merged f31/LLVM21 network-disabled gate passes 20 compiled
+checks with 27 source loads: early, live-graph midstep, and post-O2-prepare
+failure cleanup, same-trainer retry, genuine two-microbatch commit, and an
+explicit EOS negative. The independent PyTorch key-weight maximum absolute
+error is `1.86e-9`; a nonfinite mutant is rejected. Evidence is sealed at
+`tr3-step-composer-root-f5649ab-20260925/SHA256SUMS` (`b78043c9...`).
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
