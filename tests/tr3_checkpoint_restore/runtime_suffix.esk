@@ -66,6 +66,60 @@
 (check "compatible receiver snapshot is available"
        (vector? load-before))
 
+;;; The final file restore uses a genuinely advanced detached state. This
+;;; creates U=1, T=2 and a moved D2 cursor through the accepted O2/D2 APIs.
+(define (advance-checkpoint-source! tuple)
+  (let* ((model (vector-ref tuple 3))
+         (source-handles
+           (vector-ref (m3t-entry model 'model 'trainer-state #t) 8))
+         (modules (make-vector 17 #f))
+         (handles (make-vector 14 #f))
+         (carriers (make-vector 14 #f)))
+    (check "advanced source fixed-set capture"
+           (= (tr3-p1-fixed-capture-internal
+                model source-handles modules handles carriers) 0))
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (begin
+            (i2-parameter-accumulate-uniform-internal!
+              (vector-ref carriers index) 1065353216 0 1065353216)
+            (loop (+ index 1)))))
+    (check "advanced source authentic optimizer update"
+           (o2-public-optimizer-step! (vector-ref tuple 4)))
+    (check "advanced source gradient clear"
+           (o2-public-optimizer-zero-grad! (vector-ref tuple 4)))
+    (let ((batch (d2-token-dataset-next-batch (vector-ref tuple 2))))
+      (check "advanced source authentic D2 batch"
+             (not (d2-token-dataset-end? batch)))
+      (check "advanced source batch release"
+             (d2-token-batch-release! batch)))))
+(define (advanced-checkpoint-controls tuple)
+  (let ((identity (d2-tokenizer-identity (vector-ref tuple 1)))
+        (resolved (vector-ref tuple 0)))
+    (vector
+      (vector 'philox4x32-10 1 1729 0 0)
+      identity
+      (vector (d2-token-dataset-cursor (vector-ref tuple 2))
+              (vector-ref tuple 6))
+      (vector (string->utf8 (x1-private-config-canonical resolved))
+              (x1-private-config-fingerprint resolved))
+      (vector 2 1 0))))
+(define advanced-path (string-append corpus-directory "/advanced.c2"))
+(define advanced-tuple (make-tuple 1729))
+(advance-checkpoint-source! advanced-tuple)
+(define advanced-owner
+  (compose-owner advanced-tuple
+                 (advanced-checkpoint-controls advanced-tuple)))
+(define advanced-image (owner-image advanced-owner))
+(check "advanced checkpoint differs from fresh live receiver"
+       (not (byte-list=? (vector-ref advanced-image 0)
+                         (vector-ref load-before 0))))
+(check "advanced C2 checkpoint SAVE succeeds"
+       (c2-checkpoint-save-internal!
+         advanced-owner advanced-path save-policy '()))
+(check "advanced detached owner remains live after SAVE"
+       (image=? advanced-image (owner-image advanced-owner)))
+
 (define before-restore-releases restore-release-count)
 (restore-error 'corrupt-data 'checkpoint-load
   (lambda ()
@@ -179,16 +233,21 @@
 (set! before-restore-releases restore-release-count)
 (check "valid checkpoint restores live receiver"
        (tr3-c-checkpoint-restore-internal!
-         load-receiver save-a save-policy restore-report))
+         load-receiver advanced-path save-policy restore-report))
 (check "successful restore releases loaded owner once"
        (restore-released-once? before-restore-releases))
 (check "all 42 restored tensor bytes and controls match saved source"
-       (image=? reference-image (load-receiver-image)))
+       (image=? advanced-image (load-receiver-image)))
 (check "restored receiver is idle"
        (and (eq? (vector-ref load-receiver-record 3) 'idle)
             (not (vector-ref load-receiver-record 4))))
 (check "successful file restore preserves source trainer"
        (source-trainer-unchanged?))
+(check "successful file restore preserves independent advanced owner"
+       (image=? advanced-image (owner-image advanced-owner)))
+(check "advanced detached source releases"
+       (c2-training-state-release-internal!
+         advanced-owner 'trainer-state-release!))
 
 (set! tr3-c-checkpoint-restore-release! original-restore-release)
 (display "TR3-C CHECKPOINT RESTORE PASS: ")
