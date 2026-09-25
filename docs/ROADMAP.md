@@ -833,18 +833,20 @@ ASan+UBSan+LSan evidence is sealed as `g3t-owned-token-input-6bbc14a`:
 46,586 checks per mode, ten source contracts and Q0 4/4. No public G3-G
 facade or package tuple is accepted by this candidate.
 
-The [source-private generated-ID wrapper](g3/G3_T_IDS_OWNER_LEAF.md) is an
-isolated candidate after the accepted native kind-5 clone. It authenticates
-live output, preallocates/root-registers a detached shell and one-element
+The [source-private generated-ID wrapper](g3/G3_T_IDS_OWNER_LEAF.md) is
+integrated at `e1c9d03` with evidence note `76396c8`, after the accepted
+native kind-5 clone. It authenticates live output, preallocates/root-registers
+a detached shell and one-element
 result list before cloning, and extends typed tensor release to kind-5 IDs.
 Strict type preflight and pinned normal/repeat/ASan+UBSan+LSan evidence is
 sealed as `g3t-ids-owner-969a348`: 46,626 checks per mode, eleven source
 contracts and Q0 4/4. No public G3-G facade, package tuple or CLI is
-accepted by this candidate.
+accepted by this leaf.
 
 The [source-private generated- and cache-length wrappers](g3/G3_T_LENGTH_OWNERS_LEAF.md)
-are sealed at source commit `d327232` after the accepted native kind-6 and
-kind-7 clones. They return distinct owned CPU i64[1] shells with values G
+are integrated at `05f7484` with evidence note `146c966` from sealed source
+commit `d327232`, after the accepted native kind-6 and kind-7 clones. They
+return distinct owned CPU i64[1] shells with values G
 and P+G, and extend typed tensor release without changing the input/IDs
 routes. The pinned P2 aggregate passed 46,690 checks per normal, repeat and
 ASan+UBSan+LSan mode, twelve source contracts and Q0 4/4. No public G3-G
