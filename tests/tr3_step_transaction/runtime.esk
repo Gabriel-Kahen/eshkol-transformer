@@ -1,0 +1,250 @@
+(load "tr3_step_transaction_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "TR3-STEP-TX-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (error-at? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught)))))
+    (thunk) #f))
+(define (diagnose label thunk)
+  (guard (caught
+           (#t (begin
+                 (display "TR3-STEP-TX-ERROR ") (display label)
+                 (if (transformer-error? caught)
+                     (begin (display " ")
+                            (display (transformer-error-category caught))
+                            (display " ")
+                            (display (transformer-error-operation caught))
+                            (display " ")
+                            (display (transformer-error-message caught)))
+                     (display " foreign"))
+                 (newline) (exit 2))))
+    (thunk)))
+(define (same-bytes? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((i 0))
+         (if (= i (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left i) (bytevector-u8-ref right i))
+                  (loop (+ i 1)))))))
+(define (u32-le bytes offset)
+  (+ (bytevector-u8-ref bytes offset)
+     (* 256 (bytevector-u8-ref bytes (+ offset 1)))
+     (* 65536 (bytevector-u8-ref bytes (+ offset 2)))
+     (* 16777216 (bytevector-u8-ref bytes (+ offset 3)))))
+(define (emit-bytes label bytes)
+  (display label)
+  (let loop ((i 0))
+    (if (= i (bytevector-length bytes)) (newline)
+        (begin (display " ") (display (bytevector-u8-ref bytes i))
+               (loop (+ i 1))))))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((i 0))
+    (if (= i (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles i))
+              (loop (+ i 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define (parameter-bits handle)
+  (i2-checkpoint-encode
+    (vector (parameter-handle-tensor-internal handle) 'parameter
+            (parameter-handle-shape handle) 'f32 'cpu
+            'dense-row-major-contiguous 'TR3-STEP-LEAF)))
+(define (gradient-metadata handle)
+  (i2-parameter-gradient-metadata-internal
+    (parameter-handle-tensor-internal handle)))
+(define (all-gradient-metadata? handles state count)
+  (let loop ((i 0))
+    (if (= i (vector-length handles)) #t
+        (let ((meta (gradient-metadata (vector-ref handles i))))
+          (and (= (vector-ref meta 0) state)
+               (= (vector-ref meta 1) count)
+               (loop (+ i 1)))))))
+
+(define directory (diagnose 'argv (lambda () (car (cdr (command-line))))))
+(define resolved
+  (diagnose 'config (lambda ()
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}")
+    '()))))
+(define tokenizer (diagnose 'tokenizer (lambda () (t2-wave2-tokenizer-byte resolved))))
+(define dataset (diagnose 'dataset (lambda () (d2-token-dataset-open (dataset-config directory) tokenizer))))
+(define model
+  (diagnose 'model (lambda ()
+    (m3t-public-model-create resolved (m3t-public-initializer-state 1729)))))
+(define handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+(define optimizer
+  (diagnose 'optimizer (lambda ()
+    (o2-public-optimizer-create (optimizer-config handles)
+                                (module-parameters model)))))
+(define trainer
+  (diagnose 'trainer (lambda ()
+    (tr3-lease-create-internal resolved tokenizer dataset model optimizer))))
+(define record (car (vector-ref tr3-trainers 0)))
+(define token (vector-ref record 5))
+(check "enrolled exact shell" (eq? (vector-ref record 2) trainer))
+(check "fixed accumulation two"
+       (= (x1-private-config-ref resolved 'training.accumulation-steps) 2))
+(define before (diagnose 'parameter-bits (lambda () (parameter-bits (vector-ref handles 0)))))
+(check "key weight shape [4,4]" (= (bytevector-length before) 64))
+(emit-bytes "TR3-STEP-KEY-BEFORE" before)
+(define input (m3t-public-input-create))
+(define seed (m3t-public-logits-create))
+
+(define (microbatch ordinal expected-weight)
+  (let* ((leased-dataset (tr3-lease-step-dataset-internal record token))
+         (batch (diagnose 'next-batch
+                  (lambda ()
+                    (if (not (eq? leased-dataset (vector-ref record 16)))
+                        (exit 3))
+                    (d2-token-dataset-next-batch dataset)))))
+    (check "live batch" (not (d2-token-dataset-end? batch)))
+    (check "stage exact i64[1,2]" (tr3-stage-d2-input! batch input))
+    (let* ((leased-model (vector-ref (tr3-lease-step-model-internal record token) 0))
+           (output (diagnose 'forward
+                     (lambda () (m3-public-model-forward leased-model input '()))))
+           (logits (diagnose 'logits
+                     (lambda () (m3-public-model-output-logits output))))
+           (observation (make-bytevector 12 85)))
+      (if (= ordinal 0)
+          (begin
+            (check "malformed observation rejects before gradient"
+                   (error-at? 'shape-mismatch 'tr3-objective-vjp!
+                     (lambda ()
+                       (tr3-objective-vjp! output logits batch seed ordinal
+                                          (make-bytevector 11 0)))))
+            (check "malformed observation preserves absent gradients"
+                   (all-gradient-metadata? handles 0 0))))
+      (check "genuine numerator VJP"
+             (tr3-objective-vjp! output logits batch seed ordinal observation))
+      (check "exact positive mask weight"
+             (= (u32-le observation 4) expected-weight))
+      (display "TR3-STEP-TX-OBS ") (display ordinal) (display " ")
+      (display (u32-le observation 0)) (display " ")
+      (display (u32-le observation 4)) (display " ")
+      (display (u32-le observation 8)) (newline)
+      (check "logits release"
+             (m3-public-diagnostic-model-logits-release! logits))
+      (check "output release" (m3-public-model-output-release! output))
+      (check "batch release" (d2-token-batch-release! batch)))))
+
+(define start-cursor (d2-token-dataset-cursor dataset))
+(define original-rng (vector-ref record 18))
+(define first (diagnose 'begin (lambda () (tr3-step-start-internal trainer))))
+(check "rooted active frame" (eq? (car (vector-ref tr3-step-frames 0)) first))
+(check "step phase" (eq? (vector-ref record 3) 'step))
+(check "second begin rejects"
+       (error-at? 'invalid-state 'tr3-step-transaction
+         (lambda () (tr3-step-start-internal trainer))))
+(check "forged frame rejects"
+       (error-at? 'invalid-argument 'tr3-step-transaction
+         (lambda () (tr3-step-abort-internal! (vector-copy first)))))
+(microbatch 0 1073741824)
+(check "one numerator gradient" (all-gradient-metadata? handles 1 1))
+(check "cursor advanced"
+       (not (same-bytes? start-cursor (d2-token-dataset-cursor dataset))))
+(define live-batch (d2-token-dataset-next-batch dataset))
+(check "live batch blocks prepare"
+       (error-at? 'invalid-state 'tr3-step-transaction
+         (lambda () (tr3-step-prepare-internal! first 2 1077936128))))
+(check "live batch blocks abort"
+       (error-at? 'invalid-state 'tr3-step-transaction
+         (lambda () (tr3-step-abort-internal! first))))
+(check "failed abort retains gradient and frame"
+       (and (all-gradient-metadata? handles 1 1)
+            (eq? (car (vector-ref tr3-step-frames 0)) first)))
+(check "release live batch" (d2-token-batch-release! live-batch))
+;;; Fixed train mode is an invariant; only the supported control fields may
+;;; advance during the accumulation phase.
+(vector-set! record 18 (vector 'philox4x32-10 1 1730 0 0))
+(vector-set! record 19 2)
+(vector-set! record 21 1)
+(check "rollback after recoverable accumulation failure"
+       (diagnose 'abort (lambda () (tr3-step-abort-internal! first))))
+(check "cursor restored" (same-bytes? start-cursor
+                                      (d2-token-dataset-cursor dataset)))
+(check "RNG restored" (equal? original-rng (vector-ref record 18)))
+(check "counters restored"
+       (and (= (vector-ref record 19) 0) (= (vector-ref record 20) 0)
+            (= (vector-ref record 21) 0)))
+(check "gradient cleared" (all-gradient-metadata? handles 0 0))
+(check "parameter untouched" (same-bytes? before
+                                          (parameter-bits (vector-ref handles 0))))
+(check "idle and unrooted"
+       (and (eq? (vector-ref record 3) 'idle)
+            (null? (vector-ref tr3-step-frames 0))))
+(check "repeat abort rejects"
+       (error-at? 'invalid-argument 'tr3-step-transaction
+         (lambda () (tr3-step-abort-internal! first))))
+
+(define second (tr3-step-start-internal trainer))
+(microbatch 0 1073741824)
+(microbatch 1 1065353216)
+(check "two numerator gradients" (all-gradient-metadata? handles 1 2))
+(check "wrong accumulation rejects"
+       (error-at? 'invalid-argument 'tr3-step-transaction
+         (lambda () (tr3-step-prepare-internal! second 1 1077936128))))
+(check "wrong normalization weight rejects"
+       (error-at? 'invalid-state 'o2-trainer-step-clear-prepare-internal
+         (lambda () (tr3-step-prepare-internal! second 2 1065353216))))
+(check "failed prepare leaves accumulation and parameters"
+       (and (eq? (vector-ref record 3) 'step)
+            (all-gradient-metadata? handles 1 2)
+            (same-bytes? before (parameter-bits (vector-ref handles 0)))))
+(define plan (diagnose 'prepare
+               (lambda () (tr3-step-prepare-internal! second 2 1077936128))))
+(check "exact plan bound before write"
+       (and (eq? (vector-ref record 3) 'commit)
+            (eq? (vector-ref record 4) plan)
+            (eq? (vector-ref second 9) plan)
+            (eq? (tr3-lease-commit-optimizer-internal record token plan)
+                 (vector-ref record 14))))
+(check "repeat prepare rejects"
+       (error-at? 'invalid-state 'tr3-step-transaction
+         (lambda () (tr3-step-prepare-internal! second 2 1077936128))))
+(define saved-cursor
+  (bytevector-copy (vector-ref second 4) 0
+                   (bytevector-length (vector-ref second 4))))
+(bytevector-u8-set! (vector-ref second 4) 0 0)
+(check "malformed rollback cursor rejects"
+       (guard (caught (#t (transformer-error? caught)))
+         (tr3-step-abort-internal! second) #f))
+(check "failed seek retains retry frame and old parameter"
+       (and (eq? (vector-ref second 8) 'active)
+            (eq? (vector-ref record 3) 'step)
+            (eq? (car (vector-ref tr3-step-frames 0)) second)
+            (same-bytes? before (parameter-bits (vector-ref handles 0)))))
+(vector-set! second 4 saved-cursor)
+(check "prepared plan rollback"
+       (diagnose 'prepared-abort
+         (lambda () (tr3-step-abort-internal! second))))
+(check "prepared rollback preserves old parameter and O2 count"
+       (and (same-bytes? before (parameter-bits (vector-ref handles 0)))
+            (= (o2-optimizer-completed-updates-internal optimizer) 0)))
+(check "prepared rollback clears gradients and restores cursor"
+       (and (all-gradient-metadata? handles 0 0)
+            (same-bytes? start-cursor (d2-token-dataset-cursor dataset))))
+(check "prepared plan cannot commit after abort"
+       (error-at? 'invalid-state 'o2-trainer-step-clear-commit-internal!
+         (lambda () (o2-trainer-step-clear-commit-internal! plan))))
+(define retry (tr3-step-start-internal trainer))
+(check "same authority retries" (tr3-step-abort-internal! retry))
+(check "input release" (m3t-public-input-release! input))
+(check "seed release" (m3t-public-logits-release! seed))
+(check "lease unlink" (tr3-lease-unenroll-internal! trainer))
+(check "dataset close" (d2-token-dataset-close! dataset))
+(display "TR3-STEP-TX-PASS checks=") (display checks) (newline)
