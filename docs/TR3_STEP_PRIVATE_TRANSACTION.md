@@ -31,6 +31,10 @@ the captured mode vector is an invariant witness rather than an eval-to-train
 repair mechanism. A component cleanup fault can leave the frame rooted for
 retry; this leaf does not claim fault-free automatic cleanup under arbitrary
 provider failures.
+The frame is a source-private mutable vector: registry identity authenticates
+the exact frame, but its cursor/RNG fields are not sealed against a caller that
+mutates the frame itself. A public trainer must keep this frame opaque or move
+the saved controls to an inaccessible authoritative record.
 
 The pinned f31/LLVM21 runtime witness uses genuine D2 masks and one analytic
 TR3-B numerator VJP, then exercises a live-batch abort rejection, cursor/RNG/

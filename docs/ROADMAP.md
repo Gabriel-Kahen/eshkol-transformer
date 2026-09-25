@@ -51,6 +51,13 @@ configured 75-minute job limit before the smoke/benchmark step; the two
 aggregate jobs therefore failed. The measured log shows no compiler/test
 failure in that job. The canonical job budget is raised to 120 minutes for
 the next exact-head run; full combined acceptance remains pending.
+Pushed `45a05dc` run `36088444454` passed 20 substantive jobs, including
+canonical build and model composition. Native numerics failed at the N2
+source-closure check because the private TR3 raw-symbol `.txt` fixture matched
+the broad source scan; the aggregate jobs consequently failed. Test-only
+`65136dd` restricts N2 and N3K closure scans to C source/header files, and
+both expected closure fixtures plus shell syntax pass locally. A fresh
+exact-head run is needed for acceptance of the combined branch.
 The subsequent private G3 Step19A output-reservation candidate `06b6fd2` was
 cherry-picked locally at `ee7325d`. Independent review found two failure-
 atomicity gaps: abort could discard a non-idle token frame before a borrowed
@@ -701,6 +708,11 @@ now binds the fixed-profile step-start cursor, RNG, train-mode witness, and
 counters to an authenticated rooted frame, rejects malformed/busy entry, and
 supports D2/gradient rollback and O2 prepare/abort before parameter writes.
 It does not own the no-fail post-write trainer-control tail or public step.
+Source `25673ef`/tree `5cd4abb` is integrated byte-identically at `c7cdf00`.
+Root's pinned merged gate passes 63 runtime checks with 23 source loads;
+`tr3-step-transaction-root-c7cdf00-20260925/SHA256SUMS` is sealed at
+`e6e852da...`. The source-private frame is mutable, so a public trainer
+must keep its saved controls opaque or seal them before exposure.
 The exact private source `8a29dcf`/tree `43bff41` is integrated with
 identical runtime, test, and script blobs at `cc84b49`. The worker's pinned
 normal 1,024/8,192 and sanitizer 1,024 runtime gates each pass 133
