@@ -2327,15 +2327,17 @@
             (= 14 (g3t-test-pin-count manual-cut-native))))
 (check "manual P1 candidate allocation cut armed"
        (= 0 (g3t-test-fail-a2-after 0)))
+(define manual-cut-begin-failed
+  (not (= 0 (g3t-native-frame-begin
+               manual-cut-native manual-cut-input 1))))
+(check "manual P1 candidate allocation cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
 (check "manual P1 candidate allocation failure atomic"
-       (and (not (= 0 (g3t-native-frame-begin
-                         manual-cut-native manual-cut-input 1)))
+       (and manual-cut-begin-failed
             (= 0 (g3t-test-cache-length manual-cut-native))
             (= 0 (g3t-test-rng-word manual-cut-native 2))
             (= 0 (g3t-test-logits-state manual-cut-result))
             (= 14 (g3t-test-pin-count manual-cut-native))))
-(check "manual P1 candidate allocation cut disarmed"
-       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
 (check "manual P1 frame begins after cut"
        (= 0 (g3t-native-frame-begin manual-cut-native manual-cut-input 1)))
 (check "manual P1 wrong ordinal rejected without advance"
