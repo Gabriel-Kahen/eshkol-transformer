@@ -525,8 +525,16 @@ repeat, and sanitizer each pass 1,946 checks across T1/T2/decode, including
 bitwise X+AO, injected provider failure/retry, candidate/cache/logits/
 binding/RNG invariance and borrowed-logits abort. No added global symbol,
 predecessor hashes, Q0 and merged structural gates pass. Root sealed
-`g3c4-manual-r-cc89863-20260925/SHA256SUMS` (`e5c3708e...`). Ordinals
-14–20, public role stepping, frame commit, and generation remain pending.
+`g3c4-manual-r-cc89863-20260925/SHA256SUMS` (`e5c3708e...`). The exact-base
+private numerical tail `c398b2e`/tree `de73fcb` is integrated byte-identically
+at `d653508`: ordinals 14–20 dispatch N2, FU, FG, FD, Y, NF, and tied-head Z
+through the accepted G3-N/N2/N3K routes. Pinned normal, repeat, and sanitizer
+each pass 10,765 checks across T1/T2/decode with 21 provider failure/retry
+cuts; root independently reran the focused gate and verified predecessor
+hashes, Q0, structural checks, and identical integration blobs. Sealed root
+evidence is `g3c4-manual-tail-c398b2e-20260925/SHA256SUMS`
+(`e3e04058...`). Public role stepping, frame commit, and generation remain
+pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -542,9 +550,14 @@ floored-modulo and truncated-quotient values/result kinds, and direct/stored
 VM canonical F32 uses the checked inexact route. All-INT64/bignum controls
 remain pinned; exact-tree Release and sanitizer gates each pass 8/8,
 sealed `f32-modulo-quotient-parity-20260924/SHA256SUMS` (`6f9b0041...`).
-Inexact remainder-zero, GCD/LCM integer-domain policy and numerator remain
-open, so whole-F32 acceptance and the transformer runtime repin remain
-pending.
+The exact-base VM inexact remainder-zero correction `b74ab5f`/tree `fa2e455`
+is composed byte-identically at `8afd55e`: VM direct/stored F64 and canonical
+F32 now raise a catchable error on ±0 divisor like native, while exact
+INT64/bignum zero retains its historical fatal VM boundary. Pinned Release
+and ASan+UBSan+LSan focused gates each pass 10/10; root verified
+`f32-remainder-zero-parity-20260924/SHA256SUMS` (`7e8f6f29...`). GCD/LCM
+integer-domain policy and numerator remain open, so whole-F32 acceptance and
+the transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
