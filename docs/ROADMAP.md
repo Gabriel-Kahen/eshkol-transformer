@@ -599,6 +599,11 @@ invocation and repeat pass. An injected initializer fixture proves failure
 status, raised-value and handler cleanup, reentrant busy, and retry. Real TR3
 initializer failure retention is unmeasured, and no C-callable trainer bridge
 is accepted; public trainer and resume acceptance remain pending.
+The [private C trainer entry audit](TR3_C_PRIVATE_TRAINER_ENTRY_BLOCKER.md)
+finds the real five-operand lease constructor in the compiled root, but no
+same-package C producer for its operands and no trainer unenroll/close. The
+rooted registry retains every successful trainer and its receivers. Freeze
+those lifecycle and ownership contracts before a C construct/close seam.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
