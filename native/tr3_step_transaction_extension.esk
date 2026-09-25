@@ -1,0 +1,169 @@
+;;; Fixed-profile pre-write step transaction. The caller owns all transient
+;;; D2/M3 objects and must release them before abort or O2 prepare. No public
+;;; trainer-step!, post-write commit tail, or C ABI is defined here.
+
+(define tr3-step-operation 'tr3-step-transaction)
+(define tr3-step-frame-tag (vector 'tr3-step-frame-v1))
+(define tr3-step-frames (vector '()))
+(define tr3-step-operation-active? #f)
+
+(define (tr3-step-fail category message)
+  (m3t-fail category tr3-step-operation message))
+
+(define (tr3-step-enter! thunk)
+  (if tr3-step-operation-active?
+      (tr3-step-fail 'invalid-state "step transaction operation is busy"))
+  (set! tr3-step-operation-active? #t)
+  (guard (caught
+           (#t (begin (set! tr3-step-operation-active? #f)
+                      (raise caught))))
+    (let ((result (thunk)))
+      (set! tr3-step-operation-active? #f)
+      result)))
+
+(define (tr3-step-frame? frame)
+  (and (vector? frame) (= (vector-length frame) 10)
+       (eq? (vector-ref frame 0) tr3-step-frame-tag)
+       (eq? (vector-ref frame 1) frame)
+       (let loop ((remaining (vector-ref tr3-step-frames 0)))
+         (cond ((null? remaining) #f)
+               ((eq? frame (car remaining)) #t)
+               (else (loop (cdr remaining)))))))
+
+(define (tr3-step-admit-frame frame)
+  (if (not (tr3-step-frame? frame))
+      (tr3-step-fail 'invalid-argument "expected an active exact step frame"))
+  (let ((record (vector-ref frame 2))
+        (token (vector-ref frame 3))
+        (status (vector-ref frame 8))
+        (plan (vector-ref frame 9)))
+    (tr3-lease-authenticate record token tr3-step-operation)
+    (if (not (and
+               (eq? (vector-ref record 3)
+                    (if (eq? status 'active) 'step 'commit))
+               (eq? (vector-ref record 4)
+                    (if (eq? status 'active) #f plan))
+               (or (and (eq? status 'active) (not plan))
+                   (and (eq? status 'prepared) plan))))
+        (tr3-step-fail 'invalid-state "step frame and lease phase differ"))
+    record))
+
+(define (tr3-step-modes record)
+  (let* ((modules (vector-ref record 10))
+         (count (vector-length modules))
+         (modes (make-vector count #f)))
+    (let loop ((index 0))
+      (if (= index count) modes
+          (let ((mode (module-mode-internal (vector-ref modules index))))
+            (if (not (eq? mode 'train))
+                (tr3-step-fail 'invalid-state
+                               "fixed trainer module is not in train mode"))
+            (vector-set! modes index mode)
+            (loop (+ index 1)))))))
+
+(define (tr3-step-modes-unchanged! record modes)
+  (let ((modules (vector-ref record 10)))
+    (if (not (= (vector-length modules) (vector-length modes)))
+        (tr3-step-fail 'invalid-state "fixed module set changed"))
+    (let loop ((index 0))
+      (if (= index (vector-length modes)) #t
+          (if (not (eq? (module-mode-internal (vector-ref modules index))
+                        (vector-ref modes index)))
+              (tr3-step-fail 'invalid-state
+                             "fixed trainer mode changed during step")
+              (loop (+ index 1)))))))
+
+(define (tr3-step-start-internal trainer)
+  (tr3-step-enter!
+    (lambda ()
+      (let* ((record
+               (tr3-lease-record-for-shell-internal
+                 trainer tr3-step-operation))
+             (token (vector-ref record 5)))
+        (if (or (not (eq? (vector-ref record 3) 'idle))
+                (vector-ref record 4))
+            (tr3-step-fail 'invalid-state "trainer is not idle"))
+        (tr3-lease-restore-enter-admission! record tr3-step-operation)
+        (let* ((cursor (d2-token-dataset-cursor (vector-ref record 15)))
+               (rng (vector-copy (vector-ref record 18)))
+               (modes (tr3-step-modes record))
+               (counters (vector (vector-ref record 19)
+                                 (vector-ref record 20)
+                                 (vector-ref record 21)))
+               (frame (vector tr3-step-frame-tag #f record token cursor
+                              rng modes counters 'active #f))
+               (successor (cons frame (vector-ref tr3-step-frames 0))))
+          (vector-set! frame 1 frame)
+          ;; Reauthenticate after the last provider call. Publication below is
+          ;; only primitive rooted writes, with no recoverable failure point.
+          (tr3-lease-authenticate record token tr3-step-operation)
+          (if (or (not (eq? (vector-ref record 3) 'idle))
+                  (vector-ref record 4))
+              (tr3-step-fail 'invalid-state "trainer changed before step"))
+          (vector-set! tr3-step-frames 0 successor)
+          (vector-set! record 3 'step)
+          frame)))))
+
+(define (tr3-step-prepare-internal! frame contributions weight-bits)
+  (tr3-step-enter!
+    (lambda ()
+      (let ((record (tr3-step-admit-frame frame)))
+        (if (not (eq? (vector-ref frame 8) 'active))
+            (tr3-step-fail 'invalid-state "step is already prepared"))
+        (if (not (equal?
+                   contributions
+                   (x1-private-config-ref
+                     (vector-ref record 6) 'training.accumulation-steps)))
+            (tr3-step-fail 'invalid-argument
+                           "contributions differ from configured accumulation"))
+        (tr3-step-modes-unchanged! record (vector-ref frame 6))
+        (tr3-lease-m3-idle! (vector-ref record 9) tr3-step-operation)
+        (tr3-lease-d2-idle! (vector-ref record 16) tr3-step-operation)
+        (let ((plan
+                (o2-trainer-step-clear-prepare-internal
+                  (vector-ref record 13) (vector-ref (vector-ref frame 7) 1)
+                  contributions weight-bits)))
+          ;; Native prepare owns no parameter writes. The exact plan is rooted
+          ;; before the lease advertises its commit phase.
+          (vector-set! frame 9 plan)
+          (vector-set! record 4 plan)
+          (vector-set! record 3 'commit)
+          (vector-set! frame 8 'prepared)
+          plan)))))
+
+(define (tr3-step-remaining frames frame)
+  (cond ((null? frames)
+         (tr3-step-fail 'invalid-argument "step frame is no longer active"))
+        ((eq? (car frames) frame) (cdr frames))
+        (else (cons (car frames)
+                    (tr3-step-remaining (cdr frames) frame)))))
+
+(define (tr3-step-abort-internal! frame)
+  (tr3-step-enter!
+    (lambda ()
+      (let* ((record (tr3-step-admit-frame frame))
+             (successor
+               (tr3-step-remaining (vector-ref tr3-step-frames 0) frame)))
+        (tr3-step-modes-unchanged! record (vector-ref frame 6))
+        (tr3-lease-m3-idle! (vector-ref record 9) tr3-step-operation)
+        (tr3-lease-d2-idle! (vector-ref record 16) tr3-step-operation)
+        (if (eq? (vector-ref frame 8) 'prepared)
+            (begin
+              (o2-trainer-step-clear-abort-internal! (vector-ref frame 9))
+              (vector-set! frame 9 #f)
+              (vector-set! record 4 #f)
+              (vector-set! record 3 'step)
+              (vector-set! frame 8 'active)))
+        ;; Both operations are accepted failure-atomic component operations.
+        ;; On a cleanup failure the frame stays rooted for an explicit retry.
+        (d2-token-dataset-seek! (vector-ref record 15)
+                                (vector-ref frame 4))
+        (o2-public-optimizer-zero-grad! (vector-ref record 13))
+        (vector-set! record 18 (vector-ref frame 5))
+        (vector-set! record 19 (vector-ref (vector-ref frame 7) 0))
+        (vector-set! record 20 (vector-ref (vector-ref frame 7) 1))
+        (vector-set! record 21 (vector-ref (vector-ref frame 7) 2))
+        (vector-set! record 3 'idle)
+        (vector-set! frame 8 'dead)
+        (vector-set! tr3-step-frames 0 successor)
+        #t))))

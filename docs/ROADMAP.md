@@ -696,7 +696,11 @@ mutant; the 1:26 AOT build peaked at 4,402,264 KiB. Root sealed
 `tr3-step-leaf-root-d821900-20260925/SHA256SUMS` (`05bf6a62...`). Trainer
 phase/counter publication is still test-owned;
 whole-step rollback, EOS replay, metrics, public `trainer-step!`, and resume
-acceptance remain pending.
+acceptance remain pending. The follow-on [private pre-write transaction leaf](TR3_STEP_PRIVATE_TRANSACTION.md)
+now binds the fixed-profile step-start cursor, RNG, train-mode witness, and
+counters to an authenticated rooted frame, rejects malformed/busy entry, and
+supports D2/gradient rollback and O2 prepare/abort before parameter writes.
+It does not own the no-fail post-write trainer-control tail or public step.
 The exact private source `8a29dcf`/tree `43bff41` is integrated with
 identical runtime, test, and script blobs at `cc84b49`. The worker's pinned
 normal 1,024/8,192 and sanitizer 1,024 runtime gates each pass 133
