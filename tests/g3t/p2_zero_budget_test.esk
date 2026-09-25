@@ -8,6 +8,7 @@
 (load "g3t_final_publication_extension.esk")
 (load "g3t_zero_budget_extension.esk")
 (load "g3t_p2_zero_budget_extension.esk")
+(load "g3t_t1_input_extension.esk")
 
 (extern i64 g3t-test-input-length-set ptr i64
         :real et_g3t_test_input_length_set_v1)
@@ -81,6 +82,20 @@
         :real et_g3t_private_last_error_category_v1)
 (extern i64 g3t-test-last-error-code
         :real et_g3t_private_last_error_code_v1)
+(extern ptr g3t-native-input-from-t1 ptr
+        :real et_g3t_private_input_from_t1_v1)
+(extern i64 g3t-test-input-length ptr
+        :real et_g3t_test_input_length_v1)
+(extern i64 g3t-test-input-word ptr i64
+        :real et_g3t_test_input_word_v1)
+(extern ptr g3t-test-input-borrow-begin ptr
+        :real et_g3t_test_input_borrow_begin_v1)
+(extern i64 g3t-test-input-borrow-end ptr
+        :real et_g3t_test_input_borrow_end_v1)
+(extern i64 g3t-test-live-t1-inputs
+        :real et_g3t_test_live_t1_inputs_v1)
+(extern i64 g3t-test-i1-count i64
+        :real et_m3_test_i64_counts_v1)
 
 (define checks 0)
 (define (check label value)
@@ -92,6 +107,12 @@
        (= b (g3t-test-rng-clone-word clone 1))
        (= c (g3t-test-rng-clone-word clone 2))
        (= d (g3t-test-rng-clone-word clone 3))))
+(define (reject-category label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
 (define config
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -103,6 +124,138 @@
     (g3t-checked-m3t-model-create config initial)))
 (define tokenizer (t1-private-tokenizer-byte config))
 (check "eval" (module-eval! model))
+(define t1-p2 (t1-wave1-tokenizer-encode tokenizer (bytevector 65 66)))
+(define t1-p1 (t1-wave1-tokenizer-encode tokenizer (bytevector 255)))
+(define t1-empty (t1-wave1-tokenizer-encode tokenizer (bytevector)))
+(define t1-long (t1-wave1-tokenizer-encode tokenizer (bytevector 1 2 3)))
+(check "T1 sources admitted in same aggregate"
+       (and (t1-wave1-tensor-admitted? t1-p2)
+            (t1-wave1-tensor-admitted? t1-p1)))
+(reject-category "foreign T1 wrapper rejected" 'invalid-argument
+  (lambda () (g3t-generation-t1-input-create (vector 'foreign))))
+(reject-category "empty T1 prompt rejected" 'shape-mismatch
+  (lambda () (g3t-generation-t1-input-create t1-empty)))
+(reject-category "P3 T1 prompt rejected" 'shape-mismatch
+  (lambda () (g3t-generation-t1-input-create t1-long)))
+(check "T1 shape rejects enroll no native input"
+       (= 0 (g3t-test-live-t1-inputs)))
+(define old-t1-registry t1-wave1-tensor-registry)
+(set! t1-wave1-tensor-registry '())
+(reject-category "withdrawn T1 authority rejected" 'invalid-argument
+  (lambda () (g3t-generation-t1-input-create t1-p2)))
+(set! t1-wave1-tensor-registry old-t1-registry)
+(define t1-unsealed (t1-shell-create 1))
+(check "unsealed T1 fixture" (not (null? t1-unsealed)))
+(check "unsealed T1 word" (= 0 (t1-shell-write t1-unsealed 0 65)))
+(check "unsealed T1 native reject"
+       (and (null? (g3t-native-input-from-t1 t1-unsealed))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "abort unsealed T1 fixture" (= 0 (t1-shell-abort t1-unsealed)))
+(check "stale T1 native reject"
+       (and (null? (g3t-native-input-from-t1 t1-unsealed))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "foreign native T1 reject"
+       (and (null? (g3t-native-input-from-t1 (vector 'foreign)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(define t1-out-of-range (t1-shell-create 1))
+(check "out-of-range T1 fixture" (not (null? t1-out-of-range)))
+(check "out-of-range T1 write"
+       (= 0 (t1-shell-write t1-out-of-range 0 256)))
+(check "out-of-range T1 seal"
+       (= 0 (t1-shell-seal t1-out-of-range)))
+(check "out-of-range T1 native reject"
+       (and (null? (g3t-native-input-from-t1 t1-out-of-range))
+            (= 3 (g3t-test-last-error-category))
+            (= 4 (g3t-test-last-error-code))))
+(define t1-i1-baseline (g3t-test-i1-count 0))
+(check "T1 header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "T1 header cut atomic"
+       (and (null? (g3t-native-input-from-t1 t1-p2))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-t1-inputs))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "T1 header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "T1 I1 cut armed" (= 0 (g3t-test-fail-i1-after index)))
+        (check "T1 I1 cut atomic"
+               (and (null? (g3t-native-input-from-t1 t1-p2))
+                    (= 0 (g3t-test-live-t1-inputs))
+                    (= t1-i1-baseline (g3t-test-i1-count 0))))
+        (cuts (+ index 1)))))
+(check "T1 I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define t1-native-copy (g3t-native-input-from-t1 t1-p2))
+(check "T1 P2 owns exact independent I1"
+       (and (not (null? t1-native-copy))
+            (= 2 (g3t-test-input-length t1-native-copy))
+            (= 65 (g3t-test-input-word t1-native-copy 0))
+            (= 66 (g3t-test-input-word t1-native-copy 1))
+            (= 1 (g3t-test-live-t1-inputs))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(define t1-input-borrow (g3t-test-input-borrow-begin t1-native-copy))
+(check "T1-owned I1 borrow begins" (not (null? t1-input-borrow)))
+(check "T1-owned I1 borrow blocks release"
+       (and (not (= 0 (g3t-native-tensor-release t1-native-copy)))
+            (= 1 (g3t-test-live-t1-inputs))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(check "T1-owned I1 borrow ends"
+       (= 0 (g3t-test-input-borrow-end t1-input-borrow)))
+(check "T1-native typed release"
+       (and (= 0 (g3t-native-tensor-release t1-native-copy))
+            (= 0 (g3t-native-tensor-release t1-native-copy))
+            (= 0 (g3t-test-live-t1-inputs))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "dead T1 input cannot be reused"
+       (= -1 (g3t-test-input-length t1-native-copy)))
+(check "T1 source unchanged by copy/release"
+       (and (= 2 (t1-shell-length t1-p2))
+            (= 65 (t1-shell-read t1-p2 0))
+            (= 66 (t1-shell-read t1-p2 1))))
+(define t1-wrapper-p1 (g3t-generation-t1-input-create t1-p1))
+(define t1-wrapper-p1-native
+  (vector-ref (g3t-prefill-entry t1-wrapper-p1 'input 't1-p1) 3))
+(check "same-aggregate P1 copies byte 255"
+       (= 255 (g3t-test-input-word t1-wrapper-p1-native 0)))
+(check "same-aggregate P1 release"
+       (and (g3t-generation-tensor-release! t1-wrapper-p1)
+            (g3t-generation-tensor-release! t1-wrapper-p1)
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "wrapper I1 cut armed" (= 0 (g3t-test-fail-i1-after 0)))
+(reject-category "wrapper I1 cut raises" 'internal
+  (lambda () (g3t-generation-t1-input-create t1-p2)))
+(check "wrapper I1 cut tombstone and no owner"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (g3t-test-live-t1-inputs))
+              (= t1-i1-baseline (g3t-test-i1-count 0)))))
+(check "wrapper I1 cut disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define (t1-retention-cycles count)
+  (let cycle ((index 0))
+    (if (= index count) #t
+        (let ((copy (g3t-generation-t1-input-create t1-p2)))
+          (check "T1 retention one live input"
+                 (= 1 (g3t-test-live-t1-inputs)))
+          (check "T1 retention one live I1"
+                 (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0)))
+          (check "T1 retention typed release"
+                 (g3t-generation-tensor-release! copy))
+          (check "T1 retention no live input"
+                 (= 0 (g3t-test-live-t1-inputs)))
+          (check "T1 retention no live I1"
+                 (= t1-i1-baseline (g3t-test-i1-count 0)))
+          (cycle (+ index 1))))))
+(check "T1 1024-cycle retention" (t1-retention-cycles 1024))
+(check "T1 8192-cycle retention" (t1-retention-cycles 8192))
 (define policy
   (list ':profile 'diagnostic-c2 ':sampling 'categorical
         ':temperature-bits #x3f800000 ':top-k 256
@@ -446,7 +599,13 @@
 (check "reference input release" (g3t-checked-m3t-input-release! reference-input))
 
 (define wrapped-generator (g3t-generator-create model tokenizer policy))
-(define wrapped-input (g3t-generation-pair-input-create 65 66))
+(define wrapped-input (g3t-generation-t1-input-create t1-p2))
+(check "T1 P2 frame source owns I1"
+       (let ((native-input
+              (vector-ref (g3t-prefill-entry wrapped-input 'input 't1-p2) 3)))
+         (and (= 2 (g3t-test-input-length native-input))
+              (= 65 (g3t-test-input-word native-input 0))
+              (= 66 (g3t-test-input-word native-input 1)))))
 (define wrapped-output (g3t-p2-zero-generate! wrapped-generator wrapped-input))
 (check "rooted P2/G0 empty result"
        (let ((entry (g3t-prefill-entry wrapped-output 'output 'g3t-p2-rooted)))
@@ -458,7 +617,7 @@
 
 ;; The same zero-budget envelope remains valid for a one-token prompt.
 (define p1-zero-generator (g3t-generator-create model tokenizer policy))
-(define p1-zero-input (g3t-generation-token-input-create 65))
+(define p1-zero-input (g3t-generation-t1-input-create t1-p1))
 (define p1-zero-output (g3t-zero-generate! p1-zero-generator p1-zero-input))
 (define p1-zero-native-output
   (vector-ref (g3t-prefill-entry p1-zero-output 'output 'g3t-p1-zero) 3))

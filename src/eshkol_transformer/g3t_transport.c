@@ -5,6 +5,9 @@
 #include "m3_call_pins.h"
 #include "eshkol_transformer/a2_kv_cache.h"
 #include "eshkol_transformer/i64_tensor.h"
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+#include "t1_i64_shell.h"
+#endif
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #include "eshkol_transformer/a2_attention_abi.h"
 #include "eshkol_transformer/g3n_primitives_abi.h"
@@ -49,6 +52,11 @@
 #error "G3-T RNG clones require live final output publication"
 #endif
 #endif
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+#ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
+#error "G3-T T1 input requires private input transport"
+#endif
+#endif
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -79,7 +87,8 @@ enum { G3T_GENERATOR = 1, G3T_INPUT = 2, G3T_OUTPUT = 4,
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
        G3T_INTERNAL = 5 };
 enum { G3T_IDENTITY = 1, G3T_LIFECYCLE = 2, G3T_CONFIG = 3,
-       G3T_TOPOLOGY = 6, G3T_ALLOCATION = 7, G3T_INVARIANT = 10 };
+       G3T_TOKEN_RANGE = 4, G3T_TOPOLOGY = 6, G3T_ALLOCATION = 7,
+       G3T_INVARIANT = 10 };
 typedef struct g3t_record {
   struct g3t_record *next;
   int kind, state, busy;
@@ -106,6 +115,9 @@ typedef struct g3t_frame {
 typedef struct g3t_input {
   g3t_record h;
   int64_t length, ids[2];
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+  et_i64_tensor *tensor;
+#endif
 } g3t_input;
 struct g3t_context;
 typedef struct g3t_output {
@@ -190,6 +202,22 @@ static int64_t g3t_f32_failure(const et_f32_tensor_error *error) {
 static int64_t g3t_i64_failure(const et_i64_tensor_error *error) {
   return g3t_fail(2, error->category, error->code);
 }
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+static int64_t g3t_t1_failure(int64_t status) {
+  switch (status) {
+    case ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT:
+      return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+    case ET_T1_I64_SHELL_STATUS_INVALID_STATE:
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    case ET_T1_I64_SHELL_STATUS_RANGE:
+      return g3t_bad(G3T_SHAPE, G3T_TOKEN_RANGE);
+    case ET_T1_I64_SHELL_STATUS_ALLOCATION_FAILED:
+      return g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    default:
+      return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+  }
+}
+#endif
 static int64_t g3t_a2_failure(const et_kernel_error *error) {
   return g3t_fail(1, error->category, error->code);
 }
@@ -519,6 +547,69 @@ void *et_g3t_private_input_from_token_v1(int64_t token) {
   g3t_registry = &input->h;
   return input;
 }
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+void *et_g3t_private_input_from_t1_v1(void *sealed_t1) {
+  g3t_clear();
+  int64_t length = et_t1_i64_shell_length_v1(sealed_t1);
+  int64_t status = et_t1_i64_shell_last_status_v1();
+  if (status != ET_T1_I64_SHELL_STATUS_OK) {
+    g3t_t1_failure(status);
+    return NULL;
+  }
+  if (length != 1 && length != 2) {
+    g3t_bad(G3T_SHAPE, G3T_TOKEN_RANGE);
+    return NULL;
+  }
+  int64_t words[2] = {0, 0};
+  for (int64_t index = 0; index < length; ++index) {
+    words[index] = et_t1_i64_shell_read_v1(sealed_t1, index);
+    status = et_t1_i64_shell_last_status_v1();
+    if (status != ET_T1_I64_SHELL_STATUS_OK) {
+      g3t_t1_failure(status);
+      return NULL;
+    }
+    if (words[index] < 0 || words[index] > 255) {
+      g3t_bad(G3T_SHAPE, G3T_TOKEN_RANGE);
+      return NULL;
+    }
+  }
+#ifdef ET_G3T_TESTING
+  if (g3t_allocations >= g3t_allocation_limit) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#endif
+  g3t_input *input = calloc(1, sizeof(*input));
+  if (!input) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  ++g3t_allocations;
+#endif
+  const uint64_t shape[2] = {1, (uint64_t)length};
+  et_i64_tensor_error error;
+  if (et_i64_tensor_create_v1(2, shape, &input->tensor, &error)) {
+    g3t_i64_failure(&error);
+    free(input);
+    return NULL;
+  }
+  if (et_i64_tensor_copy_from_v1(input->tensor, words, (size_t)length,
+                                 &error)) {
+    g3t_i64_failure(&error);
+    if (et_i64_tensor_destroy_v1(&input->tensor, &error)) abort();
+    free(input);
+    return NULL;
+  }
+  input->length = length;
+  memcpy(input->ids, words, sizeof(words));
+  input->h.kind = G3T_INPUT;
+  input->h.state = G3T_LIVE;
+  input->h.next = g3t_registry;
+  g3t_registry = &input->h;
+  return input;
+}
+#endif
 int64_t et_g3t_private_tensor_release_v1(void *candidate) {
   g3t_clear();
   g3t_record *record = g3t_registry;
@@ -575,6 +666,14 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
   }
 #endif
   g3t_input *input = (g3t_input *)record;
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+  if (input->tensor) {
+    et_i64_tensor_error error;
+    if (et_m3_private_i64_unborrowed_v1(input->tensor, &error))
+      return g3t_i64_failure(&error);
+    if (et_i64_tensor_destroy_v1(&input->tensor, &error)) abort();
+  }
+#endif
   input->length = 0;
   memset(input->ids, 0, sizeof(input->ids));
   record->state = G3T_DEAD;
@@ -1620,6 +1719,45 @@ int64_t et_g3t_test_cache_empty_v1(void *candidate) {
   return ok;
 }
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+int64_t et_g3t_test_input_length_v1(void *candidate) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  return input && input->tensor ? input->length : -1;
+}
+int64_t et_g3t_test_input_word_v1(void *candidate, int64_t index) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || !input->tensor || index < 0 || index >= input->length)
+    return -1;
+  int64_t words[2] = {0, 0};
+  et_i64_tensor_error error;
+  return et_i64_tensor_copy_to_v1(input->tensor, words,
+                                  (size_t)input->length, &error) ?
+         -1 : words[index];
+}
+void *et_g3t_test_input_borrow_begin_v1(void *candidate) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || !input->tensor) return NULL;
+  et_i64_tensor_borrow *borrow = NULL;
+  et_i64_tensor_error error;
+  return et_i64_tensor_borrow_begin_v1(input->tensor, &borrow, &error) ?
+         NULL : borrow;
+}
+int64_t et_g3t_test_input_borrow_end_v1(void *candidate) {
+  et_i64_tensor_borrow *borrow = candidate;
+  et_i64_tensor_error error;
+  return et_i64_tensor_borrow_end_v1(&borrow, &error);
+}
+int64_t et_g3t_test_live_t1_inputs_v1(void) {
+  int64_t count = 0;
+  for (g3t_record *r = g3t_registry; r; r = r->next)
+    if (r->kind == G3T_INPUT && r->state == G3T_LIVE &&
+        ((g3t_input *)r)->tensor) ++count;
+  return count;
+}
+#endif
 int64_t et_g3t_test_output_word_v1(void *candidate, int64_t field) {
   g3t_output *output = (g3t_output *)g3t_admit_record(
       candidate, G3T_OUTPUT, 1);
