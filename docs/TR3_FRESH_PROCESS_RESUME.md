@@ -28,3 +28,10 @@ leaf has no public next-step metrics or effective-learning-rate observation,
 so those two TR3-C §13 comparisons remain pending. Public trainer packaging,
 full failure-prefix/environment acceptance, and other model profiles remain
 separate gates.
+
+The clean source `15a7c8a` (tree `68b2d56`) passed the pinned gate with
+246 runtime checks across nine processes and 15 byte comparisons. Compilation
+took 1:43.19, peaked at 5,388,024 KiB RSS, and used no swap. The full
+evidence is sealed at
+`tr3-fresh-resume-15a7c8a-20260925/SHA256SUMS`
+(`f11dc3a662c9d6029ef558f4d1dd7556f776d6c33bd5c775b458542432931efe`).
