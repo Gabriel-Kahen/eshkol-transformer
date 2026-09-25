@@ -78,7 +78,8 @@
     (m3-call operation
       (let* ((found (g3t-generator-find shell operation))
              (kind (vector-ref found 1)))
-        (if (not (or (eq? kind 'input) (eq? kind 'ids)))
+        (if (not (or (eq? kind 'input) (eq? kind 'ids)
+                     (eq? kind 'lengths) (eq? kind 'cache-lengths)))
             (g3t-fail-raw 'invalid-argument operation 1
                           "G3-T transport owner kind differs"))
         (let ((entry (g3t-prefill-entry shell kind operation)))
@@ -88,7 +89,9 @@
                     (g3t-fail-raw 'invalid-state operation 2
                                   (if (eq? kind 'input)
                                       "G3-T input is not live"
-                                      "G3-T IDs clone is not live")))
+                                      (if (eq? kind 'ids)
+                                          "G3-T IDs clone is not live"
+                                          "G3-T length clone is not live"))))
                 (if (not (= 0 (g3t-native-tensor-release
                                 (vector-ref entry 3))))
                     (g3t-native-fail-raw operation))

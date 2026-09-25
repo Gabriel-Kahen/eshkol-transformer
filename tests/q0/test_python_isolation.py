@@ -65,6 +65,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3t-generator-rng-input.py",
     ROOT / "scripts" / "check-g3t-owned-token-input.py",
     ROOT / "scripts" / "check-g3t-ids-owner.py",
+    ROOT / "scripts" / "check-g3t-length-owners.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 

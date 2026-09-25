@@ -1,0 +1,80 @@
+;;; Source-private detached generated- and cache-length owners. Load after
+;;; final publication and the shared typed tensor release.
+(extern ptr g3t-native-output-lengths-clone ptr
+        :real et_g3t_private_output_lengths_clone_v1)
+(extern ptr g3t-native-output-cache-lengths-clone ptr
+        :real et_g3t_private_output_cache_lengths_clone_v1)
+
+(define (g3t-generation-output-lengths output)
+  (let ((operation 'g3t-generation-output-lengths))
+    (m3-call operation
+      (let ((source (g3t-prefill-entry output 'output operation)))
+        (if (not (and (eq? (vector-ref source 2) 'live)
+                      (not (null? (vector-ref source 3)))
+                      (eq? (vector-ref source 4) #f)
+                      (eq? (vector-ref source 5) #f)
+                      (bytevector? (vector-ref source 6))))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-T output is not independently live"))
+        (let* ((shell (vector 'g3t-lengths-private))
+               (ledger (vector #f))
+               (entry (vector shell 'lengths 'pending #f #f #f #f #f #f #f
+                              ledger 'diagnostic-c2))
+               (next (cons entry (vector-ref g3t-registry 0)))
+               (created '()))
+          (guard (caught
+                   (#t
+                     (if (not (null? created))
+                         (if (not (= 0 (g3t-native-tensor-release created)))
+                             (exit 134)))
+                     (g3t-prefill-dead! entry)
+                     (raise caught)))
+            (vector-set! g3t-registry 0 next)
+            (let* ((canonical (car (vector-ref g3t-registry 0)))
+                   (canonical-ledger (vector-ref canonical 10))
+                   (native (g3t-native-output-lengths-clone
+                             (vector-ref source 3))))
+              (set! created native)
+              (if (null? native) (g3t-native-fail-raw operation))
+              (vector-set! canonical-ledger 0 native)
+              (vector-set! canonical 3 native)
+              (vector-set! canonical 2 'live)
+              (vector-set! canonical 10 #f)
+              (vector-ref canonical 0))))))))
+
+(define (g3t-generation-output-cache-lengths output)
+  (let ((operation 'g3t-generation-output-cache-lengths))
+    (m3-call operation
+      (let ((source (g3t-prefill-entry output 'output operation)))
+        (if (not (and (eq? (vector-ref source 2) 'live)
+                      (not (null? (vector-ref source 3)))
+                      (eq? (vector-ref source 4) #f)
+                      (eq? (vector-ref source 5) #f)
+                      (bytevector? (vector-ref source 6))))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-T output is not independently live"))
+        (let* ((shell (vector 'g3t-cache-lengths-private))
+               (ledger (vector #f))
+               (entry (vector shell 'cache-lengths 'pending #f #f #f #f #f #f #f
+                              ledger 'diagnostic-c2))
+               (next (cons entry (vector-ref g3t-registry 0)))
+               (created '()))
+          (guard (caught
+                   (#t
+                     (if (not (null? created))
+                         (if (not (= 0 (g3t-native-tensor-release created)))
+                             (exit 134)))
+                     (g3t-prefill-dead! entry)
+                     (raise caught)))
+            (vector-set! g3t-registry 0 next)
+            (let* ((canonical (car (vector-ref g3t-registry 0)))
+                   (canonical-ledger (vector-ref canonical 10))
+                   (native (g3t-native-output-cache-lengths-clone
+                             (vector-ref source 3))))
+              (set! created native)
+              (if (null? native) (g3t-native-fail-raw operation))
+              (vector-set! canonical-ledger 0 native)
+              (vector-set! canonical 3 native)
+              (vector-set! canonical 2 'live)
+              (vector-set! canonical 10 #f)
+              (vector-ref canonical 0))))))))

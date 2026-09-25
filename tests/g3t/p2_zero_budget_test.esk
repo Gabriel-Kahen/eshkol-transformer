@@ -11,6 +11,7 @@
 (load "g3t_t1_input_extension.esk")
 (load "g3t_rng_owner_extension.esk")
 (load "g3t_ids_owner_extension.esk")
+(load "g3t_lengths_owner_extension.esk")
 
 (extern i64 g3t-test-input-length-set ptr i64
         :real et_g3t_test_input_length_set_v1)
@@ -44,8 +45,6 @@
         :real et_g3t_test_fail_alloc_after_v1)
 (extern i64 g3t-test-fail-i1-after i64
         :real et_g3t_test_fail_i1_after_v1)
-(extern ptr g3t-native-output-lengths-clone ptr
-        :real et_g3t_private_output_lengths_clone_v1)
 (extern i64 g3t-test-lengths-clone-state ptr
         :real et_g3t_test_lengths_clone_state_v1)
 (extern i64 g3t-test-lengths-clone-value ptr
@@ -56,8 +55,6 @@
         :real et_g3t_test_lengths_clone_borrow_end_v1)
 (extern i64 g3t-test-live-lengths-clones
         :real et_g3t_test_live_lengths_clones_v1)
-(extern ptr g3t-native-output-cache-lengths-clone ptr
-        :real et_g3t_private_output_cache_lengths_clone_v1)
 (extern i64 g3t-test-cache-lengths-clone-state ptr
         :real et_g3t_test_cache_lengths_clone_state_v1)
 (extern i64 g3t-test-cache-lengths-clone-value ptr
@@ -125,6 +122,14 @@
         (let ((entry (car entries)))
           (walk (cdr entries)
                 (if (and (eq? (vector-ref entry 1) 'ids)
+                         (eq? (vector-ref entry 2) 'live))
+                    (+ count 1) count))))))
+(define (live-length-shells kind)
+  (let walk ((entries (vector-ref g3t-registry 0)) (count 0))
+    (if (null? entries) count
+        (let ((entry (car entries)))
+          (walk (cdr entries)
+                (if (and (eq? (vector-ref entry 1) kind)
                          (eq? (vector-ref entry 2) 'live))
                     (+ count 1) count))))))
 (define (reject-category label category thunk)
@@ -936,6 +941,169 @@
             (= 1 (g3t-test-output-state wrapped-native-output))))
 (check "IDs wrapper source borrow ends"
        (= 0 (g3t-test-output-borrow-end wrapped-ids-source-borrow)))
+(reject-category "lengths wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-lengths (vector 'g3t-output-private))))
+(reject-category "cache-lengths wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-cache-lengths
+               (vector 'g3t-output-private))))
+(reject-category "lengths wrapper rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-lengths wrapped-input)))
+(reject-category "cache-lengths wrapper rejects wrong-kind IDs" 'invalid-argument
+  (lambda () (g3t-generation-output-cache-lengths wrapped-ids-shell)))
+(vector-set! wrapped-output-entry 2 'pending)
+(reject-category "lengths wrapper rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(reject-category "cache-lengths wrapper rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(vector-set! wrapped-output-entry 2 'live)
+(check "length wrappers pending rejection enrolls no owner"
+       (and (= 0 (live-length-shells 'lengths))
+            (= 0 (live-length-shells 'cache-lengths))
+            (= 0 (g3t-test-live-lengths-clones))
+            (= 0 (g3t-test-live-cache-lengths-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(define wrapped-lengths-i1-before (g3t-test-i1-count 0))
+(check "lengths wrapper header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "lengths wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(check "lengths wrapper header cut atomic"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 1) 'lengths)
+              (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (live-length-shells 'lengths))
+              (= 0 (g3t-test-live-lengths-clones))
+              (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+              (= 1 (g3t-test-output-state wrapped-native-output))
+              (= 2 (g3t-test-output-word wrapped-native-output 2))
+              (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+(check "lengths wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "lengths wrapper I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (reject-category "lengths wrapper I1 cut raises" 'internal
+          (lambda () (g3t-generation-output-lengths wrapped-output)))
+        (check "lengths wrapper I1 cut atomic"
+               (let ((entry (car (vector-ref g3t-registry 0))))
+                 (and (eq? (vector-ref entry 2) 'dead)
+                      (not (vector-ref entry 3))
+                      (not (vector-ref entry 10))
+                      (= 0 (live-length-shells 'lengths))
+                      (= 0 (g3t-test-live-lengths-clones))
+                      (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+                      (= 1 (g3t-test-output-state wrapped-native-output))
+                      (= 2 (g3t-test-output-word wrapped-native-output 2))
+                      (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+        (cuts (+ index 1)))))
+(check "lengths wrapper I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(check "cache-lengths wrapper header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "cache-lengths wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(check "cache-lengths wrapper header cut atomic"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 1) 'cache-lengths)
+              (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (live-length-shells 'cache-lengths))
+              (= 0 (g3t-test-live-cache-lengths-clones))
+              (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+              (= 1 (g3t-test-output-state wrapped-native-output))
+              (= 2 (g3t-test-output-word wrapped-native-output 2))
+              (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+(check "cache-lengths wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "cache-lengths wrapper I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (reject-category "cache-lengths wrapper I1 cut raises" 'internal
+          (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+        (check "cache-lengths wrapper I1 cut atomic"
+               (let ((entry (car (vector-ref g3t-registry 0))))
+                 (and (eq? (vector-ref entry 2) 'dead)
+                      (not (vector-ref entry 3))
+                      (not (vector-ref entry 10))
+                      (= 0 (live-length-shells 'cache-lengths))
+                      (= 0 (g3t-test-live-cache-lengths-clones))
+                      (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+                      (= 1 (g3t-test-output-state wrapped-native-output))
+                      (= 2 (g3t-test-output-word wrapped-native-output 2))
+                      (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+        (cuts (+ index 1)))))
+(check "cache-lengths wrapper I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define wrapped-lengths-shell (g3t-generation-output-lengths wrapped-output))
+(define wrapped-cache-lengths-shell
+  (g3t-generation-output-cache-lengths wrapped-output))
+(define wrapped-lengths-entry
+  (g3t-prefill-entry wrapped-lengths-shell 'lengths 'g3t-lengths-test))
+(define wrapped-cache-lengths-entry
+  (g3t-prefill-entry wrapped-cache-lengths-shell
+                     'cache-lengths 'g3t-lengths-test))
+(define wrapped-lengths-native (vector-ref wrapped-lengths-entry 3))
+(define wrapped-cache-lengths-native (vector-ref wrapped-cache-lengths-entry 3))
+(check "P2/G0 length wrappers own independent I1[1] values"
+       (and (vector? wrapped-lengths-shell)
+            (vector? wrapped-cache-lengths-shell)
+            (not (eq? wrapped-lengths-shell wrapped-cache-lengths-shell))
+            (not (eq? wrapped-lengths-native wrapped-cache-lengths-native))
+            (eq? (vector-ref wrapped-lengths-entry 2) 'live)
+            (eq? (vector-ref wrapped-cache-lengths-entry 2) 'live)
+            (eq? (vector-ref wrapped-lengths-entry 4) #f)
+            (eq? (vector-ref wrapped-cache-lengths-entry 4) #f)
+            (eq? (vector-ref wrapped-lengths-entry 10) #f)
+            (eq? (vector-ref wrapped-cache-lengths-entry 10) #f)
+            (= 0 (g3t-test-lengths-clone-value wrapped-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   wrapped-cache-lengths-native))
+            (= 1 (live-length-shells 'lengths))
+            (= 1 (live-length-shells 'cache-lengths))
+            (= 1 (g3t-test-live-lengths-clones))
+            (= 1 (g3t-test-live-cache-lengths-clones))
+            (= (+ wrapped-lengths-i1-before 2) (g3t-test-i1-count 0))))
+(define wrapped-lengths-borrow
+  (g3t-test-lengths-clone-borrow-begin wrapped-lengths-native))
+(define wrapped-cache-lengths-borrow
+  (g3t-test-cache-lengths-clone-borrow-begin wrapped-cache-lengths-native))
+(check "length wrappers clone borrows begin"
+       (and (not (null? wrapped-lengths-borrow))
+            (not (null? wrapped-cache-lengths-borrow))))
+(reject-category "lengths wrapper borrow blocks typed release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! wrapped-lengths-shell)))
+(reject-category "cache-lengths wrapper borrow blocks typed release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! wrapped-cache-lengths-shell)))
+(check "length wrappers borrowed owners remain live"
+       (and (= 1 (g3t-test-lengths-clone-state wrapped-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-state
+                   wrapped-cache-lengths-native))))
+(check "length wrappers clone borrows end"
+       (and (= 0 (g3t-test-lengths-clone-borrow-end wrapped-lengths-borrow))
+            (= 0 (g3t-test-cache-lengths-clone-borrow-end
+                   wrapped-cache-lengths-borrow))))
+(define wrapped-length-source-borrow
+  (g3t-test-output-borrow-begin wrapped-native-output))
+(check "length wrappers source borrow begins"
+       (not (null? wrapped-length-source-borrow)))
+(reject-category "lengths wrapper rejects borrowed output" 'invalid-state
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(reject-category "cache-lengths wrapper rejects borrowed output" 'invalid-state
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(check "length wrappers source borrow preserves owners"
+       (and (= 1 (live-length-shells 'lengths))
+            (= 1 (live-length-shells 'cache-lengths))
+            (= 1 (g3t-test-live-lengths-clones))
+            (= 1 (g3t-test-live-cache-lengths-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(check "length wrappers source borrow ends"
+       (= 0 (g3t-test-output-borrow-end wrapped-length-source-borrow)))
 (reject-category "RNG wrapper rejects forged output" 'invalid-argument
   (lambda () (g3t-generation-output-rng (vector 'g3t-output-private))))
 (reject-category "RNG wrapper rejects wrong-kind input" 'invalid-argument
@@ -975,6 +1143,32 @@
   (lambda () (g3t-generation-rng-release! wrapped-output)))
 (check "wrapped close" (g3t-generator-close! wrapped-generator))
 (check "wrapped output release" (g3t-output-release! wrapped-output))
+(check "P2/G0 length wrappers survive parent releases"
+       (and (= 0 (g3t-test-lengths-clone-value wrapped-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   wrapped-cache-lengths-native))
+            (= 1 (live-length-shells 'lengths))
+            (= 1 (live-length-shells 'cache-lengths))))
+(reject-category "lengths wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(reject-category "cache-lengths wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(check "P2/G0 generated length typed release"
+       (and (g3t-generation-tensor-release! wrapped-lengths-shell)
+            (g3t-generation-tensor-release! wrapped-lengths-shell)
+            (= -1 (g3t-test-lengths-clone-state wrapped-lengths-native))
+            (= 0 (live-length-shells 'lengths))))
+(check "P2/G0 cache length independent of generated length release"
+       (and (= 2 (g3t-test-cache-lengths-clone-value
+                   wrapped-cache-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-state
+                   wrapped-cache-lengths-native))))
+(check "P2/G0 cache length typed release"
+       (and (g3t-generation-tensor-release! wrapped-cache-lengths-shell)
+            (g3t-generation-tensor-release! wrapped-cache-lengths-shell)
+            (= -1 (g3t-test-cache-lengths-clone-state
+                   wrapped-cache-lengths-native))
+            (= 0 (live-length-shells 'cache-lengths))))
 (check "P2/G0 IDs wrapper survives parent releases"
        (and (= 1 (live-ids-shells))
             (= 1 (g3t-test-clone-state wrapped-ids-native))
@@ -1084,6 +1278,21 @@
 (define p1-zero-ids-shell (car p1-zero-ids-result))
 (define p1-zero-ids-native
   (vector-ref (g3t-prefill-entry p1-zero-ids-shell 'ids 'g3t-p1-ids) 3))
+(define p1-zero-lengths-shell
+  (g3t-generation-output-lengths p1-zero-output))
+(define p1-zero-cache-lengths-shell
+  (g3t-generation-output-cache-lengths p1-zero-output))
+(define p1-zero-lengths-native
+  (vector-ref (g3t-prefill-entry p1-zero-lengths-shell
+                                 'lengths 'g3t-p1-lengths) 3))
+(define p1-zero-cache-lengths-native
+  (vector-ref (g3t-prefill-entry p1-zero-cache-lengths-shell
+                                 'cache-lengths 'g3t-p1-lengths) 3))
+(check "P1/G0 length wrappers return exact independent 0 and 1"
+       (and (= 0 (g3t-test-lengths-clone-value p1-zero-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-value
+                   p1-zero-cache-lengths-native))
+            (not (eq? p1-zero-lengths-native p1-zero-cache-lengths-native))))
 (check "P1/G0 IDs wrapper returns one empty detached owner"
        (and (pair? p1-zero-ids-result)
             (null? (cdr p1-zero-ids-result))
@@ -1120,6 +1329,16 @@
        (= 0 (g3t-native-generator-close p1-zero-rng-context)))
 (check "P1/G0 output release" (g3t-output-release! p1-zero-output))
 (check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
+(check "P1/G0 length wrappers survive parent releases"
+       (and (= 0 (g3t-test-lengths-clone-value p1-zero-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-value
+                   p1-zero-cache-lengths-native))))
+(check "P1/G0 length wrappers typed release"
+       (and (g3t-generation-tensor-release! p1-zero-lengths-shell)
+            (g3t-generation-tensor-release! p1-zero-cache-lengths-shell)
+            (= -1 (g3t-test-lengths-clone-state p1-zero-lengths-native))
+            (= -1 (g3t-test-cache-lengths-clone-state
+                   p1-zero-cache-lengths-native))))
 (check "P1/G0 detached clone survives" (= 0 (g3t-test-clone-length p1-zero-clone)))
 (check "P1/G0 IDs wrapper survives parent releases"
        (and (= 0 (g3t-test-clone-length p1-zero-ids-native))
@@ -1528,6 +1747,22 @@
 (define g1-rooted-ids-shell (car g1-rooted-ids-result))
 (define g1-rooted-ids-native
   (vector-ref (g3t-prefill-entry g1-rooted-ids-shell 'ids 'g3t-g1-ids) 3))
+(define g1-rooted-lengths-shell
+  (g3t-generation-output-lengths g1-rooted-output))
+(define g1-rooted-cache-lengths-shell
+  (g3t-generation-output-cache-lengths g1-rooted-output))
+(define g1-rooted-lengths-native
+  (vector-ref (g3t-prefill-entry g1-rooted-lengths-shell
+                                 'lengths 'g3t-g1-lengths) 3))
+(define g1-rooted-cache-lengths-native
+  (vector-ref (g3t-prefill-entry g1-rooted-cache-lengths-shell
+                                 'cache-lengths 'g3t-g1-lengths) 3))
+(check "P1/G1 length wrappers return exact independent 1 and 2"
+       (and (= 1 (g3t-test-lengths-clone-value g1-rooted-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   g1-rooted-cache-lengths-native))
+            (not (eq? g1-rooted-lengths-native
+                      g1-rooted-cache-lengths-native))))
 (check "P1/G1 IDs wrapper returns exact one-token detached I1"
        (and (pair? g1-rooted-ids-result)
             (null? (cdr g1-rooted-ids-result))
@@ -1552,6 +1787,16 @@
        (g3t-generator-close! g1-rooted-generator))
 (check "P1/G1 rooted output release"
        (g3t-output-release! g1-rooted-output))
+(check "P1/G1 length wrappers survive parent releases"
+       (and (= 1 (g3t-test-lengths-clone-value g1-rooted-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   g1-rooted-cache-lengths-native))))
+(check "P1/G1 length wrappers typed release"
+       (and (g3t-generation-tensor-release! g1-rooted-lengths-shell)
+            (g3t-generation-tensor-release! g1-rooted-cache-lengths-shell)
+            (= -1 (g3t-test-lengths-clone-state g1-rooted-lengths-native))
+            (= -1 (g3t-test-cache-lengths-clone-state
+                   g1-rooted-cache-lengths-native))))
 (check "P1/G1 IDs wrapper survives parent releases"
        (and (= g1-id (g3t-test-clone-word g1-rooted-ids-native))
             (= 1 (g3t-test-clone-state g1-rooted-ids-native))))
