@@ -71,7 +71,7 @@ assert extension.index("(g3t-native-tensor-release created)") < extension.index(
 assert extension.index("(set! created native)") < extension.index(
     "(vector-set! canonical 2 'live)"
 )
-assert "(or (eq? kind 'input) (eq? kind 'ids)" in release
+assert all(f"(eq? kind '{kind})" in release for kind in ("input", "ids"))
 assert "(g3t-prefill-entry shell kind operation)" in release
 assert "(g3t-native-tensor-release" in release
 assert "et_g3t_private_output_ids_clone_v1" in extension

@@ -1,0 +1,68 @@
+;;; Accepted G3-T manual result transport only. The 21-role schedule belongs
+;;; to a caller; this file performs no numerical loop or public export.
+(extern ptr g3t-native-logits-reserve ptr
+        :real et_g3t_private_logits_reserve_v1)
+
+(define (g3t-logits-reserve call)
+  (let* ((operation 'g3t-logits-reserve)
+         (call-entry (g3t-prefill-call-entry call operation)))
+    (if (not (eq? (vector-ref call-entry 8) #f))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T call already owns a pending result"))
+    (let* ((shell (vector 'g3t-logits-private))
+           (entry (vector shell 'logits 'pending #f call-entry #f #f
+                          #f #f #f #f #f))
+           (next (cons entry (vector-ref g3t-registry 0)))
+           (native '()))
+      (guard (caught
+               (#t (if (not (null? native))
+                       (if (not (= 0 (g3t-native-tensor-release native)))
+                           (exit 134)))
+                   (g3t-prefill-dead! entry)
+                   (raise caught)))
+        (vector-set! g3t-registry 0 next)
+        (let ((created (g3t-native-logits-reserve (vector-ref call-entry 3))))
+          (set! native created)
+          (if (null? created)
+              (begin (g3t-prefill-dead! entry)
+                     (g3t-native-fail-raw operation)))
+          (vector-set! entry 3 created)
+          (vector-set! call-entry 8 entry)
+          shell)))))
+
+(define (g3t-call-prepare-end call)
+  (let* ((operation 'g3t-call-prepare-end)
+         (entry (g3t-prefill-call-entry call operation))
+         (result (vector-ref entry 8)))
+    (if (not (and (vector? result) (= (vector-length result) 12)
+                  (eq? (vector-ref result 1) 'logits)
+                  (eq? (vector-ref result 2) 'pending)
+                  (eq? (vector-ref result 4) entry)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T manual result linkage changed"))
+    (if (not (= 0 (g3t-native-call-prepare-end (vector-ref entry 3))))
+        (g3t-native-fail-raw operation))
+    #t))
+
+(define (g3t-call-finish call)
+  (let* ((operation 'g3t-call-finish)
+         (entry (g3t-prefill-call-entry call operation))
+         (generator-entry (vector-ref entry 4))
+         (model-entry (vector-ref entry 5))
+         (result (vector-ref entry 8)))
+    (if (not (and (vector? result) (= (vector-length result) 12)
+                  (eq? (vector-ref result 1) 'logits)
+                  (eq? (vector-ref result 2) 'pending)
+                  (eq? (vector-ref result 4) entry)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T manual result linkage changed"))
+    ;; Called immediately after native frame_commit. No recoverable work follows.
+    (if (not (= 0 (g3t-native-call-finish (vector-ref entry 3)))) (exit 134))
+    (vector-set! result 4 #f)
+    (vector-set! result 2 'live)
+    (vector-set! entry 8 #f)
+    (vector-set! generator-entry 9 #f)
+    (vector-set! model-entry 10 #f)
+    (g3t-prefill-dead! entry)
+    (vector-set! m3-call-state 0 #t)
+    #t))

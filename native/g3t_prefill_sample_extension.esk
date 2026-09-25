@@ -78,7 +78,7 @@
     (m3-call operation
       (let* ((found (g3t-generator-find shell operation))
              (kind (vector-ref found 1)))
-        (if (not (or (eq? kind 'input) (eq? kind 'ids)
+        (if (not (or (eq? kind 'input) (eq? kind 'logits) (eq? kind 'ids)
                      (eq? kind 'lengths) (eq? kind 'cache-lengths)))
             (g3t-fail-raw 'invalid-argument operation 1
                           "G3-T transport owner kind differs"))
@@ -143,9 +143,9 @@
                   (eq? (g3t-generator-find
                          (vector-ref generator-entry 0) operation)
                        generator-entry)
-                  (m3t-exact-i64? kind) (= kind 2)))
+                  (m3t-exact-i64? kind) (or (= kind 0) (= kind 2))))
         (g3t-fail-raw 'invalid-argument operation 3
-                      "G3-T leaf accepts only generate/P1/G1"))
+                      "G3-T leaf accepts only manual prefill or generate"))
     (let* ((model-entry (vector-ref generator-entry 5))
            (shell (vector 'g3t-call-private))
            (entry (vector shell 'call 'pending (vector-ref generator-entry 3)
@@ -273,10 +273,15 @@
          (generator-entry (vector-ref entry 4))
          (model-entry (vector-ref entry 5))
          (tokenizer (vector-ref entry 6))
-         (tokenizer-entry (t1-private-entry tokenizer)))
-    (if (not (eq? staged-result #f))
-        (g3t-fail-raw 'invalid-argument operation 3
-                      "G1 prefill has no manual logits result"))
+         (tokenizer-entry (t1-private-entry tokenizer))
+         (logits-entry (if (eq? staged-result #f) #f
+                           (g3t-prefill-entry staged-result 'logits operation))))
+    (if (and logits-entry
+             (not (and (eq? (vector-ref logits-entry 2) 'pending)
+                       (eq? (vector-ref logits-entry 4) entry)
+                       (eq? (vector-ref entry 8) logits-entry))))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T pending logits belong to another call"))
     (if (not (and (pair? tokenizer-entry)
                   (eq? (car tokenizer-entry) tokenizer)
                   (pair? (cdr tokenizer-entry))
@@ -297,7 +302,9 @@
                   (eq? (vector-ref generator-entry 5) model-entry)))
         (g3t-fail-raw 'invalid-state operation 2
                       "G3-T prefill binding changed before prepare"))
-    (if (not (= 0 (g3t-native-frame-prepare (vector-ref entry 3) #f)))
+    (if (not (= 0 (g3t-native-frame-prepare
+                    (vector-ref entry 3)
+                    (if logits-entry (vector-ref logits-entry 3) #f))))
         (g3t-native-fail-raw operation))
     #t))
 

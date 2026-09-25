@@ -891,6 +891,14 @@ aggregate with byte-identical 46,777 checks, fifteen source contracts, Q0
 4/4, and production-symbol exclusion of test hooks; sealed evidence is
 `g3t-manual-logits-983e424-sealed/SEAL.sha256` (`37854213...`).
 
+The [source-private manual P1 prefill leaf](g3/G3_T_MANUAL_P1_PREFILL_LEAF.md)
+is in an isolated candidate from `07588f8`. It routes an authentic kind-0
+call and owned P1 input through the existing 21 G3-N/N2/A2 roles into a
+prepared A2 cache and detached kind-3 `[1,256]` logits result. The explicit
+21-role witness remains test-local; the production G3-M orchestration
+signature is the next contract gate. Focused normal/repeat/sanitizer evidence
+and independent review are pending; no public G3-G/package/CLI claim follows.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
