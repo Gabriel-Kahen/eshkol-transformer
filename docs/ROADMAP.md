@@ -583,6 +583,15 @@ O0/O2; root verified `f32-numerator-parity-31ed68f2-20260924/SHA256SUMS`
 (`3a3999de...`). This is native compatibility, not full R7RS inexact
 fraction semantics. GCD/LCM integer-domain policy, other operation gaps,
 whole-F32 acceptance and the transformer runtime repin remain pending.
+The sealed no-change `gcd`/`lcm` audit on provisional Eshkol `4e483c89`
+found that native direct/stored DOUBLE GCD already disagree, both native
+and VM truncate fractional DOUBLE inputs, bignum paths diverge, and VM
+sanitizer catches an out-of-range float-to-int cast at `gcd 1e300 4.0`.
+F32 remains explicitly rejected on these operations until the non-F32
+integer domain, result kind, direct/stored parity, and overflow contract
+are repaired. Root verified
+`f32-gcd-lcm-domain-blocker-4e483c89-20260924/SHA256SUMS`
+(`5aa474e5...`); no transformer runtime repin is made.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
