@@ -4,6 +4,8 @@
         :real et_tr3_cycle_test_count_v1)
 (extern i64 cycle-core-live-images
         :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 cycle-monotonic-millis
+        :real et_tr3_cycle_test_monotonic_millis_v1)
 (define cycle-args (cdr (cdr trajectory-args)))
 (define cycle-horizon (string->number (car cycle-args)))
 (define cycle-path (trajectory-path "cycle" 1))
@@ -120,14 +122,21 @@
 (define cycle-native-before (cycle-native-snapshot))
 (define cycle-scheme-before (cycle-scheme-snapshot))
 (define cycle-arena-before (__arena-used))
+(define cycle-save-millis 0)
+(define cycle-restore-millis 0)
 (cycle-report 'before cycle-native-before)
 (let loop ((index 0))
   (if (= index cycle-horizon) #t
-      (begin
+      (let ((started (cycle-monotonic-millis)))
         (cycle-save)
-        (check "genuine C2 LOAD and joint restore cycle"
-               (tr3-c-checkpoint-restore-internal!
-                 cycle-receiver cycle-path trajectory-policy trajectory-report))
+        (let ((saved (cycle-monotonic-millis)))
+          (check "genuine C2 LOAD and joint restore cycle"
+                 (tr3-c-checkpoint-restore-internal!
+                   cycle-receiver cycle-path trajectory-policy trajectory-report))
+          (let ((restored (cycle-monotonic-millis)))
+            (set! cycle-save-millis (+ cycle-save-millis (- saved started)))
+            (set! cycle-restore-millis
+                  (+ cycle-restore-millis (- restored saved)))))
         (loop (+ index 1)))))
 (define cycle-arena-after (__arena-used))
 (define cycle-native-after (cycle-native-snapshot))
@@ -145,4 +154,6 @@
 (display "TR3-C CYCLE PASS horizon=") (display cycle-horizon)
 (display " checks=") (display checks)
 (display " arena_delta=") (display (- cycle-arena-after cycle-arena-before))
+(display " save_ms=") (display cycle-save-millis)
+(display " restore_ms=") (display cycle-restore-millis)
 (newline)
