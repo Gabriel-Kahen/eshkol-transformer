@@ -175,6 +175,11 @@ timeout 10s /out/factory-bridge-fixture \
 timeout 10s /out/factory-bridge-fixture failure \
   > /out/factory-bridge-failure.stdout \
   2> /out/factory-bridge-failure.stderr
+for mode in unclassified-create unclassified-close; do
+  timeout 10s /out/factory-bridge-fixture "${mode}" \
+    > "/out/factory-bridge-${mode}.stdout" \
+    2> "/out/factory-bridge-${mode}.stderr"
+done
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -I /fixed-source/inc -I native \
   native/e1b_error_consumer_bridge.c \
@@ -286,6 +291,14 @@ nm -D --undefined-only --format=posix "${evidence}/libtr3_private.so" | \
   > "${evidence}/dynamic-undefined.txt"
 printf 'TR3_PRIVATE_1\net_tr3_c_private_initialize_v1@@TR3_PRIVATE_1\net_tr3_c_private_trainer_close_v1@@TR3_PRIVATE_1\net_tr3_c_private_trainer_create_v1@@TR3_PRIVATE_1\n' | \
   cmp - "${evidence}/dynamic-defined.txt"
+cmp native/tr3_c_private_factory_raw_defined_symbols.txt \
+  "${evidence}/raw-defined.txt"
+cmp native/tr3_c_private_factory_undefined_symbols.txt \
+  "${evidence}/undefined-symbols.txt"
+cmp native/tr3_c_private_factory_dynamic_defined_symbols.txt \
+  "${evidence}/dynamic-defined.txt"
+cmp native/tr3_c_private_factory_dynamic_undefined_symbols.txt \
+  "${evidence}/dynamic-undefined.txt"
 grep -Fx 'TR3 linked private dynamic boundary PASS' \
   "${evidence}/dynamic-probe.stdout" >/dev/null
 for mode in success digest x1 missing; do
@@ -302,6 +315,10 @@ test ! -s "${evidence}/factory-bridge-success.stdout"
 test ! -s "${evidence}/factory-bridge-success.stderr"
 test ! -s "${evidence}/factory-bridge-failure.stdout"
 test ! -s "${evidence}/factory-bridge-failure.stderr"
+for mode in unclassified-create unclassified-close; do
+  test ! -s "${evidence}/factory-bridge-${mode}.stdout"
+  test ! -s "${evidence}/factory-bridge-${mode}.stderr"
+done
 test ! -s "${evidence}/initializer-retry.stdout"
 test ! -s "${evidence}/initializer-retry.stderr"
 test ! -s "${evidence}/dynamic-probe.stderr"

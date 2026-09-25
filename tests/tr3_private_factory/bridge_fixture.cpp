@@ -22,7 +22,9 @@ static int parallel_depth;
 static int copies;
 static char copied[7][16385];
 static bool source_failure;
+static bool source_unclassified;
 static bool close_busy;
+static bool close_unclassified;
 static uint64_t active_region_depth;
 static int shell_token;
 
@@ -90,6 +92,7 @@ extern "C" eshkol_tagged_value_t fake_create(
                                ET_TR3_C_REASON_RAISED_E1, 0);
     return boolean(false);
   }
+  if (source_unclassified) return boolean(false);
   return eshkol_make_ptr(reinterpret_cast<uint64_t>(&shell_token),
                          ESHKOL_VALUE_HEAP_PTR);
 }
@@ -105,6 +108,10 @@ extern "C" eshkol_tagged_value_t fake_close(eshkol_tagged_value_t trainer) {
                                ET_TR3_C_REASON_BUSY, 0);
     return boolean(false);
   }
+  if (close_unclassified) {
+    close_unclassified = false;
+    return boolean(false);
+  }
   return boolean(true);
 }
 
@@ -117,6 +124,10 @@ static bool matches(et_tr3_c_result_v1 result, uint32_t status,
 
 int main(int argc, char **argv) {
   source_failure = argc == 2 && std::strcmp(argv[1], "failure") == 0;
+  source_unclassified = argc == 2 &&
+                        std::strcmp(argv[1], "unclassified-create") == 0;
+  close_unclassified = argc == 2 &&
+                       std::strcmp(argv[1], "unclassified-close") == 0;
   static const uint8_t json[] = "{}";
   static const uint8_t directory[] = "corpus";
   et_tr3_c_create_request_v1 request{};
@@ -185,15 +196,23 @@ int main(int argc, char **argv) {
   if (source_failure) {
     if (!matches(first, ET_TR3_C_UNSUPPORTED, ET_TR3_C_STAGE_D2,
                  ET_TR3_C_REASON_RAISED_E1, false)) return 6;
+  } else if (source_unclassified) {
+    if (!matches(first, ET_TR3_C_INTERNAL, ET_TR3_C_STAGE_X1,
+                 ET_TR3_C_REASON_FOREIGN_EXCEPTION, false)) return 19;
   } else if (!matches(first, ET_TR3_C_OK, ET_TR3_C_STAGE_NONE,
                       ET_TR3_C_REASON_RAISED_E1, true)) return 7;
   if (!matches(et_tr3_c_private_trainer_create_v1(&request),
                ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_ADMISSION,
                ET_TR3_C_REASON_ATTEMPT_USED, false)) return 8;
-  if (source_failure) return parallel_depth == 0 ? 0 : 9;
+  if (source_failure || source_unclassified)
+    return parallel_depth == 0 ? 0 : 9;
   if (!matches(et_tr3_c_private_trainer_close_v1(nullptr),
                ET_TR3_C_INVALID_ARGUMENT, ET_TR3_C_STAGE_CLOSE,
                ET_TR3_C_REASON_BAD_HANDLE, false)) return 10;
+  if (close_unclassified &&
+      !matches(et_tr3_c_private_trainer_close_v1(first.handle),
+               ET_TR3_C_INTERNAL, ET_TR3_C_STAGE_CLOSE,
+               ET_TR3_C_REASON_FOREIGN_EXCEPTION, false)) return 20;
   close_busy = true;
   if (!matches(et_tr3_c_private_trainer_close_v1(first.handle),
                ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_CLOSE,

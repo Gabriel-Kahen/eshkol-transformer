@@ -1,0 +1,4 @@
+TR3_PRIVATE_1
+et_tr3_c_private_initialize_v1@@TR3_PRIVATE_1
+et_tr3_c_private_trainer_close_v1@@TR3_PRIVATE_1
+et_tr3_c_private_trainer_create_v1@@TR3_PRIVATE_1

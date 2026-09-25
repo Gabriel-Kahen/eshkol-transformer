@@ -177,6 +177,10 @@ bool invoke_create() {
   if (published) trainer_shell = answer;
   eshkol_parallel_scope_end();
   eshkol_pop_exception_handler();
+  if (!published && source_status == ET_TR3_C_OK) {
+    source_status = ET_TR3_C_INTERNAL;
+    source_reason = ET_TR3_C_REASON_FOREIGN_EXCEPTION;
+  }
   return published;
 }
 
@@ -203,7 +207,12 @@ bool invoke_close() {
   const eshkol_tagged_value_t answer = tr3_c_factory_close_source(trainer_shell);
   eshkol_parallel_scope_end();
   eshkol_pop_exception_handler();
-  return source_true(answer);
+  const bool unlinked = source_true(answer);
+  if (!unlinked && source_status == ET_TR3_C_OK) {
+    source_status = ET_TR3_C_INTERNAL;
+    source_reason = ET_TR3_C_REASON_FOREIGN_EXCEPTION;
+  }
+  return unlinked;
 }
 }  // namespace
 
