@@ -152,7 +152,7 @@
 ;;; Advisory heads hold exact, promoted shell-registry records. Slot 2 is false
 ;;; from the start of a publication until its allocation-free active-list link.
 ;;; Slot 3 roots the prepared spine before native shell creation.
-(define active-record-root (vector '() '() #t #f))
+(define active-record-root (vector '() '() #t #f '() '()))
 
 (define (shell-registry-current)
   (vector-ref shell-registry-root 0))
@@ -160,12 +160,11 @@
   (if (vector-ref active-record-root 2)
       (vector-ref active-record-root slot)
       (shell-registry-current)))
-(define (active-record-stage kind next-registry)
-  (let* ((slot (if (eq? kind 'state) 0 1))
-         (stage (vector next-registry
-                        (cons (car next-registry)
-                              (vector-ref active-record-root slot))
-                        (vector-ref active-record-root 2))))
+(define (active-record-stage slot next-registry)
+  (let ((stage (vector next-registry
+                       (cons (car next-registry)
+                             (vector-ref active-record-root slot))
+                       (vector-ref active-record-root 2))))
     (vector-set! active-record-root 3 stage)
     (vector-ref active-record-root 3)))
 (define (active-record-unlink! slot raw)
@@ -178,6 +177,20 @@
                (vector-set! active-record-root slot (cdr remaining)))
            #t)
           (else (loop remaining (cdr remaining))))))
+(define (active-record-unlink-record! slot record)
+  (let loop ((previous #f) (remaining (vector-ref active-record-root slot)))
+    (cond ((null? remaining) #t)
+          ((eq? record (car remaining))
+           (if previous
+               (set-cdr! previous (cdr remaining))
+               (vector-set! active-record-root slot (cdr remaining)))
+           #t)
+          (else (loop remaining (cdr remaining))))))
+(define (shell-for-raw-source kind)
+  (cond ((eq? kind 'state) (active-record-source 0))
+        ((eq? kind 'module) (active-record-source 1))
+        ((eq? kind 'state-tensor) (active-record-source 4))
+        (else (shell-registry-current))))
 ;; Private construction records are retained in a root holder. Callers receive
 ;; only the admitted native ledger identity, never the mutable record.
 (define construction-registry-root (vector '() #f))
@@ -419,22 +432,30 @@
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'shell-for-raw
             "released registry marker cannot be published" '())
-      (let find ((entries (shell-registry-current)))
+      (let find ((entries (shell-for-raw-source kind)))
         (cond
       ((null? entries)
+       ;; The native tensor creator resolves its owner shell. Resolve it
+       ;; before taking the registry snapshot, so a nested state publication
+       ;; cannot be dropped or replace this entry's pending stage.
+       (if (eq? kind 'state-tensor)
+           (shell-for-raw 'state (vector-ref raw 1)) #t)
        (let* ((entry (if (or (eq? kind 'module) (eq? kind 'handle))
                          (vector #f kind raw (active-construction))
                          (vector #f kind raw)))
               (next-registry (cons entry (shell-registry-current)))
-              (active? (or (eq? kind 'state) (eq? kind 'module)))
+              (active-slot (cond ((eq? kind 'state) 0)
+                                 ((eq? kind 'module) 1)
+                                 ((eq? kind 'state-tensor) 4)
+                                 (else #f)))
               (stage #f)
               (shell
-                (if active?
+                (if active-slot
                     (guard (caught
                              (#t
-                               (if stage (vector-set! active-record-root 3 #f))
+                               (vector-set! active-record-root 3 #f)
                                (raise caught)))
-                      (set! stage (active-record-stage kind next-registry))
+                      (set! stage (active-record-stage active-slot next-registry))
                       (native-create-shell kind raw))
                     (native-create-shell kind raw))))
          ;; The stage holder promoted both the registry spine and active node.
@@ -449,7 +470,7 @@
          (if stage
              (begin
                (vector-set! active-record-root
-                            (if (eq? kind 'state) 0 1) (vector-ref stage 1))
+                            active-slot (vector-ref stage 1))
                (vector-set! active-record-root 3 #f)
                (vector-set! active-record-root 2 (vector-ref stage 2))))
          (index-published-shell!
@@ -470,23 +491,36 @@
           (eq? raw dead-state-entry-raw))
       (fail 'internal 'state-entry-shell-for-raw
             "released registry marker cannot be published" '())
-      (let find ((records (shell-registry-current)))
+      (let find ((records (active-record-source 5)))
         (cond
           ((null? records)
            (let* ((record (vector #f 'entry raw state))
-                  (next-registry (cons record (shell-registry-current))))
-             (require-native-context 'state-entry-shell-for-raw)
-             (native-check
-               'state-entry-shell-for-raw
-               (p1-native-state-entry-create native-context state-shell))
-             (let ((shell (p1-native-result-ptr native-context)))
-               (vector-set! record 0 shell)
-               (vector-set! shell-registry-root 0 next-registry)
-               (index-published-shell!
-                 (canonical-published-shell (car (shell-registry-current)))
-                 (car (shell-registry-current)))
-               ;; Return only the canonical post-barrier identity.
-               (vector-ref (car (shell-registry-current)) 0))))
+                  (next-registry (cons record (shell-registry-current)))
+                  (stage #f)
+                  (shell
+                    (guard (caught
+                             (#t
+                               (vector-set! active-record-root 3 #f)
+                               (raise caught)))
+                      (set! stage (active-record-stage 5 next-registry))
+                      (require-native-context 'state-entry-shell-for-raw)
+                      (native-check
+                        'state-entry-shell-for-raw
+                        (p1-native-state-entry-create native-context state-shell))
+                      (p1-native-result-ptr native-context))))
+             (set! next-registry (vector-ref stage 0))
+             (set! record (car next-registry))
+             (vector-set! record 0 shell)
+             (vector-set! active-record-root 2 #f)
+             (vector-set! shell-registry-root 0 next-registry)
+             (vector-set! active-record-root 5 (vector-ref stage 1))
+             (vector-set! active-record-root 3 #f)
+             (vector-set! active-record-root 2 (vector-ref stage 2))
+             (index-published-shell!
+               (canonical-published-shell (car (shell-registry-current)))
+               (car (shell-registry-current)))
+             ;; Return only the canonical post-barrier identity.
+             (vector-ref (car (shell-registry-current)) 0)))
           ((and (eq? (vector-ref (car records) 1) 'entry)
                 (= (vector-length (car records)) 4)
                 (eq? (vector-ref (car records) 2) raw)
@@ -538,11 +572,13 @@
               ((and (eq? kind 'state-tensor)
                     (state-tensor-value? raw)
                     (eq? (vector-ref raw 1) state))
+               (active-record-unlink-record! 4 record)
                (vector-set! record 2 dead-state-tensor-raw))
               ((and (eq? kind 'entry)
                     (= (vector-length record) 4)
                     (eq? (vector-ref record 3) state)
                     (identity-member-local? raw entries))
+               (active-record-unlink-record! 5 record)
                (vector-set! record 2 dead-state-entry-raw)
                (vector-set! record 3 dead-state-raw))
               (else #t))
@@ -3375,6 +3411,7 @@
     (if (null? remaining)
         #t
         (begin
+          (active-record-unlink-record! 5 (car remaining))
           (vector-set! (car remaining) 2 dead-state-entry-raw)
           (vector-set! (car remaining) 3 dead-state-raw)
           (loop (cdr remaining))))))

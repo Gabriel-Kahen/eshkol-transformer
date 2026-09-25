@@ -11,9 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "internal/p1/lib/transformer/module.esk"
 WRAPPER = ROOT / "native/tr3_p1_fixed_set_extension.esk"
 MANIFEST = ROOT / "native/tr3_p1_fixed_set_source_closure.txt"
-# Reviewed integration through 6caae36 retains the exact TR3 leaf while P1
-# repairs canonical shell publication and adds advisory active-record lists.
-COMPOSED_BASE_SHA256 = "482f0fb96372d8c0b69736771dc598d355c0c4065d483e070b66aa1b479d8fd5"
+# Reviewed P1 active-record source retains the exact TR3 fixed-set leaf.
+COMPOSED_BASE_SHA256 = "3b8599b07affc3f98bf43a06bb08a92d37b59101cbd5f51b4437f334a675b96b"
 
 
 def require(condition, message):

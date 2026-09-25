@@ -40,3 +40,33 @@ The pinned strict-O0 focused proof passed poisoned nested/sibling publication
 (17 checks), construction abort/seal (23 checks), and registry atomicity
 (169 checks). Logs and the compressed generated IR are sealed under
 `/home/gabe/.codex/evidence/eshkol-transformer/p1-active-record-candidate-focused-20260925/`.
+
+## State-tensor and entry lookup leaf
+
+The separate raw-identity candidate extends the same advisory root with two
+heads of canonical promoted records: live state tensors and live state entries.
+`shell-for-raw` uses the tensor head; `state-entry-shell-for-raw` uses the entry
+head and still rechecks exact raw and owner-state identity. Both fall back to
+the append-only registry whenever the shared validity bit is false. No moving
+raw object is used as a hash-table key, and native `find_record` is unchanged.
+
+Tensor shell creation resolves its owner state before preparing the registry
+snapshot and stage. Entry and tensor records are linked only after registry
+publication; any failed preparation/native creation clears the pending root.
+Successful state release and pre-clone entry tombstoning unlink records before
+changing their raw markers. A lost advisory link leaves the validity bit false
+and full-registry lookup authoritative. All existing shell validation and
+release predicates remain on the read paths.
+
+The pinned LLVM 21 strict-O0 focused proof passes 24 poisoned publication,
+forged and stale checks, plus 11 test-only diagnostic checks. The diagnostic
+copy inserts only an extra private slot to simulate a stage failure and missing
+advisory heads: it verifies pending cleanup, exact retry identity, and
+full-registry fallback while invalid. The production root has no diagnostic
+slot or public ABI change. The native normal/sanitized suite passes, including
+139 allocation-failpoint checks for state-entry and state-tensor token/record
+creation. E3/P1, TR3 fixed-set, prepared-split and generated-root checks pass.
+Evidence is under
+`/home/gabe/.codex/evidence/eshkol-transformer/p1-raw-identity-focused-20260925/`.
+The full P1 package gate and genuine 1,024/8,192-cycle performance and memory
+horizons have not been run on this leaf.

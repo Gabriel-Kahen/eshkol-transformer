@@ -1,0 +1,63 @@
+;;; Test-only trusted-root overlay exposes a diagnostic control in slot 73.
+;;; Production module source and its public ABI have no such control.
+(require transformer.module)
+(require p1_test.tensor_provider)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "P1 index fallback FAIL: ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define module (module-create-fixture-internal))
+(module-register-parameter-internal!
+  module "weight"
+  (fixture-tensor-internal '(2) 'f32 'cpu (vector 'index 'fallback)))
+(define state (module-state-dict module))
+(define path (car (state-dict-paths state)))
+
+;; A stage failure occurs after the pending root has been installed, but
+;; before native creation or authoritative registry publication.
+(p1-index-test-control! 'fail-stage)
+(check "stage allocation failure is explicit"
+       (guard (raised (#t (eq? raised 'index-stage-failed)))
+         (state-dict-entries-internal state)
+         #f))
+(check "failed stage clears pending root"
+       (p1-index-test-control! 'pending-clear))
+(define entry (car (state-dict-entries-internal state)))
+(define tensor (state-dict-tensor state path))
+(check "retry publishes exact entry"
+       (eq? entry (car (state-dict-entries-internal state))))
+(check "retry publishes exact tensor"
+       (eq? tensor (state-dict-tensor state path)))
+
+;; Model lost advisory index publication: both heads are absent and the
+;; validity bit forbids trusting them. The append-only registry remains.
+(p1-index-test-control! 'invalidate)
+(check "invalid entry head falls back to exact registry record"
+       (eq? entry (car (state-dict-entries-internal state))))
+(check "invalid tensor head falls back to exact registry record"
+       (eq? tensor (state-dict-tensor state path)))
+
+(define later-state (module-state-dict module))
+(define later-path (car (state-dict-paths later-state)))
+(define later-entry (car (state-dict-entries-internal later-state)))
+(define later-tensor (state-dict-tensor later-state later-path))
+(check "publication with invalid index keeps registry authority for entry"
+       (eq? later-entry (car (state-dict-entries-internal later-state))))
+(check "publication with invalid index keeps registry authority for tensor"
+       (eq? later-tensor (state-dict-tensor later-state later-path)))
+(check "failed publication never revalidates incomplete index"
+       (p1-index-test-control! 'invalid))
+(check "first state releases" (state-dict-release! state))
+(check "second state releases" (state-dict-release! later-state))
+
+(display "P1 INDEX FALLBACK PASS: ")
+(display checks)
+(display " checks")
+(newline)

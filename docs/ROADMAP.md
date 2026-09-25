@@ -1346,6 +1346,20 @@ match the manifest byte for byte; sealed evidence is
 aggregate and CI verification remain pending. The earlier integration full P1
 gate hit its default 360-second per-compile timeout; the clean candidate's
 supported 900-second-bound full rerun above passed.
+The isolated [state-tensor/entry raw-identity leaf](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md#state-tensor-and-entry-lookup-leaf)
+adds two live advisory record heads for the two largest measured shell lookups,
+with exact registry fallback and no native `find_record` change. Its pinned
+strict-O0 IR/poisoned publication proof passes 24 checks, the test-only
+invalid-index/stage-failure overlay passes 11, and the native normal/sanitized
+suite passes 139 failpoint checks; E3/P1, TR3 fixed-set, prepared-split and
+generated-root checks pass. The exact clean `83eedb2` full supported P1
+package gate passed in 3,701 seconds with 3,983,988 KiB peak RSS: two 419-check
+P1 runs, two 169-check registry-atomicity runs, 274 native identity checks,
+139 failpoints, 23 construction checks, 24 poisoned publication checks and
+11 invalid-index/stage-failure fallback checks. The 232-file seal is
+`p1-raw-identity-full-package-83eedb2-20260925/SHA256SUMS` (`44071bc6...`).
+The genuine 1,024/8,192-cycle continuation horizons and integrated exact-head
+CI remain pending on this leaf.
 
 ## Wave 4 — practical pretraining and performance
 

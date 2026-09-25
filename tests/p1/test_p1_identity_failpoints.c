@@ -277,6 +277,34 @@ int main(void) {
         "successful retry removes the exact pre-bind entry count");
   check(tombstone_count(context) == tombstones + 1,
         "successful retry creates one state-entry tombstone");
+  baseline = live_count(context);
+  tombstones = tombstone_count(context);
+  fail_calloc_after = 0;
+  check(et_p1_private_state_tensor_create_v1(context, state) ==
+            ET_P1_STATUS_INTERNAL,
+        "state tensor token allocation failure is explicit");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_ALLOCATION_FAILED,
+        "state tensor token failure has exact status data");
+  check(et_p1_private_result_ptr_v1(context) == NULL,
+        "state tensor token failure publishes no identity");
+  check(live_count(context) == baseline,
+        "state tensor token failure preserves live count");
+  check(tombstone_count(context) == tombstones,
+        "state tensor token failure creates no tombstone");
+  fail_calloc_after = 1;
+  check(et_p1_private_state_tensor_create_v1(context, state) ==
+            ET_P1_STATUS_INTERNAL,
+        "state tensor record allocation failure is explicit");
+  check(et_p1_private_error_code_v1(context) ==
+            ET_P1_CODE_ALLOCATION_FAILED,
+        "state tensor record failure has exact status data");
+  check(et_p1_private_result_ptr_v1(context) == NULL,
+        "state tensor record failure publishes no identity");
+  check(live_count(context) == baseline,
+        "state tensor record failure preserves live count");
+  check(tombstone_count(context) == tombstones,
+        "state tensor record failure creates no tombstone");
   check(et_p1_private_state_tensor_create_v1(context, state) ==
             ET_P1_STATUS_OK,
         "release-nonallocation state tensor identity is created");

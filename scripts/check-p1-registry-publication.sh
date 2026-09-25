@@ -32,7 +32,7 @@ require_exact_count() {
 
 for source in "${template}" "${generated}"; do
   require_exact_count 1 "(define shell-registry-root (vector '()))" "${source}"
-  require_exact_count 1 "(define active-record-root (vector '() '() #t #f))" "${source}"
+  require_exact_count 1 "(define active-record-root (vector '() '() #t #f '() '()))" "${source}"
   require_exact_count 1 "(vector-ref shell-registry-root 0)" "${source}"
   require_exact_count 2 \
     "(vector-set! shell-registry-root 0 next-registry)" "${source}"
@@ -72,7 +72,9 @@ source = Path(sys.argv[1]).read_text()
 publication = source.split("(define (shell-for-raw kind raw)", 1)[1].split(
     "(define (state-entry-shell-for-raw", 1)[0]
 ordered = (
-    "(active-record-stage kind next-registry)",
+    "(shell-for-raw 'state (vector-ref raw 1))",
+    "(next-registry (cons entry (shell-registry-current)))",
+    "(active-record-stage active-slot next-registry)",
     "(native-create-shell kind raw)",
     "(vector-set! entry 0 shell)",
     "(vector-set! active-record-root 2 #f)",
@@ -83,6 +85,36 @@ ordered = (
 positions = [publication.index(witness) for witness in ordered]
 if positions != sorted(positions):
     raise SystemExit("active-record staging/publication order changed")
+entry = source.split("(define (state-entry-shell-for-raw", 1)[1].split(
+    "(define (raw-for-shell", 1)[0]
+entry_ordered = (
+    "(active-record-source 5)",
+    "(active-record-stage 5 next-registry)",
+    "(p1-native-state-entry-create native-context state-shell)",
+    "(vector-set! record 0 shell)",
+    "(vector-set! active-record-root 2 #f)",
+    "(vector-set! shell-registry-root 0 next-registry)",
+    "(vector-set! active-record-root 5 (vector-ref stage 1))",
+    "(vector-set! active-record-root 2 (vector-ref stage 2))",
+)
+positions = [entry.index(witness) for witness in entry_ordered]
+if positions != sorted(positions):
+    raise SystemExit("state-entry staging/publication order changed")
+if "(eq? (vector-ref (car records) 2) raw)" not in entry or \
+        "(eq? (vector-ref (car records) 3) state)" not in entry:
+    raise SystemExit("state-entry exact raw/owner identity check changed")
+if "(active-record-source 4)" not in source or \
+        "(shell-registry-current)" not in source.split(
+            "(define (active-record-source slot)", 1)[1].split(
+                "(define (active-record-stage", 1)[0]:
+    raise SystemExit("active raw index lost its registry fallback")
+compaction = source.split("(define (compact-released-state-shells! state)", 1)[1].split(
+    "(define (bounded-acyclic-list-spine?", 1)[0]
+if compaction.index("(active-record-unlink-record! 4 record)") > \
+        compaction.index("(vector-set! record 2 dead-state-tensor-raw)") or \
+        compaction.index("(active-record-unlink-record! 5 record)") > \
+        compaction.index("(vector-set! record 2 dead-state-entry-raw)"):
+    raise SystemExit("active raw records survive state release")
 PY
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/p1-registry-publication.XXXXXX")"
@@ -95,7 +127,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${tmp}/native" "${tmp}/aot"
+mkdir -p "${tmp}/native" "${tmp}/aot" "${tmp}/overlay/transformer" \
+  "${tmp}/fallback"
 "${cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion \
   -Wsign-conversion -Wshadow -fPIC -fvisibility=hidden -fno-common \
   -DET_P1_TRUSTED_BUILD=1 -I "${PROJECT_ROOT}/native" \
@@ -275,7 +308,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     roles.add(role)
     barriers = [i for i, line in enumerate(lines)
                 if "call i32 @eshkol_region_write_barrier_checked_v1" in line]
-    expected_barriers = 7 if role == "generic-shell" else 2
+    expected_barriers = 7
     if len(barriers) != expected_barriers:
         raise SystemExit(
             f"IR proof failed: {name} has {len(barriers)} write barriers, "
@@ -321,7 +354,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     if root_barrier is None:
         raise SystemExit(
             f"IR proof failed: {name} lacks a root-vector next-registry barrier")
-    entry_barrier = barriers[1] if role == "generic-shell" else barriers[0]
+    entry_barrier = barriers[1]
     if entry_barrier >= root_barrier:
         raise SystemExit(f"IR proof failed: {name} root publication ordering changed")
     entry_prior = "\n".join(lines[max(0, entry_barrier - 3):entry_barrier])
@@ -332,29 +365,33 @@ for ordinal, function in enumerate(publication_functions, 1):
     successor_label = root_flow["successor_label"]
     successor_index = root_flow["successor_index"]
     successor = root_flow["successor"]
-    canonical_tail = successor if role == "state-entry-shell" else lines[root_barrier + 1:]
+    canonical_tail = lines[root_barrier + 1:]
     if not any("ptr %shell-registry-current_cap" in line
                and " load " in f" {line} " for line in canonical_tail):
         raise SystemExit(
             f"IR proof failed: {name} root barrier does not enter canonical readback")
-    if role == "generic-shell":
-        # The staged active node and validity marker are root-owned before
-        # publication. Their three checked stores follow the registry store.
-        # Each has the normal checked success/failure control flow, and the
-        # caller still returns a registry-read shell after that tail.
-        if barriers[3] != root_barrier:
-            raise SystemExit(f"IR proof failed: {name} active tail ordering changed")
-        for index in barriers[4:]:
-            if not any("ptr %active-record-root_cap" in line
-                       for line in lines[max(0, index - 256):index]):
-                raise SystemExit(f"IR proof failed: {name} active tail lost its root")
+    # The staged active node and validity marker are root-owned before
+    # publication. Their three checked stores follow the registry store.
+    # Each has the normal checked success/failure control flow, and the
+    # caller still returns a registry-read shell after that tail.
+    if barriers[3] != root_barrier:
+        raise SystemExit(f"IR proof failed: {name} active tail ordering changed")
+    for index in barriers[4:]:
+        if not any("ptr %active-record-root_cap" in line
+                   for line in lines[max(0, index - 256):index]):
+            raise SystemExit(f"IR proof failed: {name} active tail lost its root")
     if any("%shell.load" in line for line in lines[root_barrier + 1:]):
         raise SystemExit(f"IR proof failed: {name} reuses pre-barrier shell identity")
     returns = [(i, line) for i, line in enumerate(lines)
                if line.lstrip().startswith("ret %eshkol_tagged_value")]
-    if len(returns) != 1 or "%cond_result" not in returns[0][1]:
+    if len(returns) != 1:
         raise SystemExit(f"IR proof failed: {name} does not return canonical branch result")
-    cond_phis = [line for line in lines if "%cond_result = phi" in line]
+    return_match = re.search(
+        r"ret %eshkol_tagged_value (%cond_result[0-9]*)$", returns[0][1])
+    if return_match is None:
+        raise SystemExit(f"IR proof failed: {name} does not return canonical branch result")
+    cond_phis = [line for line in lines if re.search(
+        rf"{re.escape(return_match.group(1))} = phi %eshkol_tagged_value", line)]
     if len(cond_phis) != 1 or "%vref_result" not in cond_phis[0]:
         raise SystemExit(f"IR proof failed: {name} return phi bypasses registry readback")
 
@@ -395,9 +432,91 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/aot/registry-proof" \
   >"${tmp}/runtime.stdout" 2>"${tmp}/runtime.stderr"
 test ! -s "${tmp}/runtime.stderr"
-grep -Fx "P1 REGISTRY PUBLICATION PASS: 17 checks" \
+grep -Fx "P1 REGISTRY PUBLICATION PASS: 24 checks" \
   "${tmp}/runtime.stdout" >/dev/null
+
+# The diagnostic copy differs from the trusted root only at four asserted
+# insertion sites. Its extra slot is private to this test; the production
+# source, generated template, and ABI are checked above and never altered.
+python3 - "${generated}" "${tmp}/overlay/transformer/module.esk" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+def inject(old, new):
+    global source
+    if source.count(old) != 1:
+        raise SystemExit(f"diagnostic overlay lost exact anchor: {old!r}")
+    source = source.replace(old, new)
+
+inject("         module-construction-parameters-internal)\n",
+       "         module-construction-parameters-internal\n"
+       "         p1-index-test-control!)\n")
+inject("(define active-record-root (vector '() '() #t #f '() '()))\n",
+       "(define active-record-root (vector '() '() #t #f '() '()))\n"
+       "(define p1-index-test-fail-stage? #f)\n")
+inject("    (vector-set! active-record-root 3 stage)\n"
+       "    (vector-ref active-record-root 3)))",
+       "    (vector-set! active-record-root 3 stage)\n"
+       "    (if p1-index-test-fail-stage?\n"
+       "        (begin (set! p1-index-test-fail-stage? #f)\n"
+       "               (raise 'index-stage-failed)) #t)\n"
+       "    (vector-ref active-record-root 3)))")
+inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\n"
+       "  (lambda (identity)\n"
+       "    (construction-prepare-eval-guarded! identity))\n"
+       "  (lambda (identity)\n"
+       "    (construction-seal-prepared! identity))\n"
+       "  )))",
+       "  ;; Append-only source-private G3-C4 construction split, slots 71..72.\n"
+       "  (lambda (identity)\n"
+       "    (construction-prepare-eval-guarded! identity))\n"
+       "  (lambda (identity)\n"
+       "    (construction-seal-prepared! identity))\n"
+       "  ;; Test-only slot 73 models failed advisory linkage.\n"
+       "  (lambda (mode)\n"
+       "    (cond ((eq? mode 'fail-stage)\n"
+       "           (set! p1-index-test-fail-stage? #t) #t)\n"
+       "          ((eq? mode 'pending-clear)\n"
+       "           (not (vector-ref active-record-root 3)))\n"
+       "          ((eq? mode 'invalidate)\n"
+       "           (vector-set! active-record-root 2 #f)\n"
+       "           (vector-set! active-record-root 4 '())\n"
+       "           (vector-set! active-record-root 5 '()) #t)\n"
+       "          ((eq? mode 'invalid)\n"
+       "           (not (vector-ref active-record-root 2)))\n"
+       "          (else #f)))\n"
+       "  )))")
+source += "\n(define (p1-index-test-control! mode)\n"
+source += "  ((vector-ref p1-trusted-surface 73) mode))\n"
+Path(sys.argv[2]).write_text(source)
+PY
+
+(cd "${tmp}/fallback" &&
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="${tmp}/cache-fallback" ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+    ESHKOL_CXX_COMPILER="${cxx}" \
+    timeout --foreground --signal=TERM --kill-after=5s \
+      "${compiler_timeout}s" "${runner}" \
+      --strict-types --optimize 0 --no-stdlib \
+      -I "${tmp}/overlay" -I "${PROJECT_ROOT}/internal/p1/lib" \
+      -I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native" \
+      -I "${PROJECT_ROOT}/tests/p1/providers" -L "${tmp}/native" \
+      --lib eshkol_transformer_p1_identity \
+      "${PROJECT_ROOT}/tests/p1/registry_index_fallback_test.esk" \
+      -o "${tmp}/fallback/index-fallback" \
+      >"${tmp}/fallback/compile.stdout" \
+      2>"${tmp}/fallback/compile.stderr")
+test -x "${tmp}/fallback/index-fallback"
+test ! -s "${tmp}/fallback/compile.stderr"
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
+  30s "${tmp}/fallback/index-fallback" \
+  >"${tmp}/fallback/runtime.stdout" 2>"${tmp}/fallback/runtime.stderr"
+test ! -s "${tmp}/fallback/runtime.stderr"
+grep -Fx "P1 INDEX FALLBACK PASS: 11 checks" \
+  "${tmp}/fallback/runtime.stdout" >/dev/null
 
 cat "${tmp}/publication-witness.txt"
 printf 'poison-nested-sibling-runtime=true\n'
+printf 'diagnostic-invalid-index-fallback-runtime=true\n'
 printf 'P1 REGISTRY PUBLICATION PROOF PASS\n'
