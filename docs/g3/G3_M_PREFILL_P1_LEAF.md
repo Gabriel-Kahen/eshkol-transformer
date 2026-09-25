@@ -29,3 +29,11 @@ old detached logits, and cover forged/wrong-kind/dead/P2/busy input or
 context, I2/A2 allocation and old-cache-borrow rollback, ownership release,
 normal/repeat/sanitizer, Q0 and exact source closure. The next contract gate
 for broader G3-M is manual P2/decode and cross-operation state transitions.
+
+Source `143b037`/tree `22475f8` passed the pinned f31/LLVM21 network-none
+normal, repeat and ASan+UBSan+LSan gate with 46,852 byte-identical checks,
+empty runtime/compiler stderr, 17 source contracts, Q0 4/4 and production
+native test-symbol exclusion. One sanitizer launch used `detect_leaks=1`.
+External evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/g3m-prefill-p1-143b037-20260925/SEAL.sha256`
+(SHA256 `ffa6d997b61223379054f27d9b5a4886b3e819069c60532887387f28218a7ea4`).
