@@ -1101,9 +1101,14 @@ cross-commit 60.03/147.59-second profile. Root reviewed source and tests and
 integrated identical trusted source at `6caae36`. E3/TR3/prepared structural
 hash pins were repaired to the separately reviewed E3 active-list,
 construction-handle identity, indexed-shell runtime symbols, and I2 rollback
-changes; all three checks pass. The full pinned package and 8,192-cycle
-resource horizon remain open, and the cross-commit timing comparison is not
-an exact-base performance proof.
+changes; all three checks pass. The full pinned P1 package gate on immutable
+`8b5b125` passed with the supported 900-second per-compile allowance:
+E1B-integrated packaging, structural/native/registry checks, root-publication
+IR and poison proof, sanitizers, negatives, atomicity and determinism. It took
+3370.85 seconds, peaked at 3,958,628 KiB RSS, and is sealed at
+`p1-full-package-8b5b125-900-20260925/SHA256SUMS` (`ab2fbb1e...`). The
+8,192-cycle resource horizon remains open; the cross-commit timing comparison
+is not an exact-base performance proof.
 Hosted CI run `36125833885` on PR #126 exposed three new P1 hash-table
 runtime references in the I2 aggregate that its exact undefined-symbol
 manifest did not yet admit. The standalone P1 object at `76299fd` matches
