@@ -1,0 +1,5 @@
+;;; Source-private TR3/C2 aggregate. All retained receivers, detached owners,
+;;; and restore authority live in one compiled identity universe. This root
+;;; installs no public trainer facade.
+(load "tr3_c_checkpoint_restore_root.esk")
+(load "tr3_c_trainer_load_state_extension.esk")

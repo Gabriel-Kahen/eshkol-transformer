@@ -481,6 +481,14 @@ Root verified `tr3-c-snapshot-composer-final-4534b21/SHA256SUMS`
 strict O0 AOT runtime with 27 checks and 42 tensors. Public trainer state,
 serialization, restore invocation and resume acceptance remain pending.
 
+The [TR3-C private root closure](TR3_C_PRIVATE_ROOT.md) now source-composes the
+accepted lease, snapshot, C2 SAVE/LOAD and result-cell restore under one
+identity. Its pinned internal-object gate fixes the 46-source/334-undefined
+boundary and exercises a real construct/snapshot/file/restore continuation.
+The canonical shared-library package path still fails in the pinned compiler
+at `Tail transfer: no public entry` for accepted private functions; bridge,
+localization and public trainer construction remain blocked on that boundary.
+
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
 Ubuntu 22.04/LLVM 21 image with networking disabled. E3 private package policy,
