@@ -1,0 +1,42 @@
+# Versioned trainer facade package boundary
+
+The canonical `lib/transformer/trainer.esk` now provides the A0
+`trainer-create resolved tokenizer dataset model optimizer` constructor and
+`trainer-release! trainer` operation, alongside the unchanged C2
+`trainer-state-release! state`. `trainer-release!` ends the exclusive lease
+while leaving all five caller-owned receivers live. Dropping the trainer
+reference alone does not release its lease. Forged or repeated release is
+`invalid-argument`; a busy trainer is `invalid-state`. The public E1 operation
+is `trainer-release!`, and the private unenroll operation is not exposed as
+an error cause. These semantics are implemented by the reviewed private
+same-aggregate constructor and unenroll path.
+
+This canonical facade **requires** the single
+`libeshkol_transformer_tr3_public_installed.a` aggregate built by
+`scripts/test-tr3-public-installed-linked.sh`. Its bridge adds the C2
+state-release entry to the reviewed TR3 release candidate in the same
+registry-owning object. The linked caller imports `transformer.trainer`,
+constructs authentic operands through test-only same-aggregate entries,
+checks create/release/re-lease and negative identity/lease behavior, and
+checks the retained C2 state-release name. The two copied facade files and
+the archive form one versioned package tuple. The prior 48-source candidate and
+the production initializer-only TR3 package remain unchanged.
+
+The accepted C2 archive is a distinct versioned tuple. `scripts/build-c2.sh`
+copies the byte-pinned pre-TR3 `transformer/trainer.esk` into its artifact's
+`facades` directory; the source fixture is
+`tests/c2/legacy_facades/transformer/trainer.esk` (SHA-256
+`b2f3818cc7645a9accf397479e3e4f859d73b635e39752310e76cd067921b9a8`).
+To use `libeshkol_transformer_wave2.a`, put its sibling `facades` directory
+before `lib` in the Eshkol include path. `scripts/test-c2-public.sh` checks
+the copied bytes and depfile selection, then runs its original exact C2
+archive, public API, runtime, and deterministic rebuild assertions. The C2
+object, archive, symbol manifests, and original trainer facade bytes are not
+changed. A client migrating to the canonical trainer facade must also switch
+to the single TR3 aggregate; mixing that facade with the C2 archive is an
+unsupported package tuple.
+
+This is an intermediate trainer facet. Ordinary installed producers for all
+five operands, `trainer-step!`, training/evaluation, state/load, and resume
+remain separate work. The linked test-only producers do not make those APIs
+installed or accepted.

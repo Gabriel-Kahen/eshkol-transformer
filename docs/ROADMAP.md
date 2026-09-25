@@ -1129,6 +1129,14 @@ exact symbol boundary; evidence is sealed at
 Root independently reviewed the prior bridge, source wrapper, linked scripts,
 fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.
+The [versioned public trainer facet](TR3_PUBLIC_INSTALLED_FACET.md) is an
+isolated candidate: canonical `transformer.trainer` adds A0 `trainer-create`
+and `trainer-release!` to C2 `trainer-state-release!` only with one new
+same-registry TR3 aggregate. The C2 archive stays paired with its exact
+pre-TR3 trainer facade, copied into the C2 artifact and selected by the C2
+public gate. Linked proof of both package tuples is pending. Ordinary
+installed operand producers, step/train/evaluate, state/load and resume
+remain outside this facet.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
