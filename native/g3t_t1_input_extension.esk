@@ -1,0 +1,34 @@
+;;; Source-private same-aggregate T1 prompt copy; no public facade.
+(extern ptr g3t-native-input-from-t1 ptr
+        :real et_g3t_private_input_from_t1_v1)
+
+(define (g3t-generation-t1-input-create encoded)
+  (let ((operation 'g3t-generation-t1-input-create))
+    (m3-call operation
+      (if (not (t1-wave1-tensor-admitted? encoded))
+          (g3t-fail-raw 'invalid-argument operation 1
+                        "G3-T prompt must be a same-aggregate T1 tensor"))
+      (let* ((shell (vector 'g3t-input-private))
+             (ledger (vector #f))
+             (entry (vector shell 'input 'pending #f #f #f #f #f #f #f
+                            ledger #f))
+             (next (cons entry (vector-ref g3t-registry 0)))
+             (native '()))
+        (guard (caught
+                 (#t
+                   (if (not (null? native))
+                       (if (not (= 0 (g3t-native-tensor-release native)))
+                           (exit 134)))
+                   (g3t-prefill-dead! entry)
+                   (raise caught)))
+          (vector-set! g3t-registry 0 next)
+          (let* ((canonical (car (vector-ref g3t-registry 0)))
+                 (canonical-ledger (vector-ref canonical 10))
+                 (created (g3t-native-input-from-t1 encoded)))
+            (set! native created)
+            (if (null? created) (g3t-native-fail-raw operation))
+            (vector-set! canonical-ledger 0 created)
+            (vector-set! canonical 3 created)
+            (vector-set! canonical 2 'live)
+            (vector-set! canonical 10 #f)
+            (vector-ref canonical 0)))))))

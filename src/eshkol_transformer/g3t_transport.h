@@ -13,6 +13,9 @@ int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
 int64_t et_g3t_private_call_abort_v1(void *context);
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 void *et_g3t_private_input_from_token_v1(int64_t token);
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+void *et_g3t_private_input_from_t1_v1(void *sealed_t1);
+#endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 void *et_g3t_private_input_from_pair_v1(int64_t first, int64_t second);
 int64_t et_g3t_private_prompt_preflight_v1(
@@ -75,6 +78,13 @@ int64_t et_g3t_test_output_borrow_end_v1(void *borrow);
 int64_t et_g3t_test_output_id_set_v1(void *output, int64_t token);
 int64_t et_g3t_test_binding_flip_v1(void *context);
 int64_t et_g3t_test_output_state_v1(void *output);
+#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+int64_t et_g3t_test_input_length_v1(void *input);
+int64_t et_g3t_test_input_word_v1(void *input, int64_t index);
+void *et_g3t_test_input_borrow_begin_v1(void *input);
+int64_t et_g3t_test_input_borrow_end_v1(void *borrow);
+int64_t et_g3t_test_live_t1_inputs_v1(void);
+#endif
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
 int64_t et_g3t_test_ids_clone_state_v1(void *clone);
 int64_t et_g3t_test_ids_clone_length_v1(void *clone);
