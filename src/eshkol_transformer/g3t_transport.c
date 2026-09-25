@@ -57,6 +57,12 @@
 #error "G3-T RNG constructor requires kind-8 RNG clone authority"
 #endif
 #endif
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+#if !defined(ET_G3T_MANUAL_LOGITS_PRIVATE) || \
+    !defined(ET_G3T_FINAL_PUBLICATION_PRIVATE)
+#error "G3-T manual P1 requires kind-3 logits and final call transport"
+#endif
+#endif
 #ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
 #ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #error "G3-T T1 input requires private input transport"
@@ -1363,6 +1369,32 @@ int64_t et_g3t_private_frame_begin_v1(
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
   if (!c) return g3t_error_category;
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+  if (c->call_kind == 0) {
+    if (frame_kind != 1 || !c->pending_logits || c->pending_output ||
+        c->frame.active || c->pending_logits->parent_ctx != c ||
+        c->pending_logits->h.state != G3T_PENDING)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    g3t_input *input = (g3t_input *)g3t_admit_record(
+        input_candidate, G3T_INPUT, 0);
+    if (!input) return g3t_error_category;
+    if (input->length != 1 || input->ids[0] < 0 ||
+        input->ids[0] > 255 || input->h.busy)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    et_a2_kv_cache *cache = NULL;
+    et_kernel_error error;
+    if (g3t_capture_kernel(et_a2_kv_cache_create_v1(
+            1, 1, 2, 2, 2, &cache, &error), &error))
+      return g3t_error_category;
+    memset(&c->frame, 0, sizeof(c->frame));
+    c->frame.candidate_cache = cache;
+    c->frame.token = input->ids[0];
+    c->frame.prompt_length = 1;
+    c->frame.active = 1;
+    c->frame.kind = 1;
+    return 0;
+  }
+#endif
   if (c->call_kind != 2 || !c->pending_output || c->frame.active ||
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
       (c->pending_output->P != 1 && c->pending_output->P != 2) ||
@@ -1423,6 +1455,42 @@ int64_t et_g3t_private_frame_prepare_v1(
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
   if (!c) return g3t_error_category;
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+  if (c->call_kind == 0) {
+    g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+        staged_result, G3T_LOGITS, 1);
+    if (!logits) return g3t_error_category;
+    if (logits != c->pending_logits || logits->parent_ctx != c ||
+        logits->h.state != G3T_PENDING || !logits->tensor ||
+        c->pending_output || !c->frame.active || c->frame.kind != 1 ||
+        c->frame.prompt_length != 1 || c->frame.next_ordinal != 21 ||
+        !c->frame.transaction || !c->frame.candidate_cache ||
+        c->frame.prepared)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    et_f32_tensor_error error;
+    if (et_g3t_model_pins_check_internal(&c->pins, &error))
+      return g3t_f32_failure(&error);
+    size_t offset = 0;
+    for (size_t i = 0; i < 14; ++i) {
+      const et_kernel_tensor_view_v1 *view = &c->pins.views[i];
+      if (!view->data || !c->pins.identities[i] ||
+          view->byte_length > sizeof(c->frame.binding_values) - offset)
+        return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+      c->frame.binding_identities[i] = c->pins.identities[i];
+      memcpy(c->frame.binding_values + offset, view->data, view->byte_length);
+      offset += view->byte_length;
+    }
+    if (offset != sizeof(c->frame.binding_values))
+      return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+    uint32_t bits[256];
+    memcpy(bits, c->frame.z, sizeof(bits));
+    if (et_f32_tensor_copy_bits_from_v1(
+            logits->tensor, bits, 256, &error))
+      return g3t_f32_failure(&error);
+    c->frame.prepared = 1;
+    return 0;
+  }
+#endif
   if (staged_result) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
   if (c->call_kind != 2 || !c->pending_output || !c->frame.active ||
       c->frame.next_ordinal != 21 || !c->frame.transaction ||
@@ -1575,6 +1643,95 @@ old_end:
 #endif
 /* The only fallible final-commit work is done here. A2's view admission
  * proves the sole layer is staged and that no nested view exists. */
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+static int64_t g3t_manual_p1_preflight(g3t_context *c) {
+  g3t_logits *logits = c->pending_logits;
+  if (c->call_kind != 0 || !logits || c->pending_output ||
+      logits->parent_ctx != c || logits->h.state != G3T_PENDING ||
+      !logits->tensor || !c->frame.active || c->frame.kind != 1 ||
+      c->frame.prompt_length != 1 || c->frame.next_ordinal != 21 ||
+      !c->frame.prepared || !c->frame.transaction ||
+      !c->frame.candidate_cache)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  et_f32_tensor_error f32_error;
+  if (et_g3t_model_pins_check_internal(&c->pins, &f32_error))
+    return g3t_f32_failure(&f32_error);
+  size_t offset = 0;
+  for (size_t i = 0; i < 14; ++i) {
+    const et_kernel_tensor_view_v1 *v = &c->pins.views[i];
+    if (!v->data || c->frame.binding_identities[i] != c->pins.identities[i] ||
+        v->byte_length > sizeof(c->frame.binding_values) - offset ||
+        memcmp(c->frame.binding_values + offset, v->data, v->byte_length))
+      return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+    offset += v->byte_length;
+  }
+  if (offset != sizeof(c->frame.binding_values))
+    return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+
+  et_f32_scoped_guard_internal logits_view = {0};
+  if (et_f32_tensor_scoped_begin_internal(
+          logits->tensor, &logits_view, &f32_error))
+    return g3t_f32_failure(&f32_error);
+  const et_kernel_tensor_view_v1 *lv = &logits_view.view;
+  int logits_ok = lv->rank == 2 && lv->shape && lv->shape[0] == 1 &&
+                  lv->shape[1] == 256 && lv->byte_length ==
+                  sizeof(c->frame.z) && lv->data &&
+                  !memcmp(lv->data, c->frame.z, sizeof(c->frame.z));
+  if (et_f32_tensor_scoped_end_internal(&logits_view)) abort();
+  if (!logits_ok) return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+
+  et_a2_kv_cache_transaction_view *view = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_transaction_view_begin_v1(
+          c->frame.transaction, 0, &view, &error), &error))
+    return g3t_error_category;
+  if (g3t_capture_kernel(et_a2_kv_cache_transaction_view_tensors_v1(
+          view, &keys, &values, &lengths, &mask, &error), &error))
+    goto view_end;
+  if (!keys || !values || !lengths || !mask ||
+      !keys->data || !values->data || !lengths->data || !mask->data ||
+      lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
+      lengths->byte_length != sizeof(int64_t) ||
+      ((const int64_t *)lengths->data)[0] != 1 ||
+      mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
+      mask->shape[1] != 2 || mask->byte_length != 2 ||
+      ((const uint8_t *)mask->data)[0] != 1 ||
+      ((const uint8_t *)mask->data)[1] != 0)
+    g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+view_end: {
+    int64_t domain = g3t_error_domain, category = g3t_error_category;
+    int64_t code = g3t_error_code;
+    if (et_a2_kv_cache_transaction_view_end_v1(&view, &error)) abort();
+    if (category) return g3t_fail(domain, category, code);
+  }
+
+  /* This lease proves the previous cache can be destroyed after the candidate
+   * transaction commits, including when a prior manual prefill left P=1. */
+  et_a2_kv_cache_read_borrow *old = NULL;
+  const et_kernel_tensor_view_v1 *old_keys = NULL, *old_values = NULL;
+  const et_kernel_tensor_view_v1 *old_lengths = NULL, *old_mask = NULL;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &old, &error), &error)) return g3t_error_category;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+          old, 0, &old_keys, &old_values, &old_lengths, &old_mask,
+          &error), &error)) goto old_end;
+  if (!old_keys || !old_values || !old_lengths || !old_mask ||
+      !old_lengths->data || old_lengths->rank != 1 ||
+      !old_lengths->shape || old_lengths->shape[0] != 1 ||
+      old_lengths->byte_length != sizeof(int64_t) ||
+      ((const int64_t *)old_lengths->data)[0] < 0 ||
+      ((const int64_t *)old_lengths->data)[0] > 2)
+    g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+old_end: {
+    int64_t domain = g3t_error_domain, category = g3t_error_category;
+    int64_t code = g3t_error_code;
+    if (et_a2_kv_cache_read_borrow_end_v1(&old, &error)) abort();
+    return category ? g3t_fail(domain, category, code) : 0;
+  }
+}
+#endif
 static int64_t g3t_final_preflight(g3t_context *c) {
 #ifdef ET_G3T_ZERO_BUDGET_PRIVATE
   if (c->policy[4] == 0) return g3t_zero_preflight(c);
@@ -1665,6 +1822,15 @@ int64_t et_g3t_private_call_prepare_end_v1(void *candidate) {
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
   if (!c) return g3t_error_category;
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+  if (c->call_kind == 0) {
+    if (c->frame.end_prepared || c->final_committed)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    if (g3t_manual_p1_preflight(c)) return g3t_error_category;
+    c->frame.end_prepared = 1;
+    return 0;
+  }
+#endif
   if (c->call_kind != 2 || c->frame.end_prepared ||
       c->final_committed)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
@@ -1677,6 +1843,35 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
   if (!c) return g3t_error_category;
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+  if (c->call_kind == 0) {
+    if (!c->frame.end_prepared || g3t_manual_p1_preflight(c))
+      return g3t_error_category ?
+          g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    /* All recoverable checks end before the A2 commit and old-cache destroy. */
+    et_kernel_error error;
+    if (et_a2_kv_cache_transaction_commit_v1(
+            &c->frame.transaction, &error)) abort();
+    if (et_a2_kv_cache_destroy_v1(&c->cache, &error)) abort();
+    c->cache = c->frame.candidate_cache;
+    c->frame.candidate_cache = NULL;
+    memcpy(c->binding_identities, c->frame.binding_identities,
+           sizeof(c->binding_identities));
+    memcpy(c->binding_values, c->frame.binding_values,
+           sizeof(c->binding_values));
+    c->binding_ready = 1;
+    memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
+    c->prefill_committed = 1;
+    g3t_logits *logits = c->pending_logits;
+    logits->parent_ctx = NULL;
+    logits->h.state = G3T_LIVE;
+    logits->h.busy = 0;
+    c->pending_logits = NULL;
+    c->final_committed = 1;
+    memset(&c->frame, 0, sizeof(c->frame));
+    return 0;
+  }
+#endif
   if (c->call_kind != 2 || !c->pending_output || !c->frame.active ||
       c->frame.next_ordinal != 21 || !c->frame.transaction ||
       !c->frame.prepared ||
@@ -1767,7 +1962,12 @@ int64_t et_g3t_private_call_finish_v1(void *candidate) {
   if (!c->final_committed) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
   owner *o = g3t_model(c->model);
   et_f32_tensor_error error;
-  if (!o || o->active != c || !c->h.busy || c->call_kind != 2 ||
+  if (!o || o->active != c || !c->h.busy ||
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+      (c->call_kind != 2 && c->call_kind != 0) || c->pending_logits ||
+#else
+      c->call_kind != 2 ||
+#endif
       c->pending_output || c->frame.active || c->frame.transaction ||
       et_g3t_model_pins_check_internal(&c->pins, &error))
     abort();
@@ -1909,6 +2109,81 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
   return 0;
 }
 #ifdef ET_G3T_TESTING
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+int64_t et_g3t_test_manual_logits_word_v1(
+    void *candidate, int64_t index) {
+  g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+      candidate, G3T_LOGITS, 1);
+  if (!logits || logits->h.state != G3T_LIVE || !logits->tensor ||
+      index < 0 || index >= 256) return -1;
+  uint32_t bits[256];
+  et_f32_tensor_error error;
+  return et_f32_tensor_copy_bits_to_v1(logits->tensor, bits, 256, &error)
+             ? -1 : bits[index];
+}
+int64_t et_g3t_test_manual_frame_kv_word_v1(
+    void *candidate, int64_t which, int64_t index) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || c->call_kind != 0 || !c->frame.active ||
+      c->frame.next_ordinal < 10 || which < 0 || which > 1 ||
+      index < 0 || index >= 4) return -1;
+  uint32_t bits;
+  memcpy(&bits, (which ? c->frame.vh : c->frame.kh) + index, sizeof(bits));
+  return bits;
+}
+int64_t et_g3t_test_manual_cache_kv_word_v1(
+    void *candidate, int64_t which, int64_t index) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || !c->cache || which < 0 || which > 1 ||
+      index < 0 || index >= 4) return -1;
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &borrow, &error)) return -1;
+  int64_t answer = -1;
+  if (!et_a2_kv_cache_read_borrow_layer_v1(
+          borrow, 0, &keys, &values, &lengths, &mask, &error)) {
+    const et_kernel_tensor_view_v1 *view = which ? values : keys;
+    if (view && view->data && view->rank == 4 && view->shape &&
+        view->shape[0] == 1 && view->shape[1] == 2 &&
+        view->shape[2] == 2 && view->shape[3] == 2 &&
+        lengths && lengths->data &&
+        ((const int64_t *)lengths->data)[0] >= 1) {
+      uint32_t bits;
+      size_t position = (size_t)index + (index >= 2 ? 2u : 0u);
+      memcpy(&bits, (const float *)view->data + position, sizeof(bits));
+      answer = bits;
+    }
+  }
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error)) abort();
+  return answer;
+}
+void *et_g3t_test_manual_cache_borrow_begin_v1(void *candidate) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  et_kernel_error error;
+  return c && c->cache && !et_a2_kv_cache_read_borrow_begin_v1(
+      c->cache, &borrow, &error) ? borrow : NULL;
+}
+int64_t et_g3t_test_manual_cache_borrow_end_v1(void *candidate) {
+  et_a2_kv_cache_read_borrow *borrow = candidate;
+  et_kernel_error error;
+  return et_a2_kv_cache_read_borrow_end_v1(&borrow, &error);
+}
+int64_t et_g3t_test_manual_reference_kv_word_v1(
+    void *candidate, int64_t which, int64_t index) {
+  workspace *w = admit(candidate, WORKSPACE, 0);
+  if (!w || which < 0 || which > 1 || index < 0 || index >= 4 ||
+      !w->ready[which ? VH : KH]) return -1;
+  uint32_t bits[8];
+  et_f32_tensor_error error;
+  if (et_f32_tensor_copy_bits_to_v1(
+          w->slots[which ? VH : KH], bits, 8, &error)) return -1;
+  return bits[index + (index >= 2 ? 2 : 0)];
+}
+#endif
 #ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
 int64_t et_g3t_test_logits_state_v1(void *candidate) {
   g3t_logits *logits = (g3t_logits *)g3t_admit_record(
@@ -1932,7 +2207,11 @@ void *et_g3t_test_logits_borrow_begin_v1(void *candidate) {
       candidate, G3T_LOGITS, 1);
   et_f32_tensor_borrow *borrow = NULL;
   et_f32_tensor_error error;
-  return logits && logits->h.state == G3T_PENDING &&
+  return logits && (logits->h.state == G3T_PENDING
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+                    || logits->h.state == G3T_LIVE
+#endif
+                    ) &&
          !et_f32_tensor_borrow_begin_v1(
       logits->tensor, &borrow, &error) ? borrow : NULL;
 }

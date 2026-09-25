@@ -22,6 +22,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3t-length-owners.py" >>"$evidence/static.s
 python3 "$PROJECT_ROOT/scripts/check-g3t-text-result.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-full-request-preflight.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-manual-logits.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3t-manual-p1-prefill.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 temporary="$(mktemp -d "$evidence/tmp.XXXXXX")"
@@ -62,6 +63,7 @@ build_mode() {
       -DET_G3T_P2_ZERO_BUDGET_PRIVATE
       -DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
       -DET_G3T_MANUAL_LOGITS_PRIVATE
+      -DET_G3T_MANUAL_P1_PREFILL_PRIVATE
       -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
@@ -143,6 +145,7 @@ done
   -DET_G3T_P2_ZERO_BUDGET_PRIVATE \
   -DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE \
   -DET_G3T_MANUAL_LOGITS_PRIVATE \
+  -DET_G3T_MANUAL_P1_PREFILL_PRIVATE \
   -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE \
   -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE \
   -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE \
@@ -168,6 +171,8 @@ sha256sum "$PROJECT_ROOT/native/g3t_p2_zero_budget_source_closure.txt" \
 sha256sum "$PROJECT_ROOT/native/g3t_full_request_preflight_source_closure.txt" \
   >>"$evidence/closure.sha256"
 sha256sum "$PROJECT_ROOT/native/g3t_manual_logits_source_closure.txt" \
+  >>"$evidence/closure.sha256"
+sha256sum "$PROJECT_ROOT/native/g3t_manual_p1_prefill_source_closure.txt" \
   >>"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"

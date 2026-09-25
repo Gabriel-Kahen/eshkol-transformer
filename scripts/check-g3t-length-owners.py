@@ -81,7 +81,8 @@ for kind, clone in accessors:
     assert "(result (list" not in body
     assert "'" + kind + " 'pending" in body
 
-assert "(or (eq? kind 'input) (eq? kind 'ids)" in release
+assert all(f"(eq? kind '{kind})" in release
+           for kind in ("input", "ids", "lengths", "cache-lengths"))
 assert "(eq? kind 'lengths) (eq? kind 'cache-lengths)" in release
 assert "(g3t-prefill-entry shell kind operation)" in release
 assert "(g3t-native-tensor-release" in release

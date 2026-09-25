@@ -216,6 +216,18 @@ int64_t et_g3t_private_role_step_v1(void *candidate, int64_t ordinal) {
   if (!c) return g3t_error_category;
   if (ordinal < 0 || ordinal > 20)
     return g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+  if (c->call_kind == 0) {
+    if (!c->pending_logits || c->pending_output || !c->frame.active ||
+        c->frame.kind != 1 || c->frame.prompt_length != 1 ||
+        c->frame.next_ordinal != ordinal ||
+        c->pending_logits->parent_ctx != c ||
+        c->pending_logits->h.state != G3T_PENDING)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return ordinal == 10 ? g3t_prefill_attention(c) :
+                           g3t_prefill_plain(c, ordinal);
+  }
+#endif
   if (!c->h.busy || c->call_kind != 2 || !c->pending_output ||
       !c->frame.active || c->frame.next_ordinal != ordinal ||
       (c->frame.kind == 1 ? c->sampled :

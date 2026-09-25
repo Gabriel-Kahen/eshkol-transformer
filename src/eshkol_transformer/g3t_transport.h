@@ -68,6 +68,17 @@ int64_t et_g3t_private_last_error_domain_v1(void);
 int64_t et_g3t_private_last_error_category_v1(void);
 int64_t et_g3t_private_last_error_code_v1(void);
 #ifdef ET_G3T_TESTING
+#ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+int64_t et_g3t_test_manual_logits_word_v1(void *logits, int64_t index);
+int64_t et_g3t_test_manual_frame_kv_word_v1(
+    void *context, int64_t which, int64_t index);
+int64_t et_g3t_test_manual_cache_kv_word_v1(
+    void *context, int64_t which, int64_t index);
+void *et_g3t_test_manual_cache_borrow_begin_v1(void *context);
+int64_t et_g3t_test_manual_cache_borrow_end_v1(void *borrow);
+int64_t et_g3t_test_manual_reference_kv_word_v1(
+    void *workspace, int64_t which, int64_t index);
+#endif
 #ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
 int64_t et_g3t_test_logits_state_v1(void *logits);
 int64_t et_g3t_test_logits_shape_v1(void *logits);
