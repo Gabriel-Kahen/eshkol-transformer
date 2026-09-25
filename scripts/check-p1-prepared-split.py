@@ -67,11 +67,13 @@ def check():
         "native/p1_package_defined_symbols.txt":
             "ea56c69b4fd42507688df052219a62dc3c8b7a9039e4aa7be9dc7bcb0febdf17",
         "native/p1_package_undefined_symbols.txt":
-            "0bbd8b80e3a72a9cd4babacc2c419f8a696c0baade902f10bac824c4a71f9344",
+            # 07dbc6e admitted the reviewed indexed shell-lookup runtime calls.
+            "1941268ad78dad3d432fcbe5a8cd93ee7a959d3714c23fe59e8a6f3736566173",
         "native/m3t_transport_extension.esk":
             "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
         "native/i2_wave2_root.esk":
-            "aa43dfb1c023f264c8d50abd8cf71c9138e0dae7c8dd21d2447082914e242322",
+            # c74c267 kept private rollback in call position for pinned LLVM.
+            "f1314ccd4c5a382733115005c93d8712290bd63c5373eac2509093989fefad33",
     }
     for path, expected in fixed_hashes.items():
         require(digest(path) == expected, f"inherited surface drifted: {path}")
@@ -82,7 +84,9 @@ def check():
         "@@P1_TRUSTED_END@@", 1)[0]
     require(generated == source, "trusted P1 root is stale")
     require(sha256(definition(source, "construction-seal!").encode()).hexdigest()
-            == "ddc851476d4d26f2fe835b6321d5c9c92ce3648f4d2ee7df8fbcfe13518e1467",
+            # cf5e394 compares scheduled handles by identity, avoiding a
+            # structural walk over opaque mutable construction records.
+            == "a74565aba7af6804de57f0074acef8d7da03acb77e7aa3a50c4e46108623c665",
             "legacy slot-61 construction seal changed")
 
     begin = definition(source, "construction-begin")

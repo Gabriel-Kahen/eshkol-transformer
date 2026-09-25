@@ -679,6 +679,13 @@ pinned f31/LLVM21 network-none normal/repeat/ASan+UBSan+LSan witness passes
 match independent M3T first-row bits. Static source contracts and Q0 pass;
 sealed evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/g3t-zero-budget-g0-20260925/SHA256SUMS`.
+Candidate `2413189` is integrated as byte-identical source at
+`423ef0f`/`da61f54` after independent source/test review. The merged P1
+active-record + G0 full pinned gate passes normal/repeat/ASan+UBSan+LSan,
+122 checks each with identical stdout, empty stderr, Q0 4/4, and five
+static source contracts. Root sealed the merged witness at
+`/home/gabe/.codex/evidence/eshkol-transformer/g3t-zero-budget-merged-da61f54-git-20260925/SHA256SUMS`
+(`8ee1b6c3...`).
 Public facade/accessors, P2 input, generation loop and CLI remain open.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
@@ -1052,8 +1059,15 @@ a publication/release/rollback and authoritative-fallback contract before
 implementation; the 8,192-cycle horizon remains open.
 An isolated [active-record candidate](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md)
 implements that contract for state/module ownership scans. Focused pinned
-behavioral and performance evidence, independent review, and source-hash
-checker repinning remain integration gates; the 8,192 horizon is still open.
+publication/rollback checks pass 17/23/169 cases; sanitizer 128/256 genuine
+cycles pass 283/539 checks in 49.53/112.01 seconds, compared with the older
+cross-commit 60.03/147.59-second profile. Root reviewed source and tests and
+integrated identical trusted source at `6caae36`. E3/TR3/prepared structural
+hash pins were repaired to the separately reviewed E3 active-list,
+construction-handle identity, indexed-shell runtime symbols, and I2 rollback
+changes; all three checks pass. The full pinned package and 8,192-cycle
+resource horizon remain open, and the cross-commit timing comparison is not
+an exact-base performance proof.
 
 ## Wave 4 — practical pretraining and performance
 

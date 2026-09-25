@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "internal/p1/lib/transformer/module.esk"
 WRAPPER = ROOT / "native/tr3_p1_fixed_set_extension.esk"
 MANIFEST = ROOT / "native/tr3_p1_fixed_set_source_closure.txt"
-COMPOSED_BASE_SHA256 = "35d24971d1832ee62d330435d750127d3c68ae9e15afec86952627ab165c9f31"
+# Reviewed integration through 6caae36 retains the exact TR3 leaf while P1
+# repairs canonical shell publication and adds advisory active-record lists.
+COMPOSED_BASE_SHA256 = "482f0fb96372d8c0b69736771dc598d355c0c4065d483e070b66aa1b479d8fd5"
 
 
 def require(condition, message):
@@ -118,7 +120,7 @@ def check():
     without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
     without_leaf = without_leaf.replace(vector_append, "")
     require(sha256(without_leaf.encode()).hexdigest() == COMPOSED_BASE_SHA256,
-            "canonical #121+E3+G3-C4 P1 source changed outside the exact TR3 helper/vector append")
+            "reviewed integrated P1 source changed outside the exact TR3 helper/vector append")
 
     print("TR3-P1 FIXED STRUCTURE PASS: slots=69,70 modules=17 handles=14 carriers=14")
     for path in (SOURCE, WRAPPER, MANIFEST):

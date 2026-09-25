@@ -107,8 +107,11 @@ def check():
             name = atom(target[2][0])
         if name and name.startswith("e3-mode-"):
             e3_definitions.append(node)
-    require(len(e3_definitions) == 23 and digest(text, e3_definitions) ==
-            "69d85636fffe58568c649308796a40d870d7fea7d78d54e88d0c0cb20149da02",
+    # ca21861 added the reviewed active-record removal helper and changed
+    # enrollment to consult the bounded active head. The lexical E3 slice is
+    # identical from that commit through the current P1 index integration.
+    require(len(e3_definitions) == 24 and digest(text, e3_definitions) ==
+            "8dcb04c2adb943374c40da939637f3331af574b5cf1a07ae3976e8211f1d669a",
             "accepted E3 lexical definitions changed")
     g3c4_externs = [
         ["extern", "i64", "p1-native-construction-prepare", "ptr", "ptr",
