@@ -126,9 +126,18 @@ the committed cache, pending logits, binding and RNG on a provider failure.
 Pinned f31 normal, repeat and ASan/UBSan/LSan each passed 246 checks, with
 inherited Step23B (745) and Step23A (1,196) regressions. Root verified
 `g3c4-step23c-cf97072/seal.txt`, its exact 170-source closure, structural
-checker and Q0 4/4. The remaining 20 numerical roles and candidate A2 scratch
-must precede manual `role_step`; frame prepare/commit and public result remain
-downstream.
+checker and Q0 4/4. The reviewed Step23D source-private pre-A2 block
+`c7e32b1`/tree `e84b406` is integrated byte-identically as `016abf4`.
+Frame-owned actual-T scratch and the accepted G3-N/N3K/N2 providers execute
+ordinals 1–9 individually for T1/T2 prefill and decode, with one dispatch per
+call, exact next-ordinal checks, candidate-first output and failure retry.
+Pinned f31 normal, repeat and ASan/UBSan/LSan each passed 23,040 checks across
+three routes and 27 provider cuts; T1/T2 slots 0–9 match the existing whole
+forward bitwise. Root verified `g3c4-step23d-67c579e/seal.txt`, its exact
+175-source closure, inherited Step23C/B/A gates, merged structural/Q0 4/4 and
+CI topology. Ordinal 10 still needs a capacity-2 candidate A2 transaction;
+the remaining 11 roles, manual `role_step`, frame prepare/commit and public
+result remain downstream.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
