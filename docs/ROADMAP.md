@@ -880,9 +880,15 @@ identity, fixed O2 paths, failure retention and exact C handle/status behavior.
 It is a review candidate only; the initializer-only export manifest and public
 trainer/resume status remain unchanged until a genuine linked-package gate passes.
 An isolated source/private implementation candidate now adds the same-package
-producer wrapper, C ingress/handle bridge, and a linked lifecycle gate. Its
-lightweight bridge fixture passes; strict linked compilation, exact symbol
-manifests, cleanup/failure-cut evidence and independent review are pending.
+producer wrapper, C ingress/handle bridge, and a linked lifecycle gate. The
+first pinned 47-source/30-native strict linked run on `1e45393` passed genuine
+`dlopen` create/close, X1/D2/digest negatives, initializer and hostile-link
+probes; its sealed evidence is `tr3-factory-linked-1e45393-20260925`.
+The candidate exact raw/undefined/dynamic symbol manifests are pinned from
+that run, including the three newly indexed P1 hash references. Final
+same-tree linked rerun, broader cleanup/failure-cut evidence and independent
+review remain pending; the production initializer-only export manifest and
+public trainer/resume status are unchanged.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
