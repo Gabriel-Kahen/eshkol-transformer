@@ -605,8 +605,12 @@ evidence is at `g3t-model-seal-fix-20260925/SHA256SUMS`. Root reviewed the
 opaque-handle identity contract and integrated the four implementation/test
 blobs byte-identically at `cf5e394`; the verified 21-file seal is
 `567a4d36...`.
-RNG ownership, authentic frames/results, sampling, and public generation
-remain pending.
+The isolated [P1/G1 prefill and speculative-sample leaf](g3/G3_T_PREFILL_SAMPLE_LEAF.md)
+adds a guarded 21-role source-private prefill, prompt/cache/model binding,
+and a speculative G3-S greedy or categorical candidate. Its witness compares
+all 256 logits bitwise with independent M3T and exercises precommit,
+attention, and stale-profile rollback. A token frame, published output,
+continuation binding validation, and public generation remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

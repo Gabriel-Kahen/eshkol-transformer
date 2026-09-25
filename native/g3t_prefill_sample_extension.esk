@@ -1,0 +1,261 @@
+;;; Private P1/G1 prefill and speculative sampling seam. Load after the
+;;; constructor extension. A call always aborts its pending output here;
+;;; token-frame publication belongs to a later leaf.
+(extern ptr g3t-native-input-from-token i64
+        :real et_g3t_private_input_from_token_v1)
+(extern i64 g3t-native-tensor-release ptr
+        :real et_g3t_private_tensor_release_v1)
+(extern i64 g3t-native-call-acquire ptr i64
+        :real et_g3t_private_call_acquire_v1)
+(extern i64 g3t-native-call-abort ptr
+        :real et_g3t_private_call_abort_v1)
+(extern ptr g3t-native-output-reserve ptr i64
+        :real et_g3t_private_output_reserve_v1)
+(extern i64 g3t-native-output-release ptr
+        :real et_g3t_private_output_release_v1)
+(extern i64 g3t-native-frame-begin ptr ptr i64
+        :real et_g3t_private_frame_begin_v1)
+(extern i64 g3t-native-role-step ptr i64
+        :real et_g3t_private_role_step_v1)
+(extern i64 g3t-native-frame-prepare ptr ptr
+        :real et_g3t_private_frame_prepare_v1)
+(extern i64 g3t-native-frame-commit ptr
+        :real et_g3t_private_frame_commit_v1)
+(extern i64 g3t-native-sample ptr
+        :real et_g3t_private_sample_v1)
+
+(define (g3t-prefill-dead! entry)
+  (let scrub ((index 3))
+    (if (< index 12)
+        (begin (vector-set! entry index #f) (scrub (+ index 1)))))
+  (vector-set! entry 2 'dead)
+  #t)
+
+(define (g3t-prefill-entry shell kind operation)
+  (let ((entry (g3t-generator-find shell operation)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 1) kind)))
+        (g3t-fail-raw 'invalid-argument operation 1
+                      "G3-T transport owner kind differs"))
+    entry))
+
+(define (g3t-generation-token-input-create token)
+  (let ((operation 'g3t-generation-token-input-create))
+    (m3-call operation
+      (if (not (and (m3t-exact-i64? token) (>= token 0) (<= token 255)))
+          (g3t-fail-raw 'invalid-argument operation 3
+                        "G3-T token must be an exact byte ID"))
+      (let* ((shell (vector 'g3t-input-private))
+             (entry (vector shell 'input 'pending #f #f #f #f #f #f #f #f #f)))
+        (vector-set! g3t-registry 0
+                     (cons entry (vector-ref g3t-registry 0)))
+        (let ((native (g3t-native-input-from-token token)))
+          (if (null? native)
+              (begin (g3t-prefill-dead! entry)
+                     (g3t-native-fail-raw operation)))
+          (vector-set! entry 3 native)
+          (vector-set! entry 2 'live)
+          shell)))))
+
+(define (g3t-generation-tensor-release! shell)
+  (let ((operation 'g3t-generation-tensor-release!))
+    (m3-call operation
+      (let ((entry (g3t-prefill-entry shell 'input operation)))
+        (if (eq? (vector-ref entry 2) 'dead) #t
+            (begin
+              (if (not (eq? (vector-ref entry 2) 'live))
+                  (g3t-fail-raw 'invalid-state operation 2
+                                "G3-T input is not live"))
+              (if (not (= 0 (g3t-native-tensor-release
+                              (vector-ref entry 3))))
+                  (g3t-native-fail-raw operation))
+              (g3t-prefill-dead! entry)))))))
+
+(define (g3t-prefill-call-linked call operation)
+  (let* ((entry (g3t-prefill-entry call 'call operation))
+         (generator-entry (vector-ref entry 4))
+         (model-entry (vector-ref entry 5)))
+    (if (not (and (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref m3-call-state 0) entry)
+                  (vector? generator-entry)
+                  (= (vector-length generator-entry) 12)
+                  (eq? (vector-ref generator-entry 1) 'generator)
+                  (eq? (vector-ref generator-entry 2) 'live)
+                  (eq? (g3t-generator-find
+                         (vector-ref generator-entry 0) operation)
+                       generator-entry)
+                  (vector? model-entry)
+                  (= (vector-length model-entry) 12)
+                  (eq? (vector-ref generator-entry 5) model-entry)
+                  (eq? (vector-ref entry 3) (vector-ref generator-entry 3))
+                  (eq? (vector-ref entry 6) (vector-ref generator-entry 6))
+                  (eq? (vector-ref generator-entry 9) entry)
+                  (eq? (vector-ref model-entry 10) entry)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T call links are not active"))
+    entry))
+
+(define (g3t-prefill-call-entry call operation)
+  (let* ((entry (g3t-prefill-call-linked call operation))
+         (model-entry (vector-ref entry 5)))
+    (if (not (eq? (g3t-model-entry-live
+                   (vector-ref model-entry 0) operation entry)
+                 model-entry))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T model readiness changed during call"))
+    entry))
+
+(define (g3t-call-acquire generator-entry kind)
+  (let ((operation 'g3t-call-acquire))
+    (if (not (eq? (vector-ref m3-call-state 0) #t))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T call requires the shared M3 guard"))
+    (if (not (and (vector? generator-entry)
+                  (= (vector-length generator-entry) 12)
+                  (eq? (vector-ref generator-entry 1) 'generator)
+                  (eq? (vector-ref generator-entry 2) 'live)
+                  (eq? (g3t-generator-find
+                         (vector-ref generator-entry 0) operation)
+                       generator-entry)
+                  (m3t-exact-i64? kind) (= kind 2)))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G3-T leaf accepts only generate/P1/G1"))
+    (let* ((model-entry (vector-ref generator-entry 5))
+           (shell (vector 'g3t-call-private))
+           (entry (vector shell 'call 'pending (vector-ref generator-entry 3)
+                          generator-entry model-entry
+                          (vector-ref generator-entry 6) #f #f #f #f #f)))
+      (g3t-model-entry-live (vector-ref model-entry 0) operation #f)
+      (if (not (and (eq? (vector-ref generator-entry 9) #f)
+                    (eq? (vector-ref model-entry 10) #f)))
+          (g3t-fail-raw 'invalid-state operation 2
+                        "G3-T generator or model already has a call"))
+      (vector-set! g3t-registry 0
+                   (cons entry (vector-ref g3t-registry 0)))
+      (if (not (= 0 (g3t-native-call-acquire
+                       (vector-ref generator-entry 3) kind)))
+          (begin (g3t-prefill-dead! entry)
+                 (g3t-native-fail-raw operation)))
+      (vector-set! generator-entry 9 entry)
+      (vector-set! model-entry 10 entry)
+      (vector-set! entry 2 'live)
+      (vector-set! m3-call-state 0 entry)
+      shell)))
+
+(define (g3t-call-abort call)
+  (let* ((operation 'g3t-call-abort)
+         (entry (g3t-prefill-call-linked call operation))
+         (generator-entry (vector-ref entry 4))
+         (model-entry (vector-ref entry 5))
+         (output-entry (vector-ref entry 8)))
+    (if (not (= 0 (g3t-native-call-abort (vector-ref entry 3))))
+        (exit 134))
+    (if output-entry (g3t-prefill-dead! output-entry))
+    (vector-set! generator-entry 9 #f)
+    (vector-set! model-entry 10 #f)
+    (g3t-prefill-dead! entry)
+    (vector-set! m3-call-state 0 #t)
+    #t))
+
+(define-syntax g3t-with-call
+  (syntax-rules ()
+    ((_ operation generator (call) body ...)
+     (m3-call operation
+       (let* ((generator-entry (g3t-generator-find generator operation))
+              (call (g3t-call-acquire generator-entry 2)))
+         (guard (caught (#t (g3t-call-abort call) (raise caught)))
+           (let ((result (begin body ...)))
+             (g3t-call-abort call)
+             result)))))))
+
+(define (g3t-output-reserve call length)
+  (let* ((operation 'g3t-output-reserve)
+         (entry (g3t-prefill-call-entry call operation)))
+    (if (not (and (m3t-exact-i64? length) (= length 1)
+                  (eq? (vector-ref entry 8) #f)))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G3-T leaf requires one pending output"))
+    (let* ((shell (vector 'g3t-output-private))
+           (output (vector shell 'output 'pending #f entry #f #f #f #f #f #f #f)))
+      (vector-set! g3t-registry 0
+                   (cons output (vector-ref g3t-registry 0)))
+      (let ((native (g3t-native-output-reserve (vector-ref entry 3) length)))
+        (if (null? native)
+            (begin (g3t-prefill-dead! output)
+                   (g3t-native-fail-raw operation)))
+        (vector-set! output 3 native)
+        (vector-set! output 2 'pending)
+        (vector-set! entry 8 output)
+        shell))))
+
+(define (g3t-frame-begin call input frame-kind)
+  (let* ((operation 'g3t-frame-begin)
+         (entry (g3t-prefill-call-entry call operation))
+         (input-entry (g3t-prefill-entry input 'input operation)))
+    (if (not (and (eq? (vector-ref input-entry 2) 'live)
+                  (m3t-exact-i64? frame-kind) (= frame-kind 1)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T P1 input/frame is not live"))
+    (if (not (= 0 (g3t-native-frame-begin
+                    (vector-ref entry 3) (vector-ref input-entry 3) frame-kind)))
+        (g3t-native-fail-raw operation))
+    #t))
+
+(define (g3t-role-step call ordinal)
+  (let* ((operation 'g3t-role-step)
+         (entry (g3t-prefill-call-entry call operation)))
+    (if (not (and (m3t-exact-i64? ordinal) (>= ordinal 0) (<= ordinal 20)))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G3-T role ordinal is outside 0..20"))
+    (if (not (= 0 (g3t-native-role-step (vector-ref entry 3) ordinal)))
+        (g3t-native-fail-raw operation))
+    #t))
+
+(define (g3t-frame-commit call)
+  (let* ((operation 'g3t-frame-commit)
+         (entry (g3t-prefill-call-entry call operation)))
+    (if (not (= 0 (g3t-native-frame-commit (vector-ref entry 3))))
+        (g3t-native-fail-raw operation))
+    #t))
+
+(define (g3t-frame-prepare call staged-result)
+  (let* ((operation 'g3t-frame-prepare)
+         (entry (g3t-prefill-call-entry call operation))
+         (generator-entry (vector-ref entry 4))
+         (model-entry (vector-ref entry 5))
+         (tokenizer (vector-ref entry 6))
+         (tokenizer-entry (t1-private-entry tokenizer)))
+    (if (not (eq? staged-result #f))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G1 prefill has no manual logits result"))
+    (if (not (and (pair? tokenizer-entry)
+                  (eq? (car tokenizer-entry) tokenizer)
+                  (pair? (cdr tokenizer-entry))
+                  (null? (cdr (cdr tokenizer-entry)))
+                  (let ((core (car (cdr tokenizer-entry))))
+                    (and (t1-core-tokenizer? core)
+                         (eq? (vector-ref core 1) 'raw)
+                         (null? (vector-ref core 2))
+                         (null? (vector-ref core 3))
+                         (null? (vector-ref core 4))
+                         (= (t1-tokenizer-core-vocab-size core) 256)
+                         (string? (vector-ref core 6))
+                         (string=? (vector-ref core 6)
+                           "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))
+                  (eq? (g3t-model-entry-live
+                         (vector-ref model-entry 0) operation entry)
+                       model-entry)
+                  (eq? (vector-ref generator-entry 5) model-entry)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T prefill binding changed before prepare"))
+    (if (not (= 0 (g3t-native-frame-prepare (vector-ref entry 3) #f)))
+        (g3t-native-fail-raw operation))
+    #t))
+
+(define (g3t-sample call)
+  (let* ((operation 'g3t-sample)
+         (entry (g3t-prefill-call-entry call operation)))
+    (if (not (= 0 (g3t-native-sample (vector-ref entry 3))))
+        (g3t-native-fail-raw operation))
+    #t))

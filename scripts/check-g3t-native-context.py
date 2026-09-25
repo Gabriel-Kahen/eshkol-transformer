@@ -26,7 +26,7 @@ def check() -> None:
                    "et_g3t_model_pins_check_internal",
                    "et_g3t_model_pins_end_internal",
                    "o->active = c", "o->active = NULL",
-                   "et_a2_kv_cache_destroy_v1", "c->state = G3T_DEAD"):
+                   "et_a2_kv_cache_destroy_v1", "c->h.state = G3T_DEAD"):
         assert phrase in source, phrase
     for phrase in ("foreign model pointer rejected", "initializer pointer is wrong kind",
                    "context allocation failure", "A2 allocation failure",
