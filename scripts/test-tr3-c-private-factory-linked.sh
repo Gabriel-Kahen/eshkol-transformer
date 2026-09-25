@@ -200,15 +200,27 @@ clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -ldl -o /out/factory-dynamic-probe
 python3 - <<PY
 from pathlib import Path
-from tests.d2.test_resources import write_d1_resource
+from tests.d2.test_resources import load_d1_resource, write_d1_resource
 from tests.tr3_reference.constants import TOKENIZER_FINGERPRINT
 directory = Path("/out/corpus")
 directory.mkdir()
 write_d1_resource(directory, ((1, 2, 3, 4),),
                   fingerprint=TOKENIZER_FINGERPRINT, vocab=256)
+mismatch = Path("/out/corpus-tokenizer-mismatch")
+mismatch.mkdir()
+other_fingerprint = TOKENIZER_FINGERPRINT[:-1] + "5"
+assert other_fingerprint != TOKENIZER_FINGERPRINT
+write_d1_resource(mismatch, ((1, 2, 3, 4),),
+                  fingerprint=other_fingerprint, vocab=256)
+load_d1_resource(mismatch, expected_fingerprint=other_fingerprint,
+                 expected_vocab=256)
 PY
-for mode in success seed-2718 profile d2-limit digest x1 missing; do
-  /out/factory-dynamic-probe /out/libtr3_private.so /out/corpus "${mode}" \
+for mode in success seed-2718 profile d2-limit digest x1 missing tokenizer-mismatch; do
+  corpus=/out/corpus
+  if [[ "${mode}" == tokenizer-mismatch ]]; then
+    corpus=/out/corpus-tokenizer-mismatch
+  fi
+  /out/factory-dynamic-probe /out/libtr3_private.so "${corpus}" "${mode}" \
     > "/out/factory-${mode}.stdout" \
     2> "/out/factory-${mode}.stderr"
 done
@@ -315,7 +327,15 @@ grep -Fx 'TR3 private factory profile status=6 stage=2 reason=0 original=0 PASS'
   "${evidence}/factory-profile.stdout" >/dev/null
 grep -Fx 'TR3 private factory d2-limit status=1 stage=4 reason=0 original=0 PASS' \
   "${evidence}/factory-d2-limit.stdout" >/dev/null
-for mode in seed-2718 profile d2-limit; do
+grep -Fx 'TR3 private factory tokenizer-mismatch status=1 stage=4 reason=0 original=0 PASS' \
+  "${evidence}/factory-tokenizer-mismatch.stdout" >/dev/null
+grep -Fx 'TR3 private factory tokenizer-mismatch close=1/10/4/0 PASS' \
+  "${evidence}/factory-tokenizer-mismatch.stdout" >/dev/null
+for mode in success seed-2718; do
+  grep -Fx "TR3 private factory ${mode} close=0/0/0/0 repeat=7/10/5/0 PASS" \
+    "${evidence}/factory-${mode}.stdout" >/dev/null
+done
+for mode in seed-2718 profile d2-limit tokenizer-mismatch; do
   test ! -s "${evidence}/factory-${mode}.stderr"
 done
 grep -E '^TR3 linked private initializer PASS: root_used_before=[0-9]+ root_used_after=[0-9]+$' \
