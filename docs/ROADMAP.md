@@ -627,6 +627,11 @@ forward pass, rejects stale profile and wrong frame/order, and proves failed
 attention and abort preserve the prompt cache and pre-call RNG. Final output
 readiness, text decode, joint cache/ID/RNG publication and public generation
 remain downstream.
+Candidate `4a82887` and root integration `02c7b3f` have identical tree
+`d4792525`; root source review found no concrete defect. The pinned normal,
+repeat and ASan/UBSan/LSan witnesses each pass 146 checks with identical
+stdout and empty stderr; Q0 passes 4/4. The exact-tree evidence is sealed at
+`g3t-token-frame-root-02c7b3f-20260925/SHA256SUMS`.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
