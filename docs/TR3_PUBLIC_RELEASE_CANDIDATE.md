@@ -1,6 +1,7 @@
 # TR3 explicit trainer release candidate
 
-Status: non-installed source candidate; the linked aggregate gate is pending.
+Status: supported non-installed linked candidate. The exact source/test commit
+is `38329f9` (tree `0c471f84`); no public facade is installed.
 The accepted A0 amendment makes `trainer-release! trainer` an arity-one
 operation. Successful release returns `#t`, ends the exact trainer's exclusive
 lease, and leaves the resolved configuration, tokenizer, dataset, model, and
@@ -29,3 +30,17 @@ source/native depfiles, exact private renames, dynamic C exports, unresolved
 runtime symbols, fixed compiler/runtime and poisoned linked caller. It does
 not install a public facade or change the production initializer-only export
 boundary. Step/resume and full trainer acceptance remain separate work.
+
+The fixed f31/LLVM21 network-disabled gate passed on the exact candidate head:
+48 Eshkol sources, 68 native source/header paths, 30 native objects, 4,144 raw
+defined symbols, 21 localized public C exports, and 173 unresolved runtime
+symbols. The poisoned genuine caller printed
+`TR3-PUBLIC-RELEASE-CANDIDATE-PASS` with empty stderr. Source compilation took
+3:51.98, peaked at 3,589,176 KiB RSS and used no swap. The immutable evidence
+is `/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-release-candidate-38329f9-20260925/`;
+`SHA256SUMS` hashes to
+`cd7872e863a3c632c44386758860d78a46f146647f9db1a5dd3216bda58f7cad`
+and passed `sha256sum -c` with exit 0. A0 declaration and arity-negative
+compile-only checks passed separately. This does not prove release during an
+active trainer step, physical shell reclamation, or full public trainer
+installation.

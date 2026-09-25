@@ -537,10 +537,12 @@ runtime symbols, and a poisoned genuine caller; the `SHA256SUMS` seal is
 `1b12fc91...`. A0 now specifies explicit idle `trainer-release!` as the lease
 end: dropping a trainer reference alone does not release, and all five
 receivers remain caller-owned and live. A separate non-installed
-same-aggregate [release candidate](TR3_PUBLIC_RELEASE_CANDIDATE.md) is being
-checked for exact-shell release, busy/forged/repeated errors, re-lease, and
-public E1 operation mapping. Public
-facade installation and broader trainer acceptance remain pending.
+same-aggregate [release candidate](TR3_PUBLIC_RELEASE_CANDIDATE.md) passed
+the exact `38329f9` linked f31/LLVM21 gate: 48 Eshkol sources, 30 native
+objects, 21 exports, 173 undefined symbols, and a poisoned caller checking
+exact-shell release, busy/forged/repeated errors, re-lease, and public E1
+operation mapping. Seal `cd7872e8...` is verified. Public facade installation
+and broader trainer acceptance remain pending.
 
 The private G3-C4 ordinal-10 A2 candidate transaction is integrated from
 `4f3f5e1` and the handle-pair correction `6e00c29` as `6d36e1b` and
