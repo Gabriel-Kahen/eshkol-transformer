@@ -761,7 +761,13 @@ witness alone cannot justify a public generator or CLI.
 The [proposed C2 G3-G public contract](g3/G3_G_C2_PUBLIC_CONTRACT_PROPOSAL.md)
 specifies the fifteen-name facade, single-token publication, detached ownership,
 error mapping and eight-facade package target for review only. No dependent
-runtime or public acceptance follows from this draft.
+runtime or public acceptance follows from this draft. An integrated-source
+audit at `6eb8342` records the unimplemented accepted manual kind-3 logits
+path and kind-0/1 call/frame semantics, the P2-only pre-acquire prompt
+preflight, the unresolved cross-operation cache transitions, and the test-only
+P1/G1 schedule as concrete predecessors to the
+proposed facade. All five private output accessors are now present; public
+E1 mapping, package composition and allocation-cut evidence remain pending.
 The [G3-T private ID clone leaf](g3/G3_T_OUTPUT_IDS_CLONE_LEAF.md), integrated
 at `86161a2`, implements only the accepted native kind-5 generated-ID copy
 and typed release.

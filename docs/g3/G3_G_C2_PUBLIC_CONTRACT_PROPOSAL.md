@@ -2,8 +2,8 @@
 
 **Proposed for review; no public implementation or acceptance is claimed.** This
 contract narrows the accepted [A0 public API](../PUBLIC_API_CONTRACT.md#13-generator)
-and [G3 diagnostic-C2 design](../G3_GENERATION_PROPOSAL.md) to P1/G1 and
-P2/G0 generation. It consumes the accepted [G3-T private contract](G3_T_PRIVATE_CONTRACT.md),
+and [G3 diagnostic-C2 design](../G3_GENERATION_PROPOSAL.md) to P1/G1,
+P1/G0 and P2/G0 generation. It consumes the accepted [G3-T private contract](G3_T_PRIVATE_CONTRACT.md),
 G3-N rows and G3-S sampling ABI. Every G3-G facade, package name, wrapper,
 constructor, clone and production operation below is a **new proposed seam**
 until separately reviewed and implemented. The G3-T development witness is not
@@ -69,6 +69,45 @@ helpers and test observers remain local/hidden. Exact source, object, undefined,
 defined and string manifests must be measured and reviewed on the implementation
 candidate; the counts above are an acceptance target, not build evidence.
 
+## Integrated-source prerequisites to freeze this surface
+
+At integration head `6eb8342`, the accepted G3-T private contract names
+`logits_reserve` and manual call kinds 0/1, but the current transport has no
+native or Eshkol `logits_reserve` implementation or live kind-3 last-logits
+owner. `g3t-call-acquire` admits only generate kind 2, and native frame begin,
+prepare and commit still require that kind. The two proposed manual facades
+therefore require those accepted G3-T manual transport/result semantics and
+the G3-M 21-role prefill/decode schedules before public implementation. A
+shape-compatible test observer or the retained native `last_logits` array is
+not an owned public f32[1,256] result. Native generate admission also rejects
+an already committed prefill. Before freezing the whole facade, specify and
+test the C2 cross-operation state transitions: whether a one-shot generate
+may follow manual prefill, and how a later manual prefill replaces a generated
+cache while previously returned outputs remain detached. The current private
+witness proves neither transition.
+
+The current `prompt_preflight` is P2-specific: it rejects an input unless its
+length is two. The private P1/G0 witness acquires the call without a P1
+preflight, while P1/G1 is assembled only in the development test. A public
+`generator-generate!` therefore needs a reviewed source-private P1/P2
+full-request admission that establishes authentic input length, exact
+`P+G<=2`, stored policy and draw capacity **before** call acquisition or
+pinning, followed by production P1/G1, P1/G0 and P2/G0 21-role schedules.
+The accepted kind-2 input shell currently stores its length only in its
+authenticated native owner; public code must not infer length from a shell
+tag, a test observer, or an unrelated T1 value. This paragraph requests no
+new upstream signature; it identifies the missing admission implementation
+for review against the accepted G3-T transaction contract.
+
+All five source-private output accessors now exist, including detached raw
+text, but none is an installed G3-G facade. The existing private runner
+source-checks Eshkol pre-copy allocation order; it cannot inject Eshkol
+allocator failure at every wrapper/list/bytevector cut required below for
+public acceptance. The package candidate needs that witness, exact E1
+public-operation mapping, one source-composed registry owner and measured
+export/link/AOT boundaries. These are remaining implementation and evidence
+gates, not acceptance of the proposed tuple.
+
 ## Admission, ownership and detached results
 
 `generation-input-create` first authenticates the exact same-aggregate T1 shell
@@ -95,8 +134,8 @@ and leaves the output unchanged. IDs are a fresh one-element list around the
 owned i64[G] clone. Text is a fresh list and bytevector copy; caller changes to
 one returned list or bytevector affect no later accessor. No output accessor
 returns a borrowed native header, cache view, T1 shell or G3-T test observer.
-The four native clone stems and source-private Eshkol wrappers for IDs, lengths,
-cache lengths and RNG have focused witnesses. Package linkage and public
+The four native clone stems and all five source-private Eshkol accessors,
+including detached text, have focused witnesses. Package linkage and public
 accessor behavior described here remain proposed.
 
 For each ID, length, cache-length or RNG accessor, allocate and root its future
