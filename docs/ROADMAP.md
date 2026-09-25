@@ -807,6 +807,10 @@ contracts do not define one data-only C request, child ownership/cleanup, or
 trainer handle/status ABI; CLI3 deliberately leaves `pretrain` flags undefined.
 The linked package therefore retains only its initializer export until those
 contracts are accepted.
+The same-package primitive-ingress audit found runtime string/integer tagging
+and localized source thunks, but no reviewed factory wrapper or per-call E1
+scope. A bounded one-attempt private factory is now the candidate proof seam;
+its ownership policy, C handle, linked gate and public generalization remain open.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

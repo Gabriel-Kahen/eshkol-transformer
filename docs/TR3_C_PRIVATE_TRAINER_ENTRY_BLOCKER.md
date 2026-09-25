@@ -109,3 +109,30 @@ f31/LLVM21 linked-package gate already proves initializer invocation,
 localization and hostile-link negatives, but proves none of these trainer
 lifecycle operations. No trainer C entry or resume claim should be added until
 the producer and close contracts are frozen and exercised in that gate.
+
+## Same-package primitive ingress finding
+
+The linked object already contains localized C ABI thunks for X1, O2 and the
+TR3 lease constructor; external `dlsym` does not expose them. The pinned
+Eshkol runtime can
+copy a NUL-terminated C string into its arena and construct tagged exact
+integers. A bridge must first bound and validate the byte input, including
+embedded NUL, because the string copier uses `strlen`. It can then call a new
+same-package Eshkol wrapper with only primitive tagged arguments. That wrapper
+would build the exact D2 options and O2 configuration as Eshkol data and call
+the existing five-operand producer sequence in one identity universe. Passing
+a raw C-built Scheme list or a tagged value from another package is not an
+accepted ingress. The initializer pops its E1 handler before returning, so
+each factory call needs its own exception scope and categorized error capture.
+
+A bounded candidate for the next private proof is one construction attempt per
+initialized process, byte tokenizer only, fixed M3T profile, caller-supplied
+X1 JSON, D2 options, initializer seed and O2 hyperparameters. The package
+would retain created children until process exit; idle close would unenroll
+only the trainer lease. This is a proposed policy, not an accepted public
+factory or resource-destruction contract. It avoids claiming repeated use
+while M3T and O2 have no destroy operation. The next gate must compile and
+invoke the primitive wrapper through the actual linked package, exercise
+malformed inputs and every producer failure cut, prove no partial C handle,
+and check exact idle unenrollment, busy/forged/repeat close, and child
+retention. Until then the exported manifest remains initializer-only.
