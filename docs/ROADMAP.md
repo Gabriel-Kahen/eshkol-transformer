@@ -658,6 +658,11 @@ normal/sanitizer output, and the sealed evidence at
 `g3t-output-text-727eecd-20260925/SHA256SUMS` (`48513349...`). G0, final
 frame commit, cache/RNG/output publication, and public generation remain open.
 
+The isolated [G1 final publication leaf](g3/G3_T_FINAL_PUBLICATION_LEAF.md)
+adds final frame preparation, resource preflight, joint cache/ID/RNG/output
+commit, immediate call finish, and independently releasable output ownership.
+It keeps G0 and public generation surfaces open pending integration review.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/

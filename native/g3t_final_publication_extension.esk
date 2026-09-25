@@ -1,0 +1,69 @@
+;;; Source-private G1 final commit. The pending output is already rooted and
+;;; carries preallocated ID staging and raw text before this source is loaded.
+(extern i64 g3t-native-call-prepare-end ptr
+        :real et_g3t_private_call_prepare_end_v1)
+(extern i64 g3t-native-call-finish ptr
+        :real et_g3t_private_call_finish_v1)
+
+(define-syntax g3t-with-final-call
+  (syntax-rules ()
+    ((_ operation generator (call) body ...)
+     (m3-call operation
+       (let* ((generator-entry (g3t-generator-find generator operation))
+              (call (g3t-call-acquire generator-entry 2))
+              (entry (g3t-prefill-entry call 'call operation)))
+         (guard (caught
+                  (#t (if (eq? (vector-ref entry 2) 'live)
+                          (g3t-call-abort call))
+                      (raise caught)))
+           (let ((result (begin body ...)))
+             (if (eq? (vector-ref entry 2) 'live)
+                 (g3t-call-abort call))
+             result)))))))
+
+(define (g3t-final-commit! call output)
+  (let* ((operation 'g3t-final-commit!)
+         (entry (g3t-prefill-call-entry call operation))
+         (generator-entry (vector-ref entry 4))
+         (model-entry (vector-ref entry 5))
+         (output-entry (g3t-prefill-entry output 'output operation))
+         (native (vector-ref entry 3)))
+    (if (not (and (eq? (vector-ref output-entry 2) 'pending)
+                  (eq? (vector-ref output-entry 4) entry)
+                  (eq? (vector-ref entry 8) output-entry)
+                  (bytevector? (vector-ref output-entry 6))
+                  (= (bytevector-length (vector-ref output-entry 6)) 1)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T final output linkage changed"))
+    (g3t-frame-prepare call #f)
+    (if (not (= 0 (g3t-native-call-prepare-end native)))
+        (g3t-native-fail-raw operation))
+    (if (not (= 0 (g3t-native-frame-commit native)))
+        (g3t-native-fail-raw operation))
+    ;; Native publication has occurred. Finish has no recoverable path.
+    (if (not (= 0 (g3t-native-call-finish native))) (exit 134))
+    (vector-set! output-entry 4 #f)
+    (vector-set! output-entry 5 #f)
+    (vector-set! output-entry 2 'live)
+    (vector-set! entry 8 #f)
+    (vector-set! generator-entry 9 #f)
+    (vector-set! model-entry 10 #f)
+    (g3t-prefill-dead! entry)
+    (vector-set! m3-call-state 0 #t)
+    output))
+
+(define (g3t-output-release! output)
+  (let ((operation 'g3t-output-release!))
+    (m3-call operation
+      (let ((entry (g3t-prefill-entry output 'output operation)))
+        (if (eq? (vector-ref entry 2) 'dead) #t
+            (begin
+              (if (not (and (eq? (vector-ref entry 2) 'live)
+                            (eq? (vector-ref entry 4) #f)
+                            (eq? (vector-ref entry 5) #f)
+                            (bytevector? (vector-ref entry 6))))
+                  (g3t-fail-raw 'invalid-state operation 2
+                                "G3-T output is not independently live"))
+              (if (not (= 0 (g3t-native-output-release (vector-ref entry 3))))
+                  (g3t-native-fail-raw operation))
+              (g3t-prefill-dead! entry)))))))

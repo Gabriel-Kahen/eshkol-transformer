@@ -28,6 +28,8 @@ int64_t et_g3t_private_frame_prepare_v1(
     void *context, void *staged_result);
 int64_t et_g3t_private_frame_commit_v1(void *context);
 int64_t et_g3t_private_sample_v1(void *context);
+int64_t et_g3t_private_call_prepare_end_v1(void *context);
+int64_t et_g3t_private_call_finish_v1(void *context);
 #endif
 int64_t et_g3t_private_last_error_domain_v1(void);
 int64_t et_g3t_private_last_error_category_v1(void);
@@ -54,6 +56,7 @@ void *et_g3t_test_output_borrow_begin_v1(void *output);
 int64_t et_g3t_test_output_borrow_end_v1(void *borrow);
 int64_t et_g3t_test_output_id_set_v1(void *output, int64_t token);
 int64_t et_g3t_test_binding_flip_v1(void *context);
+int64_t et_g3t_test_output_state_v1(void *output);
 #endif
 #endif
 #ifdef __cplusplus
