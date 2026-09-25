@@ -123,7 +123,10 @@ static void role_step_case(et_g3c4_model_owner_internal *owner,
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_MANUAL_ROLE_STEP_TEST_MAIN
+#define ET_G3C4_MANUAL_ROLE_STEP_TEST_MAIN main
+#endif
+int ET_G3C4_MANUAL_ROLE_STEP_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   tail_case(owner, 1, 1);
   publication_case(owner, 1, 1, 0);

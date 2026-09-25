@@ -5712,9 +5712,11 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
     }
     for (size_t head = 0u; head < 2u; head++) {
       memcpy(prefix_keys + head * 2u,
-             (const float *)keys->data + head * 8u, 2u * sizeof(float));
+             (const float *)keys->data +
+                 head * (size_t)keys->shape[2] * 2u, 2u * sizeof(float));
       memcpy(prefix_values + head * 2u,
-             (const float *)values->data + head * 8u, 2u * sizeof(float));
+             (const float *)values->data +
+                 head * (size_t)values->shape[2] * 2u, 2u * sizeof(float));
     }
     if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_end_v1(
             &borrow, &error), &error) != 0)
