@@ -602,6 +602,11 @@ is accepted; public trainer and resume acceptance remain pending. The
 source `4675500`/tree `b5bd6d0` is integrated byte-identically at `675f1de`;
 root verified `tr3-dynamic-init-bridge-4675500-20260924/SHA256SUMS`
 (`0bf88f01...`) and exact integrated source blobs.
+The [private C trainer entry audit](TR3_C_PRIVATE_TRAINER_ENTRY_BLOCKER.md)
+finds the real five-operand lease constructor in the compiled root, but no
+same-package C producer for its operands and no trainer unenroll/close. The
+rooted registry retains every successful trainer and its receivers. Freeze
+those lifecycle and ownership contracts before a C construct/close seam.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
