@@ -179,7 +179,10 @@
         (g3t-fail-raw 'invalid-argument operation 3
                       "G3-T leaf requires one pending output"))
     (let* ((shell (vector 'g3t-output-private))
-           (output (vector shell 'output 'pending #f entry #f #f #f #f #f #f #f)))
+           (staging (make-bytevector 8 0))
+           (raw (make-bytevector 1 0))
+           (output (vector shell 'output 'pending #f entry staging raw
+                           #f #f #f #f #f)))
       (vector-set! g3t-registry 0
                    (cons output (vector-ref g3t-registry 0)))
       (let ((native (g3t-native-output-reserve (vector-ref entry 3) length)))

@@ -647,6 +647,13 @@ transport; normal/repeat/ASan+UBSan+LSan witnesses each passed 170 checks,
 and the root static source contract passes. Evidence is sealed at
 `g3t-output-readiness-64c613d-20260925/SHA256SUMS`.
 
+The isolated [G1 ID/raw-text readiness leaf](g3/G3_T_OUTPUT_TEXT_LEAF.md)
+stages the pending output's I1 byte ID, decodes it through the authentic
+same-package T1 raw decoder, and accepts the decoded byte with once-only
+readiness and binding checks. The focused normal/repeat/ASan+UBSan+LSan gate
+passes 56 checks per run in the pinned Ubuntu/LLVM21 image. G0, final frame
+commit, cache/RNG/output publication, and public generation remain open.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
