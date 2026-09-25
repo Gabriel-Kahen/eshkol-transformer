@@ -287,6 +287,7 @@ static void tail_case(et_g3c4_model_owner_internal *owner,
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
+#ifndef ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE
 int main(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   tail_case(owner, 1, 1);
@@ -296,3 +297,4 @@ int main(void) {
          checks);
   return 0;
 }
+#endif

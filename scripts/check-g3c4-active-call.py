@@ -54,7 +54,9 @@ def check():
         without_conditional_feature(
             without_conditional_feature(
                 without_conditional_feature(
-                    source, "ET_G3C4_MANUAL_PRE_A2_PRIVATE"),
+                    without_conditional_feature(
+                        source, "ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE"),
+                    "ET_G3C4_MANUAL_PRE_A2_PRIVATE"),
                 "ET_G3C4_MANUAL_ROLE0_PRIVATE"),
             "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE"),
         "ET_G3C4_GENERATOR_PRIVATE")
