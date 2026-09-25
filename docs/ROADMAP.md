@@ -971,9 +971,18 @@ allocation cut occurs after one D2 native open, then observes one close and
 live count zero. Both return a null handle, consume the attempt and reject
 close on the absent handle. This proves D2 native control cleanup, not physical
 arena reclamation; the pinned factory harness has no sanitizer mode. Sealed
-evidence is `tr3-factory-fault-4911711-20260925` (`eff4c19e2...`). Other
-producer/lease cuts, cleanup-failure behavior, process-lifetime retention,
-broader E1 category evidence and an exact merged-union gate remain pending.
+evidence is `tr3-factory-fault-4911711-20260925` (`eff4c19e2...`). The
+`e97c3ea` linked test variant proves a genuine O2 native allocation failure
+(`internal/O2/raised-e1`), a real lease-stage arena denial
+(`internal/lease/foreign-exception`), and D2 cleanup-failure precedence after
+an active borrowed batch makes native close refuse. The latter returns
+`internal/M3T-initializer/cleanup-failed` with the first `internal` category
+preserved and D2 still live. Successful alias close leaves all six existing
+source-root children and D2/O2 native receivers live; an exact repeated close
+sees the handle tombstone. Evidence is sealed at
+`tr3-factory-o2-lease-cleanup-e97c3ea-20260925` (`82c16e57...`). Other producer
+cuts, broader E1 category evidence, close/lease busy paths, and an exact
+merged-union gate remain pending.
 Root independently reviewed the prior bridge, source wrapper, linked scripts,
 fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.
