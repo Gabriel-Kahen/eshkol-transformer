@@ -616,8 +616,16 @@ fabricates zero, and LCM rejects int64 overflow. Independent pinned
 Release and ASan+UBSan+LSan JIT/AOT O0/O2 source matrices pass, as do the
 four host-bit F32 route tests in each build; root verified
 `f32-native-gcd-lcm-guards-fcfb14a6-20260924/SHA256SUMS`
-(`1ce5f97c...`). Wide LCM, R7RS inexact result kind, whole-F32 acceptance
-and transformer runtime repin remain pending.
+(`1ce5f97c...`). The subsequent VM exact-wide GCD leaf
+`95697c0f`/tree `985b003a` is composed byte-identically on the provisional
+runtime line at `f748077a`. VM binary direct/stored GCD now uses the
+existing bignum kernel for all-exact INT64/bignum operands, normalizing a
+fitting answer back to INT64; mixed wide/inexact operands explicitly reject.
+Independent pinned Release and ASan+UBSan+LSan CTest each pass 4/4, with
+worker JIT/AOT O0/O2 parity in both builds. Root verified
+`f32-gcd-lcm-result-contract-95697c0f-20260924/SHA256SUMS`
+(`3487a9c3...`). Wide LCM, R7RS inexact result kind, native/VM arity and
+AD policy, whole-F32 acceptance and transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
