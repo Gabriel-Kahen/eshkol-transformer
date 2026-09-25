@@ -221,6 +221,11 @@ int64_t et_g3t_private_role_step_v1(void *candidate, int64_t ordinal) {
       (c->frame.kind == 1 ? c->sampled :
        (c->frame.kind != 2 || !c->sampled || !c->prefill_committed)))
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+  if (c->frame.kind == 1 && c->frame.prompt_length == 2)
+    return ordinal == 10 ? g3t_prefill2_attention(c) :
+                           g3t_prefill2_plain(c, ordinal);
+#endif
   return ordinal == 10 ? g3t_prefill_attention(c) :
                          g3t_prefill_plain(c, ordinal);
 }

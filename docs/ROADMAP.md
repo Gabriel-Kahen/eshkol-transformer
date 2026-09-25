@@ -688,6 +688,18 @@ static source contracts. Root sealed the merged witness at
 (`8ee1b6c3...`).
 Public facade/accessors, P2 input, generation loop and CLI remain open.
 
+The isolated [P2/G0 zero-budget leaf](g3/G3_T_P2_ZERO_BUDGET_LEAF.md)
+adds an exact two-byte-ID input and a read-only `P+G<=2` admission before
+pinning. Its genuine 21-role T2 prefill stages both K/V positions in A2 and
+publishes the second-position logits, cache length two, empty output, and
+unchanged RNG through the existing private G0 tail. P2/G1 and length above
+two reject before pins. Supported f31/LLVM21 network-none normal, repeat and
+ASan/UBSan/LSan each pass 201 checks with byte-identical output and empty
+stderr, including the G1 route compiled into the P2-enabled native object.
+The inherited exact-checkout G1 publication witness passes 118 checks. All
+six G3-T source contracts and Q0 4/4 pass. This source-private candidate
+adds no public facade, accessor, generation loop, or CLI.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/

@@ -13,6 +13,11 @@ int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
 int64_t et_g3t_private_call_abort_v1(void *context);
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 void *et_g3t_private_input_from_token_v1(int64_t token);
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+void *et_g3t_private_input_from_pair_v1(int64_t first, int64_t second);
+int64_t et_g3t_private_prompt_preflight_v1(
+    void *context, void *input);
+#endif
 int64_t et_g3t_private_tensor_release_v1(void *input);
 void *et_g3t_private_output_reserve_v1(void *context, int64_t prompt_length);
 int64_t et_g3t_private_output_release_v1(void *output);
@@ -57,6 +62,9 @@ int64_t et_g3t_test_output_borrow_end_v1(void *borrow);
 int64_t et_g3t_test_output_id_set_v1(void *output, int64_t token);
 int64_t et_g3t_test_binding_flip_v1(void *context);
 int64_t et_g3t_test_output_state_v1(void *output);
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+int64_t et_g3t_test_input_length_set_v1(void *input, int64_t length);
+#endif
 #endif
 #endif
 #ifdef __cplusplus

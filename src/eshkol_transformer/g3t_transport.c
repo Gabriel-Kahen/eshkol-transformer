@@ -10,6 +10,9 @@
 #include "eshkol_transformer/g3n_primitives_abi.h"
 #include "eshkol_transformer/g3s_sampling_abi.h"
 #include "eshkol_transformer/n2_primitives_abi.h"
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+#include "eshkol_transformer/n3k_primitives_abi.h"
+#endif
 #endif
 #ifdef ET_G3T_FINAL_PUBLICATION_PRIVATE
 #ifndef ET_G3T_OUTPUT_TEXT_PRIVATE
@@ -18,6 +21,11 @@
 #ifdef ET_G3T_ZERO_BUDGET_PRIVATE
 #ifndef ET_G3T_FINAL_PUBLICATION_PRIVATE
 #error "G3-T zero budget requires final publication"
+#endif
+#endif
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+#ifndef ET_G3T_ZERO_BUDGET_PRIVATE
+#error "G3-T P2 zero budget requires P1 zero budget"
 #endif
 #endif
 #endif
@@ -36,7 +44,8 @@
 
 enum { G3T_GENERATOR = 1, G3T_INPUT = 2, G3T_OUTPUT = 4,
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
-enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_INTERNAL = 5 };
+enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
+       G3T_INTERNAL = 5 };
 enum { G3T_IDENTITY = 1, G3T_LIFECYCLE = 2, G3T_CONFIG = 3,
        G3T_TOPOLOGY = 6, G3T_ALLOCATION = 7, G3T_INVARIANT = 10 };
 typedef struct g3t_record {
@@ -45,7 +54,15 @@ typedef struct g3t_record {
 } g3t_record;
 typedef struct g3t_frame {
   int active, kind, next_ordinal, prepared, end_prepared;
-  int64_t token;
+  int64_t token, prompt_length;
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+  int64_t prompt_ids[2];
+  struct {
+    float et[8], ep[8], x[8], n1[8], qt[8], kt[8], vt[8];
+    float qh[8], kh[8], vh[8], ah[8], at[8], ao[8], r[8], n2[8];
+    float fu[16], fg[16], fd[8], y[8], nf[8], z[512];
+  } p2;
+#endif
   et_a2_kv_cache *candidate_cache;
   et_a2_kv_cache_transaction *transaction;
   float et[4], ep[4], x[4], n1[4], qt[4], kt[4], vt[4];
@@ -100,6 +117,16 @@ static int64_t g3t_fail(int64_t domain, int64_t category, int64_t code) {
 static int64_t g3t_bad(int64_t category, int64_t code) {
   return g3t_fail(0, category, code);
 }
+#ifdef ET_G3T_ZERO_BUDGET_PRIVATE
+static int g3t_zero_prompt(const g3t_context *c, const g3t_output *out) {
+  if (!c || !out || out->P != c->frame.prompt_length) return 0;
+  return out->P == 1
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+         || out->P == 2
+#endif
+         ;
+}
+#endif
 static int64_t g3t_f32_failure(const et_f32_tensor_error *error) {
   return g3t_fail(3, error->category, error->code);
 }
@@ -377,6 +404,45 @@ int64_t et_g3t_private_call_acquire_v1(void *candidate, int64_t call_kind) {
   return 0;
 }
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+int64_t et_g3t_private_prompt_preflight_v1(
+    void *context_candidate, void *input_candidate) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(context_candidate, 0);
+  if (!c) return g3t_error_category;
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      input_candidate, G3T_INPUT, 0);
+  if (!input) return g3t_error_category;
+  if (input->length != 2 || input->length + c->policy[4] > 2)
+    return g3t_bad(G3T_SHAPE, G3T_CONFIG);
+  if (input->ids[0] < 0 || input->ids[0] > 255 ||
+      input->ids[1] < 0 || input->ids[1] > 255)
+    return g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+  if (c->h.busy || c->prefill_committed || input->h.busy)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  return 0;
+}
+void *et_g3t_private_input_from_pair_v1(int64_t first, int64_t second) {
+  g3t_clear();
+  if (first < 0 || first > 255 || second < 0 || second > 255) {
+    g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+    return NULL;
+  }
+  g3t_input *input = calloc(1, sizeof(*input));
+  if (!input) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+  input->h.kind = G3T_INPUT;
+  input->h.state = G3T_LIVE;
+  input->length = 2;
+  input->ids[0] = first;
+  input->ids[1] = second;
+  input->h.next = g3t_registry;
+  g3t_registry = &input->h;
+  return input;
+}
+#endif
 void *et_g3t_private_input_from_token_v1(int64_t token) {
   g3t_clear();
   if (token < 0 || token > 255) {
@@ -411,7 +477,13 @@ void *et_g3t_private_output_reserve_v1(void *candidate, int64_t prompt_length) {
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
   if (!c) return NULL;
-  if (c->call_kind != 2 || prompt_length != 1 || c->pending_output ||
+  if (c->call_kind != 2 ||
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+      (prompt_length != 1 && (prompt_length != 2 || c->policy[4] != 0)) ||
+#else
+      prompt_length != 1 ||
+#endif
+      c->pending_output ||
       c->prefill_committed || c->frame.active) {
     g3t_bad(G3T_STATE, G3T_CONFIG);
     return NULL;
@@ -475,7 +547,8 @@ int64_t et_g3t_private_output_prepare_v1(
   if (c->policy[4] == 0) {
     if (output->h.state != G3T_PENDING || !output->h.busy ||
         c->call_kind != 2 || c->pending_output != output ||
-        output->parent_ctx != c || output->P != 1 || output->G != 0 ||
+        output->parent_ctx != c || !g3t_zero_prompt(c, output) ||
+        output->G != 0 ||
         !output->ids || output->numeric_ready || output->ids_copied ||
         output->text_ready || output->length || output->cache_length ||
         c->prefill_committed || c->sampled || c->binding_ready ||
@@ -487,7 +560,7 @@ int64_t et_g3t_private_output_prepare_v1(
     if (et_g3t_model_pins_check_internal(&c->pins, &error))
       return g3t_f32_failure(&error);
     output->length = 0;
-    output->cache_length = 1;
+    output->cache_length = output->P;
     memcpy(output->rng, c->rng, sizeof(output->rng));
     output->numeric_ready = 1;
     return 0;
@@ -552,8 +625,8 @@ static g3t_output *g3t_ready_output(void *context_candidate,
   if (out->G == 0) {
     if (out->h.state != G3T_PENDING || !out->h.busy ||
         c->call_kind != 2 || c->pending_output != out ||
-        out->parent_ctx != c || out->P != 1 ||
-        !out->ids || out->length != 0 || out->cache_length != 1 ||
+        out->parent_ctx != c || !g3t_zero_prompt(c, out) ||
+        !out->ids || out->length != 0 || out->cache_length != out->P ||
         out->numeric_ready != 1 || out->ids_copied != text ||
         out->text_ready || c->prefill_committed || c->sampled ||
         c->binding_ready || !c->frame.active || c->frame.kind != 1 ||
@@ -685,7 +758,11 @@ int64_t et_g3t_private_frame_begin_v1(
   g3t_context *c = g3t_active(candidate);
   if (!c) return g3t_error_category;
   if (c->call_kind != 2 || !c->pending_output || c->frame.active ||
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+      (c->pending_output->P != 1 && c->pending_output->P != 2) ||
+#else
       c->pending_output->P != 1 ||
+#endif
       (frame_kind != 1 && frame_kind != 2))
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
   et_a2_kv_cache *cache = NULL;
@@ -694,8 +771,16 @@ int64_t et_g3t_private_frame_begin_v1(
     g3t_input *input = (g3t_input *)g3t_admit_record(
         input_candidate, G3T_INPUT, 0);
     if (!input) return g3t_error_category;
-    if (c->prefill_committed || c->sampled || input->length != 1 ||
-        input->h.busy)
+    if (c->prefill_committed || c->sampled ||
+        input->length != c->pending_output->P ||
+        input->length + c->policy[4] > 2 ||
+#ifndef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+        input->length != 1 ||
+#endif
+        input->length < 1 || input->length > 2 ||
+        input->ids[0] < 0 || input->ids[0] > 255 ||
+        (input->length == 2 &&
+         (input->ids[1] < 0 || input->ids[1] > 255)) || input->h.busy)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
     token = input->ids[0];
     et_kernel_error error;
@@ -712,10 +797,20 @@ int64_t et_g3t_private_frame_begin_v1(
   memset(&c->frame, 0, sizeof(c->frame));
   c->frame.candidate_cache = cache;
   c->frame.token = token;
+  c->frame.prompt_length = frame_kind == 1 ? c->pending_output->P : 1;
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+  if (frame_kind == 1 && c->frame.prompt_length == 2) {
+    g3t_input *input = (g3t_input *)input_candidate;
+    memcpy(c->frame.prompt_ids, input->ids, sizeof(c->frame.prompt_ids));
+  }
+#endif
   c->frame.active = 1;
   c->frame.kind = (int)frame_kind;
   return 0;
 }
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+#include "g3t_prefill2_roles.inc"
+#endif
 #include "g3t_prefill_roles.inc"
 int64_t et_g3t_private_frame_prepare_v1(
     void *candidate, void *staged_result) {
@@ -751,8 +846,8 @@ int64_t et_g3t_private_frame_prepare_v1(
   if (c->policy[4] == 0) {
     g3t_output *out = c->pending_output;
     if (out->parent_ctx != c || out->h.state != G3T_PENDING ||
-        !out->h.busy || out->P != 1 || out->G != 0 ||
-        out->length != 0 || out->cache_length != 1 || !out->ids ||
+        !out->h.busy || !g3t_zero_prompt(c, out) || out->G != 0 ||
+        out->length != 0 || out->cache_length != out->P || !out->ids ||
         out->numeric_ready != 1 || out->ids_copied != 1 ||
         out->text_ready != 1 ||
         memcmp(out->rng, c->rng, sizeof(out->rng)))
@@ -786,8 +881,8 @@ static int64_t g3t_zero_preflight(g3t_context *c) {
       !c->frame.prepared || !c->frame.transaction ||
       !c->frame.candidate_cache || c->prefill_committed || c->sampled ||
       c->binding_ready || out->h.state != G3T_PENDING || !out->h.busy ||
-      out->parent_ctx != c || out->P != 1 || out->G != 0 ||
-      out->length != 0 || out->cache_length != 1 ||
+      out->parent_ctx != c || !g3t_zero_prompt(c, out) || out->G != 0 ||
+      out->length != 0 || out->cache_length != out->P ||
       out->numeric_ready != 1 || out->ids_copied != 1 ||
       out->text_ready != 1 || !out->ids ||
       memcmp(out->rng, c->rng, sizeof(out->rng)))
@@ -837,11 +932,11 @@ static int64_t g3t_zero_preflight(g3t_context *c) {
       !keys->data || !values->data || !lengths->data || !mask->data ||
       lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
       lengths->byte_length != sizeof(int64_t) ||
-      ((const int64_t *)lengths->data)[0] != 1 ||
+      ((const int64_t *)lengths->data)[0] != out->P ||
       mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
       mask->shape[1] != 2 || mask->byte_length != 2 ||
       ((const uint8_t *)mask->data)[0] != 1 ||
-      ((const uint8_t *)mask->data)[1] != 0)
+      ((const uint8_t *)mask->data)[1] != (uint8_t)(out->P == 2))
     g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
 view_end:
   category = g3t_error_category; domain = g3t_error_domain;
@@ -999,7 +1094,11 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     memcpy(c->binding_values, c->frame.binding_values,
            sizeof(c->binding_values));
     c->binding_ready = 1;
-    memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
+    memcpy(c->last_logits,
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+           c->frame.prompt_length == 2 ? c->frame.p2.z + 256 :
+#endif
+           c->frame.z, sizeof(c->last_logits));
     c->prefill_committed = 1;
     g3t_output *out = c->pending_output;
     out->parent_ctx = NULL;
@@ -1247,6 +1346,15 @@ int64_t et_g3t_test_output_state_v1(void *candidate) {
       candidate, G3T_OUTPUT, 1);
   return out ? out->h.state : -2;
 }
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+int64_t et_g3t_test_input_length_set_v1(void *candidate, int64_t length) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || input->h.busy || length < 1 || length > 3) return -1;
+  input->length = length;
+  return 0;
+}
+#endif
 int64_t et_g3t_test_output_id_set_v1(void *candidate, int64_t token) {
   g3t_output *out = (g3t_output *)g3t_admit_record(
       candidate, G3T_OUTPUT, 1);
@@ -1303,7 +1411,12 @@ int64_t et_g3t_test_frame_logit_bits_v1(void *candidate, int64_t index) {
   if (!c || !c->frame.active || c->frame.next_ordinal != 21 ||
       index < 0 || index >= 256) return -1;
   uint32_t bits;
-  memcpy(&bits, &c->frame.z[index], sizeof(bits));
+  memcpy(&bits,
+#ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
+         c->frame.kind == 1 && c->frame.prompt_length == 2 ?
+             &c->frame.p2.z[256 + index] :
+#endif
+             &c->frame.z[index], sizeof(bits));
   return bits;
 }
 int64_t et_g3t_test_cache_length_v1(void *candidate) {

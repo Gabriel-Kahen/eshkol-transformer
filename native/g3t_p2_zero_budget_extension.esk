@@ -1,0 +1,77 @@
+;;; Source-private P2/G0 prompt path. The preflight precedes native pinning.
+(extern ptr g3t-native-input-from-pair i64 i64
+        :real et_g3t_private_input_from_pair_v1)
+(extern i64 g3t-native-prompt-preflight ptr ptr
+        :real et_g3t_private_prompt_preflight_v1)
+
+(define (g3t-generation-pair-input-create first second)
+  (let ((operation 'g3t-generation-pair-input-create))
+    (m3-call operation
+      (if (not (and (m3t-exact-i64? first) (>= first 0) (<= first 255)
+                    (m3t-exact-i64? second) (>= second 0) (<= second 255)))
+          (g3t-fail-raw 'invalid-argument operation 3
+                        "G3-T pair requires two exact byte IDs"))
+      (let* ((shell (vector 'g3t-input-private))
+             (entry (vector shell 'input 'pending #f #f #f #f #f #f #f #f #f)))
+        (vector-set! g3t-registry 0
+                     (cons entry (vector-ref g3t-registry 0)))
+        (let ((native (g3t-native-input-from-pair first second)))
+          (if (null? native)
+              (begin (g3t-prefill-dead! entry)
+                     (g3t-native-fail-raw operation)))
+          (vector-set! entry 3 native)
+          (vector-set! entry 2 'live)
+          shell)))))
+
+(define (g3t-p2-output-reserve call)
+  (let* ((operation 'g3t-p2-output-reserve)
+         (entry (g3t-prefill-call-entry call operation))
+         (budget (vector-ref (vector-ref (vector-ref entry 4) 7) 5)))
+    (if (not (and (= budget 0) (eq? (vector-ref entry 8) #f)))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G3-T P2 requires zero generation budget"))
+    (let* ((shell (vector 'g3t-output-private))
+           (staging (make-bytevector 0 0))
+           (raw (make-bytevector 0 0))
+           (output (vector shell 'output 'pending #f entry staging raw
+                           #f #f #f #f #f)))
+      (vector-set! g3t-registry 0
+                   (cons output (vector-ref g3t-registry 0)))
+      (let ((native (g3t-native-output-reserve (vector-ref entry 3) 2)))
+        (if (null? native)
+            (begin (g3t-prefill-dead! output)
+                   (g3t-native-fail-raw operation)))
+        (vector-set! output 3 native)
+        (vector-set! output 2 'pending)
+        (vector-set! entry 8 output)
+        shell))))
+
+(define (g3t-p2-zero-generate! generator input)
+  (let ((operation 'g3t-p2-zero-generate!))
+    (m3-call operation
+      (let* ((generator-entry (g3t-generator-find generator operation))
+             (input-entry (g3t-prefill-entry input 'input operation)))
+        (if (not (and (eq? (vector-ref generator-entry 1) 'generator)
+                      (eq? (vector-ref generator-entry 2) 'live)
+                      (eq? (vector-ref input-entry 2) 'live)))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-T P2 owner is not live"))
+        (if (not (= 0 (g3t-native-prompt-preflight
+                       (vector-ref generator-entry 3)
+                       (vector-ref input-entry 3))))
+            (g3t-native-fail-raw operation))
+        (let* ((call (g3t-call-acquire generator-entry 2))
+               (entry (g3t-prefill-entry call 'call operation)))
+          (guard (caught
+                   (#t (if (eq? (vector-ref entry 2) 'live)
+                           (g3t-call-abort call))
+                       (raise caught)))
+            (let ((output (g3t-p2-output-reserve call)))
+              (g3t-frame-begin call input 1)
+              (let roles ((ordinal 0))
+                (if (< ordinal 21)
+                    (begin (g3t-role-step call ordinal)
+                           (roles (+ ordinal 1)))))
+              (g3t-output-prepare call output)
+              (g3t-t1-decode-output! call output)
+              (g3t-final-commit! call output))))))))
