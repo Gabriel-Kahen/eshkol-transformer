@@ -401,6 +401,17 @@ generated record callable metadata and ESKB v1 named high-arity export remain
 unresolved. The switch fallback compiles but lacks supported dynamic proof.
 This is a provisional runtime successor, not whole-F32 acceptance or a
 transformer pin change.
+The upstream Eshkol F32 composition is now pushed as draft PR
+[#1](https://github.com/Gabriel-Kahen/eshkol/pull/1) at `b8a1a82c`. Its
+source cut `79074607` passed a pinned local full run of 46/46 suites and
+844/844 tests. Combined core and source-compatible quantum traces passed the
+execution-backed 1,110/1,110 surface gate with zero deficit and zero
+high-risk uncovered constructs; the policy, sidecar and deficit ledger are
+committed. Root verified the sealed evidence at
+`f32-coverage-79074607-20260925/SHA256SUMS` (`a9781b3e...`). Exact-head
+hosted CI `36145227115` is pending across the platform matrix. The
+transformer runtime pin remains `81298b4a`; whole-F32 acceptance and a
+tested repin have not occurred.
 The separate reviewed native AOT/JIT and VM `conjugate` leaf
 `e1394ee`/tree `66e4fa7` promotes canonical F32 to the existing DOUBLE
 result kind, rejects malformed/folded native carriers, preserves VM INT/FLOAT
