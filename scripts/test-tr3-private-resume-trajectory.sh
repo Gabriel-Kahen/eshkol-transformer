@@ -91,7 +91,7 @@ script = script.replace(
 )
 script = script.replace(
     "TR3-C JOINT RUNTIME PASS: [0-9]+ checks, 42 tensors, abort/retry",
-    "TR3-C PRIVATE RESUME TRAJECTORY PASS: [0-9]+ checks, K=1 R=1 finite EOS and exact 42-image/C2 bytes",
+    "TR3-C PRIVATE RESUME TRAJECTORY PASS: [0-9]+ checks, A=1/2/3 K=1 R=3 finite EOS and exact 42-image/C2 bytes",
 )
 script = script.replace(
     'sha256sum /out/runtime_trajectory.esk',
