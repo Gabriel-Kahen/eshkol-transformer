@@ -238,6 +238,15 @@ gate includes a bounded probe that retains eight stale entry shells while droppi
 their released states, checks every shell remains `invalid-state`, checks detached
 path/alias copies remain usable, and requires native/provider live counts to stay at
 the pre-loop baseline.
+
+The private shell registry remains the authority for every opaque value. A
+process-local hash table indexes published shell pointer bits to registry records;
+lookup accepts a hit only when the record's shell is `eq?` to the supplied value.
+Missing entries, including a failed table resize, fall back to the registry scan.
+The index never hashes a native token as an Eshkol heap object, adds no public or
+native identity operation, and retains only records already retained by the
+registry. Release still replaces raw state, entry, and tensor edges with dead
+markers, so an indexed stale shell cannot regain authority or retain a carrier.
 The pinned runtime supplies no proved finalizer, so callers must explicitly release
 every successfully returned state. P1 neither hides abandoned states in a strong
 snapshot registry nor treats GC reachability as native-storage reclamation.
