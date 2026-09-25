@@ -93,6 +93,17 @@ regressions. Root verified the source closure and merged Q0 4/4 plus the
 Step22 structural checker. Call finalization deliberately rejects after text
 readiness until frame prepare/commit and publication are implemented. Public
 result, generation loop and save/reload remain pending.
+The reviewed private native manual logits reservation Step23A source
+`9e9e628`/tree `f3183fd` is integrated byte-identically as `b3295e1`.
+It adds only the documented `logits_reserve` entry: active manual calls own
+one pending I2 f32 `[1,256]` result, with typed release, abort tombstone,
+borrow rejection and allocation-failure cleanup. Pinned f31 normal, repeat
+and ASan/UBSan/LSan passed 1,196 checks with 4 I2 and 1 owner allocation
+cuts plus inherited Step22/21B/call-entry regressions. Root verified the
+`g3c4-logits-reservation-9e9e628-20260924` source closure
+(`a7c54e4...`), byte-identical merged source, Q0 4/4 and structural checker.
+Native frame begin/role step, manual transcript, frame prepare/commit and
+public result remain downstream.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
