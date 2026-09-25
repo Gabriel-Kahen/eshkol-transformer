@@ -688,7 +688,13 @@ now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
 witness and independent PyTorch checker prove one fixed-profile two-microbatch
 update with wrong-weight rejection, abort/retry, gradient clear, and a numerical
-key-weight comparison. Trainer phase/counter publication is still test-owned;
+key-weight comparison. Source `365a180` plus audit `e461cc2`/tree `cbf8ca09`
+are integrated at `d341ae4`/`07ebba1`, with formatting `d821900`. Root reran
+the exact merged pinned gate: 21 static loads, 41 runtime checks, key-weight
+postupdate maximum absolute difference `1.86e-9`, and a rejected nonfinite
+mutant; the 1:26 AOT build peaked at 4,402,264 KiB. Root sealed
+`tr3-step-leaf-root-d821900-20260925/SHA256SUMS` (`05bf6a62...`). Trainer
+phase/counter publication is still test-owned;
 whole-step rollback, EOS replay, metrics, public `trainer-step!`, and resume
 acceptance remain pending.
 The exact private source `8a29dcf`/tree `43bff41` is integrated with
