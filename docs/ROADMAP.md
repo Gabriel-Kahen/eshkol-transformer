@@ -611,6 +611,14 @@ and a speculative G3-S greedy or categorical candidate. Its witness compares
 all 256 logits bitwise with independent M3T and exercises precommit,
 attention, and stale-profile rollback. A token frame, published output,
 continuation binding validation, and public generation remain pending.
+The reviewed candidate `c31611c`/tree `99194ff` passed 125 checks in each
+normal/repeat/sanitizer witness, 20 fresh sanitizer launches, and bitwise
+agreement of all 256 logits with independent M3T. Its sealed evidence is
+`g3t-prefill-sample-p1-combined-c31611c-20260925/SHA256SUMS`
+(`013a0fba...`). Root integrated the feature, test, and source checker at
+`74cff23`, `736f2f0`, and `3496c0d`; the separate candidate P1 repair was
+already integrated at `cf5e394`. All in-repo source-closure files match the
+candidate except this roadmap; root reran the static checkers and Q0 4/4.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -883,6 +891,11 @@ bytes per cycle, alongside linear P1/O2/C2/I2 terminal records. Section 13's
 already permits linear terminal records and makes no flat-total-memory claim.
 Clean `cd2899c`/tree `81a9980` evidence is sealed at
 `tr3-retention-cycle-cd2899c-20260925/SHA256SUMS` (`b8280e90...`).
+Root attempted the 1,024-cycle ASan horizon on that sealed candidate after
+integration. It timed out at 1,200 seconds before the horizon (exit 124,
+peak RSS 1,334,512 KiB), so it gives no 1,024-cycle acceptance evidence;
+the bounded 32/128-cycle results above remain the measured limit. The
+attempt is sealed at `tr3-retention-1024-integrated-20260925/SHA256SUMS`.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
