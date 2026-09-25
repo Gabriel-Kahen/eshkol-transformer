@@ -58,6 +58,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3t-prefill-sample.py",
     ROOT / "scripts" / "check-g3t-output-text.py",
     ROOT / "scripts" / "check-g3t-final-publication.py",
+    ROOT / "scripts" / "check-g3t-zero-budget.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
