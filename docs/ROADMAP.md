@@ -988,9 +988,14 @@ an active borrowed batch makes native close refuse. The latter returns
 preserved and D2 still live. Successful alias close leaves all six existing
 source-root children and D2/O2 native receivers live; an exact repeated close
 sees the handle tombstone. Evidence is sealed at
-`tr3-factory-o2-lease-cleanup-e97c3ea-20260925` (`82c16e57...`). Other producer
-cuts, broader E1 category evidence, close/lease busy paths, and an exact
-merged-union gate remain pending.
+`tr3-factory-o2-lease-cleanup-e97c3ea-20260925` (`82c16e57...`). The `779a4f3`
+test uses the accepted native D2 idle preflight to
+return authenticated `invalid-state/lease/raised-e1` with D2 cleanup and no
+handle. The same unborrowed batch makes close return `invalid-state/close/busy`
+without consuming the handle; native release permits close retry and exact
+repeat-close tombstone. Sealed evidence is `tr3-factory-busy-779a4f3-20260925`
+(`e007ee61...`). Other producer cuts, broader E1 categories, other busy paths,
+and an exact merged-union gate remain pending.
 Root independently reviewed the prior bridge, source wrapper, linked scripts,
 fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.

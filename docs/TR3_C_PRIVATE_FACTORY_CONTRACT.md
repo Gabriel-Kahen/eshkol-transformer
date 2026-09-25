@@ -249,5 +249,17 @@ objects and raw source-global observations, not package exports or physical
 reclamation evidence. Sealed linked evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-o2-lease-cleanup-e97c3ea-20260925/SHA256SUMS`
 (`82c16e57b2e18050c7f8073d755ce2171f06d04e0df23baf7342c81ddaa294b2`).
-Other producer failure cuts, broader E1 category evidence, close/lease busy
-failures, and exact merged-union acceptance remain open.
+The `779a4f3` linked test uses the already accepted native D2 idle preflight:
+an unborrowed batch on the exact opened dataset owner makes lease construction
+raise authenticated `invalid-state/lease/raised-e1`. Factory cleanup closes
+that batch and dataset, returns no handle, and consumes the attempt. A separate
+successful construction stages the same native busy condition before close.
+The C call returns `invalid-state/close/busy` while retaining the exact live
+handle and D2/O2 children. Releasing the batch through D2's accepted preflight
+and release lets the same handle close successfully; a repeated close sees its
+tombstone. This tests dependency-busy admission and retry, not overlapping C
+threads or an active trainer phase. Other producer cuts, broader E1 categories,
+other busy paths, and exact merged-union acceptance remain open. Sealed linked
+evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-busy-779a4f3-20260925/SHA256SUMS`
+(`e007ee61f32ac14fa863d11b3a552e3038efc488d05b005a248a9ee758eecf0a`).
