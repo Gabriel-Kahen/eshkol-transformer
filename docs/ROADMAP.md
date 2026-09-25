@@ -682,6 +682,18 @@ fixtures in each mode. Evidence is sealed at
 `f32-gcd-lcm-root-d432dc11-20260925/SHA256SUMS` (`0eed9b20...`). Canonical
 F32 is still rejected; all-INT64 `INT64_MIN`, mixed wide/inexact, reverse-tape
 AD-node policy, whole-F32 acceptance, and transformer repin remain open.
+The bounded canonical F32 GCD/LCM admission `8cb2c0d8` and root correction
+`58cc9a3f` are composed on the provisional Eshkol branch at `e459fbab`/tree
+`d1da01d`. Native JIT/AOT and VM direct/stored routes accept finite integral
+F32 within the signed-int64 magnitude domain and return inexact DOUBLE;
+fractional, nonfinite, out-of-range, malformed, mixed exact-wide/inexact, and
+AD inputs reject. The root correction removes two hidden zero fallbacks when
+F32 promotion cannot be emitted. Root's pinned LLVM21 Release and
+ASan+UBSan+LSan focused CTest pass 16/16 each; the sanitizer runtime tests
+retain leak detection, while AOT fixture compilation disables it for known
+frontend parser allocations. Evidence is sealed at
+`f32-gcd-lcm-root-e459fbab-20260925/SHA256SUMS` (`1a2b3551...`). Broader
+Eshkol CI and the transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
@@ -832,6 +844,9 @@ The pinned f31/LLVM21 network-disabled run on clean `15a7c8a`/tree
 `68b2d56` passed 246 checks in nine distinct processes and 15 C2 byte
 comparisons; its seal is
 `tr3-fresh-resume-15a7c8a-20260925/SHA256SUMS` (`f11dc3a6...`).
+Root independently reran the same source/tree with the same 246 checks and
+15 byte comparisons; the verified 87-file root seal is
+`tr3-fresh-resume-root-d835a51-20260925/SHA256SUMS` (`1967e564...`).
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
