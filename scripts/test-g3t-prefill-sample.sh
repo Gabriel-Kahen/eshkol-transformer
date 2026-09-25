@@ -86,6 +86,20 @@ test ! -s "$temporary/normal/repeat.stderr"
 build_mode sanitize
 cmp "$temporary/normal/stdout" "$temporary/normal/repeat.stdout"
 cmp "$temporary/normal/stdout" "$temporary/sanitize/stdout"
+launches="${G3T_SANITIZER_LAUNCHES:-1}"
+[[ "$launches" =~ ^[1-9][0-9]*$ ]] && (( launches <= 300 )) || \
+  die "G3T_SANITIZER_LAUNCHES must be 1..300"
+for ((attempt = 2; attempt <= launches; ++attempt)); do
+  env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:handle_segv=2:abort_on_error=1:print_stacktrace=1 \
+    UBSAN_OPTIONS=halt_on_error=1 ESHKOL_ARENA_POISON=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 120s \
+    "$temporary/sanitize/caller" \
+    >"$temporary/sanitize/extra.stdout" \
+    2>"$temporary/sanitize/extra.stderr"
+  test ! -s "$temporary/sanitize/extra.stderr"
+  cmp "$temporary/normal/stdout" "$temporary/sanitize/extra.stdout"
+done
+printf '%s\n' "$launches" >"$evidence/sanitizer-launches.txt"
 for mode in normal sanitize; do
   cp "$temporary/$mode/stdout" "$evidence/$mode.stdout"
   cp "$temporary/$mode/stderr" "$evidence/$mode.stderr"

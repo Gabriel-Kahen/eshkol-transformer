@@ -33,7 +33,10 @@ sanitizer callers, checks private test-hook absence from a production object,
 and records a source closure. `G3T_ONLY_NORMAL=1` is a development shortcut;
 it is not the final gate.
 
-The predecessor's sanitizer model-seal crash remains an independent limitation:
-the previously sealed constructor and the earlier native-context baseline both
-showed intermittent crashes in `eshkol_bignum_compare` during model creation,
-before generator construction. This leaf does not claim to fix that path.
+The isolated branch also carries the exact P1 source/template repair from
+`cf5e394`: construction schedules compare opaque native handles by identity.
+Before that repair, the predecessor constructor and native-context baseline
+showed intermittent sanitizer crashes in `eshkol_bignum_compare` during model
+creation, before generator construction. The combined branch's sanitizer gate
+and focused P1 witness are rerun after that repair; the old crash remains an
+audited predecessor limitation, not an unexamined failure in this leaf.
