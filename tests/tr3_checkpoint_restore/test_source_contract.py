@@ -50,6 +50,8 @@ class CheckpointRestoreSourceContract(unittest.TestCase):
             "X1 compatibility rejection preserves receiver",
             "forged trainer releases loaded owner once",
             "forged K2 report preserves source trainer",
+            "advanced source authentic optimizer update",
+            "advanced checkpoint differs from fresh live receiver",
             "successful restore releases loaded owner once",
             "all 42 restored tensor bytes and controls match saved source",
         ):

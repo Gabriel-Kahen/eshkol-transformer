@@ -21,8 +21,10 @@ checksummed file via private snapshot SAVE, then checks checksum corruption,
 truncation, malformed path, forged K2 report, and an authentic receiver with
 different canonical X1 run seed. Each rejection preserves the receiver and
 live source trainer; failures after LOAD return release the exact detached
-owner once. The valid path compares all 42 restored tensor byte images and
-controls against the saved source and confirms release and idle state.
+owner once. The valid path loads a separate, genuinely advanced C2 state with
+one authentic O2 update and D2 batch progression into a fresh receiver,
+compares all 42 restored tensor byte images and controls against that saved
+source, and confirms release and idle state.
 
 This bounded seam does not establish public trainer wiring, a nontrivial
 interrupted/resumed trajectory, all allocation-failure cuts, or general file
