@@ -870,29 +870,28 @@ contracts do not define one data-only C request, child ownership/cleanup, or
 trainer handle/status ABI; CLI3 deliberately leaves `pretrain` flags undefined.
 The linked package therefore retains only its initializer export until those
 contracts are accepted.
-The same-package primitive-ingress audit found runtime string/integer tagging
-and localized source thunks, but no reviewed factory wrapper or per-call E1
-scope. A bounded one-attempt private factory is the current proof seam;
-its public generalization remains open.
 The [private factory/close contract](TR3_C_PRIVATE_FACTORY_CONTRACT.md)
-specifies the one-attempt data-only request, X1-derived M3T seed, D2 corpus
+specifies a one-attempt data-only request, X1-derived M3T seed, D2 corpus
 identity, fixed O2 paths, failure retention and exact C handle/status behavior.
-The initializer-only production export manifest and public trainer/resume status
-remain unchanged. An isolated source/private implementation candidate adds the same-package
-producer wrapper, C ingress/handle bridge, and a linked lifecycle gate. The
-first pinned 47-source/30-native strict linked run on `1e45393` passed genuine
-`dlopen` create/close, X1/D2/digest negatives, initializer and hostile-link
-probes; its sealed evidence is `tr3-factory-linked-1e45393-20260925`.
-The final same-tree linked rerun on `5558c08` passes with exact
-raw/undefined/dynamic symbol manifests, including the three newly indexed P1
-hash references; its sealed evidence is `tr3-factory-linked-5558c08-20260925`.
+The isolated implementation now composes authentic same-package producers
+through candidate-only `tr3_c_private_factory_root.esk`; the production root
+and initializer-only export manifest remain unchanged. On `b0cd341`, the
+production linked gate passes its exact 46-source/29-native boundary with two
+dynamic-defined symbols (`tr3-linked-production-b0cd341-20260925`), while
+the candidate linked gate passes 48-source/30-native construction, lifecycle,
+negative probes and four candidate dynamic-defined symbols
+(`tr3-factory-candidate-b0cd341-20260925`). Both evidence sets are sealed.
+The distinct production `--emit-object` and `--shared-lib -c` gates pass on
+`436efad` after exact P1 hash-symbol repins; the latter also pins three
+preexisting lease-unenrollment definitions and retains its expected linked
+tail-transfer negative. Sealed evidence is `tr3-private-object-436efad-20260925`
+and `tr3-private-mode-436efad-20260925`.
 The full contract matrix still needs a fixed-profile and X1-seed derivation
 witness, every producer/lease failure cut, cleanup-failure behavior,
 process-lifetime retention, broader E1 category evidence and an exact merged
 union gate. Root independently reviewed the bridge, source wrapper, linked
-script, fixture, runtime lifetime and sealed candidate evidence without finding
-a blocker. The production initializer-only export manifest and public
-trainer/resume status are unchanged.
+scripts, fixtures, runtime lifetime and sealed evidence without finding a
+blocker. Public trainer/resume status is unchanged.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

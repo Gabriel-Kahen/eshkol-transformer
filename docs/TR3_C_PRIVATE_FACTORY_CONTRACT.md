@@ -3,8 +3,11 @@
 Status: **source/private implementation candidate with a passing bounded linked
 lifecycle gate; full contract acceptance, production exports, public trainer,
 and resume remain pending**. Source base for this contract: integration commit
-`76299fd`. The candidate source is `5558c08` and its sealed linked evidence is
-`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-linked-5558c08-20260925/SHA256SUMS`. This freezes a bounded
+`76299fd`. The candidate-only `native/tr3_c_private_factory_root.esk` loads
+the unchanged production private root plus its factory extension. Its linked
+gate passed on `b0cd341` with sealed evidence at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-candidate-b0cd341-20260925/SHA256SUMS`.
+The production root remains initializer-only. This freezes a bounded
 linked-package proof seam, not CLI3 policy or a general training API.
 
 ## Accepted source and missing boundary
@@ -187,7 +190,7 @@ negatives for every localized source operation. This contract permits a
 bounded private C construct/close proof; it does not justify public trainer
 exports or exact-resume claims.
 
-The candidate linked gate on `5558c08` proves real same-package construction,
+The candidate linked gate on `b0cd341` proves real same-package construction,
 success/close, X1 parse, D2 missing-corpus and digest-mismatch negatives,
 initializer behavior, opaque-handle forged/repeated close, and hostile-link
 localization. Its fixture covers C admission and unclassified-return status
