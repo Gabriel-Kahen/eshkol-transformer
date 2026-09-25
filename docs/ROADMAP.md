@@ -508,8 +508,16 @@ runs each pass 1,914 checks across T1/T2/decode; provider failure/retry,
 candidate and committed-cache invariance, borrowed-logits abort, no added
 global symbol, predecessor hashes, Q0, and merged structural gates pass.
 Root sealed `g3c4-manual-at-b02bcf3-20260925/SHA256SUMS` (`c85e5d29...`).
-Ordinals 12–20, public role stepping, frame commit, and generation remain
-pending.
+The private ordinal-12 attention-out projection from exact source
+`63757e1`/tree `e02abb4` is integrated byte-identically at `6c63c0f`:
+accepted G3-N/N3K linear uses pinned W_o and writes frame-owned AO only
+after a successful dispatch. Supported normal/repeat/sanitizer each pass
+1,937 checks across T1/T2/decode, including provider failure/retry, exact
+weight identity, staged A2 and committed-cache invariance, and borrowed-
+logits abort. No new global symbol, predecessor hashes, Q0, and merged
+structural gates pass. Root sealed
+`g3c4-manual-ao-63757e1-20260925/SHA256SUMS` (`faafc832...`). Ordinals
+13–20, public role stepping, frame commit, and generation remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
