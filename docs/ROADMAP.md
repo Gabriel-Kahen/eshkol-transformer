@@ -503,6 +503,12 @@ boundary and exercises a real construct/snapshot/file/restore continuation.
 The canonical shared-library package path still fails in the pinned compiler
 at `Tail transfer: no public entry` for accepted private functions; bridge,
 localization and public trainer construction remain blocked on that boundary.
+The documented private `--shared-lib -c` object flavor compiles the same root
+with an exact 46-source/2,593-defined/330-undefined boundary and no public
+trainer or C ABI thunk. A focused negative gate reproduces all 52 linked-mode
+tail-transfer failures. The pinned compiler must bind each tail-body forwarder
+to its renamed internal implementation before a C-callable package can be
+admitted; public trainer and resume claims remain pending.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
