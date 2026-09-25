@@ -726,6 +726,12 @@ now binds the fixed-profile step-start cursor, RNG, train-mode witness, and
 counters to an authenticated rooted frame, rejects malformed/busy entry, and
 supports D2/gradient rollback and O2 prepare/abort before parameter writes.
 It does not own the no-fail post-write trainer-control tail or public step.
+The bounded [private no-EOS commit tail](TR3_STEP_PRIVATE_COMMIT_TAIL.md)
+stages exact token/update controls and frame retirement before O2's accepted
+first-write boundary, then performs only primitive no-fail writes after O2
+success. Its pinned genuine two-microbatch numerical witness passes, while
+EOS/epoch replay, automatic whole-step error cleanup, metrics, public trainer,
+and resume remain pending.
 Source `25673ef`/tree `5cd4abb` is integrated byte-identically at `c7cdf00`.
 Root's pinned merged gate passes 63 runtime checks with 23 source loads;
 `tr3-step-transaction-root-c7cdf00-20260925/SHA256SUMS` is sealed at
