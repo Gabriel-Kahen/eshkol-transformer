@@ -13,6 +13,11 @@
 (define cycle-receiver (trajectory-create cycle-tuple-receiver))
 (define cycle-source-record (record-for-shell cycle-source))
 (define cycle-receiver-record (record-for-shell cycle-receiver))
+(define (cycle-save)
+  (check "canonical overwrite SAVE"
+         (tr3-c-snapshot-save-internal!
+           cycle-source cycle-path trajectory-policy
+           (list ':overwrite? #t))))
 
 (define (cycle-native-snapshot)
   (let ((result (make-vector 35 0)))
@@ -84,7 +89,7 @@
 
 ;;; Prewarm the P1/C2-owned lazy tensor-shell identities through genuine SAVE
 ;;; and LOAD, then establish the receiver at K before measuring counts.
-(trajectory-save cycle-source "cycle" 1)
+(cycle-save)
 (check "initial C2 LOAD and joint restore"
        (tr3-c-checkpoint-restore-internal!
          cycle-receiver cycle-path trajectory-policy trajectory-report))
@@ -118,7 +123,7 @@
 (let loop ((index 0))
   (if (= index cycle-horizon) #t
       (begin
-        (trajectory-save cycle-source "cycle" 1)
+        (cycle-save)
         (check "genuine C2 LOAD and joint restore cycle"
                (tr3-c-checkpoint-restore-internal!
                  cycle-receiver cycle-path trajectory-policy trajectory-report))
