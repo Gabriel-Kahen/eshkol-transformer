@@ -699,6 +699,11 @@ stderr, including the G1 route compiled into the P2-enabled native object.
 The inherited exact-checkout G1 publication witness passes 118 checks. All
 six G3-T source contracts and Q0 4/4 pass. This source-private candidate
 adds no public facade, accessor, generation loop, or CLI.
+Root independently reviewed source and tests, verified the sealed candidate
+and G1 evidence (`2b282e30...` and `52f55d93...`), and integrated identical
+source at `490b1fd`. Once the new Python source checker became Git-tracked,
+Q0 correctly required its exact development-only admission; `c245550`
+adds that admission, and the merged Q0 4/4 and P2 static contract pass.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
