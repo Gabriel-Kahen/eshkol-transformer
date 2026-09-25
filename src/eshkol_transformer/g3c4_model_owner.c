@@ -808,6 +808,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_G3C4_TOKEN_FORWARD_PRIVATE))
 #error "ET_G3C4_MANUAL_ROLE0_PRIVATE requires manual frame and token provider routes"
 #endif
+#if defined(ET_G3C4_MANUAL_PRE_A2_PRIVATE) && \
+    !defined(ET_G3C4_MANUAL_ROLE0_PRIVATE)
+#error "ET_G3C4_MANUAL_PRE_A2_PRIVATE requires the first manual role"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -919,6 +923,11 @@ typedef struct et_g3c4_manual_frame_internal {
 #ifdef ET_G3C4_MANUAL_ROLE0_PRIVATE
   float et[8];
 #endif
+#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+  float ep[8], x[8], n1[8];
+  float qt[8], kt[8], vt[8];
+  float qh[8], kh[8], vh[8];
+#endif
 } et_g3c4_manual_frame_internal;
 #endif
 
@@ -978,7 +987,9 @@ static int et_g3c4_manual_frame_valid(
       context->budget != 0 || frame->frame_kind < 1 ||
       frame->frame_kind > 2 ||
       context->call_kind != frame->frame_kind - 1 ||
-#ifdef ET_G3C4_MANUAL_ROLE0_PRIVATE
+#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+      (frame->next_ordinal < 0 || frame->next_ordinal > 10) ||
+#elif defined(ET_G3C4_MANUAL_ROLE0_PRIVATE)
       (frame->next_ordinal != 0 && frame->next_ordinal != 1) ||
 #else
       frame->next_ordinal != 0 ||
@@ -5395,6 +5406,136 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_role0_run(
   et_kernel_runtime_destroy(runtime);
   memcpy(frame->et, et_candidate, bytes);
   frame->next_ordinal = 1;
+  return 0;
+}
+#endif
+
+#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+/* Internal ordinal 1..9 precursor; the accepted role_step is still absent. */
+static inline __attribute__((unused)) int64_t et_g3c4_manual_pre_a2_run(
+    void *candidate_context, int64_t ordinal) {
+  et_g3c4_context_internal *context;
+  et_g3c4_manual_frame_internal *frame;
+  et_g3c4_logits_internal *pending = NULL;
+  et_kernel_runtime *runtime = NULL;
+  const et_kernel_provider_v1 *provider;
+  et_kernel_tensor_view_v1 inputs[4];
+  const char *capability, *operation;
+  uint64_t ids_shape[2] = {1u, 0u};
+  uint64_t table_shape[2] = {2u, 4u};
+  uint64_t embedding_row[4] = {1u, 0u, 2u, 4u};
+  uint64_t d4_shape[3] = {1u, 0u, 4u};
+  uint64_t linear_row[4] = {1u, 0u, 4u, 4u};
+  uint64_t layout_row[4] = {1u, 0u, 2u, 2u};
+  uint64_t heads_shape[4] = {1u, 2u, 0u, 2u};
+  const uint64_t *request_shape = d4_shape, *output_shape = d4_shape;
+  size_t request_rank = 3u, output_rank = 3u, input_count = 0u, bytes;
+  int64_t positions[2] = {0, 1};
+  uint32_t epsilon_bits = UINT32_C(0x3727c5ac);
+  float epsilon, step_candidate[8] = {0};
+  float *destination = NULL;
+  const float *source = NULL;
+  int t2;
+
+  et_g3c4_error_reset_internal();
+  if (ordinal < 1 || ordinal > 9)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  context = et_g3c4_admit_active_call(candidate_context);
+  if (context == NULL) return et_g3c4_error_state.category;
+  frame = context->manual_frame;
+  if (frame == NULL || frame->next_ordinal != ordinal)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_logits_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+
+  t2 = frame->input_length == 2;
+  ids_shape[1] = embedding_row[1] = d4_shape[1] =
+      linear_row[1] = layout_row[1] = heads_shape[2] =
+          (uint64_t)frame->input_length;
+  bytes = (size_t)frame->input_length * 4u * sizeof(float);
+  memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
+  provider = t2 ? et_n3k_kernel_provider_v1() : et_g3n_kernel_provider_v1();
+
+  switch (ordinal) {
+    case 1:
+      positions[0] = frame->frame_kind == 2 ? 1 : 0;
+      inputs[0] = et_g3c4_view(positions,
+          (size_t)frame->input_length * sizeof(int64_t), "i64", 2u, ids_shape);
+      /* The accepted provider reads only positions 0..1 of pinned [4,4]. */
+      inputs[1] = et_g3c4_view(context->pins.views[13].data,
+          2u * 4u * sizeof(float), "f32", 2u, table_shape);
+      input_count = 2u;
+      request_shape = embedding_row;
+      request_rank = 4u;
+      capability = t2 ? "n3k.embedding-forward" : "g3n.embedding-forward";
+      operation = t2 ? "n3k.embedding.forward" : "g3n.embedding.forward";
+      destination = frame->ep;
+      break;
+    case 2:
+      inputs[0] = et_g3c4_view(frame->et, bytes, "f32", 3u, d4_shape);
+      inputs[1] = et_g3c4_view(frame->ep, bytes, "f32", 3u, d4_shape);
+      input_count = 2u;
+      capability = t2 ? "n3k.residual" : "g3n.residual-forward";
+      operation = t2 ? "n3k.residual.forward" : "g3n.residual.forward";
+      destination = frame->x;
+      break;
+    case 3:
+      inputs[0] = et_g3c4_view(frame->x, bytes, "f32", 3u, d4_shape);
+      inputs[1] = context->pins.views[7];
+      inputs[2] = context->pins.views[6];
+      inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
+      input_count = 4u;
+      provider = t2 ? et_n2_kernel_provider_v1() : provider;
+      capability = t2 ? "kernel.norm" : "g3n.layer-norm-forward";
+      operation = t2 ? "layer-norm.forward" : "g3n.layer-norm.forward";
+      destination = frame->n1;
+      break;
+    case 4: case 5: case 6:
+      inputs[0] = et_g3c4_view(frame->n1, bytes, "f32", 3u, d4_shape);
+      inputs[1] = context->pins.views[ordinal == 4 ? 2u :
+                                     (ordinal == 5 ? 0u : 3u)];
+      input_count = 2u;
+      request_shape = linear_row;
+      request_rank = 4u;
+      capability = t2 ? "n3k.linear" : "g3n.linear-forward";
+      operation = t2 ? "n3k.linear.forward-no-bias" :
+                       "g3n.linear.forward-no-bias";
+      destination = ordinal == 4 ? frame->qt :
+                    (ordinal == 5 ? frame->kt : frame->vt);
+      break;
+    default:
+      source = ordinal == 7 ? frame->qt :
+               (ordinal == 8 ? frame->kt : frame->vt);
+      inputs[0] = et_g3c4_view((void *)source, bytes, "f32", 3u, d4_shape);
+      input_count = 1u;
+      request_shape = layout_row;
+      request_rank = 4u;
+      output_shape = heads_shape;
+      output_rank = 4u;
+      capability = t2 ? "n3k.head-layout" : "g3n.head-layout-forward";
+      operation = t2 ? "n3k.heads.split.forward" :
+                       "g3n.heads.split.forward";
+      destination = ordinal == 7 ? frame->qh :
+                    (ordinal == 8 ? frame->kh : frame->vh);
+      break;
+  }
+  if (et_g3c4_token_runtime_discover(provider, &runtime) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_token_dispatch(
+          runtime, capability, operation, request_rank, request_shape,
+          inputs, input_count,
+          et_g3c4_view(step_candidate, bytes, "f32", output_rank,
+                        output_shape)) != 0) {
+    et_kernel_runtime_destroy(runtime);
+    return et_g3c4_error_state.category;
+  }
+  et_kernel_runtime_destroy(runtime);
+  memcpy(destination, step_candidate, bytes);
+  frame->next_ordinal = ordinal + 1;
   return 0;
 }
 #endif

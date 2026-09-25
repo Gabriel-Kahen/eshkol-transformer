@@ -11,7 +11,10 @@ static int fail_role0;
 static size_t role0_dispatches;
 static et_g3c4_context_internal *role0_context;
 
-int32_t __wrap_et_kernel_runtime_dispatch(
+#ifndef ET_G3C4_MANUAL_ROLE0_FINAL_DISPATCH
+#define ET_G3C4_MANUAL_ROLE0_FINAL_DISPATCH __wrap_et_kernel_runtime_dispatch
+#endif
+int32_t ET_G3C4_MANUAL_ROLE0_FINAL_DISPATCH(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
   if (record_role0) {
@@ -161,7 +164,10 @@ static void malformed_role0(et_g3c4_model_owner_internal *owner) {
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_MANUAL_ROLE0_TEST_MAIN
+#define ET_G3C4_MANUAL_ROLE0_TEST_MAIN main
+#endif
+int ET_G3C4_MANUAL_ROLE0_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   prefill_role0(owner, 1);
   prefill_role0(owner, 2);
