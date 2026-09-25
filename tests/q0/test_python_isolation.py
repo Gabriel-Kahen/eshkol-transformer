@@ -55,6 +55,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3t-model-admission.py",
     ROOT / "scripts" / "check-g3t-native-context.py",
     ROOT / "scripts" / "check-g3t-generator-constructor.py",
+    ROOT / "scripts" / "check-g3t-prefill-sample.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
