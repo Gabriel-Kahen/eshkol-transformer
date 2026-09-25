@@ -914,6 +914,18 @@ integration. It timed out at 1,200 seconds before the horizon (exit 124,
 peak RSS 1,334,512 KiB), so it gives no 1,024-cycle acceptance evidence;
 the bounded 32/128-cycle results above remain the measured limit. The
 attempt is sealed at `tr3-retention-1024-integrated-20260925/SHA256SUMS`.
+The isolated test-only timing successor `b9824e9` passes pinned sanitizer
+32/128-cycle gates; at 128, genuine SAVE takes 37.721 s and LOAD/joint
+restore 32.418 s of 71.63 s wall. An instrumented 128-cycle profile identifies
+the largest self-time hotspot as an append-only P1 shell-registry scan invoked
+through the accepted fixed-set recheck during measured joint restore (15.58
+of 65.95 sampled CPU seconds). Evidence is sealed at
+`tr3-retention-phase-b9824e9-20260925/SHA256SUMS` (`392787c0...`) and
+`tr3-retention-gprof-b9824e9-20260925/SHA256SUMS` (`4639f62b...`). A
+test-only partition or terminal-registry reset would invalidate the single-
+process retention horizon. The 1,024/8,192 live-authority gate remains open;
+the next dependency is an accepted runtime identity-indexing contract or a
+measured larger runtime budget.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
