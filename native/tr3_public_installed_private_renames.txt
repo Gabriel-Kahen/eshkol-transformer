@@ -7,6 +7,10 @@ transformer-error-cause et_e1b_private_error_cause_cabi_v1
 et-e1b-private-raise et_e1b_private_raise_cabi_v1
 x1-private-config-parse et_e1b_private_x1_config_parse_cabi_v1
 x1-private-config-resolve et_e1b_private_x1_config_resolve_cabi_v1
+x1-private-config-validate et_e1b_private_x1_config_validate_cabi_v1
+x1-private-config-canonical et_e1b_private_x1_config_canonical_cabi_v1
+x1-private-config-fingerprint et_e1b_private_x1_config_fingerprint_cabi_v1
+x1-private-config-ref et_e1b_private_x1_config_ref_cabi_v1
 t2-wave2-tokenizer-byte et_e1b_private_t1_tokenizer_byte_cabi_v1
 d2-token-dataset-open et_e1b_private_d2_token_dataset_open_cabi_v1
 d2-token-dataset-close! et_e1b_private_d2_token_dataset_close_cabi_v1

@@ -147,7 +147,7 @@ timeout --foreground --signal=TERM --kill-after=5s 120s \
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   /out/caller /out/corpus/packed-single \
   > /out/caller.stdout 2> /out/caller.stderr
-grep -Fx TR3-PUBLIC-INSTALLED-PASS /out/caller.stdout >/dev/null
+grep -Fx TR3-PUBLIC-X1-FACET-PASS /out/caller.stdout >/dev/null
 test ! -s /out/caller.stderr
 '
 
@@ -197,8 +197,9 @@ import sys
 dep = Path(sys.argv[1]).read_text().replace('\\\n', ' ')
 paths = [path.removeprefix('/workspace/') for path in dep.split(':', 1)[1].split()]
 assert paths == ['tests/tr3_public_installed/runtime.esk',
-                 '/out/facades/transformer/trainer.esk',
-                 '/out/facades/transformer/error_consumer.esk'], paths
+                 '/out/facades/transformer/config.esk',
+                 '/out/facades/transformer/error_consumer.esk',
+                 '/out/facades/transformer/trainer.esk'], paths
 PY
 if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^c2-public-trainer-state-release!$' \
     "${evidence}/global-defined.txt"; then

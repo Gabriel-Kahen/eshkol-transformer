@@ -55,3 +55,18 @@ exports, and 173 undefined runtime symbols. Its evidence is sealed at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-installed-linked-57ca36b-20260925/`
 (`SHA256SUMS` SHA-256 `9932eec33411c078f23bf9d147a86295be40357bb80638706e34d9b8fcbdf393`).
 Both seals passed `sha256sum -c`.
+
+## X1 operand facade successor candidate
+
+The next isolated candidate copies the unchanged six-operation
+`lib/transformer/config.esk` into the same TR3 archive's facade bundle.
+Parse/resolve were already exported; the four accepted X1
+validate/canonical/fingerprint/ref operations now use their existing
+source-private definitions, the exact X1 package rename signatures, and
+boxed wrappers in the same native bridge. The linked caller imports
+`transformer.config`, exercises all six public operations and typed failures,
+derives the M3T initializer seed from the genuine resolved configuration,
+and passes that same receiver to the installed trainer constructor. T2, D2,
+M3T, P1 and O2 creation remain test-local direct entries. The C2 versioned
+tuple and the prior sealed `57ca36b` package evidence remain unchanged.
+This successor is pending its full linked gate and exact manifest measurement.

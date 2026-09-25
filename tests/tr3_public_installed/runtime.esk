@@ -1,10 +1,9 @@
-;;; Installed trainer facet caller. Test-only boxed entries construct authentic
-;;; same-aggregate operands; the trainer names come from the installed facade.
+;;; Installed X1/trainer facet caller. Other operands use test-only same-package
+;;; boxed entries; config and trainer names come from exact installed facades.
+(require transformer.config)
 (require transformer.trainer)
 (require transformer.error_consumer)
 
-(extern void x1-parse ptr ptr :real et_e1b_public_x1_config_parse_v1)
-(extern void x1-resolve ptr ptr ptr :real et_e1b_public_x1_config_resolve_v1)
 (extern void t1-byte ptr ptr :real et_e1b_public_t1_tokenizer_byte_v1)
 (extern void d2-open ptr ptr ptr :real et_e1b_public_d2_token_dataset_open_v1)
 (extern void d2-close ptr ptr :real et_e1b_public_d2_token_dataset_close_v1)
@@ -24,14 +23,6 @@
 (extern void o2-create ptr ptr ptr
         :real et_e1b_public_o2_optimizer_create_v1)
 
-(define (config-parse text)
-  (let ((output (vector #f)))
-    (x1-parse (vector text) output)
-    (vector-ref output 0)))
-(define (config-resolve parsed overrides)
-  (let ((output (vector #f)))
-    (x1-resolve (vector parsed) (vector overrides) output)
-    (vector-ref output 0)))
 (define (tokenizer-byte resolved)
   (let ((output (vector #f)))
     (t1-byte (vector resolved) output)
@@ -132,11 +123,38 @@
   (if (null? value) 0 (+ 1 (list-length (cdr value)))))
 
 (define corpus-directory (car (cdr (command-line))))
+(expect-error "malformed config keeps X1 public operation"
+              'invalid-argument 'config-parse
+  (lambda () (config-parse "{")))
+(define parsed
+  (config-parse
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}"))
 (define resolved
-  (config-resolve
-    (config-parse
-      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
-    '()))
+  (config-resolve parsed '()))
+(check "installed X1 validates authentic resolved value"
+       (config-validate resolved))
+(check "installed X1 ref supplies initializer seed"
+       (= (config-ref resolved 'run.seed) 1729))
+(define canonical (config-canonical resolved))
+(define fingerprint (config-fingerprint resolved))
+(check "installed X1 canonical is stable"
+       (and (string? canonical)
+            (string=? canonical (config-canonical resolved))))
+(check "installed X1 fingerprint is stable"
+       (and (string? fingerprint)
+            (string=? fingerprint (config-fingerprint resolved))))
+(expect-error "forged X1 resolved value rejected"
+              'invalid-argument 'config-validate
+  (lambda () (config-validate (vector 'forged))))
+(expect-error "unknown X1 reference key rejected"
+              'invalid-argument 'config-ref
+  (lambda () (config-ref resolved 'unknown)))
+(expect-error "unresolved X1 value cannot canonicalize"
+              'invalid-argument 'config-canonical
+  (lambda () (config-canonical parsed)))
+(expect-error "unresolved X1 value cannot fingerprint"
+              'invalid-argument 'config-fingerprint
+  (lambda () (config-fingerprint parsed)))
 (define tokenizer (tokenizer-byte resolved))
 (define (dataset-options)
     (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
@@ -146,7 +164,8 @@
 (define failure-dataset (token-dataset-open (dataset-options) tokenizer))
 (define model
   (with-region ('tr3-public-model 65536)
-    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+    (diagnostic-model-create
+      resolved (diagnostic-initializer-state (config-ref resolved 'run.seed)))))
 (define tree (module-parameters model))
 (define paths (unique-paths tree))
 (check "exact fixed unique parameter set" (= (list-length paths) 14))
@@ -208,5 +227,5 @@
 (expect-error "C2 detached-state release retains public error mapping"
               'invalid-argument 'trainer-state-release!
   (lambda () (trainer-state-release! (vector 'forged))))
-(display "TR3-PUBLIC-INSTALLED-PASS")
+(display "TR3-PUBLIC-X1-FACET-PASS")
 (newline)
