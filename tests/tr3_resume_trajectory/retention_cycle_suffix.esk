@@ -1,7 +1,7 @@
 ;;; Test-only steady-state TR3/C2 retention witness. The preceding definitions
 ;;; come from the accepted snapshot and fresh-process trajectory witnesses.
 (extern i64 cycle-native-count i64
-        :real et_c2_checkpoint_save_test_counter_v1)
+        :real et_tr3_cycle_test_count_v1)
 (extern i64 cycle-core-live-images
         :real et_c2_checkpoint_core_test_live_images_v1)
 (define cycle-args (cdr (cdr trajectory-args)))
@@ -22,7 +22,7 @@
             (vector-set! result index (cycle-native-count index))
             (loop (+ index 1)))))))
 (define (cycle-native-live=? left right)
-  (let loop ((indices '(0 1 2 3 4 5 6 17 18 19 24 25 26 28 30 31 32 33)))
+  (let loop ((indices '(0 1 2 3 4 5 6 24 25 26 28 30 31 32 33)))
     (if (null? indices) #t
         (and (= (vector-ref left (car indices))
                 (vector-ref right (car indices)))
@@ -48,7 +48,8 @@
           (cycle-ledger-active-count tr3-c-restore-o2-ledgers 7)
           (cycle-ledger-active-count tr3-c-restore-i2-ledgers 5)
           (cycle-core-live-images)
-          (list-length (vector-ref tr3-trainers 0) 8)))
+          (list-length (vector-ref tr3-trainers 0) 8)
+          (i2-owned-clone-live-count-internal)))
 (define (cycle-vector=? left right)
   (let loop ((index 0))
     (if (= index (vector-length left)) #t
@@ -62,7 +63,6 @@
   (display "TR3-C CYCLE ") (display label)
   (display " horizon=") (display cycle-horizon)
   (display " f32_retained_bytes=") (display (vector-ref native 13))
-  (display " i2_retained_bytes=") (display (vector-ref native 23))
   (display " o2_dead_states=") (display (vector-ref native 27))
   (display " p1_tombstones=") (display (vector-ref native 34))
   (display " c2_scheme_records=")
