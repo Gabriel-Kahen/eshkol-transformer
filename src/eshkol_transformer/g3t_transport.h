@@ -8,6 +8,11 @@ extern "C" {
 void *et_g3t_private_generator_seed_v1(
     void *model_owner, int64_t seed, int64_t mode, int64_t temperature_bits,
     int64_t k, int64_t p_bits, int64_t max_new, int64_t eos);
+#ifdef ET_G3T_GENERATOR_RNG_PRIVATE
+void *et_g3t_private_generator_rng_v1(
+    void *model_owner, void *rng, int64_t mode, int64_t temperature_bits,
+    int64_t k, int64_t p_bits, int64_t max_new, int64_t eos);
+#endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
 int64_t et_g3t_private_call_abort_v1(void *context);
@@ -111,6 +116,9 @@ int64_t et_g3t_test_live_cache_lengths_clones_v1(void);
 int64_t et_g3t_test_rng_clone_state_v1(void *clone);
 int64_t et_g3t_test_rng_clone_word_v1(void *clone, int64_t index);
 int64_t et_g3t_test_live_rng_clones_v1(void);
+#ifdef ET_G3T_GENERATOR_RNG_PRIVATE
+int64_t et_g3t_test_rng_clone_busy_set_v1(void *clone, int64_t busy);
+#endif
 #endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 int64_t et_g3t_test_input_length_set_v1(void *input, int64_t length);
