@@ -785,6 +785,11 @@ next EOS-crossing update matches the uninterrupted trainer's 42 tensor images,
 RNG/cursors/counters, and final canonical C2 bytes; corruption, X1 mismatch,
 and post-rewind retry are negative-tested. The longer supported resume gate
 in the TR3-C contract and public trainer remain pending.
+Source `9efdc65` is integrated with byte-identical implementation and test
+files at `c8b9e94`. Root's merged pinned f31/LLVM21 network-disabled gate
+passes 77 compiled checks from the 42-source closure; the uninterrupted and
+restored final canonical C2 files match byte-for-byte. Evidence is sealed at
+`tr3-private-resume-root-c8b9e94-20260925/SHA256SUMS` (`025e2705...`).
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
