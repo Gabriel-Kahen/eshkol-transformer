@@ -564,9 +564,17 @@ is composed byte-identically at `8afd55e`: VM direct/stored F64 and canonical
 F32 now raise a catchable error on ±0 divisor like native, while exact
 INT64/bignum zero retains its historical fatal VM boundary. Pinned Release
 and ASan+UBSan+LSan focused gates each pass 10/10; root verified
-`f32-remainder-zero-parity-20260924/SHA256SUMS` (`7e8f6f29...`). GCD/LCM
-integer-domain policy and numerator remain open, so whole-F32 acceptance and
-the transformer runtime repin remain pending.
+`f32-remainder-zero-parity-20260924/SHA256SUMS` (`7e8f6f29...`). The
+two-commit `numerator` successor `17289866`/`31ed68f2` is composed
+byte-identically at `7bd9cbb7`/`b143176f`; `4e483c89` corrects a stale
+inventory row. The VM now matches native non-rational result kinds without
+unsafe float-to-int conversion, while native and VM direct/stored canonical
+F32 return the checked inexact DOUBLE promotion. Independent pinned Release
+and ASan+UBSan+LSan focused tests each pass 7/7 across ABI, VM and AOT/JIT
+O0/O2; root verified `f32-numerator-parity-31ed68f2-20260924/SHA256SUMS`
+(`3a3999de...`). This is native compatibility, not full R7RS inexact
+fraction semantics. GCD/LCM integer-domain policy, other operation gaps,
+whole-F32 acceptance and the transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
