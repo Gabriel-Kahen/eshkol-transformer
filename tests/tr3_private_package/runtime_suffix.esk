@@ -1,0 +1,23 @@
+;;; The same compiled root admits a fresh owned snapshot through the private
+;;; result-cell restore entry after the C2 file-load transaction above.
+(define private-package-owner (snapshot-or-report trainer (vector #f)))
+(define private-package-cell (vector #f))
+(check "private package result-cell restore succeeds"
+       (tr3-c-trainer-load-state-internal!
+         load-receiver private-package-owner private-package-cell))
+(check "private package publishes only exact success"
+       (eq? (vector-ref private-package-cell 0) #t))
+(check "private package restores all source images"
+       (image=? reference-image (load-receiver-image)))
+(check "private package leaves receiver idle"
+       (and (eq? (vector-ref load-receiver-record 3) 'idle)
+            (not (vector-ref load-receiver-record 4))))
+(check "private package retains source trainer"
+       (source-trainer-unchanged?))
+(check "private package releases detached source"
+       (c2-training-state-release-internal!
+         private-package-owner 'trainer-state-release!))
+(display "TR3-C PRIVATE ROOT PASS: ")
+(display checks)
+(display " checks, construct/snapshot/SAVE/LOAD/result-cell restore")
+(newline)
