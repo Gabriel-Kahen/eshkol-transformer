@@ -76,16 +76,23 @@
 (define (g3t-generation-tensor-release! shell)
   (let ((operation 'g3t-generation-tensor-release!))
     (m3-call operation
-      (let ((entry (g3t-prefill-entry shell 'input operation)))
-        (if (eq? (vector-ref entry 2) 'dead) #t
-            (begin
-              (if (not (eq? (vector-ref entry 2) 'live))
-                  (g3t-fail-raw 'invalid-state operation 2
-                                "G3-T input is not live"))
-              (if (not (= 0 (g3t-native-tensor-release
-                              (vector-ref entry 3))))
-                  (g3t-native-fail-raw operation))
-              (g3t-prefill-dead! entry)))))))
+      (let* ((found (g3t-generator-find shell operation))
+             (kind (vector-ref found 1)))
+        (if (not (or (eq? kind 'input) (eq? kind 'ids)))
+            (g3t-fail-raw 'invalid-argument operation 1
+                          "G3-T transport owner kind differs"))
+        (let ((entry (g3t-prefill-entry shell kind operation)))
+          (if (eq? (vector-ref entry 2) 'dead) #t
+              (begin
+                (if (not (eq? (vector-ref entry 2) 'live))
+                    (g3t-fail-raw 'invalid-state operation 2
+                                  (if (eq? kind 'input)
+                                      "G3-T input is not live"
+                                      "G3-T IDs clone is not live")))
+                (if (not (= 0 (g3t-native-tensor-release
+                                (vector-ref entry 3))))
+                    (g3t-native-fail-raw operation))
+                (g3t-prefill-dead! entry))))))))
 
 (define (g3t-prefill-call-linked call operation)
   (let* ((entry (g3t-prefill-entry call 'call operation))

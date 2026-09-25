@@ -10,6 +10,7 @@
 (load "g3t_p2_zero_budget_extension.esk")
 (load "g3t_t1_input_extension.esk")
 (load "g3t_rng_owner_extension.esk")
+(load "g3t_ids_owner_extension.esk")
 
 (extern i64 g3t-test-input-length-set ptr i64
         :real et_g3t_test_input_length_set_v1)
@@ -27,8 +28,6 @@
 (extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
 (extern i64 g3t-test-frame-binding-flip ptr
         :real et_g3t_test_frame_binding_flip_v1)
-(extern ptr g3t-native-output-ids-clone ptr
-        :real et_g3t_private_output_ids_clone_v1)
 (extern i64 g3t-test-clone-state ptr
         :real et_g3t_test_ids_clone_state_v1)
 (extern i64 g3t-test-clone-length ptr
@@ -118,6 +117,14 @@
         (let ((entry (car entries)))
           (walk (cdr entries)
                 (if (and (eq? (vector-ref entry 1) 'rng)
+                         (eq? (vector-ref entry 2) 'live))
+                    (+ count 1) count))))))
+(define (live-ids-shells)
+  (let walk ((entries (vector-ref g3t-registry 0)) (count 0))
+    (if (null? entries) count
+        (let ((entry (car entries)))
+          (walk (cdr entries)
+                (if (and (eq? (vector-ref entry 1) 'ids)
                          (eq? (vector-ref entry 2) 'live))
                     (+ count 1) count))))))
 (define (reject-category label category thunk)
@@ -821,6 +828,114 @@
               (= 0 (bytevector-length (vector-ref entry 6))))))
 (define wrapped-native-output
   (vector-ref (g3t-prefill-entry wrapped-output 'output 'g3t-rng-test) 3))
+(define wrapped-output-entry
+  (g3t-prefill-entry wrapped-output 'output 'g3t-ids-test))
+(reject-category "IDs wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-ids (vector 'g3t-output-private))))
+(reject-category "IDs wrapper rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-ids wrapped-input)))
+(vector-set! wrapped-output-entry 2 'pending)
+(reject-category "IDs wrapper rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(vector-set! wrapped-output-entry 2 'live)
+(check "IDs pending rejection leaves no owner"
+       (and (= 0 (live-ids-shells)) (= 0 (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(define wrapped-ids-i1-before (g3t-test-i1-count 0))
+(check "IDs wrapper header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "IDs wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(check "IDs wrapper header cut atomic"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 1) 'ids)
+              (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (live-ids-shells))
+              (= 0 (g3t-test-live-clones))
+              (= wrapped-ids-i1-before (g3t-test-i1-count 0))
+              (= 1 (g3t-test-output-state wrapped-native-output))
+              (= 2 (g3t-test-output-word wrapped-native-output 2))
+              (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+(check "IDs wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 3) #t
+      (begin
+        (check "IDs wrapper I1 cut armed" (= 0 (g3t-test-fail-i1-after index)))
+        (reject-category "IDs wrapper I1 cut raises" 'internal
+          (lambda () (g3t-generation-output-ids wrapped-output)))
+        (check "IDs wrapper I1 cut atomic"
+               (let ((entry (car (vector-ref g3t-registry 0))))
+                 (and (eq? (vector-ref entry 2) 'dead)
+                      (not (vector-ref entry 3))
+                      (not (vector-ref entry 10))
+                      (= 0 (live-ids-shells))
+                      (= 0 (g3t-test-live-clones))
+                      (= wrapped-ids-i1-before (g3t-test-i1-count 0))
+                      (= 1 (g3t-test-output-state wrapped-native-output))
+                      (= 2 (g3t-test-output-word wrapped-native-output 2))
+                      (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+        (cuts (+ index 1)))))
+(check "IDs wrapper I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define wrapped-ids-result (g3t-generation-output-ids wrapped-output))
+(define wrapped-ids-shell (car wrapped-ids-result))
+(define wrapped-ids-entry
+  (g3t-prefill-entry wrapped-ids-shell 'ids 'g3t-ids-test))
+(define wrapped-ids-native (vector-ref wrapped-ids-entry 3))
+(check "P2/G0 IDs wrapper returns one rooted detached I1"
+       (and (pair? wrapped-ids-result)
+            (null? (cdr wrapped-ids-result))
+            (eq? (car wrapped-ids-result) wrapped-ids-shell)
+            (eq? (vector-ref wrapped-ids-entry 2) 'live)
+            (eq? (vector-ref wrapped-ids-entry 4) #f)
+            (eq? (vector-ref wrapped-ids-entry 5) #f)
+            (eq? (vector-ref wrapped-ids-entry 10) #f)
+            (= 0 (g3t-test-clone-length wrapped-ids-native))
+            (= 1 (live-ids-shells))
+            (= 1 (g3t-test-live-clones))
+            (= (+ wrapped-ids-i1-before 1) (g3t-test-i1-count 0))))
+(define wrapped-ids-second (g3t-generation-output-ids wrapped-output))
+(check "IDs wrapper creates a fresh list and native owner"
+       (and (pair? wrapped-ids-second)
+            (null? (cdr wrapped-ids-second))
+            (not (eq? wrapped-ids-result wrapped-ids-second))
+            (not (eq? wrapped-ids-shell (car wrapped-ids-second)))
+            (not (eq? wrapped-ids-native
+                      (vector-ref (g3t-prefill-entry
+                                    (car wrapped-ids-second) 'ids 'g3t-ids-test) 3)))
+            (= 2 (live-ids-shells))
+            (= 2 (g3t-test-live-clones))))
+(check "IDs second clone typed release"
+       (and (g3t-generation-tensor-release! (car wrapped-ids-second))
+            (= 1 (live-ids-shells))
+            (= 1 (g3t-test-live-clones))))
+(define wrapped-ids-borrow (g3t-test-clone-borrow-begin wrapped-ids-native))
+(check "IDs wrapper clone borrow begins" (not (null? wrapped-ids-borrow)))
+(reject-category "IDs wrapper borrow blocks typed release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! wrapped-ids-shell)))
+(check "IDs wrapper borrowed clone remains live"
+       (and (= 1 (live-ids-shells))
+            (= 1 (g3t-test-clone-state wrapped-ids-native))))
+(check "IDs wrapper clone borrow ends"
+       (= 0 (g3t-test-clone-borrow-end wrapped-ids-borrow)))
+(reject-category "IDs wrapper rejects copied shell release" 'invalid-argument
+  (lambda () (g3t-generation-tensor-release!
+               (vector (vector-ref wrapped-ids-shell 0)))))
+(reject-category "RNG typed release rejects IDs shell" 'invalid-argument
+  (lambda () (g3t-generation-rng-release! wrapped-ids-shell)))
+(define wrapped-ids-source-borrow
+  (g3t-test-output-borrow-begin wrapped-native-output))
+(check "IDs wrapper source borrow begins" (not (null? wrapped-ids-source-borrow)))
+(reject-category "IDs wrapper borrowed output rejects clone" 'invalid-state
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(check "IDs wrapper source borrow cut preserves owners"
+       (and (= 1 (live-ids-shells))
+            (= 1 (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(check "IDs wrapper source borrow ends"
+       (= 0 (g3t-test-output-borrow-end wrapped-ids-source-borrow)))
 (reject-category "RNG wrapper rejects forged output" 'invalid-argument
   (lambda () (g3t-generation-output-rng (vector 'g3t-output-private))))
 (reject-category "RNG wrapper rejects wrong-kind input" 'invalid-argument
@@ -860,6 +975,18 @@
   (lambda () (g3t-generation-rng-release! wrapped-output)))
 (check "wrapped close" (g3t-generator-close! wrapped-generator))
 (check "wrapped output release" (g3t-output-release! wrapped-output))
+(check "P2/G0 IDs wrapper survives parent releases"
+       (and (= 1 (live-ids-shells))
+            (= 1 (g3t-test-clone-state wrapped-ids-native))
+            (= 0 (g3t-test-clone-length wrapped-ids-native))))
+(reject-category "IDs wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(check "P2/G0 IDs wrapper typed release and tombstone"
+       (and (g3t-generation-tensor-release! wrapped-ids-shell)
+            (g3t-generation-tensor-release! wrapped-ids-shell)
+            (= -1 (g3t-test-clone-state wrapped-ids-native))
+            (= 0 (live-ids-shells))
+            (= 0 (g3t-test-live-clones))))
 (check "P2/G0 RNG shell survives parent close and output release"
        (and (= 1 (live-rng-shells))
             (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
@@ -953,6 +1080,15 @@
 (define p1-zero-cache-lengths
   (g3t-native-output-cache-lengths-clone p1-zero-native-output))
 (define p1-zero-rng (g3t-native-output-rng-clone p1-zero-native-output))
+(define p1-zero-ids-result (g3t-generation-output-ids p1-zero-output))
+(define p1-zero-ids-shell (car p1-zero-ids-result))
+(define p1-zero-ids-native
+  (vector-ref (g3t-prefill-entry p1-zero-ids-shell 'ids 'g3t-p1-ids) 3))
+(check "P1/G0 IDs wrapper returns one empty detached owner"
+       (and (pair? p1-zero-ids-result)
+            (null? (cdr p1-zero-ids-result))
+            (= 0 (g3t-test-clone-length p1-zero-ids-native))
+            (= 1 (g3t-test-clone-state p1-zero-ids-native))))
 (check "P1/G0 empty ID clone"
        (and (not (null? p1-zero-clone))
             (= 0 (g3t-test-clone-length p1-zero-clone))
@@ -985,6 +1121,13 @@
 (check "P1/G0 output release" (g3t-output-release! p1-zero-output))
 (check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
 (check "P1/G0 detached clone survives" (= 0 (g3t-test-clone-length p1-zero-clone)))
+(check "P1/G0 IDs wrapper survives parent releases"
+       (and (= 0 (g3t-test-clone-length p1-zero-ids-native))
+            (= 1 (g3t-test-clone-state p1-zero-ids-native))))
+(check "P1/G0 IDs wrapper typed release"
+       (and (g3t-generation-tensor-release! p1-zero-ids-shell)
+            (g3t-generation-tensor-release! p1-zero-ids-shell)
+            (= -1 (g3t-test-clone-state p1-zero-ids-native))))
 (check "P1/G0 detached length survives"
        (= 0 (g3t-test-lengths-clone-value p1-zero-lengths)))
 (check "P1/G0 detached cache length survives"
@@ -1380,6 +1523,17 @@
 (check "P1/G1 rooted output exact prior ID and RNG"
        (and (= g1-id (g3t-test-output-word g1-rooted-native-output 6))
             (= 1 (g3t-test-output-word g1-rooted-native-output 9))))
+(define g1-rooted-ids-result
+  (g3t-generation-output-ids g1-rooted-output))
+(define g1-rooted-ids-shell (car g1-rooted-ids-result))
+(define g1-rooted-ids-native
+  (vector-ref (g3t-prefill-entry g1-rooted-ids-shell 'ids 'g3t-g1-ids) 3))
+(check "P1/G1 IDs wrapper returns exact one-token detached I1"
+       (and (pair? g1-rooted-ids-result)
+            (null? (cdr g1-rooted-ids-result))
+            (= 1 (g3t-test-clone-length g1-rooted-ids-native))
+            (= g1-id (g3t-test-clone-word g1-rooted-ids-native))
+            (= 1 (g3t-test-clone-state g1-rooted-ids-native))))
 (define g1-rooted-rng (g3t-generation-output-rng g1-rooted-output))
 (define g1-rooted-rng-native
   (vector-ref (g3t-prefill-entry g1-rooted-rng 'rng 'g3t-rng-g1) 3))
@@ -1398,6 +1552,13 @@
        (g3t-generator-close! g1-rooted-generator))
 (check "P1/G1 rooted output release"
        (g3t-output-release! g1-rooted-output))
+(check "P1/G1 IDs wrapper survives parent releases"
+       (and (= g1-id (g3t-test-clone-word g1-rooted-ids-native))
+            (= 1 (g3t-test-clone-state g1-rooted-ids-native))))
+(check "P1/G1 IDs wrapper typed release"
+       (and (g3t-generation-tensor-release! g1-rooted-ids-shell)
+            (g3t-generation-tensor-release! g1-rooted-ids-shell)
+            (= -1 (g3t-test-clone-state g1-rooted-ids-native))))
 (check "P1/G1 RNG shell typed release"
        (g3t-generation-rng-release! g1-rooted-rng))
 (check "P1/G1 derived generator survives all source releases"
