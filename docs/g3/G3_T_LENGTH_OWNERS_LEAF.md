@@ -27,3 +27,12 @@ The source checker pins pre-clone allocation and no-orphan order. The focused
 runner has no Eshkol allocator fault injection before native clone; those
 operations precede any native publication. No public G3-G facade, package,
 text/RNG accessor or CLI is added.
+
+The exact source candidate `d327232` (tree `1145ac5e`) passed strict Eshkol
+parse/type preflight with empty stderr. The single network-disabled pinned
+P2 aggregate passed 46,690 checks in normal, matching repeat and
+ASan+UBSan+LSan (leak detection enabled), twelve source contracts and Q0
+4/4. Full external evidence, including compiler identity, source closure,
+logs and SHA-256 seal, is at
+`/home/gabe/.codex/evidence/g3t-length-owners-d327232/` (seal
+`63c68b46c1c47254bdca845db168892885fe66358b9ef7a0a65fb00fd1bfcdf4`).
