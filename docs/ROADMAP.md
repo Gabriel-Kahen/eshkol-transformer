@@ -801,7 +801,8 @@ files at `c8b9e94`. Root's merged pinned f31/LLVM21 network-disabled gate
 passes 77 compiled checks from the 42-source closure; the uninterrupted and
 restored final canonical C2 files match byte-for-byte. Evidence is sealed at
 `tr3-private-resume-root-c8b9e94-20260925/SHA256SUMS` (`025e2705...`).
-The isolated private successor `172bb8f` generalizes the finite-D2 composer
+The private successor `172bb8f` is integrated as source at `16c3c47` and
+documentation at `c07068a`; it generalizes the finite-D2 composer
 to positive configured accumulation with an explicit exact-f32 weight bound.
 Its pinned f31/LLVM21 network-disabled compiled trajectory gate passes 167
 checks over `A=1,2,3`, `K=1`, and `R=3`: each resumed suffix crosses EOS,
@@ -814,6 +815,12 @@ oracles (maximum key-weight error `1.86e-9`) and nonfinite mutant rejection;
 its seal is `tr3-general-composer-172bb8f-20260925/SHA256SUMS`
 (`836d0cf3...`). Resume evidence is sealed at
 `tr3-general-resume-172bb8f-20260925/SHA256SUMS` (`a64c79a6...`).
+Root's merged pinned composer gate repeats 33 checks and both independent
+numerical oracles, sealed at
+`tr3-general-composer-root-16c3c47-20260925/SHA256SUMS` (`bdb1a4e5...`).
+Root's merged trajectory gate repeats 167 checks and final C2 byte equality,
+sealed at `tr3-general-resume-root-c07068a-20260925/SHA256SUMS`
+(`b75ff3a1...`).
 Fresh-process continuation, public metrics/effective-rate observations, and
 the remaining TR3-C §13 failure/environment gates remain pending.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
