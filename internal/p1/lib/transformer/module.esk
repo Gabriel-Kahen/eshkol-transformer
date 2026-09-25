@@ -149,9 +149,35 @@
 ;;; graph stored back into this holder.
 (define shell-registry-root (vector '()))
 (define shell-identity-index (make-hash-table))
+;;; Advisory heads hold exact, promoted shell-registry records. Slot 2 is false
+;;; from the start of a publication until its allocation-free active-list link.
+;;; Slot 3 roots the prepared spine before native shell creation.
+(define active-record-root (vector '() '() #t #f))
 
 (define (shell-registry-current)
   (vector-ref shell-registry-root 0))
+(define (active-record-source slot)
+  (if (vector-ref active-record-root 2)
+      (vector-ref active-record-root slot)
+      (shell-registry-current)))
+(define (active-record-stage kind next-registry)
+  (let* ((slot (if (eq? kind 'state) 0 1))
+         (stage (vector next-registry
+                        (cons (car next-registry)
+                              (vector-ref active-record-root slot))
+                        (vector-ref active-record-root 2))))
+    (vector-set! active-record-root 3 stage)
+    (vector-ref active-record-root 3)))
+(define (active-record-unlink! slot raw)
+  ;; Splice only a derived head. Terminal shell-registry records remain rooted.
+  (let loop ((previous #f) (remaining (vector-ref active-record-root slot)))
+    (cond ((null? remaining) #t)
+          ((eq? raw (vector-ref (car remaining) 2))
+           (if previous
+               (set-cdr! previous (cdr remaining))
+               (vector-set! active-record-root slot (cdr remaining)))
+           #t)
+          (else (loop remaining (cdr remaining))))))
 ;; Private construction records are retained in a root holder. Callers receive
 ;; only the admitted native ledger identity, never the mutable record.
 (define construction-registry-root (vector '() #f))
@@ -400,9 +426,32 @@
                          (vector #f kind raw (active-construction))
                          (vector #f kind raw)))
               (next-registry (cons entry (shell-registry-current)))
-              (shell (native-create-shell kind raw)))
+              (active? (or (eq? kind 'state) (eq? kind 'module)))
+              (stage #f)
+              (shell
+                (if active?
+                    (guard (caught
+                             (#t
+                               (if stage (vector-set! active-record-root 3 #f))
+                               (raise caught)))
+                      (set! stage (active-record-stage kind next-registry))
+                      (native-create-shell kind raw))
+                    (native-create-shell kind raw))))
+         ;; The stage holder promoted both the registry spine and active node.
+         ;; All subsequent pointer writes store root-owned values or a token.
+         (if stage
+             (begin
+               (set! next-registry (vector-ref stage 0))
+               (set! entry (car next-registry))))
          (vector-set! entry 0 shell)
+         (if stage (vector-set! active-record-root 2 #f))
          (vector-set! shell-registry-root 0 next-registry)
+         (if stage
+             (begin
+               (vector-set! active-record-root
+                            (if (eq? kind 'state) 0 1) (vector-ref stage 1))
+               (vector-set! active-record-root 3 #f)
+               (vector-set! active-record-root 2 (vector-ref stage 2))))
          (index-published-shell!
            (canonical-published-shell (car (shell-registry-current)))
            (car (shell-registry-current)))
@@ -475,6 +524,7 @@
 (define (compact-released-state-shells! state)
   ;; Replace all registry edges into the released raw graph with shared small
   ;; markers. Markers retain neither state, entry, carrier, path, nor aliases.
+  (active-record-unlink! 0 state)
   (let ((entries (vector-ref state 6)))
     (let scan ((remaining (shell-registry-current)))
       (if (null? remaining)
@@ -1485,7 +1535,7 @@
   ;; Exact identity protection does not invoke a provider. After trusted
   ;; provider preflight, the same scan may use that provider's admitted
   ;; storage-identity callback to reject a distinct wrapper over live storage.
-  (let scan-states ((records (shell-registry-current)))
+  (let scan-states ((records (active-record-source 0)))
     (if (null? records)
         #f
         (let* ((record (car records))
@@ -1551,7 +1601,7 @@
   (if (carrier-owned-by-live-state?
         operation provider carrier carrier-kind compare-storage?)
       #t
-      (let scan-modules ((records (shell-registry-current)))
+      (let scan-modules ((records (active-record-source 1)))
         (if (null? records)
             #f
             (let* ((record (car records))
@@ -2939,6 +2989,7 @@
                            (set! cleanup-failed? #t)
                            (set! cleanup-error release-error)))
                      #f))
+            (if state-shell (active-record-unlink! 0 state))
             (release-owned-list! operation provider ownership))
           ;; Publication rollback severs every registry edge even when native
           ;; revoke or provider release reports a defect.
@@ -3907,6 +3958,7 @@
                              (set! cleanup-failed? #t)
                              (set! cleanup-error release-error)))
                        #f))
+              (if state-shell (active-record-unlink! 0 state))
               (release-owned-list!
                 operation provider adopted-ownership))
             (if state-shell
@@ -4099,7 +4151,7 @@
   (if (not (= (vector-length entry-record) 4))
       #f
       (let ((owner-state (vector-ref entry-record 3)))
-  (let scan ((records (shell-registry-current)))
+  (let scan ((records (active-record-source 0)))
     (if (null? records)
         #f
         (let* ((record (car records))
@@ -4230,7 +4282,10 @@
                            (or (eq? (vector-ref entry 1) 'module)
                                (eq? (vector-ref entry 1) 'handle))
                            (eq? (vector-ref entry 3) identity))
-                      (vector-set! entry 2 dead-construction-raw))
+                      (begin
+                        (if (eq? (vector-ref entry 1) 'module)
+                            (active-record-unlink! 1 (vector-ref entry 2)))
+                        (vector-set! entry 2 dead-construction-raw)))
                   (loop (cdr remaining)))))
           (vector-set! record 1 'aborted)
           (vector-set! record 3 #f)

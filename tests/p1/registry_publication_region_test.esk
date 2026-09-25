@@ -115,6 +115,61 @@
 (check "parameter handle survives sibling destruction"
        (eq? 'f32 (parameter-handle-dtype parameter-handle)))
 
+;; State publication uses the same staged active-record path. A later sibling
+;; lookup and release must use the canonical record after region destruction.
+(define state-seed (module-state-dict (module-create-fixture-internal)))
+(define region-state-error #f)
+(define region-state
+  (guard (raised
+           (#t (set! region-state-error raised) #f))
+    (with-region ('p1-state-outer 8388608)
+      (with-region ('p1-state-inner 8388608)
+        (state-dict-create-unsafe-internal
+          (state-dict-format-internal state-seed) 1 0 '()
+          (state-dict-adapter-internal state-seed) '() '())))))
+(if region-state-error
+    (begin
+      (display "P1 region state error: ")
+      (if (transformer-error? region-state-error)
+          (begin
+            (display (transformer-error-category region-state-error))
+            (display " ")
+            (display (transformer-error-operation region-state-error))
+            (display " ")
+            (display (transformer-error-message region-state-error)))
+          (display region-state-error))
+      (newline)
+      (exit 1)))
+(state-dict-bind-provider-internal! region-state 'fixture-v1)
+(check "state survives destroyed nested publication regions"
+       (null? (state-dict-paths region-state)))
+(with-region ('p1-state-sibling 1048576)
+  (check "state remains usable in sibling region"
+         (null? (state-dict-paths region-state))))
+(check "state release completes" (state-dict-release! region-state))
+(state-dict-release! state-seed)
+(check "released state remains stale"
+       (guard (raised
+                (#t (and (transformer-error? raised)
+                         (eq? 'invalid-state
+                              (transformer-error-category raised)))))
+         (state-dict-paths region-state)
+         #f))
+(check "forged module shell rejects"
+       (guard (raised
+                (#t (and (transformer-error? raised)
+                         (eq? 'invalid-argument
+                              (transformer-error-category raised)))))
+         (module-mode-internal (vector 'forged-module))
+         #f))
+(check "forged state shell rejects"
+       (guard (raised
+                (#t (and (transformer-error? raised)
+                         (eq? 'invalid-argument
+                              (transformer-error-category raised)))))
+         (state-dict-release! (vector 'forged-state))
+         #f))
+
 (display "P1 REGISTRY PUBLICATION PASS: ")
 (display checks)
 (display " checks")
