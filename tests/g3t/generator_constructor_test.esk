@@ -1,0 +1,233 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+
+(extern i64 g3t-test-fail-alloc-after i64
+        :real et_g3t_test_fail_alloc_after_v1)
+(extern i64 g3t-test-fail-a2-after i64
+        :real et_g3t_test_fail_a2_after_v1)
+(extern i64 g3t-test-live-contexts
+        :real et_g3t_test_live_contexts_v1)
+(extern i64 g3t-native-call-acquire ptr i64
+        :real et_g3t_private_call_acquire_v1)
+(extern i64 g3t-native-call-abort ptr
+        :real et_g3t_private_call_abort_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-T generator constructor FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (and caught (not (vector-ref m3-call-state 0)))))
+      (thunk) #f)))
+(define (detail-ref details key)
+  (let loop ((remaining details))
+    (if (null? remaining) #f
+        (let ((row (car remaining)))
+          (if (eq? (car row) key) (car (cdr row))
+              (loop (cdr remaining)))))))
+(define (reject-mapped label category operation domain code thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (let ((details (transformer-error-details caught)))
+                        (and (eq? (detail-ref details 'source-domain) domain)
+                             (= (detail-ref details 'source-code) code)
+                             (string? (detail-ref details 'source-message))
+                             (not (vector-ref m3-call-state 0)))))))
+      (thunk) #f)))
+(define (seed-options seed)
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed seed))
+(define (live-entries)
+  (let loop ((remaining (vector-ref g3t-registry 0)) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining)
+              (if (eq? (vector-ref (car remaining) 2) 'live)
+                  (+ count 1) count)))))
+(define (dead-clean?)
+  (let loop ((remaining (vector-ref g3t-registry 0)))
+    (if (null? remaining) #t
+        (let ((entry (car remaining)))
+          (and (eq? (vector-ref entry 2) 'dead)
+               (let scrubbed ((index 3))
+                 (if (= index 12) #t
+                     (and (eq? (vector-ref entry index) #f)
+                          (scrubbed (+ index 1)))))
+               (loop (cdr remaining)))))))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3t-generator-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(define model-entry (m3t-entry model 'model 'g3t-constructor-test #t))
+(define tokenizer (t1-private-tokenizer-byte config))
+(check "authentic baseline T1 fingerprint"
+       (string=? (t1-private-tokenizer-fingerprint tokenizer)
+         "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"))
+(check "set eval" (module-eval! model))
+(check "initial G3-T root empty" (null? (vector-ref g3t-registry 0)))
+(check "initial native root empty" (= 0 (g3t-test-live-contexts)))
+
+(reject "copied model shell"
+  (lambda () (g3t-generator-create (vector (vector-ref model 0))
+                                   tokenizer (seed-options 1729))))
+(reject "foreign tokenizer"
+  (lambda () (g3t-generator-create model (vector 'foreign)
+                                   (seed-options 1729))))
+(define strict-tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'strict '() '() '())))
+(reject "authentic strict tokenizer unsupported"
+  (lambda () (g3t-generator-create model strict-tokenizer
+                                   (seed-options 1729))))
+(reject "wrong config profile"
+  (lambda () (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729))))
+(reject "duplicate policy key"
+  (lambda () (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':top-k 256))))
+(reject "invalid greedy temperature"
+  (lambda () (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x40000000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729))))
+(reject "RNG owner unavailable"
+  (lambda () (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':rng (vector 'foreign)))))
+(reject "negative seed"
+  (lambda () (g3t-generator-create model tokenizer (seed-options -1))))
+(check "preflight rejects before enrollment"
+       (and (null? (vector-ref g3t-registry 0))
+            (= 0 (g3t-test-live-contexts))))
+
+(check "switch model to train" (module-train! model))
+(reject "train model" (lambda ()
+  (g3t-generator-create model tokenizer (seed-options 1729))))
+(check "restore model eval" (module-eval! model))
+(define original-profile (vector-ref model-entry 11))
+(vector-set! model-entry 11 'diagnostic-c4)
+(reject "M3T profile cannot be relabeled" (lambda ()
+  (g3t-generator-create model tokenizer (seed-options 1729))))
+(vector-set! model-entry 11 original-profile)
+(define input (g3t-checked-m3t-input-create))
+(check "input copy" (g3t-checked-m3t-input-copy! input '(17 19)))
+(define workspace (g3t-checked-m3t-workspace-create model))
+(check "manual M3T frame begins"
+       (g3t-checked-m3t-workspace-begin! workspace input))
+(reject "same-model active frame" (lambda ()
+  (g3t-generator-create model tokenizer (seed-options 1729))))
+(check "manual frame reset" (g3t-checked-m3t-workspace-reset! workspace))
+(check "frame rejection enrolled no generator"
+       (and (null? (vector-ref g3t-registry 0))
+            (= 0 (g3t-test-live-contexts))))
+
+(check "arm native context allocation failure"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-mapped "native context allocation failure" 'internal
+  'g3t-generator-create 'g3t-transport 7 (lambda ()
+  (g3t-generator-create model tokenizer (seed-options 1729))))
+(check "native failure snapshot"
+       (and (= 0 (g3t-native-last-error-domain))
+            (= 5 (g3t-native-last-error-category))
+            (= 7 (g3t-native-last-error-code))))
+(check "context failure tombstone"
+       (and (= 0 (live-entries)) (= 0 (g3t-test-live-contexts))
+            (dead-clean?)))
+(check "disarm native allocation failure"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "arm A2 cache allocation failure"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(reject "A2 cache allocation failure" (lambda ()
+  (g3t-generator-create model tokenizer (seed-options 1729))))
+(check "A2 failure snapshot"
+       (and (= 1 (g3t-native-last-error-domain))
+            (> (g3t-native-last-error-category) 0)
+            (> (g3t-native-last-error-code) 0)))
+(check "A2 failure tombstone"
+       (and (= 0 (live-entries)) (= 0 (g3t-test-live-contexts))
+            (dead-clean?)))
+(check "disarm A2 allocation failure"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+
+(define generator
+  (with-region ('g3t-generator-construction 65536)
+    (g3t-generator-create model tokenizer (seed-options 1729))))
+(define entry (g3t-generator-find generator 'g3t-constructor-test))
+(check "source-rooted live generator"
+       (and (eq? (vector-ref entry 0) generator)
+            (eq? (vector-ref entry 1) 'generator)
+            (eq? (vector-ref entry 2) 'live)
+            (not (null? (vector-ref entry 3)))
+            (eq? (vector-ref entry 5) model-entry)
+            (eq? (vector-ref entry 6) tokenizer)
+            (eq? (vector-ref entry 11) 'diagnostic-c2)))
+(check "detached exact C2 policy"
+       (equal? (vector-ref entry 7)
+               (vector 'diagnostic-c2 0 #x3f800000 256
+                       #x3f800000 1 #f)))
+(check "one native and Eshkol generator"
+       (and (= 1 (live-entries)) (= 1 (g3t-test-live-contexts))))
+(reject "copied generator shell" (lambda ()
+  (g3t-generator-close! (vector (vector-ref generator 0)))))
+(reject "foreign close identity" (lambda ()
+  (g3t-generator-close! (vector 'foreign))))
+(reject "wrong-kind close identity" (lambda ()
+  (g3t-generator-close! model)))
+(check "native call acquires pins"
+       (= 0 (g3t-native-call-acquire (vector-ref entry 3) 0)))
+(reject-mapped "busy generator close" 'invalid-state
+  'g3t-generator-close! 'g3t-transport 2 (lambda ()
+  (g3t-generator-close! generator)))
+(check "busy close preserved live entry"
+       (and (eq? (vector-ref entry 2) 'live)
+            (= 1 (g3t-test-live-contexts))))
+(check "native call abort" (= 0 (g3t-native-call-abort (vector-ref entry 3))))
+(check "mode may change before close" (module-train! model))
+(check "close with model in train mode" (g3t-generator-close! generator))
+(check "idempotent close" (g3t-generator-close! generator))
+(check "closed Eshkol tombstone"
+       (and (eq? (vector-ref entry 2) 'dead) (dead-clean?)
+            (= 0 (live-entries)) (= 0 (g3t-test-live-contexts))))
+(check "restore eval after close" (module-eval! model))
+(define categorical
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'categorical
+          ':temperature-bits #x3fc00000 ':top-k 13
+          ':top-p-bits #x3f000000 ':max-new-tokens 0
+          ':eos 7 ':seed 1731)))
+(check "categorical C2 policy admitted"
+       (equal? (vector-ref (g3t-generator-find categorical
+                                                  'g3t-constructor-test) 7)
+               (vector 'diagnostic-c2 1 #x3fc00000 13 #x3f000000 0 7)))
+(check "categorical close" (g3t-generator-close! categorical))
+(define retry (g3t-generator-create model tokenizer (seed-options 1730)))
+(check "post-close fresh create" (= 1 (g3t-test-live-contexts)))
+(check "post-close fresh close" (g3t-generator-close! retry))
+(check "workspace release" (g3t-checked-m3t-workspace-release! workspace))
+(check "input release" (g3t-checked-m3t-input-release! input))
+(display "G3-T private generator constructor PASS: checks=")
+(display checks)
+(newline)
