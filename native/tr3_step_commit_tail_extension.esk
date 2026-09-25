@@ -1,0 +1,115 @@
+;;; Source-private fixed-profile no-EOS commit tail. The caller must retain
+;;; exclusive ownership of the mutable frame and its opaque O2 plan.
+
+(define tr3-step-i64-max 9223372036854775807)
+(define tr3-step-exact-f32-integer-max 16777216)
+
+(define (tr3-step-f32-integer-bits value)
+  ;; Exact IEEE-754 binary32 encoding for positive integers through 2^24.
+  (let loop ((power 1) (exponent 0))
+    (if (<= (* power 2) value)
+        (loop (* power 2) (+ exponent 1))
+        (+ (* (+ exponent 127) 8388608)
+           (quotient (* (- value power) 8388608) power)))))
+
+(define (tr3-step-commit-preflight frame active-tokens)
+  (let* ((record (tr3-step-admit-frame frame))
+         (plan (vector-ref frame 9))
+         (saved (vector-ref frame 7))
+         (old-tokens (vector-ref saved 0))
+         (old-updates (vector-ref saved 1))
+         (old-epochs (vector-ref saved 2))
+         (contributions (vector-ref frame 11))
+         (weight-bits (vector-ref frame 10)))
+    (if (not (eq? (vector-ref frame 8) 'prepared))
+        (tr3-step-fail 'invalid-state "step has no prepared O2 plan"))
+    (if (or (not (integer? active-tokens)) (not (exact? active-tokens))
+            (not (real? active-tokens)) (<= active-tokens 0)
+            (> active-tokens tr3-step-exact-f32-integer-max)
+            (not (integer? contributions)) (not (exact? contributions))
+            (<= contributions 0)
+            (> contributions tr3-step-exact-f32-integer-max)
+            (< active-tokens contributions)
+            (> active-tokens (* 2 contributions))
+            (not (integer? weight-bits)) (not (exact? weight-bits))
+            (not (= (tr3-step-f32-integer-bits active-tokens) weight-bits)))
+        (tr3-step-fail 'invalid-argument
+                       "active-token count differs from exact prepared mask weight"))
+    (if (or (= old-updates tr3-step-i64-max)
+            (> active-tokens (- tr3-step-i64-max old-tokens))
+            (not (= (vector-ref record 19) old-tokens))
+            (not (= (vector-ref record 20) old-updates))
+            (not (= (vector-ref record 21) old-epochs))
+            (not (equal? (vector-ref record 18) (vector-ref frame 5))))
+        (tr3-step-fail 'invalid-state
+                       "step controls changed or would overflow"))
+    (tr3-step-modes-unchanged! record (vector-ref frame 6))
+    (tr3-lease-m3-idle! (vector-ref record 9) tr3-step-operation)
+    (tr3-lease-d2-idle! (vector-ref record 16) tr3-step-operation)
+    (tr3-lease-commit-optimizer-internal record (vector-ref frame 3) plan)
+    (let* ((start (d2-core-cursor-decode (vector-ref frame 4)))
+           (current
+             (d2-core-cursor-decode
+               (d2-token-dataset-cursor (vector-ref record 15)))))
+      (if (or (not (d2-core-state-identity=? start current))
+              (> (vector-ref start 15) (vector-ref current 15))
+              (not (= (- (vector-ref current 15) (vector-ref start 15))
+                      contributions)))
+          (tr3-step-fail 'invalid-state
+                         "no-EOS cursor span differs from accumulation")))
+    ;; The successor and all scalar values are staged before the native call.
+    ;; The exact frame remains rooted until the no-fail tail retires it.
+    (let ((ledger
+            (vector frame record plan (+ old-tokens active-tokens)
+                    (+ old-updates 1) old-epochs
+                    (vector-ref tr3-step-frames 0)
+                    (tr3-step-remaining (vector-ref tr3-step-frames 0)
+                                        frame))))
+      (vector-set! frame 12 ledger)
+      ledger)))
+
+(define (tr3-step-commit-tail! ledger)
+  (let ((frame (vector-ref ledger 0))
+        (record (vector-ref ledger 1))
+        (plan (vector-ref ledger 2)))
+    ;; No provider call, allocation, condition, or release occurs after the
+    ;; native first parameter write. An impossible identity defect terminates.
+    (if (or (not (eq? (vector-ref tr3-step-frames 0)
+                      (vector-ref ledger 6)))
+            (not (eq? (vector-ref record 3) 'commit))
+            (not (eq? (vector-ref record 4) plan))
+            (not (eq? (vector-ref frame 8) 'prepared))
+            (not (eq? (vector-ref frame 9) plan))
+            (not (eq? (vector-ref frame 12) ledger)))
+        (tr3-lease-fail-stop 134))
+    (vector-set! record 19 (vector-ref ledger 3))
+    (vector-set! record 20 (vector-ref ledger 4))
+    (vector-set! record 21 (vector-ref ledger 5))
+    (vector-set! record 4 #f)
+    (vector-set! record 3 'idle)
+    (vector-set! frame 8 'dead)
+    (vector-set! frame 9 #f)
+    (vector-set! frame 10 #f)
+    (vector-set! frame 11 #f)
+    (vector-set! frame 12 #f)
+    (vector-set! tr3-step-frames 0 (vector-ref ledger 7))
+    (set! tr3-step-operation-active? #f)
+    #t))
+
+(define (tr3-step-commit-internal! frame active-tokens)
+  (if tr3-step-operation-active?
+      (tr3-step-fail 'invalid-state "step transaction operation is busy"))
+  (set! tr3-step-operation-active? #t)
+  (let ((ledger
+          (guard (caught
+                   (#t (begin (set! tr3-step-operation-active? #f)
+                              (raise caught))))
+            (tr3-step-commit-preflight frame active-tokens))))
+    ;; O2 can return a categorized pre-COMMITTING rejection; the frame remains
+    ;; prepared for explicit abort. Once COMMITTING begins, O2 either succeeds
+    ;; or fail-stops. The source tail below contains only staged primitives.
+    (guard (caught
+             (#t (begin (set! tr3-step-operation-active? #f)
+                        (raise caught))))
+      (o2-trainer-step-clear-commit-internal! (vector-ref ledger 2)))
+    (tr3-step-commit-tail! ledger)))

@@ -22,7 +22,7 @@
       result)))
 
 (define (tr3-step-frame? frame)
-  (and (vector? frame) (= (vector-length frame) 10)
+  (and (vector? frame) (= (vector-length frame) 13)
        (eq? (vector-ref frame 0) tr3-step-frame-tag)
        (eq? (vector-ref frame 1) frame)
        (let loop ((remaining (vector-ref tr3-step-frames 0)))
@@ -91,7 +91,7 @@
                                  (vector-ref record 20)
                                  (vector-ref record 21)))
                (frame (vector tr3-step-frame-tag #f record token cursor
-                              rng modes counters 'active #f))
+                              rng modes counters 'active #f #f #f #f))
                (successor (cons frame (vector-ref tr3-step-frames 0))))
           (vector-set! frame 1 frame)
           ;; Reauthenticate after the last provider call. Publication below is
@@ -126,6 +126,8 @@
           ;; Native prepare owns no parameter writes. The exact plan is rooted
           ;; before the lease advertises its commit phase.
           (vector-set! frame 9 plan)
+          (vector-set! frame 10 weight-bits)
+          (vector-set! frame 11 contributions)
           (vector-set! record 4 plan)
           (vector-set! record 3 'commit)
           (vector-set! frame 8 'prepared)
@@ -151,6 +153,9 @@
             (begin
               (o2-trainer-step-clear-abort-internal! (vector-ref frame 9))
               (vector-set! frame 9 #f)
+              (vector-set! frame 10 #f)
+              (vector-set! frame 11 #f)
+              (vector-set! frame 12 #f)
               (vector-set! record 4 #f)
               (vector-set! record 3 'step)
               (vector-set! frame 8 'active)))

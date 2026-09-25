@@ -35,6 +35,8 @@ The frame is a source-private mutable vector: registry identity authenticates
 the exact frame, but its cursor/RNG fields are not sealed against a caller that
 mutates the frame itself. A public trainer must keep this frame opaque or move
 the saved controls to an inaccessible authoritative record.
+The [private no-EOS commit tail](TR3_STEP_PRIVATE_COMMIT_TAIL.md) extends this
+frame with prepared weight/contribution fields and a rooted control ledger.
 
 The pinned f31/LLVM21 runtime witness uses genuine D2 masks and one analytic
 TR3-B numerator VJP, then exercises a live-batch abort rejection, cursor/RNG/
