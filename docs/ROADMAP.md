@@ -516,8 +516,17 @@ after a successful dispatch. Supported normal/repeat/sanitizer each pass
 weight identity, staged A2 and committed-cache invariance, and borrowed-
 logits abort. No new global symbol, predecessor hashes, Q0, and merged
 structural gates pass. Root sealed
-`g3c4-manual-ao-63757e1-20260925/SHA256SUMS` (`faafc832...`). Ordinals
-13–20, public role stepping, frame commit, and generation remain pending.
+`g3c4-manual-ao-63757e1-20260925/SHA256SUMS` (`faafc832...`).
+The private ordinal-13 attention residual from exact source `cc89863`/tree
+`1ec8ade` is integrated byte-identically at `3823a5f`. It dispatches the
+accepted G3-N/N3K residual with X first and AO second, publishes R only
+after success, and preserves the pending A2 candidate. Supported normal,
+repeat, and sanitizer each pass 1,946 checks across T1/T2/decode, including
+bitwise X+AO, injected provider failure/retry, candidate/cache/logits/
+binding/RNG invariance and borrowed-logits abort. No added global symbol,
+predecessor hashes, Q0 and merged structural gates pass. Root sealed
+`g3c4-manual-r-cc89863-20260925/SHA256SUMS` (`e5c3708e...`). Ordinals
+14–20, public role stepping, frame commit, and generation remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
