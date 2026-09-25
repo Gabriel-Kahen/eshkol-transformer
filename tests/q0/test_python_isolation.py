@@ -59,6 +59,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3t-output-text.py",
     ROOT / "scripts" / "check-g3t-final-publication.py",
     ROOT / "scripts" / "check-g3t-zero-budget.py",
+    ROOT / "scripts" / "check-g3t-p2-zero-budget.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
