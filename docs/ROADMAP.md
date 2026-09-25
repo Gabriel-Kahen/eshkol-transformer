@@ -886,10 +886,16 @@ The distinct production `--emit-object` and `--shared-lib -c` gates pass on
 preexisting lease-unenrollment definitions and retains its expected linked
 tail-transfer negative. Sealed evidence is `tr3-private-object-436efad-20260925`
 and `tr3-private-mode-436efad-20260925`.
-The full contract matrix still needs a fixed-profile and X1-seed derivation
-witness, every producer/lease failure cut, cleanup-failure behavior,
-process-lifetime retention, broader E1 category evidence and an exact merged
-union gate. Root independently reviewed the bridge, source wrapper, linked
+The bounded `28cc85a` candidate linked rerun now proves a valid-X1 fixed
+profile rejection (`unsupported/X1`), create/close at both X1 seeds 1729 and
+2718 through M3T's native initializer-seed check, and an early D2 batch-limit
+cut (`invalid-argument/D2`) before filesystem access. Exact symbols and the
+candidate export boundary stay unchanged; sealed evidence is
+`tr3-factory-profile-seed-d2-28cc85a-20260925`. Model-state bytes and
+independent T2 fault injection were not observed. Other producer/lease cuts,
+cleanup-failure behavior, process-lifetime retention, broader E1 category
+evidence and an exact merged-union gate remain pending. Root independently
+reviewed the prior bridge, source wrapper, linked
 scripts, fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
