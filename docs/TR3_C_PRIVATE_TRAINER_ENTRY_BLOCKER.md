@@ -1,8 +1,12 @@
 # TR3-C private C trainer entry: contract blocker
 
-Status: source-backed C-entry blocker. A separate private lease-unenroll
-operation now ends registry retention; no C constructor, C handle or public
-trainer facade is accepted by this note.
+Status: historical source-backed C-entry blocker. A separate private
+lease-unenroll operation ends registry retention. The subsequent
+[bounded private factory candidate](TR3_C_PRIVATE_FACTORY_CONTRACT.md) now
+defines a data-only C request and proves a narrow linked create/close path;
+its full failure matrix, production exports, public trainer and resume remain
+unaccepted. The analysis below records why the earlier initializer-only
+package could not construct a trainer.
 
 The accepted 46-source root in `native/tr3_c_private_package_root.esk`
 contains `tr3-lease-create-internal` with five operands: resolved configuration,
