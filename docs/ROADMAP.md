@@ -710,6 +710,12 @@ and the G1 append uses absolute position one. P2/G1 needs a reviewed
 capacity-three cache/position/attention and output transaction contract before
 implementation; sampling without that append would not satisfy G1. No
 P2/G1 implementation or compiler proof is claimed from this audit.
+A separate public-facade audit at `7ace598` finds the G3-T closure still lacks
+a callable P1/G1 generate operation, authentic same-T1 public input adapter,
+detached output ID/length/cache-length/RNG clone seams, and the accepted G3-G
+facade/package tuple. Public output accessors therefore await an exact G3-G
+ownership and error contract plus those upstream transports; the private P1/G1
+witness alone cannot justify a public generator or CLI.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
