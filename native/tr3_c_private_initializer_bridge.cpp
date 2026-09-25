@@ -17,9 +17,11 @@ enum : unsigned { kUninitialized, kInitializing, kReady };
 std::atomic<unsigned> readiness{kUninitialized};
 }
 
+#ifdef ET_TR3_C_PRIVATE_FACTORY_CANDIDATE
 extern "C" int et_tr3_c_private_ready_internal_v1(void) {
   return readiness.load(std::memory_order_acquire) == kReady;
 }
+#endif
 
 extern "C" int et_tr3_c_private_initialize_v1(void) {
   unsigned expected = kUninitialized;
