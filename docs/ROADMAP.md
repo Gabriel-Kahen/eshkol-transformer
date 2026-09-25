@@ -1134,7 +1134,12 @@ isolated candidate: canonical `transformer.trainer` adds A0 `trainer-create`
 and `trainer-release!` to C2 `trainer-state-release!` only with one new
 same-registry TR3 aggregate. The C2 archive stays paired with its exact
 pre-TR3 trainer facade, copied into the C2 artifact and selected by the C2
-public gate. Linked proof of both package tuples is pending. Ordinary
+public gate. On `57ca36b`, the full C2 package/public gate passed its
+81-global/75-export/81-string boundary and byte-identical rebuilds; the
+TR3 installed linked gate passed a 49-source/30-native/22-export boundary
+and public trainer caller. Both evidence sets are sealed at
+`tr3-public-installed-c2-57ca36b-20260925` and
+`tr3-public-installed-linked-57ca36b-20260925`. Ordinary
 installed operand producers, step/train/evaluate, state/load and resume
 remain outside this facet.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)

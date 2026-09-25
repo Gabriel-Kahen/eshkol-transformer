@@ -40,3 +40,18 @@ This is an intermediate trainer facet. Ordinary installed producers for all
 five operands, `trainer-step!`, training/evaluation, state/load, and resume
 remain separate work. The linked test-only producers do not make those APIs
 installed or accepted.
+
+The exact `57ca36b` source/tree passed both versioned package gates. The C2
+gate retained 81 global definitions, 75 public exports, 81 public-name
+strings, 32 Eshkol sources and 53 native sources, and passed two byte-identical
+rebuilds and its linked public checks. Its archive is SHA-256
+`09b1c87bf6d1ebfb2a5c95888252fcf7e0364b71532266adaa65d1396837fab1`;
+the complete evidence is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-installed-c2-57ca36b-20260925/`
+(`SHA256SUMS` SHA-256 `ed69bd39204af1af53c36a1e7f0284d1c1bfe461d29252d9eb6a48a519f067a2`).
+The separate pinned TR3 linked gate passed the public caller with 49 Eshkol
+sources, 30 native objects, 69 native source/header paths, 22 localized public
+exports, and 173 undefined runtime symbols. Its evidence is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-installed-linked-57ca36b-20260925/`
+(`SHA256SUMS` SHA-256 `9932eec33411c078f23bf9d147a86295be40357bb80638706e34d9b8fcbdf393`).
+Both seals passed `sha256sum -c`.
