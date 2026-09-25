@@ -526,9 +526,16 @@ quotient reject F32 before unsafe or unreviewed integer-domain paths; the
 supported focused Release and sanitizer gates each pass 6/6 on the combined
 source. Root sealed the combined logs at
 `f32-integer-rational-combined-8b937b67-20260925/SHA256SUMS`
-(`89fe8f98...`). Native/VM DOUBLE modulo/quotient semantics and inexact
-remainder-zero policy still differ, so whole-F32 acceptance and the
-transformer runtime repin remain pending.
+(`89fe8f98...`). The reviewed VM modulo/quotient parity leaf
+`b9f90ec9`/tree `90c0a2c` is composed byte-identically on that line at
+`527f9fb1`, roadmap `837b7677`: stored DOUBLE paths now match native
+floored-modulo and truncated-quotient values/result kinds, and direct/stored
+VM canonical F32 uses the checked inexact route. All-INT64/bignum controls
+remain pinned; exact-tree Release and sanitizer gates each pass 8/8,
+sealed `f32-modulo-quotient-parity-20260924/SHA256SUMS` (`6f9b0041...`).
+Inexact remainder-zero, GCD/LCM integer-domain policy and numerator remain
+open, so whole-F32 acceptance and the transformer runtime repin remain
+pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
