@@ -32,6 +32,7 @@ require_exact_count() {
 
 for source in "${template}" "${generated}"; do
   require_exact_count 1 "(define shell-registry-root (vector '()))" "${source}"
+  require_exact_count 1 "(define active-record-root (vector '() '() #t #f))" "${source}"
   require_exact_count 1 "(vector-ref shell-registry-root 0)" "${source}"
   require_exact_count 2 \
     "(vector-set! shell-registry-root 0 next-registry)" "${source}"
@@ -62,6 +63,27 @@ for source in "${template}" "${generated}"; do
     die "legacy captured registry mutation remains in ${source}"
   fi
 done
+
+python3 - "${generated}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+publication = source.split("(define (shell-for-raw kind raw)", 1)[1].split(
+    "(define (state-entry-shell-for-raw", 1)[0]
+ordered = (
+    "(active-record-stage kind next-registry)",
+    "(native-create-shell kind raw)",
+    "(vector-set! entry 0 shell)",
+    "(vector-set! active-record-root 2 #f)",
+    "(vector-set! shell-registry-root 0 next-registry)",
+    "(vector-set! active-record-root\n",
+    "(vector-set! active-record-root 2 (vector-ref stage 2))",
+)
+positions = [publication.index(witness) for witness in ordered]
+if positions != sorted(positions):
+    raise SystemExit("active-record staging/publication order changed")
+PY
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/p1-registry-publication.XXXXXX")"
 cleanup() {
@@ -253,9 +275,11 @@ for ordinal, function in enumerate(publication_functions, 1):
     roles.add(role)
     barriers = [i for i, line in enumerate(lines)
                 if "call i32 @eshkol_region_write_barrier_checked_v1" in line]
-    if len(barriers) != 2:
+    expected_barriers = 7 if role == "generic-shell" else 2
+    if len(barriers) != expected_barriers:
         raise SystemExit(
-            f"IR proof failed: {name} has {len(barriers)} write barriers, expected 2")
+            f"IR proof failed: {name} has {len(barriers)} write barriers, "
+            f"expected {expected_barriers}")
     barrier_flows = {
         index: checked_barrier_flow(lines, index, name) for index in barriers
     }
@@ -288,7 +312,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     for index in barriers:
         prior = "\n".join(lines[max(0, index - 3):index])
         slot_match = re.search(
-            r"store %eshkol_tagged_value %next-registry\.load, "
+            r"store %eshkol_tagged_value %next-registry\.load[0-9]*, "
             r"ptr (%[-A-Za-z0-9_.]+)", prior)
         if (slot_match and slot_match.group(1) in lines[index]
                 and any(pointer in lines[index] for pointer in root_pointers)):
@@ -297,7 +321,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     if root_barrier is None:
         raise SystemExit(
             f"IR proof failed: {name} lacks a root-vector next-registry barrier")
-    entry_barrier = barriers[0]
+    entry_barrier = barriers[1] if role == "generic-shell" else barriers[0]
     if entry_barrier >= root_barrier:
         raise SystemExit(f"IR proof failed: {name} root publication ordering changed")
     entry_prior = "\n".join(lines[max(0, entry_barrier - 3):entry_barrier])
@@ -308,13 +332,22 @@ for ordinal, function in enumerate(publication_functions, 1):
     successor_label = root_flow["successor_label"]
     successor_index = root_flow["successor_index"]
     successor = root_flow["successor"]
+    canonical_tail = successor if role == "state-entry-shell" else lines[root_barrier + 1:]
     if not any("ptr %shell-registry-current_cap" in line
-               and " load " in f" {line} " for line in successor):
+               and " load " in f" {line} " for line in canonical_tail):
         raise SystemExit(
             f"IR proof failed: {name} root barrier does not enter canonical readback")
-    if not any("%vref_result = phi %eshkol_tagged_value" in line
-               for line in lines):
-        raise SystemExit(f"IR proof failed: {name} does not read the canonical shell slot")
+    if role == "generic-shell":
+        # The staged active node and validity marker are root-owned before
+        # publication. Their three checked stores follow the registry store.
+        # Each has the normal checked success/failure control flow, and the
+        # caller still returns a registry-read shell after that tail.
+        if barriers[3] != root_barrier:
+            raise SystemExit(f"IR proof failed: {name} active tail ordering changed")
+        for index in barriers[4:]:
+            if not any("ptr %active-record-root_cap" in line
+                       for line in lines[max(0, index - 256):index]):
+                raise SystemExit(f"IR proof failed: {name} active tail lost its root")
     if any("%shell.load" in line for line in lines[root_barrier + 1:]):
         raise SystemExit(f"IR proof failed: {name} reuses pre-barrier shell identity")
     returns = [(i, line) for i, line in enumerate(lines)
@@ -325,9 +358,12 @@ for ordinal, function in enumerate(publication_functions, 1):
     if len(cond_phis) != 1 or "%vref_result" not in cond_phis[0]:
         raise SystemExit(f"IR proof failed: {name} return phi bypasses registry readback")
 
-    readback_index = next(
-        i for i, line in enumerate(lines)
-        if "%vref_result = phi %eshkol_tagged_value" in line)
+    returned_reads = re.findall(r"%vref_result[0-9]*", cond_phis[0])
+    readback_index = next((i for i, line in enumerate(lines)
+                           if any(f"{value} = phi %eshkol_tagged_value" in line
+                                  for value in returned_reads)), None)
+    if readback_index is None:
+        raise SystemExit(f"IR proof failed: {name} lacks returned canonical readback")
     return_index = returns[0][0]
     witness.extend((
         f"publication-{ordinal}-function={name}",
@@ -359,7 +395,7 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/aot/registry-proof" \
   >"${tmp}/runtime.stdout" 2>"${tmp}/runtime.stderr"
 test ! -s "${tmp}/runtime.stderr"
-grep -Fx "P1 REGISTRY PUBLICATION PASS: 11 checks" \
+grep -Fx "P1 REGISTRY PUBLICATION PASS: 17 checks" \
   "${tmp}/runtime.stdout" >/dev/null
 
 cat "${tmp}/publication-witness.txt"

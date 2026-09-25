@@ -1038,6 +1038,10 @@ scans and raw-shell/native record lookups all grow superlinearly. No P1 runtime
 optimization is accepted from this profile. An active-only record index needs
 a publication/release/rollback and authoritative-fallback contract before
 implementation; the 8,192-cycle horizon remains open.
+An isolated [active-record candidate](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md)
+implements that contract for state/module ownership scans. Focused pinned
+behavioral and performance evidence, independent review, and source-hash
+checker repinning remain integration gates; the 8,192 horizon is still open.
 
 ## Wave 4 — practical pretraining and performance
 
