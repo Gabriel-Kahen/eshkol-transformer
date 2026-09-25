@@ -1,0 +1,132 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+
+(extern ptr g3t-native-generator-seed ptr i64 i64 i64 i64 i64 i64 i64
+        :real et_g3t_private_generator_seed_v1)
+(extern i64 g3t-native-generator-close ptr
+        :real et_g3t_private_generator_close_v1)
+(extern i64 g3t-native-call-acquire ptr i64
+        :real et_g3t_private_call_acquire_v1)
+(extern i64 g3t-native-call-abort ptr
+        :real et_g3t_private_call_abort_v1)
+(extern i64 g3t-native-last-error-domain
+        :real et_g3t_private_last_error_domain_v1)
+(extern i64 g3t-native-last-error-category
+        :real et_g3t_private_last_error_category_v1)
+(extern i64 g3t-native-last-error-code
+        :real et_g3t_private_last_error_code_v1)
+(extern i64 g3t-test-fail-alloc-after i64
+        :real et_g3t_test_fail_alloc_after_v1)
+(extern i64 g3t-test-fail-a2-after i64
+        :real et_g3t_test_fail_a2_after_v1)
+(extern i64 g3t-test-live-contexts
+        :real et_g3t_test_live_contexts_v1)
+(extern i64 g3t-test-pin-count ptr
+        :real et_g3t_test_pin_count_v1)
+(extern i64 g3t-test-cache-empty ptr
+        :real et_g3t_test_cache_empty_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-T native context FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (seed owner)
+  (g3t-native-generator-seed owner 1729 0 #x3f800000 256
+                             #x3f800000 1 -1))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3t-native-context-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(check "eval mode" (module-eval! model))
+(define entry
+  (m3-call 'g3t-native-context-test
+    (g3t-model-entry-live model 'g3t-native-context-test #f)))
+(define owner (vector-ref entry 3))
+(check "genuine M3T owner" owner)
+(check "initial empty registry" (= 0 (g3t-test-live-contexts)))
+(check "foreign model pointer rejected"
+       (null? (seed (vector 'foreign))))
+(check "foreign identity error"
+       (and (= 0 (g3t-native-last-error-domain))
+            (= 1 (g3t-native-last-error-category))
+            (= 1 (g3t-native-last-error-code))))
+(check "initializer pointer is wrong kind"
+       (null? (seed (vector-ref (m3t-entry initial 'initializer
+                                            'g3t-native-context-test #t) 3))))
+(check "invalid greedy policy rejected"
+       (null? (g3t-native-generator-seed owner 1729 0 #x40000000 256
+                                         #x3f800000 1 -1)))
+(check "invalid seed rejected"
+       (null? (g3t-native-generator-seed owner -1 0 #x3f800000 256
+                                         #x3f800000 1 -1)))
+(check "no partial owner enrolled" (= 0 (g3t-test-live-contexts)))
+
+(check "arm context allocation failure" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "context allocation failure" (null? (seed owner)))
+(check "context allocation category"
+       (and (= 0 (g3t-native-last-error-domain))
+            (= 5 (g3t-native-last-error-category))
+            (= 7 (g3t-native-last-error-code))))
+(check "context failure did not enroll" (= 0 (g3t-test-live-contexts)))
+(check "disarm context allocation failure"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "arm A2 allocation failure" (= 0 (g3t-test-fail-a2-after 0)))
+(check "A2 allocation failure" (null? (seed owner)))
+(check "A2 error retained"
+       (and (= 1 (g3t-native-last-error-domain))
+            (> (g3t-native-last-error-category) 0)
+            (> (g3t-native-last-error-code) 0)))
+(check "A2 failure did not enroll" (= 0 (g3t-test-live-contexts)))
+(check "disarm A2 allocation failure"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+
+(define context (seed owner))
+(check "retry creates context" (not (null? context)))
+(check "successful error reset"
+       (and (= 0 (g3t-native-last-error-category))
+            (= 0 (g3t-native-last-error-code))))
+(check "one live context" (= 1 (g3t-test-live-contexts)))
+(check "owned A2 cache starts empty" (= 1 (g3t-test-cache-empty context)))
+(check "no pins before call" (= 0 (g3t-test-pin-count context)))
+
+(define input (g3t-checked-m3t-input-create))
+(check "copy M3T input" (g3t-checked-m3t-input-copy! input '(17 19)))
+(define workspace (g3t-checked-m3t-workspace-create model))
+(check "manual M3T frame begins"
+       (g3t-checked-m3t-workspace-begin! workspace input))
+(check "same-model native frame excludes G3"
+       (= 2 (g3t-native-call-acquire context 0)))
+(check "no pins on rejected acquisition" (= 0 (g3t-test-pin-count context)))
+(check "manual frame reset" (g3t-checked-m3t-workspace-reset! workspace))
+(check "invalid call kind" (= 1 (g3t-native-call-acquire context 3)))
+(check "acquire fixed14" (= 0 (g3t-native-call-acquire context 0)))
+(check "all fourteen pinned" (= 14 (g3t-test-pin-count context)))
+(check "second acquire rejected" (= 2 (g3t-native-call-acquire context 0)))
+(check "busy close rejected" (= 2 (g3t-native-generator-close context)))
+(check "wrong pointer abort rejected"
+       (= 1 (g3t-native-call-abort (vector 'copied-context))))
+(check "abort drains fixed14" (= 0 (g3t-native-call-abort context)))
+(check "pins idle after abort" (= 0 (g3t-test-pin-count context)))
+(check "second abort rejected" (= 2 (g3t-native-call-abort context)))
+(check "retry acquire" (= 0 (g3t-native-call-acquire context 2)))
+(check "retry abort" (= 0 (g3t-native-call-abort context)))
+(check "close live context" (= 0 (g3t-native-generator-close context)))
+(check "idempotent exact close" (= 0 (g3t-native-generator-close context)))
+(check "dead context cannot acquire" (= 2 (g3t-native-call-acquire context 0)))
+(check "registry live count restored" (= 0 (g3t-test-live-contexts)))
+(check "M3T model remains usable"
+       (and (g3t-checked-m3t-workspace-begin! workspace input)
+            (g3t-checked-m3t-workspace-reset! workspace)))
+(check "workspace release" (g3t-checked-m3t-workspace-release! workspace))
+(check "input release" (g3t-checked-m3t-input-release! input))
+(display "G3-T authentic native context PASS: checks=")
+(display checks)
+(newline)
