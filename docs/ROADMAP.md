@@ -637,6 +637,10 @@ reserves exact I1 `[1]` ID storage and copies the completed speculative token
 there before recording lengths and successor RNG. Abort checks active I1 borrows
 before unwinding the frame and scrubs the unpublished output. G0 admission,
 ID-byte staging, T1 decode, text readiness and joint publication remain pending.
+Candidate `64c613d` is integrated at `e8d38ea` with byte-identical native
+transport; normal/repeat/ASan+UBSan+LSan witnesses each passed 170 checks,
+and the root static source contract passes. Evidence is sealed at
+`g3t-output-readiness-64c613d-20260925/SHA256SUMS`.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -926,6 +930,8 @@ test-only partition or terminal-registry reset would invalidate the single-
 process retention horizon. The 1,024/8,192 live-authority gate remains open;
 the next dependency is an accepted runtime identity-indexing contract or a
 measured larger runtime budget.
+Root integrated that timing and diagnosis at `dc965bc`/`7acfd66`, without
+changing the accepted SAVE, LOAD or joint restore path.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
