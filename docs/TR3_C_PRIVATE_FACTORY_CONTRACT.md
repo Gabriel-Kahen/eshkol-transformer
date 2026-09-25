@@ -265,8 +265,11 @@ evidence is
 (`e007ee61f32ac14fa863d11b3a552e3038efc488d05b005a248a9ee758eecf0a`).
 The bounded `m3t-model` candidate arms the existing test-only M3T allocation
 limit after one successful native allocation. The initializer therefore returns
-before the model owner's real allocation is denied. A linked preflight against
-the prior sealed private object observes authenticated
-`internal/M3T-model/raised-e1`, a null handle and consumed attempt, one D2 open
-and close, an initialized process-root slot, and no published model slot. The
-full pinned source/object gate for this candidate remains pending.
+before the model owner's real allocation is denied. The linked package
+observes authenticated `internal/M3T-model/raised-e1`, a null handle and
+consumed attempt, one D2 open and close, an initialized process-root slot,
+and no published model slot. The full pinned 48-source/30-native linked gate
+passes on `0a5d1d6`. Its exact symbol boundary remains 4151 raw-defined,
+177 undefined, and four candidate dynamic-defined symbols. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-model-259f58c-20260925/SHA256SUMS`
+(`300b1a8b7879a205989b8775c41c71705d836602dc34559944672fbe78659b85`).
