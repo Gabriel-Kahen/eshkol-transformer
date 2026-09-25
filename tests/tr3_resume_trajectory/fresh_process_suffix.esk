@@ -1,0 +1,190 @@
+;;; Appended to the snapshot witness's definitions only. Each invocation is a
+;;; distinct OS process with its own TR3/P1/O2/C2 registry universe.
+(define trajectory-policy
+  (c2-persistence-policy-internal 16777216 16777216 16777216 64 'cpu))
+(define trajectory-report (k2-public-capability-discover))
+(define trajectory-args (cdr (cdr (command-line))))
+(define trajectory-mode (car trajectory-args))
+(define trajectory-accumulation (string->number (car (cdr trajectory-args))))
+
+(define (trajectory-tuple accumulation seed)
+  (let* ((resolved
+           (x1-private-config-resolve
+             (x1-private-config-parse
+               (string-append
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+                 "\"model.context-length\":2,\"model.hidden-size\":4,"
+                 "\"model.layer-count\":1,\"model.query-head-count\":2,"
+                 "\"model.vocabulary-size\":256,\"run.seed\":"
+                 (number->string seed) ",\"training.accumulation-steps\":"
+                 (number->string accumulation) "}"))
+             '()))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset
+           (d2-token-dataset-open (dataset-config corpus-directory) tokenizer))
+         (model
+           (m3t-public-model-create
+             resolved (m3t-public-initializer-state seed)))
+         (handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+         (optimizer
+           (o2-public-optimizer-create
+             (optimizer-config handles) (module-parameters model))))
+    (vector resolved tokenizer dataset model optimizer)))
+
+(define (trajectory-create tuple)
+  (tr3-lease-create-internal
+    (vector-ref tuple 0) (vector-ref tuple 1) (vector-ref tuple 2)
+    (vector-ref tuple 3) (vector-ref tuple 4)))
+(define (trajectory-image shell)
+  (let ((owner (tr3-c-trainer-state-internal shell (vector #f))))
+    (let ((image (owner-image owner)))
+      (c2-training-state-release-internal! owner 'trainer-state-release!)
+      image)))
+(define (trajectory-path prefix ordinal)
+  (string-append corpus-directory "/" prefix "-"
+                 (number->string trajectory-accumulation) "-"
+                 (number->string ordinal) ".c2"))
+(define (trajectory-save shell prefix ordinal)
+  (check "canonical C2 SAVE"
+         (tr3-c-snapshot-save-internal!
+           shell (trajectory-path prefix ordinal) trajectory-policy '())))
+(define (trajectory-read path)
+  (let* ((port (open-binary-input-file path))
+         (bytes (read-bytevector (file-size path) port)))
+    (close-port port)
+    bytes))
+(define (trajectory-write path bytes)
+  (let ((port (open-binary-output-file path)))
+    (write-bytevector bytes port)
+    (close-port port)))
+(define (trajectory-controls? record updates)
+  (let* ((epoch (d2-core-cursor-decode (vector-ref record 17)))
+         (current (d2-core-cursor-decode
+                    (d2-token-dataset-cursor (vector-ref record 15))))
+         (span (- (vector-ref epoch 14) (vector-ref epoch 15)))
+         (epochs (vector-ref record 21))
+         (tokens (vector-ref record 19)))
+    (and (eq? (vector-ref record 3) 'idle)
+         (not (vector-ref record 4))
+         (= (vector-ref record 20) updates)
+         (= (o2-optimizer-completed-updates-internal
+              (vector-ref record 13)) updates)
+         (= (* updates trajectory-accumulation)
+            (+ (* epochs span)
+               (- (vector-ref current 15) (vector-ref epoch 15))))
+         (<= (* updates trajectory-accumulation) tokens)
+         (<= tokens (* 2 updates trajectory-accumulation)))))
+(define (trajectory-step shell)
+  (check "genuine configured update" (tr3-step-composer-internal! shell)))
+
+(check "supported accumulation profile"
+       (or (= trajectory-accumulation 1)
+           (= trajectory-accumulation 2)
+           (= trajectory-accumulation 3)))
+(define trajectory-tuple-main
+  (trajectory-tuple trajectory-accumulation 1729))
+(define trajectory-trainer (trajectory-create trajectory-tuple-main))
+(define trajectory-record (record-for-shell trajectory-trainer))
+(define trajectory-before (trajectory-image trajectory-trainer))
+
+(cond
+  ((string=? trajectory-mode "uninterrupted")
+   (let loop ((update 1) (first-delta #f) (unequal? #f))
+     (if (> update 4)
+         (check "unequal active-token update counts"
+                (or (= trajectory-accumulation 2) unequal?))
+         (let ((old-tokens (vector-ref trajectory-record 19)))
+           (trajectory-step trajectory-trainer)
+           (check "uninterrupted controls"
+                  (trajectory-controls? trajectory-record update))
+           (trajectory-image trajectory-trainer)
+           (trajectory-save trajectory-trainer "u" update)
+           (let ((delta (- (vector-ref trajectory-record 19) old-tokens)))
+             (loop (+ update 1) (if first-delta first-delta delta)
+                   (or unequal?
+                       (and first-delta (not (= first-delta delta)))))))))
+   (check "uninterrupted suffix crosses EOS"
+          (> (vector-ref trajectory-record 21) 0)))
+  ((string=? trajectory-mode "producer")
+   (trajectory-step trajectory-trainer)
+   (check "producer K controls" (trajectory-controls? trajectory-record 1))
+   (trajectory-image trajectory-trainer)
+   (trajectory-save trajectory-trainer "k" 1))
+  ((string=? trajectory-mode "receiver")
+   (let* ((k-path (trajectory-path "k" 1))
+          (corrupt-path (trajectory-path "corrupt" 1))
+          (corrupt (trajectory-read k-path))
+          (last (- (bytevector-length corrupt) 1)))
+     (bytevector-u8-set! corrupt last
+                         (if (= (bytevector-u8-ref corrupt last) 0) 1 0))
+     (trajectory-write corrupt-path corrupt)
+     (check "checksum corruption rejects"
+            (transformer-error-at?
+              'corrupt-data 'checkpoint-load
+              (lambda ()
+                (tr3-c-checkpoint-restore-internal!
+                  trajectory-trainer corrupt-path trajectory-policy
+                  trajectory-report))))
+     (check "corruption preserves fresh receiver"
+            (image=? trajectory-before (trajectory-image trajectory-trainer)))
+     (let* ((mismatch-tuple (trajectory-tuple trajectory-accumulation 9876))
+            (mismatch (trajectory-create mismatch-tuple))
+            (mismatch-before (trajectory-image mismatch)))
+       (check "canonical X1 run-seed mismatch rejects"
+              (transformer-error-at?
+                'invalid-state 'trainer-load-state!
+                (lambda ()
+                  (tr3-c-checkpoint-restore-internal!
+                    mismatch k-path trajectory-policy trajectory-report))))
+       (check "mismatch preserves receiver"
+              (image=? mismatch-before (trajectory-image mismatch)))
+       (check "mismatch lease unenroll" (tr3-lease-unenroll-internal! mismatch))
+       (check "mismatch D2 close"
+              (d2-token-dataset-close! (vector-ref mismatch-tuple 2))))
+     (check "fresh-process C2 LOAD and joint restore"
+            (tr3-c-checkpoint-restore-internal!
+              trajectory-trainer k-path trajectory-policy trajectory-report))
+     (check "restored K controls" (trajectory-controls? trajectory-record 1))
+     (check "restored K differs from initial receiver"
+            (not (image=? trajectory-before
+                           (trajectory-image trajectory-trainer))))
+     (let ((k-image (trajectory-image trajectory-trainer))
+           (original-hook tr3-step-composer-test-hook))
+       (trajectory-save trajectory-trainer "r" 0)
+       (set! tr3-step-composer-test-hook
+         (lambda (stage ordinal observation)
+           (if (eq? stage 'precommit)
+               (m3t-fail 'invalid-state 'trajectory-precommit
+                         "injected recoverable failure before first write"))
+           #t))
+       (check "pre-seal failure rejects"
+              (transformer-error-at?
+                'invalid-state 'trajectory-precommit
+                (lambda () (tr3-step-composer-internal! trajectory-trainer))))
+       (set! tr3-step-composer-test-hook original-hook)
+       (check "pre-seal abort preserves exact K image"
+              (and (image=? k-image (trajectory-image trajectory-trainer))
+                   (trajectory-controls? trajectory-record 1)))
+       (let loop ((ordinal 1))
+         (if (> ordinal 3) #t
+             (begin
+               (trajectory-step trajectory-trainer)
+               (check "resumed controls"
+                      (trajectory-controls? trajectory-record (+ ordinal 1)))
+               (trajectory-image trajectory-trainer)
+               (trajectory-save trajectory-trainer "r" ordinal)
+               (loop (+ ordinal 1)))))
+       (check "resumed suffix crosses EOS"
+              (> (vector-ref trajectory-record 21) 0)))))
+  (else (check "recognized process mode" #f)))
+
+(check "lease unenroll" (tr3-lease-unenroll-internal! trajectory-trainer))
+(check "D2 close"
+       (d2-token-dataset-close! (vector-ref trajectory-tuple-main 2)))
+(display "TR3-C FRESH PROCESS PASS: ")
+(display trajectory-mode)
+(display " A=")
+(display trajectory-accumulation)
+(display " checks=")
+(display checks)
+(newline)
