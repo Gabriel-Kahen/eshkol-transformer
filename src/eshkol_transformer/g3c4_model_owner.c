@@ -816,6 +816,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_MANUAL_PRE_A2_PRIVATE)
 #error "ET_G3C4_MANUAL_A2_PRIVATE requires manual pre-A2 roles"
 #endif
+#if defined(ET_G3C4_MANUAL_AT_PRIVATE) && \
+    !defined(ET_G3C4_MANUAL_A2_PRIVATE)
+#error "ET_G3C4_MANUAL_AT_PRIVATE requires manual A2 attention"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -940,6 +944,9 @@ typedef struct et_g3c4_manual_frame_internal {
   et_a2_kv_cache *a2_candidate;
   et_a2_kv_cache_transaction *a2_transaction;
 #endif
+#ifdef ET_G3C4_MANUAL_AT_PRIVATE
+  float at[8];
+#endif
 } et_g3c4_manual_frame_internal;
 #endif
 
@@ -999,7 +1006,13 @@ static int et_g3c4_manual_frame_valid(
       context->budget != 0 || frame->frame_kind < 1 ||
       frame->frame_kind > 2 ||
       context->call_kind != frame->frame_kind - 1 ||
-#ifdef ET_G3C4_MANUAL_A2_PRIVATE
+#ifdef ET_G3C4_MANUAL_AT_PRIVATE
+      (frame->next_ordinal < 0 || frame->next_ordinal > 12) ||
+      (frame->next_ordinal < 11 &&
+       (frame->a2_candidate != NULL || frame->a2_transaction != NULL)) ||
+      (frame->next_ordinal >= 11 &&
+       (frame->a2_candidate == NULL || frame->a2_transaction == NULL)) ||
+#elif defined(ET_G3C4_MANUAL_A2_PRIVATE)
       (frame->next_ordinal < 0 || frame->next_ordinal > 11) ||
       (frame->next_ordinal < 11 &&
        (frame->a2_candidate != NULL || frame->a2_transaction != NULL)) ||
@@ -5719,6 +5732,61 @@ fail:
           &candidate, &error) != 0) abort();
   et_g3c4_error_state = first;
   return first.category;
+}
+#endif
+#endif
+
+#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+#ifdef ET_G3C4_MANUAL_AT_PRIVATE
+/* Internal ordinal 11: merge attention heads without publishing A2 state. */
+static inline __attribute__((unused)) int64_t et_g3c4_manual_at_run(
+    void *candidate_context) {
+  et_g3c4_context_internal *context;
+  et_g3c4_manual_frame_internal *frame;
+  et_g3c4_logits_internal *pending = NULL;
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_tensor_view_v1 input;
+  uint64_t row[4] = {1u, 0u, 2u, 2u};
+  uint64_t heads_shape[4] = {1u, 2u, 0u, 2u};
+  uint64_t output_shape[3] = {1u, 0u, 4u};
+  float at_candidate[8] = {0};
+  int t2;
+  size_t bytes;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate_context);
+  if (context == NULL) return et_g3c4_error_state.category;
+  frame = context->manual_frame;
+  if (frame == NULL || frame->next_ordinal != 11)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_logits_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+
+  t2 = frame->input_length == 2;
+  row[1] = heads_shape[2] = output_shape[1] =
+      (uint64_t)frame->input_length;
+  bytes = (size_t)frame->input_length * 4u * sizeof(float);
+  input = et_g3c4_view(frame->ah, bytes, "f32", 4u, heads_shape);
+  if (et_g3c4_token_runtime_discover(
+          t2 ? et_n3k_kernel_provider_v1() : et_g3n_kernel_provider_v1(),
+          &runtime) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_token_dispatch(
+          runtime, t2 ? "n3k.head-layout" : "g3n.head-layout-forward",
+          t2 ? "n3k.heads.merge.forward" : "g3n.heads.merge.forward",
+          4u, row, &input, 1u,
+          et_g3c4_view(at_candidate, bytes, "f32", 3u, output_shape)) != 0) {
+    et_kernel_runtime_destroy(runtime);
+    return et_g3c4_error_state.category;
+  }
+  et_kernel_runtime_destroy(runtime);
+  memcpy(frame->at, at_candidate, bytes);
+  frame->next_ordinal = 12;
+  return 0;
 }
 #endif
 #endif
