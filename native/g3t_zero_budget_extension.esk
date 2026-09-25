@@ -1,0 +1,12 @@
+;;; Source-private G0 proof. The final envelope exists before the P1 frame.
+(define (g3t-zero-generate! generator input)
+  (g3t-with-final-call 'g3t-zero-generate! generator (call)
+    (let ((output (g3t-output-reserve call 1)))
+      (g3t-frame-begin call input 1)
+      (let roles ((ordinal 0))
+        (if (< ordinal 21)
+            (begin (g3t-role-step call ordinal)
+                   (roles (+ ordinal 1)))))
+      (g3t-output-prepare call output)
+      (g3t-t1-decode-output! call output)
+      (g3t-final-commit! call output))))
