@@ -77,8 +77,11 @@ accepted `ESHKDCU1` cursor after D2 open and before M3T creation; a mismatch
 is `invalid-argument` and closes that newly opened D2 receiver.
 
 All pointer/length pairs are borrowed only until return. C bounds and scans
-their bytes before using the runtime's `strlen`-based string copier, which
-must never see an embedded NUL or unterminated input. The bridge constructs
+exactly the supplied byte lengths, rejecting embedded NUL, then copies each
+span into an owned `length + 1` buffer and appends a NUL before calling the
+runtime's `strlen`-based string copier. It never scans beyond a borrowed span;
+the owned buffers are released after the tagged strings are constructed. The
+bridge constructs
 primitive tagged strings/integers in this library's arena; a new same-package
 Eshkol wrapper builds the exact D2/O2 lists and calls the accepted producers.
 No C-built Scheme list, raw tagged receiver from another package, executable
