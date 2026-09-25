@@ -15,6 +15,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3t-zero-budget.py" >>"$evidence/static.std
 python3 "$PROJECT_ROOT/scripts/check-g3t-p2-zero-budget.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-t1-input.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-rng-owner.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3t-generator-rng-input.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 temporary="$(mktemp -d "$evidence/tmp.XXXXXX")"
@@ -144,7 +145,8 @@ fi
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3t_p2_zero_budget_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_t1_input_source_closure.txt" \
-  "$PROJECT_ROOT/native/g3t_rng_owner_source_closure.txt" >"$evidence/closure.sha256"
+  "$PROJECT_ROOT/native/g3t_rng_owner_source_closure.txt" \
+  "$PROJECT_ROOT/native/g3t_generator_rng_input_source_closure.txt" >"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"
 printf 'G3-T P2 zero budget evidence: %s\n' "$evidence"

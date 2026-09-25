@@ -46,6 +46,7 @@ def balanced(source: str) -> bool:
 
 
 assert balanced(extension) and balanced(test)
+assert balanced((root / "native/g3t_generator_constructor_extension.esk").read_text())
 accessor = extension.split("(define (g3t-generation-output-rng output)", 1)[1].split(
     "(define (g3t-generation-rng-release! rng)", 1
 )[0]
