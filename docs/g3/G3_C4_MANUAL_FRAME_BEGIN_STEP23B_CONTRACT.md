@@ -1,0 +1,9 @@
+# G3-C4 Step 23B: manual frame begin
+
+This source-private leaf starts from integration commit `b3295e1730604705e9da56ae71c018bce945b96f`. It implements native `frame_begin(ptr ctx, ptr input, i64 frame_kind)` for manual prefill and manual decode. No Eshkol entry, public API, result preparation, frame commit, or publication is added.
+
+An active manual prefill call (kind 0, budget 0) accepts frame kind 1 and an authentic live kind-2 input of length 1 or 2. An active manual decode call (kind 1, budget 0) accepts frame kind 2 and an authentic live kind-2 input of length 1 only, after a committed length-1 prefix whose parameter binding matches the current call pins. Both require an attached pending kind-3 manual logits reservation and an idle cache. Wrong call, null or wrong-kind input, mismatched frame kind, duplicate frame, borrowed input, stale binding, or missing prefix rejects without installing a frame.
+
+Successful admission copies IDs from the typed input borrow into a native owned transcript record, releases the borrow, then installs the record. The record stores frame kind, length, at most two IDs, and next ordinal 0. Input release cannot change it. Allocation failure leaves the active call, pending result, cache, binding, and RNG intact. `call_prepare_end` and `call_finish` reject an incomplete frame even if the pending result was released. `call_abort` clears the frame only after all fallible pending-result cleanup succeeds; a borrowed result therefore leaves the frame and call intact for retry.
+
+The accepted 21 role calls remain the next seam. Existing native numerical helpers execute whole prefill or token schedules and cannot advance one accepted role ordinal with separate failure-atomic scratch. That numerical decomposition, per-ordinal scratch ownership, and eventual `frame_prepare`/`frame_commit` require another bounded leaf. This leaf advances no role, cache, result, or RNG.
