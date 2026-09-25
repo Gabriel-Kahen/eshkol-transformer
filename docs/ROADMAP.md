@@ -499,8 +499,17 @@ repeat, and sanitizer runs each pass 15,760 checks across three routes and
 50 allocation cuts; the malformed ordinal-11 handle-pair, provider failure,
 borrow-blocked abort, predecessor hashes, Q0 isolation, and merged structural
 gates pass. Root sealed the exact candidate evidence at
-`g3c4-manual-a2-6e00c296-20260925/SHA256SUMS` (`d82b1804...`). Ordinals
-11–20, public role stepping, frame commit, and generation remain pending.
+`g3c4-manual-a2-6e00c296-20260925/SHA256SUMS` (`d82b1804...`). The private
+ordinal-11 attention merge from exact source `b02bcf3`/tree `863af66` is
+integrated byte-identically at `f3c0c52`: accepted G3-N/N3K head-layout
+merge writes frame-owned AT only after one successful dispatch while
+preserving the pending A2 transaction. Supported normal/repeat/sanitizer
+runs each pass 1,914 checks across T1/T2/decode; provider failure/retry,
+candidate and committed-cache invariance, borrowed-logits abort, no added
+global symbol, predecessor hashes, Q0, and merged structural gates pass.
+Root sealed `g3c4-manual-at-b02bcf3-20260925/SHA256SUMS` (`c85e5d29...`).
+Ordinals 12–20, public role stepping, frame commit, and generation remain
+pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
