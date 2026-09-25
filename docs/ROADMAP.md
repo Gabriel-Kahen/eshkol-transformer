@@ -975,7 +975,10 @@ passes focused proof, with a fresh exact-head package gate pending. Evidence is 
 `/tmp/p1-index-retention-evidence/SHA256SUMS` (`c6d91e9f...`) for the
 default-limit attempt and
 `/home/gabe/.codex/evidence/eshkol-transformer/p1-index-retention-1024-4g-20260925/SHA256SUMS`
-(`c090b6cd...`) for the passing 4 GiB run.
+(`c090b6cd...`) for the passing 4 GiB run. The canonical-readback focused
+proof is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/p1-postbarrier-3b81bd5-20260925/SHA256SUMS`
+(`b147066a...`); the 1,024-cycle result predates this repair.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
