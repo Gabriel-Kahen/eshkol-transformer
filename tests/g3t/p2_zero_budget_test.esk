@@ -12,6 +12,7 @@
 (load "g3t_rng_owner_extension.esk")
 (load "g3t_ids_owner_extension.esk")
 (load "g3t_lengths_owner_extension.esk")
+(load "g3t_text_result_extension.esk")
 
 (extern i64 g3t-test-input-length-set ptr i64
         :real et_g3t_test_input_length_set_v1)
@@ -835,6 +836,35 @@
   (vector-ref (g3t-prefill-entry wrapped-output 'output 'g3t-rng-test) 3))
 (define wrapped-output-entry
   (g3t-prefill-entry wrapped-output 'output 'g3t-ids-test))
+(reject-category "text result rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-text (vector 'g3t-output-private))))
+(reject-category "text result rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-text wrapped-input)))
+(vector-set! wrapped-output-entry 2 'pending)
+(reject-category "text result rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-text wrapped-output)))
+(vector-set! wrapped-output-entry 2 'live)
+(define wrapped-text-registry-head (vector-ref g3t-registry 0))
+(define wrapped-text-first (g3t-generation-output-text wrapped-output))
+(define wrapped-text-second (g3t-generation-output-text wrapped-output))
+(define wrapped-text-first-bytes (car wrapped-text-first))
+(define wrapped-text-second-bytes (car wrapped-text-second))
+(check "P2/G0 text results are fresh empty bytevectors in fresh lists"
+       (and (pair? wrapped-text-first) (null? (cdr wrapped-text-first))
+            (pair? wrapped-text-second) (null? (cdr wrapped-text-second))
+            (not (eq? wrapped-text-first wrapped-text-second))
+            (not (eq? wrapped-text-first-bytes wrapped-text-second-bytes))
+            (not (eq? wrapped-text-first-bytes (vector-ref wrapped-output-entry 6)))
+            (= 0 (bytevector-length wrapped-text-first-bytes))
+            (= 0 (bytevector-length wrapped-text-second-bytes))
+            (eq? wrapped-text-registry-head (vector-ref g3t-registry 0))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(set-car! wrapped-text-first #f)
+(check "P2/G0 text list mutation leaves another result and source intact"
+       (and (bytevector? (car wrapped-text-second))
+            (= 0 (bytevector-length (car wrapped-text-second)))
+            (= 0 (bytevector-length (vector-ref wrapped-output-entry 6)))
+            (eq? wrapped-text-registry-head (vector-ref g3t-registry 0))))
 (reject-category "IDs wrapper rejects forged output" 'invalid-argument
   (lambda () (g3t-generation-output-ids (vector 'g3t-output-private))))
 (reject-category "IDs wrapper rejects wrong-kind input" 'invalid-argument
@@ -1143,6 +1173,11 @@
   (lambda () (g3t-generation-rng-release! wrapped-output)))
 (check "wrapped close" (g3t-generator-close! wrapped-generator))
 (check "wrapped output release" (g3t-output-release! wrapped-output))
+(check "P2/G0 text copy survives output and generator release"
+       (and (= 0 (bytevector-length wrapped-text-second-bytes))
+            (= 0 (bytevector-length wrapped-text-first-bytes))))
+(reject-category "text result rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-text wrapped-output)))
 (check "P2/G0 length wrappers survive parent releases"
        (and (= 0 (g3t-test-lengths-clone-value wrapped-lengths-native))
             (= 2 (g3t-test-cache-lengths-clone-value
@@ -1266,6 +1301,11 @@
 (define p1-zero-generator (g3t-generator-create model tokenizer policy))
 (define p1-zero-input (g3t-generation-t1-input-create t1-p1))
 (define p1-zero-output (g3t-zero-generate! p1-zero-generator p1-zero-input))
+(define p1-zero-text (g3t-generation-output-text p1-zero-output))
+(check "P1/G0 text result is one detached empty bytevector"
+       (and (pair? p1-zero-text) (null? (cdr p1-zero-text))
+            (bytevector? (car p1-zero-text))
+            (= 0 (bytevector-length (car p1-zero-text)))))
 (define p1-zero-native-output
   (vector-ref (g3t-prefill-entry p1-zero-output 'output 'g3t-p1-zero) 3))
 (define p1-zero-clone (g3t-native-output-ids-clone p1-zero-native-output))
@@ -1329,6 +1369,8 @@
        (= 0 (g3t-native-generator-close p1-zero-rng-context)))
 (check "P1/G0 output release" (g3t-output-release! p1-zero-output))
 (check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
+(check "P1/G0 text survives parent releases"
+       (= 0 (bytevector-length (car p1-zero-text))))
 (check "P1/G0 length wrappers survive parent releases"
        (and (= 0 (g3t-test-lengths-clone-value p1-zero-lengths-native))
             (= 1 (g3t-test-cache-lengths-clone-value
@@ -1737,6 +1779,32 @@
     (g3t-output-prepare call out)
     (g3t-t1-decode-output! call out)
     (g3t-final-commit! call out)))
+(define g1-text-entry
+  (g3t-prefill-entry g1-rooted-output 'output 'g3t-g1-text))
+(define g1-text-registry-head (vector-ref g3t-registry 0))
+(define g1-text-first (g3t-generation-output-text g1-rooted-output))
+(define g1-text-second (g3t-generation-output-text g1-rooted-output))
+(define g1-text-first-bytes (car g1-text-first))
+(define g1-text-second-bytes (car g1-text-second))
+(check "P1/G1 text results are exact detached emitted bytes"
+       (and (pair? g1-text-first) (null? (cdr g1-text-first))
+            (pair? g1-text-second) (null? (cdr g1-text-second))
+            (not (eq? g1-text-first g1-text-second))
+            (not (eq? g1-text-first-bytes g1-text-second-bytes))
+            (not (eq? g1-text-first-bytes (vector-ref g1-text-entry 6)))
+            (= 1 (bytevector-length g1-text-first-bytes))
+            (= 1 (bytevector-length g1-text-second-bytes))
+            (= g1-id (bytevector-u8-ref g1-text-first-bytes 0))
+            (= g1-id (bytevector-u8-ref g1-text-second-bytes 0))
+            (eq? g1-text-registry-head (vector-ref g3t-registry 0))))
+(bytevector-u8-set! g1-text-first-bytes 0 (modulo (+ g1-id 1) 256))
+(set-car! g1-text-first #f)
+(check "P1/G1 text mutations leave source and next result unchanged"
+       (and (= g1-id (bytevector-u8-ref (vector-ref g1-text-entry 6) 0))
+            (= g1-id (bytevector-u8-ref g1-text-second-bytes 0))
+            (= g1-id (bytevector-u8-ref
+                       (car (g3t-generation-output-text g1-rooted-output)) 0))
+            (eq? g1-text-registry-head (vector-ref g3t-registry 0))))
 (define g1-rooted-native-output
   (vector-ref (g3t-prefill-entry g1-rooted-output 'output 'g3t-rng-g1) 3))
 (check "P1/G1 rooted output exact prior ID and RNG"
@@ -1787,6 +1855,9 @@
        (g3t-generator-close! g1-rooted-generator))
 (check "P1/G1 rooted output release"
        (g3t-output-release! g1-rooted-output))
+(check "P1/G1 text copy survives parent releases"
+       (and (= 1 (bytevector-length g1-text-second-bytes))
+            (= g1-id (bytevector-u8-ref g1-text-second-bytes 0))))
 (check "P1/G1 length wrappers survive parent releases"
        (and (= 1 (g3t-test-lengths-clone-value g1-rooted-lengths-native))
             (= 2 (g3t-test-cache-lengths-clone-value

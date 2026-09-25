@@ -1,0 +1,22 @@
+;;; Source-private detached raw-text result. Load after final publication.
+(define (g3t-generation-output-text output)
+  (let ((operation 'g3t-generation-output-text))
+    (m3-call operation
+      (let ((source (g3t-prefill-entry output 'output operation)))
+        (if (not (and (eq? (vector-ref source 2) 'live)
+                      (not (null? (vector-ref source 3)))
+                      (eq? (vector-ref source 4) #f)
+                      (eq? (vector-ref source 5) #f)
+                      (bytevector? (vector-ref source 6))))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-T output is not independently live"))
+        (let* ((raw (vector-ref source 6))
+               (length (bytevector-length raw)))
+          (if (> length 1)
+              (g3t-fail-raw 'invalid-state operation 2
+                            "G3-T raw output exceeds C2 budget"))
+          (let* ((detached (make-bytevector length 0))
+                 (result (list detached)))
+            (if (= length 1)
+                (bytevector-u8-set! detached 0 (bytevector-u8-ref raw 0)))
+            result))))))

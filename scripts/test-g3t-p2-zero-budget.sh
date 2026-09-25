@@ -19,6 +19,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3t-generator-rng-input.py" >>"$evidence/st
 python3 "$PROJECT_ROOT/scripts/check-g3t-owned-token-input.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-ids-owner.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-length-owners.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3t-text-result.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 temporary="$(mktemp -d "$evidence/tmp.XXXXXX")"
@@ -154,7 +155,8 @@ sha256sum "$PROJECT_ROOT/native/g3t_p2_zero_budget_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_generator_rng_input_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_owned_token_input_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_ids_owner_source_closure.txt" \
-  "$PROJECT_ROOT/native/g3t_length_owners_source_closure.txt" >"$evidence/closure.sha256"
+  "$PROJECT_ROOT/native/g3t_length_owners_source_closure.txt" \
+  "$PROJECT_ROOT/native/g3t_text_result_source_closure.txt" >"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"
 printf 'G3-T P2 zero budget evidence: %s\n' "$evidence"
