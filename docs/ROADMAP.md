@@ -939,14 +939,20 @@ sanitizer retention passes 32/128 genuine cycles with 91/283 checks, flat live
 authority counts and exact images; 128-cycle wall time is 54.90 seconds versus
 the preceding 71.63-second diagnosis. Focused P1 structural, registry, and
 construction AOT tests pass 419, 169, and 23 checks. The canonical generated
-root check passes. A direct 1,024-cycle reuse of the same sanitized binary
-did not reach the horizon: the pinned runtime reported its 1,024 MiB heap
-ceiling, then the 1,200-second bound exited 124 at 1,468,752 KiB peak RSS.
-No final authority/image census or 1,024 phase timing was emitted. This
-isolated candidate has not been integrated; the 1,024/8,192 horizon remains
-an acceptance gate, now with both time and default-heap resource blockers.
-The measured logs are sealed at
-`/tmp/p1-index-retention-evidence/SHA256SUMS` (`c6d91e9f...`).
+root check passes. Root integrated the index at `6027c01`/`223085f`/`07dbc6e`.
+Its first direct 1,024-cycle reuse of the same sanitized binary hit the
+pinned runtime's default 1,024 MiB heap ceiling and the 1,200-second time
+bound, so it emitted no final census. With `ESHKOL_MAX_HEAP=4G` and a
+2,400-second bound, that exact binary passed 1,024 genuine cycles and 2,075
+checks: flat live authorities, exact final images, 1,251,758,464 arena bytes,
+728.239 seconds SAVE, 872.951 seconds LOAD/restore, 26:45.61 wall, and
+2,139,608 KiB peak RSS, with no sanitizer diagnostic. The 8,192 horizon and
+practical runtime budget remain open. The full pinned P1 package gate is being
+rerun with hosted CI's 900-second compiler bound. Evidence is sealed at
+`/tmp/p1-index-retention-evidence/SHA256SUMS` (`c6d91e9f...`) for the
+default-limit attempt and
+`/home/gabe/.codex/evidence/eshkol-transformer/p1-index-retention-1024-4g-20260925/SHA256SUMS`
+(`c090b6cd...`) for the passing 4 GiB run.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
