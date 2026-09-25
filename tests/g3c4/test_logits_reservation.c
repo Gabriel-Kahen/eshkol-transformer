@@ -126,7 +126,10 @@ static void generate_rejects(et_g3c4_model_owner_internal *owner) {
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_LOGITS_RESERVATION_TEST_MAIN
+#define ET_G3C4_LOGITS_RESERVATION_TEST_MAIN main
+#endif
+int ET_G3C4_LOGITS_RESERVATION_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   CHECK(et_g3c4_private_logits_reserve_v1(&checks) == NULL);
   CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INVALID_ARGUMENT);

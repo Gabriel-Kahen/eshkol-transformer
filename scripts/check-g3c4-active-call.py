@@ -51,7 +51,8 @@ def check():
 
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
     step5_source = without_conditional_feature(
-        source, "ET_G3C4_GENERATOR_PRIVATE")
+        without_conditional_feature(source, "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE"),
+        "ET_G3C4_GENERATOR_PRIVATE")
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
     test = (ROOT / "tests/g3c4/test_active_call.c").read_text()
     contract = (ROOT / "docs/g3/G3_C4_ACTIVE_CALL_STEP5_CONTRACT.md").read_text()
@@ -116,7 +117,7 @@ def check():
         "ET_G3C4_CONTEXT_BUSY(context) = ET_G3C4_CALL_IDLE",
         "context->acquired_mask = 0u",
     ], "active drain")
-    require(source.count("et_g3c4_cache_idle_preflight(context)") == 3,
+    require(step5_source.count("et_g3c4_cache_idle_preflight(context)") == 3,
             "cache idle proof must occur only in acquire, prepare-end, abort")
     require("et_a2_kv_cache_read_borrow_layer_v1" not in step5_source,
             "idle probe must not inspect cache content")

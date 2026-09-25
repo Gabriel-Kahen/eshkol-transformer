@@ -126,6 +126,13 @@ int64_t et_g3c4_private_output_release_v1(void *output);
 void *et_g3c4_private_logits_reserve_v1(void *context);
 #endif
 
+#ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE
+/* Begins one exact manual prefill/decode transcript using an authentic input.
+ * It owns a copy of input IDs; no role, cache or logits are published. */
+int64_t et_g3c4_private_frame_begin_v1(
+    void *context, void *input, int64_t frame_kind);
+#endif
+
 #ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
 /* Copies the final staged G0/G1 numeric result into its pending output.
  * Cache, generator RNG, text readiness and result publication are unchanged. */
