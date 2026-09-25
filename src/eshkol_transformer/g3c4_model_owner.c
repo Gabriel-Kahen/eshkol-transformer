@@ -820,6 +820,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_MANUAL_A2_PRIVATE)
 #error "ET_G3C4_MANUAL_AT_PRIVATE requires manual A2 attention"
 #endif
+#if defined(ET_G3C4_MANUAL_AO_PRIVATE) && \
+    !defined(ET_G3C4_MANUAL_AT_PRIVATE)
+#error "ET_G3C4_MANUAL_AO_PRIVATE requires manual attention merge"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -947,6 +951,9 @@ typedef struct et_g3c4_manual_frame_internal {
 #ifdef ET_G3C4_MANUAL_AT_PRIVATE
   float at[8];
 #endif
+#ifdef ET_G3C4_MANUAL_AO_PRIVATE
+  float ao[8];
+#endif
 } et_g3c4_manual_frame_internal;
 #endif
 
@@ -1006,7 +1013,13 @@ static int et_g3c4_manual_frame_valid(
       context->budget != 0 || frame->frame_kind < 1 ||
       frame->frame_kind > 2 ||
       context->call_kind != frame->frame_kind - 1 ||
-#ifdef ET_G3C4_MANUAL_AT_PRIVATE
+#ifdef ET_G3C4_MANUAL_AO_PRIVATE
+      (frame->next_ordinal < 0 || frame->next_ordinal > 13) ||
+      (frame->next_ordinal < 11 &&
+       (frame->a2_candidate != NULL || frame->a2_transaction != NULL)) ||
+      (frame->next_ordinal >= 11 &&
+       (frame->a2_candidate == NULL || frame->a2_transaction == NULL)) ||
+#elif defined(ET_G3C4_MANUAL_AT_PRIVATE)
       (frame->next_ordinal < 0 || frame->next_ordinal > 12) ||
       (frame->next_ordinal < 11 &&
        (frame->a2_candidate != NULL || frame->a2_transaction != NULL)) ||
@@ -5786,6 +5799,61 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_at_run(
   et_kernel_runtime_destroy(runtime);
   memcpy(frame->at, at_candidate, bytes);
   frame->next_ordinal = 12;
+  return 0;
+}
+#endif
+#endif
+
+#ifdef ET_G3C4_MANUAL_PRE_A2_PRIVATE
+#ifdef ET_G3C4_MANUAL_AO_PRIVATE
+/* Internal ordinal 12: project merged attention through pinned W_o. */
+static inline __attribute__((unused)) int64_t et_g3c4_manual_ao_run(
+    void *candidate_context) {
+  et_g3c4_context_internal *context;
+  et_g3c4_manual_frame_internal *frame;
+  et_g3c4_logits_internal *pending = NULL;
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_tensor_view_v1 inputs[2];
+  uint64_t row[4] = {1u, 0u, 4u, 4u};
+  uint64_t output_shape[3] = {1u, 0u, 4u};
+  float ao_candidate[8] = {0};
+  size_t bytes;
+  int t2;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate_context);
+  if (context == NULL) return et_g3c4_error_state.category;
+  frame = context->manual_frame;
+  if (frame == NULL || frame->next_ordinal != 12)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_logits_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+
+  t2 = frame->input_length == 2;
+  row[1] = output_shape[1] = (uint64_t)frame->input_length;
+  bytes = (size_t)frame->input_length * 4u * sizeof(float);
+  inputs[0] = et_g3c4_view(frame->at, bytes, "f32", 3u, output_shape);
+  inputs[1] = context->pins.views[1];
+  if (et_g3c4_token_runtime_discover(
+          t2 ? et_n3k_kernel_provider_v1() : et_g3n_kernel_provider_v1(),
+          &runtime) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_token_dispatch(
+          runtime, t2 ? "n3k.linear" : "g3n.linear-forward",
+          t2 ? "n3k.linear.forward-no-bias" :
+               "g3n.linear.forward-no-bias",
+          4u, row, inputs, 2u,
+          et_g3c4_view(ao_candidate, bytes, "f32", 3u, output_shape)) != 0) {
+    et_kernel_runtime_destroy(runtime);
+    return et_g3c4_error_state.category;
+  }
+  et_kernel_runtime_destroy(runtime);
+  memcpy(frame->ao, ao_candidate, bytes);
+  frame->next_ordinal = 13;
   return 0;
 }
 #endif
