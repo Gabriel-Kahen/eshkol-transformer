@@ -801,6 +801,21 @@ files at `c8b9e94`. Root's merged pinned f31/LLVM21 network-disabled gate
 passes 77 compiled checks from the 42-source closure; the uninterrupted and
 restored final canonical C2 files match byte-for-byte. Evidence is sealed at
 `tr3-private-resume-root-c8b9e94-20260925/SHA256SUMS` (`025e2705...`).
+The isolated private successor `172bb8f` generalizes the finite-D2 composer
+to positive configured accumulation with an explicit exact-f32 weight bound.
+Its pinned f31/LLVM21 network-disabled compiled trajectory gate passes 167
+checks over `A=1,2,3`, `K=1`, and `R=3`: each resumed suffix crosses EOS,
+all intermediate 42-tensor/control images and final C2 bytes match, and
+injected prewrite failure preserves the checkpoint image for retry. The
+`A=1` and `A=3` cases have unequal active-token weights across updates.
+The unchanged fixed-`A=2` composer gate also passes 33 compiled checks,
+including independent PyTorch numerical and two-update EOS trajectory
+oracles (maximum key-weight error `1.86e-9`) and nonfinite mutant rejection;
+its seal is `tr3-general-composer-172bb8f-20260925/SHA256SUMS`
+(`836d0cf3...`). Resume evidence is sealed at
+`tr3-general-resume-172bb8f-20260925/SHA256SUMS` (`a64c79a6...`).
+Fresh-process continuation, public metrics/effective-rate observations, and
+the remaining TR3-C §13 failure/environment gates remain pending.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
