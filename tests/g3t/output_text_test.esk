@@ -1,0 +1,206 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3t_output_text_extension.esk")
+
+(extern i64 g3t-test-output-word ptr i64 :real et_g3t_test_output_word_v1)
+(extern i64 g3t-test-output-id-set ptr i64
+        :real et_g3t_test_output_id_set_v1)
+(extern i64 g3t-test-binding-flip ptr
+        :real et_g3t_test_binding_flip_v1)
+(extern ptr g3t-test-output-borrow-begin ptr
+        :real et_g3t_test_output_borrow_begin_v1)
+(extern i64 g3t-test-output-borrow-end ptr
+        :real et_g3t_test_output_borrow_end_v1)
+(extern i64 g3t-test-fail-i1-after i64
+        :real et_g3t_test_fail_i1_after_v1)
+(extern i64 g3t-test-cache-length ptr
+        :real et_g3t_test_cache_length_v1)
+(extern i64 g3t-test-rng-word ptr i64
+        :real et_g3t_test_rng_word_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-T output text FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (roles call)
+  (let step ((ordinal 0))
+    (if (= ordinal 21) #t
+        (and (= 0 (g3t-native-role-step call ordinal))
+             (step (+ ordinal 1))))))
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3t-output-text-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(define tokenizer (t1-private-tokenizer-byte config))
+(check "eval" (module-eval! model))
+(define policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define generator (g3t-generator-create model tokenizer policy))
+(define native (vector-ref (g3t-generator-find generator 'g3t-text) 3))
+(define input (g3t-native-input-from-token 65))
+(check "input" (not (null? input)))
+(check "acquire" (= 0 (g3t-native-call-acquire native 2)))
+(define output (g3t-native-output-reserve native 1))
+(check "reserve" (not (null? output)))
+(define staging (make-bytevector 8 93))
+(define raw (make-bytevector 1 87))
+(check "copy before numeric rejected"
+       (and (not (= 0 (g3t-native-output-copy-decode-ids
+                        native output staging)))
+            (= 93 (bytevector-u8-ref staging 0))))
+(check "accept before copy rejected"
+       (not (= 0 (g3t-native-output-accept-text native output raw))))
+(check "prefill frame" (= 0 (g3t-native-frame-begin native input 1)))
+(check "prefill roles" (roles native))
+(check "prefill prepare" (= 0 (g3t-native-frame-prepare native #f)))
+(check "prefill commit" (= 0 (g3t-native-frame-commit native)))
+(check "sample" (= 0 (g3t-native-sample native)))
+(check "token frame" (= 0 (g3t-native-frame-begin native #f 2)))
+(check "token roles" (roles native))
+(check "numeric prepare" (= 0 (g3t-native-output-prepare native output)))
+(check "wrong owner rejects"
+       (and (not (= 0 (g3t-native-output-copy-decode-ids
+                        output output staging)))
+            (= 0 (g3t-test-output-word output 3))))
+(define short-staging (make-bytevector 7 66))
+(check "short staging rejects"
+       (not (= 0 (g3t-native-output-copy-decode-ids
+                   native output short-staging))))
+(check "short staging unchanged" (= 66 (bytevector-u8-ref short-staging 0)))
+(check "stale binding armed" (= 0 (g3t-test-binding-flip native)))
+(check "stale binding rejects before write"
+       (and (not (= 0 (g3t-native-output-copy-decode-ids
+                        native output staging)))
+            (= 93 (bytevector-u8-ref staging 0))))
+(check "stale binding restored" (= 0 (g3t-test-binding-flip native)))
+(define borrow (g3t-test-output-borrow-begin output))
+(check "I1 active borrow" (not (null? borrow)))
+(check "I1 borrow rejects before write"
+       (and (not (= 0 (g3t-native-output-copy-decode-ids
+                        native output staging)))
+            (= 0 (g3t-test-output-word output 3))))
+(check "I1 borrow released" (= 0 (g3t-test-output-borrow-end borrow)))
+(check "I1 borrow allocation cut armed" (= 0 (g3t-test-fail-i1-after 0)))
+(check "I1 borrow allocation cut atomic"
+       (and (not (= 0 (g3t-native-output-copy-decode-ids
+                        native output staging)))
+            (= 93 (bytevector-u8-ref staging 0))
+            (= 0 (g3t-test-output-word output 3))))
+(check "I1 borrow cut disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(check "set malformed ID" (= 0 (g3t-test-output-id-set output 256)))
+(check "malformed I1 ID rejects before staging"
+       (and (not (= 0 (g3t-native-output-copy-decode-ids
+                        native output staging)))
+            (= 93 (bytevector-u8-ref staging 0))
+            (= 0 (g3t-test-output-word output 3))))
+(check "set byte0" (= 0 (g3t-test-output-id-set output 0)))
+(check "byte0 staging" (= 0 (g3t-native-output-copy-decode-ids
+                              native output staging)))
+(check "little endian zero"
+       (let scan ((index 0))
+         (if (= index 8) #t
+             (and (= 0 (bytevector-u8-ref staging index))
+                  (scan (+ index 1))))))
+(check "ID stage once only"
+       (not (= 0 (g3t-native-output-copy-decode-ids native output staging))))
+(check "T1 raw byte0"
+       (and (eq? raw (t1-private-g3-decode-raw-into!
+                       tokenizer staging raw))
+            (= 0 (bytevector-u8-ref raw 0))))
+(define invalid-staging (bytevector 0 1 0 0 0 0 0 0))
+(define unchanged-raw (bytevector 93))
+(check "T1 rejects ID256 before first write"
+       (and (guard (caught (#t caught))
+              (t1-private-g3-decode-raw-into!
+                tokenizer invalid-staging unchanged-raw)
+              #f)
+            (= 93 (bytevector-u8-ref unchanged-raw 0))))
+(bytevector-u8-set! raw 0 1)
+(check "raw mismatch rejects"
+       (and (not (= 0 (g3t-native-output-accept-text native output raw)))
+            (= 0 (g3t-test-output-word output 4))))
+(bytevector-u8-set! raw 0 0)
+(check "malformed raw carrier rejects"
+       (not (= 0 (g3t-native-output-accept-text
+                   native output (make-bytevector 0 0)))))
+(define text-borrow (g3t-test-output-borrow-begin output))
+(check "text active borrow" (not (null? text-borrow)))
+(check "text active borrow rejects"
+       (and (not (= 0 (g3t-native-output-accept-text native output raw)))
+            (= 0 (g3t-test-output-word output 4))))
+(check "text borrow released"
+       (= 0 (g3t-test-output-borrow-end text-borrow)))
+(check "text readiness" (= 0 (g3t-native-output-accept-text
+                                native output raw)))
+(check "text once only"
+       (not (= 0 (g3t-native-output-accept-text native output raw))))
+(check "three readiness flags"
+       (and (= 1 (g3t-test-output-word output 0))
+            (= 1 (g3t-test-output-word output 3))
+            (= 1 (g3t-test-output-word output 4))))
+(check "still no final frame prepare"
+       (not (= 0 (g3t-native-frame-prepare native #f))))
+(check "prompt cache and RNG uncommitted"
+       (and (= -1 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))))
+(check "abort" (= 0 (g3t-native-call-abort native)))
+(check "abort scrubs readiness"
+       (and (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 3))
+            (= 0 (g3t-test-output-word output 4))))
+(check "output tombstone" (= 0 (g3t-native-output-release output)))
+(check "input release" (= 0 (g3t-native-tensor-release input)))
+(check "generator close" (g3t-generator-close! generator))
+
+(define wrapped-generator (g3t-generator-create model tokenizer policy))
+(define wrapped-input (g3t-generation-token-input-create 65))
+(define registry-before t1-private-tokenizer-registry)
+(define wrapped-raw
+  (g3t-with-call 'g3t-output-text-wrapped wrapped-generator (call)
+    (define wrapped-output (g3t-output-reserve call 1))
+    (g3t-frame-begin call wrapped-input 1)
+    (let step ((ordinal 0))
+      (if (= ordinal 21) #t
+          (begin (g3t-role-step call ordinal) (step (+ ordinal 1)))))
+    (g3t-frame-prepare call #f)
+    (g3t-frame-commit call)
+    (g3t-sample call)
+    (g3t-frame-begin call #f 2)
+    (let step ((ordinal 0))
+      (if (= ordinal 21) #t
+          (begin (g3t-role-step call ordinal) (step (+ ordinal 1)))))
+    (g3t-output-prepare call wrapped-output)
+    (check "set byte255" (= 0 (g3t-test-output-id-set
+                                (vector-ref (g3t-prefill-entry
+                                              wrapped-output 'output
+                                              'g3t-output-text-wrapped) 3)
+                                255)))
+    (let ((decoded (g3t-t1-decode-output! call wrapped-output)))
+      (check "source wrapper byte255"
+             (and (= 1 (bytevector-length decoded))
+                  (= 255 (bytevector-u8-ref decoded 0))))
+      (check "source wrapper cannot repeat"
+             (guard (caught (#t caught))
+               (g3t-t1-decode-output! call wrapped-output) #f))
+      decoded)))
+(check "T1 registry unchanged" (eq? registry-before t1-private-tokenizer-registry))
+(check "wrapped byte255 survives abort" (= 255 (bytevector-u8-ref wrapped-raw 0)))
+(check "wrapped input release" (g3t-generation-tensor-release! wrapped-input))
+(check "wrapped generator close" (g3t-generator-close! wrapped-generator))
+(display "G3-T output text PASS: checks=")
+(display checks)
+(newline)

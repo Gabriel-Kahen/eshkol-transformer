@@ -16,6 +16,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef ET_G3T_OUTPUT_TEXT_PRIVATE
+#if !defined(ET_G3T_PREFILL_SAMPLE_PRIVATE) || \
+    !defined(ET_I64_TENSOR_STORAGE_QUERY_PRIVATE) || \
+    !defined(ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
+#error "G3-T output text requires prefill and I1/A2 storage queries"
+#endif
+#endif
+
 enum { G3T_GENERATOR = 1, G3T_INPUT = 2, G3T_OUTPUT = 4,
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_INTERNAL = 5 };
@@ -48,6 +56,7 @@ typedef struct g3t_output {
   et_i64_tensor *ids;
   int64_t length, cache_length, rng[4];
   int numeric_ready, ids_copied, text_ready;
+  unsigned char staged_id[8];
 } g3t_output;
 typedef struct g3t_context {
   g3t_record h;
@@ -453,6 +462,125 @@ int64_t et_g3t_private_output_prepare_v1(
   output->numeric_ready = 1;
   return 0;
 }
+#ifdef ET_G3T_OUTPUT_TEXT_PRIVATE
+static int g3t_span_ok(const void *pointer, size_t bytes) {
+  return pointer && (uintptr_t)pointer <= UINTPTR_MAX - bytes;
+}
+static int g3t_overlap(const void *left, size_t left_bytes,
+                       const void *right, size_t right_bytes) {
+  if (!left || !right || !left_bytes || !right_bytes) return 0;
+  uintptr_t l = (uintptr_t)left, r = (uintptr_t)right;
+  return l < r + right_bytes && r < l + left_bytes;
+}
+static int g3t_carrier_alias(const g3t_context *c,
+                             const void *carrier, size_t bytes) {
+  for (const g3t_record *r = g3t_registry; r; r = r->next) {
+    size_t length = r->kind == G3T_GENERATOR ? sizeof(g3t_context) :
+                    r->kind == G3T_INPUT ? sizeof(g3t_input) :
+                    r->kind == G3T_OUTPUT ? sizeof(g3t_output) : sizeof(*r);
+    if (g3t_overlap(carrier, bytes, r, length)) return 1;
+  }
+  if (g3t_overlap(carrier, bytes, c->model, sizeof(*c->model))) return 1;
+  for (size_t i = 0; i < 14; ++i)
+    if (g3t_overlap(carrier, bytes, c->pins.views[i].data,
+                    c->pins.views[i].byte_length)) return 1;
+  return et_i64_tensor_private_storage_overlap_v1(carrier, bytes) != 0 ||
+         et_a2_kv_cache_private_storage_overlap_v1(carrier, bytes) != 0;
+}
+static g3t_output *g3t_ready_output(void *context_candidate,
+                                    void *output_candidate, int text) {
+  g3t_context *c = g3t_active(context_candidate);
+  if (!c) return NULL;
+  g3t_output *out = (g3t_output *)g3t_admit_record(
+      output_candidate, G3T_OUTPUT, 1);
+  if (!out) return NULL;
+  if (out->h.state != G3T_PENDING || !out->h.busy ||
+      c->call_kind != 2 || c->pending_output != out ||
+      out->parent_ctx != c || out->P != 1 || out->G != 1 ||
+      !out->ids || out->length != 1 || out->cache_length != 2 ||
+      out->numeric_ready != 1 || out->ids_copied != text ||
+      out->text_ready || !c->prefill_committed || !c->sampled ||
+      !c->binding_ready || !c->frame.active || c->frame.kind != 2 ||
+      c->frame.next_ordinal != 21 || !c->frame.transaction ||
+      c->frame.prepared) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  if (g3t_check_binding(c)) return NULL;
+  return out;
+}
+static int64_t g3t_decode_carrier(void *context_candidate,
+                                  void *output_candidate, void *carrier,
+                                  int text) {
+  g3t_clear();
+  g3t_output *out = g3t_ready_output(context_candidate, output_candidate, text);
+  if (!out) return g3t_error_category;
+  const size_t payload = text ? 1u : 8u;
+  const size_t bytes = sizeof(int64_t) + payload;
+  if (!g3t_span_ok(carrier, bytes) ||
+      g3t_carrier_alias(out->parent_ctx, carrier, bytes))
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  int64_t declared = 0;
+  memcpy(&declared, carrier, sizeof(declared));
+  if (declared != (int64_t)payload)
+    return g3t_bad(G3T_ARGUMENT, G3T_TOPOLOGY);
+
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  if (et_i64_tensor_borrow_begin_v1(out->ids, &borrow, &error))
+    return g3t_i64_failure(&error);
+  if (et_i64_tensor_borrow_view_v1(borrow, &view, &error)) {
+    g3t_i64_failure(&error);
+    goto fail;
+  }
+  if (!view || view->rank != 1 || !view->shape || view->shape[0] != 1 ||
+      view->byte_length != sizeof(int64_t) || !view->data) {
+    g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+    goto fail;
+  }
+  int64_t token;
+  memcpy(&token, view->data, sizeof(token));
+  if (token < 0 || token > 255) {
+    g3t_bad(G3T_ARGUMENT, G3T_TOPOLOGY);
+    goto fail;
+  }
+  if (text &&
+      ((const unsigned char *)carrier)[sizeof(int64_t)] !=
+          (unsigned char)token) {
+    g3t_bad(G3T_ARGUMENT, G3T_TOPOLOGY);
+    goto fail;
+  }
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error)) abort();
+  if (text) {
+    out->text_ready = 1;
+  } else {
+    unsigned char encoded[8];
+    for (size_t i = 0; i < 8; ++i)
+      encoded[i] = (unsigned char)((uint64_t)token >> (i * 8));
+    memcpy((unsigned char *)carrier + sizeof(int64_t), encoded, 8);
+    memcpy(out->staged_id, encoded, 8);
+    out->ids_copied = 1;
+  }
+  return 0;
+fail: {
+    const int64_t domain = g3t_error_domain;
+    const int64_t category = g3t_error_category;
+    const int64_t code = g3t_error_code;
+    if (et_i64_tensor_borrow_end_v1(&borrow, &error)) abort();
+    g3t_fail(domain, category, code);
+    return category;
+  }
+}
+int64_t et_g3t_private_output_copy_decode_ids_v1(
+    void *context, void *output, void *staging_header) {
+  return g3t_decode_carrier(context, output, staging_header, 0);
+}
+int64_t et_g3t_private_output_accept_text_v1(
+    void *context, void *output, void *raw_header) {
+  return g3t_decode_carrier(context, output, raw_header, 1);
+}
+#endif
 int64_t et_g3t_private_frame_begin_v1(
     void *candidate, void *input_candidate, int64_t frame_kind) {
   g3t_clear();
@@ -646,6 +774,7 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
     output->parent_ctx = NULL;
     output->P = output->G = output->length = output->cache_length = 0;
     memset(output->rng, 0, sizeof(output->rng));
+    memset(output->staged_id, 0, sizeof(output->staged_id));
     output->numeric_ready = output->ids_copied = output->text_ready = 0;
     output->h.busy = 0;
     output->h.state = G3T_DEAD;
@@ -718,6 +847,20 @@ int64_t et_g3t_test_output_borrow_end_v1(void *candidate) {
   et_i64_tensor_borrow *borrow = candidate;
   et_i64_tensor_error error;
   return et_i64_tensor_borrow_end_v1(&borrow, &error);
+}
+int64_t et_g3t_test_output_id_set_v1(void *candidate, int64_t token) {
+  g3t_output *out = (g3t_output *)g3t_admit_record(
+      candidate, G3T_OUTPUT, 1);
+  if (!out || out->h.state != G3T_PENDING || !out->numeric_ready ||
+      out->ids_copied || !out->ids) return -1;
+  et_i64_tensor_error error;
+  return et_i64_tensor_copy_from_v1(out->ids, &token, 1, &error);
+}
+int64_t et_g3t_test_binding_flip_v1(void *candidate) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || !c->h.busy || !c->binding_ready) return -1;
+  c->binding_values[0] ^= 1u;
+  return 0;
 }
 int64_t et_g3t_test_logit_bits_v1(void *candidate, int64_t index) {
   g3t_context *c = g3t_admit(candidate, 0);

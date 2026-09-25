@@ -17,6 +17,10 @@ int64_t et_g3t_private_tensor_release_v1(void *input);
 void *et_g3t_private_output_reserve_v1(void *context, int64_t prompt_length);
 int64_t et_g3t_private_output_release_v1(void *output);
 int64_t et_g3t_private_output_prepare_v1(void *context, void *output);
+int64_t et_g3t_private_output_copy_decode_ids_v1(
+    void *context, void *output, void *staging_header);
+int64_t et_g3t_private_output_accept_text_v1(
+    void *context, void *output, void *raw_header);
 int64_t et_g3t_private_frame_begin_v1(
     void *context, void *input, int64_t length);
 int64_t et_g3t_private_role_step_v1(void *context, int64_t ordinal);
@@ -48,6 +52,8 @@ int64_t et_g3t_test_cache_length_v1(void *context);
 int64_t et_g3t_test_output_word_v1(void *output, int64_t field);
 void *et_g3t_test_output_borrow_begin_v1(void *output);
 int64_t et_g3t_test_output_borrow_end_v1(void *borrow);
+int64_t et_g3t_test_output_id_set_v1(void *output, int64_t token);
+int64_t et_g3t_test_binding_flip_v1(void *context);
 #endif
 #endif
 #ifdef __cplusplus

@@ -1,0 +1,31 @@
+;;; G1 output text staging over the existing pending G3-T output authority.
+;;; Load after the G3-T prefill source and the canonical T1 raw decoder.
+(extern i64 g3t-native-output-copy-decode-ids ptr ptr ptr
+        :real et_g3t_private_output_copy_decode_ids_v1)
+(extern i64 g3t-native-output-accept-text ptr ptr ptr
+        :real et_g3t_private_output_accept_text_v1)
+
+(define (g3t-t1-decode-output! call output)
+  (let* ((operation 'g3t-t1-decode-output!)
+         (entry (g3t-prefill-call-entry call operation))
+         (output-entry (g3t-prefill-entry output 'output operation))
+         (tokenizer (vector-ref entry 6))
+         (staging (vector-ref output-entry 5))
+         (raw (vector-ref output-entry 6)))
+    (if (not (and (eq? (vector-ref output-entry 2) 'pending)
+                  (eq? (vector-ref output-entry 4) entry)
+                  (eq? (vector-ref entry 8) output-entry)
+                  (bytevector? staging) (= (bytevector-length staging) 8)
+                  (bytevector? raw) (= (bytevector-length raw) 1)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-T pending output text owner differs"))
+    (if (not (= 0 (g3t-native-output-copy-decode-ids
+                    (vector-ref entry 3) (vector-ref output-entry 3)
+                    staging)))
+        (g3t-native-fail-raw operation))
+    (t1-private-g3-decode-raw-into! tokenizer staging raw)
+    (if (not (= 0 (g3t-native-output-accept-text
+                    (vector-ref entry 3) (vector-ref output-entry 3)
+                    raw)))
+        (g3t-native-fail-raw operation))
+    raw))
