@@ -26,3 +26,14 @@ checker pins the wrapper's preallocation and no-orphan order. The focused
 runtime does not inject Eshkol allocator failures before native clone; those
 operations precede any native publication. No public G3-G facade, package,
 other result accessor or CLI is added.
+
+The supported network-disabled image
+`eshkol-checked-promotion-llvm21:20260922`
+(`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`)
+strictly compiled the P2 test and ran its normal, repeat and
+ASan+UBSan+LSan gate against source commit
+`969a348a9d9e1c9b2f8354c0020ed92c7032c14b` (tree
+`3929379329bd283d45a5da3be1c0c0b5703e49d3`). All three reported
+46,626 checks with identical output and empty compiler/runtime stderr.
+Eleven source contracts and Q0 4/4 passed. The sealed external evidence is
+`g3t-ids-owner-969a348`.
