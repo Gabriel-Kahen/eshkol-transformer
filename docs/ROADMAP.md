@@ -1014,6 +1014,10 @@ without consuming the handle; native release permits close retry and exact
 repeat-close tombstone. Sealed evidence is `tr3-factory-busy-779a4f3-20260925`
 (`e007ee61...`). Other producer cuts, broader E1 categories, other busy paths,
 and an exact merged-union gate remain pending.
+The next test-only M3T model allocation cut passed a cheap linked preflight:
+`internal/M3T-model/raised-e1` after an initializer was retained, with D2
+closed and no model published. Its full pinned source/object gate remains
+pending before this cut is accepted.
 Root independently reviewed the prior bridge, source wrapper, linked scripts,
 fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.

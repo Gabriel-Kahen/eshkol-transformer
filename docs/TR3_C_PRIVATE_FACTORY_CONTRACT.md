@@ -263,3 +263,10 @@ other busy paths, and exact merged-union acceptance remain open. Sealed linked
 evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-busy-779a4f3-20260925/SHA256SUMS`
 (`e007ee61f32ac14fa863d11b3a552e3038efc488d05b005a248a9ee758eecf0a`).
+The bounded `m3t-model` candidate arms the existing test-only M3T allocation
+limit after one successful native allocation. The initializer therefore returns
+before the model owner's real allocation is denied. A linked preflight against
+the prior sealed private object observes authenticated
+`internal/M3T-model/raised-e1`, a null handle and consumed attempt, one D2 open
+and close, an initialized process-root slot, and no published model slot. The
+full pinned source/object gate for this candidate remains pending.
