@@ -780,25 +780,25 @@ normal/repeat/ASan+UBSan+LSan focused gate passes 46,469 checks each, including
 on the integrated tree. The public G3-G adapter and package remain separate
 review gates.
 
-The [private RNG constructor leaf](g3/G3_T_GENERATOR_RNG_LEAF.md) is an
-isolated candidate from `0b20801`. It authenticates a live kind-8 RNG clone
+The [private RNG constructor leaf](g3/G3_T_GENERATOR_RNG_LEAF.md), integrated
+at `a3329c0` from `0b20801`, authenticates a live kind-8 RNG clone
 and M3T owner, copies four words into an independent idle generator, and
 preserves the seeded route. The pinned normal/repeat/ASan+UBSan+LSan gate
 passes 46,491 checks each, with seven source contracts and Q0 4/4;
-sealed evidence is `g3t-generator-rng-0b20801-r2`. An Eshkol RNG-owner
-registry entry and the G3-G public facade remain separate review gates.
+sealed evidence is `g3t-generator-rng-0b20801-r2`. The G3-G public facade
+remains a separate review gate.
 
-The [source-private RNG owner mapping](g3/G3_T_RNG_OWNER_LEAF.md) is an
-isolated candidate after the native constructor leaf. It uses the accepted
+The [source-private RNG owner mapping](g3/G3_T_RNG_OWNER_LEAF.md), integrated
+at `46a458c` with evidence note `8bca4cd`, uses the accepted
 G3-T registry to expose a detached kind-8 output clone and typed release,
 with preallocated wrapper publication and cleanup after any post-clone
 failure. The pinned normal/repeat/ASan+UBSan+LSan gate passes 46,508 checks
 each, with eight source contracts and Q0 4/4; sealed evidence is
-`g3t-rng-owner-20e1a1a`. `generator-create` RNG input admission, G3-G
-public facade, and package exports remain separate gates.
+`g3t-rng-owner-20e1a1a`. The G3-G public facade and package exports remain
+separate gates.
 
-The [private generator RNG input admission](g3/G3_T_GENERATOR_RNG_INPUT_LEAF.md)
-is an isolated candidate after the kind-8 owner mapping. It accepts the
+The [private generator RNG input admission](g3/G3_T_GENERATOR_RNG_INPUT_LEAF.md),
+integrated at `e3d14f2` with evidence note `f7655a1`, accepts the
 eight-pair `:rng` alternative in `g3t-generator-create`, authenticates the
 same-aggregate live owner and copies its words through the accepted native
 constructor while preserving the seeded route. Focused pinned evidence is
