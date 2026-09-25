@@ -574,8 +574,17 @@ eval mode, and absence of an active workspace without enrolling a generator.
 Root's pinned normal/repeat/sanitizer witness passes 24 checks, the source
 closure and merged Q0 4/4 pass, and evidence is sealed at
 `g3t-model-admission-root-59558ba-20260925/SHA256SUMS` (`ab03f8e1...`).
-The native G3-T generator context/registry, pointer pins, and transactional
-begin/close remain the next dependency before any public generation claim.
+The source-private native G3-T generator-context leaf `5a8d6c5`/tree
+`cfeccbf` is integrated byte-identically at `234a520`. It authenticates
+the actual M3T owner, enrolls an empty A2 cache only after allocation,
+holds the shared fixed-14 pins during acquired calls, and retains dead
+context tombstones after close. Root's pinned merged normal, repeat, and
+ASan/UBSan gates each pass 47 checks, with genuine model construction,
+wrong-owner/policy rejection, allocation retry, same-model exclusion,
+pin drain, and source/Q0 isolation. Evidence is sealed at
+`g3t-native-context-root-234a520-20260925/SHA256SUMS` (`fcc2dcfe...`).
+The rooted Eshkol constructor, RNG owner, frame/result state machine, and
+public generation remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -649,8 +658,19 @@ previously split into NaN versus infinity. Root's pinned Release and
 ASan+UBSan+LSan focused CTest each pass 8/8; worker source JIT/AOT O0/O2
 matrices pass 16/16. Root verified
 `f32-gcd-lcm-inexact-result-e460d26f-20260925/SHA256SUMS`
-(`4e824bea...`). Wide LCM, native/VM arity and AD policy, whole-F32
-acceptance and transformer runtime repin remain pending.
+(`4e824bea...`). The reviewed exact-wide LCM leaf `4e7f26bd`/tree
+`5af729e` is composed byte-identically at provisional Eshkol `e8fbb90b`.
+Native tagged and VM binary direct/stored routes now compute exact
+INT64/bignum LCM for all-exact inputs with a wide peer, including zero,
+negative values, and INT64_MIN mixed with 2^70; a missing native tagged
+INT64/INT64 comparison case is repaired. Worker pinned Release and
+ASan+UBSan+LSan focused CTest each pass 8/8, with 16 native JIT/AOT O0/O2
+fixture executions. Root reviewed the source, verified the exact-tree seal
+`f32-exact-wide-lcm-4e7f26bd-20260925/SHA256SUMS` (`9ab09ac5...`), and
+repeated both pinned focused CTest groups at 8/8. INT64-only overflow still
+rejects, mixed wide/DOUBLE and F32 still reject, and allocation faults were
+not injected. Native/VM arity and AD policy, whole-F32 acceptance, and
+transformer runtime repin remain pending.
 
 The independently reviewed [TR3-C private snapshot lease authority](TR3_C_SNAPSHOT_LEASE_AUTHORITY.md)
 `00d17cb`/tree `00a0091` is integrated as identical runtime/test source at
