@@ -843,11 +843,12 @@ contracts and Q0 4/4. No public G3-G facade, package tuple or CLI is
 accepted by this candidate.
 
 The [source-private generated- and cache-length wrappers](g3/G3_T_LENGTH_OWNERS_LEAF.md)
-are an isolated candidate after the accepted native kind-6 and kind-7
-clones. They return distinct owned CPU i64[1] shells with values G and P+G,
-and extend typed tensor release without changing the input/IDs routes.
-Focused pinned evidence is pending. No public G3-G facade, package, N>1
-claim or CLI is accepted by this candidate.
+are sealed at source commit `d327232` after the accepted native kind-6 and
+kind-7 clones. They return distinct owned CPU i64[1] shells with values G
+and P+G, and extend typed tensor release without changing the input/IDs
+routes. The pinned P2 aggregate passed 46,690 checks per normal, repeat and
+ASan+UBSan+LSan mode, twelve source contracts and Q0 4/4. No public G3-G
+facade, package, N>1 claim or CLI is accepted by this leaf.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
