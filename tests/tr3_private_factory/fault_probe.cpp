@@ -27,7 +27,9 @@ extern "C" eshkol_tagged_value_t factory_retained
     __asm__("tr3-c-factory-retained");
 
 namespace {
-enum class Mode { idle, t2, m3t, o2, lease, cleanup, retention };
+enum class Mode {
+  idle, t2, m3t, o2, lease, cleanup, retention, lease_busy, close_busy
+};
 Mode mode = Mode::idle;
 int64_t stage = 0;
 bool denied = false;
@@ -101,6 +103,14 @@ void stage_live_borrow() {
   check(active_borrow > 0 && et_d2_batch_test_borrow_count_v1() == 1,
         "real D2 active borrow staged");
 }
+void stage_unborrowed_batch() {
+  check(dataset_owner != nullptr && active_generation == 0,
+        "exact opened D2 owner available for busy preflight");
+  active_generation = et_d2_batch_create_v1(dataset_owner, 1, 1, 17);
+  check(active_generation > 0 &&
+            et_d2_batch_test_live_count_v1() == 1,
+        "real unborrowed D2 batch staged");
+}
 void retained_snapshot(eshkol_tagged_value_t out[6]) {
   check(ESHKOL_IS_VECTOR_COMPAT(factory_retained),
         "source process root is a vector");
@@ -124,6 +134,8 @@ extern "C" int64_t __wrap_et_tr3_c_factory_stage_v1(int64_t value) {
   stage = value;
   if (mode == Mode::cleanup && value == ET_TR3_C_STAGE_M3T_INITIALIZER)
     stage_live_borrow();
+  if (mode == Mode::lease_busy && value == ET_TR3_C_STAGE_LEASE)
+    stage_unborrowed_batch();
   return __real_et_tr3_c_factory_stage_v1(value);
 }
 extern "C" void *__wrap_arena_allocate_vector_with_header(
@@ -164,6 +176,8 @@ int main(int argc, char **argv) {
   else if (std::strcmp(argv[1], "lease") == 0) mode = Mode::lease;
   else if (std::strcmp(argv[1], "cleanup") == 0) mode = Mode::cleanup;
   else if (std::strcmp(argv[1], "retention") == 0) mode = Mode::retention;
+  else if (std::strcmp(argv[1], "lease-busy") == 0) mode = Mode::lease_busy;
+  else if (std::strcmp(argv[1], "close-busy") == 0) mode = Mode::close_busy;
   else fail("unknown mode");
   check(et_tr3_c_private_initialize_v1() == ET_TR3_C_INIT_READY_V1,
         "private initializer");
@@ -200,6 +214,45 @@ int main(int argc, char **argv) {
       et_tr3_c_private_trainer_create_v1(&request);
   et_m3t_test_fail_alloc_after(SIZE_MAX);
   et_o2_test_reset_failpoints_v1();
+  if (std::strcmp(argv[1], "close-busy") == 0) {
+    check(first.status == ET_TR3_C_OK && first.stage == ET_TR3_C_STAGE_NONE &&
+              first.handle != nullptr, "trainer created before close-busy cut");
+    stage_unborrowed_batch();
+    const et_tr3_c_result_v1 busy =
+        et_tr3_c_private_trainer_close_v1(first.handle);
+    check(busy.status == ET_TR3_C_INVALID_STATE &&
+              busy.stage == ET_TR3_C_STAGE_CLOSE &&
+              busy.reason == ET_TR3_C_REASON_BUSY &&
+              busy.original_category == 0 && busy.handle == nullptr,
+          "native D2 busy preflight preserves live handle");
+    check(opens == 1 && closes == 0 &&
+              et_d2_dataset_test_live_count_v1() == 1 &&
+              et_d2_batch_test_live_count_v1() == 1 &&
+              optimizer_count() == 1,
+          "busy close left both receivers live");
+    check(et_d2_batch_release_preflight_v1(dataset_owner,
+                                           active_generation) == 0 &&
+              et_d2_batch_release_v1(dataset_owner,
+                                     active_generation) == 0 &&
+              et_d2_batch_test_live_count_v1() == 0,
+          "accepted D2 release restores idle");
+    const et_tr3_c_result_v1 ended =
+        et_tr3_c_private_trainer_close_v1(first.handle);
+    check(ended.status == ET_TR3_C_OK && ended.stage == ET_TR3_C_STAGE_NONE &&
+              ended.reason == ET_TR3_C_REASON_RAISED_E1 &&
+              ended.original_category == 0 && ended.handle == nullptr,
+          "same handle closes after busy dependency clears");
+    const et_tr3_c_result_v1 repeated =
+        et_tr3_c_private_trainer_close_v1(first.handle);
+    check(repeated.status == ET_TR3_C_INVALID_STATE &&
+              repeated.stage == ET_TR3_C_STAGE_CLOSE &&
+              repeated.reason == ET_TR3_C_REASON_ALREADY_CLOSED &&
+              repeated.original_category == 0 && repeated.handle == nullptr,
+          "retried close leaves exact tombstone");
+    std::printf("TR3 factory fault close-busy busy=7/10/2/0 "
+                "retry=0/0/0/0 repeat=7/10/5/0 D2=1/0/1 PASS\n");
+    return 0;
+  }
   if (std::strcmp(argv[1], "retention") == 0) {
     check(first.status == ET_TR3_C_OK && first.stage == ET_TR3_C_STAGE_NONE &&
               first.reason == ET_TR3_C_REASON_RAISED_E1 &&
@@ -252,7 +305,8 @@ int main(int argc, char **argv) {
                 "repeat=7/10/5/0 D2=1/0/1 O2=1 root=6 PASS\n");
     return 0;
   }
-  check(first.status == ET_TR3_C_INTERNAL &&
+  check(first.status == (std::strcmp(argv[1], "lease-busy") == 0
+                             ? ET_TR3_C_INVALID_STATE : ET_TR3_C_INTERNAL) &&
             first.reason == (std::strcmp(argv[1], "cleanup") == 0
                                  ? ET_TR3_C_REASON_CLEANUP_FAILED
                                  : std::strcmp(argv[1], "lease") == 0
@@ -261,7 +315,7 @@ int main(int argc, char **argv) {
             first.original_category == (std::strcmp(argv[1], "cleanup") == 0
                                             ? ET_TR3_C_INTERNAL : 0) &&
             first.handle == nullptr,
-        "authenticated allocation failure has exact tuple and no handle");
+        "producer or lease failure has exact tuple and no handle");
   if (std::strcmp(argv[1], "t2") == 0) {
     check(first.stage == ET_TR3_C_STAGE_T2, "T2 result stage");
     check(denied && stage == ET_TR3_C_STAGE_T2, "actual T2 allocation denial");
@@ -285,6 +339,17 @@ int main(int argc, char **argv) {
     check(opens == 1 && closes == 1 && peak_live == 1 &&
               optimizer_count() == 1,
           "lease failure retained completed O2 child and closed D2");
+  } else if (std::strcmp(argv[1], "lease-busy") == 0) {
+    check(first.status == ET_TR3_C_INVALID_STATE &&
+              first.stage == ET_TR3_C_STAGE_LEASE &&
+              first.reason == ET_TR3_C_REASON_RAISED_E1 &&
+              first.original_category == 0 && first.handle == nullptr,
+          "authentic lease busy from native D2 preflight");
+    check(active_generation > 0 && opens == 1 && closes == 1 &&
+              et_d2_dataset_test_live_count_v1() == 0 &&
+              et_d2_batch_test_live_count_v1() == 0 &&
+              optimizer_count() == 1,
+          "lease busy cut cleans D2 and retains O2");
   } else {
     check(first.stage == ET_TR3_C_STAGE_M3T_INITIALIZER &&
               stage == ET_TR3_C_STAGE_M3T_INITIALIZER &&
