@@ -133,6 +133,13 @@ int64_t et_g3c4_private_frame_begin_v1(
     void *context, void *input, int64_t frame_kind);
 #endif
 
+#ifdef ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE
+/* Manual-only result preparation and atomic publication. The caller invokes
+ * call_prepare_end before frame_commit, then call_finish immediately after. */
+int64_t et_g3c4_private_frame_prepare_v1(void *context, void *logits);
+int64_t et_g3c4_private_frame_commit_v1(void *context);
+#endif
+
 #ifdef ET_G3C4_OUTPUT_PREPARE_PRIVATE
 /* Copies the final staged G0/G1 numeric result into its pending output.
  * Cache, generator RNG, text readiness and result publication are unchanged. */

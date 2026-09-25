@@ -92,7 +92,7 @@ def check():
     ], "RNG release")
 
     for forbidden in ["philox", "counter_advance", "sample_token",
-                      "tokenizer", "frame_commit", "result_publish"]:
+                      "tokenizer", "result_publish"]:
         require(forbidden not in source.lower(),
                 f"native ownership slice reaches held G3-S surface: {forbidden}")
 

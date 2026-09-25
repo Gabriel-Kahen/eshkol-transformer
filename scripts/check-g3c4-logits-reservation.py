@@ -66,7 +66,7 @@ def check() -> None:
                  "et_g3c4_private_call_finish_v1"):
         body = function(source, f"int64_t {name}")
         require("et_g3c4_pending_logits_lookup" in body and
-                "if (pending_logits != NULL)" in body,
+                "if (pending_logits != NULL" in body,
                 f"{name} accepts pending manual result")
     for phrase in ("manual_abort(owner, 0)", "manual_abort(owner, 1)",
                    "et_f32_tensor_test_fail_alloc_after_v1(cut)",

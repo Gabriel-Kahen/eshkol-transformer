@@ -86,7 +86,7 @@ def check():
     ], "atomic construction")
     require(source.count("et_g3c4_abort_staged_routes(") >= 3,
             "staged route cleanup is incomplete")
-    for forbidden in ["runtime_invoke", "sample_token", "frame_commit",
+    for forbidden in ["runtime_invoke", "sample_token",
                       "result_publish", "tokenizer"]:
         require(forbidden not in source.lower(),
                 f"provider-route leaf reaches held surface: {forbidden}")
