@@ -49,6 +49,8 @@ native/t1_i64_shell.h
 native/tr3_c_i2_restore_internal.h
 native/tr3_c_o2_restore.inc
 native/tr3_c_o2_restore_internal.h
+native/tr3_c_private_initializer_bridge.cpp
+native/tr3_c_private_initializer_bridge.h
 native/tr3_c_restore_bindings.c
 native/tr3_c_restore_bindings.h
 native/tr3_o2_step_clear.inc

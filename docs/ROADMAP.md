@@ -577,15 +577,15 @@ admitted; public trainer and resume claims remain pending.
 The reviewed isolated Eshkol `97c40c9d` fix now permits a
 [linked private TR3 package boundary](TR3_C_LINKED_PRIVATE_PACKAGE.md) without
 changing the transformer pin. The bounded gate composes the accepted 46-source
-root and exact 28-object/64-path native closure, localizes all but the package
-initializer, links with no unresolved trusted authority, and rejects hostile
-external links to private TR3/native symbols. Its static private archive now
-has a pinned runtime initializer witness: AOT-style shared-arena setup,
-E1B-style exception/parallel scope, one clean initialization, restored
-handler, and runtime-owned root allocation. The `.so` still hides its arena
-getter and shared-arena slot, so no same-runtime dynamic-host invocation or
-C-callable trainer bridge is accepted; real initializer failure retention is
-unmeasured. Public trainer and resume acceptance remain pending.
+root and exact 29-object/66-path native closure, localizes all but the
+versioned private initializer bridge, links with no unresolved trusted
+authority, and rejects hostile external links to the raw initializer and
+private TR3/native symbols. Its linked `.so` now owns the AOT-style
+shared-arena setup and E1B-style exception/parallel scope; real `dlopen`
+invocation and repeat pass. An injected initializer fixture proves failure
+status, raised-value and handler cleanup, reentrant busy, and retry. Real TR3
+initializer failure retention is unmeasured, and no C-callable trainer bridge
+is accepted; public trainer and resume acceptance remain pending.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31

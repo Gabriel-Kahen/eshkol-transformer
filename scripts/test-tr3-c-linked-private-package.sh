@@ -103,20 +103,27 @@ compile native/c2_checkpoint_inspect_bridge.c c2_checkpoint_inspect_bridge.o
 compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o \
   -DET_TR3_C_RESTORE_BINDINGS -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
   -DET_TR3_C_I2_RESTORE_PRIVATE -DET_TR3_C_O2_RESTORE_NATIVE
+clang++-21 -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic \
+  -fstack-protector-all -fPIC -fvisibility=hidden -fno-common \
+  -fno-exceptions -fno-rtti \
+  -isystem /fixed-source/inc -isystem /fixed-source/lib/core \
+  -I native -MMD -MF /out/native/tr3_c_private_initializer_bridge.o.d \
+  -c native/tr3_c_private_initializer_bridge.cpp \
+  -o /out/native/tr3_c_private_initializer_bridge.o
 
 clang++-21 -r /out/private.o /out/native/*.o -o /out/combined.raw.o
 nm -g --defined-only --format=posix /out/combined.raw.o | \
   awk "{print \$1}" | LC_ALL=C sort -u > /out/raw-defined.txt
-awk "\$1 != \"__eshkol_lib_init__\" {print}" /out/raw-defined.txt \
+awk "\$1 != \"et_tr3_c_private_initialize_v1\" {print}" /out/raw-defined.txt \
   > /out/localize-symbols.txt
 cp /out/combined.raw.o /out/combined.o
 objcopy --localize-symbols=/out/localize-symbols.txt /out/combined.o
 nm -g --defined-only --format=posix /out/combined.o | \
   awk "{print \$1}" | LC_ALL=C sort -u > /out/global-defined.txt
-printf "__eshkol_lib_init__\n" | cmp - /out/global-defined.txt
+printf "et_tr3_c_private_initialize_v1\n" | cmp - /out/global-defined.txt
 ar rcsD /out/libtr3_private.a /out/combined.o
 cat > /out/tr3.map <<EOF
-TR3_PRIVATE_1 { global: __eshkol_lib_init__; local: *; };
+TR3_PRIVATE_1 { global: et_tr3_c_private_initialize_v1; local: *; };
 EOF
 clang++-21 -shared -Wl,--no-undefined -Wl,--version-script=/out/tr3.map \
   -Wl,--whole-archive /out/libtr3_private.a -Wl,--no-whole-archive \
@@ -125,7 +132,7 @@ clang++-21 -shared -Wl,--no-undefined -Wl,--version-script=/out/tr3.map \
   -o /out/libtr3_private.so > /out/link.stdout 2> /out/link.stderr
 
 clang++-21 -std=c++17 -Wall -Wextra -Werror \
-  -I /fixed-source/inc -I /fixed-source/lib/core \
+  -isystem /fixed-source/inc -isystem /fixed-source/lib/core -I native \
   tests/tr3_linked_private_package/init_probe.cpp \
   -Wl,--whole-archive /out/libtr3_private.a -Wl,--no-whole-archive \
   /candidate/eshkol-build-canonical/libeshkol-runtime.a \
@@ -133,6 +140,14 @@ clang++-21 -std=c++17 -Wall -Wextra -Werror \
   -o /out/init-probe
 timeout 60s /out/init-probe \
   > /out/init-probe.stdout 2> /out/init-probe.stderr
+clang++-21 -std=c++17 -Wall -Wextra -Werror \
+  -isystem /fixed-source/inc -isystem /fixed-source/lib/core -I native \
+  native/tr3_c_private_initializer_bridge.cpp \
+  tests/tr3_linked_private_package/initializer_bridge_fixture.cpp \
+  -o /out/initializer-bridge-fixture
+timeout 10s /out/initializer-bridge-fixture \
+  > /out/initializer-bridge-fixture.stdout \
+  2> /out/initializer-bridge-fixture.stderr
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -I /fixed-source/inc -I native \
   native/e1b_error_consumer_bridge.c \
@@ -142,7 +157,8 @@ timeout 10s /out/initializer-retry \
   > /out/initializer-retry.stdout 2> /out/initializer-retry.stderr
 
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
-  tests/tr3_linked_private_package/dynamic_probe.c -ldl -o /out/dynamic-probe
+  -I native tests/tr3_linked_private_package/dynamic_probe.c \
+  -ldl -o /out/dynamic-probe
 /out/dynamic-probe /out/libtr3_private.so \
   > /out/dynamic-probe.stdout 2> /out/dynamic-probe.stderr
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
@@ -158,7 +174,7 @@ link_probe() {
 link_probe /out/link-control.o /out/link-control \
   > /out/link-control.stdout 2> /out/link-control.stderr
 /out/link-control
-for mode in LEASE NATIVE; do
+for mode in LEASE NATIVE INIT; do
   clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
     "-DTR3_HOSTILE_${mode}" \
     -c tests/tr3_linked_private_package/link_probe.c \
@@ -176,6 +192,8 @@ grep -F "tr3-lease-create-internal" /out/hostile-LEASE.stderr >/dev/null
 grep -F "undefined reference" /out/hostile-NATIVE.stderr >/dev/null
 grep -F "et_tr3_c_private_i2_restore_create_v1" \
   /out/hostile-NATIVE.stderr >/dev/null
+grep -F "undefined reference" /out/hostile-INIT.stderr >/dev/null
+grep -F "__eshkol_lib_init__" /out/hostile-INIT.stderr >/dev/null
 '
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
@@ -196,7 +214,7 @@ import sys
 
 root, evidence = map(Path, sys.argv[1:])
 deps = sorted((evidence / 'native').glob('*.d'))
-assert len(deps) == 28
+assert len(deps) == 29
 paths = set()
 for depfile in deps:
     text = depfile.read_text().replace('\\\n', ' ')
@@ -233,6 +251,8 @@ grep -Fx 'TR3 linked private dynamic boundary PASS' \
 grep -E '^TR3 linked private initializer PASS: root_used_before=[0-9]+ root_used_after=[0-9]+$' \
   "${evidence}/init-probe.stdout" >/dev/null
 test ! -s "${evidence}/init-probe.stderr"
+test ! -s "${evidence}/initializer-bridge-fixture.stdout"
+test ! -s "${evidence}/initializer-bridge-fixture.stderr"
 test ! -s "${evidence}/initializer-retry.stdout"
 test ! -s "${evidence}/initializer-retry.stderr"
 test ! -s "${evidence}/dynamic-probe.stderr"
