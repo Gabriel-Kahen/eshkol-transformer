@@ -567,6 +567,15 @@ static and Q0 isolation gates pass. Root sealed
 `g3c4-manual-transport-root-4418a0c-20260925/SHA256SUMS`
 (`a8a84bd1...`). Public Eshkol role stepping, generation loop,
 output/text publication, and save/reload remain pending.
+The authentic G3-T M3T/C2 model-admission precursor `59558ba`/tree
+`6c9225bf` is integrated byte-identically at `78d3d6f`. It authenticates
+the exact live M3T model entry, initializer lineage, fixed 14 P1 handles,
+eval mode, and absence of an active workspace without enrolling a generator.
+Root's pinned normal/repeat/sanitizer witness passes 24 checks, the source
+closure and merged Q0 4/4 pass, and evidence is sealed at
+`g3t-model-admission-root-59558ba-20260925/SHA256SUMS` (`ab03f8e1...`).
+The native G3-T generator context/registry, pointer pins, and transactional
+begin/close remain the next dependency before any public generation claim.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
