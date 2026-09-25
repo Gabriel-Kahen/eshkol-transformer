@@ -52,6 +52,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-e3-p1-contract.py",
     ROOT / "scripts" / "check-tr3-p1-fixed.py",
     ROOT / "scripts" / "e3-atomic-publish.py",
+    ROOT / "scripts" / "check-g3t-model-admission.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
