@@ -217,7 +217,21 @@ handle and consumes the single attempt, and close on that null returns
 a copied exact handle returns `ok`; repeat close returns
 `invalid-state/close/already-closed`. Sealed evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-tokenizer-mismatch-b076f25-20260925/SHA256SUMS`.
-This tests T2-to-D2 corpus identity and lease unenrollment, not a T2 producer
-allocation failure, D2 destruction, or arena reclamation.
-Other producer and lease failure cuts, cleanup failure, process-root retention,
-broader E1 category evidence, and exact merged-union acceptance remain open.
+This tests T2-to-D2 corpus identity and lease unenrollment. The focused linked
+fault probe on `4911711` reuses the reviewed test-only bounded-arena linker
+interception to deny a genuine T2 vector allocation after X1 admission. It
+observes authenticated `internal/T2/raised-e1`, a null handle, consumed attempt,
+no D2 open, and rejected close. A separate process uses M3T's existing native
+allocation failpoint after D2 has returned. It observes authenticated
+`internal/M3T-initializer/raised-e1`, a null handle and consumed attempt, and
+exactly one D2 native open followed by one close with the D2 live count restored
+to zero. The native resource control is closed; the retained source shell and
+arena storage are not claimed to be physically reclaimed. The candidate
+library's production-root separation and symbol/export manifest remain fixed.
+The pinned factory gate has no sanitizer mode; this witness is a normal linked
+run, not a sanitizer result. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-fault-4911711-20260925/SHA256SUMS`
+(`eff4c19e2ad86182edb867d7cba7588b51d4f0cda47b8362a13aab55f9db4d74`).
+Other producer and lease failure cuts, cleanup
+failure, process-root retention, broader E1 category evidence, and exact
+merged-union acceptance remain open.
