@@ -34,6 +34,11 @@
 #error "G3-T ID clones require live final output publication"
 #endif
 #endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+#ifndef ET_G3T_FINAL_PUBLICATION_PRIVATE
+#error "G3-T length clones require live final output publication"
+#endif
+#endif
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -50,6 +55,9 @@
 enum { G3T_GENERATOR = 1, G3T_INPUT = 2, G3T_OUTPUT = 4,
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
        G3T_IDS_CLONE = 5,
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+       G3T_LENGTHS_CLONE = 6,
 #endif
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
@@ -99,6 +107,12 @@ typedef struct g3t_ids_clone {
   et_i64_tensor *ids;
   int64_t length;
 } g3t_ids_clone;
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+typedef struct g3t_lengths_clone {
+  g3t_record h;
+  et_i64_tensor *value;
+} g3t_lengths_clone;
 #endif
 typedef struct g3t_context {
   g3t_record h;
@@ -485,6 +499,9 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
                   && record->kind != G3T_IDS_CLONE
 #endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+                  && record->kind != G3T_LENGTHS_CLONE
+#endif
                   )) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
   if (record->state == G3T_DEAD) return 0;
   if (record->state != G3T_LIVE || record->busy)
@@ -498,6 +515,18 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
                           g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
     if (et_i64_tensor_destroy_v1(&clone->ids, &error)) abort();
     clone->length = 0;
+    record->state = G3T_DEAD;
+    return 0;
+  }
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+  if (record->kind == G3T_LENGTHS_CLONE) {
+    g3t_lengths_clone *clone = (g3t_lengths_clone *)record;
+    et_i64_tensor_error error;
+    if (!clone->value || et_m3_private_i64_unborrowed_v1(clone->value, &error))
+      return clone->value ? g3t_i64_failure(&error) :
+                            g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+    if (et_i64_tensor_destroy_v1(&clone->value, &error)) abort();
     record->state = G3T_DEAD;
     return 0;
   }
@@ -620,6 +649,57 @@ void *et_g3t_private_output_ids_clone_v1(void *candidate) {
   clone->h.kind = G3T_IDS_CLONE;
   clone->h.state = G3T_LIVE;
   clone->length = output->G;
+  clone->h.next = g3t_registry;
+  g3t_registry = &clone->h;
+  return clone;
+}
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+void *et_g3t_private_output_lengths_clone_v1(void *candidate) {
+  g3t_clear();
+  g3t_output *output = (g3t_output *)g3t_admit_record(
+      candidate, G3T_OUTPUT, 0);
+  if (!output) return NULL;
+  if (output->h.busy || output->parent_ctx || !output->ids ||
+      output->length != output->G || output->G < 0 || output->G > 1 ||
+      !output->numeric_ready || !output->ids_copied || !output->text_ready) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  et_i64_tensor_error error;
+  if (et_m3_private_i64_unborrowed_v1(output->ids, &error)) {
+    g3t_i64_failure(&error);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  if (g3t_allocations >= g3t_allocation_limit) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#endif
+  g3t_lengths_clone *clone = calloc(1, sizeof(*clone));
+  if (!clone) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  ++g3t_allocations;
+#endif
+  const uint64_t shape[1] = {1};
+  if (et_i64_tensor_create_v1(1, shape, &clone->value, &error)) {
+    g3t_i64_failure(&error);
+    free(clone);
+    return NULL;
+  }
+  const int64_t value = output->length;
+  if (et_i64_tensor_copy_from_v1(clone->value, &value, 1, &error)) {
+    g3t_i64_failure(&error);
+    if (et_i64_tensor_destroy_v1(&clone->value, &error)) abort();
+    free(clone);
+    return NULL;
+  }
+  clone->h.kind = G3T_LENGTHS_CLONE;
+  clone->h.state = G3T_LIVE;
   clone->h.next = g3t_registry;
   g3t_registry = &clone->h;
   return clone;
@@ -1473,6 +1553,40 @@ int64_t et_g3t_test_live_ids_clones_v1(void) {
   int64_t count = 0;
   for (g3t_record *r = g3t_registry; r; r = r->next)
     if (r->kind == G3T_IDS_CLONE && r->state == G3T_LIVE) ++count;
+  return count;
+}
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+int64_t et_g3t_test_lengths_clone_state_v1(void *candidate) {
+  g3t_lengths_clone *clone = (g3t_lengths_clone *)g3t_admit_record(
+      candidate, G3T_LENGTHS_CLONE, 1);
+  return clone ? clone->h.state : -2;
+}
+int64_t et_g3t_test_lengths_clone_value_v1(void *candidate) {
+  g3t_lengths_clone *clone = (g3t_lengths_clone *)g3t_admit_record(
+      candidate, G3T_LENGTHS_CLONE, 0);
+  int64_t value = -1;
+  et_i64_tensor_error error;
+  return clone && !et_i64_tensor_copy_to_v1(clone->value, &value, 1, &error)
+             ? value : -1;
+}
+void *et_g3t_test_lengths_clone_borrow_begin_v1(void *candidate) {
+  g3t_lengths_clone *clone = (g3t_lengths_clone *)g3t_admit_record(
+      candidate, G3T_LENGTHS_CLONE, 0);
+  et_i64_tensor_borrow *borrow = NULL;
+  et_i64_tensor_error error;
+  return clone && !et_i64_tensor_borrow_begin_v1(
+                      clone->value, &borrow, &error) ? borrow : NULL;
+}
+int64_t et_g3t_test_lengths_clone_borrow_end_v1(void *candidate) {
+  et_i64_tensor_borrow *borrow = candidate;
+  et_i64_tensor_error error;
+  return et_i64_tensor_borrow_end_v1(&borrow, &error);
+}
+int64_t et_g3t_test_live_lengths_clones_v1(void) {
+  int64_t count = 0;
+  for (g3t_record *r = g3t_registry; r; r = r->next)
+    if (r->kind == G3T_LENGTHS_CLONE && r->state == G3T_LIVE) ++count;
   return count;
 }
 #endif

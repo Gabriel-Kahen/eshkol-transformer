@@ -736,6 +736,11 @@ implements only the accepted native kind-5 generated-ID copy and typed release.
 Its pinned normal/repeat/ASan+UBSan+LSan focused gate passed 242 checks in
 each mode, six source contracts and Q0 4/4. It leaves Eshkol result wrapping,
 the other clones and public G3-G open.
+The [private generated-length clone leaf](g3/G3_T_OUTPUT_LENGTHS_CLONE_LEAF.md)
+adds only the accepted kind-6 I1[1] snapshot with generated count G and typed
+release. Pinned normal/repeat/ASan+UBSan+LSan passes 281 checks each, plus six
+source contracts and Q0 4/4. Public accessors and the remaining clone kinds
+stay pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
