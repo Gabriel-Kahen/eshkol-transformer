@@ -232,6 +232,10 @@ clang-21 "${flags[@]}" -DET_M3T_TESTING \
   -c src/eshkol_transformer/m3_model.c -o /out/fault/m3_model.o
 clang-21 "${flags[@]}" -DET_TR3_C_D2_RESTORE -DET_D2_NATIVE_TESTING \
   -c native/d2_native.c -o /out/fault/d2_native.o
+clang-21 "${flags[@]}" -DET_TR3_O2_STEP_CLEAR_NATIVE \
+  -DET_I2_PRIVATE_OWNED_CLONE_MATCH -DET_TR3_C_O2_RESTORE_NATIVE \
+  -DET_O2_TESTING \
+  -c native/o2_optimizer.c -o /out/fault/o2_optimizer.o
 clang++-21 -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic \
   -fno-exceptions -fno-rtti \
   -isystem /fixed-source/inc -isystem /fixed-source/lib/core \
@@ -240,12 +244,13 @@ clang++-21 -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic \
 fault_objects=()
 for object in /out/native/*.o; do
   case "${object}" in
-    */m3_model.o|*/d2_native.o) ;;
+    */m3_model.o|*/d2_native.o|*/o2_optimizer.o) ;;
     *) fault_objects+=("${object}") ;;
   esac
 done
 clang++-21 -fPIE -fuse-ld=bfd /out/private.o "${fault_objects[@]}" \
-  /out/fault/m3_model.o /out/fault/d2_native.o /out/fault/probe.o \
+  /out/fault/m3_model.o /out/fault/d2_native.o \
+  /out/fault/o2_optimizer.o /out/fault/probe.o \
   /candidate/eshkol-build-canonical/libeshkol-runtime.a \
   -Wl,--wrap=et_tr3_c_factory_stage_v1 \
   -Wl,--wrap=arena_allocate_vector_with_header \
@@ -254,7 +259,7 @@ clang++-21 -fPIE -fuse-ld=bfd /out/private.o "${fault_objects[@]}" \
   -Wl,-z,stack-size=536870912 \
   -pthread -ldl -lm -lcrypto -lpng -ljpeg -lwebp -lz -lopenblas \
   -o /out/fault/probe > /out/fault/link.stdout 2> /out/fault/link.stderr
-for mode in t2 m3t; do
+for mode in t2 m3t o2 lease cleanup retention; do
   timeout 60s /out/fault/probe "${mode}" /out/corpus \
     > "/out/fault/${mode}.stdout" 2> "/out/fault/${mode}.stderr"
 done
@@ -365,15 +370,29 @@ grep -Fx 'TR3 private factory tokenizer-mismatch status=1 stage=4 reason=0 origi
   "${evidence}/factory-tokenizer-mismatch.stdout" >/dev/null
 grep -Fx 'TR3 private factory tokenizer-mismatch close=1/10/4/0 PASS' \
   "${evidence}/factory-tokenizer-mismatch.stdout" >/dev/null
-grep -Fx 'TR3 factory fault t2 first=12/3/0/0 again=7/1/3/0 D2=0/0/0 PASS' \
+grep -Fx 'TR3 factory fault t2 first=12/3/0/0 again=7/1/3/0 D2=0/0/0/0 O2=0 PASS' \
   "${evidence}/fault/t2.stdout" >/dev/null
-grep -Fx 'TR3 factory fault m3t first=12/6/0/0 again=7/1/3/0 D2=1/1/0 PASS' \
+grep -Fx 'TR3 factory fault m3t first=12/6/0/0 again=7/1/3/0 D2=1/1/0/0 O2=0 PASS' \
   "${evidence}/fault/m3t.stdout" >/dev/null
+grep -Fx 'TR3 factory fault o2 first=12/8/0/0 again=7/1/3/0 D2=1/1/0/0 O2=0 PASS' \
+  "${evidence}/fault/o2.stdout" >/dev/null
+grep -Fx 'TR3 factory fault lease first=12/9/8/0 again=7/1/3/0 D2=1/1/0/0 O2=1 PASS' \
+  "${evidence}/fault/lease.stdout" >/dev/null
+grep -Fx 'TR3 factory fault cleanup first=12/6/7/12 again=7/1/3/0 D2=1/0/1/1 O2=0 PASS' \
+  "${evidence}/fault/cleanup.stdout" >/dev/null
+grep -Fx 'TR3 factory fault retention close=0/0/0/0 repeat=7/10/5/0 D2=1/0/1 O2=1 root=6 PASS' \
+  "${evidence}/fault/retention.stdout" >/dev/null
 grep -F 'Bounded arena exhausted: request 144 bytes exceeds remaining capacity' \
   "${evidence}/fault/t2.stderr" >/dev/null
 grep -F 'Failed to allocate vector with header (capacity=8)' \
   "${evidence}/fault/t2.stderr" >/dev/null
-test ! -s "${evidence}/fault/m3t.stderr"
+grep -F 'Bounded arena exhausted: request 288 bytes exceeds remaining capacity' \
+  "${evidence}/fault/lease.stderr" >/dev/null
+grep -F 'Failed to allocate vector with header (capacity=17)' \
+  "${evidence}/fault/lease.stderr" >/dev/null
+for mode in m3t o2 cleanup retention; do
+  test ! -s "${evidence}/fault/${mode}.stderr"
+done
 test ! -s "${evidence}/fault/link.stderr"
 for mode in success seed-2718; do
   grep -Fx "TR3 private factory ${mode} close=0/0/0/0 repeat=7/10/5/0 PASS" \
