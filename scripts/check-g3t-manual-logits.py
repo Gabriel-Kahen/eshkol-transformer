@@ -30,6 +30,10 @@ assert "c->policy[4] != 0" not in body
 assert body.index("g3t_registry = &logits->h") < body.index("c->pending_logits = logits")
 assert "G3T_LOGITS = 3" in native
 assert "record->kind == G3T_LOGITS" in native
+borrow = native[native.index("void *et_g3t_test_logits_borrow_begin_v1"):]
+borrow = borrow[:borrow.index("\n}")]
+assert "candidate, G3T_LOGITS, 1" in borrow
+assert "logits->h.state == G3T_PENDING" in borrow
 assert "et_f32_tensor_destroy_v1(&logits->tensor" in native
 assert "et_f32_tensor_scoped_begin_internal(" in native
 assert "#ifdef ET_G3T_TESTING" in native
