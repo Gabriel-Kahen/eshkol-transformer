@@ -655,13 +655,18 @@ passes 56 checks per run in the pinned Ubuntu/LLVM21 image. Candidate
 `ee29b72` plus the exact Q0 admission correction `727eecd` are integrated at
 `0f2fdf7`/`a0b6adc`. Root verified Q0 4/4, the source closure, identical
 normal/sanitizer output, and the sealed evidence at
-`g3t-output-text-727eecd-20260925/SHA256SUMS` (`48513349...`). G0, final
-frame commit, cache/RNG/output publication, and public generation remain open.
+`g3t-output-text-727eecd-20260925/SHA256SUMS` (`48513349...`).
 
 The isolated [G1 final publication leaf](g3/G3_T_FINAL_PUBLICATION_LEAF.md)
 adds final frame preparation, resource preflight, joint cache/ID/RNG/output
 commit, immediate call finish, and independently releasable output ownership.
-It keeps G0 and public generation surfaces open pending integration review.
+Candidate `2355d2c`/tree `a43a709` is integrated byte-identically at
+`017a213`. The pinned normal/repeat/ASan+UBSan+LSan witnesses each pass 118
+checks with identical stdout and empty stderr. Root reviewed source and tests,
+reran the static contracts and Q0 4/4, and sealed evidence at
+`/home/gabe/.codex/evidence/eshkol-transformer/g3t-final-publication-2355d2c-20260925/SHA256SUMS`
+(`d414c6e8...`). G0, public facade/accessors, generation loop and CLI remain
+open.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
