@@ -13,6 +13,9 @@ This project is being developed through coordinated Codex tasks.
 - Coordinate long builds by completion-triggered handoff. Use one bounded wait for
   relevant tasks and avoid repeated polls of unchanged processes or logs. Check
   a live build only when its result, resource condition, or a decision needs it.
+- For hosted CI, avoid `gh run watch` and repeated status queries. Check once
+  after the expected full-suite duration, then only when a result is needed;
+  stop querying if the GitHub API reports a rate limit.
 - Read only the relevant roadmap section and source contracts for a bounded task;
   do not reload the full project history on each follow-up. Keep implementation
   handoffs under 500 words: accepted contract, changed files, exact commit/tree,
