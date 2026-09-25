@@ -120,7 +120,8 @@ typedef struct g3t_frame {
 typedef struct g3t_input {
   g3t_record h;
   int64_t length, ids[2];
-#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+#if defined(ET_G3T_INPUT_FROM_T1_PRIVATE) || \
+    defined(ET_G3T_OWNED_TOKEN_INPUT_PRIVATE)
   et_i64_tensor *tensor;
 #endif
 } g3t_input;
@@ -587,11 +588,35 @@ void *et_g3t_private_input_from_token_v1(int64_t token) {
     g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
     return NULL;
   }
+#if defined(ET_G3T_OWNED_TOKEN_INPUT_PRIVATE) && defined(ET_G3T_TESTING)
+  if (g3t_allocations >= g3t_allocation_limit) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#endif
   g3t_input *input = calloc(1, sizeof(*input));
   if (!input) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
   }
+#ifdef ET_G3T_OWNED_TOKEN_INPUT_PRIVATE
+#ifdef ET_G3T_TESTING
+  ++g3t_allocations;
+#endif
+  const uint64_t shape[2] = {1, 1};
+  et_i64_tensor_error error;
+  if (et_i64_tensor_create_v1(2, shape, &input->tensor, &error)) {
+    g3t_i64_failure(&error);
+    free(input);
+    return NULL;
+  }
+  if (et_i64_tensor_copy_from_v1(input->tensor, &token, 1, &error)) {
+    g3t_i64_failure(&error);
+    if (et_i64_tensor_destroy_v1(&input->tensor, &error)) abort();
+    free(input);
+    return NULL;
+  }
+#endif
   input->h.kind = G3T_INPUT;
   input->h.state = G3T_LIVE;
   input->length = 1;
@@ -719,7 +744,8 @@ int64_t et_g3t_private_tensor_release_v1(void *candidate) {
   }
 #endif
   g3t_input *input = (g3t_input *)record;
-#ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
+#if defined(ET_G3T_INPUT_FROM_T1_PRIVATE) || \
+    defined(ET_G3T_OWNED_TOKEN_INPUT_PRIVATE)
   if (input->tensor) {
     et_i64_tensor_error error;
     if (et_m3_private_i64_unborrowed_v1(input->tensor, &error))
