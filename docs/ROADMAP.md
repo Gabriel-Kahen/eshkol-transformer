@@ -811,7 +811,9 @@ The [source-private owned scalar token input](g3/G3_T_OWNED_TOKEN_INPUT_LEAF.md)
 is an isolated candidate after the accepted T1-backed I1 route. It makes the
 exact byte-ID `input_from_token` branch own a distinct CPU I1[1,1], hardens
 the Eshkol shell publication/cleanup path, and retains inline IDs only as
-validated frame staging. Pinned focused evidence is pending; no public G3-G
+validated frame staging. Pinned strict type preflight and normal/repeat/
+ASan+UBSan+LSan evidence is sealed as `g3t-owned-token-input-6bbc14a`:
+46,586 checks per mode, ten source contracts and Q0 4/4. No public G3-G
 facade or package tuple is accepted by this candidate.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
