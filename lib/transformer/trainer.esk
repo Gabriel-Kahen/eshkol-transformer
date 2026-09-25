@@ -1,9 +1,34 @@
-;;; C2-owned trainer-state lifetime operation. Later trainer work may extend
-;;; this facade without changing the detached checkpoint owner contract.
+;;; Installed trainer lease and C2 detached-state lifetime facade.
 
 (require transformer.error_consumer)
 
-(provide trainer-state-release!)
+(provide trainer-create trainer-release! trainer-state-release!)
+
+(define tr3-safe-trainer-create
+  (let ()
+    (extern void tr3-public-trainer-create ptr ptr ptr ptr ptr ptr
+            :real et_e1b_public_tr3_trainer_create_v1)
+    (lambda (resolved tokenizer dataset model optimizer)
+      (let ((output (vector #f)))
+        (tr3-public-trainer-create
+          (vector resolved) (vector tokenizer) (vector dataset)
+          (vector model) (vector optimizer) output)
+        (vector-ref output 0)))))
+
+(define (trainer-create resolved tokenizer dataset model optimizer)
+  (tr3-safe-trainer-create resolved tokenizer dataset model optimizer))
+
+(define tr3-safe-trainer-release
+  (let ()
+    (extern void tr3-public-trainer-release ptr ptr
+            :real et_e1b_public_tr3_trainer_release_v1)
+    (lambda (trainer)
+      (let ((output (vector #f)))
+        (tr3-public-trainer-release (vector trainer) output)
+        (vector-ref output 0)))))
+
+(define (trainer-release! trainer)
+  (tr3-safe-trainer-release trainer))
 
 (define c2-safe-trainer-state-release
   (let ()

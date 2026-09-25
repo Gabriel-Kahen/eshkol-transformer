@@ -1,0 +1,18 @@
+;;; C2-owned trainer-state lifetime operation. Later trainer work may extend
+;;; this facade without changing the detached checkpoint owner contract.
+
+(require transformer.error_consumer)
+
+(provide trainer-state-release!)
+
+(define c2-safe-trainer-state-release
+  (let ()
+    (extern void c2-public-trainer-state-release ptr ptr
+            :real et_e1b_public_c2_trainer_state_release_v1)
+    (lambda (state)
+      (let ((output (vector #f)))
+        (c2-public-trainer-state-release (vector state) output)
+        (vector-ref output 0)))))
+
+(define (trainer-state-release! state)
+  (c2-safe-trainer-state-release state))

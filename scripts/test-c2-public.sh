@@ -5,7 +5,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
 for command in ar awk cmp diff env grep ldd nm python3 rg sort strings \
-    timeout tr wc; do
+    sha256sum timeout tr wc; do
   require_command "${command}"
 done
 
@@ -22,9 +22,15 @@ artifact_dir="$(project_build_dir)/c2"
 object="${artifact_dir}/c2_wave2.o"
 library="${artifact_dir}/libeshkol_transformer_wave2.a"
 evidence="${object}.evidence"
+legacy_facade="${PROJECT_ROOT}/tests/c2/legacy_facades/transformer/trainer.esk"
+[[ "$(sha256sum "${legacy_facade}" | awk '{print $1}')" == \
+   b2f3818cc7645a9accf397479e3e4f859d73b635e39752310e76cd067921b9a8 ]] || \
+  die "versioned C2 trainer facade changed"
 
 [[ -r "${object}" && -r "${library}" ]] || \
   die "canonical C2 aggregate is missing; run scripts/build-c2.sh"
+cmp "${legacy_facade}" "${artifact_dir}/facades/transformer/trainer.esk" || \
+  die "C2 archive is not paired with its versioned trainer facade"
 [[ "$(ar t "${library}")" == "c2_wave2.o" ]] || \
   die "canonical C2 archive must contain exactly c2_wave2.o"
 ar p "${library}" c2_wave2.o >"${temporary_dir}/canonical-archive-member.o"
@@ -109,7 +115,8 @@ run_compiler() {
     ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
     ESHKOL_CXX_COMPILER="${cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s \
-      "${compiler_timeout}s" "${runner}" "$@"
+      "${compiler_timeout}s" "${runner}" \
+      -I "${artifact_dir}/facades" "$@"
 }
 
 for fixture_set in a b; do
@@ -127,6 +134,7 @@ for repetition in 1 2; do
   mkdir -p "${contract_dir}" "${runtime_dir}"
   run_compiler "public-contract-${repetition}" \
     --strict-types --no-stdlib --compile-only -I "${PROJECT_ROOT}/lib" \
+    --emit-depfile "${contract_dir}/api.d" \
     "${PROJECT_ROOT}/tests/c2/compile_public_api.esk" \
     -o "${contract_dir}/api.o" \
     >"${contract_dir}/compile.log" 2>&1
@@ -150,6 +158,17 @@ for repetition in 1 2; do
   cmp "${temporary_dir}/fixtures-a/valid.c2" \
     "${runtime_dir}/roundtrip.c2"
 done
+
+python3 - "${temporary_dir}/public-contract-1/api.d" \
+  "${artifact_dir}/facades/transformer/trainer.esk" \
+  "${PROJECT_ROOT}/lib/transformer/trainer.esk" <<'PY'
+from pathlib import Path
+import sys
+depfile, legacy, successor = map(Path, sys.argv[1:])
+deps = depfile.read_text().replace('\\\n', ' ').split(':', 1)[1].split()
+assert str(legacy) in deps, deps
+assert str(successor) not in deps, deps
+PY
 
 models_dir="${temporary_dir}/public-models"
 mkdir -p "${models_dir}"
@@ -210,7 +229,7 @@ if nm -u --format=posix "${object}" | \
 fi
 if grep -Ein 'python|pytorch|torch' \
     "${PROJECT_ROOT}/lib/transformer/persistence.esk" \
-    "${PROJECT_ROOT}/lib/transformer/trainer.esk" \
+    "${artifact_dir}/facades/transformer/trainer.esk" \
     "${PROJECT_ROOT}/native/c2_wave2_root.esk" \
     "${PROJECT_ROOT}/native/c2_public_extension.esk" \
     "${PROJECT_ROOT}/native/c2_wave2_package_bridge.c" \
@@ -407,6 +426,10 @@ done
 cmp "${object}" "${temporary_dir}/rebuild-a/c2_wave2.o"
 cmp "${library}" \
   "${temporary_dir}/rebuild-a/libeshkol_transformer_wave2.a"
+for rebuild in a b; do
+  cmp "${legacy_facade}" \
+    "${temporary_dir}/rebuild-${rebuild}/facades/transformer/trainer.esk"
+done
 for rebuild in a b; do
   if nm -a "${temporary_dir}/rebuild-${rebuild}/c2_wave2.o" | \
       rg 'et_k2_test_(require_count|require_shape_count|fail_require_at)_v1' \
