@@ -80,9 +80,9 @@ foreign aggregate, M3T input, output clone or shape-compatible generic tensor
 cannot acquire G3 input authority. The accepted private `input_from_t1` stem
 and same-aggregate wrapper now have focused source-private evidence; their
 public mapping remains proposed. Existing scalar and pair constructors are
-private witnesses, not alternate public constructors. Manual scalar token
-input still requires an owned I1[1,1] implementation to meet this proposed
-public result contract: the current private scalar witness stores inline IDs.
+private witnesses, not alternate public constructors. The private scalar
+token branch now owns a distinct I1[1,1] through the reviewed
+`input_from_token` stem; its public mapping remains proposed.
 
 Output is a separately authenticated live owner with no parent-call, model or
 tokenizer roots after publication. It holds the exact generated IDs, G and P+G
@@ -95,8 +95,9 @@ and leaves the output unchanged. IDs are a fresh one-element list around the
 owned i64[G] clone. Text is a fresh list and bytevector copy; caller changes to
 one returned list or bytevector affect no later accessor. No output accessor
 returns a borrowed native header, cache view, T1 shell or G3-T test observer.
-The four native clone stems have focused private witnesses; the Eshkol wrappers,
-package linkage and public accessor behavior described here remain proposed.
+The four native clone stems and source-private Eshkol wrappers for IDs, lengths,
+cache lengths and RNG have focused witnesses. Package linkage and public
+accessor behavior described here remain proposed.
 
 For each ID, length, cache-length or RNG accessor, allocate and root its future
 Eshkol shell, pending entry, registry cons cell and (for IDs) one-element result
