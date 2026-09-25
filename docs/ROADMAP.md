@@ -619,6 +619,14 @@ agreement of all 256 logits with independent M3T. Its sealed evidence is
 `74cff23`, `736f2f0`, and `3496c0d`; the separate candidate P1 repair was
 already integrated at `cf5e394`. All in-repo source-closure files match the
 candidate except this roadmap; root reran the static checkers and Q0 4/4.
+The isolated [sampled-token frame staging leaf](g3/G3_T_TOKEN_FRAME_LEAF.md)
+executes the 21-role position-1 append under the committed P1 binding and
+holds the A2 K/V append transaction speculative. Its focused witness checks
+all 256 position-1 logits bitwise against an independent M3T two-token
+forward pass, rejects stale profile and wrong frame/order, and proves failed
+attention and abort preserve the prompt cache and pre-call RNG. Final output
+readiness, text decode, joint cache/ID/RNG publication and public generation
+remain downstream.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

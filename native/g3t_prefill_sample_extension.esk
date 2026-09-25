@@ -192,13 +192,18 @@
 (define (g3t-frame-begin call input frame-kind)
   (let* ((operation 'g3t-frame-begin)
          (entry (g3t-prefill-call-entry call operation))
-         (input-entry (g3t-prefill-entry input 'input operation)))
-    (if (not (and (eq? (vector-ref input-entry 2) 'live)
-                  (m3t-exact-i64? frame-kind) (= frame-kind 1)))
+         (input-entry (if (eq? input #f) #f
+                          (g3t-prefill-entry input 'input operation))))
+    (if (not (and (m3t-exact-i64? frame-kind)
+                  (or (and (= frame-kind 1) input-entry
+                           (eq? (vector-ref input-entry 2) 'live))
+                      (and (= frame-kind 2) (eq? input #f)))))
         (g3t-fail-raw 'invalid-state operation 2
-                      "G3-T P1 input/frame is not live"))
+                      "G3-T input/frame is not live"))
     (if (not (= 0 (g3t-native-frame-begin
-                    (vector-ref entry 3) (vector-ref input-entry 3) frame-kind)))
+                    (vector-ref entry 3)
+                    (if input-entry (vector-ref input-entry 3) #f)
+                    frame-kind)))
         (g3t-native-fail-raw operation))
     #t))
 

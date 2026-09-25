@@ -11,6 +11,10 @@
         :real et_g3t_test_successor_word_v1)
 (extern i64 g3t-test-greedy-argmax ptr
         :real et_g3t_test_greedy_argmax_v1)
+(extern i64 g3t-test-frame-logit-bits ptr i64
+        :real et_g3t_test_frame_logit_bits_v1)
+(extern i64 g3t-test-cache-length ptr
+        :real et_g3t_test_cache_length_v1)
 (extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
 (extern i64 g3t-test-cache-empty ptr :real et_g3t_test_cache_empty_v1)
 (extern i64 g3t-test-fail-a2-after i64 :real et_g3t_test_fail_a2_after_v1)
@@ -99,15 +103,48 @@
             (= 1729 (g3t-test-rng-word native 1))
             (= 0 (g3t-test-rng-word native 2))
             (= 0 (g3t-test-rng-word native 3))))
+(check "prompt cache length one" (= 1 (g3t-test-cache-length native)))
+(check "decode rejects a supplied input"
+       (not (= 0 (g3t-native-frame-begin native input 2))))
+(check "decode rejects prefill kind after commit"
+       (not (= 0 (g3t-native-frame-begin native input 1))))
+(check "sampled token frame begin"
+       (= 0 (g3t-native-frame-begin native #f 2)))
+(check "duplicate sampled frame rejected"
+       (not (= 0 (g3t-native-frame-begin native #f 2))))
+(check "sampled role order enforced"
+       (not (= 0 (g3t-native-role-step native 1))))
+(check "sampled frame cannot commit before roles"
+       (not (= 0 (g3t-native-frame-commit native))))
+(define (token-roles context)
+  (let step ((ordinal 0))
+    (if (= ordinal 21) #t
+        (and (= 0 (g3t-native-role-step context ordinal))
+             (step (+ ordinal 1))))))
+(check "all sampled-token roles" (token-roles native))
+(define token-frame-bits (make-vector 256 0))
+(let capture ((index 0))
+  (if (= index 256) #t
+      (begin
+        (vector-set! token-frame-bits index
+                     (g3t-test-frame-logit-bits native index))
+        (capture (+ index 1)))))
+(check "append remains speculative before publication"
+       (= -1 (g3t-test-cache-length native)))
+(check "sampled frame prepare waits for output readiness"
+       (not (= 0 (g3t-native-frame-prepare native #f))))
+(check "sampled frame commit gated on output publication"
+       (not (= 0 (g3t-native-frame-commit native))))
 (check "abort" (= 0 (g3t-native-call-abort native)))
 (check "pins drained" (= 0 (g3t-test-pin-count native)))
-(check "prompt retained" (not (= 1 (g3t-test-cache-empty native))))
+(check "prompt retained without append" (= 1 (g3t-test-cache-length native)))
 (check "output tombstone" (= 0 (g3t-native-output-release output)))
 (check "second initial prefill unavailable"
        (not (= 0 (g3t-native-call-acquire native 2))))
 (check "close" (g3t-generator-close! generator))
 (define reference-input (g3t-checked-m3t-input-create))
-(check "reference input" (g3t-checked-m3t-input-copy! reference-input '(65 66)))
+(check "reference input"
+       (g3t-checked-m3t-input-copy! reference-input (list 65 token)))
 (define reference-workspace (g3t-checked-m3t-workspace-create model))
 (define reference-logits (g3t-checked-m3t-logits-create))
 (check "reference begin" (g3t-checked-m3t-workspace-begin!
@@ -147,6 +184,16 @@
                              (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
                (and (= bits (vector-ref prefill-bits index))
                     (compare (+ index 1)))))))
+(check "all 256 token-frame logits equal independent M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (vector-ref token-frame-bits index))
+                    (compare (+ index 1)))))))
 (check "reference reset" (g3t-checked-m3t-workspace-reset! reference-workspace))
 (check "reference logits release" (g3t-checked-m3t-logits-release! reference-logits))
 (check "reference workspace release"
@@ -179,6 +226,16 @@
     (g3t-frame-prepare call #f)
     (g3t-frame-commit call)
     (g3t-sample call)
+    (let* ((entry (m3t-entry model 'model 'g3t-token-profile #t))
+           (profile (vector-ref entry 11)))
+      (vector-set! entry 11 'diagnostic-c4)
+      (check "profile drift rejects sampled frame"
+             (guard (caught (#t caught))
+               (g3t-frame-begin call #f 2)
+               #f))
+      (vector-set! entry 11 profile))
+    (g3t-frame-begin call #f 2)
+    (wrapped-roles call)
     (g3t-test-sample-token
       (vector-ref (g3t-generator-find wrapped-generator
                                       'g3t-prefill-witness) 3))))
@@ -300,6 +357,28 @@
     (check "categorical candidate advances copied counter"
            (and (= 1 (g3t-test-successor-word categorical-native 2))
                 (= 0 (g3t-test-successor-word categorical-native 3))))
+    (check "source sampled frame begins"
+           (g3t-frame-begin call #f 2))
+    (check "categorical append roles 0..9"
+           (let step ((ordinal 0))
+             (if (= ordinal 10) #t
+                 (and (= 0 (g3t-native-role-step categorical-native ordinal))
+                      (step (+ ordinal 1))))))
+    (check "arm sampled attention allocator fault"
+           (= 0 (g3t-test-fail-a2-after 0)))
+    (check "sampled attention failure leaves prompt"
+           (not (= 0 (g3t-native-role-step categorical-native 10))))
+    (check "disarm sampled attention fault"
+           (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+    (check "sampled attention failure preserves cache length"
+           (= 1 (g3t-test-cache-length categorical-native)))
+    (check "sampled attention can retry"
+           (= 0 (g3t-native-role-step categorical-native 10)))
+    (check "sampled append roles 11..20"
+           (let step ((ordinal 11))
+             (if (= ordinal 21) #t
+                 (and (= 0 (g3t-native-role-step categorical-native ordinal))
+                      (step (+ ordinal 1))))))
     (g3t-test-sample-token categorical-native)))
 (check "categorical G3-S token byte"
        (and (>= categorical-token 0) (< categorical-token 256)))
@@ -307,7 +386,7 @@
        (and (= 0 (g3t-test-rng-word categorical-native 2))
             (= 0 (g3t-test-rng-word categorical-native 3))))
 (check "categorical abort retains prompt"
-       (not (= 1 (g3t-test-cache-empty categorical-native))))
+       (= 1 (g3t-test-cache-length categorical-native)))
 (check "categorical input release"
        (g3t-generation-tensor-release! categorical-input))
 (check "categorical generator close" (g3t-generator-close! categorical-generator))
