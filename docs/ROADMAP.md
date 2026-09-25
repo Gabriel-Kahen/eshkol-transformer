@@ -858,6 +858,16 @@ comparisons; its seal is
 Root independently reran the same source/tree with the same 246 checks and
 15 byte comparisons; the verified 87-file root seal is
 `tr3-fresh-resume-root-d835a51-20260925/SHA256SUMS` (`1967e564...`).
+The bounded [private TR3-C retention diagnosis](TR3_C_RETENTION_CYCLE_DIAGNOSIS.md)
+passes pinned f31/LLVM21 ASan/UBSan/LSan tests at 32 and 128 genuine
+snapshot→C2 SAVE/LOAD→joint restore cycles after one P1/C2 identity prewarm,
+including pre-seal failure/preservation/retry. Native and Scheme live
+authority counts stay flat, while F32 retired controls grow exactly 17,552
+bytes per cycle, alongside linear P1/O2/C2/I2 terminal records. Section 13's
+1,024/8,192 live-authority horizons remain unproved; the accepted joint plan
+already permits linear terminal records and makes no flat-total-memory claim.
+Clean `cd2899c`/tree `81a9980` evidence is sealed at
+`tr3-retention-cycle-cd2899c-20260925/SHA256SUMS` (`b8280e90...`).
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
