@@ -892,12 +892,17 @@ aggregate with byte-identical 46,777 checks, fifteen source contracts, Q0
 `g3t-manual-logits-983e424-sealed/SEAL.sha256` (`37854213...`).
 
 The [source-private manual P1 prefill leaf](g3/G3_T_MANUAL_P1_PREFILL_LEAF.md)
-is in an isolated candidate from `07588f8`. It routes an authentic kind-0
+is an isolated candidate from `07588f8`. It routes an authentic kind-0
 call and owned P1 input through the existing 21 G3-N/N2/A2 roles into a
 prepared A2 cache and detached kind-3 `[1,256]` logits result. The explicit
 21-role witness remains test-local; the production G3-M orchestration
-signature is the next contract gate. Focused normal/repeat/sanitizer evidence
-and independent review are pending; no public G3-G/package/CLI claim follows.
+signature is the next contract gate. Source `c9e7a32`/tree `39412b8` passed
+the pinned network-none normal/repeat/ASan+UBSan+LSan aggregate with
+byte-identical 46,827 checks, 16 source contracts, Q0 4/4, and production
+test-symbol exclusion. The evidence is sealed at
+`g3t-manual-p1-prefill-c9e7a32-20260925/SEAL.sha256` (`4e901c3a...`).
+Independent integration review remains pending; no public G3-G/package/CLI
+claim follows.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
