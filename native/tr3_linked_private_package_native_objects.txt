@@ -24,5 +24,6 @@ o2_bridge.o
 o2_optimizer.o
 p1_identity.o
 t1_i64_shell.o
+tr3_c_private_initializer_bridge.o
 tr3_c_restore_bindings.o
 tr3b_objective_bridge.o

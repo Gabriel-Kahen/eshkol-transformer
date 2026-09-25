@@ -6,10 +6,14 @@ typedef void (*target_fn)(void);
 extern void et_tr3_c_private_i2_restore_create_v1(void);
 #define TARGET et_tr3_c_private_i2_restore_create_v1
 typedef void (*target_fn)(void);
-#else
+#elif defined(TR3_HOSTILE_INIT)
 extern void __eshkol_lib_init__(void *);
 #define TARGET __eshkol_lib_init__
 typedef void (*target_fn)(void *);
+#else
+extern int et_tr3_c_private_initialize_v1(void);
+#define TARGET et_tr3_c_private_initialize_v1
+typedef int (*target_fn)(void);
 #endif
 
 int main(void) {

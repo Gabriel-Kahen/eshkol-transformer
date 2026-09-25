@@ -4,6 +4,7 @@ __current_ad_tape
 __errno_location
 __eshkol_register_parallel_workers
 __global_arena
+__repl_shared_arena
 __stack_chk_fail
 __tls_get_addr
 abort
@@ -70,6 +71,8 @@ eshkol_list_to_vector_sret
 eshkol_make_exception_with_header
 eshkol_mkdir
 eshkol_object_abi_v1_h8_s0_a8
+eshkol_parallel_scope_begin
+eshkol_parallel_scope_end
 eshkol_parameter_converter_ref_ptr
 eshkol_parameter_ref_ptr
 eshkol_parameter_set_ptr
@@ -97,6 +100,7 @@ eshkol_rmdir
 eshkol_runtime_close_port
 eshkol_runtime_emergency_raise_v1
 eshkol_runtime_emergency_rethrow_if_v1
+eshkol_runtime_init
 eshkol_runtime_register_port
 eshkol_runtime_reserve_exception_handlers_v1
 eshkol_set_error_location
@@ -131,6 +135,8 @@ fseek
 fstat
 fsync
 ftell
+g_exception_handler_stack
+get_global_arena_shared
 getpid
 getrandom
 logf
