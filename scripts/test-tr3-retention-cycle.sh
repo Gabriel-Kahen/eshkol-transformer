@@ -74,7 +74,8 @@ script = script.replace("tr3_joint_runtime", "tr3_retention_runtime")
 script = script.replace("joint-runtime", "retention-runtime")
 script = script.replace(
     '  -w /workspace "${image}" bash -lc',
-    '  -e "TR3_CYCLE_HORIZONS=${TR3_CYCLE_HORIZONS:-1024 8192}" \\n  -w /workspace "${image}" bash -lc',
+    '  -e "TR3_CYCLE_HORIZONS=${TR3_CYCLE_HORIZONS:-1024 8192}" '
+    '-w /workspace "${image}" bash -lc',
 )
 script = script.replace(
     "compile native/checkpoint_io.c checkpoint_io.o",
@@ -109,7 +110,7 @@ script = script.replace(
 script = script.replace(
     'export ESHKOL_CXX_COMPILER=/usr/bin/clang++-21',
     'printf "#!/bin/sh\nexec /usr/bin/clang++-21 -fsanitize=address,undefined '
-    '-fno-omit-frame-pointer \\\"\$@\\\"\n" > /out/clang++-san\n'
+    '-fno-omit-frame-pointer \\\"\\$@\\\"\n" > /out/clang++-san\n'
     'chmod +x /out/clang++-san\n'
     'export ESHKOL_CXX_COMPILER=/out/clang++-san')
 runtime = '''ESHKOL_ARENA_POISON=1 /usr/bin/time -v -o /out/runtime.time \\
