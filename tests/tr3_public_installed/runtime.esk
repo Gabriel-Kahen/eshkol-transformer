@@ -1,16 +1,11 @@
-;;; Installed X1/T2/trainer facet caller. Other operands use test-only
-;;; same-package boxed entries; public names come from installed facades.
+;;; Installed X1/T2/D1/D2/trainer facet caller. Remaining operands use
+;;; test-only same-package boxed entries.
 (require transformer.config)
+(require transformer.data)
 (require transformer.tokenizer)
 (require transformer.trainer)
 (require transformer.error_consumer)
 
-(extern void d2-open ptr ptr ptr :real et_e1b_public_d2_token_dataset_open_v1)
-(extern void d2-close ptr ptr :real et_e1b_public_d2_token_dataset_close_v1)
-(extern void d2-next ptr ptr
-        :real et_e1b_public_d2_token_dataset_next_batch_v1)
-(extern void d2-release-batch ptr ptr
-        :real et_e1b_public_d2_token_batch_release_v1)
 (extern void m3t-initializer ptr ptr
         :real et_e1b_public_m3t_initializer_state_v1)
 (extern void m3t-model ptr ptr ptr :real et_e1b_public_m3t_model_create_v1)
@@ -23,22 +18,6 @@
 (extern void o2-create ptr ptr ptr
         :real et_e1b_public_o2_optimizer_create_v1)
 
-(define (token-dataset-open options tokenizer)
-  (let ((output (vector #f)))
-    (d2-open (vector options) (vector tokenizer) output)
-    (vector-ref output 0)))
-(define (token-dataset-close! dataset)
-  (let ((output (vector #f)))
-    (d2-close (vector dataset) output)
-    (vector-ref output 0)))
-(define (token-dataset-next-batch dataset)
-  (let ((output (vector #f)))
-    (d2-next (vector dataset) output)
-    (vector-ref output 0)))
-(define (token-batch-release! batch)
-  (let ((output (vector #f)))
-    (d2-release-batch batch output)
-    (vector-ref output 0)))
 (define (diagnostic-initializer-state seed)
   (let ((output (vector #f)))
     (m3t-initializer (vector seed) output)
@@ -185,11 +164,69 @@
     (tokenizer-save! tokenizer
                      (string-append corpus-directory "/unused-tokenizer.t1")
                      (vector 'forged-policy))))
+(define writer-summary
+  (token-corpus-write! corpus-directory (tokenizer-fingerprint tokenizer)
+                       (tokenizer-vocab-size tokenizer) 4
+                       '(0 1 2 3 4 5 6 7 8 9 10 11 12 13)))
+(define validated-summary
+  (token-corpus-validate corpus-directory 1048576 1048576 65536))
+(check "installed D1 summary shard count"
+       (and (= (token-corpus-summary-shard-count writer-summary) 4)
+            (= (token-corpus-summary-shard-count validated-summary) 4)))
+(check "installed D1 summary total tokens"
+       (= (token-corpus-summary-total-tokens validated-summary) 14))
+(check "installed D1 summary vocabulary"
+       (= (token-corpus-summary-vocab-size validated-summary) 256))
+(check "installed D1 summary shard limit"
+       (= (token-corpus-summary-shard-token-limit validated-summary) 4))
+(check "installed D1 summary fingerprint"
+       (string=? (token-corpus-summary-tokenizer-fingerprint validated-summary)
+                 (tokenizer-fingerprint tokenizer)))
+(check "installed D1 summary has shard bytes"
+       (> (token-corpus-summary-total-shard-bytes validated-summary) 0))
 (define (dataset-options)
     (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
           ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
           ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
           ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define probe-dataset (token-dataset-open (dataset-options) tokenizer))
+(define start-cursor (token-dataset-cursor probe-dataset))
+(check "installed D2 cursor is detached bytes"
+       (and (bytevector? start-cursor)
+            (bytes-equal? start-cursor (token-dataset-cursor probe-dataset))
+            (not (eq? start-cursor (token-dataset-cursor probe-dataset)))))
+(define probe-batch (token-dataset-next-batch probe-dataset))
+(check "installed D2 live batch" (and (procedure? probe-batch)
+                                       (not (token-dataset-end? probe-batch))
+                                       (token-batch-validate probe-batch)))
+(check "installed D2 batch accessors stable"
+       (and (eq? (token-batch-inputs probe-batch)
+                 (token-batch-inputs probe-batch))
+            (eq? (token-batch-targets probe-batch)
+                 (token-batch-targets probe-batch))
+            (eq? (token-batch-loss-mask probe-batch)
+                 (token-batch-loss-mask probe-batch))))
+(expect-error "live D2 batch rejects seek"
+              'invalid-state 'token-dataset-seek!
+  (lambda () (token-dataset-seek! probe-dataset start-cursor)))
+(expect-error "wrong-kind D2 batch accessor"
+              'invalid-argument 'token-batch-inputs
+  (lambda () (token-batch-inputs (vector 'forged))))
+(expect-error "wrong-kind D2 batch release"
+              'invalid-argument 'token-batch-release!
+  (lambda () (token-batch-release! (vector 'forged))))
+(expect-error "forged D2 dataset cursor"
+              'invalid-argument 'token-dataset-cursor
+  (lambda () (token-dataset-cursor (vector 'forged))))
+(check "installed D2 batch release" (token-batch-release! probe-batch))
+(expect-error "released D2 batch is stale"
+              'invalid-state 'token-batch-validate
+  (lambda () (token-batch-validate probe-batch)))
+(check "installed D2 seek after release"
+       (token-dataset-seek! probe-dataset start-cursor))
+(check "installed D2 idempotent batch release"
+       (token-batch-release! probe-batch))
+(check "installed D2 close" (token-dataset-close! probe-dataset))
 (define failure-dataset (token-dataset-open (dataset-options) tokenizer))
 (define model
   (with-region ('tr3-public-model 65536)
@@ -256,5 +293,5 @@
 (expect-error "C2 detached-state release retains public error mapping"
               'invalid-argument 'trainer-state-release!
   (lambda () (trainer-state-release! (vector 'forged))))
-(display "TR3-PUBLIC-T2-FACET-PASS")
+(display "TR3-PUBLIC-D2-FACET-PASS")
 (newline)
