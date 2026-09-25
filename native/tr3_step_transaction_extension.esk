@@ -22,7 +22,7 @@
       result)))
 
 (define (tr3-step-frame? frame)
-  (and (vector? frame) (= (vector-length frame) 13)
+  (and (vector? frame) (= (vector-length frame) 14)
        (eq? (vector-ref frame 0) tr3-step-frame-tag)
        (eq? (vector-ref frame 1) frame)
        (let loop ((remaining (vector-ref tr3-step-frames 0)))
@@ -90,8 +90,12 @@
                (counters (vector (vector-ref record 19)
                                  (vector-ref record 20)
                                  (vector-ref record 21)))
+               (epoch-start (bytevector-copy
+                              (vector-ref record 17) 0
+                              (bytevector-length (vector-ref record 17))))
                (frame (vector tr3-step-frame-tag #f record token cursor
-                              rng modes counters 'active #f #f #f #f))
+                              rng modes counters 'active #f #f #f #f
+                              epoch-start))
                (successor (cons frame (vector-ref tr3-step-frames 0))))
           (vector-set! frame 1 frame)
           ;; Reauthenticate after the last provider call. Publication below is

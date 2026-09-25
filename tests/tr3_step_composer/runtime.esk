@@ -75,6 +75,8 @@
                (loop (+ i 1)))))))
 
 (define directory (diagnose 'argv (lambda () (car (cdr (command-line))))))
+(define one-directory (diagnose 'argv-one (lambda () (car (cdr (cdr (command-line)))))))
+(define empty-directory (diagnose 'argv-empty (lambda () (car (cdr (cdr (cdr (command-line))))))))
 (define resolved
   (diagnose 'config (lambda ()
   (x1-private-config-resolve
@@ -201,19 +203,112 @@
 (check "parameter updated" (not (same-bytes? before after)))
 (emit-bytes "TR3-STEP-KEY-AFTER" after)
 
-(check "EOS is explicit unsupported condition"
+(set! injected 'rewind)
+(check "failure after EOS rewind is categorized"
        (error-at? 'invalid-state 'tr3-step-composer-internal!
          (lambda () (tr3-step-composer-internal! trainer))))
-(check "EOS failure preserves prior committed step"
+(check "failure after rewind restores committed authority"
        (and (same-bytes? after (parameter-bits (vector-ref handles 0)))
             (same-bytes? committed-cursor
                          (d2-token-dataset-cursor dataset))
             (= (vector-ref record 19) 3)
             (= (vector-ref record 20) 1)
+            (= (vector-ref record 21) 0)
+            (= (o2-optimizer-completed-updates-internal optimizer) 1)
             (all-gradient-metadata? handles 0 0)
             (= (live-transients) baseline-transients)
             (null? (vector-ref tr3-step-frames 0))
             (not (vector-ref tr3-step-composer-active 0))))
+(set! injected #f)
+(check "EOS before first microbatch retries on same trainer"
+       (diagnose 'eos-before-first
+         (lambda () (tr3-step-composer-internal! trainer))))
+(check "EOS-before-first publishes exact controls"
+       (and (same-bytes? committed-cursor (d2-token-dataset-cursor dataset))
+            (= (vector-ref record 19) 6)
+            (= (vector-ref record 20) 2)
+            (= (vector-ref record 21) 1)
+            (= (o2-optimizer-completed-updates-internal optimizer) 2)
+            (all-gradient-metadata? handles 0 0)
+            (= (live-transients) baseline-transients)))
+(emit-bytes "TR3-STEP-KEY-AFTER-2" (parameter-bits (vector-ref handles 0)))
 (check "lease unlink" (tr3-lease-unenroll-internal! trainer))
 (check "dataset close" (d2-token-dataset-close! dataset))
+
+;;; Fresh genuine one-row D2/optimizer: EOS falls between microbatches, then
+;;; the next update crosses two epoch boundaries on the same authority.
+(define one-dataset
+  (diagnose 'one-dataset
+    (lambda () (d2-token-dataset-open (dataset-config one-directory) tokenizer))))
+(define one-model
+  (diagnose 'one-model
+    (lambda () (m3t-public-model-create resolved
+                  (m3t-public-initializer-state 1729)))))
+(define one-handles (vector-ref (m3t-entry one-model 'model 'trainer-create #t) 8))
+(define one-optimizer
+  (diagnose 'one-optimizer
+    (lambda () (o2-public-optimizer-create (optimizer-config one-handles)
+                                           (module-parameters one-model)))))
+(define one-trainer
+  (diagnose 'one-trainer
+    (lambda () (tr3-lease-create-internal resolved tokenizer one-dataset
+                                           one-model one-optimizer))))
+(define one-record (car (vector-ref tr3-trainers 0)))
+(define one-start (d2-token-dataset-cursor one-dataset))
+(define one-before (parameter-bits (vector-ref one-handles 0)))
+(set! injected 'rewind)
+(check "between-microbatch rewind failure is categorized"
+       (error-at? 'invalid-state 'tr3-step-composer-internal!
+         (lambda () (tr3-step-composer-internal! one-trainer))))
+(check "between-microbatch rollback is exact"
+       (and (same-bytes? one-start (d2-token-dataset-cursor one-dataset))
+            (same-bytes? one-before (parameter-bits (vector-ref one-handles 0)))
+            (= (vector-ref one-record 19) 0)
+            (= (vector-ref one-record 20) 0)
+            (= (vector-ref one-record 21) 0)
+            (= (o2-optimizer-completed-updates-internal one-optimizer) 0)
+            (all-gradient-metadata? one-handles 0 0)
+            (= (live-transients) baseline-transients)
+            (null? (vector-ref tr3-step-frames 0))))
+(set! injected #f)
+(check "EOS between microbatches commits on retry"
+       (diagnose 'eos-between
+         (lambda () (tr3-step-composer-internal! one-trainer))))
+(define one-end (d2-token-dataset-cursor one-dataset))
+(display "TR3-STEP-ONE-CONTROLS ")
+(display (vector-ref one-record 19)) (display " ")
+(display (vector-ref one-record 20)) (display " ")
+(display (vector-ref one-record 21)) (newline)
+(check "between-microbatch controls and cursor"
+       (and (not (same-bytes? one-start one-end))
+            (= (vector-ref one-record 19) 2)
+            (= (vector-ref one-record 20) 1)
+            (= (vector-ref one-record 21) 1)
+            (= (o2-optimizer-completed-updates-internal one-optimizer) 1)
+            (all-gradient-metadata? one-handles 0 0)))
+(check "one update may cross two epoch boundaries"
+       (diagnose 'two-rewinds
+         (lambda () (tr3-step-composer-internal! one-trainer))))
+(check "two-boundary controls and cursor"
+       (and (same-bytes? one-end (d2-token-dataset-cursor one-dataset))
+            (= (vector-ref one-record 19) 4)
+            (= (vector-ref one-record 20) 2)
+            (= (vector-ref one-record 21) 3)
+            (= (o2-optimizer-completed-updates-internal one-optimizer) 2)
+            (all-gradient-metadata? one-handles 0 0)))
+(check "one-row lease unlink" (tr3-lease-unenroll-internal! one-trainer))
+(check "one-row dataset close" (d2-token-dataset-close! one-dataset))
+
+;;; The accepted constructor is the empty-finite-data admission boundary.
+(define empty-dataset
+  (diagnose 'empty-dataset
+    (lambda () (d2-token-dataset-open (dataset-config empty-directory)
+                                      tokenizer))))
+(check "empty finite D2 rejects at trainer constructor"
+       (error-at? 'invalid-state 'trainer-create
+         (lambda () (tr3-lease-create-internal resolved tokenizer empty-dataset
+                                                one-model one-optimizer))))
+(check "empty constructor retains no lease"
+       (null? (vector-ref tr3-trainers 0)))
+(check "empty dataset close" (d2-token-dataset-close! empty-dataset))
 (display "TR3-STEP-COMPOSER-PASS checks=") (display checks) (newline)

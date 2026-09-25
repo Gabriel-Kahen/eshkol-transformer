@@ -29,6 +29,10 @@ evidence="$(readlink -f -- "${evidence}")"
   die "evidence must be outside the checkout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus"
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
+  --output "${evidence}/one" --rows one
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
+  --output "${evidence}/empty" --rows empty
 
 docker run --rm --network none \
   -v "${PROJECT_ROOT}:/workspace:ro" \
@@ -59,11 +63,12 @@ export ESHKOL_LIB_DIR=/workspace/lib ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
     /workspace/tests/tr3_step_composer/runtime.esk -o /out/runtime \
     > /out/compile.stdout 2> /out/compile.stderr
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
-  /out/runtime /out/corpus > /out/runtime.stdout 2> /out/runtime.stderr
+  /out/runtime /out/corpus /out/one /out/empty \
+    > /out/runtime.stdout 2> /out/runtime.stderr
 '
 test ! -s "${evidence}/compile.stderr"
 test ! -s "${evidence}/runtime.stderr"
-grep -Fx 'TR3-STEP-COMPOSER-PASS checks=20' "${evidence}/runtime.stdout" >/dev/null
+grep -Fx 'TR3-STEP-COMPOSER-PASS checks=33' "${evidence}/runtime.stdout" >/dev/null
 python3 - "${PROJECT_ROOT}" "${evidence}/source-closure.txt" <<'PY'
 from pathlib import Path
 import re
@@ -108,8 +113,8 @@ observations = [line.replace('TR3-STEP-COMPOSER-OBS', 'TR3-STEP-OBS')
                 for line in lines if line.startswith('TR3-STEP-COMPOSER-OBS ')]
 before = next(line for line in lines if line.startswith('TR3-STEP-KEY-BEFORE '))
 after = next(line for line in lines if line.startswith('TR3-STEP-KEY-AFTER '))
-assert len(observations) == 5 and observations[-2].split()[1] == '0' and observations[-1].split()[1] == '1'
-target.write_text('\n'.join((before, *observations[-2:], after,
+assert len(observations) >= 5 and observations[3].split()[1] == '0' and observations[4].split()[1] == '1'
+target.write_text('\n'.join((before, *observations[3:5], after,
                              'TR3-STEP-LEAF-PASS checks=41')) + '\n')
 PYNUM
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${oracle}" \
@@ -117,6 +122,11 @@ ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${oracle}" \
   > "${evidence}/numeric.stdout" 2> "${evidence}/numeric.stderr"
 grep -E '^TR3-STEP-NUMERICAL-PASS before_max_abs=[0-9.e+-]+ after_max_abs=[0-9.e+-]+$' \
   "${evidence}/numeric.stdout" >/dev/null
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${oracle}" \
+  -m tests.tr3_step_composer.check_eos_trajectory "${evidence}/runtime.stdout" \
+  > "${evidence}/trajectory.stdout" 2> "${evidence}/trajectory.stderr"
+grep -E '^TR3-STEP-EOS-TRAJECTORY-PASS max_abs=[0-9.e+-]+ after1=[0-9.e+-]+ after2=[0-9.e+-]+$' \
+  "${evidence}/trajectory.stdout" >/dev/null
 python3 - "${evidence}/numeric-witness.stdout" "${evidence}/nonfinite.stdout" <<'PYNUM'
 from pathlib import Path
 import sys
@@ -145,6 +155,7 @@ grep -F 'nonfinite objective observation' \
   printf 'source_count\t%s\n' "$(wc -l <"${evidence}/source-closure.txt")"
   printf 'result\t%s\n' "$(tail -1 "${evidence}/runtime.stdout")"
   printf 'numeric\t%s\n' "$(cat "${evidence}/numeric.stdout")"
+  printf 'trajectory\t%s\n' "$(cat "${evidence}/trajectory.stdout")"
   printf 'nonfinite_negative\tPASS\n'
 } > "${evidence}/manifest.tsv"
 (cd "${evidence}" && find . -type f ! -name SHA256SUMS -printf '%P\n' | \

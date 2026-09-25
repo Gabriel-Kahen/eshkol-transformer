@@ -765,6 +765,12 @@ failure cleanup, same-trainer retry, genuine two-microbatch commit, and an
 explicit EOS negative. The independent PyTorch key-weight maximum absolute
 error is `1.86e-9`; a nonfinite mutant is rejected. Evidence is sealed at
 `tr3-step-composer-root-f5649ab-20260925/SHA256SUMS` (`b78043c9...`).
+The follow-on source-private [finite-D2 EOS composer extension](TR3_STEP_PRIVATE_COMPOSER.md)
+stages epoch rewinds and proves the accepted global update/epoch/cursor
+equation before the first O2 write. Its genuine one- and two-row fixtures
+exercise EOS before and between microbatches, multiple boundaries per update,
+empty-D2 constructor rejection, and rollback after rewind. Public trainer,
+streaming EOS, metrics, C ownership, and resume proof remain pending.
 Source `0fdefc8`/tree `df5ccd9` is integrated byte-identically at `4d56381`.
 Root's pinned merged gate passes 91 runtime checks with 25 source loads, exact
 cursor/RNG/counter publication, key-weight PyTorch maximum absolute error
