@@ -102,8 +102,18 @@ and ASan/UBSan/LSan passed 1,196 checks with 4 I2 and 1 owner allocation
 cuts plus inherited Step22/21B/call-entry regressions. Root verified the
 `g3c4-logits-reservation-9e9e628-20260924` source closure
 (`a7c54e4...`), byte-identical merged source, Q0 4/4 and structural checker.
-Native frame begin/role step, manual transcript, frame prepare/commit and
-public result remain downstream.
+The reviewed native manual frame-begin Step23B source `0ecac398`/tree
+`d4ec9a9` is integrated byte-identically as `865c1ff`. It admits an exact
+prefill T1/T2 or decode-after-one-prefix call only with authentic owned input,
+pending logits and idle cache, then copies the IDs into an ordinal-zero
+private transcript. Failure preserves caller state; abort releases the frame;
+prepare-end and finish reject incomplete work. Pinned f31 normal, repeat and
+ASan/UBSan/LSan passed 745 checks with allocation and borrow cuts, inherited
+Step23A 1,196 checks and Step22 affected gates. Root verified
+`g3c4-step23b-b3295e1/seal.txt`, the exact source closure, merged Q0 4/4
+and structural checker. The accepted numerical helpers still execute whole
+schedules, so a separate 21-role decomposition/scratch seam must precede
+manual `role_step`; frame prepare/commit and public result remain downstream.
 
 The isolated Eshkol F32 runtime line now has a reviewed public `float32?` leaf
 at `d960add`/tree `7e0e0fd`: supported f31/LLVM21 focused 11/11 twice, F32
