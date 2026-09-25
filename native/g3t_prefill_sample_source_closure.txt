@@ -84,6 +84,9 @@ include/eshkol_transformer/g3n_primitives_abi.h
 include/eshkol_transformer/g3s_sampling_abi.h
 native/g3n_primitives_provider.c
 native/g3s_sampling_provider.c
+templates/p1/module_roots.esk.tmpl
+scripts/test-p1-construction-schedule.sh
+tests/p1/construction_schedule_identity_test.esk
 src/eshkol_transformer/g3t_prefill_roles.inc
 native/g3t_prefill_sample_extension.esk
 native/g3t_prefill_sample_local_symbols.txt

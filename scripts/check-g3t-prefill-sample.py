@@ -13,6 +13,9 @@ additions = [
     "include/eshkol_transformer/g3s_sampling_abi.h",
     "native/g3n_primitives_provider.c",
     "native/g3s_sampling_provider.c",
+    "templates/p1/module_roots.esk.tmpl",
+    "scripts/test-p1-construction-schedule.sh",
+    "tests/p1/construction_schedule_identity_test.esk",
     "src/eshkol_transformer/g3t_prefill_roles.inc",
     "native/g3t_prefill_sample_extension.esk",
     "native/g3t_prefill_sample_local_symbols.txt",
@@ -48,4 +51,6 @@ assert "all 256 prefill logits equal independent M3T" in test
 assert "G3T_ONLY_NORMAL" in (ROOT / "scripts/test-g3t-prefill-sample.sh").read_text()
 assert "-DET_G3T_PREFILL_SAMPLE_PRIVATE" in (
     ROOT / "scripts/test-g3t-prefill-sample.sh").read_text()
+assert "construction-schedule-equal?" in (
+    ROOT / "internal/p1/lib/transformer/module.esk").read_text()
 print("G3-T private P1/G1 prefill/sample source contract: PASS")
