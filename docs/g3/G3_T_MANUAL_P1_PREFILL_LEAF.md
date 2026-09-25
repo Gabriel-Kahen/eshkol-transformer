@@ -23,5 +23,15 @@ K/V bits to an independently executed M3T P2 reference, checks the A2
 committed cache and unchanged RNG, verifies detached result ownership after
 parent release, and exercises identity, ordinal, borrowed-result, borrowed-old-
 cache, binding, candidate allocation, and abort cuts. The accepted generate
-P1/G0, P1/G1, and P2/G0 tests remain in the same aggregate. Gate result and
-source commit are recorded in the roadmap after the pinned run.
+P1/G0, P1/G1, and P2/G0 tests remain in the same aggregate. Source
+`c9e7a32`/tree `39412b8` passed the pinned f31/LLVM21 network-none normal,
+repeat, and ASan+UBSan+LSan gate with 46,827 byte-identical checks each,
+empty runtime/compiler stderr, 16 source contracts, Q0 4/4 and
+production-object test-symbol exclusion. One sanitizer launch used
+`detect_leaks=1`. External evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/g3t-manual-p1-prefill-c9e7a32-20260925/SEAL.sha256`
+(SHA256 `4e901c3ac679d18ae685e244fe741ecb29b98b9c08e338320eb62e766d2d9bb9`).
+Two earlier attempts reached normal runtime and exposed test-only assertion
+ordering errors: each diagnostic queried the A2 cache while its own injected
+fault or read lease was still active. Those logs were retained; the passing
+candidate ends the fault/lease before the unchanged-state check.
