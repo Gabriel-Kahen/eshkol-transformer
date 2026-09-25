@@ -1173,7 +1173,10 @@ installed caller constructs a byte tokenizer, round-trips bytes, checks
 accessors and typed forged-policy load/save failures, then passes that
 receiver to `trainer-create`. Successful load/save awaits an installed
 same-aggregate C1 policy producer. D2/M3T/P1/O2 remain test-local, and
-the T2 linked gate and exact package measurements are pending.
+the pinned `bd5dc8f` linked gate passed with 49 Eshkol sources, 30 native
+objects, 69 native paths, 4,156 raw definitions, 33 exports and 173
+undefined symbols. The poisoned public caller passed with empty stderr;
+`tr3-public-t2-linked-bd5dc8f-20260925/SHA256SUMS` is verified.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
