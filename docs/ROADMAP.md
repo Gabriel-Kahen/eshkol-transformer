@@ -731,10 +731,12 @@ The [proposed C2 G3-G public contract](g3/G3_G_C2_PUBLIC_CONTRACT_PROPOSAL.md)
 specifies the fifteen-name facade, single-token publication, detached ownership,
 error mapping and eight-facade package target for review only. No dependent
 runtime or public acceptance follows from this draft.
-The isolated [G3-T private ID clone leaf](g3/G3_T_OUTPUT_IDS_CLONE_LEAF.md)
-implements only the accepted native kind-5 generated-ID copy and typed release.
+The [G3-T private ID clone leaf](g3/G3_T_OUTPUT_IDS_CLONE_LEAF.md), integrated
+at `86161a2`, implements only the accepted native kind-5 generated-ID copy
+and typed release.
 Its pinned normal/repeat/ASan+UBSan+LSan focused gate passed 242 checks in
-each mode, six source contracts and Q0 4/4. It leaves Eshkol result wrapping,
+each mode, six source contracts and Q0 4/4; sealed evidence is
+`g3t-output-ids-clone-055af2e`. It leaves Eshkol result wrapping,
 the other clones and public G3-G open.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
