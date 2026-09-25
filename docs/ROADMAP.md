@@ -607,6 +607,9 @@ finds the real five-operand lease constructor in the compiled root, but no
 same-package C producer for its operands and no trainer unenroll/close. The
 rooted registry retains every successful trainer and its receivers. Freeze
 those lifecycle and ownership contracts before a C construct/close seam.
+The source-backed audit `6293a30` is integrated at `858ce0d`, with seal
+`tr3-private-trainer-entry-blocker-6293a30-20260924/SHA256SUMS`
+(`c52bba5d...`); it adds no runtime entry.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
