@@ -25,6 +25,24 @@
 (extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
 (extern i64 g3t-test-frame-binding-flip ptr
         :real et_g3t_test_frame_binding_flip_v1)
+(extern ptr g3t-native-output-ids-clone ptr
+        :real et_g3t_private_output_ids_clone_v1)
+(extern i64 g3t-test-clone-state ptr
+        :real et_g3t_test_ids_clone_state_v1)
+(extern i64 g3t-test-clone-length ptr
+        :real et_g3t_test_ids_clone_length_v1)
+(extern i64 g3t-test-clone-word ptr
+        :real et_g3t_test_ids_clone_word_v1)
+(extern ptr g3t-test-clone-borrow-begin ptr
+        :real et_g3t_test_ids_clone_borrow_begin_v1)
+(extern i64 g3t-test-clone-borrow-end ptr
+        :real et_g3t_test_ids_clone_borrow_end_v1)
+(extern i64 g3t-test-live-clones
+        :real et_g3t_test_live_ids_clones_v1)
+(extern i64 g3t-test-fail-alloc-after i64
+        :real et_g3t_test_fail_alloc_after_v1)
+(extern i64 g3t-test-fail-i1-after i64
+        :real et_g3t_test_fail_i1_after_v1)
 
 (define checks 0)
 (define (check label value)
@@ -72,6 +90,9 @@
 (define output (g3t-native-output-reserve native 2))
 (check "empty ID owner reserved" (and (not (null? output))
                                        (= 1 (g3t-test-output-word output 5))))
+(check "pending output cannot clone IDs"
+       (and (null? (g3t-native-output-ids-clone output))
+            (= 0 (g3t-test-live-clones))))
 (define wrong-input (g3t-native-input-from-token 65))
 (check "wrong length frame rejected"
        (not (= 0 (g3t-native-frame-begin native wrong-input 1))))
@@ -162,9 +183,49 @@
                   (same (+ index 1))))))
 (check "finish" (= 0 (g3t-native-call-finish native)))
 (check "pins drained" (= 0 (g3t-test-pin-count native)))
+(check "P2/G0 clone header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "P2/G0 header cut is atomic"
+       (and (null? (g3t-native-output-ids-clone output))
+            (= 0 (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))))
+(check "P2/G0 header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 3) #t
+      (begin
+        (check "P2/G0 I1 clone cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "P2/G0 I1 clone cut atomic"
+               (and (null? (g3t-native-output-ids-clone output))
+                    (= 0 (g3t-test-live-clones))
+                    (= 1 (g3t-test-output-state output))
+                    (= 2 (g3t-test-cache-length native))
+                    (= 0 (g3t-test-rng-word native 2))))
+        (cuts (+ index 1)))))
+(check "P2/G0 I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define p2-clone (g3t-native-output-ids-clone output))
+(check "P2/G0 empty detached I1 owner"
+       (and (not (null? p2-clone))
+            (= 1 (g3t-test-clone-state p2-clone))
+            (= 0 (g3t-test-clone-length p2-clone))
+            (= 1 (g3t-test-live-clones))))
+(check "wrong-kind tensor release rejected"
+       (and (not (= 0 (g3t-native-tensor-release output)))
+            (= 1 (g3t-test-output-state output))
+            (= 1 (g3t-test-clone-state p2-clone))))
 (check "generator close" (g3t-generator-close! generator))
 (check "output release" (= 0 (g3t-native-output-release output)))
 (check "output tombstone" (= -1 (g3t-test-output-state output)))
+(check "P2/G0 clone survives output and generator release"
+       (and (= 1 (g3t-test-clone-state p2-clone))
+            (= 0 (g3t-test-clone-length p2-clone))))
+(check "P2/G0 clone release" (= 0 (g3t-native-tensor-release p2-clone)))
+(check "P2/G0 clone tombstone and idempotence"
+       (and (= -1 (g3t-test-clone-state p2-clone))
+            (= 0 (g3t-native-tensor-release p2-clone))
+            (= 0 (g3t-test-live-clones))))
 (check "input release" (= 0 (g3t-native-tensor-release input)))
 
 (define reference-input (g3t-checked-m3t-input-create))
@@ -224,6 +285,23 @@
 (check "wrapped close" (g3t-generator-close! wrapped-generator))
 (check "wrapped output release" (g3t-output-release! wrapped-output))
 (check "wrapped input release" (g3t-generation-tensor-release! wrapped-input))
+
+;; The same zero-budget envelope remains valid for a one-token prompt.
+(define p1-zero-generator (g3t-generator-create model tokenizer policy))
+(define p1-zero-input (g3t-generation-token-input-create 65))
+(define p1-zero-output (g3t-zero-generate! p1-zero-generator p1-zero-input))
+(define p1-zero-native-output
+  (vector-ref (g3t-prefill-entry p1-zero-output 'output 'g3t-p1-zero) 3))
+(define p1-zero-clone (g3t-native-output-ids-clone p1-zero-native-output))
+(check "P1/G0 empty ID clone"
+       (and (not (null? p1-zero-clone))
+            (= 0 (g3t-test-clone-length p1-zero-clone))
+            (= 1 (g3t-test-clone-state p1-zero-clone))))
+(check "P1/G0 output release" (g3t-output-release! p1-zero-output))
+(check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
+(check "P1/G0 detached clone survives" (= 0 (g3t-test-clone-length p1-zero-clone)))
+(check "P1/G0 clone release" (= 0 (g3t-native-tensor-release p1-zero-clone)))
+(check "P1/G0 input release" (g3t-generation-tensor-release! p1-zero-input))
 
 (define abort-generator (g3t-generator-create model tokenizer policy))
 (define abort-native
@@ -334,9 +412,49 @@
        (= 0 (g3t-native-call-finish g1-regression-native)))
 (check "G1 regression pins drained"
        (= 0 (g3t-test-pin-count g1-regression-native)))
+(define g1-id (g3t-test-output-word g1-regression-output 6))
+(define g1-source-borrow (g3t-test-output-borrow-begin g1-regression-output))
+(check "G1 source borrow begins" (not (null? g1-source-borrow)))
+(check "G1 borrowed source cannot clone"
+       (and (null? (g3t-native-output-ids-clone g1-regression-output))
+            (= 0 (g3t-test-live-clones))))
+(check "G1 source borrow ends" (= 0 (g3t-test-output-borrow-end g1-source-borrow)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "G1 I1 clone cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "G1 I1 clone cut atomic"
+               (and (null? (g3t-native-output-ids-clone g1-regression-output))
+                    (= 0 (g3t-test-live-clones))
+                    (= 1 (g3t-test-output-state g1-regression-output))
+                    (= g1-id (g3t-test-output-word g1-regression-output 6))
+                    (= 2 (g3t-test-cache-length g1-regression-native))))
+        (cuts (+ index 1)))))
+(check "G1 I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define g1-clone (g3t-native-output-ids-clone g1-regression-output))
+(check "G1 detached ID copy"
+       (and (not (null? g1-clone))
+            (= 1 (g3t-test-clone-length g1-clone))
+            (= g1-id (g3t-test-clone-word g1-clone))))
+(define g1-clone-borrow (g3t-test-clone-borrow-begin g1-clone))
+(check "G1 clone borrow begins" (not (null? g1-clone-borrow)))
+(check "G1 clone borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release g1-clone)))
+            (= 1 (g3t-test-clone-state g1-clone))))
+(check "G1 clone borrow ends" (= 0 (g3t-test-clone-borrow-end g1-clone-borrow)))
 (check "G1 regression close" (g3t-generator-close! g1-regression))
 (check "G1 regression output release"
        (= 0 (g3t-native-output-release g1-regression-output)))
+(check "G1 clone survives parent releases"
+       (and (= g1-id (g3t-test-clone-word g1-clone))
+            (= 1 (g3t-test-clone-state g1-clone))))
+(check "G1 clone typed release" (= 0 (g3t-native-tensor-release g1-clone)))
+(check "G1 clone tombstone"
+       (and (= -1 (g3t-test-clone-state g1-clone))
+            (= 0 (g3t-native-tensor-release g1-clone))
+            (= 0 (g3t-test-live-clones))))
 (check "G1 regression input release"
        (= 0 (g3t-native-tensor-release g1-regression-input)))
 (display "G3-T P2 zero budget PASS: checks=")
