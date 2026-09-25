@@ -892,7 +892,7 @@ aggregate with byte-identical 46,777 checks, fifteen source contracts, Q0
 `g3t-manual-logits-983e424-sealed/SEAL.sha256` (`37854213...`).
 
 The [source-private manual P1 prefill leaf](g3/G3_T_MANUAL_P1_PREFILL_LEAF.md)
-is an isolated candidate from `07588f8`. It routes an authentic kind-0
+is integrated from `07588f8` at `c6a9235`. It routes an authentic kind-0
 call and owned P1 input through the existing 21 G3-N/N2/A2 roles into a
 prepared A2 cache and detached kind-3 `[1,256]` logits result. The explicit
 21-role witness remains test-local; the production G3-M orchestration
@@ -901,20 +901,20 @@ the pinned network-none normal/repeat/ASan+UBSan+LSan aggregate with
 byte-identical 46,827 checks, 16 source contracts, Q0 4/4, and production
 test-symbol exclusion. The evidence is sealed at
 `g3t-manual-p1-prefill-c9e7a32-20260925/SEAL.sha256` (`4e901c3a...`).
-Independent integration review remains pending; no public G3-G/package/CLI
-claim follows.
+Root independently reviewed the source and verified the sealed blobs against
+the integration tree. No public G3-G/package/CLI claim follows.
 
 The [source-private G3-M P1 orchestration leaf](g3/G3_M_PREFILL_P1_LEAF.md)
-is a separate bounded candidate. The accepted `(g3m-prefill-p1! generator
+is integrated at `aec48a9`. The accepted `(g3m-prefill-p1! generator
 input)` arity-two seam runs the production 21-role P1 schedule through the
 reviewed G3-T native frame, returns detached kind-3 logits, and aborts all
 uncommitted failures. Source `143b037`/tree `22475f8` passed the pinned
 network-none normal/repeat/ASan+UBSan+LSan aggregate with byte-identical
 46,852 checks, 17 source contracts, Q0 4/4 and production native test-symbol
 exclusion. Evidence is sealed at
-`g3m-prefill-p1-143b037-20260925/SEAL.sha256` (`ffa6d997...`). Independent
-integration review remains pending. It does not add manual P2/decode or a
-public G3-G facade/package.
+`g3m-prefill-p1-143b037-20260925/SEAL.sha256` (`ffa6d997...`). Root
+independently reviewed and byte-matched the tested source. It does not add
+manual P2/decode or a public G3-G facade/package.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -1141,8 +1141,9 @@ exact symbol boundary; evidence is sealed at
 Root independently reviewed the prior bridge, source wrapper, linked scripts,
 fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.
-The [versioned public trainer facet](TR3_PUBLIC_INSTALLED_FACET.md) is an
-isolated candidate: canonical `transformer.trainer` adds A0 `trainer-create`
+The [versioned public trainer facet](TR3_PUBLIC_INSTALLED_FACET.md) is
+integrated at `7065a13`: canonical `transformer.trainer` adds A0
+`trainer-create`
 and `trainer-release!` to C2 `trainer-state-release!` only with one new
 same-registry TR3 aggregate. The C2 archive stays paired with its exact
 pre-TR3 trainer facade, copied into the C2 artifact and selected by the C2
@@ -1154,11 +1155,11 @@ and public trainer caller. Both evidence sets are sealed at
 `tr3-public-installed-linked-57ca36b-20260925`. Ordinary
 installed operand producers, step/train/evaluate, state/load and resume
 remain outside this facet.
-The next isolated TR3 installed X1 leaf adds the unchanged six-operation
-`transformer.config` facade to that same aggregate: parse/resolve were
+The TR3 installed X1 leaf integrated at `d9799c1` adds the unchanged
+six-operation `transformer.config` facade to that same aggregate: parse/resolve were
 already present, while validate/canonical/fingerprint/ref receive reviewed
-same-package boxed wrappers and private renames. A compile-only public caller
-now references all six X1 C entries and the trainer facet; linked gate and
+same-package boxed wrappers and private renames. The linked public caller
+references all six X1 C entries and the trainer facet; the gate and
 exact package measurements passed on `f3827a4` with 49 Eshkol sources,
 30 native objects, 69 native paths, 26 exports and 173 undefined symbols.
 The poisoned public caller passed all six X1 operations, malformed/forged
