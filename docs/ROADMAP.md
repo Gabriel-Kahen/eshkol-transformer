@@ -716,6 +716,10 @@ detached output ID/length/cache-length/RNG clone seams, and the accepted G3-G
 facade/package tuple. Public output accessors therefore await an exact G3-G
 ownership and error contract plus those upstream transports; the private P1/G1
 witness alone cannot justify a public generator or CLI.
+The [proposed C2 G3-G public contract](g3/G3_G_C2_PUBLIC_CONTRACT_PROPOSAL.md)
+specifies the fifteen-name facade, single-token publication, detached ownership,
+error mapping and eight-facade package target for review only. No dependent
+runtime or public acceptance follows from this draft.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
