@@ -756,13 +756,14 @@ normal/repeat/ASan+UBSan+LSan gate passes 345 checks each, plus six source
 contracts and Q0 4/4; sealed evidence is
 `g3t-output-rng-clone-f7b8362`. The four private clones are integrated;
 public result wrapping and G3-G remain unaccepted.
-The [private T1 input leaf](g3/G3_T_INPUT_FROM_T1_LEAF.md) is an isolated
-candidate from `70753da`. It authenticates same-aggregate sealed T1 byte IDs
+The [private T1 input leaf](g3/G3_T_INPUT_FROM_T1_LEAF.md), integrated at
+`d3cbad7`, authenticates same-aggregate sealed T1 byte IDs
 and copies P1/P2 into a distinct G3-T I1[1,P] owner. Its pinned
 normal/repeat/ASan+UBSan+LSan focused gate passes 46,469 checks each, including
-1,024/8,192 ownership cycles, seven source contracts and Q0 4/4; sealed
-evidence is `g3t-input-from-t1-70753da`. The public G3-G adapter and package
-remain separate review gates.
+1,024/8,192 ownership cycles and seven source contracts; sealed evidence is
+`g3t-input-from-t1-70753da`. Tracked Q0 admission at `b494105` passes 4/4
+on the integrated tree. The public G3-G adapter and package remain separate
+review gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
