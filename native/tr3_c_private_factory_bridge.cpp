@@ -172,12 +172,12 @@ bool invoke_create() {
   }
   const eshkol_tagged_value_t answer = tr3_c_factory_create_source(
       args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+  const bool published = answer.type == ESHKOL_VALUE_HEAP_PTR &&
+                         answer.data.ptr_val != 0;
+  if (published) trainer_shell = answer;
   eshkol_parallel_scope_end();
   eshkol_pop_exception_handler();
-  if (answer.type != ESHKOL_VALUE_HEAP_PTR || answer.data.ptr_val == 0)
-    return false;
-  trainer_shell = answer;
-  return true;
+  return published;
 }
 
 bool invoke_close() {
