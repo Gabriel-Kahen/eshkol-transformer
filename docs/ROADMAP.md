@@ -744,10 +744,12 @@ generated count G and typed release. Pinned normal/repeat/ASan+UBSan+LSan
 passes 281 checks each, plus six source contracts and Q0 4/4; sealed evidence
 is `g3t-output-lengths-clone-86161a2`. Public accessors and the remaining
 clone kinds stay pending.
-The [private cache-length clone leaf](g3/G3_T_OUTPUT_CACHE_LENGTHS_CLONE_LEAF.md)
-adds only the accepted kind-7 I1[1] snapshot of P+G and typed release.
-Pinned normal/repeat/ASan+UBSan+LSan passes 320 checks each, plus six source
-contracts and Q0 4/4. Public result wrapping and RNG cloning stay pending.
+The [private cache-length clone leaf](g3/G3_T_OUTPUT_CACHE_LENGTHS_CLONE_LEAF.md),
+integrated at `6d4c17f`, adds only the accepted kind-7 I1[1] snapshot of P+G
+and typed release. Pinned normal/repeat/ASan+UBSan+LSan passes 320 checks each,
+plus six source contracts and Q0 4/4; sealed evidence is
+`g3t-output-cache-lengths-clone-d3dfab0`. Public result wrapping and RNG
+cloning stay pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
