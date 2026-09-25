@@ -2365,14 +2365,16 @@
        (= 0 (g3t-native-frame-prepare manual-cut-native manual-cut-result)))
 (define manual-cut-old-borrow
   (g3t-test-manual-cache-borrow-begin manual-cut-native))
+(define manual-cut-old-blocked
+  (and (not (null? manual-cut-old-borrow))
+       (not (= 0 (g3t-native-call-prepare-end manual-cut-native)))))
+(check "manual P1 old cache borrow ends"
+       (= 0 (g3t-test-manual-cache-borrow-end manual-cut-old-borrow)))
 (check "manual P1 borrowed old cache blocks prepare-end"
-       (and (not (null? manual-cut-old-borrow))
-            (not (= 0 (g3t-native-call-prepare-end manual-cut-native)))
+       (and manual-cut-old-blocked
             (= 0 (g3t-test-cache-length manual-cut-native))
             (= 0 (g3t-test-rng-word manual-cut-native 2))
             (= 14 (g3t-test-pin-count manual-cut-native))))
-(check "manual P1 old cache borrow ends"
-       (= 0 (g3t-test-manual-cache-borrow-end manual-cut-old-borrow)))
 (check "manual P1 stale binding injected"
        (= 0 (g3t-test-frame-binding-flip manual-cut-native)))
 (check "manual P1 stale binding blocks prepare-end"
