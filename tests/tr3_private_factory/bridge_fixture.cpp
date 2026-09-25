@@ -23,6 +23,10 @@ static int copies;
 static char copied[7][16385];
 static bool source_failure;
 static bool close_busy;
+static uint64_t active_region_depth;
+static int shell_token;
+
+extern "C" uint64_t region_get_depth(void) { return active_region_depth; }
 
 extern "C" int eshkol_runtime_init(void) { return 0; }
 extern "C" arena_t *get_global_arena_shared(void) { return &arena; }
@@ -86,12 +90,15 @@ extern "C" eshkol_tagged_value_t fake_create(
                                ET_TR3_C_REASON_RAISED_E1, 0);
     return boolean(false);
   }
-  return boolean(true);
+  return eshkol_make_ptr(reinterpret_cast<uint64_t>(&shell_token),
+                         ESHKOL_VALUE_HEAP_PTR);
 }
-extern "C" eshkol_tagged_value_t fake_close(void)
+extern "C" eshkol_tagged_value_t fake_close(eshkol_tagged_value_t)
     __asm__("tr3-c-factory-close-source");
-extern "C" eshkol_tagged_value_t fake_close(void) {
-  if (parallel_depth != 1) std::abort();
+extern "C" eshkol_tagged_value_t fake_close(eshkol_tagged_value_t trainer) {
+  if (parallel_depth != 1 ||
+      trainer.data.ptr_val != reinterpret_cast<uint64_t>(&shell_token))
+    std::abort();
   if (close_busy) {
     close_busy = false;
     et_tr3_c_factory_report_v1(ET_TR3_C_INVALID_STATE,
@@ -135,6 +142,11 @@ int main(int argc, char **argv) {
                ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_ADMISSION,
                ET_TR3_C_REASON_NOT_READY, false)) return 1;
   if (et_tr3_c_private_initialize_v1() != ET_TR3_C_INIT_READY_V1) return 2;
+  active_region_depth = 1;
+  if (!matches(et_tr3_c_private_trainer_create_v1(&request),
+               ET_TR3_C_INVALID_STATE, ET_TR3_C_STAGE_ADMISSION,
+               ET_TR3_C_REASON_BUSY, false)) return 18;
+  active_region_depth = 0;
   if (!matches(et_tr3_c_private_trainer_create_v1(nullptr),
                ET_TR3_C_INVALID_ARGUMENT, ET_TR3_C_STAGE_ADMISSION,
                ET_TR3_C_REASON_MALFORMED_REQUEST, false)) return 3;
