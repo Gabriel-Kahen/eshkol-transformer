@@ -86,12 +86,14 @@ tokenizer roots after publication. It holds the exact generated IDs, G and P+G
 lengths, final RNG words and raw bytes as immutable snapshots, independent of
 subsequent generator mutation, replacement or close. `generation-output-ids`,
 `-lengths`, `-cache-lengths` and `-rng` authenticate the output, call the four
-already accepted but **unimplemented** G3-T private clone stems, enroll fresh
+accepted source-private G3-T clone stems, enroll fresh
 closed G3 owners and return detached copies; clone failure enrolls no live shell
 and leaves the output unchanged. IDs are a fresh one-element list around the
 owned i64[G] clone. Text is a fresh list and bytevector copy; caller changes to
 one returned list or bytevector affect no later accessor. No output accessor
 returns a borrowed native header, cache view, T1 shell or G3-T test observer.
+The four native clone stems have focused private witnesses; the Eshkol wrappers,
+package linkage and public accessor behavior described here remain proposed.
 
 For each ID, length, cache-length or RNG accessor, allocate and root its future
 Eshkol shell, pending entry, registry cons cell and (for IDs) one-element result
