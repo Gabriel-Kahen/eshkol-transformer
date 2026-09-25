@@ -1,7 +1,15 @@
+#define _POSIX_C_SOURCE 200809L
 #include "f32_parameter_internal.h"
 #include "o2_optimizer_internal.h"
 
 #include <stdint.h>
+#include <time.h>
+
+int64_t et_tr3_cycle_test_monotonic_millis_v1(void) {
+  struct timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return -1;
+  return (int64_t)now.tv_sec * INT64_C(1000) + now.tv_nsec / 1000000;
+}
 
 int64_t et_p1_test_live_entry_count_v1(void);
 int64_t et_p1_test_tombstone_count_v1(void);

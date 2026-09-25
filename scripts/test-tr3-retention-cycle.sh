@@ -132,7 +132,7 @@ grep -E '^TR3-C JOINT RUNTIME PASS: [0-9]+ checks, 42 tensors, abort/retry$' \\
   "${evidence}/runtime.stdout" >/dev/null'''
 assert check in script
 script = script.replace(check, '''for horizon in ${TR3_CYCLE_HORIZONS:-32 128}; do
-  grep -E "^TR3-C CYCLE PASS horizon=${horizon} checks=[0-9]+ arena_delta=[0-9]+$" \\
+  grep -E "^TR3-C CYCLE PASS horizon=${horizon} checks=[0-9]+ arena_delta=[0-9]+ save_ms=[0-9]+ restore_ms=[0-9]+$" \\
     "${evidence}/${horizon}.stdout" >/dev/null
   if grep -E 'ERROR: AddressSanitizer|runtime error:|LeakSanitizer' \\
       "${evidence}/${horizon}.stderr"; then exit 1; fi
