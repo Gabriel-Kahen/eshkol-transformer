@@ -15,6 +15,15 @@ adoption gates pass; the separate #117/#121 guard-order repairs, their combined
 aggregate evidence, full supported CI, and final integration review remain pending.
 No workstream status changes solely from the pin update.
 
+The separate F32/master composition remains draft in fork PR #1. Its local
+full suite passed 46/46 suites and 844/844 tests, and the execution-backed
+surface gate covered 1,110/1,110 constructs. Hosted CI on preceding head
+`b8a1a82c` completed with one stale generated-API-docs failure and one
+cancelled Windows ARM64 lite job; the other completed platform jobs passed.
+The docs repair is pushed at `d97c4b6b`, with local API-doc checks passing,
+and exact-head CI `36156858263` is pending. This does not repin the
+transformer or prove its successor-runtime gates.
+
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
 unpublished tail-body entry of the private construction rollback helper. The
