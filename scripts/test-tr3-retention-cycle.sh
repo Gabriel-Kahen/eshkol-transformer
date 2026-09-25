@@ -74,7 +74,7 @@ script = script.replace("tr3_joint_runtime", "tr3_retention_runtime")
 script = script.replace("joint-runtime", "retention-runtime")
 script = script.replace(
     '  -w /workspace "${image}" bash -lc',
-    '  -e "TR3_CYCLE_HORIZONS=${TR3_CYCLE_HORIZONS:-1024 8192}" \\\n  -w /workspace "${image}" bash -lc',
+    '  -e "TR3_CYCLE_HORIZONS=${TR3_CYCLE_HORIZONS:-1024 8192}" \\n  -w /workspace "${image}" bash -lc',
 )
 script = script.replace(
     "compile native/checkpoint_io.c checkpoint_io.o",
@@ -100,17 +100,17 @@ script = script.replace(
     'compile native/c2_checkpoint_core.c c2_checkpoint_core.o -DET_C2_CHECKPOINT_CORE_TESTING')
 script = script.replace(
     'compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o',
-    'compile tests/c2/c2_checkpoint_save_test_bridge.c cycle_counts.o\\n'
+    'compile tests/c2/c2_checkpoint_save_test_bridge.c cycle_counts.o\n'
     'compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o')
 script = script.replace(
     '       -I include -I native -I src)',
-    '       -I include -I native -I src\\n'
+    '       -I include -I native -I src\n'
     '       -fsanitize=address,undefined -fno-omit-frame-pointer)')
 script = script.replace(
     'export ESHKOL_CXX_COMPILER=/usr/bin/clang++-21',
-    'printf "#!/bin/sh\\nexec /usr/bin/clang++-21 -fsanitize=address,undefined '
-    '-fno-omit-frame-pointer \\\"$@\\\"\\n" > /out/clang++-san\\n'
-    'chmod +x /out/clang++-san\\n'
+    'printf "#!/bin/sh\nexec /usr/bin/clang++-21 -fsanitize=address,undefined '
+    '-fno-omit-frame-pointer \\\"\$@\\\"\n" > /out/clang++-san\n'
+    'chmod +x /out/clang++-san\n'
     'export ESHKOL_CXX_COMPILER=/out/clang++-san')
 runtime = '''ESHKOL_ARENA_POISON=1 /usr/bin/time -v -o /out/runtime.time \\
   timeout --foreground --signal=TERM --kill-after=5s 300s \\
