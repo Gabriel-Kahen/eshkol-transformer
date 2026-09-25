@@ -666,8 +666,20 @@ checks with identical stdout and empty stderr. Root reviewed source and tests,
 reran the merged-tree pinned normal witness (118 checks), static contracts and
 Q0 4/4, and sealed evidence at
 `/home/gabe/.codex/evidence/eshkol-transformer/g3t-final-publication-2355d2c-20260925/SHA256SUMS`
-(`eb7f3536...`). G0, public facade/accessors, generation loop and CLI remain
-open.
+(`eb7f3536...`). At that gate, G0, public facade/accessors, generation loop
+and CLI remained open.
+
+The isolated [P1/G0 zero-budget leaf](g3/G3_T_ZERO_BUDGET_LEAF.md) runs the
+authentic 21-role one-byte prefill and commits a prompt-only A2 cache with a
+live empty-ID/raw-text output and unchanged RNG. It preallocates output
+ownership before prefill, rejects token-frame/sample/draw paths, and retains
+G1's binding, cleanup, tombstone and source-private closure contracts. The
+pinned f31/LLVM21 network-none normal/repeat/ASan+UBSan+LSan witness passes
+122 checks with identical stdout and empty stderr; all 256 prefill logits
+match independent M3T first-row bits. Static source contracts and Q0 pass;
+sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/g3t-zero-budget-g0-20260925/SHA256SUMS`.
+Public facade/accessors, P2 input, generation loop and CLI remain open.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

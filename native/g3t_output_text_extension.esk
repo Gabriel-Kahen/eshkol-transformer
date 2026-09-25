@@ -9,14 +9,16 @@
   (let* ((operation 'g3t-t1-decode-output!)
          (entry (g3t-prefill-call-entry call operation))
          (output-entry (g3t-prefill-entry output 'output operation))
+         (budget (vector-ref (vector-ref (vector-ref entry 4) 7) 5))
          (tokenizer (vector-ref entry 6))
          (staging (vector-ref output-entry 5))
          (raw (vector-ref output-entry 6)))
     (if (not (and (eq? (vector-ref output-entry 2) 'pending)
                   (eq? (vector-ref output-entry 4) entry)
                   (eq? (vector-ref entry 8) output-entry)
-                  (bytevector? staging) (= (bytevector-length staging) 8)
-                  (bytevector? raw) (= (bytevector-length raw) 1)))
+                  (bytevector? staging)
+                  (= (bytevector-length staging) (* 8 budget))
+                  (bytevector? raw) (= (bytevector-length raw) budget)))
         (g3t-fail-raw 'invalid-state operation 2
                       "G3-T pending output text owner differs"))
     (if (not (= 0 (g3t-native-output-copy-decode-ids

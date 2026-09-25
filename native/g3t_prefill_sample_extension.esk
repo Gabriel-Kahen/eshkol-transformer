@@ -178,9 +178,10 @@
                   (eq? (vector-ref entry 8) #f)))
         (g3t-fail-raw 'invalid-argument operation 3
                       "G3-T leaf requires one pending output"))
-    (let* ((shell (vector 'g3t-output-private))
-           (staging (make-bytevector 8 0))
-           (raw (make-bytevector 1 0))
+    (let* ((budget (vector-ref (vector-ref (vector-ref entry 4) 7) 5))
+           (shell (vector 'g3t-output-private))
+           (staging (make-bytevector (* 8 budget) 0))
+           (raw (make-bytevector budget 0))
            (output (vector shell 'output 'pending #f entry staging raw
                            #f #f #f #f #f)))
       (vector-set! g3t-registry 0
