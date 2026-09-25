@@ -106,6 +106,7 @@ compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o \
 clang++-21 -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all -fPIC -fvisibility=hidden -fno-common \
   -fno-exceptions -fno-rtti \
+  -DET_TR3_C_PRIVATE_FACTORY_CANDIDATE \
   -isystem /fixed-source/inc -isystem /fixed-source/lib/core \
   -I native -MMD -MF /out/native/tr3_c_private_initializer_bridge.o.d \
   -c native/tr3_c_private_initializer_bridge.cpp \
@@ -164,6 +165,7 @@ timeout 10s /out/initializer-bridge-fixture \
   2> /out/initializer-bridge-fixture.stderr
 clang++-21 -std=c++17 -O0 -Wall -Wextra -Werror -Wpedantic \
   -fno-exceptions -fno-rtti \
+  -DET_TR3_C_PRIVATE_FACTORY_CANDIDATE \
   -isystem /fixed-source/inc -isystem /fixed-source/lib/core -I native \
   native/tr3_c_private_initializer_bridge.cpp \
   native/tr3_c_private_factory_bridge.cpp \
