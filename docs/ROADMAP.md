@@ -643,6 +643,18 @@ same-package C producer for its operands. The
 authenticated idle trainer record and returns its five receivers to their
 callers without destroying them. A C construct/handle contract remains
 pending; no public trainer or resume claim follows from unenrollment.
+The exact private source `8a29dcf`/tree `43bff41` is integrated with
+identical runtime, test, and script blobs at `cc84b49`. The worker's pinned
+normal 1,024/8,192 and sanitizer 1,024 runtime gates each pass 133
+unenrollment checks, with head/interior/tail unlink, reentry, failure,
+re-lease, and constant registry-count cases; the full linked package and
+hostile-link gate also passes. Root independently reran the pinned runtime
+gate with the same counts and verified all 56 evidence files at
+`tr3-private-lease-unenroll-root-8a29dcf-20260925/SHA256SUMS`
+(`663c2825...`). Worker final mapping is sealed at
+`tr3-private-lease-unenroll-final-8a29dcf-20260924/SHA256SUMS`
+(`7eb65cae...`). Physical arena reclamation and parallel registry races
+remain unproved.
 The source-backed audit `6293a30` is integrated at `858ce0d`, with seal
 `tr3-private-trainer-entry-blocker-6293a30-20260924/SHA256SUMS`
 (`c52bba5d...`); it adds no runtime entry.
