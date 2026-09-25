@@ -13,6 +13,11 @@ This project is being developed through coordinated Codex tasks.
 - Coordinate long builds by completion-triggered handoff. Use one bounded wait for
   relevant tasks and avoid repeated polls of unchanged processes or logs. Check
   a live build only when its result, resource condition, or a decision needs it.
+- Read only the relevant roadmap section and source contracts for a bounded task;
+  do not reload the full project history on each follow-up. Keep implementation
+  handoffs under 500 words: accepted contract, changed files, exact commit/tree,
+  test result, unresolved finding, and next completion gate. Link sealed logs
+  rather than pasting them into the conversation.
 - Work from the roadmap dependency graph. Do not implement a dependent subsystem
   against an invented upstream API.
 - Keep changes scoped to the assigned workstream. Coordinate contract changes with
