@@ -3,7 +3,8 @@
 The test-only `native/tr3_step_composer_root.esk` composes the accepted lease,
 TR3-B objective, pre-write transaction, and O2 commit tail in one Eshkol
 registry universe. `tr3-step-composer-internal! trainer` is source-private and
-requires the fixed context length two and accumulation count two. It owns a
+requires the fixed context length two and a positive configured accumulation
+count with an exactly representable cumulative binary32 mask weight. It owns a
 rooted ledger for the authentic step frame, one M3 input and seed, and the
 current D2 batch, M3 graph output, and graph-logits lease. It returns `#t`
 after one update; it publishes no public metrics or trainer facade.
@@ -13,10 +14,11 @@ the trainer-owned epoch-start cursor, seeks it, stages one completed epoch,
 and requests a real batch again. The accepted constructor rejects an empty
 finite dataset before lease enrollment. One update may cross more than one
 epoch boundary when the finite dataset has fewer rows than accumulation
-steps. Each real D2 batch advances exactly one cursor ordinal. The composer stages its
+steps. The rewind guard permits at most `A` boundaries in one update. Each
+real D2 batch advances exactly one cursor ordinal. The composer stages its
 input, runs the genuine M3 forward and TR3-B analytic VJP, reads the objective
 observation's bool-mask weight (one or two), then releases graph logits,
-output, and batch in that order. After two microbatches it releases input and
+output, and batch in that order. After `A` microbatches it releases input and
 seed, prepares the accepted O2 plan with the exact cumulative binary32 weight,
 and invokes the accepted private commit tail with the integer active-token
 count and staged epoch delta. The latter validates the accepted global
@@ -46,6 +48,9 @@ microbatches, injected failure after rewind with exact same-trainer rollback,
 two epoch boundaries within one update, and empty-D2 constructor rejection.
 The two-update key-weight trajectory is checked against an independent
 PyTorch reference with gradients recomputed at each updated parameter set.
-General accumulation counts, streaming datasets, automatic training loops,
-metrics, public APIs, C ownership, and resume-equivalence proof remain
-separate dependencies.
+The checkpoint trajectory witness also exercises `A=1` and `A=3` over three
+resumed updates with unequal active-token weights. Counts whose minimum mask
+weight exceeds `2^24`, or whose observed weight exceeds that exact integer
+range, reject before the first parameter write. Streaming datasets, automatic
+training loops, metrics, public APIs, and C ownership remain separate
+dependencies.
