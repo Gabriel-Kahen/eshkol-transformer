@@ -1,0 +1,7 @@
+;;; One private identity universe for snapshot composition and C2 SAVE.
+(load "tr3_c_snapshot_root.esk")
+(load "c2_o2_encode_extension.esk")
+(load "c2_model_encode_extension.esk")
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_save_extension.esk")
+(load "tr3_c_snapshot_save_extension.esk")

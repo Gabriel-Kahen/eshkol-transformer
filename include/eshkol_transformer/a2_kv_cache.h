@@ -139,6 +139,13 @@ int32_t et_a2_kv_cache_read_borrow_layer_v1(
 int32_t et_a2_kv_cache_read_borrow_end_v1(
     et_a2_kv_cache_read_borrow **borrow, et_kernel_error *error);
 
+#ifdef ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE
+/* Source-private admission helper. Returns one iff the complete caller span
+ * overlaps any live A2-owned allocation, including handle objects. */
+int32_t et_a2_kv_cache_private_storage_overlap_v1(
+    const void *pointer, size_t bytes);
+#endif
+
 #ifdef ET_A2_KV_CACHE_TESTING
 void et_a2_kv_cache_test_fail_alloc_after_v1(size_t successful_allocations);
 void et_a2_kv_cache_test_reset_allocator_v1(void);

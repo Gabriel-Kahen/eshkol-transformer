@@ -13,45 +13,83 @@
 #define ET_F32_OWNERSHIP_ORDINARY 0u
 #define ET_F32_OWNERSHIP_PRIVATE_CLONE 1u
 
+/* Released controls retain their first two authentication/list fields.  The
+ * remaining live payload is dead before retirement and becomes this node. */
+typedef struct f32_retired_index_node {
+  struct f32_retired_index_node *left;
+  struct f32_retired_index_node *right;
+  uint8_t height;
+  uint8_t kind;
+} f32_retired_index_node;
+
+enum f32_retired_control_kind {
+  F32_RETIRED_TENSOR = 1,
+  F32_RETIRED_BORROW,
+  F32_RETIRED_COPY_PLAN,
+  F32_RETIRED_PARAMETER,
+  F32_RETIRED_GRADIENT_PLAN,
+  F32_RETIRED_RESET_PLAN
+};
+
 struct et_f32_tensor {
   uint64_t magic;
   et_f32_tensor *registry_next;
-  size_t rank;
-  size_t element_count;
-  size_t byte_length;
-  et_f32_tensor_borrow *active_borrow;
-  size_t plan_pins;
-  uint64_t *shape;
-  size_t *strides;
-  float *data;
-  uint32_t ownership_kind;
+  union {
+    struct {
+      size_t rank;
+      size_t element_count;
+      size_t byte_length;
+      et_f32_tensor_borrow *active_borrow;
+      size_t plan_pins;
+      uint64_t *shape;
+      size_t *strides;
+      float *data;
+      uint32_t ownership_kind;
+    };
+    f32_retired_index_node retired_index;
+  };
 };
 
 struct et_f32_tensor_borrow {
   uint64_t magic;
   et_f32_tensor_borrow *registry_next;
-  et_f32_tensor *owner;
-  et_kernel_tensor_view_v1 view;
+  union {
+    struct {
+      et_f32_tensor *owner;
+      et_kernel_tensor_view_v1 view;
+    };
+    f32_retired_index_node retired_index;
+  };
 };
 
 struct et_f32_tensor_copy_plan {
   uint64_t magic;
   et_f32_tensor_copy_plan *registry_next;
-  size_t count;
-  et_f32_tensor_copy_assignment_v1 *assignments;
-  uint32_t consumed;
+  union {
+    struct {
+      size_t count;
+      et_f32_tensor_copy_assignment_v1 *assignments;
+      uint32_t consumed;
+    };
+    f32_retired_index_node retired_index;
+  };
 };
 
 struct et_f32_parameter {
   uint64_t magic;
   et_f32_parameter *registry_next;
-  et_f32_tensor *value;
-  et_f32_tensor *gradient;
-  const void *identity;
-  uint64_t contribution_count;
-  uint32_t normalization_weight_bits;
-  uint32_t gradient_state;
-  size_t plan_pins;
+  union {
+    struct {
+      et_f32_tensor *value;
+      et_f32_tensor *gradient;
+      const void *identity;
+      uint64_t contribution_count;
+      uint32_t normalization_weight_bits;
+      uint32_t gradient_state;
+      size_t plan_pins;
+    };
+    f32_retired_index_node retired_index;
+  };
 };
 
 typedef struct et_f32_gradient_plan_entry {
@@ -63,19 +101,29 @@ typedef struct et_f32_gradient_plan_entry {
 struct et_f32_gradient_plan {
   uint64_t magic;
   et_f32_gradient_plan *registry_next;
-  size_t count;
-  et_f32_gradient_plan_entry *entries;
-  uint64_t next_count;
-  uint32_t next_weight_bits;
-  uint32_t consumed;
+  union {
+    struct {
+      size_t count;
+      et_f32_gradient_plan_entry *entries;
+      uint64_t next_count;
+      uint32_t next_weight_bits;
+      uint32_t consumed;
+    };
+    f32_retired_index_node retired_index;
+  };
 };
 
 struct et_f32_gradient_reset_plan {
   uint64_t magic;
   et_f32_gradient_reset_plan *registry_next;
-  size_t count;
-  et_f32_parameter **parameters;
-  uint32_t consumed;
+  union {
+    struct {
+      size_t count;
+      et_f32_parameter **parameters;
+      uint32_t consumed;
+    };
+    f32_retired_index_node retired_index;
+  };
 };
 
 #define ET_F32_COPY_PLAN_MAGIC UINT64_C(0x4554463343504c4e)
@@ -101,6 +149,27 @@ static et_f32_tensor_copy_plan *retired_copy_plans;
 static et_f32_parameter *retired_parameters;
 static et_f32_gradient_plan *retired_gradient_plans;
 static et_f32_gradient_reset_plan *retired_reset_plans;
+static f32_retired_index_node *f32_retired_index_root;
+
+#define F32_RETIRED_INDEX_OFFSET offsetof(et_f32_tensor, retired_index)
+_Static_assert(F32_RETIRED_INDEX_OFFSET ==
+                   offsetof(et_f32_tensor_borrow, retired_index) &&
+                   F32_RETIRED_INDEX_OFFSET ==
+                   offsetof(et_f32_tensor_copy_plan, retired_index) &&
+                   F32_RETIRED_INDEX_OFFSET ==
+                   offsetof(et_f32_parameter, retired_index) &&
+                   F32_RETIRED_INDEX_OFFSET ==
+                   offsetof(et_f32_gradient_plan, retired_index) &&
+                   F32_RETIRED_INDEX_OFFSET ==
+                   offsetof(et_f32_gradient_reset_plan, retired_index),
+               "retired controls require one intrusive index offset");
+_Static_assert(sizeof(et_f32_tensor) == 88u &&
+                   sizeof(et_f32_tensor_borrow) == 96u &&
+                   sizeof(et_f32_tensor_copy_plan) == 40u &&
+                   sizeof(et_f32_parameter) == 64u &&
+                   sizeof(et_f32_gradient_plan) == 48u &&
+                   sizeof(et_f32_gradient_reset_plan) == 40u,
+               "retired index must not change control retention");
 
 typedef struct f32_allocation_envelope_state {
   uintptr_t low;
@@ -137,6 +206,10 @@ void et_f32_tensor_test_fail_alloc_after_v1(size_t allowed) {
 void et_f32_tensor_test_reset_allocator_v1(void) {
   allocation_limit = SIZE_MAX;
   successful_allocations = 0u;
+}
+
+size_t et_f32_tensor_test_successful_allocations_v1(void) {
+  return successful_allocations;
 }
 #endif
 
@@ -215,6 +288,169 @@ static int ranges_overlap(const void *left, size_t left_bytes,
          right_start < left_start + left_bytes;
 }
 
+#ifdef ET_F32_TENSOR_TESTING
+static size_t f32_retired_index_query_steps;
+#endif
+
+static size_t f32_retired_control_size(uint8_t kind) {
+  switch (kind) {
+    case F32_RETIRED_TENSOR:
+      return sizeof(et_f32_tensor);
+    case F32_RETIRED_BORROW:
+      return sizeof(et_f32_tensor_borrow);
+    case F32_RETIRED_COPY_PLAN:
+      return sizeof(et_f32_tensor_copy_plan);
+    case F32_RETIRED_PARAMETER:
+      return sizeof(et_f32_parameter);
+    case F32_RETIRED_GRADIENT_PLAN:
+      return sizeof(et_f32_gradient_plan);
+    case F32_RETIRED_RESET_PLAN:
+      return sizeof(et_f32_gradient_reset_plan);
+    default:
+      abort();
+  }
+}
+
+static const void *f32_retired_control(const f32_retired_index_node *node) {
+  return (const void *)((uintptr_t)node - F32_RETIRED_INDEX_OFFSET);
+}
+
+static uint8_t f32_retired_height(const f32_retired_index_node *node) {
+  return node == NULL ? 0u : node->height;
+}
+
+static void f32_retired_update_height(f32_retired_index_node *node) {
+  uint8_t left = f32_retired_height(node->left);
+  uint8_t right = f32_retired_height(node->right);
+  uint8_t maximum = left > right ? left : right;
+  if (maximum == UINT8_MAX) {
+    abort();
+  }
+  node->height = (uint8_t)(maximum + 1u);
+}
+
+static f32_retired_index_node *f32_retired_rotate_left(
+    f32_retired_index_node *root) {
+  f32_retired_index_node *next = root->right;
+  f32_retired_index_node *middle;
+  if (next == NULL) {
+    abort();
+  }
+  middle = next->left;
+  next->left = root;
+  root->right = middle;
+  f32_retired_update_height(root);
+  f32_retired_update_height(next);
+  return next;
+}
+
+static f32_retired_index_node *f32_retired_rotate_right(
+    f32_retired_index_node *root) {
+  f32_retired_index_node *next = root->left;
+  f32_retired_index_node *middle;
+  if (next == NULL) {
+    abort();
+  }
+  middle = next->right;
+  next->right = root;
+  root->left = middle;
+  f32_retired_update_height(root);
+  f32_retired_update_height(next);
+  return next;
+}
+
+static f32_retired_index_node *f32_retired_insert_node(
+    f32_retired_index_node *root, f32_retired_index_node *node) {
+  uintptr_t node_start = (uintptr_t)f32_retired_control(node);
+  size_t node_bytes = f32_retired_control_size(node->kind);
+  uintptr_t root_start;
+  size_t root_bytes;
+  int balance;
+  if (root == NULL) {
+    return node;
+  }
+  root_start = (uintptr_t)f32_retired_control(root);
+  root_bytes = f32_retired_control_size(root->kind);
+  if (!pointer_span_fits((const void *)node_start, node_bytes) ||
+      !pointer_span_fits((const void *)root_start, root_bytes)) {
+    abort();
+  }
+  if (node_start + node_bytes <= root_start) {
+    root->left = f32_retired_insert_node(root->left, node);
+  } else if (node_start >= root_start + root_bytes) {
+    root->right = f32_retired_insert_node(root->right, node);
+  } else {
+    abort();
+  }
+  f32_retired_update_height(root);
+  balance = (int)f32_retired_height(root->left) -
+            (int)f32_retired_height(root->right);
+  if (balance > 1) {
+    if (node_start < (uintptr_t)f32_retired_control(root->left)) {
+      return f32_retired_rotate_right(root);
+    }
+    root->left = f32_retired_rotate_left(root->left);
+    return f32_retired_rotate_right(root);
+  }
+  if (balance < -1) {
+    if (node_start > (uintptr_t)f32_retired_control(root->right)) {
+      return f32_retired_rotate_left(root);
+    }
+    root->right = f32_retired_rotate_right(root->right);
+    return f32_retired_rotate_left(root);
+  }
+  return root;
+}
+
+static void f32_retired_index_insert(void *control,
+                                     f32_retired_index_node *node,
+                                     uint8_t kind) {
+  if (control == NULL || node == NULL ||
+      control != f32_retired_control(node)) {
+    abort();
+  }
+  memset(node, 0, sizeof(*node));
+  node->height = 1u;
+  node->kind = kind;
+  f32_retired_index_root =
+      f32_retired_insert_node(f32_retired_index_root, node);
+}
+
+static int f32_retired_control_overlaps(const void *storage, size_t bytes) {
+  const f32_retired_index_node *node = f32_retired_index_root;
+  uintptr_t start;
+  uintptr_t end;
+  if (bytes == 0u) {
+    return 0;
+  }
+  if (!pointer_span_fits(storage, bytes)) {
+    return 1;
+  }
+  if (node == NULL) {
+    return 0;
+  }
+  start = (uintptr_t)storage;
+  end = start + bytes;
+  while (node != NULL) {
+    uintptr_t node_start = (uintptr_t)f32_retired_control(node);
+    size_t node_bytes = f32_retired_control_size(node->kind);
+#ifdef ET_F32_TENSOR_TESTING
+    f32_retired_index_query_steps++;
+#endif
+    if (!pointer_span_fits((const void *)node_start, node_bytes)) {
+      abort();
+    }
+    if (end <= node_start) {
+      node = node->left;
+    } else if (start >= node_start + node_bytes) {
+      node = node->right;
+    } else {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static int aligned_pointer(const void *pointer, size_t alignment) {
   return pointer != NULL && (uintptr_t)pointer % alignment == 0u;
 }
@@ -229,6 +465,120 @@ static et_f32_tensor *find_tensor(const void *candidate) {
   }
   return NULL;
 }
+
+#ifdef ET_F32_TENSOR_TESTING
+int32_t et_f32_tensor_test_metadata_snapshot_v1(
+    const et_f32_tensor *candidate,
+    et_f32_test_tensor_metadata_v1 *snapshot) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL || snapshot == NULL ||
+      snapshot->struct_size != sizeof(*snapshot) ||
+      tensor->rank > ET_KERNEL_MAX_RANK ||
+      (tensor->rank != 0u &&
+       (tensor->shape == NULL || tensor->strides == NULL))) {
+    return -1;
+  }
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->struct_size = sizeof(*snapshot);
+  snapshot->rank = tensor->rank;
+  snapshot->element_count = tensor->element_count;
+  snapshot->byte_length = tensor->byte_length;
+  snapshot->plan_pins = tensor->plan_pins;
+  snapshot->shape_storage = tensor->shape;
+  snapshot->stride_storage = tensor->strides;
+  snapshot->data_storage = tensor->data;
+  if (tensor->rank != 0u) {
+    memcpy(snapshot->shape, tensor->shape,
+           tensor->rank * sizeof(snapshot->shape[0]));
+    memcpy(snapshot->strides, tensor->strides,
+           tensor->rank * sizeof(snapshot->strides[0]));
+  }
+  return 0;
+}
+
+int32_t et_f32_tensor_test_metadata_corrupt_v1(et_f32_tensor *candidate,
+                                               uint32_t member,
+                                               size_t dimension) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL) {
+    return -1;
+  }
+  switch (member) {
+    case ET_F32_TEST_TENSOR_METADATA_RANK:
+      tensor->rank = tensor->rank == 0u ? 1u : tensor->rank - 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_ELEMENT_COUNT:
+      tensor->element_count = tensor->element_count == SIZE_MAX
+                                  ? tensor->element_count - 1u
+                                  : tensor->element_count + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_BYTE_LENGTH:
+      tensor->byte_length = tensor->byte_length == SIZE_MAX
+                                ? tensor->byte_length - 1u
+                                : tensor->byte_length + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_SHAPE:
+      if (dimension >= tensor->rank || tensor->shape == NULL) {
+        return -1;
+      }
+      tensor->shape[dimension] = tensor->shape[dimension] == UINT64_MAX
+                                     ? tensor->shape[dimension] - 1u
+                                     : tensor->shape[dimension] + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_STRIDE:
+      if (dimension >= tensor->rank || tensor->strides == NULL) {
+        return -1;
+      }
+      tensor->strides[dimension] = tensor->strides[dimension] == SIZE_MAX
+                                       ? tensor->strides[dimension] - 1u
+                                       : tensor->strides[dimension] + 1u;
+      return 0;
+    case ET_F32_TEST_TENSOR_METADATA_DATA:
+      tensor->data = NULL;
+      return 0;
+    default:
+      return -1;
+  }
+}
+
+int32_t et_f32_tensor_test_metadata_restore_v1(
+    et_f32_tensor *candidate,
+    const et_f32_test_tensor_metadata_v1 *snapshot) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL || snapshot == NULL ||
+      snapshot->struct_size != sizeof(*snapshot) ||
+      snapshot->rank > ET_KERNEL_MAX_RANK ||
+      (snapshot->rank != 0u &&
+       (snapshot->shape_storage == NULL ||
+        snapshot->stride_storage == NULL))) {
+    return -1;
+  }
+  tensor->rank = snapshot->rank;
+  tensor->element_count = snapshot->element_count;
+  tensor->byte_length = snapshot->byte_length;
+  tensor->plan_pins = snapshot->plan_pins;
+  tensor->shape = snapshot->shape_storage;
+  tensor->strides = snapshot->stride_storage;
+  tensor->data = snapshot->data_storage;
+  if (snapshot->rank != 0u) {
+    memcpy(tensor->shape, snapshot->shape,
+           snapshot->rank * sizeof(snapshot->shape[0]));
+    memcpy(tensor->strides, snapshot->strides,
+           snapshot->rank * sizeof(snapshot->strides[0]));
+  }
+  return 0;
+}
+
+int32_t et_f32_tensor_test_plan_pins_v1(const et_f32_tensor *candidate,
+                                        size_t *pins) {
+  et_f32_tensor *tensor = find_tensor(candidate);
+  if (tensor == NULL || pins == NULL) {
+    return -1;
+  }
+  *pins = tensor->plan_pins;
+  return 0;
+}
+#endif
 
 static et_f32_tensor_borrow *find_borrow(const void *candidate) {
   et_f32_tensor_borrow *cursor = live_borrows;
@@ -338,6 +688,8 @@ static void retire_tensor(et_f32_tensor *tensor) {
   tensor->strides = NULL;
   tensor->data = NULL;
   tensor->ownership_kind = ET_F32_OWNERSHIP_ORDINARY;
+  f32_retired_index_insert(tensor, &tensor->retired_index,
+                           F32_RETIRED_TENSOR);
   tensor->registry_next = retired_tensors;
   retired_tensors = tensor;
 }
@@ -357,6 +709,8 @@ static void retire_borrow(et_f32_tensor_borrow *borrow) {
   borrow->magic = 0u;
   borrow->owner = NULL;
   memset(&borrow->view, 0, sizeof(borrow->view));
+  f32_retired_index_insert(borrow, &borrow->retired_index,
+                           F32_RETIRED_BORROW);
   borrow->registry_next = retired_borrows;
   retired_borrows = borrow;
 }
@@ -366,6 +720,8 @@ static void retire_copy_plan(et_f32_tensor_copy_plan *plan) {
   plan->count = 0u;
   plan->assignments = NULL;
   plan->consumed = 0u;
+  f32_retired_index_insert(plan, &plan->retired_index,
+                           F32_RETIRED_COPY_PLAN);
   plan->registry_next = retired_copy_plans;
   retired_copy_plans = plan;
 }
@@ -379,6 +735,8 @@ static void retire_parameter(et_f32_parameter *parameter) {
   parameter->normalization_weight_bits = 0u;
   parameter->gradient_state = ET_F32_GRADIENT_ABSENT;
   parameter->plan_pins = 0u;
+  f32_retired_index_insert(parameter, &parameter->retired_index,
+                           F32_RETIRED_PARAMETER);
   parameter->registry_next = retired_parameters;
   retired_parameters = parameter;
 }
@@ -390,6 +748,8 @@ static void retire_gradient_plan(et_f32_gradient_plan *plan) {
   plan->next_count = 0u;
   plan->next_weight_bits = 0u;
   plan->consumed = 0u;
+  f32_retired_index_insert(plan, &plan->retired_index,
+                           F32_RETIRED_GRADIENT_PLAN);
   plan->registry_next = retired_gradient_plans;
   retired_gradient_plans = plan;
 }
@@ -399,6 +759,8 @@ static void retire_reset_plan(et_f32_gradient_reset_plan *plan) {
   plan->count = 0u;
   plan->parameters = NULL;
   plan->consumed = 0u;
+  f32_retired_index_insert(plan, &plan->retired_index,
+                           F32_RETIRED_RESET_PLAN);
   plan->registry_next = retired_reset_plans;
   retired_reset_plans = plan;
 }
@@ -465,44 +827,7 @@ static int storage_aliases_live_reference(const void *storage, size_t bytes) {
       return 1;
     }
   }
-  for (tensor = retired_tensors; tensor != NULL;
-       tensor = tensor->registry_next) {
-    if (ranges_overlap(storage, bytes, tensor, sizeof(*tensor))) {
-      return 1;
-    }
-  }
-  for (borrow = retired_borrows; borrow != NULL;
-       borrow = borrow->registry_next) {
-    if (ranges_overlap(storage, bytes, borrow, sizeof(*borrow))) {
-      return 1;
-    }
-  }
-  for (copy_plan = retired_copy_plans; copy_plan != NULL;
-       copy_plan = copy_plan->registry_next) {
-    if (ranges_overlap(storage, bytes, copy_plan, sizeof(*copy_plan))) {
-      return 1;
-    }
-  }
-  for (parameter = retired_parameters; parameter != NULL;
-       parameter = parameter->registry_next) {
-    if (ranges_overlap(storage, bytes, parameter, sizeof(*parameter))) {
-      return 1;
-    }
-  }
-  for (gradient_plan = retired_gradient_plans; gradient_plan != NULL;
-       gradient_plan = gradient_plan->registry_next) {
-    if (ranges_overlap(storage, bytes, gradient_plan,
-                       sizeof(*gradient_plan))) {
-      return 1;
-    }
-  }
-  for (reset_plan = retired_reset_plans; reset_plan != NULL;
-       reset_plan = reset_plan->registry_next) {
-    if (ranges_overlap(storage, bytes, reset_plan, sizeof(*reset_plan))) {
-      return 1;
-    }
-  }
-  return 0;
+  return f32_retired_control_overlaps(storage, bytes);
 }
 
 static int storage_aliases_live(const void *storage, size_t bytes) {
@@ -680,10 +1005,10 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
                                 et_f32_tensor **output,
                                 et_f32_tensor_error *error) {
   et_f32_tensor *tensor;
-  size_t count;
-  size_t bytes;
+  size_t count = 0u;
+  size_t bytes = 0u;
   size_t shape_bytes;
-  int empty;
+  int empty = 0;
   int32_t result;
   if (!caller_shape_span(rank, shape, &shape_bytes)) {
     if (error != NULL) {
@@ -993,6 +1318,118 @@ static int same_shape(const et_f32_tensor *left,
           memcmp(left->shape, right->shape,
                  left->rank * sizeof(*left->shape)) == 0);
 }
+
+#ifdef ET_I2_PRIVATE_OWNED_CLONE_MATCH
+static int et_i2_private_tensor_is_canonical(const et_f32_tensor *tensor) {
+  size_t element_count = 1u;
+  size_t expected_stride = sizeof(float);
+  int empty = 0;
+
+  if (tensor->rank == 0u) {
+    return tensor->shape == NULL && tensor->strides == NULL &&
+           tensor->element_count == 1u &&
+           tensor->byte_length == sizeof(float) && tensor->data != NULL;
+  }
+  if (tensor->shape == NULL || tensor->strides == NULL) {
+    return 0;
+  }
+  for (size_t index = 0u; index < tensor->rank; ++index) {
+    const uint64_t extent = tensor->shape[index];
+    if (extent == 0u) {
+      empty = 1;
+      element_count = 0u;
+      continue;
+    }
+    if (!empty &&
+        (extent > (uint64_t)SIZE_MAX ||
+         element_count > SIZE_MAX / (size_t)extent)) {
+      return 0;
+    }
+    if (!empty) {
+      element_count *= (size_t)extent;
+    }
+  }
+  if (empty) {
+    if (tensor->element_count != 0u || tensor->byte_length != 0u ||
+        tensor->data != NULL) {
+      return 0;
+    }
+    for (size_t index = 0u; index < tensor->rank; ++index) {
+      if (tensor->strides[index] != 0u) {
+        return 0;
+      }
+    }
+    return 1;
+  }
+  if (element_count > SIZE_MAX / sizeof(float) ||
+      tensor->element_count != element_count ||
+      tensor->byte_length != element_count * sizeof(float) ||
+      tensor->data == NULL) {
+    return 0;
+  }
+  for (size_t index = tensor->rank; index > 0u; --index) {
+    const size_t dimension = index - 1u;
+    if (tensor->strides[dimension] != expected_stride ||
+        tensor->shape[dimension] > (uint64_t)SIZE_MAX ||
+        expected_stride >
+            SIZE_MAX / (size_t)tensor->shape[dimension]) {
+      return 0;
+    }
+    expected_stride *= (size_t)tensor->shape[dimension];
+  }
+  return 1;
+}
+
+int32_t et_i2_private_owned_clone_match_v1(
+    const et_f32_tensor *candidate_value,
+    const et_f32_tensor *destination_value, uint32_t value_policy) {
+  et_f32_tensor *candidate = find_tensor(candidate_value);
+  et_f32_tensor *destination = find_tensor(destination_value);
+
+  if (candidate == NULL || destination == NULL ||
+      candidate->magic != ET_F32_TENSOR_MAGIC ||
+      destination->magic != ET_F32_TENSOR_MAGIC ||
+      candidate->ownership_kind != ET_F32_OWNERSHIP_PRIVATE_CLONE) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  if (candidate->active_borrow != NULL ||
+      destination->active_borrow != NULL || candidate->plan_pins != 0u ||
+      destination->plan_pins != 0u) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_STATE;
+  }
+  if (!et_i2_private_tensor_is_canonical(candidate) ||
+      !et_i2_private_tensor_is_canonical(destination) ||
+      candidate->rank != destination->rank ||
+      candidate->element_count != destination->element_count ||
+      candidate->byte_length != destination->byte_length ||
+      (candidate->rank != 0u &&
+       (memcmp(candidate->shape, destination->shape,
+               candidate->rank * sizeof(*candidate->shape)) != 0 ||
+        memcmp(candidate->strides, destination->strides,
+               candidate->rank * sizeof(*candidate->strides)) != 0))) {
+    return ET_I2_PRIVATE_OWNED_RESULT_SHAPE_MISMATCH;
+  }
+  if (value_policy != ET_I2_PRIVATE_OWNED_VALUE_FINITE &&
+      value_policy != ET_I2_PRIVATE_OWNED_VALUE_FINITE_NONNEGATIVE) {
+    return ET_I2_PRIVATE_OWNED_RESULT_INVALID_ARGUMENT;
+  }
+  for (size_t index = 0u; index < candidate->element_count; ++index) {
+    uint32_t bits;
+    memcpy(&bits, (const unsigned char *)candidate->data +
+                      index * sizeof(bits),
+           sizeof(bits));
+    if ((bits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000)) {
+      return ET_I2_PRIVATE_OWNED_RESULT_NONFINITE;
+    }
+    if (value_policy == ET_I2_PRIVATE_OWNED_VALUE_FINITE_NONNEGATIVE &&
+        (bits & UINT32_C(0x80000000)) != 0u &&
+        (bits & UINT32_C(0x7fffffff)) != 0u) {
+      return ET_I2_PRIVATE_OWNED_RESULT_INVALID_VALUE;
+    }
+  }
+  return ET_I2_PRIVATE_OWNED_RESULT_OK;
+}
+#endif
 
 int32_t et_f32_tensor_clone_v1(const et_f32_tensor *tensor,
                                et_f32_tensor **output,

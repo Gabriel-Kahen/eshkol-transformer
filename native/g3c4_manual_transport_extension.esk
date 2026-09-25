@@ -1,0 +1,209 @@
+;;; Private C4 manual transport witness. Load after the output envelope.
+;;; The caller supplies each role step; this source owns no numeric schedule.
+
+(extern ptr g3t-native-logits-reserve ptr
+        :real et_g3c4_private_logits_reserve_v1)
+(extern i64 g3t-native-frame-begin ptr ptr i64
+        :real et_g3c4_private_frame_begin_v1)
+(extern i64 g3t-native-role-step ptr i64
+        :real et_g3c4_private_role_step_v1)
+(extern i64 g3t-native-frame-prepare ptr ptr
+        :real et_g3c4_private_frame_prepare_v1)
+(extern i64 g3t-native-frame-commit ptr
+        :real et_g3c4_private_frame_commit_v1)
+
+(define (g3t-logits-entry-pending call-entry logits-entry operation)
+  (let* ((call (g3t-call-entry-live call-entry operation))
+         (entry (g3t-registry-entry logits-entry operation)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (vector? (vector-ref entry 0))
+                  (= (vector-length (vector-ref entry 0)) 1)
+                  (eq? (vector-ref entry 1) 'logits)
+                  (eq? (vector-ref entry 2) 'pending)
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) (vector-ref call 4))
+                  (eq? (vector-ref entry 5) (vector-ref call 5))
+                  (eq? (vector-ref entry 6) (vector-ref call 6))
+                  (eq? (vector-ref entry 7) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (eq? (vector-ref (vector-ref call 10) 4) entry)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 pending logits is not exact and linked"))
+    entry))
+
+(define (g3t-logits-reserve call-entry)
+  (let* ((operation 'g3t-logits-reserve)
+         (call (g3t-call-entry-live call-entry operation))
+         (ledger (vector-ref call 10)))
+    (if (vector-ref ledger 4)
+        (g3c4-fail 'invalid-state operation
+                   "C4 call already owns a pending result"))
+    (let* ((shell (vector 'g3c4-logits-private))
+           (entry (vector shell 'logits 'pending #f
+                          (vector-ref call 4) (vector-ref call 5)
+                          (vector-ref call 6) #f #f #f #f
+                          g3c4-model-profile))
+           (next (cons entry (vector-ref g3c4-registry 0)))
+           (native '()))
+      (guard (caught
+               (#t
+                 (if (not (null? native))
+                     (if (not (= (g3c4-native-tensor-release native) 0))
+                         (exit 134)))
+                 (if (eq? (vector-ref ledger 4) entry)
+                     (vector-set! ledger 4 #f))
+                 (g3c4-entry-dead! entry)
+                 (raise caught)))
+        (vector-set! g3c4-registry 0 next)
+        (let ((canonical (car (vector-ref g3c4-registry 0))))
+          (vector-set! ledger 4 canonical)
+          (let ((created
+                  (g3t-native-logits-reserve
+                    (vector-ref (vector-ref call 4) 3))))
+            (set! native created)
+            (if (null? created) (g3c4-native-fail operation))
+            (vector-set! canonical 3 created)
+            canonical))))))
+
+(define (g3t-frame-begin call-entry input frame-kind)
+  (let* ((operation 'g3t-frame-begin)
+         (call (g3t-call-entry-live call-entry operation))
+         (pending (vector-ref (vector-ref call 10) 4))
+         (prompt (g3c4-input-entry-live input operation)))
+    (if (not pending)
+        (g3c4-fail 'invalid-state operation "C4 call lacks pending logits"))
+    (g3t-logits-entry-pending call pending operation)
+    (if (not (and (m3t-exact-i64? frame-kind)
+                  (or (= frame-kind 1) (= frame-kind 2))))
+        (g3c4-fail 'invalid-argument operation "C4 frame kind is invalid"))
+    (g3c4-native-check
+      (g3t-native-frame-begin
+        (vector-ref (vector-ref call 4) 3)
+        (vector-ref prompt 3) frame-kind)
+      operation)))
+
+(define (g3t-role-step call-entry ordinal)
+  (let* ((operation 'g3t-role-step)
+         (call (g3t-call-entry-live call-entry operation))
+         (pending (vector-ref (vector-ref call 10) 4)))
+    (if (not pending)
+        (g3c4-fail 'invalid-state operation "C4 call lacks pending logits"))
+    (g3t-logits-entry-pending call pending operation)
+    (if (not (and (m3t-exact-i64? ordinal)
+                  (>= ordinal 0) (<= ordinal 20)))
+        (g3c4-fail 'invalid-argument operation "C4 role ordinal is invalid"))
+    (g3c4-native-check
+      (g3t-native-role-step (vector-ref (vector-ref call 4) 3) ordinal)
+      operation)))
+
+(define (g3t-frame-prepare call-entry logits-entry)
+  (let* ((operation 'g3t-frame-prepare)
+         (call (g3t-call-entry-live call-entry operation))
+         (pending (g3t-logits-entry-pending call logits-entry operation)))
+    (g3c4-require-model-eval (vector-ref call 5) operation 'invalid-state)
+    (g3c4-native-check
+      (g3t-native-frame-prepare
+        (vector-ref (vector-ref call 4) 3) (vector-ref pending 3))
+      operation)))
+
+(define (g3t-manual-commit! call-entry answer phase operation)
+  (let* ((call (g3t-call-entry-live call-entry operation))
+         (generator-entry (vector-ref call 4))
+         (model-entry (vector-ref call 5))
+         (ledger (vector-ref call 10))
+         (pending (vector-ref ledger 4)))
+    (if (not pending)
+        (g3c4-fail 'invalid-state operation "C4 call lacks pending logits"))
+    (g3t-logits-entry-pending call pending operation)
+    (if (not (eq? answer (vector-ref pending 0)))
+        (g3c4-fail 'invalid-argument operation
+                   "C4 manual result is not the pending logits shell"))
+    (g3c4-baseline-tokenizer-entry
+      (vector-ref call 6) operation 'invalid-state 'invalid-state)
+    (g3c4-require-model-eval model-entry operation 'invalid-state)
+    (g3c4-native-check
+      (g3c4-native-call-prepare-end (vector-ref generator-entry 3))
+      operation)
+    (g3c4-native-check
+      (g3t-native-frame-commit (vector-ref generator-entry 3)) operation)
+    ;; Native publication has occurred. Every remaining failure is fail-stop.
+    (vector-set! phase 0 'committed)
+    (vector-set! pending 4 #f)
+    (vector-set! pending 5 #f)
+    (vector-set! pending 6 #f)
+    (vector-set! pending 2 'live)
+    (vector-set! ledger 4 #f)
+    (if (not (= (g3c4-native-call-finish (vector-ref generator-entry 3)) 0))
+        (exit 134))
+    (g3c4-call-success! call generator-entry model-entry)
+    answer))
+
+(define (g3t-logits-release! shell)
+  (let ((operation 'g3t-logits-release!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find shell operation)))
+        (cond ((g3c4-dead-entry? entry 'logits) #t)
+              ((and (= (vector-length entry) 12)
+                    (eq? (vector-ref entry 1) 'logits)
+                    (eq? (vector-ref entry 2) 'live)
+                    (vector-ref entry 3)
+                    (let loop ((index 4))
+                      (if (= index 11) #t
+                          (and (not (vector-ref entry index))
+                               (loop (+ index 1)))))
+                    (eq? (vector-ref entry 11) g3c4-model-profile))
+               (g3c4-native-check
+                 (g3c4-native-tensor-release (vector-ref entry 3)) operation)
+               (g3c4-entry-dead! entry))
+              (else
+                (g3c4-fail 'invalid-state operation
+                           "C4 logits is not detached and live")))))))
+
+;; This duplicates the small lexical acquire/cleanup boundary deliberately:
+;; the existing empty-call macro retains its frozen publication order.
+(define-syntax g3c4-with-manual-call-internal
+  (syntax-rules ()
+    ((_ operation generator call-kind body ...)
+     (m3-call operation
+       (if (not (and (m3t-exact-i64? call-kind)
+                     (or (= call-kind 0) (= call-kind 1))))
+           (g3c4-fail 'invalid-argument operation
+                      "C4 manual call kind is invalid"))
+       (let* ((generator-entry
+                (g3c4-generator-entry-call-ready generator operation))
+              (model-entry (vector-ref generator-entry 5))
+              (tokenizer (vector-ref generator-entry 6))
+              (shell (vector 'g3c4-call-private))
+              (ledger (vector #f #f #f #f #f))
+              (call-entry
+                (vector shell 'call 'pending #f generator-entry model-entry
+                        tokenizer #f #f #f ledger g3c4-model-profile))
+              (next (cons call-entry (vector-ref g3c4-registry 0)))
+              (phase (vector 'precommit)))
+         (guard (caught
+                  (#t
+                    (if (eq? (vector-ref phase 0) 'precommit)
+                        (g3c4-call-rollback!
+                          call-entry generator-entry model-entry operation)
+                        (exit 134))
+                    (raise caught)))
+           (vector-set! g3c4-registry 0 next)
+           (let ((canonical (car (vector-ref g3c4-registry 0)))
+                 (canonical-ledger
+                   (vector-ref (car (vector-ref g3c4-registry 0)) 10)))
+             (g3c4-native-check
+               (g3c4-native-call-acquire
+                 (vector-ref generator-entry 3) call-kind 0) operation)
+             (vector-set! canonical-ledger 0 #t)
+             (vector-set! model-entry 10 canonical)
+             (vector-set! canonical-ledger 1 #t)
+             (vector-set! generator-entry 9 canonical)
+             (vector-set! canonical-ledger 2 #t)
+             (vector-set! canonical 2 'live)
+             (vector-set! canonical-ledger 3 #t)
+             (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+             (vector-set! m3-call-state 0 canonical)
+             (g3t-manual-commit! canonical (begin body ...) phase operation))))))))

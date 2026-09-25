@@ -760,23 +760,23 @@
 (set! c2-load-compose-owner-internal saved-compose)
 (check-failure-formula compose-post-structured 6 1 1 1 2 1)
 
-;;; If post-consumption normalization itself observes a faulty C2 releaser,
-;;; cleanup still retires the exact published owner before reporting INTERNAL.
-(define saved-release-c2 c2-load-release-c2-internal)
+;;; A post-consumption finalizer defect follows real C2 retirement. Cleanup
+;;; reports INTERNAL without retrying finalization or retaining owner authority.
+(define saved-finalize-c2 c2-load-release-c2-finalize-internal!)
 (define cleanup-c2-calls 0)
 (set! c2-load-compose-owner-internal
   (lambda (request)
     (saved-compose request)
     (raise #f)))
-(set! c2-load-release-c2-internal
-  (lambda (value operation)
+(set! c2-load-release-c2-finalize-internal!
+  (lambda (record operation)
     (set! cleanup-c2-calls (+ cleanup-c2-calls 1))
-    (saved-release-c2 value operation)
+    (saved-finalize-c2 record operation)
     (raise #f)))
 (define cleanup-c2-false
   (run-reconstruction-failure
     "post-consumption C2 cleanup defect retires owner" valid-path))
-(set! c2-load-release-c2-internal saved-release-c2)
+(set! c2-load-release-c2-finalize-internal! saved-finalize-c2)
 (set! c2-load-compose-owner-internal saved-compose)
 (check "post-consumption C2 cleanup is attempted exactly once"
        (= cleanup-c2-calls 1))
@@ -788,19 +788,107 @@
     (saved-compose request)
     (c2-load-fail 'internal 'checkpoint-load
                   "injected post-compose defect" '())))
-(set! c2-load-release-c2-internal
-  (lambda (value operation)
+(set! c2-load-release-c2-finalize-internal!
+  (lambda (record operation)
     (set! cleanup-c2-calls (+ cleanup-c2-calls 1))
-    (saved-release-c2 value operation)
+    (saved-finalize-c2 record operation)
     (c2-load-fail 'internal operation "C2 cleanup defect" '())))
 (define cleanup-c2-structured
   (run-reconstruction-failure
     "structured post-consumption C2 cleanup defect retires owner" valid-path))
-(set! c2-load-release-c2-internal saved-release-c2)
+(set! c2-load-release-c2-finalize-internal! saved-finalize-c2)
 (set! c2-load-compose-owner-internal saved-compose)
 (check "structured post-consumption C2 cleanup is attempted exactly once"
        (= cleanup-c2-calls 1))
 (check-failure-formula cleanup-c2-structured 6 1 1 1 2 1)
+
+;;; Claimed-child defects must unwind through LOAD's already-installed sibling
+;;; and finalizer handlers. Each wrapper consumes its real authority first.
+(define saved-release-claimed-p1 c2-load-release-c2-p1-internal!)
+(define saved-release-claimed-o2 c2-load-release-c2-o2-internal!)
+(define claimed-cleanup-defects (vector 'none 'none))
+(define claimed-cleanup-calls (vector 0 0 0))
+(define claimed-cleanup-order 0)
+(define claimed-cleanup-owner #f)
+(define claimed-cleanup-record #f)
+(define (raise-claimed-cleanup-defect kind operation)
+  (cond ((eq? kind 'false) (raise #f))
+        ((eq? kind 'structured)
+         (c2-load-fail 'internal operation "claimed child cleanup defect" '()))
+        (else #t)))
+(define (check-claimed-child-cleanup label p1-defect o2-defect)
+  (vector-set! claimed-cleanup-defects 0 p1-defect)
+  (vector-set! claimed-cleanup-defects 1 o2-defect)
+  (vector-set! claimed-cleanup-calls 0 0)
+  (vector-set! claimed-cleanup-calls 1 0)
+  (vector-set! claimed-cleanup-calls 2 0)
+  (set! claimed-cleanup-order 0)
+  (set! claimed-cleanup-owner #f)
+  (set! claimed-cleanup-record #f)
+  (let ((result (run-reconstruction-failure label valid-path)))
+    (check "claimed cleanup attempts P1, O2, and finalization once in order"
+      (and (= (vector-ref claimed-cleanup-calls 0) 1)
+           (= (vector-ref claimed-cleanup-calls 1) 1)
+           (= (vector-ref claimed-cleanup-calls 2) 1)
+           (= claimed-cleanup-order 123)))
+    (check "claimed cleanup retires exact published owner and release record"
+      (and claimed-cleanup-owner claimed-cleanup-record
+           (eq? (vector-ref (c2-training-state-find claimed-cleanup-owner) 7)
+                'dead)
+           (eq? (vector-ref claimed-cleanup-record 2) 'done)
+           (eq? (vector-ref claimed-cleanup-record 4) #f)
+           (eq? (vector-ref claimed-cleanup-record 5) #f)
+           (eq? (vector-ref claimed-cleanup-record 6) #f)))
+    (check "claimed cleanup dead owner is idempotent without child retries"
+      (and (c2-training-state-release-internal!
+             claimed-cleanup-owner 'trainer-state-release!)
+           (= (vector-ref claimed-cleanup-calls 0) 1)
+           (= (vector-ref claimed-cleanup-calls 1) 1)
+           (= (vector-ref claimed-cleanup-calls 2) 1)))
+    (check-failure-formula result 6 1 1 1 2 1)))
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (saved-compose request)
+    (set! claimed-cleanup-owner (vector-ref request 5))
+    (raise #f)))
+(set! c2-load-release-c2-p1-internal!
+  (lambda (record operation)
+    (vector-set! claimed-cleanup-calls 0
+      (+ (vector-ref claimed-cleanup-calls 0) 1))
+    (set! claimed-cleanup-order (+ (* claimed-cleanup-order 10) 1))
+    (saved-release-claimed-p1 record operation)
+    (raise-claimed-cleanup-defect
+      (vector-ref claimed-cleanup-defects 0) operation)))
+(set! c2-load-release-c2-o2-internal!
+  (lambda (record operation)
+    (vector-set! claimed-cleanup-calls 1
+      (+ (vector-ref claimed-cleanup-calls 1) 1))
+    (set! claimed-cleanup-order (+ (* claimed-cleanup-order 10) 2))
+    (saved-release-claimed-o2 record operation)
+    (raise-claimed-cleanup-defect
+      (vector-ref claimed-cleanup-defects 1) operation)))
+(set! c2-load-release-c2-finalize-internal!
+  (lambda (record operation)
+    (vector-set! claimed-cleanup-calls 2
+      (+ (vector-ref claimed-cleanup-calls 2) 1))
+    (set! claimed-cleanup-order (+ (* claimed-cleanup-order 10) 3))
+    (saved-finalize-c2 record operation)
+    (set! claimed-cleanup-record record)
+    #t))
+(check-claimed-child-cleanup "claimed P1 raised false still drains O2" 'false 'none)
+(check-claimed-child-cleanup "claimed P1 structured defect still drains O2"
+                             'structured 'none)
+(check-claimed-child-cleanup "claimed O2 raised false still finalizes" 'none 'false)
+(check-claimed-child-cleanup "claimed O2 structured defect still finalizes"
+                             'none 'structured)
+(check-claimed-child-cleanup "both claimed children raise false and finalize"
+                             'false 'false)
+(check-claimed-child-cleanup "both claimed children report structured defects"
+                             'structured 'structured)
+(set! c2-load-release-c2-p1-internal! saved-release-claimed-p1)
+(set! c2-load-release-c2-o2-internal! saved-release-claimed-o2)
+(set! c2-load-release-c2-finalize-internal! saved-finalize-c2)
+(set! c2-load-compose-owner-internal saved-compose)
 
 ;;; Cleanup catches both structured errors and #f while continuing through the
 ;;; second component. Each injected wrapper releases its owner first, so the

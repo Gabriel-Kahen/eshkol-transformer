@@ -1,0 +1,9 @@
+__stack_chk_fail
+calloc
+et_kernel_error_clear
+free
+memcmp
+memcpy
+memset
+snprintf
+strcmp

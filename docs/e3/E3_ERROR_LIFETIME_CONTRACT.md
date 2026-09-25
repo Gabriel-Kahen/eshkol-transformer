@@ -5,7 +5,12 @@ at reviewed head0a077a7.** This supersedes the proposal-state wording in the
 source audit below; behavior is unchanged. Contract merge and explicit bounded
 dispatch remain required; implementation and runtime evidence are not accepted.
 
-Inspected actual E1 core/internal/consumer code, M3 `m3-call`/`m3t-rethrow-raw`, and read-only pinned compiler/runtime source at90cbd7130f47b8184bcc77b8d5c1b0026da980de. No build/runtime proof. The proposed prebuilt table is feasible with the corrections below.
+The active implementation baseline is the reviewed compiler/runtime candidate
+`Gabriel-Kahen/eshkol@81298b4a9608fb92eb6f351a2eabd8392da7d9ef`.
+The original contract audit inspected E1 core/internal/consumer code, M3
+`m3-call`/`m3t-rethrow-raw`, and the predecessor runtime at
+`90cbd7130f47b8184bcc77b8d5c1b0026da980de`; that audit supplied no build/runtime
+proof. The proposed prebuilt table is feasible with the corrections below.
 
 ## Decision
 

@@ -1,0 +1,151 @@
+;;; Fixed closed E3 test driver. It is loaded only by the private test aggregate.
+
+(extern ptr e3-test-destination-create
+        :real et_e3_test_destination_create_v1)
+(extern i64 e3-test-destination-destroy ptr
+        :real et_e3_test_destination_destroy_v1)
+(extern i64 e3-test-destination-bits ptr
+        :real et_e3_test_destination_bits_v1)
+
+(define e3-test-fixture-root (vector #f #f #f #f))
+
+(define (e3-test-destinations-destroy! destinations)
+  (let cleanup ((index 0))
+    (if (= index 4) #t
+        (begin
+          (if (vector-ref destinations index)
+              (if (not (= (e3-test-destination-destroy
+                           (vector-ref destinations index)) 0))
+                  (e3-native-invariant-fail)))
+          (vector-set! destinations index #f)
+          (cleanup (+ index 1))))))
+
+(define (e3-test-fixed-config)
+  (let* ((parsed
+          (x1-private-config-parse
+           "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}"))
+         (result (x1-private-config-resolve parsed '())))
+    result))
+
+(define (e3-test-destinations-create)
+  (let ((destinations (vector #f #f #f #f)))
+    (guard
+     (caught
+      (#t
+       (e3-test-destinations-destroy! destinations)
+       (raise caught)))
+     (let create ((index 0))
+       (if (= index 4) destinations
+           (let ((destination (e3-test-destination-create)))
+             (if (null? destination)
+                 (let ((unreachable
+                        (et-e1b-private-raise
+                         'internal 'e3-test-run
+                         "E3 destination fixture allocation failed" '() #f)))
+                   unreachable))
+             (vector-set! destinations index destination)
+             (create (+ index 1))))))))
+
+(define (e3-test-fixture)
+  (if (vector-ref e3-test-fixture-root 0) e3-test-fixture-root
+      (let* ((config (e3-test-fixed-config))
+             (tokenizer (t1-private-tokenizer-byte config))
+             (initial (g3t-checked-m3t-initializer-state 1729))
+             (model (g3t-checked-m3t-model-create config initial))
+             (destinations (e3-test-destinations-create))
+             (frame #f))
+        (guard
+         (caught
+          (#t
+           (e3-test-destinations-destroy! destinations)
+           (raise caught)))
+         (set! frame (e3-frame-bind! model destinations))
+         (vector-set! e3-test-fixture-root 0 model)
+         (vector-set! e3-test-fixture-root 1 tokenizer)
+         (vector-set! e3-test-fixture-root 2 destinations)
+         (vector-set! e3-test-fixture-root 3 frame)
+         e3-test-fixture-root))))
+
+(define (e3-test-scenario scenario)
+  (if (not (and (vector? scenario) (= (vector-length scenario) 2)
+                (boolean? (vector-ref scenario 0))
+                (integer? (vector-ref scenario 1))
+                (exact? (vector-ref scenario 1))
+                (>= (vector-ref scenario 1) 0)
+                (<= (vector-ref scenario 1) 8192)))
+      (let ((unreachable
+             (et-e1b-private-raise
+              'invalid-argument 'e3-test-run
+              "expected #(packing? skipped-batches)" '() #f)))
+        unreachable))
+  scenario)
+
+(define (e3-test-dataset-config directory packing?)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
+
+(define (e3-test-skip! dataset count)
+  (let loop ((remaining count))
+    (if (= remaining 0) #t
+        (let ((advanced
+               (with-region ('e3-test-skip 65536)
+                 (let ((batch (d2-token-dataset-next-batch dataset)))
+                   (if (d2-token-dataset-end? batch) #f
+                       (begin (d2-token-batch-release! batch) #t))))))
+          (if advanced (loop (- remaining 1))
+              (let ((unreachable
+                     (et-e1b-private-raise
+                      'invalid-state 'e3-test-run
+                      "scenario skips beyond dataset EOS" '() #f)))
+                unreachable))))))
+
+(define (e3-test-u32-ref destination)
+  (let ((bits (e3-test-destination-bits destination)))
+    (if (< bits 0)
+        (let ((unreachable
+               (et-e1b-private-raise
+                'internal 'e3-test-run
+                "E3 destination fixture read failed" '() #f)))
+          unreachable))
+    bits))
+
+(define (e3-test-output frame destinations before after)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (if (or (not (= (vector-ref entry 1) 1))
+            (vector-ref (vector-ref entry 3) 10)
+            (not (vector-ref entry 14)))
+        (e3-native-invariant-fail)))
+  (vector 'e3-private-result-v1
+          (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)
+          before after))
+
+(define (e3-test-run scenario corpus-path)
+  (let* ((checked (e3-test-scenario scenario))
+         (fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset
+          (d2-token-dataset-open
+           (e3-test-dataset-config corpus-path (vector-ref checked 0))
+           tokenizer)))
+    (guard
+     (caught
+      (#t
+       (d2-token-dataset-close! dataset)
+       (raise caught)))
+     (e3-test-skip! dataset (vector-ref checked 1))
+     (let ((before (d2-token-dataset-cursor dataset)))
+       (with-region ('e3-evaluation-invocation 262144)
+         (e3-evaluate-into! model dataset frame))
+       (let ((after (d2-token-dataset-cursor dataset)))
+         (let ((result (e3-test-output frame destinations before after)))
+           (d2-token-dataset-close! dataset)
+           result))))))

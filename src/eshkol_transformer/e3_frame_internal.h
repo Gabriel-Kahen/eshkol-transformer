@@ -33,6 +33,8 @@ int64_t et_e3_private_cleanup_preflight_v1(void *frame);
 void et_e3_private_drain_v1(void *frame);
 int64_t et_e3_private_publish_v1(void *frame);
 void et_e3_private_finish_v1(void *frame);
+int64_t et_e3_private_selected_metric_bits_ref_v1(
+    void *frame, int64_t selector);
 int64_t et_e3_private_counter_ref_v1(void *frame, int64_t selector);
 int64_t et_e3_private_frame_destroy_preflight_v1(void *frame);
 void et_e3_private_frame_destroy_v1(void *frame);
@@ -40,6 +42,10 @@ void et_e3_private_frame_destroy_v1(void *frame);
 int64_t et_e3_private_last_error_domain_v1(void);
 int64_t et_e3_private_last_error_category_v1(void);
 int64_t et_e3_private_last_error_code_v1(void);
+
+#ifdef ET_E3_TESTING
+void et_e3_test_frame_fail_alloc_after_v1(size_t count);
+#endif
 
 #ifdef __cplusplus
 }

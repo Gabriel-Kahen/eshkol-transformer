@@ -15,10 +15,12 @@ API is stable yet.
 ## Build and test
 
 The initial supported lane is Ubuntu 22.04 x86-64 with Clang/LLVM 21.1.8. The
-Eshkol compiler/runtime is built from commit
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`, which reports version
-`1.3.4-evolve`. Exact compatibility inputs are in `toolchain/eshkol.lock`; package
-requirements and limitations are in `toolchain/README.md`.
+Eshkol compiler/runtime is built from the reviewed `Gabriel-Kahen/eshkol`
+candidate at `81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, which reports version
+`1.3.4-evolve`. Its checked-promotion implementation is proposed upstream in
+[PR #714](https://github.com/tsotchke/eshkol/pull/714). Exact compatibility inputs
+are in `toolchain/eshkol.lock`; package requirements and limitations are in
+`toolchain/README.md`.
 
 From a clean checkout on the supported lane, run:
 
@@ -179,6 +181,13 @@ lifetimes, numerical/fenv rules and focused `make test-g3n` gate are documented 
 [docs/G3N_PRIMITIVES.md](docs/G3N_PRIMITIVES.md). The bounded provider is accepted
 after independent review, supported full CI and a focused merged-head retest; it
 supplies no public generation API or G3 completion evidence.
+
+G3-S adds the registry-free ABI 1.0 CPU-f32 `[1,256]` greedy/categorical sampler
+at `build/g3s/libeshkol_transformer_g3s.a`, discovered only through
+`et_g3s_kernel_provider_v1`. Run its focused numerical, adversarial, fenv, carrier,
+stack, package and private-AOT gate with `make test-g3s`; see
+[docs/G3S_SAMPLER.md](docs/G3S_SAMPLER.md). This numeric provider does not establish
+authenticated RNG transport, public generation, or model/cache commit semantics.
 
 L2's carrier-neutral deterministic CPU-f32 fused indexed cross-entropy provider is
 at `build/l2/libeshkol_transformer_l2.a`, with its isolated ABI 1.0 header at

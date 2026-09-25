@@ -1,0 +1,69 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+
+(define selected-publication-cut 0)
+(define (g3c4-test-publication-cut cut)
+  (if (= cut selected-publication-cut)
+      (g3c4-fail 'internal 'g3c4-publication-test "injected publication cut"))
+  #t)
+
+;; The runner places a test-only transformed copy ahead of the production
+;; include directory.  The production source contains no fault hook.
+(load "g3c4_call_entry_fault_extension.esk")
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
+(extern i64 test-context-field ptr i64
+        :real et_g3c4_call_entry_test_context_field_v1)
+
+(define checks 0)
+(define (check value)
+  (if value (set! checks (+ checks 1)) (exit 1)))
+(define (latest-call)
+  (let loop ((rest (vector-ref g3c4-registry 0)))
+    (cond ((null? rest) #f)
+          ((eq? (vector-ref (car rest) 1) 'call) (car rest))
+          (else (loop (cdr rest))))))
+(define (dead-call? entry)
+  (and entry (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))))
+(define config
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed 11))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define model-entry (car (vector-ref g3c4-model-registry 0)))
+(define generator (g3c4-generator-create-internal model tokenizer config))
+(define generator-entry (car (vector-ref g3c4-registry 0)))
+(define native (vector-ref generator-entry 3))
+
+(let loop ((cut 1))
+  (if (= cut 6) #t
+      (begin
+        (set! selected-publication-cut cut)
+        (check
+          (guard (caught
+                   (#t (and (transformer-error? caught)
+                            (eq? (transformer-error-category caught) 'internal))))
+            (g3c4-call-empty-commit-internal! generator 0 0)
+            #f))
+        (check (dead-call? (latest-call)))
+        (check (and (not (vector-ref model-entry 10))
+                    (not (vector-ref generator-entry 9))
+                    (not (vector-ref m3-call-state 0))
+                    (= (test-context-field native 0) 0)
+                    (= (test-context-field native 1) 0)
+                    (= (test-context-field native 2) 0)
+                    (= (test-context-field native 5) 0)))
+        (loop (+ cut 1)))))
+(set! selected-publication-cut 0)
+(check (g3c4-call-empty-commit-internal! generator 0 0))
+(check (g3c4-generator-close-internal! generator))
+(display "G3-C4 publication cuts PASS: cuts=5 checks=")
+(display checks) (newline)

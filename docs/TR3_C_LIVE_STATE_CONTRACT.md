@@ -1,14 +1,19 @@
-# TR3-C live trainer snapshot and joint restore proposal
+# TR3-C live trainer snapshot and joint restore contract
 
-Status: **proposal only; root acceptance required before implementation**.
+Status: **accepted design contract; implementation and acceptance pending**.
 Source base: `19f404cf21632944e1f2d5d4959e1240f9a79f5f`.
 Issue: [#120](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/120).
+
+The source-grounded mapping from this contract to the accepted D2/I2/O2/C2
+interfaces and the pending lease is frozen in
+[the joint restore composer implementation plan](TR3_C_JOINT_RESTORE_IMPLEMENTATION_PLAN.md).
 
 This document refines sections 10 and 11 of the TR3 trainer proposal. It adds
 no public operation, checkpoint byte, persistence policy, compiler identity,
 provider identity, or E3 frame. C2 1.0 remains accepted and complete. The
 eventual public spellings remain `trainer-state` and `trainer-load-state!`, but
-this proposal authorizes no implementation or export.
+this contract alone adds no implementation or export. Implementation remains
+gated by the companion plan's prerequisites and acceptance evidence.
 
 The selected design deep-stages every detached tensor and control while one
 genuine C2 borrow is active, then closes that borrow before preparing any live
@@ -17,7 +22,7 @@ the input C2 owner and needs no new C2 sealed-borrow lifecycle.
 
 ## 1. Fixed ownership decisions and prerequisites
 
-The following decisions are normative for this proposal.
+The following decisions are normative for this contract.
 
 1. C2 remains the sole detached-state policy and ownership lineage. Snapshot
    calls the existing P1 and O2 snapshot operations and the existing authentic
@@ -89,7 +94,7 @@ All private source operations use the eventual public operation symbol
 `trainer-state` or `trainer-load-state!`; callers do not supply an operation,
 category, callback, selector, pointer, index, or registry token.
 
-The proposed source-private entry points are:
+The contract's logical source-private responsibilities are:
 
 ```scheme
 (tr3-c-trainer-state-internal trainer result-cell)
@@ -103,25 +108,31 @@ The proposed source-private entry points are:
 (tr3-c-restore-abort-internal! plan)
 ```
 
-These names are lexical to the future source-composed TR3 package. They are not
-installed, exported, serialized, or callable through an arbitrary vector.
+These names describe the accepted parent transaction decomposition; they are
+not a requirement to recreate component operations that now have accepted exact
+entries. Any implementation names are lexical to the source-composed TR3
+package. They are not installed, exported, serialized, or callable through an
+arbitrary vector. The exact accepted component binding is recorded in the
+companion implementation plan.
 `result-cell` is an exact caller-owned one-slot cell initialized to `#f` and
 promoted before admission. Snapshot writes the exact C2 shell only on success;
 restore writes `#t` only after the trainer is idle again.
 
-The only new native I2 seams are feature-gated private package-bridge entries,
-not public I2/provider ABI:
+The accepted native I2 participant is feature-gated private package-bridge
+surface, not public I2/provider ABI. It includes the authority-bound fixed
+restore42 create/append/verify/prepare/checked commit/checked abort/terminal
+entries recorded in `native/tr3_c_i2_restore_internal.h`, plus the checked owned
+release entry:
 
 ```c
-int64_t et_tr3_c_i2_copy_builder_commit_checked_v1(void *builder);
-int64_t et_tr3_c_i2_copy_builder_abort_checked_v1(void *builder);
 void et_tr3_c_i2_owned_release_checked_v1(void *owned);
 ```
 
-The first two reject an unauthenticated builder before mutation, but after
-authenticating a TR3-C-owned builder they check every child status and
-`_Exit(134)` on an impossible commit/release invariant. The owned-release entry
-is sealed-tail-only and likewise fail-stops on a nonzero raw release status.
+The checked restore42 commit and abort reject an unauthenticated builder before
+mutation, but after authenticating a TR3-C-owned builder they check every child
+status and `_Exit(134)` on an impossible commit/release invariant. The
+owned-release entry is sealed-tail-only and likewise fail-stops on a nonzero raw
+release status.
 
 TR3-specific failures use the accepted A0 categories:
 
@@ -296,8 +307,13 @@ before the outer C2 borrow ends. No O2 handle, native state pointer, or borrowed
 moment carrier enters the parent plan. Clone/decode return substitution is
 ignored; only the request output slot transfers authority.
 
-After source shutdown, O2 owns a typed private receiver restore plan. Its minimum
-same-aggregate source boundary, coordinated with #119, is:
+After source shutdown, O2 owns a typed private receiver restore plan. The fixed
+native core for the following logical responsibilities is accepted in
+`native/tr3_c_o2_restore_internal.h`. One source-private adapter remains required
+to realize the two-cell transfer, source topology/config validation, native
+status mapping, logical slot-2 publication, and authority cleanup. It may use
+these names or exact lexical equivalents, but must not invent a competing native
+restore authority:
 
 ```scheme
 (o2-optimizer-restore-prepare-internal
@@ -434,11 +450,11 @@ The following are mandatory:
   gradients are absent, D2 is idle, parameter/moment identities are unchanged,
   and O2 still owns this exact restore-plan backreference.
 
-The fixed read-only mode check is
-`(tr3-fixed-train-modes-check-internal trainer) -> #t`. It authenticates the
-trainer lease and its 17 retained module identities, reads only the existing P1
-mode state, and accepts only all-train. It is not installed and grants no E3 or
-mode-mutation authority.
+The fixed read-only mode check reuses
+`tr3-p1-fixed-recheck-internal` through a trainer-lexical wrapper. It
+authenticates the trainer lease and its 17 retained module identities, reads
+only the existing P1 mode state, and accepts only all-train. It is not installed
+and grants no E3 or mode-mutation authority.
 
 The receiver's current tensors, controls, and captured count `R` are not required
 to equal the checkpoint targets or `U`; only topology, configuration,
@@ -447,7 +463,7 @@ to both O2 and trainer counters in the fixed tail.
 
 ## 8. Trainer-specific D2 binding
 
-Public `token-dataset-seek!` is not used. The proposed trainer-private source
+Public `token-dataset-seek!` is not used. The implemented trainer-private source
 operations are:
 
 ```scheme
@@ -545,8 +561,9 @@ prepared I2 plan. The tail is exactly:
 4. invoke D2 commit to publish current ordinal and clear status/cache;
 5. publish trainer-owned epoch-start bytes, RNG words, total tokens, completed
    updates, and completed epochs from the promoted control record;
-6. drain the remaining 14 P1 staged owned tensors through a fixed private
-   no-error cleanup after the I2 plan has removed their pins;
+6. drain the remaining 14 P1 staged owned tensors through fixed private
+   no-error checked release after the I2 plan has removed their pins; clear each
+   Eshkol carrier raw-pointer slot and then its parent authority cell;
 7. while the canonical parent remains rooted in `trainer.active-plan`, clear
    its now-empty child authority slots and mark it `committed` then `dead`;
    clear `trainer.active-plan`, set trainer phase `idle`, and finally write
@@ -592,14 +609,21 @@ no path that reports a retryable partial restore.
 | model/O2 compositor or I2 prepare | zero live destination writes; all pins drained |
 | final identity/reachability check | receiver byte/control snapshot unchanged; input already live and unchanged |
 
-Abort order before commit is: checked I2 builder/plan abort, D2 plan, O2 restore
-plan (or the still-parent-owned 28-stage cell), staged P1 tensors, copied
-controls, trainer active-plan graph, trainer phase. Each source-level authority
-cell clears before its cleanup call; the checked native I2 abort retires its
-builder only after child-plan release succeeds. Cleanup continues after the
-first recoverable defect and never retries consumed authority. An impossible
-authenticated child-release failure fail-stops rather than leaking pins and
-reporting successful cleanup. No abort operation is called after `committing`.
+Abort order is phase-dependent. If a P1 tensor access is active, end it first.
+If the C2 borrow is active, end it and clear its authority before releasing any
+staged clone. After source shutdown, abort order is: checked I2 builder/plan
+abort, D2 plan, O2 restore plan (or the still-parent-owned 28-stage cell), staged
+P1 tensors, copied controls, trainer active-plan graph, trainer phase. After
+source shutdown, each terminal child authority is taken locally and its parent
+cell clears before its cleanup call; C2 borrow authority instead clears only
+after successful borrow end. The checked native I2 abort retires its builder
+only after child-plan release succeeds. Cleanup
+continues after the first recoverable defect and never retries consumed
+authority. The original operation error remains primary unless cleanup finds an
+admitted ownership/provider invariant defect, which is reported as `internal`.
+An impossible authenticated checked-release failure fail-stops rather than
+leaking pins and reporting successful cleanup. No abort operation is called
+after `committing`.
 
 Every recoverable failure before commit must prove:
 
@@ -712,14 +736,17 @@ multiple threads, signal handlers, or forked processes are unsupported and have
 no structured-error or data-race-safety guarantee. No test may reinterpret that
 unsupported scope as a lock or transactional concurrency claim.
 
-## 15. Remaining root decisions before implementation
+## 15. Accepted decisions and implementation prerequisites
 
-1. Accept the exact O2 restore-plan boundary and localized compositor jointly
-   with #119, including shared busy/backreference mutual exclusion.
-2. Assign ownership of the fixed private I2 commit/fail-stop and staging-drain
-   wrapper without changing SHARED-R2 provider identity or public ABI.
-3. Accept the trainer-specific D2 prepare/check/commit seam and the fixed model
-   compositor; neither belongs to E3.
-4. Require merged, verified #121 before final snapshot/restore acceptance and
-   supported adoption. Root may separately authorize bounded implementation
-   against its unchanged C2/P1 APIs after freezing this contract.
+Root accepted the exact O2 restore-plan/shared-exclusion boundary, the checked
+private I2 commit/abort and staging-drain ownership, and the trainer-specific D2
+seam. The native I2, O2, and D2 participants now exist as bounded private leaves.
+The fixed model compositor remains source-private to TR3 and does not belong to
+E3.
+
+Implementation must use the exact accepted component entry points and authority
+identities recorded in the companion implementation plan. It must not recreate
+the earlier abstract operations in this document as competing component seams.
+The lease registry and source binding/compositor remain pending. Merged, verified
+#121 remains mandatory before final snapshot/restore acceptance and supported
+adoption.

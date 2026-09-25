@@ -1,0 +1,641 @@
+;;; Private TR3-C joint restore composer. Load only in the feature-local
+;;; aggregate after the accepted C2 owner, lease, D2 restore, and I2/O2
+;;; bindings. This file deliberately publishes no public facade.
+
+(define tr3-c-joint-operation 'trainer-load-state!)
+(define tr3-c-joint-i64-max 9223372036854775807)
+(define tr3-c-joint-fixed-paths
+  '(("blocks" "0" "attention" "key" "weight")
+    ("blocks" "0" "attention" "output" "weight")
+    ("blocks" "0" "attention" "query" "weight")
+    ("blocks" "0" "attention" "value" "weight")
+    ("blocks" "0" "ffn" "down" "weight")
+    ("blocks" "0" "ffn" "up" "weight")
+    ("blocks" "0" "norm1" "bias")
+    ("blocks" "0" "norm1" "weight")
+    ("blocks" "0" "norm2" "bias")
+    ("blocks" "0" "norm2" "weight")
+    ("head" "weight")
+    ("norm_final" "bias")
+    ("norm_final" "weight")
+    ("position_embedding" "weight")))
+(define tr3-c-joint-fixed-shapes
+  '((4 4) (4 4) (4 4) (4 4) (4 8) (8 4)
+    (4) (4) (4) (4) (256 4) (4) (4) (2 4)))
+(define tr3-c-joint-tied-secondary-path
+  '("token_embedding" "weight"))
+(define tr3-c-joint-tied-secondary-shape '(256 4))
+
+(define (tr3-c-joint-fail category message)
+  (m3t-fail category tr3-c-joint-operation message))
+
+(define (tr3-c-joint-length value limit)
+  (let loop ((remaining value) (count 0))
+    (cond ((null? remaining) count)
+          ((or (not (pair? remaining)) (= count limit)) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+
+(define (tr3-c-joint-list-ref values index)
+  (if (= index 0) (car values)
+      (tr3-c-joint-list-ref (cdr values) (- index 1))))
+
+(define (tr3-c-joint-list-prefix values count)
+  (if (= count 0) '()
+      (cons (car values)
+            (tr3-c-joint-list-prefix (cdr values) (- count 1)))))
+
+(define (tr3-c-joint-vector->list value count)
+  (let loop ((index (- count 1)) (result '()))
+    (if (< index 0) result
+        (loop (- index 1) (cons (vector-ref value index) result)))))
+
+(define (tr3-c-joint-product shape)
+  (let loop ((remaining shape) (product 1))
+    (if (null? remaining) product
+        (let ((extent (car remaining)))
+          (if (or (not (integer? extent)) (not (exact? extent)) (< extent 0)
+                  (> extent tr3-c-joint-i64-max)
+                  (and (> product 0) (> extent 0)
+                       (> product (quotient tr3-c-joint-i64-max extent))))
+              (tr3-c-joint-fail 'shape-mismatch
+                               "restore tensor shape is malformed or overflows"))
+          (loop (cdr remaining)
+                (if (or (= product 0) (= extent 0)) 0 (* product extent)))))))
+
+(define (tr3-c-joint-parent trainer)
+  (let* ((p1-cells (make-vector 14 #f))
+         (controls (make-vector 5 #f))
+         ;; [O2-ledger, active-entry, source-P1, access-token, stage-vector,
+         ;;  first-cleanup-error]
+         (cleanup (make-vector 6 #f))
+         (result (vector #f))
+         (parent
+           (vector tr3-lease-restore-parent-tag #f trainer 'constructing #f
+                   p1-cells (vector #f) (vector #f) controls #f #f cleanup
+                   result)))
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (begin
+            (vector-set! p1-cells index (vector #f))
+            (loop (+ index 1)))))
+    (vector-set! parent 1 parent)
+    parent))
+
+(define (tr3-c-joint-controls-copy controls)
+  (if (or (not (vector? controls)) (not (= (vector-length controls) 5))
+          (not (vector? (vector-ref controls 2)))
+          (not (= (vector-length (vector-ref controls 2)) 10))
+          (not (bytevector? (vector-ref (vector-ref controls 2) 3)))
+          (not (bytevector? (vector-ref (vector-ref controls 2) 4)))
+          (not (vector? (vector-ref controls 3)))
+          (not (= (vector-length (vector-ref controls 3)) 3)))
+      (tr3-c-joint-fail 'corrupt-data
+                       "detached trainer controls are malformed"))
+  (let* ((dataset (vector-ref controls 2))
+         (resolved (vector-ref controls 3))
+         (copied
+           (c2-training-state-controls-copy
+             tr3-c-joint-operation
+             (vector (vector-ref controls 0) (vector-ref controls 1)
+                     (vector (vector-ref dataset 3) (vector-ref dataset 4))
+                     (vector (vector-ref resolved 0) (vector-ref resolved 1))
+                     (vector-ref controls 4))))
+         (copied-dataset (vector-ref copied 2)))
+    ;; C2 returns its authenticated 10-slot cursor projection.  The lease
+    ;; parent owns the two bytevectors required by its frozen control shape;
+    ;; retain those exact copied fields rather than the projection header.
+    (vector (vector-ref copied 0) (vector-ref copied 1)
+            (vector (vector-ref copied-dataset 3)
+                    (vector-ref copied-dataset 4))
+            (vector-ref copied 3) (vector-ref copied 4))))
+
+(define (tr3-c-joint-fixed-source! p1 projection topology)
+  (if (or (not (vector? projection)) (not (= (vector-length projection) 6))
+          (not (vector? topology)) (not (= (vector-length topology) 3))
+          (not (eq? (vector-ref projection 0) 'transformer-state-dict))
+          (not (equal? (vector-ref projection 1) '(1 0)))
+          (not (equal? (vector-ref projection 2) '()))
+          (not (equal? (vector-ref projection 3)
+                       '(transformer-tensor-provider 2 0
+                         i2-dense-cpu-f32-v1))))
+      (tr3-c-joint-fail 'version-mismatch
+                       "detached P1 projection version is unsupported"))
+  (let ((entries (vector-ref projection 4))
+        (paths (vector-ref topology 0))
+        (shapes (vector-ref topology 1))
+        (aliases (vector-ref topology 2)))
+    (if (or (not (= (tr3-c-joint-length entries 16) 15))
+            (not (= (tr3-c-joint-length paths 15) 14))
+            (not (= (tr3-c-joint-length shapes 15) 14))
+            (not (equal? paths tr3-c-joint-fixed-paths))
+            (not (equal? shapes tr3-c-joint-fixed-shapes))
+            (not (equal? aliases (vector-ref projection 5)))
+            (not (equal? aliases
+                         '((("head" "weight")
+                            ("token_embedding" "weight"))))))
+        (tr3-c-joint-fail 'shape-mismatch
+                         "detached P1 schedule is not the fixed 15-path tie"))
+    (let loop ((index 0) (remaining entries)
+               (remaining-paths paths) (remaining-shapes shapes))
+      (if (= index 14)
+          (let ((secondary (car remaining)))
+            (if (or (not (null? (cdr remaining)))
+                    (not (equal? (state-entry-path-internal secondary)
+                                 tr3-c-joint-tied-secondary-path))
+                    (not (equal? (state-entry-shape-internal secondary)
+                                 tr3-c-joint-tied-secondary-shape))
+                    (not (eq? (state-entry-kind-internal secondary) 'parameter))
+                    (not (eq? (state-entry-dtype-internal secondary) 'f32))
+                    (not (eq? (state-entry-device-internal secondary) 'cpu))
+                    (not (eq? (state-entry-layout-internal secondary)
+                              'dense-row-major-contiguous)))
+                (tr3-c-joint-fail
+                  'shape-mismatch
+                  "detached tied-secondary P1 entry differs from fixed order"))
+            ;; The C2 projection authenticates all 15 canonical paths.  The
+            ;; exact alias graph above proves the final secondary aliases the
+            ;; head row, so only the 14 topology-primary entries are staged.
+            (tr3-c-joint-list-prefix entries 14))
+          (let* ((entry (car remaining))
+                 (path (state-entry-path-internal entry))
+                 (shape (state-entry-shape-internal entry)))
+            (if (or (not (equal? path
+                                 (tr3-c-joint-list-ref
+                                   tr3-c-joint-fixed-paths index)))
+                    (not (equal? shape
+                                 (tr3-c-joint-list-ref
+                                   tr3-c-joint-fixed-shapes index)))
+                    (not (equal? path (car remaining-paths)))
+                    (not (equal? shape (car remaining-shapes)))
+                    (not (eq? (state-entry-kind-internal entry) 'parameter))
+                    (not (eq? (state-entry-dtype-internal entry) 'f32))
+                    (not (eq? (state-entry-device-internal entry) 'cpu))
+                    (not (eq? (state-entry-layout-internal entry)
+                              'dense-row-major-contiguous)))
+                (tr3-c-joint-fail 'shape-mismatch
+                                 "detached P1 entry differs from fixed order"))
+            (loop (+ index 1) (cdr remaining)
+                  (cdr remaining-paths) (cdr remaining-shapes)))))))
+
+(define (tr3-c-joint-install-clone! parent index source-p1 token entry)
+  (let* ((cell (vector-ref (vector-ref parent 5) index))
+         (cleanup (vector-ref parent 11))
+         (request (vector #f 'parameter tr3-c-joint-operation #f))
+         (carrier
+           (state-dict-c2-owned-tensor-borrow-begin-internal
+             source-p1 token entry tr3-c-joint-operation)))
+    (vector-set! cleanup 1 entry)
+    (vector-set! request 0 carrier)
+    (let ((outcome
+            (guard (caught (#t (vector #f caught)))
+              (i2-clone request)
+              (vector #t #t))))
+      (if (vector-ref request 3)
+          (begin
+            (vector-set! cell 0 (vector-ref request 3))
+            (vector-set! request 3 #f)))
+      ;; P1 clears its active-access record before its final native validation.
+      (state-dict-c2-owned-tensor-borrow-end-internal
+        source-p1 token entry tr3-c-joint-operation)
+      (vector-set! cleanup 1 #f)
+      (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1)))
+      (if (not (vector-ref cell 0))
+          (tr3-c-joint-fail 'internal
+                           "I2 clone returned without publishing ownership"))
+      #t)))
+
+(define (tr3-c-joint-install-moment!
+          parent stages source-o2 token index kind shape stage-index)
+  (let* ((elements (tr3-c-joint-product shape))
+         (bytes (make-bytevector (* elements 4) 0))
+         (request
+           (vector bytes 'buffer shape 'f32 'cpu
+                   'dense-row-major-contiguous tr3-c-joint-operation #f)))
+    (o2-state-copy-moment-bits-c2-owned-internal
+      (vector source-o2 index kind bytes elements token tr3-c-joint-operation))
+    (let ((outcome
+            (guard (caught (#t (vector #f caught)))
+              (i2-checkpoint-decode request)
+              (vector #t #t))))
+      (if (vector-ref request 7)
+          (begin
+            (vector-set! stages stage-index (vector-ref request 7))
+            (vector-set! request 7 #f)))
+      (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1)))
+      (if (not (vector-ref stages stage-index))
+          (tr3-c-joint-fail 'internal
+                           "I2 decoder returned without publishing ownership"))
+      #t)))
+
+(define (tr3-c-joint-stage-source! parent source)
+  (let* ((borrow
+           (c2-training-state-borrow-begin-internal
+             source tr3-c-joint-operation))
+         (cleanup (vector-ref parent 11)))
+    (vector-set! parent 4 borrow)
+    (let* ((projection (c2-training-state-borrow-projection-internal borrow))
+           (token
+             (c2-training-state-borrow-owner-token-internal
+               borrow tr3-c-joint-operation))
+           (source-p1 (vector-ref projection 0))
+           (source-o2 (vector-ref projection 1))
+           (topology (vector-ref projection 3))
+           (p1-projection
+             (state-dict-c2-owned-projection-internal
+               source-p1 token tr3-c-joint-operation))
+           (entries (tr3-c-joint-fixed-source!
+                      source-p1 p1-projection topology))
+           (stages (make-vector 28 #f)))
+      (vector-set! cleanup 2 source-p1)
+      (vector-set! cleanup 3 token)
+      (vector-set! cleanup 4 stages)
+      (vector-set! (vector-ref parent 6) 0 stages)
+      (let p1-loop ((index 0) (remaining entries))
+        (if (= index 14) #t
+            (begin
+              (tr3-c-joint-install-clone!
+                parent index source-p1 token (car remaining))
+              (p1-loop (+ index 1) (cdr remaining)))))
+      (let moment-loop ((index 0) (shapes (vector-ref topology 1)))
+        (if (= index 14) #t
+            (begin
+              (tr3-c-joint-install-moment!
+                parent stages source-o2 token index 0 (car shapes) (* index 2))
+              (tr3-c-joint-install-moment!
+                parent stages source-o2 token index 1 (car shapes)
+                (+ (* index 2) 1))
+              (moment-loop (+ index 1) (cdr shapes)))))
+      (let ((copied (tr3-c-joint-controls-copy (vector-ref projection 2))))
+        (vector-set! (vector-ref parent 8) 0 (vector-ref copied 0))
+        (vector-set! (vector-ref parent 8) 1 (vector-ref copied 1))
+        (vector-set! (vector-ref parent 8) 2 (vector-ref copied 2))
+        (vector-set! (vector-ref parent 8) 3 (vector-ref copied 3))
+        (vector-set! (vector-ref parent 8) 4 (vector-ref copied 4)))
+      (vector-set! parent 3 'source-staged)
+      (c2-training-state-borrow-end-internal borrow)
+      (vector-set! parent 4 #f)
+      (vector-set! cleanup 2 #f)
+      (vector-set! cleanup 3 #f)
+      (vector-set! parent 3 'source-closed)
+      (vector topology (vector-ref projection 4)))))
+
+(define (tr3-c-joint-checked-product left right message)
+  (if (and (> left 0) (> right (quotient tr3-c-joint-i64-max left)))
+      (tr3-c-joint-fail 'invalid-state message))
+  (* left right))
+
+(define (tr3-c-joint-checked-add left right message)
+  (if (> left (- tr3-c-joint-i64-max right))
+      (tr3-c-joint-fail 'invalid-state message))
+  (+ left right))
+
+(define (tr3-c-joint-validate-controls! record parent topology o2-projection)
+  (let* ((controls (vector-ref parent 8))
+         (rng (vector-ref controls 0))
+         (tokenizer (vector-ref controls 1))
+         (cursor-pair (vector-ref controls 2))
+         (resolved (vector-ref controls 3))
+         (counters (vector-ref controls 4))
+         (cursor (vector-ref cursor-pair 0))
+         (epoch (vector-ref cursor-pair 1))
+         (cursor-request
+           (vector cursor epoch (vector-ref tokenizer 0)
+                   (vector-ref tokenizer 1) tr3-c-joint-operation #f))
+         (canonical
+           (string->utf8
+             (x1-private-config-canonical (vector-ref record 6))))
+         (fingerprint
+           (x1-private-config-fingerprint (vector-ref record 6)))
+         (x1-request (vector canonical fingerprint tr3-c-joint-operation #f)))
+    (c2-d2-cursor-pair-internal cursor-request)
+    (x1-canonical-inspect-internal x1-request)
+    (let* ((cursor-state (vector-ref cursor-request 5))
+           (x1 (vector-ref x1-request 3))
+           (source-x1 (vector-ref resolved 2))
+           (counts (vector-ref controls 4))
+           (total (vector-ref cursor-state 7))
+           (current (vector-ref cursor-state 8))
+           (start (vector-ref cursor-state 9))
+           (tokens (vector-ref counts 0))
+           (updates (vector-ref counts 1))
+           (epochs (vector-ref counts 2))
+           (accumulation (vector-ref x1 14))
+           (update-contributions
+             (tr3-c-joint-checked-product
+               updates accumulation "restore update count overflows"))
+           (epoch-span (- total start))
+           (epoch-contributions
+             (tr3-c-joint-checked-product
+               epochs epoch-span "restore epoch count overflows"))
+           (reachable
+             (tr3-c-joint-checked-add
+               epoch-contributions (- current start)
+               "restore continuation count overflows")))
+      (if (or (not (equal? (vector-ref topology 0)
+                           (vector-ref o2-projection 1)))
+              (not (equal? (vector-ref topology 2)
+                           (vector-ref o2-projection 2)))
+              (not (d2-core-bytes=? (vector-ref resolved 0) canonical))
+              (not (string=? (vector-ref resolved 1) fingerprint))
+              (not (equal? source-x1 x1))
+              (not (string=? (vector-ref tokenizer 0)
+                             (vector-ref (vector-ref record 7) 0)))
+              (not (= (vector-ref tokenizer 1)
+                      (vector-ref (vector-ref record 7) 1)))
+              (not (eq? (vector-ref rng 0) 'philox4x32-10))
+              (not (= (vector-ref rng 1) 1))
+              (not (= (vector-ref rng 2) (vector-ref x1 13)))
+              (not (= (vector-ref rng 3) 0))
+              (not (= (vector-ref rng 4) 0))
+              (not (= updates (vector-ref o2-projection 3)))
+              (>= start total) (> start current) (> current total)
+              (> epoch-contributions
+                 (- tr3-c-joint-i64-max (- current start)))
+              (not (= update-contributions reachable))
+              (> update-contributions tokens)
+              (> tokens
+                 (tr3-c-joint-checked-product
+                   2 update-contributions "restore token bound overflows")))
+          (tr3-c-joint-fail 'invalid-state
+                           "detached controls fail cross-state validation"))
+      #t)))
+
+(define (tr3-c-joint-prepare-receiver! record parent staged)
+  (let* ((topology (vector-ref staged 0))
+         (o2-projection (vector-ref staged 1))
+         (controls (vector-ref parent 8))
+         (cursors (vector-ref controls 2))
+         (counts (vector-ref controls 4))
+         (receiver-updates
+           (o2-optimizer-completed-updates-internal (vector-ref record 13))))
+    (if (not (= receiver-updates (vector-ref record 20)))
+        (tr3-c-joint-fail 'invalid-state
+                         "receiver trainer and optimizer counts differ"))
+    (let ((d2-plan
+            (tr3-d2-restore-prepare-internal
+              (vector-ref record 15) (vector-ref cursors 0)
+              (vector-ref cursors 1))))
+      (vector-set! parent 9 d2-plan)
+      (let* ((stage-list
+               (tr3-c-joint-vector->list
+                 (vector-ref (vector-ref parent 6) 0) 28))
+             (request
+               (vector (vector-ref record 13) o2-projection stage-list
+                       (vector-ref counts 1) receiver-updates
+                       tr3-c-joint-operation #f)))
+        (let ((outcome
+                (guard (caught (#t (vector #f caught)))
+                  (tr3-c-restore-o2-prepare-internal request)
+                  (vector #t #t))))
+          ;; Transfer is determined by the pre-rooted output slot, even when a
+          ;; trusted wrapper raises after the accepted binding published it.
+          (if (vector-ref request 6)
+              (let* ((published (vector-ref request 6))
+                     (cleanup (vector-ref parent 11)))
+                (vector-set! cleanup 0 published)
+                (vector-set! (vector-ref parent 7) 0
+                             (vector-ref published 2))
+                (vector-set! (vector-ref parent 6) 0 #f)
+                (vector-set! cleanup 4 #f)))
+          (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1))))
+        (let* ((o2-ledger (vector-ref request 6))
+               (native-plan (vector-ref o2-ledger 2))
+               (cleanup (vector-ref parent 11)))
+          (vector-set! cleanup 0 o2-ledger)
+          (vector-set! (vector-ref parent 7) 0 native-plan)
+          (vector-set! (vector-ref parent 6) 0 #f)
+          (vector-set! cleanup 4 #f)
+          (let ((i2-ledger (tr3-c-restore-i2-create-internal o2-ledger)))
+            (vector-set! parent 10 i2-ledger)
+            (let append ((index 0))
+              (if (= index 14) #t
+                  (begin
+                    (tr3-c-restore-i2-append-parameter-internal!
+                      i2-ledger (vector-ref (vector-ref record 12) index)
+                      (vector-ref (vector-ref record 11) index)
+                      (vector-ref (vector-ref (vector-ref parent 5) index) 0))
+                    (append (+ index 1)))))
+            (tr3-c-restore-o2-append-internal! o2-ledger i2-ledger)
+            (tr3-lease-p1-status!
+              (tr3-p1-fixed-recheck-internal
+                (vector-ref record 8) (vector-ref record 10)
+                (vector-ref record 11) (vector-ref record 12))
+              tr3-c-joint-operation)
+            (tr3-c-joint-validate-controls!
+              record parent topology o2-projection)
+            (vector-set! parent 3 'receiver-prepared)
+            (tr3-lease-restore-recheck-internal record parent native-plan)
+            (tr3-d2-restore-check-internal d2-plan)
+            (tr3-c-restore-o2-check-internal o2-ledger)
+            (tr3-c-restore-i2-prepare-internal! i2-ledger)
+            (vector-set! parent 3 'sealed)
+            #t))))))
+
+(define (tr3-c-joint-release-cell! cell)
+  (let ((carrier (vector-ref cell 0)))
+    (if carrier
+        (begin
+          (vector-set! cell 0 #f)
+          (tr3-c-restore-owned-release-tail-internal! carrier)))))
+
+(define (tr3-c-joint-cleanup-call! cleanup thunk)
+  (guard (caught
+           (#t
+             (if (not (vector-ref cleanup 5))
+                 (vector-set! cleanup 5 caught))
+             #f))
+    (thunk)
+    #t))
+
+(define (tr3-c-joint-access-clear? borrow)
+  (let ((access (vector-ref borrow 5)))
+    (and (vector? access) (= (vector-length access) 5)
+         (not (vector-ref access 0)) (not (vector-ref access 1))
+         (not (vector-ref access 2)) (not (vector-ref access 3))
+         (not (vector-ref access 4)))))
+
+(define (tr3-c-joint-abort! record parent)
+  (vector-set! parent 3 'aborting)
+  (let ((cleanup (vector-ref parent 11)))
+    (let ((borrow (vector-ref parent 4)))
+      (if borrow
+          (begin
+            ;; The exact P1 access is subordinate to the C2 borrow. End it
+            ;; first. P1 clears borrow[5] before its final native validation,
+            ;; so direct readback determines whether authority was consumed
+            ;; even when that validation raised.
+            (let ((entry (vector-ref cleanup 1)))
+              (if entry
+                  (begin
+                    (tr3-c-joint-cleanup-call!
+                      cleanup
+                      (lambda ()
+                        (state-dict-c2-owned-tensor-borrow-end-internal
+                          (vector-ref cleanup 2) (vector-ref cleanup 3)
+                          entry tr3-c-joint-operation)))
+                    (if (tr3-c-joint-access-clear? borrow)
+                        (vector-set! cleanup 1 #f)
+                        (begin
+                          ;; A wrapper may reject before entering the accepted
+                          ;; P1 end. Retry only while the exact authority is
+                          ;; visibly intact; a second admitted failure is an
+                          ;; ownership defect and cannot become recoverable.
+                          (tr3-c-joint-cleanup-call!
+                            cleanup
+                            (lambda ()
+                              (state-dict-c2-owned-tensor-borrow-end-internal
+                                (vector-ref cleanup 2) (vector-ref cleanup 3)
+                                entry tr3-c-joint-operation)))
+                          (if (tr3-c-joint-access-clear? borrow)
+                              (vector-set! cleanup 1 #f)
+                              (tr3-lease-fail-stop 134)))))))
+            (if (tr3-c-joint-cleanup-call!
+                  cleanup
+                  (lambda () (c2-training-state-borrow-end-internal borrow)))
+                (begin
+                  (vector-set! parent 4 #f)
+                  (vector-set! cleanup 2 #f)
+                  (vector-set! cleanup 3 #f))
+                (begin
+                  ;; An admitted borrow with no subordinate access may only
+                  ;; fail a recoverable preflight before consumption. Retry
+                  ;; that intact authority once; a repeated post-admission
+                  ;; defect fail-stops under the #121 ownership contract.
+                  (if (not (tr3-c-joint-access-clear? borrow))
+                      (tr3-lease-fail-stop 134))
+                  (if (tr3-c-joint-cleanup-call!
+                        cleanup
+                        (lambda ()
+                          (c2-training-state-borrow-end-internal borrow)))
+                      (begin
+                        (vector-set! parent 4 #f)
+                        (vector-set! cleanup 2 #f)
+                        (vector-set! cleanup 3 #f))
+                      (tr3-lease-fail-stop 134)))))))
+    (let ((i2-ledger (vector-ref parent 10)))
+      (if i2-ledger
+          (begin
+            (vector-set! parent 10 #f)
+            (tr3-c-joint-cleanup-call!
+              cleanup
+              (lambda () (tr3-c-restore-i2-abort-internal! i2-ledger))))))
+    (let ((d2-plan (vector-ref parent 9)))
+      (if d2-plan
+          (begin
+            (vector-set! parent 9 #f)
+            (tr3-c-joint-cleanup-call!
+              cleanup
+              (lambda () (tr3-d2-restore-abort-internal! d2-plan))))))
+    (let ((o2-ledger (vector-ref cleanup 0))
+          (stage-value (vector-ref (vector-ref parent 6) 0)))
+      (if o2-ledger
+          (begin
+            (vector-set! cleanup 0 #f)
+            (tr3-c-joint-cleanup-call!
+              cleanup
+              (lambda () (tr3-c-restore-o2-abort-internal! o2-ledger))))
+          (if (vector? stage-value)
+              (let loop ((index 0))
+                (if (= index 28) #t
+                    (let ((carrier (vector-ref stage-value index)))
+                      (if carrier
+                          (begin
+                            (vector-set! stage-value index #f)
+                            (tr3-c-restore-owned-release-tail-internal!
+                              carrier)))
+                      (loop (+ index 1))))))))
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (begin
+            (tr3-c-joint-cleanup-call!
+              cleanup
+              (lambda ()
+                (tr3-c-joint-release-cell!
+                  (vector-ref (vector-ref parent 5) index))))
+            (loop (+ index 1)))))
+    (vector-set! parent 3 'dead)
+    (tr3-c-joint-cleanup-call!
+      cleanup (lambda () (tr3-lease-restore-abort-internal! record parent)))
+    (vector-ref cleanup 5)))
+
+;;; Irreversible tail: direct fixed reads, checked native operations, and
+;;; assignment only. No registry lookup, recursive traversal, allocation,
+;;; recoverable validation, or ordinary lease authentication is reachable.
+(define (tr3-c-joint-commit-tail! record parent)
+  (let* ((i2 (vector-ref parent 10))
+         (o2 (vector-ref (vector-ref parent 11) 0))
+         (d2 (vector-ref parent 9))
+         (cells (vector-ref parent 5)))
+    (vector-set! parent 3 'committing)
+    (tr3-c-restore-i2-commit-tail-internal! i2)
+    (tr3-c-restore-o2-commit-tail-internal! o2)
+    (tr3-c-restore-o2-finalize-tail-internal! o2)
+    (tr3-d2-restore-commit-internal! d2)
+    (tr3-lease-restore-commit-controls-tail-internal! record parent)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 0) 0))
+    (vector-set! (vector-ref cells 0) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 1) 0))
+    (vector-set! (vector-ref cells 1) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 2) 0))
+    (vector-set! (vector-ref cells 2) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 3) 0))
+    (vector-set! (vector-ref cells 3) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 4) 0))
+    (vector-set! (vector-ref cells 4) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 5) 0))
+    (vector-set! (vector-ref cells 5) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 6) 0))
+    (vector-set! (vector-ref cells 6) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 7) 0))
+    (vector-set! (vector-ref cells 7) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 8) 0))
+    (vector-set! (vector-ref cells 8) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 9) 0))
+    (vector-set! (vector-ref cells 9) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 10) 0))
+    (vector-set! (vector-ref cells 10) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 11) 0))
+    (vector-set! (vector-ref cells 11) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 12) 0))
+    (vector-set! (vector-ref cells 12) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 13) 0))
+    (vector-set! (vector-ref cells 13) 0 #f)
+    (vector-set! parent 9 #f)
+    (vector-set! parent 10 #f)
+    (vector-set! (vector-ref parent 11) 0 #f)
+    (vector-set! (vector-ref parent 7) 0 #f)
+    (vector-set! parent 3 'committed)
+    (vector-set! parent 3 'dead)
+    (tr3-lease-restore-finish-tail-internal! record parent)
+    (vector-set! (vector-ref parent 12) 0 #t)
+    #t))
+
+(define (tr3-c-joint-restore-internal! trainer source)
+  (let ((parent (tr3-c-joint-parent trainer))
+        (record-cell (vector #f)))
+    ;; This handler exists before lease publication. The record-cell assignment
+    ;; immediately after enter is the only intervening operation and cannot
+    ;; fail or allocate.
+    (guard (caught
+             (#t
+               (let ((record (vector-ref record-cell 0)))
+                 (if record
+                     (if (or (eq? (vector-ref parent 3) 'committing)
+                             (eq? (vector-ref parent 3) 'committed)
+                             (eq? (vector-ref parent 3) 'dead))
+                         (tr3-lease-fail-stop 134)
+                         (let ((cleanup-error
+                                 (tr3-c-joint-abort! record parent)))
+                           (if (and cleanup-error
+                                    (transformer-error? cleanup-error)
+                                    (eq? (transformer-error-category
+                                           cleanup-error)
+                                         'internal))
+                               (raise cleanup-error)))))
+                 (raise caught))))
+      (let ((record (tr3-lease-restore-enter-internal! trainer parent)))
+        (vector-set! record-cell 0 record)
+        (let ((staged (tr3-c-joint-stage-source! parent source)))
+          (tr3-c-joint-prepare-receiver! record parent staged)
+          (tr3-c-joint-commit-tail! record parent))
+        (vector-ref (vector-ref parent 12) 0)))))

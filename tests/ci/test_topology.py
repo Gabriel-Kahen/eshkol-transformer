@@ -13,7 +13,7 @@ ENGINE = ".github/workflows/full-coverage.yml"
 
 class TopologyTests(unittest.TestCase):
     def test_current_complete_graph(self):
-        self.assertEqual(check(ROOT), 19)
+        self.assertEqual(check(ROOT), 20)
 
     def test_workflow_mutations_rejected(self):
         mutations = [
@@ -24,6 +24,7 @@ class TopologyTests(unittest.TestCase):
             (ENGINE, "A0_COMPILER_TIMEOUT_SECONDS: '60'", "A0_COMPILER_TIMEOUT_SECONDS: '600'"),
             (ENGINE, "P1_LSAN: '1'", "P1_LSAN: '0'"),
             (ENGINE, "L3S_ASAN_DETECT_LEAKS: '1'", "L3S_ASAN_DETECT_LEAKS: '0'"),
+            (ENGINE, "G3S_ASAN_DETECT_LEAKS: '1'", "G3S_ASAN_DETECT_LEAKS: '0'"),
             (ENGINE, "K2_ASAN_DETECT_LEAKS: '1'", "K2_ASAN_DETECT_LEAKS: '0'"),
             (ENGINE, "if: matrix.suite == 'native-numerics'", "if: false"),
             (ENGINE, 'test "$SUITES_RESULT" = success', ': "$SUITES_RESULT"'),

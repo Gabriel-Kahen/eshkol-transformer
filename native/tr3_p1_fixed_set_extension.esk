@@ -1,0 +1,11 @@
+;;; Source-private TR3 adapter. Load only in the reviewed TR3 aggregate.
+;;; The lease core authenticates the M3T entry and supplies its exact handles.
+(define (tr3-p1-fixed-capture-internal
+          model handles modules retained-handles carriers)
+  ((vector-ref p1-trusted-surface 69)
+   model handles modules retained-handles carriers))
+
+(define (tr3-p1-fixed-recheck-internal
+          model modules retained-handles carriers)
+  ((vector-ref p1-trusted-surface 70)
+   model modules retained-handles carriers))

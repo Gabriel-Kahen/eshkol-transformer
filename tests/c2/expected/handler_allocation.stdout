@@ -1,0 +1,11 @@
+C2-HANDLER case=1 mode=0 hit=1 bind=0 provider=0/0/0 acquire=0/0/0 PASS
+C2-HANDLER case=1 mode=1 hit=0 bind=0 provider=1/1/0 acquire=0/0/0 PASS
+C2-HANDLER case=1 mode=2 hit=0 bind=0 provider=1/1/0 acquire=0/0/0 PASS
+C2-HANDLER case=2 mode=0 hit=1 bind=0 provider=0/0/0 acquire=0/0/0 PASS
+C2-HANDLER case=2 mode=1 hit=0 bind=0 provider=1/1/1 acquire=0/0/0 PASS
+C2-HANDLER case=2 mode=2 hit=0 bind=0 provider=1/1/1 acquire=0/0/0 PASS
+C2-HANDLER case=3 mode=0 hit=1 bind=0 provider=0/0/0 acquire=0/0/0 PASS
+C2-HANDLER case=3 mode=1 hit=0 bind=1 provider=0/0/0 acquire=1/1/1 PASS
+C2-HANDLER case=3 mode=2 hit=0 bind=1 provider=1/1/1 acquire=1/1/1 PASS
+C2-HANDLER case=3 mode=3 hit=0 bind=1 provider=0/1/0 acquire=1/0/0 PASS
+C2-REPAIRED-HANDLER-ALLOCATION-PASS

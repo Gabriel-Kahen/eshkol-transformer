@@ -1,8 +1,8 @@
 # First-release public API contract
 
-Status: **A0 reviewed draft; declaration harness passing on the F0-pinned canonical
-`tsotchke/eshkol` compiler at commit
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`**. This document specifies the target
+Status: **A0 reviewed draft; declaration harness targets the F0-pinned
+`Gabriel-Kahen/eshkol` compiler candidate at commit
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`**. This document specifies the target
 first-release contract. It does not
 claim that Eshkol core implements any tensor, autodiff, device, compiler, or
 persistence capability. R0 must verify each runtime capability, and downstream
@@ -135,8 +135,12 @@ reported losses and metrics accumulate and return `f32` in the first release.
   and generator lifetime rules remain operation-specific.
 - `token-dataset-close!` is idempotent. Other dataset operations after close raise
   `invalid-state`. Checkpoint writes retain no caller-owned state after return.
-- `trainer-create` takes an exclusive lease on its dataset, model, and optimizer until
-  the trainer is unreachable; callers must not mutate them concurrently.
+- `trainer-create` takes an exclusive lease on its dataset, model, and optimizer
+  until a successful `trainer-release!` on the exact trainer. Dropping a trainer
+  reference alone does not release the lease. Release does not destroy the
+  resolved configuration, tokenizer, dataset, model, or optimizer; all five
+  remain caller-owned and live. Callers must not mutate leased receivers
+  concurrently.
   `generator-create` retains read-only model/tokenizer references plus its own
   cache/RNG; the model must not be mutated concurrently. Retained objects outlive the
   retaining object.
@@ -511,6 +515,7 @@ tombstones remain.
 | Operation | Contract | Ownership/errors/gradient |
 |---|---|---|
 | `trainer-create resolved tokenizer dataset model optimizer` | Validate identities, fingerprints, tree binding, capabilities, modes, device/dtype policy, and reproducibility state. Capture the dataset's current cursor as the immutable epoch-start cursor. | New exclusively mutable state machine retaining receivers; structured mismatch/unsupported errors. |
+| `trainer-release! trainer` | End the exact trainer's exclusive lease at an idle boundary and return `#t`. The five caller-owned receivers stay live and may form a fresh lease. | Exact enrolled shell only; forged or repeated release is `invalid-argument`, while an active batch, operation, or other busy receiver is `invalid-state` and preserves the lease. Errors report `trainer-release!`, not private helper names. Does not physically reclaim caller-region shell storage. |
 | `trainer-step! trainer` | Perform one optimizer update from exactly the configured positive integer `accumulation-steps` microbatches: fetch/forward/backward each, normalize by total mask weight, clip once, update once, then advance scheduler/counters. On finite-dataset end-of-stream, increment the epoch count, seek to the captured epoch-start cursor, and continue filling the same update; an empty finite dataset or an end sentinel from a declared streaming dataset is `invalid-state`. | Mutates leased state; returns immutable `f32` metrics. Exact gradients required; no approximations. |
 | `trainer-stop-policy max-tokens max-updates max-epochs` | Construct an immutable policy; each limit is `#f` or a positive integer and at least one is present. | CPU; new value; `invalid-argument`; no gradient. |
 | `trainer-train! trainer stop-policy` | Repeat updates until the first supplied limit is reached or explicit interrupt occurs; conditions are tested after each committed update. No hidden wall-clock stopping. | Same mutation; returns immutable summary; propagates errors. |

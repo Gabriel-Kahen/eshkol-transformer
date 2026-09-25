@@ -40,6 +40,15 @@ class D2ScopeTests(unittest.TestCase):
         ):
             self.assertIn(required, source)
 
+    def test_width_eight_store_reuses_rooted_u64_limit(self) -> None:
+        source = CORE.read_text(encoding="utf-8")
+        self.assertEqual(source.count("18446744073709551616"), 1)
+        start = source.index("(define (d2-core-unsigned-field-limit width)")
+        end = source.index("(define (d2-core-store-unsigned-le!", start)
+        limit = source[start:end]
+        self.assertIn("((= width 8) d2-core-u64-space)", limit)
+        self.assertNotIn("18446744073709551616", limit)
+
     def test_production_io_and_shuffle_storage_are_bounded_private_seams(self) -> None:
         source = DATASET.read_text(encoding="utf-8")
         self.assertIn("et_d2_exact_read_v1", source)
@@ -48,6 +57,16 @@ class D2ScopeTests(unittest.TestCase):
         self.assertIn("et_d2_shuffle_window_store_v1", source)
         self.assertIn("et_d2_shuffle_window_load_v1", source)
         self.assertNotIn("shuffle-buffer (make-bytevector", source)
+
+    def test_tokenizer_identity_only_remaps_foreign_registry_identity(self) -> None:
+        source = DATASET.read_text(encoding="utf-8")
+        start = source.index("(define (d2-tokenizer-identity tokenizer)")
+        end = source.index("(define (d2-token-dataset-open", start)
+        identity = source[start:end]
+        self.assertIn("(t2-private-entry tokenizer)", identity)
+        self.assertIn("'invalid-argument 'token-dataset-open", identity)
+        self.assertIn("(t2-private-tokenizer-fingerprint tokenizer)", identity)
+        self.assertNotIn("(guard", identity)
 
 
 if __name__ == "__main__":

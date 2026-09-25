@@ -266,7 +266,7 @@
   (cond ((= width 1) 256)
         ((= width 2) 65536)
         ((= width 4) 4294967296)
-        ((= width 8) 18446744073709551616)
+        ((= width 8) d2-core-u64-space)
         (else (d2-core-fail "D2 little-endian field width is unsupported"))))
 
 (define (d2-core-store-unsigned-le! bytes offset width value)

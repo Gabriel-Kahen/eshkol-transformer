@@ -14,7 +14,7 @@ jobs:
         include:
           - suite: canonical-build
             test_target: test-ci-clean-build-after-build
-            timeout: 75
+            timeout: 120
           - suite: native-numerics
             test_target: test-ci-core-after-build
             timeout: 105
@@ -29,6 +29,9 @@ jobs:
             timeout: 105
           - suite: g3n-forward
             test_target: test-ci-g3n-after-build
+            timeout: 75
+          - suite: g3s-sampling
+            test_target: test-ci-g3s-after-build
             timeout: 75
           - suite: contracts-data
             test_target: test-ci-contracts-after-build
@@ -76,6 +79,12 @@ jobs:
       LLVM_CONFIG_EXECUTABLE: llvm-config-21
       ESHKOL_JOBS: '2'
       A0_COMPILER_TIMEOUT_SECONDS: '60'
+      P1_COMPILER_TIMEOUT_SECONDS: '900'
+      T1_COMPILER_TIMEOUT_SECONDS: '600'
+      T2_COMPILER_TIMEOUT_SECONDS: '600'
+      D2_COMPILER_TIMEOUT_SECONDS: '900'
+      K2_COMPILER_TIMEOUT_SECONDS: '900'
+      O2_COMPILER_TIMEOUT_SECONDS: '1200'
       P1_LSAN: '1'
       C1_LSAN: '1'
       I2_ASAN_DETECT_LEAKS: '1'
@@ -85,6 +94,7 @@ jobs:
       O2_ASAN_DETECT_LEAKS: '1'
       N3K_ASAN_DETECT_LEAKS: '1'
       L3S_ASAN_DETECT_LEAKS: '1'
+      G3S_ASAN_DETECT_LEAKS: '1'
       M3T_ASAN_DETECT_LEAKS: '1'
       M3_ASAN_DETECT_LEAKS: '1'
       G3N_ASAN_DETECT_LEAKS: '1'

@@ -1,0 +1,81 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
+(extern i64 live-cache-stat i64
+        :real et_g3c4_call_entry_test_live_cache_stat_v1)
+(extern i64 context-bytes
+        :real et_g3c4_call_entry_test_context_bytes_v1)
+
+(define arguments (cdr (command-line)))
+(define horizon-text (if (null? arguments) "" (car arguments)))
+(define horizon (cond ((string=? horizon-text "1024") 1024)
+                      ((string=? horizon-text "8192") 8192)
+                      (else (exit 64))))
+(define (check value) (if value #t (exit 1)))
+(define (config seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed seed))
+(define (kind-count kind)
+  (let loop ((rest (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? rest) count
+        (loop (cdr rest)
+              (if (eq? (vector-ref (car rest) 1) kind)
+                  (+ count 1) count)))))
+
+(define model (g3c4-model-create-seeded-internal 1729))
+(let rng-loop ((index 0))
+  (if (= index horizon) #t
+      (let ((rng (g3c4-rng-create-seeded-internal index)))
+        (check (g3c4-rng-release-internal! rng))
+        (rng-loop (+ index 1)))))
+(let generator-loop ((index 0))
+  (if (= index (- horizon 1)) #t
+      (let ((generator (g3c4-generator-create-internal model tokenizer (config index))))
+        (check (g3c4-generator-close-internal! generator))
+        (generator-loop (+ index 1)))))
+(define generator
+  (g3c4-generator-create-internal model tokenizer (config horizon)))
+(define peak-caches (live-cache-stat 0))
+(define peak-cache-bytes (live-cache-stat 1))
+(define peak-native-bytes (context-bytes))
+(let call-loop ((index 0))
+  (if (= index horizon) #t
+      (begin
+        (check (g3c4-call-empty-commit-internal! generator 0 0))
+        (call-loop (+ index 1)))))
+(check (g3c4-generator-close-internal! generator))
+
+;; A retained tombstone is one 12-slot entry (208 logical bytes), its one-slot
+;; shell (32), and the registry cons cell (40): exactly 280 logical bytes.
+(define rng-count (kind-count 'rng))
+(define generator-count (kind-count 'generator))
+(define call-count (kind-count 'call))
+(check (= rng-count horizon))
+(check (= generator-count horizon))
+(check (= call-count horizon))
+(check (= (live-cache-stat 0) 0))
+(display "G3-C4 Eshkol retention: horizon=") (display horizon)
+(display " rng_entries=") (display rng-count)
+(display " rng_shells=") (display rng-count)
+(display " rng_registry_cells=") (display rng-count)
+(display " rng_logical_bytes=") (display (* rng-count 280))
+(display " generator_entries=") (display generator-count)
+(display " generator_shells=") (display generator-count)
+(display " generator_registry_cells=") (display generator-count)
+(display " generator_logical_bytes=") (display (* generator-count 280))
+(display " call_entries=") (display call-count)
+(display " call_shells=") (display call-count)
+(display " call_registry_cells=") (display call-count)
+(display " call_logical_bytes=") (display (* call-count 280))
+(display " peak_native_bytes=") (display peak-native-bytes)
+(display " peak_live_caches=") (display peak-caches)
+(display " peak_cache_bytes=") (display peak-cache-bytes)
+(newline)

@@ -348,7 +348,7 @@ write_lifetime_witness() {
     "${ir}" >"${borrow_ir}"
   test -s "${borrow_ir}"
   state_barrier_line="$(rg -n -m1 -F \
-    'call void @eshkol_region_write_barrier_into' "${borrow_ir}")"
+    'call i32 @eshkol_region_write_barrier_checked_v1' "${borrow_ir}")"
   state_barrier_line="${state_barrier_line%%:*}"
   active_borrow_line="$(rg -n -m1 -F \
     '%active-borrow = alloca' "${borrow_ir}")"
@@ -360,7 +360,7 @@ write_lifetime_witness() {
     '%active-access-token = alloca' "${borrow_ir}")"
   active_access_line="${active_access_line%%:*}"
   owner_barrier_line="$(rg -n -F \
-    'call void @eshkol_region_write_barrier_into' "${borrow_ir}" | \
+    'call i32 @eshkol_region_write_barrier_checked_v1' "${borrow_ir}" | \
     sed -n '2{s/:.*//;p;}')"
   region_line="$(rg -n -m1 -F \
     '%region_mark = call i64 @eshkol_region_mark()' "${borrow_ir}")"

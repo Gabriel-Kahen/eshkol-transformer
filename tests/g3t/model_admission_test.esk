@@ -1,0 +1,84 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-T model admission FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (and caught (not (vector-ref m3-call-state 0)))))
+      (thunk) #f)))
+(define (admit shell)
+  (m3-call 'g3t-model-admission-test
+    (g3t-model-entry-live shell 'g3t-model-admission-test #f)))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3t-model-admission-construction 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(define entry (m3t-entry model 'model 'g3t-model-admission-test #t))
+(check "set eval mode" (module-eval! model))
+
+(check "exact M3T model entry" (eq? (admit model) entry))
+(check "one empty G3-T registry"
+       (null? (vector-ref g3t-registry 0)))
+(reject "copied shell"
+  (lambda () (admit (vector (vector-ref model 0)))))
+(reject "foreign shell"
+  (lambda () (admit (vector 'foreign-model))))
+(reject "wrong M3T kind"
+  (lambda () (admit initial)))
+
+(define original-native (vector-ref entry 3))
+(vector-set! entry 3 '())
+(reject "missing native M3T owner"
+  (lambda () (admit model)))
+(vector-set! entry 3 original-native)
+(check "native owner restoration" (eq? (admit model) entry))
+
+(define original-handles (vector-ref entry 8))
+(vector-set! entry 8 (make-vector 14 #f))
+(reject "missing canonical handle"
+  (lambda () (admit model)))
+(vector-set! entry 8 original-handles)
+(check "canonical handle restoration" (eq? (admit model) entry))
+
+(define original-profile (vector-ref entry 11))
+(vector-set! entry 11 'diagnostic-c4)
+(reject "C4 profile cannot relabel M3T"
+  (lambda () (admit model)))
+(vector-set! entry 11 original-profile)
+(check "profile restoration" (eq? (admit model) entry))
+
+(check "enter train mode" (module-train! model))
+(reject "train mode"
+  (lambda () (admit model)))
+(check "restore eval mode" (module-eval! model))
+(check "eval restoration" (eq? (admit model) entry))
+
+(define input (g3t-checked-m3t-input-create))
+(check "input copy" (g3t-checked-m3t-input-copy! input '(17 19)))
+(define workspace (g3t-checked-m3t-workspace-create model))
+(check "real M3T workspace begin"
+       (g3t-checked-m3t-workspace-begin! workspace input))
+(reject "active M3T frame"
+  (lambda () (admit model)))
+(check "real M3T workspace reset"
+       (g3t-checked-m3t-workspace-reset! workspace))
+(check "model released from active frame" (eq? (admit model) entry))
+(check "workspace release" (g3t-checked-m3t-workspace-release! workspace))
+(check "input release" (g3t-checked-m3t-input-release! input))
+(check "G3-T registry still empty"
+       (null? (vector-ref g3t-registry 0)))
+
+(display "G3-T M3T/C2 model admission PASS: checks=")
+(display checks)
+(newline)

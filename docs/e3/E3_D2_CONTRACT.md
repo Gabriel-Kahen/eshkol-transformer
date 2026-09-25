@@ -25,11 +25,11 @@ Generated output path relative to private artifact build directory: `source/e3_d
   (let ((result (e3-d2-byte-identity tokenizer))) result))
 ```
 
-The generator reads only those repository-owned inputs and an explicit output directory. It verifies the full predecessor SHA256, exactly one expected byte sequence spanning the existing definition, exactly one replacement definition, no remaining `t2-private-tokenizer-` reference in the result, and exact prefix/suffix preservation. It fails closed on predecessor drift, symlinked input/output, absent/duplicate form, arbitrary root/include/substitution overrides, or output escape. It writes deterministic LF bytes with no absolute-path/time header and emits source+replacement+generated hashes. It does not parse/evaluate Eshkol or copy a test carrier implementation. Checked-in exact expected form can be extracted from current lines643–654 into the manifest as UTF-8 text; the full predecessor hash prevents ambiguous extraction.
+The generator reads only those repository-owned inputs and an explicit output directory. It verifies the full predecessor SHA256, exactly one expected byte sequence spanning the existing definition, exactly one replacement definition, no remaining `t2-private-tokenizer-` reference in the result, and exact prefix/suffix preservation. It fails closed on predecessor drift, symlinked input/output, absent/duplicate form, arbitrary root/include/substitution overrides, or output escape. It writes deterministic LF bytes with no absolute-path/time header and emits source+replacement+generated hashes. It does not parse/evaluate Eshkol or copy a test carrier implementation. Checked-in exact expected form can be extracted from current lines 643–651 into the manifest as UTF-8 text; the full predecessor hash prevents ambiguous extraction.
 
 Reviewed predecessor hashes at this base:
 
-- d2_dataset.esk: `d16224de20732fa9eaf4f9be990d33712986d2f94723d7517f7e9b653ebf2fcf`
+- d2_dataset.esk: `53c5f1eb1c6a306503036251960607d1800a2d944a2322af6b5240fc5b20d5a9`
 - native/d2_native.c: `645ec4c0166b274045c9dced0bd2ee023b3fd7d75f5c2ff1821571f12be5d08c`
 - native/d2_native.h: `165dc0184d288b5ea1eef0b3a6a4d5aee4c44e7a2acc1eb1d4d46908206163e8`
 
@@ -188,7 +188,7 @@ Read-only source inspection used explicit /usr/bin/bash, login=false. No product
 
 A read-only Python bytes calculation over the pinned original proves the above exact replacement is unique and removes the only two T2 accessor references. Include the trailing two LF bytes after the definition in both source/replacement spans:
 
-- Replaced definition:535 bytes, SHA256 `3833c0b46a54779cb2a587337359fb12546b739fb1f5a1d0d2044ee7c284ed27`.
+- Replaced definition: 456 bytes, SHA256 `11a458544608ca8c484221069b68fe444f273c4417f78686a230fb69f932205a`.
 - Replacement definition:102 bytes, SHA256 `2ac3329c7b432d29a1d734f4e6328a1ccec6fd309642c97849ca8b176687b0a6`.
 - Generated candidate:44,982 bytes, SHA256 `d102ee50a33140271653f732f9dfea7c1c842c5c0922e99b4509ebffdc46ccaa`.
 

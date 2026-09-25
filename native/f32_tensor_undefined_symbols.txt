@@ -1,4 +1,5 @@
 __stack_chk_fail
+abort
 calloc
 et_kernel_error_clear
 free

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-readonly CANONICAL_REPOSITORY="https://github.com/tsotchke/eshkol.git"
+readonly CANONICAL_REPOSITORY="https://github.com/Gabriel-Kahen/eshkol.git"
 readonly CANONICAL_VERSION="Eshkol Compiler v1.3.4-evolve"
 
 usage() {

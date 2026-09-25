@@ -123,7 +123,8 @@
                     "diagnostic dependency rejected the request"))
               (m3t-fail 'internal operation
                 "diagnostic dependency raised a foreign value"))))
-    unreachable))
+    unreachable)
+  :runtime-emergency-rethrow-param caught)
 (define-syntax m3t-boundary
   (syntax-rules ()
     ((_ operation body ...)

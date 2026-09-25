@@ -1,0 +1,157 @@
+;;; Private one-attempt C factory. Native bridge admits/copies primitive input;
+;;; this source alone constructs and retains same-package identities.
+
+(extern i64 tr3-c-factory-input i64 :real et_tr3_c_factory_input_v1)
+(extern i64 tr3-c-factory-expected-byte i64
+        :real et_tr3_c_factory_expected_byte_v1)
+(extern i64 tr3-c-factory-stage i64 :real et_tr3_c_factory_stage_v1)
+(extern i64 tr3-c-factory-report i64 i64 i64
+        :real et_tr3_c_factory_report_v1)
+(extern i64 tr3-c-factory-reason :real et_tr3_c_factory_reason_v1)
+
+;;; [resolved,tokenizer,dataset,initializer,model,optimizer].
+;;; Successful children are promoted here before another fallible producer.
+(define tr3-c-factory-retained (make-vector 6 #f))
+
+(define (tr3-c-factory-category caught)
+  (if (not (transformer-error? caught)) 12
+      (let ((category (transformer-error-category caught)))
+        (cond ((eq? category 'invalid-argument) 1)
+              ((eq? category 'shape-mismatch) 2)
+              ((eq? category 'dtype-mismatch) 3)
+              ((eq? category 'device-mismatch) 4)
+              ((eq? category 'noncontiguous) 5)
+              ((eq? category 'unsupported) 6)
+              ((eq? category 'invalid-state) 7)
+              ((eq? category 'io) 8)
+              ((eq? category 'corrupt-data) 9)
+              ((eq? category 'version-mismatch) 10)
+              ((eq? category 'determinism-unavailable) 11)
+              (else 12)))))
+
+(define (tr3-c-factory-failure caught)
+  (let ((authentic (transformer-error? caught))
+        (category (tr3-c-factory-category caught))
+        (dataset (vector-ref tr3-c-factory-retained 2)))
+    (if dataset
+        (guard (cleanup
+                (#t (begin
+                      (tr3-c-factory-report 12 7 category)
+                      #f)))
+          (d2-token-dataset-close! dataset)
+          (tr3-c-factory-report
+            category
+            (if authentic (tr3-c-factory-reason) 8) 0)
+          #f)
+        (begin
+          (tr3-c-factory-report
+            category
+            (if authentic (tr3-c-factory-reason) 8) 0)
+          #f))))
+
+(define (tr3-c-factory-profile! resolved)
+  (x1-private-config-validate resolved)
+  (let loop ((checks '((model.context-length . 2) (model.hidden-size . 4)
+                       (model.layer-count . 1) (model.query-head-count . 2)
+                       (model.kv-head-count . 2) (model.head-size . 2)
+                       (model.vocabulary-size . 256) (model.dtype . f32)
+                       (model.device . cpu) (run.deterministic . #t))))
+    (if (null? checks) #t
+        (begin
+          (if (not (equal? (x1-private-config-ref resolved (car (car checks)))
+                           (cdr (car checks))))
+              (m3t-fail 'unsupported 'trainer-create
+                        "configuration differs from fixed diagnostic profile"))
+          (loop (cdr checks))))))
+
+(define (tr3-c-factory-dataset-options directory)
+  (list ':directory directory
+        ':batch-size (tr3-c-factory-input 0)
+        ':sequence-length (tr3-c-factory-input 1)
+        ':maximum-manifest-bytes (tr3-c-factory-input 2)
+        ':maximum-shard-bytes (tr3-c-factory-input 3)
+        ':maximum-total-tokens (tr3-c-factory-input 4)
+        ':maximum-batch-bytes (tr3-c-factory-input 5)
+        ':shuffle-seed
+        (if (= (tr3-c-factory-input 8) 1) (tr3-c-factory-input 6) #f)
+        ':shuffle-window-rows (tr3-c-factory-input 7)
+        ':packing? (= (tr3-c-factory-input 9) 1)))
+
+(define (tr3-c-factory-corpus-match? dataset)
+  (let ((cursor (d2-token-dataset-cursor dataset)))
+    (and (bytevector? cursor) (>= (bytevector-length cursor) 160)
+         (let loop ((index 0))
+           (if (= index 32) #t
+               (and (= (bytevector-u8-ref cursor (+ 128 index))
+                       (tr3-c-factory-expected-byte index))
+                    (loop (+ index 1))))))))
+
+(define (tr3-c-factory-handle-paths handles)
+  (let loop ((index 0))
+    (if (= index 14) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+
+(define (tr3-c-factory-optimizer-options handles rate beta1 beta2 epsilon decay)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (tr3-c-factory-handle-paths handles)
+                    rate beta1 beta2 epsilon decay))))
+
+(define (tr3-c-factory-create-source json directory rate beta1 beta2 epsilon decay)
+  (guard (caught (#t (tr3-c-factory-failure caught)))
+    (tr3-c-factory-stage 2)
+    (let* ((resolved
+             (x1-private-config-resolve
+               (x1-private-config-parse json) '())))
+      (vector-set! tr3-c-factory-retained 0 resolved)
+      (tr3-c-factory-profile! resolved)
+      (tr3-c-factory-stage 3)
+      (let ((tokenizer (t2-wave2-tokenizer-byte resolved)))
+        (vector-set! tr3-c-factory-retained 1 tokenizer)
+        (tr3-c-factory-stage 4)
+        (let ((dataset
+                (d2-token-dataset-open
+                  (tr3-c-factory-dataset-options directory) tokenizer)))
+          (vector-set! tr3-c-factory-retained 2 dataset)
+          (tr3-c-factory-stage 5)
+          (if (not (tr3-c-factory-corpus-match? dataset))
+              (begin
+                (tr3-c-factory-report 0 6 0)
+                (m3t-fail 'invalid-argument 'trainer-create
+                          "corpus manifest digest differs")))
+          (tr3-c-factory-stage 6)
+          (let ((initializer
+                  (m3t-public-initializer-state
+                    (x1-private-config-ref resolved 'run.seed))))
+            (vector-set! tr3-c-factory-retained 3 initializer)
+            (tr3-c-factory-stage 7)
+            (let ((model (m3t-public-model-create resolved initializer)))
+              (vector-set! tr3-c-factory-retained 4 model)
+              (tr3-c-factory-stage 8)
+              (let* ((handles
+                       (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+                     (tree (module-parameters model))
+                     (optimizer
+                       (o2-public-optimizer-create
+                         (tr3-c-factory-optimizer-options
+                           handles rate beta1 beta2 epsilon decay)
+                         tree)))
+                (vector-set! tr3-c-factory-retained 5 optimizer)
+                (tr3-c-factory-stage 9)
+                ;; Lease enrollment itself roots the fresh shell. Return it
+                ;; directly to C; no fallible Eshkol store follows enrollment.
+                (tr3-lease-create-internal
+                  resolved tokenizer dataset model optimizer)))))))))
+
+(define (tr3-c-factory-close-source trainer)
+  (guard (caught
+           (#t (let ((authentic (transformer-error? caught))
+                     (category (tr3-c-factory-category caught)))
+                 (tr3-c-factory-report
+                   category (cond ((not authentic) 8)
+                                  ((= category 7) 2)
+                                  (else 0)) 0)
+                 #f)))
+    (tr3-lease-unenroll-internal! trainer)
+    #t))

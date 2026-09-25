@@ -1,0 +1,235 @@
+;;; Ordinary-path development tests over canonical P1 and the genuine M3
+;;; constructor. Root-owned inert frame keys exercise P1 helper semantics only:
+;;; no E3 frame admission, shared-guard, allocation, or promotion proof is claimed.
+(load "m3_package_root.esk")
+(load "e3_p1_modes_extension.esk")
+
+(define checks 0)
+(define (check label actual expected)
+  (if (equal? actual expected) (set! checks (+ checks 1))
+      (begin (display "FAIL ") (display label) (display " actual=")
+             (display actual) (display " expected=") (display expected)
+             (newline) (exit 1))))
+(define (check-status label actual expected)
+  (check label (and (integer? actual) (exact? actual) (eq? actual expected)) #t))
+(define (check-invalid-token label token)
+  (check-status label (p1-e3-mode-prepare! token) 1)
+  (check-status label (p1-e3-mode-enter! token) 1)
+  (check-status label (p1-e3-mode-restore! token) 1)
+  (check-status label (p1-e3-mode-unbind! token) 1))
+(define (check-bind-rejection label root box status)
+  (let ((frame (vector-ref box 0)) (output (vector-ref box 1)))
+    (check-status label (p1-e3-mode-bind! root box) status)
+    (check "rejected bind preserves frame identity" (eq? (vector-ref box 0) frame) #t)
+    (check "rejected bind preserves output identity" (eq? (vector-ref box 1) output) #t)))
+
+;;; Independent contract-order fixture data. These hold only legitimate opaque
+;;; module shells; no raw module, mode snapshot, or lexical ledger is exposed.
+(define fixture-parents '#(-1 0 1 2 3 3 3 3 2 8 8 2 2 0 0 0 0))
+(define fixture-names '#("" "blocks" "0" "attention" "key" "output"
+  "query" "value" "ffn" "down" "up" "norm1" "norm2" "head"
+  "norm_final" "position_embedding" "token_embedding"))
+(define mixed-modes '#(train eval train eval train eval train eval train
+  eval train eval train eval train eval train))
+(define eval-modes (make-vector 17 'eval))
+(define (check-modes label nodes expected)
+  (let loop ((index 0))
+    (if (= index 17) #t
+        (begin
+          (check label (module-mode-internal (vector-ref nodes index))
+                       (vector-ref expected index))
+          (loop (+ index 1))))))
+(define (make-fixture variant)
+  (let ((nodes (make-vector 17 #f)))
+    ;; Set mixed modes while every module remains an independent root. Setting
+    ;; modes does not seal topology, and attachment preserves each node's mode.
+    (let create ((index 0))
+      (if (= index 17) #t
+          (let ((node (i2-module-create-internal)))
+            (if (eq? (vector-ref mixed-modes index) 'eval) (module-eval! node))
+            (vector-set! nodes index node)
+            (create (+ index 1)))))
+    (let attach ((index 1))
+      (if (= index 17) #t
+          (begin
+            (if (not (and (eq? variant 'missing) (= index 16)))
+                (check "attachment preserves exact child shell"
+                  (eq? (module-register-child-internal!
+                    (vector-ref nodes
+                      (if (and (eq? variant 'wrong-parent) (= index 16))
+                          13 (vector-ref fixture-parents index)))
+                    (if (and (eq? variant 'wrong-name) (= index 16))
+                        "token_embeddings" (vector-ref fixture-names index))
+                    (vector-ref nodes index))
+                    (vector-ref nodes index)) #t))
+            (attach (+ index 1)))))
+    (if (eq? variant 'extra)
+        (module-register-child-internal! (vector-ref nodes 0) "extra"
+                                         (i2-module-create-internal)))
+    nodes))
+(define (seal-fixture! nodes)
+  (check "fixture has no parameter bindings"
+    (parameter-tree-paths (module-parameters (vector-ref nodes 0))) '()))
+
+(define config (x1-private-config-resolve
+  (x1-private-config-parse "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}") '()))
+(define model (m3t-public-model-create config (m3t-public-initializer-state 1729)))
+(define parameters (module-parameters model))
+(check "genuine M3 constructor profile" (m3t-public-model-profile model)
+       'eshkol-diagnostic-byte-decoder-v1)
+(check "genuine M3 logical parameter paths"
+  (let count ((remaining (parameter-tree-paths parameters)) (total 0))
+    (if (or (null? remaining) (= total 16)) total
+        (count (cdr remaining) (+ total 1)))) 15)
+(check "genuine M3 head/token parameter tie"
+  (eq? (parameter-tree-handle parameters '("head" "weight"))
+       (parameter-tree-handle parameters '("token_embedding" "weight"))) #t)
+(check "surface length" (vector-length p1-trusted-surface) 73)
+
+(define frame (vector #f))
+(define setup (vector frame #f))
+(check-bind-rejection "foreign model" (vector #f) setup 1)
+(check-bind-rejection "wrong-kind model" parameters setup 1)
+(check-status "nonvector setup" (p1-e3-mode-bind! model #f) 1)
+(check-status "empty setup" (p1-e3-mode-bind! model (vector)) 1)
+(check-status "short setup" (p1-e3-mode-bind! model (vector frame)) 1)
+(check-status "long setup" (p1-e3-mode-bind! model (vector frame #f #f)) 1)
+(check-bind-rejection "absent frame key" model (vector #f #f) 1)
+(check-bind-rejection "malformed occupied setup" model (vector frame (vector #f)) 1)
+(check-status "genuine M3 bind" (p1-e3-mode-bind! model setup) 0)
+(define token (vector-ref setup 1))
+(check "successful bind preserves frame identity" (eq? (vector-ref setup 0) frame) #t)
+(check "canonical token shape" (and (vector? token) (= (vector-length token) 1)) #t)
+(check-bind-rejection "duplicate bind" model setup 2)
+(check-bind-rejection "duplicate model fresh frame" model (vector (vector #f) #f) 2)
+(check-invalid-token "false token" #f)
+(check-invalid-token "foreign immediate token" 7)
+(check-invalid-token "wrong-kind token" model)
+(check-invalid-token "copied token" (vector (vector-ref token 0)))
+(check-invalid-token "foreign token length" (vector #f #f))
+(check-status "idle enter" (p1-e3-mode-enter! token) 2)
+(check-status "idle restore" (p1-e3-mode-restore! token) 2)
+
+(check-status "prepare" (p1-e3-mode-prepare! token) 0)
+(check-status "repeat prepare" (p1-e3-mode-prepare! token) 2)
+(check-status "prepared unbind" (p1-e3-mode-unbind! token) 2)
+(check "prepare leaves root train" (module-mode-internal model) 'train)
+(check-status "prepared restore" (p1-e3-mode-restore! token) 0)
+(check-status "prepare second" (p1-e3-mode-prepare! token) 0)
+(check-status "enter" (p1-e3-mode-enter! token) 0)
+(check "root eval" (module-mode-internal model) 'eval)
+(check-status "entered prepare" (p1-e3-mode-prepare! token) 2)
+(check-status "entered unbind" (p1-e3-mode-unbind! token) 2)
+(check-status "repeat enter" (p1-e3-mode-enter! token) 2)
+(check-status "restore" (p1-e3-mode-restore! token) 0)
+(check "root train" (module-mode-internal model) 'train)
+(check-status "repeat restore" (p1-e3-mode-restore! token) 2)
+
+;;; Legal public setters deliberately violate the admitted mode snapshot here.
+;;; Rejection must preserve the phase/snapshot so restoring the expected mode
+;;; allows a successful retry. These are P1 preflight tests, not E3 cleanup.
+(check-status "prepare before outside write" (p1-e3-mode-prepare! token) 0)
+(module-eval! model)
+(check-status "enter rejects outside write" (p1-e3-mode-enter! token) 4)
+(check-status "prepared restore rejects outside write" (p1-e3-mode-restore! token) 4)
+(check "rejected preflight writes no mode" (module-mode-internal model) 'eval)
+(check-status "rejected preflight keeps prepared" (p1-e3-mode-unbind! token) 2)
+(module-train! model)
+(check-status "prepared restore retry" (p1-e3-mode-restore! token) 0)
+(check-status "prepare before entered corruption" (p1-e3-mode-prepare! token) 0)
+(check-status "enter before entered corruption" (p1-e3-mode-enter! token) 0)
+(module-train! model)
+(check-status "entered restore rejects non-eval" (p1-e3-mode-restore! token) 4)
+(check "rejected entered restore writes no mode" (module-mode-internal model) 'train)
+(check-status "rejected entered restore keeps entered" (p1-e3-mode-unbind! token) 2)
+(module-eval! model)
+(check-status "entered restore retry" (p1-e3-mode-restore! token) 0)
+(check "entered retry restores train" (module-mode-internal model) 'train)
+
+;;; A parameterless I2 tree has the exact P1 shape/provider, but no M3 model
+;;; constructor identity or parameter profile. Its admission proves only the
+;;; P1 helper's deliberately narrower authority contract.
+(define nodes (make-fixture 'valid))
+(define fixture (vector-ref nodes 0))
+(check-modes "mixed17 before sealing" nodes mixed-modes)
+(check-bind-rejection "unsealed exact17 tree" fixture (vector (vector #f) #f) 3)
+(check-modes "unsealed rejection preserves mixed17" nodes mixed-modes)
+(seal-fixture! nodes)
+(check-bind-rejection "duplicate frame across models" fixture (vector frame #f) 2)
+(check-bind-rejection "attached child is not root" (vector-ref nodes 1)
+                       (vector (vector #f) #f) 3)
+(define mixed-setup (vector (vector #f) #f))
+(check-status "mixed17 bind" (p1-e3-mode-bind! fixture mixed-setup) 0)
+(define mixed-token (vector-ref mixed-setup 1))
+(check "different bindings have distinct tokens" (eq? token mixed-token) #f)
+(check-status "mixed17 prepare" (p1-e3-mode-prepare! mixed-token) 0)
+(check-modes "mixed17 prepare preserves all nodes" nodes mixed-modes)
+(check-status "mixed17 prepared restore" (p1-e3-mode-restore! mixed-token) 0)
+(check-modes "mixed17 prepared restore exact" nodes mixed-modes)
+(check-status "mixed17 prepare before enter" (p1-e3-mode-prepare! mixed-token) 0)
+(check-status "mixed17 enter" (p1-e3-mode-enter! mixed-token) 0)
+(check-modes "mixed17 all eval" nodes eval-modes)
+(check "other bound model unaffected" (module-mode-internal model) 'train)
+(check-status "mixed17 restore" (p1-e3-mode-restore! mixed-token) 0)
+(check-modes "mixed17 restore exact" nodes mixed-modes)
+
+;;; Token contents are inert: equal contents confer nothing, while mutating the
+;;; authentic token's harmless payload does not replace its exact identity.
+(vector-set! mixed-token 0 'fixture-inert-payload)
+(check-invalid-token "copy of altered token" (vector (vector-ref mixed-token 0)))
+(check-status "altered authentic token prepare" (p1-e3-mode-prepare! mixed-token) 0)
+(check-status "altered authentic token enter" (p1-e3-mode-enter! mixed-token) 0)
+(check-status "altered authentic token restore" (p1-e3-mode-restore! mixed-token) 0)
+(check-modes "altered authentic token restores all17" nodes mixed-modes)
+
+(define caught-sentinel (vector #f))
+(check-status "prepare before simulated failure" (p1-e3-mode-prepare! mixed-token) 0)
+(check-status "enter before simulated failure" (p1-e3-mode-enter! mixed-token) 0)
+(guard (caught
+         (#t (check "same caught sentinel" (eq? caught caught-sentinel) #t)
+             (check-status "restore after simulated failure" (p1-e3-mode-restore! mixed-token) 0)))
+  (raise caught-sentinel))
+(check-modes "simulated failure restores all17" nodes mixed-modes)
+(let reuse ((iteration 0))
+  (if (= iteration 8) #t
+      (begin
+        (check-status "reused prepare" (p1-e3-mode-prepare! mixed-token) 0)
+        (check-status "reused enter" (p1-e3-mode-enter! mixed-token) 0)
+        (check-modes "reused all eval" nodes eval-modes)
+        (check-status "reused restore" (p1-e3-mode-restore! mixed-token) 0)
+        (check-modes "reused mixed17 exact" nodes mixed-modes)
+        (check "setup retains exact reused token" (eq? (vector-ref mixed-setup 1) mixed-token) #t)
+        (reuse (+ iteration 1)))))
+
+;;; Reachable malformed topologies use ordinary trusted construction APIs.
+;;; Duplicate-node/cycle/raw-record corruption cannot be constructed through
+;;; these APIs and is intentionally not fabricated with another raw authority.
+(let variants ((remaining '(missing extra wrong-name wrong-parent)))
+  (if (null? remaining) #t
+      (let ((bad-nodes (make-fixture (car remaining))))
+        (seal-fixture! bad-nodes)
+        (check-bind-rejection (car remaining) (vector-ref bad-nodes 0)
+                               (vector (vector #f) #f) 3)
+        (check-modes "topology rejection preserves all17 held modes" bad-nodes mixed-modes)
+        (variants (cdr remaining)))))
+(check-bind-rejection "providerless model unsupported" (module-create-internal)
+                       (vector (vector #f) #f) 3)
+
+(check-status "mixed17 unbind" (p1-e3-mode-unbind! mixed-token) 0)
+(check-status "genuine M3 unbind" (p1-e3-mode-unbind! token) 0)
+(check-status "dead unbind" (p1-e3-mode-unbind! token) 0)
+(check-status "dead prepare" (p1-e3-mode-prepare! token) 2)
+(check-status "dead enter" (p1-e3-mode-enter! token) 2)
+(check-status "dead restore" (p1-e3-mode-restore! token) 2)
+(check-bind-rejection "dead occupied setup remains duplicate" model setup 2)
+(check-invalid-token "copied dead token" (vector (vector-ref token 0)))
+(check-modes "unbind preserves mixed17" nodes mixed-modes)
+(define rebound-setup (vector (vector #f) #f))
+(check-status "new frame can bind unbound model" (p1-e3-mode-bind! model rebound-setup) 0)
+(define rebound-token (vector-ref rebound-setup 1))
+(check "rebinding allocates distinct identity" (eq? rebound-token token) #f)
+(check-status "old tombstone remains dead" (p1-e3-mode-prepare! token) 2)
+(check-status "rebound prepare" (p1-e3-mode-prepare! rebound-token) 0)
+(check-status "rebound prepared restore" (p1-e3-mode-restore! rebound-token) 0)
+(check-status "rebound unbind" (p1-e3-mode-unbind! rebound-token) 0)
+(display "E3-P1-MODES-ORDINARY-PASS checks=") (display checks) (newline)

@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Closed source and publication-order check for private G3-T length owners."""
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+base = (root / "native/g3t_ids_owner_source_closure.txt").read_text().splitlines()
+additions = [
+    "native/g3t_lengths_owner_extension.esk",
+    "scripts/check-g3t-length-owners.py",
+    "docs/g3/G3_T_LENGTH_OWNERS_LEAF.md",
+]
+closure = (root / "native/g3t_length_owners_source_closure.txt").read_text().splitlines()
+assert closure == base + additions
+assert len(closure) == len(set(closure))
+assert all((root / path).is_file() for path in closure if not path.startswith(".deps/"))
+
+extension = (root / additions[0]).read_text()
+prefill = (root / "native/g3t_prefill_sample_extension.esk").read_text()
+release = prefill.split("(define (g3t-generation-tensor-release! shell)", 1)[1].split(
+    "(define (g3t-prefill-call-linked", 1
+)[0]
+test = (root / "tests/g3t/p2_zero_budget_test.esk").read_text()
+runner = (root / "scripts/test-g3t-p2-zero-budget.sh").read_text()
+native = (root / "src/eshkol_transformer/g3t_transport.c").read_text()
+
+
+def balanced(source: str) -> bool:
+    depth = 0
+    quoted = escaped = commented = False
+    for char in source:
+        if char == "\n":
+            commented = False
+        if commented:
+            continue
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == ";":
+            commented = True
+        elif char == '"':
+            quoted = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0 and not quoted
+
+
+assert balanced(extension) and balanced(prefill) and balanced(test)
+accessors = [
+    ("lengths", "g3t-native-output-lengths-clone"),
+    ("cache-lengths", "g3t-native-output-cache-lengths-clone"),
+]
+for kind, clone in accessors:
+    name = "g3t-generation-output-" + kind
+    body = extension.split("(define (" + name + " output)", 1)[1]
+    if kind == "lengths":
+        body = body.split("(define (g3t-generation-output-cache-lengths", 1)[0]
+    assert body.index("g3t-prefill-entry output 'output") < body.index(
+        "(let* ((shell"
+    )
+    assert body.index("(shell (vector") < body.index("(next (cons entry") < body.index(
+        "(" + clone
+    )
+    assert body.index("(vector-set! g3t-registry 0 next)") < body.index(
+        "(" + clone
+    )
+    assert body.index("(g3t-native-tensor-release created)") < body.index(
+        "(g3t-prefill-dead! entry)"
+    ) < body.index("(raise caught)")
+    assert body.index("(set! created native)") < body.index(
+        "(vector-set! canonical 2 'live)"
+    )
+    assert "(vector-ref canonical 0)" in body
+    assert "(result (list" not in body
+    assert "'" + kind + " 'pending" in body
+
+assert all(f"(eq? kind '{kind})" in release
+           for kind in ("input", "ids", "lengths", "cache-lengths"))
+assert "(eq? kind 'lengths) (eq? kind 'cache-lengths)" in release
+assert "(g3t-prefill-entry shell kind operation)" in release
+assert "(g3t-native-tensor-release" in release
+assert "const uint64_t shape[1] = {1};" in native
+assert "et_g3t_private_output_lengths_clone_v1" in extension
+assert "et_g3t_private_output_cache_lengths_clone_v1" in extension
+assert "(provide" not in extension
+assert '(load "g3t_lengths_owner_extension.esk")' in test
+assert "native/g3t_length_owners_source_closure.txt" in runner
+for witness in (
+    "lengths wrapper rejects forged output",
+    "cache-lengths wrapper rejects pending output",
+    "lengths wrapper header cut atomic",
+    "cache-lengths wrapper header cut atomic",
+    "lengths wrapper I1 cut atomic",
+    "cache-lengths wrapper I1 cut atomic",
+    "P2/G0 length wrappers own independent I1[1] values",
+    "lengths wrapper borrow blocks typed release",
+    "cache-lengths wrapper borrow blocks typed release",
+    "lengths wrapper rejects borrowed output",
+    "P1/G0 length wrappers return exact independent 0 and 1",
+    "P1/G1 length wrappers return exact independent 1 and 2",
+):
+    assert witness in test, witness
+print("G3-T private length owner source contract: PASS")

@@ -1,0 +1,45 @@
+;;; Private snapshot-to-checkpoint publication. The result cell is the sole
+;;; authority for the detached C2 owner, including a snapshot wrapper that
+;;; raises after publishing it. C2 owns the byte format and atomic writer.
+
+(define tr3-c-snapshot-save-call c2-checkpoint-save-internal!)
+(define tr3-c-snapshot-save-release! c2-training-state-release-internal!)
+
+(define (tr3-c-snapshot-save-internal! trainer path policy options)
+  (let ((owner-cell (vector #f))
+        (failure (vector #f #f))
+        (cleanup (vector #f #f)))
+    (let ((result
+            (guard (caught
+                     (#t
+                       (vector-set! failure 0 #t)
+                       (vector-set! failure 1 caught)
+                       #f))
+              (tr3-c-trainer-state-internal trainer owner-cell)
+              (let ((owner (vector-ref owner-cell 0)))
+                (if (not owner)
+                    (tr3-c-snapshot-fail
+                      'internal "snapshot did not publish a C2 owner"))
+                (tr3-c-snapshot-save-call owner path policy options)))))
+      (let ((owner (vector-ref owner-cell 0)))
+        (if owner
+            (begin
+              ;; Clear authority before release. A defective release cannot
+              ;; trigger a second attempt or mask the fact it consumed owner.
+              (vector-set! owner-cell 0 #f)
+              (guard (caught
+                       (#t
+                         (vector-set! cleanup 0 #t)
+                         (vector-set! cleanup 1 caught)
+                         #f))
+                (tr3-c-snapshot-save-release!
+                  owner 'trainer-state-release!)))))
+      (if (vector-ref cleanup 0)
+          (tr3-c-snapshot-fail
+            'internal "detached snapshot cleanup failed"))
+      (if (vector-ref failure 0)
+          (raise (vector-ref failure 1)))
+      (if (not (eq? result #t))
+          (tr3-c-snapshot-fail
+            'internal "checkpoint writer returned without success"))
+      #t)))

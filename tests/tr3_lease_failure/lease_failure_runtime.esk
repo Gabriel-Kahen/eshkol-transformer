@@ -1,0 +1,410 @@
+;;; Test-only exhaustive allocation-prefix witness for TR3 lease acquisition.
+;;; The tuple is fully constructed before each failpoint is armed.  The lease
+;;; implementation and every component implementation are production sources.
+(load "t2_wave2_root.esk")
+(load "i2_wave2_extension.esk")
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+(load "d2_semantic_core.esk")
+(load "d2_dataset.esk")
+(load "o2_wave2_extension.esk")
+(load "tr3_p1_fixed_set_extension.esk")
+
+(load "tr3_lease_core_extension.esk")
+(load "tr3_lease_public_gates_extension.esk")
+(o2-install-tr3-create-overlap-check-internal!
+  tr3-o2-create-overlap-check-internal)
+
+(extern i64 lf-root ptr :real et_tr3_lf_root_v1)
+(extern i64 lf-object-arm i64 :real et_tr3_lf_object_arm_v1)
+(extern i64 lf-all-arm i64 :real et_tr3_lf_all_arm_v1)
+(extern i64 lf-promotion-arm i64 :real et_tr3_lf_promotion_arm_v1)
+(extern i64 lf-target-arm i64 :real et_tr3_lf_target_arm_v1)
+(extern i64 lf-handler-prepare :real et_tr3_lf_handler_prepare_v1)
+(extern i64 lf-handler-fresh :real et_tr3_lf_handler_fresh_v1)
+(extern i64 lf-handler-arm :real et_tr3_lf_handler_arm_v1)
+(extern i64 lf-poststage-arm :real et_tr3_lf_poststage_arm_v1)
+(extern i64 lf-poststage-finish :real et_tr3_lf_poststage_finish_v1)
+(extern i64 lf-finish i64 :real et_tr3_lf_finish_v1)
+(extern i64 lf-snapshot-begin :real et_tr3_lf_snapshot_begin_v1)
+(extern i64 lf-snapshot-parameter i64 ptr
+        :real et_tr3_lf_snapshot_parameter_v1)
+(extern i64 lf-snapshot-optimizer ptr
+        :real et_tr3_lf_snapshot_optimizer_v1)
+(extern i64 lf-verify-parameter i64 ptr
+        :real et_tr3_lf_verify_parameter_v1)
+(extern i64 lf-verify-optimizer ptr
+        :real et_tr3_lf_verify_optimizer_v1)
+(extern i64 lf-done :real et_tr3_lf_done_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "TR3 LEASE FAILURE FAIL: ") (display label) (newline)
+        (exit 1))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (record-count)
+  (let loop ((remaining (vector-ref tr3-trainers 0)) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+(define (record-for-shell shell)
+  (let loop ((remaining (vector-ref tr3-trainers 0)))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 2)) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (verify-successor-record! shell enrollment-cursor)
+  (let ((record (record-for-shell shell)))
+    (check "successful enrollment owns a 22-slot idle record"
+           (and (vector? record) (= (vector-length record) 22)
+                (eq? (vector-ref record 3) 'idle)
+                (eq? (vector-ref record 4) #f)))
+    (check "successful enrollment owns exact initial epoch and RNG controls"
+           (and (bytes=? (vector-ref record 17) enrollment-cursor)
+                (equal? (vector-ref record 18)
+                        (vector 'philox4x32-10 1 1729 0 0))))
+    (check "successful enrollment owns zero initial counters"
+           (and (= (vector-ref record 19) 0)
+                (= (vector-ref record 20) 0)
+                (= (vector-ref record 21) 0)))
+    #t))
+
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+
+;;; Tuple slots: resolved, tokenizer, dataset, model, optimizer, model entry.
+(define corpus-directory (car (cdr (command-line))))
+(define (make-tuple)
+  (let* ((resolved (resolved-config))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset (d2-token-dataset-open
+                    (dataset-config corpus-directory) tokenizer))
+         (model (m3t-public-model-create
+                  resolved (m3t-public-initializer-state 1729)))
+         (entry (m3t-entry model 'model 'trainer-create #t))
+         (tree (module-parameters model))
+         (optimizer
+           (o2-public-optimizer-create
+             (optimizer-config (vector-ref entry 8)) tree)))
+    (vector resolved tokenizer dataset model optimizer entry)))
+(define (tuple-create tuple)
+  (tr3-lease-create-internal
+    (vector-ref tuple 0) (vector-ref tuple 1) (vector-ref tuple 2)
+    (vector-ref tuple 3) (vector-ref tuple 4)))
+
+(define (snapshot-native! tuple)
+  (check "native snapshot begins" (= (lf-snapshot-begin) 1))
+  (let ((handles (vector-ref (vector-ref tuple 5) 8)))
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (let ((carrier
+                  (parameter-handle-tensor-internal
+                    (vector-ref handles index))))
+            (check "native parameter snapshot"
+                   (= (lf-snapshot-parameter index
+                        (vector-ref carrier 2)) 1))
+            (loop (+ index 1))))))
+  (check "native optimizer snapshot"
+         (= (lf-snapshot-optimizer
+              (vector-ref (o2-require-optimizer
+                            'trainer-create (vector-ref tuple 4)) 1)) 1)))
+(define (verify-native! tuple)
+  (let ((handles (vector-ref (vector-ref tuple 5) 8)))
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (let ((carrier
+                  (parameter-handle-tensor-internal
+                    (vector-ref handles index))))
+            (check "parameter values, bytes, and gradients unchanged"
+                   (= (lf-verify-parameter index
+                        (vector-ref carrier 2)) 1))
+            (loop (+ index 1))))))
+  (check "optimizer moments and counters unchanged"
+         (= (lf-verify-optimizer
+              (vector-ref (o2-require-optimizer
+                            'trainer-create (vector-ref tuple 4)) 1)) 1)))
+
+(define (ordinary-mutations! tuple cursor)
+  (check "ordinary module eval remains usable"
+         (tr3-public-module-eval! (vector-ref tuple 3)))
+  (check "ordinary module train remains usable"
+         (tr3-public-module-train! (vector-ref tuple 3)))
+  (check "ordinary optimizer zero-grad remains usable"
+         (tr3-public-optimizer-zero-grad! (vector-ref tuple 4)))
+  (check "ordinary dataset seek remains usable"
+         (tr3-public-token-dataset-seek! (vector-ref tuple 2) cursor)))
+
+(define (arm-failure! mode ordinal)
+  (cond
+    ((eq? mode 'object) (lf-object-arm ordinal))
+    ((eq? mode 'all) (lf-all-arm ordinal))
+    ((eq? mode 'promotion) (lf-promotion-arm ordinal))
+    ((eq? mode 'target) (lf-target-arm ordinal))
+    (else (exit 83))))
+(define (attempt-failure! tuple mode ordinal label)
+  ;; Every observation is complete before injection.
+  (let ((head-before (vector-ref tr3-trainers 0))
+        (count-before (record-count))
+        (cursor-before (d2-token-dataset-cursor (vector-ref tuple 2)))
+        (mode-before (module-mode-internal (vector-ref tuple 3)))
+        (frame-before (vector-ref (vector-ref tuple 5) 10))
+        (updates-before
+          (o2-optimizer-completed-updates-internal (vector-ref tuple 4))))
+    (snapshot-native! tuple)
+    (check "failpoint arms" (= (arm-failure! mode ordinal) 1))
+    (let* ((raised-value
+            (guard (raised (#t raised))
+              (with-region ('tr3-lease-short-promotion 65536)
+                (tuple-create tuple))
+              #f))
+           (did-catch (not (eq? raised-value #f))))
+      (if (and did-catch (transformer-error? raised-value))
+          (check "translated allocation has exact E1 category and operation"
+                 (and (eq? mode 'all)
+                      (eq? (transformer-error-category raised-value)
+                           'internal)
+                      (or
+                        (and
+                          (eq? (transformer-error-operation raised-value)
+                               'config-fingerprint)
+                          (string=? (transformer-error-message raised-value)
+                                    "canonical SHA-256 result could not be materialized"))
+                        (and
+                          (eq? (transformer-error-operation raised-value)
+                               'tokenizer-fingerprint)
+                          (string=? (transformer-error-message raised-value)
+                                    "unexpected tokenizer core failure"))))))
+      (let ((failed (= (lf-finish (if did-catch 1 0)) 1)))
+        (if failed
+            (begin
+              (check "injected allocation raises" did-catch)
+              (check "failed acquisition enrolls no trainer"
+                     (= (record-count) count-before))
+              (check "failed acquisition preserves prior head"
+                     (eq? (vector-ref tr3-trainers 0) head-before))
+              (check "failed acquisition clears staging root"
+                     (eq? (vector-ref tr3-trainers 1) #f))
+              (check "failed acquisition resets acquisition guard"
+                     (eq? tr3-acquisition-active? #f))
+              (check "failed acquisition preserves cursor bytes"
+                     (bytes=? cursor-before
+                              (d2-token-dataset-cursor
+                                (vector-ref tuple 2))))
+              (check "failed acquisition preserves mode and frame"
+                     (and (eq? mode-before
+                               (module-mode-internal (vector-ref tuple 3)))
+                          (eq? frame-before
+                               (vector-ref (vector-ref tuple 5) 10))))
+              (check "failed acquisition preserves update counter"
+                     (= updates-before
+                        (o2-optimizer-completed-updates-internal
+                          (vector-ref tuple 4))))
+              (verify-native! tuple)
+              (ordinary-mutations! tuple cursor-before)
+              (let ((shell
+                      (with-region ('tr3-lease-short-retry 65536)
+                        (tuple-create tuple))))
+                (check "same genuine tuple retries successfully" shell)
+                (check "retry enrolls exactly once"
+                       (= (record-count) (+ count-before 1)))
+                (verify-successor-record! shell cursor-before))
+              #t)
+            (begin
+              (check "first uninjected prefix succeeds" (not did-catch))
+              (display label) (display " prefixes=") (display ordinal)
+              (newline)
+              #f))))))
+
+(check "test shim records exact lease registry root"
+       (= (lf-root tr3-trainers) 1))
+
+(define (run-matrix-case mode ordinal class-name label)
+  (let ((failed (attempt-failure! (make-tuple) mode ordinal label)))
+    (check "isolated matrix case completes" (= (lf-done) 1))
+    (display "TR3-LEASE-CASE class=") (display class-name)
+    (display " ordinal=") (display ordinal)
+    (display " result=") (display (if failed "HIT" "END"))
+    (display " checks=") (display checks)
+    (newline)))
+
+;;; Exhaust the recycled handler pool with live guards, then deny the exact
+;;; allocation needed by the acquisition's own guard.
+(define (handler-scope tuple depth)
+  (guard (caught
+           (#t
+             (begin
+               (check "handler allocation failure is genuine"
+                      (= (lf-finish 1) 1))
+               0)))
+    (if (= (lf-handler-fresh) 0)
+        (if (< depth 512)
+            ;; The return value is required after recursion, so the compiler
+            ;; must retain this guard frame while its child runs.
+            (+ 1 (handler-scope tuple (+ depth 1)))
+            (exit 82))
+        (begin
+          (check "handler failpoint arms" (= (lf-handler-arm) 1))
+          (tuple-create tuple)
+          0))))
+(define (run-handler-case)
+  (let* ((tuple (make-tuple))
+         (head (vector-ref tr3-trainers 0))
+         (count (record-count))
+         (cursor (d2-token-dataset-cursor (vector-ref tuple 2)))
+         (mode (module-mode-internal (vector-ref tuple 3)))
+         (frame (vector-ref (vector-ref tuple 5) 10))
+         (updates
+           (o2-optimizer-completed-updates-internal (vector-ref tuple 4))))
+    (snapshot-native! tuple)
+    (check "handler exhaustion preparation begins" (= (lf-handler-prepare) 1))
+    (check "handler allocation failure caught in live nested scope"
+           (>= (handler-scope tuple 0) 0))
+    (check "handler allocation failure enrolls no trainer"
+           (= (record-count) count))
+    (check "handler allocation failure preserves prior head"
+           (eq? (vector-ref tr3-trainers 0) head))
+    (check "handler allocation failure clears staging and guard"
+           (and (eq? (vector-ref tr3-trainers 1) #f)
+                (eq? tr3-acquisition-active? #f)))
+    (check "handler allocation failure preserves cursor"
+           (bytes=? cursor
+                    (d2-token-dataset-cursor (vector-ref tuple 2))))
+    (check "handler allocation failure preserves mode, frame, and counter"
+           (and (eq? mode (module-mode-internal (vector-ref tuple 3)))
+                (eq? frame (vector-ref (vector-ref tuple 5) 10))
+                (= updates
+                   (o2-optimizer-completed-updates-internal
+                     (vector-ref tuple 4)))))
+    (verify-native! tuple)
+    (ordinary-mutations! tuple cursor)
+    (let ((shell
+            (with-region ('tr3-handler-retry 65536)
+              (tuple-create tuple))))
+      (check "handler allocation failure retry succeeds" shell)
+      (check "handler allocation failure retry enrolls exactly once"
+             (= (record-count) (+ count 1)))
+      (verify-successor-record! shell cursor))
+    (check "isolated handler case completes" (= (lf-done) 1))
+    (display "TR3-LEASE-CASE class=handler ordinal=0 result=HIT checks=")
+    (display checks) (newline)))
+
+;;; The contract requires no fallible allocation after canonical staging and
+;;; before enrollment. Observe every wrapped allocator during that exact
+;;; interval and require zero attempts. A nonzero census is a production
+;;; counterexample; manufacturing an error here would be a fake prefix.
+(define (poststage-attempt)
+  (let* ((tuple (make-tuple))
+         (head (vector-ref tr3-trainers 0))
+         (count (record-count))
+         (cursor (d2-token-dataset-cursor (vector-ref tuple 2)))
+         (handles (vector-ref (vector-ref tuple 5) 8))
+         (optimizer-record
+           (o2-require-optimizer 'trainer-create (vector-ref tuple 4)))
+         (handle-list (vector-ref optimizer-record 5)))
+    (check "fixed handle identity accepts the authentic list"
+           (tr3-lease-vector-identical? handles handle-list 14))
+    (check "fixed handle identity rejects a short list"
+           (not (tr3-lease-vector-identical? handles (cdr handle-list) 14)))
+    (check "fixed handle identity rejects an extra element"
+           (not (tr3-lease-vector-identical?
+                  handles (cons #f handle-list) 14)))
+    (check "fixed handle identity rejects a changed first handle"
+           (not (tr3-lease-vector-identical?
+                  handles (cons #f (cdr handle-list)) 14)))
+    (check "TR3 O2 idle query agrees with the O2 helper"
+           (and (= (o2-optimizer-completed-updates-internal
+                     (vector-ref tuple 4)) 0)
+                (tr3-lease-o2-idle! optimizer-record handles)))
+    (let ((forged (vector-copy optimizer-record)))
+      (vector-set! forged 0 #f)
+      (check "TR3 O2 rejection preserves O2 category and operation"
+             (guard (caught
+                      (#t (and (transformer-error? caught)
+                               (eq? (transformer-error-category caught)
+                                    'invalid-argument)
+                               (eq? (transformer-error-operation caught)
+                                    'o2-optimizer-completed-updates-internal))))
+               (tr3-lease-o2-idle! forged handles)
+               #f)))
+    (snapshot-native! tuple)
+    (check "post-staging census arms" (= (lf-poststage-arm) 1))
+    (let ((shell
+            (with-region ('tr3-post-staging-short 65536)
+              (tuple-create tuple))))
+      (check "post-staging interval allocates nothing"
+             (= (lf-poststage-finish) 1))
+      (check "post-staging success enrolls once"
+             (= (record-count) (+ count 1)))
+      (check "post-staging success prepends prior head"
+             (eq? (cdr (vector-ref tr3-trainers 0)) head))
+      (check "post-staging success clears staging and guard"
+             (and (eq? (vector-ref tr3-trainers 1) #f)
+                  (eq? tr3-acquisition-active? #f)))
+      (check "post-staging success preserves cursor bytes"
+             (bytes=? cursor
+                      (d2-token-dataset-cursor (vector-ref tuple 2))))
+      (verify-successor-record! shell cursor)
+      (verify-native! tuple)
+      (check "promoted shell survives short region"
+             (eq? shell
+                  (vector-ref (car (vector-ref tr3-trainers 0)) 2))))))
+(define (run-poststage-case)
+  (poststage-attempt)
+  (poststage-attempt)
+  (check "isolated cold and repeated post-staging cases complete"
+         (= (lf-done) 1))
+  (display "TR3-LEASE-CASE class=poststage ordinal=0 result=PASS checks=")
+  (display checks) (newline))
+
+;;; The shell gate starts a fresh process for every ordinal. Each process still
+;;; prepares a complete tuple before arming, verifies the failed state, performs
+;;; ordinary mutations, and retries that same tuple successfully. Isolation
+;;; prevents already-enrolled retries from exhausting the ordinary arena while
+;;; the complete prefix stream is enumerated.
+(define case-arguments (cdr (cdr (command-line))))
+(define case-name (car case-arguments))
+(define case-ordinal
+  (if (null? (cdr case-arguments)) 0
+      (string->number (car (cdr case-arguments)))))
+(cond
+  ((string=? case-name "object")
+    (run-matrix-case 'object case-ordinal "object"
+                     "TR3-LEASE-SUPPORTED-OBJECT"))
+  ((string=? case-name "all")
+    (run-matrix-case 'all case-ordinal "all"
+                     "TR3-LEASE-ALL-OBJECT"))
+  ((string=? case-name "promotion")
+    (run-matrix-case 'promotion case-ordinal "promotion"
+                     "TR3-LEASE-PROMOTION"))
+  ((string=? case-name "target")
+    (run-matrix-case 'target case-ordinal "target"
+                     "TR3-LEASE-TARGET"))
+  ((string=? case-name "handler") (run-handler-case))
+  ((string=? case-name "poststage") (run-poststage-case))
+  (else (exit 84)))

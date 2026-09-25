@@ -1,0 +1,32 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
+(extern i64 test-failstop i64
+        :real et_g3c4_call_entry_test_failstop_v1)
+
+(define model (g3c4-model-create-seeded-internal 1729))
+(define generator
+  (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4
+          ':sampling 'greedy
+          ':temperature-bits 1065353216
+          ':top-k 256
+          ':top-p-bits 1065353216
+          ':max-new-tokens 1
+          ':eos #f
+          ':seed 11)))
+(define arguments (cdr (command-line)))
+(if (and (pair? arguments) (equal? (car arguments) "finish"))
+    (g3c4-with-call-internal 'finish-failstop generator 0 0
+      (test-failstop 1))
+    (g3c4-with-call-internal 'abort-failstop generator 0 0
+      (begin
+        (test-failstop 2)
+        (g3c4-fail 'internal 'abort-failstop
+                   "injected precommit failure"))))
+(exit 1)

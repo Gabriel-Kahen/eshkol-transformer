@@ -1,0 +1,5 @@
+;;; Test-only composition of the accepted TR3 lease, objective and update-clear
+;;; operations in one registry universe. No installed trainer entry is exported.
+(load "tr3_lease_root.esk")
+(load "tr3b_objective_extension.esk")
+(load "tr3_o2_step_clear_extension.esk")

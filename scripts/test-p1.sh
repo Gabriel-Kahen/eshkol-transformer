@@ -12,6 +12,7 @@ require_command rg
 require_command strings
 require_command timeout
 verify_toolchain
+python3 "${PROJECT_ROOT}/scripts/check-p1-native-index.py"
 
 p1_runner="$(eshkol_build_dir)/eshkol-run"
 p1_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
@@ -281,7 +282,7 @@ trusted_private_count="$(readelf -Ws \
   "${p1_trusted_link}/p1_identity.o" | \
   awk '/et_p1_private_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 private symbol visibility changed"
-[[ "${trusted_private_count}" == 36 ]] || \
+[[ "${trusted_private_count}" == 39 ]] || \
   die "P1 trusted ABI symbol count changed: ${trusted_private_count}"
 
 p1_public_cflags=(
@@ -305,7 +306,9 @@ fi
   cat "${PROJECT_ROOT}/native/p1_identity_trusted_symbols.txt"
   printf '%s\n' \
     et_p1_test_callback_fail_after_v1 \
+    et_p1_test_construction_commit_fail_next_v1 \
     et_p1_test_live_entry_count_v1 \
+    et_p1_test_record_index_invalidate_v1 \
     et_p1_test_state_bind_fail_next_v1 \
     et_p1_test_tombstone_count_v1
 } | LC_ALL=C sort >"${p1_tmp}/test-trusted-symbols.expected"
@@ -317,7 +320,7 @@ cmp "${p1_tmp}/test-trusted-symbols.expected" \
 test_hook_count="$(readelf -Ws "${p1_test_trusted_link}/p1_identity.o" | \
   awk '/et_p1_test_/ { if ($5 != "GLOBAL" || $6 != "HIDDEN") exit 2; n++ }
        END { print n + 0 }')" || die "P1 test-hook visibility changed"
-[[ "${test_hook_count}" == 4 ]] || \
+[[ "${test_hook_count}" == 6 ]] || \
   die "P1 test-only hook count changed: ${test_hook_count}"
 "${p1_cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
   -I "${PROJECT_ROOT}/native" \
@@ -341,8 +344,15 @@ grep -F 'P1 identity PASS: 274 checks' "${p1_tmp}/identity.stdout" >/dev/null
   -o "${p1_tmp}/test-p1-identity-failpoints"
 "${p1_tmp}/test-p1-identity-failpoints" \
   >"${p1_tmp}/failpoints.stdout"
-grep -F 'P1 failpoint PASS: 123 checks' \
+grep -F 'P1 failpoint PASS: 139 checks' \
   "${p1_tmp}/failpoints.stdout" >/dev/null
+
+"${p1_cc}" "${p1_cflags[@]}" \
+  "${PROJECT_ROOT}/tests/p1/test_p1_identity_index.c" \
+  "${p1_test_trusted_archive}" -o "${p1_tmp}/test-p1-identity-index"
+"${p1_tmp}/test-p1-identity-index" >"${p1_tmp}/index.stdout"
+grep -F 'P1 native index PASS: 2828 checks' \
+  "${p1_tmp}/index.stdout" >/dev/null
 
 "${p1_cc}" "${p1_public_cflags[@]}" -c \
   "${PROJECT_ROOT}/tests/p1/p1_public_identity_probe.c" \

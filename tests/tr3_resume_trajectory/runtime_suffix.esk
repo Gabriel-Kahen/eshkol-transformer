@@ -1,0 +1,366 @@
+;;; Appended to the accepted TR3-C snapshot witness after its hooks reset.
+;;; K=1 genuine composer update, then a three-update source/restore suffix.
+
+(define trajectory-policy
+  (c2-persistence-policy-internal 16777216 16777216 16777216 64 'cpu))
+(define trajectory-report (k2-public-capability-discover))
+(define trajectory-k-path (string-append corpus-directory "/trajectory-k.c2"))
+(define trajectory-source-path
+  (string-append corpus-directory "/trajectory-source-r.c2"))
+(define trajectory-resumed-path
+  (string-append corpus-directory "/trajectory-resumed-r.c2"))
+(define trajectory-corrupt-path
+  (string-append corpus-directory "/trajectory-corrupt.c2"))
+
+(define (trajectory-read path)
+  (let* ((port (open-binary-input-file path))
+         (bytes (read-bytevector (file-size path) port)))
+    (close-port port)
+    bytes))
+(define (trajectory-write path bytes)
+  (let ((port (open-binary-output-file path)))
+    (write-bytevector bytes port)
+    (close-port port)))
+(define (trajectory-live-image shell)
+  (let ((owner (tr3-c-trainer-state-internal shell (vector #f))))
+    (let ((image (owner-image owner)))
+      (c2-training-state-release-internal! owner 'trainer-state-release!)
+      image)))
+(define (trajectory-idle? record)
+  (and (eq? (vector-ref record 3) 'idle)
+       (not (vector-ref record 4))))
+(define (trajectory-controls? record updates tokens epochs ordinal)
+  (let* ((cursor (d2-token-dataset-cursor (vector-ref record 15)))
+         (decoded (d2-core-cursor-decode cursor))
+         (epoch (d2-core-cursor-decode (vector-ref record 17)))
+         (span (- (vector-ref epoch 14) (vector-ref epoch 15))))
+    (and (= (vector-ref record 19) tokens)
+         (= (vector-ref record 20) updates)
+         (= (vector-ref record 21) epochs)
+         (= (o2-optimizer-completed-updates-internal
+              (vector-ref record 13)) updates)
+         (= (vector-ref decoded 15) ordinal)
+         (= (* updates 2)
+            (+ (* epochs span)
+               (- ordinal (vector-ref epoch 15)))))))
+(define (trajectory-step label shell)
+  (guard (caught
+           (#t (begin
+                 (display "TR3-C TRAJECTORY STEP ERROR ")
+                 (display label)
+                 (if (transformer-error? caught)
+                     (begin (display " ")
+                            (display (transformer-error-category caught))
+                            (display " ")
+                            (display (transformer-error-operation caught))
+                            (display " ")
+                            (display (transformer-error-message caught)))
+                     (display " foreign"))
+                 (newline)
+                 (exit 2))))
+    (tr3-step-composer-internal! shell)))
+
+(check "K=1 genuine two-microbatch update"
+       (trajectory-step 'K trainer))
+(check "K controls are at finite EOS"
+       (and (trajectory-idle? record)
+            (trajectory-controls? record 1 3 0 2)))
+(define trajectory-k-image (trajectory-live-image trainer))
+(check "K checkpoint publishes through accepted TR3/C2 SAVE"
+       (tr3-c-snapshot-save-internal!
+         trainer trajectory-k-path trajectory-policy '()))
+(check "SAVE leaves source image unchanged"
+       (image=? trajectory-k-image (trajectory-live-image trainer)))
+
+(define trajectory-receiver-tuple (make-tuple 1729))
+(define trajectory-receiver
+  (tr3-lease-create-internal
+    (vector-ref trajectory-receiver-tuple 0)
+    (vector-ref trajectory-receiver-tuple 1)
+    (vector-ref trajectory-receiver-tuple 2)
+    (vector-ref trajectory-receiver-tuple 3)
+    (vector-ref trajectory-receiver-tuple 4)))
+(define trajectory-receiver-record (record-for-shell trajectory-receiver))
+(define trajectory-receiver-before (trajectory-live-image trajectory-receiver))
+(check "fresh receiver differs from K state"
+       (not (image=? trajectory-k-image trajectory-receiver-before)))
+
+(define trajectory-corrupt
+  (bytevector-copy (trajectory-read trajectory-k-path)
+                   0 (file-size trajectory-k-path)))
+(bytevector-u8-set!
+  trajectory-corrupt (- (bytevector-length trajectory-corrupt) 1)
+  (if (= (bytevector-u8-ref
+           trajectory-corrupt (- (bytevector-length trajectory-corrupt) 1)) 0)
+      1 0))
+(trajectory-write trajectory-corrupt-path trajectory-corrupt)
+(check "checksum corruption rejects before receiver mutation"
+       (transformer-error-at?
+         'corrupt-data 'checkpoint-load
+         (lambda ()
+           (tr3-c-checkpoint-restore-internal!
+             trajectory-receiver trajectory-corrupt-path
+             trajectory-policy trajectory-report))))
+(check "corrupt file preserves both live trainers"
+       (and (image=? trajectory-receiver-before
+                     (trajectory-live-image trajectory-receiver))
+            (image=? trajectory-k-image (trajectory-live-image trainer))
+            (trajectory-idle? trajectory-receiver-record)))
+
+(define trajectory-mismatch-resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":9876,\"training.accumulation-steps\":2}")
+    '()))
+(define trajectory-mismatch-tokenizer
+  (t2-wave2-tokenizer-byte trajectory-mismatch-resolved))
+(define trajectory-mismatch-dataset
+  (d2-token-dataset-open
+    (dataset-config corpus-directory) trajectory-mismatch-tokenizer))
+(define trajectory-mismatch-model
+  (m3t-public-model-create trajectory-mismatch-resolved
+                           (m3t-public-initializer-state 9876)))
+(define trajectory-mismatch-handles
+  (vector-ref
+    (m3t-entry trajectory-mismatch-model 'model 'trainer-create #t) 8))
+(define trajectory-mismatch-optimizer
+  (o2-public-optimizer-create
+    (optimizer-config trajectory-mismatch-handles)
+    (module-parameters trajectory-mismatch-model)))
+(define trajectory-mismatch-trainer
+  (tr3-lease-create-internal
+    trajectory-mismatch-resolved trajectory-mismatch-tokenizer
+    trajectory-mismatch-dataset trajectory-mismatch-model
+    trajectory-mismatch-optimizer))
+(define trajectory-mismatch-record
+  (record-for-shell trajectory-mismatch-trainer))
+(define trajectory-mismatch-before
+  (trajectory-live-image trajectory-mismatch-trainer))
+(check "canonical X1 mismatch rejects genuine K checkpoint"
+       (transformer-error-at?
+         'invalid-state 'trainer-load-state!
+         (lambda ()
+           (tr3-c-checkpoint-restore-internal!
+             trajectory-mismatch-trainer trajectory-k-path
+             trajectory-policy trajectory-report))))
+(check "mismatch rejection preserves receiver and source"
+       (and (image=? trajectory-mismatch-before
+                     (trajectory-live-image trajectory-mismatch-trainer))
+            (image=? trajectory-k-image (trajectory-live-image trainer))
+            (trajectory-idle? trajectory-mismatch-record)))
+
+(check "genuine C2 LOAD and TR3 joint restore into fresh receiver"
+       (tr3-c-checkpoint-restore-internal!
+         trajectory-receiver trajectory-k-path
+         trajectory-policy trajectory-report))
+(check "all K tensor and control images match restored receiver"
+       (and (image=? trajectory-k-image
+                     (trajectory-live-image trajectory-receiver))
+            (trajectory-idle? trajectory-receiver-record)
+            (trajectory-controls? trajectory-receiver-record 1 3 0 2)))
+(check "restore retains exact receiver operand identities"
+       (and (eq? (vector-ref trajectory-receiver-record 8)
+                 (vector-ref trajectory-receiver-tuple 3))
+            (eq? (vector-ref trajectory-receiver-record 13)
+                 (vector-ref trajectory-receiver-tuple 4))
+            (eq? (vector-ref trajectory-receiver-record 15)
+                 (vector-ref trajectory-receiver-tuple 2))))
+
+(check "uninterrupted first suffix step crosses EOS"
+       (trajectory-step 'uninterrupted-R1 trainer))
+(check "uninterrupted second suffix step"
+       (trajectory-step 'uninterrupted-R2 trainer))
+(check "uninterrupted third suffix step"
+       (trajectory-step 'uninterrupted-R3 trainer))
+(define trajectory-source-r-image (trajectory-live-image trainer))
+(check "uninterrupted R controls"
+       (and (trajectory-idle? record)
+            (trajectory-controls? record 4 12 3 2)))
+(check "uninterrupted R canonical C2 publication"
+       (tr3-c-snapshot-save-internal!
+         trainer trajectory-source-path trajectory-policy '()))
+
+(define trajectory-original-hook tr3-step-composer-test-hook)
+(set! tr3-step-composer-test-hook
+  (lambda (stage ordinal observation)
+    (if (eq? stage 'rewind)
+        (m3t-fail 'invalid-state 'trajectory-injected-rewind
+                  "injected recoverable failure after restored EOS rewind"))
+    #t))
+(check "restored trainer fails recoverably after EOS rewind"
+       (transformer-error-at?
+         'invalid-state 'trajectory-injected-rewind
+         (lambda ()
+           (tr3-step-composer-internal! trajectory-receiver))))
+(set! tr3-step-composer-test-hook trajectory-original-hook)
+(check "restored trainer rollback preserves exact K image"
+       (and (image=? trajectory-k-image
+                     (trajectory-live-image trajectory-receiver))
+            (trajectory-idle? trajectory-receiver-record)
+            (trajectory-controls? trajectory-receiver-record 1 3 0 2)))
+(check "restored first suffix step crosses EOS on same authority"
+       (trajectory-step 'resumed-R1 trajectory-receiver))
+(check "restored second suffix step"
+       (trajectory-step 'resumed-R2 trajectory-receiver))
+(check "restored third suffix step"
+       (trajectory-step 'resumed-R3 trajectory-receiver))
+(define trajectory-resumed-r-image
+  (trajectory-live-image trajectory-receiver))
+(check "R=3 restores exact 42-tensor and control trajectory"
+       (and (image=? trajectory-source-r-image trajectory-resumed-r-image)
+            (trajectory-idle? trajectory-receiver-record)
+            (trajectory-controls? trajectory-receiver-record 4 12 3 2)))
+(check "resumed R canonical C2 publication"
+       (tr3-c-snapshot-save-internal!
+         trajectory-receiver trajectory-resumed-path trajectory-policy '()))
+(check "final canonical C2 bytes equal uninterrupted source"
+       (bytes=? (trajectory-read trajectory-source-path)
+                (trajectory-read trajectory-resumed-path)))
+(check "source remains unchanged after receiver trajectory"
+       (image=? trajectory-source-r-image (trajectory-live-image trainer)))
+(check "mismatch lease unenroll"
+       (tr3-lease-unenroll-internal! trajectory-mismatch-trainer))
+(check "mismatch dataset close"
+       (d2-token-dataset-close! trajectory-mismatch-dataset))
+
+;;; The same authentic package also runs A=1 and A=3. The two finite rows
+;;; have unequal bool-mask weights, so consecutive updates exercise distinct
+;;; normalization denominators while the suffix crosses EOS.
+(define (trajectory-profile-tuple accumulation)
+  (let* ((resolved
+           (x1-private-config-resolve
+             (x1-private-config-parse
+               (string-append
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+                 "\"model.context-length\":2,\"model.hidden-size\":4,"
+                 "\"model.layer-count\":1,\"model.query-head-count\":2,"
+                 "\"model.vocabulary-size\":256,\"run.seed\":1729,"
+                 "\"training.accumulation-steps\":"
+                 (number->string accumulation) "}"))
+             '()))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset
+           (d2-token-dataset-open (dataset-config corpus-directory) tokenizer))
+         (model
+           (m3t-public-model-create
+             resolved (m3t-public-initializer-state 1729)))
+         (handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+         (tree (module-parameters model))
+         (optimizer (o2-public-optimizer-create
+                      (optimizer-config handles) tree)))
+    (vector resolved tokenizer dataset model optimizer tree
+            (d2-token-dataset-cursor dataset))))
+
+(define (trajectory-profile-controls? record accumulation updates)
+  (let* ((epoch (d2-core-cursor-decode (vector-ref record 17)))
+         (current (d2-core-cursor-decode
+                    (d2-token-dataset-cursor (vector-ref record 15))))
+         (span (- (vector-ref epoch 14) (vector-ref epoch 15)))
+         (epochs (vector-ref record 21))
+         (tokens (vector-ref record 19)))
+    (and (trajectory-idle? record)
+         (= (vector-ref record 20) updates)
+         (= (o2-optimizer-completed-updates-internal
+              (vector-ref record 13)) updates)
+         (= (* updates accumulation)
+            (+ (* epochs span)
+               (- (vector-ref current 15) (vector-ref epoch 15))))
+         (<= (* updates accumulation) tokens)
+         (<= tokens (* 2 updates accumulation)))))
+
+(define (trajectory-profile-run accumulation)
+  (let* ((source-tuple (trajectory-profile-tuple accumulation))
+         (source
+           (tr3-lease-create-internal
+             (vector-ref source-tuple 0) (vector-ref source-tuple 1)
+             (vector-ref source-tuple 2) (vector-ref source-tuple 3)
+             (vector-ref source-tuple 4)))
+         (source-record (record-for-shell source))
+         (receiver-tuple (trajectory-profile-tuple accumulation))
+         (receiver
+           (tr3-lease-create-internal
+             (vector-ref receiver-tuple 0) (vector-ref receiver-tuple 1)
+             (vector-ref receiver-tuple 2) (vector-ref receiver-tuple 3)
+             (vector-ref receiver-tuple 4)))
+         (receiver-record (record-for-shell receiver))
+         (k-path (string-append corpus-directory "/profile-k-"
+                                (number->string accumulation) ".c2"))
+         (source-path (string-append corpus-directory "/profile-source-"
+                                     (number->string accumulation) ".c2"))
+         (receiver-path (string-append corpus-directory "/profile-resumed-"
+                                       (number->string accumulation) ".c2")))
+    (check "profile K genuine step" (trajectory-step 'profile-K source))
+    (check "profile K controls"
+           (trajectory-profile-controls? source-record accumulation 1))
+    (let* ((k-epochs (vector-ref source-record 21))
+           (k-image (trajectory-live-image source)))
+      (check "profile K SAVE"
+             (tr3-c-snapshot-save-internal!
+               source k-path trajectory-policy '()))
+      (check "profile genuine C2 LOAD and joint restore"
+             (tr3-c-checkpoint-restore-internal!
+               receiver k-path trajectory-policy trajectory-report))
+      (check "profile K exact 42-tensor and control image"
+             (and (image=? k-image (trajectory-live-image receiver))
+                  (trajectory-profile-controls? receiver-record accumulation 1)))
+      (let ((original-hook tr3-step-composer-test-hook))
+        (set! tr3-step-composer-test-hook
+          (lambda (stage ordinal observation)
+            (if (eq? stage 'precommit)
+                (m3t-fail 'invalid-state 'trajectory-profile-precommit
+                          "injected failure before first parameter write"))
+            #t))
+        (check "profile prepared-plan failure is recoverable"
+               (transformer-error-at?
+                 'invalid-state 'trajectory-profile-precommit
+                 (lambda () (tr3-step-composer-internal! receiver))))
+        (set! tr3-step-composer-test-hook original-hook))
+      (check "profile prewrite abort preserves exact K image"
+             (and (image=? k-image (trajectory-live-image receiver))
+                  (trajectory-profile-controls? receiver-record accumulation 1)))
+      (let loop ((ordinal 1) (first-delta #f) (unequal? #f))
+        (if (> ordinal 3)
+            (check "profile unequal active-token updates" unequal?)
+            (let ((old-tokens (vector-ref source-record 19)))
+              (check "profile uninterrupted suffix step"
+                     (trajectory-step 'profile-source source))
+              (check "profile restored suffix step"
+                     (trajectory-step 'profile-receiver receiver))
+              (check "profile exact intermediate image and controls"
+                     (and (image=? (trajectory-live-image source)
+                                   (trajectory-live-image receiver))
+                          (trajectory-profile-controls?
+                            source-record accumulation (+ ordinal 1))
+                          (trajectory-profile-controls?
+                            receiver-record accumulation (+ ordinal 1))))
+              (let ((delta (- (vector-ref source-record 19) old-tokens)))
+                (loop (+ ordinal 1) (if first-delta first-delta delta)
+                      (or unequal?
+                          (and first-delta (not (= first-delta delta)))))))))
+      (check "profile suffix crosses finite D2 EOS"
+             (> (vector-ref source-record 21) k-epochs))
+      (check "profile source final canonical SAVE"
+             (tr3-c-snapshot-save-internal!
+               source source-path trajectory-policy '()))
+      (check "profile restored final canonical SAVE"
+             (tr3-c-snapshot-save-internal!
+               receiver receiver-path trajectory-policy '()))
+      (check "profile canonical final C2 bytes"
+             (bytes=? (trajectory-read source-path)
+                      (trajectory-read receiver-path)))
+      (check "profile source lease unenroll"
+             (tr3-lease-unenroll-internal! source))
+      (check "profile receiver lease unenroll"
+             (tr3-lease-unenroll-internal! receiver))
+      (check "profile source D2 close"
+             (d2-token-dataset-close! (vector-ref source-tuple 2)))
+      (check "profile receiver D2 close"
+             (d2-token-dataset-close! (vector-ref receiver-tuple 2))))))
+
+(trajectory-profile-run 1)
+(trajectory-profile-run 3)
+
+(display "TR3-C PRIVATE RESUME TRAJECTORY PASS: ")
+(display checks)
+(display " checks, A=1/2/3 K=1 R=3 finite EOS and exact 42-image/C2 bytes")
+(newline)

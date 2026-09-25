@@ -104,6 +104,11 @@ int64_t et_p1_private_construction_module_create_v1(void *context, void *constru
 int64_t et_p1_private_construction_handle_create_v1(void *context, void *construction);
 int64_t et_p1_private_construction_seal_v1(void *context, void *construction);
 int64_t et_p1_private_construction_abort_v1(void *context, void *construction);
+int64_t et_p1_private_construction_prepare_v1(void *context, void *construction);
+int64_t et_p1_private_construction_commit_prepared_v1(void *context,
+                                                       void *construction);
+int64_t et_p1_private_construction_abort_prepared_v1(void *context,
+                                                      void *construction);
 int64_t et_p1_private_module_create_v1(void *context);
 int64_t et_p1_private_parameter_handle_create_v1(void *context);
 int64_t et_p1_private_parameter_tree_create_v1(void *context);
@@ -147,6 +152,7 @@ int64_t et_p1_private_live_entry_count_v1(void *context);
 int64_t et_p1_private_tombstone_count_v1(void *context);
 #if defined(ET_P1_TEST_HOOKS)
 int64_t et_p1_test_state_bind_fail_next_v1(void);
+int64_t et_p1_test_record_index_invalidate_v1(void);
 #endif
 #endif
 

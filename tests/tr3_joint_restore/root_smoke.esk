@@ -1,0 +1,2 @@
+;;; Strict-AOT source-composition probe; it exercises no public facade.
+(load "tr3_c_joint_restore_root.esk")

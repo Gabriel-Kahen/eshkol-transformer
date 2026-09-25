@@ -1,0 +1,325 @@
+;;; Private G3-T seeded generator constructor. Load after the M3 root,
+;;; checked M3T adapters, and g3t_model_admission_extension.esk.
+;;; No public generation operation or frame transport is defined here.
+
+(extern ptr g3t-native-generator-seed ptr i64 i64 i64 i64 i64 i64 i64
+        :real et_g3t_private_generator_seed_v1)
+(extern ptr g3t-native-generator-rng ptr ptr i64 i64 i64 i64 i64 i64
+        :real et_g3t_private_generator_rng_v1)
+(extern i64 g3t-native-generator-close ptr
+        :real et_g3t_private_generator_close_v1)
+(extern i64 g3t-native-last-error-domain
+        :real et_g3t_private_last_error_domain_v1)
+(extern i64 g3t-native-last-error-category
+        :real et_g3t_private_last_error_category_v1)
+(extern i64 g3t-native-last-error-code
+        :real et_g3t_private_last_error_code_v1)
+
+(define (g3t-fail-raw category operation code message)
+  (let ((number (cond ((eq? category 'invalid-argument) 1)
+                      ((eq? category 'invalid-state) 2)
+                      ((eq? category 'shape-mismatch) 3)
+                      ((eq? category 'unsupported) 4)
+                      (else 5))))
+    (let ((unreachable
+            (et-e1b-private-raise category operation message
+              (list (list 'source-domain 'g3t-transport)
+                    (list 'source-code code)
+                    (list 'source-message message)
+                    (list 'native-category number)) #f)))
+      unreachable)))
+
+(define (g3t-native-fail-raw operation)
+  (let* ((domain (g3t-native-last-error-domain))
+         (category (g3t-native-last-error-category))
+         (code (g3t-native-last-error-code))
+         (valid (and (>= domain 0) (<= domain 3)
+                     (> category 0)
+                     (<= category (cond ((= domain 0) 6)
+                                        ((= domain 1) 8) (else 6)))
+                     (> code 0)
+                     (<= code (cond ((= domain 0) 13)
+                                    ((= domain 1) 16) (else 11)))))
+         (mapped
+           (if (not valid) 'internal
+               (cond
+                 ((= domain 0)
+                  (cond ((= category 1) 'invalid-argument)
+                        ((= category 2) 'invalid-state)
+                        ((= category 3) 'shape-mismatch)
+                        ((= category 4) 'unsupported)
+                        ((= category 6) 'determinism-unavailable)
+                        (else 'internal)))
+                 ((= domain 1)
+                  (cond ((= category 1) 'invalid-argument)
+                        ((= category 2) 'shape-mismatch)
+                        ((= category 3) 'dtype-mismatch)
+                        ((= category 4) 'device-mismatch)
+                        ((= category 5) 'noncontiguous)
+                        ((= category 6) 'unsupported)
+                        ((= category 7) 'version-mismatch)
+                        (else 'internal)))
+                 (else
+                  (cond ((= category 1) 'invalid-argument)
+                        ((= category 2) 'shape-mismatch)
+                        ((= category 3) 'noncontiguous)
+                        ((= category 4) 'invalid-state)
+                        ((= category 5) 'version-mismatch)
+                        (else 'internal))))))
+         (message (if valid "private G3-T native transport rejected the request"
+                      "invalid private G3-T native status"))
+         (unreachable
+           (et-e1b-private-raise mapped operation message
+             (list (list 'source-domain
+                         (cond ((= domain 1) 'kernel-abi)
+                               ((= domain 2) 'i64-tensor)
+                               ((= domain 3) 'f32-tensor)
+                               (else 'g3t-transport)))
+                   (list 'source-code (if valid code 10))
+                   (list 'source-message message)
+                   (list 'native-category (if valid category 5))) #f)))
+    unreachable))
+
+(define (g3t-seed-config config operation)
+  (let ((seen (make-vector 9 #f))
+        (slots (make-vector 9 #f)))
+    (let walk ((tail config) (count 0))
+      (if (= count 8)
+          (if (not (null? tail))
+              (g3t-fail-raw 'invalid-argument operation 3
+                            "G3-T config must have exactly eight pairs"))
+          (if (not (and (pair? tail) (pair? (cdr tail))))
+              (g3t-fail-raw 'invalid-argument operation 3
+                            "G3-T config must be a proper flat list")
+              (let* ((key (car tail))
+                     (slot
+                       (cond ((eq? key ':profile) 0)
+                             ((eq? key ':sampling) 1)
+                             ((eq? key ':temperature-bits) 2)
+                             ((eq? key ':top-k) 3)
+                             ((eq? key ':top-p-bits) 4)
+                             ((eq? key ':max-new-tokens) 5)
+                             ((eq? key ':eos) 6)
+                             ((eq? key ':seed) 7)
+                             ((eq? key ':rng) 8)
+                             (else -1))))
+                (if (< slot 0)
+                    (g3t-fail-raw 'invalid-argument operation 3
+                                  "G3-T config contains an unknown key"))
+                (if (vector-ref seen slot)
+                    (g3t-fail-raw 'invalid-argument operation 3
+                                  "G3-T config contains a duplicate key"))
+                (vector-set! seen slot #t)
+                (vector-set! slots slot (car (cdr tail)))
+                (walk (cdr (cdr tail)) (+ count 1)))))
+    (let required ((index 0))
+      (if (< index 7)
+          (begin
+            (if (not (vector-ref seen index))
+                (g3t-fail-raw 'invalid-argument operation 3
+                              "G3-T config is missing a required key"))
+            (required (+ index 1)))))
+    (if (eq? (vector-ref seen 7) (vector-ref seen 8))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G3-T config needs exactly one seed or RNG"))
+    (if (not (eq? (vector-ref slots 0) 'diagnostic-c2))
+        (g3t-fail-raw 'invalid-argument operation 3
+                      "G3-T config profile must be diagnostic-c2"))
+    (let* ((sampling (vector-ref slots 1))
+           (mode (cond ((eq? sampling 'greedy) 0)
+                       ((eq? sampling 'categorical) 1)
+                       (else -1)))
+           (temperature (vector-ref slots 2))
+           (top-k (vector-ref slots 3))
+           (top-p (vector-ref slots 4))
+           (max-new (vector-ref slots 5))
+           (eos (vector-ref slots 6))
+           (seed (vector-ref slots 7)))
+      (if (not (and (>= mode 0)
+                    (m3t-exact-i64? temperature)
+                    (> temperature 0) (<= temperature 4294967295)
+                    (= (bitwise-and temperature 2147483648) 0)
+                    (not (= (bitwise-and temperature 2139095040)
+                            2139095040))
+                    (m3t-exact-i64? top-p)
+                    (> top-p 0) (<= top-p 1065353216)
+                    (= (bitwise-and top-p 2147483648) 0)
+                    (not (= (bitwise-and top-p 2139095040) 2139095040))
+                    (m3t-exact-i64? top-k) (>= top-k 1) (<= top-k 256)
+                    (m3t-exact-i64? max-new) (>= max-new 0) (<= max-new 1)
+                    (or (eq? eos #f)
+                        (and (m3t-exact-i64? eos) (>= eos 0) (<= eos 255)))
+                    (or (vector-ref seen 8)
+                        (and (m3t-exact-i64? seed) (>= seed 0)))
+                    (or (= mode 1)
+                        (and (= temperature 1065353216)
+                             (= top-k 256) (= top-p 1065353216)))))
+          (g3t-fail-raw 'invalid-argument operation 3
+                        "G3-T seed or sampling policy is invalid"))
+      (vector (vector 'diagnostic-c2 mode temperature top-k top-p
+                      max-new eos)
+              (if (vector-ref seen 8) (vector-ref slots 8) seed)
+              (if (vector-ref seen 8) 'rng 'seed))))))
+
+(define (g3t-generator-find shell operation)
+  (let search ((remaining (vector-ref g3t-registry 0)))
+    (cond ((null? remaining)
+           (g3t-fail-raw 'invalid-argument operation 1
+                         "expected an exact G3-T generator"))
+          ((not (pair? remaining))
+           (g3t-fail-raw 'internal operation 10
+                         "G3-T registry is not a proper list"))
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (search (cdr remaining))))))
+
+(define (g3t-generator-create model tokenizer config)
+  (let ((operation 'g3t-generator-create))
+    (m3-call operation
+      (let* ((normalized (g3t-seed-config config operation))
+             (policy (vector-ref normalized 0))
+             (source (vector-ref normalized 1))
+             (source-kind (vector-ref normalized 2))
+             (model-entry (g3t-model-entry-live model operation #f))
+             (tokenizer-entry (t1-private-entry tokenizer)))
+        (if (not tokenizer-entry)
+            (g3t-fail-raw 'invalid-argument operation 1
+                          "expected an exact T1 tokenizer"))
+        (if (not (and (pair? tokenizer-entry)
+                      (eq? (car tokenizer-entry) tokenizer)
+                      (pair? (cdr tokenizer-entry))
+                      (null? (cdr (cdr tokenizer-entry)))))
+            (g3t-fail-raw 'invalid-state operation 1
+                          "T1 tokenizer registry entry changed"))
+        (let ((core (car (cdr tokenizer-entry))))
+          (if (not (and (t1-core-tokenizer? core)
+                        (eq? (vector-ref core 1) 'raw)
+                        (null? (vector-ref core 2))
+                        (null? (vector-ref core 3))
+                        (null? (vector-ref core 4))
+                        (= (t1-tokenizer-core-vocab-size core) 256)
+                        (string? (vector-ref core 6))
+                        (string=? (vector-ref core 6)
+                          "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))
+              (g3t-fail-raw 'unsupported operation 3
+                            "G3-T requires the baseline raw V256 tokenizer")))
+        (let ((rng-entry
+                (if (eq? source-kind 'rng)
+                    (let ((entry (g3t-generator-find source operation)))
+                      (if (not (and (vector? entry)
+                                    (= (vector-length entry) 12)
+                                    (eq? (vector-ref entry 1) 'rng)))
+                          (g3t-fail-raw 'invalid-argument operation 1
+                                        "expected an exact G3-T RNG owner"))
+                      (if (not (and (eq? (vector-ref entry 2) 'live)
+                                    (not (null? (vector-ref entry 3)))
+                                    (eq? (vector-ref entry 4) #f)
+                                    (eq? (vector-ref entry 5) #f)
+                                    (eq? (vector-ref entry 6) #f)
+                                    (eq? (vector-ref entry 7) #f)
+                                    (eq? (vector-ref entry 8) #f)
+                                    (eq? (vector-ref entry 9) #f)
+                                    (eq? (vector-ref entry 10) #f)
+                                    (eq? (vector-ref entry 11) 'diagnostic-c2)))
+                          (g3t-fail-raw 'invalid-state operation 2
+                                        "G3-T RNG owner is not live"))
+                      entry)
+                    #f)))
+        (let* ((shell (vector 'g3t-generator-private))
+               (ledger (vector #f))
+               (entry (vector shell 'generator 'pending #f #f model-entry
+                              tokenizer policy #f #f ledger 'diagnostic-c2))
+               (next (cons entry (vector-ref g3t-registry 0)))
+               (created '()))
+          (guard (caught
+                   (#t
+                     (if (not (null? created))
+                         (if (not (= (g3t-native-generator-close created) 0))
+                             (exit 134)))
+                     (let find ((remaining (vector-ref g3t-registry 0)))
+                       (if (pair? remaining)
+                           (let ((canonical (car remaining)))
+                             (if (and (vector? canonical)
+                                      (= (vector-length canonical) 12)
+                                      (eq? (vector-ref canonical 0) shell))
+                                 (begin
+                                   (vector-set! canonical 2 'dead)
+                                   (let scrub ((index 3))
+                                     (if (< index 12)
+                                         (begin (vector-set! canonical index #f)
+                                                (scrub (+ index 1))))))
+                                 (find (cdr remaining))))))
+                     (raise caught)))
+            (vector-set! g3t-registry 0 next)
+            (let* ((canonical (car (vector-ref g3t-registry 0)))
+                   (canonical-policy (vector-ref canonical 7))
+                   (canonical-ledger (vector-ref canonical 10))
+                   (native
+                     (if rng-entry
+                         (g3t-native-generator-rng
+                           (vector-ref model-entry 3) (vector-ref rng-entry 3)
+                           (vector-ref canonical-policy 1)
+                           (vector-ref canonical-policy 2)
+                           (vector-ref canonical-policy 3)
+                           (vector-ref canonical-policy 4)
+                           (vector-ref canonical-policy 5)
+                           (if (vector-ref canonical-policy 6)
+                               (vector-ref canonical-policy 6) -1))
+                         (g3t-native-generator-seed
+                           (vector-ref model-entry 3) source
+                           (vector-ref canonical-policy 1)
+                           (vector-ref canonical-policy 2)
+                           (vector-ref canonical-policy 3)
+                           (vector-ref canonical-policy 4)
+                           (vector-ref canonical-policy 5)
+                           (if (vector-ref canonical-policy 6)
+                               (vector-ref canonical-policy 6) -1)))))
+              (set! created native)
+              (if (null? native) (g3t-native-fail-raw operation))
+              (vector-set! canonical-ledger 0 native)
+              (vector-set! canonical 3 native)
+              (vector-set! canonical 2 'live)
+              (vector-set! canonical 10 #f)
+              (vector-ref canonical 0)))))))))
+
+(define (g3t-generator-close! generator)
+  (let ((operation 'g3t-generator-close!))
+    (m3-call operation
+      (let ((entry (g3t-generator-find generator operation)))
+        (if (not (and (vector? entry) (= (vector-length entry) 12)
+                      (eq? (vector-ref entry 1) 'generator)))
+            (g3t-fail-raw 'invalid-argument operation 1
+                          "identity is not a G3-T generator"))
+        (if (eq? (vector-ref entry 2) 'dead)
+            (let check-dead ((index 3))
+              (if (= index 12) #t
+                  (if (eq? (vector-ref entry index) #f)
+                      (check-dead (+ index 1))
+                      (g3t-fail-raw 'invalid-state operation 2
+                                    "dead G3-T owner retained payload"))))
+            (begin
+              (if (not (and (eq? (vector-ref entry 2) 'live)
+                            (not (null? (vector-ref entry 3)))
+                            (eq? (vector-ref entry 4) #f)
+                            (eq? (vector-ref entry 8) #f)
+                            (eq? (vector-ref entry 9) #f)
+                            (eq? (vector-ref entry 10) #f)
+                            (eq? (vector-ref entry 11) 'diagnostic-c2)))
+                  (g3t-fail-raw 'invalid-state operation 2
+                                "G3-T generator is not idle and live"))
+              (let ((model-entry (vector-ref entry 5))
+                    (tokenizer (vector-ref entry 6)))
+                (if (not (and (vector? model-entry)
+                              (= (vector-length model-entry) 12)
+                              (eq? (m3t-find (vector-ref model-entry 0))
+                                   model-entry)
+                              (t1-private-entry tokenizer)))
+                    (g3t-fail-raw 'invalid-state operation 1
+                                  "G3-T generator roots changed")))
+              (if (not (= (g3t-native-generator-close
+                            (vector-ref entry 3)) 0))
+                  (g3t-native-fail-raw operation))
+              (vector-set! entry 2 'dead)
+              (let scrub ((index 3))
+                (if (= index 12) #t
+                    (begin (vector-set! entry index #f)
+                           (scrub (+ index 1)))))))))))

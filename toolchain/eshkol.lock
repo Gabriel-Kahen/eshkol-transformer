@@ -1,6 +1,6 @@
 # Machine-readable TSV; parsed as data and never sourced.
-eshkol_repository	https://github.com/tsotchke/eshkol.git
-eshkol_commit	90cbd7130f47b8184bcc77b8d5c1b0026da980de
+eshkol_repository	https://github.com/Gabriel-Kahen/eshkol.git
+eshkol_commit	81298b4a9608fb92eb6f351a2eabd8392da7d9ef
 eshkol_version	1.3.4-evolve
 llvm_version	21.1.8
 supported_os	ubuntu-22.04

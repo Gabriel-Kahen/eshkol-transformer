@@ -1,0 +1,319 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+
+(extern i64 test-context-fail-after i64
+        :real et_g3c4_call_entry_test_context_fail_after_v1)
+(extern i64 test-context-reset
+        :real et_g3c4_call_entry_test_context_reset_v1)
+(extern i64 test-a2-fail-after i64
+        :real et_g3c4_call_entry_test_a2_fail_after_v1)
+(extern i64 test-a2-reset
+        :real et_g3c4_call_entry_test_a2_reset_v1)
+(extern i64 test-acquire-fail-after i64
+        :real et_g3c4_call_entry_test_acquire_fail_after_v1)
+(extern i64 test-transport-count i64
+        :real et_g3c4_call_entry_test_transport_count_v1)
+(extern i64 test-context-field ptr i64
+        :real et_g3c4_call_entry_test_context_field_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "G3-C4 call entry FAIL: ") (display label) (newline)
+        (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (transport-count)
+  (let loop ((entries (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? entries) count (loop (cdr entries) (+ count 1)))))
+(define (no-pending?)
+  (let loop ((entries (vector-ref g3c4-registry 0)))
+    (if (null? entries) #t
+        (and (not (eq? (vector-ref (car entries) 2) 'pending))
+             (loop (cdr entries))))))
+(define (latest kind)
+  (let loop ((entries (vector-ref g3c4-registry 0)))
+    (cond ((null? entries) #f)
+          ((eq? (vector-ref (car entries) 1) kind) (car entries))
+          (else (loop (cdr entries))))))
+(define (dead-only? entry kind)
+  (and (eq? (vector-ref entry 1) kind)
+       (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))))
+(define (greedy-config seed)
+  (list ':profile 'diagnostic-c4
+        ':sampling 'greedy
+        ':temperature-bits 1065353216
+        ':top-k 256
+        ':top-p-bits 1065353216
+        ':max-new-tokens 1
+        ':eos #f
+        ':seed seed))
+(define (categorical-rng-config rng)
+  (list ':rng rng
+        ':eos 255
+        ':max-new-tokens 0
+        ':top-p-bits 1056964608
+        ':top-k 17
+        ':temperature-bits 1061158912
+        ':sampling 'categorical
+        ':profile 'diagnostic-c4))
+
+(reject "negative RNG seed" 'invalid-argument
+        (lambda () (g3c4-rng-create-seeded-internal -1)))
+(reject "inexact RNG seed" 'invalid-argument
+        (lambda () (g3c4-rng-create-seeded-internal 1.0)))
+(check "invalid RNG input publishes nothing" (= (transport-count) 0))
+(test-context-fail-after 0)
+(reject "native RNG allocation cut" 'internal
+        (lambda () (g3c4-rng-create-seeded-internal 0)))
+(test-context-reset)
+(check "failed RNG is a dead tombstone"
+       (and (dead-only? (latest 'rng) 'rng) (no-pending?)))
+
+(define rng-zero (g3c4-rng-create-seeded-internal 0))
+(define rng-zero-entry (latest 'rng))
+(check "seeded RNG exact entry"
+       (and (= (vector-length rng-zero-entry) 12)
+            (eq? (vector-ref rng-zero-entry 0) rng-zero)
+            (eq? (vector-ref rng-zero-entry 2) 'live)
+            (vector-ref rng-zero-entry 3)
+            (equal? (vector-ref rng-zero-entry 7)
+                    '#(g3.philox4x32-10.categorical-f32.v1 1 0 0 0))
+            (not (vector-ref rng-zero-entry 10))))
+(define rng-max (g3c4-rng-create-seeded-internal 9223372036854775807))
+(define rng-max-entry (latest 'rng))
+(test-context-fail-after 0)
+(reject "native RNG clone allocation cut" 'internal
+        (lambda () (g3c4-rng-clone-internal rng-max)))
+(test-context-reset)
+(check "failed clone is a dead tombstone"
+       (and (dead-only? (latest 'rng) 'rng) (no-pending?)))
+(define rng-clone (g3c4-rng-clone-internal rng-max))
+(define rng-clone-entry (latest 'rng))
+(check "clone is independent exact snapshot"
+       (and (not (eq? rng-clone rng-max))
+            (not (eq? (vector-ref rng-clone-entry 3)
+                      (vector-ref rng-max-entry 3)))
+            (equal? (vector-ref rng-clone-entry 7)
+                    '#(g3.philox4x32-10.categorical-f32.v1
+                       1 9223372036854775807 0 0))))
+(check "release source" (g3c4-rng-release-internal! rng-max))
+(check "release source idempotent" (g3c4-rng-release-internal! rng-max))
+(check "released source scrubbed" (dead-only? (g3c4-registry-find rng-max 'test) 'rng))
+(check "clone remains live" (eq? (vector-ref (g3c4-rng-entry-live rng-clone 'test) 2) 'live))
+(reject "forged RNG shell" 'invalid-argument
+        (lambda () (g3c4-rng-clone-internal (vector 'g3c4-rng-private))))
+
+(define model (g3c4-model-create-seeded-internal 1729))
+(define model-entry (car (vector-ref g3c4-model-registry 0)))
+(define bad-improper (cons ':profile 7))
+(reject "improper config" 'invalid-argument
+        (lambda () (g3c4-generator-create-internal model tokenizer bad-improper)))
+(define cyclic (greedy-config 2))
+(set-cdr! (cdr (cdr cyclic)) cyclic)
+(reject "cyclic config" 'invalid-argument
+        (lambda () (g3c4-generator-create-internal model tokenizer cyclic)))
+(reject "duplicate config key" 'invalid-argument
+        (lambda ()
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':profile 'diagnostic-c4
+                  ':temperature-bits 1065353216 ':top-k 256
+                  ':top-p-bits 1065353216 ':max-new-tokens 1
+                  ':eos #f ':seed 2))))
+(reject "greedy controls are canonical" 'invalid-argument
+        (lambda ()
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':sampling 'greedy
+                  ':temperature-bits 1065353216 ':top-k 255
+                  ':top-p-bits 1065353216 ':max-new-tokens 1
+                  ':eos #f ':seed 2))))
+(reject "temperature infinity" 'invalid-argument
+        (lambda ()
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':sampling 'categorical
+                  ':temperature-bits 2139095040 ':top-k 1
+                  ':top-p-bits 1065353216 ':max-new-tokens 0
+                  ':eos 0 ':seed 2))))
+(reject "top-p above one" 'invalid-argument
+        (lambda ()
+          (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4 ':sampling 'categorical
+                  ':temperature-bits 1065353216 ':top-k 1
+                  ':top-p-bits 1065353217 ':max-new-tokens 0
+                  ':eos 0 ':seed 2))))
+(check "bad configs do not call native"
+       (= (test-transport-count 1) 0))
+
+(test-context-fail-after 0)
+(reject "native context allocation cut" 'internal
+        (lambda () (g3c4-generator-create-internal model tokenizer (greedy-config 3))))
+(test-context-reset)
+(check "failed generator is a dead tombstone"
+       (and (dead-only? (latest 'generator) 'generator) (no-pending?)
+            (not (vector-ref m3-call-state 0))))
+
+(let a2-cuts ((cut 0))
+  (if (= cut 5) #t
+      (begin
+        (test-a2-fail-after cut)
+        (reject "native fixed-cache allocation cut" 'internal
+                (lambda ()
+                  (g3c4-generator-create-internal model tokenizer (greedy-config 3))))
+        (check "cache cut leaves a dead generator"
+               (and (dead-only? (latest 'generator) 'generator)
+                    (no-pending?) (not (vector-ref m3-call-state 0))))
+        (a2-cuts (+ cut 1)))))
+(test-a2-reset)
+
+(define seeded-generator
+  (g3c4-generator-create-internal model tokenizer (greedy-config 4)))
+(define seeded-generator-entry (latest 'generator))
+(check "seed constructor publishes canonical greedy policy"
+       (equal? (vector-ref seeded-generator-entry 7)
+               '#(diagnostic-c4 0 1065353216 256 1065353216 1 #f)))
+(check "seeded generator closes"
+       (g3c4-generator-close-internal! seeded-generator))
+(check "seeded generator scrubs"
+       (dead-only? seeded-generator-entry 'generator))
+
+(define boundary-generator
+  (g3c4-generator-create-internal model tokenizer (list ':profile 'diagnostic-c4
+          ':sampling 'categorical
+          ':temperature-bits 2139095039
+          ':top-k 1
+          ':top-p-bits 1
+          ':max-new-tokens 0
+          ':eos 0
+          ':seed 9223372036854775807)))
+(define boundary-generator-entry (latest 'generator))
+(check "categorical scalar boundaries normalize exactly"
+       (equal? (vector-ref boundary-generator-entry 7)
+               '#(diagnostic-c4 1 2139095039 1 1 0 0)))
+(check "boundary generator closes"
+       (g3c4-generator-close-internal! boundary-generator))
+
+(define generator
+  (g3c4-generator-create-internal model tokenizer (categorical-rng-config rng-clone)))
+(define generator-entry (latest 'generator))
+(define generator-native (vector-ref generator-entry 3))
+(check "exact live generator entry"
+       (and (eq? (vector-ref generator-entry 0) generator)
+            (eq? (vector-ref generator-entry 2) 'live)
+            (eq? (vector-ref generator-entry 5) model-entry)
+            (eq? (vector-ref generator-entry 6) tokenizer)
+            (equal? (vector-ref generator-entry 7)
+                    '#(diagnostic-c4 1 1061158912 17 1056964608 0 255))
+            (not (vector-ref generator-entry 9))
+            (not (vector-ref generator-entry 10))))
+(check "generator native subtype live"
+       (and (= (test-context-field generator-native 6) 1)
+            (= (test-context-field generator-native 7) 1)))
+(check "source clone release after deep copy"
+       (g3c4-rng-release-internal! rng-clone))
+
+(define (tuple-witness generator)
+  (g3c4-with-call-internal 'tuple-witness generator 2 1
+    (let ((call-entry (vector-ref m3-call-state 0)))
+      (check "published exact aggregate tuple"
+        (and (vector? call-entry)
+             (eq? (vector-ref call-entry 1) 'call)
+             (eq? (vector-ref call-entry 2) 'live)
+             (eq? (vector-ref call-entry 4) generator-entry)
+             (eq? (vector-ref call-entry 5) model-entry)
+             (eq? (vector-ref call-entry 6) tokenizer)
+             (eq? (vector-ref generator-entry 9) call-entry)
+             (eq? (vector-ref model-entry 10) call-entry)
+             (= (test-context-field generator-native 0) 1)
+             (= (test-context-field generator-native 1) 15)
+             (= (test-context-field generator-native 2) 16383)
+             (= (test-context-field generator-native 3) 2)
+             (= (test-context-field generator-native 4) 1)
+             (= (test-context-field generator-native 5) 1))))))
+(tuple-witness generator)
+(check "empty commit clears tuple"
+       (and (dead-only? (latest 'call) 'call)
+            (not (vector-ref generator-entry 9))
+            (not (vector-ref model-entry 10))
+            (not (vector-ref m3-call-state 0))
+            (= (test-context-field generator-native 0) 0)
+            (= (test-context-field generator-native 1) 0)
+            (= (test-context-field generator-native 2) 0)
+            (= (test-context-field generator-native 5) 0)))
+
+(define (nested-witness generator)
+  (g3c4-with-call-internal 'nested-witness generator 0 0
+    (g3c4-rng-create-seeded-internal 9)))
+(reject "nested aggregate failure aborts call" 'invalid-state
+  (lambda () (nested-witness generator)))
+(check "precommit exception rolls back"
+       (and (dead-only? (latest 'call) 'call)
+            (not (vector-ref generator-entry 9))
+            (not (vector-ref model-entry 10))
+            (not (vector-ref m3-call-state 0))
+            (= (test-context-field generator-native 0) 0)
+            (= (test-context-field generator-native 1) 0)))
+
+(define (active-close-witness generator)
+  (g3c4-with-call-internal 'active-close-witness generator 0 0
+    (let ((call-entry (vector-ref m3-call-state 0)))
+      (reject "generator close rejects under aggregate call" 'invalid-state
+              (lambda () (g3c4-generator-close-internal! generator)))
+      (check "rejected close preserves published tuple"
+             (and (eq? (vector-ref generator-entry 9) call-entry)
+                  (eq? (vector-ref model-entry 10) call-entry)
+                  (= (test-context-field generator-native 0) 1)
+                  (= (test-context-field generator-native 1) 15))))))
+(active-close-witness generator)
+(check "active-close witness finishes normally"
+       (and (not (vector-ref generator-entry 9))
+            (not (vector-ref model-entry 10))
+            (= (test-context-field generator-native 0) 0)))
+
+(let fail-cuts ((cut 1))
+  (if (= cut 5) #t
+      (begin
+        (test-acquire-fail-after cut)
+        (reject "native acquire rollback cut" 'internal
+                (lambda ()
+                  (g3c4-call-empty-commit-internal! generator 1 0)))
+        (check "acquire cut restores both authorities"
+               (and (not (vector-ref generator-entry 9))
+                    (not (vector-ref model-entry 10))
+                    (not (vector-ref m3-call-state 0))
+                    (= (test-context-field generator-native 0) 0)
+                    (= (test-context-field generator-native 1) 0)))
+        (fail-cuts (+ cut 1)))))
+(test-acquire-fail-after -1)
+(check "kind-one empty commit succeeds"
+       (g3c4-call-empty-commit-internal! generator 1 0))
+(reject "invalid call tuple" 'invalid-argument
+        (lambda () (g3c4-call-empty-commit-internal! generator 2 2)))
+(check "invalid call publishes nothing active"
+       (and (not (vector-ref generator-entry 9))
+            (not (vector-ref model-entry 10))))
+
+(check "generator close" (g3c4-generator-close-internal! generator))
+(check "generator close idempotent" (g3c4-generator-close-internal! generator))
+(check "Eshkol generator tombstone scrubbed"
+       (dead-only? generator-entry 'generator))
+(check "native generator tombstone retained"
+       (and (= (test-context-field generator-native 6) 2)
+            (= (test-context-field generator-native 7) 0)))
+(reject "cross-kind close" 'invalid-argument
+        (lambda () (g3c4-generator-close-internal! rng-zero)))
+(check "remaining RNG release" (g3c4-rng-release-internal! rng-zero))
+(check "all aggregate state restored"
+       (and (no-pending?) (not (vector-ref m3-call-state 0))
+            (not (vector-ref model-entry 10))))
+
+(display "G3-C4 call entry PASS: checks=") (display checks) (newline)

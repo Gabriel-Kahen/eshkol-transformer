@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 PINS = {
-    'native/d2_native.c': '645ec4c0166b274045c9dced0bd2ee023b3fd7d75f5c2ff1821571f12be5d08c',
+    'native/d2_native.c': 'cb4d67fa6f334e33d4cec4fae39c42d9bdfd864f75eb3c71036b6fb3da63668b',
     'native/d2_native.h': '165dc0184d288b5ea1eef0b3a6a4d5aee4c44e7a2acc1eb1d4d46908206163e8',
 }
 

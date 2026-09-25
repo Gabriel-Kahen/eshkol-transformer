@@ -20,10 +20,12 @@ SHELL := /usr/bin/bash
 	test-c2-model-encode test-c2-o2-encode \
 	test-c2-persistence-policy test-c2-training-state-owner \
 	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e3-native-frame \
-	test-e3-native-parity test-e1 test-e1b \
+	test-e3-native-parity test-e3-private-package test-e3-private-runtime \
+	test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
-	test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-tr3b test-x1 \
+	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
+	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
+	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build clean
 
 toolchain:
@@ -61,6 +63,7 @@ build-ci-core: configure
 	/usr/bin/bash scripts/build-k2.sh
 	/usr/bin/bash scripts/build-n2.sh
 	/usr/bin/bash scripts/build-n3k.sh
+	/usr/bin/bash scripts/build-g3s.sh
 	/usr/bin/bash scripts/build-t2.sh
 	/usr/bin/bash scripts/build-d2.sh
 	/usr/bin/bash scripts/build-o2.sh
@@ -109,6 +112,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-k2.sh
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
+	/usr/bin/bash scripts/test-g3s.sh
 	/usr/bin/bash scripts/test-o2.sh
 	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
@@ -145,6 +149,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-k2.sh
 	/usr/bin/bash scripts/test-n2.sh
 	/usr/bin/bash scripts/test-n3k.sh
+	/usr/bin/bash scripts/test-g3s.sh
 	/usr/bin/bash scripts/test-o2.sh
 	/usr/bin/bash scripts/test-tr3-o.sh
 	/usr/bin/bash scripts/test-x1.sh
@@ -278,6 +283,13 @@ test-n2: build
 test-n3k: build
 	/usr/bin/bash scripts/test-n3k.sh
 
+test-g3s: configure
+	/usr/bin/bash scripts/build-k1.sh
+	/usr/bin/bash scripts/build-i1.sh
+	/usr/bin/bash scripts/build-i2.sh
+	/usr/bin/bash scripts/build-g3s.sh
+	/usr/bin/bash scripts/test-g3s.sh
+
 test-o2: build
 	/usr/bin/bash scripts/test-o2.sh
 
@@ -299,6 +311,15 @@ test-d1: build
 
 test-d2: build
 	/usr/bin/bash scripts/test-d2.sh
+
+test-tr3-c-d2-restore: configure
+	/usr/bin/bash scripts/test-tr3-c-d2-restore.sh
+
+test-tr3-c-i2-restore:
+	/usr/bin/bash scripts/test-tr3-c-i2-restore.sh
+
+test-tr3-c-o2-restore:
+	/usr/bin/bash scripts/test-tr3-c-o2-restore.sh
 
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
@@ -425,6 +446,16 @@ test-g3n: configure
 test-m3cg: configure
 	/usr/bin/bash scripts/test-m3cg.sh
 
+.PHONY: test-e3-private-package test-e3-private-runtime
+test-e3-private-package: configure
+	/usr/bin/bash scripts/build-e3-private.sh
+	/usr/bin/bash scripts/test-e3-private-package.sh
+
+test-e3-private-runtime: configure
+	/usr/bin/bash scripts/build-e3-private.sh
+	/usr/bin/bash scripts/test-e3-private-package.sh
+	/usr/bin/bash scripts/test-e3-private-runtime.sh
+
 # Bounded metrics gate shares the canonical numerical prerequisites in CI.
 test-e3-metrics: configure
 	/usr/bin/bash scripts/build-k1.sh
@@ -452,3 +483,7 @@ test-e3-native-parity: configure
 test-g3c4: configure
 	/usr/bin/bash scripts/ci-build-prerequisites.sh g3n-forward
 	/usr/bin/bash scripts/test-g3c4.sh
+
+.PHONY: test-ci-g3s-after-build
+test-ci-g3s-after-build:
+	/usr/bin/bash scripts/test-g3s.sh

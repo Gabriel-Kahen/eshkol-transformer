@@ -1,0 +1,277 @@
+;;; Source-private fixed-model E3 diagnostic report successor.
+;;; Public names remain provisional; this file is not installed or exported.
+
+(extern ptr e3-diagnostic-destination-create
+        :real et_e3_diagnostic_destination_create_v1)
+(extern i64 e3-diagnostic-destination-bits ptr
+        :real et_e3_diagnostic_destination_bits_v1)
+(extern i64 e3-diagnostic-destination-destroy ptr
+        :real et_e3_diagnostic_destination_destroy_v1)
+(extern i64 e3-diagnostic-native-selected-bits ptr i64
+        :real et_e3_private_selected_metric_bits_ref_v1)
+
+(define e3-diagnostic-report-tag (vector 'e3-diagnostic-report-v1))
+;;; [published records, active staging envelope, charged invocations, successes,
+;;;  promoted staging-graph bytes, post-reservation transaction bytes].
+;;; The last two counters are source-private test instrumentation. They contain
+;;; only immediate integers and grant no report, model, frame or tensor authority.
+(define e3-diagnostic-report-root (vector '() #f 0 0 0 0))
+(define e3-diagnostic-report-limit 8192)
+
+(define (e3-diagnostic-raise category operation message)
+  (let ((unreachable
+         (et-e1b-private-raise category operation message '() #f)))
+    unreachable))
+
+(define-syntax e3-diagnostic-fail
+  (syntax-rules ()
+    ((_ category operation message)
+     ;; Keep the named wrapper call out of tail position. The accepted compiler
+     ;; otherwise treats this non-returning boundary as a mutual tail transfer.
+     (let ((result (e3-diagnostic-raise category operation message))) result))))
+
+(define (e3-diagnostic-make-shell)
+  ;; The caught condition has no report fields or forgeable marker. Exact identity
+  ;; in e3-diagnostic-report-root is the only report authority.
+  (guard (raised (#t raised))
+    (error "e3-diagnostic-report:v1")))
+
+(define (e3-diagnostic-find-report value)
+  (let loop ((entries (vector-ref e3-diagnostic-report-root 0)))
+    (cond ((null? entries) #f)
+          ((eq? value (vector-ref (car entries) 2)) (car entries))
+          (else (loop (cdr entries))))))
+
+(define (e3-diagnostic-require-report value operation)
+  (let ((record (e3-diagnostic-find-report value)))
+    (if (not record)
+        (e3-diagnostic-fail 'invalid-argument operation
+                            "expected an authentic evaluation report"))
+    (if (or (not (vector? record))
+            (not (= (vector-length record) 10))
+            (not (eq? (vector-ref record 0) e3-diagnostic-report-tag))
+            (not (eq? (vector-ref record 1) record))
+            (not (eq? (vector-ref record 3) 'published)))
+        (e3-native-invariant-fail))
+    record))
+
+(define (e3-diagnostic-reserve-report! operation)
+  (let ((arena-before (__arena-used)))
+    (if (vector-ref e3-diagnostic-report-root 1)
+        (e3-diagnostic-fail 'invalid-state operation
+                            "evaluation report construction is active"))
+    (let ((reservations (vector-ref e3-diagnostic-report-root 2)))
+      (if (>= reservations e3-diagnostic-report-limit)
+          (e3-diagnostic-fail 'unsupported operation
+                              "evaluation invocation limit reached"))
+      ;; Charge before every per-invocation report/frame/destination allocation.
+      ;; Reservations are deliberately never recycled, including after failure.
+      (vector-set! e3-diagnostic-report-root 2 (+ reservations 1)))
+    (let* ((shell (e3-diagnostic-make-shell))
+           (record (vector e3-diagnostic-report-tag #f shell 'staged
+                           0 0 0 0 0 0))
+           (head (vector-ref e3-diagnostic-report-root 0))
+           (successor (cons record head))
+           (envelope (vector record successor head)))
+      (vector-set! record 1 record)
+      ;; The root barrier promotes the complete unpublished graph before E3 mutates
+      ;; model mode or dataset cursor. Only canonical values reread below are used.
+      (vector-set! e3-diagnostic-report-root 1 envelope)
+      (let* ((canonical-envelope (vector-ref e3-diagnostic-report-root 1))
+             (canonical-record (vector-ref canonical-envelope 0))
+             (promoted-bytes (- (__arena-used) arena-before)))
+        (if (or (not (vector? canonical-envelope))
+                (not (= (vector-length canonical-envelope) 3))
+                (not (vector? canonical-record))
+                (not (= (vector-length canonical-record) 10))
+                (not (eq? (vector-ref canonical-record 0)
+                          e3-diagnostic-report-tag))
+                (not (eq? (vector-ref canonical-record 1) canonical-record))
+                (not (eq? (vector-ref canonical-record 3) 'staged))
+                (<= promoted-bytes 0))
+            (e3-native-invariant-fail))
+        (vector-set! e3-diagnostic-report-root 4
+                     (+ (vector-ref e3-diagnostic-report-root 4)
+                        promoted-bytes))
+        canonical-record))))
+
+(define (e3-diagnostic-record-transaction-retention! arena-after-reserve)
+  ;; This boundary excludes the promoted report/staging graph. It includes only
+  ;; root bytes retained by the inherited E3/P1/I2 transaction after reservation
+  ;; through completed cleanup; failure-side runtime error retention is included.
+  (let ((retained (- (__arena-used) arena-after-reserve)))
+    (if (< retained 0) (e3-native-invariant-fail))
+    (vector-set! e3-diagnostic-report-root 5
+                 (+ (vector-ref e3-diagnostic-report-root 5) retained))
+    retained))
+
+(define (e3-diagnostic-abandon-report!)
+  (let ((envelope (vector-ref e3-diagnostic-report-root 1)))
+    (if envelope
+        (let ((record (vector-ref envelope 0)))
+          (if (not (eq? (vector-ref record 3) 'staged))
+              (e3-native-invariant-fail))
+          (vector-set! record 3 'abandoned)
+          (vector-set! record 2 #f)
+          (vector-set! record 4 0)
+          (vector-set! record 5 0)
+          (vector-set! record 6 0)
+          (vector-set! record 7 0)
+          (vector-set! record 8 0)
+          (vector-set! record 9 0)
+          (vector-set! e3-diagnostic-report-root 1 #f))))
+  #t)
+
+(define (e3-diagnostic-publish-report! record)
+  (let* ((envelope (vector-ref e3-diagnostic-report-root 1))
+         (successes (vector-ref e3-diagnostic-report-root 3)))
+    (if (or (not envelope)
+            (not (eq? record (vector-ref envelope 0)))
+            (not (eq? (vector-ref e3-diagnostic-report-root 0)
+                      (vector-ref envelope 2)))
+            (not (eq? (car (vector-ref envelope 1)) record))
+            (not (eq? (cdr (vector-ref envelope 1))
+                      (vector-ref envelope 2)))
+            (not (eq? (vector-ref record 3) 'staged))
+            (>= successes e3-diagnostic-report-limit))
+        (e3-native-invariant-fail))
+    ;; Prevalidated, allocation-free publication tail.
+    (vector-set! record 3 'published)
+    (vector-set! e3-diagnostic-report-root 0 (vector-ref envelope 1))
+    (vector-set! e3-diagnostic-report-root 1 #f)
+    (vector-set! e3-diagnostic-report-root 3 (+ successes 1))
+    (vector-ref record 2)))
+
+(define (e3-diagnostic-destinations-destroy! destinations)
+  (let cleanup ((index 0))
+    (if (= index 4) #t
+        (begin
+          (if (vector-ref destinations index)
+              (if (not (= (e3-diagnostic-destination-destroy
+                           (vector-ref destinations index)) 0))
+                  (e3-native-invariant-fail)))
+          (vector-set! destinations index #f)
+          (cleanup (+ index 1))))))
+
+(define (e3-diagnostic-destinations-create operation)
+  (let ((destinations (vector #f #f #f #f)))
+    (guard
+     (caught
+      (#t
+       (e3-diagnostic-destinations-destroy! destinations)
+       (raise caught)))
+     (let create ((index 0))
+       (if (= index 4) destinations
+           (let ((destination (e3-diagnostic-destination-create)))
+             (if (null? destination)
+                 (e3-diagnostic-fail 'internal operation
+                                     "evaluation destination allocation failed"))
+             (vector-set! destinations index destination)
+             (create (+ index 1))))))))
+
+(define (e3-diagnostic-destination-word destinations index operation)
+  (let ((word (e3-diagnostic-destination-bits
+               (vector-ref destinations index))))
+    (if (< word 0)
+        (e3-diagnostic-fail 'internal operation
+                            "evaluation destination inspection failed"))
+    word))
+
+(define (e3-diagnostic-selected-bits frame selector operation)
+  ;; The C seam admits only the native pointer in the authenticated E3 entry;
+  ;; never pass its public frame shell across this boundary.
+  (let* ((entry (e3-frame-entry-live frame operation))
+         (word (e3-diagnostic-native-selected-bits
+                (vector-ref entry 4) selector)))
+    (if (< word 0)
+        (let ((unreachable (e3-raise-native-setup operation))) unreachable))
+    word))
+
+(define (e3-diagnostic-read-results! record frame destinations operation)
+  ;; Reacquire the accepted model guard after e3-evaluate-into! has restored all
+  ;; state and returned its own guard. No callback occurs in this closed read set.
+  (m3-call operation
+    (let ((loss (e3-diagnostic-selected-bits frame 0 operation)))
+      (let ((weight (e3-diagnostic-selected-bits frame 1 operation)))
+        (let* ((perplexity
+                (e3-diagnostic-destination-word destinations 2 operation))
+               (accuracy
+                (e3-diagnostic-destination-word destinations 3 operation))
+               (tokens (e3-counter-ref frame 0))
+               (batches (e3-counter-ref frame 1)))
+          (if (or (> loss 4294967295) (> weight 4294967295)
+                  (> perplexity 4294967295) (> accuracy 4294967295)
+                  (<= tokens 0) (> tokens 16384)
+                  (<= batches 0) (> batches 8192))
+              (e3-native-invariant-fail))
+          (vector-set! record 4 loss)
+          (vector-set! record 5 weight)
+          (vector-set! record 6 perplexity)
+          (vector-set! record 7 accuracy)
+          (vector-set! record 8 tokens)
+          (vector-set! record 9 batches)
+          #t)))))
+
+(define (e3-diagnostic-evaluate-fixed! model dataset)
+  (let* ((operation 'diagnostic-evaluate-fixed!)
+         (record (e3-diagnostic-reserve-report! operation))
+         (arena-after-reserve (__arena-used))
+         (destinations #f)
+         (frame #f))
+    (guard
+     (caught
+      (#t
+       ;; E3 itself restores cursor and all modes before raising. A returned frame
+       ;; is therefore idle here and must be unbound before destination teardown.
+       (if frame (e3-frame-unbind! frame))
+       (if destinations
+           (e3-diagnostic-destinations-destroy! destinations))
+       (e3-diagnostic-abandon-report!)
+       (e3-diagnostic-record-transaction-retention! arena-after-reserve)
+       (raise caught)))
+     (set! destinations (e3-diagnostic-destinations-create operation))
+     (set! frame (e3-frame-bind! model destinations))
+     (e3-evaluate-into! model dataset frame)
+     (e3-diagnostic-read-results! record frame destinations operation)
+     (e3-frame-unbind! frame)
+     (set! frame #f)
+     (e3-diagnostic-destinations-destroy! destinations)
+     (set! destinations #f)
+     (let ((report (e3-diagnostic-publish-report! record)))
+       (e3-diagnostic-record-transaction-retention! arena-after-reserve)
+       report))))
+
+(define (e3-diagnostic-f32-bits report key)
+  (let* ((operation 'diagnostic-evaluation-f32-bits)
+         (record (e3-diagnostic-require-report report operation)))
+    (if (not (symbol? key))
+        (e3-diagnostic-fail 'invalid-argument operation
+                            "evaluation metric key must be a symbol"))
+    (cond ((eq? key 'loss) (vector-ref record 4))
+          ((eq? key 'mask-weight) (vector-ref record 5))
+          ((eq? key 'perplexity) (vector-ref record 6))
+          ((eq? key 'token-accuracy) (vector-ref record 7))
+          (else
+           (e3-diagnostic-fail 'invalid-argument operation
+                               "unknown floating evaluation metric")))))
+
+(define (e3-diagnostic-count report key)
+  (let* ((operation 'diagnostic-evaluation-count)
+         (record (e3-diagnostic-require-report report operation)))
+    (if (not (symbol? key))
+        (e3-diagnostic-fail 'invalid-argument operation
+                            "evaluation count key must be a symbol"))
+    (cond ((eq? key 'tokens) (vector-ref record 8))
+          ((eq? key 'batches) (vector-ref record 9))
+          (else
+           (e3-diagnostic-fail 'invalid-argument operation
+                               "unknown evaluation count")))))
+
+(define (e3-diagnostic-report-stats-internal)
+  ;; Test-only source-private observation: reservations, successes, active flag,
+  ;; promoted report/staging graph bytes, and inherited transaction bytes.
+  (vector (vector-ref e3-diagnostic-report-root 2)
+          (vector-ref e3-diagnostic-report-root 3)
+          (if (vector-ref e3-diagnostic-report-root 1) 1 0)
+          (vector-ref e3-diagnostic-report-root 4)
+          (vector-ref e3-diagnostic-report-root 5)))

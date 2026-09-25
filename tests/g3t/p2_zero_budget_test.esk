@@ -1,0 +1,2554 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3t_output_text_extension.esk")
+(load "g3t_final_publication_extension.esk")
+(load "g3t_manual_p1_extension.esk")
+(load "g3m_prefill_p1_extension.esk")
+(load "g3t_zero_budget_extension.esk")
+(load "g3t_p2_zero_budget_extension.esk")
+(load "g3t_t1_input_extension.esk")
+(load "g3t_rng_owner_extension.esk")
+(load "g3t_ids_owner_extension.esk")
+(load "g3t_lengths_owner_extension.esk")
+(load "g3t_text_result_extension.esk")
+
+(extern i64 g3t-test-input-length-set ptr i64
+        :real et_g3t_test_input_length_set_v1)
+(extern i64 g3t-native-full-request-preflight ptr ptr
+        :real et_g3t_private_full_request_preflight_v1)
+(extern i64 g3t-test-rng-counter-set ptr i64 i64
+        :real et_g3t_test_rng_counter_set_v1)
+(extern i64 g3t-test-output-word ptr i64 :real et_g3t_test_output_word_v1)
+(extern i64 g3t-test-output-state ptr :real et_g3t_test_output_state_v1)
+(extern ptr g3t-test-output-borrow-begin ptr
+        :real et_g3t_test_output_borrow_begin_v1)
+(extern i64 g3t-test-output-borrow-end ptr
+        :real et_g3t_test_output_borrow_end_v1)
+(extern i64 g3t-test-fail-a2-after i64 :real et_g3t_test_fail_a2_after_v1)
+(extern i64 g3t-test-cache-length ptr :real et_g3t_test_cache_length_v1)
+(extern i64 g3t-test-rng-word ptr i64 :real et_g3t_test_rng_word_v1)
+(extern i64 g3t-test-logit-bits ptr i64 :real et_g3t_test_logit_bits_v1)
+(extern i64 g3t-test-sample-token ptr :real et_g3t_test_sample_token_v1)
+(extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
+(extern i64 g3t-test-frame-binding-flip ptr
+        :real et_g3t_test_frame_binding_flip_v1)
+(extern i64 g3t-test-clone-state ptr
+        :real et_g3t_test_ids_clone_state_v1)
+(extern i64 g3t-test-clone-length ptr
+        :real et_g3t_test_ids_clone_length_v1)
+(extern i64 g3t-test-clone-word ptr
+        :real et_g3t_test_ids_clone_word_v1)
+(extern ptr g3t-test-clone-borrow-begin ptr
+        :real et_g3t_test_ids_clone_borrow_begin_v1)
+(extern i64 g3t-test-clone-borrow-end ptr
+        :real et_g3t_test_ids_clone_borrow_end_v1)
+(extern i64 g3t-test-live-clones
+        :real et_g3t_test_live_ids_clones_v1)
+(extern i64 g3t-test-fail-alloc-after i64
+        :real et_g3t_test_fail_alloc_after_v1)
+(extern i64 g3t-test-fail-i1-after i64
+        :real et_g3t_test_fail_i1_after_v1)
+(extern i64 g3t-test-lengths-clone-state ptr
+        :real et_g3t_test_lengths_clone_state_v1)
+(extern i64 g3t-test-lengths-clone-value ptr
+        :real et_g3t_test_lengths_clone_value_v1)
+(extern ptr g3t-test-lengths-clone-borrow-begin ptr
+        :real et_g3t_test_lengths_clone_borrow_begin_v1)
+(extern i64 g3t-test-lengths-clone-borrow-end ptr
+        :real et_g3t_test_lengths_clone_borrow_end_v1)
+(extern i64 g3t-test-live-lengths-clones
+        :real et_g3t_test_live_lengths_clones_v1)
+(extern i64 g3t-test-cache-lengths-clone-state ptr
+        :real et_g3t_test_cache_lengths_clone_state_v1)
+(extern i64 g3t-test-cache-lengths-clone-value ptr
+        :real et_g3t_test_cache_lengths_clone_value_v1)
+(extern ptr g3t-test-cache-lengths-clone-borrow-begin ptr
+        :real et_g3t_test_cache_lengths_clone_borrow_begin_v1)
+(extern i64 g3t-test-cache-lengths-clone-borrow-end ptr
+        :real et_g3t_test_cache_lengths_clone_borrow_end_v1)
+(extern i64 g3t-test-live-cache-lengths-clones
+        :real et_g3t_test_live_cache_lengths_clones_v1)
+(extern i64 g3t-test-rng-clone-state ptr
+        :real et_g3t_test_rng_clone_state_v1)
+(extern i64 g3t-test-rng-clone-word ptr i64
+        :real et_g3t_test_rng_clone_word_v1)
+(extern i64 g3t-test-live-rng-clones
+        :real et_g3t_test_live_rng_clones_v1)
+(extern i64 g3t-test-rng-clone-busy-set ptr i64
+        :real et_g3t_test_rng_clone_busy_set_v1)
+(extern i64 g3t-test-live-contexts
+        :real et_g3t_test_live_contexts_v1)
+(extern i64 g3t-test-last-error-category
+        :real et_g3t_private_last_error_category_v1)
+(extern i64 g3t-test-last-error-code
+        :real et_g3t_private_last_error_code_v1)
+(extern ptr g3t-native-input-from-t1 ptr
+        :real et_g3t_private_input_from_t1_v1)
+(extern i64 g3t-test-input-length ptr
+        :real et_g3t_test_input_length_v1)
+(extern i64 g3t-test-input-word ptr i64
+        :real et_g3t_test_input_word_v1)
+(extern ptr g3t-test-input-borrow-begin ptr
+        :real et_g3t_test_input_borrow_begin_v1)
+(extern i64 g3t-test-input-borrow-end ptr
+        :real et_g3t_test_input_borrow_end_v1)
+(extern i64 g3t-test-live-t1-inputs
+        :real et_g3t_test_live_t1_inputs_v1)
+(extern i64 g3t-test-i1-count i64
+        :real et_m3_test_i64_counts_v1)
+
+(extern ptr g3t-native-logits-reserve ptr
+        :real et_g3t_private_logits_reserve_v1)
+(extern i64 g3t-test-logits-state ptr
+        :real et_g3t_test_logits_state_v1)
+(extern i64 g3t-test-logits-shape ptr
+        :real et_g3t_test_logits_shape_v1)
+(extern ptr g3t-test-logits-borrow-begin ptr
+        :real et_g3t_test_logits_borrow_begin_v1)
+(extern i64 g3t-test-logits-borrow-end ptr
+        :real et_g3t_test_logits_borrow_end_v1)
+(extern i64 g3t-test-pending-logits
+        :real et_g3t_test_pending_logits_v1)
+(extern i64 g3t-test-fail-f32-after i64
+        :real et_g3t_test_fail_f32_after_v1)
+(extern i64 g3t-test-f32-tensors
+        :real et_g3t_test_f32_tensors_v1)
+(extern i64 g3t-test-manual-logits-word ptr i64
+        :real et_g3t_test_manual_logits_word_v1)
+(extern i64 g3t-test-manual-frame-kv-word ptr i64 i64
+        :real et_g3t_test_manual_frame_kv_word_v1)
+(extern i64 g3t-test-manual-cache-kv-word ptr i64 i64
+        :real et_g3t_test_manual_cache_kv_word_v1)
+(extern ptr g3t-test-manual-cache-borrow-begin ptr
+        :real et_g3t_test_manual_cache_borrow_begin_v1)
+(extern i64 g3t-test-manual-cache-borrow-end ptr
+        :real et_g3t_test_manual_cache_borrow_end_v1)
+(extern i64 g3t-test-manual-reference-kv-word ptr i64 i64
+        :real et_g3t_test_manual_reference_kv_word_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-T P2 zero budget FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (rng-clone-words? clone a b c d)
+  (and (= a (g3t-test-rng-clone-word clone 0))
+       (= b (g3t-test-rng-clone-word clone 1))
+       (= c (g3t-test-rng-clone-word clone 2))
+       (= d (g3t-test-rng-clone-word clone 3))))
+(define (rooted-roles call)
+  (let step ((ordinal 0))
+    (if (= ordinal 21) #t
+        (begin (g3t-role-step call ordinal) (step (+ ordinal 1))))))
+(define (live-rng-shells)
+  (let walk ((entries (vector-ref g3t-registry 0)) (count 0))
+    (if (null? entries) count
+        (let ((entry (car entries)))
+          (walk (cdr entries)
+                (if (and (eq? (vector-ref entry 1) 'rng)
+                         (eq? (vector-ref entry 2) 'live))
+                    (+ count 1) count))))))
+(define (live-ids-shells)
+  (let walk ((entries (vector-ref g3t-registry 0)) (count 0))
+    (if (null? entries) count
+        (let ((entry (car entries)))
+          (walk (cdr entries)
+                (if (and (eq? (vector-ref entry 1) 'ids)
+                         (eq? (vector-ref entry 2) 'live))
+                    (+ count 1) count))))))
+(define (live-length-shells kind)
+  (let walk ((entries (vector-ref g3t-registry 0)) (count 0))
+    (if (null? entries) count
+        (let ((entry (car entries)))
+          (walk (cdr entries)
+                (if (and (eq? (vector-ref entry 1) kind)
+                         (eq? (vector-ref entry 2) 'live))
+                    (+ count 1) count))))))
+(define (reject-category label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3t-p2-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(check "eval" (module-eval! model))
+(define native-model (vector-ref (g3t-model-entry-live model 'g3t-rng-test #f) 3))
+(define (generator-from-rng source budget)
+  (g3t-native-generator-rng native-model source 1 #x3f800000 256
+                            #x3f800000 budget -1))
+(define tokenizer (t1-private-tokenizer-byte config))
+(define t1-p2 (t1-wave1-tokenizer-encode tokenizer (bytevector 65 66)))
+(define t1-p1 (t1-wave1-tokenizer-encode tokenizer (bytevector 255)))
+(define t1-empty (t1-wave1-tokenizer-encode tokenizer (bytevector)))
+(define t1-long (t1-wave1-tokenizer-encode tokenizer (bytevector 1 2 3)))
+(check "T1 sources admitted in same aggregate"
+       (and (t1-wave1-tensor-admitted? t1-p2)
+            (t1-wave1-tensor-admitted? t1-p1)))
+(reject-category "foreign T1 wrapper rejected" 'invalid-argument
+  (lambda () (g3t-generation-t1-input-create (vector 'foreign))))
+(reject-category "empty T1 prompt rejected" 'shape-mismatch
+  (lambda () (g3t-generation-t1-input-create t1-empty)))
+(reject-category "P3 T1 prompt rejected" 'shape-mismatch
+  (lambda () (g3t-generation-t1-input-create t1-long)))
+(check "T1 shape rejects enroll no native input"
+       (= 0 (g3t-test-live-t1-inputs)))
+(define old-t1-registry t1-wave1-tensor-registry)
+(set! t1-wave1-tensor-registry '())
+(reject-category "withdrawn T1 authority rejected" 'invalid-argument
+  (lambda () (g3t-generation-t1-input-create t1-p2)))
+(set! t1-wave1-tensor-registry old-t1-registry)
+(define t1-unsealed (t1-shell-create 1))
+(check "unsealed T1 fixture" (not (null? t1-unsealed)))
+(check "unsealed T1 word" (= 0 (t1-shell-write t1-unsealed 0 65)))
+(check "unsealed T1 native reject"
+       (and (null? (g3t-native-input-from-t1 t1-unsealed))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "abort unsealed T1 fixture" (= 0 (t1-shell-abort t1-unsealed)))
+(check "stale T1 native reject"
+       (and (null? (g3t-native-input-from-t1 t1-unsealed))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "foreign native T1 reject"
+       (and (null? (g3t-native-input-from-t1 (vector 'foreign)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(define t1-out-of-range (t1-shell-create 1))
+(check "out-of-range T1 fixture" (not (null? t1-out-of-range)))
+(check "out-of-range T1 write"
+       (= 0 (t1-shell-write t1-out-of-range 0 256)))
+(check "out-of-range T1 seal"
+       (= 0 (t1-shell-seal t1-out-of-range)))
+(check "out-of-range T1 native reject"
+       (and (null? (g3t-native-input-from-t1 t1-out-of-range))
+            (= 3 (g3t-test-last-error-category))
+            (= 4 (g3t-test-last-error-code))))
+(define t1-i1-baseline (g3t-test-i1-count 0))
+(check "scalar native rejects negative ID before allocation"
+       (and (null? (g3t-native-input-from-token -1))
+            (= 1 (g3t-test-last-error-category))
+            (= 3 (g3t-test-last-error-code))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "scalar native rejects ID 256 before allocation"
+       (and (null? (g3t-native-input-from-token 256))
+            (= 1 (g3t-test-last-error-category))
+            (= 3 (g3t-test-last-error-code))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(reject-category "scalar wrapper rejects non-byte ID" 'invalid-argument
+  (lambda () (g3t-generation-token-input-create 256)))
+(reject-category "scalar wrapper rejects inexact ID" 'invalid-argument
+  (lambda () (g3t-generation-token-input-create 65.0)))
+(check "scalar header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "scalar header cut atomic"
+       (and (null? (g3t-native-input-from-token 65))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-t1-inputs))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "scalar header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "scalar I1 cut armed" (= 0 (g3t-test-fail-i1-after index)))
+        (check "scalar I1 cut atomic"
+               (and (null? (g3t-native-input-from-token 65))
+                    (= 0 (g3t-test-live-t1-inputs))
+                    (= t1-i1-baseline (g3t-test-i1-count 0))))
+        (cuts (+ index 1)))))
+(check "scalar I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define scalar-native (g3t-native-input-from-token 255))
+(check "scalar native owns exact singleton I1"
+       (and (not (null? scalar-native))
+            (= 1 (g3t-test-input-length scalar-native))
+            (= 255 (g3t-test-input-word scalar-native 0))
+            (= 1 (g3t-test-live-t1-inputs))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(define scalar-native-borrow (g3t-test-input-borrow-begin scalar-native))
+(check "scalar I1 borrow begins" (not (null? scalar-native-borrow)))
+(check "scalar I1 borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release scalar-native)))
+            (= 1 (g3t-test-live-t1-inputs))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(check "scalar I1 borrow ends"
+       (= 0 (g3t-test-input-borrow-end scalar-native-borrow)))
+(check "scalar native typed release and tombstone"
+       (and (= 0 (g3t-native-tensor-release scalar-native))
+            (= 0 (g3t-native-tensor-release scalar-native))
+            (= -1 (g3t-test-input-length scalar-native))
+            (= 0 (g3t-test-live-t1-inputs))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "scalar foreign native release rejected"
+       (and (not (= 0 (g3t-native-tensor-release native-model)))
+            (= 1 (g3t-test-last-error-category))))
+(reject-category "scalar wrapper rejects forged release" 'invalid-argument
+  (lambda () (g3t-generation-tensor-release! (vector 'g3t-input-private))))
+(reject-category "scalar wrapper rejects wrong-kind release" 'invalid-argument
+  (lambda () (g3t-generation-tensor-release! model)))
+(check "scalar wrapper header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "scalar wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-token-input-create 65)))
+(check "scalar wrapper header cut tombstones without owner"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (g3t-test-live-t1-inputs))
+              (= t1-i1-baseline (g3t-test-i1-count 0)))))
+(check "scalar wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "scalar wrapper I1 cut armed" (= 0 (g3t-test-fail-i1-after 0)))
+(reject-category "scalar wrapper I1 cut raises" 'internal
+  (lambda () (g3t-generation-token-input-create 65)))
+(check "scalar wrapper cut tombstones without owner"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (g3t-test-live-t1-inputs))
+              (= t1-i1-baseline (g3t-test-i1-count 0)))))
+(check "scalar wrapper I1 cut disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define scalar-shell (g3t-generation-token-input-create 65))
+(define scalar-shell-native
+  (vector-ref (g3t-prefill-entry scalar-shell 'input 'scalar-test) 3))
+(reject-category "scalar copied shell rejected" 'invalid-argument
+  (lambda () (g3t-generation-tensor-release!
+               (vector (vector-ref scalar-shell 0)))))
+(check "scalar wrapper owns one singleton I1"
+       (and (= 1 (g3t-test-input-length scalar-shell-native))
+            (= 65 (g3t-test-input-word scalar-shell-native 0))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(define scalar-shell-borrow (g3t-test-input-borrow-begin scalar-shell-native))
+(reject-category "scalar wrapper borrow blocks release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! scalar-shell)))
+(check "scalar wrapper source remains live on borrow"
+       (and (eq? (vector-ref (g3t-prefill-entry scalar-shell 'input 'scalar-test) 2)
+                 'live)
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(check "scalar wrapper borrow ends"
+       (= 0 (g3t-test-input-borrow-end scalar-shell-borrow)))
+(check "scalar wrapper typed release"
+       (and (g3t-generation-tensor-release! scalar-shell)
+            (g3t-generation-tensor-release! scalar-shell)
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "T1 header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "T1 header cut atomic"
+       (and (null? (g3t-native-input-from-t1 t1-p2))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-t1-inputs))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "T1 header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "T1 I1 cut armed" (= 0 (g3t-test-fail-i1-after index)))
+        (check "T1 I1 cut atomic"
+               (and (null? (g3t-native-input-from-t1 t1-p2))
+                    (= 0 (g3t-test-live-t1-inputs))
+                    (= t1-i1-baseline (g3t-test-i1-count 0))))
+        (cuts (+ index 1)))))
+(check "T1 I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define t1-native-copy (g3t-native-input-from-t1 t1-p2))
+(check "T1 P2 owns exact independent I1"
+       (and (not (null? t1-native-copy))
+            (= 2 (g3t-test-input-length t1-native-copy))
+            (= 65 (g3t-test-input-word t1-native-copy 0))
+            (= 66 (g3t-test-input-word t1-native-copy 1))
+            (= 1 (g3t-test-live-t1-inputs))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(define t1-input-borrow (g3t-test-input-borrow-begin t1-native-copy))
+(check "T1-owned I1 borrow begins" (not (null? t1-input-borrow)))
+(check "T1-owned I1 borrow blocks release"
+       (and (not (= 0 (g3t-native-tensor-release t1-native-copy)))
+            (= 1 (g3t-test-live-t1-inputs))
+            (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0))))
+(check "T1-owned I1 borrow ends"
+       (= 0 (g3t-test-input-borrow-end t1-input-borrow)))
+(check "T1-native typed release"
+       (and (= 0 (g3t-native-tensor-release t1-native-copy))
+            (= 0 (g3t-native-tensor-release t1-native-copy))
+            (= 0 (g3t-test-live-t1-inputs))
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "dead T1 input cannot be reused"
+       (= -1 (g3t-test-input-length t1-native-copy)))
+(check "T1 source unchanged by copy/release"
+       (and (= 2 (t1-shell-length t1-p2))
+            (= 65 (t1-shell-read t1-p2 0))
+            (= 66 (t1-shell-read t1-p2 1))))
+(define t1-wrapper-p1 (g3t-generation-t1-input-create t1-p1))
+(define t1-wrapper-p1-native
+  (vector-ref (g3t-prefill-entry t1-wrapper-p1 'input 't1-p1) 3))
+(check "same-aggregate P1 copies byte 255"
+       (= 255 (g3t-test-input-word t1-wrapper-p1-native 0)))
+(check "same-aggregate P1 release"
+       (and (g3t-generation-tensor-release! t1-wrapper-p1)
+            (g3t-generation-tensor-release! t1-wrapper-p1)
+            (= t1-i1-baseline (g3t-test-i1-count 0))))
+(check "wrapper I1 cut armed" (= 0 (g3t-test-fail-i1-after 0)))
+(reject-category "wrapper I1 cut raises" 'internal
+  (lambda () (g3t-generation-t1-input-create t1-p2)))
+(check "wrapper I1 cut tombstone and no owner"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (g3t-test-live-t1-inputs))
+              (= t1-i1-baseline (g3t-test-i1-count 0)))))
+(check "wrapper I1 cut disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define (t1-retention-cycles count)
+  (let cycle ((index 0))
+    (if (= index count) #t
+        (let ((copy (g3t-generation-t1-input-create t1-p2)))
+          (check "T1 retention one live input"
+                 (= 1 (g3t-test-live-t1-inputs)))
+          (check "T1 retention one live I1"
+                 (= (+ t1-i1-baseline 1) (g3t-test-i1-count 0)))
+          (check "T1 retention typed release"
+                 (g3t-generation-tensor-release! copy))
+          (check "T1 retention no live input"
+                 (= 0 (g3t-test-live-t1-inputs)))
+          (check "T1 retention no live I1"
+                 (= t1-i1-baseline (g3t-test-i1-count 0)))
+          (cycle (+ index 1))))))
+(check "T1 1024-cycle retention" (t1-retention-cycles 1024))
+(check "T1 8192-cycle retention" (t1-retention-cycles 8192))
+(define policy
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 0
+        ':eos #f ':seed 1729))
+(define policy-g1
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define policy-greedy-g1
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define (rng-policy source budget)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens budget
+        ':eos #f ':rng source))
+
+(define generator (g3t-generator-create model tokenizer policy))
+(define native (vector-ref (g3t-generator-find generator 'g3t-p2) 3))
+(define input (g3t-native-input-from-pair 65 66))
+(check "two-token input" (not (null? input)))
+(check "invalid pair rejected"
+       (null? (g3t-native-input-from-pair 65 256)))
+(check "P2 preflight" (= 0 (g3t-native-prompt-preflight native input)))
+(check "full request P2/G0 admitted before pins"
+       (and (= 0 (g3t-native-full-request-preflight native input))
+            (= 0 (g3t-test-pin-count native))
+            (= 0 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))))
+(define full-p1 (g3t-native-input-from-token 65))
+(check "full request P1/G0 admitted before pins"
+       (and (= 0 (g3t-native-full-request-preflight native full-p1))
+            (= 0 (g3t-test-pin-count native))))
+(check "P2-only helper still rejects P1 before pins"
+       (and (not (= 0 (g3t-native-prompt-preflight native full-p1)))
+            (= 0 (g3t-test-pin-count native))))
+(check "full request rejects forged generator"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        (vector 'forged) full-p1)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "full request rejects forged input"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        native (vector 'forged))))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "full request rejects wrong input kind"
+       (and (not (= 0 (g3t-native-full-request-preflight native native)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "full request P1 release"
+       (= 0 (g3t-native-tensor-release full-p1)))
+(check "full request rejects dead input"
+       (and (not (= 0 (g3t-native-full-request-preflight native full-p1)))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "length>2 setup" (= 0 (g3t-test-input-length-set input 3)))
+(check "length>2 rejected before pins"
+       (and (not (= 0 (g3t-native-prompt-preflight native input)))
+            (= 0 (g3t-test-pin-count native))
+            (= 0 (g3t-test-cache-length native))))
+(check "full request rejects length>2 before pins"
+       (and (not (= 0 (g3t-native-full-request-preflight native input)))
+            (= 3 (g3t-test-last-error-category))
+            (= 0 (g3t-test-pin-count native))))
+(check "length restored" (= 0 (g3t-test-input-length-set input 2)))
+
+(check "acquire" (= 0 (g3t-native-call-acquire native 2)))
+(check "14 pins" (= 14 (g3t-test-pin-count native)))
+(define output (g3t-native-output-reserve native 2))
+(check "empty ID owner reserved" (and (not (null? output))
+                                       (= 1 (g3t-test-output-word output 5))))
+(check "pending output cannot clone IDs"
+       (and (null? (g3t-native-output-ids-clone output))
+            (= 0 (g3t-test-live-clones))))
+(check "pending output cannot clone lengths"
+       (and (null? (g3t-native-output-lengths-clone output))
+            (= 0 (g3t-test-live-lengths-clones))))
+(check "pending output cannot clone cache length"
+       (and (null? (g3t-native-output-cache-lengths-clone output))
+            (= 0 (g3t-test-live-cache-lengths-clones))))
+(check "pending output cannot clone RNG"
+       (and (null? (g3t-native-output-rng-clone output))
+            (= 0 (g3t-test-live-rng-clones))))
+(define wrong-input (g3t-native-input-from-token 65))
+(check "wrong length frame rejected"
+       (not (= 0 (g3t-native-frame-begin native wrong-input 1))))
+(check "wrong input release" (= 0 (g3t-native-tensor-release wrong-input)))
+(check "A2 create cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(check "P2 create cut rejected"
+       (not (= 0 (g3t-native-frame-begin native input 1))))
+(check "A2 create cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "P2 create cut preserves old cache"
+       (and (= 0 (g3t-test-cache-length native))
+            (= 14 (g3t-test-pin-count native))))
+(check "P2 begin" (= 0 (g3t-native-frame-begin native input 1)))
+(let roles ((ordinal 0))
+  (if (= ordinal 10)
+      #t
+      (begin (check "P2 role 0..9"
+                    (= 0 (g3t-native-role-step native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "A2 attention cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(check "A2 attention rejected"
+       (not (= 0 (g3t-native-role-step native 10))))
+(check "A2 attention cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "A2 attention rollback"
+       (and (= 0 (g3t-test-cache-length native))
+            (= 14 (g3t-test-pin-count native))))
+(check "P2 attention" (= 0 (g3t-native-role-step native 10)))
+(let roles ((ordinal 11))
+  (if (= ordinal 21)
+      #t
+      (begin (check "P2 role 11..20"
+                    (= 0 (g3t-native-role-step native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "no sampler in G0" (not (= 0 (g3t-native-sample native))))
+(check "no append frame in G0"
+       (not (= 0 (g3t-native-frame-begin native #f 2))))
+(check "numeric zero preparation"
+       (= 0 (g3t-native-output-prepare native output)))
+(define staging (make-bytevector 0 0))
+(define raw (make-bytevector 0 0))
+(check "empty IDs" (= 0 (g3t-native-output-copy-decode-ids
+                              native output staging)))
+(check "T1 empty raw decode" (eq? raw (t1-private-g3-decode-raw-into!
+                                        tokenizer staging raw)))
+(check "empty text accepted" (= 0 (g3t-native-output-accept-text
+                                     native output raw)))
+(check "P2 output ready"
+       (and (= 0 (g3t-test-output-word output 1))
+            (= 2 (g3t-test-output-word output 2))
+            (= 1 (g3t-test-output-word output 3))
+            (= 1 (g3t-test-output-word output 4))))
+(check "frame prepare" (= 0 (g3t-native-frame-prepare native #f)))
+(check "binding flip" (= 0 (g3t-test-frame-binding-flip native)))
+(check "stale binding blocks preflight"
+       (and (not (= 0 (g3t-native-call-prepare-end native)))
+            (= 0 (g3t-test-output-state output))
+            (= 0 (g3t-test-cache-length native))))
+(check "binding restore" (= 0 (g3t-test-frame-binding-flip native)))
+(define borrow (g3t-test-output-borrow-begin output))
+(check "empty ID borrow" (not (null? borrow)))
+(check "borrow blocks preflight and abort"
+       (and (not (= 0 (g3t-native-call-prepare-end native)))
+            (not (= 0 (g3t-native-call-abort native)))
+            (= 14 (g3t-test-pin-count native))))
+(check "borrow end" (= 0 (g3t-test-output-borrow-end borrow)))
+(check "preflight" (= 0 (g3t-native-call-prepare-end native)))
+(check "P2 joint commit" (= 0 (g3t-native-frame-commit native)))
+(define prefill-bits (make-vector 256 0))
+(let capture ((index 0))
+  (if (= index 256) #t
+      (begin (vector-set! prefill-bits index
+                          (g3t-test-logit-bits native index))
+             (capture (+ index 1)))))
+(check "published P2/G0 state"
+       (and (= 1 (g3t-test-output-state output))
+            (= 0 (g3t-test-output-word output 1))
+            (= 2 (g3t-test-output-word output 2))
+            (= 2 (g3t-test-cache-length native))
+            (= -1 (g3t-test-sample-token native))))
+(check "RNG unchanged"
+       (let same ((index 0))
+         (if (= index 4) #t
+             (and (= (g3t-test-rng-word native index)
+                     (g3t-test-output-word output (+ 7 index)))
+                  (= (g3t-test-rng-word native index)
+                     (cond ((= index 0) 1) ((= index 1) 1729) (else 0)))
+                  (same (+ index 1))))))
+(check "finish" (= 0 (g3t-native-call-finish native)))
+(check "pins drained" (= 0 (g3t-test-pin-count native)))
+(check "P2/G0 clone header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "P2/G0 header cut is atomic"
+       (and (null? (g3t-native-output-ids-clone output))
+            (= 0 (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))))
+(check "P2/G0 header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 3) #t
+      (begin
+        (check "P2/G0 I1 clone cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "P2/G0 I1 clone cut atomic"
+               (and (null? (g3t-native-output-ids-clone output))
+                    (= 0 (g3t-test-live-clones))
+                    (= 1 (g3t-test-output-state output))
+                    (= 2 (g3t-test-cache-length native))
+                    (= 0 (g3t-test-rng-word native 2))))
+        (cuts (+ index 1)))))
+(check "P2/G0 I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define p2-clone (g3t-native-output-ids-clone output))
+(check "P2/G0 empty detached I1 owner"
+       (and (not (null? p2-clone))
+            (= 1 (g3t-test-clone-state p2-clone))
+            (= 0 (g3t-test-clone-length p2-clone))
+            (= 1 (g3t-test-live-clones))))
+(check "wrong-kind tensor release rejected"
+       (and (not (= 0 (g3t-native-tensor-release output)))
+            (= 1 (g3t-test-output-state output))
+            (= 1 (g3t-test-clone-state p2-clone))))
+(check "P2/G0 lengths header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "P2/G0 lengths header cut atomic"
+       (and (null? (g3t-native-output-lengths-clone output))
+            (= 0 (g3t-test-live-lengths-clones))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))))
+(check "P2/G0 lengths header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "P2/G0 lengths I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "P2/G0 lengths I1 cut atomic"
+               (and (null? (g3t-native-output-lengths-clone output))
+                    (= 0 (g3t-test-live-lengths-clones))
+                    (= 1 (g3t-test-output-state output))
+                    (= 2 (g3t-test-output-word output 2))
+                    (= 0 (g3t-test-rng-word native 2))))
+        (cuts (+ index 1)))))
+(check "P2/G0 lengths I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define p2-lengths-clone (g3t-native-output-lengths-clone output))
+(check "P2/G0 detached generated length is zero"
+       (and (not (null? p2-lengths-clone))
+            (= 1 (g3t-test-lengths-clone-state p2-lengths-clone))
+            (= 0 (g3t-test-lengths-clone-value p2-lengths-clone))))
+(check "P2/G0 cache-length header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "P2/G0 cache-length header cut atomic"
+       (and (null? (g3t-native-output-cache-lengths-clone output))
+            (= 0 (g3t-test-live-cache-lengths-clones))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))))
+(check "P2/G0 cache-length header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "P2/G0 cache-length I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "P2/G0 cache-length I1 cut atomic"
+               (and (null? (g3t-native-output-cache-lengths-clone output))
+                    (= 0 (g3t-test-live-cache-lengths-clones))
+                    (= 1 (g3t-test-output-state output))
+                    (= 2 (g3t-test-output-word output 2))
+                    (= 0 (g3t-test-rng-word native 2))))
+        (cuts (+ index 1)))))
+(check "P2/G0 cache-length I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define p2-cache-lengths-clone
+  (g3t-native-output-cache-lengths-clone output))
+(check "P2/G0 detached cache length is two"
+       (and (not (null? p2-cache-lengths-clone))
+            (= 1 (g3t-test-cache-lengths-clone-state p2-cache-lengths-clone))
+            (= 2 (g3t-test-cache-lengths-clone-value p2-cache-lengths-clone))))
+(check "P2/G0 RNG header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "P2/G0 RNG header cut atomic"
+       (and (null? (g3t-native-output-rng-clone output))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-rng-clones))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))))
+(check "P2/G0 RNG header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(define p2-source-borrow (g3t-test-output-borrow-begin output))
+(check "P2/G0 ID borrow begins" (not (null? p2-source-borrow)))
+(define p2-rng-clone (g3t-native-output-rng-clone output))
+(check "P2/G0 RNG clone permits ID borrow"
+       (and (not (null? p2-rng-clone))
+            (= 1 (g3t-test-rng-clone-state p2-rng-clone))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)
+            (= 1 (g3t-test-live-rng-clones))))
+(check "P2/G0 ID borrow ends"
+       (= 0 (g3t-test-output-borrow-end p2-source-borrow)))
+(define rng-context-baseline (g3t-test-live-contexts))
+(check "RNG constructor rejects forged source before read"
+       (and (null? (generator-from-rng (vector 'forged) 0))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))))
+(check "RNG constructor rejects wrong-kind source"
+       (and (null? (generator-from-rng output 0))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))))
+(check "RNG constructor rejects forged model"
+       (and (null? (g3t-native-generator-rng (vector 'forged)
+                  p2-rng-clone 1 #x3f800000 256 #x3f800000 0 -1))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "RNG busy fixture armed" (= 0 (g3t-test-rng-clone-busy-set p2-rng-clone 1)))
+(check "RNG constructor rejects busy source before copy"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "RNG busy fixture disarmed" (= 0 (g3t-test-rng-clone-busy-set p2-rng-clone 0)))
+(check "RNG constructor rejects invalid policy atomically"
+       (and (null? (g3t-native-generator-rng native-model p2-rng-clone
+                                               1 #x3f800000 256 #x3f800000 2 -1))
+            (= 1 (g3t-test-last-error-category))
+            (= 3 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))))
+(check "RNG context header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "RNG context header cut atomic"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (g3t-test-output-state output))
+            (= 2 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "RNG context header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "RNG context A2 cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(check "RNG context A2 cut atomic"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (g3t-test-output-state output))
+            (= 0 (g3t-test-rng-word native 2))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "RNG context A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "RNG A2 cut preserves source cache"
+       (= 2 (g3t-test-cache-length native)))
+(define p2-rng-context (generator-from-rng p2-rng-clone 0))
+(check "P2/G0 RNG constructor exact copy without draw"
+       (and (not (null? p2-rng-context))
+            (= (+ rng-context-baseline 1) (g3t-test-live-contexts))
+            (= 1 (g3t-test-rng-word p2-rng-context 0))
+            (= 1729 (g3t-test-rng-word p2-rng-context 1))
+            (= 0 (g3t-test-rng-word p2-rng-context 2))
+            (= 0 (g3t-test-rng-word p2-rng-context 3))
+            (= 0 (g3t-test-cache-length p2-rng-context))
+            (= 0 (g3t-test-pin-count p2-rng-context))))
+(check "P2/G0 typed RNG release rejects output"
+       (and (not (= 0 (g3t-native-rng-release output)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= 1 (g3t-test-output-state output))))
+(check "P2/G0 tensor release rejects RNG"
+       (and (not (= 0 (g3t-native-tensor-release p2-rng-clone)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (rng-clone-words? p2-rng-clone 1 1729 0 0)))
+(check "generator close" (g3t-generator-close! generator))
+(check "output release" (= 0 (g3t-native-output-release output)))
+(check "output tombstone" (= -1 (g3t-test-output-state output)))
+(check "P2/G0 clone survives output and generator release"
+       (and (= 1 (g3t-test-clone-state p2-clone))
+            (= 0 (g3t-test-clone-length p2-clone))))
+(check "P2/G0 clone release" (= 0 (g3t-native-tensor-release p2-clone)))
+(check "P2/G0 clone tombstone and idempotence"
+       (and (= -1 (g3t-test-clone-state p2-clone))
+            (= 0 (g3t-native-tensor-release p2-clone))
+            (= 0 (g3t-test-live-clones))))
+(check "P2/G0 lengths clone survives parent release"
+       (= 0 (g3t-test-lengths-clone-value p2-lengths-clone)))
+(check "P2/G0 lengths clone release"
+       (= 0 (g3t-native-tensor-release p2-lengths-clone)))
+(check "P2/G0 lengths clone idempotent tombstone"
+       (and (= -1 (g3t-test-lengths-clone-state p2-lengths-clone))
+            (= 0 (g3t-native-tensor-release p2-lengths-clone))
+            (= 0 (g3t-test-live-lengths-clones))))
+(check "P2/G0 cache length survives parent release"
+       (= 2 (g3t-test-cache-lengths-clone-value p2-cache-lengths-clone)))
+(check "P2/G0 cache-length clone release"
+       (= 0 (g3t-native-tensor-release p2-cache-lengths-clone)))
+(check "P2/G0 cache-length tombstone"
+       (and (= -1 (g3t-test-cache-lengths-clone-state p2-cache-lengths-clone))
+            (= 0 (g3t-native-tensor-release p2-cache-lengths-clone))
+            (= 0 (g3t-test-live-cache-lengths-clones))))
+(check "P2/G0 RNG survives parent release"
+       (rng-clone-words? p2-rng-clone 1 1729 0 0))
+(check "P2/G0 RNG typed release"
+       (= 0 (g3t-native-rng-release p2-rng-clone)))
+(check "P2/G0 RNG tombstone and zeroization"
+       (and (= -1 (g3t-test-rng-clone-state p2-rng-clone))
+            (rng-clone-words? p2-rng-clone 0 0 0 0)
+            (= 0 (g3t-native-rng-release p2-rng-clone))
+            (= 0 (g3t-test-live-rng-clones))))
+(check "P2/G0 new context survives source and parent release"
+       (and (= 1 (g3t-test-rng-word p2-rng-context 0))
+            (= 1729 (g3t-test-rng-word p2-rng-context 1))
+            (= 0 (g3t-test-rng-word p2-rng-context 2))
+            (= 0 (g3t-test-rng-word p2-rng-context 3))
+            (= 0 (g3t-test-cache-length p2-rng-context))))
+(check "RNG constructor rejects released source"
+       (and (null? (generator-from-rng p2-rng-clone 0))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "P2/G0 RNG context close"
+       (and (= 0 (g3t-native-generator-close p2-rng-context))
+            (= (- rng-context-baseline 1) (g3t-test-live-contexts))))
+(check "P2/G0 dead output cannot clone RNG"
+       (and (null? (g3t-native-output-rng-clone output))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "input release" (= 0 (g3t-native-tensor-release input)))
+
+(define reference-input (g3t-checked-m3t-input-create))
+(check "reference input"
+       (g3t-checked-m3t-input-copy! reference-input (list 65 66)))
+(define reference-workspace (g3t-checked-m3t-workspace-create model))
+(define reference-logits (g3t-checked-m3t-logits-create))
+(check "reference begin" (g3t-checked-m3t-workspace-begin!
+                            reference-workspace reference-input))
+(check "reference ET" (g3t-checked-m3t-embedding! reference-workspace 'token))
+(check "reference EP" (g3t-checked-m3t-embedding! reference-workspace 'position))
+(check "reference X" (g3t-checked-m3t-residual! reference-workspace 'embeddings))
+(check "reference N1" (g3t-checked-m3t-layer-norm! reference-workspace 'block-input))
+(check "reference QT" (g3t-checked-m3t-linear! reference-workspace 'q))
+(check "reference KT" (g3t-checked-m3t-linear! reference-workspace 'k))
+(check "reference VT" (g3t-checked-m3t-linear! reference-workspace 'v))
+(check "reference QH" (g3t-checked-m3t-heads-split! reference-workspace 'q))
+(check "reference KH" (g3t-checked-m3t-heads-split! reference-workspace 'k))
+(check "reference VH" (g3t-checked-m3t-heads-split! reference-workspace 'v))
+(define reference-native-workspace
+  (vector-ref (m3t-entry reference-workspace 'workspace 'g3t-manual-reference #t) 3))
+(define manual-reference-kv
+  (let ((words (make-vector 8 0)))
+    (let fill ((which 0) (index 0))
+      (if (= which 2) words
+          (begin
+            (vector-set! words (+ (* which 4) index)
+                         (g3t-test-manual-reference-kv-word
+                           reference-native-workspace which index))
+            (if (= index 3) (fill (+ which 1) 0)
+                (fill which (+ index 1))))))))
+(check "reference AH" (g3t-checked-m3t-attention! reference-workspace))
+(check "reference AT" (g3t-checked-m3t-heads-merge! reference-workspace))
+(check "reference AO" (g3t-checked-m3t-linear! reference-workspace 'attention-output))
+(check "reference R" (g3t-checked-m3t-residual! reference-workspace 'attention))
+(check "reference N2" (g3t-checked-m3t-layer-norm! reference-workspace 'ffn-input))
+(check "reference FU" (g3t-checked-m3t-linear! reference-workspace 'ffn-up))
+(check "reference FG" (g3t-checked-m3t-gelu! reference-workspace))
+(check "reference FD" (g3t-checked-m3t-linear! reference-workspace 'ffn-down))
+(check "reference Y" (g3t-checked-m3t-residual! reference-workspace 'ffn))
+(check "reference NF" (g3t-checked-m3t-layer-norm! reference-workspace 'final))
+(check "reference Z" (g3t-checked-m3t-linear! reference-workspace 'tied-head))
+(check "reference copy" (g3t-checked-m3t-workspace-copy-logits!
+                          reference-workspace reference-logits))
+(define reference-bytes (g3t-checked-m3t-logits-bits reference-logits))
+(check "all 256 P2 logits equal independent M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (vector-ref prefill-bits index))
+                    (compare (+ index 1)))))))
+(check "reference reset" (g3t-checked-m3t-workspace-reset! reference-workspace))
+(check "reference logits release" (g3t-checked-m3t-logits-release! reference-logits))
+(check "reference workspace release"
+       (g3t-checked-m3t-workspace-release! reference-workspace))
+(check "reference input release" (g3t-checked-m3t-input-release! reference-input))
+
+(define wrapped-generator (g3t-generator-create model tokenizer policy))
+(define wrapped-input (g3t-generation-t1-input-create t1-p2))
+(check "T1 P2 frame source owns I1"
+       (let ((native-input
+              (vector-ref (g3t-prefill-entry wrapped-input 'input 't1-p2) 3)))
+         (and (= 2 (g3t-test-input-length native-input))
+              (= 65 (g3t-test-input-word native-input 0))
+              (= 66 (g3t-test-input-word native-input 1)))))
+(define wrapped-output (g3t-p2-zero-generate! wrapped-generator wrapped-input))
+(check "rooted P2/G0 empty result"
+       (let ((entry (g3t-prefill-entry wrapped-output 'output 'g3t-p2-rooted)))
+         (and (eq? (vector-ref entry 2) 'live)
+              (= 0 (bytevector-length (vector-ref entry 6))))))
+(define wrapped-native-output
+  (vector-ref (g3t-prefill-entry wrapped-output 'output 'g3t-rng-test) 3))
+(define wrapped-output-entry
+  (g3t-prefill-entry wrapped-output 'output 'g3t-ids-test))
+(reject-category "text result rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-text (vector 'g3t-output-private))))
+(reject-category "text result rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-text wrapped-input)))
+(vector-set! wrapped-output-entry 2 'pending)
+(reject-category "text result rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-text wrapped-output)))
+(vector-set! wrapped-output-entry 2 'live)
+(define wrapped-text-registry-head (vector-ref g3t-registry 0))
+(define wrapped-text-first (g3t-generation-output-text wrapped-output))
+(define wrapped-text-second (g3t-generation-output-text wrapped-output))
+(define wrapped-text-first-bytes (car wrapped-text-first))
+(define wrapped-text-second-bytes (car wrapped-text-second))
+(check "P2/G0 text results are fresh empty bytevectors in fresh lists"
+       (and (pair? wrapped-text-first) (null? (cdr wrapped-text-first))
+            (pair? wrapped-text-second) (null? (cdr wrapped-text-second))
+            (not (eq? wrapped-text-first wrapped-text-second))
+            (not (eq? wrapped-text-first-bytes wrapped-text-second-bytes))
+            (not (eq? wrapped-text-first-bytes (vector-ref wrapped-output-entry 6)))
+            (= 0 (bytevector-length wrapped-text-first-bytes))
+            (= 0 (bytevector-length wrapped-text-second-bytes))
+            (eq? wrapped-text-registry-head (vector-ref g3t-registry 0))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(set-car! wrapped-text-first #f)
+(check "P2/G0 text list mutation leaves another result and source intact"
+       (and (bytevector? (car wrapped-text-second))
+            (= 0 (bytevector-length (car wrapped-text-second)))
+            (= 0 (bytevector-length (vector-ref wrapped-output-entry 6)))
+            (eq? wrapped-text-registry-head (vector-ref g3t-registry 0))))
+(reject-category "IDs wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-ids (vector 'g3t-output-private))))
+(reject-category "IDs wrapper rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-ids wrapped-input)))
+(vector-set! wrapped-output-entry 2 'pending)
+(reject-category "IDs wrapper rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(vector-set! wrapped-output-entry 2 'live)
+(check "IDs pending rejection leaves no owner"
+       (and (= 0 (live-ids-shells)) (= 0 (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(define wrapped-ids-i1-before (g3t-test-i1-count 0))
+(check "IDs wrapper header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "IDs wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(check "IDs wrapper header cut atomic"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 1) 'ids)
+              (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (live-ids-shells))
+              (= 0 (g3t-test-live-clones))
+              (= wrapped-ids-i1-before (g3t-test-i1-count 0))
+              (= 1 (g3t-test-output-state wrapped-native-output))
+              (= 2 (g3t-test-output-word wrapped-native-output 2))
+              (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+(check "IDs wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 3) #t
+      (begin
+        (check "IDs wrapper I1 cut armed" (= 0 (g3t-test-fail-i1-after index)))
+        (reject-category "IDs wrapper I1 cut raises" 'internal
+          (lambda () (g3t-generation-output-ids wrapped-output)))
+        (check "IDs wrapper I1 cut atomic"
+               (let ((entry (car (vector-ref g3t-registry 0))))
+                 (and (eq? (vector-ref entry 2) 'dead)
+                      (not (vector-ref entry 3))
+                      (not (vector-ref entry 10))
+                      (= 0 (live-ids-shells))
+                      (= 0 (g3t-test-live-clones))
+                      (= wrapped-ids-i1-before (g3t-test-i1-count 0))
+                      (= 1 (g3t-test-output-state wrapped-native-output))
+                      (= 2 (g3t-test-output-word wrapped-native-output 2))
+                      (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+        (cuts (+ index 1)))))
+(check "IDs wrapper I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define wrapped-ids-result (g3t-generation-output-ids wrapped-output))
+(define wrapped-ids-shell (car wrapped-ids-result))
+(define wrapped-ids-entry
+  (g3t-prefill-entry wrapped-ids-shell 'ids 'g3t-ids-test))
+(define wrapped-ids-native (vector-ref wrapped-ids-entry 3))
+(check "P2/G0 IDs wrapper returns one rooted detached I1"
+       (and (pair? wrapped-ids-result)
+            (null? (cdr wrapped-ids-result))
+            (eq? (car wrapped-ids-result) wrapped-ids-shell)
+            (eq? (vector-ref wrapped-ids-entry 2) 'live)
+            (eq? (vector-ref wrapped-ids-entry 4) #f)
+            (eq? (vector-ref wrapped-ids-entry 5) #f)
+            (eq? (vector-ref wrapped-ids-entry 10) #f)
+            (= 0 (g3t-test-clone-length wrapped-ids-native))
+            (= 1 (live-ids-shells))
+            (= 1 (g3t-test-live-clones))
+            (= (+ wrapped-ids-i1-before 1) (g3t-test-i1-count 0))))
+(define wrapped-ids-second (g3t-generation-output-ids wrapped-output))
+(check "IDs wrapper creates a fresh list and native owner"
+       (and (pair? wrapped-ids-second)
+            (null? (cdr wrapped-ids-second))
+            (not (eq? wrapped-ids-result wrapped-ids-second))
+            (not (eq? wrapped-ids-shell (car wrapped-ids-second)))
+            (not (eq? wrapped-ids-native
+                      (vector-ref (g3t-prefill-entry
+                                    (car wrapped-ids-second) 'ids 'g3t-ids-test) 3)))
+            (= 2 (live-ids-shells))
+            (= 2 (g3t-test-live-clones))))
+(check "IDs second clone typed release"
+       (and (g3t-generation-tensor-release! (car wrapped-ids-second))
+            (= 1 (live-ids-shells))
+            (= 1 (g3t-test-live-clones))))
+(define wrapped-ids-borrow (g3t-test-clone-borrow-begin wrapped-ids-native))
+(check "IDs wrapper clone borrow begins" (not (null? wrapped-ids-borrow)))
+(reject-category "IDs wrapper borrow blocks typed release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! wrapped-ids-shell)))
+(check "IDs wrapper borrowed clone remains live"
+       (and (= 1 (live-ids-shells))
+            (= 1 (g3t-test-clone-state wrapped-ids-native))))
+(check "IDs wrapper clone borrow ends"
+       (= 0 (g3t-test-clone-borrow-end wrapped-ids-borrow)))
+(reject-category "IDs wrapper rejects copied shell release" 'invalid-argument
+  (lambda () (g3t-generation-tensor-release!
+               (vector (vector-ref wrapped-ids-shell 0)))))
+(reject-category "RNG typed release rejects IDs shell" 'invalid-argument
+  (lambda () (g3t-generation-rng-release! wrapped-ids-shell)))
+(define wrapped-ids-source-borrow
+  (g3t-test-output-borrow-begin wrapped-native-output))
+(check "IDs wrapper source borrow begins" (not (null? wrapped-ids-source-borrow)))
+(reject-category "IDs wrapper borrowed output rejects clone" 'invalid-state
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(check "IDs wrapper source borrow cut preserves owners"
+       (and (= 1 (live-ids-shells))
+            (= 1 (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(check "IDs wrapper source borrow ends"
+       (= 0 (g3t-test-output-borrow-end wrapped-ids-source-borrow)))
+(reject-category "lengths wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-lengths (vector 'g3t-output-private))))
+(reject-category "cache-lengths wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-cache-lengths
+               (vector 'g3t-output-private))))
+(reject-category "lengths wrapper rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-lengths wrapped-input)))
+(reject-category "cache-lengths wrapper rejects wrong-kind IDs" 'invalid-argument
+  (lambda () (g3t-generation-output-cache-lengths wrapped-ids-shell)))
+(vector-set! wrapped-output-entry 2 'pending)
+(reject-category "lengths wrapper rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(reject-category "cache-lengths wrapper rejects pending output" 'invalid-state
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(vector-set! wrapped-output-entry 2 'live)
+(check "length wrappers pending rejection enrolls no owner"
+       (and (= 0 (live-length-shells 'lengths))
+            (= 0 (live-length-shells 'cache-lengths))
+            (= 0 (g3t-test-live-lengths-clones))
+            (= 0 (g3t-test-live-cache-lengths-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(define wrapped-lengths-i1-before (g3t-test-i1-count 0))
+(check "lengths wrapper header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "lengths wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(check "lengths wrapper header cut atomic"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 1) 'lengths)
+              (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (live-length-shells 'lengths))
+              (= 0 (g3t-test-live-lengths-clones))
+              (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+              (= 1 (g3t-test-output-state wrapped-native-output))
+              (= 2 (g3t-test-output-word wrapped-native-output 2))
+              (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+(check "lengths wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "lengths wrapper I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (reject-category "lengths wrapper I1 cut raises" 'internal
+          (lambda () (g3t-generation-output-lengths wrapped-output)))
+        (check "lengths wrapper I1 cut atomic"
+               (let ((entry (car (vector-ref g3t-registry 0))))
+                 (and (eq? (vector-ref entry 2) 'dead)
+                      (not (vector-ref entry 3))
+                      (not (vector-ref entry 10))
+                      (= 0 (live-length-shells 'lengths))
+                      (= 0 (g3t-test-live-lengths-clones))
+                      (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+                      (= 1 (g3t-test-output-state wrapped-native-output))
+                      (= 2 (g3t-test-output-word wrapped-native-output 2))
+                      (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+        (cuts (+ index 1)))))
+(check "lengths wrapper I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(check "cache-lengths wrapper header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "cache-lengths wrapper header cut raises" 'internal
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(check "cache-lengths wrapper header cut atomic"
+       (let ((entry (car (vector-ref g3t-registry 0))))
+         (and (eq? (vector-ref entry 1) 'cache-lengths)
+              (eq? (vector-ref entry 2) 'dead)
+              (not (vector-ref entry 3))
+              (not (vector-ref entry 10))
+              (= 0 (live-length-shells 'cache-lengths))
+              (= 0 (g3t-test-live-cache-lengths-clones))
+              (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+              (= 1 (g3t-test-output-state wrapped-native-output))
+              (= 2 (g3t-test-output-word wrapped-native-output 2))
+              (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+(check "cache-lengths wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "cache-lengths wrapper I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (reject-category "cache-lengths wrapper I1 cut raises" 'internal
+          (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+        (check "cache-lengths wrapper I1 cut atomic"
+               (let ((entry (car (vector-ref g3t-registry 0))))
+                 (and (eq? (vector-ref entry 2) 'dead)
+                      (not (vector-ref entry 3))
+                      (not (vector-ref entry 10))
+                      (= 0 (live-length-shells 'cache-lengths))
+                      (= 0 (g3t-test-live-cache-lengths-clones))
+                      (= wrapped-lengths-i1-before (g3t-test-i1-count 0))
+                      (= 1 (g3t-test-output-state wrapped-native-output))
+                      (= 2 (g3t-test-output-word wrapped-native-output 2))
+                      (= 1729 (g3t-test-output-word wrapped-native-output 8)))))
+        (cuts (+ index 1)))))
+(check "cache-lengths wrapper I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define wrapped-lengths-shell (g3t-generation-output-lengths wrapped-output))
+(define wrapped-cache-lengths-shell
+  (g3t-generation-output-cache-lengths wrapped-output))
+(define wrapped-lengths-entry
+  (g3t-prefill-entry wrapped-lengths-shell 'lengths 'g3t-lengths-test))
+(define wrapped-cache-lengths-entry
+  (g3t-prefill-entry wrapped-cache-lengths-shell
+                     'cache-lengths 'g3t-lengths-test))
+(define wrapped-lengths-native (vector-ref wrapped-lengths-entry 3))
+(define wrapped-cache-lengths-native (vector-ref wrapped-cache-lengths-entry 3))
+(check "P2/G0 length wrappers own independent I1[1] values"
+       (and (vector? wrapped-lengths-shell)
+            (vector? wrapped-cache-lengths-shell)
+            (not (eq? wrapped-lengths-shell wrapped-cache-lengths-shell))
+            (not (eq? wrapped-lengths-native wrapped-cache-lengths-native))
+            (eq? (vector-ref wrapped-lengths-entry 2) 'live)
+            (eq? (vector-ref wrapped-cache-lengths-entry 2) 'live)
+            (eq? (vector-ref wrapped-lengths-entry 4) #f)
+            (eq? (vector-ref wrapped-cache-lengths-entry 4) #f)
+            (eq? (vector-ref wrapped-lengths-entry 10) #f)
+            (eq? (vector-ref wrapped-cache-lengths-entry 10) #f)
+            (= 0 (g3t-test-lengths-clone-value wrapped-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   wrapped-cache-lengths-native))
+            (= 1 (live-length-shells 'lengths))
+            (= 1 (live-length-shells 'cache-lengths))
+            (= 1 (g3t-test-live-lengths-clones))
+            (= 1 (g3t-test-live-cache-lengths-clones))
+            (= (+ wrapped-lengths-i1-before 2) (g3t-test-i1-count 0))))
+(define wrapped-lengths-borrow
+  (g3t-test-lengths-clone-borrow-begin wrapped-lengths-native))
+(define wrapped-cache-lengths-borrow
+  (g3t-test-cache-lengths-clone-borrow-begin wrapped-cache-lengths-native))
+(check "length wrappers clone borrows begin"
+       (and (not (null? wrapped-lengths-borrow))
+            (not (null? wrapped-cache-lengths-borrow))))
+(reject-category "lengths wrapper borrow blocks typed release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! wrapped-lengths-shell)))
+(reject-category "cache-lengths wrapper borrow blocks typed release" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! wrapped-cache-lengths-shell)))
+(check "length wrappers borrowed owners remain live"
+       (and (= 1 (g3t-test-lengths-clone-state wrapped-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-state
+                   wrapped-cache-lengths-native))))
+(check "length wrappers clone borrows end"
+       (and (= 0 (g3t-test-lengths-clone-borrow-end wrapped-lengths-borrow))
+            (= 0 (g3t-test-cache-lengths-clone-borrow-end
+                   wrapped-cache-lengths-borrow))))
+(define wrapped-length-source-borrow
+  (g3t-test-output-borrow-begin wrapped-native-output))
+(check "length wrappers source borrow begins"
+       (not (null? wrapped-length-source-borrow)))
+(reject-category "lengths wrapper rejects borrowed output" 'invalid-state
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(reject-category "cache-lengths wrapper rejects borrowed output" 'invalid-state
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(check "length wrappers source borrow preserves owners"
+       (and (= 1 (live-length-shells 'lengths))
+            (= 1 (live-length-shells 'cache-lengths))
+            (= 1 (g3t-test-live-lengths-clones))
+            (= 1 (g3t-test-live-cache-lengths-clones))
+            (= 1 (g3t-test-output-state wrapped-native-output))))
+(check "length wrappers source borrow ends"
+       (= 0 (g3t-test-output-borrow-end wrapped-length-source-borrow)))
+(reject-category "RNG wrapper rejects forged output" 'invalid-argument
+  (lambda () (g3t-generation-output-rng (vector 'g3t-output-private))))
+(reject-category "RNG wrapper rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generation-output-rng wrapped-input)))
+(check "RNG wrapper header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "RNG wrapper header cut maps native failure" 'internal
+  (lambda () (g3t-generation-output-rng wrapped-output)))
+(check "RNG wrapper cut enrolls no live owner"
+       (and (= 0 (live-rng-shells))
+            (= 0 (g3t-test-live-rng-clones))
+            (eq? (vector-ref (g3t-prefill-entry
+                               wrapped-output 'output 'g3t-rng-cut) 2) 'live)
+            (= 1 (g3t-test-output-state wrapped-native-output))
+            (= 2 (g3t-test-output-word wrapped-native-output 2))
+            (= 1729 (g3t-test-output-word wrapped-native-output 8))
+            (= 0 (g3t-test-output-word wrapped-native-output 9))))
+(check "RNG wrapper header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(define wrapped-id-borrow (g3t-test-output-borrow-begin wrapped-native-output))
+(check "RNG wrapper source ID borrow begins" (not (null? wrapped-id-borrow)))
+(define wrapped-rng (g3t-generation-output-rng wrapped-output))
+(define wrapped-rng-entry (g3t-prefill-entry wrapped-rng 'rng 'g3t-rng-test))
+(define wrapped-rng-native (vector-ref wrapped-rng-entry 3))
+(check "P2/G0 RNG wrapper owns detached kind-8 snapshot"
+       (and (eq? (vector-ref wrapped-rng-entry 2) 'live)
+            (eq? (vector-ref wrapped-rng-entry 4) #f)
+            (eq? (vector-ref wrapped-rng-entry 5) #f)
+            (eq? (vector-ref wrapped-rng-entry 10) #f)
+            (= 1 (live-rng-shells))
+            (= 1 (g3t-test-live-rng-clones))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG wrapper source ID borrow ends"
+       (= 0 (g3t-test-output-borrow-end wrapped-id-borrow)))
+(reject-category "tensor release rejects RNG wrapper" 'invalid-argument
+  (lambda () (g3t-generation-tensor-release! wrapped-rng)))
+(reject-category "RNG release rejects output wrapper" 'invalid-argument
+  (lambda () (g3t-generation-rng-release! wrapped-output)))
+(check "wrapped close" (g3t-generator-close! wrapped-generator))
+(check "wrapped output release" (g3t-output-release! wrapped-output))
+(check "P2/G0 text copy survives output and generator release"
+       (and (= 0 (bytevector-length wrapped-text-second-bytes))
+            (= 0 (bytevector-length wrapped-text-first-bytes))))
+(reject-category "text result rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-text wrapped-output)))
+(check "P2/G0 length wrappers survive parent releases"
+       (and (= 0 (g3t-test-lengths-clone-value wrapped-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   wrapped-cache-lengths-native))
+            (= 1 (live-length-shells 'lengths))
+            (= 1 (live-length-shells 'cache-lengths))))
+(reject-category "lengths wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-lengths wrapped-output)))
+(reject-category "cache-lengths wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-cache-lengths wrapped-output)))
+(check "P2/G0 generated length typed release"
+       (and (g3t-generation-tensor-release! wrapped-lengths-shell)
+            (g3t-generation-tensor-release! wrapped-lengths-shell)
+            (= -1 (g3t-test-lengths-clone-state wrapped-lengths-native))
+            (= 0 (live-length-shells 'lengths))))
+(check "P2/G0 cache length independent of generated length release"
+       (and (= 2 (g3t-test-cache-lengths-clone-value
+                   wrapped-cache-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-state
+                   wrapped-cache-lengths-native))))
+(check "P2/G0 cache length typed release"
+       (and (g3t-generation-tensor-release! wrapped-cache-lengths-shell)
+            (g3t-generation-tensor-release! wrapped-cache-lengths-shell)
+            (= -1 (g3t-test-cache-lengths-clone-state
+                   wrapped-cache-lengths-native))
+            (= 0 (live-length-shells 'cache-lengths))))
+(check "P2/G0 IDs wrapper survives parent releases"
+       (and (= 1 (live-ids-shells))
+            (= 1 (g3t-test-clone-state wrapped-ids-native))
+            (= 0 (g3t-test-clone-length wrapped-ids-native))))
+(reject-category "IDs wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-ids wrapped-output)))
+(check "P2/G0 IDs wrapper typed release and tombstone"
+       (and (g3t-generation-tensor-release! wrapped-ids-shell)
+            (g3t-generation-tensor-release! wrapped-ids-shell)
+            (= -1 (g3t-test-clone-state wrapped-ids-native))
+            (= 0 (live-ids-shells))
+            (= 0 (g3t-test-live-clones))))
+(check "P2/G0 RNG shell survives parent close and output release"
+       (and (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(reject-category "RNG wrapper rejects dead output" 'invalid-state
+  (lambda () (g3t-generation-output-rng wrapped-output)))
+(reject-category "RNG constructor rejects forged shell" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy (vector 'g3t-rng-private) 0))))
+(reject-category "RNG constructor rejects wrong-kind output" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-output 0))))
+(reject-category "RNG constructor rejects wrong-kind input" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-input 0))))
+(reject-category "RNG constructor rejects malformed greedy policy" 'invalid-argument
+  (lambda () (g3t-generator-create model tokenizer
+               (list ':profile 'diagnostic-c2 ':sampling 'greedy
+                     ':temperature-bits #x40000000 ':top-k 256
+                     ':top-p-bits #x3f800000 ':max-new-tokens 0
+                     ':eos #f ':rng wrapped-rng))))
+(check "RNG constructor busy source armed"
+       (= 0 (g3t-test-rng-clone-busy-set wrapped-rng-native 1)))
+(reject-category "RNG constructor rejects busy source" 'invalid-state
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "RNG constructor busy rejection preserves source"
+       (and (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG constructor busy source disarmed"
+       (= 0 (g3t-test-rng-clone-busy-set wrapped-rng-native 0)))
+(define wrapped-rng-context-baseline (g3t-test-live-contexts))
+(check "RNG wrapper constructor header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(reject-category "RNG wrapper constructor header cut" 'internal
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "RNG wrapper constructor header cut atomic"
+       (and (= wrapped-rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG wrapper constructor header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "RNG wrapper constructor A2 cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(reject-category "RNG wrapper constructor A2 cut" 'internal
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "RNG wrapper constructor A2 cut atomic"
+       (and (= wrapped-rng-context-baseline (g3t-test-live-contexts))
+            (= 1 (live-rng-shells))
+            (rng-clone-words? wrapped-rng-native 1 1729 0 0)))
+(check "RNG wrapper constructor A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(define wrapped-rng-derived
+  (g3t-generator-create model tokenizer (rng-policy wrapped-rng 0)))
+(define wrapped-rng-derived-native
+  (vector-ref (g3t-generator-find wrapped-rng-derived 'g3t-rng-derived) 3))
+(check "P2/G0 Eshkol RNG constructor exact copy without draw"
+       (and (= (+ wrapped-rng-context-baseline 1) (g3t-test-live-contexts))
+            (= 1 (g3t-test-rng-word wrapped-rng-derived-native 0))
+            (= 1729 (g3t-test-rng-word wrapped-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word wrapped-rng-derived-native 2))
+            (= 0 (g3t-test-rng-word wrapped-rng-derived-native 3))
+            (= 0 (g3t-test-cache-length wrapped-rng-derived-native))))
+(check "RNG wrapper typed release and tombstone"
+       (and (g3t-generation-rng-release! wrapped-rng)
+            (= 0 (live-rng-shells))
+            (= 0 (g3t-test-live-rng-clones))
+            (= -1 (g3t-test-rng-clone-state wrapped-rng-native))
+            (rng-clone-words? wrapped-rng-native 0 0 0 0)
+            (g3t-generation-rng-release! wrapped-rng)))
+(check "P2/G0 copied RNG survives source release"
+       (and (= 1729 (g3t-test-rng-word wrapped-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word wrapped-rng-derived-native 2))))
+(reject-category "RNG constructor rejects released shell" 'invalid-state
+  (lambda () (g3t-generator-create model tokenizer
+               (rng-policy wrapped-rng 0))))
+(check "P2/G0 derived RNG generator close"
+       (g3t-generator-close! wrapped-rng-derived))
+(check "wrapped input release" (g3t-generation-tensor-release! wrapped-input))
+
+;; The same zero-budget envelope remains valid for a one-token prompt.
+(define p1-zero-generator (g3t-generator-create model tokenizer policy))
+(define p1-zero-input (g3t-generation-t1-input-create t1-p1))
+(define p1-zero-output (g3t-zero-generate! p1-zero-generator p1-zero-input))
+(define p1-zero-text (g3t-generation-output-text p1-zero-output))
+(check "P1/G0 text result is one detached empty bytevector"
+       (and (pair? p1-zero-text) (null? (cdr p1-zero-text))
+            (bytevector? (car p1-zero-text))
+            (= 0 (bytevector-length (car p1-zero-text)))))
+(define p1-zero-native-output
+  (vector-ref (g3t-prefill-entry p1-zero-output 'output 'g3t-p1-zero) 3))
+(define p1-zero-clone (g3t-native-output-ids-clone p1-zero-native-output))
+(define p1-zero-lengths
+  (g3t-native-output-lengths-clone p1-zero-native-output))
+(define p1-zero-cache-lengths
+  (g3t-native-output-cache-lengths-clone p1-zero-native-output))
+(define p1-zero-rng (g3t-native-output-rng-clone p1-zero-native-output))
+(define p1-zero-ids-result (g3t-generation-output-ids p1-zero-output))
+(define p1-zero-ids-shell (car p1-zero-ids-result))
+(define p1-zero-ids-native
+  (vector-ref (g3t-prefill-entry p1-zero-ids-shell 'ids 'g3t-p1-ids) 3))
+(define p1-zero-lengths-shell
+  (g3t-generation-output-lengths p1-zero-output))
+(define p1-zero-cache-lengths-shell
+  (g3t-generation-output-cache-lengths p1-zero-output))
+(define p1-zero-lengths-native
+  (vector-ref (g3t-prefill-entry p1-zero-lengths-shell
+                                 'lengths 'g3t-p1-lengths) 3))
+(define p1-zero-cache-lengths-native
+  (vector-ref (g3t-prefill-entry p1-zero-cache-lengths-shell
+                                 'cache-lengths 'g3t-p1-lengths) 3))
+(check "P1/G0 length wrappers return exact independent 0 and 1"
+       (and (= 0 (g3t-test-lengths-clone-value p1-zero-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-value
+                   p1-zero-cache-lengths-native))
+            (not (eq? p1-zero-lengths-native p1-zero-cache-lengths-native))))
+(check "P1/G0 IDs wrapper returns one empty detached owner"
+       (and (pair? p1-zero-ids-result)
+            (null? (cdr p1-zero-ids-result))
+            (= 0 (g3t-test-clone-length p1-zero-ids-native))
+            (= 1 (g3t-test-clone-state p1-zero-ids-native))))
+(check "P1/G0 empty ID clone"
+       (and (not (null? p1-zero-clone))
+            (= 0 (g3t-test-clone-length p1-zero-clone))
+            (= 1 (g3t-test-clone-state p1-zero-clone))))
+(check "P1/G0 generated length clone"
+       (and (not (null? p1-zero-lengths))
+            (= 0 (g3t-test-lengths-clone-value p1-zero-lengths))))
+(check "P1/G0 cache length clone is one"
+       (and (not (null? p1-zero-cache-lengths))
+            (= 1 (g3t-test-cache-lengths-clone-value
+                   p1-zero-cache-lengths))))
+(check "P1/G0 exact final RNG clone"
+       (and (not (null? p1-zero-rng))
+            (rng-clone-words? p1-zero-rng 1 1729 0 0)))
+(define p1-zero-rng-shell (g3t-generation-output-rng p1-zero-output))
+(define p1-zero-rng-shell-native
+  (vector-ref (g3t-prefill-entry p1-zero-rng-shell 'rng 'g3t-p1-rng) 3))
+(check "P1/G0 RNG wrapper exact copy"
+       (rng-clone-words? p1-zero-rng-shell-native 1 1729 0 0))
+(define p1-zero-rng-context (generator-from-rng p1-zero-rng 0))
+(check "P1/G0 RNG constructor copies without draw"
+       (and (not (null? p1-zero-rng-context))
+            (= 1 (g3t-test-rng-word p1-zero-rng-context 0))
+            (= 1729 (g3t-test-rng-word p1-zero-rng-context 1))
+            (= 0 (g3t-test-rng-word p1-zero-rng-context 2))
+            (= 0 (g3t-test-rng-word p1-zero-rng-context 3))
+            (= 0 (g3t-test-cache-length p1-zero-rng-context))))
+(check "P1/G0 RNG context close"
+       (= 0 (g3t-native-generator-close p1-zero-rng-context)))
+(check "P1/G0 output release" (g3t-output-release! p1-zero-output))
+(check "P1/G0 close" (g3t-generator-close! p1-zero-generator))
+(check "P1/G0 text survives parent releases"
+       (= 0 (bytevector-length (car p1-zero-text))))
+(check "P1/G0 length wrappers survive parent releases"
+       (and (= 0 (g3t-test-lengths-clone-value p1-zero-lengths-native))
+            (= 1 (g3t-test-cache-lengths-clone-value
+                   p1-zero-cache-lengths-native))))
+(check "P1/G0 length wrappers typed release"
+       (and (g3t-generation-tensor-release! p1-zero-lengths-shell)
+            (g3t-generation-tensor-release! p1-zero-cache-lengths-shell)
+            (= -1 (g3t-test-lengths-clone-state p1-zero-lengths-native))
+            (= -1 (g3t-test-cache-lengths-clone-state
+                   p1-zero-cache-lengths-native))))
+(check "P1/G0 detached clone survives" (= 0 (g3t-test-clone-length p1-zero-clone)))
+(check "P1/G0 IDs wrapper survives parent releases"
+       (and (= 0 (g3t-test-clone-length p1-zero-ids-native))
+            (= 1 (g3t-test-clone-state p1-zero-ids-native))))
+(check "P1/G0 IDs wrapper typed release"
+       (and (g3t-generation-tensor-release! p1-zero-ids-shell)
+            (g3t-generation-tensor-release! p1-zero-ids-shell)
+            (= -1 (g3t-test-clone-state p1-zero-ids-native))))
+(check "P1/G0 detached length survives"
+       (= 0 (g3t-test-lengths-clone-value p1-zero-lengths)))
+(check "P1/G0 detached cache length survives"
+       (= 1 (g3t-test-cache-lengths-clone-value p1-zero-cache-lengths)))
+(check "P1/G0 detached RNG survives"
+       (rng-clone-words? p1-zero-rng 1 1729 0 0))
+(check "P1/G0 RNG shell survives parent releases"
+       (rng-clone-words? p1-zero-rng-shell-native 1 1729 0 0))
+(define p1-zero-rng-derived
+  (g3t-generator-create model tokenizer (rng-policy p1-zero-rng-shell 0)))
+(define p1-zero-rng-derived-native
+  (vector-ref (g3t-generator-find p1-zero-rng-derived 'g3t-p1-rng-derived) 3))
+(check "P1/G0 Eshkol RNG constructor exact copy"
+       (and (= 1729 (g3t-test-rng-word p1-zero-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word p1-zero-rng-derived-native 2))
+            (= 0 (g3t-test-cache-length p1-zero-rng-derived-native))))
+(check "P1/G0 RNG shell typed release"
+       (and (g3t-generation-rng-release! p1-zero-rng-shell)
+            (= -1 (g3t-test-rng-clone-state p1-zero-rng-shell-native))))
+(check "P1/G0 derived RNG survives shell release"
+       (and (= 1729 (g3t-test-rng-word p1-zero-rng-derived-native 1))
+            (= 0 (g3t-test-rng-word p1-zero-rng-derived-native 2))))
+(check "P1/G0 derived RNG generator close"
+       (g3t-generator-close! p1-zero-rng-derived))
+(check "P1/G0 clone release" (= 0 (g3t-native-tensor-release p1-zero-clone)))
+(check "P1/G0 lengths release"
+       (= 0 (g3t-native-tensor-release p1-zero-lengths)))
+(check "P1/G0 cache-length release"
+       (= 0 (g3t-native-tensor-release p1-zero-cache-lengths)))
+(check "P1/G0 RNG release"
+       (and (= 0 (g3t-native-rng-release p1-zero-rng))
+            (rng-clone-words? p1-zero-rng 0 0 0 0)
+            (= 0 (g3t-native-rng-release p1-zero-rng))))
+(check "P1/G0 input release" (g3t-generation-tensor-release! p1-zero-input))
+
+(define scalar-zero-i1-before (g3t-test-i1-count 0))
+(define scalar-zero-generator (g3t-generator-create model tokenizer policy))
+(check "scalar native wrong-kind generator release rejected"
+       (not (= 0 (g3t-native-tensor-release
+                   (vector-ref (g3t-generator-find scalar-zero-generator
+                                                  'scalar-zero) 3)))))
+(reject-category "scalar wrapper wrong-kind generator release rejected"
+                 'invalid-argument
+  (lambda () (g3t-generation-tensor-release! scalar-zero-generator)))
+(define scalar-zero-input (g3t-generation-token-input-create 255))
+(define scalar-zero-native-input
+  (vector-ref (g3t-prefill-entry scalar-zero-input 'input 'scalar-zero) 3))
+(check "P1/G0 scalar source owns I1 before frame"
+       (and (= 1 (g3t-test-input-length scalar-zero-native-input))
+            (= 255 (g3t-test-input-word scalar-zero-native-input 0))
+            (= (+ scalar-zero-i1-before 1) (g3t-test-i1-count 0))))
+(define scalar-zero-output
+  (g3t-zero-generate! scalar-zero-generator scalar-zero-input))
+(define scalar-zero-native-output
+  (vector-ref (g3t-prefill-entry scalar-zero-output 'output 'scalar-zero) 3))
+(check "P1/G0 scalar I1 prefill commits exact cache and RNG"
+       (let ((native-generator
+              (vector-ref (g3t-generator-find scalar-zero-generator 'scalar-zero) 3)))
+         (and (= 1 (g3t-test-cache-length native-generator))
+              (= 0 (g3t-test-output-word scalar-zero-native-output 1))
+              (= 1 (g3t-test-output-word scalar-zero-native-output 2))
+              (= 1729 (g3t-test-output-word scalar-zero-native-output 8))
+              (= 255 (g3t-test-input-word scalar-zero-native-input 0)))))
+(check "P1/G0 scalar output release"
+       (g3t-output-release! scalar-zero-output))
+(check "P1/G0 scalar generator close"
+       (g3t-generator-close! scalar-zero-generator))
+(check "P1/G0 scalar input outlives frame and releases I1"
+       (and (= 255 (g3t-test-input-word scalar-zero-native-input 0))
+            (g3t-generation-tensor-release! scalar-zero-input)
+            (= scalar-zero-i1-before (g3t-test-i1-count 0))))
+
+(define abort-generator (g3t-generator-create model tokenizer policy))
+(define abort-native
+  (vector-ref (g3t-generator-find abort-generator 'g3t-p2-abort) 3))
+(define abort-input (g3t-native-input-from-pair 65 66))
+(check "abort acquire" (= 0 (g3t-native-call-acquire abort-native 2)))
+(define abort-output (g3t-native-output-reserve abort-native 2))
+(check "abort reserve" (not (null? abort-output)))
+(check "abort P2 begin" (= 0 (g3t-native-frame-begin abort-native abort-input 1)))
+(let roles ((ordinal 0))
+  (if (= ordinal 21) #t
+      (begin (check "abort P2 role" (= 0 (g3t-native-role-step abort-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "abort numeric" (= 0 (g3t-native-output-prepare
+                               abort-native abort-output)))
+(check "abort IDs" (= 0 (g3t-native-output-copy-decode-ids
+                           abort-native abort-output (make-bytevector 0 0))))
+(check "abort text" (= 0 (g3t-native-output-accept-text
+                            abort-native abort-output (make-bytevector 0 0))))
+(check "abort frame prepare" (= 0 (g3t-native-frame-prepare abort-native #f)))
+(check "abort A2 cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(check "abort preflight failure"
+       (not (= 0 (g3t-native-call-prepare-end abort-native))))
+(check "abort A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "abort preflight preserves old cache"
+       (and (= 0 (g3t-test-output-state abort-output))
+            (= 0 (g3t-test-cache-length abort-native))
+            (= 14 (g3t-test-pin-count abort-native))))
+(check "abort after failed preflight" (= 0 (g3t-native-call-abort abort-native)))
+(check "abort rollback and pin drain"
+       (and (= -1 (g3t-test-output-state abort-output))
+            (= 0 (g3t-test-cache-length abort-native))
+            (= 0 (g3t-test-pin-count abort-native))
+            (= 0 (g3t-test-rng-word abort-native 2))))
+(check "abort output tombstone release"
+       (= 0 (g3t-native-output-release abort-output)))
+(check "abort input release" (= 0 (g3t-native-tensor-release abort-input)))
+(check "abort generator close" (g3t-generator-close! abort-generator))
+
+(define g1-generator (g3t-generator-create model tokenizer policy-g1))
+(define g1-native (vector-ref (g3t-generator-find g1-generator 'g3t-p2-g1) 3))
+(define g1-input (g3t-generation-pair-input-create 65 66))
+(define g1-p1-native-input (g3t-native-input-from-token 65))
+(define g1-p2-native-input
+  (vector-ref (g3t-prefill-entry g1-input 'input 'g3t-p2-g1) 3))
+(check "full request P1/G1 admitted before pins"
+       (and (= 0 (g3t-native-full-request-preflight
+                   g1-native g1-p1-native-input))
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "full request P2/G1 rejected before pins and draw"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p2-native-input)))
+            (= 3 (g3t-test-last-error-category))
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "counter fixture rejects forged generator"
+       (and (not (= 0 (g3t-test-rng-counter-set
+                        (vector 'forged) -1 -1)))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "counter fixture rejects wrong kind"
+       (and (not (= 0 (g3t-test-rng-counter-set
+                        g1-p1-native-input -1 -1)))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "full request busy fixture acquire"
+       (= 0 (g3t-native-call-acquire g1-native 2)))
+(check "full request rejects busy generator and counter mutation"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p1-native-input)))
+            (= 2 (g3t-test-last-error-category))
+            (not (= 0 (g3t-test-rng-counter-set g1-native -1 -1)))
+            (= 0 (g3t-test-rng-word g1-native 2))
+            (= 14 (g3t-test-pin-count g1-native))))
+(check "full request busy fixture abort"
+       (= 0 (g3t-native-call-abort g1-native)))
+(check "idle counter fixture set exhausted"
+       (= 0 (g3t-test-rng-counter-set g1-native -1 -1)))
+(check "categorical G1 exhaustion is 2/12 before pins"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p1-native-input)))
+            (= 2 (g3t-test-last-error-category))
+            (= 12 (g3t-test-last-error-code))
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= -1 (g3t-test-rng-word g1-native 2))))
+(check "call acquire defensive exhaustion is 2/12"
+       (and (not (= 0 (g3t-native-call-acquire g1-native 2)))
+            (= 2 (g3t-test-last-error-category))
+            (= 12 (g3t-test-last-error-code))
+            (= 0 (g3t-test-pin-count g1-native))))
+(check "P2/G1 shape precedes exhausted draw"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p2-native-input)))
+            (= 3 (g3t-test-last-error-category))
+            (= 0 (g3t-test-pin-count g1-native))))
+(check "G1 counter fixture restored"
+       (= 0 (g3t-test-rng-counter-set g1-native 0 0)))
+(check "G1 full request P1 input release"
+       (= 0 (g3t-native-tensor-release g1-p1-native-input)))
+(check "P2/G1 rejected before pins"
+       (and (guard (caught (#t caught))
+              (g3t-p2-zero-generate! g1-generator g1-input) #f)
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "G1 close" (g3t-generator-close! g1-generator))
+(check "G1 input release" (g3t-generation-tensor-release! g1-input))
+(define exhausted-g0-generator (g3t-generator-create model tokenizer policy))
+(define exhausted-g0-native
+  (vector-ref (g3t-generator-find exhausted-g0-generator 'exhausted-g0) 3))
+(define exhausted-g0-input (g3t-native-input-from-token 65))
+(check "G0 exhausted fixture"
+       (= 0 (g3t-test-rng-counter-set exhausted-g0-native -1 -1)))
+(check "G0 exhausted RNG still admitted"
+       (= 0 (g3t-native-full-request-preflight
+              exhausted-g0-native exhausted-g0-input)))
+(check "G0 exhausted input release"
+       (= 0 (g3t-native-tensor-release exhausted-g0-input)))
+(check "G0 exhausted generator close"
+       (g3t-generator-close! exhausted-g0-generator))
+(define exhausted-greedy-generator
+  (g3t-generator-create model tokenizer policy-greedy-g1))
+(define exhausted-greedy-native
+  (vector-ref (g3t-generator-find exhausted-greedy-generator 'exhausted-greedy) 3))
+(define exhausted-greedy-input (g3t-native-input-from-token 65))
+(check "greedy exhausted fixture"
+       (= 0 (g3t-test-rng-counter-set exhausted-greedy-native -1 -1)))
+(check "greedy G1 exhausted RNG still admitted"
+       (and (= 0 (g3t-native-full-request-preflight
+                   exhausted-greedy-native exhausted-greedy-input))
+            (= 0 (g3t-native-call-acquire exhausted-greedy-native 2))))
+(check "greedy G1 exhausted abort"
+       (= 0 (g3t-native-call-abort exhausted-greedy-native)))
+(check "greedy exhausted input release"
+       (= 0 (g3t-native-tensor-release exhausted-greedy-input)))
+(check "greedy exhausted generator close"
+       (g3t-generator-close! exhausted-greedy-generator))
+
+;; G1 runs through the same native object with P2 enabled.
+(define g1-regression (g3t-generator-create model tokenizer policy-g1))
+(define g1-regression-native
+  (vector-ref (g3t-generator-find g1-regression 'g3t-p2-g1-regression) 3))
+(define g1-regression-input (g3t-native-input-from-token 65))
+(check "G1 regression acquire"
+       (= 0 (g3t-native-call-acquire g1-regression-native 2)))
+(define g1-regression-output
+  (g3t-native-output-reserve g1-regression-native 1))
+(check "G1 regression reserve" (not (null? g1-regression-output)))
+(check "G1 regression prefill begin"
+       (= 0 (g3t-native-frame-begin g1-regression-native g1-regression-input 1)))
+(let roles ((ordinal 0))
+  (if (= ordinal 21) #t
+      (begin (check "G1 regression prefill role"
+                    (= 0 (g3t-native-role-step g1-regression-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "G1 regression prefill prepare"
+       (= 0 (g3t-native-frame-prepare g1-regression-native #f)))
+(check "G1 regression prefill commit"
+       (= 0 (g3t-native-frame-commit g1-regression-native)))
+(check "G1 regression sample" (= 0 (g3t-native-sample g1-regression-native)))
+(check "G1 regression append begin"
+       (= 0 (g3t-native-frame-begin g1-regression-native #f 2)))
+(let roles ((ordinal 0))
+  (if (= ordinal 21) #t
+      (begin (check "G1 regression append role"
+                    (= 0 (g3t-native-role-step g1-regression-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "G1 regression numeric"
+       (= 0 (g3t-native-output-prepare
+              g1-regression-native g1-regression-output)))
+(define g1-staging (make-bytevector 8 0))
+(define g1-raw (make-bytevector 1 0))
+(check "G1 regression ID stage"
+       (= 0 (g3t-native-output-copy-decode-ids
+              g1-regression-native g1-regression-output g1-staging)))
+(check "G1 regression T1 decode"
+       (eq? g1-raw (t1-private-g3-decode-raw-into!
+                     tokenizer g1-staging g1-raw)))
+(check "G1 regression text"
+       (= 0 (g3t-native-output-accept-text
+              g1-regression-native g1-regression-output g1-raw)))
+(check "G1 regression final prepare"
+       (= 0 (g3t-native-frame-prepare g1-regression-native #f)))
+(check "G1 regression cleanup preflight"
+       (= 0 (g3t-native-call-prepare-end g1-regression-native)))
+(check "G1 regression final commit"
+       (= 0 (g3t-native-frame-commit g1-regression-native)))
+(check "G1 regression cache and output"
+       (and (= 2 (g3t-test-cache-length g1-regression-native))
+            (= 1 (g3t-test-output-state g1-regression-output))
+            (= 1 (g3t-test-output-word g1-regression-output 1))
+            (= 2 (g3t-test-output-word g1-regression-output 2))))
+(check "G1 regression finish"
+       (= 0 (g3t-native-call-finish g1-regression-native)))
+(check "G1 regression pins drained"
+       (= 0 (g3t-test-pin-count g1-regression-native)))
+(check "G1 exact final RNG published"
+       (and (= 1 (g3t-test-output-word g1-regression-output 7))
+            (= 1729 (g3t-test-output-word g1-regression-output 8))
+            (= 1 (g3t-test-output-word g1-regression-output 9))
+            (= 0 (g3t-test-output-word g1-regression-output 10))
+            (= 1 (g3t-test-rng-word g1-regression-native 2))))
+(check "wrong-kind RNG clone source rejected"
+       (and (null? (g3t-native-output-rng-clone g1-regression-input))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))
+            (= 0 (g3t-test-live-rng-clones))))
+(define g1-id (g3t-test-output-word g1-regression-output 6))
+(define g1-source-borrow (g3t-test-output-borrow-begin g1-regression-output))
+(check "G1 source borrow begins" (not (null? g1-source-borrow)))
+(check "G1 borrowed source cannot clone"
+       (and (null? (g3t-native-output-ids-clone g1-regression-output))
+            (null? (g3t-native-output-lengths-clone g1-regression-output))
+            (null? (g3t-native-output-cache-lengths-clone
+                     g1-regression-output))
+            (= 0 (g3t-test-live-clones))
+            (= 0 (g3t-test-live-lengths-clones))
+            (= 0 (g3t-test-live-cache-lengths-clones))))
+(define g1-rng-clone (g3t-native-output-rng-clone g1-regression-output))
+(check "G1 RNG clone permits borrowed IDs"
+       (and (not (null? g1-rng-clone))
+            (rng-clone-words? g1-rng-clone 1 1729 1 0)
+            (= 1 (g3t-test-live-rng-clones))))
+(define g1-rng-context (generator-from-rng g1-rng-clone 1))
+(check "P1/G1 RNG constructor copies exact successor without draw"
+       (and (not (null? g1-rng-context))
+            (= 1 (g3t-test-rng-word g1-rng-context 0))
+            (= 1729 (g3t-test-rng-word g1-rng-context 1))
+            (= 1 (g3t-test-rng-word g1-rng-context 2))
+            (= 0 (g3t-test-rng-word g1-rng-context 3))
+            (= 0 (g3t-test-cache-length g1-rng-context))))
+(check "P1/G1 RNG context close" (= 0 (g3t-native-generator-close g1-rng-context)))
+(check "G1 source borrow ends" (= 0 (g3t-test-output-borrow-end g1-source-borrow)))
+(check "G1 RNG header cut armed" (= 0 (g3t-test-fail-alloc-after 0)))
+(check "G1 RNG header cut atomic"
+       (and (null? (g3t-native-output-rng-clone g1-regression-output))
+            (= 5 (g3t-test-last-error-category))
+            (= 7 (g3t-test-last-error-code))
+            (= 1 (g3t-test-live-rng-clones))
+            (= 1 (g3t-test-output-state g1-regression-output))
+            (= g1-id (g3t-test-output-word g1-regression-output 6))
+            (= 1 (g3t-test-rng-word g1-regression-native 2))))
+(check "G1 RNG header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "G1 I1 clone cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "G1 I1 clone cut atomic"
+               (and (null? (g3t-native-output-ids-clone g1-regression-output))
+                    (= 0 (g3t-test-live-clones))
+                    (= 1 (g3t-test-output-state g1-regression-output))
+                    (= g1-id (g3t-test-output-word g1-regression-output 6))
+                    (= 2 (g3t-test-cache-length g1-regression-native))))
+        (cuts (+ index 1)))))
+(check "G1 I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define g1-clone (g3t-native-output-ids-clone g1-regression-output))
+(check "G1 detached ID copy"
+       (and (not (null? g1-clone))
+            (= 1 (g3t-test-clone-length g1-clone))
+            (= g1-id (g3t-test-clone-word g1-clone))))
+(define g1-clone-borrow (g3t-test-clone-borrow-begin g1-clone))
+(check "G1 clone borrow begins" (not (null? g1-clone-borrow)))
+(check "G1 clone borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release g1-clone)))
+            (= 1 (g3t-test-clone-state g1-clone))))
+(check "G1 clone borrow ends" (= 0 (g3t-test-clone-borrow-end g1-clone-borrow)))
+(check "G1 lengths header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "G1 lengths header cut atomic"
+       (and (null? (g3t-native-output-lengths-clone g1-regression-output))
+            (= 0 (g3t-test-live-lengths-clones))
+            (= 1 (g3t-test-output-state g1-regression-output))
+            (= g1-id (g3t-test-output-word g1-regression-output 6))))
+(check "G1 lengths header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "G1 lengths I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "G1 lengths I1 cut atomic"
+               (and (null? (g3t-native-output-lengths-clone
+                             g1-regression-output))
+                    (= 0 (g3t-test-live-lengths-clones))
+                    (= 1 (g3t-test-output-state g1-regression-output))
+                    (= 2 (g3t-test-cache-length g1-regression-native))))
+        (cuts (+ index 1)))))
+(check "G1 lengths I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define g1-lengths-clone
+  (g3t-native-output-lengths-clone g1-regression-output))
+(check "G1 detached generated length is one"
+       (and (not (null? g1-lengths-clone))
+            (= 1 (g3t-test-lengths-clone-value g1-lengths-clone))))
+(define g1-lengths-borrow
+  (g3t-test-lengths-clone-borrow-begin g1-lengths-clone))
+(check "G1 length borrow begins" (not (null? g1-lengths-borrow)))
+(check "G1 length borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release g1-lengths-clone)))
+            (= 1 (g3t-test-lengths-clone-state g1-lengths-clone))))
+(check "G1 length borrow ends"
+       (= 0 (g3t-test-lengths-clone-borrow-end g1-lengths-borrow)))
+(check "G1 cache-length header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "G1 cache-length header cut atomic"
+       (and (null? (g3t-native-output-cache-lengths-clone
+                     g1-regression-output))
+            (= 0 (g3t-test-live-cache-lengths-clones))
+            (= 1 (g3t-test-output-state g1-regression-output))
+            (= g1-id (g3t-test-output-word g1-regression-output 6))))
+(check "G1 cache-length header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "G1 cache-length I1 cut armed"
+               (= 0 (g3t-test-fail-i1-after index)))
+        (check "G1 cache-length I1 cut atomic"
+               (and (null? (g3t-native-output-cache-lengths-clone
+                             g1-regression-output))
+                    (= 0 (g3t-test-live-cache-lengths-clones))
+                    (= 1 (g3t-test-output-state g1-regression-output))
+                    (= 2 (g3t-test-cache-length g1-regression-native))))
+        (cuts (+ index 1)))))
+(check "G1 cache-length I1 cuts disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define g1-cache-lengths-clone
+  (g3t-native-output-cache-lengths-clone g1-regression-output))
+(check "G1 detached cache length is two"
+       (and (not (null? g1-cache-lengths-clone))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   g1-cache-lengths-clone))))
+(define g1-cache-lengths-borrow
+  (g3t-test-cache-lengths-clone-borrow-begin g1-cache-lengths-clone))
+(check "G1 cache-length borrow begins"
+       (not (null? g1-cache-lengths-borrow)))
+(check "G1 cache-length borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release g1-cache-lengths-clone)))
+            (= 1 (g3t-test-cache-lengths-clone-state
+                   g1-cache-lengths-clone))))
+(check "G1 cache-length borrow ends"
+       (= 0 (g3t-test-cache-lengths-clone-borrow-end g1-cache-lengths-borrow)))
+(check "G1 regression close" (g3t-generator-close! g1-regression))
+(check "G1 regression output release"
+       (= 0 (g3t-native-output-release g1-regression-output)))
+(check "G1 clone survives parent releases"
+       (and (= g1-id (g3t-test-clone-word g1-clone))
+            (= 1 (g3t-test-clone-state g1-clone))))
+(check "G1 length survives parent releases"
+       (= 1 (g3t-test-lengths-clone-value g1-lengths-clone)))
+(check "G1 cache length survives parent releases"
+       (= 2 (g3t-test-cache-lengths-clone-value g1-cache-lengths-clone)))
+(check "G1 RNG survives parent releases"
+       (rng-clone-words? g1-rng-clone 1 1729 1 0))
+(check "G1 clone typed release" (= 0 (g3t-native-tensor-release g1-clone)))
+(check "G1 length typed release"
+       (= 0 (g3t-native-tensor-release g1-lengths-clone)))
+(check "G1 cache-length typed release"
+       (= 0 (g3t-native-tensor-release g1-cache-lengths-clone)))
+(check "G1 RNG typed release"
+       (= 0 (g3t-native-rng-release g1-rng-clone)))
+(check "G1 clone tombstone"
+       (and (= -1 (g3t-test-clone-state g1-clone))
+            (= 0 (g3t-native-tensor-release g1-clone))
+            (= 0 (g3t-test-live-clones))))
+(check "G1 length tombstone"
+       (and (= -1 (g3t-test-lengths-clone-state g1-lengths-clone))
+            (= 0 (g3t-native-tensor-release g1-lengths-clone))
+            (= 0 (g3t-test-live-lengths-clones))))
+(check "G1 cache-length tombstone"
+       (and (= -1 (g3t-test-cache-lengths-clone-state g1-cache-lengths-clone))
+            (= 0 (g3t-native-tensor-release g1-cache-lengths-clone))
+            (= 0 (g3t-test-live-cache-lengths-clones))))
+(check "G1 RNG tombstone"
+       (and (= -1 (g3t-test-rng-clone-state g1-rng-clone))
+            (rng-clone-words? g1-rng-clone 0 0 0 0)
+            (= 0 (g3t-native-rng-release g1-rng-clone))
+            (= 0 (g3t-test-live-rng-clones))))
+(check "G1 regression input release"
+       (= 0 (g3t-native-tensor-release g1-regression-input)))
+(define g1-rooted-generator (g3t-generator-create model tokenizer policy-g1))
+(define g1-rooted-i1-before (g3t-test-i1-count 0))
+(define g1-rooted-input (g3t-generation-token-input-create 65))
+(define g1-rooted-native-input
+  (vector-ref (g3t-prefill-entry g1-rooted-input 'input 'g1-rooted) 3))
+(check "P1/G1 scalar input owns singleton I1"
+       (and (= 1 (g3t-test-input-length g1-rooted-native-input))
+            (= 65 (g3t-test-input-word g1-rooted-native-input 0))
+            (= (+ g1-rooted-i1-before 1) (g3t-test-i1-count 0))))
+(define g1-rooted-output
+  (g3t-with-final-call 'g3t-rng-g1-rooted g1-rooted-generator (call)
+    (define out (g3t-output-reserve call 1))
+    (g3t-frame-begin call g1-rooted-input 1)
+    (rooted-roles call)
+    (g3t-frame-prepare call #f)
+    (g3t-frame-commit call)
+    (g3t-sample call)
+    (g3t-frame-begin call #f 2)
+    (rooted-roles call)
+    (g3t-output-prepare call out)
+    (g3t-t1-decode-output! call out)
+    (g3t-final-commit! call out)))
+(define g1-text-entry
+  (g3t-prefill-entry g1-rooted-output 'output 'g3t-g1-text))
+(define g1-text-registry-head (vector-ref g3t-registry 0))
+(define g1-text-first (g3t-generation-output-text g1-rooted-output))
+(define g1-text-second (g3t-generation-output-text g1-rooted-output))
+(define g1-text-first-bytes (car g1-text-first))
+(define g1-text-second-bytes (car g1-text-second))
+(check "P1/G1 text results are exact detached emitted bytes"
+       (and (pair? g1-text-first) (null? (cdr g1-text-first))
+            (pair? g1-text-second) (null? (cdr g1-text-second))
+            (not (eq? g1-text-first g1-text-second))
+            (not (eq? g1-text-first-bytes g1-text-second-bytes))
+            (not (eq? g1-text-first-bytes (vector-ref g1-text-entry 6)))
+            (= 1 (bytevector-length g1-text-first-bytes))
+            (= 1 (bytevector-length g1-text-second-bytes))
+            (= g1-id (bytevector-u8-ref g1-text-first-bytes 0))
+            (= g1-id (bytevector-u8-ref g1-text-second-bytes 0))
+            (eq? g1-text-registry-head (vector-ref g3t-registry 0))))
+(bytevector-u8-set! g1-text-first-bytes 0 (modulo (+ g1-id 1) 256))
+(set-car! g1-text-first #f)
+(check "P1/G1 text mutations leave source and next result unchanged"
+       (and (= g1-id (bytevector-u8-ref (vector-ref g1-text-entry 6) 0))
+            (= g1-id (bytevector-u8-ref g1-text-second-bytes 0))
+            (= g1-id (bytevector-u8-ref
+                       (car (g3t-generation-output-text g1-rooted-output)) 0))
+            (eq? g1-text-registry-head (vector-ref g3t-registry 0))))
+(define g1-rooted-native-output
+  (vector-ref (g3t-prefill-entry g1-rooted-output 'output 'g3t-rng-g1) 3))
+(check "P1/G1 rooted output exact prior ID and RNG"
+       (and (= g1-id (g3t-test-output-word g1-rooted-native-output 6))
+            (= 1 (g3t-test-output-word g1-rooted-native-output 9))))
+(define g1-rooted-ids-result
+  (g3t-generation-output-ids g1-rooted-output))
+(define g1-rooted-ids-shell (car g1-rooted-ids-result))
+(define g1-rooted-ids-native
+  (vector-ref (g3t-prefill-entry g1-rooted-ids-shell 'ids 'g3t-g1-ids) 3))
+(define g1-rooted-lengths-shell
+  (g3t-generation-output-lengths g1-rooted-output))
+(define g1-rooted-cache-lengths-shell
+  (g3t-generation-output-cache-lengths g1-rooted-output))
+(define g1-rooted-lengths-native
+  (vector-ref (g3t-prefill-entry g1-rooted-lengths-shell
+                                 'lengths 'g3t-g1-lengths) 3))
+(define g1-rooted-cache-lengths-native
+  (vector-ref (g3t-prefill-entry g1-rooted-cache-lengths-shell
+                                 'cache-lengths 'g3t-g1-lengths) 3))
+(check "P1/G1 length wrappers return exact independent 1 and 2"
+       (and (= 1 (g3t-test-lengths-clone-value g1-rooted-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   g1-rooted-cache-lengths-native))
+            (not (eq? g1-rooted-lengths-native
+                      g1-rooted-cache-lengths-native))))
+(check "P1/G1 IDs wrapper returns exact one-token detached I1"
+       (and (pair? g1-rooted-ids-result)
+            (null? (cdr g1-rooted-ids-result))
+            (= 1 (g3t-test-clone-length g1-rooted-ids-native))
+            (= g1-id (g3t-test-clone-word g1-rooted-ids-native))
+            (= 1 (g3t-test-clone-state g1-rooted-ids-native))))
+(define g1-rooted-rng (g3t-generation-output-rng g1-rooted-output))
+(define g1-rooted-rng-native
+  (vector-ref (g3t-prefill-entry g1-rooted-rng 'rng 'g3t-rng-g1) 3))
+(define g1-rooted-derived
+  (g3t-generator-create model tokenizer (rng-policy g1-rooted-rng 1)))
+(define g1-rooted-derived-native
+  (vector-ref (g3t-generator-find g1-rooted-derived 'g3t-rng-g1-derived) 3))
+(check "P1/G1 Eshkol RNG constructor copies final successor without draw"
+       (and (rng-clone-words? g1-rooted-rng-native 1 1729 1 0)
+            (= 1 (g3t-test-rng-word g1-rooted-derived-native 0))
+            (= 1729 (g3t-test-rng-word g1-rooted-derived-native 1))
+            (= 1 (g3t-test-rng-word g1-rooted-derived-native 2))
+            (= 0 (g3t-test-rng-word g1-rooted-derived-native 3))
+            (= 0 (g3t-test-cache-length g1-rooted-derived-native))))
+(check "P1/G1 rooted generator close"
+       (g3t-generator-close! g1-rooted-generator))
+(check "P1/G1 rooted output release"
+       (g3t-output-release! g1-rooted-output))
+(check "P1/G1 text copy survives parent releases"
+       (and (= 1 (bytevector-length g1-text-second-bytes))
+            (= g1-id (bytevector-u8-ref g1-text-second-bytes 0))))
+(check "P1/G1 length wrappers survive parent releases"
+       (and (= 1 (g3t-test-lengths-clone-value g1-rooted-lengths-native))
+            (= 2 (g3t-test-cache-lengths-clone-value
+                   g1-rooted-cache-lengths-native))))
+(check "P1/G1 length wrappers typed release"
+       (and (g3t-generation-tensor-release! g1-rooted-lengths-shell)
+            (g3t-generation-tensor-release! g1-rooted-cache-lengths-shell)
+            (= -1 (g3t-test-lengths-clone-state g1-rooted-lengths-native))
+            (= -1 (g3t-test-cache-lengths-clone-state
+                   g1-rooted-cache-lengths-native))))
+(check "P1/G1 IDs wrapper survives parent releases"
+       (and (= g1-id (g3t-test-clone-word g1-rooted-ids-native))
+            (= 1 (g3t-test-clone-state g1-rooted-ids-native))))
+(check "P1/G1 IDs wrapper typed release"
+       (and (g3t-generation-tensor-release! g1-rooted-ids-shell)
+            (g3t-generation-tensor-release! g1-rooted-ids-shell)
+            (= -1 (g3t-test-clone-state g1-rooted-ids-native))))
+(check "P1/G1 RNG shell typed release"
+       (g3t-generation-rng-release! g1-rooted-rng))
+(check "P1/G1 derived generator survives all source releases"
+       (and (= 1729 (g3t-test-rng-word g1-rooted-derived-native 1))
+            (= 1 (g3t-test-rng-word g1-rooted-derived-native 2))))
+(check "P1/G1 derived generator close"
+       (g3t-generator-close! g1-rooted-derived))
+(check "P1/G1 rooted input release"
+       (and (g3t-generation-tensor-release! g1-rooted-input)
+            (= g1-rooted-i1-before (g3t-test-i1-count 0))))
+(check "RNG input admission leaves no live private owners"
+       (and (= 0 (live-rng-shells))
+            (= 0 (g3t-test-live-rng-clones))
+            (= 0 (g3t-test-live-contexts))))
+;; Source-private native manual kind-3 result reservation only; no frame schedule.
+(define manual-f32-baseline (g3t-test-f32-tensors))
+(define manual-generator (g3t-generator-create model tokenizer policy))
+(define manual-native
+  (vector-ref (g3t-generator-find manual-generator 'manual-logits) 3))
+(check "manual logits forged context rejected"
+       (and (null? (g3t-native-logits-reserve (vector 'foreign)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "manual logits idle context rejected"
+       (and (null? (g3t-native-logits-reserve manual-native))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual logits acquire kind0"
+       (and (= 0 (g3t-native-call-acquire manual-native 0))
+            (= 14 (g3t-test-pin-count manual-native))))
+(check "manual logits wrong kind release rejected"
+       (and (not (= 0 (g3t-native-tensor-release manual-native)))
+            (= 1 (g3t-test-last-error-category))))
+(define manual-logits (g3t-native-logits-reserve manual-native))
+(check "manual logits pending owned f32 [1,256]"
+       (and (not (null? manual-logits))
+            (= 0 (g3t-test-logits-state manual-logits))
+            (= 1 (g3t-test-logits-shape manual-logits))
+            (= 1 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))))
+(check "manual logits wrong-kind context rejected"
+       (and (null? (g3t-native-logits-reserve manual-logits))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits wrong-kind output release rejected"
+       (and (not (= 0 (g3t-native-output-release manual-logits)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits duplicate reserve rejected atomically"
+       (and (null? (g3t-native-logits-reserve manual-native))
+            (= 1 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))
+            (= 14 (g3t-test-pin-count manual-native))))
+(define manual-logits-borrow
+  (g3t-test-logits-borrow-begin manual-logits))
+(check "manual logits borrow begins" (not (null? manual-logits-borrow)))
+(check "manual logits borrow blocks typed release"
+       (and (not (= 0 (g3t-native-tensor-release manual-logits)))
+            (= 0 (g3t-test-logits-state manual-logits))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits borrow blocks abort before pin drain"
+       (and (not (= 0 (g3t-native-call-abort manual-native)))
+            (= 14 (g3t-test-pin-count manual-native))
+            (= 1 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))))
+(check "manual logits borrow ends"
+       (= 0 (g3t-test-logits-borrow-end manual-logits-borrow)))
+(check "manual logits pending typed release and tombstone"
+       (and (= 0 (g3t-native-tensor-release manual-logits))
+            (= 0 (g3t-native-tensor-release manual-logits))
+            (= -1 (g3t-test-logits-state manual-logits))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(define manual-logits-again (g3t-native-logits-reserve manual-native))
+(check "manual logits slot reusable after typed release"
+       (and (not (null? manual-logits-again))
+            (= 0 (g3t-test-logits-state manual-logits-again))
+            (= 1 (g3t-test-pending-logits))))
+(check "manual logits abort destroys pending I2 once"
+       (and (= 0 (g3t-native-call-abort manual-native))
+            (= -1 (g3t-test-logits-state manual-logits-again))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (= 0 (g3t-test-pin-count manual-native))
+            (= 0 (g3t-native-tensor-release manual-logits-again))))
+(check "manual logits acquire kind1"
+       (= 0 (g3t-native-call-acquire manual-native 1)))
+(define manual-decode-logits (g3t-native-logits-reserve manual-native))
+(check "manual decode logits reserve"
+       (and (not (null? manual-decode-logits))
+            (= 1 (g3t-test-logits-shape manual-decode-logits))))
+(check "manual decode logits abort"
+       (and (= 0 (g3t-native-call-abort manual-native))
+            (= -1 (g3t-test-logits-state manual-decode-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "generate kind2 does not reserve manual logits"
+       (and (= 0 (g3t-native-call-acquire manual-native 2))
+            (null? (g3t-native-logits-reserve manual-native))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (= 0 (g3t-native-call-abort manual-native))))
+(check "manual logits generator close"
+       (g3t-generator-close! manual-generator))
+(check "dead manual generator rejects reservation"
+       (and (null? (g3t-native-logits-reserve manual-native))
+            (= 2 (g3t-test-last-error-category))))
+
+(define manual-fault-generator (g3t-generator-create model tokenizer policy))
+(define manual-fault-native
+  (vector-ref (g3t-generator-find manual-fault-generator 'manual-fault) 3))
+(check "manual fault call acquire"
+       (= 0 (g3t-native-call-acquire manual-fault-native 0)))
+(check "manual logits header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(check "manual logits header cut preserves call and owners"
+       (and (null? (g3t-native-logits-reserve manual-fault-native))
+            (= 0 (g3t-test-pending-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (= 14 (g3t-test-pin-count manual-fault-native))
+            (= 0 (g3t-test-cache-length manual-fault-native))
+            (= 0 (g3t-test-rng-word manual-fault-native 2))))
+(check "manual logits header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(let cuts ((index 0))
+  (if (= index 4) #t
+      (begin
+        (check "manual logits I2 cut armed"
+               (= 0 (g3t-test-fail-f32-after index)))
+        (check "manual logits I2 cut preserves call and owners"
+               (and (null? (g3t-native-logits-reserve manual-fault-native))
+                    (= 0 (g3t-test-pending-logits))
+                    (= manual-f32-baseline (g3t-test-f32-tensors))
+                    (= 14 (g3t-test-pin-count manual-fault-native))
+                    (= 0 (g3t-test-cache-length manual-fault-native))
+                    (= 0 (g3t-test-rng-word manual-fault-native 2))))
+        (cuts (+ index 1)))))
+(check "manual logits I2 cuts disarmed"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(define manual-after-cuts (g3t-native-logits-reserve manual-fault-native))
+(check "manual logits succeeds after allocation cuts"
+       (and (not (null? manual-after-cuts))
+            (= 1 (g3t-test-logits-shape manual-after-cuts))))
+(check "manual logits fault call abort"
+       (and (= 0 (g3t-native-call-abort manual-fault-native))
+            (= -1 (g3t-test-logits-state manual-after-cuts))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual logits fault generator close"
+       (g3t-generator-close! manual-fault-generator))
+(define manual-budget-generator
+  (g3t-generator-create model tokenizer policy-g1))
+(define manual-budget-native
+  (vector-ref (g3t-generator-find manual-budget-generator 'manual-budget) 3))
+(check "manual G1 exhausted counter fixture"
+       (= 0 (g3t-test-rng-counter-set manual-budget-native -1 -1)))
+(check "manual G1-budget prefill acquire"
+       (= 0 (g3t-native-call-acquire manual-budget-native 0)))
+(define manual-budget-prefill-logits
+  (g3t-native-logits-reserve manual-budget-native))
+(check "manual G1 exhausted prefill logits reserve"
+       (and (not (null? manual-budget-prefill-logits))
+            (= 1 (g3t-test-logits-shape manual-budget-prefill-logits))
+            (= -1 (g3t-test-rng-word manual-budget-native 2))))
+(check "manual G1 exhausted prefill abort"
+       (and (= 0 (g3t-native-call-abort manual-budget-native))
+            (= -1 (g3t-test-logits-state manual-budget-prefill-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual G1-budget decode acquire"
+       (= 0 (g3t-native-call-acquire manual-budget-native 1)))
+(define manual-budget-decode-logits
+  (g3t-native-logits-reserve manual-budget-native))
+(check "manual G1 exhausted decode logits reserve"
+       (and (not (null? manual-budget-decode-logits))
+            (= 1 (g3t-test-logits-shape manual-budget-decode-logits))
+            (= -1 (g3t-test-rng-word manual-budget-native 2))))
+(check "manual G1 exhausted decode abort and close"
+       (and (= 0 (g3t-native-call-abort manual-budget-native))
+            (= -1 (g3t-test-logits-state manual-budget-decode-logits))
+            (= manual-f32-baseline (g3t-test-f32-tensors))
+            (g3t-generator-close! manual-budget-generator)))
+
+;; The manual orchestration is deliberately test-local until G3-M freezes its
+;; production signature. Every role below calls the genuine native provider.
+(reject-category "manual forged Eshkol call rejected" 'invalid-argument
+  (lambda () (g3t-logits-reserve (vector 'forged))))
+(define manual-p1-generator (g3t-generator-create model tokenizer policy))
+(define manual-p1-input (g3t-generation-token-input-create 65))
+(define manual-p1-native
+  (vector-ref (g3t-generator-find manual-p1-generator 'manual-p1) 3))
+(define manual-p1-result
+  (m3-call 'manual-p1-witness
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find manual-p1-generator 'manual-p1) 0))
+           (entry (g3t-prefill-entry call 'call 'manual-p1))
+           (result (g3t-logits-reserve call)))
+      (guard (caught
+               (#t (if (eq? (vector-ref entry 2) 'live)
+                       (g3t-call-abort call))
+                   (raise caught)))
+        (g3t-frame-begin call manual-p1-input 1)
+        (rooted-roles call)
+        (check "manual P1 frame KH/VH bit parity with M3T"
+               (let compare ((which 0) (index 0))
+                 (if (= which 2) #t
+                     (and (= (vector-ref manual-reference-kv
+                                         (+ (* which 4) index))
+                             (g3t-test-manual-frame-kv-word
+                               manual-p1-native which index))
+                          (if (= index 3) (compare (+ which 1) 0)
+                              (compare which (+ index 1)))))))
+        (g3t-frame-prepare call result)
+        (g3t-call-prepare-end call)
+        (g3t-frame-commit call)
+        (g3t-call-finish call)
+        result))))
+(define manual-p1-native-result
+  (vector-ref (g3t-prefill-entry manual-p1-result 'logits 'manual-p1) 3))
+(check "manual P1 committed cache and unchanged RNG"
+       (and (= 1 (g3t-test-cache-length manual-p1-native))
+            (= 1729 (g3t-test-rng-word manual-p1-native 1))
+            (= 0 (g3t-test-rng-word manual-p1-native 2))
+            (= 0 (g3t-test-pin-count manual-p1-native))
+            (= 1 (g3t-test-logits-state manual-p1-native-result))))
+(check "manual P1 all 256 logits bit-exact to M3T row zero"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (* index 4))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word
+                               manual-p1-native-result index))
+                    (compare (+ index 1)))))))
+(check "manual P1 committed K/V bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-reference-kv (+ (* which 4) index))
+                     (g3t-test-manual-cache-kv-word
+                       manual-p1-native which index))
+                  (if (= index 3) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "manual P1 input and generator release"
+       (and (g3t-generation-tensor-release! manual-p1-input)
+            (g3t-generator-close! manual-p1-generator)))
+(check "manual P1 result detached from parents"
+       (and (= 1 (g3t-test-logits-state manual-p1-native-result))
+            (= 1 (g3t-test-logits-shape manual-p1-native-result))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))))
+(define manual-p1-live-borrow
+  (g3t-test-logits-borrow-begin manual-p1-native-result))
+(check "manual P1 live result borrow blocks typed release"
+       (and (not (null? manual-p1-live-borrow))
+            (not (= 0 (g3t-native-tensor-release manual-p1-native-result)))
+            (= 1 (g3t-test-logits-state manual-p1-native-result))))
+(check "manual P1 live borrow ends"
+       (= 0 (g3t-test-logits-borrow-end manual-p1-live-borrow)))
+(check "manual P1 typed release and tombstone"
+       (and (g3t-generation-tensor-release! manual-p1-result)
+            (g3t-generation-tensor-release! manual-p1-result)
+            (= -1 (g3t-test-logits-state manual-p1-native-result))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+
+(define manual-cut-generator (g3t-generator-create model tokenizer policy))
+(define manual-cut-native
+  (vector-ref (g3t-generator-find manual-cut-generator 'manual-cut) 3))
+(define manual-cut-input (g3t-native-input-from-token 65))
+(define manual-cut-wrong (g3t-native-input-from-pair 65 66))
+(check "manual P1 cut acquire" (= 0 (g3t-native-call-acquire manual-cut-native 0)))
+(define manual-cut-result (g3t-native-logits-reserve manual-cut-native))
+(check "manual P1 wrong P2 input rejected before candidate"
+       (and (not (= 0 (g3t-native-frame-begin
+                         manual-cut-native manual-cut-wrong 1)))
+            (= 0 (g3t-test-cache-length manual-cut-native))
+            (= 14 (g3t-test-pin-count manual-cut-native))))
+(check "manual P1 candidate allocation cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(define manual-cut-begin-failed
+  (not (= 0 (g3t-native-frame-begin
+               manual-cut-native manual-cut-input 1))))
+(check "manual P1 candidate allocation cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "manual P1 candidate allocation failure atomic"
+       (and manual-cut-begin-failed
+            (= 0 (g3t-test-cache-length manual-cut-native))
+            (= 0 (g3t-test-rng-word manual-cut-native 2))
+            (= 0 (g3t-test-logits-state manual-cut-result))
+            (= 14 (g3t-test-pin-count manual-cut-native))))
+(check "manual P1 frame begins after cut"
+       (= 0 (g3t-native-frame-begin manual-cut-native manual-cut-input 1)))
+(check "manual P1 wrong ordinal rejected without advance"
+       (not (= 0 (g3t-native-role-step manual-cut-native 1))))
+(let roles ((ordinal 0))
+  (if (= ordinal 21) #t
+      (begin (check "manual P1 native role" (= 0 (g3t-native-role-step
+                                                manual-cut-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "manual P1 wrong-kind staged result rejected"
+       (and (not (= 0 (g3t-native-frame-prepare
+                         manual-cut-native manual-cut-input)))
+            (= 0 (g3t-test-logits-state manual-cut-result))
+            (= 0 (g3t-test-cache-length manual-cut-native))))
+(define manual-cut-logits-borrow
+  (g3t-test-logits-borrow-begin manual-cut-result))
+(check "manual P1 borrowed logits block prepare"
+       (and (not (null? manual-cut-logits-borrow))
+            (not (= 0 (g3t-native-frame-prepare
+                         manual-cut-native manual-cut-result)))
+            (= 0 (g3t-test-cache-length manual-cut-native))))
+(check "manual P1 pending logits borrow ends"
+       (= 0 (g3t-test-logits-borrow-end manual-cut-logits-borrow)))
+(check "manual P1 frame prepare retry"
+       (= 0 (g3t-native-frame-prepare manual-cut-native manual-cut-result)))
+(define manual-cut-old-borrow
+  (g3t-test-manual-cache-borrow-begin manual-cut-native))
+(define manual-cut-old-blocked
+  (and (not (null? manual-cut-old-borrow))
+       (not (= 0 (g3t-native-call-prepare-end manual-cut-native)))))
+(check "manual P1 old cache borrow ends"
+       (= 0 (g3t-test-manual-cache-borrow-end manual-cut-old-borrow)))
+(check "manual P1 borrowed old cache blocks prepare-end"
+       (and manual-cut-old-blocked
+            (= 0 (g3t-test-cache-length manual-cut-native))
+            (= 0 (g3t-test-rng-word manual-cut-native 2))
+            (= 14 (g3t-test-pin-count manual-cut-native))))
+(check "manual P1 stale binding injected"
+       (= 0 (g3t-test-frame-binding-flip manual-cut-native)))
+(check "manual P1 stale binding blocks prepare-end"
+       (and (not (= 0 (g3t-native-call-prepare-end manual-cut-native)))
+            (= 0 (g3t-test-cache-length manual-cut-native))
+            (= 14 (g3t-test-pin-count manual-cut-native))))
+(check "manual P1 binding restored"
+       (= 0 (g3t-test-frame-binding-flip manual-cut-native)))
+(check "manual P1 prepare-end retry"
+       (= 0 (g3t-native-call-prepare-end manual-cut-native)))
+(check "manual P1 final abort rolls back staged result"
+       (and (= 0 (g3t-native-call-abort manual-cut-native))
+            (= -1 (g3t-test-logits-state manual-cut-result))
+            (= 0 (g3t-test-cache-length manual-cut-native))
+            (= 0 (g3t-test-pin-count manual-cut-native))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+(check "manual P1 cut owners release"
+       (and (= 0 (g3t-native-tensor-release manual-cut-input))
+            (= 0 (g3t-native-tensor-release manual-cut-wrong))
+            (g3t-generator-close! manual-cut-generator)))
+
+;; This is the production G3-M operation, distinct from the earlier
+;; test-local transport transcript. No caller-supplied role ordinal enters it.
+(define g3m-generator (g3t-generator-create model tokenizer policy-g1))
+(define g3m-native
+  (vector-ref (g3t-generator-find g3m-generator 'g3m-test) 3))
+(define g3m-input-65 (g3t-generation-token-input-create 65))
+(define g3m-input-66 (g3t-generation-token-input-create 66))
+(define g3m-p2-input (g3t-generation-pair-input-create 65 66))
+(define g3m-dead-input (g3t-generation-token-input-create 65))
+(check "G3-M dead input fixture release"
+       (g3t-generation-tensor-release! g3m-dead-input))
+(reject-category "G3-M forged input rejected" 'invalid-argument
+  (lambda () (g3m-prefill-p1! g3m-generator (vector 'forged))))
+(reject-category "G3-M wrong-kind input rejected" 'invalid-argument
+  (lambda () (g3m-prefill-p1! g3m-generator model)))
+(reject-category "G3-M dead input rejected" 'invalid-state
+  (lambda () (g3m-prefill-p1! g3m-generator g3m-dead-input)))
+(check "G3-M pre-acquire negatives leave context idle"
+       (and (= 0 (g3t-test-cache-length g3m-native))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= 0 (g3t-test-pending-logits))
+            (= 0 (g3t-test-rng-word g3m-native 2))))
+(define g3m-first (g3m-prefill-p1! g3m-generator g3m-input-65))
+(define g3m-first-native
+  (vector-ref (g3t-prefill-entry g3m-first 'logits 'g3m-first) 3))
+(check "G3-M production P1 all 256 logits bit-exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (* index 4))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word g3m-first-native index))
+                    (compare (+ index 1)))))))
+(check "G3-M production P1 K/V bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-reference-kv (+ (* which 4) index))
+                     (g3t-test-manual-cache-kv-word g3m-native which index))
+                  (if (= index 3) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(define g3m-first-kv
+  (let ((words (make-vector 8 0)))
+    (let fill ((which 0) (index 0))
+      (if (= which 2) words
+          (begin (vector-set! words (+ (* which 4) index)
+                              (g3t-test-manual-cache-kv-word
+                                g3m-native which index))
+                 (if (= index 3) (fill (+ which 1) 0)
+                     (fill which (+ index 1))))))))
+(reject-category "G3-M P2 rejected and rolled back" 'invalid-state
+  (lambda () (g3m-prefill-p1! g3m-generator g3m-p2-input)))
+(check "G3-M P2 rejection keeps old committed cache"
+       (and (= 1 (g3t-test-cache-length g3m-native))
+            (= (vector-ref g3m-first-kv 0)
+               (g3t-test-manual-cache-kv-word g3m-native 0 0))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= 0 (g3t-test-pending-logits))
+            (= 0 (g3t-test-rng-word g3m-native 2))))
+(check "G3-M external native call makes context busy"
+       (= 0 (g3t-native-call-acquire g3m-native 0)))
+(reject-category "G3-M busy context rejected" 'invalid-state
+  (lambda () (g3m-prefill-p1! g3m-generator g3m-input-66)))
+(check "G3-M busy context abort restores old cache"
+       (and (= 0 (g3t-native-call-abort g3m-native))
+            (= 1 (g3t-test-cache-length g3m-native))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= 0 (g3t-test-pending-logits))))
+(check "G3-M I2 allocation cut armed"
+       (= 0 (g3t-test-fail-f32-after 0)))
+(define g3m-i2-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-prefill-p1! g3m-generator g3m-input-66) #f))
+(check "G3-M I2 allocation cut disarmed"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(check "G3-M I2 cut preserves old cache and ownership"
+       (and g3m-i2-cut
+            (= 1 (g3t-test-cache-length g3m-native))
+            (= (vector-ref g3m-first-kv 0)
+               (g3t-test-manual-cache-kv-word g3m-native 0 0))
+            (= 0 (g3t-test-pending-logits))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))))
+(check "G3-M A2 allocation cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(define g3m-a2-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-prefill-p1! g3m-generator g3m-input-66) #f))
+(check "G3-M A2 allocation cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "G3-M A2 cut preserves old cache and ownership"
+       (and g3m-a2-cut
+            (= 1 (g3t-test-cache-length g3m-native))
+            (= (vector-ref g3m-first-kv 0)
+               (g3t-test-manual-cache-kv-word g3m-native 0 0))
+            (= 0 (g3t-test-pending-logits))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= 0 (g3t-test-rng-word g3m-native 2))))
+(define g3m-old-borrow
+  (g3t-test-manual-cache-borrow-begin g3m-native))
+(define g3m-old-borrow-cut
+  (and (not (null? g3m-old-borrow))
+       (guard (caught (#t (transformer-error? caught)))
+         (g3m-prefill-p1! g3m-generator g3m-input-66) #f)))
+(check "G3-M old cache borrow ends"
+       (= 0 (g3t-test-manual-cache-borrow-end g3m-old-borrow)))
+(check "G3-M old cache borrow rollback keeps prefix"
+       (and g3m-old-borrow-cut
+            (= 1 (g3t-test-cache-length g3m-native))
+            (= (vector-ref g3m-first-kv 0)
+               (g3t-test-manual-cache-kv-word g3m-native 0 0))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= 0 (g3t-test-pending-logits))))
+(define g3m-second (g3m-prefill-p1! g3m-generator g3m-input-66))
+(define g3m-second-native
+  (vector-ref (g3t-prefill-entry g3m-second 'logits 'g3m-second) 3))
+(check "G3-M second prefill replaces old P1 cache without RNG draw"
+       (and (= 1 (g3t-test-cache-length g3m-native))
+            (= 0 (g3t-test-rng-word g3m-native 2))
+            (= 0 (g3t-test-pin-count g3m-native))
+            (= 1 (g3t-test-logits-state g3m-first-native))
+            (= 1 (g3t-test-logits-state g3m-second-native))
+            (let changed ((which 0) (index 0))
+              (if (= which 2) #f
+                  (or (not (= (vector-ref g3m-first-kv (+ (* which 4) index))
+                              (g3t-test-manual-cache-kv-word
+                                g3m-native which index)))
+                      (if (= index 3) (changed (+ which 1) 0)
+                          (changed which (+ index 1))))))))
+(check "G3-M first detached logits survive cache replacement"
+       (= (g3t-test-manual-logits-word g3m-first-native 0)
+          (+ (bytevector-u8-ref reference-bytes 0)
+             (* 256 (bytevector-u8-ref reference-bytes 1))
+             (* 65536 (bytevector-u8-ref reference-bytes 2))
+             (* 16777216 (bytevector-u8-ref reference-bytes 3)))))
+(check "G3-M inputs and generator release"
+       (and (g3t-generation-tensor-release! g3m-input-65)
+            (g3t-generation-tensor-release! g3m-input-66)
+            (g3t-generation-tensor-release! g3m-p2-input)
+            (g3t-generator-close! g3m-generator)))
+(check "G3-M both detached logits survive parent close"
+       (and (= 1 (g3t-test-logits-shape g3m-first-native))
+            (= 1 (g3t-test-logits-shape g3m-second-native))
+            (= (+ manual-f32-baseline 2) (g3t-test-f32-tensors))))
+(check "G3-M detached logits typed release"
+       (and (g3t-generation-tensor-release! g3m-first)
+            (g3t-generation-tensor-release! g3m-second)
+            (g3t-generation-tensor-release! g3m-first)
+            (g3t-generation-tensor-release! g3m-second)
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+
+(display "G3-T P2 zero budget PASS: checks=")
+(display checks)
+(newline)

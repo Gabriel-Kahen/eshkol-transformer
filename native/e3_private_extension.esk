@@ -1,0 +1,507 @@
+;;; Closed private E3 source transaction.  This source is reachable only from
+;;; the reviewed private aggregate and owns no public evaluator surface.
+
+(extern ptr e3-native-frame-create ptr ptr ptr ptr ptr
+        :real et_e3_private_frame_create_v1)
+(extern i64 e3-native-frame-check ptr :real et_e3_private_frame_check_v1)
+(extern i64 e3-native-acquire ptr :real et_e3_private_acquire_v1)
+(extern i64 e3-native-forward-role ptr i64 :real et_e3_private_forward_role_v1)
+(extern i64 e3-native-ce ptr :real et_e3_private_ce_v1)
+(extern i64 e3-native-reduce ptr :real et_e3_private_reduce_v1)
+(extern i64 e3-native-correct ptr :real et_e3_private_correct_v1)
+(extern i64 e3-native-accumulate ptr :real et_e3_private_accumulate_v1)
+(extern i64 e3-native-finalize ptr :real et_e3_private_finalize_v1)
+(extern i64 e3-native-cleanup-preflight ptr
+        :real et_e3_private_cleanup_preflight_v1)
+(extern void e3-native-drain ptr :real et_e3_private_drain_v1)
+(extern i64 e3-native-publish ptr :real et_e3_private_publish_v1)
+(extern void e3-native-finish ptr :real et_e3_private_finish_v1)
+(extern i64 e3-native-counter-ref ptr i64 :real et_e3_private_counter_ref_v1)
+(extern i64 e3-native-frame-destroy-preflight ptr
+        :real et_e3_private_frame_destroy_preflight_v1)
+(extern void e3-native-frame-destroy ptr
+        :real et_e3_private_frame_destroy_v1)
+(extern i64 e3-native-last-error-domain
+        :real et_e3_private_last_error_domain_v1)
+(extern i64 e3-native-last-error-category
+        :real et_e3_private_last_error_category_v1)
+(extern i64 e3-native-last-error-code
+        :real et_e3_private_last_error_code_v1)
+(extern void e3-native-invariant-fail :real abort)
+
+(define e3-frame-registry-root (vector '()))
+(define e3-d2-restore-tag (vector 'e3-d2-restore-v1))
+
+(define (e3-frame-entry-find frame)
+  (let loop ((entries (vector-ref e3-frame-registry-root 0)))
+    (cond ((null? entries) #f)
+          ((eq? frame (vector-ref (car entries) 0)) (car entries))
+          (else (loop (cdr entries))))))
+
+(define (e3-source-claim-invalid? entry)
+  (let ((claimed (vector-ref (vector-ref entry 3) 10)))
+    (if (not (= (bitwise-and (vector-ref entry 10) 2) 0))
+        (not (eq? claimed entry))
+        (and (or (= (vector-ref entry 1) 2) (= (vector-ref entry 1) 3))
+             claimed))))
+
+(define (e3-frame-entry-internal frame)
+  (let ((entry (e3-frame-entry-find frame)))
+    (if (not entry)
+        (let ((unreachable
+               (et-e1b-private-raise 'invalid-argument 'e3-evaluate-into!
+                                     "expected an authentic E3 frame" '() #f)))
+          unreachable))
+    (if (e3-source-claim-invalid? entry) (e3-native-invariant-fail))
+    entry))
+
+(define (e3-frame-entry-live frame operation)
+  (let ((entry (e3-frame-entry-find frame)))
+    (if (not entry)
+        (let ((unreachable
+               (et-e1b-private-raise 'invalid-argument operation
+                                     "expected an authentic E3 frame" '() #f)))
+          unreachable))
+    (if (= (vector-ref entry 1) 4)
+        (let ((unreachable
+               (et-e1b-private-raise 'invalid-state operation
+                                     "E3 frame is released" '() #f)))
+          unreachable))
+    entry))
+
+(define (e3-entry-bit? entry mask)
+  (not (= (bitwise-and (vector-ref entry 10) mask) 0)))
+(define (e3-entry-bit-set! entry mask)
+  (vector-set! entry 10 (bitwise-or (vector-ref entry 10) mask)))
+(define (e3-entry-bit-clear! entry mask)
+  (vector-set! entry 10
+               (bitwise-and (vector-ref entry 10) (bitwise-not mask))))
+
+(define (e3-stage-set! entry stage)
+  (vector-set! (vector-ref entry 12) 0 stage))
+
+(define (e3-note-error! entry stage category domain native-category code)
+  (if (= (vector-ref entry 15) -1)
+      (let ((index (+ (* stage 12) (e3-error-category-index category))))
+        (vector-set! entry 15 index)
+        (vector-set! entry 11 (vector-ref e3-error-table index))
+        (vector-set! (vector-ref entry 12) 0 stage)
+        (vector-set! (vector-ref entry 12) 1 domain)
+        (vector-set! (vector-ref entry 12) 2 native-category)
+        (vector-set! (vector-ref entry 12) 3 code)))
+  #f)
+
+(define (e3-note-native-error! entry stage)
+  (let* ((domain (e3-native-last-error-domain))
+         (category (e3-native-last-error-category))
+         (code (e3-native-last-error-code)))
+    (let ((result
+           (e3-note-error! entry stage
+                           (e3-error-category-from-native domain category)
+                           domain category code)))
+      result)))
+
+(define (e3-note-p1-error! entry stage status)
+  (let ((result
+         (e3-note-error! entry stage (e3-error-category-from-p1 status)
+                         5 status status)))
+    result))
+
+(define (e3-note-caught-error! entry stage caught inspect-args)
+  (let ((result
+         (e3-note-error! entry stage
+                         (e3-classify-caught caught inspect-args) 0 5 9)))
+    result))
+
+(define (e3-raise-native-setup operation)
+  (let* ((domain (e3-native-last-error-domain))
+         (native-category (e3-native-last-error-category))
+         (code (e3-native-last-error-code))
+         (category (e3-error-category-from-native domain native-category)))
+    (let ((unreachable
+           (et-e1b-private-raise
+            category operation "E3 native frame rejected setup"
+            (list (list 'source-domain 'e3-evaluation)
+                  (list 'source-code code)
+                  (list 'source-message "native frame setup failed"))
+            #f)))
+      unreachable)))
+
+(define (e3-make-d2-record frame)
+  (let* ((snapshot (make-vector 15 #f))
+         (record (vector e3-d2-restore-tag #f frame 'idle #f #f #f 0 0
+                         #f #f #f snapshot 0)))
+    (vector-set! record 1 record)
+    record))
+
+(define (e3-frame-dead! entry)
+  (vector-set! entry 1 4)
+  (vector-set! entry 2 #f)
+  (vector-set! entry 3 #f)
+  (vector-set! entry 4 #f)
+  (vector-set! entry 5 #f)
+  (vector-set! entry 6 #f)
+  (vector-set! entry 7 #f)
+  (vector-set! entry 8 #f)
+  (vector-set! entry 9 #f)
+  (vector-set! entry 10 0)
+  (vector-set! entry 11 #f)
+  (vector-set! entry 13 #f)
+  (vector-set! entry 14 #f)
+  (vector-set! entry 15 -1)
+  #t)
+
+(define (e3-frame-bind! model destinations)
+  (let ((operation 'e3-frame-bind!))
+    (m3-call operation
+      (if (not (and (vector? destinations) (= (vector-length destinations) 4)))
+          (let ((unreachable
+                 (et-e1b-private-raise 'invalid-argument operation
+                                       "expected four destination owners" '() #f)))
+            unreachable))
+      (let* ((model-entry (m3t-entry model 'model operation #t))
+             (token (vector #f))
+             (setup-box (vector token #f))
+             (record (e3-make-d2-record token))
+             (entry (vector token 0 model model-entry #f destinations #f record
+                            setup-box #f 0 #f (vector 0 0 0 0) #f #f -1))
+             (next (cons entry (vector-ref e3-frame-registry-root 0)))
+             (canonical #f))
+        (guard
+         (caught
+          (#t
+           (if canonical
+               (begin
+                 (let ((mode-token (vector-ref setup-box 1)))
+                   (if mode-token
+                       (let ((status (p1-e3-mode-unbind! mode-token)))
+                         (if (not (= status 0))
+                             (e3-native-invariant-fail)))))
+                 (e3-frame-dead! canonical)))
+           (m3t-rethrow-raw caught operation)))
+         (vector-set! e3-frame-registry-root 0 next)
+         (set! canonical (car (vector-ref e3-frame-registry-root 0)))
+         ;; The root write barrier may canonicalize the staged graph. Never use
+         ;; prepublication identities for P1 binding or as the returned token.
+         (set! token (vector-ref canonical 0))
+         (set! model (vector-ref canonical 2))
+         (set! model-entry (vector-ref canonical 3))
+         (set! destinations (vector-ref canonical 5))
+         (set! setup-box (vector-ref canonical 8))
+         (let ((p1-status (p1-e3-mode-bind! model setup-box)))
+           (if (not (= p1-status 0))
+               (let ((unreachable
+                      (et-e1b-private-raise
+                       (e3-error-category-from-p1 p1-status) operation
+                       "P1 rejected E3 mode binding" '() #f)))
+                 unreachable))
+           (let ((mode-token (vector-ref setup-box 1)))
+             (vector-set! canonical 6 mode-token)
+             (let ((native
+                    (e3-native-frame-create
+                     (vector-ref model-entry 3)
+                     (vector-ref destinations 0) (vector-ref destinations 1)
+                     (vector-ref destinations 2) (vector-ref destinations 3))))
+               (if (null? native)
+                   (e3-raise-native-setup operation))
+               (vector-set! canonical 4 native)
+               (vector-set! canonical 8 #f)
+               (vector-set! canonical 1 1)
+               token))))))))
+
+(define (e3-frame-d2-record-internal frame)
+  (let ((entry (e3-frame-entry-live frame 'e3-evaluate-into!)))
+    (if (or (= (vector-ref entry 1) 0)
+            (e3-source-claim-invalid? entry)
+            (not (= (e3-native-frame-check (vector-ref entry 4)) 0)))
+        (let ((unreachable
+               (et-e1b-private-raise 'invalid-state 'e3-evaluate-into!
+                                     "E3 frame is not admitted" '() #f)))
+          unreachable))
+    (vector-ref entry 7)))
+
+(define (e3-forward-role! frame role)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-forward-role (vector-ref entry 4) role)))
+    (if (= status 0) #t
+        (let ((result (e3-note-native-error! entry 7))) result))))
+(define (e3-ce! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-ce (vector-ref entry 4))))
+    (if (= status 0) #t
+        (let ((result (e3-note-native-error! entry 8))) result))))
+(define (e3-reduce! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-reduce (vector-ref entry 4))))
+    (if (= status 0) #t
+        (let ((result (e3-note-native-error! entry 9))) result))))
+(define (e3-correct! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-correct (vector-ref entry 4))))
+    (if (= status 0) #t
+        (let ((result (e3-note-native-error! entry 10))) result))))
+(define (e3-accumulate! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-accumulate (vector-ref entry 4))))
+    (if (= status 0) #t
+        (let ((result (e3-note-native-error! entry 11))) result))))
+(define (e3-finalize! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-finalize (vector-ref entry 4))))
+    (if (= status 0) #t
+        (let ((result (e3-note-native-error! entry 12))) result))))
+
+(define (e3-cleanup-preflight! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-cleanup-preflight (vector-ref entry 4))))
+    (if (= status 0) #t (e3-native-invariant-fail))))
+
+(define (e3-source-finish! entry)
+  (let ((model-entry (vector-ref entry 3)))
+    (if (eq? (vector-ref model-entry 10) entry)
+        (vector-set! model-entry 10 #f)
+        (e3-native-invariant-fail)))
+  (vector-set! entry 10 0)
+  (vector-set! entry 13 #f)
+  (vector-set! entry 1 1)
+  #t)
+
+(define (e3-restore-closed! frame publish?)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (if (e3-entry-bit? entry 32) (e3-native-invariant-fail))
+    (vector-set! entry 1 3)
+    (if (e3-entry-bit? entry 1)
+        (begin
+          (e3-cleanup-preflight! frame)
+          (if (e3-entry-bit? entry 16)
+              (if (vector-ref entry 13)
+                  (if (not (e3-d2-restore-preflight! frame))
+                      (e3-native-invariant-fail))
+                  #t))
+          (e3-native-drain (vector-ref entry 4))
+          (if (e3-entry-bit? entry 16)
+              (if (vector-ref entry 13)
+                  (if (not (e3-d2-restore-commit! frame))
+                      (e3-native-invariant-fail))
+                  (if (not (e3-d2-cancel-prepare! frame))
+                      (e3-native-invariant-fail))))
+          (if (e3-entry-bit? entry 4)
+              (let ((status (p1-e3-mode-restore! (vector-ref entry 6))))
+                (if (not (= status 0)) (e3-native-invariant-fail))))
+          (let ((published
+                 (if publish?
+                     (let ((status (e3-native-publish (vector-ref entry 4))))
+                       (if (= status 0)
+                           (begin (vector-set! entry 14 #t) #t)
+                           (begin (e3-note-native-error! entry 12) #f)))
+                     #f)))
+            (e3-native-finish (vector-ref entry 4))
+            (if (e3-entry-bit? entry 2)
+                (e3-source-finish! entry)
+                (begin
+                  (vector-set! entry 10 0)
+                  (vector-set! entry 13 #f)
+                  (vector-set! entry 1 1)))
+            published))
+        (begin
+          (if (e3-entry-bit? entry 16)
+              (if (not (e3-d2-cancel-prepare! frame))
+                  (e3-native-invariant-fail)))
+          (if (e3-entry-bit? entry 4)
+              (let ((status (p1-e3-mode-restore! (vector-ref entry 6))))
+                (if (not (= status 0)) (e3-native-invariant-fail))))
+          (vector-set! entry 10 0)
+          (vector-set! entry 13 #f)
+          (vector-set! entry 1 1)
+          #f))))
+
+(define (e3-abort! frame)
+  (let ((result (e3-restore-closed! frame #f))) result))
+
+(define (e3-run-one-batch! frame dataset)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (owned (vector #f 0 #f (cons #f '())))
+         (inspect-args (vector-ref owned 3)))
+    (guard
+     (caught
+      (#t
+       (e3-note-caught-error!
+        entry (vector-ref (vector-ref entry 12) 0) caught inspect-args)
+       (e3-d2-release-owned! frame owned)
+       0))
+     (e3-stage-set! entry 5)
+     (let ((batch (d2-token-dataset-next-batch dataset)))
+       (if (d2-token-dataset-end? batch) 2
+           (begin
+             ;; Record native ownership immediately after next-batch returns.
+             (vector-set! owned 0 batch)
+             (vector-set! owned 1
+                          (vector-ref (vector-ref (vector-ref entry 7) 5) 8))
+             (vector-set! owned 2 #t)
+             (e3-entry-bit-set! entry 32)
+             (e3-stage-set! entry 6)
+             (let ((ok
+                    (and (e3-stage-batch! frame batch)
+                         (begin (e3-stage-set! entry 7)
+                                (e3-forward-schedule-internal frame))
+                         (begin (e3-stage-set! entry 8) (e3-ce! frame))
+                         (begin (e3-stage-set! entry 9) (e3-reduce! frame))
+                         (begin (e3-stage-set! entry 10) (e3-correct! frame))
+                         (begin (e3-stage-set! entry 11)
+                                (e3-accumulate! frame)))))
+               (e3-d2-release-owned! frame owned)
+               (if ok 1 0))))))))
+
+(define (e3-traverse! frame dataset)
+  (let loop ((batches 0))
+    (let ((step
+           (with-region ('e3-evaluation-batch 65536)
+             (e3-run-one-batch! frame dataset))))
+      (cond ((= step 0) #f)
+            ((= step 2)
+             (let ((entry (e3-frame-entry-internal frame)))
+               (e3-stage-set! entry 12)
+               (let ((result (e3-finalize! frame))) result)))
+            ((>= batches 8192)
+             (let ((entry (e3-frame-entry-internal frame)))
+               (e3-note-error! entry 5 'unsupported 0 4 6)))
+            (else (loop (+ batches 1)))))))
+
+(define (e3-evaluate-closed! model dataset frame entry inspect-args)
+  (guard
+   (caught
+    (#t
+     (e3-note-caught-error!
+      entry (vector-ref (vector-ref entry 12) 0) caught inspect-args)
+     (e3-abort! frame)
+     #f))
+   (let* ((source-model-entry
+           (if (eq? model (vector-ref entry 2))
+               (m3t-entry model 'model 'e3-evaluate-into! #t)
+               #f))
+          (native-status (e3-native-frame-check (vector-ref entry 4))))
+     (if (or (not (= (vector-ref entry 1) 1))
+             (not (eq? model (vector-ref entry 2)))
+             (not (eq? source-model-entry (vector-ref entry 3)))
+             (vector-ref (vector-ref entry 3) 10)
+             (not (= native-status 0)))
+         (begin
+           (cond ((not (= (vector-ref entry 1) 1))
+                  (e3-note-error! entry 0 'invalid-state 0 2 2))
+                 ((or (not (eq? model (vector-ref entry 2)))
+                      (not (eq? source-model-entry (vector-ref entry 3))))
+                  (e3-note-error! entry 0 'invalid-argument 0 1 1))
+                 ((vector-ref (vector-ref entry 3) 10)
+                  (e3-note-error! entry 0 'invalid-state 0 2 7))
+                 ((not (= native-status 0))
+                  (e3-note-native-error! entry 0))
+                 (else
+                  (e3-native-invariant-fail)))
+           #f)
+         (begin
+           (vector-set! entry 1 2)
+           (e3-stage-set! entry 1)
+           (let ((p1-status (p1-e3-mode-prepare! (vector-ref entry 6))))
+         (if (not (= p1-status 0))
+             (begin
+               (e3-note-p1-error! entry 1 p1-status)
+               (e3-abort! frame))
+             (begin
+               (e3-entry-bit-set! entry 4)
+               (e3-stage-set! entry 2)
+               (if (not (e3-d2-prepare! frame dataset))
+                   (e3-abort! frame)
+                   (begin
+                     (e3-entry-bit-set! entry 16)
+                     (e3-stage-set! entry 3)
+                     (if (vector-ref (vector-ref entry 3) 10)
+                         (begin
+                           (e3-note-error! entry 3 'invalid-state 0 2 7)
+                           (e3-abort! frame))
+                         (let ((acquire-status
+                                (e3-native-acquire (vector-ref entry 4))))
+                           (if (not (= acquire-status 0))
+                               (begin
+                                 (e3-note-native-error! entry 3)
+                                 (e3-abort! frame))
+                               (begin
+                                 (if (vector-ref (vector-ref entry 3) 10)
+                                     (e3-native-invariant-fail))
+                                 (vector-set! (vector-ref entry 3) 10 entry)
+                                 (e3-entry-bit-set! entry 2)
+                                 (e3-entry-bit-set! entry 1)
+                                 (e3-stage-set! entry 4)
+                                 (let ((enter-status
+                                        (p1-e3-mode-enter!
+                                         (vector-ref entry 6))))
+                                   (if (not (= enter-status 0))
+                                       (begin
+                                         (e3-note-p1-error!
+                                          entry 4 enter-status)
+                                         (e3-abort! frame))
+                                       (begin
+                                         (e3-entry-bit-set! entry 8)
+                                         (vector-set! entry 13 #t)
+                                         (if (e3-traverse! frame dataset)
+                                             (e3-restore-closed! frame #t)
+                                             (e3-abort! frame)))))))))))))))))))
+
+(define (e3-evaluate-into! model dataset frame)
+  (let* ((entry (e3-frame-entry-live frame 'e3-evaluate-into!))
+         (inspect-args (cons #f '())))
+    (let ((outcome
+           (m3-call 'e3-evaluate-into!
+             (vector-set! entry 11 #f)
+             (vector-set! (vector-ref entry 12) 0 0)
+             (vector-set! (vector-ref entry 12) 1 0)
+             (vector-set! (vector-ref entry 12) 2 0)
+             (vector-set! (vector-ref entry 12) 3 0)
+             (vector-set! entry 15 -1)
+             (guard
+              (caught
+               (#t
+                (e3-note-caught-error!
+                 entry (vector-ref (vector-ref entry 12) 0)
+                 caught inspect-args)
+                #f))
+              (e3-evaluate-closed! model dataset frame entry inspect-args)))))
+      (if outcome #t (raise (vector-ref entry 11))))))
+
+(define (e3-publish! frame)
+  (let* ((entry (e3-frame-entry-internal frame))
+         (status (e3-native-publish (vector-ref entry 4))))
+    (if (= status 0) (begin (vector-set! entry 14 #t) #t)
+        (let ((result (e3-note-native-error! entry 12))) result))))
+
+(define (e3-counter-ref frame selector)
+  (let* ((entry (e3-frame-entry-live frame 'e3-counter-ref))
+         (value (e3-native-counter-ref (vector-ref entry 4) selector)))
+    (if (= value -1)
+        (let ((unreachable (e3-raise-native-setup 'e3-counter-ref)))
+          unreachable)
+        value)))
+
+(define (e3-frame-unbind! frame)
+  (let ((entry (e3-frame-entry-find frame)))
+    (if (not entry)
+        (let ((unreachable
+               (et-e1b-private-raise 'invalid-argument 'e3-frame-unbind!
+                                     "expected an authentic E3 frame" '() #f)))
+          unreachable))
+    (if (= (vector-ref entry 1) 4) #t
+        (m3-call 'e3-frame-unbind!
+          (if (not (= (vector-ref entry 1) 1))
+              (let ((unreachable
+                     (et-e1b-private-raise 'invalid-state 'e3-frame-unbind!
+                                           "E3 frame is active" '() #f)))
+                unreachable))
+          (let ((status
+                 (e3-native-frame-destroy-preflight (vector-ref entry 4))))
+            (if (not (= status 0))
+                (let ((unreachable
+                       (e3-raise-native-setup 'e3-frame-unbind!)))
+                  unreachable)))
+          (let ((status (p1-e3-mode-unbind! (vector-ref entry 6))))
+            (if (not (= status 0)) (e3-native-invariant-fail)))
+          (e3-native-frame-destroy (vector-ref entry 4))
+          (e3-frame-dead! entry)))))

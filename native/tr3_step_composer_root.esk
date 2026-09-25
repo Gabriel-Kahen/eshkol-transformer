@@ -1,0 +1,3 @@
+;;; Test-only fixed-profile finite-D2 step composer; no public trainer entry.
+(load "tr3_step_commit_tail_root.esk")
+(load "tr3_step_composer_extension.esk")

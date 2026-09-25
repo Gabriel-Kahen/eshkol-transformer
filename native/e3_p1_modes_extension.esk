@@ -1,0 +1,13 @@
+;;; Source-private E3 adapter. Load only in the reviewed E3 private aggregate.
+;;; Frame admission and stable setup-box/frame-key ownership belong to E3.
+;;; These helpers expose no native symbol, public provide, or generic authority.
+(define (p1-e3-mode-bind! model setup-box)
+  ((vector-ref p1-trusted-surface 64) model setup-box))
+(define (p1-e3-mode-prepare! token)
+  ((vector-ref p1-trusted-surface 65) token))
+(define (p1-e3-mode-enter! token)
+  ((vector-ref p1-trusted-surface 66) token))
+(define (p1-e3-mode-restore! token)
+  ((vector-ref p1-trusted-surface 67) token))
+(define (p1-e3-mode-unbind! token)
+  ((vector-ref p1-trusted-surface 68) token))

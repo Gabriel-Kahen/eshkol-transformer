@@ -1,0 +1,159 @@
+;;; Test-only steady-state TR3/C2 retention witness. The preceding definitions
+;;; come from the accepted snapshot and fresh-process trajectory witnesses.
+(extern i64 cycle-native-count i64
+        :real et_tr3_cycle_test_count_v1)
+(extern i64 cycle-core-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 cycle-monotonic-millis
+        :real et_tr3_cycle_test_monotonic_millis_v1)
+(define cycle-args (cdr (cdr trajectory-args)))
+(define cycle-horizon (string->number (car cycle-args)))
+(define cycle-path (trajectory-path "cycle" 1))
+(define cycle-tuple-source (trajectory-tuple 2 1729))
+(define cycle-source (trajectory-create cycle-tuple-source))
+(define cycle-tuple-receiver (trajectory-tuple 2 1729))
+(define cycle-receiver (trajectory-create cycle-tuple-receiver))
+(define cycle-source-record (record-for-shell cycle-source))
+(define cycle-receiver-record (record-for-shell cycle-receiver))
+(define (cycle-save)
+  (check "canonical overwrite SAVE"
+         (tr3-c-snapshot-save-internal!
+           cycle-source cycle-path trajectory-policy
+           (list ':overwrite? #t))))
+
+(define (cycle-native-snapshot)
+  (let ((result (make-vector 35 0)))
+    (let loop ((index 0))
+      (if (= index 35) result
+          (begin
+            (vector-set! result index (cycle-native-count index))
+            (loop (+ index 1)))))))
+(define (cycle-native-live=? left right)
+  (let loop ((indices '(0 1 2 3 4 5 6 24 25 26 28 30 31 32 33)))
+    (if (null? indices) #t
+        (and (= (vector-ref left (car indices))
+                (vector-ref right (car indices)))
+             (loop (cdr indices))))))
+(define (cycle-scheme-live-count states slot)
+  (let loop ((remaining states) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining)
+              (if (eq? (vector-ref (car remaining) slot) 'live)
+                  (+ count 1) count)))))
+(define (cycle-ledger-active-count ledgers slot)
+  (let loop ((remaining ledgers) (count 0))
+    (if (null? remaining) count
+        (let ((phase (vector-ref (car remaining) slot)))
+          (loop (cdr remaining)
+                (if (or (eq? phase 'prepared)
+                        (eq? phase 'prefix)
+                        (eq? phase 'committing))
+                    (+ count 1) count))))))
+(define (cycle-scheme-snapshot)
+  (vector (cycle-scheme-live-count c2-training-state-states 7)
+          (cycle-scheme-live-count o2-states 6)
+          (cycle-ledger-active-count tr3-c-restore-o2-ledgers 7)
+          (cycle-ledger-active-count tr3-c-restore-i2-ledgers 5)
+          (cycle-core-live-images)
+          (list-length (vector-ref tr3-trainers 0) 8)
+          (i2-owned-clone-live-count-internal)))
+(define (cycle-vector=? left right)
+  (let loop ((index 0))
+    (if (= index (vector-length left)) #t
+        (and (= (vector-ref left index) (vector-ref right index))
+             (loop (+ index 1))))))
+(define (cycle-list-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(define (cycle-report label native)
+  (display "TR3-C CYCLE ") (display label)
+  (display " horizon=") (display cycle-horizon)
+  (display " f32_retained_bytes=") (display (vector-ref native 13))
+  (display " o2_dead_states=") (display (vector-ref native 27))
+  (display " p1_tombstones=") (display (vector-ref native 34))
+  (display " c2_scheme_records=")
+  (display (cycle-list-length c2-training-state-states))
+  (display " o2_scheme_records=")
+  (display (cycle-list-length o2-states))
+  (display " i2_plan_records=")
+  (display (cycle-list-length tr3-c-restore-i2-ledgers))
+  (newline))
+
+(check "cycle profile and horizon"
+       (and (= trajectory-accumulation 2)
+            (or (= cycle-horizon 32)
+                (= cycle-horizon 128)
+                (= cycle-horizon 1024)
+                (= cycle-horizon 8192))))
+(trajectory-step cycle-source)
+(check "K source controls" (trajectory-controls? cycle-source-record 1))
+(define cycle-k-image (trajectory-image cycle-source))
+
+;;; Prewarm the P1/C2-owned lazy tensor-shell identities through genuine SAVE
+;;; and LOAD, then establish the receiver at K before measuring counts.
+(cycle-save)
+(check "initial C2 LOAD and joint restore"
+       (tr3-c-checkpoint-restore-internal!
+         cycle-receiver cycle-path trajectory-policy trajectory-report))
+(check "prewarm preserves complete source/receiver image"
+       (and (image=? cycle-k-image (trajectory-image cycle-source))
+            (image=? cycle-k-image (trajectory-image cycle-receiver))
+            (trajectory-controls? cycle-receiver-record 1)))
+
+;;; Accepted pre-seal O2 check is interposed once, then the exact same path
+;;; and receiver retry. This is after native prepare but before live writes.
+(set! tr3-cycle-fail-o2-check? #t)
+(check "one pre-seal failure is recoverable"
+       (transformer-error-at?
+         'internal 'trainer-load-state!
+         (lambda ()
+           (tr3-c-checkpoint-restore-internal!
+             cycle-receiver cycle-path trajectory-policy trajectory-report))))
+(check "injected check was consumed" (not tr3-cycle-fail-o2-check?))
+(check "failure preserves source and receiver exactly"
+       (and (image=? cycle-k-image (trajectory-image cycle-source))
+            (image=? cycle-k-image (trajectory-image cycle-receiver))
+            (trajectory-controls? cycle-receiver-record 1)))
+(check "same receiver retries after aborted restore"
+       (tr3-c-checkpoint-restore-internal!
+         cycle-receiver cycle-path trajectory-policy trajectory-report))
+
+(define cycle-native-before (cycle-native-snapshot))
+(define cycle-scheme-before (cycle-scheme-snapshot))
+(define cycle-arena-before (__arena-used))
+(define cycle-save-millis 0)
+(define cycle-restore-millis 0)
+(cycle-report 'before cycle-native-before)
+(let loop ((index 0))
+  (if (= index cycle-horizon) #t
+      (let ((started (cycle-monotonic-millis)))
+        (cycle-save)
+        (let ((saved (cycle-monotonic-millis)))
+          (check "genuine C2 LOAD and joint restore cycle"
+                 (tr3-c-checkpoint-restore-internal!
+                   cycle-receiver cycle-path trajectory-policy trajectory-report))
+          (let ((restored (cycle-monotonic-millis)))
+            (set! cycle-save-millis (+ cycle-save-millis (- saved started)))
+            (set! cycle-restore-millis
+                  (+ cycle-restore-millis (- restored saved)))))
+        (loop (+ index 1)))))
+(define cycle-arena-after (__arena-used))
+(define cycle-native-after (cycle-native-snapshot))
+(define cycle-scheme-after (cycle-scheme-snapshot))
+(check "native live authorities stay flat"
+       (cycle-native-live=? cycle-native-before cycle-native-after))
+(check "Scheme live authorities and trainer count stay flat"
+       (cycle-vector=? cycle-scheme-before cycle-scheme-after))
+(check "source and receiver remain exact after all cycles"
+       (and (image=? cycle-k-image (trajectory-image cycle-source))
+            (image=? cycle-k-image (trajectory-image cycle-receiver))
+            (trajectory-controls? cycle-source-record 1)
+            (trajectory-controls? cycle-receiver-record 1)))
+(cycle-report 'after cycle-native-after)
+(display "TR3-C CYCLE PASS horizon=") (display cycle-horizon)
+(display " checks=") (display checks)
+(display " arena_delta=") (display (- cycle-arena-after cycle-arena-before))
+(display " save_ms=") (display cycle-save-millis)
+(display " restore_ms=") (display cycle-restore-millis)
+(newline)

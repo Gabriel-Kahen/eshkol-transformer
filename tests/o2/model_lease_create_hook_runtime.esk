@@ -1,0 +1,295 @@
+;;; Trusted-only compiled evidence for the uninstalled O2 model-lease hook.
+;;; This source composes the canonical private O2 sources and links a test-only
+;;; native counter bridge. It is never installed or included in the package.
+(load "i2_wave2_root.esk")
+
+;;; Interpose the provider preflight before loading the O2 suffix so the test
+;;; can prove that hook rejection precedes it. The ordinary path delegates to
+;;; the exact I2 binding.
+(define hook-test-provider-preflight tensor-provider-preflight-internal)
+(define provider-poison-enabled #f)
+(define provider-poison-calls 0)
+(define (tensor-provider-preflight-internal provider major minor)
+  (if provider-poison-enabled
+      (begin
+        (set! provider-poison-calls (+ provider-poison-calls 1))
+        (error "injected provider-preflight failure"))
+      (hook-test-provider-preflight provider major minor)))
+
+(load "o2_wave2_extension.esk")
+
+(extern i64 hook-test-live-count i64
+        :real et_o2_model_lease_hook_test_live_count_v1)
+(extern void hook-test-fail-alloc-after i64
+        :real et_o2_test_fail_alloc_after_v1)
+(extern void hook-test-reset-failpoints
+        :real et_o2_test_reset_failpoints_v1)
+
+(define checks 0)
+(define failures 0)
+
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (set! failures (+ failures 1))
+        (display "O2 MODEL LEASE HOOK FAIL: ")
+        (display label)
+        (newline))))
+
+(define (structured-error? category operation thunk)
+  (guard (caught
+           (#t
+             (and (transformer-error? caught)
+                  (eq? category (transformer-error-category caught))
+                  (eq? operation (transformer-error-operation caught)))))
+    (thunk)
+    #f))
+
+(define (raises? thunk)
+  (guard (caught (#t #t))
+    (thunk)
+    #f))
+
+(define (config)
+  '(transformer-optimizer-config 1 0 () adamw f32 cpu
+    (none) (constant)
+    ((group (("weight")) "3dcccccd" "3f666666" "3f7d70a4"
+            "322bcc77" "00000000"))))
+
+(define module (i2-module-create-internal))
+(define parameter (i2-parameter-create-uniform-internal 4 1065353216))
+(define expected-handle
+  (i2-module-register-parameter-internal! module "weight" parameter))
+(define tree (module-parameters module))
+
+(define (valid-hook-handles? handles)
+  (and (pair? handles)
+       (eq? (car handles) expected-handle)
+       (null? (cdr handles))))
+
+(define hook-mode 0)
+(define (fixed-overlap-check handles)
+  (if (not (valid-hook-handles? handles))
+      2
+      (cond ((= hook-mode 0) 0)
+            ((= hook-mode 1) 1)
+            ((= hook-mode 2) 2)
+            ((= hook-mode 3) #f)
+            ((= hook-mode 4)
+             (error "injected fixed overlap-check failure"))
+            (else (raise #f)))))
+(define (alternate-overlap-check handles) 0)
+
+(define (live-counts)
+  (vector (hook-test-live-count 0)
+          (hook-test-live-count 1)
+          (hook-test-live-count 2)
+          (hook-test-live-count 3)
+          (hook-test-live-count 4)
+          (hook-test-live-count 5)
+          (hook-test-live-count 6)
+          (hook-test-live-count 7)
+          (hook-test-live-count 8)
+          (hook-test-live-count 9)
+          (hook-test-live-count 10)
+          (hook-test-live-count 11)
+          (hook-test-live-count 12)
+          (hook-test-live-count 13)
+          (hook-test-live-count 14)
+          (hook-test-live-count 15)))
+
+(define baseline-counts (live-counts))
+(define uninstalled-optimizer
+  (o2-public-optimizer-create (config) tree))
+(define uninstalled-record
+  (o2-require-optimizer 'optimizer-create uninstalled-optimizer))
+(define after-uninstalled-counts (live-counts))
+(check "standalone hook cell starts uninstalled"
+       (eq? (vector-ref o2-tr3-create-overlap-check-cell-internal 0)
+            'uninstalled))
+(check "uninstalled hook is a no-op for valid optimizer construction"
+       (and (error-object? uninstalled-optimizer)
+            (= (vector-ref after-uninstalled-counts 0)
+               (vector-ref baseline-counts 0))
+            (= (vector-ref after-uninstalled-counts 1)
+               (+ (vector-ref baseline-counts 1) 1))))
+
+(check "nonprocedure install rejects invalid-argument"
+       (structured-error?
+         'invalid-argument 'optimizer-create
+         (lambda ()
+           (o2-install-tr3-create-overlap-check-internal! #f))))
+(check "failed install leaves the cell uninstalled"
+       (eq? (vector-ref o2-tr3-create-overlap-check-cell-internal 0)
+            'uninstalled))
+(check "the fixed lexical closure installs exactly once"
+       (and (o2-install-tr3-create-overlap-check-internal!
+              fixed-overlap-check)
+            (procedure?
+              (vector-ref o2-tr3-create-overlap-check-cell-internal 0))))
+(check "exact reinstall rejects invalid-state"
+       (structured-error?
+         'invalid-state 'optimizer-create
+         (lambda ()
+           (o2-install-tr3-create-overlap-check-internal!
+             fixed-overlap-check))))
+(set! hook-mode 1)
+(check "alternate reinstall rejects without replacing the fixed closure"
+       (and
+         (structured-error?
+           'invalid-state 'optimizer-create
+           (lambda ()
+             (o2-install-tr3-create-overlap-check-internal!
+               alternate-overlap-check)))
+         (= (o2-tr3-create-overlap-check-internal
+              (list expected-handle))
+            1)))
+
+(set! hook-mode 0)
+(define zero-before (live-counts))
+(define installed-zero-optimizer
+  (o2-public-optimizer-create (config) tree))
+(define installed-zero-record
+  (o2-require-optimizer 'optimizer-create installed-zero-optimizer))
+(define zero-after (live-counts))
+(check "hook status zero admits ordinary optimizer construction"
+       (and (error-object? installed-zero-optimizer)
+            (= (vector-ref zero-after 0) (vector-ref zero-before 0))
+            (= (vector-ref zero-after 1) (+ (vector-ref zero-before 1) 1))
+            (= (- (vector-ref zero-after 9) (vector-ref zero-before 9))
+               (- (vector-ref after-uninstalled-counts 9)
+                  (vector-ref baseline-counts 9)))
+            (= (- (vector-ref zero-after 15) (vector-ref zero-before 15))
+               (- (vector-ref after-uninstalled-counts 15)
+                  (vector-ref baseline-counts 15)))))
+(check "installed zero preserves uninstalled predecessor result fields"
+       (and (equal? (vector-ref installed-zero-record 2)
+                    (vector-ref uninstalled-record 2))
+            (equal? (vector-ref installed-zero-record 3)
+                    (vector-ref uninstalled-record 3))
+            (equal? (vector-ref installed-zero-record 4)
+                    (vector-ref uninstalled-record 4))
+            (eq? (car (vector-ref installed-zero-record 5))
+                 (car (vector-ref uninstalled-record 5)))
+            (null? (cdr (vector-ref installed-zero-record 5)))
+            (= (o2-optimizer-completed-updates-internal
+                 installed-zero-optimizer) 0)
+            (= (o2-optimizer-completed-updates-internal
+                 uninstalled-optimizer) 0)))
+
+(set! hook-mode 1)
+(define one-source-head o2-optimizers)
+(define one-before (live-counts))
+(check "hook status one rejects optimizer-create as invalid-state"
+       (structured-error?
+         'invalid-state 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(define one-after (live-counts))
+(check "status-one rejection publishes no source or native owner"
+       (and (eq? o2-optimizers one-source-head)
+            (equal? one-after one-before)))
+
+(define saved-node-limit o2-state-max-data-nodes)
+(set! o2-state-max-data-nodes 0)
+(set! hook-mode 1)
+(check "status one rejects before projection-budget validation"
+       (structured-error?
+         'invalid-state 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(set! hook-mode 0)
+(check "projection poison is effective after status-zero admission"
+       (structured-error?
+         'invalid-argument 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(set! o2-state-max-data-nodes saved-node-limit)
+
+(set! provider-poison-enabled #t)
+(set! hook-mode 1)
+(check "status one rejects before provider preflight"
+       (and
+         (structured-error?
+           'invalid-state 'optimizer-create
+           (lambda () (o2-public-optimizer-create (config) tree)))
+         (= provider-poison-calls 0)))
+(set! hook-mode 0)
+(check "provider poison is effective after status-zero admission"
+       (and
+         (raises?
+           (lambda () (o2-public-optimizer-create (config) tree)))
+         (= provider-poison-calls 1)))
+(set! provider-poison-enabled #f)
+
+(define builder-source-head o2-optimizers)
+(define builder-before (live-counts))
+(hook-test-fail-alloc-after 0)
+(set! hook-mode 1)
+(check "status one rejects before the armed native builder failpoint"
+       (structured-error?
+         'invalid-state 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "pre-builder rejection preserves every live count"
+       (and (eq? o2-optimizers builder-source-head)
+            (equal? (live-counts) builder-before)))
+(set! hook-mode 0)
+(check "status zero reaches the still-armed native builder failpoint"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "failed builder publishes no owner, moment, or source record"
+       (and (eq? o2-optimizers builder-source-head)
+            (equal? (live-counts) builder-before)))
+(hook-test-reset-failpoints)
+
+(set! hook-mode 2)
+(define invalid-status-head o2-optimizers)
+(define invalid-status-counts (live-counts))
+(check "invalid hook status maps to internal"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "invalid hook status publishes nothing"
+       (and (eq? o2-optimizers invalid-status-head)
+            (equal? (live-counts) invalid-status-counts)))
+
+(set! hook-mode 3)
+(define malformed-status-head o2-optimizers)
+(define malformed-status-counts (live-counts))
+(check "malformed hook status maps to internal"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "malformed hook status publishes nothing"
+       (and (eq? o2-optimizers malformed-status-head)
+            (equal? (live-counts) malformed-status-counts)))
+
+(set! hook-mode 4)
+(define raised-head o2-optimizers)
+(define raised-counts (live-counts))
+(check "foreign hook raise maps to internal"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "foreign hook raise publishes nothing"
+       (and (eq? o2-optimizers raised-head)
+            (equal? (live-counts) raised-counts)))
+
+(set! hook-mode 5)
+(define raised-false-head o2-optimizers)
+(define raised-false-counts (live-counts))
+(check "raise-false hook maps to internal"
+       (structured-error?
+         'internal 'optimizer-create
+         (lambda () (o2-public-optimizer-create (config) tree))))
+(check "raise-false hook publishes nothing"
+       (and (eq? o2-optimizers raised-false-head)
+            (equal? (live-counts) raised-false-counts)))
+
+(if (= failures 0)
+    (begin
+      (display "O2 MODEL LEASE CREATE HOOK PASS: ")
+      (display checks)
+      (display " checks")
+      (newline)
+      (exit 0))
+    (exit 1))

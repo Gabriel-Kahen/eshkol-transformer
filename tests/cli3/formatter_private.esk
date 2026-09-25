@@ -1,0 +1,75 @@
+;;; Private formatter boundary fixture. Loaded after the production CLI3 root.
+
+(define (cli3-formatter-fixture-repeat text count)
+  (let loop ((remaining count) (parts '()))
+    (if (= remaining 0) (cli3-concat parts)
+        (loop (- remaining 1) (cons text parts)))))
+
+(define (cli3-formatter-fixture-check label condition)
+  (if (not condition)
+      (exit 1)))
+
+(define cli3-formatter-fixture-smile "🙂")
+(define cli3-formatter-fixture-smile-escape "\\ud83d\\ude42")
+
+(define cli3-formatter-fixture-exact-text
+  (string-append (make-string 238 #\a)
+                 cli3-formatter-fixture-smile "bbbb"))
+(define cli3-formatter-fixture-exact-json
+  (string-append "\"" (make-string 238 #\a)
+                 cli3-formatter-fixture-smile-escape "bbbb\""))
+(define cli3-formatter-fixture-exact-rendered
+  (cli3-json-string-limit cli3-formatter-fixture-exact-text 256))
+(cli3-formatter-fixture-check
+ "encoded payload plus quotes exactly at 256 is not truncated"
+ (and (= (string-length cli3-formatter-fixture-exact-rendered) 256)
+      (string=? cli3-formatter-fixture-exact-rendered
+                cli3-formatter-fixture-exact-json)))
+
+(define cli3-formatter-fixture-over-text
+  (string-append (make-string 239 #\a)
+                 cli3-formatter-fixture-smile "bbbb"))
+(define cli3-formatter-fixture-over-json
+  (string-append "\"" (make-string 239 #\a)
+                 cli3-formatter-fixture-smile-escape "...\""))
+(define cli3-formatter-fixture-over-rendered
+  (cli3-json-string-limit cli3-formatter-fixture-over-text 256))
+(cli3-formatter-fixture-check
+ "257-byte JSON retains a complete supplementary-plane escape"
+ (and (= (string-length cli3-formatter-fixture-over-rendered) 256)
+      (string=? cli3-formatter-fixture-over-rendered
+                cli3-formatter-fixture-over-json)))
+
+(define cli3-formatter-fixture-key-text
+  (string-append
+   (cli3-formatter-fixture-repeat "\"" 42)
+   (make-string 170 #\a)))
+(define cli3-formatter-fixture-key
+  (string->symbol cli3-formatter-fixture-key-text))
+(define cli3-formatter-fixture-key-json
+  (string-append
+   (cli3-formatter-fixture-repeat "\\\"" 42)
+   (make-string 170 #\a)))
+(define cli3-formatter-fixture-key-expected
+  (string-append "{\"" cli3-formatter-fixture-key-json "\":1}"))
+(define cli3-formatter-fixture-key-rendered
+  (cli3-json-details (list (list cli3-formatter-fixture-key 1))))
+(cli3-formatter-fixture-check
+ "detail key whose encoded form plus quotes is 256 is retained"
+ (and (= (string-length cli3-formatter-fixture-key-json) 254)
+      (string=? cli3-formatter-fixture-key-rendered
+                cli3-formatter-fixture-key-expected)))
+
+(define cli3-formatter-fixture-over-key-x
+  (string->symbol (string-append cli3-formatter-fixture-key-text "x")))
+(define cli3-formatter-fixture-over-key-y
+  (string->symbol (string-append cli3-formatter-fixture-key-text "y")))
+(define cli3-formatter-fixture-collision-rendered
+  (cli3-json-details
+   (list (list cli3-formatter-fixture-over-key-x 2)
+         (list cli3-formatter-fixture-key 1)
+         (list cli3-formatter-fixture-over-key-y 3))))
+(cli3-formatter-fixture-check
+ "257-byte detail keys are omitted without a truncation collision"
+ (string=? cli3-formatter-fixture-collision-rendered
+           cli3-formatter-fixture-key-expected))

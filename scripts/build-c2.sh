@@ -4,9 +4,14 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp; do
+for command in ar cmp sha256sum; do
   require_command "${command}"
 done
+
+legacy_facade="${PROJECT_ROOT}/tests/c2/legacy_facades/transformer/trainer.esk"
+[[ "$(sha256sum "${legacy_facade}" | awk '{print $1}')" == \
+   b2f3818cc7645a9accf397479e3e4f859d73b635e39752310e76cd067921b9a8 ]] || \
+  die "versioned C2 trainer facade changed"
 
 artifact_dir="${1:-$(project_build_dir)/c2}"
 parent_dir="$(dirname -- "${artifact_dir}")"
@@ -39,5 +44,8 @@ mv "${temporary_dir}/c2_wave2.o.evidence" \
 mv -f "${temporary_dir}/c2_wave2.o" "${artifact_dir}/c2_wave2.o"
 mv -f "${temporary_dir}/libeshkol_transformer_wave2.a" \
   "${artifact_dir}/libeshkol_transformer_wave2.a"
+mkdir -p "${artifact_dir}/facades/transformer"
+cp "${legacy_facade}" \
+  "${artifact_dir}/facades/transformer/trainer.esk"
 printf 'built source-composed C2 successor aggregate: %s\n' \
   "${artifact_dir}/libeshkol_transformer_wave2.a"

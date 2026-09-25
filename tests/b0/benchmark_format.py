@@ -17,8 +17,8 @@ REPORT_FORMAT = "eshkol-benchmark-report"
 FORMAT_VERSION = 1
 MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
 MAX_JSON_DEPTH = 32
-CANONICAL_UPSTREAM_REPOSITORY = "https://github.com/tsotchke/eshkol.git"
-CANONICAL_UPSTREAM_COMMIT = "90cbd7130f47b8184bcc77b8d5c1b0026da980de"
+CANONICAL_UPSTREAM_REPOSITORY = "https://github.com/Gabriel-Kahen/eshkol.git"
+CANONICAL_UPSTREAM_COMMIT = "81298b4a9608fb92eb6f351a2eabd8392da7d9ef"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")

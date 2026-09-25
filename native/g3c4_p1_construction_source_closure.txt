@@ -1,0 +1,4 @@
+internal/p1/lib/transformer/module.esk
+native/g3c4_p1_construction_extension.esk
+tests/p1/providers/p1_test/tensor_provider.esk
+tests/p1/prepared_construction_test.esk

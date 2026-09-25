@@ -1,0 +1,297 @@
+;;; Installed X1/T2/D1/D2/trainer facet caller. Remaining operands use
+;;; test-only same-package boxed entries.
+(require transformer.config)
+(require transformer.data)
+(require transformer.tokenizer)
+(require transformer.trainer)
+(require transformer.error_consumer)
+
+(extern void m3t-initializer ptr ptr
+        :real et_e1b_public_m3t_initializer_state_v1)
+(extern void m3t-model ptr ptr ptr :real et_e1b_public_m3t_model_create_v1)
+(extern void p1-parameters ptr ptr
+        :real et_e1b_public_p1_module_parameters_v1)
+(extern void p1-paths ptr ptr
+        :real et_e1b_public_p1_parameter_tree_paths_v1)
+(extern void p1-handle ptr ptr ptr
+        :real et_e1b_public_p1_parameter_tree_handle_v1)
+(extern void o2-create ptr ptr ptr
+        :real et_e1b_public_o2_optimizer_create_v1)
+
+(define (diagnostic-initializer-state seed)
+  (let ((output (vector #f)))
+    (m3t-initializer (vector seed) output)
+    (vector-ref output 0)))
+(define (diagnostic-model-create resolved initializer)
+  (let ((output (vector #f)))
+    (m3t-model (vector resolved) (vector initializer) output)
+    (vector-ref output 0)))
+(define (module-parameters model)
+  (let ((output (vector #f)))
+    (p1-parameters (vector model) output)
+    (vector-ref output 0)))
+(define (parameter-tree-paths tree)
+  (let ((output (vector #f)))
+    (p1-paths (vector tree) output)
+    (vector-ref output 0)))
+(define (parameter-tree-handle tree path)
+  (let ((output (vector #f)))
+    (p1-handle (vector tree) (vector path) output)
+    (vector-ref output 0)))
+(define (optimizer-create config tree)
+  (let ((output (vector #f)))
+    (o2-create (vector config) (vector tree) output)
+    (vector-ref output 0)))
+
+(define (check label success)
+  (if success #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (let ((caught #f))
+    (guard (raised
+             (#t (set! caught
+                        (and (transformer-error? raised)
+                             (eq? (transformer-error-category raised)
+                                  category)
+                             (eq? (transformer-error-operation raised)
+                                  operation)))))
+      (thunk))
+    (check label caught)))
+(define (expect-release-error label category thunk)
+  (let ((caught #f))
+    (guard (raised
+             (#t
+               (let ((cause
+                       (if (transformer-error? raised)
+                           (transformer-error-cause raised) #f)))
+                 (set! caught
+                   (and (transformer-error? raised)
+                        (eq? (transformer-error-category raised) category)
+                        (eq? (transformer-error-operation raised)
+                             'trainer-release!)
+                        ;; A private unenroll operation cannot escape through
+                        ;; the public error or its cause accessor.
+                        (not (and (transformer-error? cause)
+                                  (eq? (transformer-error-operation cause)
+                                       'tr3-lease-unenroll-internal!))))))))
+      (thunk))
+    (check label caught)))
+
+(define (seen-handle? handle seen)
+  (if (null? seen) #f
+      (or (eq? handle (car seen))
+          (seen-handle? handle (cdr seen)))))
+(define (reverse-list source)
+  (let loop ((remaining source) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+(define (unique-paths tree)
+  (let loop ((remaining (parameter-tree-paths tree))
+             (seen '()) (result '()))
+    (if (null? remaining) (reverse-list result)
+        (let ((handle (parameter-tree-handle tree (car remaining))))
+          (if (seen-handle? handle seen)
+              (loop (cdr remaining) seen result)
+              (loop (cdr remaining) (cons handle seen)
+                    (cons (car remaining) result)))))))
+(define (list-length value)
+  (if (null? value) 0 (+ 1 (list-length (cdr value)))))
+(define (bytes-equal? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define corpus-directory (car (cdr (command-line))))
+(expect-error "malformed config keeps X1 public operation"
+              'invalid-argument 'config-parse
+  (lambda () (config-parse "{")))
+(define parsed
+  (config-parse
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}"))
+(define resolved
+  (config-resolve parsed '()))
+(check "installed X1 validates authentic resolved value"
+       (config-validate resolved))
+(check "installed X1 ref supplies initializer seed"
+       (= (config-ref resolved 'run.seed) 1729))
+(define canonical (config-canonical resolved))
+(define fingerprint (config-fingerprint resolved))
+(check "installed X1 canonical is stable"
+       (and (string? canonical)
+            (string=? canonical (config-canonical resolved))))
+(check "installed X1 fingerprint is stable"
+       (and (string? fingerprint)
+            (string=? fingerprint (config-fingerprint resolved))))
+(expect-error "forged X1 resolved value rejected"
+              'invalid-argument 'config-validate
+  (lambda () (config-validate (vector 'forged))))
+(expect-error "unknown X1 reference key rejected"
+              'invalid-argument 'config-ref
+  (lambda () (config-ref resolved 'unknown)))
+(expect-error "unresolved X1 value cannot canonicalize"
+              'invalid-argument 'config-canonical
+  (lambda () (config-canonical parsed)))
+(expect-error "unresolved X1 value cannot fingerprint"
+              'invalid-argument 'config-fingerprint
+  (lambda () (config-fingerprint parsed)))
+(define tokenizer (tokenizer-byte resolved))
+(check "installed T2 byte vocabulary" (= (tokenizer-vocab-size tokenizer) 256))
+(check "installed T2 byte fingerprint"
+       (string=? (tokenizer-fingerprint tokenizer)
+                 "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"))
+(define sample-bytes (bytevector 0 65 0 255))
+(define encoded (tokenizer-encode tokenizer sample-bytes))
+(check "installed T2 encode/decode round trip"
+       (bytes-equal? (tokenizer-decode tokenizer encoded) sample-bytes))
+(expect-error "byte tokenizer has no named special token"
+              'invalid-argument 'tokenizer-special-token-id
+  (lambda () (tokenizer-special-token-id tokenizer "absent")))
+(expect-error "forged T2 ID carrier rejected"
+              'invalid-argument 'tokenizer-decode
+  (lambda () (tokenizer-decode tokenizer #(1 2 3))))
+(expect-error "forged C1 policy rejects tokenizer load"
+              'invalid-argument 'tokenizer-load
+  (lambda ()
+    (tokenizer-load (string-append corpus-directory "/unused-tokenizer.t1")
+                    (vector 'forged-policy))))
+(expect-error "forged C1 policy rejects tokenizer save"
+              'invalid-argument 'tokenizer-save!
+  (lambda ()
+    (tokenizer-save! tokenizer
+                     (string-append corpus-directory "/unused-tokenizer.t1")
+                     (vector 'forged-policy))))
+(define writer-summary
+  (token-corpus-write! corpus-directory (tokenizer-fingerprint tokenizer)
+                       (tokenizer-vocab-size tokenizer) 4
+                       '(0 1 2 3 4 5 6 7 8 9 10 11 12 13)))
+(define validated-summary
+  (token-corpus-validate corpus-directory 1048576 1048576 65536))
+(check "installed D1 summary shard count"
+       (and (= (token-corpus-summary-shard-count writer-summary) 4)
+            (= (token-corpus-summary-shard-count validated-summary) 4)))
+(check "installed D1 summary total tokens"
+       (= (token-corpus-summary-total-tokens validated-summary) 14))
+(check "installed D1 summary vocabulary"
+       (= (token-corpus-summary-vocab-size validated-summary) 256))
+(check "installed D1 summary shard limit"
+       (= (token-corpus-summary-shard-token-limit validated-summary) 4))
+(check "installed D1 summary fingerprint"
+       (string=? (token-corpus-summary-tokenizer-fingerprint validated-summary)
+                 (tokenizer-fingerprint tokenizer)))
+(check "installed D1 summary has shard bytes"
+       (> (token-corpus-summary-total-shard-bytes validated-summary) 0))
+(define (dataset-options)
+    (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define probe-dataset (token-dataset-open (dataset-options) tokenizer))
+(define start-cursor (token-dataset-cursor probe-dataset))
+(check "installed D2 cursor is detached bytes"
+       (and (bytevector? start-cursor)
+            (bytes-equal? start-cursor (token-dataset-cursor probe-dataset))
+            (not (eq? start-cursor (token-dataset-cursor probe-dataset)))))
+(define probe-batch (token-dataset-next-batch probe-dataset))
+(check "installed D2 live batch" (and (procedure? probe-batch)
+                                       (not (token-dataset-end? probe-batch))
+                                       (token-batch-validate probe-batch)))
+(check "installed D2 batch accessors stable"
+       (and (eq? (token-batch-inputs probe-batch)
+                 (token-batch-inputs probe-batch))
+            (eq? (token-batch-targets probe-batch)
+                 (token-batch-targets probe-batch))
+            (eq? (token-batch-loss-mask probe-batch)
+                 (token-batch-loss-mask probe-batch))))
+(expect-error "live D2 batch rejects seek"
+              'invalid-state 'token-dataset-seek!
+  (lambda () (token-dataset-seek! probe-dataset start-cursor)))
+(expect-error "wrong-kind D2 batch accessor"
+              'invalid-argument 'token-batch-inputs
+  (lambda () (token-batch-inputs (vector 'forged))))
+(expect-error "wrong-kind D2 batch release"
+              'invalid-argument 'token-batch-release!
+  (lambda () (token-batch-release! (vector 'forged))))
+(expect-error "forged D2 dataset cursor"
+              'invalid-argument 'token-dataset-cursor
+  (lambda () (token-dataset-cursor (vector 'forged))))
+(check "installed D2 batch release" (token-batch-release! probe-batch))
+(expect-error "released D2 batch is stale"
+              'invalid-state 'token-batch-validate
+  (lambda () (token-batch-validate probe-batch)))
+(check "installed D2 seek after release"
+       (token-dataset-seek! probe-dataset start-cursor))
+(check "installed D2 idempotent batch release"
+       (token-batch-release! probe-batch))
+(check "installed D2 close" (token-dataset-close! probe-dataset))
+(define failure-dataset (token-dataset-open (dataset-options) tokenizer))
+(define model
+  (with-region ('tr3-public-model 65536)
+    (diagnostic-model-create
+      resolved (diagnostic-initializer-state (config-ref resolved 'run.seed)))))
+(define tree (module-parameters model))
+(define paths (unique-paths tree))
+(check "exact fixed unique parameter set" (= (list-length paths) 14))
+(define optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group paths "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    tree))
+
+(expect-error "forged model rejects before enrollment"
+              'invalid-argument 'trainer-create
+  (lambda ()
+    (trainer-create resolved tokenizer failure-dataset
+                    (vector 'forged) optimizer)))
+(check "failed create leaves D2 child caller-owned"
+       (token-dataset-close! failure-dataset))
+(define dataset (token-dataset-open (dataset-options) tokenizer))
+(define trainer (trainer-create resolved tokenizer dataset model optimizer))
+(check "genuine trainer shell" (and (vector? trainer)
+                                    (= (vector-length trainer) 1)))
+(expect-error "second lease overlaps retained five receivers"
+              'invalid-state 'trainer-create
+  (lambda ()
+    (trainer-create resolved tokenizer dataset model optimizer)))
+(expect-release-error "forged release"
+                      'invalid-argument
+  (lambda () (trainer-release! (vector 'forged))))
+(expect-release-error "copied shell release"
+                      'invalid-argument
+  (lambda () (trainer-release! (vector-copy trainer))))
+(expect-error "forged release preserves lease"
+              'invalid-state 'trainer-create
+  (lambda ()
+    (trainer-create resolved tokenizer dataset model optimizer)))
+(define live-batch (token-dataset-next-batch dataset))
+(check "genuine D2 batch is live" (procedure? live-batch))
+(expect-release-error "live batch rejects release"
+                      'invalid-state
+  (lambda () (trainer-release! trainer)))
+(expect-error "busy release preserves lease"
+              'invalid-state 'trainer-create
+  (lambda ()
+    (trainer-create resolved tokenizer dataset model optimizer)))
+(check "release live batch" (token-batch-release! live-batch))
+(check "idle trainer release" (trainer-release! trainer))
+(expect-release-error "repeat release tombstone"
+                      'invalid-argument
+  (lambda () (trainer-release! trainer)))
+(define successor (trainer-create resolved tokenizer dataset model optimizer))
+(check "re-lease returns distinct shell" (not (eq? trainer successor)))
+(expect-release-error "old shell cannot release successor"
+                      'invalid-argument
+  (lambda () (trainer-release! trainer)))
+(check "successor releases" (trainer-release! successor))
+(check "released D2 receiver remains caller-owned"
+       (token-dataset-close! dataset))
+(expect-error "C2 detached-state release retains public error mapping"
+              'invalid-argument 'trainer-state-release!
+  (lambda () (trainer-state-release! (vector 'forged))))
+(display "TR3-PUBLIC-D2-FACET-PASS")
+(newline)

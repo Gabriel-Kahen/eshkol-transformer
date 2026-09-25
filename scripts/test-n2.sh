@@ -49,7 +49,7 @@ nm -u "${n2_artifact_dir}/n2_primitives_provider.o" | \
   >"${n2_tmp}/undefined.txt"
 cmp "${PROJECT_ROOT}/tests/n2/expected/n2_allowed_undefined_symbols.txt" \
   "${n2_tmp}/undefined.txt"
-rg -l 'ET_N2_PRIMITIVES_ABI|et_n2_kernel_provider_v1' \
+rg -l -g '*.c' -g '*.h' 'ET_N2_PRIMITIVES_ABI|et_n2_kernel_provider_v1' \
   "${PROJECT_ROOT}/include" "${PROJECT_ROOT}/native" | \
   sed "s#^${PROJECT_ROOT}/##" | LC_ALL=C sort \
   >"${n2_tmp}/source-closure.txt"

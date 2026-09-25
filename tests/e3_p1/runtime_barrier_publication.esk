@@ -1,0 +1,37 @@
+;; Compiles the actual vector-set! root-holder publication path. This fixture
+;; diagnoses the runtime only; frame/model fields are inert, with no admission.
+(extern i64 barrier-begin :real e3_p1_barrier_probe_begin)
+(extern void barrier-end :real e3_p1_barrier_probe_end)
+(define holder (vector #f))
+(define stage -1)
+(define regional-count
+  (with-region ('barrier-probe 4096)
+    (let* ((token (vector #f))
+           (nodes (make-vector 17 #f))
+           (saved (make-vector 17 #f))
+           (heads (make-vector 17 #f))
+           (record (vector token 0 #f #f #f nodes saved heads 0))
+           (next (cons record '())))
+      (set! stage (barrier-begin))
+      (vector-set! holder 0 next)
+      ;; Every comparison/dereference is before region destruction.
+      (let* ((canonical (car (vector-ref holder 0)))
+             (count (+ (if (eq? (vector-ref holder 0) next) 1 0)
+                       (if (eq? canonical record) 1 0)
+                       (if (eq? (vector-ref canonical 0) token) 1 0)
+                       (if (eq? (vector-ref canonical 5) nodes) 1 0)
+                       (if (eq? (vector-ref canonical 6) saved) 1 0)
+                       (if (eq? (vector-ref canonical 7) heads) 1 0))))
+        (if (>= stage 0) (vector-set! holder 0 #f))
+        (barrier-end)
+        count))))
+(display "aot_stage=") (display stage)
+(display " regional_edges=") (display regional-count) (newline)
+(if (= stage -1)
+    (begin
+      (if (not (= regional-count 0)) (exit 2))
+      ;; Successful canonical graph only; failed graphs were retired before pop.
+      (if (not (= (vector-length (car (vector-ref holder 0))) 9)) (exit 2))
+      (if (not (= (vector-length (vector-ref (car (vector-ref holder 0)) 5)) 17)) (exit 2))
+      (display "aot_poisoned_survival=1") (newline))
+    (if (> regional-count 0) (exit 1)))

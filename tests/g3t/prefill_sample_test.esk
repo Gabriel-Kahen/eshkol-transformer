@@ -1,0 +1,472 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+
+(extern i64 g3t-test-logit-bits ptr i64 :real et_g3t_test_logit_bits_v1)
+(extern i64 g3t-test-sample-token ptr :real et_g3t_test_sample_token_v1)
+(extern i64 g3t-test-rng-word ptr i64 :real et_g3t_test_rng_word_v1)
+(extern i64 g3t-test-successor-word ptr i64
+        :real et_g3t_test_successor_word_v1)
+(extern i64 g3t-test-greedy-argmax ptr
+        :real et_g3t_test_greedy_argmax_v1)
+(extern i64 g3t-test-frame-logit-bits ptr i64
+        :real et_g3t_test_frame_logit_bits_v1)
+(extern i64 g3t-test-cache-length ptr
+        :real et_g3t_test_cache_length_v1)
+(extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
+(extern i64 g3t-test-cache-empty ptr :real et_g3t_test_cache_empty_v1)
+(extern i64 g3t-test-fail-a2-after i64 :real et_g3t_test_fail_a2_after_v1)
+(extern i64 g3t-test-fail-i1-after i64 :real et_g3t_test_fail_i1_after_v1)
+(extern i64 g3t-test-output-word ptr i64 :real et_g3t_test_output_word_v1)
+(extern ptr g3t-test-output-borrow-begin ptr
+        :real et_g3t_test_output_borrow_begin_v1)
+(extern i64 g3t-test-output-borrow-end ptr
+        :real et_g3t_test_output_borrow_end_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-T prefill/sample FAIL: ")
+             (display label) (newline) (exit 1))))
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3t-prefill-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(define tokenizer (t1-private-tokenizer-byte config))
+(check "eval" (module-eval! model))
+(define generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define native (vector-ref (g3t-generator-find generator 'g3t-prefill-test) 3))
+(define input (g3t-native-input-from-token 65))
+(check "input" (not (null? input)))
+(check "sample before acquire rejected" (not (= 0 (g3t-native-sample native))))
+(check "acquire" (= 0 (g3t-native-call-acquire native 2)))
+(check "pins" (= 14 (g3t-test-pin-count native)))
+(check "sample before prefill rejected" (not (= 0 (g3t-native-sample native))))
+(define output (g3t-native-output-reserve native 1))
+(check "reserved output" (not (null? output)))
+(check "reserved exact I1 and empty readiness"
+       (and (= 1 (g3t-test-output-word output 5))
+            (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 1))
+            (= 0 (g3t-test-output-word output 2))))
+(check "numeric prepare before prefill rejected"
+       (not (= 0 (g3t-native-output-prepare native output))))
+(check "begin" (= 0 (g3t-native-frame-begin native input 1)))
+(check "commit before roles rejected"
+       (not (= 0 (g3t-native-frame-commit native))))
+(check "out of order role rejected" (not (= 0 (g3t-native-role-step native 1))))
+(check "release reserved output rejected" (not (= 0 (g3t-native-output-release output))))
+(check "release input" (= 0 (g3t-native-tensor-release input)))
+(check "role 0" (= 0 (g3t-native-role-step native 0)))
+(check "role 1" (= 0 (g3t-native-role-step native 1)))
+(check "role 2" (= 0 (g3t-native-role-step native 2)))
+(check "role 3" (= 0 (g3t-native-role-step native 3)))
+(check "role 4" (= 0 (g3t-native-role-step native 4)))
+(check "role 5" (= 0 (g3t-native-role-step native 5)))
+(check "role 6" (= 0 (g3t-native-role-step native 6)))
+(check "role 7" (= 0 (g3t-native-role-step native 7)))
+(check "role 8" (= 0 (g3t-native-role-step native 8)))
+(check "role 9" (= 0 (g3t-native-role-step native 9)))
+(check "role 10" (= 0 (g3t-native-role-step native 10)))
+(check "role 11" (= 0 (g3t-native-role-step native 11)))
+(check "role 12" (= 0 (g3t-native-role-step native 12)))
+(check "role 13" (= 0 (g3t-native-role-step native 13)))
+(check "role 14" (= 0 (g3t-native-role-step native 14)))
+(check "role 15" (= 0 (g3t-native-role-step native 15)))
+(check "role 16" (= 0 (g3t-native-role-step native 16)))
+(check "role 17" (= 0 (g3t-native-role-step native 17)))
+(check "role 18" (= 0 (g3t-native-role-step native 18)))
+(check "role 19" (= 0 (g3t-native-role-step native 19)))
+(check "role 20" (= 0 (g3t-native-role-step native 20)))
+(check "commit before prepare rejected"
+       (not (= 0 (g3t-native-frame-commit native))))
+(check "prepare" (= 0 (g3t-native-frame-prepare native #f)))
+(check "commit" (= 0 (g3t-native-frame-commit native)))
+(check "sample" (= 0 (g3t-native-sample native)))
+(check "numeric prepare before token frame rejected"
+       (not (= 0 (g3t-native-output-prepare native output))))
+(check "duplicate sample rejected" (not (= 0 (g3t-native-sample native))))
+(define token (g3t-test-sample-token native))
+(check "sample token byte" (and (>= token 0) (< token 256)))
+(check "G3-S greedy equals independent argmax"
+       (= token (g3t-test-greedy-argmax native)))
+(define prefill-bits (make-vector 256 0))
+(let capture ((index 0))
+  (if (= index 256) #t
+      (begin
+        (vector-set! prefill-bits index (g3t-test-logit-bits native index))
+        (capture (+ index 1)))))
+(check "nonzero numerical logits"
+       (let scan ((index 0))
+         (if (= index 256) #f
+             (or (not (= (vector-ref prefill-bits index) 0))
+                 (scan (+ index 1))))))
+(check "rng retained before token commit"
+       (and (= 1 (g3t-test-rng-word native 0))
+            (= 1729 (g3t-test-rng-word native 1))
+            (= 0 (g3t-test-rng-word native 2))
+            (= 0 (g3t-test-rng-word native 3))))
+(check "prompt cache length one" (= 1 (g3t-test-cache-length native)))
+(check "decode rejects a supplied input"
+       (not (= 0 (g3t-native-frame-begin native input 2))))
+(check "decode rejects prefill kind after commit"
+       (not (= 0 (g3t-native-frame-begin native input 1))))
+(check "sampled token frame begin"
+       (= 0 (g3t-native-frame-begin native #f 2)))
+(check "duplicate sampled frame rejected"
+       (not (= 0 (g3t-native-frame-begin native #f 2))))
+(check "sampled role order enforced"
+       (not (= 0 (g3t-native-role-step native 1))))
+(check "sampled frame cannot commit before roles"
+       (not (= 0 (g3t-native-frame-commit native))))
+(define (token-roles context)
+  (let step ((ordinal 0))
+    (if (= ordinal 21) #t
+        (and (= 0 (g3t-native-role-step context ordinal))
+             (step (+ ordinal 1))))))
+(check "all sampled-token roles" (token-roles native))
+(define token-frame-bits (make-vector 256 0))
+(let capture ((index 0))
+  (if (= index 256) #t
+      (begin
+        (vector-set! token-frame-bits index
+                     (g3t-test-frame-logit-bits native index))
+        (capture (+ index 1)))))
+(check "append remains speculative before publication"
+       (= -1 (g3t-test-cache-length native)))
+(check "wrong context rejected before output writes"
+       (not (= 0 (g3t-native-output-prepare output output))))
+(define output-borrow (g3t-test-output-borrow-begin output))
+(check "output I1 borrow opened" (not (null? output-borrow)))
+(check "borrowed ID copy rejects atomically"
+       (and (not (= 0 (g3t-native-output-prepare native output)))
+            (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 1))
+            (= 0 (g3t-test-output-word output 2))))
+(check "borrow blocks abort before frame mutation"
+       (not (= 0 (g3t-native-call-abort native))))
+(check "borrow released" (= 0 (g3t-test-output-borrow-end output-borrow)))
+(check "numeric output preparation" (= 0 (g3t-native-output-prepare native output)))
+(check "numeric output copies token, length, cache length, RNG"
+       (and (= 1 (g3t-test-output-word output 0))
+            (= 1 (g3t-test-output-word output 1))
+            (= 2 (g3t-test-output-word output 2))
+            (= token (g3t-test-output-word output 6))
+            (= (g3t-test-successor-word native 0)
+               (g3t-test-output-word output 7))
+            (= (g3t-test-successor-word native 3)
+               (g3t-test-output-word output 10))
+            (= 0 (g3t-test-output-word output 3))
+            (= 0 (g3t-test-output-word output 4))))
+(check "numeric preparation is once-only"
+       (not (= 0 (g3t-native-output-prepare native output))))
+(check "sampled frame prepare waits for output readiness"
+       (not (= 0 (g3t-native-frame-prepare native #f))))
+(check "sampled frame commit gated on output publication"
+       (not (= 0 (g3t-native-frame-commit native))))
+(check "abort" (= 0 (g3t-native-call-abort native)))
+(check "pins drained" (= 0 (g3t-test-pin-count native)))
+(check "prompt retained without append" (= 1 (g3t-test-cache-length native)))
+(check "output tombstone" (= 0 (g3t-native-output-release output)))
+(check "abort scrubs unpublished output"
+       (and (= 0 (g3t-test-output-word output 0))
+            (= 0 (g3t-test-output-word output 1))
+            (= 0 (g3t-test-output-word output 2))
+            (= 0 (g3t-test-output-word output 5))
+            (= 0 (g3t-test-output-word output 10))))
+(check "second initial prefill unavailable"
+       (not (= 0 (g3t-native-call-acquire native 2))))
+(check "close" (g3t-generator-close! generator))
+(define reference-input (g3t-checked-m3t-input-create))
+(check "reference input"
+       (g3t-checked-m3t-input-copy! reference-input (list 65 token)))
+(define reference-workspace (g3t-checked-m3t-workspace-create model))
+(define reference-logits (g3t-checked-m3t-logits-create))
+(check "reference begin" (g3t-checked-m3t-workspace-begin!
+                            reference-workspace reference-input))
+(check "reference ET" (g3t-checked-m3t-embedding! reference-workspace 'token))
+(check "reference EP" (g3t-checked-m3t-embedding! reference-workspace 'position))
+(check "reference X" (g3t-checked-m3t-residual! reference-workspace 'embeddings))
+(check "reference N1" (g3t-checked-m3t-layer-norm! reference-workspace 'block-input))
+(check "reference QT" (g3t-checked-m3t-linear! reference-workspace 'q))
+(check "reference KT" (g3t-checked-m3t-linear! reference-workspace 'k))
+(check "reference VT" (g3t-checked-m3t-linear! reference-workspace 'v))
+(check "reference QH" (g3t-checked-m3t-heads-split! reference-workspace 'q))
+(check "reference KH" (g3t-checked-m3t-heads-split! reference-workspace 'k))
+(check "reference VH" (g3t-checked-m3t-heads-split! reference-workspace 'v))
+(check "reference AH" (g3t-checked-m3t-attention! reference-workspace))
+(check "reference AT" (g3t-checked-m3t-heads-merge! reference-workspace))
+(check "reference AO" (g3t-checked-m3t-linear! reference-workspace 'attention-output))
+(check "reference R" (g3t-checked-m3t-residual! reference-workspace 'attention))
+(check "reference N2" (g3t-checked-m3t-layer-norm! reference-workspace 'ffn-input))
+(check "reference FU" (g3t-checked-m3t-linear! reference-workspace 'ffn-up))
+(check "reference FG" (g3t-checked-m3t-gelu! reference-workspace))
+(check "reference FD" (g3t-checked-m3t-linear! reference-workspace 'ffn-down))
+(check "reference Y" (g3t-checked-m3t-residual! reference-workspace 'ffn))
+(check "reference NF" (g3t-checked-m3t-layer-norm! reference-workspace 'final))
+(check "reference Z" (g3t-checked-m3t-linear! reference-workspace 'tied-head))
+(check "reference copy" (g3t-checked-m3t-workspace-copy-logits!
+                          reference-workspace reference-logits))
+(define reference-bytes (g3t-checked-m3t-logits-bits reference-logits))
+(check "reference byte length" (= 2048 (bytevector-length reference-bytes)))
+(check "all 256 prefill logits equal independent M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (* index 4))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (vector-ref prefill-bits index))
+                    (compare (+ index 1)))))))
+(check "all 256 token-frame logits equal independent M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (vector-ref token-frame-bits index))
+                    (compare (+ index 1)))))))
+(check "reference reset" (g3t-checked-m3t-workspace-reset! reference-workspace))
+(check "reference logits release" (g3t-checked-m3t-logits-release! reference-logits))
+(check "reference workspace release"
+       (g3t-checked-m3t-workspace-release! reference-workspace))
+(check "reference input release" (g3t-checked-m3t-input-release! reference-input))
+(define wrapped-input (g3t-generation-token-input-create 65))
+(define wrapped-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define (wrapped-roles call)
+  (g3t-role-step call 0) (g3t-role-step call 1)
+  (g3t-role-step call 2) (g3t-role-step call 3)
+  (g3t-role-step call 4) (g3t-role-step call 5)
+  (g3t-role-step call 6) (g3t-role-step call 7)
+  (g3t-role-step call 8) (g3t-role-step call 9)
+  (g3t-role-step call 10) (g3t-role-step call 11)
+  (g3t-role-step call 12) (g3t-role-step call 13)
+  (g3t-role-step call 14) (g3t-role-step call 15)
+  (g3t-role-step call 16) (g3t-role-step call 17)
+  (g3t-role-step call 18) (g3t-role-step call 19)
+  (g3t-role-step call 20))
+(define wrapped-token
+  (g3t-with-call 'g3t-prefill-witness wrapped-generator (call)
+    (define wrapped-output (g3t-output-reserve call 1))
+    (g3t-frame-begin call wrapped-input 1)
+    (wrapped-roles call)
+    (g3t-frame-prepare call #f)
+    (g3t-frame-commit call)
+    (g3t-sample call)
+    (let* ((entry (m3t-entry model 'model 'g3t-token-profile #t))
+           (profile (vector-ref entry 11)))
+      (vector-set! entry 11 'diagnostic-c4)
+      (check "profile drift rejects sampled frame"
+             (guard (caught (#t caught))
+               (g3t-frame-begin call #f 2)
+               #f))
+      (vector-set! entry 11 profile))
+    (g3t-frame-begin call #f 2)
+    (wrapped-roles call)
+    (check "source-rooted numeric output prepare"
+           (g3t-output-prepare call wrapped-output))
+    (g3t-test-sample-token
+      (vector-ref (g3t-generator-find wrapped-generator
+                                      'g3t-prefill-witness) 3))))
+(check "source-rooted call reproduces sampled token" (= token wrapped-token))
+(check "shared M3 guard drained" (not (vector-ref m3-call-state 0)))
+(check "source input release" (g3t-generation-tensor-release! wrapped-input))
+(check "source generator close" (g3t-generator-close! wrapped-generator))
+
+(define i1-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define i1-native
+  (vector-ref (g3t-generator-find i1-generator 'g3t-i1-cuts) 3))
+(check "I1 cuts acquire" (= 0 (g3t-native-call-acquire i1-native 2)))
+(let cuts ((cut 0))
+  (if (= cut 4) #t
+      (begin
+        (g3t-test-fail-i1-after cut)
+        (check "I1 reservation allocation cut"
+               (null? (g3t-native-output-reserve i1-native 1)))
+        (cuts (+ cut 1)))))
+(check "I1 allocation cuts leave call active"
+       (= 14 (g3t-test-pin-count i1-native)))
+(check "disarm I1 faults"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define i1-output (g3t-native-output-reserve i1-native 1))
+(check "I1 reservation retries after all cuts"
+       (and (not (null? i1-output))
+            (= 1 (g3t-test-output-word i1-output 5))))
+(check "I1 cut call abort" (= 0 (g3t-native-call-abort i1-native)))
+(check "I1 cut output tombstone" (= 0 (g3t-native-output-release i1-output)))
+(check "I1 cut generator close" (g3t-generator-close! i1-generator))
+
+(define failure-input (g3t-generation-token-input-create 65))
+(define failure-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define failure-native
+  (vector-ref (g3t-generator-find failure-generator 'g3t-failure-test) 3))
+(check "A2 fault unwinds source call"
+       (guard (caught (#t (and caught (not (vector-ref m3-call-state 0)))))
+         (g3t-with-call 'g3t-a2-failure failure-generator (call)
+           (g3t-output-reserve call 1)
+           (g3t-test-fail-a2-after 0)
+           (g3t-frame-begin call failure-input 1))
+         #f))
+(check "disarm A2 fault" (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "failure drained pins" (= 0 (g3t-test-pin-count failure-native)))
+(check "failure retained empty cache" (= 1 (g3t-test-cache-empty failure-native)))
+(check "failure retained RNG"
+       (and (= 0 (g3t-test-rng-word failure-native 2))
+            (= 0 (g3t-test-rng-word failure-native 3))))
+(check "failure input release" (g3t-generation-tensor-release! failure-input))
+(check "failure generator close" (g3t-generator-close! failure-generator))
+
+(define partial-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define partial-native
+  (vector-ref (g3t-generator-find partial-generator 'g3t-partial-test) 3))
+(define partial-input (g3t-native-input-from-token 65))
+(check "partial acquire" (= 0 (g3t-native-call-acquire partial-native 2)))
+(define partial-output (g3t-native-output-reserve partial-native 1))
+(check "partial reserve" (not (null? partial-output)))
+(check "partial begin" (= 0 (g3t-native-frame-begin partial-native partial-input 1)))
+(check "partial role 0" (= 0 (g3t-native-role-step partial-native 0)))
+(check "partial role 1" (= 0 (g3t-native-role-step partial-native 1)))
+(check "partial role 2" (= 0 (g3t-native-role-step partial-native 2)))
+(check "partial role 3" (= 0 (g3t-native-role-step partial-native 3)))
+(check "partial role 4" (= 0 (g3t-native-role-step partial-native 4)))
+(check "partial role 5" (= 0 (g3t-native-role-step partial-native 5)))
+(check "partial role 6" (= 0 (g3t-native-role-step partial-native 6)))
+(check "partial role 7" (= 0 (g3t-native-role-step partial-native 7)))
+(check "partial role 8" (= 0 (g3t-native-role-step partial-native 8)))
+(check "partial role 9" (= 0 (g3t-native-role-step partial-native 9)))
+(check "arm attention allocator fault" (= 0 (g3t-test-fail-a2-after 0)))
+(check "attention role 10 fails without publishing"
+       (not (= 0 (g3t-native-role-step partial-native 10))))
+(check "disarm attention allocator fault"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "role 11 cannot skip failed attention"
+       (not (= 0 (g3t-native-role-step partial-native 11))))
+(check "partial sample rejected" (not (= 0 (g3t-native-sample partial-native))))
+(check "partial abort" (= 0 (g3t-native-call-abort partial-native)))
+(check "partial pins drained" (= 0 (g3t-test-pin-count partial-native)))
+(check "partial cache empty" (= 1 (g3t-test-cache-empty partial-native)))
+(check "partial RNG retained"
+       (and (= 0 (g3t-test-rng-word partial-native 2))
+            (= 0 (g3t-test-rng-word partial-native 3))))
+(check "partial pending output tombstoned"
+       (= 0 (g3t-native-output-release partial-output)))
+(check "partial input release" (= 0 (g3t-native-tensor-release partial-input)))
+(check "partial generator close" (g3t-generator-close! partial-generator))
+
+(define stale-input (g3t-generation-token-input-create 65))
+(define stale-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define stale-native
+  (vector-ref (g3t-generator-find stale-generator 'g3t-stale-test) 3))
+(define stale-model-entry (m3t-entry model 'model 'g3t-stale-test #t))
+(define original-profile (vector-ref stale-model-entry 11))
+(check "stale profile still permits structural abort"
+       (guard (caught (#t (and caught (not (vector-ref m3-call-state 0)))))
+         (g3t-with-call 'g3t-stale-test stale-generator (call)
+           (g3t-output-reserve call 1)
+           (g3t-frame-begin call stale-input 1)
+           (wrapped-roles call)
+           (vector-set! stale-model-entry 11 'diagnostic-c4)
+           (g3t-frame-prepare call #f))
+         #f))
+(vector-set! stale-model-entry 11 original-profile)
+(check "stale profile pins drained" (= 0 (g3t-test-pin-count stale-native)))
+(check "stale profile cache unpublished" (= 1 (g3t-test-cache-empty stale-native)))
+(check "stale profile input release" (g3t-generation-tensor-release! stale-input))
+(check "stale profile generator close" (g3t-generator-close! stale-generator))
+
+(define categorical-input (g3t-generation-token-input-create 65))
+(define categorical-generator
+  (g3t-generator-create model tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'categorical
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)))
+(define categorical-native
+  (vector-ref (g3t-generator-find categorical-generator 'g3t-categorical-test) 3))
+(define categorical-token
+  (g3t-with-call 'g3t-categorical-test categorical-generator (call)
+    (g3t-output-reserve call 1)
+    (g3t-frame-begin call categorical-input 1)
+    (wrapped-roles call)
+    (g3t-frame-prepare call #f)
+    (g3t-frame-commit call)
+    (g3t-sample call)
+    (check "categorical candidate advances copied counter"
+           (and (= 1 (g3t-test-successor-word categorical-native 2))
+                (= 0 (g3t-test-successor-word categorical-native 3))))
+    (check "source sampled frame begins"
+           (g3t-frame-begin call #f 2))
+    (check "categorical append roles 0..9"
+           (let step ((ordinal 0))
+             (if (= ordinal 10) #t
+                 (and (= 0 (g3t-native-role-step categorical-native ordinal))
+                      (step (+ ordinal 1))))))
+    (check "arm sampled attention allocator fault"
+           (= 0 (g3t-test-fail-a2-after 0)))
+    (check "sampled attention failure leaves prompt"
+           (not (= 0 (g3t-native-role-step categorical-native 10))))
+    (check "disarm sampled attention fault"
+           (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+    (check "sampled attention failure preserves cache length"
+           (= 1 (g3t-test-cache-length categorical-native)))
+    (check "sampled attention can retry"
+           (= 0 (g3t-native-role-step categorical-native 10)))
+    (check "sampled append roles 11..20"
+           (let step ((ordinal 11))
+             (if (= ordinal 21) #t
+                 (and (= 0 (g3t-native-role-step categorical-native ordinal))
+                      (step (+ ordinal 1))))))
+    (g3t-test-sample-token categorical-native)))
+(check "categorical G3-S token byte"
+       (and (>= categorical-token 0) (< categorical-token 256)))
+(check "categorical abort retains original RNG"
+       (and (= 0 (g3t-test-rng-word categorical-native 2))
+            (= 0 (g3t-test-rng-word categorical-native 3))))
+(check "categorical abort retains prompt"
+       (= 1 (g3t-test-cache-length categorical-native)))
+(check "categorical input release"
+       (g3t-generation-tensor-release! categorical-input))
+(check "categorical generator close" (g3t-generator-close! categorical-generator))
+(display "G3-T private prefill/sample PASS: checks=")
+(display checks)
+(newline)

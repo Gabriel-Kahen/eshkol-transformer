@@ -1,0 +1,17 @@
+;;; Source-private result-cell entry for eventual trainer-load-state! wiring.
+;;; Joint restore owns the complete receiver transaction and C2 borrow.
+
+(define (tr3-c-trainer-load-state-internal! trainer state result-cell)
+  (if (or (not (vector? result-cell))
+          (not (= (vector-length result-cell) 1))
+          (vector-ref result-cell 0))
+      (m3t-fail 'invalid-argument 'trainer-load-state!
+                "restore result cell must be empty and exact"))
+  (let ((result (tr3-c-joint-restore-internal! trainer state)))
+    (if (not (eq? result #t))
+        (m3t-fail 'internal 'trainer-load-state!
+                  "joint restore returned without success"))
+    ;; Joint restore already returned the receiver to idle. This exact scalar
+    ;; publication is the only action after its checked irreversible tail.
+    (vector-set! result-cell 0 #t)
+    #t))

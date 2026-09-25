@@ -241,20 +241,30 @@
              (o2-c2-copy-entries operation (vector-ref request 5)
                                   paths parsed))
            (clip (vector-ref parsed 1))
-           (schedule (vector-ref parsed 2)))
+           (schedule (vector-ref parsed 2))
+           ;; Exact native builder authority. This cell exists before handler
+           ;; installation and is cleared before either abort or commit transfer.
+           (builder-cell (vector #f)))
       (o2-c2-state-projection-budget! operation config paths aliases entries)
-      (let ((builder
-              (o2-c2-native-reconstruct-create-internal
-                (vector-length entries) (vector-ref clip 0)
-                (vector-ref clip 1) (vector-ref schedule 0)
-                (vector-ref schedule 1) (vector-ref schedule 2)
-                (vector-ref schedule 3) completed)))
-        (if (null? builder) (o2-native-fail operation))
-        (guard (caught
-                 (#t
-                   (if (not (= (o2-c2-native-reconstruct-abort builder) 0))
-                       (o2-native-fail operation))
-                   (raise caught)))
+      (guard (caught
+               (#t
+                 (let ((builder (vector-ref builder-cell 0)))
+                   (if builder
+                       (begin
+                         (vector-set! builder-cell 0 #f)
+                         (if (not (= (o2-c2-native-reconstruct-abort builder) 0))
+                             (o2-native-fail operation)))))
+                 (raise caught)))
+        (let ((builder
+                (o2-c2-native-reconstruct-create-internal
+                  (vector-length entries) (vector-ref clip 0)
+                  (vector-ref clip 1) (vector-ref schedule 0)
+                  (vector-ref schedule 1) (vector-ref schedule 2)
+                  (vector-ref schedule 3) completed)))
+          (if (null? builder) (o2-native-fail operation))
+          ;; The pointer is already native/root authority; enrollment is an
+          ;; assignment-only write before fill, prepare, or Eshkol allocation.
+          (vector-set! builder-cell 0 builder)
           (o2-c2-native-fill! operation builder entries)
           ;; Every Eshkol allocation and every native owner/handle allocation
           ;; precedes the non-failing native transfer and assignment-only tail.
@@ -267,6 +277,9 @@
                 (o2-native-fail operation))
             (let ((native (o2-c2-native-reconstruct-commit-internal builder)))
               (if (null? native) (o2-native-fail operation))
+              ;; A nonnull commit consumes the builder and transfers the sole
+              ;; native authority. No later failure may abort that builder.
+              (vector-set! builder-cell 0 #f)
               (vector-set! state 1 native)
               (vector-set! state 6 'live)
               (set! o2-states next-registry)

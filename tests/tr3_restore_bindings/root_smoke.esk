@@ -1,0 +1,2 @@
+;;; Compile-only witness for the private partition-2 source package.
+(load "tr3_c_restore_bindings_root.esk")

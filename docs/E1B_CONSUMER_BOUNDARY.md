@@ -6,8 +6,8 @@ The public package is a source stub plus an already-localized relocatable object
 Application source is compiled only after that object has been completed.
 
 This is a private package-building ABI, not an A0 API, K1/I1 ABI, or persistent
-format. It is fixed to canonical `tsotchke/eshkol` commit
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`, x86-64 LP64 SysV, and the supported
+format. It is fixed to the reviewed `Gabriel-Kahen/eshkol` candidate
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, x86-64 LP64 SysV, and the supported
 Ubuntu 22.04 / LLVM-Clang 21 lane.
 
 ## Raise-only contract
@@ -80,10 +80,16 @@ repository public library, so environment module paths cannot replace the classi
 source closure. No command-line manifest argument exists. The
 trusted native consumer bridge is compiled with `-fstack-protector-all`, so both
 supported Clang 21.1.8 and the explicitly unsupported Clang 22.1.6 compatibility
-lane retain `__stack_chk_fail` in the base fixture's frozen 80-name manifest and
+lane retain `__stack_chk_fail` in the base fixture's frozen 86-name manifest and
 the reviewed package-specific manifests. The builder validates the resulting localized
 object, not a compiler-dependent optional subset. Unsorted or
 duplicate public-export inputs are likewise rejected rather than normalized.
+
+The pinned compiler emits `eshkol_region_write_barrier_checked_v1` for generated
+write barriers and retains the emergency raise and rethrow entries in generated
+object closure. Every compiler-generated package manifest therefore lists those
+three exact runtime symbols and excludes the superseded
+`eshkol_region_write_barrier_into` entry.
 
 The existing `transformer.error_public` facade and every installed public Eshkol
 package stub import `transformer.error_consumer`, never

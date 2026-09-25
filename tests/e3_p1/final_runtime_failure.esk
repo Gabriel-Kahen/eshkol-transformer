@@ -1,0 +1,107 @@
+;;; One real bounded-arena bind failure per process. The runner enumerates the
+;;; constructor and root-publication budgets discovered from this exact O2
+;;; artifact, then requires a clean retry after every caught failure.
+(load "i2_wave2_root.esk")
+(load "e3_p1_modes_extension.esk")
+
+(extern i64 e3-p1-fail-arm :real et_e3_p1_test_fail_arm_v1)
+(extern i64 e3-p1-fail-caught :real et_e3_p1_test_fail_caught_v1)
+(extern i64 e3-p1-fail-disarm :real et_e3_p1_test_fail_disarm_v1)
+(extern i64 e3-p1-fail-condition :real et_e3_p1_test_fail_condition_v1)
+(extern i64 e3-p1-fail-used-delta :real et_e3_p1_test_fail_used_delta_v1)
+(extern i64 e3-p1-fail-total-delta :real et_e3_p1_test_fail_total_delta_v1)
+(extern i64 e3-p1-fail-block-delta :real et_e3_p1_test_fail_block_delta_v1)
+
+(define checks 0)
+(define (check label actual expected)
+  (if (equal? actual expected) (set! checks (+ checks 1))
+      (begin (display "FAIL ") (display label) (display " actual=")
+             (display actual) (display " expected=") (display expected)
+             (newline) (exit 1))))
+(define (check-status label actual expected)
+  (check label (and (integer? actual) (exact? actual) (eq? actual expected)) #t))
+
+(define fixture-parents '#(-1 0 1 2 3 3 3 3 2 8 8 2 2 0 0 0 0))
+(define fixture-names '#("" "blocks" "0" "attention" "key" "output"
+  "query" "value" "ffn" "down" "up" "norm1" "norm2" "head"
+  "norm_final" "position_embedding" "token_embedding"))
+(define mixed-modes '#(train eval train eval train eval train eval train
+  eval train eval train eval train eval train))
+(define (check-modes label nodes expected)
+  (let loop ((index 0))
+    (if (= index 17) #t
+        (begin
+          (check label (module-mode-internal (vector-ref nodes index))
+                       (vector-ref expected index))
+          (loop (+ index 1))))))
+(define (make-fixture)
+  (let ((nodes (make-vector 17 #f)))
+    (let create ((index 0))
+      (if (= index 17) #t
+          (let ((node (i2-module-create-internal)))
+            (if (eq? (vector-ref mixed-modes index) 'eval) (module-eval! node))
+            (vector-set! nodes index node)
+            (create (+ index 1)))))
+    (let attach ((index 1))
+      (if (= index 17) #t
+          (begin
+            (module-register-child-internal!
+              (vector-ref nodes (vector-ref fixture-parents index))
+              (vector-ref fixture-names index) (vector-ref nodes index))
+            (attach (+ index 1)))))
+    (parameter-tree-paths (module-parameters (vector-ref nodes 0)))
+    nodes))
+
+(define nodes (make-fixture))
+(define fixture (vector-ref nodes 0))
+(check-modes "mixed17 before failure" nodes mixed-modes)
+(define frame-holder (vector (vector 'stable-frame)))
+(define output-before #f)
+(define caught? #f)
+(define caught-condition 0)
+(define bind-status -1)
+(define armed-budget -1)
+(with-region ('e3-p1-failed-bind 4096)
+  (let ((setup (vector (vector-ref frame-holder 0) output-before)))
+    (guard (caught
+             (#t
+               (set! caught? #t)
+               (set! caught-condition (e3-p1-fail-caught))
+               (check "failed bind preserves setup frame"
+                      (eq? (vector-ref setup 0) (vector-ref frame-holder 0)) #t)
+               (check "failed bind preserves setup output"
+                      (eq? (vector-ref setup 1) output-before) #t)))
+      (set! armed-budget (e3-p1-fail-arm))
+      (set! bind-status (p1-e3-mode-bind! fixture setup))
+      (e3-p1-fail-disarm)
+      (if (= bind-status 0)
+          (p1-e3-mode-unbind! (vector-ref setup 1))
+          #f))))
+(check "allocation failure reached caller guard" caught? #t)
+(check "runtime classified caught allocation condition"
+       (or (= caught-condition 1) (= caught-condition 2)) #t)
+(check "shim retains caught condition" (e3-p1-fail-condition) caught-condition)
+(check "failure changes no arena block count" (e3-p1-fail-block-delta) 0)
+(check "failure changes no cumulative arena capacity" (e3-p1-fail-total-delta) 0)
+(check-modes "failed setup preserves all17 mixed modes" nodes mixed-modes)
+
+;;; A successful retry on the same model proves failed setup did not publish a
+;;; live enrollment. The exact failed-prefix arena cost is reported separately;
+;;; failed setup can consume cumulative arena bytes without publishing authority.
+(define retry-setup (vector (vector 'retry-frame) #f))
+(check-status "bind retry after allocation failure"
+              (p1-e3-mode-bind! fixture retry-setup) 0)
+(define retry-token (vector-ref retry-setup 1))
+(check-status "retry prepare" (p1-e3-mode-prepare! retry-token) 0)
+(check-status "retry enter" (p1-e3-mode-enter! retry-token) 0)
+(check-status "retry restore" (p1-e3-mode-restore! retry-token) 0)
+(check-modes "retry restores all17 mixed modes" nodes mixed-modes)
+(check-status "retry unbind" (p1-e3-mode-unbind! retry-token) 0)
+
+(display "E3-P1-BIND-FAILURE-PASS checks=") (display checks)
+(display " budget=") (display armed-budget)
+(display " condition=") (display caught-condition)
+(display " used_delta=") (display (e3-p1-fail-used-delta))
+(display " total_delta=") (display (e3-p1-fail-total-delta))
+(display " block_delta=") (display (e3-p1-fail-block-delta))
+(newline)

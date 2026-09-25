@@ -42,6 +42,9 @@ for suite in "$@"; do
       # Exact canonical read set: provider, carrier borrows and predecessor reports.
       select_producers k1 a2 i1 i2 n2 n3k g3n g3c4
       ;;
+    g3s-sampling)
+      select_producers k1 i1 i2 g3s
+      ;;
     model-composition)
       # M3-CG is a required source-only subgate; its witness builds test-local
       # inputs and adds no canonical producer or competing aggregate.
@@ -88,7 +91,7 @@ for suite in "$@"; do
       # Union of predecessor read-before-write artifacts. X1, P1, C1, T1,
       # and the smoke test itself perform intentional test-local fresh builds.
       # Add smoke-benchmark when those post-suite checks run in the same job.
-      select_producers k1 a2 l2 l3s e3-metrics i1 i2 k2 n2 n3k t2 d2 o2 d1 m3t m3 g3n g3c4
+      select_producers k1 a2 l2 l3s e3-metrics i1 i2 k2 n2 n3k g3s t2 d2 o2 d1 m3t m3 g3n g3c4
       ;;
     *)
       printf 'error: unknown CI suite: %s\n' "${suite}" >&2
@@ -98,7 +101,7 @@ for suite in "$@"; do
   esac
 done
 
-producer_order=(smoke k1 a2 l2 l3s e3-metrics i1 i2 k2 n2 n3k t2 d2 o2 d1 c2 m3t m3 g3n g3c4)
+producer_order=(smoke k1 a2 l2 l3s e3-metrics i1 i2 k2 n2 n3k g3s t2 d2 o2 d1 c2 m3t m3 g3n g3c4)
 
 producer_script() {
   case "$1" in
@@ -170,6 +173,12 @@ verify_producer() {
       verify_file "${build_dir}/n3k/n3k_primitives_provider.o"
       verify_file "${build_dir}/n3k/n3k_primitives_provider.d"
       verify_file "${build_dir}/n3k/libeshkol_transformer_n3k.a"
+      ;;
+    g3s)
+      verify_file "${build_dir}/g3s/g3s_sampling_provider.o"
+      verify_file "${build_dir}/g3s/g3s_sampling_provider.d"
+      verify_file "${build_dir}/g3s/g3s_sampling_provider.su"
+      verify_file "${build_dir}/g3s/libeshkol_transformer_g3s.a"
       ;;
     t2)
       verify_file "${build_dir}/t2/wave2.o"

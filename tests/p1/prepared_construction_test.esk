@@ -1,0 +1,140 @@
+(require transformer.module)
+(require p1_test.tensor_provider)
+(load "g3c4_p1_construction_extension.esk")
+
+(extern i64 p1-test-commit-fail-next
+        :real et_p1_test_construction_commit_fail_next_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin
+        (display "P1 prepared construction FAIL: ")
+        (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+
+(define (build-one label)
+  (with-region (label 1048576)
+    (let* ((construction
+             (module-construction-begin-internal 'fixture-v1))
+           (root (module-construction-root-internal construction))
+           (handle
+             (module-register-parameter-internal! root "weight"
+               (fixture-tensor-internal '(2) 'f32 'cpu
+                 (vector label 'bits)))))
+      (module-construction-parameters-internal construction)
+      (vector construction root handle))))
+
+(define (run-fatal)
+  (let* ((built (build-one 'fatal-commit))
+         (construction (vector-ref built 0)))
+    (module-construction-prepare-eval-internal! construction)
+    (p1-test-commit-fail-next)
+    ;; The prepared commit status cannot become a recoverable exception.
+    (module-construction-seal-prepared-internal! construction)
+    (exit 1)))
+
+(define (run-normal)
+  (let* ((built (build-one 'prepared-abort))
+         (construction (vector-ref built 0))
+         (root (vector-ref built 1))
+         (handle (vector-ref built 2)))
+    (check "prepare returns canonical root"
+           (eq? root
+                (module-construction-prepare-eval-internal! construction)))
+    (reject "prepared root hidden" 'invalid-state
+            (lambda () (module-mode-internal root)))
+    (reject "prepared raw tensor hidden" 'invalid-state
+            (lambda () (parameter-handle-tensor-internal handle)))
+    (reject "prepared raw identity hidden" 'invalid-state
+            (lambda () (parameter-handle-tensor-identity-internal handle)))
+    (reject "prepared root operation hidden" 'invalid-state
+            (lambda () (module-construction-root-internal construction)))
+    (reject "prepared parameters closed" 'invalid-state
+            (lambda ()
+              (module-construction-parameters-internal construction)))
+    (reject "prepared legacy seal closed" 'invalid-state
+            (lambda () (module-construction-seal-internal! construction)))
+    (reject "prepared nested begin" 'invalid-state
+            (lambda ()
+              (module-construction-begin-internal 'fixture-v1)))
+    (check "prepared abort"
+           (module-construction-abort-internal! construction))
+    (check "prepared abort idempotent"
+           (module-construction-abort-internal! construction))
+    (reject "prepared-aborted root dead" 'invalid-state
+            (lambda () (module-parameters root))))
+
+  (let* ((built (build-one 'prepared-seal))
+         (construction (vector-ref built 0))
+         (root (vector-ref built 1))
+         (handle (vector-ref built 2)))
+    (module-construction-prepare-eval-internal! construction)
+    (reject "duplicate prepare" 'invalid-state
+            (lambda ()
+              (module-construction-prepare-eval-internal! construction)))
+    (check "prepared seal returns canonical root"
+           (eq? root
+                (module-construction-seal-prepared-internal! construction)))
+    (check "exact eval mode" (eq? (module-mode-internal root) 'eval))
+    (check "canonical path installed"
+           (equal? (parameter-handle-path handle) '("weight")))
+    (check "published parameter tree"
+           (equal? (parameter-tree-paths (module-parameters root))
+                   '(("weight"))))
+    (reject "sealed prepared cannot abort" 'invalid-state
+            (lambda () (module-construction-abort-internal! construction))))
+
+  (let* ((construction
+           (module-construction-begin-internal 'fixture-v1))
+         (root (module-construction-root-internal construction)))
+    (module-register-parameter-internal! root "weight"
+      (fixture-tensor-internal '(1) 'f32 'cpu (vector 'missing-schedule)))
+    (reject "missing schedule aborts" 'invalid-state
+            (lambda ()
+              (module-construction-prepare-eval-internal! construction)))
+    (check "missing schedule cleanup is idempotent"
+           (module-construction-abort-internal! construction))
+    (reject "missing schedule root dead" 'invalid-state
+            (lambda () (module-parameters root))))
+
+  (let* ((construction
+           (module-construction-begin-internal 'fixture-v1))
+         (root (module-construction-root-internal construction)))
+    (module-construction-parameters-internal construction)
+    (module-register-parameter-internal! root "late"
+      (fixture-tensor-internal '(1) 'f32 'cpu (vector 'changed)))
+    (reject "changed schedule aborts" 'invalid-state
+            (lambda ()
+              (module-construction-prepare-eval-internal! construction)))
+    (check "changed schedule cleanup is idempotent"
+           (module-construction-abort-internal! construction)))
+
+  (let* ((construction
+           (module-construction-begin-internal 'fixture-v1))
+         (root (module-construction-root-internal construction))
+         (schedule
+           (module-construction-parameters-internal construction))
+         (orphan (module-create-with-provider-internal 'fixture-v1)))
+    (reject "unattached module aborts" 'invalid-state
+            (lambda ()
+              (module-construction-prepare-eval-internal! construction)))
+    (reject "unattached root dead" 'invalid-state
+            (lambda () (module-parameters root)))
+    (reject "unattached orphan dead" 'invalid-state
+            (lambda () (module-parameters orphan))))
+
+  ;; Every failure above released the sole active ledger.
+  (let ((next (module-construction-begin-internal 'fixture-v1)))
+    (check "next begin baseline" (module-construction-abort-internal! next)))
+  (display "P1 PREPARED PASS: checks=") (display checks) (newline))
+
+(define arguments (cdr (command-line)))
+(if (and (pair? arguments) (string=? (car arguments) "fatal"))
+    (run-fatal)
+    (run-normal))

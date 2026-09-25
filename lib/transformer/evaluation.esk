@@ -1,0 +1,45 @@
+;;; Installed fixed-model exact-report evaluation facade.
+(require transformer.error_consumer)
+
+(provide diagnostic-evaluate-fixed!
+         diagnostic-evaluation-f32-bits
+         diagnostic-evaluation-count)
+
+(define e3-safe-diagnostic-evaluate-fixed
+  (let ()
+    (extern void e3-boxed-diagnostic-evaluate-fixed ptr ptr ptr
+            :real et_e1b_public_e3_diagnostic_evaluate_fixed_v1)
+    (lambda (model dataset)
+      (let ((output (vector #f)))
+        (e3-boxed-diagnostic-evaluate-fixed
+         (vector model) (vector dataset) output)
+        (vector-ref output 0)))))
+
+(define (diagnostic-evaluate-fixed! model dataset)
+  (e3-safe-diagnostic-evaluate-fixed model dataset))
+
+(define e3-safe-diagnostic-evaluation-f32-bits
+  (let ()
+    (extern void e3-boxed-diagnostic-evaluation-f32-bits ptr ptr ptr
+            :real et_e1b_public_e3_diagnostic_evaluation_f32_bits_v1)
+    (lambda (report key)
+      (let ((output (vector #f)))
+        (e3-boxed-diagnostic-evaluation-f32-bits
+         (vector report) (vector key) output)
+        (vector-ref output 0)))))
+
+(define (diagnostic-evaluation-f32-bits report key)
+  (e3-safe-diagnostic-evaluation-f32-bits report key))
+
+(define e3-safe-diagnostic-evaluation-count
+  (let ()
+    (extern void e3-boxed-diagnostic-evaluation-count ptr ptr ptr
+            :real et_e1b_public_e3_diagnostic_evaluation_count_v1)
+    (lambda (report key)
+      (let ((output (vector #f)))
+        (e3-boxed-diagnostic-evaluation-count
+         (vector report) (vector key) output)
+        (vector-ref output 0)))))
+
+(define (diagnostic-evaluation-count report key)
+  (e3-safe-diagnostic-evaluation-count report key))

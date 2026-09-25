@@ -1,0 +1,23 @@
+;;; Non-installed A0 constructor/release candidate in one identity universe.
+;;; The production TR3-C root and the sealed constructor candidate are unchanged.
+(load "tr3_public_candidate_root.esk")
+
+(define (trainer-release! trainer)
+  (guard (caught
+           (#t
+             (if (transformer-error? caught)
+                 (let ((unreachable
+                         (et-e1b-private-raise
+                           (transformer-error-category caught)
+                           'trainer-release!
+                           (transformer-error-message caught)
+                           (transformer-error-details caught)
+                           (transformer-error-cause caught))))
+                   unreachable)
+                 (let ((unreachable
+                         (et-e1b-private-raise
+                           'internal 'trainer-release!
+                           "trainer lease release raised a foreign value"
+                           '() #f)))
+                   unreachable))))
+    (tr3-lease-unenroll-internal! trainer)))

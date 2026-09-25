@@ -1,0 +1,277 @@
+;;; Focused private leaf test over the genuine M3T constructor and canonical P1.
+;;; The public parameter tree below is test observation only; slots69/70 never
+;;; receive it and must preserve the native P1 identity counts measured here.
+(load "m3_package_root.esk")
+(load "tr3_p1_fixed_set_extension.esk")
+
+(extern i64 p1-test-live-count :real et_p1_test_live_entry_count_v1)
+(extern i64 p1-test-tombstone-count :real et_p1_test_tombstone_count_v1)
+(extern void f32-test-fail-alloc i64
+        :real et_f32_tensor_test_fail_alloc_after_v1)
+(extern void f32-test-reset-alloc
+        :real et_f32_tensor_test_reset_allocator_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "TR3-P1 FAIL: ") (display label) (newline) (exit 1))))
+(define (check-status label actual expected)
+  (check label (and (integer? actual) (exact? actual) (eq? actual expected))))
+(define (copy-vector input)
+  (let ((result (make-vector (vector-length input) #f)))
+    (let loop ((index 0))
+      (if (= index (vector-length input)) result
+          (begin (vector-set! result index (vector-ref input index))
+                 (loop (+ index 1)))))))
+(define (all-distinct? values)
+  (let outer ((index 0))
+    (if (= index (vector-length values)) #t
+        (let inner ((prior 0))
+          (cond ((= prior index) (outer (+ index 1)))
+                ((eq? (vector-ref values prior) (vector-ref values index)) #f)
+                (else (inner (+ prior 1))))))))
+(define (all-train? modules)
+  (let loop ((index 0))
+    (if (= index 17) #t
+        (and (eq? (module-mode-internal (vector-ref modules index)) 'train)
+             (loop (+ index 1))))))
+(define (exact-capture? source handles carriers)
+  (let loop ((index 0))
+    (if (= index 14) #t
+        (and (eq? (vector-ref handles index) (vector-ref source index))
+             (eq? (vector-ref carriers index)
+                  (parameter-handle-tensor-identity-internal
+                    (vector-ref source index)))
+             (loop (+ index 1))))))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model
+  (m3t-public-model-create config (m3t-public-initializer-state 1729)))
+(define second-model
+  (m3t-public-model-create config (m3t-public-initializer-state 1729)))
+(define source-handles
+  (vector-ref (m3t-entry model 'model 'tr3-p1-fixed-test #t) 8))
+(define second-source-handles
+  (vector-ref (m3t-entry second-model 'model 'tr3-p1-fixed-test #t) 8))
+
+;;; Finalize one unsupported authentic P1 root before count baselines.
+(define unsupported-root (i2-module-create-internal))
+(define unsupported-tree (module-parameters unsupported-root))
+(define unfinalized-root (i2-module-create-internal))
+(define unfinalized-modules (make-vector 17 #f))
+(vector-set! unfinalized-modules 0 unfinalized-root)
+;;; Observe the genuine tie before count baselines. Slots69/70 never use this tree.
+(define observed-tree (module-parameters model))
+(check "genuine head/token tie"
+  (eq? (parameter-tree-handle observed-tree '("head" "weight"))
+       (parameter-tree-handle observed-tree '("token_embedding" "weight"))))
+(check "surface length" (= (vector-length p1-trusted-surface) 73))
+
+(define modules (make-vector 17 #f))
+(define handles (make-vector 14 #f))
+(define carriers (make-vector 14 #f))
+(define second-modules (make-vector 17 #f))
+(define second-handles (make-vector 14 #f))
+(define second-carriers (make-vector 14 #f))
+(define scratch-modules (make-vector 17 #f))
+(define scratch-handles (make-vector 14 #f))
+(define scratch-carriers (make-vector 14 #f))
+(define bad-source (copy-vector source-handles))
+(define wrong-kind-modules (copy-vector modules))
+(define late-source (copy-vector source-handles))
+(define late-modules (make-vector 17 #f))
+(define late-handles (make-vector 14 #f))
+(define late-carriers (make-vector 14 #f))
+
+(define live-before (p1-test-live-count))
+(define tombstones-before (p1-test-tombstone-count))
+(f32-test-fail-alloc 0)
+
+(define capture-arena-before (__arena-used))
+(define capture-status
+  (tr3-p1-fixed-capture-internal
+    model source-handles modules handles carriers))
+(define capture-arena-after (__arena-used))
+(check-status "capture exact" capture-status 0)
+(check "capture allocates zero arena bytes"
+  (= capture-arena-before capture-arena-after))
+(check-status "capture second exact"
+  (tr3-p1-fixed-capture-internal
+    second-model second-source-handles second-modules second-handles
+    second-carriers) 0)
+(check "capture preserves native live count" (= (p1-test-live-count) live-before))
+(check "capture preserves native tombstones"
+  (= (p1-test-tombstone-count) tombstones-before))
+(check "root shell captured" (eq? (vector-ref modules 0) model))
+(check "17 module shells distinct" (all-distinct? modules))
+(check "14 handle shells distinct" (all-distinct? handles))
+(check "14 carriers distinct" (all-distinct? carriers))
+(check "all fixed modules train" (all-train? modules))
+(check "exact handles and carriers" (exact-capture? source-handles handles carriers))
+(define recheck-arena-before (__arena-used))
+(define recheck-status
+  (tr3-p1-fixed-recheck-internal model modules handles carriers))
+(define recheck-arena-after (__arena-used))
+(check-status "recheck exact" recheck-status 0)
+(check "recheck allocates zero arena bytes"
+  (= recheck-arena-before recheck-arena-after))
+
+;;; Exact argument/status precedence.
+(check-status "capture malformed handles"
+  (tr3-p1-fixed-capture-internal
+    model (vector) scratch-modules scratch-handles scratch-carriers) 1)
+(check-status "capture malformed modules"
+  (tr3-p1-fixed-capture-internal
+    model source-handles (vector) scratch-handles scratch-carriers) 1)
+(check-status "capture malformed retained handles"
+  (tr3-p1-fixed-capture-internal
+    model source-handles scratch-modules (vector) scratch-carriers) 1)
+(check-status "capture malformed carriers"
+  (tr3-p1-fixed-capture-internal
+    model source-handles scratch-modules scratch-handles (vector)) 1)
+(check-status "capture aliases source/output"
+  (tr3-p1-fixed-capture-internal
+    model source-handles scratch-modules source-handles scratch-carriers) 1)
+(check-status "capture aliases source/carriers"
+  (tr3-p1-fixed-capture-internal
+    model source-handles scratch-modules scratch-handles source-handles) 1)
+(check-status "capture aliases retained handles/carriers"
+  (tr3-p1-fixed-capture-internal
+    model source-handles scratch-modules scratch-handles scratch-handles) 1)
+(check-status "capture foreign model"
+  (tr3-p1-fixed-capture-internal
+    (vector #f) source-handles scratch-modules scratch-handles scratch-carriers) 1)
+(check-status "capture wrong-kind model shell"
+  (tr3-p1-fixed-capture-internal
+    observed-tree source-handles scratch-modules scratch-handles scratch-carriers) 1)
+(check-status "capture unsupported topology"
+  (tr3-p1-fixed-capture-internal
+    unsupported-root source-handles scratch-modules scratch-handles
+    scratch-carriers) 3)
+(check-status "capture unfinalized root"
+  (tr3-p1-fixed-capture-internal
+    unfinalized-root source-handles scratch-modules scratch-handles
+    scratch-carriers) 2)
+(check-status "recheck unfinalized root"
+  (tr3-p1-fixed-recheck-internal
+    unfinalized-root unfinalized-modules handles carriers) 2)
+(module-eval! model)
+(check-status "capture requires all train"
+  (tr3-p1-fixed-capture-internal
+    model source-handles scratch-modules scratch-handles scratch-carriers) 2)
+(module-train! model)
+
+(vector-set! wrong-kind-modules 0 observed-tree)
+(check-status "recheck wrong-kind model shell"
+  (tr3-p1-fixed-recheck-internal
+    observed-tree wrong-kind-modules handles carriers) 1)
+(check-status "recheck malformed modules"
+  (tr3-p1-fixed-recheck-internal model (vector) handles carriers) 1)
+(check-status "recheck malformed handles"
+  (tr3-p1-fixed-recheck-internal model modules (vector) carriers) 1)
+(check-status "recheck malformed carriers"
+  (tr3-p1-fixed-recheck-internal model modules handles (vector)) 1)
+(check-status "recheck aliases handles/carriers"
+  (tr3-p1-fixed-recheck-internal model modules handles handles) 1)
+
+(define (check-bad-source index replacement)
+  (let ((original (vector-ref bad-source index)))
+    (vector-set! bad-source index replacement)
+    (check-status "capture rejects substituted handle"
+      (tr3-p1-fixed-capture-internal
+        model bad-source scratch-modules scratch-handles scratch-carriers) 1)
+    (vector-set! bad-source index original)))
+(check-bad-source 0 (vector-ref source-handles 1))
+(check-bad-source 7 (vector-ref source-handles 8))
+(check-bad-source 10 (vector-ref source-handles 11))
+(check-bad-source 13 (vector-ref source-handles 12))
+(check-bad-source 0 observed-tree)
+
+(vector-set! late-source 13 (vector-ref source-handles 12))
+(check-status "late capture rejection"
+  (tr3-p1-fixed-capture-internal
+    model late-source late-modules late-handles late-carriers) 1)
+(check "late capture exposes only validated scratch prefix"
+  (and (eq? (vector-ref late-modules 16) (vector-ref modules 16))
+       (eq? (vector-ref late-handles 12) (vector-ref source-handles 12))
+       (eq? (vector-ref late-carriers 12) (vector-ref carriers 12))
+       (eq? (vector-ref late-handles 13) #f)
+       (eq? (vector-ref late-carriers 13) #f)))
+
+(define (check-module-substitution index expected)
+  (let ((original (vector-ref modules index)))
+    (vector-set! modules index (vector-ref second-modules index))
+    (check-status "recheck rejects module substitution"
+      (tr3-p1-fixed-recheck-internal model modules handles carriers) expected)
+    (vector-set! modules index original)))
+(check-module-substitution 0 1)
+(check-module-substitution 8 4)
+(check-module-substitution 16 4)
+
+(define (check-handle-substitution index)
+  (let ((original (vector-ref handles index)))
+    (vector-set! handles index (vector-ref second-handles index))
+    (check-status "recheck rejects handle substitution"
+      (tr3-p1-fixed-recheck-internal model modules handles carriers) 4)
+    (vector-set! handles index original)))
+(check-handle-substitution 0)
+(check-handle-substitution 7)
+(check-handle-substitution 13)
+
+(define (check-carrier-substitution index)
+  (let ((original (vector-ref carriers index)))
+    (vector-set! carriers index (vector-ref second-carriers index))
+    (check-status "recheck rejects carrier substitution"
+      (tr3-p1-fixed-recheck-internal model modules handles carriers) 4)
+    (vector-set! carriers index original)))
+(check-carrier-substitution 0)
+(check-carrier-substitution 7)
+(check-carrier-substitution 13)
+
+(module-eval! model)
+(check-status "recheck requires all train"
+  (tr3-p1-fixed-recheck-internal model modules handles carriers) 2)
+(module-train! model)
+(check-status "recheck recovers after train restore"
+  (tr3-p1-fixed-recheck-internal model modules handles carriers) 0)
+
+(define arguments (cdr (command-line)))
+(define horizon
+  (if (and (pair? arguments) (string=? (car arguments) "long")) 8192 1024))
+(define loop-arena-before (__arena-used))
+(let loop ((index 0))
+  (if (= index horizon) #t
+      (begin
+        (if (not (= (tr3-p1-fixed-capture-internal
+                      model source-handles modules handles carriers) 0))
+            (exit 1))
+        (if (not (= (tr3-p1-fixed-recheck-internal
+                      model modules handles carriers) 0))
+            (exit 1))
+        (loop (+ index 1)))))
+(define loop-arena-after (__arena-used))
+(check "capture/recheck loop allocates zero arena bytes"
+  (= loop-arena-before loop-arena-after))
+(check "loop preserves native live count" (= (p1-test-live-count) live-before))
+(check "loop preserves native tombstones"
+  (= (p1-test-tombstone-count) tombstones-before))
+(check "loop preserves exact captured set"
+  (and (all-train? modules) (exact-capture? source-handles handles carriers)))
+
+(f32-test-reset-alloc)
+(display "TR3-P1-FIXED-PASS checks=") (display checks)
+(display " horizon=") (display horizon)
+(display " capture_arena_delta=")
+(display (- capture-arena-after capture-arena-before))
+(display " recheck_arena_delta=")
+(display (- recheck-arena-after recheck-arena-before))
+(display " loop_arena_delta=")
+(display (- loop-arena-after loop-arena-before))
+(display " p1_live_delta=") (display (- (p1-test-live-count) live-before))
+(display " p1_tombstone_delta=")
+(display (- (p1-test-tombstone-count) tombstones-before))
+(display " f32_fail_after=0") (newline)

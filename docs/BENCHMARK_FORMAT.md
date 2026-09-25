@@ -84,9 +84,10 @@ python3 tests/b0/run_benchmark.py verify \
 ```
 
 `make benchmark` reuses F0 verification, so a missing, dirty, wrong-revision, or
-wrong-version Eshkol checkout is rejected before execution. The canonical upstream
-is `https://github.com/tsotchke/eshkol.git` at
-`90cbd7130f47b8184bcc77b8d5c1b0026da980de`; no fork or alternate ref is accepted.
+wrong-version Eshkol checkout is rejected before execution. The canonical compiler
+source for this format is `https://github.com/Gabriel-Kahen/eshkol.git` at
+`81298b4a9608fb92eb6f351a2eabd8392da7d9ef`. The benchmark validator rejects every
+other repository or revision.
 F0 target compilation and measurement-launcher compilation are setup phases that
 finish before timing begins and are excluded from elapsed/RSS samples. Their source
 and binary identities are recorded by stable hashes; the exact measured argv, working
