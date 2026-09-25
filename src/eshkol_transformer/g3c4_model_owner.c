@@ -791,6 +791,12 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_PROMPT_PREFILL_PRIVATE)
 #error "ET_G3C4_OUTPUT_RESERVATION_PRIVATE requires Step 18A"
 #endif
+#if defined(ET_G3C4_LOGITS_RESERVATION_PRIVATE) && \
+    (!defined(ET_G3C4_ACTIVE_CALL_PRIVATE) || \
+     !defined(ET_G3C4_GENERATOR_PRIVATE) || \
+     !defined(ET_G3C4_PROMPT_T1_BORROW_PRIVATE))
+#error "ET_G3C4_LOGITS_RESERVATION_PRIVATE requires an active generator call and typed tensor release"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -837,6 +843,9 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
 #define ET_G3C4_OUTPUT_MAGIC UINT64_C(0x473343344f555431)
 #endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+#define ET_G3C4_LOGITS_MAGIC UINT64_C(0x473343344c4f4731)
+#endif
 #endif
 
 enum {
@@ -851,6 +860,9 @@ enum {
   ET_G3C4_INPUT_KIND = 2,
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   ET_G3C4_OUTPUT_KIND = 4,
+#endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  ET_G3C4_LOGITS_KIND = 3,
 #endif
   ET_G3C4_RNG_KIND = 8
 #else
@@ -957,6 +969,14 @@ typedef struct et_g3c4_output_internal {
   uint32_t ids_copied;
   uint32_t text_ready;
 } et_g3c4_output_internal;
+#endif
+
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+typedef struct et_g3c4_logits_internal {
+  et_g3c4_transport_header_internal transport;
+  et_g3c4_context_internal *parent_ctx;
+  et_f32_tensor *tensor;
+} et_g3c4_logits_internal;
 #endif
 
 static et_g3c4_transport_header_internal *et_g3c4_transport_registry;
@@ -1319,6 +1339,18 @@ static int et_g3c4_transport_record_valid(
     return 0;
   }
 #endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  if (header->kind == ET_G3C4_LOGITS_KIND) {
+    const et_g3c4_logits_internal *logits =
+        (const et_g3c4_logits_internal *)header;
+    if (header->magic != ET_G3C4_LOGITS_MAGIC || header->busy != 0u ||
+        (header->state != 0u && header->state != ET_G3C4_CONTEXT_DEAD))
+      return 0;
+    return header->state == 0u
+               ? logits->parent_ctx != NULL && logits->tensor != NULL
+               : logits->parent_ctx == NULL && logits->tensor == NULL;
+  }
+#endif
   return 0;
 }
 #endif
@@ -1437,6 +1469,22 @@ static et_g3c4_output_internal *et_g3c4_output_allocate(void) {
   if (output != NULL) et_g3c4_context_successful_allocations++;
 #endif
   return output;
+}
+#endif
+
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+static et_g3c4_logits_internal *et_g3c4_logits_allocate(void) {
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (et_g3c4_context_successful_allocations >=
+      et_g3c4_context_allocation_limit)
+    return NULL;
+#endif
+  et_g3c4_logits_internal *logits =
+      (et_g3c4_logits_internal *)calloc(1u, sizeof(*logits));
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (logits != NULL) et_g3c4_context_successful_allocations++;
+#endif
+  return logits;
 }
 #endif
 
@@ -1569,6 +1617,55 @@ static int et_g3c4_pending_output_lookup(
 }
 #endif
 
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+static et_g3c4_logits_internal *et_g3c4_admit_logits(
+    const void *candidate, int allow_dead) {
+  et_g3c4_transport_header_internal *header;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (const void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (!et_g3c4_transport_record_valid(header)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (header->kind != ET_G3C4_LOGITS_KIND) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (header->state == ET_G3C4_CONTEXT_DEAD && !allow_dead) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  return (et_g3c4_logits_internal *)header;
+}
+
+static int et_g3c4_pending_logits_lookup(
+    et_g3c4_context_internal *context,
+    et_g3c4_logits_internal **result) {
+  et_g3c4_transport_header_internal *header;
+  *result = NULL;
+  for (header = et_g3c4_transport_registry;
+       header != NULL; header = header->registry_next) {
+    et_g3c4_logits_internal *logits;
+    if (header->kind != ET_G3C4_LOGITS_KIND) continue;
+    if (!et_g3c4_transport_record_valid(header))
+      return (int)et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    logits = (et_g3c4_logits_internal *)header;
+    if (header->state != 0u || logits->parent_ctx != context) continue;
+    if (*result != NULL)
+      return (int)et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    *result = logits;
+  }
+  return 0;
+}
+#endif
+
 static void et_g3c4_enroll_context(et_g3c4_context_internal *context) {
   context->transport.registry_next = et_g3c4_transport_registry;
   et_g3c4_transport_registry = &context->transport;
@@ -1590,6 +1687,13 @@ static void et_g3c4_enroll_input(et_g3c4_input_internal *input) {
 static void et_g3c4_enroll_output(et_g3c4_output_internal *output) {
   output->transport.registry_next = et_g3c4_transport_registry;
   et_g3c4_transport_registry = &output->transport;
+}
+#endif
+
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+static void et_g3c4_enroll_logits(et_g3c4_logits_internal *logits) {
+  logits->transport.registry_next = et_g3c4_transport_registry;
+  et_g3c4_transport_registry = &logits->transport;
 }
 #endif
 
@@ -1623,6 +1727,12 @@ _Static_assert(sizeof(et_g3c4_output_internal) == 128u,
                "G3-C4 output record must be 128 bytes");
 _Static_assert(offsetof(et_g3c4_output_internal, transport) == 0u,
                "G3-C4 output header must be first");
+#endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+_Static_assert(sizeof(et_g3c4_logits_internal) == 48u,
+               "G3-C4 logits record must be 48 bytes");
+_Static_assert(offsetof(et_g3c4_logits_internal, transport) == 0u,
+               "G3-C4 logits header must be first");
 #endif
 #endif
 
@@ -1907,6 +2017,28 @@ int64_t et_g3c4_private_tensor_release_v1(void *candidate) {
   et_g3c4_input_internal *input;
   et_i64_tensor_error error;
   et_g3c4_error_reset_internal();
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  {
+    et_g3c4_transport_header_internal *header;
+    for (header = et_g3c4_transport_registry;
+         header != NULL && (void *)header != candidate;
+         header = header->registry_next) {}
+    if (header != NULL && header->kind == ET_G3C4_LOGITS_KIND) {
+      et_g3c4_logits_internal *logits =
+          et_g3c4_admit_logits(candidate, 1);
+      et_f32_tensor_error f32_error;
+      if (logits == NULL) return et_g3c4_error_state.category;
+      if (logits->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
+      if (et_g3c4_capture_f32(
+              et_f32_tensor_destroy_v1(&logits->tensor, &f32_error),
+              &f32_error) != 0)
+        return et_g3c4_error_state.category;
+      logits->parent_ctx = NULL;
+      logits->transport.state = ET_G3C4_CONTEXT_DEAD;
+      return 0;
+    }
+  }
+#endif
   input = et_g3c4_admit_input(candidate, 1);
   if (input == NULL) return et_g3c4_error_state.category;
   if (input->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
@@ -2325,6 +2457,51 @@ int64_t et_g3c4_private_output_release_v1(void *candidate) {
   if (output == NULL) return et_g3c4_error_state.category;
   if (output->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
   return et_g3c4_output_discard_pending(output);
+}
+#endif
+
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+void *et_g3c4_private_logits_reserve_v1(void *candidate) {
+  static const uint64_t shape[2] = {1u, 256u};
+  et_g3c4_context_internal *context;
+  et_g3c4_logits_internal *pending = NULL;
+  et_g3c4_logits_internal *logits;
+  et_f32_tensor_error error;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return NULL;
+  if ((context->call_kind != 0 && context->call_kind != 1) ||
+      context->budget != 0) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (et_g3c4_pending_logits_lookup(context, &pending) != 0)
+    return NULL;
+  if (pending != NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  logits = et_g3c4_logits_allocate();
+  if (logits == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  if (et_g3c4_capture_f32(
+          et_f32_tensor_create_v1(2u, shape, &logits->tensor, &error),
+          &error) != 0) {
+    et_g3c4_error_state_internal first =
+        et_g3c4_error_snapshot_internal();
+    free(logits);
+    et_g3c4_error_restore_internal(first);
+    return NULL;
+  }
+  logits->transport.magic = ET_G3C4_LOGITS_MAGIC;
+  logits->transport.kind = ET_G3C4_LOGITS_KIND;
+  logits->transport.state = 0u;
+  logits->parent_ctx = context;
+  et_g3c4_enroll_logits(logits);
+  return logits;
 }
 #endif
 
@@ -5025,6 +5202,10 @@ static size_t et_g3c4_transport_record_bytes(
       return sizeof(et_g3c4_input_internal);
     case ET_G3C4_OUTPUT_KIND:
       return sizeof(et_g3c4_output_internal);
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+    case ET_G3C4_LOGITS_KIND:
+      return sizeof(et_g3c4_logits_internal);
+#endif
     default:
       return sizeof(*header);
   }
@@ -5341,6 +5522,9 @@ int64_t et_g3c4_private_call_prepare_end_v1(void *candidate) {
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   et_g3c4_output_internal *pending_output = NULL;
 #endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  et_g3c4_logits_internal *pending_logits = NULL;
+#endif
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
@@ -5348,6 +5532,13 @@ int64_t et_g3c4_private_call_prepare_end_v1(void *candidate) {
   if (et_g3c4_pending_output_lookup(context, &pending_output) != 0)
     return et_g3c4_error_state.category;
   if (pending_output != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  if (et_g3c4_pending_logits_lookup(context, &pending_logits) != 0)
+    return et_g3c4_error_state.category;
+  if (pending_logits != NULL)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 #endif
@@ -5377,6 +5568,9 @@ int64_t et_g3c4_private_call_finish_v1(void *candidate) {
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   et_g3c4_output_internal *pending_output = NULL;
 #endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  et_g3c4_logits_internal *pending_logits = NULL;
+#endif
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
@@ -5384,6 +5578,13 @@ int64_t et_g3c4_private_call_finish_v1(void *candidate) {
   if (et_g3c4_pending_output_lookup(context, &pending_output) != 0)
     return et_g3c4_error_state.category;
   if (pending_output != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  if (et_g3c4_pending_logits_lookup(context, &pending_logits) != 0)
+    return et_g3c4_error_state.category;
+  if (pending_logits != NULL)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 #endif
@@ -5400,6 +5601,9 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   et_g3c4_output_internal *pending_output = NULL;
 #endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  et_g3c4_logits_internal *pending_logits = NULL;
+#endif
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
@@ -5410,12 +5614,32 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
       et_g3c4_output_discard_preflight(pending_output) != 0)
     return et_g3c4_error_state.category;
 #endif
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  if (et_g3c4_pending_logits_lookup(context, &pending_logits) != 0)
+    return et_g3c4_error_state.category;
+#ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
+  if (pending_logits != NULL && !et_g3c4_token_frame_idle(context))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
+#endif
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
   if (!et_g3c4_token_frame_idle(context))
     et_g3c4_token_frame_discard(context);
 #endif
   if (et_g3c4_cache_idle_preflight(context) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
+  if (pending_logits != NULL) {
+    et_f32_tensor_error error;
+    if (et_g3c4_capture_f32(
+            et_f32_tensor_destroy_v1(&pending_logits->tensor, &error),
+            &error) != 0)
+      return et_g3c4_error_state.category;
+    pending_logits->parent_ctx = NULL;
+    pending_logits->transport.state = ET_G3C4_CONTEXT_DEAD;
+  }
+#endif
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   if (pending_output != NULL &&
       et_g3c4_output_discard_pending(pending_output) != 0)
