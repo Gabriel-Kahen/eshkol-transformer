@@ -1077,8 +1077,11 @@ Hosted CI run `36125833885` on PR #126 exposed three new P1 hash-table
 runtime references in the I2 aggregate that its exact undefined-symbol
 manifest did not yet admit. The standalone P1 object at `76299fd` matches
 its 110-symbol manifest. The 13 source aggregates that load P1 now each
-admit those same three runtime references; exact aggregate rebuild and CI
-verification remain pending. The local full P1 gate reached trusted test
+admit those same three runtime references. The exact I2 aggregate rebuilt
+at `8dc1e97` and its 157-symbol generated evidence and fresh `nm -u` output
+match the manifest byte for byte; sealed evidence is
+`i2-index-symbols-8dc1e97-20260925/SHA256SUMS` (`0c20051f...`). Other
+aggregate and CI verification remain pending. The local full P1 gate reached trusted test
 compilation, then hit its default 360-second per-compile timeout. Its
 earlier package and sanitizer gates passed; a full 900-second-bound rerun
 remains open.
