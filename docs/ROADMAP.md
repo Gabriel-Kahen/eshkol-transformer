@@ -663,9 +663,10 @@ commit, immediate call finish, and independently releasable output ownership.
 Candidate `2355d2c`/tree `a43a709` is integrated byte-identically at
 `017a213`. The pinned normal/repeat/ASan+UBSan+LSan witnesses each pass 118
 checks with identical stdout and empty stderr. Root reviewed source and tests,
-reran the static contracts and Q0 4/4, and sealed evidence at
+reran the merged-tree pinned normal witness (118 checks), static contracts and
+Q0 4/4, and sealed evidence at
 `/home/gabe/.codex/evidence/eshkol-transformer/g3t-final-publication-2355d2c-20260925/SHA256SUMS`
-(`d414c6e8...`). G0, public facade/accessors, generation loop and CLI remain
+(`eb7f3536...`). G0, public facade/accessors, generation loop and CLI remain
 open.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
