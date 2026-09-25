@@ -259,7 +259,7 @@ clang++-21 -fPIE -fuse-ld=bfd /out/private.o "${fault_objects[@]}" \
   -Wl,-z,stack-size=536870912 \
   -pthread -ldl -lm -lcrypto -lpng -ljpeg -lwebp -lz -lopenblas \
   -o /out/fault/probe > /out/fault/link.stdout 2> /out/fault/link.stderr
-for mode in t2 m3t o2 lease cleanup retention lease-busy close-busy; do
+for mode in t2 m3t m3t-model o2 lease cleanup retention lease-busy close-busy; do
   timeout 60s /out/fault/probe "${mode}" /out/corpus \
     > "/out/fault/${mode}.stdout" 2> "/out/fault/${mode}.stderr"
 done
@@ -374,6 +374,8 @@ grep -Fx 'TR3 factory fault t2 first=12/3/0/0 again=7/1/3/0 D2=0/0/0/0 O2=0 PASS
   "${evidence}/fault/t2.stdout" >/dev/null
 grep -Fx 'TR3 factory fault m3t first=12/6/0/0 again=7/1/3/0 D2=1/1/0/0 O2=0 PASS' \
   "${evidence}/fault/m3t.stdout" >/dev/null
+grep -Fx 'TR3 factory fault m3t-model first=12/7/0/0 again=7/1/3/0 D2=1/1/0/0 O2=0 PASS' \
+  "${evidence}/fault/m3t-model.stdout" >/dev/null
 grep -Fx 'TR3 factory fault o2 first=12/8/0/0 again=7/1/3/0 D2=1/1/0/0 O2=0 PASS' \
   "${evidence}/fault/o2.stdout" >/dev/null
 grep -Fx 'TR3 factory fault lease first=12/9/8/0 again=7/1/3/0 D2=1/1/0/0 O2=1 PASS' \
@@ -394,7 +396,7 @@ grep -F 'Bounded arena exhausted: request 288 bytes exceeds remaining capacity' 
   "${evidence}/fault/lease.stderr" >/dev/null
 grep -F 'Failed to allocate vector with header (capacity=17)' \
   "${evidence}/fault/lease.stderr" >/dev/null
-for mode in m3t o2 cleanup retention lease-busy close-busy; do
+for mode in m3t m3t-model o2 cleanup retention lease-busy close-busy; do
   test ! -s "${evidence}/fault/${mode}.stderr"
 done
 test ! -s "${evidence}/fault/link.stderr"

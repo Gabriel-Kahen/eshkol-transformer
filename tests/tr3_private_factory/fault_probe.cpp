@@ -28,7 +28,8 @@ extern "C" eshkol_tagged_value_t factory_retained
 
 namespace {
 enum class Mode {
-  idle, t2, m3t, o2, lease, cleanup, retention, lease_busy, close_busy
+  idle, t2, m3t, m3t_model, o2, lease, cleanup, retention, lease_busy,
+  close_busy
 };
 Mode mode = Mode::idle;
 int64_t stage = 0;
@@ -128,6 +129,19 @@ void retained_snapshot(eshkol_tagged_value_t out[6]) {
           "source child remains rooted");
   }
 }
+eshkol_tagged_value_t retained_slot(unsigned index) {
+  check(index < 6 && ESHKOL_IS_VECTOR_COMPAT(factory_retained),
+        "source retention root available");
+  const uint8_t *const data = reinterpret_cast<const uint8_t *>(
+      static_cast<uintptr_t>(factory_retained.data.ptr_val));
+  int64_t length = 0;
+  std::memcpy(&length, data, sizeof(length));
+  check(length == 6, "source retention root has six slots");
+  eshkol_tagged_value_t slot{};
+  std::memcpy(&slot, data + sizeof(length) + index * sizeof(slot),
+              sizeof(slot));
+  return slot;
+}
 }  // namespace
 
 extern "C" int64_t __wrap_et_tr3_c_factory_stage_v1(int64_t value) {
@@ -172,6 +186,7 @@ int main(int argc, char **argv) {
   check(argc == 3, "mode and corpus arguments");
   if (std::strcmp(argv[1], "t2") == 0) mode = Mode::t2;
   else if (std::strcmp(argv[1], "m3t") == 0) mode = Mode::m3t;
+  else if (std::strcmp(argv[1], "m3t-model") == 0) mode = Mode::m3t_model;
   else if (std::strcmp(argv[1], "o2") == 0) mode = Mode::o2;
   else if (std::strcmp(argv[1], "lease") == 0) mode = Mode::lease;
   else if (std::strcmp(argv[1], "cleanup") == 0) mode = Mode::cleanup;
@@ -209,6 +224,7 @@ int main(int argc, char **argv) {
   check(digest(argv[2], request.expected_manifest_sha256), "manifest digest");
   if (mode == Mode::m3t || mode == Mode::cleanup)
     et_m3t_test_fail_alloc_after(0);
+  if (mode == Mode::m3t_model) et_m3t_test_fail_alloc_after(1);
   if (mode == Mode::o2) et_o2_test_fail_alloc_after_v1(0);
   const et_tr3_c_result_v1 first =
       et_tr3_c_private_trainer_create_v1(&request);
@@ -327,6 +343,19 @@ int main(int argc, char **argv) {
     check(stage == ET_TR3_C_STAGE_M3T_INITIALIZER, "M3T initializer reached");
     check(opens == 1 && closes == 1 && peak_live == 1,
           "one open D2 receiver closed after later failure");
+  } else if (std::strcmp(argv[1], "m3t-model") == 0) {
+    check(first.stage == ET_TR3_C_STAGE_M3T_MODEL &&
+              stage == ET_TR3_C_STAGE_M3T_MODEL,
+          "genuine M3T model owner allocation failed after initializer");
+    const eshkol_tagged_value_t initializer = retained_slot(3);
+    const eshkol_tagged_value_t model = retained_slot(4);
+    check(initializer.type == ESHKOL_VALUE_HEAP_PTR &&
+              initializer.data.ptr_val != 0 &&
+              model.type == ESHKOL_VALUE_BOOL && model.data.int_val == 0,
+          "initializer rooted while failed model remains unpublished");
+    check(opens == 1 && closes == 1 && peak_live == 1 &&
+              optimizer_count() == 0,
+          "D2 closed and no O2 receiver after model failure");
   } else if (std::strcmp(argv[1], "o2") == 0) {
     check(first.stage == ET_TR3_C_STAGE_O2 && stage == ET_TR3_C_STAGE_O2,
           "O2 allocation failure stage");
