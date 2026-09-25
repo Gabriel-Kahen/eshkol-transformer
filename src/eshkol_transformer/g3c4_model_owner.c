@@ -1003,7 +1003,8 @@ static int et_g3c4_manual_frame_valid(
       (frame->next_ordinal < 0 || frame->next_ordinal > 11) ||
       (frame->next_ordinal < 11 &&
        (frame->a2_candidate != NULL || frame->a2_transaction != NULL)) ||
-      (frame->next_ordinal == 11 && frame->a2_candidate == NULL) ||
+      (frame->next_ordinal == 11 &&
+       (frame->a2_candidate == NULL || frame->a2_transaction == NULL)) ||
 #elif defined(ET_G3C4_MANUAL_PRE_A2_PRIVATE)
       (frame->next_ordinal < 0 || frame->next_ordinal > 10) ||
 #elif defined(ET_G3C4_MANUAL_ROLE0_PRIVATE)

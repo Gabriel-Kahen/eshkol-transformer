@@ -178,6 +178,28 @@ static void a2_case(et_g3c4_model_owner_internal *owner,
   check_binding_snapshot_equal(&binding, &binding_after);
   CHECK(memcmp(rng, context->generator_rng_words, sizeof(rng)) == 0);
   check_logits(pending, context);
+  {
+    et_a2_kv_cache_transaction *saved_transaction = frame->a2_transaction;
+    et_a2_kv_cache *saved_candidate = frame->a2_candidate;
+    frame->a2_transaction = NULL;
+    CHECK(et_g3c4_manual_a2_run(context) == ET_G3C4_INTERNAL);
+    CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_INVARIANT);
+    CHECK(et_g3c4_private_call_abort_v1(context) == ET_G3C4_INTERNAL);
+    CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_INVARIANT);
+    CHECK(context->manual_frame == frame && frame->a2_candidate == saved_candidate);
+    frame->a2_transaction = saved_transaction;
+    frame->a2_candidate = NULL;
+    CHECK(et_g3c4_manual_a2_run(context) == ET_G3C4_INTERNAL);
+    CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_INVARIANT);
+    CHECK(et_g3c4_private_call_abort_v1(context) == ET_G3C4_INTERNAL);
+    CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_INVARIANT);
+    CHECK(context->manual_frame == frame &&
+          frame->a2_transaction == saved_transaction);
+    frame->a2_candidate = saved_candidate;
+  }
+  snapshot_cache(context->cache, &after);
+  check_cache_snapshot_equal(&before, &after);
+  check_logits(pending, context);
   OK(et_f32_tensor_borrow_begin_v1(pending->tensor, &logits_borrow,
                                     &f32_error));
   CHECK(et_g3c4_private_call_abort_v1(context) != 0);

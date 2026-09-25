@@ -22,6 +22,7 @@ def check():
     runner = (ROOT / 'scripts/test-g3c4-manual-a2.sh').read_text()
     contract = (ROOT / 'docs/g3/G3_C4_MANUAL_A2_ORDINAL10_CONTRACT.md').read_text()
     role = source[source.index('static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run'):]
+    assert '(frame->a2_candidate == NULL || frame->a2_transaction == NULL)' in source
     for fragment in ('et_a2_kv_cache_create_v1', 'et_a2_kv_cache_read_borrow_layer_v1',
                      'et_a2_kv_cache_transaction_stage_layer_v1',
                      'et_a2_kv_cache_transaction_view_begin_v1',
@@ -33,7 +34,9 @@ def check():
     assert 'et_a2_kv_cache_transaction_abort_v1' in source[source.index('int64_t et_g3c4_private_call_abort_v1'):]
     assert 'et_g3c4_private_role_step_v1' not in source
     for fragment in ('a2_case(owner, 1, 1)', 'a2_case(owner, 1, 2)',
-                     'a2_case(owner, 2, 1)', 'fail_a2', 'logits_borrow'):
+                     'a2_case(owner, 2, 1)', 'fail_a2', 'logits_borrow',
+                     'frame->a2_transaction = NULL', 'frame->a2_candidate = NULL',
+                     'et_g3c4_private_call_abort_v1(context) == ET_G3C4_INTERNAL'):
         assert fragment in test, fragment
     for fragment in ('compile_mode normal', 'compile_mode sanitize',
                      'test-g3c4-manual-pre-a2.sh', 'added-defined.txt'):
