@@ -1,0 +1,200 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_manual_transport_extension.esk")
+
+(extern i64 manual-field ptr i64
+        :real et_g3c4_manual_transport_test_field_v1)
+(extern i64 manual-fail-after i64
+        :real et_g3c4_manual_transport_test_fail_after_v1)
+(extern i64 manual-fail-reset
+        :real et_g3c4_manual_transport_test_fail_reset_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 manual transport FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (latest kind)
+  (let loop ((remaining (vector-ref g3c4-registry 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 1) kind) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (dead-only? entry kind)
+  (and entry (eq? (vector-ref entry 1) kind)
+       (eq? (vector-ref entry 2) 'dead)
+       (let loop ((index 3))
+         (if (= index 12) #t
+             (and (not (vector-ref entry index)) (loop (+ index 1)))))))
+(define (config seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 0
+        ':eos #f ':seed seed))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+
+(reject "forged call entry" 'invalid-argument
+  (lambda () (g3t-logits-reserve (vector 'forged))))
+
+(define (manual-frame generator input call-kind frame-kind)
+  (g3c4-with-manual-call-internal
+    'g3c4-manual-transport-test generator call-kind
+    (let* ((call (vector-ref m3-call-state 0))
+           (logits (g3t-logits-reserve call)))
+      (g3t-frame-begin call input frame-kind)
+      (g3t-role-step call 0)
+      (g3t-role-step call 1)
+      (g3t-role-step call 2)
+      (g3t-role-step call 3)
+      (g3t-role-step call 4)
+      (g3t-role-step call 5)
+      (g3t-role-step call 6)
+      (g3t-role-step call 7)
+      (g3t-role-step call 8)
+      (g3t-role-step call 9)
+      (g3t-role-step call 10)
+      (g3t-role-step call 11)
+      (g3t-role-step call 12)
+      (g3t-role-step call 13)
+      (g3t-role-step call 14)
+      (g3t-role-step call 15)
+      (g3t-role-step call 16)
+      (g3t-role-step call 17)
+      (g3t-role-step call 18)
+      (g3t-role-step call 19)
+      (g3t-role-step call 20)
+      (g3t-frame-prepare call logits)
+      (vector-ref logits 0))))
+
+(define (run-prefill bytes seed expected-length)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer (config seed)))
+         (generator-entry (latest 'generator))
+         (input
+           (generation-input-create-internal
+             (t1-wave1-tokenizer-encode tokenizer bytes)))
+         (result (manual-frame generator input 0 1))
+         (entry (g3c4-registry-find result 'manual-test))
+         (native (vector-ref entry 3)))
+    (check "published logits entry is detached"
+           (and (eq? (vector-ref entry 1) 'logits)
+                (eq? (vector-ref entry 2) 'live)
+                (not (vector-ref entry 4))
+                (not (vector-ref entry 5))
+                (not (vector-ref entry 6))
+                (= (manual-field native 0) 3)
+                (= (manual-field native 1) 1)
+                (>= (manual-field native 2) 0)))
+    (check "native cache committed to prompt length"
+           (= (manual-field (vector-ref generator-entry 3) 3)
+              expected-length))
+    (check "shared guard and active cells released"
+           (and (not (vector-ref m3-call-state 0))
+                (not (vector-ref generator-entry 9))))
+    (check "input release" (generation-tensor-release-internal! input))
+    (check "logits release" (g3t-logits-release! result))
+    (check "native logits dead" (= (manual-field native 0) 2))
+    (check "logits release idempotent" (g3t-logits-release! result))
+    (check "generator close" (g3c4-generator-close-internal! generator))))
+
+(run-prefill (bytevector 41) 31 1)
+(run-prefill (bytevector 41 43) 37 2)
+
+(define decode-generator
+  (g3c4-generator-create-internal model tokenizer (config 41)))
+(define decode-generator-entry (latest 'generator))
+(define prefix-input
+  (generation-input-create-internal
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 47))))
+(define prefix-result (manual-frame decode-generator prefix-input 0 1))
+(check "decode prefix committed"
+       (= (manual-field (vector-ref decode-generator-entry 3) 3) 1))
+(check "prefix input release" (generation-tensor-release-internal! prefix-input))
+(check "prefix logits release" (g3t-logits-release! prefix-result))
+(define decode-input
+  (generation-input-create-internal
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 53))))
+(define decode-result (manual-frame decode-generator decode-input 1 2))
+(check "decode cache committed"
+       (= (manual-field (vector-ref decode-generator-entry 3) 3) 2))
+(check "decode input release" (generation-tensor-release-internal! decode-input))
+(check "decode logits release" (g3t-logits-release! decode-result))
+(check "decode generator close"
+       (g3c4-generator-close-internal! decode-generator))
+
+(define failure-generator
+  (g3c4-generator-create-internal model tokenizer (config 43)))
+(define failure-generator-entry (latest 'generator))
+(define failure-input
+  (generation-input-create-internal
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 61))))
+(define captured-order-native #f)
+(define captured-result-native #f)
+(reject "out-of-order role rolls back" 'invalid-state
+  (lambda ()
+    (g3c4-with-manual-call-internal
+      'g3c4-manual-order-cut failure-generator 0
+      (let* ((call (vector-ref m3-call-state 0))
+             (logits (g3t-logits-reserve call)))
+        (set! captured-order-native (vector-ref logits 3))
+        (g3t-frame-begin call failure-input 1)
+        (g3t-role-step call 1)
+        (vector-ref logits 0)))))
+(check "out-of-order rollback tombstones logits and call"
+       (and (dead-only? (latest 'logits) 'logits)
+            (dead-only? (latest 'call) 'call)
+            (= (manual-field captured-order-native 0) 2)
+            (= (manual-field (vector-ref failure-generator-entry 3) 3) 0)
+            (not (vector-ref failure-generator-entry 9))
+            (not (vector-ref m3-call-state 0))))
+
+(reject "wrong result shell rolls back" 'invalid-argument
+  (lambda ()
+    (g3c4-with-manual-call-internal
+      'g3c4-manual-result-cut failure-generator 0
+      (let* ((call (vector-ref m3-call-state 0))
+             (logits (g3t-logits-reserve call)))
+        (set! captured-result-native (vector-ref logits 3))
+        (g3t-frame-begin call failure-input 1)
+        (vector 'wrong-result)))))
+(check "wrong result tombstones Eshkol logits"
+       (dead-only? (latest 'logits) 'logits))
+(check "wrong result kills native logits"
+       (= (manual-field captured-result-native 0) 2))
+(check "wrong result preserves empty cache"
+       (= (manual-field (vector-ref failure-generator-entry 3) 3) 0))
+
+(reject "native reservation allocation failure" 'internal
+  (lambda ()
+    (g3c4-with-manual-call-internal
+      'g3c4-manual-allocation-cut failure-generator 0
+      (let ((call (vector-ref m3-call-state 0)))
+        (check "arm owner allocation cut" (= (manual-fail-after 0) 0))
+        (g3t-logits-reserve call)))))
+(check "reset owner allocation cut" (= (manual-fail-reset) 0))
+(check "allocation failure leaves exact tombstones"
+       (and (dead-only? (latest 'logits) 'logits)
+            (dead-only? (latest 'call) 'call)
+            (not (vector-ref failure-generator-entry 9))))
+(check "failure input release"
+       (generation-tensor-release-internal! failure-input))
+(check "failure generator close"
+       (g3c4-generator-close-internal! failure-generator))
+
+(display "G3-C4 manual transport PASS: checks=")
+(display checks)
+(display " routes=3 rollback=3")
+(newline)
