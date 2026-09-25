@@ -81,3 +81,33 @@ different run. Its 53-file seal is
 The 8,192-cycle run was not started: linear projection exceeds the 4 GiB
 heap and the 2,400-second runtime cap. A measured retention/time improvement
 or separately justified resource bound is needed before that horizon.
+
+## Native exact-token lookup leaf
+
+The integrated leaf adds an intrusive address-ordered AVL to P1's private
+native records. It accelerates exact lookup of registered token addresses;
+the permanent newest-first `records` chain still owns every record and all
+tombstones. Lookup compares only integer forms of pointers until an exact
+registered address matches, so forged pointers are never dereferenced. A
+missing address or invalid index takes the full chain. Node insertion and
+rotation allocate nothing and follow authoritative record publication, before
+the result token is returned. Any unexpected duplicate address invalidates
+the index and restores full-chain lookup.
+
+This changes only private record size and test-only invalidation API. Public
+token layout, status categories, native symbol manifests, and opaque surface
+slots remain unchanged. The focused native suite covers 2,828 indexed and
+fallback identity checks plus its inherited forged/stale, 139 allocation
+failpoints, construction rollback, deterministic builds, and sanitizer checks.
+It does not change the separate live-capacity or nonce-uniqueness scans in
+`create_token`; terminal record retention and the Eshkol global-arena slope
+are expected to remain.
+
+The clean `2a6ece7` full supported P1 package gate passed in 1:01:42 at
+3,985,304 KiB peak RSS. It includes the 2,828 native-index checks,
+failpoints, sanitizers, publication proof and deterministic rebuilds; the
+evidence is sealed at
+`p1-native-index-full-package-2a6ece7-20260925/SHA256SUMS`
+(`3d7b3224...`). Separate genuine 128/256-cycle samples measured lower
+native `find_record` self-time but no overall speed or memory improvement.
+The 8,192-cycle retention horizon remains unproven.

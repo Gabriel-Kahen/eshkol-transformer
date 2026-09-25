@@ -1450,6 +1450,17 @@ horizon was held because projected growth exceeds the 4 GiB heap and linear
 time exceeds the 2,400-second cap. Further measured retention/lookup work
 and integrated exact-head CI remain pending.
 
+The [native exact-token lookup leaf](P1_ACTIVE_RECORD_INDEX_CANDIDATE.md#native-exact-token-lookup-leaf)
+adds an allocation-free intrusive AVL to private P1 records while retaining
+the append-only chain and full-list fallback as authority. On exact clean
+`2a6ece7`, the pinned full supported P1 package gate passed in 1:01:42 at
+3,985,304 KiB peak RSS, including 2,828 native-index checks, failpoints,
+sanitizers, publication and deterministic rebuilds. The evidence seal is
+`p1-native-index-full-package-2a6ece7-20260925/SHA256SUMS`
+(`3d7b3224...`). The separate 128/256-cycle samples show faster native
+lookup but no overall speed or memory improvement claim; 8,192 cycles
+remain unproven.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
