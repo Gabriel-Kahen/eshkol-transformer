@@ -7,6 +7,7 @@ done
 cd "${PROJECT_ROOT}"
 
 compiler_evidence="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/tr3-shared-tail-finalizer-97c40c9d}"
+compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/tr3-shared-tail-finalizer/eshkol}"
 candidate_root="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/runtime-81298-recovery}"
 candidate_manifest="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
 image="$(tsv_value "${candidate_manifest}" container_image)"
@@ -15,6 +16,12 @@ image="$(tsv_value "${candidate_manifest}" container_image)"
 [[ "$(sha256sum "${compiler_evidence}/eshkol-run-release" | awk '{print $1}')" == \
   1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb ]] || \
   die "reviewed fixed compiler changed"
+[[ "$(git -C "${compiler_source}" rev-parse HEAD)" == \
+  97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0 ]] || \
+  die "reviewed fixed compiler headers changed"
+git -C "${compiler_source}" diff --quiet HEAD -- \
+  inc/eshkol/eshkol.h inc/eshkol/core/runtime.h lib/core/arena_memory.h || \
+  die "reviewed fixed compiler headers are modified"
 [[ "$(sha256sum "${candidate_root}/eshkol-build-canonical/libeshkol-runtime.a" | awk '{print $1}')" == \
   "$(tsv_value "${candidate_manifest}" runtime_archive_sha256)" ]] || \
   die "pinned runtime archive changed"
@@ -28,6 +35,7 @@ evidence="$(readlink -f -- "${evidence}")"
 docker run --rm --network none \
   -v "${PROJECT_ROOT}:/workspace:ro" \
   -v "${compiler_evidence}:/fixed:ro" \
+  -v "${compiler_source}:/fixed-source:ro" \
   -v "${candidate_root}:/candidate:ro" \
   -v "${evidence}:/out" -w /workspace "${image}" bash -lc '
 set -euo pipefail
@@ -115,6 +123,23 @@ clang++-21 -shared -Wl,--no-undefined -Wl,--version-script=/out/tr3.map \
   /candidate/eshkol-build-canonical/libeshkol-runtime.a \
   -lpng -ljpeg -lwebp -lz -lopenblas -lcrypto -pthread -ldl -lm \
   -o /out/libtr3_private.so > /out/link.stdout 2> /out/link.stderr
+
+clang++-21 -std=c++17 -Wall -Wextra -Werror \
+  -I /fixed-source/inc -I /fixed-source/lib/core \
+  tests/tr3_linked_private_package/init_probe.cpp \
+  -Wl,--whole-archive /out/libtr3_private.a -Wl,--no-whole-archive \
+  /candidate/eshkol-build-canonical/libeshkol-runtime.a \
+  -lpng -ljpeg -lwebp -lz -lopenblas -lcrypto -pthread -ldl -lm \
+  -o /out/init-probe
+timeout 60s /out/init-probe \
+  > /out/init-probe.stdout 2> /out/init-probe.stderr
+clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -I /fixed-source/inc -I native \
+  native/e1b_error_consumer_bridge.c \
+  tests/fixtures/e1b/private_initializer_retry.c \
+  -o /out/initializer-retry
+timeout 10s /out/initializer-retry \
+  > /out/initializer-retry.stdout 2> /out/initializer-retry.stderr
 
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic \
   tests/tr3_linked_private_package/dynamic_probe.c -ldl -o /out/dynamic-probe
@@ -205,6 +230,11 @@ cmp native/tr3_linked_private_package_dynamic_undefined_symbols.txt \
   "${evidence}/dynamic-undefined.txt"
 grep -Fx 'TR3 linked private dynamic boundary PASS' \
   "${evidence}/dynamic-probe.stdout" >/dev/null
+grep -E '^TR3 linked private initializer PASS: root_used_before=[0-9]+ root_used_after=[0-9]+$' \
+  "${evidence}/init-probe.stdout" >/dev/null
+test ! -s "${evidence}/init-probe.stderr"
+test ! -s "${evidence}/initializer-retry.stdout"
+test ! -s "${evidence}/initializer-retry.stderr"
 test ! -s "${evidence}/dynamic-probe.stderr"
 test ! -s "${evidence}/link.stderr"
 ar t "${evidence}/libtr3_private.a" | \
@@ -226,6 +256,7 @@ fi
   printf 'combined_undefined_count\t%s\n' "$(wc -l <"${evidence}/undefined-symbols.txt")"
   printf 'dynamic_export_count\t%s\n' "$(wc -l <"${evidence}/dynamic-defined.txt")"
   printf 'dynamic_boundary\t%s\n' "$(cat "${evidence}/dynamic-probe.stdout")"
+  printf 'initializer_boundary\t%s\n' "$(cat "${evidence}/init-probe.stdout")"
 } > "${evidence}/manifest.tsv"
 (cd "${evidence}" && find . -type f ! -name SHA256SUMS -printf '%P\n' | \
   LC_ALL=C sort | xargs sha256sum >SHA256SUMS)

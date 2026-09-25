@@ -579,9 +579,13 @@ The reviewed isolated Eshkol `97c40c9d` fix now permits a
 changing the transformer pin. The bounded gate composes the accepted 46-source
 root and exact 28-object/64-path native closure, localizes all but the package
 initializer, links with no unresolved trusted authority, and rejects hostile
-external links to private TR3/native symbols. It does not yet invoke the
-initializer or expose a C-callable trainer bridge; public trainer and resume
-acceptance remain pending.
+external links to private TR3/native symbols. Its static private archive now
+has a pinned runtime initializer witness: AOT-style shared-arena setup,
+E1B-style exception/parallel scope, one clean initialization, restored
+handler, and runtime-owned root allocation. The `.so` still hides its arena
+getter and shared-arena slot, so no same-runtime dynamic-host invocation or
+C-callable trainer bridge is accepted; real initializer failure retention is
+unmeasured. Public trainer and resume acceptance remain pending.
 
 The isolated root integration tree `463a06b` passed its combined supported
 E3-private/CLI3-A package and focused runtime gate in the immutable f31
