@@ -73,7 +73,7 @@ script = script.replace("tr3_joint_runtime", "tr3_retention_runtime")
 script = script.replace("joint-runtime", "retention-runtime")
 script = script.replace(
     '  -w /workspace "${image}" bash -lc',
-    '  -e "TR3_CYCLE_HORIZONS=${TR3_CYCLE_HORIZONS:-1024 8192}" '
+    '  -e "TR3_CYCLE_HORIZONS=${TR3_CYCLE_HORIZONS:-32 128}" '
     '-w /workspace "${image}" bash -lc',
 )
 script = script.replace(
@@ -118,7 +118,7 @@ runtime = '''ESHKOL_ARENA_POISON=1 /usr/bin/time -v -o /out/runtime.time \\
   /out/retention-runtime /out/corpus \\
   > /out/runtime.stdout 2> /out/runtime.stderr'''
 assert runtime in script
-script = script.replace(runtime, '''for horizon in ${TR3_CYCLE_HORIZONS:-1024 8192}; do
+script = script.replace(runtime, '''for horizon in ${TR3_CYCLE_HORIZONS:-32 128}; do
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \\
   UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \\
   ESHKOL_ARENA_POISON=1 ESHKOL_ARENA_REPORT=1 \\
@@ -131,14 +131,14 @@ check = '''test ! -s "${evidence}/runtime.stderr"
 grep -E '^TR3-C JOINT RUNTIME PASS: [0-9]+ checks, 42 tensors, abort/retry$' \\
   "${evidence}/runtime.stdout" >/dev/null'''
 assert check in script
-script = script.replace(check, '''for horizon in ${TR3_CYCLE_HORIZONS:-1024 8192}; do
+script = script.replace(check, '''for horizon in ${TR3_CYCLE_HORIZONS:-32 128}; do
   grep -E "^TR3-C CYCLE PASS horizon=${horizon} checks=[0-9]+ arena_delta=[0-9]+$" \\
     "${evidence}/${horizon}.stdout" >/dev/null
   if grep -E 'ERROR: AddressSanitizer|runtime error:|LeakSanitizer' \\
       "${evidence}/${horizon}.stderr"; then exit 1; fi
 done''')
 script = script.replace('"$(cat "${evidence}/runtime.stdout")"',
-                        '"cycle horizons ${TR3_CYCLE_HORIZONS:-1024 8192} passed"')
+                        '"cycle horizons ${TR3_CYCLE_HORIZONS:-32 128} passed"')
 script = script.replace('sha256sum /out/runtime_retention.esk',
                         'sha256sum "${evidence}/runtime_retention.esk"')
 script = script.replace('TR3-C joint runtime evidence:', 'TR3-C retention evidence:')

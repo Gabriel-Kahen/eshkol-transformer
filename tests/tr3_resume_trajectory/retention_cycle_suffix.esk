@@ -81,6 +81,7 @@
 (check "cycle profile and horizon"
        (and (= trajectory-accumulation 2)
             (or (= cycle-horizon 32)
+                (= cycle-horizon 128)
                 (= cycle-horizon 1024)
                 (= cycle-horizon 8192))))
 (trajectory-step cycle-source)
