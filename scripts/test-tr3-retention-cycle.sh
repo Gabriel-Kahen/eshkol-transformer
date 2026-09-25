@@ -101,7 +101,8 @@ script = script.replace(
     'compile native/c2_checkpoint_core.c c2_checkpoint_core.o -DET_C2_CHECKPOINT_CORE_TESTING')
 script = script.replace(
     'compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o',
-    'compile tests/c2/c2_checkpoint_save_test_bridge.c cycle_counts.o\n'
+    'compile tests/c2/c2_checkpoint_save_test_bridge.c cycle_counts.o '
+    '-DET_F32_TENSOR_TESTING -DET_O2_TESTING\n'
     'compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o')
 script = script.replace(
     '       -I include -I native -I src)',
