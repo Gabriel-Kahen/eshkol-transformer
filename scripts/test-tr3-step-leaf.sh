@@ -57,7 +57,6 @@ export ESHKOL_LIB_DIR=/workspace/lib ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
     -I /workspace/internal/c1/lib -I /workspace/internal/t2/lib \
     -I /workspace/internal/t1/lib -I /workspace/internal/d2/lib \
     -I /workspace/src -I /workspace/lib -L /out --lib tr3_step_native \
-    --emit-depfile /out/runtime.d \
     /workspace/tests/tr3_step_leaf/runtime.esk -o /out/runtime \
     > /out/compile.stdout 2> /out/compile.stderr
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
@@ -66,18 +65,34 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
 test ! -s "${evidence}/compile.stderr"
 test ! -s "${evidence}/runtime.stderr"
 grep -Fx 'TR3-STEP-LEAF-PASS checks=41' "${evidence}/runtime.stdout" >/dev/null
-python3 - "${evidence}/runtime.d" "${evidence}/source-closure.txt" <<'PY'
+python3 - "${PROJECT_ROOT}" "${evidence}/source-closure.txt" <<'PY'
 from pathlib import Path
+import re
 import sys
-dep = Path(sys.argv[1]).read_text().replace('\\\n', ' ')
-paths = [path.removeprefix('/workspace/') for path in dep.split(':', 1)[1].split()]
-assert len(paths) == len(set(paths))
+root, output = map(Path, sys.argv[1:])
+search = ('native', 'internal/p1/lib', 'internal/c1/lib',
+          'internal/t2/lib', 'internal/t1/lib', 'internal/d2/lib',
+          'src', 'lib')
+seen = set()
+def visit(path):
+    path = path.resolve()
+    if path in seen:
+        return
+    seen.add(path)
+    for name in re.findall(r'\(load\s+"([^"]+)"\)', path.read_text()):
+        found = next((candidate for directory in (path.parent, *(root / item for item in search))
+                      if (candidate := directory / name).is_file()), None)
+        if found is None:
+            raise ValueError(f'missing static load: {name}')
+        visit(found)
+visit(root / 'tests/tr3_step_leaf/runtime.esk')
+paths = sorted(str(path.relative_to(root)) for path in seen)
 for required in ('native/tr3_step_private_root.esk',
                  'native/tr3_lease_root.esk',
                  'native/tr3b_objective_extension.esk',
                  'native/tr3_o2_step_clear_extension.esk'):
     assert paths.count(required) == 1, required
-Path(sys.argv[2]).write_text(''.join(path + '\n' for path in paths))
+output.write_text(''.join(path + '\n' for path in paths))
 PY
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${oracle}" \
   -m tests.tr3_step_leaf.check_numeric "${evidence}/runtime.stdout" \
