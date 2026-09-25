@@ -1068,6 +1068,15 @@ construction-handle identity, indexed-shell runtime symbols, and I2 rollback
 changes; all three checks pass. The full pinned package and 8,192-cycle
 resource horizon remain open, and the cross-commit timing comparison is not
 an exact-base performance proof.
+Hosted CI run `36125833885` on PR #126 exposed three new P1 hash-table
+runtime references in the I2 aggregate that its exact undefined-symbol
+manifest did not yet admit. The standalone P1 object at `76299fd` matches
+its 110-symbol manifest. The 13 source aggregates that load P1 now each
+admit those same three runtime references; exact aggregate rebuild and CI
+verification remain pending. The local full P1 gate reached trusted test
+compilation, then hit its default 360-second per-compile timeout. Its
+earlier package and sanitizer gates passed; a full 900-second-bound rerun
+remains open.
 
 ## Wave 4 — practical pretraining and performance
 
