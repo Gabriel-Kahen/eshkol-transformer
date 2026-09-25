@@ -26,6 +26,10 @@ void *et_g3t_private_input_from_pair_v1(int64_t first, int64_t second);
 int64_t et_g3t_private_prompt_preflight_v1(
     void *context, void *input);
 #endif
+#ifdef ET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
+int64_t et_g3t_private_full_request_preflight_v1(
+    void *context, void *input);
+#endif
 int64_t et_g3t_private_tensor_release_v1(void *input);
 void *et_g3t_private_output_reserve_v1(void *context, int64_t prompt_length);
 int64_t et_g3t_private_output_release_v1(void *output);
@@ -122,6 +126,10 @@ int64_t et_g3t_test_rng_clone_busy_set_v1(void *clone, int64_t busy);
 #endif
 #ifdef ET_G3T_P2_ZERO_BUDGET_PRIVATE
 int64_t et_g3t_test_input_length_set_v1(void *input, int64_t length);
+#endif
+#ifdef ET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
+int64_t et_g3t_test_rng_counter_set_v1(
+    void *context, int64_t low, int64_t high);
 #endif
 #endif
 #endif

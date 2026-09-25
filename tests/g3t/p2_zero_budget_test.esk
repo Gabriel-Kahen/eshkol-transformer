@@ -16,6 +16,10 @@
 
 (extern i64 g3t-test-input-length-set ptr i64
         :real et_g3t_test_input_length_set_v1)
+(extern i64 g3t-native-full-request-preflight ptr ptr
+        :real et_g3t_private_full_request_preflight_v1)
+(extern i64 g3t-test-rng-counter-set ptr i64 i64
+        :real et_g3t_test_rng_counter_set_v1)
 (extern i64 g3t-test-output-word ptr i64 :real et_g3t_test_output_word_v1)
 (extern i64 g3t-test-output-state ptr :real et_g3t_test_output_state_v1)
 (extern ptr g3t-test-output-borrow-begin ptr
@@ -406,6 +410,11 @@
         ':temperature-bits #x3f800000 ':top-k 256
         ':top-p-bits #x3f800000 ':max-new-tokens 1
         ':eos #f ':seed 1729))
+(define policy-greedy-g1
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
 (define (rng-policy source budget)
   (list ':profile 'diagnostic-c2 ':sampling 'categorical
         ':temperature-bits #x3f800000 ':top-k 256
@@ -419,11 +428,47 @@
 (check "invalid pair rejected"
        (null? (g3t-native-input-from-pair 65 256)))
 (check "P2 preflight" (= 0 (g3t-native-prompt-preflight native input)))
+(check "full request P2/G0 admitted before pins"
+       (and (= 0 (g3t-native-full-request-preflight native input))
+            (= 0 (g3t-test-pin-count native))
+            (= 0 (g3t-test-cache-length native))
+            (= 0 (g3t-test-rng-word native 2))))
+(define full-p1 (g3t-native-input-from-token 65))
+(check "full request P1/G0 admitted before pins"
+       (and (= 0 (g3t-native-full-request-preflight native full-p1))
+            (= 0 (g3t-test-pin-count native))))
+(check "P2-only helper still rejects P1 before pins"
+       (and (not (= 0 (g3t-native-prompt-preflight native full-p1)))
+            (= 0 (g3t-test-pin-count native))))
+(check "full request rejects forged generator"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        (vector 'forged) full-p1)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "full request rejects forged input"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        native (vector 'forged))))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "full request rejects wrong input kind"
+       (and (not (= 0 (g3t-native-full-request-preflight native native)))
+            (= 1 (g3t-test-last-error-category))
+            (= 1 (g3t-test-last-error-code))))
+(check "full request P1 release"
+       (= 0 (g3t-native-tensor-release full-p1)))
+(check "full request rejects dead input"
+       (and (not (= 0 (g3t-native-full-request-preflight native full-p1)))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
 (check "length>2 setup" (= 0 (g3t-test-input-length-set input 3)))
 (check "length>2 rejected before pins"
        (and (not (= 0 (g3t-native-prompt-preflight native input)))
             (= 0 (g3t-test-pin-count native))
             (= 0 (g3t-test-cache-length native))))
+(check "full request rejects length>2 before pins"
+       (and (not (= 0 (g3t-native-full-request-preflight native input)))
+            (= 3 (g3t-test-last-error-category))
+            (= 0 (g3t-test-pin-count native))))
 (check "length restored" (= 0 (g3t-test-input-length-set input 2)))
 
 (check "acquire" (= 0 (g3t-native-call-acquire native 2)))
@@ -1503,6 +1548,65 @@
 (define g1-generator (g3t-generator-create model tokenizer policy-g1))
 (define g1-native (vector-ref (g3t-generator-find g1-generator 'g3t-p2-g1) 3))
 (define g1-input (g3t-generation-pair-input-create 65 66))
+(define g1-p1-native-input (g3t-native-input-from-token 65))
+(define g1-p2-native-input
+  (vector-ref (g3t-prefill-entry g1-input 'input 'g3t-p2-g1) 3))
+(check "full request P1/G1 admitted before pins"
+       (and (= 0 (g3t-native-full-request-preflight
+                   g1-native g1-p1-native-input))
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "full request P2/G1 rejected before pins and draw"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p2-native-input)))
+            (= 3 (g3t-test-last-error-category))
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "counter fixture rejects forged generator"
+       (and (not (= 0 (g3t-test-rng-counter-set
+                        (vector 'forged) -1 -1)))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "counter fixture rejects wrong kind"
+       (and (not (= 0 (g3t-test-rng-counter-set
+                        g1-p1-native-input -1 -1)))
+            (= 0 (g3t-test-rng-word g1-native 2))))
+(check "full request busy fixture acquire"
+       (= 0 (g3t-native-call-acquire g1-native 2)))
+(check "full request rejects busy generator and counter mutation"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p1-native-input)))
+            (= 2 (g3t-test-last-error-category))
+            (not (= 0 (g3t-test-rng-counter-set g1-native -1 -1)))
+            (= 0 (g3t-test-rng-word g1-native 2))
+            (= 14 (g3t-test-pin-count g1-native))))
+(check "full request busy fixture abort"
+       (= 0 (g3t-native-call-abort g1-native)))
+(check "idle counter fixture set exhausted"
+       (= 0 (g3t-test-rng-counter-set g1-native -1 -1)))
+(check "categorical G1 exhaustion is 2/12 before pins"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p1-native-input)))
+            (= 2 (g3t-test-last-error-category))
+            (= 12 (g3t-test-last-error-code))
+            (= 0 (g3t-test-pin-count g1-native))
+            (= 0 (g3t-test-cache-length g1-native))
+            (= -1 (g3t-test-rng-word g1-native 2))))
+(check "call acquire defensive exhaustion is 2/12"
+       (and (not (= 0 (g3t-native-call-acquire g1-native 2)))
+            (= 2 (g3t-test-last-error-category))
+            (= 12 (g3t-test-last-error-code))
+            (= 0 (g3t-test-pin-count g1-native))))
+(check "P2/G1 shape precedes exhausted draw"
+       (and (not (= 0 (g3t-native-full-request-preflight
+                        g1-native g1-p2-native-input)))
+            (= 3 (g3t-test-last-error-category))
+            (= 0 (g3t-test-pin-count g1-native))))
+(check "G1 counter fixture restored"
+       (= 0 (g3t-test-rng-counter-set g1-native 0 0)))
+(check "G1 full request P1 input release"
+       (= 0 (g3t-native-tensor-release g1-p1-native-input)))
 (check "P2/G1 rejected before pins"
        (and (guard (caught (#t caught))
               (g3t-p2-zero-generate! g1-generator g1-input) #f)
@@ -1511,6 +1615,36 @@
             (= 0 (g3t-test-rng-word g1-native 2))))
 (check "G1 close" (g3t-generator-close! g1-generator))
 (check "G1 input release" (g3t-generation-tensor-release! g1-input))
+(define exhausted-g0-generator (g3t-generator-create model tokenizer policy))
+(define exhausted-g0-native
+  (vector-ref (g3t-generator-find exhausted-g0-generator 'exhausted-g0) 3))
+(define exhausted-g0-input (g3t-native-input-from-token 65))
+(check "G0 exhausted fixture"
+       (= 0 (g3t-test-rng-counter-set exhausted-g0-native -1 -1)))
+(check "G0 exhausted RNG still admitted"
+       (= 0 (g3t-native-full-request-preflight
+              exhausted-g0-native exhausted-g0-input)))
+(check "G0 exhausted input release"
+       (= 0 (g3t-native-tensor-release exhausted-g0-input)))
+(check "G0 exhausted generator close"
+       (g3t-generator-close! exhausted-g0-generator))
+(define exhausted-greedy-generator
+  (g3t-generator-create model tokenizer policy-greedy-g1))
+(define exhausted-greedy-native
+  (vector-ref (g3t-generator-find exhausted-greedy-generator 'exhausted-greedy) 3))
+(define exhausted-greedy-input (g3t-native-input-from-token 65))
+(check "greedy exhausted fixture"
+       (= 0 (g3t-test-rng-counter-set exhausted-greedy-native -1 -1)))
+(check "greedy G1 exhausted RNG still admitted"
+       (and (= 0 (g3t-native-full-request-preflight
+                   exhausted-greedy-native exhausted-greedy-input))
+            (= 0 (g3t-native-call-acquire exhausted-greedy-native 2))))
+(check "greedy G1 exhausted abort"
+       (= 0 (g3t-native-call-abort exhausted-greedy-native)))
+(check "greedy exhausted input release"
+       (= 0 (g3t-native-tensor-release exhausted-greedy-input)))
+(check "greedy exhausted generator close"
+       (g3t-generator-close! exhausted-greedy-generator))
 
 ;; G1 runs through the same native object with P2 enabled.
 (define g1-regression (g3t-generator-create model tokenizer policy-g1))
