@@ -129,9 +129,14 @@ test "$(ar t /out/libeshkol_transformer_tr3_public_candidate.a)" = combined.o
 python3 -m tests.e3_reference.corpus --output /out/corpus
 timeout --foreground --signal=TERM --kill-after=5s 120s \
   /fixed/eshkol-run-release --strict-types --no-stdlib -O 0 \
+    -I lib --compile-only --emit-depfile /out/caller.d \
+    tests/tr3_public_candidate/runtime.esk -o /out/caller.o \
+    > /out/caller-check.stdout 2> /out/caller-check.stderr
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  /fixed/eshkol-run-release --strict-types --no-stdlib -O 0 \
     -I lib -L /out -L /candidate/eshkol-build-canonical \
     --lib eshkol_transformer_tr3_public_candidate \
-    --emit-depfile /out/caller.d tests/tr3_public_candidate/runtime.esk \
+    tests/tr3_public_candidate/runtime.esk \
     -o /out/caller > /out/caller-compile.stdout 2> /out/caller-compile.stderr
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   /out/caller /out/corpus/packed-single \
