@@ -675,6 +675,14 @@ contracts do not define one data-only C request, child ownership/cleanup, or
 trainer handle/status ABI; CLI3 deliberately leaves `pretrain` flags undefined.
 The linked package therefore retains only its initializer export until those
 contracts are accepted.
+The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
+now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
+update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
+witness and independent PyTorch checker prove one fixed-profile two-microbatch
+update with wrong-weight rejection, abort/retry, gradient clear, and a numerical
+key-weight comparison. Trainer phase/counter publication is still test-owned;
+whole-step rollback, EOS replay, metrics, public `trainer-step!`, and resume
+acceptance remain pending.
 The exact private source `8a29dcf`/tree `43bff41` is integrated with
 identical runtime, test, and script blobs at `cc84b49`. The worker's pinned
 normal 1,024/8,192 and sanitizer 1,024 runtime gates each pass 133
