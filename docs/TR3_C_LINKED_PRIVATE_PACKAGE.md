@@ -16,11 +16,27 @@ control link and `dlopen` succeed; external static links to the private TR3
 lease and native restore symbols fail by name. `dlsym` sees the initializer but
 cannot see those private symbols or the result-cell restore entry.
 
-The shared library does not expose `trainer-create`, `trainer-state`,
-`trainer-load-state!` or a C-callable trainer bridge. The `dlopen` witness does
-not invoke the initializer, construct a trainer or exercise package runtime
-semantics. The accepted source-compiled private 151-check witness remains the
-only construct/snapshot/SAVE/LOAD/live-restore runtime evidence. Next work
-needs a reviewed initializer/exception boundary and package-facing trainer
-entry contract, followed by an actual C ABI runtime witness and ownership
-tests before any public facade or resume claim.
+The fixed compiler's `createLibraryInitFunction` emits
+`void __eshkol_lib_init__(void *arena)`. Its AOT entry initializes the hosted
+runtime, obtains a global arena, and writes `__repl_shared_arena` before
+executing package code. The existing E1B bridge calls the initializer with
+`get_global_arena_shared()` inside a parallel scope and exception handler. The
+linked private archive witness now follows those exact steps once. On the
+pinned runtime it completes without stderr, restores the prior exception
+handler, leaves the runtime's shared arena slot intact, and raises root-arena
+used bytes from 0 to 7,234,848. The root arena remains runtime-owned; the
+witness does not destroy or roll it back.
+
+The linked `.so` still exports only the initializer and version marker.
+`dlsym` explicitly rejects its arena getter and shared-arena slot, so a host
+cannot supply the **same runtime's** initialized arena through this dynamic
+boundary. The private archive witness proves initialization, not a callable
+dynamic-host bridge. The real initializer has no accepted deterministic
+failure injection here; its exception rollback and partial-root retention on
+failure remain unmeasured. E1B's separate injected-initializer test covers
+handler unwinding and retry only. The shared library does not expose
+`trainer-create`, `trainer-state`, `trainer-load-state!` or a C-callable trainer
+bridge. The accepted source-compiled private 151-check witness remains the
+construct/snapshot/SAVE/LOAD/live-restore runtime evidence. A reviewed
+same-runtime arena/exception bridge and package-facing trainer entry contract
+are still required before a dynamic C ABI witness or public resume claim.

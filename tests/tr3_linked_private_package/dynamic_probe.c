@@ -9,6 +9,8 @@ int main(int argc, char **argv) {
     return 3;
   }
   if (!dlsym(library, "__eshkol_lib_init__")) return 4;
+  if (dlsym(library, "get_global_arena_shared")) return 9;
+  if (dlsym(library, "__repl_shared_arena")) return 10;
   if (dlsym(library, "tr3-lease-create-internal")) return 5;
   if (dlsym(library, "tr3-c-trainer-load-state-internal!")) return 6;
   if (dlsym(library, "et_tr3_c_private_i2_restore_create_v1")) return 7;
