@@ -51,7 +51,9 @@ def check():
 
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
     step5_source = without_conditional_feature(
-        without_conditional_feature(source, "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE"),
+        without_conditional_feature(
+            without_conditional_feature(source, "ET_G3C4_MANUAL_ROLE0_PRIVATE"),
+            "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE"),
         "ET_G3C4_GENERATOR_PRIVATE")
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
     test = (ROOT / "tests/g3c4/test_active_call.c").read_text()

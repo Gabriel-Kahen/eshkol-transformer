@@ -803,6 +803,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_G3C4_OUTPUT_PREPARE_PRIVATE))
 #error "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE requires logits, input and committed-cache prerequisites"
 #endif
+#if defined(ET_G3C4_MANUAL_ROLE0_PRIVATE) && \
+    (!defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE) || \
+     !defined(ET_G3C4_TOKEN_FORWARD_PRIVATE))
+#error "ET_G3C4_MANUAL_ROLE0_PRIVATE requires manual frame and token provider routes"
+#endif
 #if defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A"
@@ -911,6 +916,9 @@ typedef struct et_g3c4_manual_frame_internal {
   int64_t input_length;
   int64_t input_ids[2];
   int64_t next_ordinal;
+#ifdef ET_G3C4_MANUAL_ROLE0_PRIVATE
+  float et[8];
+#endif
 } et_g3c4_manual_frame_internal;
 #endif
 
@@ -970,7 +978,11 @@ static int et_g3c4_manual_frame_valid(
       context->budget != 0 || frame->frame_kind < 1 ||
       frame->frame_kind > 2 ||
       context->call_kind != frame->frame_kind - 1 ||
+#ifdef ET_G3C4_MANUAL_ROLE0_PRIVATE
+      (frame->next_ordinal != 0 && frame->next_ordinal != 1) ||
+#else
       frame->next_ordinal != 0 ||
+#endif
       frame->input_length < 1 || frame->input_length > 2 ||
       (frame->frame_kind == 2 && frame->input_length != 1))
     return 0;
@@ -5325,6 +5337,64 @@ int64_t et_g3c4_private_frame_begin_v1(
   memcpy(frame->input_ids, ids, sizeof(frame->input_ids));
   frame->next_ordinal = 0;
   context->manual_frame = frame;
+  return 0;
+}
+#endif
+
+#ifdef ET_G3C4_MANUAL_ROLE0_PRIVATE
+/* Internal precursor to role_step: one token-embedding row, no publication. */
+static inline __attribute__((unused)) int64_t et_g3c4_manual_role0_run(
+    void *candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_manual_frame_internal *frame;
+  et_g3c4_logits_internal *pending = NULL;
+  et_kernel_runtime *runtime = NULL;
+  et_kernel_tensor_view_v1 inputs[2];
+  uint64_t ids_shape[2], row_shape[4], et_shape[3];
+  float et_candidate[8] = {0};
+  size_t bytes;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  frame = context->manual_frame;
+  if (frame == NULL || frame->next_ordinal != 0)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_logits_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+
+  ids_shape[0] = row_shape[0] = et_shape[0] = 1u;
+  ids_shape[1] = row_shape[1] = et_shape[1] = (uint64_t)frame->input_length;
+  row_shape[2] = 256u;
+  row_shape[3] = et_shape[2] = 4u;
+  bytes = (size_t)frame->input_length * 4u * sizeof(float);
+  if (et_g3c4_token_runtime_discover(
+          frame->input_length == 1 ? et_g3n_kernel_provider_v1() :
+                                     et_n3k_kernel_provider_v1(),
+          &runtime) != 0)
+    return et_g3c4_error_state.category;
+  inputs[0] = et_g3c4_view(frame->input_ids,
+                            (size_t)frame->input_length * sizeof(int64_t),
+                            "i64", 2u, ids_shape);
+  inputs[1] = context->pins.views[10];
+  if (et_g3c4_token_dispatch(
+          runtime,
+          frame->input_length == 1 ? "g3n.embedding-forward" :
+                                     "n3k.embedding-forward",
+          frame->input_length == 1 ? "g3n.embedding.forward" :
+                                     "n3k.embedding.forward",
+          4u, row_shape, inputs, 2u,
+          et_g3c4_view(et_candidate, bytes, "f32", 3u, et_shape)) != 0) {
+    et_kernel_runtime_destroy(runtime);
+    return et_g3c4_error_state.category;
+  }
+  et_kernel_runtime_destroy(runtime);
+  memcpy(frame->et, et_candidate, bytes);
+  frame->next_ordinal = 1;
   return 0;
 }
 #endif
