@@ -853,11 +853,12 @@ ASan+UBSan+LSan mode, twelve source contracts and Q0 4/4. No public G3-G
 facade, package, N>1 claim or CLI is accepted by this leaf.
 
 The [source-private detached text accessor](g3/G3_T_TEXT_RESULT_LEAF.md)
-is an isolated candidate after the accepted rooted raw-byte output and T1
-decode readiness. It returns a fresh one-element list of copied raw bytes
-for P1/G0, P2/G0 and P1/G1 without native or Eshkol owner enrollment.
-Focused pinned evidence is pending; no public G3-G facade, package, N>1
-claim or CLI is accepted by this candidate.
+is sealed at source commit `e912551` after the accepted rooted raw-byte
+output and T1 decode readiness. It returns a fresh one-element list of copied
+raw bytes for P1/G0, P2/G0 and P1/G1 without native or Eshkol owner
+enrollment. The pinned P2 aggregate passed 46,702 checks per normal, repeat
+and ASan+UBSan+LSan mode, thirteen source contracts and Q0 4/4. No public
+G3-G facade, package, N>1 claim or CLI is accepted by this leaf.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
