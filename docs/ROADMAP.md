@@ -788,6 +788,13 @@ passes 46,491 checks each, with seven source contracts and Q0 4/4;
 sealed evidence is `g3t-generator-rng-0b20801-r2`. An Eshkol RNG-owner
 registry entry and the G3-G public facade remain separate review gates.
 
+The [source-private RNG owner mapping](g3/G3_T_RNG_OWNER_LEAF.md) is an
+isolated candidate after the native constructor leaf. It uses the accepted
+G3-T registry to expose a detached kind-8 output clone and typed release,
+with preallocated wrapper publication and cleanup after any post-clone
+failure. Focused pinned evidence is pending; `generator-create` RNG input
+admission, G3-G public facade, and package exports remain separate gates.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
