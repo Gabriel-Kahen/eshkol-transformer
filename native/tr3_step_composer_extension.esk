@@ -1,0 +1,127 @@
+;;; Source-private fixed [1,2] two-microbatch composer. Its sole root owns
+;;; every transient capability until release and the step frame until commit.
+
+(define tr3-step-composer-operation 'tr3-step-composer-internal!)
+(define tr3-step-composer-active (vector #f))
+;;; Test-only injection/observation hook. It is never installed publicly.
+(define tr3-step-composer-test-hook
+  (lambda (stage ordinal observation) #t))
+
+(define (tr3-step-composer-fail category message)
+  (m3t-fail category tr3-step-composer-operation message))
+
+;;; Ledger: [frame,input,seed,batch,output,graph-logits,active-tokens].
+(define (tr3-step-composer-release-batch! ledger)
+  (let ((logits (vector-ref ledger 5))
+        (output (vector-ref ledger 4))
+        (batch (vector-ref ledger 3)))
+    (if logits
+        (begin (m3-public-diagnostic-model-logits-release! logits)
+               (vector-set! ledger 5 #f)))
+    (if output
+        (begin (m3-public-model-output-release! output)
+               (vector-set! ledger 4 #f)))
+    (if batch
+        (begin (d2-token-batch-release! batch)
+               (vector-set! ledger 3 #f)))
+    #t))
+
+(define (tr3-step-composer-release-scratch! ledger)
+  (let ((seed (vector-ref ledger 2))
+        (input (vector-ref ledger 1)))
+    (if seed
+        (begin (m3t-public-logits-release! seed)
+               (vector-set! ledger 2 #f)))
+    (if input
+        (begin (m3t-public-input-release! input)
+               (vector-set! ledger 1 #f)))
+    #t))
+
+(define (tr3-step-composer-abort! ledger)
+  ;; Exact owners are idempotently releasable. Failure to release one of them
+  ;; or abort the authenticated frame is an invariant defect: never report a
+  ;; recoverable error with a live batch/graph or half-aborted step.
+  (guard (caught (#t (tr3-lease-fail-stop 134)))
+    (tr3-step-composer-release-batch! ledger)
+    (tr3-step-composer-release-scratch! ledger)
+    (let ((frame (vector-ref ledger 0)))
+      (if frame
+          (begin (tr3-step-abort-internal! frame)
+                 (vector-set! ledger 0 #f))))
+    (vector-set! tr3-step-composer-active 0 #f)
+    #t))
+
+(define (tr3-step-composer-microbatch! ledger ordinal)
+  (let* ((frame (vector-ref ledger 0))
+         (record (vector-ref frame 2))
+         (token (vector-ref frame 3)))
+    (tr3-step-composer-test-hook 'early ordinal #f)
+    (let ((dataset-state
+            (tr3-lease-step-dataset-internal record token)))
+      (if (not (eq? dataset-state (vector-ref record 16)))
+          (tr3-step-composer-fail 'internal
+                                  "dataset lease identity changed")))
+    (let ((batch (d2-token-dataset-next-batch (vector-ref record 15))))
+      (if (d2-token-dataset-end? batch)
+          (tr3-step-composer-fail 'invalid-state
+                                  "no-EOS step reached dataset end"))
+      (vector-set! ledger 3 batch)
+      (tr3-stage-d2-input! batch (vector-ref ledger 1))
+      (let* ((model-entry (tr3-lease-step-model-internal record token))
+             (output
+               (m3-public-model-forward
+                 (vector-ref model-entry 0) (vector-ref ledger 1) '())))
+        (vector-set! ledger 4 output)
+        (let* ((logits (m3-public-model-output-logits output))
+               (observation (make-bytevector 12 0)))
+          (vector-set! ledger 5 logits)
+          (tr3-objective-vjp!
+            output logits batch (vector-ref ledger 2) ordinal observation)
+          (let ((weight (tr3b-u32-le observation 4)))
+            (if (not (or (= weight 1065353216) (= weight 1073741824)))
+                (tr3-step-composer-fail
+                  'invalid-state "fixed bool mask weight is not one or two"))
+            (vector-set! ledger 6
+                         (+ (vector-ref ledger 6)
+                            (if (= weight 1065353216) 1 2))))
+          (tr3-step-composer-test-hook 'observation ordinal observation)
+          (tr3-step-composer-test-hook 'mid ordinal observation)
+          (tr3-step-composer-release-batch! ledger))))))
+
+(define (tr3-step-composer-run! ledger trainer)
+  (let ((frame (tr3-step-start-internal trainer)))
+    (vector-set! ledger 0 frame)
+    (let* ((record (vector-ref frame 2))
+           (resolved (vector-ref record 6)))
+      (if (or (not (= (x1-private-config-ref
+                        resolved 'training.accumulation-steps) 2))
+              (not (= (x1-private-config-ref resolved 'model.context-length) 2)))
+          (tr3-step-composer-fail
+            'unsupported "composer requires fixed context and accumulation two")))
+    (vector-set! ledger 1 (m3t-public-input-create))
+    (vector-set! ledger 2 (m3t-public-logits-create))
+    (tr3-step-composer-microbatch! ledger 0)
+    (tr3-step-composer-microbatch! ledger 1)
+    (tr3-step-composer-release-scratch! ledger)
+    (tr3-step-prepare-internal!
+      frame 2 (tr3-step-f32-integer-bits (vector-ref ledger 6)))
+    (tr3-step-composer-test-hook 'precommit 2 #f)
+    #t))
+
+(define (tr3-step-composer-internal! trainer)
+  (if (vector-ref tr3-step-composer-active 0)
+      (tr3-step-composer-fail 'invalid-state "step composer is busy"))
+  (let ((ledger (vector #f #f #f #f #f #f 0)))
+    (vector-set! tr3-step-composer-active 0 ledger)
+    ;; Every failure before native O2 COMMITTING releases exact owners and
+    ;; aborts the step. After O2 begins COMMITTING it either succeeds or
+    ;; fail-stops, so no recoverable path enters this handler after a write.
+    (guard (caught
+             (#t (begin (tr3-step-composer-abort! ledger)
+                        (raise caught))))
+      (tr3-step-composer-run! ledger trainer)
+      (tr3-step-commit-internal!
+        (vector-ref ledger 0) (vector-ref ledger 6))
+      (vector-set! ledger 0 #f)
+      (vector-set! tr3-step-composer-active 0 #f)
+      #t)))
