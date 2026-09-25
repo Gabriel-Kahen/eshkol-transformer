@@ -574,8 +574,17 @@ eval mode, and absence of an active workspace without enrolling a generator.
 Root's pinned normal/repeat/sanitizer witness passes 24 checks, the source
 closure and merged Q0 4/4 pass, and evidence is sealed at
 `g3t-model-admission-root-59558ba-20260925/SHA256SUMS` (`ab03f8e1...`).
-The native G3-T generator context/registry, pointer pins, and transactional
-begin/close remain the next dependency before any public generation claim.
+The native G3-T context/pins and seeded constructor are now the accepted
+private predecessor `824f91e` (see
+[constructor leaf](g3/G3_T_GENERATOR_CONSTRUCTOR_LEAF.md)). This isolated
+[P1/G1 prefill/sample leaf](g3/G3_T_PREFILL_SAMPLE_LEAF.md) adds a guarded,
+source-private 21-role prefill, prepared prompt/cache/model binding commit,
+and speculative G3-S greedy/categorical output. Its pinned normal/repeat/
+sanitizer witness compares all 256 logits bitwise with M3T and exercises
+precommit, attention, and stale-profile rollback. A token frame, text/result
+publication, continuation binding validation and public generation remain
+pending. The predecessor's intermittent sanitizer model-seal crash remains a
+separate limitation.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
