@@ -4,7 +4,7 @@ This project is being developed through coordinated Codex tasks.
 
 ## Working method
 
-- Use `gpt-5.6-sol` with high reasoning for project tasks.
+- Use `gpt-6-sol` with high reasoning for project tasks.
 - Use subagents for independent implementation, tests, review, or documentation when
   the task has separable work.
 - Work from the roadmap dependency graph. Do not implement a dependent subsystem
