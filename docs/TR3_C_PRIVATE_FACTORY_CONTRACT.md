@@ -208,5 +208,16 @@ vocabulary/identity failures are precluded by the fixed X1 profile, so the D2
 config rejection is the earliest source-backed T2/D2 cut reachable without
 allocation injection. Sealed evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-profile-seed-d2-28cc85a-20260925/SHA256SUMS`.
+A separate exact linked gate on `b076f25` gives D2 a valid D1 corpus whose
+manifest digest matches the request but whose fingerprint differs from the
+authenticated T2 byte tokenizer. The source D2 identity check raises
+`invalid-argument/D2/raised-e1` before returning a dataset; C returns a null
+handle and consumes the single attempt, and close on that null returns
+`invalid-argument/close/bad-handle`. On a successful construction, close through
+a copied exact handle returns `ok`; repeat close returns
+`invalid-state/close/already-closed`. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-factory-tokenizer-mismatch-b076f25-20260925/SHA256SUMS`.
+This tests T2-to-D2 corpus identity and lease unenrollment, not a T2 producer
+allocation failure, D2 destruction, or arena reclamation.
 Other producer and lease failure cuts, cleanup failure, process-root retention,
 broader E1 category evidence, and exact merged-union acceptance remain open.

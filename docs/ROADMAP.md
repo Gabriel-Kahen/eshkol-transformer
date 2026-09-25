@@ -919,9 +919,17 @@ profile rejection (`unsupported/X1`), create/close at both X1 seeds 1729 and
 cut (`invalid-argument/D2`) before filesystem access. Exact symbols and the
 candidate export boundary stay unchanged; sealed evidence is
 `tr3-factory-profile-seed-d2-28cc85a-20260925`. Model-state bytes and
-independent T2 fault injection were not observed. Other producer/lease cuts,
-cleanup-failure behavior, process-lifetime retention, broader E1 category
-evidence and an exact merged-union gate remain pending. Root independently
+independent T2 fault injection were not observed. The focused `b076f25`
+candidate gate uses an independently valid D1 corpus with a different T2
+fingerprint and correct digest, then proves authenticated
+`invalid-argument/D2/raised-e1`, a null handle, consumed attempt, and rejected
+close. Successful close through a copied exact handle returns `ok`; repeated
+close sees the tombstone. Exact symbols/exports remain unchanged; sealed
+evidence is `tr3-factory-tokenizer-mismatch-b076f25-20260925`. This does not
+prove T2 producer allocation failure or physical D2 cleanup. Other
+producer/lease cuts, cleanup-failure behavior, process-lifetime retention,
+broader E1 category evidence and an exact merged-union gate remain pending.
+Root independently
 reviewed the prior bridge, source wrapper, linked
 scripts, fixtures, runtime lifetime and sealed evidence without finding a
 blocker. Public trainer/resume status is unchanged.
