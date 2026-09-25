@@ -807,6 +807,13 @@ the constructor and P2 aggregate each passed normal/repeat/ASan+UBSan+LSan
 with 53 and 46,540 checks, nine source contracts, and Q0 4/4. The public
 G3-G facade and package remain separate gates.
 
+The [source-private owned scalar token input](g3/G3_T_OWNED_TOKEN_INPUT_LEAF.md)
+is an isolated candidate after the accepted T1-backed I1 route. It makes the
+exact byte-ID `input_from_token` branch own a distinct CPU I1[1,1], hardens
+the Eshkol shell publication/cleanup path, and retains inline IDs only as
+validated frame staging. Pinned focused evidence is pending; no public G3-G
+facade or package tuple is accepted by this candidate.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
