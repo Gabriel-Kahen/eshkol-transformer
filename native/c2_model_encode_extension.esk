@@ -1,6 +1,8 @@
 ;;; Private C2 adapter for encoding the nested C1 1.0 model container. Never
 ;;; install independently: the trusted caller must first load i2_wave2_root.esk.
 
+(require transformer.checkpoint_internal)
+
 (extern i64 c2-model-native-state-owned-copy ptr ptr i64
         :real et_c2_private_i2_state_owned_copy_bytes_v1)
 

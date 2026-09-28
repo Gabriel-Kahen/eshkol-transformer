@@ -6,6 +6,7 @@
 ;;; private core predicate check. It defines no installed surface or native ABI.
 
 (require e1b_error_consumer_private)
+(require x1_config_private)
 (load "t1_tokenizer_core.esk")
 (load "t2_bpe_core.esk")
 
