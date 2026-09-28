@@ -32,6 +32,14 @@ immediates. Unknown keys, other key types, and foreign tokens raise
 `invalid-argument` under the public `metrics-ref` operation. This facet does
 not yet install a public step producer; positive result fixtures use the
 source-private committed-record authority.
+The linked gate defaults to this checkout's `.deps/eshkol-src` and
+`.deps/eshkol-build`. An isolated checkout without those pinned dependencies
+must set `TR3_LINKED_COMPILER_SOURCE_DIR` to the clean fe9 source,
+`TR3_LINKED_COMPILER_EVIDENCE_DIR` to the matching runner directory, and
+`TR3_LEASE_RUNTIME_CANDIDATE_DIR` to their parent directory containing
+`eshkol-build`. The gate authenticates the fe9 commit, tree, runner hash,
+runtime archive hash, and provenance before compiling. The prior 81298 runtime
+is rejected because it has no true-f32 scalar ABI.
 
 The accepted C2 archive is a distinct versioned tuple. `scripts/build-c2.sh`
 copies the byte-pinned pre-TR3 `transformer/trainer.esk` into its artifact's

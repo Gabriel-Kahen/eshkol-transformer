@@ -10,6 +10,9 @@ fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-build}"
 compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-src}"
 runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-${PROJECT_ROOT}/.deps}"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
+[[ -f "${fixed}/eshkol-run" && -e "${compiler_source}/.git" &&
+   -f "${runtime}/eshkol-build/libeshkol-runtime.a" ]] ||
+  die "fe9 toolchain unavailable; set TR3_LINKED_COMPILER_EVIDENCE_DIR, TR3_LINKED_COMPILER_SOURCE_DIR, and TR3_LEASE_RUNTIME_CANDIDATE_DIR"
 case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-fe9}" in
   fe9)
     compiler_commit=fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9
@@ -190,6 +193,21 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   > /out/linked-metrics.stdout 2> /out/linked-metrics.stderr
 grep -Fx TR3-PUBLIC-METRICS-LINKED-PASS /out/linked-metrics.stdout >/dev/null
 test ! -s /out/linked-metrics.stderr
+
+# Focused bit and counter boundary proof for the actual installed C bridge.
+clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
+  -I /fixed-source/inc -c native/tr3_public_installed_bridge.c \
+  -o /out/metrics_bridge_unit.o
+clang-21 "${flags[@]}" -I /fixed-source/inc \
+  -c tests/tr3_metrics/public_bridge.c -o /out/metrics_bridge_unit_test.o
+clang++-21 -Wl,--gc-sections /out/metrics_bridge_unit.o \
+  /out/metrics_bridge_unit_test.o \
+  /candidate/eshkol-build-canonical/libeshkol-runtime.a \
+  -pthread -ldl -lm -o /out/metrics_bridge_unit_test
+/out/metrics_bridge_unit_test > /out/metrics-bridge.stdout \
+  2> /out/metrics-bridge.stderr
+grep -Fx TR3-PUBLIC-METRICS-BRIDGE-PASS /out/metrics-bridge.stdout >/dev/null
+test ! -s /out/metrics-bridge.stderr
 '
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
