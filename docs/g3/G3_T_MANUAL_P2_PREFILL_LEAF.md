@@ -1,6 +1,6 @@
 # G3-T private manual P2 prefill transport
 
-Status: implementation candidate pending independent review.
+Status: independently source-reviewed candidate; hosted integration CI pending.
 The accepted [manual P2 contract](G3_T_MANUAL_P2_TRANSPORT_PROPOSAL.md)
 defines this source-private extension to G3-T's existing kind-0 native call.
 It adds no public facade, new native symbol, G3-M orchestration, or manual
@@ -28,6 +28,9 @@ empty compiler/runtime stderr, 18 source contracts, Q0 4/4 and production
 test-symbol exclusion. One sanitizer launch used `detect_leaks=1`. Evidence
 is recorded at
 `/home/gabe/.codex/evidence/eshkol-transformer/g3t-manual-p2-native-candidate-20260928`.
+Root independently reviewed commit `fd11d72` / tree `4d100f8`: the owned-I1
+admission, 21-role dispatch, row-one logits, both K/V rows, cache preflight,
+failure cleanup and feature-off isolation match the accepted private contract.
 The synthetic dispatch cut tests error propagation and retry; it is not a
 measured failure from an actual provider. This leaf does not implement G3-M
 P2 orchestration or a public facade.
