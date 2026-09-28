@@ -1058,6 +1058,18 @@ hosted exact-head integration remain required; revision 2 remains the
 accepted installed boundary. Generic I2 interop, N>1, P2/repeated decode,
 resume and CLI are deferred.
 
+Independent review requested a narrower revision-3 negative closure. Its
+testing-only facade fixture now asserts public E1 operation/category/details
+for P2 non-byte inline IDs, P2 inline/stored divergence, decode divergence,
+and corrupt authenticated kind-3 storage, with predecessor result/cache/pins
+unchanged. The exact-source inherited materialization probe asserts malformed
+I2 shape, stride and storage return native internal/invariant and leave copy
+destination bytes untouched. Device and layout cannot be mutated in this
+fixture: `et_f32_tensor_borrow_begin_v1` builds both as fixed literals, the
+tensor stores neither field, and the public kind-3 shell exposes no generic
+I2 write. Follow-up evidence is under `g3g-manual-r3-negative-final-20260928/`;
+independent re-review and hosted exact-head integration remain pending.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/

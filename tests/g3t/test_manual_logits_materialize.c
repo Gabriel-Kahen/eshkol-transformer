@@ -99,15 +99,36 @@ int main(void) {
   CHECK(mutable_shape != NULL);
   mutable_shape[1] = 255;
   CHECK(et_g3t_private_logits_copy_bits_v1(&fixture, &out, 1024) != 0);
+  CHECK(et_g3t_private_last_error_category_v1() == G3T_INTERNAL);
+  CHECK(et_g3t_private_last_error_code_v1() == G3T_INVARIANT);
   CHECK(sentinel(&out));
   mutable_shape[1] = 256;
   size_t *mutable_stride = (size_t *)et_f32_tensor_test_stride_storage_v1(fixture.tensor);
   CHECK(mutable_stride != NULL);
   mutable_stride[1] = 8;
   CHECK(et_g3t_private_logits_copy_bits_v1(&fixture, &out, 1024) != 0);
+  CHECK(et_g3t_private_last_error_category_v1() == G3T_INTERNAL);
+  CHECK(et_g3t_private_last_error_code_v1() == G3T_INVARIANT);
   CHECK(sentinel(&out));
   mutable_stride[1] = 4;
 
+  et_f32_test_tensor_metadata_v1 snapshot = {
+      .struct_size = sizeof(snapshot)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(
+            fixture.tensor, &snapshot) == 0);
+  reset(&out);
+  CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+            fixture.tensor, ET_F32_TEST_TENSOR_METADATA_DATA, 0) == 0);
+  CHECK(et_g3t_private_logits_copy_bits_v1(&fixture, &out, 1024) != 0);
+  CHECK(et_g3t_private_last_error_category_v1() == G3T_INTERNAL);
+  CHECK(et_g3t_private_last_error_code_v1() == G3T_INVARIANT);
+  CHECK(sentinel(&out));
+  CHECK(et_f32_tensor_test_metadata_restore_v1(
+            fixture.tensor, &snapshot) == 0);
+  CHECK(et_g3t_private_logits_copy_bits_v1(&fixture, &out, 1024) == 0);
+  CHECK(memcmp(out.words, expected, sizeof(expected)) == 0);
+
+  reset(&out);
   et_f32_tensor_test_fail_alloc_after_v1(0);
   CHECK(et_g3t_private_logits_copy_bits_v1(&fixture, &out, 1024) != 0);
   CHECK(sentinel(&out));

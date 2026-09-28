@@ -10,13 +10,19 @@
 (extern ptr test-logits-borrow-begin ptr :real et_g3t_test_logits_borrow_begin_v1)
 (extern i64 test-logits-borrow-end ptr :real et_g3t_test_logits_borrow_end_v1)
 (extern i64 test-fail-f32-after i64 :real et_g3t_test_fail_f32_after_v1)
+(extern i64 test-logits-storage-corrupt ptr i64
+        :real et_g3t_test_logits_storage_corrupt_v1)
 (extern i64 test-fail-a2-after i64 :real et_g3t_test_fail_a2_after_v1)
 (extern i64 test-fail-dispatch-after i64
         :real et_g3t_test_manual_p2_fail_dispatch_after_v1)
 (extern i64 test-p2-shape-set ptr i64
         :real et_g3t_test_manual_p2_i1_shape_set_v1)
+(extern i64 test-p2-inline-id-set ptr i64 i64
+        :real et_g3t_test_manual_p2_inline_id_set_v1)
 (extern i64 test-decode-shape-set ptr i64
         :real et_g3t_test_manual_decode_i1_shape_set_v1)
+(extern i64 test-decode-inline-id-set ptr i64
+        :real et_g3t_test_manual_decode_inline_id_set_v1)
 (extern ptr test-input-borrow-begin ptr
         :real et_g3t_test_input_borrow_begin_v1)
 (extern i64 test-input-borrow-end ptr
@@ -49,6 +55,34 @@
                           (source-domain m3t-transport)
                           (source-message
                             "diagnostic dependency rejected the request")))
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (reject-native-state-details label operation code thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'invalid-state)
+                      (eq? (transformer-error-operation caught) operation)
+                      (equal? (transformer-error-details caught)
+                        (list (list 'native-category 2)
+                              (list 'source-code code)
+                              (list 'source-domain 'm3t-transport)
+                              (list 'source-message
+                                    "diagnostic dependency rejected the request")))
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (reject-native-invariant-details label operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'internal)
+                      (eq? (transformer-error-operation caught) operation)
+                      (equal? (transformer-error-details caught)
+                        '((native-category 5)
+                          (source-code 10)
+                          (source-domain g3t-transport)
+                          (source-message
+                            "private G3-T native transport rejected the request")))
                       (eq? (transformer-error-cause caught) #f))))
       (thunk) #f)))
 (define (row-equal? actual reference offset)
@@ -153,6 +187,20 @@
 (check "P1 mask" (and (= 1 (test-cache-mask native 0))
                       (= 0 (test-cache-mask native 1))))
 (check "P1 K/V exact" (cache-kv-equal? native reference-kv 4))
+;;; The production kind-3 shell admits no I2 mutation. This test-only hook
+;;; corrupts its actual F32 storage; F32 borrow view device/layout are fixed
+;;; literals, with no stored field or mutation hook.
+(check "I2 storage corruption injected"
+  (= 0 (test-logits-storage-corrupt first-native 1)))
+(reject-native-invariant-details "I2 storage public E1"
+  'diagnostic-generation-logits-bits
+  (lambda () (g3g-public-diagnostic-generation-logits-bits first)))
+(check "I2 storage restored"
+  (= 0 (test-logits-storage-corrupt first-native 0)))
+(check "I2 corruption preserves P1 result and cache"
+  (and (same-bytes? first-bits
+         (g3g-public-diagnostic-generation-logits-bits first))
+       (quiet-state? native 1)))
 (define borrow (test-logits-borrow-begin first-native))
 (check "borrow begins" (not (null? borrow)))
 (reject "borrow blocks read" 'invalid-state 'diagnostic-generation-logits-bits
@@ -201,12 +249,23 @@
 (reject-native-shape-details "P2 source details" 'generator-prefill!
   (lambda () (g3g-public-generator-prefill generator pair)))
 (check "P2 shape restored" (= 0 (test-p2-shape-set pair-native 2)))
+(check "P2 non-byte ID injected" (= 0 (test-p2-inline-id-set pair-native 1 256)))
+(reject-native-state-details "P2 non-byte E1" 'generator-prefill! 2
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "P2 non-byte ID restored" (= 0 (test-p2-inline-id-set pair-native 1 66)))
+(check "P2 inline divergence injected" (= 0 (test-p2-inline-id-set pair-native 1 67)))
+(reject-native-state-details "P2 divergence E1" 'generator-prefill! 2
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "P2 inline divergence restored" (= 0 (test-p2-inline-id-set pair-native 1 66)))
 (define pair-borrow (test-input-borrow-begin pair-native))
 (check "P2 input borrow begins" (not (null? pair-borrow)))
 (reject "P2 borrowed input" 'invalid-state 'generator-prefill!
   (lambda () (g3g-public-generator-prefill generator pair)))
 (check "P2 input borrow ends" (= 0 (test-input-borrow-end pair-borrow)))
-(check "P2 shape/borrow preserve predecessor" (quiet-state? native 1))
+(check "P2 negatives preserve predecessor"
+  (and (quiet-state? native 1)
+       (same-bytes? first-bits
+         (g3g-public-diagnostic-generation-logits-bits first))))
 (check "F32 cut armed" (= 0 (test-fail-f32-after 0)))
 (reject "F32 allocation cut" 'internal 'generator-prefill!
   (lambda () (g3g-public-generator-prefill generator pair)))
@@ -255,7 +314,16 @@
   (lambda () (g3g-public-generator-decode-step decoder decoder-token)))
 (check "decode shape restored"
   (= 0 (test-decode-shape-set decoder-token-native 1)))
-(check "decode failure keeps P1 cache" (quiet-state? decoder-native 1))
+(check "decode inline divergence injected"
+  (= 0 (test-decode-inline-id-set decoder-token-native 67)))
+(reject-native-state-details "decode divergence E1" 'generator-decode-step! 2
+  (lambda () (g3g-public-generator-decode-step decoder decoder-token)))
+(check "decode inline divergence restored"
+  (= 0 (test-decode-inline-id-set decoder-token-native 66)))
+(check "decode negatives keep P1 cache and result"
+  (and (quiet-state? decoder-native 1)
+       (same-bytes? (g3g-public-diagnostic-generation-logits-bits decoder-first)
+         first-bits)))
 (define decoder-second (g3g-public-generator-decode-step decoder decoder-token))
 (check "decode all 256 bits" (row-equal?
   (g3g-public-diagnostic-generation-logits-bits decoder-second)
