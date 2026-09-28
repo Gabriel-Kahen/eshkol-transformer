@@ -47,6 +47,7 @@ trainer-release! et_e1b_private_tr3_trainer_release_cabi_v1
 d2-token-dataset-next-batch et_e1b_private_d2_token_dataset_next_batch_cabi_v1
 d2-token-batch-release! et_e1b_private_d2_token_batch_release_cabi_v1
 c2-public-trainer-state-release! et_e1b_private_c2_trainer_state_release_cabi_v1
+tr3-metrics-ref-coded-internal et_e1b_private_tr3_metrics_ref_cabi_v1
 m3t-public-attention! et_e1b_private_m3t_attention_cabi_v1
 m3t-public-attention-vjp! et_e1b_private_m3t_attention_vjp_cabi_v1
 m3t-public-embedding! et_e1b_private_m3t_embedding_cabi_v1

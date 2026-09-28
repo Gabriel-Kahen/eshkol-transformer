@@ -121,6 +121,7 @@ eshkol_type_error_with_operand
 eshkol_utf8_ref
 eshkol_utf8_strlen
 eshkol_utf8_substring
+eshkol_value_f32_from_bits_v1
 exit
 expf
 fclose

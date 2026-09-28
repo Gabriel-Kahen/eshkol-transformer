@@ -2,7 +2,7 @@
 
 (require transformer.error_consumer)
 
-(provide trainer-create trainer-release! trainer-state-release!)
+(provide trainer-create trainer-release! trainer-state-release! metrics-ref)
 
 (define tr3-safe-trainer-create
   (let ()
@@ -41,3 +41,15 @@
 
 (define (trainer-state-release! state)
   (c2-safe-trainer-state-release state))
+
+(define tr3-safe-metrics-ref
+  (let ()
+    (extern void tr3-public-metrics-ref ptr ptr ptr
+            :real et_e1b_public_tr3_metrics_ref_v1)
+    (lambda (metrics key)
+      (let ((output (vector #f)))
+        (tr3-public-metrics-ref (vector metrics) (vector key) output)
+        (vector-ref output 0)))))
+
+(define (metrics-ref metrics key)
+  (tr3-safe-metrics-ref metrics key))

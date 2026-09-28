@@ -1473,8 +1473,17 @@ artifacts verify under
 allocation denial, fail-stop exit 134 and the 336-byte retention measurement;
 its 35 artifacts verify under
 `tr3-private-metrics-fe9-combined-d7ac4d8-20260928/SHA256SUMS`
-(`2e8667ac...`). Public `metrics-ref`, true-f32 scalar return, trainer-step integration,
-train/evaluate adapters, and all-result retention evidence remain pending.
+(`2e8667ac...`). The bounded public `metrics-ref` step-record reader is now a
+separate candidate: it authenticates the private authority, preserves exact
+i64 counters, and converts stored binary32 words through the accepted runtime
+f32 scalar ABI. Its focused private and linked installed gates pass on
+`f7173b4`/tree `cdacf555`: 42 runtime checks and a 50-source/30-native,
+105-global/176-undefined linked package with an authentic same-aggregate
+step producer and exact f32 bit probe. Evidence is sealed under
+`tr3-public-metrics-ref-private-f7173b4-20260928/SHA256SUMS` and
+`tr3-public-metrics-ref-installed-f7173b4-20260928/SHA256SUMS`.
+Hosted integration, trainer-step, train/evaluate adapters, and all-result
+retention evidence remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

@@ -1,0 +1,42 @@
+(require transformer.trainer)
+(require transformer.error_consumer)
+
+(extern void publish-step ptr :real et_tr3_test_publish_step_v1)
+(extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+
+(define (check label success)
+  (if success #t
+      (begin (display "TR3-PUBLIC-METRICS-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (fails? category thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught) 'metrics-ref))))
+    (thunk) #f))
+
+(define token-box (vector #f))
+(publish-step token-box)
+(define token (vector-ref token-box 0))
+(define loss (metrics-ref token 'loss))
+(define weight (metrics-ref token 'mask-weight))
+(check 'loss-bits (= (f32-bits (vector loss)) 1051372203))
+(check 'weight-bits (= (f32-bits (vector weight)) 1065353216))
+(check 'loss-repeat (= (f32-bits (vector (metrics-ref token 'loss))) 1051372203))
+(check 'tokens (= (metrics-ref token 'tokens) 7))
+(check 'microbatches (= (metrics-ref token 'microbatches) 2))
+(check 'update (= (metrics-ref token 'update) 3))
+(check 'counter-exact (exact? (metrics-ref token 'tokens)))
+(check 'unknown (fails? 'invalid-argument
+                        (lambda () (metrics-ref token 'epochs))))
+(check 'case (fails? 'invalid-argument
+                     (lambda () (metrics-ref token 'Loss))))
+(check 'key-type (fails? 'invalid-argument
+                         (lambda () (metrics-ref token "loss"))))
+(check 'foreign (fails? 'invalid-argument
+                        (lambda () (metrics-ref (make-hash-table) 'loss))))
+(check 'receiver-before-key
+       (fails? 'invalid-argument
+               (lambda () (metrics-ref #f "loss"))))
+(display "TR3-PUBLIC-METRICS-LINKED-PASS")
+(newline)

@@ -6,20 +6,14 @@ for command in ar cmp docker git nm objcopy python3 readlink rg sha256sum; do
 done
 cd "${PROJECT_ROOT}"
 
-fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/tr3-shared-tail-finalizer-97c40c9d}"
-compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/tr3-shared-tail-finalizer/eshkol}"
-runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/runtime-81298-recovery}"
+fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-build}"
+compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-src}"
+runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-${PROJECT_ROOT}/.deps}"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
-case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-81298}" in
-  81298)
-    compiler_commit=97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0
-    runner_name=eshkol-run-release
-    runner_sha256=1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb
-    runtime_build_dir="${runtime}/eshkol-build-canonical"
-    runtime_sha256="$(tsv_value "${pin}" runtime_archive_sha256)"
-    source_manifest=native/tr3_public_installed_source_closure.txt
-    undefined_manifest=native/tr3_public_installed_undefined_symbols.txt
-    ;;
+[[ -f "${fixed}/eshkol-run" && -e "${compiler_source}/.git" &&
+   -f "${runtime}/eshkol-build/libeshkol-runtime.a" ]] ||
+  die "fe9 toolchain unavailable; set TR3_LINKED_COMPILER_EVIDENCE_DIR, TR3_LINKED_COMPILER_SOURCE_DIR, and TR3_LEASE_RUNTIME_CANDIDATE_DIR"
+case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-fe9}" in
   fe9)
     compiler_commit=fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9
     runner_name=eshkol-run
@@ -36,6 +30,7 @@ case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-81298}" in
     [[ "$(tsv_value "${runtime_build_dir}/eshkol-transformer-provenance.tsv" eshkol_commit)" == \
        "${compiler_commit}" ]] || die "fe9 runtime provenance changed"
     ;;
+  81298) die "public metrics-ref requires the fe9 true-f32 runtime" ;;
   *) die "unsupported TR3 public installed runtime pin" ;;
 esac
 image="$(tsv_value "${pin}" container_image)"
@@ -179,6 +174,40 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   > /out/caller.stdout 2> /out/caller.stderr
 grep -Fx TR3-PUBLIC-OPERANDS-PASS /out/caller.stdout >/dev/null
 test ! -s /out/caller.stderr
+
+# The installed package intentionally has no public step producer yet. Link a
+# test-only producer to the unlocalized copy of this exact aggregate so its
+# private authority can publish one authentic record for the public reader.
+clang-21 "${flags[@]}" -I /fixed-source/inc \
+  -c tests/tr3_metrics/linked_producer.c -o /out/linked_producer.o
+ar rcsD /out/libeshkol_transformer_tr3_metrics_test.a \
+  /out/combined.raw.o /out/linked_producer.o
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_metrics/linked_runtime.esk -o /out/linked_metrics_caller \
+    > /out/linked-metrics-compile.stdout 2> /out/linked-metrics-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
+  /out/linked_metrics_caller \
+  > /out/linked-metrics.stdout 2> /out/linked-metrics.stderr
+grep -Fx TR3-PUBLIC-METRICS-LINKED-PASS /out/linked-metrics.stdout >/dev/null
+test ! -s /out/linked-metrics.stderr
+
+# Focused bit and counter boundary proof for the actual installed C bridge.
+clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
+  -I /fixed-source/inc -c native/tr3_public_installed_bridge.c \
+  -o /out/metrics_bridge_unit.o
+clang-21 "${flags[@]}" -I /fixed-source/inc \
+  -c tests/tr3_metrics/public_bridge.c -o /out/metrics_bridge_unit_test.o
+clang++-21 -Wl,--gc-sections /out/metrics_bridge_unit.o \
+  /out/metrics_bridge_unit_test.o \
+  /candidate/eshkol-build-canonical/libeshkol-runtime.a \
+  -pthread -ldl -lm -o /out/metrics_bridge_unit_test
+/out/metrics_bridge_unit_test > /out/metrics-bridge.stdout \
+  2> /out/metrics-bridge.stderr
+grep -Fx TR3-PUBLIC-METRICS-BRIDGE-PASS /out/metrics-bridge.stdout >/dev/null
+test ! -s /out/metrics-bridge.stderr
 '
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'

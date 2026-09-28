@@ -292,5 +292,11 @@
 (expect-error "C2 detached-state release retains public error mapping"
               'invalid-argument 'trainer-state-release!
   (lambda () (trainer-state-release! (vector 'forged))))
+(expect-error "metrics reject ordinary hash" 'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref (make-hash-table) 'loss)))
+(expect-error "metrics reject trainer identity" 'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref trainer 'loss)))
+(expect-error "metrics authenticate before key" 'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref #f "loss")))
 (display "TR3-PUBLIC-OPERANDS-PASS")
 (newline)
