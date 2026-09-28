@@ -1516,7 +1516,18 @@ roots and no release operation or fixed count cap; memory use therefore grows
 linearly with distinct policies until the process arena limit. The focused
 gate also rejects an exact limit above signed i64. Its sealed witness is at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-retention-20260928/SHA256SUMS`.
-Train-loop thresholds, interruption, summary metrics and resume are pending.
+The bounded finite-D2 public `trainer-train!` candidate composes the private
+step transaction and same-aggregate stop policy. Cumulative lifetime token,
+update, and epoch thresholds are checked at entry and after each committed
+step; an already-met threshold returns a newly owned zero-update summary.
+One summary is staged before work, and each candidate physical binary32
+weighted numerator/weight and invocation-delta counters is checked before the
+private step's first parameter write. A later failed step rolls back only that
+step; earlier commits remain, and no partial summary is published. Train
+summaries have disjoint `loss`, `mask-weight`, `tokens`, `updates`, `epochs`
+keys in the sole metrics registry; existing step tokens retain their schema.
+The fixed CPU f32 N=1,T=2,V=256 finite-D2 linked gate, independent review,
+explicit interrupt API, public resume and wider profiles are pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2

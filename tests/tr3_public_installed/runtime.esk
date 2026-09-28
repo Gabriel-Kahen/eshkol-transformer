@@ -353,6 +353,36 @@
        (and (= (metrics-ref second-step 'update) 2)
             (= (metrics-ref first-step 'update) 1)
             (= (metrics-ref second-step 'microbatches) 2)))
+(define zero-summary
+  (trainer-train! step-trainer (trainer-stop-policy #f 2 #f)))
+(check "already-met lifetime limit returns zero-update summary"
+       (and (= (metrics-ref zero-summary 'tokens) 0)
+            (= (metrics-ref zero-summary 'updates) 0)
+            (= (metrics-ref zero-summary 'epochs) 0)
+            (= (metrics-ref zero-summary 'loss) 0)
+            (= (metrics-ref zero-summary 'mask-weight) 0)
+            (not (exact? (metrics-ref zero-summary 'loss)))))
+(expect-error "train summary rejects step-only key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref zero-summary 'update)))
+(expect-error "foreign policy rejects before training"
+              'invalid-argument 'trainer-train!
+  (lambda () (trainer-train! step-trainer first-step)))
+(expect-error "forged trainer rejects before training"
+              'invalid-argument 'trainer-train!
+  (lambda ()
+    (trainer-train! (vector 'forged)
+                    (trainer-stop-policy #f 3 #f))))
+(define mixed-summary
+  (trainer-train! step-trainer (trainer-stop-policy 9 3 2)))
+(check "mixed lifetime limits commit one update"
+       (and (= (metrics-ref mixed-summary 'updates) 1)
+            (= (metrics-ref mixed-summary 'tokens) 4)
+            (= (metrics-ref second-step 'update) 2)
+            (= (metrics-ref first-step 'update) 1)))
+(expect-error "step token rejects train-only key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref first-step 'updates)))
 (check "step trainer release" (trainer-release! step-trainer))
 (check "released D2 receiver remains caller-owned"
        (token-dataset-close! dataset))

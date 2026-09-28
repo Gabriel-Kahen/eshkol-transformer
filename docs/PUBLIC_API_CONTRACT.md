@@ -542,8 +542,17 @@ raising a recoverable public error. Process termination and hardware loss are ou
 in-process rollback and are recovered from the last durable checkpoint. Thus a
 recoverable failure leaves the whole current step uncommitted without imposing
 model-sized rollback storage. `trainer-train!` commits after each successful step; on
-failure earlier steps remain committed and only the current step rolls back. Metrics
-are opaque immutable maps inspected with `metrics-ref`; unknown keys raise
+failure earlier steps remain committed and only the current step rolls back.
+Each supplied stop threshold compares against the trainer's cumulative lifetime
+token, update, or epoch counter, including work before this invocation. A threshold
+already met at entry returns an immutable summary with positive-zero `loss` and
+`mask-weight` and zero `tokens`, `updates`, and `epochs`; otherwise the first
+threshold met after a committed update stops the invocation. The summary counts
+only this invocation's committed work and its `loss` is the physical binary32
+numerator divided by physical binary32 mask weight after ordered accumulation.
+The summary's five keys are `loss`, `mask-weight`, `tokens`, `updates`, and
+`epochs`; step results keep their separate five-key schema. Metrics are opaque
+immutable maps inspected with `metrics-ref`; unknown keys raise
 `invalid-argument`.
 `max-tokens` counts positions whose boolean mask is true or whose floating mask is
 positive; an update may cross the limit because limits are checked only after commit.

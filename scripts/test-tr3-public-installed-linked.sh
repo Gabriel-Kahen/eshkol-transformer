@@ -287,7 +287,7 @@ assert paths == ['tests/tr3_public_installed/runtime.esk',
                  '/out/facades/transformer/tokenizer.esk',
                  '/out/facades/transformer/trainer.esk'], paths
 PY
-if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^trainer-step!$|^c2-public-trainer-state-release!$' \
+if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^trainer-step!$|^trainer-train!$|^c2-public-trainer-state-release!$' \
     "${evidence}/global-defined.txt"; then
   die "candidate package leaked private trainer authority"
 fi

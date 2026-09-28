@@ -11,6 +11,8 @@
 
 (extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
 (extern void set-step-fault ptr ptr :real et_tr3_test_set_step_fault_v1)
+(extern void arm-train-after-one ptr ptr
+        :real et_tr3_test_arm_train_after_one_v1)
 (define (check label okay)
   (if (not okay)
       (begin (display "TR3-PUBLIC-STEP-FAIL ") (display label)
@@ -119,6 +121,105 @@
                1077936128)))
 (check 'release (trainer-release! trainer))
 (check 'close (token-dataset-close! dataset))
+(define train-dataset
+  (token-dataset-open (dataset-options directory) tokenizer))
+(define train-model
+  (with-region ('tr3-public-train-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define train-tree (module-parameters train-model))
+(define train-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths train-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    train-tree))
+(define train-trainer
+  (trainer-create resolved tokenizer train-dataset
+                  train-model train-optimizer))
+(define first-summary
+  (trainer-train! train-trainer (trainer-stop-policy #f 1 #f)))
+(check 'train-first-exact-f32
+       (and (= (f32-bits (vector (metrics-ref first-summary 'loss)))
+               1085403699)
+            (= (f32-bits (vector (metrics-ref first-summary 'mask-weight)))
+               1077936128)
+            (= (metrics-ref first-summary 'tokens) 3)
+            (= (metrics-ref first-summary 'updates) 1)
+            (= (metrics-ref first-summary 'epochs) 0)))
+(define zero-summary
+  (trainer-train! train-trainer (trainer-stop-policy #f 1 #f)))
+(check 'train-zero-update-bits
+       (and (= (f32-bits (vector (metrics-ref zero-summary 'loss))) 0)
+            (= (f32-bits (vector (metrics-ref zero-summary 'mask-weight))) 0)
+            (= (metrics-ref zero-summary 'tokens) 0)
+            (= (metrics-ref zero-summary 'updates) 0)
+            (= (metrics-ref zero-summary 'epochs) 0)))
+(define epoch-summary
+  (trainer-train! train-trainer (trainer-stop-policy #f #f 1)))
+(check 'train-eos-crossing
+       (and (= (metrics-ref epoch-summary 'updates) 1)
+            (= (metrics-ref epoch-summary 'tokens) 3)
+            (= (metrics-ref epoch-summary 'epochs) 1)))
+(define armed (vector #f))
+(arm-train-after-one (vector #t) armed)
+(check 'train-fault-arm (vector-ref armed 0))
+(check 'train-later-step-error
+       (guard (caught
+                (#t (and (transformer-error? caught)
+                         (eq? (transformer-error-category caught)
+                              'invalid-state)
+                         (eq? (transformer-error-operation caught)
+                              'trainer-train!))))
+         (trainer-train! train-trainer
+                         (trainer-stop-policy #f 4 #f))
+         #f))
+(inject! #f)
+(define retained-commit
+  (trainer-train! train-trainer (trainer-stop-policy #f 3 #f)))
+(check 'train-earlier-commit-retained
+       (and (= (metrics-ref retained-commit 'updates) 0)
+            (= (metrics-ref first-summary 'updates) 1)
+            (= (f32-bits (vector (metrics-ref first-summary 'loss)))
+               1085403699)))
+(define retried
+  (trainer-train! train-trainer (trainer-stop-policy #f 4 #f)))
+(check 'train-failed-step-retried
+       (= (metrics-ref retried 'updates) 1))
+(check 'train-release (trainer-release! train-trainer))
+(check 'train-close (token-dataset-close! train-dataset))
+(define two-dataset
+  (token-dataset-open (dataset-options directory) tokenizer))
+(define two-model
+  (with-region ('tr3-public-train-two-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define two-tree (module-parameters two-model))
+(define two-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths two-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    two-tree))
+(define two-trainer
+  (trainer-create resolved tokenizer two-dataset two-model two-optimizer))
+(define two-summary
+  (trainer-train! two-trainer (trainer-stop-policy #f 2 #f)))
+;;; The independent finite-D2 trajectory observes f32 numerator words
+;;; 1093788954, 1085410405, 1093788954, 1085410405 in that order. Their
+;;; physical f32 sum divided by ordered weight 2+1+2+1 is word 1085403699.
+(check 'train-two-update-weighted-exact
+       (and (= (f32-bits (vector (metrics-ref two-summary 'loss)))
+               1085403699)
+            (= (f32-bits (vector (metrics-ref two-summary 'mask-weight)))
+               1086324736)
+            (= (metrics-ref two-summary 'tokens) 6)
+            (= (metrics-ref two-summary 'updates) 2)
+            (= (metrics-ref two-summary 'epochs) 1)))
+(check 'train-two-release (trainer-release! two-trainer))
+(check 'train-two-close (token-dataset-close! two-dataset))
 (display "TR3-PUBLIC-STEP-AOT-PASS loss-bits=")
 (display first-loss-bits)
 (display " weight-bits=")

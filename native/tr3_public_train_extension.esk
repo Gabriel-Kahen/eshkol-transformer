@@ -1,0 +1,127 @@
+;;; Fixed finite-D2 train loop. Each private composer step validates the
+;;; candidate summary before its first parameter write. One summary token is
+;;; staged before the first update and published only after a successful stop.
+
+(define tr3-train-active (vector #f))
+;;; Localized test control only; ordinary installed callers have no setter.
+(define tr3-train-test-fail-after-one (vector #f))
+
+(define (tr3-train-test-arm-after-one-internal! enabled)
+  (if (not (boolean? enabled))
+      (tr3-train-fail 'invalid-argument "expected a boolean test control"))
+  (vector-set! tr3-train-test-fail-after-one 0 enabled)
+  #t)
+
+(define (tr3-train-fail category message)
+  (m3t-fail category 'trainer-train! message))
+
+(define (tr3-train-rethrow caught)
+  (if (transformer-error? caught)
+      (et-e1b-private-raise
+        (transformer-error-category caught) 'trainer-train!
+        (transformer-error-message caught)
+        (transformer-error-details caught) caught)
+      (et-e1b-private-raise
+        'internal 'trainer-train! "trainer train raised a foreign value"
+        '() #f)))
+
+(define (tr3-train-check-f32 status)
+  (cond ((= status -2)
+         (tr3-train-fail 'unsupported
+           "unsupported binary32 rounding or flush controls"))
+        ((= status -1)
+         (tr3-train-fail 'invalid-state
+           "nonfinite physical f32 train observation"))
+        ((< status -2)
+         (tr3-train-fail 'internal "unexpected train reduction status")))
+  status)
+
+(define (tr3-train-stop? record limits)
+  (or (and (vector-ref limits 0)
+           (>= (vector-ref record 19) (vector-ref limits 0)))
+      (and (vector-ref limits 1)
+           (>= (vector-ref record 20) (vector-ref limits 1)))
+      (and (vector-ref limits 2)
+           (>= (vector-ref record 21) (vector-ref limits 2)))))
+
+(define (tr3-train-prepare-summary! record start candidate ledger)
+  (let* ((tokens (+ (- (vector-ref record 19) (vector-ref start 0))
+                    (vector-ref ledger 6)))
+         (updates (+ (- (vector-ref record 20) (vector-ref start 1)) 1))
+         (epochs (+ (- (vector-ref record 21) (vector-ref start 2))
+                    (vector-ref ledger 7)))
+         (loss-bits
+           (tr3-train-check-f32
+             (tr3-step-metrics-mean-bits candidate)))
+         (weight-bits (tr3b-u32-le candidate 4)))
+    (if (or (not (tr3-metrics-i64? tokens))
+            (not (tr3-metrics-i64? updates))
+            (not (tr3-metrics-i64? epochs))
+            (= weight-bits 0))
+        (tr3-train-fail 'invalid-state "train counters or weight differ"))
+    (tr3-metrics-train-fill-internal!
+      loss-bits weight-bits tokens updates epochs)))
+
+(define (trainer-train! trainer stop-policy)
+  (let* ((record (tr3-lease-record-for-shell-internal
+                   trainer 'trainer-train!))
+         (limits (tr3-stop-policy-validate-internal stop-policy)))
+    ;; This installed profile admits finite D2 states only. Unknown future
+    ;; dataset kinds cannot silently satisfy an epoch stop policy.
+    (if (and (vector-ref limits 2)
+             (not (d2-core-state-valid?
+                    (vector-ref (vector-ref record 16) 6)
+                    'd2-dataset-state)))
+        (tr3-train-fail 'invalid-argument
+          "max-epochs requires a finite training dataset"))
+    (if (or (vector-ref tr3-train-active 0)
+            (not (eq? (vector-ref record 3) 'idle))
+            (vector-ref record 4))
+        (tr3-train-fail 'invalid-state "trainer train is busy"))
+    (let ((start (vector (vector-ref record 19)
+                         (vector-ref record 20)
+                         (vector-ref record 21)))
+          (committed (vector (make-bytevector 8 0)))
+          (staged (vector #f)))
+      (guard (caught
+               (#t (begin
+                     (if (vector-ref staged 0)
+                         (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                           (tr3-metrics-train-abort-internal!)))
+                     (vector-set! tr3-train-active 0 #f)
+                     (tr3-train-rethrow caught))))
+        (tr3-metrics-train-begin-internal!)
+        (vector-set! staged 0 #t)
+        (vector-set! tr3-train-active 0 #t)
+        (let loop ()
+          (if (tr3-train-stop? record limits)
+              (begin
+                ;; An already-met limit publishes +0 f32 and zero counters.
+                (tr3-metrics-train-precommit-internal!)
+                (let ((summary (tr3-metrics-train-publish-internal!)))
+                  (vector-set! staged 0 #f)
+                  (vector-set! tr3-train-active 0 #f)
+                  summary))
+              (let ((candidate
+                      (bytevector-copy (vector-ref committed 0) 0 8)))
+                (if (and (vector-ref tr3-train-test-fail-after-one 0)
+                         (= (- (vector-ref record 20)
+                               (vector-ref start 1)) 1))
+                    (begin
+                      (vector-set! tr3-train-test-fail-after-one 0 #f)
+                      (tr3-step-composer-test-inject-internal! 'mid)))
+                (tr3-step-composer-with-hooks-internal!
+                  trainer
+                  (lambda (observation)
+                    (tr3-train-check-f32
+                      (tr3-step-metrics-accumulate candidate observation))
+                    #t)
+                  (lambda (ledger)
+                    (tr3-train-prepare-summary!
+                      record start candidate ledger))
+                  (lambda ()
+                    (tr3-metrics-train-precommit-internal!))
+                  (lambda () #t))
+                ;; Only a committed private step reaches here.
+                (vector-set! committed 0 candidate)
+                (loop))))))))
