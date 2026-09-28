@@ -143,9 +143,10 @@
                   (eq? (g3t-generator-find
                          (vector-ref generator-entry 0) operation)
                        generator-entry)
-                  (m3t-exact-i64? kind) (or (= kind 0) (= kind 2))))
+                  (m3t-exact-i64? kind)
+                  (or (= kind 0) (= kind 1) (= kind 2))))
         (g3t-fail-raw 'invalid-argument operation 3
-                      "G3-T leaf accepts only manual prefill or generate"))
+                      "G3-T leaf accepts manual prefill, manual decode or generate"))
     (let* ((model-entry (vector-ref generator-entry 5))
            (shell (vector 'g3t-call-private))
            (entry (vector shell 'call 'pending (vector-ref generator-entry 3)
@@ -240,7 +241,10 @@
     (if (not (and (m3t-exact-i64? frame-kind)
                   (or (and (= frame-kind 1) input-entry
                            (eq? (vector-ref input-entry 2) 'live))
-                      (and (= frame-kind 2) (eq? input #f)))))
+                      (and (= frame-kind 2)
+                           (or (eq? input #f)
+                               (and input-entry
+                                    (eq? (vector-ref input-entry 2) 'live)))))))
         (g3t-fail-raw 'invalid-state operation 2
                       "G3-T input/frame is not live"))
     (if (not (= 0 (g3t-native-frame-begin

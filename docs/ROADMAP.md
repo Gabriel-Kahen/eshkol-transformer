@@ -949,8 +949,8 @@ prepare/preflight/commit/finish sequence with authentic T1-backed P2 input.
 Its pinned network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,016
 byte-identical checks, 19 source contracts, Q0 4/4 and production test-symbol
 exclusion. Evidence is at `g3m-prefill-p2-candidate-20260928`; root
-independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
-integration CI remains pending. It adds no public
+independently source-reviewed `da0ba38` / tree `ca20699`; PR #132 passed all
+23 hosted checks and merged as `846ee52`. It adds no public
 generation facade or manual decode.
 
 The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
@@ -961,13 +961,14 @@ prefix, 21-role T1 append and atomic length-two cache/logits commit. Its pinned
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
 exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. Root
-independently reviewed the source; hosted integration CI remains pending.
+independently reviewed the source; PR #135 merged as `fedf0be` while its
+refreshed hosted run remained queued, so that gate still needs follow-up.
 The accepted [private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md)
-merged as `893cbc7` and adds no implementation. The isolated wrapper candidate
-`f117987` / tree `972087b` has since passed independent source review and
-47,194 pinned normal/repeat/sanitizer checks; its hosted integration remains
-separate. The G3-M decode composer and seeded generation/public facade are
-downstream gates.
+merged as `893cbc7`. This isolated implementation `f117987` / tree `972087b`
+widens kind-1 calls and authentic non-null frame-kind-2 input. Root
+independently reviewed its source and 47,194 pinned normal/repeat/sanitizer
+checks; hosted integration CI remains pending. The G3-M decode composer and
+seeded generation/public facade are downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
