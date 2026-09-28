@@ -62,6 +62,9 @@ fi
 
 mkdir -p "$work_dir" "$work_dir/tmp" "$work_dir/run" "$results_dir/commands"
 export TMPDIR="$work_dir/tmp"
+# OpenBLAS worker startup and shutdown can stall under the probe's 2 GiB
+# virtual-memory cap. Keep bounded AOT/JIT executions on one BLAS thread.
+export OPENBLAS_NUM_THREADS=1
 manifest="$results_dir/manifest.tsv"
 printf 'name\texit_code\texpectation\tcommand\n' > "$manifest"
 : > "$results_dir/assertion-failures.txt"
@@ -188,6 +191,7 @@ fi
   echo "jit_timeout_seconds=$jit_timeout"
   echo "compile_timeout_seconds=$compile_timeout"
   echo "build_timeout_seconds=$build_timeout"
+  echo "openblas_num_threads=$OPENBLAS_NUM_THREADS"
   echo "tmpdir=$TMPDIR"
   echo "transformer_revision=$(git -C "$probe_dir/../.." rev-parse HEAD 2>/dev/null || echo unavailable)"
   echo "transformer_status=$(git -C "$probe_dir/../.." status --porcelain 2>/dev/null | tr '\n' ';' || echo unavailable)"

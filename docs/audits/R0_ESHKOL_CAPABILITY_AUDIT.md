@@ -42,15 +42,84 @@ compiler required an explicit `-l stdc++` link option to build these AOT
 programs in this image; the successor compiler did not. Thus compilation inputs
 were not identical, while probe source, execution image, executable deadline,
 and repeated-run procedure were fixed. The liveness failure predates the
-successor pin in this lane; its root cause remains unresolved.
+successor pin in this lane; the subsequent diagnosis appears below.
 
 These observations support only the successful individual AOT executions and
 the failure/timeout classifications above. They do not establish repeatable AOT
 completion, JIT startup, AOT/JIT parity, the remaining positive and negative
 probe inventory, GPU execution, or sanitizer behavior. The default harness still
 runs both modes; `--aot-only` is an explicit partial-evidence mode. Full R0
-successor adoption remains under review until the inherited liveness problem and
-the complete executable gate are resolved.
+successor adoption remained under review at that historical checkpoint.
+
+### Supported-image OpenBLAS diagnosis and bounded rerun
+
+Live thread stacks under the original 2 GiB virtual-memory cap identified
+OpenBLAS worker allocation as the inherited liveness cause. In the AOT timeout,
+the main thread waited in `exit → gotoblas_quit → blas_shutdown →
+blas_thread_shutdown_` while a worker used CPU in `blas_memory_alloc → malloc`.
+In the JIT timeout, the main thread entered the same shutdown hook from
+`eshkol::pkg::run_subprocess → fork`, while two workers allocated memory.
+Without the cap, the same AOT binary exited 0 in 12/12 repetitions. With the
+original cap and `OPENBLAS_NUM_THREADS=1`, it exited 0 in 12/12. These are
+observations of the supported image's OpenBLAS configuration, not evidence of
+an Eshkol compiler defect. The diagnostic stacks and repeated-run records are
+retained in `r0-runtime-liveness-20260928/` under the evidence root above.
+
+The R0 harness now explicitly sets and records `OPENBLAS_NUM_THREADS=1` while
+keeping the 2 GiB capability-run cap and the default full AOT/JIT gate. A tiny
+JIT smoke then completed in 55.03 seconds with 1,056,848 KiB peak RSS under
+that cap, instead of stalling at the `fork` hook. A separate 180-second JIT
+ceiling accommodates focused cold JIT executions of approximately 64 and 60
+seconds (retained command/output timestamps) while leaving the AOT
+executable's 30-second exit deadline intact. On the
+same exact successor source, compiler, and network-disabled image, focused
+`activations` and `attention` each passed AOT compile, two AOT executions, and
+two JIT executions. Both had byte-identical AOT/JIT output; another 12 capped
+AOT runs per probe exited 0 with the same hashes. Evidence is retained in
+`r0-openblas-one-20260928/{activations,attention,repeats}`.
+
+The malformed `reshape_size_mismatch` smoke compiled and returned 0 in both
+AOT and JIT, printing `#((1 2) (3 1e-323))` rather than rejecting the
+three-element input reshaped to four elements. This is a real negative-probe
+failure, not a reason to relax the assertion. The single-thread BLAS setting
+also leaves multithreaded BLAS behavior and performance untested.
+
+The one default full AOT/JIT inventory ran for 79 minutes 11 seconds in the
+network-disabled supported image with a four-hour outer bound. It completed
+183 command rows and exited 1 with `failures=38`; each bounded capability run
+retained the 2 GiB cap, a 30-second AOT exit limit, and a separate 180-second
+JIT limit. The 38 count includes command failures and assertions, not 38
+distinct probes. `r0-openblas-one-20260928/full/results/` retains the exact
+manifest, streams, assertion and parity logs. Its failing groups are:
+
+| Group | Observed result | Prior `81298b4` status |
+|---|---|---|
+| `autodiff_attention` | `FAIL attention gradient` in both AOT and JIT repeats | Same failure in controlled old-pin AOT repeats and JIT |
+| `autodiff_gradient_tensor` | FAIL marker in both AOT and JIT repeats | Untested |
+| `autodiff_layer_norm` | Exit 1 and `expected tensor or numeric vector, got vector` in both modes | Untested |
+| `rms_norm` | AOT compile and JIT report unknown `rms-norm` function | Untested |
+| `rng` | AOT/JIT stdout differs despite completion markers | Untested |
+| Negative `broadcast_shape_mismatch`, `file_missing` | AOT and JIT terminate with signal 139, rather than actionable rejection | Untested |
+| Negative `indexed_cross_entropy_targets`, `negative_dimension` | Malformed input succeeds in AOT and JIT | Untested |
+| Negative `reshape_size_mismatch` | Malformed input succeeds in AOT and JIT | Same incorrect success and output in controlled old-pin AOT repeats and JIT |
+
+The other 27 positive groups passed their harness assertions. The three
+remaining negative groups (`embedding_index_out_of_bounds`,
+`index_out_of_bounds`, `matmul_shape_mismatch`) rejected the input with
+diagnostics in both modes. The controlled old-pin comparison used the same
+image, 2 GiB cap, and `OPENBLAS_NUM_THREADS=1`; old AOT compilation additionally
+needed `-l stdc++`. Only the attention-gradient and reshape failures have
+old-pin executable classification. All other failing rows are successor
+observations with old-pin status untested.
+
+The verified evidence umbrella is
+`/home/gabe/.codex/evidence/eshkol-transformer/r0-openblas-one-20260928/MANIFEST.tsv`
+(SHA-256 `926cbaee57976e4ee37710d7b32bfb91ca715507a6e2dd6c081adafa1de2d30c`);
+it includes focused runs, 24 additional AOT repetitions, the full inventory,
+and the old-pin comparison. The diagnostic stack evidence has its own verified
+seal, referenced in that manifest. These failures prevent R0 successor
+adoption. GPU behavior, sanitizer behavior, and multithreaded BLAS behavior
+remain untested.
 
 ## Historical baseline: scope and evidence state
 

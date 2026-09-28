@@ -11,6 +11,12 @@ probes run twice in both AOT and JIT modes and stdout parity is checked. Every
 recorded build or probe command has a wall-clock, core-dump, and output-file limit;
 capability commands also have a virtual-memory limit. This bounds malformed probe
 allocations without misrepresenting the uncapped provenance metadata helpers.
+The harness explicitly sets `OPENBLAS_NUM_THREADS=1` for its child processes
+and records the setting in `environment.txt`. Under the 2 GiB capability-run
+limit, OpenBLAS worker allocation caused intermittent AOT shutdown stalls and
+JIT `fork` stalls on both the prior and successor compilers. This setting keeps
+the memory bound and tests a single-threaded BLAS execution lane; it does not
+establish multithreaded BLAS behavior or performance.
 
 The harness accepts a clean canonical source checkout, records and validates its
 origin and pinned commit, and validates the compiler identity. It can either build
