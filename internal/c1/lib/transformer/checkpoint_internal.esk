@@ -23,8 +23,8 @@
          c1-checkpoint-inspect-bytes-internal
          c1-checkpoint-inspect-internal
          c1-checkpoint-metadata-ref-internal
-         c1-concat c1-copy-into! c1-encode-path c1-list-length-bounded
-         c1-path<? c1-read-u32 c1-read-u64 c1-shape-product
+         c1-bytes=? c1-concat c1-copy-into! c1-encode-path c1-list-length-bounded
+         c1-path<? c1-read-file c1-read-u32 c1-read-u64 c1-shape-product
          c1-valid-file-path? c1-valid-path? c1-write-u16!
          c1-write-u32! c1-write-u64! c1-max-path-segments)
 

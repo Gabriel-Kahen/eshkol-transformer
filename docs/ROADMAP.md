@@ -24,6 +24,16 @@ two byte-identical clean rebuilds. R0 executable audit, the other affected
 packages and full supported CI still need this exact pin. No workstream status
 changes solely from this bounded repin.
 
+The first hosted full-suite attempt on this repin (PR #131, run 36379473716)
+exposed exact I2/base-E1B undefined-symbol manifest drift, DD-10 trusted
+C1 helper imports in C2 fixtures, and C2 compile-only probes whose
+fresh caches sat under the successor compiler's forbidden system temp root.
+Scoped repairs retain exact manifests and strict empty-stderr assertions;
+the supported local I2/base-E1B, C2 format/state/save/load, and C2 public
+package gates pass after rebuilding canonical C2, including byte-identical
+canonical/two-clean artifacts. This hosted attempt is failure evidence, not a
+passing full-CI gate; a new exact-head run remains pending.
+
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
 unpublished tail-body entry of the private construction rollback helper. The
