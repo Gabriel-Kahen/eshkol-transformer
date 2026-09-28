@@ -1196,7 +1196,7 @@ and checks forged model/initializer identities before the existing live
 trainer lease/release cases. The pinned linked gate passed on `df584de` with
 49 Eshkol sources, 30 native objects, 84 localized exports, 173 undefined
 runtime symbols, and empty poisoned-caller stderr; all files in
-`/tmp/tr3-public-installed.oOj8iC/SHA256SUMS` verify. P1 and O2 construction
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-m3t-df584de-20260927/SHA256SUMS` verify. P1 and O2 construction
 remain test-local until
 their complete canonical facades are installed; this facet makes no public
 step/train/evaluate or resume claim.
