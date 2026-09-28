@@ -54,9 +54,10 @@ input immediately afterward without changing the transcript.
 The existing `g3t-generation-t1-input-create` copies a same-aggregate sealed
 T1 P2 input into such an I1 owner. The current
 `g3t-generation-pair-input-create` creates only inline IDs and is therefore
-not eligible for this manual P2 route. A future owned pair constructor would
-need its own accepted contract. P1 remains eligible for its accepted input
-forms; this proposal does not change P1 admission.
+not eligible for this manual P2 route: it has no canonical I1 tensor to
+authenticate or borrow. This proposal adds no new owner API. P1 remains
+eligible for its accepted input forms; this proposal does not change P1
+admission.
 
 No generation `P+G` or draw preflight applies to kind 0. A missing, forged,
 wrong-kind or dead owner rejects before mutation; wrong frame kind, repeat
@@ -92,9 +93,11 @@ failed later preflight must never expose it as detached live output.
 `call_prepare_end` and `frame_commit` repeat the P2 publication preflight:
 exact pending linkage, completed ordinal 21, unchanged pins and binding
 snapshot, writable logits rank/shape/bytes with bits equal to the P2 last
-row, staged layer-zero K/V with shape `[1,2,2,2]` and 32 bytes each matching
-both P2 scratch rows, A2 length `[2]`, capacity-two keep mask `[1,1]`, and a
-read lease proving the old cache can be destroyed. The old cache may have
+row, staged layer-zero K and V tensors each of rank 4, shape `[1,2,2,2]`
+and 32 bytes, with both positions bitwise equal to the P2 scratch K/V;
+lengths tensor of rank 1, shape `[1]`, 8 bytes and value `2`; keep-mask
+tensor of rank 2, shape `[1,2]`, 2 bytes and values `[1,1]`; and a read lease
+proving the old cache can be destroyed. The old cache may have
 committed length 0, 1 or 2. End every view
 and lease before mutation, preserving the first failure status. The first
 preflight marks end-ready; commit repeats it and then uses the accepted P1
