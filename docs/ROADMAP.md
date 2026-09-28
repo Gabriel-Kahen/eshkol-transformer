@@ -947,9 +947,16 @@ The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
 native frame/role/publication branches and private Eshkol call/frame wrappers
 still exclude manual decode. Root independently reviewed the source-anchored
 native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
-is integrated in this `origin/main` baseline. Native decode, its wrapper, a
-G3-M decode composer, and the seeded
-generation/public facade remain separate downstream gates.
+is integrated in this `origin/main` baseline. The isolated
+[G3-T native manual decode candidate](g3/G3_T_MANUAL_DECODE_LEAF.md)
+extends the reviewed P2 source with an owned `[1,1]` ID, bound P1 prefix,
+21-role T1 append, and atomic length-two cache/logits commit. Its pinned
+network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
+byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
+exclusion; evidence is at `g3t-manual-decode-candidate-20260928`.
+Independent source review and hosted integration CI remain pending. The
+private wrapper, G3-M decode composer, and seeded generation/public facade
+are separate downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

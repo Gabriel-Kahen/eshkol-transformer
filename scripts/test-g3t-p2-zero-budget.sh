@@ -26,6 +26,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3t-manual-p1-prefill.py" >>"$evidence/stat
 python3 "$PROJECT_ROOT/scripts/check-g3m-prefill-p1.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-manual-p2-prefill.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3m-prefill-p2.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3t-manual-decode.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 temporary="$(mktemp -d "$evidence/tmp.XXXXXX")"
@@ -68,6 +69,7 @@ build_mode() {
       -DET_G3T_MANUAL_LOGITS_PRIVATE
       -DET_G3T_MANUAL_P1_PREFILL_PRIVATE
       -DET_G3T_MANUAL_P2_PREFILL_PRIVATE
+      -DET_G3T_MANUAL_DECODE_PRIVATE
       -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
@@ -183,6 +185,8 @@ sha256sum "$PROJECT_ROOT/native/g3m_prefill_p1_source_closure.txt" \
 sha256sum "$PROJECT_ROOT/native/g3t_manual_p2_prefill_source_closure.txt" \
   >>"$evidence/closure.sha256"
 sha256sum "$PROJECT_ROOT/native/g3m_prefill_p2_source_closure.txt" \
+  >>"$evidence/closure.sha256"
+sha256sum "$PROJECT_ROOT/native/g3t_manual_decode_source_closure.txt" \
   >>"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"
