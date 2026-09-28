@@ -14,6 +14,17 @@ raw_public_exports=$4
 raw_include_dirs=("${@:6}")
 g3g_tuple_requested=0
 g3g_g0_tuple_requested=0
+g3g_manual_tuple_requested=0
+for g3g_manual_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
+    "${raw_package_renames}" "${raw_public_exports}"; do
+  case "$(realpath -m -- "${g3g_manual_raw_input}")" in
+    "${PROJECT_ROOT}/native/g3g_manual_package_root.esk"|\
+    "${PROJECT_ROOT}/native/g3g_manual_package_bridge.c"|\
+    "${PROJECT_ROOT}/native/g3g_manual_package_private_renames.txt"|\
+    "${PROJECT_ROOT}/native/g3g_manual_package_public_exports.txt")
+      g3g_manual_tuple_requested=1 ;;
+  esac
+done
 for g3g_g0_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
     "${raw_package_renames}" "${raw_public_exports}"; do
   case "$(realpath -m -- "${g3g_g0_raw_input}")" in
@@ -48,7 +59,8 @@ else
 fi
 source "${PROJECT_ROOT}/scripts/g3g-package-policy.sh"
 source "${PROJECT_ROOT}/scripts/g3g-g0-package-policy.sh"
-if [[ "${g3g_tuple_requested}" == 1 || "${g3g_g0_tuple_requested}" == 1 ]]; then
+source "${PROJECT_ROOT}/scripts/g3g-manual-package-policy.sh"
+if [[ "${g3g_tuple_requested}" == 1 || "${g3g_g0_tuple_requested}" == 1 || "${g3g_manual_tuple_requested}" == 1 ]]; then
   e3_tuple_requested=0
   m3_tuple_requested=0
   m3t_tuple_requested=0
@@ -394,6 +406,22 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
         "${PROJECT_ROOT}/native/e3_diagnostic_destinations.c"
       )
     fi
+elif [[ "${g3g_manual_tuple_requested}" == 1 ]]; then
+    package_policy=g3g-manual-public-aggregate
+    undefined_symbols="${g3g_manual_prefix}_undefined_symbols.txt"
+    package_public_strings="${g3g_manual_prefix}_public_strings.txt"
+    package_source_closure="${g3g_manual_prefix}_source_closure.txt"
+    package_native_source_closure="${g3g_manual_prefix}_native_source_closure.txt"
+    package_native_sources=(
+      "${PROJECT_ROOT}/native/data_io.c"
+      "${PROJECT_ROOT}/native/checkpoint_io.c"
+      "${PROJECT_ROOT}/native/kernel_abi.c"
+      "${PROJECT_ROOT}/src/eshkol_transformer/m3_i64_integration.c"
+      "${PROJECT_ROOT}/native/t1_i64_shell.c"
+      "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c"
+      "${PROJECT_ROOT}/src/eshkol_transformer/g3t_transport.c"
+      "${PROJECT_ROOT}/native/a2_kv_cache.c"
+    )
 elif [[ "${g3g_g0_tuple_requested}" == 1 ]]; then
     package_policy=g3g-g0-public-aggregate
     undefined_symbols="${g3g_g0_prefix}_undefined_symbols.txt"
@@ -949,7 +977,7 @@ if [[ "${package_policy}" == cli3-c2-successor || \
 fi
 
 g3g_package_policy=0
-if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-g0-public-aggregate ]]; then
+if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-g0-public-aggregate || "${package_policy}" == g3g-manual-public-aggregate ]]; then
   g3g_package_policy=1
 fi
 
@@ -1302,9 +1330,17 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
         -DET_G3T_OWNED_TOKEN_INPUT_PRIVATE
         -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
         -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
-      if [[ "${package_policy}" == g3g-g0-public-aggregate ]]; then
+      if [[ "${package_policy}" == g3g-g0-public-aggregate || "${package_policy}" == g3g-manual-public-aggregate ]]; then
         package_source_flags+=(-DET_G3T_ZERO_BUDGET_PRIVATE
                                -DET_G3T_P2_ZERO_BUDGET_PRIVATE)
+      fi
+      if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
+        package_source_flags+=(
+          -DET_G3T_MANUAL_LOGITS_PRIVATE
+          -DET_G3T_MANUAL_P1_PREFILL_PRIVATE
+          -DET_G3T_MANUAL_P2_PREFILL_PRIVATE
+          -DET_G3T_MANUAL_DECODE_PRIVATE
+          -DET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE)
       fi
     elif [[ "${g3g_package_policy}" == 1 &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_i64_integration.c" ]]; then
@@ -1329,6 +1365,8 @@ elif [[ "${package_policy}" == m3-model-aggregate ]]; then
   source "${PROJECT_ROOT}/scripts/m3-native-inputs.sh"
 elif [[ "${package_policy}" == g3g-g0-public-aggregate ]]; then
   source "${PROJECT_ROOT}/scripts/g3g-g0-native-inputs.sh"
+elif [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
+  source "${PROJECT_ROOT}/scripts/g3g-manual-native-inputs.sh"
 elif [[ "${g3g_package_policy}" == 1 ]]; then
   source "${PROJECT_ROOT}/scripts/g3g-native-inputs.sh"
 elif [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then

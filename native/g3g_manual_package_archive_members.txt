@@ -1,0 +1,1 @@
+g3g_manual_package.o

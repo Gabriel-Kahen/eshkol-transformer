@@ -1041,9 +1041,16 @@ passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
 Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
 checks, with exact feature-on/off private-symbol delta. Commands and logs
 are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
-(`SEAL.sha256` `980c7e46...`). #143 hosted integration remains pending.
-Revision-3 public ownership/read, atomic cache/result publication, exact
-closed package tuple and numerical/negative gates remain separate.
+(`SEAL.sha256` `980c7e46...`). #143 merged into `main` as `9e1ee516` after
+23/23 hosted checks (run 36434951609). An isolated revision-3 manual package
+checkpoint now drafts the separate 40-source, 53-native-entry tuple and three
+additive boxed operations. The pinned first package build compiled the Eshkol
+root and native providers, then stopped at the expected global-definition
+manifest drift (the copied revision-2 file still lists 106 definitions). This
+is an incomplete implementation checkpoint: the exact new definition and
+undefined inventories, closed build, AOT numerical/negative tests,
+independent review and hosted integration remain required. Revision 2 is
+still the accepted installed boundary.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
