@@ -84,6 +84,8 @@
         :real et_g3t_test_live_contexts_v1)
 (extern i64 g3t-test-last-error-category
         :real et_g3t_private_last_error_category_v1)
+(extern i64 g3t-test-last-error-domain
+        :real et_g3t_private_last_error_domain_v1)
 (extern i64 g3t-test-last-error-code
         :real et_g3t_private_last_error_code_v1)
 (extern ptr g3t-native-input-from-t1 ptr
@@ -129,6 +131,12 @@
         :real et_g3t_test_manual_cache_borrow_end_v1)
 (extern i64 g3t-test-manual-reference-kv-word ptr i64 i64
         :real et_g3t_test_manual_reference_kv_word_v1)
+(extern i64 g3t-test-manual-p2-inline-id-set ptr i64 i64
+        :real et_g3t_test_manual_p2_inline_id_set_v1)
+(extern i64 g3t-test-manual-p2-fail-dispatch-after i64
+        :real et_g3t_test_manual_p2_fail_dispatch_after_v1)
+(extern i64 g3t-test-manual-p2-i1-shape-set ptr i64
+        :real et_g3t_test_manual_p2_i1_shape_set_v1)
 
 (define checks 0)
 (define (check label value)
@@ -876,6 +884,16 @@
                          (g3t-test-manual-reference-kv-word
                            reference-native-workspace which index))
             (if (= index 3) (fill (+ which 1) 0)
+                (fill which (+ index 1))))))))
+(define manual-p2-reference-kv
+  (let ((words (make-vector 16 0)))
+    (let fill ((which 0) (index 0))
+      (if (= which 2) words
+          (begin
+            (vector-set! words (+ (* which 8) index)
+                         (g3t-test-manual-reference-kv-word
+                           reference-native-workspace which index))
+            (if (= index 7) (fill (+ which 1) 0)
                 (fill which (+ index 1))))))))
 (check "reference AH" (g3t-checked-m3t-attention! reference-workspace))
 (check "reference AT" (g3t-checked-m3t-heads-merge! reference-workspace))
@@ -2547,6 +2565,249 @@
             (g3t-generation-tensor-release! g3m-second)
             (g3t-generation-tensor-release! g3m-first)
             (g3t-generation-tensor-release! g3m-second)
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+
+;; G3-T manual kind-0 P2 is a native transport leaf. The input is copied from
+;; the sealed T1 shell into an owned I1; no G3-M P2 composer is installed.
+(define mp2-generator (g3t-generator-create model tokenizer policy-g1))
+(define mp2-native
+  (vector-ref (g3t-generator-find mp2-generator 'manual-p2) 3))
+(define mp2-i1-baseline (g3t-test-i1-count 0))
+(define mp2-p1-input (g3t-native-input-from-token 65))
+(check "manual P2 predecessor P1 acquire"
+       (= 0 (g3t-native-call-acquire mp2-native 0)))
+(define mp2-p1-result (g3t-native-logits-reserve mp2-native))
+(check "manual P2 predecessor P1 begin"
+       (= 0 (g3t-native-frame-begin mp2-native mp2-p1-input 1)))
+(let roles ((ordinal 0))
+  (if (= ordinal 21) #t
+      (begin (check "manual P2 predecessor P1 role"
+                    (= 0 (g3t-native-role-step mp2-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "manual P2 predecessor P1 prepare"
+       (= 0 (g3t-native-frame-prepare mp2-native mp2-p1-result)))
+(check "manual P2 predecessor P1 preflight"
+       (= 0 (g3t-native-call-prepare-end mp2-native)))
+(check "manual P2 predecessor P1 commit"
+       (= 0 (g3t-native-frame-commit mp2-native)))
+(check "manual P2 predecessor P1 finish"
+       (= 0 (g3t-native-call-finish mp2-native)))
+(check "manual P2 predecessor P1 cache"
+       (= 1 (g3t-test-cache-length mp2-native)))
+(check "manual P2 predecessor P1 input release"
+       (= 0 (g3t-native-tensor-release mp2-p1-input)))
+(define mp2-input (g3t-native-input-from-t1 t1-p2))
+(check "manual P2 authentic I1 admission fixture"
+       (and (not (null? mp2-input))
+            (= 2 (g3t-test-input-length mp2-input))
+            (= (+ mp2-i1-baseline 1) (g3t-test-i1-count 0))))
+(define mp2-inline (g3t-native-input-from-pair 65 66))
+(check "manual P2 acquire" (= 0 (g3t-native-call-acquire mp2-native 0)))
+(define mp2-first (g3t-native-logits-reserve mp2-native))
+(check "manual P2 inline-only pair rejected"
+       (and (not (= 0 (g3t-native-frame-begin mp2-native mp2-inline 1)))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "manual P2 invalid metadata length injected"
+       (= 0 (g3t-test-input-length-set mp2-input 3)))
+(check "manual P2 wrong metadata length rejected"
+       (and (not (= 0 (g3t-native-frame-begin mp2-native mp2-input 1)))
+            (= 2 (g3t-test-last-error-category))
+            (= 2 (g3t-test-last-error-code))))
+(check "manual P2 metadata length restored"
+       (= 0 (g3t-test-input-length-set mp2-input 2)))
+(check "manual P2 malformed I1 shape injected"
+       (= 0 (g3t-test-manual-p2-i1-shape-set mp2-input 3)))
+(check "manual P2 malformed typed I1 rejected"
+       (and (not (= 0 (g3t-native-frame-begin mp2-native mp2-input 1)))
+            (= 3 (g3t-test-last-error-category))
+            (= 4 (g3t-test-last-error-code))))
+(check "manual P2 I1 shape restored"
+       (= 0 (g3t-test-manual-p2-i1-shape-set mp2-input 2)))
+(check "manual P2 inline shadow mismatch injected"
+       (= 0 (g3t-test-manual-p2-inline-id-set mp2-input 1 67)))
+(check "manual P2 inline shadow mismatch rejected"
+       (and (not (= 0 (g3t-native-frame-begin mp2-native mp2-input 1)))
+            (= 2 (g3t-test-last-error-category))
+            (= 6 (g3t-test-last-error-code))))
+(check "manual P2 inline shadow restored"
+       (= 0 (g3t-test-manual-p2-inline-id-set mp2-input 1 66)))
+(check "manual P2 rejected input fixtures release"
+       (and (= 0 (g3t-native-tensor-release mp2-inline))
+            (= (+ mp2-i1-baseline 1) (g3t-test-i1-count 0))))
+(define mp2-input-borrow (g3t-test-input-borrow-begin mp2-input))
+(check "manual P2 borrowed I1 admission rejected"
+       (and (not (null? mp2-input-borrow))
+            (not (= 0 (g3t-native-frame-begin mp2-native mp2-input 1)))
+            (= 1 (g3t-test-cache-length mp2-native))
+            (= 14 (g3t-test-pin-count mp2-native))))
+(check "manual P2 input borrow ends"
+       (= 0 (g3t-test-input-borrow-end mp2-input-borrow)))
+(check "manual P2 A2 create cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(check "manual P2 A2 create failure"
+       (not (= 0 (g3t-native-frame-begin mp2-native mp2-input 1))))
+(check "manual P2 A2 create cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "manual P2 create failure preserves P1 authority"
+       (and (= 1 (g3t-test-cache-length mp2-native))
+            (= 14 (g3t-test-pin-count mp2-native))
+            (= 0 (g3t-test-logits-state mp2-first))
+            (= 0 (g3t-test-rng-word mp2-native 2))))
+(check "manual P2 frame begin"
+       (= 0 (g3t-native-frame-begin mp2-native mp2-input 1)))
+(check "manual P2 input release after copied transcript"
+       (and (= 0 (g3t-native-tensor-release mp2-input))
+            (= mp2-i1-baseline (g3t-test-i1-count 0))))
+(check "manual P2 wrong ordinal rejected"
+       (not (= 0 (g3t-native-role-step mp2-native 1))))
+(let roles ((ordinal 0))
+  (if (= ordinal 10) #t
+      (begin (check "manual P2 T2 roles 0..9"
+                    (= 0 (g3t-native-role-step mp2-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "manual P2 frame both K/V rows bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-frame-kv-word mp2-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "manual P2 A2 attention cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(check "manual P2 A2 attention failure"
+       (not (= 0 (g3t-native-role-step mp2-native 10))))
+(check "manual P2 A2 attention cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "manual P2 attention failure keeps old cache and ordinal"
+       (and (= 1 (g3t-test-cache-length mp2-native))
+            (= 14 (g3t-test-pin-count mp2-native))))
+(check "manual P2 attention retry"
+       (= 0 (g3t-native-role-step mp2-native 10)))
+(let roles ((ordinal 11))
+  (if (= ordinal 21) #t
+      (begin (check "manual P2 T2 roles 11..20"
+                    (= 0 (g3t-native-role-step mp2-native ordinal)))
+             (roles (+ ordinal 1)))))
+(define mp2-result-borrow (g3t-test-logits-borrow-begin mp2-first))
+(check "manual P2 borrowed result blocks prepare"
+       (and (not (null? mp2-result-borrow))
+            (not (= 0 (g3t-native-frame-prepare mp2-native mp2-first)))))
+(check "manual P2 result borrow ends"
+       (= 0 (g3t-test-logits-borrow-end mp2-result-borrow)))
+(check "manual P2 frame prepare retry"
+       (= 0 (g3t-native-frame-prepare mp2-native mp2-first)))
+(define mp2-old-borrow (g3t-test-manual-cache-borrow-begin mp2-native))
+(check "manual P2 old-cache lease blocks preflight"
+       (and (not (null? mp2-old-borrow))
+            (not (= 0 (g3t-native-call-prepare-end mp2-native)))))
+(check "manual P2 old-cache lease ends"
+       (= 0 (g3t-test-manual-cache-borrow-end mp2-old-borrow)))
+(check "manual P2 binding flip"
+       (= 0 (g3t-test-frame-binding-flip mp2-native)))
+(check "manual P2 stale binding blocks preflight"
+       (not (= 0 (g3t-native-call-prepare-end mp2-native))))
+(check "manual P2 binding restore"
+       (= 0 (g3t-test-frame-binding-flip mp2-native)))
+(check "manual P2 end preflight"
+       (= 0 (g3t-native-call-prepare-end mp2-native)))
+(check "manual P2 commit" (= 0 (g3t-native-frame-commit mp2-native)))
+(check "manual P2 finish" (= 0 (g3t-native-call-finish mp2-native)))
+(check "manual P2 last row all 256 bits exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word mp2-first index))
+                    (compare (+ index 1)))))))
+(check "manual P2 committed both K/V rows bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-cache-kv-word mp2-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "manual P2 committed state and P1 detached result"
+       (and (= 2 (g3t-test-cache-length mp2-native))
+            (= 1 (g3t-test-logits-state mp2-first))
+            (= 1 (g3t-test-logits-state mp2-p1-result))
+            (= 0 (g3t-test-rng-word mp2-native 2))
+            (= 0 (g3t-test-pin-count mp2-native))))
+(define mp2-repeat-input (g3t-native-input-from-t1 t1-p2))
+(check "manual P2 repeated acquire"
+       (= 0 (g3t-native-call-acquire mp2-native 0)))
+(define mp2-second (g3t-native-logits-reserve mp2-native))
+(check "manual P2 repeated begin"
+       (= 0 (g3t-native-frame-begin mp2-native mp2-repeat-input 1)))
+(let roles ((ordinal 0))
+  (if (= ordinal 21) #t
+      (begin (check "manual P2 repeated T2 role"
+                    (= 0 (g3t-native-role-step mp2-native ordinal)))
+             (roles (+ ordinal 1)))))
+(check "manual P2 repeated prepare"
+       (= 0 (g3t-native-frame-prepare mp2-native mp2-second)))
+(check "manual P2 repeated preflight"
+       (= 0 (g3t-native-call-prepare-end mp2-native)))
+(check "manual P2 repeated commit"
+       (= 0 (g3t-native-frame-commit mp2-native)))
+(check "manual P2 repeated finish"
+       (= 0 (g3t-native-call-finish mp2-native)))
+(check "manual P2 repeated input release"
+       (and (= 0 (g3t-native-tensor-release mp2-repeat-input))
+            (= mp2-i1-baseline (g3t-test-i1-count 0))))
+(check "manual P2 repeated publication retains older logits"
+       (and (= 2 (g3t-test-cache-length mp2-native))
+            (= 1 (g3t-test-logits-state mp2-first))
+            (= 1 (g3t-test-logits-state mp2-second))
+            (= 1 (g3t-test-logits-state mp2-p1-result))
+            (= (g3t-test-manual-logits-word mp2-first 0)
+               (g3t-test-manual-logits-word mp2-second 0))
+            (= 0 (g3t-test-rng-word mp2-native 2))))
+(define mp2-abort-input (g3t-native-input-from-t1 t1-p2))
+(check "manual P2 abort acquire"
+       (= 0 (g3t-native-call-acquire mp2-native 0)))
+(define mp2-abort-result (g3t-native-logits-reserve mp2-native))
+(check "manual P2 abort frame begin"
+       (= 0 (g3t-native-frame-begin mp2-native mp2-abort-input 1)))
+(check "manual P2 abort input release after begin"
+       (= 0 (g3t-native-tensor-release mp2-abort-input)))
+(check "manual P2 synthetic provider cut armed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 0)))
+(check "manual P2 synthetic provider dispatch failure"
+       (and (not (= 0 (g3t-native-role-step mp2-native 0)))
+            (= 1 (g3t-test-last-error-domain))
+            (= 8 (g3t-test-last-error-category))
+            (= 9 (g3t-test-last-error-code))))
+(check "manual P2 provider failure leaves ordinal retryable"
+       (and (= 2 (g3t-test-cache-length mp2-native))
+            (= 0 (g3t-native-role-step mp2-native 0))))
+(define mp2-abort-borrow (g3t-test-logits-borrow-begin mp2-abort-result))
+(check "manual P2 borrowed pending result blocks abort"
+       (and (not (null? mp2-abort-borrow))
+            (not (= 0 (g3t-native-call-abort mp2-native)))
+            (= 14 (g3t-test-pin-count mp2-native))
+            (= 2 (g3t-test-cache-length mp2-native))))
+(check "manual P2 abort borrow ends"
+       (= 0 (g3t-test-logits-borrow-end mp2-abort-borrow)))
+(check "manual P2 abort drains candidate and pins"
+       (and (= 0 (g3t-native-call-abort mp2-native))
+            (= -1 (g3t-test-logits-state mp2-abort-result))
+            (= 2 (g3t-test-cache-length mp2-native))
+            (= 0 (g3t-test-pin-count mp2-native))
+            (= 0 (g3t-test-rng-word mp2-native 2))))
+(check "manual P2 generator closes"
+       (g3t-generator-close! mp2-generator))
+(check "manual P2 detached logits survive generator close"
+       (and (= 1 (g3t-test-logits-state mp2-first))
+            (= 1 (g3t-test-logits-state mp2-second))
+            (= 1 (g3t-test-logits-state mp2-p1-result))))
+(check "manual P2 typed output release"
+       (and (= 0 (g3t-native-tensor-release mp2-first))
+            (= 0 (g3t-native-tensor-release mp2-second))
+            (= 0 (g3t-native-tensor-release mp2-p1-result))
             (= manual-f32-baseline (g3t-test-f32-tensors))))
 
 (display "G3-T P2 zero budget PASS: checks=")
