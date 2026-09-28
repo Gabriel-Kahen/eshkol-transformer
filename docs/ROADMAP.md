@@ -459,6 +459,18 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md) | complete |
 
+The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
+is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
+exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker
+allocation and shutdown. Explicit single-thread OpenBLAS preserves that cap;
+focused activations and attention pass AOT/JIT parity with a separate
+180-second JIT ceiling. The one full supported AOT/JIT inventory completed
+183 command rows and exited 1 with 38 counted failures: autodiff and RMSNorm
+gaps, RNG mode-parity mismatch, malformed negatives that succeed, and two
+signal-139 negatives. Attention-gradient and malformed-reshape failures also
+reproduce on the prior runtime pin; the other old-pin outcomes are untested.
+The successor R0 gate remains open, with sealed evidence in the audit.
+
 ## Wave 1 — independent foundations
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
@@ -949,19 +961,21 @@ prefix, 21-role T1 append and atomic length-two cache/logits commit. Its pinned
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
 exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. Root
-independently reviewed the source; PR #135 merged as `fedf0be` while its
-refreshed hosted run remained queued, so that gate still needs follow-up.
+independently reviewed the source; PR #135 merged as `fedf0be` and its exact
+PR head subsequently passed all 23 hosted checks.
 The accepted [private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md)
 merged as `893cbc7`. This isolated implementation `f117987` / tree `972087b`
 widens kind-1 calls and authentic non-null frame-kind-2 input. Root
 independently reviewed its source and 47,194 pinned normal/repeat/sanitizer
-checks; hosted integration CI remains pending. The accepted
+checks; PR #137 passed all 23 hosted checks and merged as `189d993`.
+The accepted
 [private G3-M one-token decode composer contract](g3/G3_M_MANUAL_DECODE_COMPOSER_PROPOSAL.md)
 has an isolated candidate `86bd5a5` / tree `0d8912b`: one guarded kind-1
 call, owned `[1,1]` input, exact 21-role T1 schedule, A2 `1→2` append,
 detached logits and precommit rollback. Root independently reviewed its
 source and 47,240 pinned normal/repeat/sanitizer checks, 22 source contracts
-and Q0 4/4; hosted integration CI remains pending. The accepted private
+and Q0 4/4; its prior head passed all 23 hosted checks. Refreshed hosted
+integration CI remains pending. The accepted private
 [seeded P1/G1 schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) has a
 [reviewed implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) at
 `9029b67` / tree `052fdf9`: a single guarded full-request preflight,
@@ -969,7 +983,8 @@ prompt commit, G3-S sample, generated append and atomic final publication.
 Its pinned normal/repeat/ASan+UBSan+LSan gate passed 47,330 identical checks,
 23 source contracts, Q0 4/4 and production test-symbol exclusion. The
 isolated integration head preserves the reviewed source and tests byte for
-byte; hosted CI remains pending. The independently accepted bounded
+byte; its prior head passed all 23 hosted checks. Refreshed hosted CI remains
+pending. The independently accepted bounded
 [public P1/G1 G3-G contract](g3/G3_G_C2_PUBLIC_CONTRACT_PROPOSAL.md)
 defines a thirteen-name facade over only that private seeded route. Its
 separate single-owner [package candidate](g3/G3_G_C2_PUBLIC_LEAF.md)
