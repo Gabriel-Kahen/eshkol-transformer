@@ -93,6 +93,8 @@ for witness in (
     "failed release preserves provenance and owner",
     "A2 rollback keeps empty cache and drains pins",
     "P2/G0 detached exact clone values",
+    "G0 seeded RNG snapshot has no draw",
+    "categorical G0 admits exhausted counter without a draw",
 ):
     assert witness in v2_private
 public_test = (ROOT / "tests/g3g_g0/public_runtime.esk").read_text()
