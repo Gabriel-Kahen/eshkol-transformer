@@ -6,20 +6,11 @@ for command in ar cmp docker git nm objcopy python3 readlink rg sha256sum; do
 done
 cd "${PROJECT_ROOT}"
 
-fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/tr3-shared-tail-finalizer-97c40c9d}"
-compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/tr3-shared-tail-finalizer/eshkol}"
-runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/runtime-81298-recovery}"
+fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps/eshkol-build}"
+compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps/eshkol-src}"
+runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps}"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
-case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-81298}" in
-  81298)
-    compiler_commit=97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0
-    runner_name=eshkol-run-release
-    runner_sha256=1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb
-    runtime_build_dir="${runtime}/eshkol-build-canonical"
-    runtime_sha256="$(tsv_value "${pin}" runtime_archive_sha256)"
-    source_manifest=native/tr3_public_installed_source_closure.txt
-    undefined_manifest=native/tr3_public_installed_undefined_symbols.txt
-    ;;
+case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-fe9}" in
   fe9)
     compiler_commit=fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9
     runner_name=eshkol-run

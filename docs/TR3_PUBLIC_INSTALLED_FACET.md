@@ -3,7 +3,8 @@
 The canonical `lib/transformer/trainer.esk` now provides the A0
 `trainer-create resolved tokenizer dataset model optimizer` constructor and
 `trainer-release! trainer` operation, alongside the unchanged C2
-`trainer-state-release! state`. `trainer-release!` ends the exclusive lease
+`trainer-state-release! state` and `metrics-ref metrics key`.
+`trainer-release!` ends the exclusive lease
 while leaving all five caller-owned receivers live. Dropping the trainer
 reference alone does not release its lease. Forged or repeated release is
 `invalid-argument`; a busy trainer is `invalid-state`. The public E1 operation
@@ -21,6 +22,16 @@ checks create/release/re-lease and negative identity/lease behavior, and
 checks the retained C2 state-release name. The two copied facade files and
 the archive form one versioned package tuple. The prior 48-source candidate and
 the production initializer-only TR3 package remain unchanged.
+
+`metrics-ref` authenticates a committed step token against the same aggregate's
+private metrics registry before inspecting the key. Its fixed step schema is
+`loss:f32`, `mask-weight:f32`, `tokens:i64`, `microbatches:i64`, and
+`update:i64`. The f32 values are canonical detached runtime immediates
+constructed from stored physical binary32 words; counters remain exact i64
+immediates. Unknown keys, other key types, and foreign tokens raise
+`invalid-argument` under the public `metrics-ref` operation. This facet does
+not yet install a public step producer; positive result fixtures use the
+source-private committed-record authority.
 
 The accepted C2 archive is a distinct versioned tuple. `scripts/build-c2.sh`
 copies the byte-pinned pre-TR3 `transformer/trainer.esk` into its artifact's

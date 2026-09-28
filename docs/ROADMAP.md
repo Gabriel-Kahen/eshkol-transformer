@@ -1413,8 +1413,12 @@ a poisoned public caller on the pre-facet tree. Sealed evidence is under
 `tr3-private-metrics-fe9-201331e-20260928/SHA256SUMS` and
 `tr3-public-installed-metrics-fe9-201331e-20260928/SHA256SUMS`.
 The combined current installed facet still needs an exact fe9 metrics linked
-gate. Public `metrics-ref`, true-f32 scalar return, trainer-step integration,
-train/evaluate adapters, and all-result retention evidence remain pending.
+gate. The bounded public `metrics-ref` step-record reader is implemented as a
+candidate: it authenticates the private authority, preserves exact i64 counters,
+and converts stored binary32 words through the accepted runtime f32 scalar ABI.
+Its focused and linked package gates remain integration gates. Trainer-step
+integration, train/evaluate adapters, and all-result retention evidence remain
+pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
