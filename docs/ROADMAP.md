@@ -1221,6 +1221,20 @@ runtime symbols, and empty poisoned-caller stderr; all files in
 remain test-local until
 their complete canonical facades are installed; this facet makes no public
 step/train/evaluate or resume claim.
+The stacked P1/O2 installed operand facet adds the unchanged 18-operation
+`transformer.module` and six-operation `transformer.optim` facades to the
+same aggregate. It reuses the four existing producer exports and adds only
+the 20 missing accepted boxed operations/private renames. The ordinary caller
+imports both facades, constructs P1 parameters and O2 optimizer from the
+installed M3T model, then passes all five installed operands to
+`trainer-create`. Forged P1 module/tree and O2 optimizer identities, released
+P1/O2 snapshots, and the existing overlapping/busy/repeated trainer release
+cases pass. The pinned linked gate on `cd9f6b5`/tree `d52bf931` passed with
+49 Eshkol sources, 30 native objects, 104 localized exports, 173 undefined
+runtime symbols and empty poisoned-caller stderr; all files under
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-operands-cd9f6b5-20260927/SHA256SUMS`
+verify. This is an installed construction/lease facet; public step, train,
+evaluate, state/load and resume remain separate work.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
