@@ -929,8 +929,16 @@ implements that source-private bridge. Root independently source-reviewed
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 46,984 identical
 checks, 18 source contracts, Q0 4/4 and production test-symbol exclusion;
 the external evidence is in `g3t-manual-p2-native-candidate-20260928`.
-This does not add G3-M P2, generation or a public facade. Integrate the
-G3-T native leaf before implementing the G3-M P2 composer.
+The G3-T transport is source-reviewed at `832a709`. The isolated
+[source-private G3-M P2 composer candidate](g3/G3_M_PREFILL_P2_LEAF.md)
+stacks on that exact head and runs the existing guarded acquire/reserve/21-role/
+prepare/preflight/commit/finish sequence with authentic T1-backed P2 input.
+Its pinned network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,016
+byte-identical checks, 19 source contracts, Q0 4/4 and production test-symbol
+exclusion. Evidence is at `g3m-prefill-p2-candidate-20260928`; root
+independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
+integration CI remains pending. It adds no public
+generation facade or manual decode.
 
 The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
 was independently reviewed at `58499c0`. Its isolated native implementation
