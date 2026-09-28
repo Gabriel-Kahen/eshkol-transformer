@@ -940,6 +940,17 @@ independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
 integration CI remains pending. It adds no public
 generation facade or manual decode.
 
+The next dependency after the independently reviewed G3-T manual P2 native
+head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
+[proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
+The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
+native frame/role/publication branches and private Eshkol call/frame wrappers
+still exclude manual decode. Root independently reviewed the source-anchored
+native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
+is integrated in this `origin/main` baseline. Native decode, its wrapper, a
+G3-M decode composer, and the seeded
+generation/public facade remain separate downstream gates.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
@@ -1211,6 +1222,19 @@ measurements passed on `1a44e42`: 49 Eshkol sources, 30 native objects,
 70 native paths, 4,171 raw definitions, 48 exports and 173 undefined
 symbols. The poisoned caller passed with empty stderr; sealed evidence is
 `tr3-public-d2-linked-1a44e42-20260925/SHA256SUMS`.
+The isolated M3T operand facet adds the unchanged 38-entry
+`transformer.diagnostic_transport` facade to the same registry-owning aggregate.
+The existing initializer/model producer exports gain the other 36 reviewed
+same-package boxed operations and private renames. Its ordinary caller uses
+the installed facade for model construction, profile and successor initializer,
+and checks forged model/initializer identities before the existing live
+trainer lease/release cases. The pinned linked gate passed on `df584de` with
+49 Eshkol sources, 30 native objects, 84 localized exports, 173 undefined
+runtime symbols, and empty poisoned-caller stderr; all files in
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-m3t-df584de-20260927/SHA256SUMS` verify. P1 and O2 construction
+remain test-local until
+their complete canonical facades are installed; this facet makes no public
+step/train/evaluate or resume claim.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
