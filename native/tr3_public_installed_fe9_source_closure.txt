@@ -48,3 +48,9 @@ native/tr3_c_joint_restore_extension.esk
 native/tr3_c_checkpoint_restore_extension.esk
 native/tr3_c_trainer_load_state_extension.esk
 native/tr3_metrics_extension.esk
+native/tr3b_objective_extension.esk
+native/tr3_o2_step_clear_extension.esk
+native/tr3_step_transaction_extension.esk
+native/tr3_step_commit_tail_extension.esk
+native/tr3_step_composer_extension.esk
+native/tr3_public_step_extension.esk

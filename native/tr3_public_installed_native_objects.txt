@@ -27,4 +27,5 @@ p1_identity.o
 t1_i64_shell.o
 tr3_c_restore_bindings.o
 tr3_public_installed_bridge.o
+tr3_public_step_metrics.o
 tr3b_objective_bridge.o

@@ -79,7 +79,7 @@
                   "finite dataset is empty after epoch rewind"))
             next)))))
 
-(define (tr3-step-composer-microbatch! ledger ordinal)
+(define (tr3-step-composer-microbatch! ledger ordinal observe)
   (let* ((frame (vector-ref ledger 0))
          (record (vector-ref frame 2))
          (token (vector-ref frame 3)))
@@ -110,10 +110,11 @@
                          (+ (vector-ref ledger 6)
                             (if (= weight 1065353216) 1 2))))
           (tr3-step-composer-test-hook 'observation ordinal observation)
+          (observe observation)
           (tr3-step-composer-test-hook 'mid ordinal observation)
           (tr3-step-composer-release-batch! ledger))))))
 
-(define (tr3-step-composer-run! ledger trainer)
+(define (tr3-step-composer-run! ledger trainer observe)
   (let ((frame (tr3-step-start-internal trainer)))
     (vector-set! ledger 0 frame)
     (let* ((record (vector-ref frame 2))
@@ -132,7 +133,7 @@
     (vector-set! ledger 2 (m3t-public-logits-create))
     (let loop ((ordinal 0))
       (if (< ordinal (vector-ref ledger 8))
-          (begin (tr3-step-composer-microbatch! ledger ordinal)
+          (begin (tr3-step-composer-microbatch! ledger ordinal observe)
                  (loop (+ ordinal 1)))))
     (tr3-step-composer-release-scratch! ledger)
     (if (> (vector-ref ledger 6) tr3-step-exact-f32-integer-max)
@@ -144,7 +145,8 @@
     (tr3-step-composer-test-hook 'precommit (vector-ref ledger 8) #f)
     #t))
 
-(define (tr3-step-composer-internal! trainer)
+(define (tr3-step-composer-with-hooks-internal!
+          trainer observe prepare-metrics precommit publish)
   (if (vector-ref tr3-step-composer-active 0)
       (tr3-step-composer-fail 'invalid-state "step composer is busy"))
   (let ((ledger (vector #f #f #f #f #f #f 0 0 0)))
@@ -155,10 +157,18 @@
     (guard (caught
              (#t (begin (tr3-step-composer-abort! ledger)
                         (raise caught))))
-      (tr3-step-composer-run! ledger trainer)
-      (tr3-step-commit-with-epochs-internal!
+      (tr3-step-composer-run! ledger trainer observe)
+      (prepare-metrics ledger)
+      (tr3-step-commit-with-epochs-and-precommit-internal!
         (vector-ref ledger 0) (vector-ref ledger 6)
-        (vector-ref ledger 7))
+        (vector-ref ledger 7) precommit)
       (vector-set! ledger 0 #f)
       (vector-set! tr3-step-composer-active 0 #f)
-      #t)))
+      ;; The accepted commit has no recoverable successor path. Publication
+      ;; performs only prevalidated rooted stores and returns the opaque token.
+      (publish))))
+
+(define (tr3-step-composer-internal! trainer)
+  (tr3-step-composer-with-hooks-internal!
+    trainer (lambda (observation) #t) (lambda (ledger) #t)
+    (lambda () #t) (lambda () #t)))

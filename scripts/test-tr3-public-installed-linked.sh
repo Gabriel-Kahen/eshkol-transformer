@@ -127,6 +127,7 @@ compile native/c2_checkpoint_inspect_bridge.c c2_checkpoint_inspect_bridge.o
 compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o \
   -DET_TR3_C_RESTORE_BINDINGS -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
   -DET_TR3_C_I2_RESTORE_PRIVATE -DET_TR3_C_O2_RESTORE_NATIVE
+compile native/tr3_public_step_metrics.c tr3_public_step_metrics.o
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC \
   -I /fixed-source/inc -I native -MMD -MF /out/native/e1b_bridge.o.d \
   -c native/e1b_error_consumer_bridge.c -o /out/native/e1b_bridge.o
@@ -224,7 +225,7 @@ from pathlib import Path
 import sys
 root, evidence = map(Path, sys.argv[1:])
 deps = sorted((evidence / 'native').glob('*.d'))
-assert len(deps) == 30
+assert len(deps) == 31
 paths = set()
 for dep in deps:
     text = dep.read_text().replace('\\\n', ' ')
@@ -265,7 +266,7 @@ assert paths == ['tests/tr3_public_installed/runtime.esk',
                  '/out/facades/transformer/tokenizer.esk',
                  '/out/facades/transformer/trainer.esk'], paths
 PY
-if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^c2-public-trainer-state-release!$' \
+if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^trainer-step!$|^c2-public-trainer-state-release!$' \
     "${evidence}/global-defined.txt"; then
   die "candidate package leaked private trainer authority"
 fi

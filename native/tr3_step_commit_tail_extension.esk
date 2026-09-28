@@ -120,7 +120,8 @@
     (set! tr3-step-operation-active? #f)
     #t))
 
-(define (tr3-step-commit-with-epochs-internal! frame active-tokens epoch-delta)
+(define (tr3-step-commit-with-epochs-and-precommit-internal!
+          frame active-tokens epoch-delta precommit)
   (if tr3-step-operation-active?
       (tr3-step-fail 'invalid-state "step transaction operation is busy"))
   (set! tr3-step-operation-active? #t)
@@ -130,6 +131,12 @@
                               (raise caught))))
             (tr3-step-commit-preflight-with-epochs
               frame active-tokens epoch-delta))))
+    ;; The caller's staged result head is checked after all fallible trainer
+    ;; preflight and immediately before the native first-write boundary.
+    (guard (caught
+             (#t (begin (set! tr3-step-operation-active? #f)
+                        (raise caught))))
+      (precommit))
     ;; O2 can return a categorized pre-COMMITTING rejection; the frame remains
     ;; prepared for explicit abort. Once COMMITTING begins, O2 either succeeds
     ;; or fail-stops. The source tail below contains only staged primitives.
@@ -138,6 +145,10 @@
                         (raise caught))))
       (o2-trainer-step-clear-commit-internal! (vector-ref ledger 2)))
     (tr3-step-commit-tail! ledger)))
+
+(define (tr3-step-commit-with-epochs-internal! frame active-tokens epoch-delta)
+  (tr3-step-commit-with-epochs-and-precommit-internal!
+    frame active-tokens epoch-delta (lambda () #t)))
 
 (define (tr3-step-commit-preflight frame active-tokens)
   (tr3-step-commit-preflight-with-epochs frame active-tokens 0))

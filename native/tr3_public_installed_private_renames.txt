@@ -44,6 +44,7 @@ parameter-tree-handle et_e1b_private_p1_parameter_tree_handle_cabi_v1
 o2-public-optimizer-create et_e1b_private_o2_optimizer_create_cabi_v1
 trainer-create et_e1b_private_tr3_trainer_create_cabi_v1
 trainer-release! et_e1b_private_tr3_trainer_release_cabi_v1
+trainer-step! et_e1b_private_tr3_trainer_step_cabi_v1
 d2-token-dataset-next-batch et_e1b_private_d2_token_dataset_next_batch_cabi_v1
 d2-token-batch-release! et_e1b_private_d2_token_batch_release_cabi_v1
 c2-public-trainer-state-release! et_e1b_private_c2_trainer_state_release_cabi_v1
