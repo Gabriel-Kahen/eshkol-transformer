@@ -36,7 +36,7 @@ source checks at `a22572e` / tree `2834a68`; the focused native gate passed
 47 identical checks. Exact commands and logs are sealed under
 `/home/gabe/.codex/evidence/eshkol-transformer/g3t-logits-materialize-pinned-a22572e-20260928/`
 (`SEAL.sha256`: `980c7e46...`). This is private execution evidence, not a
-public facade. #142 materialization hosted integration remains pending.
+public facade. #143 materialization hosted integration remains pending.
 
 The [private materialization proposal](G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md)
 supplies the authenticated read seam. Revision 3 can conditionally define
@@ -150,7 +150,7 @@ pointer.
 
 ## Completion gates and deferrals
 
-First resolve refreshed #138 decode CI/merge and #142 private materialization
+First resolve refreshed #138 decode CI/merge and #143 private materialization
 hosted integration. Then independently review this fixed-profile public
 tensor contract and implement the revision-3 tuple. A fresh-cache installed
 AOT caller must read all 256 words through the diagnostic accessor after

@@ -1025,14 +1025,14 @@ claim generic tensor interop or full A0 generality. No public implementation,
 export or package is accepted; revision 2's thirteen names and artifacts
 remain the installed boundary. Root independently reviewed #138 private
 decode source and its prior head passed 23 hosted checks; refreshed hosted
-CI and merge remain pending. The isolated #142 source-private
+CI and merge remain pending. The isolated #143 source-private
 [materialization candidate](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md)
 passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
 `a22572e` / tree `2834a68`: 47,358 identical normal/repeat/sanitizer checks,
 Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
 checks, with exact feature-on/off private-symbol delta. Commands and logs
 are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
-(`SEAL.sha256` `980c7e46...`). #142 hosted integration remains pending.
+(`SEAL.sha256` `980c7e46...`). #143 hosted integration remains pending.
 Revision-3 public ownership/read, atomic cache/result publication, exact
 closed package tuple and numerical/negative gates remain separate.
 

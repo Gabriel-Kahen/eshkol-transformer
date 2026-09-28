@@ -110,6 +110,6 @@ runner: 47,358 identical normal/repeat/sanitizer checks, Q0 4/4 and closed
 source contracts. The focused Clang-21 native gate passed 47 identical
 checks. Exact commands and logs are sealed outside Git under
 `g3t-logits-materialize-pinned-a22572e-20260928/` (`SEAL.sha256` hashes
-`SHA256SUMS` to `980c7e46...`). #142 hosted integration remains pending.
+`SHA256SUMS` to `980c7e46...`). #143 hosted integration remains pending.
 The private bit snapshot still supplies no public tensor or A0 manual name;
 that is a separate [fixed-profile revision-3 proposal](G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md).
