@@ -9,6 +9,7 @@
 (load "g3t_manual_p1_extension.esk")
 (load "g3m_prefill_p1_extension.esk")
 (load "g3m_prefill_p2_extension.esk")
+(load "g3m_manual_decode_extension.esk")
 (load "g3t_zero_budget_extension.esk")
 (load "g3t_p2_zero_budget_extension.esk")
 (load "g3t_t1_input_extension.esk")
@@ -3549,6 +3550,251 @@
             (g3t-generator-close! mdw-g0-generator)
             (= 1 (g3t-test-logits-state mdw-g0-result-native))
             (g3t-generation-tensor-release! mdw-g0-result)))
+
+;; G3-M owns only the source-private schedule and rollback for one T1 append.
+(define g3md-empty-generator (g3t-generator-create model tokenizer policy-g1))
+(define g3md-empty-native
+  (vector-ref (g3t-generator-find g3md-empty-generator 'g3md-empty) 3))
+(define g3md-empty-input (g3t-generation-token-input-create 66))
+(reject-category "G3-M decode no-prefix rollback" 'invalid-state
+  (lambda () (g3m-decode-one! g3md-empty-generator g3md-empty-input)))
+(check "G3-M decode no-prefix ownership preserved"
+       (and (= 0 (g3t-test-cache-length g3md-empty-native))
+            (= 0 (g3t-test-pin-count g3md-empty-native))
+            (= 0 (g3t-test-pending-logits))
+            (g3t-generation-tensor-release! g3md-empty-input)
+            (g3t-generator-close! g3md-empty-generator)))
+
+(define g3md-generator (g3t-generator-create model tokenizer policy-g1))
+(define g3md-native
+  (vector-ref (g3t-generator-find g3md-generator 'g3md) 3))
+(define g3md-p1-input (g3t-generation-token-input-create 65))
+(define g3md-p1-result (g3m-prefill-p1! g3md-generator g3md-p1-input))
+(define g3md-p1-native
+  (vector-ref (g3t-prefill-entry g3md-p1-result 'logits 'g3md) 3))
+(define g3md-prefix-kv (g3t-test-manual-cache-kv-word g3md-native 0 0))
+(define g3md-input (g3t-generation-token-input-create 66))
+(define g3md-input-native
+  (vector-ref (g3t-prefill-entry g3md-input 'input 'g3md) 3))
+(define g3md-p2-input (g3t-generation-t1-input-create t1-p2))
+(define g3md-dead (g3t-generation-token-input-create 66))
+(check "G3-M decode dead fixture release"
+       (g3t-generation-tensor-release! g3md-dead))
+(reject-category "G3-M decode forged input rejected" 'invalid-argument
+  (lambda () (g3m-decode-one! g3md-generator (vector 'forged))))
+(reject-category "G3-M decode wrong-kind input rejected" 'invalid-argument
+  (lambda () (g3m-decode-one! g3md-generator model)))
+(reject-category "G3-M decode dead input rejected" 'invalid-state
+  (lambda () (g3m-decode-one! g3md-generator g3md-dead)))
+(reject-category "G3-M decode length-two input rejected" 'invalid-state
+  (lambda () (g3m-decode-one! g3md-generator g3md-p2-input)))
+(check "G3-M decode malformed I1 injected"
+       (= 0 (g3t-test-manual-decode-i1-shape-set g3md-input-native 2)))
+(reject-category "G3-M decode malformed owned I1 rejected" 'shape-mismatch
+  (lambda () (g3m-decode-one! g3md-generator g3md-input)))
+(check "G3-M decode I1 shape restored"
+       (= 0 (g3t-test-manual-decode-i1-shape-set g3md-input-native 1)))
+(define g3md-input-borrow (g3t-test-input-borrow-begin g3md-input-native))
+(check "G3-M decode borrowed I1 fixture"
+       (not (null? g3md-input-borrow)))
+(check "G3-M decode borrowed owned I1 rejected"
+       (guard (caught (#t (transformer-error? caught)))
+         (g3m-decode-one! g3md-generator g3md-input) #f))
+(check "G3-M decode input borrow ends"
+       (= 0 (g3t-test-input-borrow-end g3md-input-borrow)))
+(check "G3-M decode stale binding fixture acquire"
+       (= 0 (g3t-native-call-acquire g3md-native 1)))
+(check "G3-M decode stale binding injected"
+       (= 0 (g3t-test-binding-flip g3md-native)))
+(check "G3-M decode stale binding fixture abort"
+       (= 0 (g3t-native-call-abort g3md-native)))
+(reject-category "G3-M decode stale binding rejected" 'invalid-state
+  (lambda () (g3m-decode-one! g3md-generator g3md-input)))
+(check "G3-M decode binding restore acquire"
+       (= 0 (g3t-native-call-acquire g3md-native 1)))
+(check "G3-M decode binding restored"
+       (= 0 (g3t-test-binding-flip g3md-native)))
+(check "G3-M decode binding restore abort"
+       (= 0 (g3t-native-call-abort g3md-native)))
+(check "G3-M decode external native call makes context busy"
+       (= 0 (g3t-native-call-acquire g3md-native 1)))
+(reject-category "G3-M decode busy context rejected" 'invalid-state
+  (lambda () (g3m-decode-one! g3md-generator g3md-input)))
+(check "G3-M decode external busy call aborted"
+       (= 0 (g3t-native-call-abort g3md-native)))
+(check "G3-M decode F32 cut armed"
+       (= 0 (g3t-test-fail-f32-after 0)))
+(define g3md-f32-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-decode-one! g3md-generator g3md-input) #f))
+(check "G3-M decode F32 cut disarmed"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(check "G3-M decode A2 cut armed"
+       (= 0 (g3t-test-fail-a2-after 0)))
+(define g3md-a2-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-decode-one! g3md-generator g3md-input) #f))
+(check "G3-M decode A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "G3-M decode synthetic provider cut armed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 0)))
+(define g3md-provider-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-decode-one! g3md-generator g3md-input) #f))
+(check "G3-M decode synthetic provider cut disarmed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 9223372036854775807)))
+(check "G3-M decode F32 reservation rollback"
+       (and g3md-f32-cut
+            (= 1 (g3t-test-cache-length g3md-native))
+            (= 0 (g3t-test-pin-count g3md-native))
+            (= 0 (g3t-test-pending-logits))))
+(check "G3-M decode A2 failure rollback"
+       (and g3md-a2-cut
+            (= 1 (g3t-test-cache-length g3md-native))
+            (= 0 (g3t-test-pin-count g3md-native))
+            (= 0 (g3t-test-pending-logits))))
+(check "G3-M decode synthetic provider failure rollback"
+       (and g3md-provider-cut
+            (= 1 (g3t-test-cache-length g3md-native))
+            (= g3md-prefix-kv
+               (g3t-test-manual-cache-kv-word g3md-native 0 0))
+            (= 1 (g3t-test-logits-state g3md-p1-native))
+            (= 0 (g3t-test-rng-word g3md-native 2))
+            (= 0 (g3t-test-pin-count g3md-native))
+            (= 0 (g3t-test-pending-logits))))
+(define g3md-old-borrow (g3t-test-manual-cache-borrow-begin g3md-native))
+(define g3md-old-cut
+  (and (not (null? g3md-old-borrow))
+       (guard (caught (#t (transformer-error? caught)))
+         (g3m-decode-one! g3md-generator g3md-input) #f)))
+(check "G3-M decode old cache borrow ends"
+       (= 0 (g3t-test-manual-cache-borrow-end g3md-old-borrow)))
+(check "G3-M decode old-cache lease rollback"
+       (and g3md-old-cut
+            (= 1 (g3t-test-cache-length g3md-native))
+            (= g3md-prefix-kv
+               (g3t-test-manual-cache-kv-word g3md-native 0 0))
+            (= 0 (g3t-test-pin-count g3md-native))
+            (= 0 (g3t-test-pending-logits))))
+(define g3md-result (g3m-decode-one! g3md-generator g3md-input))
+(define g3md-result-native
+  (vector-ref (g3t-prefill-entry g3md-result 'logits 'g3md) 3))
+(check "G3-M decode P1 all 256 logits bit-exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word g3md-result-native index))
+                    (compare (+ index 1)))))))
+(check "G3-M decode P1 both K/V positions bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-cache-kv-word g3md-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "G3-M decode P1 A2 length/mask and old output retained"
+       (and (= 2 (g3t-test-cache-length g3md-native))
+            (= 1 (g3t-test-manual-decode-cache-mask g3md-native 0))
+            (= 1 (g3t-test-manual-decode-cache-mask g3md-native 1))
+            (= 0 (g3t-test-rng-word g3md-native 2))
+            (= 0 (g3t-test-pin-count g3md-native))
+            (= 1 (g3t-test-logits-state g3md-p1-native))))
+(define g3md-full-token (g3t-generation-token-input-create 67))
+(reject-category "G3-M decode full-cache rejected" 'invalid-state
+  (lambda () (g3m-decode-one! g3md-generator g3md-full-token)))
+(check "G3-M decode full-cache rollback preserves result"
+       (and (= 2 (g3t-test-cache-length g3md-native))
+            (= 0 (g3t-test-pin-count g3md-native))
+            (= 0 (g3t-test-pending-logits))
+            (= 1 (g3t-test-logits-state g3md-result-native))))
+(check "G3-M decode P1 owners release"
+       (and (g3t-generation-tensor-release! g3md-p1-input)
+            (g3t-generation-tensor-release! g3md-input)
+            (g3t-generation-tensor-release! g3md-p2-input)
+            (g3t-generation-tensor-release! g3md-full-token)
+            (g3t-generator-close! g3md-generator)
+            (= 1 (g3t-test-logits-state g3md-result-native))))
+(check "G3-M decode P1 detached logits typed release"
+       (and (g3t-generation-tensor-release! g3md-p1-result)
+            (g3t-generation-tensor-release! g3md-result)))
+
+(define g3md-g0-generator (g3t-generator-create model tokenizer policy))
+(define g3md-g0-native
+  (vector-ref (g3t-generator-find g3md-g0-generator 'g3md-g0) 3))
+(define g3md-g0-prefix-input (g3t-generation-token-input-create 65))
+(define g3md-g0-output
+  (g3t-zero-generate! g3md-g0-generator g3md-g0-prefix-input))
+(define g3md-g0-token (g3t-generation-token-input-create 66))
+(define g3md-g0-result (g3m-decode-one! g3md-g0-generator g3md-g0-token))
+(define g3md-g0-result-native
+  (vector-ref (g3t-prefill-entry g3md-g0-result 'logits 'g3md-g0) 3))
+(check "G3-M decode P1/G0 all 256 logits bit-exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word g3md-g0-result-native index))
+                    (compare (+ index 1)))))))
+(check "G3-M decode P1/G0 both K/V positions bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-cache-kv-word g3md-g0-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "G3-M decode P1/G0 A2 length/mask no draw"
+       (and (= 2 (g3t-test-cache-length g3md-g0-native))
+            (= 1 (g3t-test-manual-decode-cache-mask g3md-g0-native 0))
+            (= 1 (g3t-test-manual-decode-cache-mask g3md-g0-native 1))
+            (= 0 (g3t-test-rng-word g3md-g0-native 2))))
+
+(define g3md-repeat-generator (g3t-generator-create model tokenizer policy))
+(define g3md-repeat-native
+  (vector-ref (g3t-generator-find g3md-repeat-generator 'g3md-repeat) 3))
+(define g3md-repeat-prefix-input (g3t-generation-token-input-create 65))
+(define g3md-repeat-output
+  (g3t-zero-generate! g3md-repeat-generator g3md-repeat-prefix-input))
+(define g3md-repeat-token (g3t-generation-token-input-create 66))
+(define g3md-repeat-result
+  (g3m-decode-one! g3md-repeat-generator g3md-repeat-token))
+(define g3md-repeat-result-native
+  (vector-ref (g3t-prefill-entry g3md-repeat-result 'logits 'g3md-repeat) 3))
+(check "G3-M decode fresh-call repeat matches P1/G0"
+       (and (let compare ((index 0))
+              (if (= index 256) #t
+                  (and (= (g3t-test-manual-logits-word
+                            g3md-g0-result-native index)
+                          (g3t-test-manual-logits-word
+                            g3md-repeat-result-native index))
+                       (compare (+ index 1)))))
+            (let compare ((which 0) (index 0))
+              (if (= which 2) #t
+                  (and (= (g3t-test-manual-cache-kv-word
+                            g3md-g0-native which index)
+                          (g3t-test-manual-cache-kv-word
+                            g3md-repeat-native which index))
+                       (if (= index 7) (compare (+ which 1) 0)
+                           (compare which (+ index 1))))))))
+(check "G3-M decode detached logits survive parent close"
+       (and (g3t-generation-tensor-release! g3md-g0-prefix-input)
+            (g3t-generation-tensor-release! g3md-g0-token)
+            (g3t-output-release! g3md-g0-output)
+            (g3t-generator-close! g3md-g0-generator)
+            (g3t-generation-tensor-release! g3md-repeat-prefix-input)
+            (g3t-generation-tensor-release! g3md-repeat-token)
+            (g3t-output-release! g3md-repeat-output)
+            (g3t-generator-close! g3md-repeat-generator)
+            (= 1 (g3t-test-logits-state g3md-g0-result-native))
+            (= 1 (g3t-test-logits-state g3md-repeat-result-native))
+            (g3t-generation-tensor-release! g3md-g0-result)
+            (g3t-generation-tensor-release! g3md-repeat-result)))
 
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)
