@@ -10,6 +10,7 @@
 (require transformer.error_consumer)
 
 (extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+(extern void set-step-fault ptr ptr :real et_tr3_test_set_step_fault_v1)
 (define (check label okay)
   (if (not okay)
       (begin (display "TR3-PUBLIC-STEP-FAIL ") (display label)
@@ -18,6 +19,26 @@
   (if (null? seen) #f
       (or (eq? handle (car seen))
           (seen-handle? handle (cdr seen)))))
+(define (bytes-equal? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (inject! cut)
+  (let ((output (vector #f)))
+    (set-step-fault (vector cut) output)
+    (check 'fault-selection (vector-ref output 0))))
+(define (expect-step-failure trainer)
+  (check 'categorized-public-rollback
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught)
+                           'invalid-state)
+                      (eq? (transformer-error-operation caught)
+                           'trainer-step!))))
+      (trainer-step! trainer) #f)))
 (define (reverse-list source)
   (let loop ((remaining source) (result '()))
     (if (null? remaining) result
@@ -56,6 +77,20 @@
                     "3a83126f" "00000000"))))
 (define optimizer (optimizer-create optimizer-config tree))
 (define trainer (trainer-create resolved tokenizer dataset model optimizer))
+(define initial-cursor (token-dataset-cursor dataset))
+(inject! 'early)
+(expect-step-failure trainer)
+(check 'early-cursor-rollback
+       (bytes-equal? initial-cursor (token-dataset-cursor dataset)))
+(inject! 'mid)
+(expect-step-failure trainer)
+(check 'mid-cursor-rollback
+       (bytes-equal? initial-cursor (token-dataset-cursor dataset)))
+(inject! 'precommit)
+(expect-step-failure trainer)
+(check 'prepared-cursor-rollback
+       (bytes-equal? initial-cursor (token-dataset-cursor dataset)))
+(inject! #f)
 (define first (trainer-step! trainer))
 (define first-loss-bits (f32-bits (vector (metrics-ref first 'loss))))
 (define first-weight-bits (f32-bits (vector (metrics-ref first 'mask-weight))))
@@ -68,6 +103,12 @@
             (= (metrics-ref first 'tokens) 3)
             (= (metrics-ref first 'microbatches) 2)
             (= (metrics-ref first 'update) 1)))
+(define committed-cursor (token-dataset-cursor dataset))
+(inject! 'rewind)
+(expect-step-failure trainer)
+(check 'rewind-cursor-rollback
+       (bytes-equal? committed-cursor (token-dataset-cursor dataset)))
+(inject! #f)
 (define second (trainer-step! trainer))
 (check 'finite-eos-rewind
        (and (= (metrics-ref second 'tokens) 3)
