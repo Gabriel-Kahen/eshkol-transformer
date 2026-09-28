@@ -916,6 +916,14 @@ exclusion. Evidence is sealed at
 independently reviewed and byte-matched the tested source. It does not add
 manual P2/decode or a public G3-G facade/package.
 
+The [G3-T manual kind-0 P2 transport proposal](g3/G3_T_MANUAL_P2_TRANSPORT_PROPOSAL.md)
+is pending independent contract review. It identifies the missing bridge
+between the accepted G3-C4 T2 manual route and G3-T's P1-only manual frame:
+authenticated owned I1 `[1,2]` admission, 21-role T2 routing, last-row
+logits, length-two A2 publication and rollback. No P2 native implementation,
+G3-M P2 composer, generation claim or acceptance evidence follows from this
+proposal. Review and implement that G3-T dependency before the G3-M P2 leaf.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
