@@ -10,20 +10,46 @@ fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/evidence/eshkol-tra
 compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/tr3-shared-tail-finalizer/eshkol}"
 runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/runtime-81298-recovery}"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
+case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-81298}" in
+  81298)
+    compiler_commit=97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0
+    runner_sha256=1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb
+    runtime_build_dir="${runtime}/eshkol-build-canonical"
+    runtime_sha256="$(tsv_value "${pin}" runtime_archive_sha256)"
+    source_manifest=native/tr3_public_installed_source_closure.txt
+    undefined_manifest=native/tr3_public_installed_undefined_symbols.txt
+    ;;
+  fe9)
+    compiler_commit=fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9
+    compiler_tree=66c21f7ec19b1b4a42199fa30ed8e0e9727021bf
+    runner_sha256=7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa
+    runtime_build_dir="${runtime}/eshkol-build"
+    runtime_sha256=32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e
+    source_manifest=native/tr3_public_installed_fe9_source_closure.txt
+    undefined_manifest=native/tr3_public_installed_fe9_undefined_symbols.txt
+    [[ "$(git -C "${compiler_source}" rev-parse 'HEAD^{tree}')" == "${compiler_tree}" ]] || \
+      die "fe9 compiler tree changed"
+    [[ -z "$(git -C "${compiler_source}" status --porcelain --untracked-files=all)" ]] || \
+      die "fe9 compiler source changed"
+    [[ "$(tsv_value "${runtime_build_dir}/eshkol-transformer-provenance.tsv" eshkol_commit)" == \
+       "${compiler_commit}" ]] || die "fe9 runtime provenance changed"
+    ;;
+  *) die "unsupported TR3 public installed runtime pin" ;;
+esac
 image="$(tsv_value "${pin}" container_image)"
 [[ "$(docker image inspect "${image}" --format '{{.Id}}')" == \
    "$(tsv_value "${pin}" container_digest)" ]] || die "pinned image changed"
 [[ "$(sha256sum "${fixed}/eshkol-run-release" | awk '{print $1}')" == \
-   1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb ]] || \
+   "${runner_sha256}" ]] || \
   die "reviewed compiler changed"
 [[ "$(git -C "${compiler_source}" rev-parse HEAD)" == \
-   97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0 ]] || \
+   "${compiler_commit}" ]] || \
   die "reviewed compiler source changed"
 git -C "${compiler_source}" diff --quiet HEAD -- \
   inc/eshkol/eshkol.h inc/eshkol/core/runtime.h lib/core/arena_memory.h || \
   die "reviewed compiler headers changed"
-[[ "$(sha256sum "${runtime}/eshkol-build-canonical/libeshkol-runtime.a" | awk '{print $1}')" == \
-   "$(tsv_value "${pin}" runtime_archive_sha256)" ]] || \
+[[ "$(sha256sum "${runtime_build_dir}/libeshkol-runtime.a" | awk '{print $1}')" == \
+   "${runtime_sha256}" ]] || \
   die "pinned runtime archive changed"
 
 evidence="${TR3_PUBLIC_INSTALLED_EVIDENCE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/tr3-public-installed.XXXXXX")}"
@@ -34,7 +60,8 @@ evidence="$(readlink -f -- "${evidence}")"
 
 docker run --rm --network none \
   -v "${PROJECT_ROOT}:/workspace:ro" -v "${fixed}:/fixed:ro" \
-  -v "${compiler_source}:/fixed-source:ro" -v "${runtime}:/candidate:ro" \
+  -v "${compiler_source}:/fixed-source:ro" \
+  -v "${runtime_build_dir}:/candidate/eshkol-build-canonical:ro" \
   -v "${evidence}:/out" -w /workspace "${image}" bash -lc '
 set -euo pipefail
 mkdir -p /out/native /out/cache
@@ -159,7 +186,7 @@ paths = [path.removeprefix('/workspace/') for path in dep.split(':', 1)[1].split
 assert len(paths) == len(set(paths))
 Path(sys.argv[2]).write_text(''.join(path + '\n' for path in paths))
 PY
-cmp native/tr3_public_installed_source_closure.txt "${evidence}/source-closure.txt"
+cmp "${source_manifest}" "${evidence}/source-closure.txt"
 python3 - "${PROJECT_ROOT}" "${evidence}" <<'PY'
 from pathlib import Path
 import sys
@@ -189,7 +216,7 @@ cmp native/tr3_public_installed_native_objects.txt \
 while IFS= read -r facade; do
   cmp "lib/${facade}" "${evidence}/facades/${facade}"
 done < native/tr3_public_installed_facades.txt
-cmp native/tr3_public_installed_undefined_symbols.txt \
+cmp "${undefined_manifest}" \
   "${evidence}/undefined-symbols.txt"
 python3 - "${evidence}/caller.d" <<'PY'
 from pathlib import Path
@@ -210,8 +237,8 @@ fi
 {
   printf 'source_commit\t%s\n' "$(git rev-parse HEAD)"
   printf 'source_tree\t%s\n' "$(git rev-parse 'HEAD^{tree}')"
-  printf 'fixed_compiler_commit\t%s\n' 97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0
-  printf 'fixed_runner_sha256\t%s\n' 1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb
+  printf 'fixed_compiler_commit\t%s\n' "${compiler_commit}"
+  printf 'fixed_runner_sha256\t%s\n' "${runner_sha256}"
   printf 'container_digest\t%s\n' "$(tsv_value "${pin}" container_digest)"
   printf 'source_count\t%s\n' "$(wc -l <"${evidence}/source-closure.txt")"
   printf 'global_defined_count\t%s\n' "$(wc -l <"${evidence}/global-defined.txt")"

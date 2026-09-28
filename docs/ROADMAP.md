@@ -1256,7 +1256,10 @@ the P1 trusted generator and structural checks admit exactly one additional
 private `p1-trusted-surface` provide while retaining the inherited public
 manifest and closure digests. Versioned fe9 source-order and undefined-runtime
 symbol manifests preserve the earlier 81298 package tuple and its exact
-manifests. The pinned strict source and linked poisoned public-caller gate
+manifests. `scripts/test-tr3-public-installed-linked.sh` selects the exact
+fe9 closure only with `TR3_PUBLIC_INSTALLED_RUNTIME_PIN=fe9` and verifies the
+successor compiler/tree, runner, archive and image pins. The pinned strict
+source and linked poisoned public-caller gate
 passes on fe9 with the same 49-source/30-native/48-export boundary; public
 trainer step and metrics remain separate gates.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
