@@ -1,6 +1,7 @@
 # G3-M private seeded P1/G1 schedule proposal
 
-Status: **pending independent review; contract only**. This draft is based on
+Status: **accepted for bounded private implementation** after independent root
+source-contract review. This contract is based on
 reviewed private composer `86bd5a5` and the existing G3-T generated call in
 `src/eshkol_transformer/g3t_transport.c`. It proposes one private Eshkol
 operation, `(g3m-generate-p1-g1! generator input)`, arity two. It adds no native

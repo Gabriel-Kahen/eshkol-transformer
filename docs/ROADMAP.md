@@ -964,8 +964,10 @@ independently reviewed the contract and source candidate `86bd5a5`/tree
 test-symbol exclusion. Sealed evidence is `g3m-manual-decode-86bd5a5-20260928`;
 hosted CI remains pending. The next proposed private dependency is the
 [single P1/G1 seeded-generation schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md),
-using the existing G3-T generated transaction and G3-S sampler; it is pending
-independent contract review and implements no public G3-G facade.
+using the existing G3-T generated transaction and G3-S sampler. Root accepted
+the private P1/G1 boundary, name and budget mismatch precedence; an isolated
+[implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) is under test.
+It adds no public G3-G facade or N>1 behavior.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

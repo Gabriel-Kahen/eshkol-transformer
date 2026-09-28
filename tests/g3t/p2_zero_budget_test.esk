@@ -10,6 +10,7 @@
 (load "g3m_prefill_p1_extension.esk")
 (load "g3m_prefill_p2_extension.esk")
 (load "g3m_manual_decode_extension.esk")
+(load "g3m_seeded_p1_g1_extension.esk")
 (load "g3t_zero_budget_extension.esk")
 (load "g3t_p2_zero_budget_extension.esk")
 (load "g3t_t1_input_extension.esk")
@@ -34,6 +35,8 @@
 (extern i64 g3t-test-cache-length ptr :real et_g3t_test_cache_length_v1)
 (extern i64 g3t-test-rng-word ptr i64 :real et_g3t_test_rng_word_v1)
 (extern i64 g3t-test-logit-bits ptr i64 :real et_g3t_test_logit_bits_v1)
+(extern i64 g3t-test-generated-logit-bits ptr i64
+        :real et_g3t_test_generated_logit_bits_v1)
 (extern i64 g3t-test-sample-token ptr :real et_g3t_test_sample_token_v1)
 (extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
 (extern i64 g3t-test-frame-binding-flip ptr
@@ -191,6 +194,23 @@
     (guard (caught
              (#t (and (transformer-error? caught)
                       (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (g3m-detail details key)
+  (let scan ((remaining details))
+    (if (null? remaining) #f
+        (let ((row (car remaining)))
+          (if (eq? (car row) key) (car (cdr row))
+              (scan (cdr remaining)))))))
+(define (g3m-reject-exact label category code thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught)
+                           'g3m-generate-p1-g1!)
+                      (= code (g3m-detail
+                                (transformer-error-details caught)
+                                'source-code)))))
       (thunk) #f)))
 (define config
   (x1-private-config-resolve
@@ -3795,6 +3815,338 @@
             (= 1 (g3t-test-logits-state g3md-repeat-result-native))
             (g3t-generation-tensor-release! g3md-g0-result)
             (g3t-generation-tensor-release! g3md-repeat-result)))
+
+;; Private seeded P1/G1 uses the same G3-T transaction as the native witness.
+(define sg0 (g3t-generator-create model tokenizer policy))
+(define sg-input (g3t-generation-token-input-create 65))
+(g3m-reject-exact "G3-M seeded budget-zero rejected before pins"
+  'invalid-argument 3
+  (lambda () (g3m-generate-p1-g1! sg0 sg-input)))
+(check "G3-M seeded budget mismatch leaves cache and pins idle"
+       (let ((native (vector-ref (g3t-generator-find sg0 'sg0) 3)))
+         (and (= 0 (g3t-test-cache-length native))
+              (= 0 (g3t-test-pin-count native)))))
+(check "G3-M seeded budget-zero owner close"
+       (and (g3t-generation-tensor-release! sg-input)
+            (g3t-generator-close! sg0)))
+
+(define sg-generator (g3t-generator-create model tokenizer policy-g1))
+(define sg-native (vector-ref (g3t-generator-find sg-generator 'sg) 3))
+(define sg-pair (g3t-generation-t1-input-create t1-p2))
+(reject-category "G3-M seeded P2/G1 rejected before pins" 'shape-mismatch
+  (lambda () (g3m-generate-p1-g1! sg-generator sg-pair)))
+(check "G3-M seeded P2/G1 keeps cache RNG and pins"
+       (and (= 0 (g3t-test-cache-length sg-native))
+            (= 0 (g3t-test-rng-word sg-native 2))
+            (= 0 (g3t-test-pin-count sg-native))))
+(reject-category "G3-M seeded forged input rejected" 'invalid-argument
+  (lambda () (g3m-generate-p1-g1! sg-generator (vector 'fake))))
+(reject-category "G3-M seeded wrong-kind input rejected" 'invalid-argument
+  (lambda () (g3m-generate-p1-g1! sg-generator sg-generator)))
+(reject-category "G3-M seeded wrong-kind generator rejected" 'invalid-argument
+  (lambda () (g3m-generate-p1-g1! sg-pair sg-pair)))
+(define sg-dead (g3t-generation-token-input-create 65))
+(check "G3-M seeded dead input fixture" (g3t-generation-tensor-release! sg-dead))
+(reject-category "G3-M seeded dead input rejected" 'invalid-state
+  (lambda () (g3m-generate-p1-g1! sg-generator sg-dead)))
+(define sg-prompt (g3t-generation-token-input-create 65))
+(check "G3-M seeded prefill provider cut armed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 0)))
+(define sg-prefill-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-generate-p1-g1! sg-generator sg-prompt) #f))
+(check "G3-M seeded prefill provider cut disarmed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 9223372036854775807)))
+(check "G3-M seeded prefill failure rolls back all state"
+       (and sg-prefill-cut (= 0 (g3t-test-cache-length sg-native))
+            (= 0 (g3t-test-rng-word sg-native 2))
+            (= 0 (g3t-test-pin-count sg-native))))
+(check "G3-M seeded append provider cut armed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 21)))
+(define sg-append-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-generate-p1-g1! sg-generator sg-prompt) #f))
+(check "G3-M seeded append provider cut disarmed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 9223372036854775807)))
+(check "G3-M seeded append failure retains prompt-only cache"
+       (and sg-append-cut (= 1 (g3t-test-cache-length sg-native))
+            (= 0 (g3t-test-rng-word sg-native 2))
+            (= 0 (g3t-test-pin-count sg-native))))
+(reject-category "G3-M seeded continuation after prompt rejected" 'invalid-state
+  (lambda () (g3m-generate-p1-g1! sg-generator sg-prompt)))
+(check "G3-M seeded failed-call owners release"
+       (and (g3t-generation-tensor-release! sg-prompt)
+            (g3t-generation-tensor-release! sg-pair)
+            (g3t-generator-close! sg-generator)))
+
+(define sg-a2-generator (g3t-generator-create model tokenizer policy-g1))
+(define sg-a2-native (vector-ref (g3t-generator-find sg-a2-generator 'sg-a2) 3))
+(define sg-a2-input (g3t-generation-token-input-create 65))
+(check "G3-M seeded A2 cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(define sg-a2-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-generate-p1-g1! sg-a2-generator sg-a2-input) #f))
+(check "G3-M seeded A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "G3-M seeded A2 failure rolls back before prompt"
+       (and sg-a2-cut (= 0 (g3t-test-cache-length sg-a2-native))
+            (= 0 (g3t-test-rng-word sg-a2-native 2))
+            (= 0 (g3t-test-pin-count sg-a2-native))))
+(check "G3-M seeded A2 owners release"
+       (and (g3t-generation-tensor-release! sg-a2-input)
+            (g3t-generator-close! sg-a2-generator)))
+(define sg-exhausted (g3t-generator-create model tokenizer policy-g1))
+(define sg-exhausted-native
+  (vector-ref (g3t-generator-find sg-exhausted 'sg-exhausted) 3))
+(define sg-exhausted-input (g3t-generation-token-input-create 65))
+(check "G3-M seeded exhausted categorical fixture"
+       (= 0 (g3t-test-rng-counter-set sg-exhausted-native -1 -1)))
+(reject-category "G3-M seeded exhausted categorical rejects before pins" 'invalid-state
+  (lambda () (g3m-generate-p1-g1! sg-exhausted sg-exhausted-input)))
+(check "G3-M seeded exhausted categorical leaves cache and pins idle"
+       (and (= 0 (g3t-test-cache-length sg-exhausted-native))
+            (= 0 (g3t-test-pin-count sg-exhausted-native))
+            (= -1 (g3t-test-rng-word sg-exhausted-native 2))))
+(check "G3-M seeded exhausted owners release"
+       (and (g3t-generation-tensor-release! sg-exhausted-input)
+            (g3t-generator-close! sg-exhausted)))
+
+(define sg-good (g3t-generator-create model tokenizer policy-g1))
+(define sg-good-native (vector-ref (g3t-generator-find sg-good 'sg-good) 3))
+(define sg-good-input (g3t-generation-token-input-create 65))
+(define sg-output (g3m-generate-p1-g1! sg-good sg-good-input))
+(define sg-output-native
+  (vector-ref (g3t-prefill-entry sg-output 'output 'sg-output) 3))
+(check "G3-M seeded categorical sample and final publication"
+       (and (= g1-id (g3t-test-output-word sg-output-native 6))
+            (= 1 (g3t-test-output-word sg-output-native 1))
+            (= 2 (g3t-test-output-word sg-output-native 2))
+            (= 1 (g3t-test-output-word sg-output-native 3))
+            (= 1 (g3t-test-output-word sg-output-native 4))
+            (= 1 (g3t-test-rng-word sg-good-native 2))
+            (= 2 (g3t-test-cache-length sg-good-native))
+            (= 0 (g3t-test-pin-count sg-good-native))))
+(check "G3-M seeded prefill all 256 logits bit-exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (* index 4))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-logit-bits sg-good-native index))
+                    (compare (+ index 1)))))))
+(define sg-reference-input (g3t-checked-m3t-input-create))
+(check "G3-M seeded reference input"
+       (g3t-checked-m3t-input-copy! sg-reference-input (list 65 g1-id)))
+(define sg-reference-workspace (g3t-checked-m3t-workspace-create model))
+(define sg-reference-logits (g3t-checked-m3t-logits-create))
+(check "G3-M seeded reference begin"
+       (g3t-checked-m3t-workspace-begin!
+         sg-reference-workspace sg-reference-input))
+(check "G3-M seeded reference ET"
+       (g3t-checked-m3t-embedding! sg-reference-workspace 'token))
+(check "G3-M seeded reference EP"
+       (g3t-checked-m3t-embedding! sg-reference-workspace 'position))
+(check "G3-M seeded reference X"
+       (g3t-checked-m3t-residual! sg-reference-workspace 'embeddings))
+(check "G3-M seeded reference N1"
+       (g3t-checked-m3t-layer-norm! sg-reference-workspace 'block-input))
+(check "G3-M seeded reference QT"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'q))
+(check "G3-M seeded reference KT"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'k))
+(check "G3-M seeded reference VT"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'v))
+(check "G3-M seeded reference QH"
+       (g3t-checked-m3t-heads-split! sg-reference-workspace 'q))
+(check "G3-M seeded reference KH"
+       (g3t-checked-m3t-heads-split! sg-reference-workspace 'k))
+(check "G3-M seeded reference VH"
+       (g3t-checked-m3t-heads-split! sg-reference-workspace 'v))
+(define sg-reference-native
+  (vector-ref (m3t-entry sg-reference-workspace 'workspace 'sg-reference #t) 3))
+(check "G3-M seeded both K/V positions bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (g3t-test-manual-reference-kv-word
+                       sg-reference-native which index)
+                     (g3t-test-manual-cache-kv-word
+                       sg-good-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "G3-M seeded reference AH"
+       (g3t-checked-m3t-attention! sg-reference-workspace))
+(check "G3-M seeded reference AT"
+       (g3t-checked-m3t-heads-merge! sg-reference-workspace))
+(check "G3-M seeded reference AO"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'attention-output))
+(check "G3-M seeded reference R"
+       (g3t-checked-m3t-residual! sg-reference-workspace 'attention))
+(check "G3-M seeded reference N2"
+       (g3t-checked-m3t-layer-norm! sg-reference-workspace 'ffn-input))
+(check "G3-M seeded reference FU"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'ffn-up))
+(check "G3-M seeded reference FG"
+       (g3t-checked-m3t-gelu! sg-reference-workspace))
+(check "G3-M seeded reference FD"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'ffn-down))
+(check "G3-M seeded reference Y"
+       (g3t-checked-m3t-residual! sg-reference-workspace 'ffn))
+(check "G3-M seeded reference NF"
+       (g3t-checked-m3t-layer-norm! sg-reference-workspace 'final))
+(check "G3-M seeded reference Z"
+       (g3t-checked-m3t-linear! sg-reference-workspace 'tied-head))
+(check "G3-M seeded reference logits copy"
+       (g3t-checked-m3t-workspace-copy-logits!
+         sg-reference-workspace sg-reference-logits))
+(define sg-reference-bytes
+  (g3t-checked-m3t-logits-bits sg-reference-logits))
+(check "G3-M seeded append all 256 logits bit-exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref sg-reference-bytes at)
+                             (* 256 (bytevector-u8-ref sg-reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref sg-reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref sg-reference-bytes (+ at 3))))))
+               (and (= bits
+                       (g3t-test-generated-logit-bits sg-good-native index))
+                    (compare (+ index 1)))))))
+(check "G3-M seeded reference owners release"
+       (and (g3t-checked-m3t-workspace-reset! sg-reference-workspace)
+            (g3t-checked-m3t-logits-release! sg-reference-logits)
+            (g3t-checked-m3t-workspace-release! sg-reference-workspace)
+            (g3t-checked-m3t-input-release! sg-reference-input)))
+(check "G3-M seeded output text and clones"
+       (let* ((text (g3t-generation-output-text sg-output))
+              (ids (car (g3t-generation-output-ids sg-output)))
+              (lengths (g3t-generation-output-lengths sg-output))
+              (cache-lengths (g3t-generation-output-cache-lengths sg-output))
+              (rng (g3t-generation-output-rng sg-output))
+              (ids-native (vector-ref (g3t-prefill-entry ids 'ids 'sg) 3))
+              (lengths-native (vector-ref (g3t-prefill-entry lengths 'lengths 'sg) 3))
+              (cache-native (vector-ref (g3t-prefill-entry cache-lengths 'cache-lengths 'sg) 3))
+              (rng-native (vector-ref (g3t-prefill-entry rng 'rng 'sg) 3)))
+         (and (= 1 (bytevector-length (car text)))
+              (= g1-id (bytevector-u8-ref (car text) 0))
+              (= g1-id (g3t-test-clone-word ids-native))
+              (= 1 (g3t-test-lengths-clone-value lengths-native))
+              (= 2 (g3t-test-cache-lengths-clone-value cache-native))
+              (rng-clone-words? rng-native 1 1729 1 0)
+              (g3t-generation-tensor-release! ids)
+              (g3t-generation-tensor-release! lengths)
+              (g3t-generation-tensor-release! cache-lengths)
+              (g3t-generation-rng-release! rng))))
+(define sg-source-rng (g3t-generation-output-rng sg-output))
+(define sg-source-rng-native
+  (vector-ref (g3t-prefill-entry sg-source-rng 'rng 'sg-source-rng) 3))
+(define sg-from-rng
+  (g3t-generator-create model tokenizer (rng-policy sg-source-rng 1)))
+(define sg-from-rng-native (vector-ref (g3t-generator-find sg-from-rng 'sg-rng) 3))
+(define sg-from-rng-input (g3t-generation-token-input-create 65))
+(define sg-from-rng-output
+  (g3m-generate-p1-g1! sg-from-rng sg-from-rng-input))
+(check "G3-M seeded RNG-source continuation copies independent state"
+       (and (= 2 (g3t-test-rng-word sg-from-rng-native 2))
+            (rng-clone-words? sg-source-rng-native 1 1729 1 0)
+            (= 1 (g3t-test-output-word
+                   (vector-ref (g3t-prefill-entry sg-from-rng-output
+                                                 'output 'sg-rng) 3) 1))))
+(check "G3-M seeded RNG-source owners release"
+       (and (g3t-output-release! sg-from-rng-output)
+            (g3t-generation-tensor-release! sg-from-rng-input)
+            (g3t-generator-close! sg-from-rng)
+            (g3t-generation-rng-release! sg-source-rng)))
+(define sg-eos-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos g1-id ':seed 1729))
+(define sg-eos-generator (g3t-generator-create model tokenizer sg-eos-policy))
+(define sg-eos-native (vector-ref (g3t-generator-find sg-eos-generator 'sg-eos) 3))
+(define sg-eos-input (g3t-generation-token-input-create 65))
+(define sg-eos-output
+  (g3m-generate-p1-g1! sg-eos-generator sg-eos-input))
+(define sg-eos-native-output
+  (vector-ref (g3t-prefill-entry sg-eos-output 'output 'sg-eos) 3))
+(check "G3-M seeded emitted EOS included after one append"
+       (and (= g1-id (g3t-test-output-word sg-eos-native-output 6))
+            (= 1 (g3t-test-output-word sg-eos-native-output 1))
+            (= 2 (g3t-test-cache-length sg-eos-native))
+            (= g1-id (bytevector-u8-ref
+                        (car (g3t-generation-output-text sg-eos-output)) 0))
+            (= 1 (g3t-test-rng-word sg-eos-native 2))))
+(check "G3-M seeded EOS owners release"
+       (and (g3t-output-release! sg-eos-output)
+            (g3t-generation-tensor-release! sg-eos-input)
+            (g3t-generator-close! sg-eos-generator)))
+(define sg-other-eos
+  (modulo (+ g1-id 1) 256))
+(define sg-other-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos sg-other-eos ':seed 1729))
+(define sg-other-generator
+  (g3t-generator-create model tokenizer sg-other-policy))
+(define sg-other-input (g3t-generation-token-input-create 65))
+(define sg-other-output
+  (g3m-generate-p1-g1! sg-other-generator sg-other-input))
+(check "G3-M seeded unequal EOS still emits budget one"
+       (let ((native-output
+               (vector-ref (g3t-prefill-entry sg-other-output
+                                             'output 'sg-other) 3)))
+         (and (= g1-id (g3t-test-output-word native-output 6))
+              (not (= g1-id sg-other-eos))
+              (= 1 (g3t-test-output-word native-output 1)))))
+(check "G3-M seeded unequal EOS owners release"
+       (and (g3t-output-release! sg-other-output)
+            (g3t-generation-tensor-release! sg-other-input)
+            (g3t-generator-close! sg-other-generator)))
+(define (g3m-edge-prompt byte-id)
+  (let* ((generator (g3t-generator-create model tokenizer policy-greedy-g1))
+         (input (g3t-generation-token-input-create byte-id))
+         (output (g3m-generate-p1-g1! generator input))
+         (native (vector-ref (g3t-generator-find generator 'sg-edge) 3))
+         (answer (and (= 2 (g3t-test-cache-length native))
+                      (= 1 (bytevector-length
+                             (car (g3t-generation-output-text output)))))))
+    (and answer (g3t-output-release! output)
+         (g3t-generation-tensor-release! input)
+         (g3t-generator-close! generator))))
+(check "G3-M seeded byte-zero prompt" (g3m-edge-prompt 0))
+(check "G3-M seeded byte-255 prompt" (g3m-edge-prompt 255))
+(define sg-greedy (g3t-generator-create model tokenizer policy-greedy-g1))
+(define sg-greedy-native (vector-ref (g3t-generator-find sg-greedy 'sg-greedy) 3))
+(check "G3-M seeded greedy exhausted RNG fixture"
+       (= 0 (g3t-test-rng-counter-set sg-greedy-native -1 -1)))
+(define sg-greedy-input (g3t-generation-token-input-create 65))
+(define sg-greedy-output
+  (g3m-generate-p1-g1! sg-greedy sg-greedy-input))
+(check "G3-M seeded greedy emits without exhausted RNG draw"
+       (and (= -1 (g3t-test-rng-word sg-greedy-native 2))
+            (= -1 (g3t-test-rng-word sg-greedy-native 3))
+            (= 2 (g3t-test-cache-length sg-greedy-native))
+            (= 1 (g3t-test-output-word
+                   (vector-ref (g3t-prefill-entry sg-greedy-output
+                                                 'output 'sg-greedy) 3) 1))))
+(check "G3-M seeded greedy owners release"
+       (and (g3t-output-release! sg-greedy-output)
+            (g3t-generation-tensor-release! sg-greedy-input)
+            (g3t-generator-close! sg-greedy)))
+(define sg-output-borrow (g3t-test-output-borrow-begin sg-output-native))
+(check "G3-M seeded output borrow fixture" (not (null? sg-output-borrow)))
+(reject-category "G3-M seeded borrowed output release rejected" 'invalid-state
+  (lambda () (g3t-output-release! sg-output)))
+(check "G3-M seeded output borrow ended"
+       (= 0 (g3t-test-output-borrow-end sg-output-borrow)))
+(check "G3-M seeded detached output survives generator close"
+       (and (g3t-generation-tensor-release! sg-good-input)
+            (g3t-generator-close! sg-good)
+            (= g1-id (bytevector-u8-ref
+                        (car (g3t-generation-output-text sg-output)) 0))
+            (g3t-output-release! sg-output)))
 
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)

@@ -29,6 +29,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3m-prefill-p2.py" >>"$evidence/static.stdo
 python3 "$PROJECT_ROOT/scripts/check-g3t-manual-decode.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-manual-decode-wrapper.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3m-manual-decode.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3m-seeded-p1-g1.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 temporary="$(mktemp -d "$evidence/tmp.XXXXXX")"
@@ -193,6 +194,8 @@ sha256sum "$PROJECT_ROOT/native/g3t_manual_decode_source_closure.txt" \
 sha256sum "$PROJECT_ROOT/native/g3t_manual_decode_wrapper_source_closure.txt" \
   >>"$evidence/closure.sha256"
 sha256sum "$PROJECT_ROOT/native/g3m_manual_decode_source_closure.txt" \
+  >>"$evidence/closure.sha256"
+sha256sum "$PROJECT_ROOT/native/g3m_seeded_p1_g1_source_closure.txt" \
   >>"$evidence/closure.sha256"
 cat "$evidence/static.stdout"
 cat "$evidence/normal.stdout"
