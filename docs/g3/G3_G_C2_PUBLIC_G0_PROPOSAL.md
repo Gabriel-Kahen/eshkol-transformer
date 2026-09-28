@@ -1,6 +1,6 @@
 # G3-G public diagnostic-C2 zero-budget extension proposal
 
-**Independently accepted bounded contract; isolated implementation candidate pending full gates.** This is a successor
+**Independently accepted bounded contract; isolated implementation candidate locally sealed, pending independent source review and hosted integration.** This is a successor
 to the reviewed [public P1/G1 package](G3_G_C2_PUBLIC_LEAF.md). It exposes the
 already accepted source-private [P1/G0](G3_T_ZERO_BUDGET_LEAF.md) and
 [P2/G0](G3_T_P2_ZERO_BUDGET_LEAF.md) paths alongside P1/G1. It does not expose
@@ -139,3 +139,25 @@ allocation/A2/binding cuts, and all reviewed P1/G1 regression checks.
 Exercise wrapper-level E1 operation/details and native clone cuts, Q0,
 feature-off inventory, mixed-tuple rejection and v1 package isolation.
 This proposal adds no generated-token loop or public manual operation.
+
+## Isolated candidate evidence
+
+The revision-2 implementation is at `1086582` / tree `5ccfa9f` before this
+documentation seal. `native/g3g_g0_public_extension.esk` owns prompt provenance;
+`native/g3g_g0_package_root.esk` source-composes only the accepted G0/G1
+routes. `scripts/build-g3g-g0.sh` and its exact tuple/manifests keep a
+separate one-owner artifact. The pinned network-none package build passed
+exact source/native/object/export/undefined/string manifests and installed
+one archive member and eight facades. The fresh-cache public AOT caller
+passed normal/repeat with identical output, E1 operation/details, the three
+admitted `(P,G)` pairs and P2/G1 pre-pin rejection. The v2 testing closure
+passed 20 identical normal/repeat/ASan+UBSan+LSan checks, 24 source contracts,
+Q0 4/4 and production test-symbol exclusion, including failed-release
+provenance, A2 rollback/retry, exact G0 clone values and seeded/exhausted RNG
+witnesses. The unchanged inherited private suite passed 47,342 identical
+checks in those three modes with 23 source contracts and Q0 4/4, retaining
+bitwise M3T logit/K/V parity. A sequential default v1→v2 build kept the
+reviewed v1 archive, object and facades byte-identical; the v1 fresh-cache
+public P1/G1 caller also passed normal/repeat. Local evidence is sealed under
+`/home/gabe/.codex/evidence/eshkol-transformer/g3g-public-g0-candidate-20260928/`.
+No hosted CI, public manual route, continuation or N>1 claim follows.
