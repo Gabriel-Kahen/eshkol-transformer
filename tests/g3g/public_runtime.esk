@@ -1,0 +1,153 @@
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.diagnostic_transport)
+(require transformer.generation)
+(require transformer.error_public)
+
+(define (check label value)
+  (if value #t (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model (diagnostic-model-create config (diagnostic-initializer-state 1729)))
+(check "eval mode" (module-eval! model))
+(define tokenizer (tokenizer-byte config))
+(define policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define zero-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 0
+        ':eos #f ':seed 1729))
+(expect-error "zero budget not public" 'invalid-argument 'generator-create
+  (lambda () (generator-create model tokenizer zero-policy)))
+(expect-error "token byte bound" 'invalid-argument 'generation-token-input-create
+  (lambda () (generation-token-input-create 256)))
+(expect-error "token inexact" 'invalid-argument 'generation-token-input-create
+  (lambda () (generation-token-input-create 65.0)))
+(expect-error "forged T1 input" 'invalid-argument 'generation-input-create
+  (lambda () (generation-input-create (vector 'foreign))))
+(check "private G3-M rejection has public E1 operation and data-only details"
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-argument)
+                    (eq? (transformer-error-operation caught)
+                         'generator-generate!)
+                    (string=? (transformer-error-message caught)
+                              "generation operation rejected the request")
+                    (equal? (transformer-error-details caught)
+                      '((native-category 1)
+                        (source-code 1)
+                        (source-domain g3t-transport)
+                        (source-message "expected an exact G3-T generator")))
+                    (eq? (transformer-error-cause caught) #f))))
+    (generator-generate! (vector 'foreign) (vector 'foreign)) #f))
+(define generator (generator-create model tokenizer policy))
+(define input (generation-token-input-create 65))
+(expect-error "tensor release rejects generator" 'invalid-argument
+              'generation-tensor-release!
+  (lambda () (generation-tensor-release! generator)))
+(expect-error "output release rejects input" 'invalid-argument
+              'generation-output-release!
+  (lambda () (generation-output-release! input)))
+(expect-error "foreign output" 'invalid-argument 'generation-output-text
+  (lambda () (generation-output-text (vector 'foreign))))
+(define output (generator-generate! generator input))
+(define text (generation-output-text output))
+(check "one raw byte" (and (pair? text) (null? (cdr text))
+                           (bytevector? (car text))
+                           (= 1 (bytevector-length (car text)))))
+(define generated-byte (bytevector-u8-ref (car text) 0))
+(define ids (generation-output-ids output))
+(define lengths (generation-output-lengths output))
+(define cache-lengths (generation-output-cache-lengths output))
+(define rng (generation-output-rng output))
+(check "detached ID list" (and (pair? ids) (null? (cdr ids))))
+(bytevector-u8-set! (car text) 0 (modulo (+ generated-byte 1) 256))
+(check "detached raw text" (= generated-byte
+  (bytevector-u8-ref (car (generation-output-text output)) 0)))
+(expect-error "output release rejects generator" 'invalid-argument
+              'generation-output-release!
+  (lambda () (generation-output-release! generator)))
+(expect-error "tensor release rejects output" 'invalid-argument
+              'generation-tensor-release!
+  (lambda () (generation-tensor-release! output)))
+(expect-error "no second generate" 'invalid-state 'generator-generate!
+  (lambda () (generator-generate! generator input)))
+(check "close generator" (generator-close! generator))
+(check "text after close" (= generated-byte
+  (bytevector-u8-ref (car (generation-output-text output)) 0)))
+(check "release detached owners"
+  (and (generation-tensor-release! (car ids))
+       (generation-tensor-release! lengths)
+       (generation-tensor-release! cache-lengths)
+       (generation-rng-release! rng)
+       (generation-output-release! output)
+       (generation-tensor-release! input)))
+(check "idempotent releases"
+  (and (generation-output-release! output)
+       (generation-tensor-release! input)
+       (generator-close! generator)))
+(expect-error "dead output" 'invalid-state 'generation-output-text
+  (lambda () (generation-output-text output)))
+
+(define t1 (tokenizer-encode tokenizer (bytevector 255)))
+(define t1-input (generation-input-create t1))
+(define t1-generator (generator-create model tokenizer policy))
+(define t1-output (generator-generate! t1-generator t1-input))
+(check "T1 P1/G1 text" (= 1
+  (bytevector-length (car (generation-output-text t1-output)))))
+(check "T1 owners"
+  (and (generator-close! t1-generator)
+       (generation-output-release! t1-output)
+       (generation-tensor-release! t1-input)))
+(define t1-p2 (tokenizer-encode tokenizer (bytevector 65 66)))
+(expect-error "T1 P2 not public" 'shape-mismatch 'generation-input-create
+  (lambda () (generation-input-create t1-p2)))
+(define eos-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos generated-byte ':seed 1729))
+(define eos-generator (generator-create model tokenizer eos-policy))
+(define eos-input (generation-token-input-create 65))
+(define eos-output (generator-generate! eos-generator eos-input))
+(check "EOS retains the sampled byte" (= generated-byte
+  (bytevector-u8-ref (car (generation-output-text eos-output)) 0)))
+(check "EOS owners"
+  (and (generator-close! eos-generator)
+       (generation-output-release! eos-output)
+       (generation-tensor-release! eos-input)))
+(define categorical-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define categorical-generator (generator-create model tokenizer categorical-policy))
+(define categorical-input (generation-token-input-create 0))
+(define categorical-output
+  (generator-generate! categorical-generator categorical-input))
+(check "categorical output byte" (= 1
+  (bytevector-length (car (generation-output-text categorical-output)))))
+(define categorical-successor-rng (generation-output-rng categorical-output))
+(check "categorical detached RNG and owners"
+  (and (generator-close! categorical-generator)
+       (generation-output-release! categorical-output)
+       (generation-tensor-release! categorical-input)
+       (generation-rng-release! categorical-successor-rng)))
+(display "G3G-PUBLIC-P1G1-PASS") (newline)

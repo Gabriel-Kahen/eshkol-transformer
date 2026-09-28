@@ -18,6 +18,7 @@
 (load "g3t_ids_owner_extension.esk")
 (load "g3t_lengths_owner_extension.esk")
 (load "g3t_text_result_extension.esk")
+(load "g3g_public_extension.esk")
 
 (extern i64 g3t-test-input-length-set ptr i64
         :real et_g3t_test_input_length_set_v1)
@@ -4240,6 +4241,57 @@
             (= g1-id (bytevector-u8-ref
                         (car (g3t-generation-output-text sg-output)) 0))
             (g3t-output-release! sg-output)))
+
+;;; Public adapter fault witnesses use the private testing closure only.
+(define (g3g-reject-public label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(check "G3-G constructor native header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(g3g-reject-public "G3-G constructor cut maps invoked public operation"
+                   'internal 'generator-create
+  (lambda () (g3g-public-generator-create model tokenizer policy-greedy-g1)))
+(check "G3-G constructor native header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(define g3g-cut-generator
+  (g3g-public-generator-create model tokenizer policy-greedy-g1))
+(define g3g-cut-input (g3g-public-generation-token-input-create 65))
+(define g3g-cut-output
+  (g3g-public-generator-generate g3g-cut-generator g3g-cut-input))
+(define g3g-cut-output-native
+  (vector-ref (g3t-prefill-entry g3g-cut-output 'output 'g3g-cut) 3))
+(define g3g-live-id-before (g3t-test-live-clones))
+(check "G3-G ID clone I1 cut armed" (= 0 (g3t-test-fail-i1-after 0)))
+(g3g-reject-public "G3-G ID clone cut maps invoked public operation"
+                   'internal 'generation-output-ids
+  (lambda () (g3g-public-generation-output-ids g3g-cut-output)))
+(check "G3-G ID clone I1 cut preserves output and owner counts"
+       (and (= g3g-live-id-before (g3t-test-live-clones))
+            (= 1 (g3t-test-output-state g3g-cut-output-native))))
+(check "G3-G ID clone I1 cut disarmed"
+       (= 0 (g3t-test-fail-i1-after 9223372036854775807)))
+(define g3g-live-rng-before (g3t-test-live-rng-clones))
+(check "G3-G RNG clone header cut armed"
+       (= 0 (g3t-test-fail-alloc-after 0)))
+(g3g-reject-public "G3-G RNG clone cut maps invoked public operation"
+                   'internal 'generation-output-rng
+  (lambda () (g3g-public-generation-output-rng g3g-cut-output)))
+(check "G3-G RNG clone header cut preserves output and owner counts"
+       (and (= g3g-live-rng-before (g3t-test-live-rng-clones))
+            (= 1 (g3t-test-output-state g3g-cut-output-native))))
+(check "G3-G RNG clone header cut disarmed"
+       (= 0 (g3t-test-fail-alloc-after 9223372036854775807)))
+(check "G3-G public adapter cut retry and owners release"
+       (let ((clone (car (g3g-public-generation-output-ids g3g-cut-output))))
+         (and (g3g-public-generation-tensor-release clone)
+              (g3g-public-generation-output-release g3g-cut-output)
+              (g3g-public-generation-tensor-release g3g-cut-input)
+              (g3g-public-generator-close g3g-cut-generator))))
 
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)

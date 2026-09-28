@@ -993,8 +993,15 @@ Its pinned normal/repeat/ASan+UBSan+LSan gate passed 47,330 identical checks,
 23 source contracts, Q0 4/4 and production test-symbol exclusion. The
 isolated integration head preserves the reviewed source and tests byte for
 byte; its prior head passed all 23 hosted checks. Refreshed hosted CI remains
-pending. The public G3-G facade and N>1 continuation are separate downstream
-gates.
+pending. The independently accepted bounded
+[public P1/G1 G3-G contract](g3/G3_G_C2_PUBLIC_CONTRACT_PROPOSAL.md)
+defines a thirteen-name facade over only that private seeded route. Its
+separate single-owner [package candidate](g3/G3_G_C2_PUBLIC_LEAF.md)
+has one archive member, eight facades, 100 boxed exports and 106
+globals/strings, with fresh-cache AOT and testing-closure fault/sanitizer
+evidence. Root independently reviewed `baa08ad` / tree `6a6e164` and
+found no blocking source issue; stacked integration and hosted CI remain
+pending. No G0/manual facade, continuation or N>1 behavior is claimed.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
