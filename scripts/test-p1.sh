@@ -25,7 +25,8 @@ p1_lsan="${P1_LSAN:-0}"
 [[ "${p1_lsan}" == 0 || "${p1_lsan}" == 1 ]] || \
   die "P1_LSAN must be 0 or 1"
 
-p1_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-p1.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+p1_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-p1.XXXXXX")"
 p1_cleanup() {
   if [[ "${P1_KEEP_TMP:-0}" == 1 ]]; then
     printf 'P1 preserved temporary evidence: %s\n' "${p1_tmp}" >&2
@@ -55,8 +56,14 @@ p1_package_object="${p1_package_link}/eshkol_transformer_p1.o"
 p1_package_archive="${p1_package_link}/libeshkol_transformer_p1.a"
 
 run_compiler() {
+  local cache status=0
+  cache="$(mktemp -d "${p1_tmp}/cache-compiler.XXXXXX")"
   timeout --foreground --signal=TERM --kill-after=5s \
-    "${p1_timeout}s" env -u ESHKOL_PATH "${p1_runner}" "$@"
+    "${p1_timeout}s" env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+    -u ESHKOL_AOT_MODULE_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="${cache}" "${p1_runner}" "$@" || status=$?
+  rm -rf -- "${cache}"
+  return "${status}"
 }
 
 run_fresh_compiler() {
@@ -65,6 +72,7 @@ run_fresh_compiler() {
   mkdir -p "${cache}"
   timeout --foreground --signal=TERM --kill-after=5s \
     "${p1_timeout}s" env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+    -u ESHKOL_AOT_MODULE_CACHE_DIR \
     ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${cache}" "${p1_runner}" "$@"
 }
 

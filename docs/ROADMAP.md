@@ -32,7 +32,30 @@ Scoped repairs retain exact manifests and strict empty-stderr assertions;
 the supported local I2/base-E1B, C2 format/state/save/load, and C2 public
 package gates pass after rebuilding canonical C2, including byte-identical
 canonical/two-clean artifacts. This hosted attempt is failure evidence, not a
-passing full-CI gate; a new exact-head run remains pending.
+passing full-CI gate; the next exact-head run is summarized below.
+
+The second hosted full-suite attempt on PR #131 (`61e1392`, run 36387430536)
+ended with eight passing jobs and fifteen failures. The distinct failures are
+exact successor-symbol manifest drift in P1 (`eshkol_runtime_fatal`) and the
+D1 fault, T1/T2, K2, D2, M3T and M3 aggregates (also
+`eshkol_format_float32_bits`), plus forbidden system-temp AOT cache roots in
+G3N/G3S. The next local canonical O2 build independently exposed the same two
+actual-only symbols. The scoped repair retains package-specific exact
+allowlists, moves strict compile-probe caches under ignored `.deps`, gives P1
+trusted fixtures fresh per-invocation caches, updates G3C4's lock-derived
+supported-SHA fixture, and repins E3-D2's active digest of the reviewed D2
+closure-layout source. Supported local exact package rebuilds pass for all
+nine affected variants; full contracts-data, G3S, G3N, G3C4, N3K, T1, T2
+runtime, M3T and D2 gates pass. Focused E3-D2 source, mutation, native and
+identity checks also pass. Full P1 passes with fresh allowed compiler caches,
+including deterministic repeats and sanitizer/negative checks. The first
+local T2 boundary run reached its private-binding probes but timed out with
+the successor's forbidden system-temp AOT cache warning. After moving its
+test-local cache root under ignored `.deps`, the full T2 boundary gate passes:
+exact production and D1-test surfaces, two-build byte parity, private-binding
+and crafted-link negatives, public closure, and Wave 1/2 collision. Oracle-
+backed numeric/model suites and new hosted CI remain successor acceptance
+gates; R0 is tracked separately.
 
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the

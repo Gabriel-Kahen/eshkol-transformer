@@ -9,7 +9,8 @@ l3s_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 l3s_cc="$(tsv_value "${l3s_provenance}" cc_path)"
 l3s_cxx="$(tsv_value "${l3s_provenance}" cxx_path)"
 l3s_runner="$(eshkol_build_dir)/eshkol-run"
-l3s_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-l3s.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+l3s_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-l3s.XXXXXX")"
 l3s_error_log=''
 cleanup_l3s() {
   local status=$?
