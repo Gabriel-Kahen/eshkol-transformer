@@ -926,6 +926,16 @@ logits, length-two A2 publication and rollback. No P2 native implementation,
 G3-M P2 composer, generation claim or acceptance evidence follows from this
 contract. Implement and verify that G3-T dependency before the G3-M P2 leaf.
 
+The next dependency after the independently reviewed G3-T manual P2 native
+head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
+[proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
+The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
+native frame/role/publication branches and private Eshkol call/frame wrappers
+still exclude manual decode. This proposal is pending independent contract
+review; neither isolated P2 candidate is integrated in this `origin/main`
+baseline. Native decode, its wrapper, a G3-M decode composer, and the seeded
+generation/public facade remain separate downstream gates.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
