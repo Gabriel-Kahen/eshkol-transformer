@@ -926,16 +926,19 @@ logits, length-two A2 publication and rollback. No P2 native implementation,
 G3-M P2 composer, generation claim or acceptance evidence follows from this
 contract. Implement and verify that G3-T dependency before the G3-M P2 leaf.
 
-The next dependency after the independently reviewed G3-T manual P2 native
-head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
-[proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
-The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
-native frame/role/publication branches and private Eshkol call/frame wrappers
-still exclude manual decode. Root independently reviewed the source-anchored
-native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
-is integrated in this `origin/main` baseline. Native decode, its wrapper, a
-G3-M decode composer, and the seeded
-generation/public facade remain separate downstream gates.
+The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
+was independently reviewed at `58499c0`. Its isolated native implementation
+`a4f7c53`/tree `ad87a4e` has passed independent source review and remains
+outside this `origin/main` baseline, as do the independently reviewed G3-T
+manual P2 native head `832a709` and isolated G3-M P2 composer candidate
+`da0ba38`. The next narrow dependency is the
+[private G3-T Eshkol wrapper proposal](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md):
+admit kind-1 call acquisition and authentic non-null input for frame kind 2
+through the existing private wrappers, preserving generated decode's `#f`
+route. This proposal is pending independent review and adds no code. The G3-M
+manual decode composer can follow only after that native/wrapper composition
+is reviewed; a public seeded generation schedule/facade remains a separate
+downstream gate.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
