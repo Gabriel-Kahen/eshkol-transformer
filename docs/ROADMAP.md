@@ -1518,6 +1518,27 @@ gate also rejects an exact limit above signed i64. Its sealed witness is at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-retention-20260928/SHA256SUMS`.
 Train-loop thresholds, interruption, summary metrics and resume are pending.
 
+The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
+accepted same-registry TR3-C snapshot and joint-restore entries with private
+rooted result cells. A genuine installed fixed-profile caller creates and
+releases a detached C2 state, restores an advanced trainer, repeats the next
+step, and rejects forged, dead, busy, and authentic X1 run-seed mismatch cases.
+The pinned fe9 full linked gate passed before two test-only caller extensions;
+its archive is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-state-load-d50ea6e-20260928/SHA256SUMS`.
+The changed ordinary caller and exact f32-bit replay caller pass against that
+byte-identified unchanged archive, sealed respectively at
+`tr3-public-state-load-mismatch-final-d50ea6e-20260928/SHA256SUMS` and
+`tr3-public-state-load-replay-d50ea6e-20260928/SHA256SUMS` under the same
+evidence root. A full final-test-tree rerun completed fe9 source compilation
+but exited 143 during LLVM object emission; it is not an acceptance run.
+The focused TR3-C private load-entry gate compiled, then its unchanged base
+joint-restore fixture raised an unhandled user exception before the load-entry
+suffix; both failures are retained at
+`tr3-public-state-load-private-d50ea6e-20260928/` under that evidence root.
+Full public exact-resume acceptance, public checkpoint I/O packaging, and
+independent review remain pending.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

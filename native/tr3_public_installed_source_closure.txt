@@ -55,3 +55,4 @@ native/tr3_step_commit_tail_extension.esk
 native/tr3_step_composer_extension.esk
 native/tr3_public_step_extension.esk
 native/tr3_stop_policy_extension.esk
+native/tr3_public_state_extension.esk
