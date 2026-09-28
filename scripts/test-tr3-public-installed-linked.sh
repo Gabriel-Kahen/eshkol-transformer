@@ -6,9 +6,9 @@ for command in ar cmp docker git nm objcopy python3 readlink rg sha256sum; do
 done
 cd "${PROJECT_ROOT}"
 
-fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps/eshkol-build}"
-compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps/eshkol-src}"
-runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps}"
+fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-build}"
+compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-src}"
+runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-${PROJECT_ROOT}/.deps}"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
 case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-fe9}" in
   fe9)
@@ -27,6 +27,7 @@ case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-fe9}" in
     [[ "$(tsv_value "${runtime_build_dir}/eshkol-transformer-provenance.tsv" eshkol_commit)" == \
        "${compiler_commit}" ]] || die "fe9 runtime provenance changed"
     ;;
+  81298) die "public metrics-ref requires the fe9 true-f32 runtime" ;;
   *) die "unsupported TR3 public installed runtime pin" ;;
 esac
 image="$(tsv_value "${pin}" container_image)"
@@ -170,6 +171,25 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   > /out/caller.stdout 2> /out/caller.stderr
 grep -Fx TR3-PUBLIC-OPERANDS-PASS /out/caller.stdout >/dev/null
 test ! -s /out/caller.stderr
+
+# The installed package intentionally has no public step producer yet. Link a
+# test-only producer to the unlocalized copy of this exact aggregate so its
+# private authority can publish one authentic record for the public reader.
+clang-21 "${flags[@]}" -I /fixed-source/inc \
+  -c tests/tr3_metrics/linked_producer.c -o /out/linked_producer.o
+ar rcsD /out/libeshkol_transformer_tr3_metrics_test.a \
+  /out/combined.raw.o /out/linked_producer.o
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_metrics/linked_runtime.esk -o /out/linked_metrics_caller \
+    > /out/linked-metrics-compile.stdout 2> /out/linked-metrics-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
+  /out/linked_metrics_caller \
+  > /out/linked-metrics.stdout 2> /out/linked-metrics.stderr
+grep -Fx TR3-PUBLIC-METRICS-LINKED-PASS /out/linked-metrics.stdout >/dev/null
+test ! -s /out/linked-metrics.stderr
 '
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
