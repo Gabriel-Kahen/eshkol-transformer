@@ -291,7 +291,19 @@
        (and (token-dataset-seek! dataset trainer-start-cursor)
             (bytes-equal? trainer-start-cursor
                           (token-dataset-cursor dataset))))
-(define first-step (trainer-step! trainer))
+(check "idle trainer release" (trainer-release! trainer))
+(expect-release-error "repeat release tombstone"
+                      'invalid-argument
+  (lambda () (trainer-release! trainer)))
+(define successor (trainer-create resolved tokenizer dataset model optimizer))
+(check "re-lease returns distinct shell" (not (eq? trainer successor)))
+(expect-release-error "old shell cannot release successor"
+                      'invalid-argument
+  (lambda () (trainer-release! trainer)))
+(check "successor releases" (trainer-release! successor))
+(define step-trainer
+  (trainer-create resolved tokenizer dataset model optimizer))
+(define first-step (trainer-step! step-trainer))
 (check "public step publishes first update"
        (and (= (metrics-ref first-step 'update) 1)
             (= (metrics-ref first-step 'microbatches) 2)
@@ -305,21 +317,12 @@
 (expect-error "step metrics reject foreign key"
               'invalid-argument 'metrics-ref
   (lambda () (metrics-ref first-step 'epochs)))
-(define second-step (trainer-step! trainer))
+(define second-step (trainer-step! step-trainer))
 (check "public step increments update with old metrics stable"
        (and (= (metrics-ref second-step 'update) 2)
             (= (metrics-ref first-step 'update) 1)
             (= (metrics-ref second-step 'microbatches) 2)))
-(check "idle trainer release" (trainer-release! trainer))
-(expect-release-error "repeat release tombstone"
-                      'invalid-argument
-  (lambda () (trainer-release! trainer)))
-(define successor (trainer-create resolved tokenizer dataset model optimizer))
-(check "re-lease returns distinct shell" (not (eq? trainer successor)))
-(expect-release-error "old shell cannot release successor"
-                      'invalid-argument
-  (lambda () (trainer-release! trainer)))
-(check "successor releases" (trainer-release! successor))
+(check "step trainer release" (trainer-release! step-trainer))
 (check "released D2 receiver remains caller-owned"
        (token-dataset-close! dataset))
 (expect-error "C2 detached-state release retains public error mapping"
