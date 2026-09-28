@@ -212,7 +212,7 @@ timeout --foreground --signal=TERM --kill-after=5s 120s \
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   /out/step_caller /out/corpus/step-two \
   > /out/step.stdout 2> /out/step.stderr
-grep -Fx 'TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128' \
+grep -Fx "TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128" \
   /out/step.stdout >/dev/null
 test ! -s /out/step.stderr
 
