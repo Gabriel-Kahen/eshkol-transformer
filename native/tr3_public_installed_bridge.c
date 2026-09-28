@@ -122,3 +122,120 @@ void et_e1b_public_t1_tokenizer_save_v1(void *tokenizer, void *path,
       *et_e1b_box_value_v1(tokenizer), *et_e1b_box_value_v1(path),
       *et_e1b_box_value_v1(policy));
 }
+
+/* Complete unchanged diagnostic transport facade, in this registry. */
+#define TR3_PUBLIC_NULLARY(name, target) \
+  void name(void *output) { \
+    et_e1b_ensure_private_initialized_v1(); \
+    *et_e1b_box_value_v1(output) = target(); \
+  }
+
+extern eshkol_tagged_value_t et_e1b_private_m3t_initializer_algorithm_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_initializer_algorithm_v1,
+                  et_e1b_private_m3t_initializer_algorithm_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_initializer_words_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_initializer_words_v1,
+                  et_e1b_private_m3t_initializer_words_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_model_profile_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_model_profile_v1,
+                  et_e1b_private_m3t_model_profile_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_model_initializer_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_model_initializer_v1,
+                  et_e1b_private_m3t_model_initializer_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_input_create_cabi_v1(void);
+TR3_PUBLIC_NULLARY(et_e1b_public_m3t_input_create_v1,
+                  et_e1b_private_m3t_input_create_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_input_copy_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_input_copy_v1,
+                  et_e1b_private_m3t_input_copy_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_input_copy_tokenizer_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_input_copy_tokenizer_v1,
+                  et_e1b_private_m3t_input_copy_tokenizer_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_input_release_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_input_release_v1,
+                  et_e1b_private_m3t_input_release_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_logits_create_cabi_v1(void);
+TR3_PUBLIC_NULLARY(et_e1b_public_m3t_logits_create_v1,
+                  et_e1b_private_m3t_logits_create_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_logits_copy_bits_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_logits_copy_bits_v1,
+                  et_e1b_private_m3t_logits_copy_bits_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_logits_bits_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_logits_bits_v1,
+                  et_e1b_private_m3t_logits_bits_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_logits_release_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_logits_release_v1,
+                  et_e1b_private_m3t_logits_release_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_create_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_workspace_create_v1,
+                  et_e1b_private_m3t_workspace_create_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_begin_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_workspace_begin_v1,
+                  et_e1b_private_m3t_workspace_begin_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_vjp_begin_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_workspace_vjp_begin_v1,
+                  et_e1b_private_m3t_workspace_vjp_begin_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_copy_logits_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_workspace_copy_logits_v1,
+                  et_e1b_private_m3t_workspace_copy_logits_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_check_primals_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_workspace_check_primals_v1,
+                  et_e1b_private_m3t_workspace_check_primals_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_reset_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_workspace_reset_v1,
+                  et_e1b_private_m3t_workspace_reset_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_workspace_release_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_workspace_release_v1,
+                  et_e1b_private_m3t_workspace_release_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_embedding_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_embedding_v1,
+                  et_e1b_private_m3t_embedding_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_linear_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_linear_v1,
+                  et_e1b_private_m3t_linear_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_layer_norm_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_layer_norm_v1,
+                  et_e1b_private_m3t_layer_norm_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_gelu_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_gelu_v1,
+                  et_e1b_private_m3t_gelu_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_residual_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_residual_v1,
+                  et_e1b_private_m3t_residual_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_heads_split_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_heads_split_v1,
+                  et_e1b_private_m3t_heads_split_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_heads_merge_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_heads_merge_v1,
+                  et_e1b_private_m3t_heads_merge_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_attention_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_attention_v1,
+                  et_e1b_private_m3t_attention_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_embedding_vjp_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_embedding_vjp_v1,
+                  et_e1b_private_m3t_embedding_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_linear_vjp_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_linear_vjp_v1,
+                  et_e1b_private_m3t_linear_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_layer_norm_vjp_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_layer_norm_vjp_v1,
+                  et_e1b_private_m3t_layer_norm_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_gelu_vjp_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_gelu_vjp_v1,
+                  et_e1b_private_m3t_gelu_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_residual_vjp_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_residual_vjp_v1,
+                  et_e1b_private_m3t_residual_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_heads_split_vjp_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_heads_split_vjp_v1,
+                  et_e1b_private_m3t_heads_split_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_heads_merge_vjp_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_heads_merge_vjp_v1,
+                  et_e1b_private_m3t_heads_merge_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_attention_vjp_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_m3t_attention_vjp_v1,
+                  et_e1b_private_m3t_attention_vjp_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_m3t_sum_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_m3t_sum_v1,
+                  et_e1b_private_m3t_sum_cabi_v1)
+#undef TR3_PUBLIC_NULLARY

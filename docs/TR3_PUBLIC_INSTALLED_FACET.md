@@ -125,3 +125,18 @@ Its poisoned public caller passed with empty stderr. Evidence is sealed at
 (`SHA256SUMS` SHA-256 `2449a18ab13f5c2b5c1e4fc5e793011762ead0515422d726d8a1a2cf41892760`);
 `sha256sum -c` passed. The C2 versioned tuple and earlier sealed TR3
 evidence remain unchanged.
+
+## M3T operand facade successor candidate
+
+The same aggregate now installs the unchanged 38-entry
+`lib/transformer/diagnostic_transport.esk`. The two existing test-local
+initializer/model exports retain their ABI and gain the 36 other canonical
+M3T boxed operations through reviewed same-package source definitions and
+private renames. The ordinary linked caller imports the facade, derives its
+initializer seed from the installed X1 resolved configuration, creates the
+fixed diagnostic model, reads its profile and successor initializer, and
+checks forged owner identities. The model then enters the existing genuine
+trainer lease/release and D2 ownership checks. P1 and O2 remain test-local
+operands pending installation of their complete canonical facades. This
+facet does not provide a generic model constructor, model release operation,
+training step, or resume API.

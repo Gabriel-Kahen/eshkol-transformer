@@ -1187,6 +1187,15 @@ measurements passed on `1a44e42`: 49 Eshkol sources, 30 native objects,
 70 native paths, 4,171 raw definitions, 48 exports and 173 undefined
 symbols. The poisoned caller passed with empty stderr; sealed evidence is
 `tr3-public-d2-linked-1a44e42-20260925/SHA256SUMS`.
+The isolated M3T operand facet adds the unchanged 38-entry
+`transformer.diagnostic_transport` facade to the same registry-owning aggregate.
+The existing initializer/model producer exports gain the other 36 reviewed
+same-package boxed operations and private renames. Its ordinary caller uses
+the installed facade for model construction, profile and successor initializer,
+and checks forged model/initializer identities before the existing live
+trainer lease/release cases. P1 and O2 construction remain test-local until
+their complete canonical facades are installed; this facet makes no public
+step/train/evaluate or resume claim.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
