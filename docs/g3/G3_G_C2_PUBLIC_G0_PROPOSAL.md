@@ -1,6 +1,6 @@
 # G3-G public diagnostic-C2 zero-budget extension proposal
 
-**Pending independent review; contract only.** This is a proposed successor
+**Independently accepted bounded contract; isolated implementation candidate pending full gates.** This is a successor
 to the reviewed [public P1/G1 package](G3_G_C2_PUBLIC_LEAF.md). It exposes the
 already accepted source-private [P1/G0](G3_T_ZERO_BUDGET_LEAF.md) and
 [P2/G0](G3_T_P2_ZERO_BUDGET_LEAF.md) paths alongside P1/G1. It does not expose
@@ -28,8 +28,8 @@ available through the T1 constructor only; the existing private
 remains eligible, so P2/G1 rejects before native pins.
 
 This is **G3-G C2 package revision 2**, a new fixed E1B tuple rather than a
-silent mutation of the reviewed `g3g_package_*` tuple. Proposed repository
-stem: `g3g_g0_package_*`; proposed single-owner archive/member:
+silent mutation of the reviewed `g3g_package_*` tuple. Fixed repository
+stem: `g3g_g0_package_*`; fixed single-owner archive/member:
 `libeshkol_transformer_g3g_g0.a` / `g3g_g0_package.o`, built by
 `scripts/build-g3g-g0.sh`. It installs the same eight facades, with the
 generation facade copied for this artifact. The public source names,

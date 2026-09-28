@@ -978,12 +978,15 @@ globals/strings, with fresh-cache AOT and testing-closure fault/sanitizer
 evidence. Root independently reviewed `baa08ad` / tree `6a6e164` and
 found no blocking source issue; stacked integration and hosted CI remain
 pending. No G0/manual facade, continuation or N>1 behavior is claimed.
-The next [public G0 extension proposal](g3/G3_G_C2_PUBLIC_G0_PROPOSAL.md)
-is docs-only and pending independent review. It proposes a separate fixed
-G3-G C2 revision-2 package tuple with the same thirteen facade names,
-budget-zero P1/P2 routing from constructor-recorded input provenance, and
-the accepted private G0 schedules. It neither changes the reviewed P1/G1
-package nor claims a public G0 implementation or hosted gate.
+The bounded [public G0 extension contract](g3/G3_G_C2_PUBLIC_G0_PROPOSAL.md)
+was independently accepted at `8b2bd70` / tree `ab67893`. Its isolated
+implementation candidate adds a separate fixed G3-G C2 revision-2 package
+tuple with the same thirteen facade names, budget-zero P1/P2 routing from
+constructor-recorded exact input provenance, and the accepted private G0
+schedules. The original P1/G1 package blobs remain unchanged. Source/Q0
+checks pass; the fixed package build, public AOT, regression/sanitizer seal and
+independent source review remain pending. No public G0 hosted gate, manual
+facade, continuation or N>1 behavior is claimed yet.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
