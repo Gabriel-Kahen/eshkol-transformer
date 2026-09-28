@@ -24,6 +24,30 @@ two byte-identical clean rebuilds. R0 executable audit, the other affected
 packages and full supported CI still need this exact pin. No workstream status
 changes solely from this bounded repin.
 
+On exact `5fc65a0`, hosted PR #131 run `36430441598` exposed a later
+`fe9dfd52` trusted-source closure order change in C2 SAVE, LOAD and public,
+and the D2 shard-loader's instrumented aggregate. The scoped C2/D2 repin
+orders `native/x1_config_private.esk` immediately before
+`internal/t2/lib/t2_d1_bridge.esk`; it changes no source or surface counts.
+Pinned Ubuntu 22.04/LLVM 21 SAVE/LOAD depfile probes and canonical C2/D2
+package builds match the new 27/25/32/18-source manifests, while the old
+pins fail exact comparison. The C2 public package gate passes the exact
+81/75/81 surface, public LOAD/SAVE/release, isolation and byte-identical
+clean rebuilds. The private SAVE gate passes strict Clang/GCC/C++ AOT,
+runtime, parser, failpoints and sanitizers; the focused private LOAD gate
+passes deterministic AOT/runtime, exact reconstruction and rollback,
+parser/reader failpoints, sanitizers and source/symbol closure. D2's
+instrumented resource-test aggregate matches its fixture-root-plus-D2
+19-source expected closure; the old expected order fails comparison. The C2
+D2 cursor-pair pin equals the verified D2 closure plus its extension.
+This local repin is not full-CI acceptance.
+
+The same hosted run reached the P1 parameter-state diagnostic overlay and
+found its test-only exact provide-tail anchor stale after the accepted
+`p1-trusted-surface` append. The overlay now inserts its test control before
+that tail. All four diagnostic insertion anchors match the current trusted
+source in a focused static probe; execution awaits the next hosted run.
+
 The first hosted full-suite attempt on this repin (PR #131, run 36379473716)
 exposed exact I2/base-E1B undefined-symbol manifest drift, DD-10 trusted
 C1 helper imports in C2 fixtures, and C2 compile-only probes whose
@@ -578,7 +602,7 @@ generation, and Wave 3 remains incomplete.
 | P1L | [Release-capable provider/state ownership correction](P1_MODULE_STATE.md) | P1, E1B, C1, T1 | Provider 2.0 exact-once clone ownership, explicit idempotent state release, scoped read-only state-backed handles, callback-defect/failure cleanup, exact P1/C1/T1 aggregate manifests, sanitizers, deterministic fresh-AOT negatives, and supported CI | complete |
 | I2 | Shared dense CPU-f32 tensor, P1 value/gradient, and atomic-mutation substrate | P1L, K1, Q0, E1/E1B, R0 | [ABI 1.0 exact-bit storage, borrowed K1 views, P1-bound accumulated gradients, whole-batch preflight/commit, sanitizers, packaging negatives, and deterministic AOT evidence](I2_F32_TENSOR.md) | complete |
 | K2 | [Process-local A0 capability facade over exact K1/I2 discovery](K2_CAPABILITY_FACADE.md) | A0, K1, E1/E1B, I2 | Twelve unchanged A0 operations; exact 11-row audited report; 59-global/53-export aggregate; independent approval, supported blocking/exhaustive CI, identical-tree merge and focused merged-main retest | complete |
-| T2 | [Deterministic BPE training and streaming encode/decode](BPE_TOKENIZER_FORMAT.md) | T1, D1 | Canonical repeated artifacts and order/partition-invariant merges; all-byte/raw/strict/F0-F4/special whole-stream parity; exact 65,536-byte/73,728-ID ceilings including 73,728 one-ID chunks and one-over negatives; compiled parser/D1 corrupt-data negatives; deterministic localized object/archive/evidence/AOT boundary suite; exact aggregate manifests; production Python isolation; independent review; supported CI; and merged-main retest | complete |
+| T2 | [Deterministic BPE training and streaming encode/decode](BPE_TOKENIZER_FORMAT.md) | T1, D1 | Canonical repeated artifacts and order/partition-invariant merges; all-byte/raw/strict/F0-F4/special whole-stream parity; exact 65,536-byte/73,728-ID ceilings including 73,728 one-ID chunks and one-over negatives; compiled parser/D1 corrupt-data negatives; deterministic localized object/archive/evidence/AOT boundary suite; exact aggregate manifests; production Python isolation; independent review; supported CI; and merged-main retest. At exact `5fc65a0` with pinned `fe9dfd5`/LLVM 21.1.8, production and D1-test depfiles move `native/x1_config_private.esk` immediately before `internal/t2/lib/t2_d1_bridge.esk`; both updated manifests match byte-for-byte and both prior pins reject. Local T2 reference 25/25, CI structure 107/107, and the supported production package gate pass. The supported T2 boundary gate passes on the combined verification tree with the reviewed C2/D2 source pins and canonical D2 prerequisite, including exact 47/41 and 48/42 surfaces, deterministic artifacts, hostile-path and public-caller checks. | complete |
 | D2 | [Memory-bounded shard loader, batching, packing and cursor state](D2_SHARD_LOADER.md) | D1, T1, Q0 | Accepted ten-key config and 11-operation surface; exact CPU `17*N*T` carrier/lifetime; packed/unpacked shift and bool masks; unbiased bounded-window shuffle; `ESHKDCU1` exact resume; corrupt/resource/sanitizer/AOT/58-global/52-export gates; independent D2-R, supported CI, identical-tree merge, and merged-main retest. After hosted PR #126 run `36009739388` passed the semantic/resource gates but tripped the non-diagnostic raw-byte oracle scan, the test-only isolation checker now bounds raw dependency markers, preserves source/symbol/link checks, and reports the artifact, channel, and match. Four focused mutation checks and all exact rebuilt delivered artifacts pass; hosted PR #126 run `36020537251` on pushed `8169e68` passes the full shard-loader suite with the hardened isolation check | complete |
 | N2 | [Embedding, linear, normalization, activations, dropout, residuals](N2_PRIMITIVES.md) | P1L, K1, Q0, I1, I2 | Exact-row carrier-backed forward/VJP parity, scaled numerical gradients, Philox bit determinism, failure atomicity, native lifetime, private AOT, ABI/isolation manifests, sanitizers, independent review, and supported CI | complete |
 | A2 | Causal attention, masks, RoPE and KV-cache primitives | P1, K1, Q0 | Masking, forward/backward and cache parity tests | complete |
@@ -1046,7 +1070,7 @@ call, owned `[1,1]` input, exact 21-role T1 schedule, A2 `1→2` append,
 detached logits and precommit rollback. Root independently reviewed its
 source and 47,240 pinned normal/repeat/sanitizer checks, 22 source contracts
 and Q0 4/4; its prior head passed all 23 hosted checks. Refreshed hosted
-integration CI remains pending. The accepted private
+integration CI and merge remain pending. The accepted private
 [seeded P1/G1 schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) has a
 [reviewed implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) at
 `9029b67` / tree `052fdf9`: a single guarded full-request preflight,
@@ -1086,6 +1110,26 @@ passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
 its source and sealed evidence without a blocking finding. Hosted integration
 remains pending; no public manual facade, continuation or N>1 behavior is
 claimed.
+
+The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
+now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
+names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
+with a distinct 1,024-byte diagnostic bit readout and typed release. It
+follows the accepted fixed-profile M3 logits/readout pattern but does not
+claim generic tensor interop or full A0 generality. No public implementation,
+export or package is accepted; revision 2's thirteen names and artifacts
+remain the installed boundary. Root independently reviewed #138 private
+decode source, which merged as `bf6c284` after 23 exact-head hosted checks.
+The isolated #143 source-private
+[materialization candidate](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md)
+passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
+`a22572e` / tree `2834a68`: 47,358 identical normal/repeat/sanitizer checks,
+Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
+checks, with exact feature-on/off private-symbol delta. Commands and logs
+are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
+(`SEAL.sha256` `980c7e46...`). #143 hosted integration remains pending.
+Revision-3 public ownership/read, atomic cache/result publication, exact
+closed package tuple and numerical/negative gates remain separate.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -1412,13 +1456,26 @@ with 50 sources, 30 native objects, 48 exports, 175 undefined symbols, and
 a poisoned public caller on the pre-facet tree. Sealed evidence is under
 `tr3-private-metrics-fe9-201331e-20260928/SHA256SUMS` and
 `tr3-public-installed-metrics-fe9-201331e-20260928/SHA256SUMS`.
-The combined current installed facet still needs an exact fe9 metrics linked
-gate. The bounded public `metrics-ref` step-record reader is implemented as a
-candidate: it authenticates the private authority, preserves exact i64 counters,
-and converts stored binary32 words through the accepted runtime f32 scalar ABI.
-Its focused and linked package gates remain integration gates. Trainer-step
-integration, train/evaluate adapters, and all-result retention evidence remain
-pending.
+The combined current installed facet passed an exact fe9 metrics linked gate
+on `d7ac4d8`/tree `6e0bf4e`: 50 sources, 30 native objects, 104 exports,
+175 undefined symbols, and a poisoned caller with empty stderr. Its 103
+artifacts verify under
+`tr3-public-installed-metrics-combined-d7ac4d8-20260928/SHA256SUMS`
+(`bc5a7a97...`). The focused exact-tree gate also passed 30 runtime checks,
+allocation denial, fail-stop exit 134 and the 336-byte retention measurement;
+its 35 artifacts verify under
+`tr3-private-metrics-fe9-combined-d7ac4d8-20260928/SHA256SUMS`
+(`2e8667ac...`). The bounded public `metrics-ref` step-record reader is now a
+separate candidate: it authenticates the private authority, preserves exact
+i64 counters, and converts stored binary32 words through the accepted runtime
+f32 scalar ABI. Its focused private and linked installed gates pass on
+`f7173b4`/tree `cdacf555`: 42 runtime checks and a 50-source/30-native,
+105-global/176-undefined linked package with an authentic same-aggregate
+step producer and exact f32 bit probe. Evidence is sealed under
+`tr3-public-metrics-ref-private-f7173b4-20260928/SHA256SUMS` and
+`tr3-public-metrics-ref-installed-f7173b4-20260928/SHA256SUMS`.
+Hosted integration, trainer-step, train/evaluate adapters, and all-result
+retention evidence remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

@@ -10,5 +10,6 @@ new native ABI or public facade is installed.
 
 The focused aggregate checks P1 and P1/G0 predecessors, independent M3T
 logit/KV parity, cache length/mask, rollback and failure status, detached
-ownership and production feature-off behavior. Independent source review and
-hosted integration CI remain pending.
+ownership and production feature-off behavior. Root independently reviewed
+the private decode source; the prior head passed all 23 hosted checks.
+Refreshed hosted CI and merge remain pending.
