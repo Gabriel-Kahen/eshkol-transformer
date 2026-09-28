@@ -1,6 +1,7 @@
 # G3-M private manual decode composer proposal
 
-Status: **proposed, pending independent source review**. This is the next
+Status: **accepted for bounded private implementation** after independent
+source review. This is the next
 bounded private consumer of the reviewed G3-T native manual decode source
 `a4f7c53` and Eshkol wrapper source `f117987` (tree `972087b`). It adds no
 implementation, native symbol, public generation facade, sampler call, draw,
@@ -19,9 +20,11 @@ live kind-2 owner containing unborrowed canonical CPU i64 dense `[1,1]`
 storage, eight bytes and byte ID `0..255`. Existing
 `g3t-generation-token-input-create` or one-token
 `g3t-generation-t1-input-create` supplies it; no new input constructor,
-inline-only pair, null input or shell-inferred shape is admitted. G3-M
-authenticates generator shell, input kind and liveness before acquisition;
-the reviewed native `frame_begin` proves typed I1 bits, inline agreement,
+inline-only pair, null input or shell-inferred shape is admitted. G3-M uses
+`g3t-generator-find` for shell identity and checks input kind and liveness
+before acquisition. `g3t-call-acquire` checks generator/model liveness before
+publishing the call; the reviewed native `frame_begin` proves typed I1 bits,
+inline agreement,
 binding and exact A2 prefix (`g3t_transport.c:1473-1562`). A missing prefix,
 full length-two cache, stale binding, borrowed or malformed input rejects.
 The caller retains input ownership; native copies the token during admission.
