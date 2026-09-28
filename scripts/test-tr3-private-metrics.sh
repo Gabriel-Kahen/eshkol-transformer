@@ -108,7 +108,7 @@ test ! -s "${evidence}/allocation.compile.stderr"
 test ! -s "${evidence}/shim.compile.stderr"
 test ! -s "${evidence}/link.stderr"
 test ! -s "${evidence}/private.stderr"
-rg '^TR3-METRICS-PASS checks=30 retained-1024=[0-9]+ retained-8192=[0-9]+ failed-1024=[0-9]+$' \
+rg '^TR3-METRICS-PASS checks=42 retained-1024=[0-9]+ retained-8192=[0-9]+ failed-1024=[0-9]+$' \
   "${evidence}/private.stdout" >/dev/null
 rg -Fx TR3-METRICS-ALLOCATION-PASS "${evidence}/allocation.stdout" >/dev/null
 rg -F 'Failed to allocate vector with header (capacity=10)' \
@@ -120,7 +120,7 @@ import sys
 root = Path(sys.argv[1])
 line = (root / 'private.stdout').read_text().strip()
 match = re.fullmatch(
-    r'TR3-METRICS-PASS checks=30 retained-1024=(\d+) '
+    r'TR3-METRICS-PASS checks=42 retained-1024=(\d+) '
     r'retained-8192=(\d+) failed-1024=(\d+)', line)
 assert match is not None
 short, long, failed = map(int, match.groups())
