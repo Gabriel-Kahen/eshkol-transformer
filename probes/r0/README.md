@@ -11,6 +11,12 @@ probes run twice in both AOT and JIT modes and stdout parity is checked. Every
 recorded build or probe command has a wall-clock, core-dump, and output-file limit;
 capability commands also have a virtual-memory limit. This bounds malformed probe
 allocations without misrepresenting the uncapped provenance metadata helpers.
+The harness explicitly sets `OPENBLAS_NUM_THREADS=1` for its child processes
+and records the setting in `environment.txt`. Under the 2 GiB capability-run
+limit, OpenBLAS worker allocation caused intermittent AOT shutdown stalls and
+JIT `fork` stalls on both the prior and successor compilers. This setting keeps
+the memory bound and tests a single-threaded BLAS execution lane; it does not
+establish multithreaded BLAS behavior or performance.
 
 The harness accepts a clean canonical source checkout, records and validates its
 origin and pinned commit, and validates the compiler identity. It can either build
@@ -29,12 +35,18 @@ R0_RUN_ROOT="$(mktemp -d /home/gabe/.cache/eshkol-r0-canonical.XXXXXX)"
   --probe tensor_core
 ```
 
-Omit `--existing-build` for a clean full build. Default run/compile/build timeouts
-are 90/300/1200 seconds and may be changed with the corresponding command-line
-options or `R0_*_TIMEOUT_SECONDS` variables. Every retained `.command` file records
+Omit `--existing-build` for a clean full build. Default AOT run/JIT run/compile/build
+timeouts are 90/90/300/1200 seconds and may be changed with the corresponding
+command-line options or `R0_*_TIMEOUT_SECONDS` variables. A separate JIT ceiling
+allows its compilation time without relaxing the AOT executable's exit deadline.
+Every retained `.command` file records
 the effective timeout, working directory, output cap, and virtual-memory cap. Build
 and discovery phases intentionally have no virtual-memory cap; command streams are
 retained up to 2 MiB each.
+
+`--aot-only` runs the complete positive and negative AOT inventory when JIT cannot
+finish within a bounded audit. It records `audit_mode=aot-only` and provides partial
+capability evidence only; the default full AOT/JIT gate is unchanged.
 
 The harness is expected to exit nonzero when it finds a missing or broken capability;
 that is audit evidence, not a harness failure. Review `manifest.tsv`, retained
