@@ -1016,23 +1016,25 @@ its source and sealed evidence without a blocking finding. Hosted integration
 remains pending; no public manual facade, continuation or N>1 behavior is
 claimed.
 
-The [public manual facade prerequisite proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
-records the gap between the source-private detached G3-T logits shell and
-A0's newly owned readable floating tensor result. It installs no manual A0
-name or package revision. Root independently reviewed the #138 private
-decode source and its prior head passed all 23 hosted checks; refreshed hosted
-CI and merge remain pending. The separate [G3-T source-private exact-bit
-materialization proposal](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md),
-an installed tensor ownership/read contract, and atomic cache/result
-publication must precede a separately reviewed public package tuple and
-numerical/negative gates. Revision-2's thirteen
-public names and artifacts remain the current boundary.
-The isolated private materialization candidate adds a feature-gated
-authenticated kind-3 logits bit snapshot into a detached 1,024-byte
-bytevector. Its focused native normal/repeat/sanitizer probe passes 47
-identical checks, Q0 4/4 and feature-on/off symbol exclusion. The full
-private Eshkol runner is blocked locally by unsupported CachyOS and missing
-LLVM 21, so wrapper runtime acceptance and hosted integration remain open.
+The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
+now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
+names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
+with a distinct 1,024-byte diagnostic bit readout and typed release. It
+follows the accepted fixed-profile M3 logits/readout pattern but does not
+claim generic tensor interop or full A0 generality. No public implementation,
+export or package is accepted; revision 2's thirteen names and artifacts
+remain the installed boundary. Root independently reviewed #138 private
+decode source and its prior head passed 23 hosted checks; refreshed hosted
+CI and merge remain pending. The isolated #142 source-private
+[materialization candidate](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md)
+passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
+`a22572e` / tree `2834a68`: 47,358 identical normal/repeat/sanitizer checks,
+Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
+checks, with exact feature-on/off private-symbol delta. Commands and logs
+are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
+(`SEAL.sha256` `980c7e46...`). #142 hosted integration remains pending.
+Revision-3 public ownership/read, atomic cache/result publication, exact
+closed package tuple and numerical/negative gates remain separate.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

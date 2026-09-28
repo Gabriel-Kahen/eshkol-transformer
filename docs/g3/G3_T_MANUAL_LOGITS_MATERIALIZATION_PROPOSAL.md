@@ -103,10 +103,13 @@ closure checker and P1/P2/decode Eshkol witnesses are present in the isolated
 candidate. A focused source-inclusion C probe passed 47 checks with identical
 normal/repeat/ASan+UBSan+LSan output; Q0 isolation passed 4/4, and Clang
 feature-on/off object inventories respectively contain/exclude the private
-stem. The existing full private Eshkol runner cannot start on this CachyOS
-host: the supported policy requires Ubuntu 22.04 and the pinned
-`llvm-config-21` command is unavailable. Therefore the Eshkol wrapper and
-its P1/P2/decode runtime witnesses are **not execution-accepted** by this
-local probe. The focused logs and exact source hashes are sealed outside Git
-under `g3t-logits-materialize-private-20260928`. No public package or A0
-claim follows.
+stem. The initial local full-runner attempt was blocked by unsupported
+CachyOS/missing LLVM 21. A later pinned Ubuntu 22.04/LLVM 21 network-none
+run on clean `a22572e` / tree `2834a68` passed the full private Eshkol
+runner: 47,358 identical normal/repeat/sanitizer checks, Q0 4/4 and closed
+source contracts. The focused Clang-21 native gate passed 47 identical
+checks. Exact commands and logs are sealed outside Git under
+`g3t-logits-materialize-pinned-a22572e-20260928/` (`SEAL.sha256` hashes
+`SHA256SUMS` to `980c7e46...`). #142 hosted integration remains pending.
+The private bit snapshot still supplies no public tensor or A0 manual name;
+that is a separate [fixed-profile revision-3 proposal](G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md).
