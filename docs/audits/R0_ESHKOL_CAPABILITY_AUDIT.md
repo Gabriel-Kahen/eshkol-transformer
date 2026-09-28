@@ -1,8 +1,60 @@
 # R0 Eshkol capability audit
 
-## Scope and evidence state
+## 2026-09-28 successor pin adoption: review
 
-This report uses only the canonical Eshkol repository:
+The successor probe pin is `Gabriel-Kahen/eshkol@fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`
+(tree `66c21f7ec19b1b4a42199fa30ed8e0e9727021bf`). R0 validated a clean
+checkout with canonical HTTPS origin, exact commit, compiler version
+`Eshkol Compiler v1.3.4-evolve`, supplied F0 provenance, and compiler SHA-256
+`7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa`.
+Execution used network-disabled Ubuntu 22.04.5 / LLVM 21.1.8 Docker image
+`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`.
+The source was a separate canonical-origin checkout mounted at the F0 build's
+recorded `/workspace/.deps/eshkol-src` path; both checkouts resolve to the same
+commit. The build provenance and command streams are retained under
+`/home/gabe/.codex/evidence/eshkol-transformer/`. The verified umbrella
+`r0-successor-adoption-20260928/MANIFEST.tsv` has SHA-256
+`b701db9a0b54b1d4f31114b3da1dc8daf701fac06c00903ed577fc7ea5c5f33a`;
+each listed directory has its own verified `SHA256SUMS`.
+
+| Evidence directory under that root | Observation |
+|---|---|
+| `r0-fe9dfd5-initial-90s-20260928` | First exploratory `activations` AOT execution printed PASS and `R0_DONE` but exited 124 at 90 seconds; the run was stopped before a full suite result. |
+| `r0-fe9dfd5-activations-cold-20260928` | AOT compile and two runs exited 0, with identical PASS output; both JIT attempts exited 124 at the 180-second ceiling with no probe output. |
+| `r0-fe9dfd5-tensor-core-20260928` | AOT compile and two runs exited 0 with identical output; the first JIT attempt exited 124 at 180 seconds. The redundant second JIT was interrupted. |
+| `r0-fe9dfd5-activations-jit-600-20260928` | Isolated JIT exited 124 at 600 seconds, zero probe output, 79.46 seconds user CPU, 1093.01 seconds system CPU, and 62,076 KiB peak RSS. |
+| `r0-81298-activations-jit-compare-20260928` | Prior pinned `81298b4` compiler also exited 124 on the same JIT program at 180 seconds with no probe output. |
+| `r0-fe9dfd5-jit-smoke-20260928`, `r0-81298-jit-smoke-20260928` | The same one-line display program timed out with no output at 30 seconds on both compilers; successor with documented `ESHKOL_JIT_COMPILE_THREADS=1` also timed out at 60 seconds. |
+| `r0-fe9dfd5-aot-inventory-20260928` | Interrupted AOT-only inventory: complete manifest rows for `activations` (AOT 124/124), `attention` (124/0), and `autodiff_attention` (124/124) at 30 seconds after all three compiled successfully. Each exit 124 is a failure even when stdout contains PASS and `R0_DONE`. The following compile was interrupted and is not classified. |
+| `r0-aot-old-new-compare-20260928` | Controlled repeated AOT execution described below. |
+
+For `activations` and `attention`, the comparison ran four executions of each
+old and successor compiled binary in the same image with the same 30-second
+limit. Every revision/probe pair exited 0 twice and 124 twice. All 16 stdout
+streams matched the expected PASS output byte-for-byte within each probe;
+including the timed-out runs, `activations` hashes to
+`a9bc8d2a61f47583a94739d20e880138438b7ab1fb6c5017a1eb54c01269a45f`
+and `attention` to
+`0cf39b710c8dc5d341007047e0ed23678d2ffa78e267b090960af3d95e204f68`.
+Live timed-out snapshots show a main thread in
+`futex_wait` and one worker using about 98% CPU on both revisions. The old
+compiler required an explicit `-l stdc++` link option to build these AOT
+programs in this image; the successor compiler did not. Thus compilation inputs
+were not identical, while probe source, execution image, executable deadline,
+and repeated-run procedure were fixed. The liveness failure predates the
+successor pin in this lane; its root cause remains unresolved.
+
+These observations support only the successful individual AOT executions and
+the failure/timeout classifications above. They do not establish repeatable AOT
+completion, JIT startup, AOT/JIT parity, the remaining positive and negative
+probe inventory, GPU execution, or sanitizer behavior. The default harness still
+runs both modes; `--aot-only` is an explicit partial-evidence mode. Full R0
+successor adoption remains under review until the inherited liveness problem and
+the complete executable gate are resolved.
+
+## Historical baseline: scope and evidence state
+
+The original R0 report used only the canonical Eshkol repository:
 
 - repository: `https://github.com/tsotchke/eshkol.git`
 - revision: `90cbd7130f47b8184bcc77b8d5c1b0026da980de`
@@ -121,5 +173,5 @@ ESHKOL_LLVM_CONFIG=/usr/lib/llvm-21/bin/llvm-config \
   --results-dir "$R0_RUN_ROOT/results"
 ```
 
-R0 remains incomplete until the full canonical suite and an independent review run
-establish the remaining rows. This report does not update `docs/ROADMAP.md`.
+At that historical baseline, the full canonical suite and an independent review
+run had not established the remaining rows.

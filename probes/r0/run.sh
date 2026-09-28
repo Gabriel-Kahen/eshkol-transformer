@@ -7,16 +7,18 @@ readonly CANONICAL_VERSION="Eshkol Compiler v1.3.4-evolve"
 usage() {
   cat >&2 <<'EOF'
 usage: run.sh --eshkol-source DIR --work-dir DIR --results-dir DIR
-              [--existing-build DIR] [--probe NAME]
-              [--run-timeout SECONDS] [--compile-timeout SECONDS]
+              [--existing-build DIR] [--probe NAME] [--aot-only]
+              [--run-timeout SECONDS] [--jit-timeout SECONDS]
+              [--compile-timeout SECONDS]
               [--build-timeout SECONDS]
 EOF
   exit 64
 }
 
-eshkol_source= work_dir= results_dir= existing_build= selected_probe=
+eshkol_source= work_dir= results_dir= existing_build= selected_probe= aot_only=0
 run_timeout=${R0_RUN_TIMEOUT_SECONDS:-90}
 compile_timeout=${R0_COMPILE_TIMEOUT_SECONDS:-300}
+jit_timeout=${R0_JIT_TIMEOUT_SECONDS:-}
 build_timeout=${R0_BUILD_TIMEOUT_SECONDS:-1200}
 while (( $# > 0 )); do
   case "$1" in
@@ -25,12 +27,15 @@ while (( $# > 0 )); do
     --results-dir) results_dir=${2:-}; shift 2 ;;
     --existing-build) existing_build=${2:-}; shift 2 ;;
     --probe) selected_probe=${2:-}; shift 2 ;;
+    --aot-only) aot_only=1; shift ;;
     --run-timeout) run_timeout=${2:-}; shift 2 ;;
+    --jit-timeout) jit_timeout=${2:-}; shift 2 ;;
     --compile-timeout) compile_timeout=${2:-}; shift 2 ;;
     --build-timeout) build_timeout=${2:-}; shift 2 ;;
     *) usage ;;
   esac
 done
+jit_timeout=${jit_timeout:-$run_timeout}
 [[ -n "$eshkol_source" && -n "$work_dir" && -n "$results_dir" ]] || usage
 for directory in "$eshkol_source" "$work_dir" "$results_dir"; do
   [[ "$directory" = /* ]] || { echo "all directory arguments must be absolute" >&2; exit 64; }
@@ -38,7 +43,7 @@ done
 [[ -z "$existing_build" || "$existing_build" = /* ]] || {
   echo "--existing-build must be absolute" >&2; exit 64;
 }
-for seconds in "$run_timeout" "$compile_timeout" "$build_timeout"; do
+for seconds in "$run_timeout" "$jit_timeout" "$compile_timeout" "$build_timeout"; do
   [[ "$seconds" =~ ^[1-9][0-9]*$ ]] || { echo "timeouts must be positive integers" >&2; exit 64; }
 done
 if [[ -d "$results_dir" && -n "$(find "$results_dir" -mindepth 1 -print -quit)" ]]; then
@@ -69,6 +74,7 @@ record() {
   case "$classification" in
     build|upstream-tests) timeout_seconds=$build_timeout; virtual_kib=0 ;;
     discovery) virtual_kib=0 ;;
+    jit|jit-repeat|expected-failure-jit) timeout_seconds=$jit_timeout ;;
     *compile*) timeout_seconds=$compile_timeout; virtual_kib=4194304 ;;
   esac
   local stdout="$results_dir/commands/$name.stdout"
@@ -177,7 +183,9 @@ fi
   echo "build_mode=$build_mode"
   echo "build_provenance=$build_provenance"
   echo "build_dir=$build_dir"
+  echo "audit_mode=$([[ "$aot_only" == 1 ]] && echo aot-only || echo aot-and-jit)"
   echo "run_timeout_seconds=$run_timeout"
+  echo "jit_timeout_seconds=$jit_timeout"
   echo "compile_timeout_seconds=$compile_timeout"
   echo "build_timeout_seconds=$build_timeout"
   echo "tmpdir=$TMPDIR"
@@ -242,17 +250,19 @@ for source in "${positive_sources[@]}"; do
       echo "$name: repeated AOT output differs" >> "$results_dir/parity-failures.txt"; failures=$((failures + 1));
     }
   fi
-  record "$name.jit_run" jit "$compiler" -r "$source" -L "$build_dir" || failures=$((failures + 1))
-  record "$name.jit_run_2" jit-repeat "$compiler" -r "$source" -L "$build_dir" || failures=$((failures + 1))
-  validate_positive "$name" jit_run; validate_positive "$name" jit_run_2
-  if (( aot_ready == 1 )); then
-    cmp -s "$results_dir/commands/$name.aot_run_1.stdout" "$results_dir/commands/$name.jit_run.stdout" || {
-      echo "$name: AOT/JIT stdout differs" >> "$results_dir/parity-failures.txt"; failures=$((failures + 1));
+  if (( aot_only == 0 )); then
+    record "$name.jit_run" jit "$compiler" -r "$source" -L "$build_dir" || failures=$((failures + 1))
+    record "$name.jit_run_2" jit-repeat "$compiler" -r "$source" -L "$build_dir" || failures=$((failures + 1))
+    validate_positive "$name" jit_run; validate_positive "$name" jit_run_2
+    if (( aot_ready == 1 )); then
+      cmp -s "$results_dir/commands/$name.aot_run_1.stdout" "$results_dir/commands/$name.jit_run.stdout" || {
+        echo "$name: AOT/JIT stdout differs" >> "$results_dir/parity-failures.txt"; failures=$((failures + 1));
+      }
+    fi
+    cmp -s "$results_dir/commands/$name.jit_run.stdout" "$results_dir/commands/$name.jit_run_2.stdout" || {
+      echo "$name: repeated JIT output differs" >> "$results_dir/parity-failures.txt"; failures=$((failures + 1));
     }
   fi
-  cmp -s "$results_dir/commands/$name.jit_run.stdout" "$results_dir/commands/$name.jit_run_2.stdout" || {
-    echo "$name: repeated JIT output differs" >> "$results_dir/parity-failures.txt"; failures=$((failures + 1));
-  }
 done
 
 if [[ -z "$selected_probe" ]]; then
@@ -281,13 +291,15 @@ if [[ -z "$selected_probe" ]]; then
         echo "$name: AOT failed without an actionable diagnostic" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
       fi
     fi
-    record "$name.jit_run" expected-failure-run "$compiler" -r "$source" -L "$build_dir"; jit_status=$?
-    if (( jit_status == 124 || jit_status >= 128 )); then
-      echo "$name: JIT rejection timed out or terminated by signal" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
-    elif (( jit_status == 0 )); then
-      echo "$name: malformed JIT input succeeded" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
-    elif ! has_diagnostic "$results_dir/commands/$name.jit_run.stdout" "$results_dir/commands/$name.jit_run.stderr"; then
-      echo "$name: JIT failed without an actionable diagnostic" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
+    if (( aot_only == 0 )); then
+      record "$name.jit_run" expected-failure-jit "$compiler" -r "$source" -L "$build_dir"; jit_status=$?
+      if (( jit_status == 124 || jit_status >= 128 )); then
+        echo "$name: JIT rejection timed out or terminated by signal" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
+      elif (( jit_status == 0 )); then
+        echo "$name: malformed JIT input succeeded" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
+      elif ! has_diagnostic "$results_dir/commands/$name.jit_run.stdout" "$results_dir/commands/$name.jit_run.stderr"; then
+        echo "$name: JIT failed without an actionable diagnostic" >> "$results_dir/assertion-failures.txt"; failures=$((failures + 1))
+      fi
     fi
   done
 fi

@@ -29,12 +29,18 @@ R0_RUN_ROOT="$(mktemp -d /home/gabe/.cache/eshkol-r0-canonical.XXXXXX)"
   --probe tensor_core
 ```
 
-Omit `--existing-build` for a clean full build. Default run/compile/build timeouts
-are 90/300/1200 seconds and may be changed with the corresponding command-line
-options or `R0_*_TIMEOUT_SECONDS` variables. Every retained `.command` file records
+Omit `--existing-build` for a clean full build. Default AOT run/JIT run/compile/build
+timeouts are 90/90/300/1200 seconds and may be changed with the corresponding
+command-line options or `R0_*_TIMEOUT_SECONDS` variables. A separate JIT ceiling
+allows its compilation time without relaxing the AOT executable's exit deadline.
+Every retained `.command` file records
 the effective timeout, working directory, output cap, and virtual-memory cap. Build
 and discovery phases intentionally have no virtual-memory cap; command streams are
 retained up to 2 MiB each.
+
+`--aot-only` runs the complete positive and negative AOT inventory when JIT cannot
+finish within a bounded audit. It records `audit_mode=aot-only` and provides partial
+capability evidence only; the default full AOT/JIT gate is unchanged.
 
 The harness is expected to exit nonzero when it finds a missing or broken capability;
 that is audit evidence, not a harness failure. Review `manifest.tsv`, retained

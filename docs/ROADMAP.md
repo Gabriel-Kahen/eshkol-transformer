@@ -459,6 +459,11 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md) | complete |
 
+The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
+is in **review**: the `fe9dfd5` supported-image audit observes inherited,
+intermittent AOT process timeouts and JIT timeouts, including a 600-second
+JIT bound. Its partial executable evidence does not pass the full R0 gate.
+
 ## Wave 1 — independent foundations
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
