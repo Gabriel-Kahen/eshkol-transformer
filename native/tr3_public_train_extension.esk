@@ -37,13 +37,16 @@
          (tr3-train-fail 'internal "unexpected train reduction status")))
   status)
 
-(define (tr3-train-stop? record limits)
+(define (tr3-train-stop? record start limits)
   (or (and (vector-ref limits 0)
-           (>= (vector-ref record 19) (vector-ref limits 0)))
+           (>= (- (vector-ref record 19) (vector-ref start 0))
+               (vector-ref limits 0)))
       (and (vector-ref limits 1)
-           (>= (vector-ref record 20) (vector-ref limits 1)))
+           (>= (- (vector-ref record 20) (vector-ref start 1))
+               (vector-ref limits 1)))
       (and (vector-ref limits 2)
-           (>= (vector-ref record 21) (vector-ref limits 2)))))
+           (>= (- (vector-ref record 21) (vector-ref start 2))
+               (vector-ref limits 2)))))
 
 (define (tr3-train-prepare-summary! record start candidate ledger)
   (let* ((tokens (+ (- (vector-ref record 19) (vector-ref start 0))
@@ -95,9 +98,8 @@
         (vector-set! staged 0 #t)
         (vector-set! tr3-train-active 0 #t)
         (let loop ()
-          (if (tr3-train-stop? record limits)
+          (if (tr3-train-stop? record start limits)
               (begin
-                ;; An already-met limit publishes +0 f32 and zero counters.
                 (tr3-metrics-train-precommit-internal!)
                 (let ((summary (tr3-metrics-train-publish-internal!)))
                   (vector-set! staged 0 #f)
