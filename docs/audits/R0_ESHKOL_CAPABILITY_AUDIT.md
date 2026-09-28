@@ -122,7 +122,7 @@ seal, referenced in that manifest. These failures prevent R0 successor
 adoption. GPU behavior, sanitizer behavior, and multithreaded BLAS behavior
 remain untested.
 
-### Isolated RNG probe correction: focused review
+### Isolated RNG probe correction: supported review
 
 The `rng` row and its AOT/JIT parity assertion remain in the original
 183-command, `failures=38` full-audit record above. A separate supported-image
@@ -149,10 +149,19 @@ All four output streams hash to
 Its exact manifest and streams are sealed in
 `/home/gabe/.codex/evidence/eshkol-transformer/r0-rng-probe-correction-20260928/focused/SHA256SUMS`
 (SHA-256 `910625383468d989ec053d0f27b4dbf24653b15d59a3a37db43362968c8f9dca`).
-The 37 other counted failures in the original full audit remain unchanged;
-this focused result does not subtract from that historical 38 count or pass
-the full R0 successor gate. A full supported inventory on the corrected probe
-tree and independent review remain required. Status: **review**.
+The original `failures=38` audit remains a historical result. A subsequent
+one-shot full AOT/JIT inventory on exact corrected commit `d592eae` (tree
+`01052e53d6f3117ef2be91db276d01e25b4f505a`) completed 183 command rows
+in 84 minutes 28 seconds and exited 1 with `failures=37`. Against the
+historical inventory, row names, order, expectations, and command exit codes
+were identical. The 30-line assertion-failure logs were byte-identical. The
+only changed failure record was removal of `rng: AOT/JIT stdout differs`;
+the corrected parity log is empty and all four RNG streams have the focused
+output hash above. The exact rerun and comparison are sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/r0-rng-corrected-full-20260928/SHA256SUMS`
+(SHA-256 `fccd53c4f131d3a006cc456a01c54e0b9cbe474006e27653597a08a94d26bcc5`).
+The 37 other counted failures remain; they are not 37 distinct probes. Full
+R0 successor adoption still fails. Status: **review**.
 
 ## Historical baseline: scope and evidence state
 

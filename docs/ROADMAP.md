@@ -473,9 +473,12 @@ non-RNG old-pin outcomes are untested.
 The RNG assertion was subsequently traced on both runtime pins to the probe's
 raw `srand48` call being overwritten by the first `random` time seed; changing
 only that call to documented `set-random-seed!` passes focused AOT/JIT repeats
-with the same parity assertion. The original 38 count and 37 other counted
-failures remain recorded; full-suite re-execution and review are pending. The
-successor R0 gate remains open, with sealed evidence in the audit.
+with the same parity assertion. The original 38 count remains recorded. One
+full supported rerun on the corrected `d592eae` tree completed the same 183
+command rows and exited 1 with 37 counted failures: zero command-status
+deltas, byte-identical assertion logs, and only the RNG parity line removed.
+Those 37 counted failures remain unresolved, so the successor R0 gate stays
+in **review** with both runs sealed in the audit.
 
 ## Wave 1 — independent foundations
 
