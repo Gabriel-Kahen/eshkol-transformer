@@ -1,14 +1,12 @@
-;;; Installed X1/T2/D1/D2/trainer facet caller. Remaining operands use
+;;; Installed X1/T2/D1/D2/M3T/trainer facet caller. P1/O2 operands use
 ;;; test-only same-package boxed entries.
 (require transformer.config)
 (require transformer.data)
+(require transformer.diagnostic_transport)
 (require transformer.tokenizer)
 (require transformer.trainer)
 (require transformer.error_consumer)
 
-(extern void m3t-initializer ptr ptr
-        :real et_e1b_public_m3t_initializer_state_v1)
-(extern void m3t-model ptr ptr ptr :real et_e1b_public_m3t_model_create_v1)
 (extern void p1-parameters ptr ptr
         :real et_e1b_public_p1_module_parameters_v1)
 (extern void p1-paths ptr ptr
@@ -18,14 +16,6 @@
 (extern void o2-create ptr ptr ptr
         :real et_e1b_public_o2_optimizer_create_v1)
 
-(define (diagnostic-initializer-state seed)
-  (let ((output (vector #f)))
-    (m3t-initializer (vector seed) output)
-    (vector-ref output 0)))
-(define (diagnostic-model-create resolved initializer)
-  (let ((output (vector #f)))
-    (m3t-model (vector resolved) (vector initializer) output)
-    (vector-ref output 0)))
 (define (module-parameters model)
   (let ((output (vector #f)))
     (p1-parameters (vector model) output)
@@ -232,6 +222,15 @@
   (with-region ('tr3-public-model 65536)
     (diagnostic-model-create
       resolved (diagnostic-initializer-state (config-ref resolved 'run.seed)))))
+(check "installed M3T model profile" (diagnostic-model-profile model))
+(check "installed M3T successor initializer"
+       (diagnostic-model-initializer model))
+(expect-error "forged M3T model rejects profile"
+              'invalid-argument 'diagnostic-model-profile
+  (lambda () (diagnostic-model-profile (vector 'forged))))
+(expect-error "forged M3T initializer rejects model creation"
+              'invalid-argument 'diagnostic-model-create
+  (lambda () (diagnostic-model-create resolved (vector 'forged))))
 (define tree (module-parameters model))
 (define paths (unique-paths tree))
 (check "exact fixed unique parameter set" (= (list-length paths) 14))
@@ -293,5 +292,5 @@
 (expect-error "C2 detached-state release retains public error mapping"
               'invalid-argument 'trainer-state-release!
   (lambda () (trainer-state-release! (vector 'forged))))
-(display "TR3-PUBLIC-D2-FACET-PASS")
+(display "TR3-PUBLIC-M3T-FACET-PASS")
 (newline)
