@@ -57,6 +57,15 @@ and crafted-link negatives, public closure, and Wave 1/2 collision. Oracle-
 backed numeric/model suites and new hosted CI remain successor acceptance
 gates; R0 is tracked separately.
 
+PR #131's supported `bb992c8` run `36409778534` reached the E3-METRICS
+reference stage and rejected its historical `81298b4a` source identity after
+the lock moved to `fe9dfd52`. The E3 generator, frozen fixture provenance,
+and reference assertion now bind that exact successor commit and lock digest;
+the numerical tensors and cases are byte-identical. The complete E3-METRICS
+package/reference/native/AOT/sanitizer gate passes locally on Ubuntu 22.04,
+LLVM 21.1.8, Python 3.14.6 and PyTorch 2.13.0+cpu. Fresh exact-head hosted CI
+remains the acceptance gate.
+
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
 unpublished tail-body entry of the private construction rollback helper. The
