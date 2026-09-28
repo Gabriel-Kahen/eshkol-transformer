@@ -1,0 +1,164 @@
+;;; Source-private TR3 result authority. Load exactly once, after the lease core,
+;;; in the same aggregate. No public metrics operation is defined here.
+
+;;; Published entries are strong process-lifetime roots. Slot 1 is the only
+;;; staging/promotion root and also excludes overlapping construction.
+(define tr3-metrics (vector '() #f))
+(define tr3-metrics-record-tag (vector 'tr3-metrics-record-v1))
+(define tr3-metrics-i64-max 9223372036854775807)
+(define tr3-metrics-u32-max 4294967295)
+
+(define (tr3-metrics-fail category message)
+  (m3t-fail category 'tr3-metrics-internal message))
+
+(define (tr3-metrics-u32? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value 0) (<= value tr3-metrics-u32-max)))
+
+(define (tr3-metrics-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value 0) (<= value tr3-metrics-i64-max)))
+
+(define (tr3-metrics-finite-f32? bits)
+  (and (tr3-metrics-u32? bits)
+       (not (= (modulo (quotient bits 8388608) 256) 255))))
+
+(define (tr3-metrics-step-fields? record)
+  (and (tr3-metrics-finite-f32? (vector-ref record 5))
+       (tr3-metrics-finite-f32? (vector-ref record 6))
+       (> (modulo (vector-ref record 6) 2147483648) 0)
+       (< (vector-ref record 6) 2147483648)
+       (tr3-metrics-i64? (vector-ref record 7))
+       (tr3-metrics-i64? (vector-ref record 8))
+       (tr3-metrics-i64? (vector-ref record 9))
+       (> (vector-ref record 7) 0)
+       (> (vector-ref record 8) 0)
+       (> (vector-ref record 9) 0)))
+
+(define (tr3-metrics-record? record state)
+  (and (vector? record) (= (vector-length record) 10)
+       (eq? (vector-ref record 0) tr3-metrics-record-tag)
+       (eq? (vector-ref record 1) record)
+       (error-object? (vector-ref record 2))
+       (eq? (vector-ref record 3) 'step)
+       (eq? (vector-ref record 4) state)
+       (if (eq? state 'published)
+           (tr3-metrics-step-fields? record)
+           (and (eq? state 'ready)
+                (or (eq? (vector-ref record 5) #f)
+                    (tr3-metrics-step-fields? record))))))
+
+(define (tr3-metrics-published-list? head)
+  (let loop ((rows head))
+    (or (null? rows)
+        (and (pair? rows)
+             (tr3-metrics-record? (car rows) 'published)
+             (loop (cdr rows))))))
+
+(define (tr3-metrics-step-staging)
+  (let ((staging (vector-ref tr3-metrics 1)))
+    (if (or (not (vector? staging)) (not (= (vector-length staging) 2))
+            (not (pair? (vector-ref staging 0)))
+            (not (tr3-metrics-record? (car (vector-ref staging 0)) 'ready)))
+        (tr3-metrics-fail 'invalid-state "no authentic staged step metrics"))
+    staging))
+
+(define (tr3-metrics-step-token-internal)
+  ;; Error conditions are existing fieldless native identities. Neither the
+  ;; message nor irritants encodes metrics, a brand, or an ownership link.
+  (guard (caught (#t caught)) (error "")))
+
+(define (tr3-metrics-step-begin-internal!)
+  (if (vector-ref tr3-metrics 1)
+      (tr3-metrics-fail 'invalid-state "metrics construction is active"))
+  (if (not (tr3-metrics-published-list? (vector-ref tr3-metrics 0)))
+      (tr3-metrics-fail 'internal "published metrics registry is corrupt"))
+  (guard (caught
+           (#t (begin (vector-set! tr3-metrics 1 #f)
+                      (raise caught))))
+  (let* ((head (vector-ref tr3-metrics 0))
+         (token (tr3-metrics-step-token-internal))
+         (record (vector tr3-metrics-record-tag #f token 'step 'ready
+                         #f #f #f #f #f))
+         (successor (cons record head))
+         (staging (vector successor head)))
+    (vector-set! record 1 record)
+    ;; This checked write promotes the full graph. The canonical aliases used
+    ;; afterward are read back from the root, never from the region locals.
+    (vector-set! tr3-metrics 1 staging)
+    (if (not (eq? (vector-ref (vector-ref tr3-metrics 1) 1)
+                  (vector-ref tr3-metrics 0)))
+        (tr3-metrics-fail 'invalid-state "metrics head changed during staging"))
+    #t)))
+
+(define (tr3-metrics-step-fill-internal!
+          loss-bits weight-bits tokens microbatches update)
+  (let* ((staging (tr3-metrics-step-staging))
+         (record (car (vector-ref staging 0))))
+    (if (or (not (tr3-metrics-finite-f32? loss-bits))
+            (not (tr3-metrics-finite-f32? weight-bits))
+            (= weight-bits 0) (>= weight-bits 2147483648)
+            (not (tr3-metrics-i64? tokens)) (= tokens 0)
+            (not (tr3-metrics-i64? microbatches)) (= microbatches 0)
+            (not (tr3-metrics-i64? update)) (= update 0))
+        (tr3-metrics-fail 'invalid-argument "invalid step metrics fields"))
+    (vector-set! record 5 loss-bits)
+    (vector-set! record 6 weight-bits)
+    (vector-set! record 7 tokens)
+    (vector-set! record 8 microbatches)
+    (vector-set! record 9 update)
+    #t))
+
+(define (tr3-metrics-step-precommit-internal!)
+  (let* ((staging (tr3-metrics-step-staging))
+         (successor (vector-ref staging 0))
+         (record (car successor)))
+    (if (or (not (eq? (vector-ref staging 1) (vector-ref tr3-metrics 0)))
+            (not (eq? (cdr successor) (vector-ref tr3-metrics 0)))
+            (not (tr3-metrics-step-fields? record)))
+        (tr3-metrics-fail 'invalid-state "step metrics changed before commit"))
+    #t))
+
+(define (tr3-metrics-step-publish-internal!)
+  ;; Called only after precommit and the nonraising O2/trainer commit tail.
+  ;; An impossible authority divergence must terminate before changing either
+  ;; root. All checks are identity/shape reads; the success tail still allocates
+  ;; nothing, promotes nothing, and raises no recoverable error.
+  (let ((staging (vector-ref tr3-metrics 1))
+        (head (vector-ref tr3-metrics 0)))
+    (if (or (not (vector? staging)) (not (= (vector-length staging) 2)))
+        (tr3-lease-fail-stop 134))
+    (let ((successor (vector-ref staging 0)))
+      (if (or (not (pair? successor))
+              (not (eq? (vector-ref staging 1) head))
+              (not (eq? (cdr successor) head)))
+          (tr3-lease-fail-stop 134))
+      (let ((record (car successor)))
+        (if (or (not (vector? record)) (not (= (vector-length record) 10))
+                (not (eq? (vector-ref record 0) tr3-metrics-record-tag))
+                (not (eq? (vector-ref record 1) record))
+                (not (eq? (vector-ref record 3) 'step))
+                (not (eq? (vector-ref record 4) 'ready)))
+            (tr3-lease-fail-stop 134))
+        (let ((token (vector-ref record 2)))
+          (vector-set! record 4 'published)
+          (vector-set! tr3-metrics 1 #f)
+          (vector-set! tr3-metrics 0 successor)
+          token)))))
+
+(define (tr3-metrics-step-abort-internal!)
+  (if (not (vector-ref tr3-metrics 1))
+      (tr3-metrics-fail 'invalid-state "no staged metrics to abort"))
+  (vector-set! tr3-metrics 1 #f)
+  #t)
+
+(define (tr3-metrics-step-authenticate-internal token)
+  ;; Scan trusted registry identities before inspecting the untrusted value.
+  (let find ((rows (vector-ref tr3-metrics 0)))
+    (cond ((null? rows)
+           (tr3-metrics-fail 'invalid-argument "unknown metrics identity"))
+          ((eq? token (vector-ref (car rows) 2))
+           (if (not (tr3-metrics-record? (car rows) 'published))
+               (tr3-metrics-fail 'invalid-state "metrics record is not published"))
+           (car rows))
+          (else (find (cdr rows))))))

@@ -1448,9 +1448,33 @@ manifests. `scripts/test-tr3-public-installed-linked.sh` selects the exact
 fe9 closure only with `TR3_PUBLIC_INSTALLED_RUNTIME_PIN=fe9` and verifies the
 successor compiler/tree, runner, archive and image pins. The pinned strict
 source and linked poisoned public-caller gate passed on the pre-facet fe9
-tree with 49 sources, 30 native objects and 48 exports; the combined current
-installed facet still needs an exact successor linked gate. Public trainer
-step and metrics remain separate gates.
+tree with 49 sources, 30 native objects and 48 exports. The combined current
+installed facet also passed with 49 sources, 30 native objects, 104 exports
+and 175 undefined symbols; its 103-artifact seal is under
+`tr3-public-installed-fe9-combined-5fc65a0-20260928/SHA256SUMS`.
+Public trainer step and metrics API remain separate gates.
+The source-private TR3 step metrics authority now stages a ten-slot record
+alongside the lease root and fail-stops on postcommit authority divergence.
+On the exact fe9/LLVM21 pin, `scripts/test-tr3-private-metrics.sh` passes 30
+runtime checks, vector and promotion allocation denial, and the exit-134
+fail-stop probe. Retention measures 336 incremental arena bytes per published
+record from 1,024 to 8,192 records; 1,024 rejected staging attempts add
+15,679,432 bytes including error delivery. The installed linked gate passes
+with 50 sources, 30 native objects, 48 exports, 175 undefined symbols, and
+a poisoned public caller on the pre-facet tree. Sealed evidence is under
+`tr3-private-metrics-fe9-201331e-20260928/SHA256SUMS` and
+`tr3-public-installed-metrics-fe9-201331e-20260928/SHA256SUMS`.
+The combined current installed facet passed an exact fe9 metrics linked gate
+on `d7ac4d8`/tree `6e0bf4e`: 50 sources, 30 native objects, 104 exports,
+175 undefined symbols, and a poisoned caller with empty stderr. Its 103
+artifacts verify under
+`tr3-public-installed-metrics-combined-d7ac4d8-20260928/SHA256SUMS`
+(`bc5a7a97...`). The focused exact-tree gate also passed 30 runtime checks,
+allocation denial, fail-stop exit 134 and the 336-byte retention measurement;
+its 35 artifacts verify under
+`tr3-private-metrics-fe9-combined-d7ac4d8-20260928/SHA256SUMS`
+(`2e8667ac...`). Public `metrics-ref`, true-f32 scalar return, trainer-step integration,
+train/evaluate adapters, and all-result retention evidence remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

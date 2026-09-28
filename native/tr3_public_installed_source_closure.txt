@@ -47,3 +47,4 @@ native/tr3_c_restore_bindings_extension.esk
 native/tr3_c_joint_restore_extension.esk
 native/tr3_c_checkpoint_restore_extension.esk
 native/tr3_c_trainer_load_state_extension.esk
+native/tr3_metrics_extension.esk
