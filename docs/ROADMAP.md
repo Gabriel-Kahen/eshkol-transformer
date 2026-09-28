@@ -954,7 +954,8 @@ extends the reviewed P2 source with an owned `[1,1]` ID, bound P1 prefix,
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
 exclusion; evidence is at `g3t-manual-decode-candidate-20260928`.
-Independent source review and hosted integration CI remain pending. The
+Root independently source-reviewed `a4f7c53` / tree `ad87a4e`; hosted
+integration CI remains pending. The
 private wrapper, G3-M decode composer, and seeded generation/public facade
 are separate downstream gates.
 

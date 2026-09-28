@@ -25,4 +25,7 @@ passed 47,141 byte-identical checks in each mode with empty compiler/runtime
 stderr, 20 source contracts, Q0 4/4, and production test-symbol exclusion.
 One sanitizer launch used `detect_leaks=1`. Sealed external evidence is at
 `/home/gabe/.codex/evidence/eshkol-transformer/g3t-manual-decode-candidate-20260928`.
-Independent source review and hosted integration CI remain pending.
+Root independently reviewed commit `a4f7c53` / tree `ad87a4e`: owned-I1
+admission, prefix snapshot, 21-role append, full K/V/logits preflight,
+no-failure commit tail, abort and feature-off isolation match the accepted
+contract. Hosted integration CI remains pending.
