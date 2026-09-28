@@ -955,9 +955,13 @@ network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
 exclusion; evidence is at `g3t-manual-decode-candidate-20260928`.
 Root independently source-reviewed `a4f7c53` / tree `ad87a4e`; hosted
-integration CI remains pending. The
-private wrapper, G3-M decode composer, and seeded generation/public facade
-are separate downstream gates.
+integration CI remains pending. The accepted
+[private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md), merged
+to main at `893cbc7`, now permits a bounded Eshkol call/frame admission
+candidate over that reviewed native source. This isolated implementation
+widens kind-1 calls and authentic non-null frame-kind-2 input only; wrapper
+source review and hosted CI remain pending. G3-M decode and seeded
+generation/public facade are separate downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

@@ -3248,6 +3248,308 @@
             (= 0 (g3t-native-tensor-release md-g0-result))
             (= manual-f32-baseline (g3t-test-f32-tensors))))
 
+;; Private Eshkol wrapper gate over the reviewed native manual decode route.
+;; The native owner, not these wrappers, authenticates I1 bits and A2 state.
+(define mdw-empty-generator (g3t-generator-create model tokenizer policy-g1))
+(define mdw-empty-native
+  (vector-ref (g3t-generator-find mdw-empty-generator 'mdw-empty) 3))
+(define mdw-empty-input (g3t-generation-token-input-create 66))
+(check "manual decode wrapper missing prefix rolls back"
+  (m3-call 'mdw-empty
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find mdw-empty-generator 'mdw-empty) 1))
+           (result (g3t-logits-reserve call)))
+      (reject-category "manual decode wrapper no prefix" 'invalid-state
+        (lambda () (g3t-frame-begin call mdw-empty-input 2)))
+      (g3t-call-abort call)
+      (and (= 0 (g3t-test-cache-length mdw-empty-native))
+           (= 0 (g3t-test-pin-count mdw-empty-native))
+           (= 0 (g3t-test-pending-logits))))))
+(check "manual decode wrapper empty owners release"
+       (and (g3t-generation-tensor-release! mdw-empty-input)
+            (g3t-generator-close! mdw-empty-generator)))
+
+(define mdw-reserve-generator (g3t-generator-create model tokenizer policy-g1))
+(define mdw-reserve-native
+  (vector-ref (g3t-generator-find mdw-reserve-generator 'mdw-reserve) 3))
+(define mdw-reserve-input (g3t-generation-token-input-create 65))
+(define mdw-reserve-prefix
+  (g3m-prefill-p1! mdw-reserve-generator mdw-reserve-input))
+(check "manual decode wrapper F32 reservation failure rolls back"
+  (m3-call 'mdw-reserve
+    (let ((call (g3t-call-acquire
+                  (g3t-generator-find mdw-reserve-generator 'mdw-reserve)
+                  1)))
+      (check "manual decode wrapper F32 reservation cut armed"
+             (= 0 (g3t-test-fail-f32-after 0)))
+      (let ((failed
+              (guard (caught (#t (transformer-error? caught)))
+                (g3t-logits-reserve call) #f)))
+        (check "manual decode wrapper F32 reservation cut disarmed"
+               (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+        (g3t-call-abort call)
+        (and failed
+             (= 0 (g3t-test-pending-logits))
+             (= 1 (g3t-test-cache-length mdw-reserve-native))
+             (= 0 (g3t-test-pin-count mdw-reserve-native)))))))
+(check "manual decode wrapper F32 failure owners release"
+       (and (g3t-generation-tensor-release! mdw-reserve-input)
+            (g3t-generation-tensor-release! mdw-reserve-prefix)
+            (g3t-generator-close! mdw-reserve-generator)))
+
+(define mdw-generated-generator
+  (g3t-generator-create model tokenizer policy-g1))
+(define mdw-generated-input (g3t-generation-token-input-create 66))
+(check "manual decode wrapper generated frame rejects non-null input"
+  (m3-call 'mdw-generated
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find mdw-generated-generator 'mdw-generated)
+                   2))
+           (output (g3t-output-reserve call 1)))
+      (reject-category "manual decode wrapper generated input native reject"
+                       'invalid-state
+        (lambda () (g3t-frame-begin call mdw-generated-input 2)))
+      (g3t-call-abort call)
+      (and (= 0 (g3t-test-pending-logits))
+           (eq? (vector-ref
+                  (g3t-prefill-entry output 'output 'mdw-generated) 2)
+                'dead)))))
+(check "manual decode wrapper generated fixture release"
+       (and (g3t-generation-tensor-release! mdw-generated-input)
+            (g3t-generator-close! mdw-generated-generator)))
+
+(define mdw-generator (g3t-generator-create model tokenizer policy-g1))
+(define mdw-native (vector-ref (g3t-generator-find mdw-generator 'mdw) 3))
+(define mdw-prefix-input (g3t-generation-token-input-create 65))
+(define mdw-prefix-result (g3m-prefill-p1! mdw-generator mdw-prefix-input))
+(define mdw-token (g3t-generation-token-input-create 66))
+(define mdw-token-native
+  (vector-ref (g3t-prefill-entry mdw-token 'input 'mdw) 3))
+(define mdw-dead (g3t-generation-token-input-create 66))
+(check "manual decode wrapper dead fixture release"
+       (g3t-generation-tensor-release! mdw-dead))
+(define mdw-result
+  (m3-call 'mdw
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find mdw-generator 'mdw) 1))
+           (entry (g3t-prefill-entry call 'call 'mdw))
+           (result (g3t-logits-reserve call)))
+      (guard (caught
+               (#t (if (eq? (vector-ref entry 2) 'live)
+                       (g3t-call-abort call))
+                   (raise caught)))
+        (reject-category "manual decode wrapper forged input" 'invalid-argument
+          (lambda () (g3t-frame-begin call (vector 'foreign) 2)))
+        (reject-category "manual decode wrapper dead input" 'invalid-state
+          (lambda () (g3t-frame-begin call mdw-dead 2)))
+        (reject-category "manual decode wrapper null input" 'invalid-argument
+          (lambda () (g3t-frame-begin call #f 2)))
+        (reject-category "manual decode wrapper wrong frame kind" 'invalid-state
+          (lambda () (g3t-frame-begin call mdw-token 1)))
+        (check "manual decode wrapper wrong length injected"
+               (= 0 (g3t-test-input-length-set mdw-token-native 2)))
+        (reject-category "manual decode wrapper wrong length" 'invalid-state
+          (lambda () (g3t-frame-begin call mdw-token 2)))
+        (check "manual decode wrapper length restored"
+               (= 0 (g3t-test-input-length-set mdw-token-native 1)))
+        (check "manual decode wrapper malformed I1 injected"
+               (= 0 (g3t-test-manual-decode-i1-shape-set mdw-token-native 2)))
+        (reject-category "manual decode wrapper malformed I1" 'shape-mismatch
+          (lambda () (g3t-frame-begin call mdw-token 2)))
+        (check "manual decode wrapper I1 restored"
+               (= 0 (g3t-test-manual-decode-i1-shape-set mdw-token-native 1)))
+        (check "manual decode wrapper inline shadow changed"
+               (= 0 (g3t-test-manual-decode-inline-id-set mdw-token-native 67)))
+        (reject-category "manual decode wrapper inline I1 mismatch" 'invalid-state
+          (lambda () (g3t-frame-begin call mdw-token 2)))
+        (check "manual decode wrapper inline shadow restored"
+               (= 0 (g3t-test-manual-decode-inline-id-set mdw-token-native 66)))
+        (let ((borrow (g3t-test-input-borrow-begin mdw-token-native)))
+          (check "manual decode wrapper I1 borrow fixture"
+                 (not (null? borrow)))
+          (check "manual decode wrapper borrowed I1 rejected"
+                 (guard (caught (#t (transformer-error? caught)))
+                   (g3t-frame-begin call mdw-token 2) #f))
+          (check "manual decode wrapper I1 borrow ends"
+                 (= 0 (g3t-test-input-borrow-end borrow))))
+        (check "manual decode wrapper binding drift injected"
+               (= 0 (g3t-test-binding-flip mdw-native)))
+        (reject-category "manual decode wrapper stale binding" 'invalid-state
+          (lambda () (g3t-frame-begin call mdw-token 2)))
+        (check "manual decode wrapper binding restored"
+               (= 0 (g3t-test-binding-flip mdw-native)))
+        (g3t-frame-begin call mdw-token 2)
+        (check "manual decode wrapper copied owned I1 can release"
+               (= 0 (g3t-native-tensor-release mdw-token-native)))
+        (reject-category "manual decode wrapper ordinal precheck" 'invalid-argument
+          (lambda () (g3t-role-step call 21)))
+        (rooted-roles call)
+        (g3t-frame-prepare call result)
+        (g3t-call-prepare-end call)
+        (g3t-frame-commit call)
+        (g3t-call-finish call)
+        result))))
+(define mdw-result-native
+  (vector-ref (g3t-prefill-entry mdw-result 'logits 'mdw) 3))
+(check "manual decode wrapper P1 all 256 logits bit-exact to M3T row one"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word mdw-result-native index))
+                    (compare (+ index 1)))))))
+(check "manual decode wrapper P1 both K/V positions bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-cache-kv-word mdw-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "manual decode wrapper P1 A2 lengths [1]=2 mask [1,2]=[1,1] RNG and pins"
+       (and (= 2 (g3t-test-cache-length mdw-native))
+            (= 1 (g3t-test-manual-decode-cache-mask mdw-native 0))
+            (= 1 (g3t-test-manual-decode-cache-mask mdw-native 1))
+            (= 0 (g3t-test-rng-word mdw-native 2))
+            (= 0 (g3t-test-pin-count mdw-native))
+            (= 1 (g3t-test-logits-state mdw-result-native))))
+(define mdw-full-token (g3t-generation-token-input-create 67))
+(check "manual decode wrapper full prefix rejects append"
+  (m3-call 'mdw-full
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find mdw-generator 'mdw-full) 1))
+           (result (g3t-logits-reserve call)))
+      (reject-category "manual decode wrapper length-two prefix" 'invalid-state
+        (lambda () (g3t-frame-begin call mdw-full-token 2)))
+      (g3t-call-abort call)
+      (and (= 2 (g3t-test-cache-length mdw-native))
+           (= 0 (g3t-test-pin-count mdw-native))))))
+(check "manual decode wrapper P1 detached result survives close"
+       (and (g3t-generation-tensor-release! mdw-prefix-input)
+            (g3t-generation-tensor-release! mdw-token)
+            (g3t-generation-tensor-release! mdw-full-token)
+            (g3t-generator-close! mdw-generator)
+            (= 1 (g3t-test-logits-state mdw-result-native))))
+(check "manual decode wrapper P1 results release"
+       (and (g3t-generation-tensor-release! mdw-prefix-result)
+            (g3t-generation-tensor-release! mdw-result)))
+
+(define mdw-g0-generator (g3t-generator-create model tokenizer policy))
+(define mdw-g0-native
+  (vector-ref (g3t-generator-find mdw-g0-generator 'mdw-g0) 3))
+(define mdw-g0-prefix-input (g3t-generation-token-input-create 65))
+(define mdw-g0-output
+  (g3t-zero-generate! mdw-g0-generator mdw-g0-prefix-input))
+(define mdw-g0-prefix-word
+  (g3t-test-manual-cache-kv-word mdw-g0-native 0 0))
+(define mdw-g0-token (g3t-generation-token-input-create 66))
+(check "manual decode wrapper P1/G0 provider cut and abort"
+  (m3-call 'mdw-g0-cut
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find mdw-g0-generator 'mdw-g0-cut) 1))
+           (result (g3t-logits-reserve call))
+           (result-native
+             (vector-ref (g3t-prefill-entry result 'logits 'mdw-g0-cut) 3)))
+      (g3t-frame-begin call mdw-g0-token 2)
+      (check "manual decode wrapper provider cut armed"
+             (= 0 (g3t-test-manual-p2-fail-dispatch-after 0)))
+      (let ((caught-provider
+              (guard (caught (#t (transformer-error? caught)))
+                (g3t-role-step call 0) #f)))
+        (check "manual decode wrapper provider cut disarmed"
+               (= 0 (g3t-test-manual-p2-fail-dispatch-after
+                      9223372036854775807)))
+        (check "manual decode wrapper provider failure preserves prefix"
+               (and caught-provider
+                    (= 1 (g3t-test-cache-length mdw-g0-native))
+                    (= 14 (g3t-test-pin-count mdw-g0-native))))
+        (g3t-call-abort call)
+        (and (= -1 (g3t-test-logits-state result-native))
+             (= 1 (g3t-test-cache-length mdw-g0-native))
+             (= mdw-g0-prefix-word
+                (g3t-test-manual-cache-kv-word mdw-g0-native 0 0))
+             (= 0 (g3t-test-rng-word mdw-g0-native 2))
+             (= 0 (g3t-test-pin-count mdw-g0-native)))))))
+(define mdw-g0-result
+  (m3-call 'mdw-g0-retry
+    (let* ((call (g3t-call-acquire
+                   (g3t-generator-find mdw-g0-generator 'mdw-g0-retry) 1))
+           (entry (g3t-prefill-entry call 'call 'mdw-g0-retry))
+           (result (g3t-logits-reserve call)))
+      (guard (caught
+               (#t (if (eq? (vector-ref entry 2) 'live)
+                       (g3t-call-abort call))
+                   (raise caught)))
+        (g3t-frame-begin call mdw-g0-token 2)
+        (let roles ((ordinal 0))
+          (if (= ordinal 10) #t
+              (begin (g3t-role-step call ordinal)
+                     (roles (+ ordinal 1)))))
+        (check "manual decode wrapper A2 cut armed"
+               (= 0 (g3t-test-fail-a2-after 0)))
+        (check "manual decode wrapper A2 failure maps status"
+               (guard (caught (#t (transformer-error? caught)))
+                 (g3t-role-step call 10) #f))
+        (check "manual decode wrapper A2 cut disarmed"
+               (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+        (check "manual decode wrapper A2 cut retains prefix"
+               (and (= 1 (g3t-test-cache-length mdw-g0-native))
+                    (= mdw-g0-prefix-word
+                       (g3t-test-manual-cache-kv-word mdw-g0-native 0 0))))
+        (g3t-role-step call 10)
+        (let roles ((ordinal 11))
+          (if (= ordinal 21) #t
+              (begin (g3t-role-step call ordinal)
+                     (roles (+ ordinal 1)))))
+        (let ((result-native
+                (vector-ref (g3t-prefill-entry result 'logits 'mdw-g0) 3)))
+          (let ((borrow (g3t-test-logits-borrow-begin result-native)))
+            (check "manual decode wrapper pending logits borrow fixture"
+                   (not (null? borrow)))
+            (reject-category
+              "manual decode wrapper pending logits blocks prepare"
+              'invalid-state
+              (lambda () (g3t-frame-prepare call result)))
+            (check "manual decode wrapper pending logits borrow ends"
+                   (= 0 (g3t-test-logits-borrow-end borrow)))))
+        (g3t-frame-prepare call result)
+        (g3t-call-prepare-end call)
+        (g3t-frame-commit call)
+        (g3t-call-finish call)
+        result))))
+(define mdw-g0-result-native
+  (vector-ref (g3t-prefill-entry mdw-g0-result 'logits 'mdw-g0) 3))
+(check "manual decode wrapper P1/G0 all 256 logits bit-exact to M3T row one"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word mdw-g0-result-native index))
+                    (compare (+ index 1)))))))
+(check "manual decode wrapper P1/G0 both K/V positions bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-cache-kv-word mdw-g0-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "manual decode wrapper P1/G0 A2 lengths [1]=2 mask [1,2]=[1,1] detached result"
+       (and (= 2 (g3t-test-cache-length mdw-g0-native))
+            (= 1 (g3t-test-manual-decode-cache-mask mdw-g0-native 0))
+            (= 1 (g3t-test-manual-decode-cache-mask mdw-g0-native 1))
+            (= 0 (g3t-test-rng-word mdw-g0-native 2))
+            (g3t-generation-tensor-release! mdw-g0-token)
+            (g3t-generation-tensor-release! mdw-g0-prefix-input)
+            (g3t-output-release! mdw-g0-output)
+            (g3t-generator-close! mdw-g0-generator)
+            (= 1 (g3t-test-logits-state mdw-g0-result-native))
+            (g3t-generation-tensor-release! mdw-g0-result)))
+
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)
 (newline)
