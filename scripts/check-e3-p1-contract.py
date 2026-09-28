@@ -123,8 +123,20 @@ def check():
     ]
     require(sum(signature(n) in g3c4_externs for n in externs(nodes)) == 3,
             "G3-C4 native extern delta is missing or duplicated")
-    require(digest(text, (n for n in nodes if n is not surface
-                          and signature(n) not in g3c4_externs)) ==
+    top_level = [n for n in nodes if n is not surface
+                 and signature(n) not in g3c4_externs]
+    inherited_forms = []
+    for node in top_level:
+        source = text[node[0]:node[1]]
+        if source.startswith("(provide "):
+            successor_tail = ("\n         module-construction-parameters-internal"
+                              "\n         p1-trusted-surface)")
+            require(source.endswith(successor_tail),
+                    "trusted provide differs from exact private import delta")
+            source = source[:-len(successor_tail)] + ("\n         "
+                "module-construction-parameters-internal)")
+        inherited_forms.append(source)
+    require(sha256("\0".join(inherited_forms).encode()).hexdigest() ==
             "505b1c59f9f2734e4ce457423129ca426fd300c748076e0fac03c9d84762d34f",
             "P1 top-level authority/provides/wrappers changed from accepted #121 base")
     require(digest(text, (n for n in externs(nodes)
@@ -162,7 +174,8 @@ def check():
          [["vector-ref", "p1-trusted-surface", "70"], "model", "modules",
           "retained-handles", "carriers"]],
     ]
-    require([signature(n) for n in forms(tr3_wrapper_text)] == tr3_expected,
+    require([signature(n) for n in forms(tr3_wrapper_text)] ==
+            [["require", "transformer.module"], *tr3_expected],
             "TR3 private wrappers differ from exact slot69/70 arities")
     g3c4_wrapper_text = (ROOT / G3C4_WRAPPERS).read_text()
     g3c4_expected = [
