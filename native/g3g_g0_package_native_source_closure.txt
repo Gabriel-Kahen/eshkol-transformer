@@ -43,6 +43,7 @@ src/eshkol_transformer/g3t_transport.h
 include/eshkol_transformer/a2_kv_cache.h
 include/eshkol_transformer/g3n_primitives_abi.h
 include/eshkol_transformer/g3s_sampling_abi.h
+src/eshkol_transformer/g3t_prefill2_roles.inc
 src/eshkol_transformer/g3t_prefill_roles.inc
 native/a2_kv_cache.c
 native/n2_primitives_provider.c
