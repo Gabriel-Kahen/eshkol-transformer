@@ -219,8 +219,30 @@ int64_t et_g3t_private_role_step_v1(void *candidate, int64_t ordinal) {
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
   if (c->call_kind == 0) {
     if (!c->pending_logits || c->pending_output || !c->frame.active ||
-        c->frame.kind != 1 || c->frame.prompt_length != 1 ||
+        c->frame.kind != 1 ||
+        (c->frame.prompt_length != 1
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+         && c->frame.prompt_length != 2
+#endif
+         ) ||
         c->frame.next_ordinal != ordinal ||
+        c->pending_logits->parent_ctx != c ||
+        c->pending_logits->h.state != G3T_PENDING)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+    if (c->frame.prompt_length == 2)
+      return ordinal == 10 ? g3t_prefill2_attention(c) :
+                             g3t_prefill2_plain(c, ordinal);
+#endif
+    return ordinal == 10 ? g3t_prefill_attention(c) :
+                           g3t_prefill_plain(c, ordinal);
+  }
+#endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+  if (c->call_kind == 1) {
+    if (!c->pending_logits || c->pending_output || !c->frame.active ||
+        c->frame.kind != 2 || c->frame.prompt_length != 1 ||
+        c->frame.candidate_cache || c->frame.next_ordinal != ordinal ||
         c->pending_logits->parent_ctx != c ||
         c->pending_logits->h.state != G3T_PENDING)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);

@@ -63,6 +63,19 @@
 #error "G3-T manual P1 requires kind-3 logits and final call transport"
 #endif
 #endif
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+#if !defined(ET_G3T_MANUAL_P1_PREFILL_PRIVATE) || \
+    !defined(ET_G3T_P2_ZERO_BUDGET_PRIVATE) || \
+    !defined(ET_G3T_INPUT_FROM_T1_PRIVATE)
+#error "G3-T manual P2 requires manual P1, T2 roles and owned T1 input"
+#endif
+#endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+#if !defined(ET_G3T_MANUAL_P1_PREFILL_PRIVATE) || \
+    !defined(ET_G3T_OWNED_TOKEN_INPUT_PRIVATE)
+#error "G3-T manual decode requires manual logits and owned token input"
+#endif
+#endif
 #ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
 #ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #error "G3-T T1 input requires private input transport"
@@ -126,6 +139,9 @@ typedef struct g3t_frame {
   float fu[8], fg[8], fd[4], y[4], nf[4], z[256];
   const void *binding_identities[14];
   unsigned char binding_values[4736];
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+  uint32_t prefix_k[4], prefix_v[4];
+#endif
 } g3t_frame;
 typedef struct g3t_input {
   g3t_record h;
@@ -190,6 +206,11 @@ typedef struct g3t_context {
   g3t_output *pending_output;
   g3t_frame frame;
   float last_logits[256];
+#ifdef ET_G3T_TESTING
+  uint32_t test_generated_logits[256];
+  int test_generated_ready;
+  int test_flip_binding_on_sample;
+#endif
   int64_t sample_token, successor_rng[4];
   int prefill_committed, sampled;
   const void *binding_identities[14];
@@ -265,6 +286,9 @@ static const et_kernel_provider_v1 *g3t_resolve_provider(
   return symbol && strcmp(symbol, ET_KERNEL_PROVIDER_SYMBOL_V1) == 0
              ? (const et_kernel_provider_v1 *)context : NULL;
 }
+#if defined(ET_G3T_TESTING) && defined(ET_G3T_MANUAL_P2_PREFILL_PRIVATE)
+static int64_t g3t_test_dispatch_fail_after = -1;
+#endif
 static int64_t g3t_dispatch(
     const et_kernel_provider_v1 *provider, const char *capability,
     const char *operation, size_t rank, const uint64_t *shape,
@@ -272,6 +296,14 @@ static int64_t g3t_dispatch(
     et_kernel_tensor_view_v1 output) {
   et_kernel_runtime *runtime = NULL;
   et_kernel_error error;
+#if defined(ET_G3T_TESTING) && defined(ET_G3T_MANUAL_P2_PREFILL_PRIVATE)
+  if (g3t_test_dispatch_fail_after == 0) {
+    g3t_test_dispatch_fail_after = -1;
+    return g3t_fail(1, ET_KERNEL_ERROR_INTERNAL,
+                    ET_KERNEL_CODE_ALLOCATION_FAILED);
+  }
+  if (g3t_test_dispatch_fail_after > 0) --g3t_test_dispatch_fail_after;
+#endif
   if (g3t_capture_kernel(et_kernel_runtime_discover(
           g3t_resolve_provider, (void *)provider, &runtime, &error), &error))
     return g3t_error_category;
@@ -571,6 +603,9 @@ int64_t et_g3t_private_call_acquire_v1(void *candidate, int64_t call_kind) {
   if (et_g3t_model_pins_begin_internal(o->p, (const void *const *)o->handles,
                                        &c->pins, &error)) return g3t_f32_failure(&error);
   c->call_kind = (int)call_kind;
+#ifdef ET_G3T_TESTING
+  c->test_generated_ready = 0;
+#endif
   c->h.busy = 1;
   o->active = c;
   return 0;
@@ -1378,9 +1413,51 @@ int64_t et_g3t_private_frame_begin_v1(
     g3t_input *input = (g3t_input *)g3t_admit_record(
         input_candidate, G3T_INPUT, 0);
     if (!input) return g3t_error_category;
-    if (input->length != 1 || input->ids[0] < 0 ||
-        input->ids[0] > 255 || input->h.busy)
+    if (input->h.busy ||
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+        (input->length != 1 && input->length != 2) ||
+#else
+        input->length != 1 ||
+#endif
+        input->ids[0] < 0 || input->ids[0] > 255)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+    int64_t prompt_ids[2] = {0, 0};
+    if (input->length == 2) {
+      if (!input->tensor) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+      et_i64_tensor_error i64_error;
+      if (et_m3_private_i64_unborrowed_v1(input->tensor, &i64_error))
+        return g3t_i64_failure(&i64_error);
+      et_i64_tensor_borrow *borrow = NULL;
+      const et_kernel_tensor_view_v1 *view = NULL;
+      if (et_i64_tensor_borrow_begin_v1(input->tensor, &borrow, &i64_error))
+        return g3t_i64_failure(&i64_error);
+      int64_t domain = 0, category = 0, code = 0;
+      if (et_i64_tensor_borrow_view_v1(borrow, &view, &i64_error))
+        g3t_i64_failure(&i64_error);
+      else if (!view || !view->data || !view->shape || view->rank != 2 ||
+               view->shape[0] != 1 || view->shape[1] != 2 ||
+               view->byte_length != sizeof(prompt_ids) ||
+               !view->dtype || strcmp(view->dtype, "i64") ||
+               !view->device || strcmp(view->device, "cpu") ||
+               view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR)
+        g3t_bad(G3T_SHAPE, G3T_TOKEN_RANGE);
+      else {
+        memcpy(prompt_ids, view->data, sizeof(prompt_ids));
+        if (prompt_ids[0] < 0 || prompt_ids[0] > 255 ||
+            prompt_ids[1] < 0 || prompt_ids[1] > 255)
+          g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+        else if (input->ids[0] != prompt_ids[0] ||
+                 input->ids[1] != prompt_ids[1])
+          g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+      }
+      domain = g3t_error_domain;
+      category = g3t_error_category;
+      code = g3t_error_code;
+      if (et_i64_tensor_borrow_end_v1(&borrow, &i64_error)) abort();
+      if (category) return g3t_fail(domain, category, code);
+    }
+#endif
     et_a2_kv_cache *cache = NULL;
     et_kernel_error error;
     if (g3t_capture_kernel(et_a2_kv_cache_create_v1(
@@ -1389,9 +1466,106 @@ int64_t et_g3t_private_frame_begin_v1(
     memset(&c->frame, 0, sizeof(c->frame));
     c->frame.candidate_cache = cache;
     c->frame.token = input->ids[0];
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+    if (input->length == 2)
+      memcpy(c->frame.prompt_ids, prompt_ids, sizeof(prompt_ids));
+    c->frame.prompt_length = input->length;
+#else
     c->frame.prompt_length = 1;
+#endif
     c->frame.active = 1;
     c->frame.kind = 1;
+    return 0;
+  }
+#endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+  if (c->call_kind == 1) {
+    if (frame_kind != 2 || !c->pending_logits || c->pending_output ||
+        c->frame.active || c->pending_logits->parent_ctx != c ||
+        c->pending_logits->h.state != G3T_PENDING)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    g3t_input *input = (g3t_input *)g3t_admit_record(
+        input_candidate, G3T_INPUT, 0);
+    if (!input) return g3t_error_category;
+    if (input->h.busy || input->length != 1 ||
+        input->ids[0] < 0 || input->ids[0] > 255 || !input->tensor)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    et_i64_tensor_error i64_error;
+    if (et_m3_private_i64_unborrowed_v1(input->tensor, &i64_error))
+      return g3t_i64_failure(&i64_error);
+    et_i64_tensor_borrow *borrow = NULL;
+    const et_kernel_tensor_view_v1 *typed = NULL;
+    if (et_i64_tensor_borrow_begin_v1(input->tensor, &borrow, &i64_error))
+      return g3t_i64_failure(&i64_error);
+    int64_t token = -1;
+    if (et_i64_tensor_borrow_view_v1(borrow, &typed, &i64_error))
+      g3t_i64_failure(&i64_error);
+    else if (!typed || !typed->data || !typed->shape || typed->rank != 2 ||
+             typed->shape[0] != 1 || typed->shape[1] != 1 ||
+             typed->byte_length != sizeof(token) || !typed->dtype ||
+             strcmp(typed->dtype, "i64") || !typed->device ||
+             strcmp(typed->device, "cpu") ||
+             typed->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR)
+      g3t_bad(G3T_SHAPE, G3T_TOKEN_RANGE);
+    else {
+      memcpy(&token, typed->data, sizeof(token));
+      if (token < 0 || token > 255)
+        g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+      else if (token != input->ids[0])
+        g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+    }
+    int64_t domain = g3t_error_domain, category = g3t_error_category;
+    int64_t code = g3t_error_code;
+    if (et_i64_tensor_borrow_end_v1(&borrow, &i64_error)) abort();
+    if (category) return g3t_fail(domain, category, code);
+    if (!c->prefill_committed || !c->binding_ready || !c->cache)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    et_a2_kv_cache_read_borrow *old = NULL;
+    const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+    const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+    et_kernel_error error;
+    if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+            c->cache, &old, &error), &error)) return g3t_error_category;
+    uint32_t prefix_k[4] = {0}, prefix_v[4] = {0};
+    if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+            old, 0, &keys, &values, &lengths, &mask, &error), &error))
+      goto decode_old_end;
+    if (!keys || !values || !lengths || !mask ||
+        !keys->data || !values->data || !lengths->data || !mask->data ||
+        keys->rank != 4 || !keys->shape || keys->shape[0] != 1 ||
+        keys->shape[1] != 2 || keys->shape[2] != 2 || keys->shape[3] != 2 ||
+        keys->byte_length != 32 || values->rank != 4 || !values->shape ||
+        values->shape[0] != 1 || values->shape[1] != 2 ||
+        values->shape[2] != 2 || values->shape[3] != 2 ||
+        values->byte_length != 32 || lengths->rank != 1 ||
+        !lengths->shape || lengths->shape[0] != 1 ||
+        lengths->byte_length != sizeof(int64_t) ||
+        ((const int64_t *)lengths->data)[0] != 1 ||
+        mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
+        mask->shape[1] != 2 || mask->byte_length != 2 ||
+        ((const uint8_t *)mask->data)[0] != 1 ||
+        ((const uint8_t *)mask->data)[1] != 0)
+      g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    else for (size_t head = 0; head < 2; ++head) {
+      const size_t offset = head * 4 * sizeof(float);
+      memcpy(prefix_k + head * 2,
+             (const unsigned char *)keys->data + offset, 2 * sizeof(float));
+      memcpy(prefix_v + head * 2,
+             (const unsigned char *)values->data + offset, 2 * sizeof(float));
+    }
+decode_old_end:
+    domain = g3t_error_domain; category = g3t_error_category;
+    code = g3t_error_code;
+    if (et_a2_kv_cache_read_borrow_end_v1(&old, &error)) abort();
+    if (category) return g3t_fail(domain, category, code);
+    if (g3t_check_binding(c)) return g3t_error_category;
+    memset(&c->frame, 0, sizeof(c->frame));
+    memcpy(c->frame.prefix_k, prefix_k, sizeof(prefix_k));
+    memcpy(c->frame.prefix_v, prefix_v, sizeof(prefix_v));
+    c->frame.token = token;
+    c->frame.prompt_length = 1;
+    c->frame.active = 1;
+    c->frame.kind = 2;
     return 0;
   }
 #endif
@@ -1463,7 +1637,11 @@ int64_t et_g3t_private_frame_prepare_v1(
     if (logits != c->pending_logits || logits->parent_ctx != c ||
         logits->h.state != G3T_PENDING || !logits->tensor ||
         c->pending_output || !c->frame.active || c->frame.kind != 1 ||
-        c->frame.prompt_length != 1 || c->frame.next_ordinal != 21 ||
+        (c->frame.prompt_length != 1
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+         && c->frame.prompt_length != 2
+#endif
+         ) || c->frame.next_ordinal != 21 ||
         !c->frame.transaction || !c->frame.candidate_cache ||
         c->frame.prepared)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
@@ -1483,9 +1661,35 @@ int64_t et_g3t_private_frame_prepare_v1(
     if (offset != sizeof(c->frame.binding_values))
       return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
     uint32_t bits[256];
-    memcpy(bits, c->frame.z, sizeof(bits));
+    memcpy(bits,
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+           c->frame.prompt_length == 2 ? c->frame.p2.z + 256 :
+#endif
+           c->frame.z, sizeof(bits));
     if (et_f32_tensor_copy_bits_from_v1(
             logits->tensor, bits, 256, &error))
+      return g3t_f32_failure(&error);
+    c->frame.prepared = 1;
+    return 0;
+  }
+#endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+  if (c->call_kind == 1) {
+    g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+        staged_result, G3T_LOGITS, 1);
+    if (!logits) return g3t_error_category;
+    if (logits != c->pending_logits || logits->parent_ctx != c ||
+        logits->h.state != G3T_PENDING || !logits->tensor ||
+        c->pending_output || !c->frame.active || c->frame.kind != 2 ||
+        c->frame.prompt_length != 1 || c->frame.next_ordinal != 21 ||
+        !c->frame.transaction || c->frame.candidate_cache ||
+        c->frame.prepared || !c->prefill_committed || !c->binding_ready)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    if (g3t_check_binding(c)) return g3t_error_category;
+    uint32_t bits[256];
+    memcpy(bits, c->frame.z, sizeof(bits));
+    et_f32_tensor_error error;
+    if (et_f32_tensor_copy_bits_from_v1(logits->tensor, bits, 256, &error))
       return g3t_f32_failure(&error);
     c->frame.prepared = 1;
     return 0;
@@ -1649,7 +1853,11 @@ static int64_t g3t_manual_p1_preflight(g3t_context *c) {
   if (c->call_kind != 0 || !logits || c->pending_output ||
       logits->parent_ctx != c || logits->h.state != G3T_PENDING ||
       !logits->tensor || !c->frame.active || c->frame.kind != 1 ||
-      c->frame.prompt_length != 1 || c->frame.next_ordinal != 21 ||
+      (c->frame.prompt_length != 1
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+       && c->frame.prompt_length != 2
+#endif
+       ) || c->frame.next_ordinal != 21 ||
       !c->frame.prepared || !c->frame.transaction ||
       !c->frame.candidate_cache)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
@@ -1673,10 +1881,15 @@ static int64_t g3t_manual_p1_preflight(g3t_context *c) {
           logits->tensor, &logits_view, &f32_error))
     return g3t_f32_failure(&f32_error);
   const et_kernel_tensor_view_v1 *lv = &logits_view.view;
+  const float *last_logits =
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+      c->frame.prompt_length == 2 ? c->frame.p2.z + 256 :
+#endif
+      c->frame.z;
   int logits_ok = lv->rank == 2 && lv->shape && lv->shape[0] == 1 &&
                   lv->shape[1] == 256 && lv->byte_length ==
                   sizeof(c->frame.z) && lv->data &&
-                  !memcmp(lv->data, c->frame.z, sizeof(c->frame.z));
+                  !memcmp(lv->data, last_logits, sizeof(c->frame.z));
   if (et_f32_tensor_scoped_end_internal(&logits_view)) abort();
   if (!logits_ok) return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
 
@@ -1694,12 +1907,26 @@ static int64_t g3t_manual_p1_preflight(g3t_context *c) {
       !keys->data || !values->data || !lengths->data || !mask->data ||
       lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
       lengths->byte_length != sizeof(int64_t) ||
-      ((const int64_t *)lengths->data)[0] != 1 ||
+      ((const int64_t *)lengths->data)[0] != c->frame.prompt_length ||
       mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
       mask->shape[1] != 2 || mask->byte_length != 2 ||
       ((const uint8_t *)mask->data)[0] != 1 ||
-      ((const uint8_t *)mask->data)[1] != 0)
+      ((const uint8_t *)mask->data)[1] !=
+          (uint8_t)(c->frame.prompt_length == 2))
     g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+  if (!g3t_error_category && c->frame.prompt_length == 2 &&
+      (keys->rank != 4 || !keys->shape || keys->shape[0] != 1 ||
+       keys->shape[1] != 2 || keys->shape[2] != 2 || keys->shape[3] != 2 ||
+       keys->byte_length != sizeof(c->frame.p2.kh) ||
+       values->rank != 4 || !values->shape || values->shape[0] != 1 ||
+       values->shape[1] != 2 || values->shape[2] != 2 ||
+       values->shape[3] != 2 ||
+       values->byte_length != sizeof(c->frame.p2.vh) ||
+       memcmp(keys->data, c->frame.p2.kh, sizeof(c->frame.p2.kh)) ||
+       memcmp(values->data, c->frame.p2.vh, sizeof(c->frame.p2.vh))))
+    g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+#endif
 view_end: {
     int64_t domain = g3t_error_domain, category = g3t_error_category;
     int64_t code = g3t_error_code;
@@ -1728,6 +1955,78 @@ old_end: {
     int64_t domain = g3t_error_domain, category = g3t_error_category;
     int64_t code = g3t_error_code;
     if (et_a2_kv_cache_read_borrow_end_v1(&old, &error)) abort();
+    return category ? g3t_fail(domain, category, code) : 0;
+  }
+}
+#endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+static int64_t g3t_manual_decode_preflight(g3t_context *c) {
+  g3t_logits *logits = c->pending_logits;
+  if (c->call_kind != 1 || !logits || c->pending_output ||
+      logits->parent_ctx != c || logits->h.state != G3T_PENDING ||
+      !logits->tensor || !c->frame.active || c->frame.kind != 2 ||
+      c->frame.prompt_length != 1 || c->frame.next_ordinal != 21 ||
+      !c->frame.prepared || !c->frame.transaction ||
+      c->frame.candidate_cache || !c->prefill_committed || !c->binding_ready)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (g3t_check_binding(c)) return g3t_error_category;
+  et_f32_tensor_error f32_error;
+  et_f32_scoped_guard_internal logits_view = {0};
+  if (et_f32_tensor_scoped_begin_internal(
+          logits->tensor, &logits_view, &f32_error))
+    return g3t_f32_failure(&f32_error);
+  const et_kernel_tensor_view_v1 *lv = &logits_view.view;
+  int logits_ok = lv->rank == 2 && lv->shape && lv->shape[0] == 1 &&
+                  lv->shape[1] == 256 && lv->byte_length == 1024 &&
+                  lv->data && !memcmp(lv->data, c->frame.z, 1024);
+  if (et_f32_tensor_scoped_end_internal(&logits_view)) abort();
+  if (!logits_ok) return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+
+  et_a2_kv_cache_transaction_view *view = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_transaction_view_begin_v1(
+          c->frame.transaction, 0, &view, &error), &error))
+    return g3t_error_category;
+  if (g3t_capture_kernel(et_a2_kv_cache_transaction_view_tensors_v1(
+          view, &keys, &values, &lengths, &mask, &error), &error))
+    goto decode_view_end;
+  if (!keys || !values || !lengths || !mask ||
+      !keys->data || !values->data || !lengths->data || !mask->data ||
+      keys->rank != 4 || !keys->shape || keys->shape[0] != 1 ||
+      keys->shape[1] != 2 || keys->shape[2] != 2 || keys->shape[3] != 2 ||
+      keys->byte_length != 32 || values->rank != 4 || !values->shape ||
+      values->shape[0] != 1 || values->shape[1] != 2 ||
+      values->shape[2] != 2 || values->shape[3] != 2 ||
+      values->byte_length != 32 || lengths->rank != 1 ||
+      !lengths->shape || lengths->shape[0] != 1 ||
+      lengths->byte_length != sizeof(int64_t) ||
+      ((const int64_t *)lengths->data)[0] != 2 ||
+      mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
+      mask->shape[1] != 2 || mask->byte_length != 2 ||
+      ((const uint8_t *)mask->data)[0] != 1 ||
+      ((const uint8_t *)mask->data)[1] != 1)
+    g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+  else for (size_t head = 0; head < 2; ++head) {
+    const size_t prefix_offset = head * 4 * sizeof(float);
+    const size_t row_offset = head * 2 * sizeof(float);
+    if (memcmp((const unsigned char *)keys->data + prefix_offset,
+               c->frame.prefix_k + head * 2, 2 * sizeof(float)) ||
+        memcmp((const unsigned char *)values->data + prefix_offset,
+               c->frame.prefix_v + head * 2, 2 * sizeof(float)) ||
+        memcmp((const unsigned char *)keys->data + prefix_offset + 8,
+               (const unsigned char *)c->frame.kh + row_offset, 8) ||
+        memcmp((const unsigned char *)values->data + prefix_offset + 8,
+               (const unsigned char *)c->frame.vh + row_offset, 8)) {
+      g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+      break;
+    }
+  }
+decode_view_end: {
+    int64_t domain = g3t_error_domain, category = g3t_error_category;
+    int64_t code = g3t_error_code;
+    if (et_a2_kv_cache_transaction_view_end_v1(&view, &error)) abort();
     return category ? g3t_fail(domain, category, code) : 0;
   }
 }
@@ -1831,6 +2130,15 @@ int64_t et_g3t_private_call_prepare_end_v1(void *candidate) {
     return 0;
   }
 #endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+  if (c->call_kind == 1) {
+    if (c->frame.end_prepared || c->final_committed)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    if (g3t_manual_decode_preflight(c)) return g3t_error_category;
+    c->frame.end_prepared = 1;
+    return 0;
+  }
+#endif
   if (c->call_kind != 2 || c->frame.end_prepared ||
       c->final_committed)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
@@ -1860,8 +2168,31 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     memcpy(c->binding_values, c->frame.binding_values,
            sizeof(c->binding_values));
     c->binding_ready = 1;
-    memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
+    memcpy(c->last_logits,
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+           c->frame.prompt_length == 2 ? c->frame.p2.z + 256 :
+#endif
+           c->frame.z, sizeof(c->last_logits));
     c->prefill_committed = 1;
+    g3t_logits *logits = c->pending_logits;
+    logits->parent_ctx = NULL;
+    logits->h.state = G3T_LIVE;
+    logits->h.busy = 0;
+    c->pending_logits = NULL;
+    c->final_committed = 1;
+    memset(&c->frame, 0, sizeof(c->frame));
+    return 0;
+  }
+#endif
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+  if (c->call_kind == 1) {
+    if (!c->frame.end_prepared || g3t_manual_decode_preflight(c))
+      return g3t_error_category ?
+          g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    et_kernel_error error;
+    if (et_a2_kv_cache_transaction_commit_v1(
+            &c->frame.transaction, &error)) abort();
+    memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
     g3t_logits *logits = c->pending_logits;
     logits->parent_ctx = NULL;
     logits->h.state = G3T_LIVE;
@@ -1915,6 +2246,11 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (!c->frame.end_prepared || g3t_final_preflight(c))
       return g3t_error_category ?
           g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3T_TESTING
+    memcpy(c->test_generated_logits, c->frame.z,
+           sizeof(c->test_generated_logits));
+    c->test_generated_ready = 1;
+#endif
     /* All recoverable checks end here. This A2 commit has no allocator;
      * an impossible rejection after preflight is fail-stop. */
     et_kernel_error error;
@@ -1964,7 +2300,12 @@ int64_t et_g3t_private_call_finish_v1(void *candidate) {
   et_f32_tensor_error error;
   if (!o || o->active != c || !c->h.busy ||
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
-      (c->call_kind != 2 && c->call_kind != 0) || c->pending_logits ||
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+      (c->call_kind != 2 && c->call_kind != 0 && c->call_kind != 1) ||
+#else
+      (c->call_kind != 2 && c->call_kind != 0) ||
+#endif
+      c->pending_logits ||
 #else
       c->call_kind != 2 ||
 #endif
@@ -2037,6 +2378,12 @@ int64_t et_g3t_private_sample_v1(void *candidate) {
     return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
   c->sample_token = token;
   memcpy(c->successor_rng, next, sizeof(next));
+#ifdef ET_G3T_TESTING
+  if (c->test_flip_binding_on_sample) {
+    c->binding_values[0] ^= 1u;
+    c->test_flip_binding_on_sample = 0;
+  }
+#endif
   c->sampled = 1;
   return 0;
 }
@@ -2109,7 +2456,60 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
   return 0;
 }
 #ifdef ET_G3T_TESTING
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+int64_t et_g3t_test_manual_decode_inline_id_set_v1(
+    void *candidate, int64_t value) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || !input->tensor || input->h.busy || input->length != 1)
+    return -1;
+  input->ids[0] = value;
+  return 0;
+}
+int64_t et_g3t_test_manual_decode_i1_shape_set_v1(
+    void *candidate, int64_t second_extent) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || !input->tensor || input->h.busy ||
+      input->length != 1 || second_extent < 1 || second_extent > 3)
+    return -1;
+  uint64_t *shape = (uint64_t *)et_i64_tensor_test_shape_storage_v1(
+      input->tensor);
+  if (!shape) return -1;
+  shape[1] = (uint64_t)second_extent;
+  return 0;
+}
+#endif
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+int64_t et_g3t_test_manual_p2_fail_dispatch_after_v1(int64_t count) {
+  if (count < -1) return -1;
+  g3t_test_dispatch_fail_after = count;
+  return 0;
+}
+int64_t et_g3t_test_manual_p2_inline_id_set_v1(
+    void *candidate, int64_t index, int64_t value) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || !input->tensor || input->h.busy ||
+      input->length != 2 || index < 0 || index >= 2) return -1;
+  input->ids[index] = value;
+  return 0;
+}
+int64_t et_g3t_test_manual_p2_i1_shape_set_v1(
+    void *candidate, int64_t second_extent) {
+  g3t_input *input = (g3t_input *)g3t_admit_record(
+      candidate, G3T_INPUT, 0);
+  if (!input || !input->tensor || input->h.busy ||
+      input->length != 2 || second_extent < 1 || second_extent > 3)
+    return -1;
+  uint64_t *shape = (uint64_t *)et_i64_tensor_test_shape_storage_v1(
+      input->tensor);
+  if (!shape) return -1;
+  shape[1] = (uint64_t)second_extent;
+  return 0;
+}
+#endif
 int64_t et_g3t_test_manual_logits_word_v1(
     void *candidate, int64_t index) {
   g3t_logits *logits = (g3t_logits *)g3t_admit_record(
@@ -2124,18 +2524,36 @@ int64_t et_g3t_test_manual_logits_word_v1(
 int64_t et_g3t_test_manual_frame_kv_word_v1(
     void *candidate, int64_t which, int64_t index) {
   g3t_context *c = g3t_admit(candidate, 0);
-  if (!c || c->call_kind != 0 || !c->frame.active ||
+  if (!c || (c->call_kind != 0
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+             && c->call_kind != 1
+#endif
+             ) || !c->frame.active ||
       c->frame.next_ordinal < 10 || which < 0 || which > 1 ||
-      index < 0 || index >= 4) return -1;
+      index < 0 || index >=
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+          (c->frame.prompt_length == 2 ? 8 : 4)
+#else
+          4
+#endif
+          ) return -1;
   uint32_t bits;
-  memcpy(&bits, (which ? c->frame.vh : c->frame.kh) + index, sizeof(bits));
+  const float *head = which ? c->frame.vh : c->frame.kh;
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+  if (c->frame.prompt_length == 2) {
+    head = which ? c->frame.p2.vh : c->frame.p2.kh;
+    index = index + (index >= 2 && index < 4 ? 2 : 0) -
+                    (index >= 4 && index < 6 ? 2 : 0);
+  }
+#endif
+  memcpy(&bits, head + index, sizeof(bits));
   return bits;
 }
 int64_t et_g3t_test_manual_cache_kv_word_v1(
     void *candidate, int64_t which, int64_t index) {
   g3t_context *c = g3t_admit(candidate, 0);
   if (!c || !c->cache || which < 0 || which > 1 ||
-      index < 0 || index >= 4) return -1;
+      index < 0 || index >= 8) return -1;
   et_a2_kv_cache_read_borrow *borrow = NULL;
   const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
   const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
@@ -2150,9 +2568,11 @@ int64_t et_g3t_test_manual_cache_kv_word_v1(
         view->shape[0] == 1 && view->shape[1] == 2 &&
         view->shape[2] == 2 && view->shape[3] == 2 &&
         lengths && lengths->data &&
-        ((const int64_t *)lengths->data)[0] >= 1) {
+        ((const int64_t *)lengths->data)[0] >= (index < 4 ? 1 : 2)) {
       uint32_t bits;
-      size_t position = (size_t)index + (index >= 2 ? 2u : 0u);
+      size_t position = (size_t)index +
+          (index >= 2 && index < 4 ? 2u : 0u) -
+          (index >= 4 && index < 6 ? 2u : 0u);
       memcpy(&bits, (const float *)view->data + position, sizeof(bits));
       answer = bits;
     }
@@ -2160,6 +2580,28 @@ int64_t et_g3t_test_manual_cache_kv_word_v1(
   if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error)) abort();
   return answer;
 }
+#ifdef ET_G3T_MANUAL_DECODE_PRIVATE
+int64_t et_g3t_test_manual_decode_cache_mask_v1(
+    void *candidate, int64_t index) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || !c->cache || index < 0 || index > 1) return -1;
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &borrow, &error)) return -1;
+  int64_t answer = -1;
+  if (!et_a2_kv_cache_read_borrow_layer_v1(
+          borrow, 0, &keys, &values, &lengths, &mask, &error) &&
+      mask && mask->data && mask->rank == 2 && mask->shape &&
+      mask->shape[0] == 1 && mask->shape[1] == 2 &&
+      mask->byte_length == 2)
+    answer = ((const uint8_t *)mask->data)[index];
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error)) abort();
+  return answer;
+}
+#endif
 void *et_g3t_test_manual_cache_borrow_begin_v1(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);
   et_a2_kv_cache_read_borrow *borrow = NULL;
@@ -2175,13 +2617,14 @@ int64_t et_g3t_test_manual_cache_borrow_end_v1(void *candidate) {
 int64_t et_g3t_test_manual_reference_kv_word_v1(
     void *candidate, int64_t which, int64_t index) {
   workspace *w = admit(candidate, WORKSPACE, 0);
-  if (!w || which < 0 || which > 1 || index < 0 || index >= 4 ||
+  if (!w || which < 0 || which > 1 || index < 0 || index >= 8 ||
       !w->ready[which ? VH : KH]) return -1;
   uint32_t bits[8];
   et_f32_tensor_error error;
   if (et_f32_tensor_copy_bits_to_v1(
           w->slots[which ? VH : KH], bits, 8, &error)) return -1;
-  return bits[index + (index >= 2 ? 2 : 0)];
+  return bits[index + (index >= 2 && index < 4 ? 2 : 0) -
+                    (index >= 4 && index < 6 ? 2 : 0)];
 }
 #endif
 #ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
@@ -2527,6 +2970,18 @@ int64_t et_g3t_test_logit_bits_v1(void *candidate, int64_t index) {
   uint32_t bits;
   memcpy(&bits, &c->last_logits[index], sizeof(bits));
   return bits;
+}
+int64_t et_g3t_test_generated_logit_bits_v1(void *candidate, int64_t index) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  return c && c->test_generated_ready && index >= 0 && index < 256
+             ? c->test_generated_logits[index] : -1;
+}
+int64_t et_g3t_test_flip_binding_on_sample_v1(
+    void *candidate, int64_t armed) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || c->h.busy || (armed != 0 && armed != 1)) return -1;
+  c->test_flip_binding_on_sample = (int)armed;
+  return 0;
 }
 int64_t et_g3t_test_sample_token_v1(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);

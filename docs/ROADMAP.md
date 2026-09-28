@@ -521,6 +521,27 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md) | complete |
 
+The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
+is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
+exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker
+allocation and shutdown. Explicit single-thread OpenBLAS preserves that cap;
+focused activations and attention pass AOT/JIT parity with a separate
+180-second JIT ceiling. The one full supported AOT/JIT inventory completed
+183 command rows and exited 1 with 38 counted failures: autodiff and RMSNorm
+gaps, a historical RNG mode-parity assertion, malformed negatives that
+succeed, and two signal-139 negatives. Attention-gradient and
+malformed-reshape failures also reproduce on the prior runtime pin; remaining
+non-RNG old-pin outcomes are untested.
+The RNG assertion was subsequently traced on both runtime pins to the probe's
+raw `srand48` call being overwritten by the first `random` time seed; changing
+only that call to documented `set-random-seed!` passes focused AOT/JIT repeats
+with the same parity assertion. The original 38 count remains recorded. One
+full supported rerun on the corrected `d592eae` tree completed the same 183
+command rows and exited 1 with 37 counted failures: zero command-status
+deltas, byte-identical assertion logs, and only the RNG parity line removed.
+Those 37 counted failures remain unresolved, so the successor R0 gate stays
+in **review** with both runs sealed in the audit.
+
 ## Wave 1 — independent foundations
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
@@ -978,6 +999,94 @@ exclusion. Evidence is sealed at
 independently reviewed and byte-matched the tested source. It does not add
 manual P2/decode or a public G3-G facade/package.
 
+The [G3-T manual kind-0 P2 transport contract](g3/G3_T_MANUAL_P2_TRANSPORT_PROPOSAL.md)
+is accepted for bounded private implementation after independent source review
+of the G3-T input owner, T2 role route, A2 view geometry, and G3-C4 predecessor
+contracts. It identifies the missing bridge
+between the accepted G3-C4 T2 manual route and G3-T's P1-only manual frame:
+authenticated owned I1 `[1,2]` admission, 21-role T2 routing, last-row
+logits, length-two A2 publication and rollback. The isolated
+[G3-T manual P2 native transport candidate](g3/G3_T_MANUAL_P2_PREFILL_LEAF.md)
+implements that source-private bridge. Root independently source-reviewed
+`fd11d72` / tree `4d100f8`; PR #130 passed all 23 hosted checks and merged as
+`86b10ee`. Its pinned
+network-none normal/repeat/ASan+UBSan+LSan aggregate passed 46,984 identical
+checks, 18 source contracts, Q0 4/4 and production test-symbol exclusion;
+the external evidence is in `g3t-manual-p2-native-candidate-20260928`.
+The G3-T transport is source-reviewed at `832a709`. The isolated
+[source-private G3-M P2 composer candidate](g3/G3_M_PREFILL_P2_LEAF.md)
+stacks on that exact head and runs the existing guarded acquire/reserve/21-role/
+prepare/preflight/commit/finish sequence with authentic T1-backed P2 input.
+Its pinned network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,016
+byte-identical checks, 19 source contracts, Q0 4/4 and production test-symbol
+exclusion. Evidence is at `g3m-prefill-p2-candidate-20260928`; root
+independently source-reviewed `da0ba38` / tree `ca20699`; PR #132 passed all
+23 hosted checks and merged as `846ee52`. It adds no public
+generation facade or manual decode.
+
+The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
+was independently reviewed at `58499c0`. Its isolated
+[native candidate](g3/G3_T_MANUAL_DECODE_LEAF.md), `a4f7c53` / tree
+`ad87a4e`, extends reviewed manual P2 with an owned `[1,1]` ID, bound P1
+prefix, 21-role T1 append and atomic length-two cache/logits commit. Its pinned
+network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
+byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
+exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. Root
+independently reviewed the source; PR #135 merged as `fedf0be` and its exact
+PR head subsequently passed all 23 hosted checks.
+The accepted [private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md)
+merged as `893cbc7`. This isolated implementation `f117987` / tree `972087b`
+widens kind-1 calls and authentic non-null frame-kind-2 input. Root
+independently reviewed its source and 47,194 pinned normal/repeat/sanitizer
+checks; PR #137 passed all 23 hosted checks and merged as `189d993`.
+The accepted
+[private G3-M one-token decode composer contract](g3/G3_M_MANUAL_DECODE_COMPOSER_PROPOSAL.md)
+has an isolated candidate `86bd5a5` / tree `0d8912b`: one guarded kind-1
+call, owned `[1,1]` input, exact 21-role T1 schedule, A2 `1→2` append,
+detached logits and precommit rollback. Root independently reviewed its
+source and 47,240 pinned normal/repeat/sanitizer checks, 22 source contracts
+and Q0 4/4; its prior head passed all 23 hosted checks. Refreshed hosted
+integration CI remains pending. The accepted private
+[seeded P1/G1 schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) has a
+[reviewed implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) at
+`9029b67` / tree `052fdf9`: a single guarded full-request preflight,
+prompt commit, G3-S sample, generated append and atomic final publication.
+Its pinned normal/repeat/ASan+UBSan+LSan gate passed 47,330 identical checks,
+23 source contracts, Q0 4/4 and production test-symbol exclusion. The
+isolated integration head preserves the reviewed source and tests byte for
+byte; its prior head passed all 23 hosted checks. Refreshed hosted CI remains
+pending. The independently accepted bounded
+[public P1/G1 G3-G contract](g3/G3_G_C2_PUBLIC_CONTRACT_PROPOSAL.md)
+defines a thirteen-name facade over only that private seeded route. Its
+separate single-owner [package candidate](g3/G3_G_C2_PUBLIC_LEAF.md)
+has one archive member, eight facades, 100 boxed exports and 106
+globals/strings, with fresh-cache AOT and testing-closure fault/sanitizer
+evidence. Root independently reviewed `baa08ad` / tree `6a6e164` and
+found no blocking source issue; stacked integration and hosted CI remain
+pending. No G0/manual facade, continuation or N>1 behavior is claimed.
+The bounded [public G0 extension contract](g3/G3_G_C2_PUBLIC_G0_PROPOSAL.md)
+was independently accepted at `8b2bd70` / tree `ab67893`. Its isolated
+implementation candidate adds a separate fixed G3-G C2 revision-2 package
+tuple with the same thirteen facade names and a distinct default artifact
+directory, budget-zero P1/P2 routing from
+constructor-recorded exact input provenance, and the accepted private G0
+schedules. The original P1/G1 package blobs remain unchanged. The isolated source
+candidate `1086582` / tree `5ccfa9f` passed its pinned network-none fixed
+package build, exact manifests, fresh-cache public AOT normal/repeat, 20
+identical v2 testing-closure checks in normal/repeat/ASan+UBSan+LSan,
+24 source contracts, Q0 4/4 and production test-symbol exclusion. The
+unchanged inherited private G3-T suite passed 47,342 identical checks in
+those three modes with 23 source contracts and Q0 4/4, retaining bitwise
+P1/P2 M3T logit/K/V parity. A sequential default v1→v2 build left v1's
+archive, object and eight facades byte-identical, and its fresh-cache v1
+P1/G1 caller passed normal/repeat. Local logs are sealed at
+`g3g-public-g0-candidate-20260928`. The final pin-only integration head
+`65b1fa35` / tree `0515b5d` preserves G0 source/test/runner blobs and
+passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
+its source and sealed evidence without a blocking finding. Hosted integration
+remains pending; no public manual facade, continuation or N>1 behavior is
+claimed.
+
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
 `8b937b67`, with roadmap `95630bc6`. Native LCM and VM GCD/LCM/modulo/
@@ -1249,8 +1358,35 @@ measurements passed on `1a44e42`: 49 Eshkol sources, 30 native objects,
 70 native paths, 4,171 raw definitions, 48 exports and 173 undefined
 symbols. The poisoned caller passed with empty stderr; sealed evidence is
 `tr3-public-d2-linked-1a44e42-20260925/SHA256SUMS`.
+The isolated M3T operand facet adds the unchanged 38-entry
+`transformer.diagnostic_transport` facade to the same registry-owning aggregate.
+The existing initializer/model producer exports gain the other 36 reviewed
+same-package boxed operations and private renames. Its ordinary caller uses
+the installed facade for model construction, profile and successor initializer,
+and checks forged model/initializer identities before the existing live
+trainer lease/release cases. The pinned linked gate passed on `df584de` with
+49 Eshkol sources, 30 native objects, 84 localized exports, 173 undefined
+runtime symbols, and empty poisoned-caller stderr; all files in
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-m3t-df584de-20260927/SHA256SUMS` verify. P1 and O2 construction
+remain test-local until
+their complete canonical facades are installed; this facet makes no public
+step/train/evaluate or resume claim.
+The stacked P1/O2 installed operand facet adds the unchanged 18-operation
+`transformer.module` and six-operation `transformer.optim` facades to the
+same aggregate. It reuses the four existing producer exports and adds only
+the 20 missing accepted boxed operations/private renames. The ordinary caller
+imports both facades, constructs P1 parameters and O2 optimizer from the
+installed M3T model, then passes all five installed operands to
+`trainer-create`. Forged P1 module/tree and O2 optimizer identities, released
+P1/O2 snapshots, and the existing overlapping/busy/repeated trainer release
+cases pass. The pinned linked gate on `cd9f6b5`/tree `d52bf931` passed with
+49 Eshkol sources, 30 native objects, 104 localized exports, 173 undefined
+runtime symbols and empty poisoned-caller stderr; all files under
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-operands-cd9f6b5-20260927/SHA256SUMS`
+verify. This is an installed construction/lease facet; public step, train,
+evaluate, state/load and resume remain separate work.
 The successor Eshkol `fe9dfd5` DD-10 import rules exposed missing direct
-private imports in this pre-metrics installed root. The bounded compatibility
+private imports in the pre-facet installed root. The bounded compatibility
 repair declares the existing X1, P1, and C1 dependencies at their consumers;
 the P1 trusted generator and structural checks admit exactly one additional
 private `p1-trusted-surface` provide while retaining the inherited public
@@ -1259,9 +1395,10 @@ symbol manifests preserve the earlier 81298 package tuple and its exact
 manifests. `scripts/test-tr3-public-installed-linked.sh` selects the exact
 fe9 closure only with `TR3_PUBLIC_INSTALLED_RUNTIME_PIN=fe9` and verifies the
 successor compiler/tree, runner, archive and image pins. The pinned strict
-source and linked poisoned public-caller gate
-passes on fe9 with the same 49-source/30-native/48-export boundary; public
-trainer step and metrics remain separate gates.
+source and linked poisoned public-caller gate passed on the pre-facet fe9
+tree with 49 sources, 30 native objects and 48 exports; the combined current
+installed facet still needs an exact successor linked gate. Public trainer
+step and metrics remain separate gates.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

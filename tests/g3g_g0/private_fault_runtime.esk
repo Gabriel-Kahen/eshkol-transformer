@@ -1,0 +1,159 @@
+;;; Testing-only G3-G revision-2 wrapper witness; never installed or exported.
+(load "g3g_g0_package_root.esk")
+(extern ptr g3g-test-input-borrow-begin ptr
+        :real et_g3t_test_input_borrow_begin_v1)
+(extern i64 g3g-test-input-borrow-end ptr
+        :real et_g3t_test_input_borrow_end_v1)
+(extern i64 g3g-test-pin-count ptr :real et_g3t_test_pin_count_v1)
+(extern i64 g3g-test-cache-length ptr :real et_g3t_test_cache_length_v1)
+(extern i64 g3g-test-fail-a2-after i64
+        :real et_g3t_test_fail_a2_after_v1)
+(extern i64 g3g-test-length-value ptr
+        :real et_g3t_test_lengths_clone_value_v1)
+(extern i64 g3g-test-cache-value ptr
+        :real et_g3t_test_cache_lengths_clone_value_v1)
+(extern i64 g3g-test-ids-length ptr
+        :real et_g3t_test_ids_clone_length_v1)
+(extern i64 g3g-test-rng-clone-word ptr i64
+        :real et_g3t_test_rng_clone_word_v1)
+(extern i64 g3g-test-rng-counter-set ptr i64 i64
+        :real et_g3t_test_rng_counter_set_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-G G0 private FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (reject-operation label operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model
+  (with-region ('g3g-g0-model 65536)
+    (g3t-checked-m3t-model-create config
+      (g3t-checked-m3t-initializer-state 1729))))
+(check "eval" (module-eval! model))
+(define tokenizer (t1-private-tokenizer-byte config))
+(define zero-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 0
+        ':eos #f ':seed 1729))
+(define one-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define t1-p2 (t1-wave1-tokenizer-encode tokenizer (bytevector 65 66)))
+(define p2-input (g3g-public-generation-input-create t1-p2))
+(define p2-native (vector-ref (g3t-prefill-entry p2-input 'input 'g3g-g0-test) 3))
+(define one-generator (g3g-public-generator-create model tokenizer one-policy))
+(define one-native (vector-ref (g3t-generator-find one-generator 'g3g-g0-test) 3))
+(reject "P2/G1 rejects before pins" 'shape-mismatch 'generator-generate!
+  (lambda () (g3g-public-generator-generate one-generator p2-input)))
+(check "P2/G1 leaves cache and pins"
+  (and (= 0 (g3g-test-cache-length one-native))
+       (= 0 (g3g-test-pin-count one-native))))
+(check "P2/G1 generator closes" (g3g-public-generator-close one-generator))
+
+(define zero-generator (g3g-public-generator-create model tokenizer zero-policy))
+(define zero-native (vector-ref (g3t-generator-find zero-generator 'g3g-g0-test) 3))
+(define borrow (g3g-test-input-borrow-begin p2-native))
+(check "input borrow begins" (not (null? borrow)))
+(reject "borrowed input typed release fails" 'invalid-state
+        'generation-tensor-release!
+  (lambda () (g3g-public-generation-tensor-release p2-input)))
+(check "failed release preserves provenance and owner"
+  (and (eq? (vector-ref (g3g-g0-provenance-find p2-input) 2) 'live)
+       (= 0 (g3g-test-cache-length zero-native))))
+(check "borrow ends" (= 0 (g3g-test-input-borrow-end borrow)))
+(check "A2 cut armed" (= 0 (g3g-test-fail-a2-after 0)))
+(reject-operation "P2/G0 A2 cut aborts" 'generator-generate!
+  (lambda () (g3g-public-generator-generate zero-generator p2-input)))
+(check "A2 cut disarmed"
+  (= 0 (g3g-test-fail-a2-after 9223372036854775807)))
+(check "A2 rollback keeps empty cache and drains pins"
+  (and (= 0 (g3g-test-cache-length zero-native))
+       (= 0 (g3g-test-pin-count zero-native))))
+(define output (g3g-public-generator-generate zero-generator p2-input))
+(check "retry publishes P2/G0 cache"
+  (and (= 2 (g3g-test-cache-length zero-native))
+       (= 0 (g3g-test-pin-count zero-native))
+       (= 0 (bytevector-length
+              (car (g3g-public-generation-output-text output))))))
+(define ids (car (g3g-public-generation-output-ids output)))
+(define lengths (g3g-public-generation-output-lengths output))
+(define cache-lengths (g3g-public-generation-output-cache-lengths output))
+(define rng (g3g-public-generation-output-rng output))
+(define rng-native (vector-ref (g3t-prefill-entry rng 'rng 'g3g-g0-test) 3))
+(check "G0 seeded RNG snapshot has no draw"
+  (and (= 1 (g3g-test-rng-clone-word rng-native 0))
+       (= 1729 (g3g-test-rng-clone-word rng-native 1))
+       (= 0 (g3g-test-rng-clone-word rng-native 2))
+       (= 0 (g3g-test-rng-clone-word rng-native 3))))
+(check "P2/G0 detached exact clone values"
+  (and (= 0 (g3g-test-ids-length
+              (vector-ref (g3t-prefill-entry ids 'ids 'g3g-g0-test) 3)))
+       (= 0 (g3g-test-length-value
+              (vector-ref (g3t-prefill-entry lengths 'lengths 'g3g-g0-test) 3)))
+       (= 2 (g3g-test-cache-value
+              (vector-ref (g3t-prefill-entry cache-lengths
+                                            'cache-lengths 'g3g-g0-test) 3)))))
+(check "owners release"
+  (and (g3g-public-generator-close zero-generator)
+       (g3g-public-generation-output-release output)
+       (g3g-public-generation-tensor-release ids)
+       (g3g-public-generation-tensor-release lengths)
+       (g3g-public-generation-tensor-release cache-lengths)
+       (g3g-public-generation-rng-release rng)
+       (g3g-public-generation-tensor-release p2-input)))
+(check "successful release leaves provenance tombstone"
+  (eq? (vector-ref (g3g-g0-provenance-find p2-input) 2) 'dead))
+(define categorical-zero-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 0
+        ':eos #f ':seed 1729))
+(define exhausted-generator
+  (g3g-public-generator-create model tokenizer categorical-zero-policy))
+(define exhausted-native
+  (vector-ref (g3t-generator-find exhausted-generator 'g3g-g0-exhausted) 3))
+(define exhausted-input (g3g-public-generation-token-input-create 65))
+(check "categorical G0 exhausted counter fixture"
+  (= 0 (g3g-test-rng-counter-set exhausted-native -1 -1)))
+(define exhausted-output
+  (g3g-public-generator-generate exhausted-generator exhausted-input))
+(define exhausted-rng
+  (g3g-public-generation-output-rng exhausted-output))
+(define exhausted-rng-native
+  (vector-ref (g3t-prefill-entry exhausted-rng 'rng 'g3g-g0-exhausted) 3))
+(check "categorical G0 admits exhausted counter without a draw"
+  (and (= 1 (g3g-test-rng-clone-word exhausted-rng-native 0))
+       (= 1729 (g3g-test-rng-clone-word exhausted-rng-native 1))
+       (= -1 (g3g-test-rng-clone-word exhausted-rng-native 2))
+       (= -1 (g3g-test-rng-clone-word exhausted-rng-native 3))
+       (= 1 (g3g-test-cache-length exhausted-native))
+       (= 0 (bytevector-length
+              (car (g3g-public-generation-output-text exhausted-output))))))
+(check "categorical G0 owners release"
+  (and (g3g-public-generator-close exhausted-generator)
+       (g3g-public-generation-output-release exhausted-output)
+       (g3g-public-generation-rng-release exhausted-rng)
+       (g3g-public-generation-tensor-release exhausted-input)))
+(display "G3G-G0-PRIVATE-PASS: checks=") (display checks) (newline)
