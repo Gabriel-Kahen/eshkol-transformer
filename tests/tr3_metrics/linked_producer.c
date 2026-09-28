@@ -22,6 +22,8 @@ extern eshkol_tagged_value_t tr3_stop_policy_root
     __asm__("tr3-stop-policy-root");
 extern eshkol_tagged_value_t tr3_metrics_root
     __asm__("tr3-metrics");
+extern eshkol_tagged_value_t tr3_step_test_hook
+    __asm__("tr3-step-composer-test-hook");
 
 /* Test-only producer, linked with the unlocalized copy of the same aggregate. */
 void et_tr3_test_publish_step_v1(void *output) {
@@ -66,6 +68,11 @@ void et_tr3_test_stop_policy_root_v1(void *output) {
 void et_tr3_test_metrics_root_v1(void *output) {
   et_e1b_ensure_private_initialized_v1();
   *et_e1b_box_value_v1(output) = tr3_metrics_root;
+}
+
+void et_tr3_test_set_observation_hook_v1(void *callback) {
+  et_e1b_ensure_private_initialized_v1();
+  tr3_step_test_hook = *et_e1b_box_value_v1(callback);
 }
 
 void et_tr3_test_arm_train_after_one_v1(void *enabled, void *output) {

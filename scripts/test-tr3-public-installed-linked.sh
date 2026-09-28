@@ -243,6 +243,14 @@ grep -Fx TR3-PUBLIC-METRICS-BRIDGE-PASS /out/metrics-bridge.stdout >/dev/null
 test ! -s /out/metrics-bridge.stderr
 '
 
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  -m tests.tr3_public_installed.check_unequal_witness \
+  "${evidence}/step.stdout" >"${evidence}/unequal-exact.stdout" \
+  2>"${evidence}/unequal-exact.stderr"
+rg -q '^TR3-TRAIN-UNEQUAL-EXACT-PASS loss-bits=' \
+  "${evidence}/unequal-exact.stdout"
+test ! -s "${evidence}/unequal-exact.stderr"
+
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
 from pathlib import Path
 import sys
