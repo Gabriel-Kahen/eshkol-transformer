@@ -20,7 +20,8 @@
       (et-e1b-private-raise
         (transformer-error-category caught) 'trainer-train!
         (transformer-error-message caught)
-        (transformer-error-details caught) caught)
+        (transformer-error-details caught)
+        (transformer-error-cause caught))
       (et-e1b-private-raise
         'internal 'trainer-train! "trainer train raised a foreign value"
         '() #f)))

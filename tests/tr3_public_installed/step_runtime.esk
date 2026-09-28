@@ -117,6 +117,8 @@
             (= (metrics-ref second 'microbatches) 2)
             (= (metrics-ref second 'update) 2)
             (= (metrics-ref first 'update) 1)
+            (= (f32-bits (vector (metrics-ref second 'loss)))
+               1085108487)
             (= (f32-bits (vector (metrics-ref second 'mask-weight)))
                1077936128)))
 (check 'release (trainer-release! trainer))
@@ -207,12 +209,12 @@
   (trainer-create resolved tokenizer two-dataset two-model two-optimizer))
 (define two-summary
   (trainer-train! two-trainer (trainer-stop-policy #f 2 #f)))
-;;; The independent finite-D2 trajectory observes f32 numerator words
-;;; 1093788954, 1085410405, 1093788954, 1085410405 in that order. Their
-;;; physical f32 sum divided by ordered weight 2+1+2+1 is word 1085403699.
+;;; The separately published step trajectory has mean words 1085403699 and
+;;; 1085108487, each with physical weight 3. The ordered physical numerator
+;;; reduction produces word 1085256093 for the two-update summary.
 (check 'train-two-update-weighted-exact
        (and (= (f32-bits (vector (metrics-ref two-summary 'loss)))
-               1085403699)
+               1085256093)
             (= (f32-bits (vector (metrics-ref two-summary 'mask-weight)))
                1086324736)
             (= (metrics-ref two-summary 'tokens) 6)
