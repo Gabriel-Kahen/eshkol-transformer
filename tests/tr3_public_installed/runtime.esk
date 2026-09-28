@@ -270,6 +270,7 @@
               'invalid-state 'trainer-create
   (lambda ()
     (trainer-create resolved tokenizer dataset model optimizer)))
+(define trainer-start-cursor (token-dataset-cursor dataset))
 (define live-batch (token-dataset-next-batch dataset))
 (check "genuine D2 batch is live" (procedure? live-batch))
 (define before-busy-step-cursor (token-dataset-cursor dataset))
@@ -286,6 +287,10 @@
   (lambda ()
     (trainer-create resolved tokenizer dataset model optimizer)))
 (check "release live batch" (token-batch-release! live-batch))
+(check "restore captured epoch start after D2 busy probe"
+       (and (token-dataset-seek! dataset trainer-start-cursor)
+            (bytes-equal? trainer-start-cursor
+                          (token-dataset-cursor dataset))))
 (define first-step (trainer-step! trainer))
 (check "public step publishes first update"
        (and (= (metrics-ref first-step 'update) 1)

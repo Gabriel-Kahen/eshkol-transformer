@@ -37,12 +37,17 @@
       (tr3-metrics-step-begin-internal!)
       (set! staged? #t)
       (let* ((accumulator (make-bytevector 8 0))
+             (observed-microbatches 0)
              (token
                (tr3-step-composer-with-hooks-internal!
                  trainer
                  (lambda (observation)
                    (tr3-public-step-f32-check
                      (tr3-step-metrics-accumulate accumulator observation))
+                   ;; Count actual completed VJPs from an exact literal. X1's
+                   ;; configured A can carry an unflagged i64 across its
+                   ;; accessor and is never installed as a public counter.
+                   (set! observed-microbatches (+ observed-microbatches 1))
                    #t)
                  (lambda (ledger)
                    (let* ((frame (vector-ref ledger 0))
@@ -51,11 +56,16 @@
                           (weight (tr3b-u32-le accumulator 4))
                           (loss (tr3-public-step-f32-check
                                   (tr3-step-metrics-mean-bits accumulator))))
-                     (if (not (= weight (tr3-step-f32-integer-bits tokens)))
+                     (if (or (not (= weight
+                                     (tr3-step-f32-integer-bits tokens)))
+                             (not (= observed-microbatches
+                                     (vector-ref ledger 8)))
+                             (not (tr3-metrics-i64?
+                                    observed-microbatches)))
                          (m3t-fail 'invalid-state 'trainer-step!
-                                   "physical f32 step reduction differs"))
+                                   "physical f32 step reduction or count differs"))
                      (tr3-metrics-step-fill-internal!
-                       loss weight tokens (vector-ref ledger 8)
+                       loss weight tokens observed-microbatches
                        (+ (vector-ref saved 1) 1))))
                  (lambda () (tr3-metrics-step-precommit-internal!))
                  (lambda () (tr3-metrics-step-publish-internal!)))))
