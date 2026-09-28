@@ -1,8 +1,9 @@
 # G3-T manual kind-0 P2 transport proposal
 
-Status: **proposed, pending independent review**. This document specifies a
-private dependency for G3-M P2 orchestration; it does not claim an implemented
-G3-T operation, public generation, manual decode, or a new external ABI.
+Status: **accepted for bounded private implementation** after independent source
+review. This document specifies a private dependency for G3-M P2 orchestration;
+it does not claim an implemented G3-T operation, public generation, manual
+decode, or a new external ABI.
 
 ## Existing boundary and proposed feature
 
