@@ -925,7 +925,8 @@ authenticated owned I1 `[1,2]` admission, 21-role T2 routing, last-row
 logits, length-two A2 publication and rollback. The isolated
 [G3-T manual P2 native transport candidate](g3/G3_T_MANUAL_P2_PREFILL_LEAF.md)
 implements that source-private bridge. Root independently source-reviewed
-`fd11d72` / tree `4d100f8`; hosted integration CI remains pending. Its pinned
+`fd11d72` / tree `4d100f8`; PR #130 passed all 23 hosted checks and merged as
+`86b10ee`. Its pinned
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 46,984 identical
 checks, 18 source contracts, Q0 4/4 and production test-symbol exclusion;
 the external evidence is in `g3t-manual-p2-native-candidate-20260928`.
@@ -940,24 +941,21 @@ independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
 integration CI remains pending. It adds no public
 generation facade or manual decode.
 
-The next dependency after the independently reviewed G3-T manual P2 native
-head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
-[proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
-The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
-native frame/role/publication branches and private Eshkol call/frame wrappers
-still exclude manual decode. Root independently reviewed the source-anchored
-native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
-is integrated in this `origin/main` baseline. The isolated
-[G3-T native manual decode candidate](g3/G3_T_MANUAL_DECODE_LEAF.md)
-extends the reviewed P2 source with an owned `[1,1]` ID, bound P1 prefix,
-21-role T1 append, and atomic length-two cache/logits commit. Its pinned
+The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
+was independently reviewed at `58499c0`. Its isolated
+[native candidate](g3/G3_T_MANUAL_DECODE_LEAF.md), `a4f7c53` / tree
+`ad87a4e`, extends reviewed manual P2 with an owned `[1,1]` ID, bound P1
+prefix, 21-role T1 append and atomic length-two cache/logits commit. Its pinned
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
-exclusion; evidence is at `g3t-manual-decode-candidate-20260928`.
-Root independently source-reviewed `a4f7c53` / tree `ad87a4e`; hosted
-integration CI remains pending. The
-private wrapper, G3-M decode composer, and seeded generation/public facade
-are separate downstream gates.
+exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. Root
+independently reviewed the source; hosted integration CI remains pending.
+The accepted [private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md)
+merged as `893cbc7` and adds no implementation. The isolated wrapper candidate
+`f117987` / tree `972087b` has since passed independent source review and
+47,194 pinned normal/repeat/sanitizer checks; its hosted integration remains
+separate. The G3-M decode composer and seeded generation/public facade are
+downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
