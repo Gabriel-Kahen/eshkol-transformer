@@ -949,7 +949,8 @@ prefix, 21-role T1 append and atomic length-two cache/logits commit. Its pinned
 network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
 exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. Root
-independently reviewed the source; hosted integration CI remains pending.
+independently reviewed the source; PR #135 merged as `fedf0be` while its
+refreshed hosted run remained queued, so that gate still needs follow-up.
 The accepted [private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md)
 merged as `893cbc7`. This isolated implementation `f117987` / tree `972087b`
 widens kind-1 calls and authentic non-null frame-kind-2 input. Root
