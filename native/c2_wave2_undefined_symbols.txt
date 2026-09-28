@@ -52,6 +52,7 @@ eshkol_error_object_p
 eshkol_ffi_pointer_arg_type_error
 eshkol_fopen
 eshkol_format_double
+eshkol_format_float32_bits
 eshkol_get_current_exception
 eshkol_get_raised_value
 eshkol_intern_symbol_lookup
@@ -95,6 +96,7 @@ eshkol_rmdir
 eshkol_runtime_close_port
 eshkol_runtime_emergency_raise_v1
 eshkol_runtime_emergency_rethrow_if_v1
+eshkol_runtime_fatal
 eshkol_runtime_register_port
 eshkol_runtime_reserve_exception_handlers_v1
 eshkol_set_error_location

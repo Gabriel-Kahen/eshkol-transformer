@@ -7,22 +7,22 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 Work proceeds in dependency-aware waves. Within a wave, workstreams may run in
 parallel in isolated worktrees. Contracts merge before downstream implementation.
 
-The Wave 3 checked-promotion adoption candidate pins
-`Gabriel-Kahen/eshkol@81298b4a9608fb92eb6f351a2eabd8392da7d9ef`, proposed
-upstream in [PR #714](https://github.com/tsotchke/eshkol/pull/714). Adoption remains
-under review. The exact-pin supported toolchain/package rebuild and focused B0/C2/E3
-adoption gates pass; the separate #117/#121 guard-order repairs, their combined
-aggregate evidence, full supported CI, and final integration review remain pending.
-No workstream status changes solely from the pin update.
-
-The separate F32/master composition remains draft in fork PR #1. Its local
-full suite passed 46/46 suites and 844/844 tests, and the execution-backed
-surface gate covered 1,110/1,110 constructs. Hosted CI on preceding head
-`b8a1a82c` completed with one stale generated-API-docs failure and one
-cancelled Windows ARM64 lite job; the other completed platform jobs passed.
-The docs repair is pushed at `d97c4b6b`, with local API-doc checks passing,
-and exact-head CI `36156858263` is pending. This does not repin the
-transformer or prove its successor-runtime gates.
+The Wave 3 runtime pin now selects the fork's merged F32/master composition,
+`Gabriel-Kahen/eshkol@fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`
+([PR #1](https://github.com/Gabriel-Kahen/eshkol/pull/1)). The preceding
+`81298b4a` checked-promotion pin and its exact-source gates remain historical
+evidence. On the supported Ubuntu 22.04/LLVM 21 image, the new pin passes a fresh
+F0 build/configure, two AOT smokes, 41 B0 tests and 107 CI/topology tests. DD-10
+module visibility requires explicit trusted X1/C1 helper imports; the new closure
+packing requires the exact K2/D2 native readers to use 32-bit capture count and
+arity bits 32–47. Their normal and sanitizer native checks pass. Dedicated X1
+passes 111 native checks and its package/import/leakage gate; D1 builds and the
+A0 declaration/compile fixture gate passes with fresh isolated compiler caches.
+The rebuilt C2 aggregate passes its exact 81-definition/75-export/81-string
+surface plus the complete public package gate, including load/save/release and
+two byte-identical clean rebuilds. R0 executable audit, the other affected
+packages and full supported CI still need this exact pin. No workstream status
+changes solely from this bounded repin.
 
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the

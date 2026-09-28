@@ -257,9 +257,9 @@ static void initialize_bytes(tagged_bytes *carrier, const void *bytes,
 }
 
 static void register_factories(void) {
-  static size_t report_environment = (size_t)0x00010001u;
-  static size_t request_environment = (size_t)0x00010001u;
-  static size_t entry_environment = (size_t)0x00010001u;
+  static size_t report_environment = (size_t)UINT64_C(0x0000000100000001);
+  static size_t request_environment = (size_t)UINT64_C(0x0000000100000001);
+  static size_t entry_environment = (size_t)UINT64_C(0x0000000100000001);
   test_closure report = make_closure(UINT64_C(0x1010), &report_environment);
   test_closure request = make_closure(UINT64_C(0x2020), &request_environment);
   test_closure entry = make_closure(UINT64_C(0x3030), &entry_environment);
@@ -291,7 +291,8 @@ static int zero_after_nul(const char *text, size_t capacity) {
 }
 
 static void test_factory_identity(void) {
-  static size_t environment = (size_t)0x00010001u;
+  static size_t environment = (size_t)UINT64_C(0x0000000100000001);
+  static size_t legacy_environment = (size_t)UINT64_C(0x00010001);
   aligned_error diagnostic;
   test_closure first = make_closure(UINT64_C(0x1110), &environment);
   test_closure same_code = make_closure(UINT64_C(0x1110), &environment);
@@ -306,6 +307,8 @@ static void test_factory_identity(void) {
   CHECK(et_k2_private_report_factory_register_v1(NULL) == -1);
   CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
   malformed.body.flags = 1u;
+  CHECK(et_k2_private_report_factory_register_v1(&malformed.body) == -1);
+  malformed = make_closure(UINT64_C(0x4440), &legacy_environment);
   CHECK(et_k2_private_report_factory_register_v1(&malformed.body) == -1);
   CHECK(et_k2_private_report_factory_register_v1(&first.body) == 1);
   CHECK(et_k2_private_report_factory_register_v1(&same_code.body) == 1);

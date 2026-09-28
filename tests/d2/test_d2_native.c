@@ -66,7 +66,7 @@ static void init_closure(closure_fixture *fixture, uint64_t function) {
   fixture->body.func_ptr = function;
   fixture->body.env = &fixture->env;
   fixture->body.input_arity = 1u;
-  fixture->env.packed = 1u | ((size_t)1u << 16);
+  fixture->env.packed = (size_t)UINT64_C(1) | ((size_t)1u << 32);
 }
 
 static int read_stage(int64_t result) { return (int)((uint64_t)result >> 32); }
@@ -157,12 +157,17 @@ static void test_shell_factory_identity(void) {
             &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   init_closure(&malformed, UINT64_C(0x2222222222222222));
-  malformed.env.packed = 2u | ((size_t)1u << 16);
+  malformed.env.packed = 2u | ((size_t)1u << 32);
   CHECK(et_d2_shell_factory_register_v1(
             &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
   init_closure(&malformed, UINT64_C(0x2222222222222222));
-  malformed.env.packed = 1u | ((size_t)2u << 16);
+  malformed.env.packed = 1u | ((size_t)2u << 32);
+  CHECK(et_d2_shell_factory_register_v1(
+            &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
+        ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
+  init_closure(&malformed, UINT64_C(0x2222222222222222));
+  malformed.env.packed = (size_t)UINT64_C(0x00010001);
   CHECK(et_d2_shell_factory_register_v1(
             &malformed.body, ET_D2_SHELL_FACTORY_DATASET) ==
         ET_D2_NATIVE_STATUS_INVALID_ARGUMENT);
