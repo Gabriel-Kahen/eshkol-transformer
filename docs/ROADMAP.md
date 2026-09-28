@@ -80,6 +80,12 @@ two stale test-only undefined-symbol counts: the successor runtime adds exactly
 The two private-leaf package tests now expect 159 entries; the byte-exact
 manifest comparison remains mandatory. Fresh hosted acceptance is pending.
 
+The same old-head canonical-build job reached `benchmark-after-build` after its
+clean build and smoke, then rejected the new lock commit at B0's historical
+canonical-commit pin. The strict B0 report validator now accepts only the
+exact `fe9dfd52` successor identity recorded by the toolchain manifest;
+fresh hosted canonical-build acceptance remains pending.
+
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
 unpublished tail-body entry of the private construction rollback helper. The
