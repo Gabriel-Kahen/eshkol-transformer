@@ -984,8 +984,17 @@ call, owned `[1,1]` input, exact 21-role T1 schedule, A2 `1→2` append,
 detached logits and precommit rollback. Root independently reviewed its
 source and 47,240 pinned normal/repeat/sanitizer checks, 22 source contracts
 and Q0 4/4; its prior head passed all 23 hosted checks. Refreshed hosted
-integration CI remains pending. A seeded generation schedule and public G3-G
-facade are separate downstream gates.
+integration CI remains pending. The accepted private
+[seeded P1/G1 schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) has a
+[reviewed implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) at
+`9029b67` / tree `052fdf9`: a single guarded full-request preflight,
+prompt commit, G3-S sample, generated append and atomic final publication.
+Its pinned normal/repeat/ASan+UBSan+LSan gate passed 47,330 identical checks,
+23 source contracts, Q0 4/4 and production test-symbol exclusion. The
+isolated integration head preserves the reviewed source and tests byte for
+byte; its prior head passed all 23 hosted checks. Refreshed hosted CI remains
+pending. The public G3-G facade and N>1 continuation are separate downstream
+gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

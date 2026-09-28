@@ -206,6 +206,11 @@ typedef struct g3t_context {
   g3t_output *pending_output;
   g3t_frame frame;
   float last_logits[256];
+#ifdef ET_G3T_TESTING
+  uint32_t test_generated_logits[256];
+  int test_generated_ready;
+  int test_flip_binding_on_sample;
+#endif
   int64_t sample_token, successor_rng[4];
   int prefill_committed, sampled;
   const void *binding_identities[14];
@@ -598,6 +603,9 @@ int64_t et_g3t_private_call_acquire_v1(void *candidate, int64_t call_kind) {
   if (et_g3t_model_pins_begin_internal(o->p, (const void *const *)o->handles,
                                        &c->pins, &error)) return g3t_f32_failure(&error);
   c->call_kind = (int)call_kind;
+#ifdef ET_G3T_TESTING
+  c->test_generated_ready = 0;
+#endif
   c->h.busy = 1;
   o->active = c;
   return 0;
@@ -2238,6 +2246,11 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (!c->frame.end_prepared || g3t_final_preflight(c))
       return g3t_error_category ?
           g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3T_TESTING
+    memcpy(c->test_generated_logits, c->frame.z,
+           sizeof(c->test_generated_logits));
+    c->test_generated_ready = 1;
+#endif
     /* All recoverable checks end here. This A2 commit has no allocator;
      * an impossible rejection after preflight is fail-stop. */
     et_kernel_error error;
@@ -2365,6 +2378,12 @@ int64_t et_g3t_private_sample_v1(void *candidate) {
     return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
   c->sample_token = token;
   memcpy(c->successor_rng, next, sizeof(next));
+#ifdef ET_G3T_TESTING
+  if (c->test_flip_binding_on_sample) {
+    c->binding_values[0] ^= 1u;
+    c->test_flip_binding_on_sample = 0;
+  }
+#endif
   c->sampled = 1;
   return 0;
 }
@@ -2951,6 +2970,18 @@ int64_t et_g3t_test_logit_bits_v1(void *candidate, int64_t index) {
   uint32_t bits;
   memcpy(&bits, &c->last_logits[index], sizeof(bits));
   return bits;
+}
+int64_t et_g3t_test_generated_logit_bits_v1(void *candidate, int64_t index) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  return c && c->test_generated_ready && index >= 0 && index < 256
+             ? c->test_generated_logits[index] : -1;
+}
+int64_t et_g3t_test_flip_binding_on_sample_v1(
+    void *candidate, int64_t armed) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || c->h.busy || (armed != 0 && armed != 1)) return -1;
+  c->test_flip_binding_on_sample = (int)armed;
+  return 0;
 }
 int64_t et_g3t_test_sample_token_v1(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);
