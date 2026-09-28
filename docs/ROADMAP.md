@@ -66,6 +66,15 @@ package/reference/native/AOT/sanitizer gate passes locally on Ubuntu 22.04,
 LLVM 21.1.8, Python 3.14.6 and PyTorch 2.13.0+cpu. Fresh exact-head hosted CI
 remains the acceptance gate.
 
+The same run's parameter-state job exited 124 after the P1 sanitized identity
+build, 29m42s later and before any assertion. P1's per-compiler limit was
+900 seconds; the supported successor full-cold local gate passed in 93m47s,
+with its first large trusted object finishing about three seconds below that
+limit. Only parameter-state now receives a 1,200-second compiler bound and a
+120-minute job bound. P1 records each compiler's elapsed time, peak RSS and
+status in the CI step summary, including failure diagnostics. The exact-head
+hosted parameter-state result remains pending; other suite budgets are intact.
+
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
 unpublished tail-body entry of the private construction rollback helper. The

@@ -41,7 +41,7 @@ jobs:
             timeout: 75
           - suite: parameter-state
             test_target: test-ci-parameters-after-build
-            timeout: 75
+            timeout: 120
           - suite: byte-tokenizer
             test_target: test-ci-tokenizer-byte-after-build
             timeout: 75
@@ -79,7 +79,7 @@ jobs:
       LLVM_CONFIG_EXECUTABLE: llvm-config-21
       ESHKOL_JOBS: '2'
       A0_COMPILER_TIMEOUT_SECONDS: '60'
-      P1_COMPILER_TIMEOUT_SECONDS: '900'
+      P1_COMPILER_TIMEOUT_SECONDS: ${{ matrix.suite == 'parameter-state' && '1200' || '900' }}
       T1_COMPILER_TIMEOUT_SECONDS: '600'
       T2_COMPILER_TIMEOUT_SECONDS: '600'
       D2_COMPILER_TIMEOUT_SECONDS: '900'
