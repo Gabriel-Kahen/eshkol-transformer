@@ -63,6 +63,11 @@
 #error "G3-T manual P1 requires kind-3 logits and final call transport"
 #endif
 #endif
+#ifdef ET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE
+#ifndef ET_G3T_MANUAL_LOGITS_PRIVATE
+#error "G3-T logits materialization requires kind-3 logits ownership"
+#endif
+#endif
 #ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
 #if !defined(ET_G3T_MANUAL_P1_PREFILL_PRIVATE) || \
     !defined(ET_G3T_P2_ZERO_BUDGET_PRIVATE) || \
@@ -909,6 +914,55 @@ void *et_g3t_private_logits_reserve_v1(void *candidate) {
   c->pending_logits = logits;
   logits->h.busy = 0;
   return logits;
+}
+#endif
+#ifdef ET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE
+int64_t et_g3t_private_logits_copy_bits_v1(
+    void *candidate, void *bytevector_header, int64_t byte_count) {
+  g3t_clear();
+  g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+      candidate, G3T_LOGITS, 0);
+  if (!logits) return g3t_error_category;
+  if (logits->h.busy) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (logits->parent_ctx || !logits->tensor)
+    return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+  if (byte_count != 1024) return g3t_bad(G3T_SHAPE, G3T_CONFIG);
+  if (!bytevector_header ||
+      (uintptr_t)bytevector_header > UINTPTR_MAX - (uintptr_t)1032u)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  int64_t encoded_length = 0;
+  memcpy(&encoded_length, bytevector_header, sizeof(encoded_length));
+  if (encoded_length != 1024) return g3t_bad(G3T_SHAPE, G3T_CONFIG);
+
+  et_f32_tensor_error error;
+  et_f32_tensor_borrow *borrow = NULL;
+  if (et_f32_tensor_borrow_begin_v1(logits->tensor, &borrow, &error))
+    return g3t_f32_failure(&error);
+  int64_t status = 0;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  size_t stride0 = 0, stride1 = 0;
+  if (et_f32_tensor_borrow_view_v1(borrow, &view, &error) ||
+      et_f32_tensor_stride_bytes_at_v1(logits->tensor, 0, &stride0, &error) ||
+      et_f32_tensor_stride_bytes_at_v1(logits->tensor, 1, &stride1, &error)) {
+    status = g3t_f32_failure(&error);
+  } else if (!view || view->struct_size != sizeof(*view) ||
+             !view->data || view->rank != 2 || !view->shape ||
+             view->shape[0] != 1 || view->shape[1] != 256 ||
+             view->byte_length != 1024 || view->offset_bytes != 0 ||
+             !view->dtype || strcmp(view->dtype, "f32") ||
+             !view->device || strcmp(view->device, "cpu") ||
+             view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+             stride0 != 1024 || stride1 != 4) {
+    status = g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+  } else if (et_f32_tensor_copy_bits_to_v1(
+                 logits->tensor,
+                 (uint32_t *)((unsigned char *)bytevector_header + 8),
+                 256, &error)) {
+    status = g3t_f32_failure(&error);
+  }
+  /* Status is captured before cleanup. A failed lease end is fail-stop. */
+  if (et_f32_tensor_borrow_end_v1(&borrow, &error)) abort();
+  return status;
 }
 #endif
 void *et_g3t_private_output_reserve_v1(void *candidate, int64_t prompt_length) {

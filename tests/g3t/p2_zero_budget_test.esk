@@ -7,6 +7,7 @@
 (load "g3t_output_text_extension.esk")
 (load "g3t_final_publication_extension.esk")
 (load "g3t_manual_p1_extension.esk")
+(load "g3t_manual_logits_materialize_extension.esk")
 (load "g3m_prefill_p1_extension.esk")
 (load "g3m_prefill_p2_extension.esk")
 (load "g3m_manual_decode_extension.esk")
@@ -2933,6 +2934,14 @@
 (define g3m2-second (g3m-prefill-p2! g3m2-generator g3m2-input))
 (define g3m2-second-native
   (vector-ref (g3t-prefill-entry g3m2-second 'logits 'g3m-p2) 3))
+(check "manual logits snapshot P2 detached last-row bits"
+       (let ((bits (g3t-logits-bits g3m2-second)))
+         (and (= 1024 (bytevector-length bits))
+              (let compare ((at 0))
+                (if (= at 1024) #t
+                    (and (= (bytevector-u8-ref bits at)
+                            (bytevector-u8-ref reference-bytes (+ 1024 at)))
+                         (compare (+ at 1))))))))
 (check "G3-M P2 T1-backed input release after call"
        (and (g3t-generation-tensor-release! g3m2-input)
             (= g3m2-i1-baseline (g3t-test-i1-count 0))))
@@ -3702,6 +3711,14 @@
 (define g3md-result (g3m-decode-one! g3md-generator g3md-input))
 (define g3md-result-native
   (vector-ref (g3t-prefill-entry g3md-result 'logits 'g3md) 3))
+(check "manual logits snapshot decode detached last-row bits"
+       (let ((bits (g3t-logits-bits g3md-result)))
+         (and (= 1024 (bytevector-length bits))
+              (let compare ((at 0))
+                (if (= at 1024) #t
+                    (and (= (bytevector-u8-ref bits at)
+                            (bytevector-u8-ref reference-bytes (+ 1024 at)))
+                         (compare (+ at 1))))))))
 (check "G3-M decode P1 all 256 logits bit-exact to M3T"
        (let compare ((index 0))
          (if (= index 256) #t
@@ -4292,6 +4309,91 @@
               (g3g-public-generation-output-release g3g-cut-output)
               (g3g-public-generation-tensor-release g3g-cut-input)
               (g3g-public-generator-close g3g-cut-generator))))
+
+;;; The source-private materializer reads a detached kind-3 result only.
+(define ml-generator (g3t-generator-create model tokenizer policy))
+(define ml-generator-native
+  (vector-ref (g3t-generator-find ml-generator 'ml) 3))
+(define ml-input (g3t-generation-token-input-create 65))
+(define ml-result (g3m-prefill-p1! ml-generator ml-input))
+(define ml-native (vector-ref (g3t-prefill-entry ml-result 'logits 'ml) 3))
+(define ml-bytes (g3t-logits-bits ml-result))
+(check "manual logits snapshot exact 256 bits and shape"
+       (and (= 1024 (bytevector-length ml-bytes))
+            (= 1 (g3t-test-logits-shape ml-native))
+            (let compare ((index 0))
+              (if (= index 256) #t
+                  (let* ((at (* 4 index))
+                         (bits (+ (bytevector-u8-ref ml-bytes at)
+                                  (* 256 (bytevector-u8-ref ml-bytes (+ at 1)))
+                                  (* 65536 (bytevector-u8-ref ml-bytes (+ at 2)))
+                                  (* 16777216 (bytevector-u8-ref ml-bytes (+ at 3))))))
+                    (and (= bits (g3t-test-manual-logits-word ml-native index))
+                         (= (bytevector-u8-ref ml-bytes at)
+                            (bytevector-u8-ref reference-bytes at))
+                         (compare (+ index 1))))))))
+(define ml-sentinel (make-bytevector 1024 90))
+(check "manual logits snapshot wrong count leaves destination"
+       (and (not (= 0 (g3t-native-logits-copy-bits
+                        ml-native ml-sentinel 1023)))
+            (= 90 (bytevector-u8-ref ml-sentinel 0))
+            (= 90 (bytevector-u8-ref ml-sentinel 1023))))
+(check "manual logits snapshot wrong kind leaves destination"
+       (and (not (= 0 (g3t-native-logits-copy-bits
+                        (vector-ref (g3t-prefill-entry ml-input 'input 'ml) 3)
+                        ml-sentinel 1024)))
+            (= 90 (bytevector-u8-ref ml-sentinel 0))))
+(define ml-borrow (g3t-test-logits-borrow-begin ml-native))
+(check "manual logits snapshot borrowed owner rejects atomically"
+       (and (not (null? ml-borrow))
+            (not (= 0 (g3t-native-logits-copy-bits
+                       ml-native ml-sentinel 1024)))
+            (= 3 (g3t-test-last-error-domain))
+            (= 90 (bytevector-u8-ref ml-sentinel 0))))
+(reject-category "manual logits snapshot wrapper borrowed owner rejected"
+                 'invalid-state
+  (lambda () (g3t-logits-bits ml-result)))
+(check "manual logits snapshot borrow ended"
+       (= 0 (g3t-test-logits-borrow-end ml-borrow)))
+(check "manual logits snapshot I2 allocation cut armed"
+       (= 0 (g3t-test-fail-f32-after 0)))
+(check "manual logits snapshot I2 allocation cut leaves destination"
+       (and (not (= 0 (g3t-native-logits-copy-bits
+                        ml-native ml-sentinel 1024)))
+            (= 90 (bytevector-u8-ref ml-sentinel 0))
+            (= 1 (g3t-test-logits-state ml-native))))
+(check "manual logits snapshot I2 allocation cut disarmed"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(check "manual logits snapshot retry and repeat"
+       (let ((again (g3t-logits-bits ml-result)))
+         (and (= 1024 (bytevector-length again))
+              (= (bytevector-u8-ref ml-bytes 0)
+                 (bytevector-u8-ref again 0))
+              (= 1 (g3t-test-cache-length ml-generator-native)))))
+(define ml-pending-generator (g3t-generator-create model tokenizer policy))
+(m3-call 'ml-pending
+  (let* ((entry (g3t-generator-find ml-pending-generator 'ml-pending))
+         (call (g3t-call-acquire entry 0))
+         (pending (g3t-logits-reserve call))
+         (native (vector-ref (g3t-prefill-entry
+                              pending 'logits 'ml-pending) 3)))
+    (check "manual logits snapshot pending owner rejects atomically"
+           (and (not (= 0 (g3t-native-logits-copy-bits
+                            native ml-sentinel 1024)))
+                (= 90 (bytevector-u8-ref ml-sentinel 0))))
+    (g3t-call-abort call)))
+(check "manual logits snapshot pending fixture closes"
+       (g3t-generator-close! ml-pending-generator))
+(check "manual logits snapshot detached owner release"
+       (and (g3t-generation-tensor-release! ml-input)
+            (g3t-generator-close! ml-generator)
+            (= 1024 (bytevector-length (g3t-logits-bits ml-result)))
+            (g3t-generation-tensor-release! ml-result)
+            (= -1 (g3t-test-logits-state ml-native))
+            (= 1024 (bytevector-length ml-bytes))))
+(reject-category "manual logits snapshot dead owner rejected"
+                 'invalid-state
+  (lambda () (g3t-logits-bits ml-result)))
 
 (display "G3-T P2 zero budget PASS: checks=")
 (display checks)
