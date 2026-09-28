@@ -162,3 +162,43 @@
                (tr3-metrics-fail 'invalid-state "metrics record is not published"))
            (car rows))
           (else (find (cdr rows))))))
+
+;;; The private result code is nonnegative for an exact i64 counter and
+;;; -1-bits for a physical f32 word. Only the same-aggregate public bridge
+;;; consumes this code; the caller receives a canonical runtime f32 immediate.
+(define (tr3-metrics-ref-coded-internal token key)
+  (let ((record
+          (let find ((rows (vector-ref tr3-metrics 0)))
+            (cond ((null? rows)
+                   (m3t-fail 'invalid-argument 'metrics-ref
+                             "unknown metrics identity"))
+                  ((not (pair? rows)) (tr3-lease-fail-stop 134))
+                  (else
+                    (let ((entry (car rows)))
+                      (if (or (not (vector? entry))
+                              (not (= (vector-length entry) 10))
+                              (not (eq? (vector-ref entry 0)
+                                        tr3-metrics-record-tag))
+                              (not (eq? (vector-ref entry 1) entry))
+                              (not (error-object? (vector-ref entry 2))))
+                          (tr3-lease-fail-stop 134))
+                      (if (eq? token (vector-ref entry 2))
+                          (begin
+                            (if (not (eq? (vector-ref entry 4) 'published))
+                                (m3t-fail 'invalid-state 'metrics-ref
+                                          "metrics record is not published"))
+                            (if (or (not (eq? (vector-ref entry 3) 'step))
+                                    (not (tr3-metrics-step-fields? entry)))
+                                (tr3-lease-fail-stop 134))
+                            entry)
+                          (find (cdr rows)))))))))
+    (if (not (symbol? key))
+        (m3t-fail 'invalid-argument 'metrics-ref
+                  "metrics key must be an interned symbol"))
+    (cond ((eq? key 'loss) (- -1 (vector-ref record 5)))
+          ((eq? key 'mask-weight) (- -1 (vector-ref record 6)))
+          ((eq? key 'tokens) (vector-ref record 7))
+          ((eq? key 'microbatches) (vector-ref record 8))
+          ((eq? key 'update) (vector-ref record 9))
+          (else (m3t-fail 'invalid-argument 'metrics-ref
+                          "unknown step metrics key")))))

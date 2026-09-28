@@ -41,6 +41,31 @@ extern eshkol_tagged_value_t et_e1b_private_d2_token_batch_loss_mask_cabi_v1(
     eshkol_tagged_value_t batch);
 extern eshkol_tagged_value_t et_e1b_private_d2_token_batch_validate_cabi_v1(
     eshkol_tagged_value_t batch);
+extern eshkol_tagged_value_t et_e1b_private_tr3_metrics_ref_cabi_v1(
+    eshkol_tagged_value_t metrics, eshkol_tagged_value_t key);
+
+#if !defined(ESHKOL_HAS_F32_SCALAR_ABI_V1) || ESHKOL_HAS_F32_SCALAR_ABI_V1 != 1
+#error "public metrics-ref requires the accepted true-f32 runtime ABI"
+#endif
+
+void et_e1b_public_tr3_metrics_ref_v1(void *metrics, void *key, void *output) {
+  eshkol_tagged_value_t result;
+  int64_t code;
+  et_e1b_ensure_private_initialized_v1();
+  result = et_e1b_private_tr3_metrics_ref_cabi_v1(
+      *et_e1b_box_value_v1(metrics), *et_e1b_box_value_v1(key));
+  if (result.type != ESHKOL_VALUE_INT64 ||
+      result.flags != ESHKOL_VALUE_EXACT_FLAG || result.reserved != 0)
+    __builtin_trap();
+  code = eshkol_unpack_int64(&result);
+  if (code < 0) {
+    if (code < -INT64_C(4294967296) ||
+        eshkol_value_f32_from_bits_v1(&result, (uint32_t)(-code - 1)) !=
+            ESHKOL_VALUE_F32_OK)
+      __builtin_trap();
+  }
+  *et_e1b_box_value_v1(output) = result;
+}
 
 TR3_PUBLIC_UNARY(et_e1b_public_c2_trainer_state_release_v1,
                  et_e1b_private_c2_trainer_state_release_cabi_v1)

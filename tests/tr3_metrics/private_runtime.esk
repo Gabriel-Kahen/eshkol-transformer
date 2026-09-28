@@ -17,6 +17,12 @@
                     (eq? (transformer-error-operation caught)
                          'tr3-metrics-internal))))
     (thunk) #f))
+(define (fails-metrics? category thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught) 'metrics-ref))))
+    (thunk) #f))
 (define (count-records)
   (let loop ((rows (vector-ref tr3-metrics 0)) (count 0))
     (if (null? rows) count (loop (cdr rows) (+ count 1)))))
@@ -60,6 +66,34 @@
 (define first-token (tr3-metrics-step-publish-internal!))
 (check 'nonallocating-publication (= before-publish (__arena-used)))
 (define first-record (tr3-metrics-step-authenticate-internal first-token))
+(check 'coded-loss
+       (= (tr3-metrics-ref-coded-internal first-token 'loss) -1065353217))
+(check 'coded-weight
+       (= (tr3-metrics-ref-coded-internal first-token 'mask-weight)
+          -1073741825))
+(check 'coded-tokens (= (tr3-metrics-ref-coded-internal first-token 'tokens) 2))
+(check 'coded-microbatches
+       (= (tr3-metrics-ref-coded-internal first-token 'microbatches) 1))
+(check 'coded-update (= (tr3-metrics-ref-coded-internal first-token 'update) 1))
+(check 'coded-repeat
+       (= (tr3-metrics-ref-coded-internal first-token 'loss) -1065353217))
+(check 'coded-unknown
+       (fails-metrics? 'invalid-argument
+               (lambda () (tr3-metrics-ref-coded-internal first-token 'epochs))))
+(check 'coded-case
+       (fails-metrics? 'invalid-argument
+               (lambda () (tr3-metrics-ref-coded-internal first-token 'Loss))))
+(check 'coded-type
+       (fails-metrics? 'invalid-argument
+               (lambda () (tr3-metrics-ref-coded-internal first-token "loss"))))
+(check 'coded-foreign
+       (fails-metrics? 'invalid-argument
+               (lambda () (tr3-metrics-ref-coded-internal #f 'loss))))
+(vector-set! first-record 4 'ready)
+(check 'coded-unpublished
+       (fails-metrics? 'invalid-state
+               (lambda () (tr3-metrics-ref-coded-internal first-token 'loss))))
+(vector-set! first-record 4 'published)
 (check 'identity (eq? (vector-ref first-record 2) first-token))
 (check 'exact-bits (= (vector-ref first-record 5) 1065353216))
 (check 'exact-weight (= (vector-ref first-record 6) 1073741824))
@@ -76,6 +110,10 @@
        (fails? 'invalid-argument
                (lambda () (tr3-metrics-step-authenticate-internal
                             (make-hash-table)))))
+(check 'coded-foreign-hash
+       (fails-metrics? 'invalid-argument
+               (lambda () (tr3-metrics-ref-coded-internal
+                            (make-hash-table) 'loss))))
 
 (tr3-metrics-step-begin-internal!)
 (tr3-metrics-step-fill-internal! 0 1065353216 1 1 2)
