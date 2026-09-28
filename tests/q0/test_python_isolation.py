@@ -79,6 +79,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3m-manual-decode.py",
     ROOT / "scripts" / "check-g3m-seeded-p1-g1.py",
     ROOT / "scripts" / "check-g3g-package.py",
+    ROOT / "scripts" / "check-g3g-g0-package.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 

@@ -1002,6 +1002,28 @@ globals/strings, with fresh-cache AOT and testing-closure fault/sanitizer
 evidence. Root independently reviewed `baa08ad` / tree `6a6e164` and
 found no blocking source issue; stacked integration and hosted CI remain
 pending. No G0/manual facade, continuation or N>1 behavior is claimed.
+The bounded [public G0 extension contract](g3/G3_G_C2_PUBLIC_G0_PROPOSAL.md)
+was independently accepted at `8b2bd70` / tree `ab67893`. Its isolated
+implementation candidate adds a separate fixed G3-G C2 revision-2 package
+tuple with the same thirteen facade names and a distinct default artifact
+directory, budget-zero P1/P2 routing from
+constructor-recorded exact input provenance, and the accepted private G0
+schedules. The original P1/G1 package blobs remain unchanged. The isolated source
+candidate `1086582` / tree `5ccfa9f` passed its pinned network-none fixed
+package build, exact manifests, fresh-cache public AOT normal/repeat, 20
+identical v2 testing-closure checks in normal/repeat/ASan+UBSan+LSan,
+24 source contracts, Q0 4/4 and production test-symbol exclusion. The
+unchanged inherited private G3-T suite passed 47,342 identical checks in
+those three modes with 23 source contracts and Q0 4/4, retaining bitwise
+P1/P2 M3T logit/K/V parity. A sequential default v1→v2 build left v1's
+archive, object and eight facades byte-identical, and its fresh-cache v1
+P1/G1 caller passed normal/repeat. Local logs are sealed at
+`g3g-public-g0-candidate-20260928`. The final pin-only integration head
+`65b1fa35` / tree `0515b5d` preserves G0 source/test/runner blobs and
+passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
+its source and sealed evidence without a blocking finding. Hosted integration
+remains pending; no public manual facade, continuation or N>1 behavior is
+claimed.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

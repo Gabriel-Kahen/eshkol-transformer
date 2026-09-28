@@ -58,7 +58,7 @@ m3_check_native_dependency_path() {
     esac
   done
 }
-if [[ "${m3_tuple_requested}" == 1 && "${g3g_tuple_requested:-0}" != 1 ]]; then
+if [[ "${m3_tuple_requested}" == 1 && "${g3g_tuple_requested:-0}" != 1 && "${g3g_g0_tuple_requested:-0}" != 1 ]]; then
   [[ "${raw_private_root}" == "${m3_inputs[0]}" && \
      "${raw_package_bridge}" == "${m3_inputs[1]}" && \
      "${raw_package_renames}" == "${m3_inputs[2]}" && \
