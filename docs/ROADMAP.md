@@ -1517,23 +1517,33 @@ linearly with distinct policies until the process arena limit. The focused
 gate also rejects an exact limit above signed i64. Its sealed witness is at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-retention-20260928/SHA256SUMS`.
 The bounded finite-D2 public `trainer-train!` candidate composes the private
-step transaction and same-aggregate stop policy. Cumulative lifetime token,
-update, and epoch thresholds are checked at entry and after each committed
-step; an already-met threshold returns a newly owned zero-update summary.
+step transaction and same-aggregate stop policy. Token, update, and epoch
+thresholds are invocation deltas measured from counters captured at entry,
+as required by the earlier accepted CLI3 contract; global O2 and checkpoint
+counters continue. Positive limits are checked after each committed update.
 One summary is staged before work, and each candidate physical binary32
 weighted numerator/weight and invocation-delta counters is checked before the
 private step's first parameter write. A later failed step rolls back only that
 step; earlier commits remain, and no partial summary is published. Train
 summaries have disjoint `loss`, `mask-weight`, `tokens`, `updates`, `epochs`
 keys in the sole metrics registry; existing step tokens retain their schema.
-The pinned fe9 fixed CPU f32 N=1,T=2,V=256 finite-D2 linked gate passes on
-`64a59ff` with 58 Eshkol sources, 108 globals and 176 undefined symbols;
-all 127 artifacts verify under
-`/home/gabe/.codex/evidence/eshkol-transformer/tr3-train-fixed-64a59ff-20260928/SHA256SUMS`
-(`80c1b82b...`). Independent source/test review approved the bounded change.
-The two-update fixture uses equal update weights, so an unequal-weight
-multi-update witness remains open. Explicit interruption, public resume,
-wider profiles and hosted integration are pending.
+The prior `64a59ff` candidate and seal proved cumulative-limit behavior and
+an equal-weight two-update reduction; those semantics are superseded by the
+clean `e7041cd` invocation-delta candidate. Its pinned fe9/LLVM21 linked
+gate passes with 58 Eshkol sources, 108 globals, 176 undefined symbols and
+133 verified artifacts at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-train-unequal-delta-e7041cd-20260928/SHA256SUMS`
+(`d66b78ed...`). Repeated calls with nonzero global counters exercise all
+three delta limits. A genuine six-token D2 fixture produces physical update
+weights 4 then 3; separately captured public step observations independently
+reduce in order to train loss word `1085208079` at weight 7, distinct from
+mean-of-means word `1085173978`. The test-only metrics-root inspection shows
+one published summary and no retained per-step results for that train call;
+the later-step failure publishes no summary. The pinned PyTorch reference
+differs by one ULP on the fourth post-update numerator and is checked using
+the accepted post-update tolerance, not treated as an exact native oracle.
+Independent review of `e7041cd`, explicit interruption, public resume,
+wider profiles and hosted integration remain pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
