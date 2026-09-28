@@ -931,9 +931,10 @@ head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
 [proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
 The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
 native frame/role/publication branches and private Eshkol call/frame wrappers
-still exclude manual decode. This proposal is pending independent contract
-review; neither isolated P2 candidate is integrated in this `origin/main`
-baseline. Native decode, its wrapper, a G3-M decode composer, and the seeded
+still exclude manual decode. Root independently reviewed the source-anchored
+native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
+is integrated in this `origin/main` baseline. Native decode, its wrapper, a
+G3-M decode composer, and the seeded
 generation/public facade remain separate downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is

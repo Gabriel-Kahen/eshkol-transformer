@@ -1,8 +1,9 @@
 # G3-T manual one-token decode transport proposal
 
-Status: **proposal pending independent source review**. This is the first
-missing private transport leaf after the isolated G3-M manual P2 composer on
-the accepted capacity-two path. It adds no implementation, Eshkol operation,
+Status: **accepted for bounded private implementation** after independent
+source review. This is the first missing private transport leaf after the
+isolated G3-M manual P2 composer on the accepted capacity-two path. It adds
+no implementation, Eshkol operation,
 public facade, package export, repeated append, or generation claim.
 
 ## Authority and exact boundary
