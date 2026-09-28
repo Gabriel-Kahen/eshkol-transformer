@@ -46,7 +46,15 @@ The same hosted run reached the P1 parameter-state diagnostic overlay and
 found its test-only exact provide-tail anchor stale after the accepted
 `p1-trusted-surface` append. The overlay now inserts its test control before
 that tail. All four diagnostic insertion anchors match the current trusted
-source in a focused static probe; execution awaits the next hosted run.
+source in a focused static probe; hosted `parameter-state` passed in run
+`36445662940`.
+
+That exact-head run passed 20 pre-aggregate jobs; `shard-loader` alone failed
+because the private TR3-C D2 restore closure still used the old X1/T2 order
+after its D2 base pin changed. The private closure now matches the exact D2
+base plus its one extension. The seven focused scope tests and the supported
+Ubuntu 22.04/LLVM 21 private native, sanitizer and repeated strict-AOT gate
+pass. A fresh exact-head hosted run remains the acceptance gate.
 
 The first hosted full-suite attempt on this repin (PR #131, run 36379473716)
 exposed exact I2/base-E1B undefined-symbol manifest drift, DD-10 trusted
