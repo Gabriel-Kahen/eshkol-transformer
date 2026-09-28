@@ -166,9 +166,11 @@ static int closure_factory(const void *closure, uint64_t *factory) {
     return 0;
   }
   memcpy(&environment, body.env, sizeof(environment));
-  if ((environment.packed & UINT64_C(0xffff)) != 1u ||
-      ((environment.packed >> 16) & UINT64_C(0xffff)) != 1u ||
-      ((environment.packed >> 63) & UINT64_C(1)) != 0u) {
+  /* Merged Eshkol CLOSURE_ENV_PACK: captures [0:31], arity [32:47];
+   * this factory requires exactly one capture and one fixed argument. */
+  if ((environment.packed & UINT64_C(0xffffffff)) != UINT64_C(1) ||
+      ((environment.packed >> 32) & UINT64_C(0xffff)) != UINT64_C(1) ||
+      (environment.packed >> 48) != 0u) {
     return 0;
   }
   *factory = body.func_ptr;

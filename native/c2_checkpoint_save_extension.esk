@@ -2,6 +2,8 @@
 ;;; persistence policy, claimed model encoder, and claimed O2 staging adapter.
 ;;; This file defines no public wrapper and composes no K2/load authority.
 
+(require transformer.checkpoint_internal)
+
 (extern i64 c2-save-native-measure
         ptr ptr ptr ptr ptr ptr ptr i64 i64 i64 i64 i64
         i64 i64 i64 i64 i64 ptr

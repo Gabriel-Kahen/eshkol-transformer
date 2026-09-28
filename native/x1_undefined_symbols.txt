@@ -38,6 +38,7 @@ eshkol_current_arena
 eshkol_decrement_recursion_depth
 eshkol_ffi_pointer_arg_type_error
 eshkol_format_double
+eshkol_format_float32_bits
 eshkol_get_current_exception
 eshkol_get_raised_value
 eshkol_intern_symbol_lookup
@@ -70,6 +71,7 @@ eshkol_region_write_barrier_checked_v1
 eshkol_reroot_dynamic_wind
 eshkol_runtime_emergency_raise_v1
 eshkol_runtime_emergency_rethrow_if_v1
+eshkol_runtime_fatal
 eshkol_set_error_location
 eshkol_set_raised_value
 eshkol_sha256

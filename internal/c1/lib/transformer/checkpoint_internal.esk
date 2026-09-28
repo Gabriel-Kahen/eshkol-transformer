@@ -10,6 +10,8 @@
 (extern i64 c1-native-atomic-write ptr ptr i64 i64
         :real et_checkpoint_io_atomic_write_v1)
 
+;;; DD-10 requires explicit imports for trusted C2 aggregate helpers below;
+;;; these names remain outside the installed checkpoint facade.
 (provide c1-persistence-policy-internal
          c1-checkpoint-codec-internal
          c1-checkpoint-encode-state-internal
@@ -20,7 +22,11 @@
          c1-checkpoint-load-module-internal!
          c1-checkpoint-inspect-bytes-internal
          c1-checkpoint-inspect-internal
-         c1-checkpoint-metadata-ref-internal)
+         c1-checkpoint-metadata-ref-internal
+         c1-bytes=? c1-concat c1-copy-into! c1-encode-path c1-list-length-bounded
+         c1-path<? c1-read-file c1-read-u32 c1-read-u64 c1-shape-product
+         c1-valid-file-path? c1-valid-path? c1-write-u16!
+         c1-write-u32! c1-write-u64! c1-max-path-segments)
 
 (define c1-codec-tag (vector 'c1-checkpoint-codec))
 (define c1-metadata-tag (vector 'c1-checkpoint-metadata))

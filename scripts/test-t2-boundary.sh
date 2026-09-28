@@ -8,7 +8,8 @@ for command in ar awk cmp cp diff grep ldd nm readelf sed strings timeout tr xar
   require_command "${command}"
 done
 
-t2_boundary_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-t2-boundary.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+t2_boundary_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-t2-boundary.XXXXXX")"
 trap 'rm -rf -- "${t2_boundary_tmp}"' EXIT
 t2_boundary_runner="$(eshkol_build_dir)/eshkol-run"
 t2_boundary_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"

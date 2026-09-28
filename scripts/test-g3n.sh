@@ -9,7 +9,10 @@ done
 g3n_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 g3n_cc="$(tsv_value "${g3n_provenance}" cc_path)"
 g3n_cxx="$(tsv_value "${g3n_provenance}" cxx_path)"
-g3n_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-g3n.XXXXXX")"
+# The pinned compiler derives its AOT cache from XDG_CACHE_HOME and rejects
+# system temp roots. Keep the fresh compile probes under the ignored build root.
+mkdir -p "${PROJECT_ROOT}/.deps"
+g3n_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-g3n.XXXXXX")"
 g3n_error_log=''
 cleanup_g3n() {
   local status=$?

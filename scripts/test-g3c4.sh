@@ -9,7 +9,8 @@ done
 g3c4_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 g3c4_cc="$(tsv_value "${g3c4_provenance}" cc_path)"
 g3c4_cxx="$(tsv_value "${g3c4_provenance}" cxx_path)"
-g3c4_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-g3c4.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+g3c4_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-g3c4.XXXXXX")"
 g3c4_error_log=''
 cleanup_g3c4() {
   local status=$?

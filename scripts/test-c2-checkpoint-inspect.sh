@@ -11,7 +11,9 @@ clang_cxx=
 resolve_provenance_compilers clang_cc clang_cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-inspect.XXXXXX")"
+# The pinned compiler derives its AOT cache from XDG_CACHE_HOME and rejects
+# system temp roots. Keep each probe's fresh cache under this ignored build root.
+tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-c2-inspect.XXXXXX")"
 cleanup() {
   local status=$?
   if (( status != 0 )); then

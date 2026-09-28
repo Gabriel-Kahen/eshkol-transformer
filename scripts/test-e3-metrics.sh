@@ -7,7 +7,8 @@ e3_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 e3_cc="$(tsv_value "${e3_provenance}" cc_path)"
 e3_cxx="$(tsv_value "${e3_provenance}" cxx_path)"
 e3_runner="$(eshkol_build_dir)/eshkol-run"
-e3_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e3-metrics.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+e3_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-e3-metrics.XXXXXX")"
 e3_error_log=''
 cleanup_e3() {
   local status=$?
