@@ -1,0 +1,15 @@
+(require transformer.error_internal)
+(define (m3t-fail category operation message)
+  (transformer-error-raise category operation message '() #f))
+(extern void tr3-lease-fail-stop i64 :real _Exit)
+(load "tr3_metrics_extension.esk")
+
+(tr3-metrics-step-begin-internal!)
+(tr3-metrics-step-fill-internal! 0 1065353216 1 1 1)
+(tr3-metrics-step-precommit-internal!)
+;;; Simulate an impossible concurrent or corrupted authority change after the
+;;; irreversible trainer commit. Publication must exit 134 before any store.
+(vector-set! tr3-metrics 0 (list 'foreign-head))
+(tr3-metrics-step-publish-internal!)
+(display "TR3-METRICS-FAILSTOP-RETURNED") (newline)
+(exit 1)
