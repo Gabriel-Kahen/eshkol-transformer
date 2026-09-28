@@ -7,6 +7,7 @@ cd "${PROJECT_ROOT}"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
 image="$(tsv_value "${pin}" container_image)"
 fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/tr3-shared-tail-finalizer-97c40c9d}"
+compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/tr3-shared-tail-finalizer/eshkol}"
 runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-/home/gabe/.codex/evidence/eshkol-transformer/runtime-81298-recovery}"
 case "${TR3_METRICS_RUNTIME_PIN:-81298}" in
   81298)
@@ -20,7 +21,6 @@ case "${TR3_METRICS_RUNTIME_PIN:-81298}" in
     runner_sha256=7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa
     runtime_build=eshkol-build
     runtime_sha256=32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e
-    compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-/home/gabe/.codex/worktrees/wave3-runtime-repin/eshkol-transformer/.deps/eshkol-src}"
     [[ "$(git -C "${compiler_source}" rev-parse HEAD)" == \
        fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9 ]] || die "fe9 compiler source changed"
     [[ "$(git -C "${compiler_source}" rev-parse 'HEAD^{tree}')" == \
@@ -51,6 +51,7 @@ evidence="$(readlink -f -- "${evidence}")"
 docker run --rm --network none \
   -e TR3_METRICS_RUNNER="/fixed/${runner_name}" \
   -v "${PROJECT_ROOT}:/workspace:ro" -v "${fixed}:/fixed:ro" \
+  -v "${compiler_source}:/fixed-source:ro" \
   -v "${runtime}/${runtime_build}:/runtime/eshkol-build-canonical:ro" \
   -v "${evidence}:/out" \
   -w /workspace "${image}" bash -lc '
@@ -87,7 +88,7 @@ printf "failstop_exit\t%s\n" "${failstop_status}" > /out/failstop.tsv
   tests/tr3_metrics/allocation_probe.esk -o /out/allocation.o \
   > /out/allocation.compile.stdout 2> /out/allocation.compile.stderr
 clang++-21 -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic \
-  -I /runtime/eshkol-source/lib/core -I /runtime/eshkol-source/inc \
+  -I /fixed-source/lib/core -I /fixed-source/inc \
   -c tests/tr3_metrics/allocation_shim.cpp -o /out/allocation_shim.o \
   > /out/shim.compile.stdout 2> /out/shim.compile.stderr
 clang++-21 -fPIE -fuse-ld=bfd /out/allocation.o /out/allocation_shim.o \
