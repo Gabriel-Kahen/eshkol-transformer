@@ -24,6 +24,24 @@ two byte-identical clean rebuilds. R0 executable audit, the other affected
 packages and full supported CI still need this exact pin. No workstream status
 changes solely from this bounded repin.
 
+On exact `5fc65a0`, hosted PR #131 run `36430441598` exposed a later
+`fe9dfd52` trusted-source closure order change in C2 SAVE, LOAD and public,
+and the D2 shard-loader's instrumented aggregate. The scoped C2/D2 repin
+orders `native/x1_config_private.esk` immediately before
+`internal/t2/lib/t2_d1_bridge.esk`; it changes no source or surface counts.
+Pinned Ubuntu 22.04/LLVM 21 SAVE/LOAD depfile probes and canonical C2/D2
+package builds match the new 27/25/32/18-source manifests, while the old
+pins fail exact comparison. The C2 public package gate passes the exact
+81/75/81 surface, public LOAD/SAVE/release, isolation and byte-identical
+clean rebuilds. The private SAVE gate passes strict Clang/GCC/C++ AOT,
+runtime, parser, failpoints and sanitizers; the focused private LOAD gate
+passes deterministic AOT/runtime, exact reconstruction and rollback,
+parser/reader failpoints, sanitizers and source/symbol closure. D2's
+instrumented resource-test aggregate matches its fixture-root-plus-D2
+19-source expected closure; the old expected order fails comparison. The C2
+D2 cursor-pair pin equals the verified D2 closure plus its extension.
+This local repin is not full-CI acceptance.
+
 The first hosted full-suite attempt on this repin (PR #131, run 36379473716)
 exposed exact I2/base-E1B undefined-symbol manifest drift, DD-10 trusted
 C1 helper imports in C2 fixtures, and C2 compile-only probes whose
