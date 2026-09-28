@@ -29,6 +29,7 @@ python3 "$PROJECT_ROOT/scripts/check-g3m-prefill-p2.py" >>"$evidence/static.stdo
 python3 "$PROJECT_ROOT/scripts/check-g3t-manual-decode.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3t-manual-decode-wrapper.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3m-manual-decode.py" >>"$evidence/static.stdout"
+python3 "$PROJECT_ROOT/scripts/check-g3t-manual-logits-materialize.py" >>"$evidence/static.stdout"
 python3 "$PROJECT_ROOT/scripts/check-g3m-seeded-p1-g1.py" >>"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
@@ -73,6 +74,7 @@ build_mode() {
       -DET_G3T_MANUAL_P1_PREFILL_PRIVATE
       -DET_G3T_MANUAL_P2_PREFILL_PRIVATE
       -DET_G3T_MANUAL_DECODE_PRIVATE
+      -DET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE
       -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
       -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
@@ -155,6 +157,7 @@ done
   -DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE \
   -DET_G3T_MANUAL_LOGITS_PRIVATE \
   -DET_G3T_MANUAL_P1_PREFILL_PRIVATE \
+  -DET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE \
   -DET_G3T_OUTPUT_IDS_CLONE_PRIVATE \
   -DET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE \
   -DET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE \
@@ -168,6 +171,7 @@ done
 if nm -g --defined-only "$temporary/production.o" | grep 'et_g3t_test_'; then
   die "test hook escaped production native object"
 fi
+nm -g --defined-only "$temporary/production.o" | grep 'et_g3t_private_logits_copy_bits_v1' >/dev/null
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3t_p2_zero_budget_source_closure.txt" \
   "$PROJECT_ROOT/native/g3t_t1_input_source_closure.txt" \
@@ -194,6 +198,8 @@ sha256sum "$PROJECT_ROOT/native/g3t_manual_decode_source_closure.txt" \
 sha256sum "$PROJECT_ROOT/native/g3t_manual_decode_wrapper_source_closure.txt" \
   >>"$evidence/closure.sha256"
 sha256sum "$PROJECT_ROOT/native/g3m_manual_decode_source_closure.txt" \
+  >>"$evidence/closure.sha256"
+sha256sum "$PROJECT_ROOT/native/g3t_manual_logits_materialize_source_closure.txt" \
   >>"$evidence/closure.sha256"
 sha256sum "$PROJECT_ROOT/native/g3m_seeded_p1_g1_source_closure.txt" \
   >>"$evidence/closure.sha256"

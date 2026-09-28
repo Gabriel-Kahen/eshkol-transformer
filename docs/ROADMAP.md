@@ -1070,7 +1070,7 @@ call, owned `[1,1]` input, exact 21-role T1 schedule, A2 `1→2` append,
 detached logits and precommit rollback. Root independently reviewed its
 source and 47,240 pinned normal/repeat/sanitizer checks, 22 source contracts
 and Q0 4/4; its prior head passed all 23 hosted checks. Refreshed hosted
-integration CI remains pending. The accepted private
+integration CI and merge remain pending. The accepted private
 [seeded P1/G1 schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) has a
 [reviewed implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) at
 `9029b67` / tree `052fdf9`: a single guarded full-request preflight,
@@ -1110,6 +1110,26 @@ passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
 its source and sealed evidence without a blocking finding. Hosted integration
 remains pending; no public manual facade, continuation or N>1 behavior is
 claimed.
+
+The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
+now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
+names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
+with a distinct 1,024-byte diagnostic bit readout and typed release. It
+follows the accepted fixed-profile M3 logits/readout pattern but does not
+claim generic tensor interop or full A0 generality. No public implementation,
+export or package is accepted; revision 2's thirteen names and artifacts
+remain the installed boundary. Root independently reviewed #138 private
+decode source, which merged as `bf6c284` after 23 exact-head hosted checks.
+The isolated #143 source-private
+[materialization candidate](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md)
+passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
+`a22572e` / tree `2834a68`: 47,358 identical normal/repeat/sanitizer checks,
+Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
+checks, with exact feature-on/off private-symbol delta. Commands and logs
+are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
+(`SEAL.sha256` `980c7e46...`). #143 hosted integration remains pending.
+Revision-3 public ownership/read, atomic cache/result publication, exact
+closed package tuple and numerical/negative gates remain separate.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
