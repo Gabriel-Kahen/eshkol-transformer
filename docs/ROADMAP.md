@@ -1024,8 +1024,8 @@ follows the accepted fixed-profile M3 logits/readout pattern but does not
 claim generic tensor interop or full A0 generality. No public implementation,
 export or package is accepted; revision 2's thirteen names and artifacts
 remain the installed boundary. Root independently reviewed #138 private
-decode source and its prior head passed 23 hosted checks; refreshed hosted
-CI and merge remain pending. The isolated #143 source-private
+decode source, which merged as `bf6c284` after 23 exact-head hosted checks.
+The isolated #143 source-private
 [materialization candidate](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md)
 passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
 `a22572e` / tree `2834a68`: 47,358 identical normal/repeat/sanitizer checks,

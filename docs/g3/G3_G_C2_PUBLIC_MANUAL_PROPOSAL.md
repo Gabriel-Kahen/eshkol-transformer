@@ -8,8 +8,7 @@ f32 `[1,256]` tensor result for those exact names. It does not claim general
 A0 shape/device support or generic tensor interop. Revision 2 still installs
 only thirteen generation names. The private decode
 [candidate](G3_M_MANUAL_DECODE_LEAF.md) was independently source-reviewed by
-root; its prior head passed 23 hosted checks. Refreshed #138 hosted CI and
-merge remain pending.
+root and merged as `bf6c284` after 23 exact-head hosted checks.
 
 ## Fixed-profile public tensor decision
 
@@ -150,8 +149,8 @@ pointer.
 
 ## Completion gates and deferrals
 
-First resolve refreshed #138 decode CI/merge and #143 private materialization
-hosted integration. Then independently review this fixed-profile public
+First resolve #143 private materialization hosted integration. Then
+independently review this fixed-profile public
 tensor contract and implement the revision-3 tuple. A fresh-cache installed
 AOT caller must read all 256 words through the diagnostic accessor after
 P1, T1-backed P2 and one-token decode; compare exact bits and K/V/mask with
