@@ -1,47 +1,12 @@
-;;; Installed X1/T2/D1/D2/trainer facet caller. Remaining operands use
-;;; test-only same-package boxed entries.
+;;; Ordinary installed X1/T2/D1/D2/M3T/P1/O2/trainer caller.
 (require transformer.config)
 (require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.module)
+(require transformer.optim)
 (require transformer.tokenizer)
 (require transformer.trainer)
 (require transformer.error_consumer)
-
-(extern void m3t-initializer ptr ptr
-        :real et_e1b_public_m3t_initializer_state_v1)
-(extern void m3t-model ptr ptr ptr :real et_e1b_public_m3t_model_create_v1)
-(extern void p1-parameters ptr ptr
-        :real et_e1b_public_p1_module_parameters_v1)
-(extern void p1-paths ptr ptr
-        :real et_e1b_public_p1_parameter_tree_paths_v1)
-(extern void p1-handle ptr ptr ptr
-        :real et_e1b_public_p1_parameter_tree_handle_v1)
-(extern void o2-create ptr ptr ptr
-        :real et_e1b_public_o2_optimizer_create_v1)
-
-(define (diagnostic-initializer-state seed)
-  (let ((output (vector #f)))
-    (m3t-initializer (vector seed) output)
-    (vector-ref output 0)))
-(define (diagnostic-model-create resolved initializer)
-  (let ((output (vector #f)))
-    (m3t-model (vector resolved) (vector initializer) output)
-    (vector-ref output 0)))
-(define (module-parameters model)
-  (let ((output (vector #f)))
-    (p1-parameters (vector model) output)
-    (vector-ref output 0)))
-(define (parameter-tree-paths tree)
-  (let ((output (vector #f)))
-    (p1-paths (vector tree) output)
-    (vector-ref output 0)))
-(define (parameter-tree-handle tree path)
-  (let ((output (vector #f)))
-    (p1-handle (vector tree) (vector path) output)
-    (vector-ref output 0)))
-(define (optimizer-create config tree)
-  (let ((output (vector #f)))
-    (o2-create (vector config) (vector tree) output)
-    (vector-ref output 0)))
 
 (define (check label success)
   (if success #t
@@ -232,16 +197,50 @@
   (with-region ('tr3-public-model 65536)
     (diagnostic-model-create
       resolved (diagnostic-initializer-state (config-ref resolved 'run.seed)))))
+(check "installed M3T model profile" (diagnostic-model-profile model))
+(check "installed M3T successor initializer"
+       (diagnostic-model-initializer model))
+(expect-error "forged M3T model rejects profile"
+              'invalid-argument 'diagnostic-model-profile
+  (lambda () (diagnostic-model-profile (vector 'forged))))
+(expect-error "forged M3T initializer rejects model creation"
+              'invalid-argument 'diagnostic-model-create
+  (lambda () (diagnostic-model-create resolved (vector 'forged))))
+(expect-error "forged P1 module identity"
+              'invalid-argument 'module-parameters
+  (lambda () (module-parameters (vector 'forged))))
 (define tree (module-parameters model))
+(expect-error "forged P1 tree identity"
+              'invalid-argument 'parameter-tree-paths
+  (lambda () (parameter-tree-paths (vector 'forged))))
+(define parameter-snapshot (module-state-dict model))
+(check "installed P1 snapshot contains parameters"
+       (>= (list-length (state-dict-paths parameter-snapshot)) 14))
+(check "installed P1 snapshot release" (state-dict-release! parameter-snapshot))
+(expect-error "released P1 snapshot is stale"
+              'invalid-state 'state-dict-paths
+  (lambda () (state-dict-paths parameter-snapshot)))
 (define paths (unique-paths tree))
 (check "exact fixed unique parameter set" (= (list-length paths) 14))
+(define optimizer-config
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group paths "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(expect-error "forged P1 tree rejects O2 construction"
+              'invalid-state 'optimizer-create
+  (lambda () (optimizer-create optimizer-config (vector 'forged))))
 (define optimizer
-  (optimizer-create
-    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
-          '(none) '(constant)
-          (list (list 'group paths "3dcccccd" "3f000000" "3f000000"
-                      "3a83126f" "00000000")))
-    tree))
+  (optimizer-create optimizer-config tree))
+(expect-error "forged O2 optimizer identity"
+              'invalid-argument 'optimizer-state
+  (lambda () (optimizer-state (vector 'forged))))
+(define optimizer-snapshot (optimizer-state optimizer))
+(check "installed O2 snapshot release"
+       (optimizer-state-release! optimizer-snapshot))
+(expect-error "released O2 snapshot cannot reload"
+              'invalid-state 'optimizer-load-state!
+  (lambda () (optimizer-load-state! optimizer optimizer-snapshot)))
 
 (expect-error "forged model rejects before enrollment"
               'invalid-argument 'trainer-create
@@ -293,5 +292,5 @@
 (expect-error "C2 detached-state release retains public error mapping"
               'invalid-argument 'trainer-state-release!
   (lambda () (trainer-state-release! (vector 'forged))))
-(display "TR3-PUBLIC-D2-FACET-PASS")
+(display "TR3-PUBLIC-OPERANDS-PASS")
 (newline)

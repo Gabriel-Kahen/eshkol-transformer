@@ -1,0 +1,134 @@
+;;; Installed G0/G1 adapter. The G3-T registry and G3-M transaction stay private.
+(define (g3g-public-rethrow caught operation)
+  (let ((unreachable
+          (if (transformer-error? caught)
+              (et-e1b-private-raise
+                (transformer-error-category caught) operation
+                "generation operation rejected the request"
+                (transformer-error-details caught) #f)
+              (et-e1b-private-raise
+                'internal operation "generation dependency failed" '() #f))))
+    unreachable))
+(define-syntax g3g-public-boundary
+  (syntax-rules ()
+    ((_ operation body ...)
+     (guard (caught (#t (g3g-public-rethrow caught operation)))
+       body ...))))
+
+;;; Exact-shell prompt provenance is dispatch metadata, never an owner.
+(define g3g-g0-input-provenance (vector '()))
+(define (g3g-g0-provenance-find shell)
+  (let search ((tail (vector-ref g3g-g0-input-provenance 0)))
+    (cond ((null? tail) #f)
+          ((eq? (vector-ref (car tail) 0) shell) (car tail))
+          (else (search (cdr tail))))))
+(define (g3g-public-generator-create model tokenizer config)
+  (g3g-public-boundary 'generator-create
+    (let ((normalized (g3t-seed-config config 'generator-create)))
+      (if (not (or (= (vector-ref (vector-ref normalized 0) 5) 0)
+                   (= (vector-ref (vector-ref normalized 0) 5) 1)))
+          (g3t-fail-raw 'invalid-argument 'generator-create 3
+                        "generation budget must be zero or one"))
+      (g3t-generator-create model tokenizer config))))
+
+(define (g3g-public-generator-generate generator input)
+  (g3g-public-boundary 'generator-generate!
+    (let ((generator-entry (g3t-generator-find generator 'generator-generate!)))
+      (if (not (and (vector? generator-entry)
+                    (= (vector-length generator-entry) 12)
+                    (eq? (vector-ref generator-entry 1) 'generator)
+                    (eq? (vector-ref generator-entry 2) 'live)))
+          (g3m-generate-p1-g1! generator input)
+          (if (= 1 (vector-ref (vector-ref generator-entry 7) 5))
+              (g3m-generate-p1-g1! generator input)
+              (let* ((input-entry (g3t-prefill-entry input 'input
+                                                  'generator-generate!))
+                 (record (g3g-g0-provenance-find input)))
+            (if (not record)
+                (g3t-fail-raw 'invalid-argument 'generator-generate! 1
+                              "missing exact input provenance"))
+            (if (not (and (eq? (vector-ref input-entry 2) 'live)
+                          (eq? (vector-ref record 2) 'live)))
+                (g3t-fail-raw 'invalid-state 'generator-generate! 2
+                              "G3 input is not live"))
+            (if (not (or (= (vector-ref record 1) 1)
+                         (= (vector-ref record 1) 2)))
+                (g3t-fail-raw 'internal 'generator-generate! 10
+                              "invalid prompt provenance"))
+            (if (not (= 0 (g3m-native-full-request-preflight
+                           (vector-ref generator-entry 3)
+                           (vector-ref input-entry 3))))
+                (g3t-native-fail-raw 'generator-generate!))
+            (if (= (vector-ref record 1) 1)
+                (g3t-zero-generate! generator input)
+                (g3t-p2-zero-generate! generator input))))))))
+
+(define (g3g-public-generation-input-create encoded)
+  (g3g-public-boundary 'generation-input-create
+    (if (not (t1-wave1-tensor-admitted? encoded))
+        (g3t-fail-raw 'invalid-argument 'generation-input-create 1
+                      "expected same-aggregate sealed T1 input"))
+    (let ((length (t1-shell-length encoded)))
+      (if (not (= (t1-shell-last-status) 0))
+          (t1-wave1-native-fail 'generation-input-create
+                                (t1-shell-last-status)))
+      (if (not (or (= length 1) (= length 2)))
+          (g3t-fail-raw 'shape-mismatch 'generation-input-create 4
+                        "generation input requires one or two byte IDs"))
+      (let* ((record (vector #f #f #f))
+             (next (cons record (vector-ref g3g-g0-input-provenance 0)))
+             (shell (g3t-generation-t1-input-create encoded)))
+        (vector-set! record 0 shell)
+        (vector-set! record 1 length)
+        (vector-set! record 2 'live)
+        (vector-set! g3g-g0-input-provenance 0 next)
+        shell))))
+
+(define (g3g-public-generation-token-input-create token)
+  (g3g-public-boundary 'generation-token-input-create
+    (let* ((record (vector #f #f #f))
+           (next (cons record (vector-ref g3g-g0-input-provenance 0)))
+           (shell (g3t-generation-token-input-create token)))
+      (vector-set! record 0 shell)
+      (vector-set! record 1 1)
+      (vector-set! record 2 'live)
+      (vector-set! g3g-g0-input-provenance 0 next)
+      shell)))
+(define (g3g-public-generation-output-ids output)
+  (g3g-public-boundary 'generation-output-ids
+    (g3t-generation-output-ids output)))
+(define (g3g-public-generation-output-lengths output)
+  (g3g-public-boundary 'generation-output-lengths
+    (g3t-generation-output-lengths output)))
+(define (g3g-public-generation-output-text output)
+  (g3g-public-boundary 'generation-output-text
+    (g3t-generation-output-text output)))
+(define (g3g-public-generation-output-rng output)
+  (g3g-public-boundary 'generation-output-rng
+    (g3t-generation-output-rng output)))
+(define (g3g-public-generation-output-cache-lengths output)
+  (g3g-public-boundary 'generation-output-cache-lengths
+    (g3t-generation-output-cache-lengths output)))
+
+(define (g3g-public-generation-tensor-release value)
+  (g3g-public-boundary 'generation-tensor-release!
+    (let ((kind (vector-ref (g3t-generator-find
+                             value 'generation-tensor-release!) 1)))
+      (if (not (or (eq? kind 'input) (eq? kind 'ids)
+                   (eq? kind 'lengths) (eq? kind 'cache-lengths)))
+          (g3t-fail-raw 'invalid-argument 'generation-tensor-release! 1
+                        "expected public G3 tensor owner"))
+      (let ((released (g3t-generation-tensor-release! value)))
+        (if (eq? kind 'input)
+            (let ((record (g3g-g0-provenance-find value)))
+              (if record (vector-set! record 2 'dead))))
+        released))))
+(define (g3g-public-generation-output-release output)
+  (g3g-public-boundary 'generation-output-release!
+    (g3t-output-release! output)))
+(define (g3g-public-generation-rng-release rng)
+  (g3g-public-boundary 'generation-rng-release!
+    (g3t-generation-rng-release! rng)))
+(define (g3g-public-generator-close generator)
+  (g3g-public-boundary 'generator-close!
+    (g3t-generator-close! generator)))

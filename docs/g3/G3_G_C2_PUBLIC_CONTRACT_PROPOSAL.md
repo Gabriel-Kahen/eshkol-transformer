@@ -1,238 +1,199 @@
-# G3-G capacity-two public orchestration and ownership proposal
+# G3-G public diagnostic-C2 P1/G1 proposal
 
-**Proposed for review; no public implementation or acceptance is claimed.** This
-contract narrows the accepted [A0 public API](../PUBLIC_API_CONTRACT.md#13-generator)
-and [G3 diagnostic-C2 design](../G3_GENERATION_PROPOSAL.md) to P1/G1,
-P1/G0 and P2/G0 generation. It consumes the accepted [G3-T private contract](G3_T_PRIVATE_CONTRACT.md),
-G3-N rows and G3-S sampling ABI. Every G3-G facade, package name, wrapper,
-constructor, clone and production operation below is a **new proposed seam**
-until separately reviewed and implemented. The G3-T development witness is not
-an installed operation. Nothing here admits P2/G1, capacity three, repeated
-generation, persistence or a CLI.
+**Proposed for independent review; no public implementation or package is
+accepted.** This is one installable slice of the [A0 generator
+contract](../PUBLIC_API_CONTRACT.md#13-generator), not its full generation
+API. It consumes the reviewed private
+[P1/G1 schedule](G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) and its
+[implementation leaf](G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md). The source-private
+[P1/G0](G3_T_ZERO_BUDGET_LEAF.md),
+[P2/G0](G3_T_P2_ZERO_BUDGET_LEAF.md), and
+[manual decode](G3_M_MANUAL_DECODE_COMPOSER_PROPOSAL.md) routes establish
+separate numerical and transaction behavior; this facade calls none of them.
+There is no public prefill/decode operation, G0 output, P2 prompt, P2/G1,
+continuation after any committed prefix, second sample, N>1, persistence, or
+CLI in this proposal.
 
-## Fixed surface and package tuple
+## Exact proposed facade and package boundary
 
-The sole new installed facade is `lib/transformer/generation.esk`. Its exact
-provided names and arities are:
+Install one `lib/transformer/generation.esk` facade, with these thirteen names
+and arities only. Each maps to an existing source-private G3-T/G3-M operation
+or owner; the public wrapper and package mapping remain to be implemented.
 
-| Name | Arity | Result or effect |
+| Name | Arity | P1/G1 behavior |
 |---|---:|---|
-| `generator-create` | 3 | live generator retaining authentic model and tokenizer, with owned RNG and no cache |
-| `generator-prefill!` | 2 | new owned, no-grad CPU f32[1,256] last logits; cache replacement, no draw |
-| `generator-decode-step!` | 2 | new owned, no-grad CPU f32[1,256] last logits; one manual append, no draw |
-| `generator-generate!` | 2 | opaque live output after P1/G1, P1/G0 or P2/G0 |
-| `generation-output-ids` | 1 | new one-element list of owned CPU i64[G], G=0 or 1 |
-| `generation-output-lengths` | 1 | new owned CPU i64[1], value G |
-| `generation-output-text` | 1 | new one-element list of detached raw bytevectors of length G |
-| `generation-output-rng` | 1 | new independent, immutable G3 RNG owner |
-| `generation-output-cache-lengths` | 1 | new owned CPU i64[1], value P+G |
-| `generation-input-create` | 1 | copy authentic same-aggregate sealed T1 i64[P] to owned CPU i64[1,P], P=1 or 2 |
-| `generation-token-input-create` | 1 | one exact byte ID to owned CPU i64[1,1] |
-| `generation-tensor-release!` | 1 | typed release of G3 input, last-logit or output tensor clone |
-| `generation-output-release!` | 1 | typed output release; detached clones survive |
-| `generator-close!` | 1 | close cache, scratch and owned RNG; retain no released payload |
-| `generation-rng-release!` | 1 | typed independent RNG release |
+| `generator-create` | 3 | Authentic model, tokenizer and diagnostic-C2 config; live generator with private cache and RNG, configured for budget exactly one. |
+| `generator-generate!` | 2 | One authentic live P1 G3 input; run the private `g3m-generate-p1-g1!` transaction and return one live opaque output. |
+| `generation-input-create` | 1 | Copy a same-aggregate sealed T1 rank-one one-byte ID into a distinct owned CPU i64 `[1,1]` input. |
+| `generation-token-input-create` | 1 | Copy one exact byte ID into a distinct owned CPU i64 `[1,1]` input. |
+| `generation-output-ids` | 1 | Fresh one-element list containing an owned CPU i64 `[1]` generated-ID clone. |
+| `generation-output-lengths` | 1 | Fresh owned CPU i64 `[1]`, value `1`. |
+| `generation-output-text` | 1 | Fresh one-element list containing a detached raw one-byte bytevector. |
+| `generation-output-rng` | 1 | Fresh independent immutable G3 RNG owner with the post-generation words. |
+| `generation-output-cache-lengths` | 1 | Fresh owned CPU i64 `[1]`, value `2`. |
+| `generation-tensor-release!` | 1 | Typed G3 input or ID/length/cache-length clone release. |
+| `generation-output-release!` | 1 | Typed output release. |
+| `generation-rng-release!` | 1 | Typed independent RNG snapshot release. |
+| `generator-close!` | 1 | Close generator cache, scratch and owned RNG; retained model/tokenizer stay caller-owned. |
 
-These are the nine unchanged A0 declarations plus six accepted G3 design
-additions, not fifteen extra names beyond M3. `generator-generate!` accepts only
-an authentic live G3 input owner. Its configured budget is zero or one; require
-P+G<=2 **before** call acquisition, model pinning, cache replacement or RNG
-sampling. P2/G1 rejects even if EOS might stop the draw. The accepted profile,
-eight-pair config, exact bit-valued sampling policy, optional byte EOS, model
-evaluation, tokenizer fingerprint and admission order remain as in G3; no
-additional public option is proposed. P1/G0, manual P1/P2 prefill and manual
-P1 decode are included in the same C2 semantics, but their production schedules
-remain separate G3-G implementation work.
+The public constructor accepts only the already accepted diagnostic-C2/M3T
+profile, CPU f32 model, authentic retained T1 byte tokenizer, exact policy and
+seed or independently owned RNG source. For this facade, its configured budget
+must be `1`; a budget `0` or greater than `1` is `invalid-argument` before a
+live generator is published. It does not silently route budget zero to P1/G0
+or P2/G0. A valid optional byte EOS is accepted but cannot suppress the one
+append: if the sampled byte equals EOS, it remains in IDs, text and cache.
+Greedy chooses the lowest ID on a max tie and consumes no draw; categorical
+sampling consumes exactly one G3-S Philox block, even for singleton or EOS.
+The accepted G3 configuration, capability, tokenizer identity, model-eval and
+sampling bit contracts are unchanged.
 
-Proposed sibling package: one `libeshkol_transformer_g3g.a` containing one
-registry-owning `g3g_package.o`; compose M3/M3T/I2/P1/T1/E1/G3-T/N/S in one
-source root, never link their owning archives alongside it. Install exactly the
-existing seven M3 facades plus `transformer/generation.esk`. Preserve all 87 M3
-boxed exports and append one boxed export for each of the fifteen names above:
-**eight facades, 102 boxed exports, 108 globals/public-name strings**. Candidate
-tuple names are `native/g3g_package_{root.esk,bridge.c,private_renames.txt,public_exports.txt}`
-and `scripts/build-g3g.sh`; they are proposed names, not existing artifacts.
-Proposed generated private/public symbol pair for each row is
+The proposed sibling archive is one `libeshkol_transformer_g3g.a` with one
+registry-owning `g3g_package.o`. It source-composes the existing M3/M3T/I2/P1/
+T1/E1/G3-T/N/S closure; no second owning archive is linked alongside it. It
+installs exactly the existing seven M3 facades plus
+`transformer/generation.esk`. The measured M3 baseline is 93 globals, 87
+boxed exports and 93 public-name strings. The proposed boundary appends one
+boxed export and one public name per table row: **eight facades, 100 boxed
+exports, 106 globals and 106 public-name strings** as a target to verify,
+not an observed artifact. Candidate files remain
+`native/g3g_package_{root.esk,bridge.c,private_renames.txt,public_exports.txt}`
+and `scripts/build-g3g.sh`; no such public package is present yet. The
+proposed private/public boxed symbol pair is
 `et_e1b_private_g3_<stem>_cabi_v1` /
-`et_e1b_public_g3_<stem>_v1`, with these exact stems in table order:
+`et_e1b_public_g3_<stem>_v1`, for these thirteen stems in table order:
 
-`generator_create`, `generator_prefill`, `generator_decode_step`,
-`generator_generate`, `generation_output_ids`, `generation_output_lengths`,
-`generation_output_text`, `generation_output_rng`,
-`generation_output_cache_lengths`, `generation_input_create`,
-`generation_token_input_create`, `generation_tensor_release`,
-`generation_output_release`, `generator_close`, `generation_rng_release`.
+`generator_create`, `generator_generate`, `generation_input_create`,
+`generation_token_input_create`, `generation_output_ids`,
+`generation_output_lengths`, `generation_output_text`,
+`generation_output_rng`, `generation_output_cache_lengths`,
+`generation_tensor_release`, `generation_output_release`,
+`generation_rng_release`, `generator_close`.
 
-Only those fifteen new boxed public symbols may appear in the successor export
-manifest. The native G3-T/N/S/A2/cache helpers, registries, production role
-helpers and test observers remain local/hidden. Exact source, object, undefined,
-defined and string manifests must be measured and reviewed on the implementation
-candidate; the counts above are an acceptance target, not build evidence.
+The existing native G3-T/N/S/A2 helpers, registries, role helpers, private
+composer and testing hooks remain localized. Exact source, object,
+undefined/defined-symbol, string and AOT manifests must be measured on the
+candidate. The two deferred A0 operations `generator-prefill!` and
+`generator-decode-step!` get no wrapper, boxed export or installed name here;
+adding them later requires a separately reviewed package version/tuple.
 
-## Integrated-source prerequisites to freeze this surface
+## Admission, transaction and publication
 
-At integration head `6eb8342`, the accepted G3-T private contract names
-`logits_reserve` and manual call kinds 0/1, but the current transport has no
-native or Eshkol `logits_reserve` implementation or live kind-3 last-logits
-owner. `g3t-call-acquire` admits only generate kind 2, and native frame begin,
-prepare and commit still require that kind. The two proposed manual facades
-therefore require those accepted G3-T manual transport/result semantics and
-the G3-M 21-role prefill/decode schedules before public implementation. A
-shape-compatible test observer or the retained native `last_logits` array is
-not an owned public f32[1,256] result. Native generate admission also rejects
-an already committed prefill. Before freezing the whole facade, specify and
-test the C2 cross-operation state transitions: whether a one-shot generate
-may follow manual prefill, and how a later manual prefill replaces a generated
-cache while previously returned outputs remain detached. The current private
-witness proves neither transition.
+`generation-input-create` authenticates the sealed same-aggregate T1 shell
+through its registry, proves rank one/length one and byte `0..255`, then uses
+the accepted private T1 input constructor to copy into a distinct G3-owned
+I1 `[1,1]`. It retains no additional T1 borrow; the T1 shell retains its own
+internal borrow. A T1 length two, copied/tagged/foreign shell, output clone,
+M3T input or shape-compatible generic tensor cannot acquire public input
+authority. `generation-token-input-create` accepts only an exact integer byte
+`0..255`; no inexact coercion. Both constructors publish a live wrapper only
+after the native owner is complete. The caller retains and separately releases
+the G3 input.
 
-The current `prompt_preflight` is P2-specific: it rejects an input unless its
-length is two. The private P1/G0 witness acquires the call without a P1
-preflight, while P1/G1 is assembled only in the development test. A public
-`generator-generate!` therefore needs a reviewed source-private P1/P2
-full-request admission that establishes authentic input length, exact
-`P+G<=2`, stored policy and draw capacity **before** call acquisition or
-pinning, followed by production P1/G1, P1/G0 and P2/G0 21-role schedules.
-The accepted kind-2 input shell currently stores its length only in its
-authenticated native owner; public code must not infer length from a shell
-tag, a test observer, or an unrelated T1 value. This paragraph requests no
-new upstream signature; it identifies the missing admission implementation
-for review against the accepted G3-T transaction contract.
+`generator-generate!` authenticates the generator shell and input kind/live
+identity left to right. It rejects budget mismatch as `invalid-argument`/native
+code `3` before the existing full-request preflight. That native preflight
+reads the authenticated input's stored P/G/ID and policy, and rejects a
+committed prefix, busy call, `P+G>2`, malformed byte or unavailable required
+categorical draw before call acquisition or model pins. The public wrapper
+must not derive P from an Eshkol tag, caller tensor, test observer or old T1
+value. The generated route copies its authenticated inline ID; an underlying
+read-only I1 borrow is permitted, while typed input release rejects until
+that borrow ends. This differs from manual decode's unborrowed typed-I1
+admission. A generator with a prefix from manual P1/P2, P1/G0, manual decode
+or an earlier G1 is ineligible; native preflight rejects it. No public reset
+or cache replacement transition is implied.
 
-All five source-private output accessors now exist, including detached raw
-text, but none is an installed G3-G facade. The existing private runner
-source-checks Eshkol pre-copy allocation order; it cannot inject Eshkol
-allocator failure at every wrapper/list/bytevector cut required below for
-public acceptance. The package candidate needs that witness, exact E1
-public-operation mapping, one source-composed registry owner and measured
-export/link/AOT boundaries. These are remaining implementation and evidence
-gates, not acceptance of the proposed tuple.
+On success, the wrapper delegates exactly once to the reviewed private
+operation: one outer guarded M3 call; 14 canonical model pins; pending output
+reservation; P1 frame with roles `0..20`; prompt-only A2 commit and true
+last-row logits; one G3-S sample; generated frame with roles `0..20` at
+absolute position one; ID/raw T1 text, lengths and successor RNG readiness;
+final preflight; adjacent no-failure commit/finish. The existing private
+output reservation roots its Eshkol envelope before prompt publication; the
+public wrapper returns that already-live shell without postcommit allocation
+or a fallible conversion. It never exposes intermediate logits or a pending
+owner. It may not
+run a scalar model path, a second sample or a different provider route.
 
-## Admission, ownership and detached results
+A failure before prompt commit leaves the entry cache, binding, RNG and older
+outputs unchanged. A sampling, append, A2, ID or text failure after prompt
+commit aborts the tail and pending output, retaining only the new prompt cache
+and binding with the old generator RNG. No generated output escapes. A
+successful final commit publishes cache length `2`, one owned ID, generated
+length `1`, raw byte and successor RNG together. Native abort/finish failure
+or an impossible postcommit exception is fail-stop. The wrapper snapshots the
+first recoverable native error before cleanup; cleanup must not replace it.
+The private testing closure has a binding cut after sample, but the production
+composer exposes no interposition hook for every ID/T1/text error. Existing
+lower-level output/text and final-publication tests cover those cuts; the
+public package gate must describe precisely which faults it can inject.
 
-`generation-input-create` first authenticates the exact same-aggregate T1 shell
-and sealed rank-one raw-byte IDs through T1's registry, then checks P in {1,2}
-and every ID in 0..255. It copies synchronously into a distinct G3-owned I1
-i64[1,P] and retains no additional T1 borrow; the sealed T1 shell keeps its
-own internal borrow. A copied/tagged T1 shell,
-foreign aggregate, M3T input, output clone or shape-compatible generic tensor
-cannot acquire G3 input authority. The accepted private `input_from_t1` stem
-and same-aggregate wrapper now have focused source-private evidence; their
-public mapping remains proposed. Existing scalar and pair constructors are
-private witnesses, not alternate public constructors. The private scalar
-token branch now owns a distinct I1[1,1] through the reviewed
-`input_from_token` stem; its public mapping remains proposed.
+## Detached ownership, accessors and public errors
 
-Output is a separately authenticated live owner with no parent-call, model or
-tokenizer roots after publication. It holds the exact generated IDs, G and P+G
-lengths, final RNG words and raw bytes as immutable snapshots, independent of
-subsequent generator mutation, replacement or close. `generation-output-ids`,
-`-lengths`, `-cache-lengths` and `-rng` authenticate the output, call the four
-accepted source-private G3-T clone stems, enroll fresh
-closed G3 owners and return detached copies; clone failure enrolls no live shell
-and leaves the output unchanged. IDs are a fresh one-element list around the
-owned i64[G] clone. Text is a fresh list and bytevector copy; caller changes to
-one returned list or bytevector affect no later accessor. No output accessor
-returns a borrowed native header, cache view, T1 shell or G3-T test observer.
-The four native clone stems and all five source-private Eshkol accessors,
-including detached text, have focused witnesses. Package linkage and public
-accessor behavior described here remain proposed.
+The generator owns cache/binding and mutable RNG; model and tokenizer remain
+retained caller-owned references. The output is a distinct authenticated
+owner with immutable ID, raw byte, lengths and RNG snapshots and no parent
+call/model/tokenizer root after publication. It survives generator close and
+later mutation. Each accessor authenticates the output and returns a new
+independent payload. IDs, lengths and cache lengths use the reviewed native
+clone stems and existing private Eshkol wrappers; RNG uses the reviewed RNG
+clone; text copies the raw byte into a new bytevector and list. The accessors
+return neither a cache view nor a native header. Mutating a returned list or
+bytevector cannot affect the output or a later accessor.
 
-For each ID, length, cache-length or RNG accessor, allocate and root its future
-Eshkol shell, pending entry, registry cons cell and (for IDs) one-element result
-list **before** requesting the native clone. Native clone construction must
-allocate its full detached payload before enrolling a live native owner. On
-failure, discard the pending Eshkol wrapper without a live enrollment. After
-clone success, attach the pointer and publish the already allocated wrapper
-and list in a no-allocation tail. If a later Eshkol operation can still raise,
-its handler must release the exact newly cloned native kind, clear the pending
-wrapper and re-raise the first error; no orphan owner may remain. Text similarly
-preallocates and roots both its bytevector and one-element list, copies the
-output-owned bytes, then publishes without further allocation. Every injected
-allocation cut leaves the source output and both Eshkol/native live-registry
-membership unchanged; a failed accessor returns no partially live result.
+Each accessor must root its future Eshkol shell, pending entry, registry cell
+and, where needed, one-element list before the native clone request. Native
+clone creation completes detached storage before owner enrollment. On a
+recoverable failure, no live wrapper or orphan native clone remains and the
+source output is unchanged. After clone success, publication is a no-allocation
+tail; any remaining fallible wrapper step must release that exact new native
+kind before re-raising the original error. Text similarly preallocates its
+bytevector/list, copies, then publishes. This allocation ordering requires a
+public-wrapper cut witness; private source checks alone do not prove it.
 
-Generator, output, tensor clones and RNG snapshots have separate lifetime and
-registry identities. `generation-tensor-release!` accepts only G3 input, last
-logits and ID/length/cache-length clone kinds; `generation-rng-release!` only
-G3 RNG snapshots; output release only output; generator close only generator.
-Each exact released identity is a retained tombstone and repeated release is
-idempotent. Wrong kind, copied/forged identity and cross-aggregate shell are
-`invalid-argument`; authentic dead non-release use is `invalid-state`. Busy or
-active-borrow release rejects before payload mutation. Closing the generator
-does not close outputs or accessor results and never destroys the retained M3
-model or T1 tokenizer. Dropping an Eshkol reference does not release a payload.
+Input, output, tensor clone, RNG snapshot and generator have distinct
+registry identities and release domains. Exact already-released identity is a
+retained tombstone and repeated typed release is idempotent. Wrong kind,
+forged/copy or foreign shell is `invalid-argument`; authentic dead non-release
+use, busy receiver or active-borrow release is `invalid-state`. Typed tensor
+release accepts only this slice's input and ID/length/cache-length clone
+kinds; kind-3 manual last-logit ownership is private until its public facade
+is separately proposed. Generator close leaves outputs, clones, independent
+RNG snapshots, model and tokenizer alive. Dropping an Eshkol reference does
+not release a payload.
 
-## Single-token transaction and failure cuts
+Every facade raises E1 with the **invoked public operation**, bounded data-only
+source domain/category/code/message and `cause #f`. It authenticates receiver
+identity/liveness before later arguments; constructor scalar, T1 and model
+validation follows the accepted native order. Wrong-kind/forgery/config and
+scalar byte range map to `invalid-argument`; dead/busy/stale and categorical
+draw exhaustion to `invalid-state`; T1 tensor shape and context extent to
+`shape-mismatch`; unsupported profile/provider to `unsupported`; explicit FP
+determinism rejection to `determinism-unavailable`; allocation/invariant to
+`internal`. Dtype, device and layout preserve their dedicated E1 categories;
+inconsistent retained output storage maps to A0 `device-mismatch`. Native
+error domain/code remains authoritative. No raw pointer, private operation
+name, hidden owner or previous error leaks. No recoverable E1 error follows a
+successful joint commit.
 
-G3-G supplies the production P1 21-role prefill and one 21-role T1 append
-schedule using only the accepted fixed G3-N/N2/N3K/A2/G3-S routes. No model
-forward with a discarded graph, shape relabel, scalar numeric loop, fallback
-provider or caller-selected resolver is allowed. Prefill uses position zero;
-the sampled token uses position one and is copied from I1[1] into distinct
-I1[1,1] decode scratch. The accepted G3-T call/14-pin/frame protocol is the
-only cache publication authority.
+## Acceptance and deferred work
 
-1. Authenticate generator then input and its stored policy, validate P/G and
-   `P+G<=2`, eval/profile/model state and any required categorical draw capacity.
-   Allocate the rooted Eshkol output envelope, ID/text/RNG capacity and cleanup
-   ledger before initial prefill publication. Rejection before call acquisition
-   preserves the entry cache, binding, RNG and old outputs; no pin is acquired.
-   Greedy, G0 and manual calls accept an authentic exhausted RNG without a draw.
-2. Acquire the shared call and fourteen canonical pins; reserve its native
-   output against that active call before prefill. Begin an unpublished candidate
-   cache and run all 21 prefill roles. End views and preflight old cache
-   destruction. Initial prefill commit replaces cache/binding. For G0,
-   prepare empty IDs/raw text and unchanged RNG, preflight, commit, finish and
-   publish the output with cache length P. A prefill failure keeps the prior
-   cache/binding/RNG; no output escapes.
-3. For P1/G1, leave the output pending after the initial prompt commit. Sample
-   exactly once from the true f32[1,256] last logits. Greedy takes no block;
-   categorical stages one successor G3 Philox block, including singleton or
-   EOS. Run the complete generated-token frame and stage matching K/V at
-   absolute position one. A sample or append failure aborts/scrubs the tail,
-   destroys pending output, retains prompt-only cache/binding and old RNG, and
-   raises without a partial output.
-4. Stage ID, lengths, successor RNG and raw byte. Validate all 256 logits and
-   the raw T1 byte decode before text acceptance. `output_prepare`, decode-ID
-   copy, text acceptance, `frame_prepare` and `call_prepare_end` complete before
-   final publication. The no-failure `frame_commit` atomically publishes
-   cache/ID/RNG/output; `call_finish` immediately drains pins and active tokens,
-   then Eshkol seals the already-rooted output. Emitted EOS follows this same
-   append and is present in ID, text and cache. No allocation, callback or
-   recoverable error is allowed between final native commit and finish.
+A source-composed package candidate must fix the thirteen exact E1 mappings,
+closed source/symbol/string manifests, one registry owner and eight installed
+facades. Genuine T1-backed and scalar P1/G1 callers must prove all 256 P1 and
+append logits plus both K/V positions against independent M3T, exact G3-S
+sample/RNG, EOS equality/inequality, byte `0`/`255`, borrowed input/release
+behavior, failure rollback and retry, detached output/accessor lifetime and
+wrong-kind/dead/foreign owner rejection. Public-wrapper allocation cuts must
+cover constructor/envelope/accessor preallocation and native-clone failure;
+role/provider/A2 and post-sample binding cuts retain their existing private
+witnesses. Run normal/repeat/ASan+UBSan+LSan, Q0, production feature-off
+inventory, private-link negatives, fresh-cache AOT public callers, package
+localization and supported CI on the exact package tree before acceptance.
+This proposal neither claims those tests have run nor freezes a public ABI.
 
-All cuts must be injectable in a development-only closure, absent from the
-installed archive: malformed/foreign/dead input; P2/G1 and length>2 before
-pins; output shell/I1/RNG/text allocation and every accessor wrapper/list/
-bytevector/native-clone allocation; each of 21 prefill and append roles;
-A2 creation, stage/view/close and old-cache preflight; sampler nonfinite and
-required-draw exhaustion; ID/raw-byte mismatch; once-only prepare/finish;
-active borrow and stale model binding. At each cut assert exact cache, binding,
-RNG, output registry, pin and guard state, then retry. Compare all 256 logits
-and both K/V positions with the accepted no-cache/reference witnesses. Repeat
-normal and instrumented runs; sanitizer, exact package manifests, private-link
-negatives and AOT public callers are gates before public acceptance.
-
-## Public error and release boundary
-
-Each facade authenticates its receiver/liveness first, then arguments left to
-right, syntax/scalars, metadata rank/extents/dtype/device/layout, byte values,
-profile/provider/model/cache state and numerical preflight. For release, exact
-identity authentication precedes a dead-owner idempotent return, then busy/borrow
-preflight. Errors are E1 with the **invoked public operation**, bounded data-only
-source domain/category/code/message and `cause #f`; no pointer, raw hidden owner
-or earlier private operation leaks. The accepted G3-T bounded native mapping
-applies: wrong-kind/forgery/config and scalar token range `invalid-argument`;
-dead/busy/stale and required categorical draw exhaustion `invalid-state`;
-T1 tensor shape/ID and context shape `shape-mismatch`;
-dtype/device/layout their dedicated categories; unavailable
-profile/provider `unsupported`; explicit FP determinism failure
-`determinism-unavailable`; allocation/invariant `internal`. Output storage
-inconsistency preserves A0 `device-mismatch`. Snapshot the first native error
-before cleanup, then normalize at the outer facade. No recoverable E1 error may
-follow a successful joint commit; impossible postcommit defects fail-stop.
-
-This proposal does not change the accepted G3-T/N/S ABI or public predecessor
-arity. Review must freeze the fifteen wrapper mappings, exact package closure,
-authentic T1 constructor and detached clone ownership before dependent code.
+P1/G0, P2/G0 and manual P1/decode facades, cross-operation cache replacement,
+P2/G1 capacity-three transport, N>1 and a general generation loop remain
+separate contracts and gates. They cannot be inferred from this P1/G1
+publication path.
