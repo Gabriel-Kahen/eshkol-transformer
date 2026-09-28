@@ -27,6 +27,10 @@ draw capacity (`g3t_transport.c:605-632`). The native frame owns length
 validation; no shell field or caller token value supplies P. Use the native
 error fields on rejection. The separate existing P1/G0 and P2/G0 operations
 remain the zero-budget routes.
+For this generated inline-ID route, an underlying I1 read borrow does not
+block the operation: it reads the already authenticated copied inline byte,
+does not mutate the input, and typed input release remains blocked until that
+borrow ends. Manual P2/decode instead require unborrowed typed I1 admission.
 No generation continuation after manual P1/P2 prefill, manual decode, P1/G0,
 or a prior G1 commit is admitted: native generated preflight rejects an
 already committed prefix. Manual `g3m-prefill-p1!` and `g3m-decode-one!`
@@ -96,8 +100,9 @@ ASan+UBSan+LSan, with independent M3T parity for all 256 P1/append logits
 and both A2 K/V positions; exact G3-S sample/RNG oracle; ID/text/length/
 cache-length/RNG clone and detached-lifetime checks. Cover EOS equality and
 inequality, byte 0/255, exhausted draw and P2/G1 pre-pin rejection, malformed/
-dead/borrowed owners, stale binding, all meaningful provider/A2/ID/T1/text
-cuts, old-cache borrow and retry, plus P1/P2 manual, manual decode, P1/G0,
+dead owners, borrowed-I1 read-only behavior and release safety, stale binding,
+provider/A2/ID/T1/text cuts where stage hooks exist, old-cache borrow and
+retry, plus P1/P2 manual, manual decode, P1/G0,
 P2/G0 and inherited P1/G1 regressions. Record reached cuts, pin/guard drain,
 production feature-off symbols, Q0 and sealed exact-tree evidence. Public
 G3-G error wrappers/package, cross-operation continuation, persistence and
