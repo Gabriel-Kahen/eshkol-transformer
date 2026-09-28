@@ -935,8 +935,9 @@ stacks on that exact head and runs the existing guarded acquire/reserve/21-role/
 prepare/preflight/commit/finish sequence with authentic T1-backed P2 input.
 Its pinned network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,016
 byte-identical checks, 19 source contracts, Q0 4/4 and production test-symbol
-exclusion. Evidence is at `g3m-prefill-p2-candidate-20260928`; independent
-source review and hosted integration CI remain pending. It adds no public
+exclusion. Evidence is at `g3m-prefill-p2-candidate-20260928`; root
+independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
+integration CI remains pending. It adds no public
 generation facade or manual decode.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is

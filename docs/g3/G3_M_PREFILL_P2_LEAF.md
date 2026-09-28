@@ -34,4 +34,7 @@ exclusion. One sanitizer launch used `detect_leaks=1`. The synthetic dispatch
 cut tests error propagation and abort, not a measured failure from an actual
 provider. Sealed external evidence is at
 `/home/gabe/.codex/evidence/eshkol-transformer/g3m-prefill-p2-candidate-20260928`.
-Independent source review and hosted integration CI remain pending.
+Root independently source-reviewed commit `da0ba38` / tree `ca20699`:
+the guarded call sequence, exact 21 roles, failure cleanup, authentic-input
+gate and regression witnesses match the accepted private consumer contract.
+Hosted integration CI remains pending.
