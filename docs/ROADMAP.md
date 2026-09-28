@@ -74,6 +74,11 @@ limit. Only parameter-state now receives a 1,200-second compiler bound and a
 120-minute job bound. P1 records each compiler's elapsed time, peak RSS and
 status in the CI step summary, including failure diagnostics. The exact-head
 hosted parameter-state result remains pending; other suite budgets are intact.
+The same old-head native-optimizer job passed the O2 package build, then hit
+two stale test-only undefined-symbol counts: the successor runtime adds exactly
+`eshkol_format_float32_bits` and `eshkol_runtime_fatal` to O2's exact manifest.
+The two private-leaf package tests now expect 159 entries; the byte-exact
+manifest comparison remains mandatory. Fresh hosted acceptance is pending.
 
 The first supported full-CI attempt on integration head `c27aaf5` exposed a
 shared I2 compiler prerequisite: pinned `81298` tried to transfer into the
