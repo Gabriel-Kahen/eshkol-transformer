@@ -140,3 +140,8 @@ trainer lease/release and D2 ownership checks. P1 and O2 remain test-local
 operands pending installation of their complete canonical facades. This
 facet does not provide a generic model constructor, model release operation,
 training step, or resume API.
+The pinned supported linked gate passed on `df584de` (tree `55ee70a9`):
+49 Eshkol sources, 30 native objects, 84 localized exports and 173 undefined
+runtime symbols. The ordinary poisoned caller printed
+`TR3-PUBLIC-M3T-FACET-PASS` with empty stderr. All evidence files verify under
+`/tmp/tr3-public-installed.oOj8iC/SHA256SUMS` (SHA-256 `3152fd479975c4a54013ec440b7a72817c4f80470198ec6346f6d6c0dd775e0a`).

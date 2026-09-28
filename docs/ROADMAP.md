@@ -1193,7 +1193,11 @@ The existing initializer/model producer exports gain the other 36 reviewed
 same-package boxed operations and private renames. Its ordinary caller uses
 the installed facade for model construction, profile and successor initializer,
 and checks forged model/initializer identities before the existing live
-trainer lease/release cases. P1 and O2 construction remain test-local until
+trainer lease/release cases. The pinned linked gate passed on `df584de` with
+49 Eshkol sources, 30 native objects, 84 localized exports, 173 undefined
+runtime symbols, and empty poisoned-caller stderr; all files in
+`/tmp/tr3-public-installed.oOj8iC/SHA256SUMS` verify. P1 and O2 construction
+remain test-local until
 their complete canonical facades are installed; this facet makes no public
 step/train/evaluate or resume claim.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
