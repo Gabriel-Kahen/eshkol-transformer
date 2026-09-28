@@ -1412,8 +1412,16 @@ with 50 sources, 30 native objects, 48 exports, 175 undefined symbols, and
 a poisoned public caller on the pre-facet tree. Sealed evidence is under
 `tr3-private-metrics-fe9-201331e-20260928/SHA256SUMS` and
 `tr3-public-installed-metrics-fe9-201331e-20260928/SHA256SUMS`.
-The combined current installed facet still needs an exact fe9 metrics linked
-gate. Public `metrics-ref`, true-f32 scalar return, trainer-step integration,
+The combined current installed facet passed an exact fe9 metrics linked gate
+on `d7ac4d8`/tree `6e0bf4e`: 50 sources, 30 native objects, 104 exports,
+175 undefined symbols, and a poisoned caller with empty stderr. Its 103
+artifacts verify under
+`tr3-public-installed-metrics-combined-d7ac4d8-20260928/SHA256SUMS`
+(`bc5a7a97...`). The focused exact-tree gate also passed 30 runtime checks,
+allocation denial, fail-stop exit 134 and the 336-byte retention measurement;
+its 35 artifacts verify under
+`tr3-private-metrics-fe9-combined-d7ac4d8-20260928/SHA256SUMS`
+(`2e8667ac...`). Public `metrics-ref`, true-f32 scalar return, trainer-step integration,
 train/evaluate adapters, and all-result retention evidence remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
