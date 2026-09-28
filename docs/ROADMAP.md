@@ -994,9 +994,12 @@ those three modes with 23 source contracts and Q0 4/4, retaining bitwise
 P1/P2 M3T logit/K/V parity. A sequential default v1→v2 build left v1's
 archive, object and eight facades byte-identical, and its fresh-cache v1
 P1/G1 caller passed normal/repeat. Local logs are sealed at
-`g3g-public-g0-candidate-20260928`. Independent source review and hosted
-integration remain pending; no public manual facade, continuation or N>1
-behavior is claimed.
+`g3g-public-g0-candidate-20260928`. The final pin-only integration head
+`65b1fa35` / tree `0515b5d` preserves G0 source/test/runner blobs and
+passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
+its source and sealed evidence without a blocking finding. Hosted integration
+remains pending; no public manual facade, continuation or N>1 behavior is
+claimed.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

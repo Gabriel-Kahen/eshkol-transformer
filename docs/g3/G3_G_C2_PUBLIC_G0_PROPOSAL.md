@@ -1,6 +1,6 @@
 # G3-G public diagnostic-C2 zero-budget extension proposal
 
-**Independently accepted bounded contract; isolated implementation candidate locally sealed, pending independent source review and hosted integration.** This is a successor
+**Independently accepted bounded contract; isolated implementation candidate independently source-reviewed and locally sealed, pending hosted integration.** This is a successor
 to the reviewed [public P1/G1 package](G3_G_C2_PUBLIC_LEAF.md). It exposes the
 already accepted source-private [P1/G0](G3_T_ZERO_BUDGET_LEAF.md) and
 [P2/G0](G3_T_P2_ZERO_BUDGET_LEAF.md) paths alongside P1/G1. It does not expose
@@ -142,8 +142,11 @@ This proposal adds no generated-token loop or public manual operation.
 
 ## Isolated candidate evidence
 
-The revision-2 implementation is at `1086582` / tree `5ccfa9f` before this
-documentation seal. `native/g3g_g0_public_extension.esk` owns prompt provenance;
+The sealed revision-2 implementation is at `1086582` / tree `5ccfa9f`;
+the final pin-only integration head `65b1fa35` / tree `0515b5d` preserves all
+G0 source/test/runner blobs byte-identically and passed M3CG 9/9 plus the
+exact predecessor SHA check. Root independently source-reviewed that head
+without a blocking finding. `native/g3g_g0_public_extension.esk` owns prompt provenance;
 `native/g3g_g0_package_root.esk` source-composes only the accepted G0/G1
 routes. `scripts/build-g3g-g0.sh` and its exact tuple/manifests keep a
 separate one-owner artifact. The pinned network-none package build passed
