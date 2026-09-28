@@ -76,7 +76,7 @@
   (lambda () (config-parse "{")))
 (define parsed
   (config-parse
-    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}"))
+    "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}"))
 (define resolved
   (config-resolve parsed '()))
 (check "installed X1 validates authentic resolved value"
@@ -253,6 +253,9 @@
 (define trainer (trainer-create resolved tokenizer dataset model optimizer))
 (check "genuine trainer shell" (and (vector? trainer)
                                     (= (vector-length trainer) 1)))
+(expect-error "forged public step rejects exact shell"
+              'invalid-argument 'trainer-step!
+  (lambda () (trainer-step! (vector 'forged))))
 (expect-error "second lease overlaps retained five receivers"
               'invalid-state 'trainer-create
   (lambda ()
@@ -269,6 +272,12 @@
     (trainer-create resolved tokenizer dataset model optimizer)))
 (define live-batch (token-dataset-next-batch dataset))
 (check "genuine D2 batch is live" (procedure? live-batch))
+(define before-busy-step-cursor (token-dataset-cursor dataset))
+(expect-error "live D2 batch rejects public step"
+              'invalid-state 'trainer-step!
+  (lambda () (trainer-step! trainer)))
+(check "failed public step preserves cursor"
+       (bytes-equal? before-busy-step-cursor (token-dataset-cursor dataset)))
 (expect-release-error "live batch rejects release"
                       'invalid-state
   (lambda () (trainer-release! trainer)))
@@ -277,6 +286,25 @@
   (lambda ()
     (trainer-create resolved tokenizer dataset model optimizer)))
 (check "release live batch" (token-batch-release! live-batch))
+(define first-step (trainer-step! trainer))
+(check "public step publishes first update"
+       (and (= (metrics-ref first-step 'update) 1)
+            (= (metrics-ref first-step 'microbatches) 2)
+            (<= 2 (metrics-ref first-step 'tokens) 4)
+            (exact? (metrics-ref first-step 'tokens))))
+(check "public step publishes detached f32 fields"
+       (and (number? (metrics-ref first-step 'loss))
+            (not (exact? (metrics-ref first-step 'loss)))
+            (> (metrics-ref first-step 'loss) 0)
+            (<= 2 (metrics-ref first-step 'mask-weight) 4)))
+(expect-error "step metrics reject foreign key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref first-step 'epochs)))
+(define second-step (trainer-step! trainer))
+(check "public step increments update with old metrics stable"
+       (and (= (metrics-ref second-step 'update) 2)
+            (= (metrics-ref first-step 'update) 1)
+            (= (metrics-ref second-step 'microbatches) 2)))
 (check "idle trainer release" (trainer-release! trainer))
 (expect-release-error "repeat release tombstone"
                       'invalid-argument

@@ -58,9 +58,9 @@ native/tr3_o2_step_clear.inc
 native/tr3_o2_step_clear_internal.h
 native/tr3_public_candidate_bridge.c
 native/tr3_public_installed_bridge.c
+native/tr3_public_release_candidate_bridge.c
 native/tr3_public_step_metrics.c
 native/tr3_public_step_metrics.h
-native/tr3_public_release_candidate_bridge.c
 native/tr3b_objective_bridge.c
 native/tr3b_objective_bridge.h
 src/eshkol_transformer/m3_i64_integration.c

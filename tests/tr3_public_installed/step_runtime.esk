@@ -1,0 +1,85 @@
+;;; Canonical installed facade, linked with a test-only f32 inspection helper
+;;; against the same unlocalized aggregate. The helper does not publish data.
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.module)
+(require transformer.optim)
+(require transformer.tokenizer)
+(require transformer.trainer)
+(require transformer.error_consumer)
+
+(extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+(define (check label okay)
+  (if (not okay)
+      (begin (display "TR3-PUBLIC-STEP-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (seen-handle? handle seen)
+  (if (null? seen) #f
+      (or (eq? handle (car seen))
+          (seen-handle? handle (cdr seen)))))
+(define (reverse-list source)
+  (let loop ((remaining source) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+(define (unique-paths tree)
+  (let loop ((remaining (parameter-tree-paths tree)) (seen '()) (paths '()))
+    (if (null? remaining) (reverse-list paths)
+        (let ((handle (parameter-tree-handle tree (car remaining))))
+          (if (seen-handle? handle seen)
+              (loop (cdr remaining) seen paths)
+              (loop (cdr remaining) (cons handle seen)
+                    (cons (car remaining) paths)))))))
+(define (dataset-options directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+
+(define directory (car (cdr (command-line))))
+(define resolved
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}")
+    '()))
+(define tokenizer (tokenizer-byte resolved))
+(define dataset (token-dataset-open (dataset-options directory) tokenizer))
+(define model
+  (with-region ('tr3-public-step-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define tree (module-parameters model))
+(define optimizer-config
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (unique-paths tree)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define optimizer (optimizer-create optimizer-config tree))
+(define trainer (trainer-create resolved tokenizer dataset model optimizer))
+(define first (trainer-step! trainer))
+(define first-loss-bits (f32-bits (vector (metrics-ref first 'loss))))
+(define first-weight-bits (f32-bits (vector (metrics-ref first 'mask-weight))))
+;;; The accepted independent PyTorch/TR3-B witness observes physical numerator
+;;; words 1093788954 and 1085410405 for these two rows. In f32 order their
+;;; sum divided by the exact weight 3 is word 1085403699.
+(check 'first-numerical
+       (and (= first-loss-bits 1085403699)
+            (= first-weight-bits 1077936128)
+            (= (metrics-ref first 'tokens) 3)
+            (= (metrics-ref first 'microbatches) 2)
+            (= (metrics-ref first 'update) 1)))
+(define second (trainer-step! trainer))
+(check 'finite-eos-rewind
+       (and (= (metrics-ref second 'tokens) 3)
+            (= (metrics-ref second 'microbatches) 2)
+            (= (metrics-ref second 'update) 2)
+            (= (metrics-ref first 'update) 1)
+            (= (f32-bits (vector (metrics-ref second 'mask-weight)))
+               1077936128)))
+(check 'release (trainer-release! trainer))
+(check 'close (token-dataset-close! dataset))
+(display "TR3-PUBLIC-STEP-AOT-PASS loss-bits=")
+(display first-loss-bits)
+(display " weight-bits=")
+(display first-weight-bits)
+(newline)

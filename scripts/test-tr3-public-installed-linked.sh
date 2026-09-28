@@ -54,6 +54,8 @@ mkdir -p -- "${evidence}"
 evidence="$(readlink -f -- "${evidence}")"
 [[ "${evidence}" != "${PROJECT_ROOT}" && "${evidence}" != "${PROJECT_ROOT}/"* ]] || \
   die "evidence must be outside checkout"
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
+  --output "${evidence}/corpus/step-two"
 
 docker run --rm --network none \
   -e TR3_COMPILER_RUNNER="/fixed/${runner_name}" \
@@ -128,6 +130,12 @@ compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o \
   -DET_TR3_C_RESTORE_BINDINGS -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
   -DET_TR3_C_I2_RESTORE_PRIVATE -DET_TR3_C_O2_RESTORE_NATIVE
 compile native/tr3_public_step_metrics.c tr3_public_step_metrics.o
+clang-21 "${flags[@]}" -I native \
+  tests/tr3_public_installed/test_step_metrics.c \
+  /out/native/tr3_public_step_metrics.o -lm -o /out/step_metrics_test
+/out/step_metrics_test > /out/step-metrics.stdout 2> /out/step-metrics.stderr
+grep -Fx TR3-PUBLIC-STEP-METRICS-KERNEL-PASS /out/step-metrics.stdout >/dev/null
+test ! -s /out/step-metrics.stderr
 clang-21 -std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC \
   -I /fixed-source/inc -I native -MMD -MF /out/native/e1b_bridge.o.d \
   -c native/e1b_error_consumer_bridge.c -o /out/native/e1b_bridge.o
@@ -176,9 +184,7 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
 grep -Fx TR3-PUBLIC-OPERANDS-PASS /out/caller.stdout >/dev/null
 test ! -s /out/caller.stderr
 
-# The installed package intentionally has no public step producer yet. Link a
-# test-only producer to the unlocalized copy of this exact aggregate so its
-# private authority can publish one authentic record for the public reader.
+# Keep the legacy test-only producer for the metrics-ref bit boundary witness.
 clang-21 "${flags[@]}" -I /fixed-source/inc \
   -c tests/tr3_metrics/linked_producer.c -o /out/linked_producer.o
 ar rcsD /out/libeshkol_transformer_tr3_metrics_test.a \
@@ -194,6 +200,21 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   > /out/linked-metrics.stdout 2> /out/linked-metrics.stderr
 grep -Fx TR3-PUBLIC-METRICS-LINKED-PASS /out/linked-metrics.stdout >/dev/null
 test ! -s /out/linked-metrics.stderr
+
+# The test-only f32 inspector reads actual public step results from this same
+# raw aggregate. The ordinary installed caller above links the localized one.
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_public_installed/step_runtime.esk -o /out/step_caller \
+    > /out/step-compile.stdout 2> /out/step-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
+  /out/step_caller /out/corpus/step-two \
+  > /out/step.stdout 2> /out/step.stderr
+grep -Fx 'TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128' \
+  /out/step.stdout >/dev/null
+test ! -s /out/step.stderr
 
 # Focused bit and counter boundary proof for the actual installed C bridge.
 clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \

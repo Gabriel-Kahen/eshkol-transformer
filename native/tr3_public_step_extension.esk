@@ -15,6 +15,15 @@
       (et-e1b-private-raise
         'internal 'trainer-step! "trainer step raised a foreign value" '() #f)))
 
+(define (tr3-public-step-f32-check status)
+  (if (= status -2)
+      (m3t-fail 'unsupported 'trainer-step!
+                "unsupported binary32 rounding or flush controls"))
+  (if (= status -1)
+      (m3t-fail 'invalid-state 'trainer-step!
+                "nonfinite physical f32 step observation"))
+  status)
+
 (define (trainer-step! trainer)
   (let ((staged? #f))
     (guard (caught
@@ -32,19 +41,17 @@
                (tr3-step-composer-with-hooks-internal!
                  trainer
                  (lambda (observation)
-                   (if (not (= (tr3-step-metrics-accumulate
-                                  accumulator observation) 0))
-                       (m3t-fail 'invalid-state 'trainer-step!
-                                 "nonfinite physical f32 step observation"))
+                   (tr3-public-step-f32-check
+                     (tr3-step-metrics-accumulate accumulator observation))
                    #t)
                  (lambda (ledger)
                    (let* ((frame (vector-ref ledger 0))
                           (saved (vector-ref frame 7))
                           (tokens (vector-ref ledger 6))
                           (weight (tr3b-u32-le accumulator 4))
-                          (loss (tr3-step-metrics-mean-bits accumulator)))
-                     (if (or (< loss 0)
-                             (not (= weight (tr3-step-f32-integer-bits tokens))))
+                          (loss (tr3-public-step-f32-check
+                                  (tr3-step-metrics-mean-bits accumulator))))
+                     (if (not (= weight (tr3-step-f32-integer-bits tokens)))
                          (m3t-fail 'invalid-state 'trainer-step!
                                    "physical f32 step reduction differs"))
                      (tr3-metrics-step-fill-internal!
