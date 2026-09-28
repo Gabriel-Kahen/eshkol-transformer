@@ -958,9 +958,14 @@ The next dependency is the proposed
 [private G3-M one-token decode composer](g3/G3_M_MANUAL_DECODE_COMPOSER_PROPOSAL.md):
 one guarded kind-1 call, owned `[1,1]` input, exact 21-role T1 schedule,
 length-one A2 prefix append, detached logits and precommit rollback. Root
-independently reviewed the contract; an isolated private composer candidate
-now follows it. Source/test review and hosted CI remain pending. A seeded
-generation schedule and public G3-G facade remain separate downstream gates.
+independently reviewed the contract and source candidate `86bd5a5`/tree
+`0d8912b`; its pinned network-none normal/repeat/ASan+UBSan+LSan gate passed
+47,240 identical checks, 22 source contracts, Q0 4/4 and production
+test-symbol exclusion. Sealed evidence is `g3m-manual-decode-86bd5a5-20260928`;
+hosted CI remains pending. The next proposed private dependency is the
+[single P1/G1 seeded-generation schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md),
+using the existing G3-T generated transaction and G3-S sampler; it is pending
+independent contract review and implements no public G3-G facade.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
