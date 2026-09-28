@@ -1042,15 +1042,21 @@ Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
 checks, with exact feature-on/off private-symbol delta. Commands and logs
 are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
 (`SEAL.sha256` `980c7e46...`). #143 merged into `main` as `9e1ee516` after
-23/23 hosted checks (run 36434951609). An isolated revision-3 manual package
-checkpoint now drafts the separate 40-source, 53-native-entry tuple and three
-additive boxed operations. The pinned first package build compiled the Eshkol
-root and native providers, then stopped at the expected global-definition
-manifest drift (the copied revision-2 file still lists 106 definitions). This
-is an incomplete implementation checkpoint: the exact new definition and
-undefined inventories, closed build, AOT numerical/negative tests,
-independent review and hosted integration remain required. Revision 2 is
-still the accepted installed boundary.
+23/23 hosted checks (run 36434951609). An isolated revision-3 candidate now
+builds the separate 40-source, 53-native-entry, five-provider, eight-facade
+manual tuple. Measured inventories are 103 boxed exports, 109 definitions,
+109 public-name strings and 166 undefined symbols. Pinned Ubuntu 22.04/LLVM
+21 network-none builds produce byte-identical objects through direct,
+official and sequential default routes. Fresh-cache installed AOT normal and
+repeat compare all 256 P1, T1-backed P2 and one-step decode logit words with
+independent M3 output; testing-closure normal/repeat/ASan+UBSan+LSan also
+checks independent M3T K/V and masks, owner lifetime, malformed shapes,
+borrow and precommit rollback. Sequential v1→v2→v3 default builds preserve
+both predecessor objects, archives and facades byte-identically. Evidence is
+under `g3g-manual-r3-candidate-20260928/`. Independent source review and
+hosted exact-head integration remain required; revision 2 remains the
+accepted installed boundary. Generic I2 interop, N>1, P2/repeated decode,
+resume and CLI are deferred.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
