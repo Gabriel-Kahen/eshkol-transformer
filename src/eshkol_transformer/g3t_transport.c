@@ -209,6 +209,7 @@ typedef struct g3t_context {
 #ifdef ET_G3T_TESTING
   uint32_t test_generated_logits[256];
   int test_generated_ready;
+  int test_flip_binding_on_sample;
 #endif
   int64_t sample_token, successor_rng[4];
   int prefill_committed, sampled;
@@ -2377,6 +2378,12 @@ int64_t et_g3t_private_sample_v1(void *candidate) {
     return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
   c->sample_token = token;
   memcpy(c->successor_rng, next, sizeof(next));
+#ifdef ET_G3T_TESTING
+  if (c->test_flip_binding_on_sample) {
+    c->binding_values[0] ^= 1u;
+    c->test_flip_binding_on_sample = 0;
+  }
+#endif
   c->sampled = 1;
   return 0;
 }
@@ -2968,6 +2975,13 @@ int64_t et_g3t_test_generated_logit_bits_v1(void *candidate, int64_t index) {
   g3t_context *c = g3t_admit(candidate, 0);
   return c && c->test_generated_ready && index >= 0 && index < 256
              ? c->test_generated_logits[index] : -1;
+}
+int64_t et_g3t_test_flip_binding_on_sample_v1(
+    void *candidate, int64_t armed) {
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c || c->h.busy || (armed != 0 && armed != 1)) return -1;
+  c->test_flip_binding_on_sample = (int)armed;
+  return 0;
 }
 int64_t et_g3t_test_sample_token_v1(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);

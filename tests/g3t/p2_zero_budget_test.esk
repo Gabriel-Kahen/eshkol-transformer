@@ -37,6 +37,8 @@
 (extern i64 g3t-test-logit-bits ptr i64 :real et_g3t_test_logit_bits_v1)
 (extern i64 g3t-test-generated-logit-bits ptr i64
         :real et_g3t_test_generated_logit_bits_v1)
+(extern i64 g3t-test-flip-binding-on-sample ptr i64
+        :real et_g3t_test_flip_binding_on_sample_v1)
 (extern i64 g3t-test-sample-token ptr :real et_g3t_test_sample_token_v1)
 (extern i64 g3t-test-pin-count ptr :real et_g3t_test_pin_count_v1)
 (extern i64 g3t-test-frame-binding-flip ptr
@@ -3910,6 +3912,97 @@
 (check "G3-M seeded exhausted owners release"
        (and (g3t-generation-tensor-release! sg-exhausted-input)
             (g3t-generator-close! sg-exhausted)))
+
+(define sg-t1-generator (g3t-generator-create model tokenizer policy-greedy-g1))
+(define sg-t1-native (vector-ref (g3t-generator-find sg-t1-generator 'sg-t1) 3))
+(define sg-t1-input (g3t-generation-t1-input-create t1-p1))
+(define sg-t1-input-native
+  (vector-ref (g3t-prefill-entry sg-t1-input 'input 'sg-t1) 3))
+(check "G3-M seeded T1-backed P1 owns byte-255 I1"
+       (and (= 1 (g3t-test-input-length sg-t1-input-native))
+            (= 255 (g3t-test-input-word sg-t1-input-native 0))))
+(define sg-t1-output
+  (g3m-generate-p1-g1! sg-t1-generator sg-t1-input))
+(check "G3-M seeded genuine T1-backed P1/G1 publishes"
+       (let ((native-output
+               (vector-ref (g3t-prefill-entry sg-t1-output
+                                             'output 'sg-t1) 3)))
+         (and (= 1 (g3t-test-output-word native-output 1))
+              (= 2 (g3t-test-cache-length sg-t1-native))
+              (= 1 (bytevector-length
+                     (car (g3t-generation-output-text sg-t1-output))))
+              (= 0 (g3t-test-pin-count sg-t1-native)))))
+(check "G3-M seeded T1-backed owners release"
+       (and (g3t-output-release! sg-t1-output)
+            (g3t-generation-tensor-release! sg-t1-input)
+            (g3t-generator-close! sg-t1-generator)))
+
+(define sg-borrow-generator (g3t-generator-create model tokenizer policy-greedy-g1))
+(define sg-borrow-input (g3t-generation-token-input-create 65))
+(define sg-borrow-input-native
+  (vector-ref (g3t-prefill-entry sg-borrow-input 'input 'sg-borrow) 3))
+(define sg-i1-borrow (g3t-test-input-borrow-begin sg-borrow-input-native))
+(check "G3-M seeded borrowed I1 fixture" (not (null? sg-i1-borrow)))
+(define sg-borrow-output
+  (g3m-generate-p1-g1! sg-borrow-generator sg-borrow-input))
+(check "G3-M seeded borrowed I1 read-only generated route"
+       (= 1 (g3t-test-output-word
+                   (vector-ref (g3t-prefill-entry sg-borrow-output
+                                                 'output 'sg-borrow) 3) 1)))
+(reject-category "G3-M seeded borrowed I1 release blocked" 'invalid-state
+  (lambda () (g3t-generation-tensor-release! sg-borrow-input)))
+(check "G3-M seeded borrowed I1 end and owners release"
+       (and (= 0 (g3t-test-input-borrow-end sg-i1-borrow))
+            (= 65 (g3t-test-input-word sg-borrow-input-native 0))
+            (g3t-generation-tensor-release! sg-borrow-input)
+            (g3t-output-release! sg-borrow-output)
+            (g3t-generator-close! sg-borrow-generator)))
+
+(define sg-old-generator (g3t-generator-create model tokenizer policy-g1))
+(define sg-old-native (vector-ref (g3t-generator-find sg-old-generator 'sg-old) 3))
+(define sg-old-input (g3t-generation-token-input-create 65))
+(define sg-old-borrow (g3t-test-manual-cache-borrow-begin sg-old-native))
+(check "G3-M seeded old empty-cache borrow fixture" (not (null? sg-old-borrow)))
+(define sg-old-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-generate-p1-g1! sg-old-generator sg-old-input) #f))
+(check "G3-M seeded old-cache borrow rejects" sg-old-cut)
+(check "G3-M seeded old empty-cache borrow ended"
+       (= 0 (g3t-test-manual-cache-borrow-end sg-old-borrow)))
+(check "G3-M seeded old-cache borrow keeps empty cache"
+       (= 0 (g3t-test-cache-length sg-old-native)))
+(check "G3-M seeded old-cache borrow keeps RNG"
+       (= 0 (g3t-test-rng-word sg-old-native 2)))
+(check "G3-M seeded old-cache borrow drains pins"
+       (= 0 (g3t-test-pin-count sg-old-native)))
+(define sg-old-retry
+  (g3m-generate-p1-g1! sg-old-generator sg-old-input))
+(check "G3-M seeded old-cache failure same-generator retry publishes"
+       (and (= 2 (g3t-test-cache-length sg-old-native))
+            (= 1 (g3t-test-rng-word sg-old-native 2))
+            (= 1 (g3t-test-output-word
+                   (vector-ref (g3t-prefill-entry sg-old-retry
+                                                 'output 'sg-old) 3) 1))))
+(check "G3-M seeded old-cache retry owners release"
+       (and (g3t-output-release! sg-old-retry)
+            (g3t-generation-tensor-release! sg-old-input)
+            (g3t-generator-close! sg-old-generator)))
+
+(define sg-stale-generator (g3t-generator-create model tokenizer policy-g1))
+(define sg-stale-native
+  (vector-ref (g3t-generator-find sg-stale-generator 'sg-stale) 3))
+(define sg-stale-input (g3t-generation-token-input-create 65))
+(check "G3-M seeded stale-binding-on-sample cut armed"
+       (= 0 (g3t-test-flip-binding-on-sample sg-stale-native 1)))
+(reject-category "G3-M seeded stale binding after sample rejected" 'invalid-state
+  (lambda () (g3m-generate-p1-g1! sg-stale-generator sg-stale-input)))
+(check "G3-M seeded stale binding retains prompt and old RNG"
+       (and (= 1 (g3t-test-cache-length sg-stale-native))
+            (= 0 (g3t-test-rng-word sg-stale-native 2))
+            (= 0 (g3t-test-pin-count sg-stale-native))))
+(check "G3-M seeded stale-binding owners release"
+       (and (g3t-generation-tensor-release! sg-stale-input)
+            (g3t-generator-close! sg-stale-generator)))
 
 (define sg-good (g3t-generator-create model tokenizer policy-g1))
 (define sg-good-native (vector-ref (g3t-generator-find sg-good 'sg-good) 3))

@@ -56,6 +56,15 @@ for witness in (
     "G3-M seeded append failure retains prompt-only cache",
     "G3-M seeded A2 failure rolls back before prompt",
     "G3-M seeded exhausted categorical rejects before pins",
+    "G3-M seeded genuine T1-backed P1/G1 publishes",
+    "G3-M seeded borrowed I1 read-only generated route",
+    "G3-M seeded borrowed I1 release blocked",
+    "G3-M seeded old-cache borrow rejects",
+    "G3-M seeded old-cache borrow keeps empty cache",
+    "G3-M seeded old-cache borrow keeps RNG",
+    "G3-M seeded old-cache borrow drains pins",
+    "G3-M seeded old-cache failure same-generator retry publishes",
+    "G3-M seeded stale binding after sample rejected",
     "G3-M seeded categorical sample and final publication",
     "G3-M seeded prefill all 256 logits bit-exact to M3T",
     "G3-M seeded both K/V positions bit-exact to M3T",
@@ -78,4 +87,6 @@ assert "-DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE" in runner
 native = (root / "src/eshkol_transformer/g3t_transport.c").read_text()
 assert "et_g3t_test_generated_logit_bits_v1" in native
 assert "#ifdef ET_G3T_TESTING\n    memcpy(c->test_generated_logits" in native
+assert "et_g3t_test_flip_binding_on_sample_v1" in native
+assert "#ifdef ET_G3T_TESTING\n  if (c->test_flip_binding_on_sample)" in native
 print("G3-M private seeded P1/G1 source contract: PASS")
