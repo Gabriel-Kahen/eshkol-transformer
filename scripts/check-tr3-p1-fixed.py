@@ -118,6 +118,12 @@ def check():
             "TR3 P1 surface append is missing or duplicated")
     without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
     without_leaf = without_leaf.replace(vector_append, "")
+    successor_tail = ("\n         module-construction-parameters-internal"
+                      "\n         p1-trusted-surface)")
+    require(without_leaf.count(successor_tail) == 1,
+            "trusted P1 provide differs from exact private import delta")
+    without_leaf = without_leaf.replace(successor_tail,
+        "\n         module-construction-parameters-internal)")
     require(sha256(without_leaf.encode()).hexdigest() == COMPOSED_BASE_SHA256,
             "reviewed integrated P1 source changed outside the exact TR3 helper/vector append")
 

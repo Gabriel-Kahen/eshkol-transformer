@@ -449,9 +449,11 @@ def inject(old, new):
         raise SystemExit(f"diagnostic overlay lost exact anchor: {old!r}")
     source = source.replace(old, new)
 
-inject("         module-construction-parameters-internal)\n",
+inject("         module-construction-parameters-internal\n"
+       "         p1-trusted-surface)\n",
        "         module-construction-parameters-internal\n"
-       "         p1-index-test-control!)\n")
+       "         p1-index-test-control!\n"
+       "         p1-trusted-surface)\n")
 inject("(define active-record-root (vector '() '() #t #f '() '()))\n",
        "(define active-record-root (vector '() '() #t #f '() '()))\n"
        "(define p1-index-test-fail-stage? #f)\n")

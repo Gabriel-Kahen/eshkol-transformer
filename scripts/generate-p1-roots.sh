@@ -79,6 +79,9 @@ extract_provides() {
 awk -F '\t' '$1 == "public" { print $2 }' "${manifest}" \
   >"${temporary}/expected-public"
 awk -F '\t' '{ print $2 }' "${manifest}" >"${temporary}/expected-trusted"
+# DD-10 consumers import this existing lexical surface from the trusted root.
+# Keep the inherited P1 package manifest and public root byte-for-byte pinned.
+printf '%s\n' p1-trusted-surface >>"${temporary}/expected-trusted"
 extract_provides "${temporary}/module.esk" >"${temporary}/actual-public"
 extract_provides "${temporary}/module_internal.esk" >"${temporary}/actual-trusted"
 if ! cmp --silent "${temporary}/expected-public" "${temporary}/actual-public"; then

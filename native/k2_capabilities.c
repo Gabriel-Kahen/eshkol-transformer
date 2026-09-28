@@ -1041,9 +1041,11 @@ static int closure_code(const void *closure, uint64_t *code) {
     return 0;
   }
   memcpy(&environment_header, body.environment, sizeof(environment_header));
-  if ((environment_header & (size_t)0xffffu) != (size_t)1u ||
-      ((environment_header >> 16u) & (size_t)0xffffu) != (size_t)1u ||
-      (environment_header >> (sizeof(size_t) * CHAR_BIT - 1u)) != 0u) {
+  /* Merged Eshkol CLOSURE_ENV_PACK: captures [0:31], fixed arity [32:47],
+   * reserved [48:62], variadic [63]. This factory is exactly 1/1/nonvariadic. */
+  if ((environment_header & UINT64_C(0xffffffff)) != UINT64_C(1) ||
+      ((environment_header >> 32u) & UINT64_C(0xffff)) != UINT64_C(1) ||
+      (environment_header >> 48u) != 0u) {
     return 0;
   }
   *code = body.function_address;

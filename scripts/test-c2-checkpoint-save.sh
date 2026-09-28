@@ -26,7 +26,9 @@ if [[ "${development}" == 1 ]]; then
   printf '%s\n' \
     'C2 SAVE DEVELOPER MODE: NON-ACCEPTANCE; one Clang AOT and poison run only'
 else
-  tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-checkpoint-save.XXXXXX")"
+  # The pinned compiler derives its AOT cache from XDG_CACHE_HOME and rejects
+  # system temp roots. Keep each probe's fresh cache under this ignored build root.
+  tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-c2-checkpoint-save.XXXXXX")"
 fi
 active_phase=
 phase_started=0

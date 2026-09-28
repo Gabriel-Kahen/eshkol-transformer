@@ -9,7 +9,8 @@ done
 g3s_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 g3s_cc="$(tsv_value "${g3s_provenance}" cc_path)"
 g3s_cxx="$(tsv_value "${g3s_provenance}" cxx_path)"
-g3s_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-g3s.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+g3s_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-g3s.XXXXXX")"
 g3s_error_log=''
 cleanup_g3s() {
   local status=$?

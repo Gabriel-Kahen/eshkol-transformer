@@ -9,7 +9,8 @@ done
 n3k_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 n3k_cc="$(tsv_value "${n3k_provenance}" cc_path)"
 n3k_cxx="$(tsv_value "${n3k_provenance}" cxx_path)"
-n3k_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-n3k.XXXXXX")"
+mkdir -p "${PROJECT_ROOT}/.deps"
+n3k_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-n3k.XXXXXX")"
 n3k_error_log=''
 cleanup_n3k() {
   local status=$?

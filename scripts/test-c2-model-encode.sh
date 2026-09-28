@@ -10,7 +10,9 @@ cxx=
 resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-c2-model-encode.XXXXXX")"
+# Compile-only probes need fresh XDG caches outside the pinned compiler's
+# forbidden system temp roots; this ignored build root is removed at exit.
+tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-c2-model-encode.XXXXXX")"
 cleanup() {
   local status=$?
   if (( status != 0 )); then

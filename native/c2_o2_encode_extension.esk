@@ -10,6 +10,8 @@
 ;;; et_c2_checkpoint_encode_v1 outer codec ignores and recomputes those slots.
 ;;; Staging is not publishable before that codec and the complete C2 parser.
 
+(require transformer.checkpoint_internal)
+
 (extern i64 c2-o2-native-state-preflight ptr i64 i64
         :real et_c2_private_o2_state_preflight_transfer_v1)
 (extern i64 c2-o2-native-state-require-shape ptr i64 i64 ptr

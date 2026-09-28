@@ -7,9 +7,12 @@
 
 (require e1b_error_consumer_private)
 
+;;; Trusted aggregate consumers import this predicate under DD-10 scope rules;
+;;; the installed X1 facade does not export it.
 (provide x1-private-config-parse x1-private-config-resolve
          x1-private-config-validate x1-private-config-canonical
-         x1-private-config-fingerprint x1-private-config-ref)
+         x1-private-config-fingerprint x1-private-config-ref
+         x1-resolved?)
 
 ;;; eshkol_sha256 is part of the pinned canonical hosted runtime even when the
 ;;; optional agent FFI is disabled.  This private declaration avoids importing
