@@ -239,3 +239,65 @@ extern eshkol_tagged_value_t et_e1b_private_m3t_sum_cabi_v1(eshkol_tagged_value_
 TR3_PUBLIC_BINARY(et_e1b_public_m3t_sum_v1,
                   et_e1b_private_m3t_sum_cabi_v1)
 #undef TR3_PUBLIC_NULLARY
+
+/* Complete unchanged P1 module and O2 optimizer facades. */
+extern eshkol_tagged_value_t et_e1b_private_p1_module_buffers_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_module_buffers_v1,
+                  et_e1b_private_p1_module_buffers_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_module_state_dict_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_module_state_dict_v1,
+                  et_e1b_private_p1_module_state_dict_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_module_load_state_dict_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_p1_module_load_state_dict_v1,
+                  et_e1b_private_p1_module_load_state_dict_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_module_train_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_module_train_v1,
+                  et_e1b_private_p1_module_train_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_module_eval_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_module_eval_v1,
+                  et_e1b_private_p1_module_eval_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_module_zero_grad_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_module_zero_grad_v1,
+                  et_e1b_private_p1_module_zero_grad_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_parameter_tree_tie_groups_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_parameter_tree_tie_groups_v1,
+                  et_e1b_private_p1_parameter_tree_tie_groups_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_parameter_handle_path_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_parameter_handle_path_v1,
+                  et_e1b_private_p1_parameter_handle_path_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_parameter_handle_shape_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_parameter_handle_shape_v1,
+                  et_e1b_private_p1_parameter_handle_shape_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_parameter_handle_dtype_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_parameter_handle_dtype_v1,
+                  et_e1b_private_p1_parameter_handle_dtype_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_parameter_handle_device_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_parameter_handle_device_v1,
+                  et_e1b_private_p1_parameter_handle_device_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_state_dict_paths_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_state_dict_paths_v1,
+                  et_e1b_private_p1_state_dict_paths_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_state_dict_tensor_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_p1_state_dict_tensor_v1,
+                  et_e1b_private_p1_state_dict_tensor_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_state_dict_alias_groups_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_state_dict_alias_groups_v1,
+                  et_e1b_private_p1_state_dict_alias_groups_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_p1_state_dict_release_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_p1_state_dict_release_v1,
+                  et_e1b_private_p1_state_dict_release_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_o2_optimizer_step_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_o2_optimizer_step_v1,
+                  et_e1b_private_o2_optimizer_step_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_o2_optimizer_zero_grad_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_o2_optimizer_zero_grad_v1,
+                  et_e1b_private_o2_optimizer_zero_grad_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_o2_optimizer_state_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_o2_optimizer_state_v1,
+                  et_e1b_private_o2_optimizer_state_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_o2_optimizer_load_state_cabi_v1(eshkol_tagged_value_t, eshkol_tagged_value_t);
+TR3_PUBLIC_BINARY(et_e1b_public_o2_optimizer_load_state_v1,
+                  et_e1b_private_o2_optimizer_load_state_cabi_v1)
+extern eshkol_tagged_value_t et_e1b_private_o2_optimizer_state_release_cabi_v1(eshkol_tagged_value_t);
+TR3_PUBLIC_UNARY(et_e1b_public_o2_optimizer_state_release_v1,
+                  et_e1b_private_o2_optimizer_state_release_cabi_v1)

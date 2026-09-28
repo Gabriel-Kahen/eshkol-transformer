@@ -943,20 +943,40 @@ of the G3-T input owner, T2 role route, A2 view geometry, and G3-C4 predecessor
 contracts. It identifies the missing bridge
 between the accepted G3-C4 T2 manual route and G3-T's P1-only manual frame:
 authenticated owned I1 `[1,2]` admission, 21-role T2 routing, last-row
-logits, length-two A2 publication and rollback. No P2 native implementation,
-G3-M P2 composer, generation claim or acceptance evidence follows from this
-contract. Implement and verify that G3-T dependency before the G3-M P2 leaf.
+logits, length-two A2 publication and rollback. The isolated
+[G3-T manual P2 native transport candidate](g3/G3_T_MANUAL_P2_PREFILL_LEAF.md)
+implements that source-private bridge. Root independently source-reviewed
+`fd11d72` / tree `4d100f8`; PR #130 passed all 23 hosted checks and merged as
+`86b10ee`. Its pinned
+network-none normal/repeat/ASan+UBSan+LSan aggregate passed 46,984 identical
+checks, 18 source contracts, Q0 4/4 and production test-symbol exclusion;
+the external evidence is in `g3t-manual-p2-native-candidate-20260928`.
+The G3-T transport is source-reviewed at `832a709`. The isolated
+[source-private G3-M P2 composer candidate](g3/G3_M_PREFILL_P2_LEAF.md)
+stacks on that exact head and runs the existing guarded acquire/reserve/21-role/
+prepare/preflight/commit/finish sequence with authentic T1-backed P2 input.
+Its pinned network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,016
+byte-identical checks, 19 source contracts, Q0 4/4 and production test-symbol
+exclusion. Evidence is at `g3m-prefill-p2-candidate-20260928`; root
+independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
+integration CI remains pending. It adds no public
+generation facade or manual decode.
 
-The next dependency after the independently reviewed G3-T manual P2 native
-head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
-[proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
-The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
-native frame/role/publication branches and private Eshkol call/frame wrappers
-still exclude manual decode. Root independently reviewed the source-anchored
-native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
-is integrated in this `origin/main` baseline. Native decode, its wrapper, a
-G3-M decode composer, and the seeded
-generation/public facade remain separate downstream gates.
+The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
+was independently reviewed at `58499c0`. Its isolated
+[native candidate](g3/G3_T_MANUAL_DECODE_LEAF.md), `a4f7c53` / tree
+`ad87a4e`, extends reviewed manual P2 with an owned `[1,1]` ID, bound P1
+prefix, 21-role T1 append and atomic length-two cache/logits commit. Its pinned
+network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
+byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
+exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. Root
+independently reviewed the source; hosted integration CI remains pending.
+The accepted [private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md)
+merged as `893cbc7` and adds no implementation. The isolated wrapper candidate
+`f117987` / tree `972087b` has since passed independent source review and
+47,194 pinned normal/repeat/sanitizer checks; its hosted integration remains
+separate. The G3-M decode composer and seeded generation/public facade are
+downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -1242,6 +1262,20 @@ runtime symbols, and empty poisoned-caller stderr; all files in
 remain test-local until
 their complete canonical facades are installed; this facet makes no public
 step/train/evaluate or resume claim.
+The stacked P1/O2 installed operand facet adds the unchanged 18-operation
+`transformer.module` and six-operation `transformer.optim` facades to the
+same aggregate. It reuses the four existing producer exports and adds only
+the 20 missing accepted boxed operations/private renames. The ordinary caller
+imports both facades, constructs P1 parameters and O2 optimizer from the
+installed M3T model, then passes all five installed operands to
+`trainer-create`. Forged P1 module/tree and O2 optimizer identities, released
+P1/O2 snapshots, and the existing overlapping/busy/repeated trainer release
+cases pass. The pinned linked gate on `cd9f6b5`/tree `d52bf931` passed with
+49 Eshkol sources, 30 native objects, 104 localized exports, 173 undefined
+runtime symbols and empty poisoned-caller stderr; all files under
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-operands-cd9f6b5-20260927/SHA256SUMS`
+verify. This is an installed construction/lease facet; public step, train,
+evaluate, state/load and resume remain separate work.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
