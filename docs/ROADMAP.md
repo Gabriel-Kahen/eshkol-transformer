@@ -1277,6 +1277,20 @@ runtime symbols and empty poisoned-caller stderr; all files under
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-operands-cd9f6b5-20260927/SHA256SUMS`
 verify. This is an installed construction/lease facet; public step, train,
 evaluate, state/load and resume remain separate work.
+The source-private step metrics authority now loads exactly once after the
+lease root in the installed TR3 aggregate. Its separate two-slot strong
+registry stages and promotes an exact ten-slot step record containing finite
+binary32 words as exact integers and exact counters, authenticates published
+condition identities, and publishes through an allocation-free tail. The
+focused pinned f31/LLVM21 gate passes 30 runtime checks and actual vector and
+promotion-target allocation denial with unchanged head, cleared staging, and
+retry. It measures 336 incremental retained arena bytes per successful record
+between 1,024 and 8,192 publications; 1,024 rejected staging attempts add
+15,679,440 arena bytes, including error delivery. The same-tree installed
+linked gate retains 104 localized exports and 173 undefined runtime symbols,
+with the ordinary caller passing under arena poison. Public `metrics-ref`,
+true-f32 scalar return, `trainer-step!`, train/evaluate adapters, and all-result
+retention evidence remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
