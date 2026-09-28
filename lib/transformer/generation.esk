@@ -1,0 +1,159 @@
+;;; Installed diagnostic-C2 P1/G1 facade.
+(require transformer.error_consumer)
+
+(provide generator-create
+         generator-generate!
+         generation-input-create
+         generation-token-input-create
+         generation-output-ids
+         generation-output-lengths
+         generation-output-text
+         generation-output-rng
+         generation-output-cache-lengths
+         generation-tensor-release!
+         generation-output-release!
+         generation-rng-release!
+         generator-close!)
+
+(define g3g-safe-generator-create
+  (let ()
+    (extern void g3g-boxed-generator-create ptr ptr ptr ptr
+            :real et_e1b_public_g3_generator_create_v1)
+    (lambda (arg0 arg1 arg2)
+      (let ((output (vector #f)))
+        (g3g-boxed-generator-create (vector arg0) (vector arg1) (vector arg2) output)
+        (vector-ref output 0)))))
+(define (generator-create arg0 arg1 arg2)
+  (g3g-safe-generator-create arg0 arg1 arg2))
+
+(define g3g-safe-generator-generate
+  (let ()
+    (extern void g3g-boxed-generator-generate ptr ptr ptr
+            :real et_e1b_public_g3_generator_generate_v1)
+    (lambda (arg0 arg1)
+      (let ((output (vector #f)))
+        (g3g-boxed-generator-generate (vector arg0) (vector arg1) output)
+        (vector-ref output 0)))))
+(define (generator-generate! arg0 arg1)
+  (g3g-safe-generator-generate arg0 arg1))
+
+(define g3g-safe-generation-input-create
+  (let ()
+    (extern void g3g-boxed-generation-input-create ptr ptr
+            :real et_e1b_public_g3_generation_input_create_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-input-create (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-input-create arg0)
+  (g3g-safe-generation-input-create arg0))
+
+(define g3g-safe-generation-token-input-create
+  (let ()
+    (extern void g3g-boxed-generation-token-input-create ptr ptr
+            :real et_e1b_public_g3_generation_token_input_create_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-token-input-create (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-token-input-create arg0)
+  (g3g-safe-generation-token-input-create arg0))
+
+(define g3g-safe-generation-output-ids
+  (let ()
+    (extern void g3g-boxed-generation-output-ids ptr ptr
+            :real et_e1b_public_g3_generation_output_ids_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-output-ids (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-output-ids arg0)
+  (g3g-safe-generation-output-ids arg0))
+
+(define g3g-safe-generation-output-lengths
+  (let ()
+    (extern void g3g-boxed-generation-output-lengths ptr ptr
+            :real et_e1b_public_g3_generation_output_lengths_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-output-lengths (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-output-lengths arg0)
+  (g3g-safe-generation-output-lengths arg0))
+
+(define g3g-safe-generation-output-text
+  (let ()
+    (extern void g3g-boxed-generation-output-text ptr ptr
+            :real et_e1b_public_g3_generation_output_text_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-output-text (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-output-text arg0)
+  (g3g-safe-generation-output-text arg0))
+
+(define g3g-safe-generation-output-rng
+  (let ()
+    (extern void g3g-boxed-generation-output-rng ptr ptr
+            :real et_e1b_public_g3_generation_output_rng_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-output-rng (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-output-rng arg0)
+  (g3g-safe-generation-output-rng arg0))
+
+(define g3g-safe-generation-output-cache-lengths
+  (let ()
+    (extern void g3g-boxed-generation-output-cache-lengths ptr ptr
+            :real et_e1b_public_g3_generation_output_cache_lengths_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-output-cache-lengths (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-output-cache-lengths arg0)
+  (g3g-safe-generation-output-cache-lengths arg0))
+
+(define g3g-safe-generation-tensor-release
+  (let ()
+    (extern void g3g-boxed-generation-tensor-release ptr ptr
+            :real et_e1b_public_g3_generation_tensor_release_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-tensor-release (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-tensor-release! arg0)
+  (g3g-safe-generation-tensor-release arg0))
+
+(define g3g-safe-generation-output-release
+  (let ()
+    (extern void g3g-boxed-generation-output-release ptr ptr
+            :real et_e1b_public_g3_generation_output_release_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-output-release (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-output-release! arg0)
+  (g3g-safe-generation-output-release arg0))
+
+(define g3g-safe-generation-rng-release
+  (let ()
+    (extern void g3g-boxed-generation-rng-release ptr ptr
+            :real et_e1b_public_g3_generation_rng_release_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generation-rng-release (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-rng-release! arg0)
+  (g3g-safe-generation-rng-release arg0))
+
+(define g3g-safe-generator-close
+  (let ()
+    (extern void g3g-boxed-generator-close ptr ptr
+            :real et_e1b_public_g3_generator_close_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (g3g-boxed-generator-close (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generator-close! arg0)
+  (g3g-safe-generator-close arg0))

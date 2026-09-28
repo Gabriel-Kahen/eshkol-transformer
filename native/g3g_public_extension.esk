@@ -1,0 +1,80 @@
+;;; Installed P1/G1 adapter. The G3-T registry and G3-M transaction stay private.
+(define (g3g-public-rethrow caught operation)
+  (let ((unreachable
+          (if (transformer-error? caught)
+              (et-e1b-private-raise
+                (transformer-error-category caught) operation
+                "generation operation rejected the request"
+                (transformer-error-details caught) #f)
+              (et-e1b-private-raise
+                'internal operation "generation dependency failed" '() #f))))
+    unreachable))
+(define-syntax g3g-public-boundary
+  (syntax-rules ()
+    ((_ operation body ...)
+     (guard (caught (#t (g3g-public-rethrow caught operation)))
+       body ...))))
+
+(define (g3g-public-generator-create model tokenizer config)
+  (g3g-public-boundary 'generator-create
+    (let ((normalized (g3t-seed-config config 'generator-create)))
+      (if (not (= 1 (vector-ref (vector-ref normalized 0) 5)))
+          (g3t-fail-raw 'invalid-argument 'generator-create 3
+                        "generation budget must be one"))
+      (g3t-generator-create model tokenizer config))))
+
+(define (g3g-public-generator-generate generator input)
+  (g3g-public-boundary 'generator-generate!
+    (g3m-generate-p1-g1! generator input)))
+
+(define (g3g-public-generation-input-create encoded)
+  (g3g-public-boundary 'generation-input-create
+    (if (not (t1-wave1-tensor-admitted? encoded))
+        (g3t-fail-raw 'invalid-argument 'generation-input-create 1
+                      "expected same-aggregate sealed T1 input"))
+    (let ((length (t1-shell-length encoded)))
+      (if (not (= (t1-shell-last-status) 0))
+          (t1-wave1-native-fail 'generation-input-create
+                                (t1-shell-last-status)))
+      (if (not (= length 1))
+          (g3t-fail-raw 'shape-mismatch 'generation-input-create 4
+                        "generation input requires one byte ID"))
+      (g3t-generation-t1-input-create encoded))))
+
+(define (g3g-public-generation-token-input-create token)
+  (g3g-public-boundary 'generation-token-input-create
+    (g3t-generation-token-input-create token)))
+(define (g3g-public-generation-output-ids output)
+  (g3g-public-boundary 'generation-output-ids
+    (g3t-generation-output-ids output)))
+(define (g3g-public-generation-output-lengths output)
+  (g3g-public-boundary 'generation-output-lengths
+    (g3t-generation-output-lengths output)))
+(define (g3g-public-generation-output-text output)
+  (g3g-public-boundary 'generation-output-text
+    (g3t-generation-output-text output)))
+(define (g3g-public-generation-output-rng output)
+  (g3g-public-boundary 'generation-output-rng
+    (g3t-generation-output-rng output)))
+(define (g3g-public-generation-output-cache-lengths output)
+  (g3g-public-boundary 'generation-output-cache-lengths
+    (g3t-generation-output-cache-lengths output)))
+
+(define (g3g-public-generation-tensor-release value)
+  (g3g-public-boundary 'generation-tensor-release!
+    (let ((kind (vector-ref (g3t-generator-find
+                             value 'generation-tensor-release!) 1)))
+      (if (not (or (eq? kind 'input) (eq? kind 'ids)
+                   (eq? kind 'lengths) (eq? kind 'cache-lengths)))
+          (g3t-fail-raw 'invalid-argument 'generation-tensor-release! 1
+                        "expected public G3 tensor owner"))
+      (g3t-generation-tensor-release! value))))
+(define (g3g-public-generation-output-release output)
+  (g3g-public-boundary 'generation-output-release!
+    (g3t-output-release! output)))
+(define (g3g-public-generation-rng-release rng)
+  (g3g-public-boundary 'generation-rng-release!
+    (g3t-generation-rng-release! rng)))
+(define (g3g-public-generator-close generator)
+  (g3g-public-boundary 'generator-close!
+    (g3t-generator-close! generator)))
