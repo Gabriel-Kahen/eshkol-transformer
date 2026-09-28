@@ -965,9 +965,12 @@ test-symbol exclusion. Sealed evidence is `g3m-manual-decode-86bd5a5-20260928`;
 hosted CI remains pending. The next proposed private dependency is the
 [single P1/G1 seeded-generation schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md),
 using the existing G3-T generated transaction and G3-S sampler. Root accepted
-the private P1/G1 boundary, name and budget mismatch precedence; an isolated
-[implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) is under test.
-It adds no public G3-G facade or N>1 behavior.
+the private P1/G1 boundary, name and budget mismatch precedence. Root
+independently reviewed the isolated [implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md)
+at `9029b67`/tree `052fdf9`. Its pinned normal/repeat/ASan+UBSan+LSan gate
+passed 47,330 identical checks, 23 source contracts, Q0 4/4 and production
+test-symbol exclusion; hosted CI remains pending. It adds no public G3-G
+facade or N>1 behavior.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -1253,6 +1256,20 @@ runtime symbols, and empty poisoned-caller stderr; all files in
 remain test-local until
 their complete canonical facades are installed; this facet makes no public
 step/train/evaluate or resume claim.
+The stacked P1/O2 installed operand facet adds the unchanged 18-operation
+`transformer.module` and six-operation `transformer.optim` facades to the
+same aggregate. It reuses the four existing producer exports and adds only
+the 20 missing accepted boxed operations/private renames. The ordinary caller
+imports both facades, constructs P1 parameters and O2 optimizer from the
+installed M3T model, then passes all five installed operands to
+`trainer-create`. Forged P1 module/tree and O2 optimizer identities, released
+P1/O2 snapshots, and the existing overlapping/busy/repeated trainer release
+cases pass. The pinned linked gate on `cd9f6b5`/tree `d52bf931` passed with
+49 Eshkol sources, 30 native objects, 104 localized exports, 173 undefined
+runtime symbols and empty poisoned-caller stderr; all files under
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-operands-cd9f6b5-20260927/SHA256SUMS`
+verify. This is an installed construction/lease facet; public step, train,
+evaluate, state/load and resume remain separate work.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

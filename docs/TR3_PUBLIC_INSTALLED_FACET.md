@@ -145,3 +145,26 @@ The pinned supported linked gate passed on `df584de` (tree `55ee70a9`):
 runtime symbols. The ordinary poisoned caller printed
 `TR3-PUBLIC-M3T-FACET-PASS` with empty stderr. All evidence files verify under
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-m3t-df584de-20260927/SHA256SUMS` (SHA-256 `3152fd479975c4a54013ec440b7a72817c4f80470198ec6346f6d6c0dd775e0a`).
+
+## P1 and O2 installed operand successor candidate
+
+The same aggregate installs the complete unchanged
+`lib/transformer/module.esk` (18 operations) and
+`lib/transformer/optim.esk` (six operations). Their four already exported
+P1/O2 producer methods retain the same ABI; 20 remaining canonical methods
+use the accepted same-package implementations and exact private renames.
+The ordinary caller imports both facades, creates the P1 parameter tree from
+the installed M3T model, creates the O2 optimizer from that tree, and calls
+the public trainer constructor with all five installed operands. It rejects
+forged P1 module/tree and O2 optimizer identities, proves released P1/O2
+snapshots are stale, and preserves the existing genuine trainer lease and
+release checks. No test-local operand constructor remains in the caller.
+
+The pinned supported linked gate passed on `cd9f6b5` (tree `d52bf931`):
+49 Eshkol sources, 30 native objects, 104 localized exports and 173 undefined
+runtime symbols. The poisoned caller printed `TR3-PUBLIC-OPERANDS-PASS` with
+empty stderr. The 101-file evidence seal at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-operands-cd9f6b5-20260927/SHA256SUMS`
+has SHA-256 `c4638bc79d8a700700889efb39c672e4ce2849ec1eb2cd7bb75c50fc20874578`;
+every listed file verifies. Public step, train, evaluate, state/load and
+resume remain separate work.
