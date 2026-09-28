@@ -1,6 +1,7 @@
 # G3-T private manual decode wrapper proposal
 
-Status: **proposed, pending independent source review**. This is a bounded
+Status: **accepted for bounded private implementation** after independent
+source review. This is a bounded
 Eshkol wrapper leaf over the accepted [manual decode transport
 contract](G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md) and the independently
 reviewed native candidate `a4f7c53e2a7bdf20b12b544014249bf1c0af374a`

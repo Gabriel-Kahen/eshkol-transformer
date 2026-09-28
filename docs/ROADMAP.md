@@ -935,7 +935,8 @@ manual P2 native head `832a709` and isolated G3-M P2 composer candidate
 [private G3-T Eshkol wrapper proposal](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md):
 admit kind-1 call acquisition and authentic non-null input for frame kind 2
 through the existing private wrappers, preserving generated decode's `#f`
-route. This proposal is pending independent review and adds no code. The G3-M
+route. Root independently source-reviewed `976030a`; this contract adds no
+code. The G3-M
 manual decode composer can follow only after that native/wrapper composition
 is reviewed; a public seeded generation schedule/facade remains a separate
 downstream gate.
