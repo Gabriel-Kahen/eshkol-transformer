@@ -1536,6 +1536,13 @@ The focused TR3-C private load-entry gate compiled, then its unchanged base
 joint-restore fixture raised an unhandled user exception before the load-entry
 suffix; both failures are retained at
 `tr3-public-state-load-private-d50ea6e-20260928/` under that evidence root.
+That gate was still selecting the historical 81298 runner, whose closure
+environment packing differs from the merged fe9 D2 native check. The
+test-only gate now pins the same fe9 compiler tree, runner, runtime archive,
+and image as the public installed gate. On the unchanged joint and load-entry
+fixtures it passes 67 joint and 137 load-entry checks, including rollback and
+exact 42-image restore; evidence is sealed at
+`tr3-private-load-fe9-4232666-20260928/SHA256SUMS` under the same root.
 Full public exact-resume acceptance, public checkpoint I/O packaging, and
 independent review remain pending.
 
