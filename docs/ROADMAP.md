@@ -1482,8 +1482,22 @@ f32 scalar ABI. Its focused private and linked installed gates pass on
 step producer and exact f32 bit probe. Evidence is sealed under
 `tr3-public-metrics-ref-private-f7173b4-20260928/SHA256SUMS` and
 `tr3-public-metrics-ref-installed-f7173b4-20260928/SHA256SUMS`.
-Hosted integration, trainer-step, train/evaluate adapters, and all-result
-retention evidence remain pending.
+The bounded public `trainer-step!` candidate at `7d1cb74`/tree `e61c4e31`
+composes the accepted private finite-D2 step, prepares immutable metrics
+before the first parameter write, and returns a public token readable by
+`metrics-ref`. Its pinned fe9 linked gate passed with 56 Eshkol sources,
+31 native objects, 106 globals and 176 undefined symbols. The poisoned
+ordinary caller, authentic two-update A=2 step/fault-cut caller, f32-control
+unit and bridge unit passed with empty stderr and exact f32 bits. The 127-file
+seal is `tr3-public-step-linked-7d1cb74-20260928/SHA256SUMS` (`cf661c12...`).
+A separate same-registry synthetic publication probe measured 336 incremental
+arena bytes/result between 1,024 and 8,192 records and read the oldest token
+through public `metrics-ref`; its eight-file seal is
+`tr3-public-step-retention-7d1cb74-20260928/SHA256SUMS` (`2b906127...`).
+The synthetic probe is not an 8,192-update training trajectory. The step
+candidate is stacked on the public metrics reader; hosted integration,
+train/evaluate adapters and exact resume remain pending.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
