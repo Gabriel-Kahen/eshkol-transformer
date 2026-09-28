@@ -136,9 +136,11 @@ Each facade reports the **invoked public operation**, bounded data-only
 source domain/category/code and `cause #f`, without leaking private names
 or pointers. Forged, copied, foreign and wrong-kind shells map to
 `invalid-argument`; exact dead, busy, pending, borrowed, stale-binding or
-missing-prefix state maps to `invalid-state`. Input rank/extent/token/context
-errors map to `shape-mismatch`; admitted dtype/device/layout mismatches
-retain their dedicated categories. A live authenticated kind-3 record with
+missing-prefix state maps to `invalid-state`. Malformed typed I1 shape and
+token-range failures retain native `shape-mismatch`; wrong input metadata
+length, non-byte IDs and inline/stored ID divergence retain native
+`invalid-state`. Context/profile and admitted dtype/device/layout failures
+retain their native categories. A live authenticated kind-3 record with
 corrupt I2 shape, strides or storage is an internal invariant failure. The
 diagnostic read allocates its bytevector before native copy; any recoverable
 failure leaves destination bytes, source tensor, cache, binding and RNG
