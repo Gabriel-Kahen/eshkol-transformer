@@ -981,7 +981,8 @@ pending. No G0/manual facade, continuation or N>1 behavior is claimed.
 The bounded [public G0 extension contract](g3/G3_G_C2_PUBLIC_G0_PROPOSAL.md)
 was independently accepted at `8b2bd70` / tree `ab67893`. Its isolated
 implementation candidate adds a separate fixed G3-G C2 revision-2 package
-tuple with the same thirteen facade names, budget-zero P1/P2 routing from
+tuple with the same thirteen facade names and a distinct default artifact
+directory, budget-zero P1/P2 routing from
 constructor-recorded exact input provenance, and the accepted private G0
 schedules. The original P1/G1 package blobs remain unchanged. Source/Q0
 checks pass; the fixed package build, public AOT, regression/sanitizer seal and

@@ -31,7 +31,11 @@ This is **G3-G C2 package revision 2**, a new fixed E1B tuple rather than a
 silent mutation of the reviewed `g3g_package_*` tuple. Fixed repository
 stem: `g3g_g0_package_*`; fixed single-owner archive/member:
 `libeshkol_transformer_g3g_g0.a` / `g3g_g0_package.o`, built by
-`scripts/build-g3g-g0.sh`. It installs the same eight facades, with the
+`scripts/build-g3g-g0.sh`. Its default artifact directory is
+`$(project_build_dir)/g3g-g0`, distinct from v1's
+`$(project_build_dir)/g3g`; a sequential default build must leave the v1
+archive, object and installed facades byte-identical. It installs the same
+eight facades, with the
 generation facade copied for this artifact. The public source names,
 arities and thirteen boxed C signatures remain unchanged, so the target is
 still 100 boxed exports and 106 globals/public-name strings; exact manifests

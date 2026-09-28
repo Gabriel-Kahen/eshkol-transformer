@@ -79,6 +79,12 @@ build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
 assert "-DET_G3T_ZERO_BUDGET_PRIVATE" in build
 assert "-DET_G3T_P2_ZERO_BUDGET_PRIVATE" in build
 assert "g3g-g0-public-aggregate" in build
+v1_builder = (ROOT / "scripts/build-g3g.sh").read_text()
+v2_builder = (ROOT / "scripts/build-g3g-g0.sh").read_text()
+assert '$(project_build_dir)/g3g}' in v1_builder
+assert '$(project_build_dir)/g3g-g0}' in v2_builder
+assert "libeshkol_transformer_g3g_g0.a" not in v1_builder
+assert "libeshkol_transformer_g3g.a" not in v2_builder
 assert "-DET_G3T_TESTING" not in (ROOT / "scripts/build-e1b-consumer.sh").read_text()
 private_test = (ROOT / "tests/g3t/p2_zero_budget_test.esk").read_text()
 v2_private = (ROOT / "tests/g3g_g0/private_fault_runtime.esk").read_text()

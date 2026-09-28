@@ -4,9 +4,9 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 [[ $# -le 1 ]] || die "usage: $0 [ARTIFACT_DIR]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
-g3g_g0_artifact_dir="${1:-$(project_build_dir)/g3g}"
+g3g_g0_artifact_dir="${1:-$(project_build_dir)/g3g-g0}"
 mkdir -p "$(dirname -- "${g3g_g0_artifact_dir}")"
-g3g_g0_tmp="$(mktemp -d "$(dirname -- "${g3g_g0_artifact_dir}")/.g3g-build.XXXXXX")"
+g3g_g0_tmp="$(mktemp -d "$(dirname -- "${g3g_g0_artifact_dir}")/.g3g-g0-build.XXXXXX")"
 trap 'rm -rf -- "${g3g_g0_tmp}"' EXIT
 E1B_COMPILER_TIMEOUT_SECONDS="${G3G_G0_COMPILER_TIMEOUT_SECONDS:-1200}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
