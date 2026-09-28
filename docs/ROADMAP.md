@@ -42,6 +42,12 @@ instrumented resource-test aggregate matches its fixture-root-plus-D2
 D2 cursor-pair pin equals the verified D2 closure plus its extension.
 This local repin is not full-CI acceptance.
 
+The same hosted run reached the P1 parameter-state diagnostic overlay and
+found its test-only exact provide-tail anchor stale after the accepted
+`p1-trusted-surface` append. The overlay now inserts its test control before
+that tail. All four diagnostic insertion anchors match the current trusted
+source in a focused static probe; execution awaits the next hosted run.
+
 The first hosted full-suite attempt on this repin (PR #131, run 36379473716)
 exposed exact I2/base-E1B undefined-symbol manifest drift, DD-10 trusted
 C1 helper imports in C2 fixtures, and C2 compile-only probes whose
