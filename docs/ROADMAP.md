@@ -1135,9 +1135,34 @@ passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
 Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
 checks, with exact feature-on/off private-symbol delta. Commands and logs
 are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
-(`SEAL.sha256` `980c7e46...`). #143 hosted integration remains pending.
-Revision-3 public ownership/read, atomic cache/result publication, exact
-closed package tuple and numerical/negative gates remain separate.
+(`SEAL.sha256` `980c7e46...`). #143 merged into `main` as `9e1ee516` after
+23/23 hosted checks (run 36434951609). An isolated revision-3 candidate now
+builds the separate 40-source, 53-native-entry, five-provider, eight-facade
+manual tuple. Measured inventories are 103 boxed exports, 109 definitions,
+109 public-name strings and 166 undefined symbols. Pinned Ubuntu 22.04/LLVM
+21 network-none builds produce byte-identical objects through direct,
+official and sequential default routes. Fresh-cache installed AOT normal and
+repeat compare all 256 P1, T1-backed P2 and one-step decode logit words with
+independent M3 output; testing-closure normal/repeat/ASan+UBSan+LSan also
+checks independent M3T K/V and masks, owner lifetime, malformed shapes,
+borrow and precommit rollback. Sequential v1→v2→v3 default builds preserve
+both predecessor objects, archives and facades byte-identically. Evidence is
+under `g3g-manual-r3-candidate-20260928/`. Independent source review and
+hosted exact-head integration remain required; revision 2 remains the
+accepted installed boundary. Generic I2 interop, N>1, P2/repeated decode,
+resume and CLI are deferred.
+
+Independent review requested a narrower revision-3 negative closure. Its
+testing-only facade fixture now asserts public E1 operation/category/details
+for P2 non-byte inline IDs, P2 inline/stored divergence, decode divergence,
+and corrupt authenticated kind-3 storage, with predecessor result/cache/pins
+unchanged. The exact-source inherited materialization probe asserts malformed
+I2 shape, stride and storage return native internal/invariant and leave copy
+destination bytes untouched. Device and layout cannot be mutated in this
+fixture: `et_f32_tensor_borrow_begin_v1` builds both as fixed literals, the
+tensor stores neither field, and the public kind-3 shell exposes no generic
+I2 write. Follow-up evidence is under `g3g-manual-r3-negative-final-20260928/`;
+independent re-review and hosted exact-head integration remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

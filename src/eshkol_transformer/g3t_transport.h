@@ -99,6 +99,7 @@ int64_t et_g3t_test_pending_logits_v1(void);
 #ifdef ET_F32_TENSOR_TESTING
 int64_t et_g3t_test_fail_f32_after_v1(uint64_t successful_allocations);
 int64_t et_g3t_test_f32_tensors_v1(void);
+int64_t et_g3t_test_logits_storage_corrupt_v1(void *logits, int64_t corrupt);
 #endif
 #endif
 int64_t et_g3t_test_fail_alloc_after_v1(uint64_t successful_allocations);
