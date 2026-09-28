@@ -922,9 +922,15 @@ of the G3-T input owner, T2 role route, A2 view geometry, and G3-C4 predecessor
 contracts. It identifies the missing bridge
 between the accepted G3-C4 T2 manual route and G3-T's P1-only manual frame:
 authenticated owned I1 `[1,2]` admission, 21-role T2 routing, last-row
-logits, length-two A2 publication and rollback. No P2 native implementation,
-G3-M P2 composer, generation claim or acceptance evidence follows from this
-contract. Implement and verify that G3-T dependency before the G3-M P2 leaf.
+logits, length-two A2 publication and rollback. The isolated
+[G3-T manual P2 native transport candidate](g3/G3_T_MANUAL_P2_PREFILL_LEAF.md)
+implements that source-private bridge, pending independent review. Its pinned
+network-none normal/repeat/ASan+UBSan+LSan aggregate passed 46,984 identical
+checks, 18 source contracts, Q0 4/4 and production test-symbol exclusion;
+the external evidence is in `g3t-manual-p2-native-candidate-20260928`.
+This does not add G3-M P2, generation, a public facade or acceptance of the
+candidate. Review the G3-T native leaf before implementing the G3-M P2
+composer.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at

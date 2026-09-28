@@ -69,6 +69,13 @@ int64_t et_g3t_private_last_error_category_v1(void);
 int64_t et_g3t_private_last_error_code_v1(void);
 #ifdef ET_G3T_TESTING
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
+#ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
+int64_t et_g3t_test_manual_p2_fail_dispatch_after_v1(int64_t count);
+int64_t et_g3t_test_manual_p2_inline_id_set_v1(
+    void *input, int64_t index, int64_t value);
+int64_t et_g3t_test_manual_p2_i1_shape_set_v1(
+    void *input, int64_t second_extent);
+#endif
 int64_t et_g3t_test_manual_logits_word_v1(void *logits, int64_t index);
 int64_t et_g3t_test_manual_frame_kv_word_v1(
     void *context, int64_t which, int64_t index);
