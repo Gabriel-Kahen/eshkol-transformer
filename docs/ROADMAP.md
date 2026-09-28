@@ -1262,6 +1262,19 @@ successor compiler/tree, runner, archive and image pins. The pinned strict
 source and linked poisoned public-caller gate
 passes on fe9 with the same 49-source/30-native/48-export boundary; public
 trainer step and metrics remain separate gates.
+The source-private TR3 step metrics authority now stages a ten-slot record
+alongside the lease root and fail-stops on postcommit authority divergence.
+On the exact fe9/LLVM21 pin, `scripts/test-tr3-private-metrics.sh` passes 30
+runtime checks, vector and promotion allocation denial, and the exit-134
+fail-stop probe. Retention measures 336 incremental arena bytes per published
+record from 1,024 to 8,192 records; 1,024 rejected staging attempts add
+15,679,432 bytes including error delivery. The installed linked gate passes
+with 50 sources, 30 native objects, 48 exports, 175 undefined symbols, and
+a poisoned public caller. Sealed evidence is under
+`tr3-private-metrics-fe9-201331e-20260928/SHA256SUMS` and
+`tr3-public-installed-metrics-fe9-201331e-20260928/SHA256SUMS`.
+Public `metrics-ref`, true-f32 scalar return, trainer-step integration,
+train/evaluate adapters, and all-result retention evidence remain pending.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
