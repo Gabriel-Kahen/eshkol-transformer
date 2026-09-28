@@ -13,6 +13,7 @@ pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
 case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-81298}" in
   81298)
     compiler_commit=97c40c9de3cf9dfb02a2f5226a14b2a7625b64e0
+    runner_name=eshkol-run-release
     runner_sha256=1d4c1a2f6aca335ba873206064e0b3d92d83c457d5dc66f77392e23cc97b47cb
     runtime_build_dir="${runtime}/eshkol-build-canonical"
     runtime_sha256="$(tsv_value "${pin}" runtime_archive_sha256)"
@@ -21,6 +22,7 @@ case "${TR3_PUBLIC_INSTALLED_RUNTIME_PIN:-81298}" in
     ;;
   fe9)
     compiler_commit=fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9
+    runner_name=eshkol-run
     compiler_tree=66c21f7ec19b1b4a42199fa30ed8e0e9727021bf
     runner_sha256=7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa
     runtime_build_dir="${runtime}/eshkol-build"
@@ -39,7 +41,7 @@ esac
 image="$(tsv_value "${pin}" container_image)"
 [[ "$(docker image inspect "${image}" --format '{{.Id}}')" == \
    "$(tsv_value "${pin}" container_digest)" ]] || die "pinned image changed"
-[[ "$(sha256sum "${fixed}/eshkol-run-release" | awk '{print $1}')" == \
+[[ "$(sha256sum "${fixed}/${runner_name}" | awk '{print $1}')" == \
    "${runner_sha256}" ]] || \
   die "reviewed compiler changed"
 [[ "$(git -C "${compiler_source}" rev-parse HEAD)" == \
@@ -59,6 +61,7 @@ evidence="$(readlink -f -- "${evidence}")"
   die "evidence must be outside checkout"
 
 docker run --rm --network none \
+  -e TR3_COMPILER_RUNNER="/fixed/${runner_name}" \
   -v "${PROJECT_ROOT}:/workspace:ro" -v "${fixed}:/fixed:ro" \
   -v "${compiler_source}:/fixed-source:ro" \
   -v "${runtime_build_dir}:/candidate/eshkol-build-canonical:ro" \
@@ -69,7 +72,7 @@ export ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME=/out/cache
 export ESHKOL_LIB_DIR=/workspace/lib ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
 /usr/bin/time -v -o /out/source-compile.time \
   timeout --foreground --signal=TERM --kill-after=5s 1200s \
-  /fixed/eshkol-run-release --strict-types --no-stdlib -O 0 \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
     -I native -I internal/p1/lib -I internal/c1/lib \
     -I internal/t2/lib -I internal/t1/lib -I internal/d2/lib \
     -I src -I lib -L /candidate/eshkol-build-canonical \
@@ -161,12 +164,12 @@ while IFS= read -r facade; do
 done < native/tr3_public_installed_facades.txt
 export ESHKOL_LIB_DIR=/out/facades
 timeout --foreground --signal=TERM --kill-after=5s 120s \
-  /fixed/eshkol-run-release --strict-types --no-stdlib -O 0 \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
     -I /out/facades --compile-only --emit-depfile /out/caller.d \
     tests/tr3_public_installed/runtime.esk -o /out/caller.o \
     > /out/caller-check.stdout 2> /out/caller-check.stderr
 timeout --foreground --signal=TERM --kill-after=5s 120s \
-  /fixed/eshkol-run-release --strict-types --no-stdlib -O 0 \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
     -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
     --lib eshkol_transformer_tr3_public_installed \
     tests/tr3_public_installed/runtime.esk \
