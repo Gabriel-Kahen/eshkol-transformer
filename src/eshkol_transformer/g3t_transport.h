@@ -34,6 +34,10 @@ int64_t et_g3t_private_tensor_release_v1(void *owner);
 #ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
 void *et_g3t_private_logits_reserve_v1(void *context);
 #endif
+#ifdef ET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE
+int64_t et_g3t_private_logits_copy_bits_v1(
+    void *logits, void *bytevector_header, int64_t byte_count);
+#endif
 void *et_g3t_private_output_reserve_v1(void *context, int64_t prompt_length);
 int64_t et_g3t_private_output_release_v1(void *output);
 #ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE

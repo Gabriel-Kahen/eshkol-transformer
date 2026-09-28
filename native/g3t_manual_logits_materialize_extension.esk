@@ -1,0 +1,16 @@
+;;; Source-private exact-bit snapshot of a detached manual logits owner.
+(extern i64 g3t-native-logits-copy-bits ptr ptr i64
+        :real et_g3t_private_logits_copy_bits_v1)
+
+(define (g3t-logits-bits logits)
+  (let ((operation 'g3t-logits-bits))
+    (m3-call operation
+      (let ((entry (g3t-prefill-entry logits 'logits operation)))
+        (if (not (eq? (vector-ref entry 2) 'live))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "manual logits are not detached and live"))
+        (let ((bytes (make-bytevector 1024 0)))
+          (if (not (= 0 (g3t-native-logits-copy-bits
+                         (vector-ref entry 3) bytes 1024)))
+              (g3t-native-fail-raw operation))
+          bytes)))))
