@@ -466,10 +466,19 @@ allocation and shutdown. Explicit single-thread OpenBLAS preserves that cap;
 focused activations and attention pass AOT/JIT parity with a separate
 180-second JIT ceiling. The one full supported AOT/JIT inventory completed
 183 command rows and exited 1 with 38 counted failures: autodiff and RMSNorm
-gaps, RNG mode-parity mismatch, malformed negatives that succeed, and two
-signal-139 negatives. Attention-gradient and malformed-reshape failures also
-reproduce on the prior runtime pin; the other old-pin outcomes are untested.
-The successor R0 gate remains open, with sealed evidence in the audit.
+gaps, a historical RNG mode-parity assertion, malformed negatives that
+succeed, and two signal-139 negatives. Attention-gradient and
+malformed-reshape failures also reproduce on the prior runtime pin; remaining
+non-RNG old-pin outcomes are untested.
+The RNG assertion was subsequently traced on both runtime pins to the probe's
+raw `srand48` call being overwritten by the first `random` time seed; changing
+only that call to documented `set-random-seed!` passes focused AOT/JIT repeats
+with the same parity assertion. The original 38 count remains recorded. One
+full supported rerun on the corrected `d592eae` tree completed the same 183
+command rows and exited 1 with 37 counted failures: zero command-status
+deltas, byte-identical assertion logs, and only the RNG parity line removed.
+Those 37 counted failures remain unresolved, so the successor R0 gate stays
+in **review** with both runs sealed in the audit.
 
 ## Wave 1 — independent foundations
 

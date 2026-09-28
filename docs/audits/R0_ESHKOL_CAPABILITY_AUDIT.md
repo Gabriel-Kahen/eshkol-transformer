@@ -108,9 +108,10 @@ remaining negative groups (`embedding_index_out_of_bounds`,
 `index_out_of_bounds`, `matmul_shape_mismatch`) rejected the input with
 diagnostics in both modes. The controlled old-pin comparison used the same
 image, 2 GiB cap, and `OPENBLAS_NUM_THREADS=1`; old AOT compilation additionally
-needed `-l stdc++`. Only the attention-gradient and reshape failures have
-old-pin executable classification. All other failing rows are successor
-observations with old-pin status untested.
+needed `-l stdc++`. At that checkpoint, only the attention-gradient and
+reshape failures had old-pin executable classification. The later RNG
+diagnosis below further classifies that historical row; the other failing
+old-pin statuses remain untested.
 
 The verified evidence umbrella is
 `/home/gabe/.codex/evidence/eshkol-transformer/r0-openblas-one-20260928/MANIFEST.tsv`
@@ -120,6 +121,47 @@ and the old-pin comparison. The diagnostic stack evidence has its own verified
 seal, referenced in that manifest. These failures prevent R0 successor
 adoption. GPU behavior, sanitizer behavior, and multithreaded BLAS behavior
 remain untested.
+
+### Isolated RNG probe correction: supported review
+
+The `rng` row and its AOT/JIT parity assertion remain in the original
+183-command, `failures=38` full-audit record above. A separate supported-image
+diagnostic found that the probe's raw `(srand48 20260828)` call did not set the
+compiler-generated `__random_seeded__` flag. On the first `(random)` call,
+both old `81298b4` and successor `fe9dfd5` reseeded from wall time, replacing
+the fixed seed. All eight observed draws in every old and successor execution
+matched their respective wall-clock-second seeds. The documented
+`set-random-seed!` operation seeds the same generator and sets that flag; a
+temporary control passed byte-identical AOT/JIT repeats. This was an inherited
+raw-`srand48` probe/API mismatch, not evidence of a successor-specific RNG
+defect. The immutable diagnostic is
+`/home/gabe/.codex/evidence/eshkol-transformer/r0-rng-diagnostic-20260928/SHA256SUMS`
+(SHA-256 `3f1f53e556aff10fea48879c22099fff7ac0999d2a6ce6ba06de04cd6e8a894f`).
+
+The tracked `rng.esk` now changes only that seed call to
+`(set-random-seed! 20260828)`. The existing two-run AOT/JIT stdout parity and
+completion assertions are unchanged. The focused network-disabled supported
+run used the same successor source/build, 2 GiB capability cap,
+`OPENBLAS_NUM_THREADS=1`, and 30/180-second AOT/JIT deadlines. AOT compile and
+two runs plus two JIT runs all exited 0; `summary.txt` reports `failures=0`.
+All four output streams hash to
+`2735b5d6160a49c9bf8754f8d336d296d7becc2544f31400ff0b05984d3b9a5b`.
+Its exact manifest and streams are sealed in
+`/home/gabe/.codex/evidence/eshkol-transformer/r0-rng-probe-correction-20260928/focused/SHA256SUMS`
+(SHA-256 `910625383468d989ec053d0f27b4dbf24653b15d59a3a37db43362968c8f9dca`).
+The original `failures=38` audit remains a historical result. A subsequent
+one-shot full AOT/JIT inventory on exact corrected commit `d592eae` (tree
+`01052e53d6f3117ef2be91db276d01e25b4f505a`) completed 183 command rows
+in 84 minutes 28 seconds and exited 1 with `failures=37`. Against the
+historical inventory, row names, order, expectations, and command exit codes
+were identical. The 30-line assertion-failure logs were byte-identical. The
+only changed failure record was removal of `rng: AOT/JIT stdout differs`;
+the corrected parity log is empty and all four RNG streams have the focused
+output hash above. The exact rerun and comparison are sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/r0-rng-corrected-full-20260928/SHA256SUMS`
+(SHA-256 `fccd53c4f131d3a006cc456a01c54e0b9cbe474006e27653597a08a94d26bcc5`).
+The 37 other counted failures remain; they are not 37 distinct probes. Full
+R0 successor adoption still fails. Status: **review**.
 
 ## Historical baseline: scope and evidence state
 
