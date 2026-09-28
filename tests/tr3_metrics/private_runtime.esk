@@ -1,0 +1,131 @@
+(require transformer.error_internal)
+
+(define (m3t-fail category operation message)
+  (transformer-error-raise category operation message '() #f))
+(load "tr3_metrics_extension.esk")
+
+(define checks 0)
+(define (check name value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "TR3-METRICS-FAIL ") (display name)
+             (newline) (exit 1))))
+(define (fails? category thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught)
+                         'tr3-metrics-internal))))
+    (thunk) #f))
+(define (count-records)
+  (let loop ((rows (vector-ref tr3-metrics 0)) (count 0))
+    (if (null? rows) count (loop (cdr rows) (+ count 1)))))
+
+(check 'empty (= (count-records) 0))
+(check 'unknown (fails? 'invalid-argument
+                        (lambda () (tr3-metrics-step-authenticate-internal #f))))
+(check 'abort-empty (fails? 'invalid-state
+                            (lambda () (tr3-metrics-step-abort-internal!))))
+
+;;; A short-lived region creates the token and staging graph. The registry's
+;;; checked promotion must keep their canonical identities alive afterward.
+(with-region ('tr3-metrics-promotion 65536)
+  (tr3-metrics-step-begin-internal!))
+(check 'staged (= (count-records) 0))
+(check 'reentrant (fails? 'invalid-state
+                          (lambda () (tr3-metrics-step-begin-internal!))))
+(check 'unfilled (fails? 'invalid-state
+                         (lambda () (tr3-metrics-step-precommit-internal!))))
+(check 'negative-nan
+       (fails? 'invalid-argument
+               (lambda () (tr3-metrics-step-fill-internal!
+                            2143289344 1065353216 1 1 1))))
+(check 'negative-weight
+       (fails? 'invalid-argument
+               (lambda () (tr3-metrics-step-fill-internal!
+                            1065353216 3212836864 1 1 1))))
+(check 'negative-counter
+       (fails? 'invalid-argument
+               (lambda () (tr3-metrics-step-fill-internal!
+                            1065353216 1065353216 -1 1 1))))
+(check 'negative-overflow
+       (fails? 'invalid-argument
+               (lambda () (tr3-metrics-step-fill-internal!
+                            1065353216 1065353216
+                            9223372036854775808 1 1))))
+(check 'still-empty (= (count-records) 0))
+(tr3-metrics-step-fill-internal! 1065353216 1073741824 2 1 1)
+(check 'precommit (tr3-metrics-step-precommit-internal!))
+(define before-publish (__arena-used))
+(define first-token (tr3-metrics-step-publish-internal!))
+(check 'nonallocating-publication (= before-publish (__arena-used)))
+(define first-record (tr3-metrics-step-authenticate-internal first-token))
+(check 'identity (eq? (vector-ref first-record 2) first-token))
+(check 'exact-bits (= (vector-ref first-record 5) 1065353216))
+(check 'exact-weight (= (vector-ref first-record 6) 1073741824))
+(check 'exact-counter (= (vector-ref first-record 7) 2))
+(check 'published (= (count-records) 1))
+(check 'stage-clear (not (vector-ref tr3-metrics 1)))
+(define foreign-token
+  (guard (caught (#t caught)) (error "")))
+(check 'foreign-condition
+       (fails? 'invalid-argument
+               (lambda () (tr3-metrics-step-authenticate-internal
+                            foreign-token))))
+(check 'foreign-hash
+       (fails? 'invalid-argument
+               (lambda () (tr3-metrics-step-authenticate-internal
+                            (make-hash-table)))))
+
+(tr3-metrics-step-begin-internal!)
+(tr3-metrics-step-fill-internal! 0 1065353216 1 1 2)
+(tr3-metrics-step-abort-internal!)
+(check 'abort-head (= (count-records) 1))
+(check 'abort-clear (not (vector-ref tr3-metrics 1)))
+(check 'abort-retry (tr3-metrics-step-begin-internal!))
+(tr3-metrics-step-abort-internal!)
+
+(define failed-before (__arena-used))
+(let loop ((n 0))
+  (if (= n 1024) #t
+      (begin
+        (tr3-metrics-step-begin-internal!)
+        (guard (raised (#t #t))
+          (tr3-metrics-step-fill-internal! 2143289344 1065353216 1 1 1))
+        (tr3-metrics-step-abort-internal!)
+        (loop (+ n 1)))))
+(define failed-after (__arena-used))
+(check 'failed-no-publication (= (count-records) 1))
+(check 'failed-no-staging (not (vector-ref tr3-metrics 1)))
+
+;;; The returned token remains authoritative after many later publications.
+(define used-before (__arena-used))
+(let loop ((n 0))
+  (if (= n 1024) #t
+      (begin
+        (tr3-metrics-step-begin-internal!)
+        (tr3-metrics-step-fill-internal! 0 1065353216 1 1 (+ n 2))
+        (tr3-metrics-step-precommit-internal!)
+        (tr3-metrics-step-publish-internal!)
+        (loop (+ n 1)))))
+(define used-1024 (__arena-used))
+(check 'count-1024 (= (count-records) 1025))
+(check 'old-token (eq? (tr3-metrics-step-authenticate-internal first-token)
+                       first-record))
+(let loop ((n 0))
+  (if (= n 7168) #t
+      (begin
+        (tr3-metrics-step-begin-internal!)
+        (tr3-metrics-step-fill-internal! 0 1065353216 1 1 (+ n 1026))
+        (tr3-metrics-step-precommit-internal!)
+        (tr3-metrics-step-publish-internal!)
+        (loop (+ n 1)))))
+(define used-8192 (__arena-used))
+(check 'count-8192 (= (count-records) 8193))
+(check 'old-token-late
+       (eq? (tr3-metrics-step-authenticate-internal first-token)
+            first-record))
+(display "TR3-METRICS-PASS checks=") (display checks)
+(display " retained-1024=") (display (- used-1024 used-before))
+(display " retained-8192=") (display (- used-8192 used-before))
+(display " failed-1024=") (display (- failed-after failed-before))
+(newline)
