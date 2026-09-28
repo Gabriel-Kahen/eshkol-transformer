@@ -58,13 +58,19 @@ diff -u "$evidence/feature-off.defined" \
 sha256sum "$project_root/src/eshkol_transformer/g3t_transport.c" \
   "$project_root/src/eshkol_transformer/g3t_transport.h" \
   "$project_root/native/g3t_manual_logits_materialize_extension.esk" \
+  "$project_root/native/g3t_manual_logits_materialize_local_symbols.txt" \
+  "$project_root/scripts/check-g3t-manual-logits-materialize.py" \
+  "$project_root/scripts/test-g3t-manual-logits-materialize-native.sh" \
   "$project_root/tests/g3t/test_manual_logits_materialize.c" \
+  "$project_root/tests/g3t/p2_zero_budget_test.esk" \
+  "$project_root/tests/q0/test_python_isolation.py" \
   "$project_root/native/g3t_manual_logits_materialize_source_closure.txt" \
   >"$evidence/source.sha256"
 git -C "$project_root" rev-parse HEAD >"$evidence/head.txt"
 git -C "$project_root" rev-parse HEAD^{tree} >"$evidence/tree.txt"
 sha256sum "$evidence"/*.stdout "$evidence"/*.stderr \
   "$evidence"/*.symbol "$evidence"/*.defined "$evidence"/source.sha256 \
+  "$evidence"/head.txt "$evidence"/tree.txt "$evidence"/compiler.txt \
   >"$evidence/SEAL.sha256"
 cat "$evidence/normal.stdout"
 printf 'Evidence: %s\n' "$evidence"
