@@ -2,6 +2,7 @@
 
 (define (m3t-fail category operation message)
   (transformer-error-raise category operation message '() #f))
+(extern void tr3-lease-fail-stop i64 :real _Exit)
 (load "tr3_metrics_extension.esk")
 
 (define checks 0)

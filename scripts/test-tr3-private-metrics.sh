@@ -43,6 +43,19 @@ mkdir -p /out/cache
   > /out/private.deps.stdout 2> /out/private.deps.stderr
 ESHKOL_ARENA_POISON=1 /out/private_runtime \
   > /out/private.stdout 2> /out/private.stderr
+/fixed/eshkol-run-release --strict-types --no-stdlib -O 0 \
+  -I native -I lib -L /runtime/eshkol-build-canonical \
+  tests/tr3_metrics/failstop_runtime.esk -o /out/failstop_runtime \
+  > /out/failstop.compile.stdout 2> /out/failstop.compile.stderr
+set +e
+ESHKOL_ARENA_POISON=1 /out/failstop_runtime \
+  > /out/failstop.stdout 2> /out/failstop.stderr
+failstop_status=$?
+set -e
+test "${failstop_status}" -eq 134
+test ! -s /out/failstop.stdout
+test ! -s /out/failstop.stderr
+printf "failstop_exit\t%s\n" "${failstop_status}" > /out/failstop.tsv
 /fixed/eshkol-run-release --strict-types --no-stdlib -O 0 --emit-object \
   --emit-depfile /out/allocation.d -I native -I lib \
   tests/tr3_metrics/allocation_probe.esk -o /out/allocation.o \
@@ -63,6 +76,7 @@ ESHKOL_ARENA_POISON=1 /out/allocation \
 '
 test ! -s "${evidence}/private.compile.stderr"
 test ! -s "${evidence}/private.deps.stderr"
+test ! -s "${evidence}/failstop.compile.stderr"
 test ! -s "${evidence}/allocation.compile.stderr"
 test ! -s "${evidence}/shim.compile.stderr"
 test ! -s "${evidence}/link.stderr"

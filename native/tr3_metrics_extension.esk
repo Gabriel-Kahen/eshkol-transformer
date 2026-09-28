@@ -121,15 +121,30 @@
 
 (define (tr3-metrics-step-publish-internal!)
   ;; Called only after precommit and the nonraising O2/trainer commit tail.
-  ;; No allocation, provider call, promotion, or recoverable check follows.
-  (let* ((staging (vector-ref tr3-metrics 1))
-         (successor (vector-ref staging 0))
-         (record (car successor))
-         (token (vector-ref record 2)))
-    (vector-set! record 4 'published)
-    (vector-set! tr3-metrics 1 #f)
-    (vector-set! tr3-metrics 0 successor)
-    token))
+  ;; An impossible authority divergence must terminate before changing either
+  ;; root. All checks are identity/shape reads; the success tail still allocates
+  ;; nothing, promotes nothing, and raises no recoverable error.
+  (let ((staging (vector-ref tr3-metrics 1))
+        (head (vector-ref tr3-metrics 0)))
+    (if (or (not (vector? staging)) (not (= (vector-length staging) 2)))
+        (tr3-lease-fail-stop 134))
+    (let ((successor (vector-ref staging 0)))
+      (if (or (not (pair? successor))
+              (not (eq? (vector-ref staging 1) head))
+              (not (eq? (cdr successor) head)))
+          (tr3-lease-fail-stop 134))
+      (let ((record (car successor)))
+        (if (or (not (vector? record)) (not (= (vector-length record) 10))
+                (not (eq? (vector-ref record 0) tr3-metrics-record-tag))
+                (not (eq? (vector-ref record 1) record))
+                (not (eq? (vector-ref record 3) 'step))
+                (not (eq? (vector-ref record 4) 'ready)))
+            (tr3-lease-fail-stop 134))
+        (let ((token (vector-ref record 2)))
+          (vector-set! record 4 'published)
+          (vector-set! tr3-metrics 1 #f)
+          (vector-set! tr3-metrics 0 successor)
+          token)))))
 
 (define (tr3-metrics-step-abort-internal!)
   (if (not (vector-ref tr3-metrics 1))
