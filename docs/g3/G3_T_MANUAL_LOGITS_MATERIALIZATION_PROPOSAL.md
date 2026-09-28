@@ -1,7 +1,7 @@
 # G3-T source-private manual logits bit materialization proposal
 
-**Proposed bounded private contract; no implementation, public tensor or G3-G
-export exists.** This follows the accepted [kind-3 logits owner](G3_T_MANUAL_LOGITS_LEAF.md)
+**Source-private implementation candidate; no public tensor or G3-G export
+exists.** This follows the accepted [kind-3 logits owner](G3_T_MANUAL_LOGITS_LEAF.md)
 and P1/P2/decode publication semantics. It supplies an authenticated exact-bit
 snapshot to a private consumer. It does not satisfy A0's newly owned floating
 `[N,V]` result by itself; that needs a separate public tensor and atomic
@@ -95,3 +95,18 @@ owner counts; clearing the test borrow must permit retry. Run normal/repeat/
 ASan+UBSan+LSan, Q0, private source closure and production test-symbol
 exclusion. No numerical gradient applies: the seam copies bit patterns and
 has no differentiable operation.
+
+## Candidate evidence and remaining gate
+
+The native feature-gated operation, private Eshkol wrapper, exact source
+closure checker and P1/P2/decode Eshkol witnesses are present in the isolated
+candidate. A focused source-inclusion C probe passed 47 checks with identical
+normal/repeat/ASan+UBSan+LSan output; Q0 isolation passed 4/4, and Clang
+feature-on/off object inventories respectively contain/exclude the private
+stem. The existing full private Eshkol runner cannot start on this CachyOS
+host: the supported policy requires Ubuntu 22.04 and the pinned
+`llvm-config-21` command is unavailable. Therefore the Eshkol wrapper and
+its P1/P2/decode runtime witnesses are **not execution-accepted** by this
+local probe. The focused logs and exact source hashes are sealed outside Git
+under `g3t-logits-materialize-private-20260928`. No public package or A0
+claim follows.

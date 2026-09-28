@@ -1027,6 +1027,12 @@ an installed tensor ownership/read contract, and atomic cache/result
 publication must precede a separately reviewed public package tuple and
 numerical/negative gates. Revision-2's thirteen
 public names and artifacts remain the current boundary.
+The isolated private materialization candidate adds a feature-gated
+authenticated kind-3 logits bit snapshot into a detached 1,024-byte
+bytevector. Its focused native normal/repeat/sanitizer probe passes 47
+identical checks, Q0 4/4 and feature-on/off symbol exclusion. The full
+private Eshkol runner is blocked locally by unsupported CachyOS and missing
+LLVM 21, so wrapper runtime acceptance and hosted integration remain open.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
