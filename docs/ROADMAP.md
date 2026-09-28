@@ -1497,6 +1497,16 @@ through public `metrics-ref`; its eight-file seal is
 The synthetic probe is not an 8,192-update training trajectory. The step
 candidate is stacked on the public metrics reader; hosted integration,
 train/evaluate adapters and exact resume remain pending.
+The bounded installed `trainer-stop-policy` facet adds an immutable
+same-aggregate policy identity and private authenticated validation seam.
+Each limit is `#f` or an exact positive signed i64 and at least one is set.
+The pinned fe9 linked gate passes with 57 Eshkol sources, 31 native objects,
+107 localized global definitions and 176 undefined runtime symbols. Its
+ordinary caller checks E1 field details and malformed values; the private
+same-aggregate probe rejects forged identities and proves returned field
+copies cannot mutate policy authority. The evidence seal is at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-public-20260928/SHA256SUMS`.
+Train-loop thresholds, interruption, summary metrics and resume are pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
