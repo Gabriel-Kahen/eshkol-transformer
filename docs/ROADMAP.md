@@ -1249,6 +1249,16 @@ measurements passed on `1a44e42`: 49 Eshkol sources, 30 native objects,
 70 native paths, 4,171 raw definitions, 48 exports and 173 undefined
 symbols. The poisoned caller passed with empty stderr; sealed evidence is
 `tr3-public-d2-linked-1a44e42-20260925/SHA256SUMS`.
+The successor Eshkol `fe9dfd5` DD-10 import rules exposed missing direct
+private imports in this pre-metrics installed root. The bounded compatibility
+repair declares the existing X1, P1, and C1 dependencies at their consumers;
+the P1 trusted generator and structural checks admit exactly one additional
+private `p1-trusted-surface` provide while retaining the inherited public
+manifest and closure digests. Versioned fe9 source-order and undefined-runtime
+symbol manifests preserve the earlier 81298 package tuple and its exact
+manifests. The pinned strict source and linked poisoned public-caller gate
+passes on fe9 with the same 49-source/30-native/48-export boundary; public
+trainer step and metrics remain separate gates.
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
