@@ -940,28 +940,26 @@ independently source-reviewed `da0ba38` / tree `ca20699`, while hosted
 integration CI remains pending. It adds no public
 generation facade or manual decode.
 
-The next dependency after the independently reviewed G3-T manual P2 native
-head `832a709` and isolated G3-M P2 composer candidate `da0ba38` is a
-[proposed G3-T manual decode transport](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md).
-The accepted kind-1 call and kind-3 logits reservation exist, but the G3-T
-native frame/role/publication branches and private Eshkol call/frame wrappers
-still exclude manual decode. Root independently reviewed the source-anchored
-native/I1/A2/rollback contract at `58499c0`; neither isolated P2 candidate
-is integrated in this `origin/main` baseline. The isolated
-[G3-T native manual decode candidate](g3/G3_T_MANUAL_DECODE_LEAF.md)
-extends the reviewed P2 source with an owned `[1,1]` ID, bound P1 prefix,
-21-role T1 append, and atomic length-two cache/logits commit. Its pinned
-network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
+The [G3-T manual decode transport contract](g3/G3_T_MANUAL_DECODE_TRANSPORT_PROPOSAL.md)
+was independently reviewed at `58499c0`. Its isolated
+[native candidate](g3/G3_T_MANUAL_DECODE_LEAF.md), `a4f7c53` / tree
+`ad87a4e`, extends reviewed manual P2 with an owned `[1,1]` ID, bound P1
+prefix, 21-role T1 append and atomic length-two cache/logits commit. Its
+pinned network-none normal/repeat/ASan+UBSan+LSan aggregate passed 47,141
 byte-identical checks, 20 source contracts, Q0 4/4 and production test-symbol
-exclusion; evidence is at `g3t-manual-decode-candidate-20260928`.
-Root independently source-reviewed `a4f7c53` / tree `ad87a4e`; hosted
-integration CI remains pending. The accepted
-[private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md), merged
-to main at `893cbc7`, now permits a bounded Eshkol call/frame admission
-candidate over that reviewed native source. This isolated implementation
-widens kind-1 calls and authentic non-null frame-kind-2 input only; wrapper
-source review and hosted CI remain pending. G3-M decode and seeded
-generation/public facade are separate downstream gates.
+exclusion; evidence is at `g3t-manual-decode-candidate-20260928`. The accepted
+[private wrapper contract](g3/G3_T_MANUAL_DECODE_WRAPPER_PROPOSAL.md) merged
+to main at `893cbc7`. The isolated wrapper implementation `f117987` / tree
+`972087b` admits kind-1 calls and authentic non-null frame-kind-2 input;
+root independently reviewed it and its pinned normal/repeat/ASan+UBSan+LSan
+aggregate passed 47,194 byte-identical checks, 21 source contracts and Q0
+4/4. Hosted integration CI remains pending for these isolated candidates.
+The next dependency is the proposed
+[private G3-M one-token decode composer](g3/G3_M_MANUAL_DECODE_COMPOSER_PROPOSAL.md):
+one guarded kind-1 call, owned `[1,1]` input, exact 21-role T1 schedule,
+length-one A2 prefix append, detached logits and precommit rollback. This
+contract is pending independent review and adds no code. A seeded generation
+schedule and public G3-G facade remain separate downstream gates.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
