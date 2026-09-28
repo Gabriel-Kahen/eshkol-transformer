@@ -8,6 +8,7 @@
 (load "g3t_final_publication_extension.esk")
 (load "g3t_manual_p1_extension.esk")
 (load "g3m_prefill_p1_extension.esk")
+(load "g3m_prefill_p2_extension.esk")
 (load "g3t_zero_budget_extension.esk")
 (load "g3t_p2_zero_budget_extension.esk")
 (load "g3t_t1_input_extension.esk")
@@ -2808,6 +2809,146 @@
        (and (= 0 (g3t-native-tensor-release mp2-first))
             (= 0 (g3t-native-tensor-release mp2-second))
             (= 0 (g3t-native-tensor-release mp2-p1-result))
+            (= manual-f32-baseline (g3t-test-f32-tensors))))
+
+;; G3-M publishes manual P2 through the reviewed G3-T transport. The only
+;; admissible P2 input here is an authentic T1-backed I1 owner.
+(define g3m2-generator (g3t-generator-create model tokenizer policy-g1))
+(define g3m2-native
+  (vector-ref (g3t-generator-find g3m2-generator 'g3m-p2) 3))
+(define g3m2-i1-baseline (g3t-test-i1-count 0))
+(define g3m2-p1-input (g3t-generation-token-input-create 65))
+(define g3m2-first (g3m-prefill-p1! g3m2-generator g3m2-p1-input))
+(define g3m2-first-native
+  (vector-ref (g3t-prefill-entry g3m2-first 'logits 'g3m-p2) 3))
+(check "G3-M P2 predecessor P1 input release"
+       (g3t-generation-tensor-release! g3m2-p1-input))
+(define g3m2-input (g3t-generation-t1-input-create t1-p2))
+(define g3m2-input-native
+  (vector-ref (g3t-prefill-entry g3m2-input 'input 'g3m-p2) 3))
+(define g3m2-inline (g3t-generation-pair-input-create 65 66))
+(define g3m2-dead (g3t-generation-t1-input-create t1-p2))
+(check "G3-M P2 dead input fixture" (g3t-generation-tensor-release! g3m2-dead))
+(reject-category "G3-M P2 forged input rejected" 'invalid-argument
+  (lambda () (g3m-prefill-p2! g3m2-generator (vector 'forged))))
+(reject-category "G3-M P2 wrong-kind input rejected" 'invalid-argument
+  (lambda () (g3m-prefill-p2! g3m2-generator model)))
+(reject-category "G3-M P2 dead input rejected" 'invalid-state
+  (lambda () (g3m-prefill-p2! g3m2-generator g3m2-dead)))
+(reject-category "G3-M P2 inline-only pair rejected" 'invalid-state
+  (lambda () (g3m-prefill-p2! g3m2-generator g3m2-inline)))
+(check "G3-M P2 malformed I1 shape injected"
+       (= 0 (g3t-test-manual-p2-i1-shape-set g3m2-input-native 3)))
+(reject-category "G3-M P2 malformed typed I1 rejected" 'shape-mismatch
+  (lambda () (g3m-prefill-p2! g3m2-generator g3m2-input)))
+(check "G3-M P2 I1 shape restored"
+       (= 0 (g3t-test-manual-p2-i1-shape-set g3m2-input-native 2)))
+(define g3m2-input-borrow (g3t-test-input-borrow-begin g3m2-input-native))
+(check "G3-M P2 borrowed I1 fixture" (not (null? g3m2-input-borrow)))
+(check "G3-M P2 borrowed I1 rejected"
+       (guard (caught (#t (transformer-error? caught)))
+         (g3m-prefill-p2! g3m2-generator g3m2-input) #f))
+(check "G3-M P2 input borrow ends"
+       (= 0 (g3t-test-input-borrow-end g3m2-input-borrow)))
+(check "G3-M P2 precommit negatives preserve P1"
+       (and (= 1 (g3t-test-cache-length g3m2-native))
+            (= 0 (g3t-test-pin-count g3m2-native))
+            (= 0 (g3t-test-pending-logits))
+            (= 1 (g3t-test-logits-state g3m2-first-native))
+            (= 0 (g3t-test-rng-word g3m2-native 2))))
+(check "G3-M P2 external call makes context busy"
+       (= 0 (g3t-native-call-acquire g3m2-native 0)))
+(reject-category "G3-M P2 busy context rejected" 'invalid-state
+  (lambda () (g3m-prefill-p2! g3m2-generator g3m2-input)))
+(check "G3-M P2 busy call abort" (= 0 (g3t-native-call-abort g3m2-native)))
+(check "G3-M P2 I2 cut armed" (= 0 (g3t-test-fail-f32-after 0)))
+(define g3m2-i2-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-prefill-p2! g3m2-generator g3m2-input) #f))
+(check "G3-M P2 I2 cut disarmed"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(check "G3-M P2 A2 cut armed" (= 0 (g3t-test-fail-a2-after 0)))
+(define g3m2-a2-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-prefill-p2! g3m2-generator g3m2-input) #f))
+(check "G3-M P2 A2 cut disarmed"
+       (= 0 (g3t-test-fail-a2-after 9223372036854775807)))
+(check "G3-M P2 provider cut armed"
+       (= 0 (g3t-test-manual-p2-fail-dispatch-after 0)))
+(define g3m2-provider-cut
+  (guard (caught (#t (transformer-error? caught)))
+    (g3m-prefill-p2! g3m2-generator g3m2-input) #f))
+(check "G3-M P2 synthetic provider cut rollback"
+       (and g3m2-i2-cut g3m2-a2-cut g3m2-provider-cut
+            (= 1 (g3t-test-cache-length g3m2-native))
+            (= 0 (g3t-test-pin-count g3m2-native))
+            (= 0 (g3t-test-pending-logits))
+            (= (+ manual-f32-baseline 1) (g3t-test-f32-tensors))
+            (= 0 (g3t-test-rng-word g3m2-native 2))))
+(define g3m2-old-borrow (g3t-test-manual-cache-borrow-begin g3m2-native))
+(define g3m2-old-cut
+  (and (not (null? g3m2-old-borrow))
+       (guard (caught (#t (transformer-error? caught)))
+         (g3m-prefill-p2! g3m2-generator g3m2-input) #f)))
+(check "G3-M P2 old cache borrow ends"
+       (= 0 (g3t-test-manual-cache-borrow-end g3m2-old-borrow)))
+(check "G3-M P2 old-cache preflight rolls back"
+       (and g3m2-old-cut
+            (= 1 (g3t-test-cache-length g3m2-native))
+            (= 0 (g3t-test-pin-count g3m2-native))
+            (= 0 (g3t-test-pending-logits))
+            (= 1 (g3t-test-logits-state g3m2-first-native))))
+(define g3m2-second (g3m-prefill-p2! g3m2-generator g3m2-input))
+(define g3m2-second-native
+  (vector-ref (g3t-prefill-entry g3m2-second 'logits 'g3m-p2) 3))
+(check "G3-M P2 T1-backed input release after call"
+       (and (g3t-generation-tensor-release! g3m2-input)
+            (= g3m2-i1-baseline (g3t-test-i1-count 0))))
+(check "G3-M P2 all 256 last-row logits bit-exact to M3T"
+       (let compare ((index 0))
+         (if (= index 256) #t
+             (let* ((at (+ 1024 (* index 4)))
+                    (bits (+ (bytevector-u8-ref reference-bytes at)
+                             (* 256 (bytevector-u8-ref reference-bytes (+ at 1)))
+                             (* 65536 (bytevector-u8-ref reference-bytes (+ at 2)))
+                             (* 16777216 (bytevector-u8-ref reference-bytes (+ at 3))))))
+               (and (= bits (g3t-test-manual-logits-word g3m2-second-native index))
+                    (compare (+ index 1)))))))
+(check "G3-M P2 both K/V rows bit-exact to M3T"
+       (let compare ((which 0) (index 0))
+         (if (= which 2) #t
+             (and (= (vector-ref manual-p2-reference-kv (+ (* which 8) index))
+                     (g3t-test-manual-cache-kv-word g3m2-native which index))
+                  (if (= index 7) (compare (+ which 1) 0)
+                      (compare which (+ index 1)))))))
+(check "G3-M P2 replaces P1 without draw and retains detached logits"
+       (and (= 2 (g3t-test-cache-length g3m2-native))
+            (= 1 (g3t-test-logits-state g3m2-first-native))
+            (= 1 (g3t-test-logits-state g3m2-second-native))
+            (= 0 (g3t-test-rng-word g3m2-native 2))
+            (= 0 (g3t-test-pin-count g3m2-native))))
+(define g3m2-repeat-input (g3t-generation-t1-input-create t1-p2))
+(define g3m2-third (g3m-prefill-p2! g3m2-generator g3m2-repeat-input))
+(define g3m2-third-native
+  (vector-ref (g3t-prefill-entry g3m2-third 'logits 'g3m-p2) 3))
+(check "G3-M P2 repeat is bit-exact and preserves older output"
+       (and (= 2 (g3t-test-cache-length g3m2-native))
+            (= 1 (g3t-test-logits-state g3m2-second-native))
+            (= 1 (g3t-test-logits-state g3m2-third-native))
+            (= (g3t-test-manual-logits-word g3m2-second-native 255)
+               (g3t-test-manual-logits-word g3m2-third-native 255))))
+(check "G3-M P2 inputs and generator release"
+       (and (g3t-generation-tensor-release! g3m2-inline)
+            (g3t-generation-tensor-release! g3m2-repeat-input)
+            (g3t-generator-close! g3m2-generator)))
+(check "G3-M P2 detached logits survive parent close"
+       (and (= 1 (g3t-test-logits-state g3m2-first-native))
+            (= 1 (g3t-test-logits-state g3m2-second-native))
+            (= 1 (g3t-test-logits-state g3m2-third-native))))
+(check "G3-M P2 detached output typed release"
+       (and (g3t-generation-tensor-release! g3m2-first)
+            (g3t-generation-tensor-release! g3m2-second)
+            (g3t-generation-tensor-release! g3m2-third)
             (= manual-f32-baseline (g3t-test-f32-tensors))))
 
 (display "G3-T P2 zero budget PASS: checks=")
