@@ -1,0 +1,340 @@
+;;; Testing closure for installed revision-3 adapter and native transaction.
+(load "g3g_manual_package_root.esk")
+(extern i64 test-cache-length ptr :real et_g3t_test_cache_length_v1)
+(extern i64 test-pin-count ptr :real et_g3t_test_pin_count_v1)
+(extern i64 test-pending-logits :real et_g3t_test_pending_logits_v1)
+(extern i64 test-rng-word ptr i64 :real et_g3t_test_rng_word_v1)
+(extern i64 test-cache-kv ptr i64 i64 :real et_g3t_test_manual_cache_kv_word_v1)
+(extern i64 test-cache-mask ptr i64 :real et_g3t_test_manual_decode_cache_mask_v1)
+(extern i64 test-reference-kv ptr i64 i64 :real et_g3t_test_manual_reference_kv_word_v1)
+(extern ptr test-logits-borrow-begin ptr :real et_g3t_test_logits_borrow_begin_v1)
+(extern i64 test-logits-borrow-end ptr :real et_g3t_test_logits_borrow_end_v1)
+(extern i64 test-fail-f32-after i64 :real et_g3t_test_fail_f32_after_v1)
+(extern i64 test-logits-storage-corrupt ptr i64
+        :real et_g3t_test_logits_storage_corrupt_v1)
+(extern i64 test-fail-a2-after i64 :real et_g3t_test_fail_a2_after_v1)
+(extern i64 test-fail-dispatch-after i64
+        :real et_g3t_test_manual_p2_fail_dispatch_after_v1)
+(extern i64 test-p2-shape-set ptr i64
+        :real et_g3t_test_manual_p2_i1_shape_set_v1)
+(extern i64 test-p2-inline-id-set ptr i64 i64
+        :real et_g3t_test_manual_p2_inline_id_set_v1)
+(extern i64 test-decode-shape-set ptr i64
+        :real et_g3t_test_manual_decode_i1_shape_set_v1)
+(extern i64 test-decode-inline-id-set ptr i64
+        :real et_g3t_test_manual_decode_inline_id_set_v1)
+(extern ptr test-input-borrow-begin ptr
+        :real et_g3t_test_input_borrow_begin_v1)
+(extern i64 test-input-borrow-end ptr
+        :real et_g3t_test_input_borrow_end_v1)
+(extern i64 test-native-copy-bits ptr ptr i64
+        :real et_g3t_private_logits_copy_bits_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-G manual private FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (reject-native-shape-details label operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'shape-mismatch)
+                      (eq? (transformer-error-operation caught) operation)
+                      (equal? (transformer-error-details caught)
+                        '((native-category 3)
+                          (source-code 4)
+                          (source-domain m3t-transport)
+                          (source-message
+                            "diagnostic dependency rejected the request")))
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (reject-native-state-details label operation code thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'invalid-state)
+                      (eq? (transformer-error-operation caught) operation)
+                      (equal? (transformer-error-details caught)
+                        (list (list 'native-category 2)
+                              (list 'source-code code)
+                              (list 'source-domain 'm3t-transport)
+                              (list 'source-message
+                                    "diagnostic dependency rejected the request")))
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (reject-native-invariant-details label operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'internal)
+                      (eq? (transformer-error-operation caught) operation)
+                      (equal? (transformer-error-details caught)
+                        '((native-category 5)
+                          (source-code 10)
+                          (source-domain g3t-transport)
+                          (source-message
+                            "private G3-T native transport rejected the request")))
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (row-equal? actual reference offset)
+  (and (= 1024 (bytevector-length actual))
+       (= 2048 (bytevector-length reference))
+       (let compare ((index 0))
+         (if (= index 1024) #t
+             (and (= (bytevector-u8-ref actual index)
+                     (bytevector-u8-ref reference (+ offset index)))
+                  (compare (+ index 1)))))))
+(define (same-bytes? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let compare ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (compare (+ index 1)))))))
+(define (cache-kv-equal? context reference words)
+  (let compare ((which 0) (index 0))
+    (if (= which 2) #t
+        (and (= (test-cache-kv context which index)
+                (vector-ref reference (+ (* which 8) index)))
+             (if (= index (- words 1)) (compare (+ which 1) 0)
+                 (compare which (+ index 1)))))))
+(define (quiet-state? context length)
+  (and (= length (test-cache-length context))
+       (= 0 (test-pin-count context))
+       (= 0 (test-pending-logits))
+       (= 0 (test-rng-word context 2))))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model (g3t-checked-m3t-model-create config
+                (g3t-checked-m3t-initializer-state 1729)))
+(check "eval" (module-eval! model))
+(define tokenizer (t1-private-tokenizer-byte config))
+(define policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+
+;;; Independent M3T workspace supplies exact reference K/V and both rows.
+(define reference-input (g3t-checked-m3t-input-create))
+(check "reference input" (g3t-checked-m3t-input-copy! reference-input '(65 66)))
+(define reference-workspace (g3t-checked-m3t-workspace-create model))
+(define reference-logits (g3t-checked-m3t-logits-create))
+(check "reference begin" (g3t-checked-m3t-workspace-begin!
+                            reference-workspace reference-input))
+(check "ET" (g3t-checked-m3t-embedding! reference-workspace 'token))
+(check "EP" (g3t-checked-m3t-embedding! reference-workspace 'position))
+(check "X" (g3t-checked-m3t-residual! reference-workspace 'embeddings))
+(check "N1" (g3t-checked-m3t-layer-norm! reference-workspace 'block-input))
+(check "QT" (g3t-checked-m3t-linear! reference-workspace 'q))
+(check "KT" (g3t-checked-m3t-linear! reference-workspace 'k))
+(check "VT" (g3t-checked-m3t-linear! reference-workspace 'v))
+(check "QH" (g3t-checked-m3t-heads-split! reference-workspace 'q))
+(check "KH" (g3t-checked-m3t-heads-split! reference-workspace 'k))
+(check "VH" (g3t-checked-m3t-heads-split! reference-workspace 'v))
+(define reference-native
+  (vector-ref (m3t-entry reference-workspace 'workspace 'g3g-manual #t) 3))
+(check "AH" (g3t-checked-m3t-attention! reference-workspace))
+(check "AT" (g3t-checked-m3t-heads-merge! reference-workspace))
+(check "AO" (g3t-checked-m3t-linear! reference-workspace 'attention-output))
+(check "R" (g3t-checked-m3t-residual! reference-workspace 'attention))
+(check "N2" (g3t-checked-m3t-layer-norm! reference-workspace 'ffn-input))
+(check "FU" (g3t-checked-m3t-linear! reference-workspace 'ffn-up))
+(check "FG" (g3t-checked-m3t-gelu! reference-workspace))
+(check "FD" (g3t-checked-m3t-linear! reference-workspace 'ffn-down))
+(check "Y" (g3t-checked-m3t-residual! reference-workspace 'ffn))
+(check "NF" (g3t-checked-m3t-layer-norm! reference-workspace 'final))
+(check "Z" (g3t-checked-m3t-linear! reference-workspace 'tied-head))
+(check "reference copy" (g3t-checked-m3t-workspace-copy-logits!
+                          reference-workspace reference-logits))
+(define reference-bytes (g3t-checked-m3t-logits-bits reference-logits))
+(define reference-kv
+  (let ((words (make-vector 16 0)))
+    (let fill ((which 0) (index 0))
+      (if (= which 2) words
+          (begin
+            (vector-set! words (+ (* which 8) index)
+                         (test-reference-kv reference-native which index))
+            (if (= index 7) (fill (+ which 1) 0)
+                (fill which (+ index 1))))))))
+(check "reference cleanup"
+  (and (g3t-checked-m3t-workspace-reset! reference-workspace)
+       (g3t-checked-m3t-logits-release! reference-logits)
+       (g3t-checked-m3t-workspace-release! reference-workspace)
+       (g3t-checked-m3t-input-release! reference-input)))
+
+(define generator (g3g-public-generator-create model tokenizer policy))
+(define native (vector-ref (g3t-generator-find generator 'test) 3))
+(define scalar (g3g-public-generation-token-input-create 65))
+(define first (g3g-public-generator-prefill generator scalar))
+(define first-native (vector-ref (g3t-prefill-entry first 'logits 'test) 3))
+(define first-bits (g3g-public-diagnostic-generation-logits-bits first))
+(check "P1 all 256 bits" (row-equal? first-bits reference-bytes 0))
+(check "P1 cache and no draw" (quiet-state? native 1))
+(check "P1 mask" (and (= 1 (test-cache-mask native 0))
+                      (= 0 (test-cache-mask native 1))))
+(check "P1 K/V exact" (cache-kv-equal? native reference-kv 4))
+;;; The production kind-3 shell admits no I2 mutation. This test-only hook
+;;; corrupts its actual F32 storage; F32 borrow view device/layout are fixed
+;;; literals, with no stored field or mutation hook.
+(check "I2 storage corruption injected"
+  (= 0 (test-logits-storage-corrupt first-native 1)))
+(reject-native-invariant-details "I2 storage public E1"
+  'diagnostic-generation-logits-bits
+  (lambda () (g3g-public-diagnostic-generation-logits-bits first)))
+(check "I2 storage restored"
+  (= 0 (test-logits-storage-corrupt first-native 0)))
+(check "I2 corruption preserves P1 result and cache"
+  (and (same-bytes? first-bits
+         (g3g-public-diagnostic-generation-logits-bits first))
+       (quiet-state? native 1)))
+(define borrow (test-logits-borrow-begin first-native))
+(check "borrow begins" (not (null? borrow)))
+(reject "borrow blocks read" 'invalid-state 'diagnostic-generation-logits-bits
+  (lambda () (g3g-public-diagnostic-generation-logits-bits first)))
+(reject "borrow blocks release" 'invalid-state 'generation-tensor-release!
+  (lambda () (g3g-public-generation-tensor-release first)))
+(check "borrow ends" (= 0 (test-logits-borrow-end borrow)))
+(check "borrow failure preserves bits" (same-bytes? first-bits
+  (g3g-public-diagnostic-generation-logits-bits first)))
+(define sentinel (make-bytevector 1024 90))
+(check "short native copy leaves destination"
+  (and (not (= 0 (test-native-copy-bits first-native sentinel 1023)))
+       (= 90 (bytevector-u8-ref sentinel 0))
+       (= 90 (bytevector-u8-ref sentinel 1023))))
+(check "wrong kind native copy leaves destination"
+  (and (not (= 0 (test-native-copy-bits
+                     (vector-ref (g3t-prefill-entry scalar 'input 'test) 3)
+                     sentinel 1024)))
+       (= 90 (bytevector-u8-ref sentinel 0))))
+(check "copy allocation cut armed" (= 0 (test-fail-f32-after 0)))
+(check "copy allocation cut leaves destination"
+  (and (not (= 0 (test-native-copy-bits first-native sentinel 1024)))
+       (= 90 (bytevector-u8-ref sentinel 0))
+       (= 90 (bytevector-u8-ref sentinel 1023))))
+(check "copy allocation cut disarmed"
+  (= 0 (test-fail-f32-after 9223372036854775807)))
+(check "copy failure retains source" (same-bytes? first-bits
+  (g3g-public-diagnostic-generation-logits-bits first)))
+(define pending-generator (g3g-public-generator-create model tokenizer policy))
+(m3-call 'g3g-manual-pending
+  (let* ((entry (g3t-generator-find pending-generator 'g3g-manual-pending))
+         (call (g3t-call-acquire entry 0))
+         (pending (g3t-logits-reserve call)))
+    (reject "pending read" 'invalid-state 'diagnostic-generation-logits-bits
+      (lambda () (g3g-public-diagnostic-generation-logits-bits pending)))
+    (reject "pending release" 'invalid-state 'generation-tensor-release!
+      (lambda () (g3g-public-generation-tensor-release pending)))
+    (check "pending abort" (g3t-call-abort call))))
+(check "pending generator close" (g3g-public-generator-close pending-generator))
+(define t1-two (t1-wave1-tokenizer-encode tokenizer (bytevector 65 66)))
+(define pair (g3g-public-generation-input-create t1-two))
+(define pair-native (vector-ref (g3t-prefill-entry pair 'input 'test) 3))
+(check "P2 malformed shape injected" (= 0 (test-p2-shape-set pair-native 3)))
+(reject "P2 malformed shape" 'shape-mismatch 'generator-prefill!
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(reject-native-shape-details "P2 source details" 'generator-prefill!
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "P2 shape restored" (= 0 (test-p2-shape-set pair-native 2)))
+(check "P2 non-byte ID injected" (= 0 (test-p2-inline-id-set pair-native 1 256)))
+(reject-native-state-details "P2 non-byte E1" 'generator-prefill! 2
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "P2 non-byte ID restored" (= 0 (test-p2-inline-id-set pair-native 1 66)))
+(check "P2 inline divergence injected" (= 0 (test-p2-inline-id-set pair-native 1 67)))
+(reject-native-state-details "P2 divergence E1" 'generator-prefill! 2
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "P2 inline divergence restored" (= 0 (test-p2-inline-id-set pair-native 1 66)))
+(define pair-borrow (test-input-borrow-begin pair-native))
+(check "P2 input borrow begins" (not (null? pair-borrow)))
+(reject "P2 borrowed input" 'invalid-state 'generator-prefill!
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "P2 input borrow ends" (= 0 (test-input-borrow-end pair-borrow)))
+(check "P2 negatives preserve predecessor"
+  (and (quiet-state? native 1)
+       (same-bytes? first-bits
+         (g3g-public-diagnostic-generation-logits-bits first))))
+(check "F32 cut armed" (= 0 (test-fail-f32-after 0)))
+(reject "F32 allocation cut" 'internal 'generator-prefill!
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "F32 cut disarmed" (= 0 (test-fail-f32-after 9223372036854775807)))
+(check "F32 rollback" (and (quiet-state? native 1)
+                            (same-bytes? first-bits
+                              (g3g-public-diagnostic-generation-logits-bits first))))
+(check "A2 cut armed" (= 0 (test-fail-a2-after 0)))
+(reject "A2 allocation cut" 'internal 'generator-prefill!
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "A2 cut disarmed" (= 0 (test-fail-a2-after 9223372036854775807)))
+(check "A2 rollback" (quiet-state? native 1))
+(check "provider cut armed" (= 0 (test-fail-dispatch-after 0)))
+(reject "provider cut" 'internal 'generator-prefill!
+  (lambda () (g3g-public-generator-prefill generator pair)))
+(check "provider cut disarmed"
+  (= 0 (test-fail-dispatch-after 9223372036854775807)))
+(check "provider rollback" (quiet-state? native 1))
+(define second (g3g-public-generator-prefill generator pair))
+(check "P2 all 256 bits" (row-equal?
+  (g3g-public-diagnostic-generation-logits-bits second) reference-bytes 1024))
+(check "P2 cache and no draw" (quiet-state? native 2))
+(check "P2 mask" (and (= 1 (test-cache-mask native 0))
+                      (= 1 (test-cache-mask native 1))))
+(check "P2 K/V exact" (cache-kv-equal? native reference-kv 8))
+(check "old result after replacement" (same-bytes? first-bits
+  (g3g-public-diagnostic-generation-logits-bits first)))
+(reject "P2 blocks decode" 'invalid-state 'generator-decode-step!
+  (lambda () (g3g-public-generator-decode-step generator scalar)))
+(check "P2 owner release" (and (g3g-public-generator-close generator)
+                               (g3g-public-generation-tensor-release first)
+                               (g3g-public-generation-tensor-release second)
+                               (g3g-public-generation-tensor-release pair)
+                               (g3g-public-generation-tensor-release scalar)))
+
+(define decoder (g3g-public-generator-create model tokenizer policy))
+(define decoder-native (vector-ref (g3t-generator-find decoder 'test) 3))
+(define decoder-input (g3g-public-generation-token-input-create 65))
+(define decoder-first (g3g-public-generator-prefill decoder decoder-input))
+(define decoder-token (g3g-public-generation-token-input-create 66))
+(define decoder-token-native
+  (vector-ref (g3t-prefill-entry decoder-token 'input 'test) 3))
+(check "decode malformed shape injected"
+  (= 0 (test-decode-shape-set decoder-token-native 2)))
+(reject "decode malformed shape" 'shape-mismatch 'generator-decode-step!
+  (lambda () (g3g-public-generator-decode-step decoder decoder-token)))
+(check "decode shape restored"
+  (= 0 (test-decode-shape-set decoder-token-native 1)))
+(check "decode inline divergence injected"
+  (= 0 (test-decode-inline-id-set decoder-token-native 67)))
+(reject-native-state-details "decode divergence E1" 'generator-decode-step! 2
+  (lambda () (g3g-public-generator-decode-step decoder decoder-token)))
+(check "decode inline divergence restored"
+  (= 0 (test-decode-inline-id-set decoder-token-native 66)))
+(check "decode negatives keep P1 cache and result"
+  (and (quiet-state? decoder-native 1)
+       (same-bytes? (g3g-public-diagnostic-generation-logits-bits decoder-first)
+         first-bits)))
+(define decoder-second (g3g-public-generator-decode-step decoder decoder-token))
+(check "decode all 256 bits" (row-equal?
+  (g3g-public-diagnostic-generation-logits-bits decoder-second)
+  reference-bytes 1024))
+(check "decode cache" (quiet-state? decoder-native 2))
+(check "decode mask" (and (= 1 (test-cache-mask decoder-native 0))
+                          (= 1 (test-cache-mask decoder-native 1))))
+(check "decode K/V exact" (cache-kv-equal? decoder-native reference-kv 8))
+(check "decode owners" (and (g3g-public-generator-close decoder)
+                            (g3g-public-generation-tensor-release decoder-first)
+                            (g3g-public-generation-tensor-release decoder-second)
+                            (g3g-public-generation-tensor-release decoder-input)
+                            (g3g-public-generation-tensor-release decoder-token)))
+(display "G3G-MANUAL-PRIVATE-PASS: checks=") (display checks) (newline)
