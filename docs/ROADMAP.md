@@ -1016,13 +1016,14 @@ its source and sealed evidence without a blocking finding. Hosted integration
 remains pending; no public manual facade, continuation or N>1 behavior is
 claimed.
 
-The next bounded [public manual prefill/decode proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
-defines a separate G3-G C2 revision-3 package with two added facade names
-over the source-private P1/P2 prefill and one-token decode composers. It is
-proposal-only: private decode source review/integration, a production logits
-inspection contract, package implementation, numerical/negative gates and
-hosted CI remain open. The proposed public result is an opaque detached G3
-logits owner; no general A0 tensor interoperability is claimed.
+The [public manual facade prerequisite proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
+records the gap between the source-private detached G3-T logits shell and
+A0's newly owned readable floating tensor result. It installs no manual A0
+name or package revision. Private decode review/integration, authenticated
+G3-T logits materialization, an installed tensor ownership/read contract,
+and atomic cache/result publication must precede a separately reviewed
+public package tuple and numerical/negative gates. Revision-2's thirteen
+public names and artifacts remain the current boundary.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
