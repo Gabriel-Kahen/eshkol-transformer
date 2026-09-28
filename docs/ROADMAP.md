@@ -975,7 +975,7 @@ call, owned `[1,1]` input, exact 21-role T1 schedule, A2 `1→2` append,
 detached logits and precommit rollback. Root independently reviewed its
 source and 47,240 pinned normal/repeat/sanitizer checks, 22 source contracts
 and Q0 4/4; its prior head passed all 23 hosted checks. Refreshed hosted
-integration CI remains pending. The accepted private
+integration CI and merge remain pending. The accepted private
 [seeded P1/G1 schedule](g3/G3_M_PRIVATE_SEEDED_P1_G1_PROPOSAL.md) has a
 [reviewed implementation leaf](g3/G3_M_PRIVATE_SEEDED_P1_G1_LEAF.md) at
 `9029b67` / tree `052fdf9`: a single guarded full-request preflight,
@@ -1019,10 +1019,13 @@ claimed.
 The [public manual facade prerequisite proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 records the gap between the source-private detached G3-T logits shell and
 A0's newly owned readable floating tensor result. It installs no manual A0
-name or package revision. Private decode review/integration, authenticated
-G3-T logits materialization, an installed tensor ownership/read contract,
-and atomic cache/result publication must precede a separately reviewed
-public package tuple and numerical/negative gates. Revision-2's thirteen
+name or package revision. Root independently reviewed the #138 private
+decode source and its prior head passed all 23 hosted checks; refreshed hosted
+CI and merge remain pending. The separate [G3-T source-private exact-bit
+materialization proposal](g3/G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md),
+an installed tensor ownership/read contract, and atomic cache/result
+publication must precede a separately reviewed public package tuple and
+numerical/negative gates. Revision-2's thirteen
 public names and artifacts remain the current boundary.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is

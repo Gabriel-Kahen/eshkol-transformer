@@ -8,10 +8,11 @@ owned readable floating `[N,V]` tensors. The accepted source-private
 [P2 prefill](G3_M_PREFILL_P2_LEAF.md) and
 [one-token decode composer contract](G3_M_MANUAL_DECODE_COMPOSER_PROPOSAL.md)
 return detached G3-T kind-3 logits shells, which do not yet meet that public
-result contract. The decode implementation remains an isolated
-[candidate](G3_M_MANUAL_DECODE_LEAF.md) awaiting independent source review and
-integration. Revision-2 G3-G continues to expose only its thirteen existing
-names; this proposal does **not** install the two A0 manual names or widen
+result contract. The private decode [candidate](G3_M_MANUAL_DECODE_LEAF.md)
+has been independently source-reviewed by root; its prior head passed all
+23 hosted checks. Refreshed hosted CI and merge remain pending. Revision-2
+G3-G continues to expose only its thirteen existing names; this proposal
+does **not** install the two A0 manual names or widen
 `generation-tensor-release!`.
 
 ## Observed ownership and missing seam
@@ -35,19 +36,16 @@ installed floating-tensor interface. The revision-2 generation output
 accessors accept only opaque generation outputs and provide no manual logits
 route.
 
-Before either A0 manual name may be proposed as a public export, separately
-specify, implement and independently review an authenticated **source-private
-G3-T logits materialization** seam. It must read only a live detached kind-3
-result through its exact G3-T registry identity; prove dense CPU f32 `[1,256]`,
-1,024 bytes, no active borrow, and stable bitwise contents; produce an
-independently owned result or exact copy; and preserve G3-T/I2 source
-status across cleanup. It must reject forged, foreign, wrong-kind, pending,
-dead, busy, borrowed and malformed owners without exposing a raw I2 pointer
-or testing hook. Allocation/copy failure must leave the original logits and
-cache unchanged and create no orphan owner. A borrowed old result must keep
-its accepted release semantics. The exact private signature and choice of
-I2 clone versus copy remain for that bounded upstream contract; this document
-does not invent one.
+Before either A0 manual name may be proposed as a public export, implement
+and independently review the separate [source-private G3-T exact-bit
+materialization proposal](G3_T_MANUAL_LOGITS_MATERIALIZATION_PROPOSAL.md).
+It admits only a detached live kind-3 result by exact G3-T registry identity,
+checks CPU f32 `[1,256]` storage and no active borrow, and copies 1,024 exact
+bit bytes to a caller-owned bytevector. Forged, foreign, wrong-kind, pending,
+dead, busy, borrowed and malformed owners reject before destination writes.
+Failure preserves the source and cache and leaves no lease; a previous result
+retains its ownership and release semantics. This private bytevector is still
+not a public floating tensor.
 
 A separate public tensor contract must then say how the result is represented,
 read, cloned or borrowed, released, and interchanged with other tensor APIs.
@@ -101,7 +99,8 @@ result release must remain separate from generation-output accessors.
 
 ## Completion gates and deferrals
 
-First review/integrate the private decode candidate. The materialization gate
+First finish refreshed hosted CI and merge for the reviewed private decode
+candidate. The materialization gate
 must test exact 256-word bits against independent M3T after P1, P2 and decode,
 I2 shape/dtype/device/layout, disjoint ownership and survival after generator
 close/cache replacement, plus wrong-kind/foreign/dead/pending/borrowed owner,
