@@ -15,6 +15,8 @@ extern eshkol_tagged_value_t tr3_step_test_inject(eshkol_tagged_value_t)
     __asm__("tr3-step-composer-test-inject-internal!");
 extern eshkol_tagged_value_t et_e1b_private_tr3_stop_policy_validate_cabi_v1(
     eshkol_tagged_value_t policy);
+extern eshkol_tagged_value_t tr3_stop_policy_root
+    __asm__("tr3-stop-policy-root");
 
 /* Test-only producer, linked with the unlocalized copy of the same aggregate. */
 void et_tr3_test_publish_step_v1(void *output) {
@@ -49,4 +51,9 @@ void et_tr3_test_validate_stop_policy_v1(void *policy, void *output) {
   *et_e1b_box_value_v1(output) =
       et_e1b_private_tr3_stop_policy_validate_cabi_v1(
           *et_e1b_box_value_v1(policy));
+}
+
+void et_tr3_test_stop_policy_root_v1(void *output) {
+  et_e1b_ensure_private_initialized_v1();
+  *et_e1b_box_value_v1(output) = tr3_stop_policy_root;
 }

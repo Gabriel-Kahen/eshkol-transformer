@@ -1506,6 +1506,16 @@ ordinary caller checks E1 field details and malformed values; the private
 same-aggregate probe rejects forged identities and proves returned field
 copies cannot mutate policy authority. The evidence seal is at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-public-20260928/SHA256SUMS`.
+The same-aggregate retention witness validates the oldest policy after 8,192
+public constructions and checks every retained six-slot record contains only
+the tag, self-reference, opaque error token, and three scalar limits: no native
+or model graph owner is retained. With caller wrapper storage confined to short
+regions, the pinned fe9 arena grows by exactly 224 bytes per policy across
+both 1,023 and 7,168 additional constructions. Policies have process-lifetime
+roots and no release operation or fixed count cap; memory use therefore grows
+linearly with distinct policies until the process arena limit. The focused
+gate also rejects an exact limit above signed i64. Its sealed witness is at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-retention-20260928/SHA256SUMS`.
 Train-loop thresholds, interruption, summary metrics and resume are pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
