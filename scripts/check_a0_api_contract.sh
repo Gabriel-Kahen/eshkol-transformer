@@ -14,7 +14,8 @@ A0_COMPILER_TIMEOUT_SECONDS=${A0_COMPILER_TIMEOUT_SECONDS:-60}
 [[ "${A0_COMPILER_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || \
     die "A0_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
-A0_TMP=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-a0.XXXXXX")
+mkdir -p "${A0_ROOT}/.deps"
+A0_TMP=$(mktemp -d "${A0_ROOT}/.deps/eshkol-transformer-a0.XXXXXX")
 trap 'rm -rf -- "$A0_TMP"' EXIT
 A0_JIT_INVOCATION=0
 A0_COMPILE_INVOCATION=0
@@ -72,6 +73,10 @@ for A0_SOURCE in compile_public_api compile_module_imports; do
     cmp "$A0_TMP/$A0_SOURCE-1.compile.log" \
         "$A0_TMP/$A0_SOURCE-2.compile.log"
     cmp "$A0_TMP/$A0_SOURCE-1.o" "$A0_TMP/$A0_SOURCE-2.o"
+    if grep -Fq 'Ignoring ESHKOL_AOT_MODULE_CACHE_DIR under a forbidden temp root' \
+        "$A0_TMP/$A0_SOURCE-1.compile.log"; then
+        die "A0 compile-only fixture silently disabled the AOT module cache"
+    fi
 done
 
 for A0_RUN in 1 2; do
