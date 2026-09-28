@@ -1526,8 +1526,14 @@ private step's first parameter write. A later failed step rolls back only that
 step; earlier commits remain, and no partial summary is published. Train
 summaries have disjoint `loss`, `mask-weight`, `tokens`, `updates`, `epochs`
 keys in the sole metrics registry; existing step tokens retain their schema.
-The fixed CPU f32 N=1,T=2,V=256 finite-D2 linked gate, independent review,
-explicit interrupt API, public resume and wider profiles are pending.
+The pinned fe9 fixed CPU f32 N=1,T=2,V=256 finite-D2 linked gate passes on
+`64a59ff` with 58 Eshkol sources, 108 globals and 176 undefined symbols;
+all 127 artifacts verify under
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-train-fixed-64a59ff-20260928/SHA256SUMS`
+(`80c1b82b...`). Independent source/test review approved the bounded change.
+The two-update fixture uses equal update weights, so an unequal-weight
+multi-update witness remains open. Explicit interruption, public resume,
+wider profiles and hosted integration are pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
