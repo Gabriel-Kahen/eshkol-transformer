@@ -459,6 +459,18 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md) | complete |
 
+The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
+is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
+exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker
+allocation and shutdown. Explicit single-thread OpenBLAS preserves that cap;
+focused activations and attention pass AOT/JIT parity with a separate
+180-second JIT ceiling. The one full supported AOT/JIT inventory completed
+183 command rows and exited 1 with 38 counted failures: autodiff and RMSNorm
+gaps, RNG mode-parity mismatch, malformed negatives that succeed, and two
+signal-139 negatives. Attention-gradient and malformed-reshape failures also
+reproduce on the prior runtime pin; the other old-pin outcomes are untested.
+The successor R0 gate remains open, with sealed evidence in the audit.
+
 ## Wave 1 — independent foundations
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
