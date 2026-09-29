@@ -32,15 +32,38 @@ cmp "${temporary_dir}/version.expected" "${temporary_dir}/version.stdout"
 
 cat >"${temporary_dir}/help.expected" <<'EOF'
 Usage: eshkol-transformer GROUP COMMAND [OPTIONS]
+       eshkol-transformer pretrain|evaluate [OPTIONS]
 
 Groups:
   tokenizer   Create and inspect tokenizer artifacts
   corpus      Build and inspect D1 token corpora
   checkpoint  Inspect C2 checkpoints
+
+Commands:
+  pretrain    Train the fixed CPU f32 diagnostic profile (1..4 updates)
+  evaluate    Evaluate a checkpoint with that fixed profile
 EOF
 run_exact help 0 "${executable}" --help
 cmp "${temporary_dir}/help.expected" "${temporary_dir}/help.stdout"
 [[ ! -s "${temporary_dir}/help.stderr" ]]
+
+printf '%s\n' 'Usage: eshkol-transformer pretrain --config PATH --tokenizer PATH --train-corpus DIRECTORY --checkpoint PATH --max-updates N [--resume PATH] [--force]' >"${temporary_dir}/pretrain-help.expected"
+run_exact pretrain-help 0 "${executable}" pretrain --help
+cmp "${temporary_dir}/pretrain-help.expected" "${temporary_dir}/pretrain-help.stdout"
+[[ ! -s "${temporary_dir}/pretrain-help.stderr" ]]
+printf '%s\n' 'Usage: eshkol-transformer evaluate --config PATH --tokenizer PATH --train-corpus DIRECTORY --validation-corpus DIRECTORY --checkpoint PATH' >"${temporary_dir}/evaluate-help.expected"
+run_exact evaluate-help 0 "${executable}" evaluate --help
+cmp "${temporary_dir}/evaluate-help.expected" "${temporary_dir}/evaluate-help.stdout"
+[[ ! -s "${temporary_dir}/evaluate-help.stderr" ]]
+for cli3_b_case in pretrain evaluate; do
+  run_exact "${cli3_b_case}-missing" 2 "${executable}" "${cli3_b_case}"
+  [[ ! -s "${temporary_dir}/${cli3_b_case}-missing.stdout" ]]
+  run_exact "${cli3_b_case}-unknown" 2 "${executable}" "${cli3_b_case}" --unknown x
+  [[ ! -s "${temporary_dir}/${cli3_b_case}-unknown.stdout" ]]
+done
+run_exact pretrain-zero 2 "${executable}" pretrain --max-updates 0
+run_exact pretrain-over-cap 2 "${executable}" pretrain --max-updates 5
+run_exact pretrain-duplicate 2 "${executable}" pretrain --max-updates 1 --max-updates 1
 
 run_exact help-extra 2 "${executable}" tokenizer byte --help extra
 [[ ! -s "${temporary_dir}/help-extra.stdout" ]]
@@ -220,6 +243,7 @@ E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
     "${PROJECT_ROOT}/internal/t2/lib" \
     "${PROJECT_ROOT}/internal/t1/lib" \
     "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/internal/e3/lib" \
     "${PROJECT_ROOT}/src"
 cmp "${PROJECT_ROOT}/native/cli3_defined_symbols.txt" \
   "${formatter_dir}/cli3-formatter.o.evidence/global-defined.txt"
@@ -245,4 +269,5 @@ cmp "${temporary_dir}/version.expected" \
 if ldd "${executable}" | grep -Ei 'python|torch' >/dev/null; then
   die "CLI3 executable links a Python/PyTorch runtime"
 fi
-printf 'CLI3 TARGETED PASS: six commands, grammar, artifacts, and I/O faults\n'
+"${PROJECT_ROOT}/scripts/test-cli3-b.sh" "${executable}"
+printf 'CLI3 TARGETED PASS: fixed profile, resume, grammar, artifacts, and I/O faults\n'
