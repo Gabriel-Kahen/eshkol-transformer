@@ -753,9 +753,14 @@ as a copied constructor source. Its exact C4 branch enables the pending gate
 after native P2/G1 preflight; C2 capacity remains two. The installed caller
 exposed a C2/C4 output binding collision and a stale one-shot test assertion;
 both have focused reviewed repairs. The exact supported installed
-normal/repeat and source-composed native normal/repeat/sanitizer gate remains
-pending, so no installed C4 generation authority is accepted yet. This fixed
-leaf adds no EOS, `G>1` decode, persistence or CLI3 `generate`.
+normal/repeat and source-composed native normal/repeat/sanitizer gate passed;
+the fixed public C4 P2/G1 leaf merged through #163 at `3dd901b`/tree
+`b5c11cb` after 23/23 hosted checks. It adds no EOS, `G>1` decode,
+persistence or CLI3 `generate`. A [source-private fixed P2/G2 contract](g3/G3_C4_P2_G2_PRIVATE_GENERATION_PROPOSAL.md)
+is proposed for independent review before any budget-two implementation. It
+requires an internal first-token commit without partial output, a second
+position-three frame, and EOS-aware logical output length; no public P2/G2
+admission follows from the existing one-token profile.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
