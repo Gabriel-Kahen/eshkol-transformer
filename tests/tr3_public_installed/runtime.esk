@@ -1,9 +1,11 @@
 ;;; Ordinary installed X1/T2/D1/D2/M3T/P1/O2/trainer caller.
 (require transformer.config)
+(require transformer.capabilities)
 (require transformer.data)
 (require transformer.diagnostic_transport)
 (require transformer.module)
 (require transformer.optim)
+(require transformer.persistence)
 (require transformer.tokenizer)
 (require transformer.trainer)
 (require transformer.error_consumer)
@@ -367,6 +369,35 @@
               'invalid-argument 'metrics-ref
   (lambda () (metrics-ref first-step 'epochs)))
 (define first-state (trainer-state step-trainer))
+(define checkpoint-policy
+  (persistence-policy 16777216 524288 8388608 64 'cpu))
+(define checkpoint-report (capability-discover))
+(define checkpoint-a (string-append corpus-directory "/trainer-a.c2"))
+(define checkpoint-b (string-append corpus-directory "/trainer-b.c2"))
+(expect-error "forged detached state cannot be saved"
+              'invalid-argument 'checkpoint-save!
+  (lambda ()
+    (checkpoint-save! (vector 'forged) checkpoint-a
+                      checkpoint-policy '())))
+(check "public trainer state saves as C2 checkpoint"
+       (checkpoint-save! first-state checkpoint-a checkpoint-policy '()))
+(define checkpoint-metadata
+  (checkpoint-inspect checkpoint-a checkpoint-policy))
+(check "public checkpoint reports versioned SHA-256 C2 data"
+       (and (eq? (checkpoint-metadata-ref checkpoint-metadata 'format-id)
+                 'eshkol-training-state)
+            (equal? (checkpoint-metadata-ref checkpoint-metadata
+                                             'format-version) '(1 0))
+            (eq? (checkpoint-metadata-ref checkpoint-metadata
+                                          'checksum-algorithm) 'sha256)))
+(expect-error "load rejects forged capability report"
+              'invalid-argument 'checkpoint-load
+  (lambda ()
+    (checkpoint-load checkpoint-a checkpoint-policy (vector 'forged))))
+(define loaded-state
+  (checkpoint-load checkpoint-a checkpoint-policy checkpoint-report))
+(check "loaded C2 state saves byte-identically"
+       (checkpoint-save! loaded-state checkpoint-b checkpoint-policy '()))
 (define first-cursor (token-dataset-cursor dataset))
 (define mismatch-resolved
   (config-resolve
@@ -400,13 +431,20 @@
        (bytes-equal? mismatch-cursor (token-dataset-cursor mismatch-dataset)))
 (check "mismatch trainer releases" (trainer-release! mismatch-trainer))
 (check "mismatch dataset closes" (token-dataset-close! mismatch-dataset))
+(check "original detached owner releases independently of loaded owner"
+       (trainer-state-release! first-state))
+(expect-error "dead detached state cannot be saved"
+              'invalid-state 'checkpoint-save!
+  (lambda ()
+    (checkpoint-save! first-state checkpoint-a checkpoint-policy
+                      '(:overwrite? #t))))
 (define second-step (trainer-step! step-trainer))
 (check "public step increments update with old metrics stable"
        (and (= (metrics-ref second-step 'update) 2)
             (= (metrics-ref first-step 'update) 1)
             (= (metrics-ref second-step 'microbatches) 2)))
 (check "public restore rewinds the advanced trainer"
-       (trainer-load-state! step-trainer first-state))
+       (trainer-load-state! step-trainer loaded-state))
 (check "public restore recovers exact D2 cursor"
        (bytes-equal? first-cursor (token-dataset-cursor dataset)))
 (define repeated-second-step (trainer-step! step-trainer))
@@ -421,8 +459,11 @@
                (metrics-ref repeated-second-step 'microbatches))
             (= (metrics-ref second-step 'update)
                (metrics-ref repeated-second-step 'update))))
-(check "public resume owner releases after restore"
-       (trainer-state-release! first-state))
+(check "loaded resume owner releases after restore"
+       (trainer-state-release! loaded-state))
+(expect-error "released loaded state cannot restore"
+              'invalid-state 'trainer-load-state!
+  (lambda () (trainer-load-state! step-trainer loaded-state)))
 (define resumed-summary
   (trainer-train! step-trainer (trainer-stop-policy #f 2 #f)))
 (check "nonzero lifetime counters still allow invocation-delta updates"

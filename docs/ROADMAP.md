@@ -1595,7 +1595,7 @@ and image as the public installed gate. On the unchanged joint and load-entry
 fixtures it passes 67 joint and 137 load-entry checks, including rollback and
 exact 42-image restore; evidence is sealed at
 `tr3-private-load-fe9-4232666-20260928/SHA256SUMS` under the same root.
-Full public exact-resume acceptance, public checkpoint I/O packaging, and
+Full public exact-resume acceptance, public checkpoint integration, and
 independent review remain pending.
 
 An isolated state/train composition candidate combines the public snapshot and
@@ -1604,6 +1604,21 @@ facade, bridge, private root, and symbol/source inventories. The ordinary
 caller restores and repeats its next step before exercising train summaries.
 Merge conflict, shell/Python syntax, and static package-inventory checks pass;
 the combined fe9 linked gate and independent review remain pending.
+
+The bounded public checkpoint packaging candidate composes the unchanged C2
+policy, inspect, metadata, load, save, and release entries with the accepted K2
+capability facade in the same TR3 installed aggregate. The installed caller
+saves a genuine `trainer-state` result, rejects forged state/report inputs,
+loads a detached owner with its verified report, saves byte-identical C2 bytes,
+and restores the advanced trainer for the same next numerical update. The
+supported fe9 linked gate passed on the reviewed #151 head with 58 Eshkol
+sources, 31 native objects, 126 public exports, and 176 undefined runtime
+symbols. The final-head evidence
+is sealed at `tr3-public-checkpoint-package-20260928/final-head/SHA256SUMS`
+(`bb34292b...`) under the project evidence root. This is a candidate
+pending integration with the state/train composition and its linked fe9 gate;
+it does not claim the wider full-trajectory or fresh-process resume acceptance
+gate.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
