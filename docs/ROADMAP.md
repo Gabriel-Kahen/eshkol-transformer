@@ -681,6 +681,16 @@ later private features, while preserving synthetic negative rejection. All
 runtime test blobs remain identical to the gated `123505d` tree. Hosted
 #155/#157 merges and merged-head retest remain.
 
+The independently reviewed [public C4 model/input authority contract](g3/G3_C4_PUBLIC_MODEL_INPUT_AUTHORITY_PROPOSAL.md)
+is the next additive `diagnostic-c4` package leaf. Its isolated implementation
+candidate composes the accepted private C4 model/input registries into the
+existing C2 owning archive, exposes seeded model creation and exact P2 T1-to-I1
+input copy, and extends only exact C4 input release. The supported fe9 package build and fresh public callers pass normal/repeat,
+including exact export/source/native closure and unchanged C2 runtime behavior.
+Independent source-and-test review, malformed/borrow and allocation failure
+witnesses, and sanitizer evidence remain pending. This leaf does not admit a public C4 generator, result, EOS,
+repeated decode, persistence or CLI3 `generate`.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
