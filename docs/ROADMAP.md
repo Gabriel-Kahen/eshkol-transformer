@@ -650,6 +650,10 @@ fresh CLI3 pretrain checkpoint, capability-gated public LOAD and trainer
 restore, the exact restored M3T model, authentic T1 input, and public G3
 output owners. A public M3 logits argmax supplies the one-byte greedy oracle.
 The supported linked/runtime gate and CLI3 `generate` command remain pending.
+The isolated prerequisite build exposed an M3/M3T policy-dispatch collision
+from the reviewed CLI3 aggregate exports. An exact CLI3 tuple dispatch repair
+passes focused source-policy tests; independent review and the supported gate
+remain pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
