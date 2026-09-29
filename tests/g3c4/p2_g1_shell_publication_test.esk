@@ -63,19 +63,17 @@
            (g3c4-generator-create-internal model tokenizer
                                            (config mode seed)))
          (generator-entry (latest 'generator))
-         (completed-call #f)
-         (completed-output #f)
          (shell
            (g3c4-with-p2g1-output-call-internal
              'g3c4-p2g1-shell-success generator (call)
              (let ((output (prepare call)))
-               (set! completed-call call)
-               (set! completed-output output)
                (reject "unprepared joint commit" 'invalid-state
                  (lambda ()
-                   (g3c4-native-generation-frame-commit
-                     (vector-ref generator-entry 3)
-                     (vector-ref output 3))))
+                   (g3c4-native-check
+                     (g3c4-native-generation-frame-commit
+                       (vector-ref generator-entry 3)
+                       (vector-ref output 3))
+                     'g3c4-p2g1-unprepared)))
                (reject "pending shell cannot be released as live"
                        'invalid-state
                  (lambda ()
@@ -100,7 +98,7 @@
                 (dead? (latest 'call))))
     (reject "coordinator cannot publish a second time" 'invalid-state
       (lambda ()
-        (g3c4-p2g1-output-publish! completed-call completed-output)))
+        (g3c4-p2g1-output-publish! (latest 'call) (latest 'output))))
     (check "output survives generator close"
            (g3c4-generator-close-internal! generator))
     (reject "wrong-kind registered shell cannot release output"
@@ -130,9 +128,7 @@
 (define mutation-generator
   (g3c4-generator-create-internal model tokenizer (config 'greedy 17)))
 (define mutation-generator-entry (latest 'generator))
-(define observed-output #f)
-(define observed-raw #f)
-(define observed-staging #f)
+(define mutation-captures (vector #f #f #f))
 (define (run-mutation mode)
   (check "arm post-accept mutation"
          (= (shell-test-mutation mode) 0))
@@ -142,16 +138,17 @@
         'g3c4-p2g1-shell-mutated mutation-generator (call)
         (let* ((output (prepare call))
                (auxiliary (vector-ref output 8)))
-          (set! observed-output output)
-          (set! observed-raw (vector-ref auxiliary 0))
-          (set! observed-staging (vector-ref auxiliary 1))
+          (vector-set! mutation-captures 0 output)
+          (vector-set! mutation-captures 1 (vector-ref auxiliary 0))
+          (vector-set! mutation-captures 2 (vector-ref auxiliary 1))
           (g3c4-p2g1-output-publish! call output)))))
   (check "mutation rollback scrubs both carriers"
-         (and (dead? observed-output)
-              (= (bytevector-u8-ref observed-raw 0) 0)
+         (and (dead? (vector-ref mutation-captures 0))
+              (= (bytevector-u8-ref (vector-ref mutation-captures 1) 0) 0)
               (let upper ((i 0))
                 (if (= i 8) #t
-                    (and (= (bytevector-u8-ref observed-staging i) 0)
+                    (and (= (bytevector-u8-ref
+                              (vector-ref mutation-captures 2) i) 0)
                          (upper (+ i 1))))))))
 (run-mutation 1)
 (run-mutation 2)
@@ -175,11 +172,11 @@
            (g3c4-generator-create-internal model tokenizer
                                            (config 'greedy seed)))
          (generator-entry (latest 'generator))
-         (observed #f))
+         (observed (vector #f)))
     (g3c4-with-p2g1-output-call-internal
       'g3c4-p2g1-shell-held generator (call)
       (let ((output (prepare call)))
-        (set! observed output)
+        (vector-set! observed 0 output)
         (check "open scoped external lease"
                (= (if (eq? kind 'ids)
                       (shell-test-ids-borrow (vector-ref output 3) 1)
@@ -195,7 +192,7 @@
                   0))
         (g3c4-p2g1-call-rollback! call generator-entry model-entry)))
     (check "held lease explicit abort tombstones"
-           (and (dead? observed)
+           (and (dead? (vector-ref observed 0))
                 (not (vector-ref generator-entry 9))
                 (not (vector-ref m3-call-state 0))))
     (check "held lease generator closes"
