@@ -1,6 +1,6 @@
 # G3-C4 fixed private P2/G2 generation proposal
 
-**Proposed for independent contract review; no P2/G2 implementation or public
+**Independently reviewed private contract; no P2/G2 implementation or public
 admission is accepted.** Base: merged #163 `3dd901b`/tree `b5c11cb`.
 This is one source-private `(P,max G,N)=(2,2,1)` CPU-f32/V256 request on the
 existing fourteen-parameter `diagnostic-c4` model, owned I1 `[1,2]` prompt,

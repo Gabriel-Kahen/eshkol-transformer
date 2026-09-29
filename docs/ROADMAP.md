@@ -757,7 +757,7 @@ normal/repeat and source-composed native normal/repeat/sanitizer gate passed;
 the fixed public C4 P2/G1 leaf merged through #163 at `3dd901b`/tree
 `b5c11cb` after 23/23 hosted checks. It adds no EOS, `G>1` decode,
 persistence or CLI3 `generate`. A [source-private fixed P2/G2 contract](g3/G3_C4_P2_G2_PRIVATE_GENERATION_PROPOSAL.md)
-is proposed for independent review before any budget-two implementation. It
+is independently reviewed before any budget-two implementation. It
 requires an internal first-token commit without partial output, a second
 position-three frame, and EOS-aware logical output length; no public P2/G2
 admission follows from the existing one-token profile.
