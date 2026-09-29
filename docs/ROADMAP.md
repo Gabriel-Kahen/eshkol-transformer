@@ -1569,6 +1569,10 @@ differs by one ULP on the fourth post-update numerator and is checked using
 the accepted post-update tolerance, not treated as an exact native oracle.
 Independent review of `e7041cd`, explicit interruption, public resume,
 wider profiles and hosted integration remain pending.
+The docs-only [explicit interruption proposal](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
+starts from the reviewed #150 head `304a2a1` and specifies a same-thread
+caller predicate at committed update boundaries. It is unimplemented and
+requires independent contract review, including its proposed summary reason.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
