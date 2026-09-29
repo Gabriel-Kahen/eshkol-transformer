@@ -87,7 +87,7 @@
 
 (check "cache A2 read borrow begins"
        (= (coordinator-cache-borrow (vector-ref retry-entry 3) 1) 0))
-(reject "held A2 rejects and rolls back" 'invalid-state
+(reject "held A2 rejects and rolls back" 'invalid-argument
   (lambda () (g3c4-p2g1-generate-internal retry-generator prompt-a)))
 (check "cache A2 read borrow ends"
        (= (coordinator-cache-borrow (vector-ref retry-entry 3) 0) 0))
