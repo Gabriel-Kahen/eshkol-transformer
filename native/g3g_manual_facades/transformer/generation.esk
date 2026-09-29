@@ -1,7 +1,8 @@
 ;;; Installed diagnostic-C2 manual facade.
 (require transformer.error_consumer)
 
-(provide generator-create
+(provide generation-c4-input-create
+         generator-create
          generator-generate!
          generator-prefill!
          generator-decode-step!
@@ -193,3 +194,13 @@
         (vector-ref output 0)))))
 (define (diagnostic-generation-logits-bits arg0)
   (g3g-safe-diagnostic-generation-logits-bits arg0))
+
+(define generation-c4-input-create-boxed
+  (let ()
+    (extern void generation-c4-input-create-call ptr ptr :real et_e1b_public_g3c4_generation_input_create_v1)
+    (lambda (arg0)
+      (let ((output (vector #f)))
+        (generation-c4-input-create-call (vector arg0) output)
+        (vector-ref output 0)))))
+(define (generation-c4-input-create arg0)
+  (generation-c4-input-create-boxed arg0))

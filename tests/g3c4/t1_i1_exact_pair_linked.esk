@@ -1,0 +1,171 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_public_model_input_extension.esk")
+
+(extern i64 pair-test-corrupt ptr i64 i64
+        :real et_g3c4_prompt_test_t1_corrupt_v1)
+(extern i64 pair-test-swap ptr ptr
+        :real et_g3c4_prompt_test_t1_pair_swap_v1)
+(extern i64 pair-test-restore ptr
+        :real et_g3c4_prompt_test_t1_restore_v1)
+(extern i64 pair-test-foreign-data ptr
+        :real et_g3c4_prompt_test_t1_foreign_data_v1)
+(extern i64 pair-test-active-borrow ptr i64
+        :real et_g3c4_prompt_test_active_borrow_v1)
+(extern i64 pair-test-input-fail-after i64
+        :real et_g3c4_prompt_test_owner_fail_after_v1)
+(extern i64 pair-test-input-fail-reset
+        :real et_g3c4_prompt_test_owner_fail_reset_v1)
+(extern i64 pair-test-i1-fail-after i64
+        :real et_g3c4_prompt_test_i1_fail_after_v1)
+(extern i64 pair-test-i1-fail-reset
+        :real et_g3c4_prompt_test_i1_fail_reset_v1)
+(extern i64 pair-test-model-fail-after i64
+        :real et_g3c4_prompt_test_model_fail_after_v1)
+(extern i64 pair-test-model-fail-reset
+        :real et_g3c4_prompt_test_model_fail_reset_v1)
+(extern i64 pair-test-token ptr i64
+        :real et_g3c4_prompt_test_token_v1)
+(extern i64 pair-test-i1-count i64
+        :real et_g3c4_prompt_test_i1_count_v1)
+(extern i64 pair-test-transport-count i64
+        :real et_g3c4_prompt_test_transport_count_v1)
+
+(define checks 0)
+(define (check condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 exact-pair linked FAIL") (newline) (exit 1))))
+(define (public-reject category operation thunk)
+  (check
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define source (t1-wave1-tokenizer-encode tokenizer (bytevector 1 2)))
+(define other (t1-shell-create 2))
+(check (not (null? other)))
+(check (= (t1-shell-write other 0 3) 0))
+(check (= (t1-shell-write other 1 4) 0))
+(check (= (t1-shell-seal other) 0))
+(define i1-before (pair-test-i1-count 0))
+(define input-before (pair-test-transport-count 2))
+
+(define (rejected category)
+  (let ((result (g3c4-native-input-from-t1 source)))
+    (check (null? result))
+    (check (= (g3c4-native-last-error-category) category))
+    (check (= (pair-test-i1-count 0) i1-before))
+    (check (= (pair-test-transport-count 2) input-before))))
+
+(check (= (pair-test-corrupt source 1 2) 0))
+(rejected 3)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-corrupt source 6 1) 0))
+(rejected 3)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-swap source other) 0))
+(rejected 2)
+(check (= (pair-test-restore source) 0))
+(define created (g3c4-native-input-from-t1 source))
+(check (not (null? created)))
+(check (= (pair-test-token created 0) 1))
+(check (= (pair-test-token created 1) 2))
+(check (= (g3c4-native-tensor-release created) 0))
+(check (= (pair-test-i1-count 0) i1-before))
+(check (= (pair-test-transport-count 2) (+ input-before 1)))
+
+;;; Exercise the same Eshkol C4 public boundary source with authentic T1
+;;; corruption in this single-owner test aggregate. The installed facade has
+;;; no mutation capability and remains tested in g3g_manual/public_runtime.
+(define (malformed-public-reject candidate)
+  (let ((before-i1 (pair-test-i1-count 0)))
+    (public-reject 'shape-mismatch 'generation-c4-input-create
+      (lambda () (g3c4-public-generation-input-create candidate)))
+    (check (= (pair-test-i1-count 0) before-i1))))
+(check (= (pair-test-corrupt source 1 2) 0))
+(malformed-public-reject source)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-corrupt source 6 1) 0))
+(malformed-public-reject source)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-foreign-data source) 0))
+(malformed-public-reject source)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-swap source other) 0))
+(public-reject 'invalid-state 'generation-c4-input-create
+  (lambda () (g3c4-public-generation-input-create source)))
+(check (= (pair-test-i1-count 0) i1-before))
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-corrupt source 14 1) 0))
+(public-reject 'invalid-state 'generation-c4-input-create
+  (lambda () (g3c4-public-generation-input-create source)))
+(check (= (pair-test-i1-count 0) i1-before))
+(check (= (pair-test-restore source) 0))
+(define one-byte (t1-wave1-tokenizer-encode tokenizer (bytevector 1)))
+(malformed-public-reject one-byte)
+
+(define (admit-raw-test-source raw)
+  (set! t1-wave1-tensor-registry
+        (cons (vector raw) t1-wave1-tensor-registry)))
+(define raw-registry-before t1-wave1-tensor-registry)
+(define unsealed (t1-shell-create 2))
+(check (not (null? unsealed)))
+(admit-raw-test-source unsealed)
+(public-reject 'invalid-state 'generation-c4-input-create
+  (lambda () (g3c4-public-generation-input-create unsealed)))
+(set! t1-wave1-tensor-registry raw-registry-before)
+(check (= (t1-shell-abort unsealed) 0))
+(define negative (t1-shell-create 2))
+(check (= (t1-shell-write negative 0 -1) 0))
+(check (= (t1-shell-write negative 1 2) 0))
+(check (= (t1-shell-seal negative) 0))
+(admit-raw-test-source negative)
+(malformed-public-reject negative)
+(set! t1-wave1-tensor-registry raw-registry-before)
+(define large (t1-shell-create 2))
+(check (= (t1-shell-write large 0 1) 0))
+(check (= (t1-shell-write large 1 256) 0))
+(check (= (t1-shell-seal large) 0))
+(admit-raw-test-source large)
+(public-reject 'shape-mismatch 'generation-c4-input-create
+  (lambda () (g3c4-public-generation-input-create large)))
+(set! t1-wave1-tensor-registry raw-registry-before)
+(check (= (t1-shell-write source 0 9) 2))
+(check (= (t1-shell-abort source) 2))
+
+(define i1-before-input-fail (pair-test-i1-count 0))
+(check (= (pair-test-input-fail-after 0) 0))
+(public-reject 'internal 'generation-c4-input-create
+  (lambda () (g3c4-public-generation-input-create source)))
+(check (= (pair-test-input-fail-reset) 0))
+(check (= (pair-test-i1-count 0) i1-before-input-fail))
+(check (= (pair-test-i1-fail-after 0) 0))
+(public-reject 'internal 'generation-c4-input-create
+  (lambda () (g3c4-public-generation-input-create source)))
+(check (= (pair-test-i1-fail-reset) 0))
+(check (= (pair-test-i1-count 0) i1-before-input-fail))
+
+(define public-input (g3c4-public-generation-input-create source))
+(define public-entry (car (vector-ref g3c4-registry 0)))
+(check (= (pair-test-active-borrow (vector-ref public-entry 3) 1) 0))
+(public-reject 'invalid-state 'generation-tensor-release-internal!
+  (lambda () (generation-tensor-release-internal! public-input)))
+(check (= (pair-test-active-borrow (vector-ref public-entry 3) 0) 0))
+(check (generation-tensor-release-internal! public-input))
+(check (generation-tensor-release-internal! public-input))
+
+(check (= (pair-test-model-fail-after 0) 0))
+(public-reject 'internal 'diagnostic-c4-model-create-seeded
+  (lambda () (g3c4-public-model-create-seeded 1729)))
+(check (= (pair-test-model-fail-reset) 0))
+(check (g3c4-public-model-create-seeded 1729))
+(display "G3-C4 T1/I1 EXACT PAIR LINKED PASS: ")
+(display checks) (display " checks") (newline)

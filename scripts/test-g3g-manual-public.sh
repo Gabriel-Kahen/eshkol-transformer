@@ -11,8 +11,14 @@ if [[ $# == 1 ]]; then
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-g3g-manual.sh" "${g3g_artifact}"
 fi
 python3 "${PROJECT_ROOT}/scripts/check-g3g-manual-package.py" >"${g3g_evidence}/static.stdout"
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
-  >"${g3g_evidence}/q0.stdout" 2>"${g3g_evidence}/q0.stderr"
+if git -C "${PROJECT_ROOT}" ls-files --error-unmatch \
+    tests/q0/test_python_isolation.py >/dev/null 2>&1; then
+  PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.q0.test_python_isolation \
+    >"${g3g_evidence}/q0.stdout" 2>"${g3g_evidence}/q0.stderr"
+else
+  printf 'Docker worktree git metadata inaccessible; host Q0 and diff check required\n' \
+    >"${g3g_evidence}/git-metadata.stdout"
+fi
 g3g_prefix="${PROJECT_ROOT}/native/g3g_manual_package"
 if /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
     "${g3g_prefix}_root.esk" \
@@ -45,7 +51,7 @@ ar t "${g3g_artifact}/libeshkol_transformer_g3g_manual.a" \
   >"${g3g_evidence}/archive-members.txt"
 cmp "${g3g_prefix}_archive_members.txt" "${g3g_evidence}/archive-members.txt"
 if nm -g --defined-only "${g3g_artifact}/g3g_manual_package.o" | \
-    grep -E 'et_g3t_test_|et_e1b_private_|g3m-generate'; then
+    grep -E 'et_g3t_test_|et_e1b_private_|g3m-generate|et_t1_i64_shell_private_c4_read_v1|et_i64_tensor_private_t1_pair_validate_v1|et_g3c4_private_input_from_t1_p2_v1'; then
   die "G3-G manual production package exported a private or test seam"
 fi
 g3g_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
@@ -59,6 +65,23 @@ g3g_runner="$(eshkol_build_dir)/eshkol-run"
 if nm --defined-only "${g3g_evidence}/g3t-feature-off.o" | \
     grep -E 'et_g3t_(test_|private_(sample|zero|p2_zero|prompt_preflight|input_from_pair|full_request_preflight|input_from_t1|output_(ids|lengths|cache_lengths|rng)_clone|logits_copy_bits|logits_reserve|manual_))'; then
   die "G3-G manual feature-off transport exposed a gated seam"
+fi
+"${g3g_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native" \
+  -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/src/eshkol_transformer" \
+  -I "$(eshkol_source_dir)/inc" \
+  -DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE \
+  -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE \
+  -DET_G3C4_PROMPT_T1_BORROW_PRIVATE \
+  -c "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
+  -o "${g3g_evidence}/g3c4-feature-off.o"
+if nm -u --format=posix "${g3g_evidence}/g3c4-feature-off.o" | \
+    grep -F 'et_t1_i64_shell_private_c4_read_v1'; then
+  die "C4 owner feature-off path requires exact-pair authority"
+fi
+if nm -g --defined-only "${g3g_evidence}/g3c4-feature-off.o" | \
+    grep -F 'et_g3c4_private_input_from_t1_p2_v1'; then
+  die "C4 owner feature-off path exposed P2-only admission"
 fi
 g3g_compile() {
   env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
@@ -88,9 +111,9 @@ if nm -u --format=posix "${g3g_evidence}/compile_api.o" | \
   die "G3-G manual public caller retained private authority"
 fi
 nm -u --format=posix "${g3g_evidence}/compile_api.o" | \
-  awk '$1 ~ /^et_e1b_public_g3_/ {print $1}' | LC_ALL=C sort -u \
+  awk '$1 ~ /^et_e1b_public_g3(_|c4)/ {print $1}' | LC_ALL=C sort -u \
   >"${g3g_evidence}/api-g3-undefined.txt"
-grep '^et_e1b_public_g3_' "${g3g_prefix}_public_exports.txt" \
+grep -E '^et_e1b_public_g3(_|c4)' "${g3g_prefix}_public_exports.txt" \
   >"${g3g_evidence}/expected-api-g3-undefined.txt"
 cmp "${g3g_evidence}/expected-api-g3-undefined.txt" \
   "${g3g_evidence}/api-g3-undefined.txt"
@@ -108,6 +131,9 @@ for g3g_mode in normal repeat; do
   grep -Fx 'G3G-MANUAL-PUBLIC-PASS' "${g3g_evidence}/${g3g_mode}.stdout" >/dev/null
 done
 cmp "${g3g_evidence}/normal.stdout" "${g3g_evidence}/repeat.stdout"
-git -C "${PROJECT_ROOT}" diff --check
+if git -C "${PROJECT_ROOT}" rev-parse --is-inside-work-tree \
+    >/dev/null 2>&1; then
+  git -C "${PROJECT_ROOT}" diff --check
+fi
 cat "${g3g_evidence}/static.stdout"
 cat "${g3g_evidence}/normal.stdout"
