@@ -2,14 +2,14 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp python3 sha256sum timeout; do require_command "${command}"; done
+for command in ar cmp python3 realpath sha256sum timeout; do require_command "${command}"; done
 [[ $# == 1 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR"
-evidence="$1"
+evidence="$(realpath -m -- "$1")"
 mkdir -p -- "${evidence}"
 scratch="$(mktemp -d "${evidence}/.build.XXXXXX")"
 printf '%s\n' "${scratch}" >"${evidence}/scratch-path.txt"
 prefix="${PROJECT_ROOT}/tests/cli3_generate/aggregate"
-E1B_COMPILER_TIMEOUT_SECONDS=1200 \
+TMPDIR="${evidence}" E1B_COMPILER_TIMEOUT_SECONDS=1200 \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
     "${prefix}_root.esk" "${prefix}_bridge.c" \
     "${prefix}_private_renames.txt" "${prefix}_public_exports.txt" \
