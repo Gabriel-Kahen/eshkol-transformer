@@ -51,9 +51,9 @@
 (define (f32-order word)
   (check "finite oracle logit"
     (not (= (bitwise-and (arithmetic-shift word -23) 255) 255)))
-  (if (= (bitwise-and word #x80000000) 0)
-      (+ word #x80000000)
-      (- #xffffffff word)))
+  (cond ((= (bitwise-and word #x7fffffff) 0) #x80000000)
+        ((= (bitwise-and word #x80000000) 0) (+ word #x80000000))
+        (else (- #xffffffff word))))
 (define (greedy-oracle bytes)
   ;; Diagnostic public M3 emits P1 logits as 256 little-endian binary32 words.
   ;; Float ordering is exact for this finite all-f32 profile; ties choose low ID.
