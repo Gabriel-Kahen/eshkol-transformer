@@ -9,3 +9,4 @@
 (load "tr3_public_step_extension.esk")
 (load "tr3_stop_policy_extension.esk")
 (load "tr3_public_state_extension.esk")
+(load "tr3_public_train_extension.esk")

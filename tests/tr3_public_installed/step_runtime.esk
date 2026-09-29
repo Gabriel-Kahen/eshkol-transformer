@@ -11,6 +11,11 @@
 
 (extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
 (extern void set-step-fault ptr ptr :real et_tr3_test_set_step_fault_v1)
+(extern void arm-train-after-one ptr ptr
+        :real et_tr3_test_arm_train_after_one_v1)
+(extern void metrics-root ptr :real et_tr3_test_metrics_root_v1)
+(extern void set-observation-hook ptr
+        :real et_tr3_test_set_observation_hook_v1)
 (define (check label okay)
   (if (not okay)
       (begin (display "TR3-PUBLIC-STEP-FAIL ") (display label)
@@ -26,6 +31,17 @@
              (and (= (bytevector-u8-ref left index)
                      (bytevector-u8-ref right index))
                   (loop (+ index 1)))))))
+(define (published-metrics-count)
+  (let ((output (vector #f)))
+    (metrics-root output)
+    (let loop ((rows (vector-ref (vector-ref output 0) 0)) (count 0))
+      (if (null? rows) count
+          (loop (cdr rows) (+ count 1))))))
+(define (u32-le source offset)
+  (+ (bytevector-u8-ref source offset)
+     (* 256 (bytevector-u8-ref source (+ offset 1)))
+     (* 65536 (bytevector-u8-ref source (+ offset 2)))
+     (* 16777216 (bytevector-u8-ref source (+ offset 3)))))
 (define (inject! cut)
   (let ((output (vector #f)))
     (set-step-fault (vector cut) output)
@@ -43,6 +59,8 @@
   (let loop ((remaining source) (result '()))
     (if (null? remaining) result
         (loop (cdr remaining) (cons (car remaining) result)))))
+(define (list-length source)
+  (if (null? source) 0 (+ 1 (list-length (cdr source)))))
 (define (unique-paths tree)
   (let loop ((remaining (parameter-tree-paths tree)) (seen '()) (paths '()))
     (if (null? remaining) (reverse-list paths)
@@ -51,20 +69,21 @@
               (loop (cdr remaining) seen paths)
               (loop (cdr remaining) (cons handle seen)
                     (cons (car remaining) paths)))))))
-(define (dataset-options directory)
+(define (dataset-options directory maximum-total-tokens)
   (list ':directory directory ':batch-size 1 ':sequence-length 2
         ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
-        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':maximum-total-tokens maximum-total-tokens ':maximum-batch-bytes 34
         ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
 
 (define directory (car (cdr (command-line))))
+(define six-directory (car (cdr (cdr (command-line)))))
 (define resolved
   (config-resolve
     (config-parse
       "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}")
     '()))
 (define tokenizer (tokenizer-byte resolved))
-(define dataset (token-dataset-open (dataset-options directory) tokenizer))
+(define dataset (token-dataset-open (dataset-options directory 4) tokenizer))
 (define model
   (with-region ('tr3-public-step-model 65536)
     (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
@@ -116,6 +135,8 @@
             (= (metrics-ref second 'microbatches) 2)
             (= (metrics-ref second 'update) 2)
             (= (metrics-ref first 'update) 1)
+            (= (f32-bits (vector (metrics-ref second 'loss)))
+               1085108487)
             (= (f32-bits (vector (metrics-ref second 'mask-weight)))
                1077936128)))
 (check 'restore-advanced-step (trainer-load-state! trainer committed-state))
@@ -141,6 +162,233 @@
 (check 'detached-state-release (trainer-state-release! committed-state))
 (check 'release (trainer-release! trainer))
 (check 'close (token-dataset-close! dataset))
+(define train-dataset
+  (token-dataset-open (dataset-options directory 4) tokenizer))
+(define train-model
+  (with-region ('tr3-public-train-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define train-tree (module-parameters train-model))
+(define train-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths train-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    train-tree))
+(define train-trainer
+  (trainer-create resolved tokenizer train-dataset
+                  train-model train-optimizer))
+(define first-summary
+  (trainer-train! train-trainer (trainer-stop-policy #f 1 #f)))
+(check 'train-first-exact-f32
+       (and (= (f32-bits (vector (metrics-ref first-summary 'loss)))
+               1085403699)
+            (= (f32-bits (vector (metrics-ref first-summary 'mask-weight)))
+               1077936128)
+            (= (metrics-ref first-summary 'tokens) 3)
+            (= (metrics-ref first-summary 'updates) 1)
+            (= (metrics-ref first-summary 'epochs) 0)))
+(define second-summary
+  (trainer-train! train-trainer (trainer-stop-policy #f 1 #f)))
+(check 'train-update-limit-is-invocation-delta
+       (and (= (f32-bits (vector (metrics-ref second-summary 'loss)))
+               1085108487)
+            (= (f32-bits (vector (metrics-ref second-summary 'mask-weight)))
+               1077936128)
+            (= (metrics-ref second-summary 'tokens) 3)
+            (= (metrics-ref second-summary 'updates) 1)
+            (= (metrics-ref second-summary 'epochs) 1)
+            (= (metrics-ref first-summary 'updates) 1)))
+(define epoch-summary
+  (trainer-train! train-trainer (trainer-stop-policy #f #f 1)))
+(check 'train-epoch-limit-is-invocation-delta
+       (and (= (metrics-ref epoch-summary 'updates) 1)
+            (= (metrics-ref epoch-summary 'tokens) 3)
+            (= (metrics-ref epoch-summary 'epochs) 1)))
+(define token-summary
+  (trainer-train! train-trainer (trainer-stop-policy 3 #f #f)))
+(check 'train-token-limit-is-invocation-delta
+       (and (= (metrics-ref token-summary 'updates) 1)
+            (= (metrics-ref token-summary 'tokens) 3)))
+(define armed (vector #f))
+(arm-train-after-one (vector #t) armed)
+(check 'train-fault-arm (vector-ref armed 0))
+(define before-failed-train (published-metrics-count))
+(check 'train-later-step-error
+       (guard (caught
+                (#t (and (transformer-error? caught)
+                         (eq? (transformer-error-category caught)
+                              'invalid-state)
+                         (eq? (transformer-error-operation caught)
+                              'trainer-train!))))
+         (trainer-train! train-trainer
+                         (trainer-stop-policy #f 2 #f))
+         #f))
+(check 'train-failure-publishes-no-summary
+       (= (published-metrics-count) before-failed-train))
+(inject! #f)
+(define retained-commit
+  (trainer-train! train-trainer (trainer-stop-policy #f 1 #f)))
+(check 'train-earlier-commit-retained
+       (and (= (metrics-ref retained-commit 'updates) 1)
+            (= (metrics-ref first-summary 'updates) 1)
+            (= (f32-bits (vector (metrics-ref first-summary 'loss)))
+               1085403699)))
+(define retried
+  (trainer-train! train-trainer (trainer-stop-policy #f 1 #f)))
+(check 'train-failed-step-retried
+       (= (metrics-ref retried 'updates) 1))
+(check 'train-release (trainer-release! train-trainer))
+(check 'train-close (token-dataset-close! train-dataset))
+(define two-dataset
+  (token-dataset-open (dataset-options directory 4) tokenizer))
+(define two-model
+  (with-region ('tr3-public-train-two-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define two-tree (module-parameters two-model))
+(define two-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths two-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    two-tree))
+(define two-trainer
+  (trainer-create resolved tokenizer two-dataset two-model two-optimizer))
+(define two-summary
+  (trainer-train! two-trainer (trainer-stop-policy #f 2 #f)))
+;;; The separately published step trajectory has mean words 1085403699 and
+;;; 1085108487, each with physical weight 3. The ordered physical numerator
+;;; reduction produces word 1085256093 for the two-update summary.
+(check 'train-two-update-weighted-exact
+       (and (= (f32-bits (vector (metrics-ref two-summary 'loss)))
+               1085256093)
+            (= (f32-bits (vector (metrics-ref two-summary 'mask-weight)))
+               1086324736)
+            (= (metrics-ref two-summary 'tokens) 6)
+            (= (metrics-ref two-summary 'updates) 2)
+            (= (metrics-ref two-summary 'epochs) 1)))
+(check 'train-two-release (trainer-release! two-trainer))
+(check 'train-two-close (token-dataset-close! two-dataset))
+;;; A test-only hook on the unlocalized aggregate records physical objective
+;;; observations from an independent public step trajectory. The final checker
+;;; reduces those words in order and compares the installed train summary.
+(define unequal-observations '())
+(define (capture-unequal-observation stage ordinal observation)
+  (if (eq? stage 'observation)
+      (set! unequal-observations
+            (cons (bytevector-copy observation 0 12)
+                  unequal-observations)))
+  #t)
+(define unequal-dataset
+  (token-dataset-open (dataset-options six-directory 6) tokenizer))
+(define unequal-model
+  (with-region ('tr3-public-unequal-step-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define unequal-tree (module-parameters unequal-model))
+(define unequal-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths unequal-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    unequal-tree))
+(define unequal-step-trainer
+  (trainer-create resolved tokenizer unequal-dataset
+                  unequal-model unequal-optimizer))
+(set-observation-hook (vector capture-unequal-observation))
+(define unequal-step-one (trainer-step! unequal-step-trainer))
+(define unequal-step-two (trainer-step! unequal-step-trainer))
+(inject! #f)
+(define unequal-observation-rows (reverse-list unequal-observations))
+(check 'unequal-physical-observation-count
+       (= (list-length unequal-observation-rows) 4))
+(let loop ((rows unequal-observation-rows) (ordinal 0))
+  (if (null? rows) #t
+      (begin
+        (display "TR3-UNEQUAL-OBS ") (display ordinal)
+        (display " ") (display (u32-le (car rows) 0))
+        (display " ") (display (u32-le (car rows) 4))
+        (newline)
+        (loop (cdr rows) (+ ordinal 1)))))
+(display "TR3-UNEQUAL-STEP-OBS ")
+(display (f32-bits (vector (metrics-ref unequal-step-one 'loss))))
+(display " ")
+(display (f32-bits (vector (metrics-ref unequal-step-one 'mask-weight))))
+(display " ")
+(display (metrics-ref unequal-step-one 'tokens))
+(display " ")
+(display (f32-bits (vector (metrics-ref unequal-step-two 'loss))))
+(display " ")
+(display (f32-bits (vector (metrics-ref unequal-step-two 'mask-weight))))
+(display " ")
+(display (metrics-ref unequal-step-two 'tokens))
+(newline)
+(check 'unequal-independent-step-trajectory
+       (and (= (f32-bits (vector (metrics-ref unequal-step-one 'loss)))
+               1085412688)
+            (= (f32-bits (vector (metrics-ref unequal-step-one 'mask-weight)))
+               1082130432)
+            (= (metrics-ref unequal-step-one 'tokens) 4)
+            (= (metrics-ref unequal-step-one 'update) 1)
+            (> (metrics-ref unequal-step-two 'loss) 0)
+            (= (f32-bits (vector (metrics-ref unequal-step-two 'mask-weight)))
+               1077936128)
+            (= (metrics-ref unequal-step-two 'tokens) 3)
+            (= (metrics-ref unequal-step-two 'update) 2)))
+(check 'unequal-step-release (trainer-release! unequal-step-trainer))
+(check 'unequal-step-close (token-dataset-close! unequal-dataset))
+(define unequal-train-dataset
+  (token-dataset-open (dataset-options six-directory 6) tokenizer))
+(define unequal-train-model
+  (with-region ('tr3-public-unequal-train-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define unequal-train-tree (module-parameters unequal-train-model))
+(define unequal-train-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths unequal-train-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    unequal-train-tree))
+(define unequal-train-trainer
+  (trainer-create resolved tokenizer unequal-train-dataset
+                  unequal-train-model unequal-train-optimizer))
+(define before-unequal-train (published-metrics-count))
+(define unequal-summary
+  (trainer-train! unequal-train-trainer (trainer-stop-policy #f 2 #f)))
+(display "TR3-UNEQUAL-SUMMARY ")
+(display (f32-bits (vector (metrics-ref unequal-summary 'loss))))
+(display " ")
+(display (f32-bits (vector (metrics-ref unequal-summary 'mask-weight))))
+(newline)
+(check 'train-unequal-summary-counters
+       (and (= (f32-bits (vector (metrics-ref unequal-summary 'mask-weight)))
+               1088421888)
+            (= (metrics-ref unequal-summary 'tokens) 7)
+            (= (metrics-ref unequal-summary 'updates) 2)
+            (= (metrics-ref unequal-summary 'epochs) 1)
+            (= (published-metrics-count) (+ before-unequal-train 1))))
+(check 'train-unequal-summary-has-only-five-keys
+       (and (number? (metrics-ref unequal-summary 'loss))
+            (number? (metrics-ref unequal-summary 'mask-weight))
+            (exact? (metrics-ref unequal-summary 'tokens))
+            (exact? (metrics-ref unequal-summary 'updates))
+            (exact? (metrics-ref unequal-summary 'epochs))))
+(check 'train-unequal-rejects-step-key
+       (guard (caught
+                (#t (and (transformer-error? caught)
+                         (eq? (transformer-error-category caught)
+                              'invalid-argument)
+                         (eq? (transformer-error-operation caught)
+                              'metrics-ref))))
+         (metrics-ref unequal-summary 'microbatches) #f))
+(check 'unequal-train-release (trainer-release! unequal-train-trainer))
+(check 'unequal-train-close (token-dataset-close! unequal-train-dataset))
 (display "TR3-PUBLIC-STEP-AOT-PASS loss-bits=")
 (display first-loss-bits)
 (display " weight-bits=")
