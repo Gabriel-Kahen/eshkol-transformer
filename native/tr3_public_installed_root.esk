@@ -15,3 +15,4 @@
 (load "tr3_public_step_extension.esk")
 (load "tr3_public_evaluate_extension.esk")
 (load "tr3_stop_policy_extension.esk")
+(load "tr3_public_train_extension.esk")

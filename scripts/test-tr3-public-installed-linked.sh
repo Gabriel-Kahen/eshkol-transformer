@@ -9,6 +9,8 @@ cd "${PROJECT_ROOT}"
 fixed="${TR3_LINKED_COMPILER_EVIDENCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-build}"
 compiler_source="${TR3_LINKED_COMPILER_SOURCE_DIR:-${PROJECT_ROOT}/.deps/eshkol-src}"
 runtime="${TR3_LEASE_RUNTIME_CANDIDATE_DIR:-${PROJECT_ROOT}/.deps}"
+oracle="${TR3_TRAIN_ORACLE_PYTHON:-${M3_ORACLE_PYTHON:-}}"
+[[ "${oracle}" == /* && -x "${oracle}" ]] || die "pinned PyTorch oracle path required"
 pin="${PROJECT_ROOT}/tests/tr3_lease/runtime_candidate.tsv"
 [[ -f "${fixed}/eshkol-run" && -e "${compiler_source}/.git" &&
    -f "${runtime}/eshkol-build/libeshkol-runtime.a" ]] ||
@@ -58,6 +60,15 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus/step-two"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.e3_reference.corpus \
   --output "${evidence}/corpus/e3"
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
+  --output "${evidence}/corpus/step-three" --rows three
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \
+  PYTHONDONTWRITEBYTECODE=1 "${oracle}" \
+  -m tests.tr3_public_installed.check_unequal_reference \
+  >"${evidence}/unequal-reference.stdout" \
+  2>"${evidence}/unequal-reference.stderr"
+rg -Fx 'TR3-TRAIN-UNEQUAL-REFERENCE-PASS weights=4,3 loss-bits=1085208078' \
+  "${evidence}/unequal-reference.stdout" >/dev/null
 
 docker run --rm --network none \
   -e TR3_COMPILER_RUNNER="/fixed/${runner_name}" \
@@ -235,7 +246,7 @@ timeout --foreground --signal=TERM --kill-after=5s 120s \
     tests/tr3_public_installed/step_runtime.esk -o /out/step_caller \
     > /out/step-compile.stdout 2> /out/step-compile.stderr
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
-  /out/step_caller /out/corpus/step-two \
+  /out/step_caller /out/corpus/step-two /out/corpus/step-three \
   > /out/step.stdout 2> /out/step.stderr
 grep -Fx "TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128" \
   /out/step.stdout >/dev/null
@@ -270,6 +281,14 @@ clang++-21 -Wl,--gc-sections /out/metrics_bridge_unit.o \
 grep -Fx TR3-PUBLIC-METRICS-BRIDGE-PASS /out/metrics-bridge.stdout >/dev/null
 test ! -s /out/metrics-bridge.stderr
 '
+
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  -m tests.tr3_public_installed.check_unequal_witness \
+  "${evidence}/step.stdout" >"${evidence}/unequal-exact.stdout" \
+  2>"${evidence}/unequal-exact.stderr"
+rg -q '^TR3-TRAIN-UNEQUAL-EXACT-PASS loss-bits=' \
+  "${evidence}/unequal-exact.stdout"
+test ! -s "${evidence}/unequal-exact.stderr"
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
 from pathlib import Path
@@ -326,7 +345,7 @@ assert paths == ['tests/tr3_public_installed/runtime.esk',
                  '/out/facades/transformer/tokenizer.esk',
                  '/out/facades/transformer/trainer.esk'], paths
 PY
-if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^trainer-step!$|^c2-public-trainer-state-release!$' \
+if rg '^et_e1b_private_|^tr3-lease-create-internal$|^tr3-lease-unenroll-internal!$|^trainer-create$|^trainer-release!$|^trainer-step!$|^trainer-train!$|^c2-public-trainer-state-release!$' \
     "${evidence}/global-defined.txt"; then
   die "candidate package leaked private trainer authority"
 fi

@@ -62,3 +62,4 @@ native/tr3_step_composer_extension.esk
 native/tr3_public_step_extension.esk
 native/tr3_public_evaluate_extension.esk
 native/tr3_stop_policy_extension.esk
+native/tr3_public_train_extension.esk

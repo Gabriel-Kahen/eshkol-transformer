@@ -3,7 +3,7 @@
 (require transformer.error_consumer)
 
 (provide trainer-create trainer-release! trainer-step! trainer-evaluate!
-         trainer-stop-policy
+         trainer-stop-policy trainer-train!
          trainer-state-release! metrics-ref)
 
 (define tr3-safe-trainer-create
@@ -69,6 +69,19 @@
 
 (define (trainer-stop-policy max-tokens max-updates max-epochs)
   (tr3-safe-trainer-stop-policy max-tokens max-updates max-epochs))
+
+(define tr3-safe-trainer-train
+  (let ()
+    (extern void tr3-public-trainer-train ptr ptr ptr
+            :real et_e1b_public_tr3_trainer_train_v1)
+    (lambda (trainer stop-policy)
+      (let ((output (vector #f)))
+        (tr3-public-trainer-train
+          (vector trainer) (vector stop-policy) output)
+        (vector-ref output 0)))))
+
+(define (trainer-train! trainer stop-policy)
+  (tr3-safe-trainer-train trainer stop-policy))
 
 (define c2-safe-trainer-state-release
   (let ()
