@@ -1,0 +1,91 @@
+;;; One genuine fixed-profile D1/D2 traversal per retry, not repeated calls.
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.error_public)
+(require transformer.evaluation)
+(require transformer.tokenizer)
+
+(extern i64 hide-late-shard :real et_e3_horizon_hide_late_shard_v1)
+(extern i64 restore-late-shard :real et_e3_horizon_restore_late_shard_v1)
+
+(define (check label value)
+  (if (not value)
+      (begin (display "E3-HORIZON-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (dataset-options path)
+  (list ':directory path ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+
+(define arguments (cdr (command-line)))
+(check 'argument-count (and (pair? arguments)
+                            (pair? (cdr arguments))
+                            (null? (cdr (cdr arguments)))))
+(define horizon
+  (cond ((string=? (cadr arguments) "1024") 1024)
+        ((string=? (cadr arguments) "8192") 8192)
+        (else 0)))
+(check 'horizon (> horizon 0))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (tokenizer-byte config))
+(define model
+  (with-region ('e3-horizon-model 65536)
+    (diagnostic-model-create config (diagnostic-initializer-state 1729))))
+(define dataset (token-dataset-open (dataset-options (car arguments)) tokenizer))
+(define before (token-dataset-cursor dataset))
+(define arena-before (__arena-used))
+
+;; D2 open has authenticated one or eight full 2,048-token shards plus the
+;; singleton final shard. Only the final packed row reads that shard's token,
+;; so hiding it after open faults at the final row.
+(check 'hide-late-shard (= (hide-late-shard) 0))
+(define failed
+  (guard (caught (#t caught))
+    (with-region ('e3-horizon-late-failure 262144)
+      (diagnostic-evaluate-fixed! model dataset))))
+(check 'restore-late-shard (= (restore-late-shard) 0))
+(check 'late-read-error
+       (and (transformer-error? failed)
+            (eq? (transformer-error-category failed) 'io)
+            (eq? (transformer-error-operation failed) 'e3-evaluate-into!)
+            (string=? (transformer-error-message failed)
+                      "evaluation batch traversal failed")))
+(check 'failure-cursor (bytes=? before (token-dataset-cursor dataset)))
+(define arena-after-failure (__arena-used))
+
+;; A leaked batch or borrow would make this same-authority retry fail D2/E3
+;; admission. The call must consume all rows and then restore the exact cursor.
+(define report
+  (with-region ('e3-horizon-retry 262144)
+    (diagnostic-evaluate-fixed! model dataset)))
+(check 'retry-cursor (bytes=? before (token-dataset-cursor dataset)))
+(check 'retry-batches (= (diagnostic-evaluation-count report 'batches) horizon))
+(check 'retry-tokens (= (diagnostic-evaluation-count report 'tokens) (* 2 horizon)))
+(check 'retry-mask-weight
+       (= (diagnostic-evaluation-f32-bits report 'mask-weight)
+          (if (= horizon 1024) 1157627904 1182793728)))
+(check 'retry-positive-loss
+       (> (diagnostic-evaluation-f32-bits report 'loss) 0))
+(define arena-after-retry (__arena-used))
+(check 'dataset-close (token-dataset-close! dataset))
+(display "E3-HORIZON-PASS horizon=") (display horizon)
+(display " failed-stage=traversal retry-batches=") (display horizon)
+(display " retry-tokens=") (display (* 2 horizon))
+(display " arena-failure-delta=")
+(display (- arena-after-failure arena-before))
+(display " arena-retry-delta=")
+(display (- arena-after-retry arena-after-failure))
+(newline)
