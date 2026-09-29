@@ -29,6 +29,21 @@ ar rcsD "${out}/libeshkol_transformer_e3_horizon_test.a" \
 
 runner="$(eshkol_build_dir)/eshkol-run"
 compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-900}"
+# The pinned compiler emits depfiles for object compilation, not executable links.
+env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+  -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
+  -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
+  -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX \
+  -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+  XDG_CACHE_HOME="${out}/cache-closure" ESHKOL_LIB_DIR="${artifact}/facades" \
+  ESHKOL_CXX_COMPILER="${cxx}" \
+  timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
+  "${runner}" --strict-types --no-stdlib -O 2 \
+  -I "${artifact}/facades" --compile-only \
+  --emit-depfile "${out}/runtime.d" \
+  "${PROJECT_ROOT}/tests/e3_horizon/runtime.esk" \
+  -o "${out}/runtime-closure.o" \
+  >"${out}/closure.stdout" 2>"${out}/closure.stderr"
 env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
   -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
   -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
@@ -40,7 +55,6 @@ env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
   "${runner}" --strict-types --no-stdlib -O 2 \
   -I "${artifact}/facades" -L "${out}" \
   --lib eshkol_transformer_e3_horizon_test \
-  --emit-depfile "${out}/runtime.d" \
   "${PROJECT_ROOT}/tests/e3_horizon/runtime.esk" \
   -o "${out}/runtime" >"${out}/compile.stdout" 2>"${out}/compile.stderr"
 python3 - "${artifact}" "${PROJECT_ROOT}/tests/e3_horizon/runtime.esk" \
