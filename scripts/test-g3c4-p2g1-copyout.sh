@@ -168,10 +168,7 @@ WRAPPER
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/p2g1-$test" \
       >"$directory/$test.stdout" 2>"$directory/$test.stderr"
-    printf '%s\n' \
-      'Error in make-bytevector: out of memory (len=1)' \
-      'Error in make-bytevector: out of memory (len=56)' |
-      cmp - "$directory/$test.stderr"
+    test ! -s "$directory/$test.stderr"
     expected='greedy=1 categorical=1 bytevector-cuts=2 vector-cuts=2 decode-cut=1'
     grep -E "^G3-C4 P2/G1 copy-out PASS: checks=[1-9][0-9]* $expected$" \
       "$directory/$test.stdout" >/dev/null
