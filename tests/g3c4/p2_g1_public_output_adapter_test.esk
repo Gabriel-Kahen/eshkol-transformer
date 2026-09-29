@@ -1,0 +1,159 @@
+(load "p2_g1_shell_test_common.esk")
+(load "g3c4_public_model_input_extension.esk")
+(load "g3c4_p2g1_copyout_extension.esk")
+(load "g3c4_p2g1_coordinator_extension.esk")
+(load "g3c4_public_output_adapter_extension.esk")
+
+(extern i64 result-test-value ptr i64
+        :real et_g3c4_result_test_value_v1)
+(extern i64 result-test-borrow ptr i64
+        :real et_g3c4_result_test_borrow_v1)
+(extern void result-test-inject-device i64
+        :real et_g3c4_private_result_test_inject_device_v1)
+(extern i64 result-test-prior-device ptr
+        :real et_g3c4_result_test_prior_view_device_v1)
+(extern i64 result-test-shape ptr i64
+        :real et_g3c4_result_test_output_shape_v1)
+(extern i64 owner-fail-after i64
+        :real et_g3c4_output_envelope_test_owner_fail_after_v1)
+(extern i64 owner-fail-reset
+        :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
+
+(define prompt-a
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define prompt-b
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 83 89))))
+(define generator-a
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 41)))
+(define generator-b
+  (g3c4-generator-create-internal model tokenizer (config 'categorical 97)))
+(define output-a (g3c4-p2g1-generate-internal generator-a prompt-a))
+(define output-b (g3c4-p2g1-generate-internal generator-b prompt-b))
+(define native-a (vector-ref (g3c4-p2g1-output-entry-live output-a 'test) 3))
+(define native-b (vector-ref (g3c4-p2g1-output-entry-live output-b 'test) 3))
+
+(define ids-a (car (g3c4-public-generation-output-ids output-a)))
+(define ids-b (car (g3c4-public-generation-output-ids output-b)))
+(define ids-a-next (car (g3c4-public-generation-output-ids output-a)))
+(define lengths-a (g3c4-public-generation-output-lengths output-a))
+(define caches-a (g3c4-public-generation-output-cache-lengths output-a))
+(define text-a (car (g3c4-public-generation-output-text output-a)))
+(define text-a-next (car (g3c4-public-generation-output-text output-a)))
+(define rng-a (g3c4-public-generation-output-rng output-a))
+(define copy-a (g3c4-p2g1-output-copy-internal output-a))
+(define ids-a-entry (g3c4-registry-find ids-a 'test))
+(define ids-b-entry (g3c4-registry-find ids-b 'test))
+(check "fresh detached ID owners"
+       (and (not (eq? ids-a ids-a-next)) (not (eq? ids-a ids-b))
+            (= (result-test-value (vector-ref ids-a-entry 3) 5)
+               (vector-ref copy-a 1))
+            (= (result-test-value
+                 (vector-ref (g3c4-registry-find ids-a-next 'test) 3) 5)
+               (vector-ref copy-a 1))))
+(check "owned rank-one lengths and cache lengths"
+       (and (= (result-test-value
+                 (vector-ref (g3c4-registry-find lengths-a 'test) 3) 6) 1)
+            (= (result-test-value
+                 (vector-ref (g3c4-registry-find caches-a 'test) 3) 7) 3)))
+(check "raw text detached from native and sibling reads"
+       (and (not (eq? text-a text-a-next))
+            (= (bytevector-u8-ref text-a 0) (vector-ref copy-a 1))
+            (begin (bytevector-u8-set! text-a 0 17)
+                   (= (bytevector-u8-ref text-a-next 0)
+                      (vector-ref copy-a 1)))))
+(check "C4 RNG copied successor words"
+       (let ((entry (g3c4-registry-find rng-a 'test)))
+         (let loop ((index 0))
+           (if (= index 4) #t
+               (and (= (g3c4-native-rng-word-checked
+                         (vector-ref entry 3) index 'test)
+                       (vector-ref (vector-ref copy-a 4) (+ index 1)))
+                    (loop (+ index 1)))))))
+(reject "forged output" 'invalid-argument
+  (lambda () (g3c4-public-generation-output-ids (vector 'forged))))
+(reject "wrong C4 kind" 'invalid-argument
+  (lambda () (g3c4-public-generation-output-ids prompt-a)))
+(reject "wrong tensor release kind" 'invalid-argument
+  (lambda () (g3c4-public-generation-tensor-release! output-a)))
+(check "output I1 borrow begins" (= (shell-test-ids-borrow native-a 1) 0))
+(reject "held output borrow preserves output" 'invalid-state
+  (lambda () (g3c4-public-generation-output-ids output-a)))
+(check "output I1 borrow ends" (= (shell-test-ids-borrow native-a 0) 0))
+(result-test-inject-device 1)
+(reject "current borrowed view device-only rejection" 'device-mismatch
+  (lambda () (g3c4-public-generation-output-ids output-a)))
+(result-test-inject-device 0)
+(check "device injection restored and retry succeeds"
+       (= (result-test-value
+            (vector-ref
+              (g3c4-registry-find
+                (car (g3c4-public-generation-output-ids output-a)) 'test) 3)
+            5)
+          (vector-ref copy-a 1)))
+(check "prior borrowed view device does not persist"
+       (and (= (result-test-prior-device native-a) 0)
+            (pair? (g3c4-public-generation-output-ids output-a))))
+(check "malformed retained I1 shape injected"
+       (= (result-test-shape native-a 1) 0))
+(reject "malformed retained I1 rejected" 'internal
+  (lambda () (g3c4-public-generation-output-ids output-a)))
+(check "malformed retained I1 restored"
+       (= (result-test-shape native-a 0) 0))
+(check "clone I1 borrow begins"
+       (= (result-test-borrow (vector-ref ids-a-entry 3) 1) 0))
+(reject "held clone borrow rejects release" 'invalid-state
+  (lambda () (g3c4-public-generation-tensor-release! ids-a)))
+(check "clone I1 borrow ends"
+       (= (result-test-borrow (vector-ref ids-a-entry 3) 0) 0))
+(define original-native (vector-ref ids-a-entry 3))
+(vector-set! ids-a-entry 3 (vector-ref ids-b-entry 3))
+(reject "cross-clone native swap cannot release innocent owner" 'invalid-state
+  (lambda () (g3c4-public-generation-tensor-release! ids-a)))
+(vector-set! ids-a-entry 3 original-native)
+(check "B clone remains intact"
+       (>= (result-test-value (vector-ref ids-b-entry 3) 5) 0))
+(check "output release is native-first and idempotent"
+       (and (g3c4-public-generation-output-release! output-a)
+            (g3c4-public-generation-output-release! output-a)))
+(reject "dead output rejects read" 'invalid-state
+  (lambda () (g3c4-public-generation-output-text output-a)))
+(check "clones survive output and generator release"
+       (and (g3c4-generator-close-internal! generator-a)
+            (= (result-test-value (vector-ref ids-a-entry 3) 5)
+               (vector-ref copy-a 1))
+            (= (g3c4-native-rng-word-checked
+                 (vector-ref (g3c4-registry-find rng-a 'test) 3) 0 'test) 1)))
+(check "native result allocation fail injection"
+       (= (owner-fail-after 0) 0))
+(reject "failed clone publication" 'internal
+  (lambda () (g3c4-public-generation-output-ids output-b)))
+(check "allocation failure reset" (= (owner-fail-reset) 0))
+(check "same output retry after clone failure"
+       (>= (result-test-value
+             (vector-ref
+               (g3c4-registry-find
+                 (car (g3c4-public-generation-output-ids output-b)) 'test) 3)
+             5)
+           0))
+(check "independent B output remains live"
+       (= (shell-test-published native-b
+            (vector-ref (g3c4-p2g1-output-entry-live output-b 'test) 8)) 1))
+(check "release original result owners"
+       (and (g3c4-public-generation-tensor-release! ids-a)
+            (g3c4-public-generation-tensor-release! ids-a)
+            (g3c4-public-generation-tensor-release! ids-b)
+            (g3c4-public-generation-tensor-release! ids-a-next)
+            (g3c4-public-generation-tensor-release! lengths-a)
+            (g3c4-public-generation-tensor-release! caches-a)
+            (g3c4-public-generation-rng-release! rng-a)
+            (g3c4-public-generation-rng-release! rng-a)))
+(check "release second output and input owners"
+       (and (g3c4-public-generation-output-release! output-b)
+            (g3c4-generator-close-internal! generator-b)
+            (g3c4-public-generation-tensor-release! prompt-a)
+            (g3c4-public-generation-tensor-release! prompt-b)))
+(display "G3-C4 P2/G1 public adapter source-composed PASS: checks=")
+(display checks)
+(newline)

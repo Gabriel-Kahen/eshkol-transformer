@@ -705,6 +705,12 @@ clone ownership and an exact borrowed-view device check. Current retained
 I1 storage is CPU-only with no device field, so A0's non-CPU retained-state
 branch is unreachable through this fixed public profile; the proposed
 test-only in-borrow injection witnesses defensive `device-mismatch` mapping.
+An isolated source-composed C4 result-owner candidate now implements the
+fixed P2/G1 clone/device/release seam and tests it against the existing
+private producer archive. Its exact-head supported gate and independent
+source review are pending. The installed G3-G package still compiles only
+C4 model/input authority: adding C4 shell/copy-out/result symbols and routing
+its existing public wrappers requires a separate one-archive closure gate.
 Neither leaf admits EOS,
 repeated decode, persistence or CLI3 `generate`.
 
