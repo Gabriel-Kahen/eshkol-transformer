@@ -55,18 +55,23 @@ static size_t transport_count(uint32_t kind) {
   return count;
 }
 
-static et_g3c4_model_owner_internal *create_owner(void) {
+static et_g3c4_model_owner_internal *create_owner_with_identities(
+    unsigned char identity_bytes[14]) {
   et_g3c4_model_owner_internal *owner =
       et_g3c4_private_model_owner_create_seeded_v1(1729);
   CHECK(owner != NULL);
   for (int64_t index = 0; index < 14; index++)
     OK(et_g3c4_private_model_owner_bind_v1(
-        owner, index, &identities[(size_t)index]));
+        owner, index, &identity_bytes[(size_t)index]));
   for (int64_t index = 0; index < 14; index++)
     OK(et_g3c4_private_model_owner_initialize_v1(owner, index));
   OK(et_g3c4_private_model_owner_prepare_seal_v1(owner));
   OK(et_g3c4_private_model_owner_commit_seal_v1(owner));
   return owner;
+}
+
+static et_g3c4_model_owner_internal *create_owner(void) {
+  return create_owner_with_identities(identities);
 }
 
 static et_g3c4_context_internal *seed_generator(
@@ -499,13 +504,67 @@ static void retention(et_g3c4_model_owner_internal *owner) {
          "rng_bytes_1024=65536 rng_8192=8192 rng_bytes_8192=524288\n");
 }
 
+#ifdef ET_F32_TENSOR_STORAGE_QUERY_PRIVATE
+static void private_overlap_after_generator_close(
+    et_g3c4_model_owner_internal *first) {
+  et_f32_tensor_error error;
+  et_g3c4_context_internal *context = seed_generator(first, 401);
+  et_f32_tensor *first_value = first->parameters[0]->value;
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            first_value->data, first_value->byte_length) == 1);
+  OK(et_g3c4_private_generator_close_v1(context));
+  CHECK(first->state == ET_G3C4_OWNER_SEALED && first->active == NULL);
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            first_value->data, first_value->byte_length) == 1);
+
+  static unsigned char second_identities[14];
+  et_g3c4_model_owner_internal *second =
+      create_owner_with_identities(second_identities);
+  et_f32_tensor *second_value = second->parameters[0]->value;
+  CHECK(first_value != second_value);
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            first_value->data, first_value->byte_length) == 1);
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            second_value->data, second_value->byte_length) == 1);
+  et_f32_tensor_borrow *borrow = NULL;
+  OK(et_f32_tensor_borrow_begin_v1(first_value, &borrow, &error));
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            first_value->data, first_value->byte_length) == 1);
+  CHECK(et_f32_tensor_private_storage_overlap_v1(borrow,
+                                                  sizeof(*borrow)) == 1);
+  OK(et_f32_tensor_borrow_end_v1(&borrow, &error));
+
+  et_g3c4_model_owner_internal *aborted =
+      et_g3c4_private_model_owner_create_seeded_v1(402);
+  CHECK(aborted != NULL);
+  et_f32_parameter *retained_control = aborted->parameters[0];
+  OK(et_g3c4_private_model_owner_abort_v1(aborted));
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            retained_control, sizeof(*retained_control)) == 1);
+  CHECK(et_f32_tensor_private_storage_overlap_v1(
+            second_value->data, second_value->byte_length) == 1);
+}
+#endif
+
 int main(void) {
+#ifdef ET_F32_TENSOR_STORAGE_QUERY_PRIVATE
+  if (getenv("ET_I2_PRIVATE_OVERLAP_FOCUSED") != NULL) {
+    rng_lifetime();
+    et_g3c4_model_owner_internal *focused_owner = create_owner();
+    private_overlap_after_generator_close(focused_owner);
+    printf("I2 private G3 closed-generator PASS: checks=%zu\n", checks);
+    return 0;
+  }
+#endif
   layout_and_macro_surface();
   rng_lifetime();
   et_g3c4_model_owner_internal *owner = create_owner();
   policy_and_construction(owner);
   type_boundaries(owner);
   close_retry_and_scrub(owner);
+#ifdef ET_F32_TENSOR_STORAGE_QUERY_PRIVATE
+  private_overlap_after_generator_close(owner);
+#endif
   retention(owner);
   CHECK(et_g3c4_generator_test_a2_cache_count() == 0u);
   printf("G3-C4 native generator PASS: checks=%zu context_bytes=%zu "
