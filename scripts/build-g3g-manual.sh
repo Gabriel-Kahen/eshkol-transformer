@@ -27,7 +27,8 @@ mkdir -p "${g3g_manual_tmp}/facades/transformer"
 cp "${PROJECT_ROOT}/native/g3g_manual_package_facades.txt" "${g3g_manual_tmp}/facades.txt"
 while IFS= read -r g3g_facade; do
   g3g_source="${PROJECT_ROOT}/lib/${g3g_facade}"
-  if [[ "${g3g_facade}" == transformer/generation.esk ]]; then
+  if [[ "${g3g_facade}" == transformer/generation.esk ||
+        "${g3g_facade}" == transformer/diagnostic_transport.esk ]]; then
     g3g_source="${PROJECT_ROOT}/native/g3g_manual_facades/${g3g_facade}"
   fi
   [[ "$(realpath -- "${g3g_source}")" == "${g3g_source}" ]] || \

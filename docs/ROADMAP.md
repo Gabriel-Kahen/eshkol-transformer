@@ -688,8 +688,40 @@ Three independently reviewed checker-only commits update inherited Step 5,
 token-frame, prompt/prefill and output-reservation projections for accepted
 later private features, while preserving synthetic negative rejection. All
 37 G3-C4 structural checkers now pass on the composed tree; production and
-runtime test blobs remain identical to the gated `123505d` tree. Hosted
-#155/#157 merges and merged-head retest remain.
+runtime test blobs remain identical to the gated `123505d` tree. #155 and
+#157 are merged. The later copy-out integration passed 23/23 hosted checks
+on exact reviewed head `0972bed`/tree `11b7779` and merged as
+[#158](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/158) at
+`c7b0cc9`.
+
+The independently reviewed [public C4 model/input authority contract](g3/G3_C4_PUBLIC_MODEL_INPUT_AUTHORITY_PROPOSAL.md)
+is the next additive `diagnostic-c4` package leaf. Its isolated implementation
+candidate composes the accepted private C4 model/input registries into the
+existing C2 owning archive, exposes seeded model creation and exact P2 T1-to-I1
+input copy, and extends only exact C4 input release. The isolated integration
+with the reviewed T1/I1 exact-pair seam moves public P2 admission into a
+source-private validated reader before I1 allocation; the original private
+P1/P2 constructor remains available. Its new linked corruption/borrow and
+allocation witnesses, installed package normal/repeat, supported sanitizer,
+and independent source-and-test review passed at `9581b8a`/tree `fb3882d`.
+The pinned Clang 21 gate captured both underlying runner exits as zero and
+verified the 137-file
+`g3c4-public-model-input-validated-clang21-9581b8a-20260929-b/SHA256SUMS`
+seal. The reviewed integration with #158 repinned five predecessor manifests
+and passed the pinned Clang 21 installed/linked gate at `3c5e584`/tree
+`ddd06ba` (138-file seal). Composition with the newer #153/#158 main and
+hosted CI remain. This leaf does not
+admit a public C4 generator, result, EOS,
+repeated decode, persistence or CLI3 `generate`.
+
+The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
+is independently reviewed and passed a supported pinned-fe9 normal/repeat/
+sanitizer gate at `3e03e1c` (54-file seal). It binds each live sealed T1 to
+its birth I1 tensor/borrow/view/storage, validates the current descriptor
+before copying byte IDs, and adds feature-gated corruption and whole-pair-swap
+negatives. The composed public C4 input candidate passed its own
+malformed-input and ownership gate at `9581b8a` as described above. Neither
+the private prerequisite nor that gate establishes public C4 generation.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
