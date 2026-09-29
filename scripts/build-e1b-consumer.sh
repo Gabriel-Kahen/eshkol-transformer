@@ -216,13 +216,14 @@ if [[ "${cli3_tuple_requested}" == 1 ]]; then
      "${raw_package_renames}" == "${cli3_lexical_renames}" && \
      "${raw_public_exports}" == "${cli3_lexical_exports}" ]] || \
     die "CLI3 aggregate policy requires exact lexical repository inputs"
-  [[ "${#raw_include_dirs[@]}" == 6 && \
+  [[ "${#raw_include_dirs[@]}" == 7 && \
      "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
      "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
      "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
      "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
      "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
-     "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/src" ]] || \
+     "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+     "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]] || \
     die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
   for cli3_closure_manifest in \
       "${cli3_requested_lexical_source_closure}" \
