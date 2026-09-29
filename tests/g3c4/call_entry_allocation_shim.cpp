@@ -19,6 +19,9 @@ static int allocation_kind;
 static int64_t allocation_before;
 static int64_t allocation_seen;
 static int allocation_consumed;
+static int capture_active;
+static void *captured_bytevectors[2];
+static int captured_bytevector_count;
 static int handler_preparing;
 static int handler_fresh;
 static int handler_armed;
@@ -46,6 +49,10 @@ extern "C" int64_t et_g3c4_call_entry_alloc_arm_v1(
   allocation_before = before;
   allocation_seen = 0;
   allocation_consumed = 0;
+  capture_active = 1;
+  captured_bytevectors[0] = nullptr;
+  captured_bytevectors[1] = nullptr;
+  captured_bytevector_count = 0;
   return 0;
 }
 
@@ -72,10 +79,28 @@ extern "C" void *__wrap_arena_allocate_cons_with_header(arena_t *arena) {
 
 extern "C" void *__wrap_arena_allocate_with_header(
     arena_t *arena, size_t data_size, uint8_t subtype, uint8_t flags) {
-  return subtype == HEAP_SUBTYPE_BYTEVECTOR && allocation_should_fail(3)
-             ? nullptr
-             : __real_arena_allocate_with_header(
-                   arena, data_size, subtype, flags);
+  if (subtype == HEAP_SUBTYPE_BYTEVECTOR && allocation_should_fail(3))
+    return nullptr;
+  void *result = __real_arena_allocate_with_header(
+      arena, data_size, subtype, flags);
+  if (capture_active && subtype == HEAP_SUBTYPE_BYTEVECTOR && result != nullptr &&
+      captured_bytevector_count < 2)
+    captured_bytevectors[captured_bytevector_count++] = result;
+  return result;
+}
+
+extern "C" int64_t et_g3c4_call_entry_alloc_capture_zero_v1(
+    int64_t slot, int64_t expected_length) {
+  if (slot < 0 || slot > 1 || expected_length < -1) return 0;
+  if (expected_length == -1)
+    return captured_bytevectors[slot] == nullptr ? 1 : 0;
+  const void *candidate = captured_bytevectors[slot];
+  if (candidate == nullptr || *(const int64_t *)candidate != expected_length)
+    return 0;
+  const unsigned char *bytes = (const unsigned char *)candidate + 8;
+  for (int64_t i = 0; i < expected_length; ++i)
+    if (bytes[i] != 0u) return 0;
+  return 1;
 }
 
 extern "C" int64_t et_g3c4_call_entry_alloc_consumed_v1(void) {
@@ -86,6 +111,7 @@ extern "C" int64_t et_g3c4_call_entry_alloc_disarm_v1(void) {
   const int64_t seen = allocation_seen;
   allocation_kind = 0;
   allocation_consumed = 0;
+  capture_active = 0;
   return seen;
 }
 

@@ -7,29 +7,12 @@
         :real et_g3c4_call_entry_alloc_consumed_v1)
 (extern i64 allocation-disarm
         :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 allocation-capture-zero i64 i64
+        :real et_g3c4_call_entry_alloc_capture_zero_v1)
 (extern i64 shell-test-copyout-corrupt i64
         :real et_g3c4_shell_test_copyout_corrupt_v1)
 (extern i64 shell-test-copyout-corrupt-consumed
         :real et_g3c4_shell_test_copyout_corrupt_consumed_v1)
-
-;; Observe the production scrub helper without replacing its mutation. This
-;; records which scratch carrier was wiped and checks the whole payload.
-(define copyout-original-zero-bytes! g3c4-p2g1-zero-bytes!)
-(define copyout-copy-scrubs 0)
-(define copyout-stage-scrubs 0)
-(set! g3c4-p2g1-zero-bytes!
-  (lambda (value count)
-    (let ((answer (copyout-original-zero-bytes! value count)))
-      (if (= count 1)
-          (set! copyout-copy-scrubs (+ copyout-copy-scrubs 1)))
-      (if (= count 56)
-          (set! copyout-stage-scrubs (+ copyout-stage-scrubs 1)))
-      (let loop ((index 0))
-        (if (= index count)
-            answer
-            (if (= (bytevector-u8-ref value index) 0)
-                (loop (+ index 1))
-                (exit 2)))))))
 
 (define (publish-copyout mode seed)
   (let* ((generator
@@ -99,9 +82,7 @@
 (define (sweep-copyout-allocations kind)
   (let loop ((index 0))
     (if (> index 8) (exit 3))
-    (let ((caught #f)
-          (before-copy copyout-copy-scrubs)
-          (before-stage copyout-stage-scrubs))
+    (let ((caught #f))
       (check "allocation arm" (= (allocation-arm kind index) 0))
       (guard (condition (#t (set! caught condition)))
         (g3c4-p2g1-output-copy-internal shell-a))
@@ -115,12 +96,12 @@
                                'internal)))
               (check "allocation cut hit exact constructor"
                      (= seen (+ index 1)))
-              (check "partial copy scrubbed when allocated"
-                     (= (- copyout-copy-scrubs before-copy)
-                        (if (and (= kind 3) (= index 0)) 0 1)))
-              (check "partial stage scrubbed when allocated"
-                     (= (- copyout-stage-scrubs before-stage)
-                        (if (= kind 3) 0 1)))
+              (check "partial copy is absent or zeroed"
+                     (= (allocation-capture-zero
+                          0 (if (and (= kind 3) (= index 0)) -1 1)) 1))
+              (check "partial stage is absent or zeroed"
+                     (= (allocation-capture-zero
+                          1 (if (= kind 3) -1 56)) 1))
               (check "allocation cut preserved published owner"
                      (= (shell-test-published native-a raw-a) 1))
               (check "allocation cut permits same-output retry"
@@ -141,17 +122,19 @@
 
 ;; The native read succeeds, then a test-only linker wrapper changes only the
 ;; transient staging word. Eshkol decoding must reject and scrub both buffers.
-(define before-decode-copy-scrubs copyout-copy-scrubs)
-(define before-decode-stage-scrubs copyout-stage-scrubs)
+(check "post-native capture arm" (= (allocation-arm 3 100) 0))
 (check "post-native decode corruption arm"
        (= (shell-test-copyout-corrupt 1) 0))
 (reject "post-native decoded length rejects" 'invalid-state
   (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
 (check "post-native decode corruption was reached"
        (= (shell-test-copyout-corrupt-consumed) 1))
+(check "post-native capture had no allocation failure"
+       (and (= (allocation-consumed) 0)
+            (= (allocation-disarm) 2)))
 (check "decode rejection scrubs both transient carriers"
-       (and (= (- copyout-copy-scrubs before-decode-copy-scrubs) 1)
-            (= (- copyout-stage-scrubs before-decode-stage-scrubs) 1)))
+       (and (= (allocation-capture-zero 0 1) 1)
+            (= (allocation-capture-zero 1 56) 1)))
 (check "decode rejection preserves publication and retry"
        (and (= (shell-test-published native-a raw-a) 1)
             (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
