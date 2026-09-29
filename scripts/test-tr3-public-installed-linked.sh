@@ -279,8 +279,8 @@ for accumulation in 1 2 3; do
   printf "1" > "${directory}/interrupt-request.tmp"
   mv -- "${directory}/interrupt-request.tmp" "${directory}/interrupt-request"
   wait "${producer_pid}"
-  test "$(cat "${directory}/interrupt-ready")" = 1
-  test "$(cat "${directory}/interrupt-ack")" = 1
+  cmp -s <(printf "\001") "${directory}/interrupt-ready"
+  cmp -s <(printf "\001") "${directory}/interrupt-ack"
   grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS producer A=${accumulation}" \
     "/out/fresh-${accumulation}-producer.stdout" >/dev/null
   test ! -s "/out/fresh-${accumulation}-producer.stderr"
