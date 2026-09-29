@@ -1653,9 +1653,12 @@ issues the request and observes an acknowledgement. Public state/load probes
 reject during polling, with exact K checkpoint and cursor preservation checks.
 It compares final and intermediate canonical C2 bytes with the public step
 reference and compares each one-update train summary with independent step
-metrics. Focused static checks pass; the combined pinned fe9 linked gate and
-independent review remain pending. The fixed no-dropout profile supports only
-zero-RNG-state preservation.
+metrics. The combined `efd23d0` candidate passed the supported pinned fe9
+linked public gate and independent source/test review, with a 230-file seal at
+`tr3-public-train-interrupt-resume-fe9-efd23d0-20260929-a/SHA256SUMS`.
+The #153 production and test sources match that gated tree; exact-head hosted CI
+and merged-dependency retest remain. The fixed no-dropout profile supports
+only zero-RNG-state preservation.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2

@@ -85,8 +85,12 @@ The accepted fixed trainer profile has no dropout: training RNG low/high
 counters must remain zero, and a nonzero counter is rejected on restore.
 There is no authentic public fixed-profile run that advances RNG, so the
 combined candidate can prove preservation of that zero state, not continuation after
-RNG consumption. The combined train-interrupt gate remains unrun pending the
-local heavy slot and independent review. The existing installed step
+RNG consumption. The combined train-interrupt candidate at `efd23d0` passed
+the supported fe9 linked public gate and independent source/test review;
+its 230-file evidence seal is
+`tr3-public-train-interrupt-resume-fe9-efd23d0-20260929-a/SHA256SUMS`.
+The #153 production and test sources match that gated tree. Exact-head hosted CI
+and merged-dependency retest remain. The existing installed step
 caller separately injects early, mid, precommit, and rewind failures and
 checks public rollback/retry; this fresh-process witness adds corrupted-load
 and mismatched-restore preservation.

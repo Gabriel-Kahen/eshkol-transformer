@@ -139,9 +139,10 @@ error paths under the pinned fe9 runtime.
 This fixed trainer has no dropout and rejects nonzero RNG counters. The gate
 can prove exact preservation of zero RNG state, not equivalence after RNG
 consumption. That requires a separately accepted stochastic training profile.
-The implementation gate is a pinned supported linked public caller with an
-independent source/test review, followed by exact-head hosted CI and merged
-dependency retest. #149/#151/#153 must be composed before the public train
-interrupt fresh-process witness above can run; their current branches do not
-share the #150 train implementation. No new checkpoint format or unsupported
+The composed train-interrupt candidate at `efd23d0` passed the pinned
+supported fe9 linked public caller and independent source/test review. Its
+230-file evidence seal is
+`tr3-public-train-interrupt-resume-fe9-efd23d0-20260929-a/SHA256SUMS`.
+The #153 production and test sources match that gated tree. Exact-head hosted CI
+and merged-dependency retest remain. No new checkpoint format or unsupported
 device is implied.
