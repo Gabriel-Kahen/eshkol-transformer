@@ -28,6 +28,14 @@ the exact C4 generator, owned P2 prompt, tokenizer, eval/pin binding and
 available first categorical draw before prefill or output mutation. EOS is
 Eshkol `#f`/native `-1` (disabled) or one byte ID `0..255`; it never relaxes the
 `P+G<=4` admission. Prompt bytes equal to EOS do not stop generation.
+The merged `token_frame_begin_last_v1`, token-frame begin/stage/publish and
+`token_forward_v1` require `context->budget==1`. Their existing numerical
+schedule cannot simply be called for the first frame at budget two. This
+private feature must add a reviewed budget-two first-frame admission/state
+route, or explicitly gated per-frame changes to those guards, while leaving
+the budget-one P2/G1 path unchanged; it may then enter the existing
+budget-one frame admission for token two. No public or provider ABI changes
+are implied.
 
 Prefill the authentic two prompt IDs and commit length `2`, mask `1100`.
 Sample the P2 last-logit `[1,256]` row with accepted G3-S; open the
@@ -114,11 +122,17 @@ block, singleton and exhausted-second-draw cases. Force first-token EOS,
 second-token EOS and no EOS with deterministic fixtures, checking `G=1/2`,
 cache `3/4`, exact text/ID counts, and no second frame after first EOS.
 
-Cut each provider, A2, I1 borrow/copy, T1 decode, native/Eshkol allocation,
-frame prepare/commit and final-preflight site on both tokens. Assert the
-appropriate pre-first or post-first state above, no partial output,
-scrubbed unused bytes, then valid recovery/retry. Reject malformed owned
-P2 I1 descriptors/storage and IDs `-1/256`, malformed/falsified sampled
+Cut prompt-I1 borrow/copy once at its actual prefill acquisition; Step11
+token-forward receives a speculative integer, not a second prompt-I1 copy.
+Cut any new owned output-ID I1 operation only where its reviewed preparation
+places it. On each token, cut the genuine sampler/provider, A2 staging/view,
+T1 decode, native/Eshkol allocation, frame preparation and final-preflight
+sites **before** the corresponding commit. Assert the appropriate pre-first
+or post-first state above, no partial output, scrubbed unused bytes, then
+valid recovery/retry. Separately inject impossible failures in the closed
+first-prefix and terminal commit tails to prove fail-stop; do not demand a
+recoverable rollback or retry after their first mutation. Reject malformed
+owned P2 I1 descriptors/storage and IDs `-1/256`, malformed/falsified sampled
 IDs/logits/K/V, stale pins, wrong order, held I1/A2 views, forged/dead or
 cross-output native/Eshkol owners, equal raw/staging tampering, altered
 child ledger and output release under borrow. Prove feature-off symbols and
