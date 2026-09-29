@@ -23,11 +23,10 @@ an injected `precommit` failure before the first parameter write preserves
 the exact K image and controls; the same trainer then retries all three
 updates and produces the same final C2 bytes as uninterrupted execution.
 
-This remains a test-only private CPU f32 source composition. The current step
-leaf has no public next-step metrics or effective-learning-rate observation,
-so those two TR3-C §13 comparisons remain pending. Public trainer packaging,
-full failure-prefix/environment acceptance, and other model profiles remain
-separate gates.
+This remains a test-only private CPU f32 source composition. Public next-step
+metrics and effective-learning-rate observations remain pending, as do public
+trainer packaging, full failure-prefix/environment acceptance, and other model
+profiles.
 
 The later test-only `e569b8b` candidate changes this witness's O2 fixture to
 the accepted linear schedule (warmup 2, total 6, minimum ratio 0.1). Before
@@ -39,7 +38,15 @@ the four independently frozen nonconstant O2 schedule factors. This is an
 internal O2 observation; the public next-step metrics check remains pending.
 The historical 81298 gate compiled this candidate but the first process raised
 `Unhandled exception: user exception`, consistent with the documented D2
-closure incompatibility of that runner. Supported fe9 execution is pending.
+closure incompatibility of that runner. The supported fe9 gate on clean
+`5a9a0bd`/tree `021e58f` passed 246 runtime checks in nine fresh processes,
+15 canonical C2 byte comparisons, and 12 exact next-update effective-rate
+comparisons. The linear factor bits were `3f000000`, `3f800000`, `3f466666`,
+and `3f0ccccd`; the corresponding effective-rate bits matched at every update
+for `A=1,2,3`. The 42-source compile took 1:52.80, peaked at 5,922,716 KiB,
+and used no swap. All evidence verifies under
+`tr3-fresh-lr-fe9-5a9a0bd-20260928/SHA256SUMS`
+(`2d1e33dd3bb207ae0333680b9fb61e3565fac9712141d33fab33a4eaa95b915f`).
 
 The clean source `15a7c8a` (tree `68b2d56`) passed the pinned gate with
 246 runtime checks across nine processes and 15 byte comparisons. Compilation
