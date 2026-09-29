@@ -121,6 +121,7 @@ compile_mode() {
 exec $(printf '%q' "${cxx}") ${sanitize_link} "\$@" \
   -Wl,--wrap=arena_allocate_vector_with_header \
   -Wl,--wrap=arena_allocate_cons_with_header \
+  -Wl,--wrap=arena_allocate_with_header \
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler
 WRAPPER
   chmod 0500 "${directory}/cxx-wrap"
