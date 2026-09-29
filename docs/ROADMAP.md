@@ -1546,6 +1546,19 @@ exact 42-image restore; evidence is sealed at
 Full public exact-resume acceptance, public checkpoint I/O packaging, and
 independent review remain pending.
 
+The bounded public checkpoint packaging candidate composes the unchanged C2
+policy, inspect, metadata, load, save, and release entries with the accepted K2
+capability facade in the same TR3 installed aggregate. The installed caller
+saves a genuine `trainer-state` result, rejects forged state/report inputs,
+loads a detached owner with its verified report, saves byte-identical C2 bytes,
+and restores the advanced trainer for the same next numerical update. The
+supported fe9 linked gate passes with 58 Eshkol sources, 31 native objects,
+126 public exports, and 176 undefined runtime symbols. The final-head evidence
+is sealed at `tr3-public-checkpoint-package-20260928/final-head/SHA256SUMS`
+(`bb34292b...`) under the project evidence root. This is a candidate
+pending independent source/evidence review and final integration; it does not
+claim the wider full-trajectory or fresh-process resume acceptance gate.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

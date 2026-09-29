@@ -183,6 +183,8 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   > /out/caller.stdout 2> /out/caller.stderr
 grep -Fx TR3-PUBLIC-OPERANDS-PASS /out/caller.stdout >/dev/null
 test ! -s /out/caller.stderr
+cmp /out/corpus/installed-d1/trainer-a.c2 \
+    /out/corpus/installed-d1/trainer-b.c2
 
 # Keep the legacy test-only producer for the metrics-ref bit boundary witness.
 clang-21 "${flags[@]}" -I /fixed-source/inc \
@@ -280,10 +282,12 @@ paths = [path.removeprefix('/workspace/') for path in dep.split(':', 1)[1].split
 assert paths == ['tests/tr3_public_installed/runtime.esk',
                  '/out/facades/transformer/config.esk',
                  '/out/facades/transformer/error_consumer.esk',
+                 '/out/facades/transformer/capabilities.esk',
                  '/out/facades/transformer/data.esk',
                  '/out/facades/transformer/diagnostic_transport.esk',
                  '/out/facades/transformer/module.esk',
                  '/out/facades/transformer/optim.esk',
+                 '/out/facades/transformer/persistence.esk',
                  '/out/facades/transformer/tokenizer.esk',
                  '/out/facades/transformer/trainer.esk'], paths
 PY
