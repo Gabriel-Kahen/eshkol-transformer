@@ -54,6 +54,10 @@ extern eshkol_tagged_value_t et_e1b_private_tr3_trainer_load_state_cabi_v1(
     eshkol_tagged_value_t trainer, eshkol_tagged_value_t state);
 extern eshkol_tagged_value_t et_e1b_private_tr3_trainer_train_cabi_v1(
     eshkol_tagged_value_t trainer, eshkol_tagged_value_t policy);
+extern eshkol_tagged_value_t et_e1b_private_c2_persistence_policy_cabi_v1(
+    eshkol_tagged_value_t file, eshkol_tagged_value_t metadata,
+    eshkol_tagged_value_t tensor, eshkol_tagged_value_t tensors,
+    eshkol_tagged_value_t device);
 
 #if !defined(ESHKOL_HAS_F32_SCALAR_ABI_V1) || ESHKOL_HAS_F32_SCALAR_ABI_V1 != 1
 #error "public metrics-ref requires the accepted true-f32 runtime ABI"
@@ -78,14 +82,24 @@ void et_e1b_public_tr3_metrics_ref_v1(void *metrics, void *key, void *output) {
   *et_e1b_box_value_v1(output) = result;
 }
 
-TR3_PUBLIC_UNARY(et_e1b_public_c2_trainer_state_release_v1,
-                 et_e1b_private_c2_trainer_state_release_cabi_v1)
 TR3_PUBLIC_UNARY(et_e1b_public_tr3_trainer_step_v1,
                  et_e1b_private_tr3_trainer_step_cabi_v1)
 TR3_PUBLIC_UNARY(et_e1b_public_tr3_trainer_state_v1,
                  et_e1b_private_tr3_trainer_state_cabi_v1)
 TR3_PUBLIC_BINARY(et_e1b_public_tr3_trainer_load_state_v1,
                   et_e1b_private_tr3_trainer_load_state_cabi_v1)
+void et_e1b_public_c1_persistence_policy_v1(
+    void *file, void *metadata, void *tensor, void *tensors,
+    void *device, void *output) {
+  et_e1b_ensure_private_initialized_v1();
+  *et_e1b_box_value_v1(output) =
+      et_e1b_private_c2_persistence_policy_cabi_v1(
+          *et_e1b_box_value_v1(file), *et_e1b_box_value_v1(metadata),
+          *et_e1b_box_value_v1(tensor), *et_e1b_box_value_v1(tensors),
+          *et_e1b_box_value_v1(device));
+}
+#include "k2_wave2_public_wrappers.inc"
+#include "c2_wave2_public_wrappers.inc"
 void et_e1b_public_tr3_trainer_stop_policy_v1(
     void *max_tokens, void *max_updates, void *max_epochs, void *output) {
   et_e1b_ensure_private_initialized_v1();
