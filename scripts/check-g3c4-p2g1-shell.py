@@ -28,7 +28,7 @@ for phrase in (
     "accepted-byte",
 ):
     assert phrase in shell, phrase
-assert shell.index("g3t-native-output-accept-text") < shell.index(
+assert shell.index("g3c4-native-output-accept-text") < shell.index(
     "g3c4-native-generation-frame-prepare native output-native"
 ) < shell.index("g3c4-native-call-prepare-end native") < shell.index(
     "g3c4-native-generation-frame-commit native output-native"

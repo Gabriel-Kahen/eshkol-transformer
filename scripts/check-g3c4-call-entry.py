@@ -106,7 +106,7 @@ def main() -> int:
         "g3c4-rng-create-seeded-internal",
         "g3c4-rng-clone-internal",
         "g3c4-rng-release-internal!",
-        "g3c4-generator-create-internal",
+        "g3c4-generator-create-with-source",
         "g3c4-generator-close-internal!",
     )
     for name in operations:
@@ -121,12 +121,17 @@ def main() -> int:
     for bound in ("4294967295", "2147483648", "2139095040", "1065353216"):
         require(bound in text, f"integer f32 classifier omits {bound}")
 
-    generator = form("g3c4-generator-create-internal")
+    wrapper = form("g3c4-generator-create-internal")
+    ordered(wrapper, ["(g3c4-generator-create-with-source",
+                      "(g3c4-normalize-config config operation)"],
+            "private generator constructor delegation")
+    generator = form("g3c4-generator-create-with-source")
     ordered(generator, [
-        "(g3c4-normalize-config config operation)",
+        "(normalized-source)",
         "(g3c4-model-entry-live model operation #f)",
         "(vector-set! g3c4-registry 0 next)",
         "(car (vector-ref g3c4-registry 0))",
+        "(source-check source)",
         "(g3c4-native-generator-",
         "(vector-set! canonical 2 'live)",
         "(vector-set! canonical 10 #f)",
