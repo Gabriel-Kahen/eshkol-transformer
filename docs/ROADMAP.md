@@ -675,10 +675,11 @@ output-accessor adapter can be implemented or claimed.
 The [fixed C4 P2/G1 public producer proposal](g3/G3_C4_P2_G1_PUBLIC_PRODUCER_PROPOSAL.md)
 is contract-only and under independent review. It proposes an explicit
 `diagnostic-c4-p2g1` profile in one owning package, keeps the merged C2 path
-unchanged, and identifies the still-missing public C4 model/input authority
-and production P2 coordinator before `generator-generate!` can return an
-authentic C4 output. A public C4 accessor/release adapter, EOS, repeated
-decode, persistence and CLI3 remain separate gates.
+unchanged, and identifies the still-missing public C4 model/input authority,
+private production P2 coordinator and public C4 accessor/release adapter.
+Only their reviewed composition may enable `generator-generate!` to return
+an authentic C4 output. EOS, repeated decode, persistence and CLI3 remain
+separate gates.
 
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)

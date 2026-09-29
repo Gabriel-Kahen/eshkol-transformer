@@ -48,24 +48,29 @@ current public call is asserted to create either C4 owner.
 
 Use **one source-composed registry-owning archive**. Add C4 source files to
 the owning G3 package closure, never link a second copy of their module
-registries. Dispatch `generator-create` to C4 only for an exact, live C4
-model shell from the C4 model registry; all other models take the existing
-C2 path byte-for-byte, including its config validation and `P+G<=2` errors.
-For an authentic C4 model, validate the explicit public profile and config,
-same-aggregate tokenizer, eval state and native C4 owner before allocation.
+registries. A future `generator-create` wrapper first tests exact C4 model
+registry membership, including tombstoned entries. An authentic dead C4
+model rejects as `invalid-state` before any C2 fallback; an authentic live
+C4 model takes the C4 branch. Models absent from the C4 registry take the
+existing C2 path byte-for-byte, including its config validation and
+`P+G<=2` errors. For a live C4 model, validate the explicit public profile
+and config, same-aggregate tokenizer, eval state and native C4 owner before
+allocation.
 Only this authenticated public C4 branch may translate
 `diagnostic-c4-p2g1` into the existing private `diagnostic-c4` config;
 passing the public symbol directly to `g3c4-generator-create-internal`
 would be rejected. That translation grants no new native call ABI.
-The returned generator is an authentic C4 registry member, not a C2 shell
-with a changed tag. `generator-generate!` dispatches by exact, live
-generator registry membership, then requires the authentic C4 input owner;
-wrong-kind/forged/cross-aggregate is `invalid-argument`, a dead authentic
-owner is `invalid-state`. Mutable public payload tags are never authority.
-Both profile branches retain their own native owner and protected registry;
-public wrappers only route to one branch after authentication. A public
-output/accessor adapter is a later leaf and cannot use G3-T clone functions
-to read C4's cache length three.
+The C4 branch retains an authentic C4 registry member, not a C2 shell with
+a changed tag. The eventual public `generator-generate!`
+wrapper must dispatch by exact C4 generator registry membership (including
+dead entries), then require an authentic C4 input owner; wrong-kind/forged/
+cross-aggregate is `invalid-argument`, and a dead authentic owner is
+`invalid-state`. Mutable public payload tags are never authority. Both
+profile branches retain their own native owner and protected registry.
+The C4 public dispatch and return are **not enabled by the private producer
+alone**: an accepted exact-owner C4 output accessor/release adapter must
+also be present so callers can use and release the returned output. G3-T
+clone functions cannot read C4's cache length three.
 
 The C4 producer must be a **production private coordinator**, not
 `tests/g3c4/p2_g1_shell_native.c`'s `shell-test-prepare`, which hardcodes
@@ -73,14 +78,16 @@ The C4 producer must be a **production private coordinator**, not
 `g3c4-with-p2g1-output-call-internal` scope and reserves the raw/staging
 owners. Within that authenticated active call, it runs genuine P2 prefill
 from the caller's owned `[1,2]` IDs, opens the accepted G3-S last-logit
-sampling frame, and runs genuine T=1 token forward. It then decodes the
-sampled scalar with the actual V256 T1 decoder, validates native
-text acceptance and mutable carriers, prepare native output, and publish
-exactly once. The existing shell contract owns the commit cut: A2 cache,
-selected ID, RNG, native output and raw Eshkol shell become live together;
+sampling frame, and runs genuine T=1 token forward. It then invokes
+`g3c4-p2g1-output-publish!` exactly once. That existing operation performs
+native output prepare, ID copy, actual V256 T1 raw decode, native text
+acceptance, mutable-carrier rechecks, frame prepare/commit and finish; the
+coordinator must not repeat those steps. The shell contract owns the commit
+cut: A2 cache, selected ID, RNG, native output and raw Eshkol shell become
+live together;
 its preflighted native-finish/shell tail performs no fallible work. The
-producer returns that exact output shell; it does not copy out or create
-public accessor clones during the transaction.
+private producer returns that exact output shell; it does not copy out or
+create public accessor clones during the transaction.
 
 Before commit, failed prefill/frame/sampling/decode/allocation must leave
 no public output, no successor RNG, and no partial appended cache; abort
@@ -89,16 +96,19 @@ Held I1/A2 borrows reject before mutation, and an altered active child
 edge follows the reviewed shell fail-stop rule rather than aborting another
 owner. Retry from a valid state must match the independent G3-S/Philox
 sampled-ID/RNG oracle and the same-provider P3 logits/K/V reference.
-Output survives generator close. No C4 output may be passed to C2 release
-or accessor functions until an exact-owner public C4 adapter is accepted;
-that adapter must follow the separate public-profile gate's fresh-clone,
-native-first release and error requirements.
+Output survives generator close. No public `generator-generate!` call may
+return this C4 shell until an exact-owner public C4 accessor/release adapter
+is accepted and composed into the same package. No C4 output may be passed
+to C2 release or accessor functions; the C4 adapter must follow the
+separate public-profile gate's fresh-clone, native-first release and error
+requirements.
 
 ## Acceptance and remaining dependency
 
 Review the public C4 model/input authority and lifetime decisions first,
-then the production coordinator and package dispatch, then a separate C4
-output accessor/release adapter. Gate real T1 P2 prompts with at least two
+then the private production coordinator. Review and integrate the exact-owner
+C4 output accessor/release adapter before enabling public package dispatch
+or return. Gate real T1 P2 prompts with at least two
 distinct token pairs, greedy and categorical with nontrivial top-k/top-p,
 selected ID/raw parity, committed cache length three, all successor RNG
 words, two-call isolation and generator-close survival. Exercise malformed
