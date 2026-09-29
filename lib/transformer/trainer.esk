@@ -2,7 +2,8 @@
 
 (require transformer.error_consumer)
 
-(provide trainer-create trainer-release! trainer-step! trainer-stop-policy
+(provide trainer-create trainer-release! trainer-step! trainer-evaluate!
+         trainer-stop-policy
          trainer-state-release! metrics-ref)
 
 (define tr3-safe-trainer-create
@@ -42,6 +43,18 @@
 
 (define (trainer-step! trainer)
   (tr3-safe-trainer-step trainer))
+
+(define tr3-safe-trainer-evaluate
+  (let ()
+    (extern void tr3-public-trainer-evaluate ptr ptr ptr
+            :real et_e1b_public_tr3_trainer_evaluate_v1)
+    (lambda (trainer dataset)
+      (let ((output (vector #f)))
+        (tr3-public-trainer-evaluate (vector trainer) (vector dataset) output)
+        (vector-ref output 0)))))
+
+(define (trainer-evaluate! trainer dataset)
+  (tr3-safe-trainer-evaluate trainer dataset))
 
 (define tr3-safe-trainer-stop-policy
   (let ()

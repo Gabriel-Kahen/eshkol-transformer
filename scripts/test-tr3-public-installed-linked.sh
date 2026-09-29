@@ -56,6 +56,8 @@ evidence="$(readlink -f -- "${evidence}")"
   die "evidence must be outside checkout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus/step-two"
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.e3_reference.corpus \
+  --output "${evidence}/corpus/e3"
 
 docker run --rm --network none \
   -e TR3_COMPILER_RUNNER="/fixed/${runner_name}" \
@@ -72,6 +74,7 @@ export ESHKOL_LIB_DIR=/workspace/lib ESHKOL_CXX_COMPILER=/usr/bin/clang++-21
   "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
     -I native -I internal/p1/lib -I internal/c1/lib \
     -I internal/t2/lib -I internal/t1/lib -I internal/d2/lib \
+    -I internal/e3/lib \
     -I src -I lib -L /candidate/eshkol-build-canonical \
     --shared-lib --dump-ir --emit-depfile /out/private.d \
     native/tr3_public_installed_root.esk -o /out/private \
@@ -83,7 +86,7 @@ objcopy --redefine-syms=native/tr3_public_installed_private_renames.txt \
 
 flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
        -fPIC -fvisibility=hidden -fno-common -ffp-contract=off
-       -fexcess-precision=standard -frounding-math
+       -fexcess-precision=standard -frounding-math -fno-fast-math
        -I include -I native -I src)
 compile() {
   local source=$1 object=$2
@@ -96,10 +99,12 @@ compile native/checkpoint_io.c checkpoint_io.o
 compile native/kernel_abi.c kernel_abi.o
 compile src/eshkol_transformer/m3_i64_integration.c m3_i64_integration.o
 compile native/t1_i64_shell.c t1_i64_shell.o
-compile src/eshkol_transformer/m3t_f32_integration.c m3t_f32_integration.o \
+compile native/e3_d2_native.c e3_d2_native.o -DET_TR3_C_D2_RESTORE
+compile src/eshkol_transformer/m3_call_f32_integration.c m3_call_f32_integration.o \
   -DET_I2_PRIVATE_OWNED_CLONE_MATCH
-compile src/eshkol_transformer/m3_model.c m3_model.o
-compile native/d2_native.c d2_native.o -DET_TR3_C_D2_RESTORE
+compile src/eshkol_transformer/e3_frame.c e3_frame.o
+compile native/e3_evaluation_metrics_provider.c e3_evaluation_metrics_provider.o
+compile native/e3_diagnostic_destinations.c e3_diagnostic_destinations.o
 compile native/n2_primitives_provider.c n2_primitives_provider.o
 compile native/n3k_primitives_provider.c n3k_primitives_provider.o
 compile native/a2_attention_provider.c a2_attention_provider.o
@@ -130,6 +135,26 @@ compile native/tr3_c_restore_bindings.c tr3_c_restore_bindings.o \
   -DET_TR3_C_RESTORE_BINDINGS -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
   -DET_TR3_C_I2_RESTORE_PRIVATE -DET_TR3_C_O2_RESTORE_NATIVE
 compile native/tr3_public_step_metrics.c tr3_public_step_metrics.o
+# The E3 objects are exact supersets of these installed objects.  Compile
+# comparison witnesses outside the link manifest, and reject either co-link.
+mkdir -p /out/superset
+clang-21 "${flags[@]}" -DET_I2_PRIVATE_OWNED_CLONE_MATCH \
+  -c src/eshkol_transformer/m3t_f32_integration.c \
+  -o /out/superset/m3t_f32_integration.o
+clang-21 "${flags[@]}" -c src/eshkol_transformer/m3_model.c \
+  -o /out/superset/m3_model.o
+for pair in "m3_model e3_frame" "m3t_f32_integration m3_call_f32_integration"; do
+  read -r base replacement <<< "${pair}"
+  nm -g --defined-only --format=posix "/out/superset/${base}.o" | \
+    awk "{print \$1}" | LC_ALL=C sort -u > "/out/superset/${base}.symbols"
+  nm -g --defined-only --format=posix "/out/native/${replacement}.o" | \
+    awk "{print \$1}" | LC_ALL=C sort -u > "/out/superset/${replacement}.symbols"
+  test ! -s <(comm -23 "/out/superset/${base}.symbols" \
+    "/out/superset/${replacement}.symbols")
+  test ! -e "/out/native/${base}.o"
+done
+test ! -e /out/native/d2_native.o
+test -e /out/native/e3_d2_native.o
 clang-21 "${flags[@]}" -I native \
   tests/tr3_public_installed/test_step_metrics.c \
   /out/native/tr3_public_step_metrics.o -lm -o /out/step_metrics_test
@@ -216,6 +241,20 @@ grep -Fx "TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128" 
   /out/step.stdout >/dev/null
 test ! -s /out/step.stderr
 
+# Independently fixed E3 words, exact counters and EOS rollback through the
+# installed public trainer and metrics-ref, using the raw-link f32 inspector.
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_public_installed/evaluate_runtime.esk -o /out/evaluate_caller \
+    > /out/evaluate-compile.stdout 2> /out/evaluate-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
+  /out/evaluate_caller /out/corpus/e3/packed-single \
+  > /out/evaluate.stdout 2> /out/evaluate.stderr
+grep -Fx TR3-PUBLIC-EVALUATE-AOT-PASS /out/evaluate.stdout >/dev/null
+test ! -s /out/evaluate.stderr
+
 # Focused bit and counter boundary proof for the actual installed C bridge.
 clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
   -I /fixed-source/inc -c native/tr3_public_installed_bridge.c \
@@ -246,7 +285,7 @@ from pathlib import Path
 import sys
 root, evidence = map(Path, sys.argv[1:])
 deps = sorted((evidence / 'native').glob('*.d'))
-assert len(deps) == 31
+assert len(deps) == 33
 paths = set()
 for dep in deps:
     text = dep.read_text().replace('\\\n', ' ')
