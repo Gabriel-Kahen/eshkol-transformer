@@ -1837,6 +1837,38 @@ static et_g3c4_output_internal *et_g3c4_admit_output(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return NULL;
   }
+#ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
+  if (output->transport.state == ET_G3C4_OUTPUT_PUBLISHED) {
+    et_i64_tensor_error error;
+    size_t rank = 0u, stride = 0u, count = 0u, bytes = 0u;
+    uint64_t extent = 0u;
+    /* Check registry liveness before any metadata API dereferences IDs. */
+    if (et_g3c4_capture_i64(
+            et_m3_private_i64_unborrowed_v1(output->ids, &error),
+            &error) != 0 ||
+        et_g3c4_capture_i64(et_i64_tensor_rank_v1(
+            output->ids, &rank, &error), &error) != 0)
+      return NULL;
+    if (rank != 1u) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
+    if (et_g3c4_capture_i64(et_i64_tensor_shape_at_v1(
+            output->ids, 0u, &extent, &error), &error) != 0 ||
+        et_g3c4_capture_i64(et_i64_tensor_stride_bytes_at_v1(
+            output->ids, 0u, &stride, &error), &error) != 0 ||
+        et_g3c4_capture_i64(et_i64_tensor_element_count_v1(
+            output->ids, &count, &error), &error) != 0 ||
+        et_g3c4_capture_i64(et_i64_tensor_byte_length_v1(
+            output->ids, &bytes, &error), &error) != 0)
+      return NULL;
+    if (extent != 1u || stride != sizeof(int64_t) || count != 1u ||
+        bytes != sizeof(int64_t)) {
+      (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+      return NULL;
+    }
+  }
+#endif
   return output;
 }
 
@@ -3614,7 +3646,9 @@ int64_t et_g3c4_private_token_frame_abort_v1(void *candidate) {
 #endif
   if (et_g3c4_token_frame_idle(context)) return 0;
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
-  if (context->token_frame_transaction != NULL) {
+  if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY ||
+      context->token_frame_state == ET_G3C4_TOKEN_FRAME_PREPARED ||
+      context->token_frame_state == ET_G3C4_TOKEN_FRAME_END_READY) {
     et_a2_kv_cache_transaction_view *view = NULL;
     et_kernel_error error;
     if (et_g3c4_capture_kernel(
@@ -7066,7 +7100,9 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
   if (!et_g3c4_token_frame_idle(context)) {
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
-    if (context->token_frame_transaction != NULL) {
+    if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY ||
+        context->token_frame_state == ET_G3C4_TOKEN_FRAME_PREPARED ||
+        context->token_frame_state == ET_G3C4_TOKEN_FRAME_END_READY) {
       et_a2_kv_cache_transaction_view *view = NULL;
       et_kernel_error error;
       if (et_g3c4_capture_kernel(
@@ -7076,8 +7112,8 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
         return et_g3c4_error_state.category;
       if (et_a2_kv_cache_transaction_view_end_v1(&view, &error) != 0)
         abort();
-      staged_frame = 1;
     }
+    staged_frame = 1;
 #endif
     et_g3c4_token_frame_discard(context);
   }

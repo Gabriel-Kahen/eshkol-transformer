@@ -123,6 +123,25 @@ static void publication_success(
   OK(et_g3c4_private_generator_close_v1(context));
   CHECK(output->transport.state == ET_G3C4_OUTPUT_PUBLISHED);
 
+  uint64_t *shape = (uint64_t *)et_i64_tensor_test_shape_storage_v1(
+      output->ids);
+  size_t *stride = (size_t *)et_i64_tensor_test_stride_storage_v1(
+      output->ids);
+  CHECK(shape != NULL && stride != NULL);
+  shape[0] = 2u;
+  CHECK(et_g3c4_private_output_release_v1(output) != 0);
+  CHECK(output->transport.state == ET_G3C4_OUTPUT_PUBLISHED);
+  shape[0] = 1u;
+  stride[0] = 16u;
+  CHECK(et_g3c4_private_output_release_v1(output) != 0);
+  CHECK(output->transport.state == ET_G3C4_OUTPUT_PUBLISHED);
+  stride[0] = sizeof(int64_t);
+  et_i64_tensor *owned_ids = output->ids;
+  output->ids = (et_i64_tensor *)(uintptr_t)0x1000u;
+  CHECK(et_g3c4_private_output_release_v1(output) != 0);
+  CHECK(output->transport.state == ET_G3C4_OUTPUT_PUBLISHED);
+  output->ids = owned_ids;
+
   et_i64_tensor_borrow *borrow = NULL;
   et_i64_tensor_error ids_error;
   OK(et_i64_tensor_borrow_begin_v1(output->ids, &borrow, &ids_error));
@@ -236,12 +255,68 @@ static void publication_rejections(et_g3c4_model_owner_internal *owner) {
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
+static void sampled_abort_and_retry(
+    et_g3c4_model_owner_internal *owner) {
+  const int64_t prompt[2] = {0, 255};
+  float last[256], next[256];
+  int64_t token = -1, original_rng[4];
+  cache_snapshot p2, after;
+  et_g3c4_context_internal *context = create_generator(owner);
+  void *input = create_prompt(prompt, 2);
+  memcpy(original_rng, context->generator_rng_words, sizeof(original_rng));
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  et_g3c4_output_internal *output =
+      et_g3c4_private_output_reserve_v1(context, 2);
+  CHECK(output != NULL);
+  OK(et_g3c4_private_prompt_prefill_v1(context, input, last));
+  snapshot_cache(context->cache, &p2);
+  OK(et_g3c4_private_token_frame_begin_last_v1(context, last, &token));
+  CHECK(context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED);
+  OK(et_g3c4_private_call_abort_v1(context));
+  CHECK(et_g3c4_token_frame_idle(context));
+  check_dead_output(output);
+  snapshot_cache(context->cache, &after);
+  check_cache_snapshot_equal(&p2, &after);
+  CHECK(memcmp(context->generator_rng_words, original_rng,
+               sizeof(original_rng)) == 0);
+
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  output = et_g3c4_private_output_reserve_v1(context, 2);
+  CHECK(output != NULL);
+  OK(et_g3c4_private_prompt_prefill_v1(context, input, last));
+  OK(et_g3c4_private_token_frame_begin_last_v1(context, last, &token));
+  OK(et_g3c4_private_token_forward_v1(context, token, next));
+  OK(et_g3c4_private_output_prepare_v1(context, output));
+  OK(et_g3c4_private_call_abort_v1(context));
+  check_dead_output(output);
+  OK(et_g3c4_private_tensor_release_v1(input));
+  OK(et_g3c4_private_generator_close_v1(context));
+
+  context = create_generator(owner);
+  memcpy(original_rng, context->generator_rng_words, sizeof(original_rng));
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 1));
+  OK(et_g3c4_private_prefill2_v1(context, prompt, last));
+  snapshot_cache(context->cache, &p2);
+  OK(et_g3c4_private_token_frame_begin_last_v1(context, last, &token));
+  CHECK(context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED);
+  OK(et_g3c4_private_token_frame_abort_v1(context));
+  CHECK(et_g3c4_token_frame_idle(context));
+  snapshot_cache(context->cache, &after);
+  check_cache_snapshot_equal(&p2, &after);
+  CHECK(memcmp(context->generator_rng_words, original_rng,
+               sizeof(original_rng)) == 0);
+  OK(et_g3c4_private_token_frame_begin_last_v1(context, last, &token));
+  OK(et_g3c4_private_call_abort_v1(context));
+  OK(et_g3c4_private_generator_close_v1(context));
+}
+
 int main(void) {
   CHECK(et_g3c4_p2g1_pending_predecessor_main() == 0);
   et_g3c4_model_owner_internal *owner = p2g1_test_owner;
   publication_success(owner, 0);
   publication_success(owner, 1);
   publication_rejections(owner);
+  sampled_abort_and_retry(owner);
   printf("G3-C4 P2/G1 publication PASS: checks=%zu\n", checks);
   return 0;
 }
