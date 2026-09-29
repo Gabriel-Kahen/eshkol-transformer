@@ -112,17 +112,27 @@
 
 (define (g3g-public-generation-tensor-release value)
   (g3g-public-boundary 'generation-tensor-release!
-    (let ((kind (vector-ref (g3t-generator-find
-                             value 'generation-tensor-release!) 1)))
-      (if (not (or (eq? kind 'input) (eq? kind 'logits) (eq? kind 'ids)
-                   (eq? kind 'lengths) (eq? kind 'cache-lengths)))
+    (let ((c4-transport (g3c4-public-transport-member value))
+          (c4-model (g3c4-public-model-member value)))
+      (if c4-model
           (g3t-fail-raw 'invalid-argument 'generation-tensor-release! 1
-                        "expected public G3 tensor owner"))
-      (let ((released (g3t-generation-tensor-release! value)))
-        (if (eq? kind 'input)
-            (let ((record (g3g-manual-provenance-find value)))
-              (if record (vector-set! record 2 'dead))))
-        released))))
+                        "C4 model is not a tensor owner"))
+      (if c4-transport
+          (if (eq? (vector-ref c4-transport 1) 'input)
+              (generation-tensor-release-internal! value)
+              (g3t-fail-raw 'invalid-argument 'generation-tensor-release! 1
+                            "C4 identity is not a releasable input"))
+          (let ((kind (vector-ref (g3t-generator-find
+                                   value 'generation-tensor-release!) 1)))
+            (if (not (or (eq? kind 'input) (eq? kind 'logits) (eq? kind 'ids)
+                         (eq? kind 'lengths) (eq? kind 'cache-lengths)))
+                (g3t-fail-raw 'invalid-argument 'generation-tensor-release! 1
+                              "expected public G3 tensor owner"))
+            (let ((released (g3t-generation-tensor-release! value)))
+              (if (eq? kind 'input)
+                  (let ((record (g3g-manual-provenance-find value)))
+                    (if record (vector-set! record 2 'dead))))
+              released))))))
 (define (g3g-public-generation-output-release output)
   (g3g-public-boundary 'generation-output-release!
     (g3t-output-release! output)))

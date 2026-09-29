@@ -83,3 +83,14 @@ void et_e1b_public_g3_diagnostic_generation_logits_bits_v1(void *arg0, void *out
   et_e1b_ensure_private_initialized_v1();
   *et_e1b_box_value_v1(output) = et_e1b_private_g3_diagnostic_generation_logits_bits_cabi_v1(*et_e1b_box_value_v1(arg0));
 }
+
+extern eshkol_tagged_value_t et_e1b_private_g3c4_model_create_seeded_cabi_v1(eshkol_tagged_value_t arg0);
+void et_e1b_public_g3c4_model_create_seeded_v1(void *arg0, void *output) {
+  et_e1b_ensure_private_initialized_v1();
+  *et_e1b_box_value_v1(output) = et_e1b_private_g3c4_model_create_seeded_cabi_v1(*et_e1b_box_value_v1(arg0));
+}
+extern eshkol_tagged_value_t et_e1b_private_g3c4_generation_input_create_cabi_v1(eshkol_tagged_value_t arg0);
+void et_e1b_public_g3c4_generation_input_create_v1(void *arg0, void *output) {
+  et_e1b_ensure_private_initialized_v1();
+  *et_e1b_box_value_v1(output) = et_e1b_private_g3c4_generation_input_create_cabi_v1(*et_e1b_box_value_v1(arg0));
+}

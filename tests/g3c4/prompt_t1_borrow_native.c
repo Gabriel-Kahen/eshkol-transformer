@@ -1,4 +1,5 @@
 #define ET_I64_TENSOR_TESTING 1
+#define ET_T1_I64_SHELL_TESTING 1
 #define ET_M3_TESTING 1
 #define ET_F32_TENSOR_TESTING 1
 #define ET_M3_CALL_TESTING 1
@@ -19,6 +20,42 @@ extern int64_t et_m3_test_i64_counts_v1(int64_t field);
 
 static et_i64_tensor_borrow *et_g3c4_prompt_test_borrow;
 static et_g3c4_input_internal *et_g3c4_prompt_test_borrow_owner;
+
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+int64_t et_g3c4_prompt_test_t1_corrupt_v1(void *source, int64_t field,
+                                           int64_t value) {
+  return et_t1_i64_shell_test_corrupt_v1(
+      source, (int32_t)field, (uintptr_t)value);
+}
+
+int64_t et_g3c4_prompt_test_t1_pair_swap_v1(void *source, void *other) {
+  return et_t1_i64_shell_test_corrupt_v1(
+      source, ET_T1_TEST_CORRUPT_WHOLE_PAIR, (uintptr_t)other);
+}
+
+int64_t et_g3c4_prompt_test_t1_restore_v1(void *source) {
+  return et_t1_i64_shell_test_restore_v1(source);
+}
+
+int64_t et_g3c4_prompt_test_t1_foreign_data_v1(void *source) {
+  static int64_t foreign_words[2] = {7, 8};
+  return et_t1_i64_shell_test_corrupt_v1(
+      source, ET_T1_TEST_CORRUPT_DATA, (uintptr_t)foreign_words);
+}
+
+int64_t et_g3c4_prompt_test_model_fail_after_v1(int64_t allowed) {
+  if (allowed < 0) return -1;
+  et_g3c4_allocation_limit = (size_t)allowed;
+  et_g3c4_successful_allocations = 0u;
+  return 0;
+}
+
+int64_t et_g3c4_prompt_test_model_fail_reset_v1(void) {
+  et_g3c4_allocation_limit = SIZE_MAX;
+  et_g3c4_successful_allocations = 0u;
+  return 0;
+}
+#endif
 
 int64_t et_g3c4_prompt_test_transport_count_v1(int64_t kind) {
   int64_t count = 0;

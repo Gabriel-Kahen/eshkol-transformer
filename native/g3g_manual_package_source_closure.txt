@@ -37,4 +37,9 @@ native/g3m_prefill_p1_extension.esk
 native/g3m_prefill_p2_extension.esk
 native/g3m_manual_decode_extension.esk
 native/g3t_manual_logits_materialize_extension.esk
+native/g3c4_i2_construction_extension.esk
+native/g3c4_p1_construction_extension.esk
+native/g3c4_model_extension.esk
+native/g3c4_call_entry_extension.esk
+native/g3c4_public_model_input_extension.esk
 native/g3g_manual_public_extension.esk
