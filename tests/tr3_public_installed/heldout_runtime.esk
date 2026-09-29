@@ -1,0 +1,102 @@
+;;; Genuine installed CPU-f32 training and distinct D2 held-out evaluation.
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.module)
+(require transformer.optim)
+(require transformer.tokenizer)
+(require transformer.trainer)
+
+(extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+(define (check label okay)
+  (if (not okay)
+      (begin (display "TR3-HELDOUT-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((i 0))
+         (if (= i (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left i) (bytevector-u8-ref right i))
+                  (loop (+ i 1)))))))
+(define (seen? handle values)
+  (if (null? values) #f
+      (or (eq? handle (car values)) (seen? handle (cdr values)))))
+(define (reverse-list source)
+  (let loop ((left source) (result '()))
+    (if (null? left) result
+        (loop (cdr left) (cons (car left) result)))))
+(define (unique-paths tree)
+  (let loop ((left (parameter-tree-paths tree)) (seen '()) (result '()))
+    (if (null? left) (reverse-list result)
+        (let ((handle (parameter-tree-handle tree (car left))))
+          (if (seen? handle seen)
+              (loop (cdr left) seen result)
+              (loop (cdr left) (cons handle seen) (cons (car left) result)))))))
+(define (dataset-options path packing)
+  (list ':directory path ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing))
+(define (observe ordinal result)
+  (check 'validation-counts
+         (and (= (metrics-ref result 'tokens) 3)
+              (= (metrics-ref result 'batches) 2)
+              (= (f32-bits (vector (metrics-ref result 'mask-weight)))
+                 1077936128)))
+  (display "TR3-HELDOUT-OBS ") (display ordinal) (display " ")
+  (display (f32-bits (vector (metrics-ref result 'loss))))
+  (display " ") (display (f32-bits (vector (metrics-ref result 'mask-weight))))
+  (display " ") (display (metrics-ref result 'tokens))
+  (display " ") (display (metrics-ref result 'batches)) (newline))
+
+(define train-path (car (cdr (command-line))))
+(define heldout-path (car (cdr (cdr (command-line)))))
+(check 'distinct-corpora (not (string=? train-path heldout-path)))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":1}")
+    '()))
+(define tokenizer (tokenizer-byte config))
+(define training (token-dataset-open (dataset-options train-path #t) tokenizer))
+(define validation (token-dataset-open (dataset-options heldout-path #f) tokenizer))
+(define model
+  (with-region ('tr3-heldout-model 65536)
+    (diagnostic-model-create config (diagnostic-initializer-state 1729))))
+(define tree (module-parameters model))
+(define optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths tree)
+                      "3d4ccccd" "3f666666" "3f7fbe77"
+                      "322bcc77" "00000000")))
+    tree))
+(define trainer (trainer-create config tokenizer training model optimizer))
+(define train-start (token-dataset-cursor training))
+(define heldout-start (token-dataset-cursor validation))
+(define before (trainer-evaluate! trainer validation))
+(observe 0 before)
+(check 'before-cursors
+       (and (bytes=? train-start (token-dataset-cursor training))
+            (bytes=? heldout-start (token-dataset-cursor validation))))
+(define summary (trainer-train! trainer (trainer-stop-policy #f 32 #f)))
+(check 'actual-updates
+       (and (= (metrics-ref summary 'updates) 32)
+            (= (metrics-ref summary 'tokens) 64)
+            (= (metrics-ref summary 'epochs) 31)))
+(display "TR3-HELDOUT-TRAIN ")
+(display (metrics-ref summary 'updates)) (display " ")
+(display (metrics-ref summary 'tokens)) (display " ")
+(display (metrics-ref summary 'epochs)) (newline)
+(define trained-cursor (token-dataset-cursor training))
+(define after (trainer-evaluate! trainer validation))
+(observe 1 after)
+(check 'after-cursors
+       (and (bytes=? trained-cursor (token-dataset-cursor training))
+            (bytes=? heldout-start (token-dataset-cursor validation))))
+(observe 0 before)
+(check 'trainer-release (trainer-release! trainer))
+(check 'training-close (token-dataset-close! training))
+(check 'validation-close (token-dataset-close! validation))
+(display "TR3-HELDOUT-AOT-PASS") (newline)

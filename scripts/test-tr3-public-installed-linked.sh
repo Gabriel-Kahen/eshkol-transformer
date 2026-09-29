@@ -56,12 +56,22 @@ mkdir -p -- "${evidence}"
 evidence="$(readlink -f -- "${evidence}")"
 [[ "${evidence}" != "${PROJECT_ROOT}" && "${evidence}" != "${PROJECT_ROOT}/"* ]] || \
   die "evidence must be outside checkout"
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  tests.tr3_public_installed.test_overfit_source_contract \
+  tests.tr3_public_installed.test_overfit_checker \
+  tests.tr3_public_installed.test_heldout_checker \
+  >"${evidence}/learning-contract.stdout" \
+  2>"${evidence}/learning-contract.stderr"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus/step-two"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.e3_reference.corpus \
   --output "${evidence}/corpus/e3"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus/step-three" --rows three
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
+  --output "${evidence}/corpus/overfit-one" --rows one
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3_public_installed.prepare_heldout \
+  --output "${evidence}/corpus/heldout-pair"
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \
   PYTHONDONTWRITEBYTECODE=1 "${oracle}" \
   -m tests.tr3_public_installed.check_unequal_reference \
@@ -380,6 +390,33 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
 grep -Fx TR3-PUBLIC-EVALUATE-AOT-PASS /out/evaluate.stdout >/dev/null
 test ! -s /out/evaluate.stderr
 
+# One genuine D2 batch must overfit through public trainer/evaluator APIs;
+# public forward and state-dict restoration bind the change to parameters.
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_public_installed/one_batch_overfit.esk -o /out/overfit_caller \
+    > /out/overfit-compile.stdout 2> /out/overfit-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
+  /out/overfit_caller /out/corpus/overfit-one \
+  > /out/overfit.stdout 2> /out/overfit.stderr
+test ! -s /out/overfit.stderr
+
+# The two training transitions and three held-out transitions are disjoint.
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_public_installed/heldout_runtime.esk -o /out/heldout_caller \
+    > /out/heldout-compile.stdout 2> /out/heldout-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 600s \
+  /out/heldout_caller /out/corpus/heldout-pair/train \
+  /out/corpus/heldout-pair/heldout \
+  > /out/heldout.stdout 2> /out/heldout.stderr
+grep -Fx TR3-HELDOUT-AOT-PASS /out/heldout.stdout >/dev/null
+test ! -s /out/heldout.stderr
+
 # Focused bit and counter boundary proof for the actual installed C bridge.
 clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
   -I /fixed-source/inc -c native/tr3_public_installed_bridge.c \
@@ -403,6 +440,20 @@ PYTHONDONTWRITEBYTECODE=1 python3 \
 rg -q '^TR3-TRAIN-UNEQUAL-EXACT-PASS loss-bits=' \
   "${evidence}/unequal-exact.stdout"
 test ! -s "${evidence}/unequal-exact.stderr"
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  -m tests.tr3_public_installed.check_one_batch_overfit \
+  "${evidence}/overfit.stdout" >"${evidence}/overfit-check.stdout" \
+  2>"${evidence}/overfit-check.stderr"
+rg -q '^TR3-ONE-BATCH-OVERFIT-PASS initial=' \
+  "${evidence}/overfit-check.stdout"
+test ! -s "${evidence}/overfit-check.stderr"
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  -m tests.tr3_public_installed.check_heldout \
+  "${evidence}/heldout.stdout" >"${evidence}/heldout-check.stdout" \
+  2>"${evidence}/heldout-check.stderr"
+rg -q '^TR3-HELDOUT-CHECK-PASS before-bits=' \
+  "${evidence}/heldout-check.stdout"
+test ! -s "${evidence}/heldout-check.stderr"
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
 from pathlib import Path

@@ -1,0 +1,127 @@
+;;; Fixed N1/T2/V256/D2 CPU-f32, one genuine D2 batch per epoch.
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.error_consumer)
+(require transformer.model)
+(require transformer.module)
+(require transformer.optim)
+(require transformer.tokenizer)
+(require transformer.trainer)
+
+;; Inspection only: the results and training calls use installed public APIs.
+(extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+(define (check label okay)
+  (if (not okay)
+      (begin (display "TR3-OVERFIT-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (seen? handle values)
+  (if (null? values) #f
+      (or (eq? handle (car values)) (seen? handle (cdr values)))))
+(define (reverse-list source)
+  (let loop ((left source) (result '()))
+    (if (null? left) result
+        (loop (cdr left) (cons (car left) result)))))
+(define (unique-paths tree)
+  (let loop ((left (parameter-tree-paths tree)) (seen '()) (result '()))
+    (if (null? left) (reverse-list result)
+        (let ((handle (parameter-tree-handle tree (car left))))
+          (if (seen? handle seen)
+              (loop (cdr left) seen result)
+              (loop (cdr left) (cons handle seen) (cons (car left) result)))))))
+(define (dataset-options path)
+  (list ':directory path ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 2 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (loss-bits result)
+  (f32-bits (vector (metrics-ref result 'loss))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (forward-bits model input)
+  (let* ((output (model-forward model input ':deterministic? #t))
+         (logits (model-output-logits output))
+         (bits (diagnostic-model-logits-bits logits)))
+    (check 'output-release (model-output-release! output))
+    (check 'logits-release (diagnostic-model-logits-release! logits))
+    bits))
+(define (observe label result)
+  (check 'one-batch
+    (and (= (metrics-ref result 'tokens) 1)
+         (= (metrics-ref result 'batches) 1)
+         (= (f32-bits (vector (metrics-ref result 'mask-weight)))
+            1065353216)))
+  (display "TR3-OVERFIT-OBS ") (display label)
+  (display " ") (display (loss-bits result))
+  (display " ") (display (metrics-ref result 'tokens))
+  (display " ") (display (metrics-ref result 'batches))
+  (newline))
+
+(define path (car (cdr (command-line))))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":1}")
+    '()))
+(define tokenizer (tokenizer-byte config))
+(define training (token-dataset-open (dataset-options path) tokenizer))
+(define evaluation (token-dataset-open (dataset-options path) tokenizer))
+(define model
+  (with-region ('tr3-overfit-model 65536)
+    (diagnostic-model-create config (diagnostic-initializer-state 1729))))
+(define tree (module-parameters model))
+(define optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    tree))
+(define initial-state (module-state-dict model))
+(define input (diagnostic-input-create))
+(check 'input (diagnostic-input-copy! input '(3 197)))
+(define initial-logits (forward-bits model input))
+(check 'stable-initial-logits
+       (bytes=? initial-logits (forward-bits model input)))
+(define trainer (trainer-create config tokenizer training model optimizer))
+(check 'enrolled-model-forward-rejected
+  (guard (raised
+           (#t (and (transformer-error? raised)
+                    (eq? (transformer-error-category raised) 'invalid-state)
+                    (eq? (transformer-error-operation raised) 'model-forward))))
+    (model-forward model input ':deterministic? #t) #f))
+(define before (trainer-evaluate! trainer evaluation))
+(observe 'before before)
+(define repeated (trainer-evaluate! trainer evaluation))
+(observe 'repeat repeated)
+(check 'stable-baseline (= (loss-bits before) (loss-bits repeated)))
+(define summary (trainer-train! trainer (trainer-stop-policy #f 32 #f)))
+(check 'authentic-updates
+  (and (= (metrics-ref summary 'updates) 32)
+       (= (metrics-ref summary 'tokens) 32)))
+(display "TR3-OVERFIT-TRAIN ")
+(display (metrics-ref summary 'updates)) (display " ")
+(display (metrics-ref summary 'tokens)) (newline)
+(define after (trainer-evaluate! trainer evaluation))
+(observe 'after after)
+(check 'release (trainer-release! trainer))
+(define trained-state (module-state-dict model))
+(define trained-logits (forward-bits model input))
+(check 'model-forward-changed (not (bytes=? initial-logits trained-logits)))
+(check 'restore-initial-state (module-load-state-dict! model initial-state))
+(check 'initial-parameter-state-recovers-forward
+       (bytes=? initial-logits (forward-bits model input)))
+(check 'restore-trained-state (module-load-state-dict! model trained-state))
+(check 'trained-parameter-state-recovers-forward
+       (bytes=? trained-logits (forward-bits model input)))
+(check 'initial-state-release (state-dict-release! initial-state))
+(check 'trained-state-release (state-dict-release! trained-state))
+(check 'input-release (diagnostic-input-release! input))
+(check 'close-training (token-dataset-close! training))
+(check 'close-evaluation (token-dataset-close! evaluation))
