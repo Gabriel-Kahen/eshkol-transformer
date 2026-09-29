@@ -246,8 +246,7 @@ timeout --foreground --signal=TERM --kill-after=5s 120s \
 for accumulation in 1 2 3; do
   directory="/out/corpus/resume-${accumulation}"
   cp -a /out/corpus/step-two "${directory}"
-  printf '1' > "${directory}/interrupt-request"
-  for mode in baseline train-baseline producer receiver; do
+  for mode in baseline train-baseline; do
     ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
       --kill-after=5s 120s \
       /out/fresh_resume "${directory}" "${mode}" "${accumulation}" \
@@ -257,6 +256,40 @@ for accumulation in 1 2 3; do
       "/out/fresh-${accumulation}-${mode}.stdout" >/dev/null
     test ! -s "/out/fresh-${accumulation}-${mode}.stderr"
   done
+  test ! -e "${directory}/interrupt-request"
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
+    --kill-after=5s 120s \
+    /out/fresh_resume "${directory}" producer "${accumulation}" \
+    > "/out/fresh-${accumulation}-producer.stdout" \
+    2> "/out/fresh-${accumulation}-producer.stderr" &
+  producer_pid=$!
+  for ((attempt=0; attempt<1000; attempt++)); do
+    if test -f "${directory}/interrupt-ready"; then break; fi
+    if ! kill -0 "${producer_pid}" 2>/dev/null; then break; fi
+    sleep 0.01
+  done
+  if ! test -f "${directory}/interrupt-ready"; then
+    kill "${producer_pid}" 2>/dev/null || true
+    wait "${producer_pid}" 2>/dev/null || true
+    echo "producer did not publish ready after committed update" >&2
+    exit 1
+  fi
+  test ! -e "${directory}/interrupt-ack"
+  printf '1' > "${directory}/interrupt-request"
+  wait "${producer_pid}"
+  test "$(cat "${directory}/interrupt-ready")" = 1
+  test "$(cat "${directory}/interrupt-ack")" = 1
+  grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS producer A=${accumulation}" \
+    "/out/fresh-${accumulation}-producer.stdout" >/dev/null
+  test ! -s "/out/fresh-${accumulation}-producer.stderr"
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
+    --kill-after=5s 120s \
+    /out/fresh_resume "${directory}" receiver "${accumulation}" \
+    > "/out/fresh-${accumulation}-receiver.stdout" \
+    2> "/out/fresh-${accumulation}-receiver.stderr"
+  grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS receiver A=${accumulation}" \
+    "/out/fresh-${accumulation}-receiver.stdout" >/dev/null
+  test ! -s "/out/fresh-${accumulation}-receiver.stderr"
   grep -Fx 'INTERRUPT-ACK 1' \
     "/out/fresh-${accumulation}-producer.stdout" >/dev/null
   grep "^METRIC " "/out/fresh-${accumulation}-baseline.stdout" \
