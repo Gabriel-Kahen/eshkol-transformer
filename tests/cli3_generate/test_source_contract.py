@@ -34,11 +34,13 @@ class SingleRegistryContract(unittest.TestCase):
         m3 = (NATIVE / 'm3_package_bridge.c').read_text()
         g3 = (NATIVE / 'g3g_package_bridge.c').read_text()
         m3_wrappers = m3.split('#include "m3t_package_bridge.c"\n', 1)[1].strip()
+        tr3 = (NATIVE / 'tr3_public_installed_bridge.c').read_text()
         g3_wrappers = g3.split('#include "m3_package_bridge.c"\n', 1)[1].strip()
+        self.assertIn(m3_wrappers, tr3)
         self.assertEqual(bridge,
-            '/* Test-only same-registry CLI3/TR3 plus reviewed M3 and G3 wrappers. */\n'
+            '/* Test-only same-registry CLI3/TR3 plus accepted G3 wrappers. */\n'
             '#include "cli3_package_bridge.c"\n\n'
-            + m3_wrappers + '\n\n' + g3_wrappers + '\n')
+            + g3_wrappers + '\n')
 
     def test_witness_uses_public_checkpoint_and_generation(self):
         witness = (FIXTURE / 'public_runtime.esk').read_text()
