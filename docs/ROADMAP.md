@@ -1570,6 +1570,41 @@ the accepted post-update tolerance, not treated as an exact native oracle.
 Independent review of `e7041cd`, explicit interruption, public resume,
 wider profiles and hosted integration remain pending.
 
+The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
+accepted same-registry TR3-C snapshot and joint-restore entries with private
+rooted result cells. A genuine installed fixed-profile caller creates and
+releases a detached C2 state, restores an advanced trainer, repeats the next
+step, and rejects forged, dead, busy, and authentic X1 run-seed mismatch cases.
+The pinned fe9 full linked gate passed before two test-only caller extensions;
+its archive is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-state-load-d50ea6e-20260928/SHA256SUMS`.
+The changed ordinary caller and exact f32-bit replay caller pass against that
+byte-identified unchanged archive, sealed respectively at
+`tr3-public-state-load-mismatch-final-d50ea6e-20260928/SHA256SUMS` and
+`tr3-public-state-load-replay-d50ea6e-20260928/SHA256SUMS` under the same
+evidence root. A full final-test-tree rerun completed fe9 source compilation
+but exited 143 during LLVM object emission; it is not an acceptance run.
+The focused TR3-C private load-entry gate compiled, then its unchanged base
+joint-restore fixture raised an unhandled user exception before the load-entry
+suffix; both failures are retained at
+`tr3-public-state-load-private-d50ea6e-20260928/` under that evidence root.
+That gate was still selecting the historical 81298 runner, whose closure
+environment packing differs from the merged fe9 D2 native check. The
+test-only gate now pins the same fe9 compiler tree, runner, runtime archive,
+and image as the public installed gate. On the unchanged joint and load-entry
+fixtures it passes 67 joint and 137 load-entry checks, including rollback and
+exact 42-image restore; evidence is sealed at
+`tr3-private-load-fe9-4232666-20260928/SHA256SUMS` under the same root.
+Full public exact-resume acceptance, public checkpoint I/O packaging, and
+independent review remain pending.
+
+An isolated state/train composition candidate combines the public snapshot and
+atomic load entries with invocation-delta `trainer-train!` in the same installed
+facade, bridge, private root, and symbol/source inventories. The ordinary
+caller restores and repeats its next step before exercising train summaries.
+Merge conflict, shell/Python syntax, and static package-inventory checks pass;
+the combined fe9 linked gate and independent review remain pending.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21
@@ -1666,6 +1701,17 @@ comparisons; its seal is
 Root independently reran the same source/tree with the same 246 checks and
 15 byte comparisons; the verified 87-file root seal is
 `tr3-fresh-resume-root-d835a51-20260925/SHA256SUMS` (`1967e564...`).
+Test-only candidate `e569b8b`, with supported fe9 gate pin `5a9a0bd`/tree
+`021e58f`, adds a linear O2 schedule and compares native next-update factor
+and derived effective binary32 learning-rate bits across 12
+uninterrupted/producer/fresh-receiver updates. The pinned gate passed 246
+runtime checks in nine processes, 15 canonical C2 byte comparisons, and all
+12 effective-rate comparisons; its 42-source compile took 1:52.80 and peaked
+at 5,922,716 KiB with zero swaps. Evidence verifies under
+`tr3-fresh-lr-fe9-5a9a0bd-20260928/SHA256SUMS` (`2d1e33dd...`). The
+historical 81298 gate still fails before the first update with the documented
+D2 closure incompatibility. Public next-step metrics and effective-rate
+observations remain pending.
 The bounded [private TR3-C retention diagnosis](TR3_C_RETENTION_CYCLE_DIAGNOSIS.md)
 passes pinned f31/LLVM21 ASan/UBSan/LSan tests at 32 and 128 genuine
 snapshot→C2 SAVE/LOAD→joint restore cycles after one P1/C2 identity prewarm,
