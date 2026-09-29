@@ -319,9 +319,18 @@
   (and (not (eq? c4-greedy-id c4-greedy-id-next))
        (not (eq? c4-greedy-text
                  (car (generation-output-text c4-greedy-out))))))
-(expect-error "C4 generator cannot emit twice" 'invalid-state
-  'generator-generate!
-  (lambda () (generator-generate! c4-greedy c4-prompt)))
+(define c4-greedy-out-again (generator-generate! c4-greedy c4-prompt))
+(define c4-greedy-id-again
+  (car (generation-output-ids c4-greedy-out-again)))
+(define c4-greedy-text-again
+  (car (generation-output-text c4-greedy-out-again)))
+(check "same C4 generator publishes independent P2/G1 calls"
+  (and (not (eq? c4-greedy-out c4-greedy-out-again))
+       (not (eq? c4-greedy-id c4-greedy-id-again))
+       (not (eq? c4-greedy-text c4-greedy-text-again))
+       (= (bytevector-length c4-greedy-text-again) 1)
+       (= (bytevector-u8-ref c4-greedy-text 0)
+          (bytevector-u8-ref c4-greedy-text-again 0))))
 (expect-error "C4 model is not output" 'invalid-argument
   'generation-output-text
   (lambda () (generation-output-text c4-model-a)))
@@ -332,6 +341,14 @@
 (check "C4 output byte after close"
   (= (bytevector-u8-ref c4-greedy-text 0)
      (bytevector-u8-ref (car (generation-output-text c4-greedy-out)) 0)))
+(check "second C4 output survives close and releases independently"
+  (and (= (bytevector-u8-ref c4-greedy-text-again 0)
+          (bytevector-u8-ref
+            (car (generation-output-text c4-greedy-out-again)) 0))
+       (generation-output-release! c4-greedy-out-again)
+       (generation-tensor-release! c4-greedy-id-again)
+       (= (bytevector-u8-ref c4-greedy-text 0)
+          (bytevector-u8-ref (car (generation-output-text c4-greedy-out)) 0))))
 (check "C4 independent clones release"
   (and (generation-tensor-release! c4-greedy-id)
        (generation-tensor-release! c4-greedy-len)
