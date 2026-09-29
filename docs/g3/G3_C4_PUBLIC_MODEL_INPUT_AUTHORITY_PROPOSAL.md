@@ -40,11 +40,13 @@ destroy them on `generator-close!`.
 `generation-c4-input-create` accepts only a genuine same-aggregate sealed T1
 tensor. Before enrolling C4 input, authenticate T1 and require an exact
 contiguous CPU i64 rank-one length **two** descriptor and byte IDs `0..255`.
-Use the existing T1 shell length/status path and
-`et_g3c4_private_input_from_t1_v1`; the latter rechecks length and both IDs
-before allocation, copies into independent I1 `[1,2]`, and enrolls one live
-C4 native input. The wrapper rejects P1 though the private constructor also
-supports P1/P2. G3-T/C2 inputs, T1 shell copies, output-ID clones, arbitrary
+The source-private `et_g3c4_private_input_from_t1_p2_v1` uses the reviewed
+exact-pair T1 reader, then rejects P1 before any owned I1 allocation. It
+copies the validated two byte IDs into independent I1 `[1,2]` and enrolls
+one live C4 native input. The existing private constructor continues to
+support P1/P2. The public wrapper never reads legacy T1 length or storage
+before that authoritative native read. G3-T/C2 inputs, T1 shell copies,
+output-ID clones, arbitrary
 shape-matching I1 owners and raw pointers gain no C4 input authority. No T1
 borrow, model/generator reference or aliased T1 storage survives the call.
 The sealed T1 source cannot be written or normally released. Copy

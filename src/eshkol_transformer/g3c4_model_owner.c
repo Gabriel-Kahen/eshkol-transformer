@@ -2242,7 +2242,8 @@ static void et_g3c4_input_cleanup_unpublished(
   free(input);
 }
 
-void *et_g3c4_private_input_from_t1_v1(void *sealed_t1) {
+static void *et_g3c4_input_from_t1_internal(void *sealed_t1,
+                                             int require_p2) {
   int64_t words[2] = {0, 0};
   int64_t length;
   int64_t status;
@@ -2288,6 +2289,11 @@ void *et_g3c4_private_input_from_t1_v1(void *sealed_t1) {
   }
 #endif
 
+  if (require_p2 && length != 2) {
+    (void)et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+    return NULL;
+  }
+
   input = et_g3c4_input_allocate();
   if (input == NULL) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
@@ -2321,6 +2327,16 @@ void *et_g3c4_private_input_from_t1_v1(void *sealed_t1) {
   et_g3c4_enroll_input(input);
   return input;
 }
+
+void *et_g3c4_private_input_from_t1_v1(void *sealed_t1) {
+  return et_g3c4_input_from_t1_internal(sealed_t1, 0);
+}
+
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+void *et_g3c4_private_input_from_t1_p2_v1(void *sealed_t1) {
+  return et_g3c4_input_from_t1_internal(sealed_t1, 1);
+}
+#endif
 
 int64_t et_g3c4_private_tensor_release_v1(void *candidate) {
   et_g3c4_input_internal *input;

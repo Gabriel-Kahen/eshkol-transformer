@@ -1354,6 +1354,12 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     elif [[ "${g3g_package_policy}" == 1 &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_i64_integration.c" ]]; then
       package_source_flags=(-DET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
+      if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
+        package_source_flags+=(-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE)
+      fi
+    elif [[ "${package_policy}" == g3g-manual-public-aggregate &&
+            "${package_native_source}" == "${PROJECT_ROOT}/native/t1_i64_shell.c" ]]; then
+      package_source_flags=(-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE)
     elif [[ "${g3g_package_policy}" == 1 &&
             "${package_native_source}" == "${PROJECT_ROOT}/native/a2_kv_cache.c" ]]; then
       package_source_flags=(-DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
@@ -1362,7 +1368,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       package_source_flags=(
         -DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE
         -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE
-        -DET_G3C4_PROMPT_T1_BORROW_PRIVATE)
+        -DET_G3C4_PROMPT_T1_BORROW_PRIVATE
+        -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE)
     fi
     "${e1b_clean_toolchain_env[@]}" \
       "${e1b_cc}" "${package_native_cflags[@]}" "${package_source_flags[@]}" \

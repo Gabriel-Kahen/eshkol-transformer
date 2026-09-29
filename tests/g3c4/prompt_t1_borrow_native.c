@@ -36,6 +36,25 @@ int64_t et_g3c4_prompt_test_t1_pair_swap_v1(void *source, void *other) {
 int64_t et_g3c4_prompt_test_t1_restore_v1(void *source) {
   return et_t1_i64_shell_test_restore_v1(source);
 }
+
+int64_t et_g3c4_prompt_test_t1_foreign_data_v1(void *source) {
+  static int64_t foreign_words[2] = {7, 8};
+  return et_t1_i64_shell_test_corrupt_v1(
+      source, ET_T1_TEST_CORRUPT_DATA, (uintptr_t)foreign_words);
+}
+
+int64_t et_g3c4_prompt_test_model_fail_after_v1(int64_t allowed) {
+  if (allowed < 0) return -1;
+  et_g3c4_allocation_limit = (size_t)allowed;
+  et_g3c4_successful_allocations = 0u;
+  return 0;
+}
+
+int64_t et_g3c4_prompt_test_model_fail_reset_v1(void) {
+  et_g3c4_allocation_limit = SIZE_MAX;
+  et_g3c4_successful_allocations = 0u;
+  return 0;
+}
 #endif
 
 int64_t et_g3c4_prompt_test_transport_count_v1(int64_t kind) {

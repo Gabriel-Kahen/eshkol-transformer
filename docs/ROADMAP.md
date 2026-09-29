@@ -685,10 +685,13 @@ The independently reviewed [public C4 model/input authority contract](g3/G3_C4_P
 is the next additive `diagnostic-c4` package leaf. Its isolated implementation
 candidate composes the accepted private C4 model/input registries into the
 existing C2 owning archive, exposes seeded model creation and exact P2 T1-to-I1
-input copy, and extends only exact C4 input release. The supported fe9 package build and fresh public callers pass normal/repeat,
-including exact export/source/native closure and unchanged C2 runtime behavior.
-Independent source-and-test review, malformed/borrow and allocation failure
-witnesses, and sanitizer evidence remain pending. This leaf does not admit a public C4 generator, result, EOS,
+input copy, and extends only exact C4 input release. The isolated integration
+with the reviewed T1/I1 exact-pair seam moves public P2 admission into a
+source-private validated reader before I1 allocation; the original private
+P1/P2 constructor remains available. Its new linked corruption/borrow and
+allocation witnesses, installed package normal/repeat, supported sanitizer,
+and independent source-and-test review remain pending. This leaf does not
+admit a public C4 generator, result, EOS,
 repeated decode, persistence or CLI3 `generate`.
 
 The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)

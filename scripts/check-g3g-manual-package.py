@@ -15,7 +15,7 @@ facades = read("facades")
 assert len(exports) == 105 and exports == sorted(set(exports))
 assert len(strings) == 111 and strings == sorted(set(strings))
 assert len(sources) == 45 and len(sources) == len(set(sources))
-assert len(native_sources) == 56 and len(native_sources) == len(set(native_sources))
+assert len(native_sources) == 57 and len(native_sources) == len(set(native_sources))
 assert len(read("native_objects")) == 5
 assert len(facades) == 8 and facades == sorted(set(facades))
 assert read("archive_members") == ["g3g_manual_package.o"]
@@ -45,6 +45,9 @@ assert "src/eshkol_transformer/g3c4_model_owner.c" in native_sources
 assert "-DET_G3C4_NATIVE_PINS_PRIVATE" in (
     root / "scripts/build-e1b-consumer.sh"
 ).read_text()
+assert (root / "scripts/build-e1b-consumer.sh").read_text().count(
+    "-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE") == 3
+assert "native/i64_t1_pair_private.h" in native_sources
 assert "native/g3g_g0_package_bridge.c" not in native_sources
 package_root = (native / "g3g_manual_package_root.esk").read_text()
 for name in (name for name in sources[-6:]
