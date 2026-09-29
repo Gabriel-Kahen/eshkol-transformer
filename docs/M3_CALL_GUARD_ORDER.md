@@ -70,9 +70,12 @@ and source-input manifest SHA-256
 This is focused witness evidence; it is not full integration CI or runtime-pin
 adoption.
 
-The identical reviewed implementation and witness fixture were replayed onto main
-at `c9dce36`; the ten changed files have the same blobs as `dda768b`. Main now
-pins the descendant fe9 runtime. The script is prepared to require clean
+The reviewed implementation and witness fixture were replayed onto main at
+`c9dce36`; nine issue-117 source, test and document files have the same blobs
+as `dda768b`. The tenth, `tests/m3cg/predecessor_sources.sha256`, records an
+intervening main change to the `native/f32_tensor.c` digest (`cf66922` to
+`cea6694`). Main now pins the descendant fe9 runtime. The script is prepared
+to require clean
 `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9` (tree
 `66c21f7ec19b1b4a42199fa30ed8e0e9727021bf`), the supported-image
 `eshkol-run` SHA-256 `7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa`,
