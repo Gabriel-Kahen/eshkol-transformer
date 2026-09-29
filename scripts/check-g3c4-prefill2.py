@@ -36,10 +36,18 @@ def check():
     symbol = "et_g3c4_private_prefill2_v1"
     require(source.count(symbol) == 1 and header.count(symbol) == 1,
             "source-private P2 prefill boundary changed")
-    start = source.index(f"int64_t {symbol}")
+    # Later guarded P2/G2 work retains this numerical body behind a static
+    # adapter; the standalone raw-pointer entry still has its original ABI.
+    guarded = "static int64_t et_g3c4_prefill2_impl(" in source
+    start = source.index("static int64_t et_g3c4_prefill2_impl(") if guarded \
+        else source.index(f"int64_t {symbol}")
     end = source.index(
         "\n#endif\n#endif\n#endif\n\n#ifdef ET_G3C4_LAST", start)
     body = source[start:end]
+    if guarded:
+        require("return et_g3c4_prefill2_impl(\n"
+                "      candidate, token_ids, last_logits_output, NULL, NULL);" in body,
+                "standalone P2 prefill gained owned-prompt authority")
     ordered(body, [
         "et_g3c4_range_valid(token_ids, 2u",
         "token_ids[index] < 0 || token_ids[index] > 255",

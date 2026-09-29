@@ -776,7 +776,19 @@ persistence or CLI3 `generate`. A [source-private fixed P2/G2 contract](g3/G3_C4
 is independently reviewed before any budget-two implementation. It
 requires an internal first-token commit without partial output, a second
 position-three frame, and EOS-aware logical output length; no public P2/G2
-admission follows from the existing one-token profile.
+admission follows from the existing one-token profile. A source-private
+first-frame candidate now isolates native budget-two policy/call/P2 preflight
+and staged position-two forward behind a feature macro. Budget-two numerical
+prefill is reachable only through the authenticated prompt-I1 borrow route;
+the standalone raw-pointer P2 prefill retains budget-zero/one admission. The
+candidate retains pending-output rejection and claims no commit, EOS or G2
+output. Independent source and test review approved `3b905829`/tree
+`ef7e7c9`; its pinned fe9/Clang 21 native linked normal/repeat and
+ASan+UBSan+LSan gate passed 2,368 first-frame checks per mode, the 4,477-check
+feature-off predecessor, and the independent G3-S/Philox oracle. The sealed
+23-file evidence is `g3c4-p2g2-first-frame-clang21-3b90582-20260929-c/`
+`SHA256SUMS` (`bfdbb5892b05...`). This remains a private first-frame leaf:
+no first-token commit, second decode, EOS, G2 output, public API or CLI claim.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
