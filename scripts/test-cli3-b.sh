@@ -86,8 +86,11 @@ assert whole['updates'] == 2
 assert (first['tokens'], resumed['tokens'], whole['tokens']) == (4, 3, 7)
 assert (first['mask_weight_f32_bits'], resumed['mask_weight_f32_bits'],
         whole['mask_weight_f32_bits']) == ('40800000', '40400000', '40e00000')
-# Independently weight the two public per-update metrics by their D2 mask
-# counts, then round once to f32 for the full-run summary.
+# Independent raw-observation binary32 replay in observation_reference.c.
+assert (first['loss_f32_bits'], resumed['loss_f32_bits'],
+        whole['loss_f32_bits']) == ('40b21550', '40aacc63', '40aef60f')
+# Cross-check aggregate reporting against the two public update metrics,
+# weighting by their D2 mask counts and rounding once to f32.
 def f32(word):
     return struct.unpack('>f', bytes.fromhex(word))[0]
 
