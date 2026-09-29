@@ -657,7 +657,12 @@ package exports. The corrected manifest matches the retained builder-selected
 generation and found three G3-G T1 private helper names absent from the CLI3
 TR3/T2 root. A test-only bridge now binds those names to the same-registry T2
 tokenizer and native failure helpers. Independent review and the linked/runtime
-gate remain pending.
+gate remain pending. The next supported build compiled the IR and native objects,
+then rejected a 101-row native closure manifest: compiler depfiles selected 98
+rows and did not include the historical T1, X1, or P1 package bridge sources.
+The test-only manifest now matches those 98 compiler-selected rows while
+retaining the exact closure comparison. Link and runtime behavior remain
+unproved pending the next exact-head gate.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are

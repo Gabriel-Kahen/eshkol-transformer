@@ -87,9 +87,6 @@ native/tr3_c_restore_bindings.c
 native/tr3_c_restore_bindings.h
 native/tr3_public_step_metrics.c
 native/tr3_public_step_metrics.h
-native/t1_wave1_package_bridge.c
-native/x1_config_consumer_bridge.c
-native/p1_package_bridge.c
 src/eshkol_transformer/g3t_transport.c
 src/eshkol_transformer/g3t_transport.h
 include/eshkol_transformer/a2_kv_cache.h
