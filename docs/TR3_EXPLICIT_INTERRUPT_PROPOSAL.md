@@ -1,9 +1,11 @@
 # TR3 explicit interruption proposal
 
-Status: contract independently approved; bounded implementation and focused
-linked caller staged on the branch based on reviewed `trainer-train!` candidate
-`304a2a1` (tree `767f982`). Full pinned fe9 gate, public checkpoint composition,
-and hosted acceptance remain pending.
+Status: the bounded fixed-profile implementation is merged through PR #161
+(`221cc6ae`), after independent source/test review, the pinned fe9 linked gate,
+and 23/23 exact-head hosted checks. The composed `efd23d0` caller established
+fresh-process public checkpoint and train-interrupt equivalence for `A=1,2,3`.
+Wider training profiles and nonzero RNG-state equivalence remain outside this
+contract.
 
 ## Runtime and contract boundary
 
@@ -143,6 +145,6 @@ The composed train-interrupt candidate at `efd23d0` passed the pinned
 supported fe9 linked public caller and independent source/test review. Its
 230-file evidence seal is
 `tr3-public-train-interrupt-resume-fe9-efd23d0-20260929-a/SHA256SUMS`.
-The #153 production and test sources match that gated tree. Exact-head hosted CI
-and merged-dependency retest remain. No new checkpoint format or unsupported
-device is implied.
+The #153 production and test sources matched that gated tree. PR #161 merged
+the reviewed fixed-profile composition as `221cc6ae` after 23/23 exact-head
+hosted checks. No new checkpoint format or unsupported device is implied.
