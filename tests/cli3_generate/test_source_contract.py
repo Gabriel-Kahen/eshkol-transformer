@@ -17,10 +17,29 @@ class SingleRegistryContract(unittest.TestCase):
         aggregate = lines(FIXTURE / 'aggregate_root.esk')
         g3 = lines(NATIVE / 'g3g_package_root.esk')
         self.assertEqual(aggregate[1], '(load "cli3_root.esk")')
-        self.assertEqual(aggregate[2:-1], g3[3:])
+        self.assertEqual(aggregate[2], '(load "t2_g3g_private_bridge.esk")')
+        self.assertEqual(aggregate[3:-1], g3[3:])
         self.assertEqual(aggregate[-1], '(load "generate_extension.esk")')
         self.assertEqual(aggregate.count('(load "cli3_root.esk")'), 1)
         self.assertNotIn('(load "m3_package_root.esk")', aggregate)
+
+    def test_g3g_uses_the_existing_t2_tokenizer_authority(self):
+        bridge = (FIXTURE / 't2_g3g_private_bridge.esk').read_text()
+        for alias in ('(define t1-private-entry t2-private-entry)',
+                      '(t2-private-raise category operation message)',
+                      '(define t1-wave1-native-fail t2-wave2-native-fail)'):
+            self.assertIn(alias, bridge)
+        self.assertNotIn('(load ', bridge)
+        self.assertNotIn('(require ', bridge)
+        self.assertNotIn('t1-private-tokenizer-registry', bridge)
+
+        closure = lines(FIXTURE / 'aggregate_source_closure.txt')
+        self.assertEqual(closure.count('tests/cli3_generate/t2_g3g_private_bridge.esk'), 1)
+        self.assertEqual(closure.index('tests/cli3_generate/t2_g3g_private_bridge.esk') + 1,
+                         closure.index('native/g3t_model_admission_extension.esk'))
+        self.assertIn('internal/t2/lib/transformer/tokenizer_internal.esk', closure)
+        self.assertNotIn('native/t1_wave1_root.esk', closure)
+        self.assertNotIn('internal/t1/lib/transformer/tokenizer_internal.esk', closure)
 
     def test_public_exports_are_reviewed_union(self):
         expected = (set(lines(NATIVE / 'tr3_public_installed_exports.txt'))

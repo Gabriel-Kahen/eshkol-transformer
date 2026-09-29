@@ -661,8 +661,11 @@ Its next supported build exposed six shared error globals incorrectly listed as
 package exports. The corrected manifest matches the retained builder-selected
 146-export prerequisite list byte for byte, with six shared error globals in its
 152 public strings. The command successor adds one `generate` export: 147 exports
-and 153 public strings. Independent review and the linked/runtime gate remain
-pending.
+and 153 public strings. The following supported prerequisite build reached
+LLVM IR generation and found three G3-G T1 private helper names absent from the
+CLI3 TR3/T2 root. An independently reviewed test-only bridge binds those names
+to the same-registry T2 tokenizer and native failure helpers. The linked/runtime
+gate remains pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
