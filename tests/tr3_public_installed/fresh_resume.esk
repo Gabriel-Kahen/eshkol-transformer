@@ -12,6 +12,7 @@
 (require transformer.error_consumer)
 
 (extern i64 f32-bits ptr :real et_tr3_public_resume_f32_bits_v1)
+(extern i64 poll-delay :real et_tr3_public_resume_poll_delay_v1)
 
 (define (check label okay)
   (if (not okay)
@@ -178,9 +179,11 @@
            (write-bytes ready (bytevector 1))
            (let loop ((attempt 0))
              (if (file-exists? request) #t
-                 (if (= attempt 1000000)
+                 (if (= attempt 30000)
                      (begin (check 'request-timeout #f) #f)
-                     (loop (+ attempt 1)))))
+                     (begin
+                       (check 'poll-delay (= (poll-delay) 1))
+                       (loop (+ attempt 1))))))
            (check 'external-request (= (file-size request) 1))
            (expect-error 'poll-state 'invalid-state 'trainer-state
              (lambda () (trainer-state trainer)))
