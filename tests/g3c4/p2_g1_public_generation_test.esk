@@ -1,0 +1,161 @@
+;;; Source-composed public C4 dispatch over the same sanitized native owner.
+;;; The installed one-archive caller is checked separately by G3-G public tests.
+(load "p2_g1_shell_test_common.esk")
+(load "g3c4_public_model_input_extension.esk")
+(load "g3c4_p2g1_copyout_extension.esk")
+(load "g3c4_p2g1_coordinator_extension.esk")
+(load "g3c4_public_output_adapter_extension.esk")
+(load "g3c4_public_generation_dispatch_extension.esk")
+
+(extern i64 generator-rng-word ptr i64
+        :real et_g3c4_coordinator_test_generator_rng_word_v1)
+(extern i64 owner-fail-after i64
+        :real et_g3c4_output_envelope_test_owner_fail_after_v1)
+(extern i64 owner-fail-reset
+        :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
+
+(define (reject-public label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (list? (transformer-error-details caught))
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (public-config sampling source-key source)
+  (list ':profile 'diagnostic-c4-p2g1 ':sampling sampling
+        ':temperature-bits (if (eq? sampling 'greedy)
+                               #x3f800000 #x3f400000)
+        ':top-k (if (eq? sampling 'greedy) 256 32)
+        ':top-p-bits (if (eq? sampling 'greedy)
+                        #x3f800000 #x3f000000)
+        ':max-new-tokens 1 ':eos #f source-key source))
+(define (same-rng-words? native words)
+  (let compare ((index 0))
+    (if (= index 4) #t
+        (and (= (generator-rng-word native index)
+                (vector-ref words (+ index 1)))
+             (compare (+ index 1))))))
+
+(define prompt-a
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define prompt-b
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 83 89))))
+(define greedy
+  (g3c4-public-generator-create
+    model tokenizer (public-config 'greedy ':seed 41)))
+(reject-public "C4 input kind before native frame" 'invalid-argument
+               'generator-generate!
+  (lambda () (g3c4-public-generator-generate greedy model)))
+(define greedy-output (g3c4-public-generator-generate greedy prompt-a))
+(define greedy-copy (g3c4-p2g1-output-copy-internal greedy-output))
+(check "public greedy ID/raw parity and cache three"
+  (and (= (vector-ref greedy-copy 2) 1)
+       (= (vector-ref greedy-copy 3) 3)
+       (= (bytevector-u8-ref (vector-ref greedy-copy 0) 0)
+          (vector-ref greedy-copy 1))
+       (= (bytevector-u8-ref
+            (car (g3c4-public-generation-output-text greedy-output)) 0)
+          (vector-ref greedy-copy 1))
+       (equal? (vector-ref greedy-copy 4)
+               (vector g3c4-rng-algorithm 1 41 0 0))))
+(define second-greedy
+  (g3c4-public-generator-create
+    model tokenizer (public-config 'greedy ':seed 41)))
+(define second-output
+  (g3c4-public-generator-generate second-greedy prompt-b))
+(check "second authentic P2 prompt publishes"
+  (= (bytevector-length
+       (car (g3c4-public-generation-output-text second-output))) 1))
+
+(define categorical
+  (g3c4-public-generator-create
+    model tokenizer (public-config 'categorical ':seed 97)))
+(define categorical-output
+  (g3c4-public-generator-generate categorical prompt-a))
+(define successor (g3c4-public-generation-output-rng categorical-output))
+(define successor-entry (g3c4-registry-find successor 'test))
+(define successor-record (g3c4-public-result-record successor))
+(define successor-native (vector-ref successor-entry 3))
+(define successor-words (vector-ref successor-entry 7))
+(check "categorical Philox successor words"
+  (equal? successor-words
+          (vector g3c4-rng-algorithm 1 97 1 0)))
+(reject-public "forged result RNG is not authority" 'invalid-argument
+               'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng
+                              (vector 'g3c4-rng-private)))))
+(reject-public "C4 output is wrong RNG kind" 'invalid-argument
+               'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng categorical-output))))
+(define old-word (vector-ref successor-words 3))
+(vector-set! successor-words 3 (+ old-word 1))
+(reject-public "tampered result RNG rejects constructor" 'invalid-state
+               'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng successor))))
+(vector-set! successor-words 3 old-word)
+(define old-record-native (vector-ref successor-record 1))
+(vector-set! successor-record 1 #f)
+(reject-public "tampered result record rejects constructor" 'invalid-state
+               'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng successor))))
+(vector-set! successor-record 1 old-record-native)
+(define other-rng (g3c4-public-generation-output-rng greedy-output))
+(vector-set! successor-entry 3
+  (vector-ref (g3c4-registry-find other-rng 'test) 3))
+(reject-public "cross-result native swap rejects constructor"
+               'invalid-state 'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng successor))))
+(vector-set! successor-entry 3 successor-native)
+(check "source owner authentic after restoration"
+  (eq? (g3c4-public-result-entry-live successor 'test) successor-entry))
+
+(check "native constructor allocation cut armed" (= (owner-fail-after 0) 0))
+(reject-public "failed copied-RNG constructor rolls back" 'internal
+               'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng successor))))
+(check "native constructor allocation cut reset" (= (owner-fail-reset) 0))
+(check "source still live after constructor rollback"
+  (eq? (g3c4-public-result-entry-live successor 'test) successor-entry))
+(define follow
+  (g3c4-public-generator-create
+    model tokenizer (public-config 'categorical ':rng successor)))
+(define follow-entry (g3c4-generator-entry-call-ready follow 'test))
+(check "all four published RNG words copied to next generator"
+  (same-rng-words? (vector-ref follow-entry 3) successor-words))
+(check "source release does not close copied generator"
+  (g3c4-public-generation-rng-release! successor))
+(reject-public "dead result RNG rejects new constructor" 'invalid-state
+               'generator-create
+  (lambda () (g3c4-public-generator-create model tokenizer
+               (public-config 'categorical ':rng successor))))
+(check "independent source output and generator release"
+  (and (g3c4-public-generation-output-release! categorical-output)
+       (g3c4-public-generator-close categorical)))
+(define follow-output (g3c4-public-generator-generate follow prompt-a))
+(define follow-copy (g3c4-p2g1-output-copy-internal follow-output))
+(check "copied Philox state advances exactly once more"
+  (equal? (vector-ref follow-copy 4)
+          (vector g3c4-rng-algorithm 1 97 2 0)))
+(check "all public C4 generation owners release"
+  (and (g3c4-public-generation-rng-release! other-rng)
+       (g3c4-public-generation-output-release! greedy-output)
+       (g3c4-public-generation-output-release! second-output)
+       (g3c4-public-generation-output-release! follow-output)
+       (g3c4-public-generator-close greedy)
+       (g3c4-public-generator-close second-greedy)
+       (g3c4-public-generator-close follow)
+       (g3c4-public-generation-tensor-release! prompt-a)
+       (g3c4-public-generation-tensor-release! prompt-b)))
+(display "G3-C4 P2/G1 public generation source-composed PASS: checks=")
+(display checks)
+(newline)

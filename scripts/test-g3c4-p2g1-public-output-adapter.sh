@@ -169,7 +169,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local test expected
-  for test in copyout coordinator public_output_adapter; do
+  for test in copyout coordinator public_output_adapter public_generation; do
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
       XDG_CACHE_HOME="$directory/cache" ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
       ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
@@ -196,22 +196,25 @@ WRAPPER
     elif [[ "$test" == coordinator ]]; then
       grep -E '^G3-C4 P2/G1 coordinator PASS: checks=[1-9][0-9]* prompts=2 retry=1$' \
         "$directory/$test.stdout" >/dev/null
-    else
+    elif [[ "$test" == public_output_adapter ]]; then
       grep -E '^G3-C4 P2/G1 public adapter source-composed PASS: checks=[1-9][0-9]*$' \
+        "$directory/$test.stdout" >/dev/null
+    else
+      grep -E '^G3-C4 P2/G1 public generation source-composed PASS: checks=[1-9][0-9]*$' \
         "$directory/$test.stdout" >/dev/null
     fi
   done
 }
 
 compile_mode normal
-for test in copyout coordinator public_output_adapter; do
+for test in copyout coordinator public_output_adapter public_generation; do
   ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-$test" \
     >"$tmp/normal/$test-repeat.stdout" \
     2>"$tmp/normal/$test-repeat.stderr"
   cmp "$tmp/normal/$test.stderr" "$tmp/normal/$test-repeat.stderr"
 done
 compile_mode sanitize
-for test in copyout coordinator public_output_adapter; do
+for test in copyout coordinator public_output_adapter public_generation; do
   cmp "$tmp/normal/$test.stdout" "$tmp/normal/$test-repeat.stdout"
   cmp "$tmp/normal/$test.stdout" "$tmp/sanitize/$test.stdout"
 done
@@ -221,11 +224,13 @@ for mode in normal sanitize; do
       coordinator.stdout coordinator.stderr coordinator-compile.stdout \
       coordinator-compile.stderr public_output_adapter.stdout \
       public_output_adapter.stderr public_output_adapter-compile.stdout \
-      public_output_adapter-compile.stderr; do
+      public_output_adapter-compile.stderr public_generation.stdout \
+      public_generation.stderr public_generation-compile.stdout \
+      public_generation-compile.stderr; do
     cp "$tmp/$mode/$log" "$evidence/$mode-$log"
   done
 done
-for test in copyout coordinator public_output_adapter; do
+for test in copyout coordinator public_output_adapter public_generation; do
   cp "$tmp/normal/$test-repeat.stdout" "$evidence/$test-repeat.stdout"
 done
 if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree \

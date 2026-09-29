@@ -22,6 +22,14 @@ static int64_t copyout_corrupt_consumed;
 static et_i64_tensor_borrow *coordinator_input_borrow;
 static et_a2_kv_cache_read_borrow *coordinator_cache_borrow;
 
+int64_t et_g3c4_coordinator_test_generator_rng_word_v1(
+    void *context_candidate, int64_t index) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_idle_call(context_candidate);
+  if (context == NULL || index < 0 || index >= 4) return -1;
+  return context->generator_rng_words[index];
+}
+
 int64_t et_g3c4_coordinator_test_prefill_token_v1(
     void *context_candidate, int64_t index) {
   et_g3c4_context_internal *context =
