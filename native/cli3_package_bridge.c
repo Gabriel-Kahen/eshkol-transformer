@@ -1,17 +1,55 @@
 #include <errno.h>
 #include <stdint.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "e1b_error_consumer_bridge.h"
 
 /* Supply the predecessor's private native identities in this one aggregate.
  * Its public wrappers are localized by the CLI3 export allowlist. */
-#include "c2_wave2_package_bridge.c"
+#include "tr3_public_installed_bridge.c"
 
 extern eshkol_tagged_value_t cli3_private_dispatch_cabi_v1(
     eshkol_tagged_value_t arguments);
 
 static int64_t cli3_fallback_status = 70;
+
+/* Resolve directory aliases through their filesystem identity. */
+int64_t et_cli3_private_same_directory_v1(const char *left,
+                                           const char *right) {
+  struct stat a, b;
+  if (left == NULL || right == NULL || stat(left, &a) != 0 ||
+      stat(right, &b) != 0 || !S_ISDIR(a.st_mode) || !S_ISDIR(b.st_mode))
+    return -1;
+  return a.st_dev == b.st_dev && a.st_ino == b.st_ino ? 1 : 0;
+}
+
+/* Check output policy before the first update. C2 still owns the atomic save. */
+int64_t et_cli3_private_output_ready_v1(const char *path, int64_t force) {
+  struct stat entry, parent;
+  const char *slash;
+  char directory[4097];
+  size_t length;
+  if (path == NULL || strlen(path) > 4096)
+    return -1;
+  if (stat(path, &entry) == 0)
+    return !S_ISREG(entry.st_mode) ? 2 : (force ? 0 : 1);
+  if (errno != ENOENT)
+    return -1;
+  slash = strrchr(path, '/');
+  length = slash == NULL ? 1u : (slash == path ? 1u : (size_t)(slash - path));
+  if (length > 4096)
+    return -1;
+  if (slash == NULL)
+    directory[0] = '.';
+  else
+    memcpy(directory, path, length);
+  directory[length] = '\0';
+  if (stat(directory, &parent) != 0 || !S_ISDIR(parent.st_mode))
+    return 2;
+  return 0;
+}
 
 void et_cli3_private_fallback_status_set_v1(int64_t status) {
   cli3_fallback_status = status;

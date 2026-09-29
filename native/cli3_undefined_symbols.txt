@@ -1,9 +1,11 @@
+_Exit
 __ad_mode_active
 __current_ad_tape
 __errno_location
 __eshkol_register_parallel_workers
 __global_arena
 __stack_chk_fail
+__tls_get_addr
 abort
 arena_allocate
 arena_allocate_ad_node_with_header
@@ -28,6 +30,8 @@ arena_tagged_cons_set_tagged_value
 arena_tape_add_node
 calloc
 close
+cosf
+erff
 eshkol_access
 eshkol_ad_point_to_double
 eshkol_ad_seed_flag
@@ -52,6 +56,7 @@ eshkol_error_object_p
 eshkol_ffi_pointer_arg_type_error
 eshkol_fopen
 eshkol_format_double
+eshkol_format_float32_bits
 eshkol_get_current_exception
 eshkol_get_raised_value
 eshkol_intern_symbol_lookup
@@ -63,6 +68,7 @@ eshkol_jmp_buf_size
 eshkol_lambda_registry_add
 eshkol_lambda_registry_init
 eshkol_limit_poll_interrupt
+eshkol_list_to_vector_sret
 eshkol_make_exception_with_header
 eshkol_mkdir
 eshkol_object_abi_v1_h8_s0_a8
@@ -95,6 +101,7 @@ eshkol_rmdir
 eshkol_runtime_close_port
 eshkol_runtime_emergency_raise_v1
 eshkol_runtime_emergency_rethrow_if_v1
+eshkol_runtime_fatal
 eshkol_runtime_register_port
 eshkol_runtime_reserve_exception_handlers_v1
 eshkol_set_error_location
@@ -104,6 +111,7 @@ eshkol_shapes_equal
 eshkol_string_byte_length
 eshkol_string_from_codepoints
 eshkol_string_to_number_tagged
+eshkol_tail_transfer_slot
 eshkol_taylor_binary_tagged
 eshkol_taylor_c0
 eshkol_taylor_lift_ad_node
@@ -113,8 +121,13 @@ eshkol_type_error_with_operand
 eshkol_utf8_ref
 eshkol_utf8_strlen
 eshkol_utf8_substring
+eshkol_value_f32_from_bits_v1
 exit
+expf
 fclose
+fegetenv
+fegetround
+fesetenv
 fgetc
 floor
 fmod
@@ -130,6 +143,7 @@ getpid
 getrandom
 hash_table_get
 hash_table_set
+logf
 malloc
 memchr
 memcmp
@@ -149,7 +163,10 @@ region_pop
 region_push
 renameat
 setjmp
+sinf
 snprintf
+sqrtf
+stat
 strcmp
 strlen
 strrchr
