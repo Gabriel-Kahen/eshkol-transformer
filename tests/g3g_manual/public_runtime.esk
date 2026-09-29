@@ -1,0 +1,169 @@
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.diagnostic_transport)
+(require transformer.model)
+(require transformer.generation)
+(require transformer.error_public)
+
+(define (check label value)
+  (if value #t (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (same-row? actual reference offset)
+  (and (bytevector? actual) (= 1024 (bytevector-length actual))
+       (= 2048 (bytevector-length reference))
+       (let loop ((at 0))
+         (if (= at 1024) #t
+             (and (= (bytevector-u8-ref actual at)
+                     (bytevector-u8-ref reference (+ offset at)))
+                  (loop (+ at 1)))))))
+(define (same-bytes? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((at 0))
+         (if (= at (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left at)
+                     (bytevector-u8-ref right at))
+                  (loop (+ at 1)))))))
+
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model (diagnostic-model-create config (diagnostic-initializer-state 1729)))
+(check "eval mode" (module-eval! model))
+(define tokenizer (tokenizer-byte config))
+(define reference-input (diagnostic-input-create))
+(check "reference input" (diagnostic-input-copy! reference-input '(65 66)))
+(define reference-output (model-forward model reference-input))
+(define reference-logits (model-output-logits reference-output))
+(define reference-bytes (diagnostic-model-logits-bits reference-logits))
+(check "reference has two rows" (= 2048 (bytevector-length reference-bytes)))
+(check "reference release"
+  (and (diagnostic-model-logits-release! reference-logits)
+       (model-output-release! reference-output)
+       (diagnostic-input-release! reference-input)))
+(define policy-g0
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 0
+        ':eos #f ':seed 1729))
+(define policy-g1
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(expect-error "foreign generator admitted first" 'invalid-argument 'generator-prefill!
+  (lambda () (generator-prefill! (vector 'foreign) (vector 'foreign))))
+(check "manual error keeps public operation and data-only details"
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-argument)
+                    (eq? (transformer-error-operation caught)
+                         'generator-prefill!)
+                    (equal? (transformer-error-details caught)
+                      '((native-category 1)
+                        (source-code 1)
+                        (source-domain g3t-transport)
+                        (source-message "expected an exact G3-T generator")))
+                    (eq? (transformer-error-cause caught) #f))))
+    (generator-prefill! (vector 'foreign) (vector 'foreign)) #f))
+(define generator (generator-create model tokenizer policy-g0))
+(define scalar-input (generation-token-input-create 65))
+(expect-error "wrong input kind" 'invalid-argument 'generator-prefill!
+  (lambda () (generator-prefill! generator model)))
+(expect-error "missing prefix" 'invalid-state 'generator-decode-step!
+  (lambda () (generator-decode-step! generator scalar-input)))
+(define first (generator-prefill! generator scalar-input))
+(define first-bits (diagnostic-generation-logits-bits first))
+(check "P1 all 256 exact words" (same-row? first-bits reference-bytes 0))
+(expect-error "copied shell read" 'invalid-argument
+  'diagnostic-generation-logits-bits
+  (lambda () (diagnostic-generation-logits-bits
+               (vector 'g3t-logits-private))))
+(expect-error "M3T shell read" 'invalid-argument
+  'diagnostic-generation-logits-bits
+  (lambda () (diagnostic-generation-logits-bits reference-logits)))
+(expect-error "copied shell release" 'invalid-argument
+  'generation-tensor-release!
+  (lambda () (generation-tensor-release! (vector 'g3t-logits-private))))
+(check "P1 repeat read" (same-bytes? first-bits
+  (diagnostic-generation-logits-bits first)))
+(expect-error "output-only accessor" 'invalid-argument 'generation-output-text
+  (lambda () (generation-output-text first)))
+(expect-error "prefill blocks generate" 'invalid-state 'generator-generate!
+  (lambda () (generator-generate! generator scalar-input)))
+(define t1-two (tokenizer-encode tokenizer (bytevector 65 66)))
+(define pair-input (generation-input-create t1-two))
+(define second (generator-prefill! generator pair-input))
+(check "P2 last row exact words" (same-row?
+  (diagnostic-generation-logits-bits second) reference-bytes 1024))
+(check "P1 survives P2 replacement" (same-bytes? first-bits
+  (diagnostic-generation-logits-bits first)))
+(check "release P2 source" (generation-tensor-release! pair-input))
+(check "close with detached tensors" (generator-close! generator))
+(check "P2 survives close" (same-row?
+  (diagnostic-generation-logits-bits second) reference-bytes 1024))
+(check "independent release" (generation-tensor-release! first))
+(expect-error "released P1 read" 'invalid-state 'diagnostic-generation-logits-bits
+  (lambda () (diagnostic-generation-logits-bits first)))
+(check "P2 survives sibling release" (same-row?
+  (diagnostic-generation-logits-bits second) reference-bytes 1024))
+(check "release P2 and inputs"
+  (and (generation-tensor-release! second)
+       (generation-tensor-release! second)
+       (generation-tensor-release! first)
+       (generation-tensor-release! scalar-input)))
+(expect-error "dead P2 read" 'invalid-state 'diagnostic-generation-logits-bits
+  (lambda () (diagnostic-generation-logits-bits second)))
+(expect-error "wrong kind diagnostic" 'invalid-argument
+  'diagnostic-generation-logits-bits
+  (lambda () (diagnostic-generation-logits-bits scalar-input)))
+(expect-error "foreign diagnostic" 'invalid-argument
+  'diagnostic-generation-logits-bits
+  (lambda () (diagnostic-generation-logits-bits (vector 'foreign))))
+
+(define decode-generator (generator-create model tokenizer policy-g1))
+(define decode-prefix (generation-token-input-create 65))
+(define decode-first (generator-prefill! decode-generator decode-prefix))
+(check "G1 P1 exact words" (same-row?
+  (diagnostic-generation-logits-bits decode-first) reference-bytes 0))
+(define decode-token (generation-token-input-create 66))
+(define decode-second (generator-decode-step! decode-generator decode-token))
+(check "decode last row exact words" (same-row?
+  (diagnostic-generation-logits-bits decode-second) reference-bytes 1024))
+(expect-error "repeated decode" 'invalid-state 'generator-decode-step!
+  (lambda () (generator-decode-step! decode-generator decode-token)))
+(check "decode predecessor survives" (same-row?
+  (diagnostic-generation-logits-bits decode-first) reference-bytes 0))
+(check "decode owners"
+  (and (generator-close! decode-generator)
+       (generation-tensor-release! decode-first)
+       (generation-tensor-release! decode-second)
+       (generation-tensor-release! decode-prefix)
+       (generation-tensor-release! decode-token)))
+
+(define zero-generator (generator-create model tokenizer policy-g0))
+(define zero-prefix (generation-token-input-create 65))
+(define zero-output (generator-generate! zero-generator zero-prefix))
+(define zero-token (generation-token-input-create 66))
+(define zero-decode (generator-decode-step! zero-generator zero-token))
+(check "decode after P1/G0 exact words" (same-row?
+  (diagnostic-generation-logits-bits zero-decode) reference-bytes 1024))
+(check "old output release leaves logits" (generation-output-release! zero-output))
+(check "logits survive output release" (same-row?
+  (diagnostic-generation-logits-bits zero-decode) reference-bytes 1024))
+(check "zero-budget owners"
+  (and (generator-close! zero-generator)
+       (generation-tensor-release! zero-decode)
+       (generation-tensor-release! zero-prefix)
+       (generation-tensor-release! zero-token)))
+(display "G3G-MANUAL-PUBLIC-PASS") (newline)
