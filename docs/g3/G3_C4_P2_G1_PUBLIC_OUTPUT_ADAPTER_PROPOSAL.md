@@ -42,7 +42,8 @@ bytes and may be mutated without changing a later read.
 ## Bounded native clone prerequisite
 
 Under a new `ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE` feature, requiring C4
-publication and copy-out, add only source-private native constructors and
+publication, copy-out and the accepted `ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE`
+validator, add only source-private native constructors and
 release. `et_g3c4_private_result_tensor_create_v1(kind,value)` accepts exact
 selectors `ids`, `lengths`, `cache-lengths` (numeric selectors 5, 6, 7 in
 this private ABI), respectively requiring `[0,255]`, `1`, `3`. It allocates a
@@ -69,23 +70,40 @@ generator or output is a wrong tensor/RNG kind.
 
 ## Retained-device prerequisite and error order
 
-A0 requires `device-mismatch` when retained output storage has an
-inconsistent device. Today the C4 native copy-out reports malformed I1
-invariants as generic `internal`, and it does not expose a device-specific
-result. The adapter therefore needs one separately reviewed, feature-gated,
-nonmutating native inspection, provisionally
-`et_g3c4_private_output_device_state_v1(output)`: `0` means exact live
-published output with an unborrowed owned I1 and CPU view, `1` means that
-same authenticated I1 view reports a non-CPU device, and `-1` means an
-ordinary typed native rejection with the existing last-error triple. It
-must borrow/end I1 within the call, preserve the first error on cleanup,
-and never alter output, cache, RNG or carrier bytes. The Eshkol adapter maps
-only `1` to public `device-mismatch`; it never guesses from generic
-`internal`. Rank/dtype/layout/shape corruption that prevents reliable
-inspection follows the existing typed native invariant error unless a later
-separately reviewed discriminator is added. A held I1 borrow remains
-`invalid-state`, not `device-mismatch`. The normal I1 constructor is CPU-only;
-test-only descriptor corruption is required to prove the distinct branch.
+A0 requires `device-mismatch` if retained output storage has an
+inconsistent device. **No such persistent state is representable in this
+fixed CPU-only I1 owner today:** `et_i64_tensor` stores no device field,
+`et_i64_tensor_create_v1` creates only CPU storage, the C4 output retains
+only its I1 pointer, and each `et_i64_tensor_borrow_begin_v1` constructs a
+fresh view with canonical CPU device metadata. Altering an earlier borrowed
+descriptor cannot affect a later accessor. Thus the A0 conditional is
+unreachable through the admitted public owner operations; the adapter
+cannot infer `device-mismatch` from copy-out's generic `internal` error.
+
+For a bounded defensive check of the **current borrowed descriptor**, add a
+feature-gated inspection, provisionally
+`et_g3c4_private_output_device_state_v1(output)`. It authenticates the
+published output, begins one scoped borrow of its exact retained I1, obtains
+that borrow's live view, and calls the existing
+`et_i64_tensor_private_t1_pair_validate_v1(ids,borrow,view,1)`. Status `0`
+means exact live CPU view; status `1` means that **live view's** device
+identity differs from I1's canonical CPU identity (`ET_I64_T1_PAIR_DEVICE`),
+not that I1 has a stored non-CPU device; `-1` means another typed native
+rejection with the existing last-error triple. The I1 validator checks
+shape/ownership before dtype, device, layout and storage; other failures
+remain bounded `internal` or the original borrow error. The inspection
+restores the first error and ends its borrow on every path, without changing
+output, cache, RNG or carrier bytes. Only status `1` maps to public
+`device-mismatch`; held I1 borrow remains `invalid-state`.
+
+To witness status `1`, a test-only switch inside this inspection changes
+`view->device` **after its own borrow-view acquisition**, invokes the I1
+validator, and restores the original device pointer before ending the same
+borrow. This switch is absent when the testing feature is off and never
+changes an I1 tensor, a prior descriptor or production admission. Prove
+that the injected device-only case returns `device-mismatch`, the next
+ordinary read succeeds, and no lease/output/RNG state changes. A prior-view
+corruption alone must not falsely trigger this branch.
 
 Each public accessor first tests exact C4 transport **and separate C4 model**
 membership (including dead entries), then kind, then liveness and protected
@@ -144,7 +162,8 @@ fresh CPU I1 shapes/values, ID/raw parity, lengths `1/3`, all Philox words
 against the independent oracle, two-call isolation, clones after output
 release/generator close, and exact repeated release. Test forged/copied,
 wrong-kind, dead, cross-profile, cross-output native/raw/clone swaps, held
-output and clone I1 borrows, device-only corruption, other malformed I1
+output and clone I1 borrows, the in-inspection device-only injection and
+prior-view non-effect, other malformed I1
 descriptors, raw/ID mismatch, native/Eshkol allocation and copy/decode
 failures, no leaked lease/partial public result, output unchanged and
 same-output retry. Source-only feature-off must omit all new private clone

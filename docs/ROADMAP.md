@@ -701,8 +701,11 @@ seal is `g3c4-p2g1-coordinator-clang21-9f41d1a-20260929-a/SHA256SUMS`.
 This producer does not admit a public C4 generator or result. The proposed
 [exact-owner output adapter](g3/G3_C4_P2_G1_PUBLIC_OUTPUT_ADAPTER_PROPOSAL.md)
 is the next review dependency: it requires new source-private rank-one I1
-clone ownership and a device-specific retained-output discriminator before
-public access/release dispatch. Neither leaf admits EOS,
+clone ownership and an exact borrowed-view device check. Current retained
+I1 storage is CPU-only with no device field, so A0's non-CPU retained-state
+branch is unreachable through this fixed public profile; the proposed
+test-only in-borrow injection witnesses defensive `device-mismatch` mapping.
+Neither leaf admits EOS,
 repeated decode, persistence or CLI3 `generate`.
 
 The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
