@@ -81,7 +81,7 @@ and empty runtime stderr. PR #156 passed the supported model-composition
 and suite-evidence jobs at this implementation. PR #159 then passed all
 23 supported checks at head `b839b17`/tree `1eefefb`, identical to merged
 main `a51ab96`'s tree; no M3 production blob changed between the witness
-and that main tree. This closes the requested fe9 failure/retry and full-CI
+and then-main tree. This closes the requested fe9 failure/retry and full-CI
 acceptance for the narrow guard-order correction.
 
 The reviewed implementation and witness fixture were replayed onto main at
