@@ -415,21 +415,22 @@
        (= (metrics-ref tie-summary 'tokens) 3)))
 (define interrupt-ack (vector #f))
 (define interrupt-before (published-metrics-count))
-(define interrupt-summary
+(define interrupt-predicate
   (with-region ('tr3-public-interrupt-callback 65536)
-    (trainer-train! interrupt-trainer interrupt-three
-      (lambda ()
-        (check 'poll-release-guard
-          (interrupt-error? 'invalid-state 'trainer-release!
-            (lambda () (trainer-release! interrupt-trainer))))
-        (check 'poll-step-guard
-          (interrupt-error? 'invalid-state 'trainer-step!
-            (lambda () (trainer-step! interrupt-trainer))))
-        (check 'poll-train-guard
-          (interrupt-error? 'invalid-state 'trainer-train!
-            (lambda () (trainer-train! interrupt-trainer interrupt-one))))
-        (vector-set! interrupt-ack 0 #t)
-        #t))))
+    (lambda ()
+      (check 'poll-release-guard
+        (interrupt-error? 'invalid-state 'trainer-release!
+          (lambda () (trainer-release! interrupt-trainer))))
+      (check 'poll-step-guard
+        (interrupt-error? 'invalid-state 'trainer-step!
+          (lambda () (trainer-step! interrupt-trainer))))
+      (check 'poll-train-guard
+        (interrupt-error? 'invalid-state 'trainer-train!
+          (lambda () (trainer-train! interrupt-trainer interrupt-one))))
+      (vector-set! interrupt-ack 0 #t)
+      #t)))
+(define interrupt-summary
+  (trainer-train! interrupt-trainer interrupt-three interrupt-predicate))
 (check 'interrupt-linked-callback-and-five-keys
   (and (vector-ref interrupt-ack 0)
        (= (metrics-ref interrupt-summary 'updates) 1)
