@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tests.d2.reference import ReferenceConfig, ReferenceDataset
 from tests.d2.test_resources import load_d1_resource
-from tests.e3_horizon.generate import HORIZONS, materialize
+from tests.e3_horizon.generate import HORIZONS, SHARD_TOKENS, materialize
 from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
 
 
@@ -17,12 +17,17 @@ class HorizonCorpusTests(unittest.TestCase):
                 root = Path(temporary) / str(horizon)
                 late = materialize(root, horizon)
                 self.assertEqual(late.parent, root)
-                self.assertEqual(late.name, "shard-0000000000000001.ets")
+                self.assertEqual(
+                    late.name, f"shard-{2 * horizon // SHARD_TOKENS:016d}.ets"
+                )
                 shards, digest = load_d1_resource(
                     root, expected_fingerprint=FINGERPRINT,
                     expected_vocab=VOCAB_SIZE,
                 )
-                self.assertEqual(tuple(map(len, shards)), (2 * horizon, 1))
+                self.assertEqual(
+                    tuple(map(len, shards)),
+                    (SHARD_TOKENS,) * (2 * horizon // SHARD_TOKENS) + (1,),
+                )
                 rows = ReferenceDataset(
                     shards, ReferenceConfig(1, 2, None, 1, True),
                     manifest_digest=digest, tokenizer_fingerprint=FINGERPRINT,
@@ -34,14 +39,15 @@ class HorizonCorpusTests(unittest.TestCase):
 
     def test_repeated_generation_is_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            first = Path(temporary) / "first"
-            second = Path(temporary) / "second"
-            materialize(first, 1024)
-            materialize(second, 1024)
-            self.assertEqual(
-                {path.name: path.read_bytes() for path in first.iterdir()},
-                {path.name: path.read_bytes() for path in second.iterdir()},
-            )
+            for horizon in HORIZONS:
+                first = Path(temporary) / f"first-{horizon}"
+                second = Path(temporary) / f"second-{horizon}"
+                materialize(first, horizon)
+                materialize(second, horizon)
+                self.assertEqual(
+                    {path.name: path.read_bytes() for path in first.iterdir()},
+                    {path.name: path.read_bytes() for path in second.iterdir()},
+                )
 
     def test_reject_unadmitted_horizon(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

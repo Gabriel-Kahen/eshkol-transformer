@@ -646,11 +646,13 @@ generation, and Wave 3 remains incomplete.
 The [E3 single-invocation horizon leaf](e3/E3_SINGLE_INVOCATION_HORIZON.md)
 adds a generated genuine D1/D2 1,024/8,192-batch public-caller test with a
 last-batch shard-read failure and same-authority retry. Its source/static
-checks pass. The pinned `05f4f48` supported gate passed package, closure and
-executable construction; 1,024 passed in 345.14 seconds/162,400 KiB, but 8,192
-timed out at the former 1,800-second bound (exit 124, 160,436 KiB). The
-test-only per-process bound is now 3,600 seconds based on the 1,024 measurement;
-independent source review and an exact-head completed 8,192 run remain pending.
+checks pass. Pinned `05f4f48` and `5fb359e` supported gates passed package,
+closure, executable construction and 1,024 runtime; the old large-first-shard
+8,192 fixture timed out at 1,800 and 3,600 seconds respectively. D2 rereads and
+validates the entire source shard on every batch, so the fixture now uses
+canonical 2,048-token shards and keeps a singleton late target. The 3,600-second
+bound and 512 MiB RSS ceiling remain. Independent source review and an exact-head
+completed 8,192 run remain pending.
 It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 

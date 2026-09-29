@@ -11,16 +11,20 @@ from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
 
 HORIZONS = (1024, 8192)
 TOKENS = (3, 197, 0, 255, 7, 7)
+SHARD_TOKENS = 2048
 
 
 def materialize(root: Path, horizon: int) -> Path:
     if horizon not in HORIZONS:
         raise ValueError("unsupported E3 horizon")
     root.mkdir(parents=True, exist_ok=False)
-    # D2 packed T=2 emits ceil((N-1)/2) rows. The final target is the only
-    # token in shard two, so its removal after D2 open fails at the last row.
+    # D2 packed T=2 emits ceil((N-1)/2) rows. Even-sized canonical shards
+    # preserve the rows; the singleton last shard holds only the final target.
     values = tuple(TOKENS[index % len(TOKENS)] for index in range(2 * horizon + 1))
-    shards = (values[:-1], values[-1:])
+    shards = tuple(
+        values[start : start + SHARD_TOKENS]
+        for start in range(0, 2 * horizon, SHARD_TOKENS)
+    ) + (values[-1:],)
     write_d1_resource(root, shards, fingerprint=FINGERPRINT, vocab=VOCAB_SIZE)
     loaded, digest = load_d1_resource(
         root, expected_fingerprint=FINGERPRINT, expected_vocab=VOCAB_SIZE,
@@ -34,7 +38,7 @@ def materialize(root: Path, horizon: int) -> Path:
     assert len(reference.rows) == horizon
     assert sum(sum(row.loss_mask) for row in reference.rows) == 2 * horizon
     assert reference.rows[-1].targets[-1] == values[-1]
-    return root / "shard-0000000000000001.ets"
+    return root / f"shard-{len(shards) - 1:016d}.ets"
 
 
 def main() -> None:

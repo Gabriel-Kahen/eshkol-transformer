@@ -75,8 +75,9 @@ for horizon in 1024 8192; do
   late="$(PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${PROJECT_ROOT}" \
     python3 -m tests.e3_horizon.generate \
     --output "${corpus}" --horizon "${horizon}")"
-  [[ "${late}" == "${corpus}/shard-0000000000000001.ets" ]] || \
-    die "generated late shard path differs from the admitted two-shard layout"
+  expected_late="$(printf '%s/shard-%016d.ets' "${corpus}" "$((horizon / 1024))")"
+  [[ "${late}" == "${expected_late}" ]] || \
+    die "generated late shard path differs from the admitted canonical layout"
   runtime_timeout="${E3_HORIZON_RUNTIME_TIMEOUT_SECONDS:-3600}"
   ESHKOL_ARENA_POISON=1 E3_HORIZON_LATE_SHARD="${late}" \
     /usr/bin/time -f 'elapsed_seconds=%e peak_rss_kib=%M' \
