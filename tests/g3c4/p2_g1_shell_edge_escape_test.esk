@@ -1,0 +1,32 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g1_pending_extension.esk")
+(load "g3c4_p2g1_shell_publication_extension.esk")
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define generator
+  (g3c4-generator-create-internal model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits 1065353216 ':top-k 256
+          ':top-p-bits 1065353216 ':max-new-tokens 1
+          ':eos #f ':seed 7)))
+
+;;; Intentionally leave a changed child edge at the exception boundary. The
+;;; call guard must fail-stop before native abort can act on the wrong owner.
+(g3c4-with-p2g1-output-call-internal
+  'g3c4-p2g1-edge-escape generator (call)
+  (let ((output (g3c4-p2g1-output-reserve call)))
+    (vector-set! (vector-ref call 10) 4 #f)
+    (if (not output) (exit 1))
+    (g3c4-fail 'invalid-state 'g3c4-p2g1-edge-escape
+               "test-only escaped child edge")))
+(display "escaped ledger edge incorrectly returned")
+(newline)
+(exit 1)
