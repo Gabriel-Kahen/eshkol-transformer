@@ -423,6 +423,35 @@
                (metrics-ref repeated-second-step 'update))))
 (check "public resume owner releases after restore"
        (trainer-state-release! first-state))
+(define resumed-summary
+  (trainer-train! step-trainer (trainer-stop-policy #f 2 #f)))
+(check "nonzero lifetime counters still allow invocation-delta updates"
+       (and (= (metrics-ref resumed-summary 'tokens) 7)
+            (= (metrics-ref resumed-summary 'updates) 2)
+            (= (metrics-ref resumed-summary 'epochs) 1)
+            (> (metrics-ref resumed-summary 'loss) 0)
+            (= (metrics-ref resumed-summary 'mask-weight) 7)))
+(expect-error "train summary rejects step-only key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref resumed-summary 'update)))
+(expect-error "foreign policy rejects before training"
+              'invalid-argument 'trainer-train!
+  (lambda () (trainer-train! step-trainer first-step)))
+(expect-error "forged trainer rejects before training"
+              'invalid-argument 'trainer-train!
+  (lambda ()
+    (trainer-train! (vector 'forged)
+                    (trainer-stop-policy #f 3 #f))))
+(define mixed-summary
+  (trainer-train! step-trainer (trainer-stop-policy 9 3 2)))
+(check "mixed invocation limits stop at first reached delta"
+       (and (= (metrics-ref mixed-summary 'updates) 3)
+            (= (metrics-ref mixed-summary 'tokens) 11)
+            (= (metrics-ref second-step 'update) 2)
+            (= (metrics-ref first-step 'update) 1)))
+(expect-error "step token rejects train-only key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref first-step 'updates)))
 (check "step trainer release" (trainer-release! step-trainer))
 (check "released D2 receiver remains caller-owned"
        (token-dataset-close! dataset))

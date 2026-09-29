@@ -2724,6 +2724,30 @@ int64_t et_g3t_test_pending_logits_v1(void) {
   return count;
 }
 #ifdef ET_F32_TENSOR_TESTING
+static g3t_logits *g3t_test_corrupt_logits;
+static et_f32_test_tensor_metadata_v1 g3t_test_logits_snapshot;
+int64_t et_g3t_test_logits_storage_corrupt_v1(
+    void *candidate, int64_t corrupt) {
+  g3t_logits *logits = (g3t_logits *)g3t_admit_record(
+      candidate, G3T_LOGITS, 0);
+  if (!logits || logits->h.state != G3T_LIVE || logits->h.busy ||
+      !logits->tensor || (corrupt != 0 && corrupt != 1)) return -1;
+  if (corrupt) {
+    if (g3t_test_corrupt_logits) return -1;
+    g3t_test_logits_snapshot.struct_size = sizeof(g3t_test_logits_snapshot);
+    if (et_f32_tensor_test_metadata_snapshot_v1(
+            logits->tensor, &g3t_test_logits_snapshot) ||
+        et_f32_tensor_test_metadata_corrupt_v1(
+            logits->tensor, ET_F32_TEST_TENSOR_METADATA_DATA, 0)) return -1;
+    g3t_test_corrupt_logits = logits;
+    return 0;
+  }
+  if (g3t_test_corrupt_logits != logits ||
+      et_f32_tensor_test_metadata_restore_v1(
+          logits->tensor, &g3t_test_logits_snapshot)) return -1;
+  g3t_test_corrupt_logits = NULL;
+  return 0;
+}
 int64_t et_g3t_test_fail_f32_after_v1(uint64_t count) {
   et_f32_tensor_test_fail_alloc_after_v1((size_t)count);
   return 0;

@@ -52,6 +52,8 @@ extern eshkol_tagged_value_t et_e1b_private_tr3_trainer_state_cabi_v1(
     eshkol_tagged_value_t trainer);
 extern eshkol_tagged_value_t et_e1b_private_tr3_trainer_load_state_cabi_v1(
     eshkol_tagged_value_t trainer, eshkol_tagged_value_t state);
+extern eshkol_tagged_value_t et_e1b_private_tr3_trainer_train_cabi_v1(
+    eshkol_tagged_value_t trainer, eshkol_tagged_value_t policy);
 
 #if !defined(ESHKOL_HAS_F32_SCALAR_ABI_V1) || ESHKOL_HAS_F32_SCALAR_ABI_V1 != 1
 #error "public metrics-ref requires the accepted true-f32 runtime ABI"
@@ -91,6 +93,8 @@ void et_e1b_public_tr3_trainer_stop_policy_v1(
       *et_e1b_box_value_v1(max_tokens), *et_e1b_box_value_v1(max_updates),
       *et_e1b_box_value_v1(max_epochs));
 }
+TR3_PUBLIC_BINARY(et_e1b_public_tr3_trainer_train_v1,
+                  et_e1b_private_tr3_trainer_train_cabi_v1)
 TR3_PUBLIC_UNARY(et_e1b_public_x1_config_validate_v1,
                  et_e1b_private_x1_config_validate_cabi_v1)
 TR3_PUBLIC_UNARY(et_e1b_public_x1_config_canonical_v1,

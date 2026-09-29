@@ -1135,9 +1135,34 @@ passed a pinned Ubuntu 22.04/LLVM 21 network-none full Eshkol runner at
 Q0 4/4 and closed-source checks. Its focused native gate passed 47 identical
 checks, with exact feature-on/off private-symbol delta. Commands and logs
 are sealed under `g3t-logits-materialize-pinned-a22572e-20260928/`
-(`SEAL.sha256` `980c7e46...`). #143 hosted integration remains pending.
-Revision-3 public ownership/read, atomic cache/result publication, exact
-closed package tuple and numerical/negative gates remain separate.
+(`SEAL.sha256` `980c7e46...`). #143 merged into `main` as `9e1ee516` after
+23/23 hosted checks (run 36434951609). An isolated revision-3 candidate now
+builds the separate 40-source, 53-native-entry, five-provider, eight-facade
+manual tuple. Measured inventories are 103 boxed exports, 109 definitions,
+109 public-name strings and 166 undefined symbols. Pinned Ubuntu 22.04/LLVM
+21 network-none builds produce byte-identical objects through direct,
+official and sequential default routes. Fresh-cache installed AOT normal and
+repeat compare all 256 P1, T1-backed P2 and one-step decode logit words with
+independent M3 output; testing-closure normal/repeat/ASan+UBSan+LSan also
+checks independent M3T K/V and masks, owner lifetime, malformed shapes,
+borrow and precommit rollback. Sequential v1→v2→v3 default builds preserve
+both predecessor objects, archives and facades byte-identically. Evidence is
+under `g3g-manual-r3-candidate-20260928/`. Independent source review and
+hosted exact-head integration remain required; revision 2 remains the
+accepted installed boundary. Generic I2 interop, N>1, P2/repeated decode,
+resume and CLI are deferred.
+
+Independent review requested a narrower revision-3 negative closure. Its
+testing-only facade fixture now asserts public E1 operation/category/details
+for P2 non-byte inline IDs, P2 inline/stored divergence, decode divergence,
+and corrupt authenticated kind-3 storage, with predecessor result/cache/pins
+unchanged. The exact-source inherited materialization probe asserts malformed
+I2 shape, stride and storage return native internal/invariant and leave copy
+destination bytes untouched. Device and layout cannot be mutated in this
+fixture: `et_f32_tensor_borrow_begin_v1` builds both as fixed literals, the
+tensor stores neither field, and the public kind-3 shell exposes no generic
+I2 write. Follow-up evidence is under `g3g-manual-r3-negative-final-20260928/`;
+independent re-review and hosted exact-head integration remain pending.
 
 The isolated Eshkol F32 numeric safety leaf `5091032b`/tree `71f6897` is
 reviewed and composed onto the provisional compiler/runtime line at
@@ -1516,7 +1541,34 @@ roots and no release operation or fixed count cap; memory use therefore grows
 linearly with distinct policies until the process arena limit. The focused
 gate also rejects an exact limit above signed i64. Its sealed witness is at
 `/home/gabe/.codex/evidence/eshkol-transformer/tr3-stop-policy-retention-20260928/SHA256SUMS`.
-Train-loop thresholds, interruption, summary metrics and resume are pending.
+The bounded finite-D2 public `trainer-train!` candidate composes the private
+step transaction and same-aggregate stop policy. Token, update, and epoch
+thresholds are invocation deltas measured from counters captured at entry,
+as required by the earlier accepted CLI3 contract; global O2 and checkpoint
+counters continue. Positive limits are checked after each committed update.
+One summary is staged before work, and each candidate physical binary32
+weighted numerator/weight and invocation-delta counters is checked before the
+private step's first parameter write. A later failed step rolls back only that
+step; earlier commits remain, and no partial summary is published. Train
+summaries have disjoint `loss`, `mask-weight`, `tokens`, `updates`, `epochs`
+keys in the sole metrics registry; existing step tokens retain their schema.
+The prior `64a59ff` candidate and seal proved cumulative-limit behavior and
+an equal-weight two-update reduction; those semantics are superseded by the
+clean `e7041cd` invocation-delta candidate. Its pinned fe9/LLVM21 linked
+gate passes with 58 Eshkol sources, 108 globals, 176 undefined symbols and
+133 verified artifacts at
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-train-unequal-delta-e7041cd-20260928/SHA256SUMS`
+(`d66b78ed...`). Repeated calls with nonzero global counters exercise all
+three delta limits. A genuine six-token D2 fixture produces physical update
+weights 4 then 3; separately captured public step observations independently
+reduce in order to train loss word `1085208079` at weight 7, distinct from
+mean-of-means word `1085173978`. The test-only metrics-root inspection shows
+one published summary and no retained per-step results for that train call;
+the later-step failure publishes no summary. The pinned PyTorch reference
+differs by one ULP on the fourth post-update numerator and is checked using
+the accepted post-update tolerance, not treated as an exact native oracle.
+Independent review of `e7041cd`, explicit interruption, public resume,
+wider profiles and hosted integration remain pending.
 
 The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
 accepted same-registry TR3-C snapshot and joint-restore entries with private
@@ -1545,6 +1597,13 @@ exact 42-image restore; evidence is sealed at
 `tr3-private-load-fe9-4232666-20260928/SHA256SUMS` under the same root.
 Full public exact-resume acceptance, public checkpoint I/O packaging, and
 independent review remain pending.
+
+An isolated state/train composition candidate combines the public snapshot and
+atomic load entries with invocation-delta `trainer-train!` in the same installed
+facade, bridge, private root, and symbol/source inventories. The ordinary
+caller restores and repeats its next step before exercising train summaries.
+Merge conflict, shell/Python syntax, and static package-inventory checks pass;
+the combined fe9 linked gate and independent review remain pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
