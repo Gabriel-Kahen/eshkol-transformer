@@ -7,6 +7,11 @@ typedef struct shell_bytevector {
   unsigned char bytes[8];
 } shell_bytevector;
 
+typedef struct shell_copyout_stage {
+  int64_t length;
+  unsigned char bytes[56];
+} shell_copyout_stage;
+
 static et_i64_tensor_borrow *shell_ids_borrow;
 static et_a2_kv_cache_transaction_view *shell_a2_view;
 static shell_bytevector *shell_staging;
@@ -32,7 +37,7 @@ int64_t __wrap_et_g3c4_private_output_copy_snapshot_v1(
   int64_t status = __real_et_g3c4_private_output_copy_snapshot_v1(
       output, raw, stage);
   if (status == 0 && copyout_corrupt != 0) {
-    shell_bytevector *carrier = (shell_bytevector *)stage;
+    shell_copyout_stage *carrier = (shell_copyout_stage *)stage;
     carrier->bytes[8] = 2u; /* Decoded length is invalid after native success. */
     for (size_t i = 9; i < 16; ++i) carrier->bytes[i] = 0u;
     copyout_corrupt = 0;
