@@ -1,0 +1,131 @@
+(load "p2_g1_shell_test_common.esk")
+(load "g3c4_public_model_input_extension.esk")
+(load "g3c4_p2g1_copyout_extension.esk")
+(load "g3c4_p2g1_coordinator_extension.esk")
+
+(extern i64 coordinator-input-borrow ptr i64
+        :real et_g3c4_coordinator_test_input_borrow_v1)
+(extern i64 coordinator-cache-borrow ptr i64
+        :real et_g3c4_coordinator_test_cache_borrow_v1)
+(extern i64 coordinator-prefill-token ptr i64
+        :real et_g3c4_coordinator_test_prefill_token_v1)
+
+(define prompt-a
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define prompt-b
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 83 89))))
+(define prompt-p1
+  (generation-input-create-internal
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7))))
+
+(define (run-prompt mode seed input first-token second-token)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer
+                                           (config mode seed)))
+         (output (g3c4-p2g1-generate-internal generator input))
+         (entry (g3c4-p2g1-output-entry-live output 'coordinator-test))
+         (copied (g3c4-p2g1-output-copy-internal output)))
+    (check "authentic selected ID, raw byte and committed length"
+           (and (= (vector-ref copied 2) 1)
+                (= (vector-ref copied 3) 3)
+                (= (bytevector-length (vector-ref copied 0)) 1)
+                (= (bytevector-u8-ref (vector-ref copied 0) 0)
+                   (vector-ref copied 1))
+                (= (shell-test-published (vector-ref entry 3)
+                                         (vector-ref entry 8)) 1)))
+    (check "native P2 prefill used caller-owned IDs"
+           (and (= (coordinator-prefill-token
+                     (vector-ref (g3c4-generator-entry-call-ready
+                                   generator 'coordinator-test) 3) 0)
+                   first-token)
+                (= (coordinator-prefill-token
+                     (vector-ref (g3c4-generator-entry-call-ready
+                                   generator 'coordinator-test) 3) 1)
+                   second-token)))
+    (check "output survives generator close"
+           (g3c4-generator-close-internal! generator))
+    (check "closed-generator output remains copyable"
+           (= (vector-ref (g3c4-p2g1-output-copy-internal output) 1)
+              (vector-ref copied 1)))
+    (check "source-private output release"
+           (g3c4-p2g1-output-release-internal! output))
+    copied))
+
+(define first (run-prompt 'greedy 41 prompt-a 0 255))
+(define second (run-prompt 'greedy 41 prompt-b 83 89))
+(check "two caller-owned prompt inputs remain live"
+       (and (g3c4-input-entry-live prompt-a 'coordinator-test)
+            (g3c4-input-entry-live prompt-b 'coordinator-test)))
+
+(define retry-generator
+  (g3c4-generator-create-internal model tokenizer (config 'categorical 97)))
+(define retry-entry (g3c4-generator-entry-call-ready
+                      retry-generator 'coordinator-test))
+(define prompt-a-entry (g3c4-input-entry-live prompt-a 'coordinator-test))
+(define before-call (latest 'call))
+(reject "forged input rejected before call acquisition" 'invalid-argument
+  (lambda ()
+    (g3c4-p2g1-generate-internal retry-generator
+                                 (vector 'forged-input))))
+(reject "P1 rejected before call acquisition" 'shape-mismatch
+  (lambda () (g3c4-p2g1-generate-internal retry-generator prompt-p1)))
+(check "P1 rejection preserved idle generator and registry"
+       (and (eq? (latest 'call) before-call)
+            (not (vector-ref retry-entry 9))))
+
+(check "input I1 borrow begins"
+       (= (coordinator-input-borrow (vector-ref prompt-a-entry 3) 1) 0))
+(reject "held I1 rejects and rolls back" 'invalid-state
+  (lambda () (g3c4-p2g1-generate-internal retry-generator prompt-a)))
+(check "input I1 borrow ends"
+       (= (coordinator-input-borrow (vector-ref prompt-a-entry 3) 0) 0))
+(check "held I1 rejection leaves generator idle"
+       (and (not (vector-ref retry-entry 9))
+            (dead? (latest 'output))))
+
+(check "cache A2 read borrow begins"
+       (= (coordinator-cache-borrow (vector-ref retry-entry 3) 1) 0))
+(reject "held A2 rejects and rolls back" 'invalid-state
+  (lambda () (g3c4-p2g1-generate-internal retry-generator prompt-a)))
+(check "cache A2 read borrow ends"
+       (= (coordinator-cache-borrow (vector-ref retry-entry 3) 0) 0))
+(check "held A2 rejection leaves generator idle"
+       (and (not (vector-ref retry-entry 9))
+            (dead? (latest 'output))))
+
+(check "post-native text corruption cut arms"
+       (= (shell-test-mutation 1) 0))
+(reject "post-native text corruption rolls back" 'invalid-state
+  (lambda () (g3c4-p2g1-generate-internal retry-generator prompt-a)))
+(check "post-native cut leaves generator idle"
+       (and (not (vector-ref retry-entry 9))
+            (dead? (latest 'output))))
+
+(define retry-output
+  (g3c4-p2g1-generate-internal retry-generator prompt-a))
+(define retry-copy (g3c4-p2g1-output-copy-internal retry-output))
+(define fresh-generator
+  (g3c4-generator-create-internal model tokenizer (config 'categorical 97)))
+(define fresh-output
+  (g3c4-p2g1-generate-internal fresh-generator prompt-a))
+(define fresh-copy (g3c4-p2g1-output-copy-internal fresh-output))
+(check "abort/retry matches fresh sampled ID and RNG"
+       (and (= (vector-ref retry-copy 1) (vector-ref fresh-copy 1))
+            (equal? (vector-ref retry-copy 4) (vector-ref fresh-copy 4))))
+(check "retry output releases"
+       (g3c4-p2g1-output-release-internal! retry-output))
+(check "fresh output releases"
+       (g3c4-p2g1-output-release-internal! fresh-output))
+(check "generators close"
+       (and (g3c4-generator-close-internal! retry-generator)
+            (g3c4-generator-close-internal! fresh-generator)))
+(check "inputs release"
+       (and (generation-tensor-release-internal! prompt-a)
+            (generation-tensor-release-internal! prompt-b)
+            (generation-tensor-release-internal! prompt-p1)))
+
+(display "G3-C4 P2/G1 coordinator PASS: checks=")
+(display checks)
+(display " prompts=2 retry=1") (newline)

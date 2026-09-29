@@ -113,6 +113,13 @@ int64_t et_g3c4_private_prompt_prefill_preflight_v1(
  * numerical prefill. The input owner and borrowed view are never retained. */
 int64_t et_g3c4_private_prompt_prefill_v1(
     void *context, void *input, float last_logits[256]);
+#ifdef ET_G3C4_P2_G1_COORDINATOR_PRIVATE
+/* Source-private fixed P2/G1 producer. Preflight runs before call admission;
+ * run requires the reserved pending output and leaves publication to the
+ * Eshkol shell. Neither routine retains the input owner. */
+int64_t et_g3c4_private_p2g1_preflight_v1(void *context, void *input);
+int64_t et_g3c4_private_p2g1_run_v1(void *context, void *input);
+#endif
 #endif
 
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE

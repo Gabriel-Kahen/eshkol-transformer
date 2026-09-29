@@ -18,6 +18,47 @@ static shell_bytevector *shell_staging;
 static int64_t shell_mutation;
 static int64_t copyout_corrupt;
 static int64_t copyout_corrupt_consumed;
+#ifdef ET_G3C4_P2_G1_COORDINATOR_PRIVATE
+static et_i64_tensor_borrow *coordinator_input_borrow;
+static et_a2_kv_cache_read_borrow *coordinator_cache_borrow;
+
+int64_t et_g3c4_coordinator_test_prefill_token_v1(
+    void *context_candidate, int64_t index) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_idle_call(context_candidate);
+  if (context == NULL || index < 0 || index > 1 ||
+      context->prefill_binding_ready != 1u) return -1;
+  return context->prefill_tokens[index];
+}
+
+int64_t et_g3c4_coordinator_test_input_borrow_v1(
+    void *input_candidate, int64_t active) {
+  et_g3c4_input_internal *input = et_g3c4_admit_input(input_candidate, 0);
+  et_i64_tensor_error error;
+  if (input == NULL) return -1;
+  if (active == 1 && coordinator_input_borrow == NULL)
+    return et_i64_tensor_borrow_begin_v1(
+        input->tensor, &coordinator_input_borrow, &error);
+  if (active == 0 && coordinator_input_borrow != NULL)
+    return et_i64_tensor_borrow_end_v1(&coordinator_input_borrow, &error);
+  return -1;
+}
+
+int64_t et_g3c4_coordinator_test_cache_borrow_v1(
+    void *context_candidate, int64_t active) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_idle_call(context_candidate);
+  et_kernel_error error;
+  if (context == NULL) return -1;
+  if (active == 1 && coordinator_cache_borrow == NULL)
+    return et_a2_kv_cache_read_borrow_begin_v1(
+        context->cache, &coordinator_cache_borrow, &error);
+  if (active == 0 && coordinator_cache_borrow != NULL)
+    return et_a2_kv_cache_read_borrow_end_v1(
+        &coordinator_cache_borrow, &error);
+  return -1;
+}
+#endif
 
 int64_t et_g3c4_shell_test_copyout_corrupt_v1(int64_t active) {
   if (active != 0 && active != 1) return -1;

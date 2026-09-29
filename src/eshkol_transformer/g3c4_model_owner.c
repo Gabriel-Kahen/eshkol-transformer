@@ -813,6 +813,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_F32_TENSOR_STORAGE_QUERY_PRIVATE))
 #error "ET_G3C4_P2_G1_COPYOUT_PRIVATE requires publication and private I2 storage inspection"
 #endif
+#if defined(ET_G3C4_P2_G1_COORDINATOR_PRIVATE) && \
+    (!defined(ET_G3C4_P2_G1_PUBLICATION_PRIVATE) || \
+     !defined(ET_G3C4_PROMPT_PREFILL_PRIVATE))
+#error "ET_G3C4_P2_G1_COORDINATOR_PRIVATE requires publication and prompt prefill"
+#endif
 #ifdef ET_G3C4_P2_G1_PENDING_PRIVATE
 #define ET_G3C4_PENDING_TOTAL_LIMIT 3
 #else
@@ -5289,6 +5294,43 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+#ifdef ET_G3C4_P2_G1_COORDINATOR_PRIVATE
+int64_t et_g3c4_private_p2g1_preflight_v1(
+    void *context_candidate, void *input_candidate) {
+  et_g3c4_input_internal *input;
+  int64_t status = et_g3c4_private_prompt_prefill_preflight_v1(
+      context_candidate, input_candidate, 1);
+  if (status != 0) return status;
+  input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL) return et_g3c4_error_state.category;
+  if (input->length != 2)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g1_run_v1(
+    void *context_candidate, void *input_candidate) {
+  et_g3c4_input_internal *input;
+  float prefill_logits[256];
+  float token_logits[256];
+  int64_t token = -1;
+  int64_t status;
+
+  et_g3c4_error_reset_internal();
+  input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL) return et_g3c4_error_state.category;
+  if (input->length != 2)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  status = et_g3c4_private_prompt_prefill_v1(
+      context_candidate, input_candidate, prefill_logits);
+  if (status != 0) return status;
+  status = et_g3c4_private_token_frame_begin_last_v1(
+      context_candidate, prefill_logits, &token);
+  if (status != 0) return status;
+  return et_g3c4_private_token_forward_v1(
+      context_candidate, token, token_logits);
+}
+#endif
 #endif
 #endif
 #endif

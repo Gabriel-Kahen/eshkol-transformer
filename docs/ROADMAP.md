@@ -690,8 +690,13 @@ with the reviewed T1/I1 exact-pair seam moves public P2 admission into a
 source-private validated reader before I1 allocation; the original private
 P1/P2 constructor remains available. Its new linked corruption/borrow and
 allocation witnesses, installed package normal/repeat, supported sanitizer,
-and independent source-and-test review remain pending. This leaf does not
-admit a public C4 generator, result, EOS,
+and independent source-and-test review passed at `9581b8a` (the current
+private-coordinator base). The next isolated source-private P2/G1 producer
+uses the accepted caller-owned C4 input for genuine P2 prefill, last-logit
+sampling, one-token forward, and exactly one existing shell publication.
+Its two-prompt and failure/retry gate remains pending. This producer does not
+admit a public C4 generator or result; an exact-owner output accessor/release
+adapter is the next public dependency. Neither leaf admits EOS,
 repeated decode, persistence or CLI3 `generate`.
 
 The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
