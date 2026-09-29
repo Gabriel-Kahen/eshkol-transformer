@@ -664,6 +664,20 @@ The 20-file seal is
 This remains a source-private `(P,G,N)=(2,1,1)` detached snapshot; EOS,
 repeated decode, N>1, a public generator and CLI3 `generate` are not provided.
 
+The local copy-out/#155 shell/#157 I2 composition at `123505d`/tree
+`2c33457` preserves all independently reviewed production and test blobs.
+Independent integration review approved its registry, closure, ownership and
+feature-macro boundaries. The exact-head supported fe9 Clang 21 gate passed
+6,626 native checks in normal and sanitizer modes and 64 Eshkol checks in
+normal, repeat and sanitizer modes, with identical output, feature-off and
+independent G3-S/Philox oracle.
+All 21 files verify under
+`g3c4-copyout-union-fe9-123505d-20260929-a/SHA256SUMS` (seal SHA-256
+`3664752479150b9d41d136872bdefccfab9a3fa01ad1482e2a718bec776cb2fa`).
+The Step 5 structural checker still reports an inherited later-feature
+`generator_rng` source-string assertion on both reviewed inputs; the focused
+copy-out gate passes. Hosted #155/#157 merges and merged-head retest remain.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
