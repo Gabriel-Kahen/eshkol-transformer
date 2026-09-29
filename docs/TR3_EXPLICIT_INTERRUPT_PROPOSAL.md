@@ -1,8 +1,9 @@
 # TR3 explicit interruption proposal
 
-Status: proposed for independent review. This document does not change an
-installed API or establish implementation evidence. It starts from the reviewed
-bounded `trainer-train!` candidate at `304a2a1` (tree `767f982`).
+Status: contract independently approved; bounded implementation and focused
+linked caller staged on the branch based on reviewed `trainer-train!` candidate
+`304a2a1` (tree `767f982`). Full pinned fe9 gate, public checkpoint composition,
+and hosted acceptance remain pending.
 
 ## Runtime and contract boundary
 
@@ -140,4 +141,7 @@ can prove exact preservation of zero RNG state, not equivalence after RNG
 consumption. That requires a separately accepted stochastic training profile.
 The implementation gate is a pinned supported linked public caller with an
 independent source/test review, followed by exact-head hosted CI and merged
-dependency retest. No new checkpoint format or unsupported device is implied.
+dependency retest. #149/#151/#153 must be composed before the public train
+interrupt fresh-process witness above can run; their current branches do not
+share the #150 train implementation. No new checkpoint format or unsupported
+device is implied.

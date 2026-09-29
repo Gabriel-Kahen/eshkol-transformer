@@ -3,6 +3,8 @@
 ;;; staged before the first update and published only after a successful stop.
 
 (define tr3-train-active (vector #f))
+;;; Sole synchronous root for the optional caller predicate. Never checkpointed.
+(define tr3-train-predicate (vector #f))
 ;;; Localized test control only; ordinary installed callers have no setter.
 (define tr3-train-test-fail-after-one (vector #f))
 
@@ -66,10 +68,27 @@
     (tr3-metrics-train-fill-internal!
       loss-bits weight-bits tokens updates epochs)))
 
-(define (trainer-train! trainer stop-policy)
+(define (tr3-train-poll? record)
+  (let ((predicate (vector-ref tr3-train-predicate 0)))
+    (if (not predicate) #f
+        (begin
+          ;; The composer has committed and left the lease idle. Exclude
+          ;; reentrant same-trainer operations until the predicate returns.
+          (vector-set! record 3 'polling)
+          (let ((requested (predicate)))
+            (vector-set! record 3 'idle)
+            (if (not (boolean? requested))
+                (tr3-train-fail 'invalid-argument
+                  "interrupt predicate must return a boolean"))
+            requested)))))
+
+(define (tr3-train-run-internal trainer stop-policy predicate)
   (let* ((record (tr3-lease-record-for-shell-internal
                    trainer 'trainer-train!))
          (limits (tr3-stop-policy-validate-internal stop-policy)))
+    (if (and predicate (not (procedure? predicate)))
+        (tr3-train-fail 'invalid-argument
+          "interrupt predicate must be a procedure"))
     ;; This installed profile admits finite D2 states only. Unknown future
     ;; dataset kinds cannot silently satisfy an epoch stop policy.
     (if (and (vector-ref limits 2)
@@ -89,24 +108,21 @@
           (staged (vector #f)))
       (guard (caught
                (#t (begin
+                     (if (eq? (vector-ref record 3) 'polling)
+                         (vector-set! record 3 'idle))
                      (if (vector-ref staged 0)
                          (guard (cleanup (#t (tr3-lease-fail-stop 134)))
                            (tr3-metrics-train-abort-internal!)))
+                     (vector-set! tr3-train-predicate 0 #f)
                      (vector-set! tr3-train-active 0 #f)
                      (tr3-train-rethrow caught))))
         (tr3-metrics-train-begin-internal!)
         (vector-set! staged 0 #t)
+        (vector-set! tr3-train-predicate 0 predicate)
         (vector-set! tr3-train-active 0 #t)
         (let loop ()
-          (if (tr3-train-stop? record start limits)
-              (begin
-                (tr3-metrics-train-precommit-internal!)
-                (let ((summary (tr3-metrics-train-publish-internal!)))
-                  (vector-set! staged 0 #f)
-                  (vector-set! tr3-train-active 0 #f)
-                  summary))
-              (let ((candidate
-                      (bytevector-copy (vector-ref committed 0) 0 8)))
+          (let ((candidate
+                  (bytevector-copy (vector-ref committed 0) 0 8)))
                 (if (and (vector-ref tr3-train-test-fail-after-one 0)
                          (= (- (vector-ref record 20)
                                (vector-ref start 1)) 1))
@@ -127,4 +143,24 @@
                   (lambda () #t))
                 ;; Only a committed private step reaches here.
                 (vector-set! committed 0 candidate)
-                (loop))))))))
+                (if (or (tr3-train-stop? record start limits)
+                        (tr3-train-poll? record))
+                    (begin
+                      (tr3-metrics-train-precommit-internal!)
+                      (let ((summary (tr3-metrics-train-publish-internal!)))
+                        (vector-set! staged 0 #f)
+                        (vector-set! tr3-train-predicate 0 #f)
+                        (vector-set! tr3-train-active 0 #f)
+                        summary))
+                    (loop))))))))
+
+(define (trainer-train! trainer stop-policy)
+  (tr3-train-run-internal trainer stop-policy #f))
+
+(define (tr3-train-with-interrupt-internal trainer stop-policy options)
+  (if (or (not (pair? options))
+          (not (null? (cdr options)))
+          (not (procedure? (car options))))
+      (tr3-train-fail 'invalid-argument
+        "expected exactly one interrupt predicate"))
+  (tr3-train-run-internal trainer stop-policy (car options)))

@@ -68,8 +68,22 @@
           (vector trainer) (vector stop-policy) output)
         (vector-ref output 0)))))
 
-(define (trainer-train! trainer stop-policy)
-  (tr3-safe-trainer-train trainer stop-policy))
+(define tr3-safe-trainer-train-interruptible
+  (let ()
+    (extern void tr3-public-trainer-train-interruptible ptr ptr ptr ptr
+            :real et_e1b_public_tr3_trainer_train_interruptible_v1)
+    (lambda (trainer stop-policy interrupt-options)
+      (let ((output (vector #f))
+            (root (vector interrupt-options)))
+        (tr3-public-trainer-train-interruptible
+          (vector trainer) (vector stop-policy) root output)
+        (vector-ref output 0)))))
+
+(define (trainer-train! trainer stop-policy . interrupt)
+  (if (null? interrupt)
+      (tr3-safe-trainer-train trainer stop-policy)
+      (tr3-safe-trainer-train-interruptible
+        trainer stop-policy interrupt)))
 
 (define c2-safe-trainer-state-release
   (let ()
