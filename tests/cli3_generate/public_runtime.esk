@@ -1,0 +1,195 @@
+(require transformer.config)
+(require transformer.capabilities)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.generation)
+(require transformer.model)
+(require transformer.module)
+(require transformer.optim)
+(require transformer.persistence)
+(require transformer.tokenizer)
+(require transformer.trainer)
+(require transformer.error_public)
+
+(define (check label value)
+  (if value #t (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (same-bytes? a b)
+  (and (= (bytevector-length a) (bytevector-length b))
+       (let loop ((i 0))
+         (if (= i (bytevector-length a)) #t
+             (and (= (bytevector-u8-ref a i) (bytevector-u8-ref b i))
+                  (loop (+ i 1)))))))
+(define (seen? handle prior)
+  (if (null? prior) #f
+      (or (eq? handle (car prior)) (seen? handle (cdr prior)))))
+(define (reverse-list left)
+  (let loop ((source left) (out '()))
+    (if (null? source) out (loop (cdr source) (cons (car source) out)))))
+(define (list-length left)
+  (if (null? left) 0 (+ 1 (list-length (cdr left)))))
+(define (unique-paths tree)
+  (let loop ((left (parameter-tree-paths tree)) (seen '()) (out '()))
+    (if (null? left) (reverse-list out)
+        (let ((handle (parameter-tree-handle tree (car left))))
+          (if (seen? handle seen)
+              (loop (cdr left) seen out)
+              (loop (cdr left) (cons handle seen) (cons (car left) out)))))))
+(define (f32-word bytes index)
+  (let ((offset (* index 4)))
+    (+ (bytevector-u8-ref bytes offset)
+       (* 256 (bytevector-u8-ref bytes (+ offset 1)))
+       (* 65536 (bytevector-u8-ref bytes (+ offset 2)))
+       (* 16777216 (bytevector-u8-ref bytes (+ offset 3))))))
+(define (f32-order word)
+  (check "finite oracle logit"
+    (not (= (bitwise-and (arithmetic-shift word -23) 255) 255)))
+  (if (= (bitwise-and word #x80000000) 0)
+      (+ word #x80000000)
+      (- #xffffffff word)))
+(define (greedy-oracle bytes)
+  ;; Diagnostic public M3 emits P1 logits as 256 little-endian binary32 words.
+  ;; Float ordering is exact for this finite all-f32 profile; ties choose low ID.
+  (check "P1 oracle shape" (= (bytevector-length bytes) 2048))
+  (let loop ((token 1) (best 0) (best-word (f32-order (f32-word bytes 0))))
+    (if (= token 256) best
+        (let ((word (f32-order (f32-word bytes token))))
+          (if (> word best-word)
+              (loop (+ token 1) token word)
+              (loop (+ token 1) best best-word))))))
+(define (logits-for model token)
+  (let ((input (diagnostic-input-create)))
+    (check "reference input" (diagnostic-input-copy! input (list token 0)))
+    (let* ((output (model-forward model input))
+           (logits (model-output-logits output))
+           (bits (diagnostic-model-logits-bits logits)))
+      (check "reference owners"
+        (and (diagnostic-model-logits-release! logits)
+             (model-output-release! output)
+             (diagnostic-input-release! input)))
+      bits)))
+
+(define args (cdr (command-line)))
+(check "five paths" (= (list-length args) 5))
+(define tokenizer-path (car args))
+(define corpus-directory (car (cdr args)))
+(define checkpoint-path (car (cdr (cdr args))))
+(define corrupt-path (car (cdr (cdr (cdr args)))))
+(define torn-path (car (cdr (cdr (cdr (cdr args))))))
+(define resolved
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}")
+    '()))
+(define tokenizer
+  (tokenizer-load tokenizer-path
+                  (persistence-policy 1048576 1048576 1048576 64 'cpu)))
+(check "canonical T1" (and (= (tokenizer-vocab-size tokenizer) 256)
+                            (string=? (tokenizer-fingerprint tokenizer)
+                              "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))
+(define dataset
+  (token-dataset-open
+    (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+(define model
+  (with-region ('cli3-generate-restored-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define tree (module-parameters model))
+(define optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths tree) "3dcccccd" "3f000000"
+                      "3f000000" "3a83126f" "00000000")))
+    tree))
+(define trainer (trainer-create resolved tokenizer dataset model optimizer))
+(define before-logits (logits-for model 65))
+(define checkpoint-policy (persistence-policy 16777216 524288 8388608 64 'cpu))
+(expect-error "forged capability report" 'invalid-argument 'checkpoint-load
+  (lambda () (checkpoint-load checkpoint-path checkpoint-policy (vector 'forged))))
+(define capabilities (capability-discover))
+(expect-error "corrupt checksum" 'corrupt-data 'checkpoint-load
+  (lambda () (checkpoint-load corrupt-path checkpoint-policy capabilities)))
+(expect-error "malformed truncated C2" 'corrupt-data 'checkpoint-load
+  (lambda () (checkpoint-load torn-path checkpoint-policy capabilities)))
+(check "failed LOAD leaves receiver model untouched"
+  (same-bytes? before-logits (logits-for model 65)))
+(define loaded (checkpoint-load checkpoint-path checkpoint-policy capabilities))
+(expect-error "forged trainer state" 'invalid-argument 'trainer-load-state!
+  (lambda () (trainer-load-state! trainer (vector 'forged))))
+(check "public TR3 restore" (trainer-load-state! trainer loaded))
+(check "detached state release" (trainer-state-release! loaded))
+(expect-error "released state cannot restore" 'invalid-state 'trainer-load-state!
+  (lambda () (trainer-load-state! trainer loaded)))
+(check "restored model changed" (not (same-bytes? before-logits (logits-for model 65))))
+(check "eval mode" (module-eval! model))
+(expect-error "wrong-kind model" 'invalid-argument 'generator-create
+  (lambda () (generator-create (vector 'forged) tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729))))
+(expect-error "forged T1 input" 'invalid-argument 'generation-input-create
+  (lambda () (generation-input-create (vector 'forged))))
+(define expected-byte (greedy-oracle (logits-for model 65)))
+(define policy
+  (list ':profile 'diagnostic-c2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define categorical-policy
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define (generate-once selected-policy)
+  (let* ((encoded (tokenizer-encode tokenizer (bytevector 65)))
+         (input (generation-input-create encoded))
+         (generator (generator-create model tokenizer selected-policy)))
+    (expect-error "wrong-kind input" 'invalid-argument 'generator-generate!
+      (lambda () (generator-generate! generator model)))
+    (let* ((output (generator-generate! generator input))
+           (text (generation-output-text output))
+           (ids (generation-output-ids output))
+           (lengths (generation-output-lengths output))
+           (cache-lengths (generation-output-cache-lengths output))
+           (rng (generation-output-rng output)))
+      (check "one detached raw byte"
+        (and (pair? text) (null? (cdr text)) (bytevector? (car text))
+             (= 1 (bytevector-length (car text)))))
+      (let ((result (bytevector-u8-ref (car text) 0)))
+        (check "one public ID" (and (pair? ids) (null? (cdr ids))))
+        (check "typed G3 owners"
+          (and (generator-close! generator)
+               (generation-tensor-release! (car ids))
+               (generation-tensor-release! lengths)
+               (generation-tensor-release! cache-lengths)
+               (generation-rng-release! rng)
+               (generation-output-release! output)
+               (generation-tensor-release! input)))
+        (expect-error "released output" 'invalid-state 'generation-output-text
+          (lambda () (generation-output-text output)))
+        result))))
+(define first (generate-once policy))
+(check "restored model greedy oracle" (= first expected-byte))
+(check "greedy repeat" (= first (generate-once policy)))
+(define categorical (generate-once categorical-policy))
+(check "seeded categorical repeat"
+  (= categorical (generate-once categorical-policy)))
+(check "trainer release" (trainer-release! trainer))
+(check "D2 close" (token-dataset-close! dataset))
+(display "CLI3-GENERATE-CHECKPOINT-PREREQUISITE-PASS ")
+(display first)
+(display " ")
+(display categorical)
+(newline)

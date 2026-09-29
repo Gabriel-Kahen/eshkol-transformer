@@ -1,0 +1,58 @@
+from pathlib import Path
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = ROOT / 'tests/cli3_generate'
+NATIVE = ROOT / 'native'
+
+
+def lines(path):
+    return path.read_text().splitlines()
+
+
+class SingleRegistryContract(unittest.TestCase):
+    def test_accepts_exact_g3g_p1_g1_suffix(self):
+        aggregate = lines(FIXTURE / 'aggregate_root.esk')
+        g3 = lines(NATIVE / 'g3g_package_root.esk')
+        self.assertEqual(aggregate[1], '(load "cli3_root.esk")')
+        self.assertEqual(aggregate[2:], g3[3:])
+        self.assertEqual(aggregate.count('(load "cli3_root.esk")'), 1)
+        self.assertNotIn('(load "m3_package_root.esk")', aggregate)
+
+    def test_public_exports_are_reviewed_union(self):
+        expected = (set(lines(NATIVE / 'tr3_public_installed_exports.txt'))
+                    | set(lines(NATIVE / 'cli3_public_exports.txt'))
+                    | {name for name in lines(NATIVE / 'g3g_package_public_exports.txt')
+                       if name.startswith(('et_e1b_public_g3_',
+                                           'et_e1b_public_m3_'))})
+        self.assertEqual(lines(FIXTURE / 'aggregate_public_exports.txt'),
+                         sorted(expected))
+
+    def test_bridge_keeps_one_predecessor(self):
+        bridge = (FIXTURE / 'aggregate_bridge.c').read_text()
+        m3 = (NATIVE / 'm3_package_bridge.c').read_text()
+        g3 = (NATIVE / 'g3g_package_bridge.c').read_text()
+        m3_wrappers = m3.split('#include "m3t_package_bridge.c"\n', 1)[1].strip()
+        g3_wrappers = g3.split('#include "m3_package_bridge.c"\n', 1)[1].strip()
+        self.assertEqual(bridge,
+            '/* Test-only same-registry CLI3/TR3 plus reviewed M3 and G3 wrappers. */\n'
+            '#include "cli3_package_bridge.c"\n\n'
+            + m3_wrappers + '\n\n' + g3_wrappers + '\n')
+
+    def test_witness_uses_public_checkpoint_and_generation(self):
+        witness = (FIXTURE / 'public_runtime.esk').read_text()
+        for call in ('(capability-discover)', '(checkpoint-load ',
+                     '(trainer-load-state! trainer loaded)',
+                     '(module-eval! model)',
+                     '(generator-create model tokenizer selected-policy)',
+                     '(tokenizer-encode tokenizer (bytevector 65))',
+                     '(generation-input-create encoded)',
+                     '(generation-output-text output)', '(greedy-oracle '):
+            self.assertIn(call, witness)
+        self.assertNotIn('et_e1b_private_', witness)
+        self.assertNotIn('g3t-', witness)
+
+
+if __name__ == '__main__':
+    unittest.main()
