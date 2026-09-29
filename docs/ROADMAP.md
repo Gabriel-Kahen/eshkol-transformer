@@ -657,6 +657,23 @@ failures, and reruns the original six CLI commands. The predecessor linked
 gate, successor independent review and supported linked/runtime gate remain
 pending; the production CLI3 package does not yet export `generate`.
 
+The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
+[disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
+accepted locally at `328f049`/tree `55f84c0` against merged main `a51ab96`.
+Eight accepted M3 public entries route through the installed trainer lease
+gates in the same registry. Independent source/tests and post-exit evidence
+reviews approved the exact head. Its pinned fe9 linked gate exited zero with
+exact 66-source/33-native package manifests, all twelve fresh-process
+resume cases at accumulation 1/2/3, and genuine public CPU-f32 training:
+one-batch loss fell from 5.57905149 to 2.21726823e-05 after 32 updates,
+with changed and restorable public forward state; disjoint held-out loss fell
+from 5.54273176 to 4.08261538 after 32 updates, preserving D2 cursors and
+prior metrics. The 293-file post-exit seal is
+`tr3-overfit-heldout-main-a51-328f-20260929/FINAL_SHA256SUMS` (SHA256
+`f9989dd27a87a10dee4779255842755b367383ada6bf27b1d28d11dd758bc9d2`).
+Hosted integration and broader stochastic/general-profile TR3 acceptance
+remain open.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
