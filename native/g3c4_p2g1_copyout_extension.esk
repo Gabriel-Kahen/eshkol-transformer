@@ -1,0 +1,84 @@
+;;; Source-private detached P2/G1 output copy. Load after the shell extension.
+;;; No public generation facade, EOS decision, or subsequent decode is added.
+
+(extern i64 g3c4-native-output-copy-snapshot ptr ptr ptr
+        :real et_g3c4_private_output_copy_snapshot_v1)
+
+(define g3c4-p2g1-copyout-i64-sign 9223372036854775808)
+(define g3c4-p2g1-copyout-u64-modulus 18446744073709551616)
+
+(define (g3c4-p2g1-copyout-word bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0)
+        (if (>= value g3c4-p2g1-copyout-i64-sign)
+            (- value g3c4-p2g1-copyout-u64-modulus)
+            value)
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (g3c4-p2g1-output-copy-internal shell)
+  (let ((operation 'g3c4-p2g1-output-copy-internal))
+    (m3-call operation
+      (let* ((entry (g3c4-registry-find shell operation))
+             (live (if (g3c4-dead-entry? entry 'output)
+                       (g3c4-fail 'invalid-state operation
+                                  "C4 output was released")
+                       (g3c4-p2g1-output-entry-live shell operation)))
+             (record (g3c4-p2g1-record-for-output live))
+             (native (vector-ref live 3))
+             (raw (vector-ref live 8))
+             (copy #f)
+             (stage #f)
+             (rng #f)
+             (result #f))
+        (guard (caught
+                 (#t
+                   (if (bytevector? stage)
+                       (g3c4-p2g1-zero-bytes! stage 56))
+                   (if (bytevector? copy)
+                       (g3c4-p2g1-zero-bytes! copy 1))
+                   (if (transformer-error? caught)
+                       (raise caught)
+                       (g3c4-fail 'internal operation
+                                  "C4 copy-out dependency raised a foreign value"))))
+          (set! copy (make-bytevector 1 0))
+          (set! stage (make-bytevector 56 0))
+          (set! rng (vector g3c4-rng-algorithm 0 0 0 0))
+          (set! result (vector copy 0 0 0 rng))
+          (g3c4-native-check
+            (g3c4-native-output-copy-snapshot native raw stage)
+            operation)
+          (let* ((selected (g3c4-p2g1-copyout-word stage 0))
+                 (length (g3c4-p2g1-copyout-word stage 8))
+                 (cache-length (g3c4-p2g1-copyout-word stage 16))
+                 (rng0 (g3c4-p2g1-copyout-word stage 24))
+                 (rng1 (g3c4-p2g1-copyout-word stage 32))
+                 (rng2 (g3c4-p2g1-copyout-word stage 40))
+                 (rng3 (g3c4-p2g1-copyout-word stage 48)))
+            (if (not (and (<= 0 selected) (<= selected 255)
+                          (= length 1) (= cache-length 3)
+                          (= rng0 1) (>= rng1 0)
+                          (eq? live
+                               (g3c4-p2g1-output-entry-live
+                                 shell operation))
+                          (eq? record
+                               (g3c4-p2g1-record-for-output live))
+                          (eq? native (vector-ref live 3))
+                          (eq? raw (vector-ref live 8))
+                          (= (bytevector-u8-ref raw 0) selected)))
+                (g3c4-fail 'invalid-state operation
+                           "C4 copied output or owner link changed"))
+            (bytevector-u8-set! copy 0 selected)
+            (vector-set! rng 1 rng0)
+            (vector-set! rng 2 rng1)
+            (vector-set! rng 3 rng2)
+            (vector-set! rng 4 rng3)
+            (if (not (g3c4-rng-snapshot? rng))
+                (g3c4-fail 'internal operation
+                           "C4 copied RNG snapshot is invalid"))
+            (vector-set! result 1 selected)
+            (vector-set! result 2 length)
+            (vector-set! result 3 cache-length)
+            (g3c4-p2g1-zero-bytes! stage 56)
+            result))))))
