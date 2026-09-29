@@ -68,6 +68,7 @@ native/tr3_public_state_extension.esk
 native/tr3_public_train_extension.esk
 native/cli3_extension.esk
 native/cli3_b_extension.esk
+tests/cli3_generate/t2_g3g_private_bridge.esk
 native/g3t_model_admission_extension.esk
 native/g3t_generator_constructor_extension.esk
 native/g3t_prefill_sample_extension.esk

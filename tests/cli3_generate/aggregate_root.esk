@@ -1,5 +1,6 @@
 ;;; Test-only single registry: CLI3/TR3 checkpoint restore plus accepted G3-G C2.
 (load "cli3_root.esk")
+(load "t2_g3g_private_bridge.esk")
 (load "g3t_model_admission_extension.esk")
 (load "g3t_generator_constructor_extension.esk")
 (load "g3t_prefill_sample_extension.esk")

@@ -1,0 +1,9 @@
+;;; Test-only predecessor spelling for G3-G inside CLI3's T2 registry.
+;;; T2 owns the tokenizer shell and the T1 core in this aggregate; loading the
+;;; T1 private registry would create a second, incompatible shell authority.
+(define t1-private-entry t2-private-entry)
+(define-syntax t1-private-raise
+  (syntax-rules ()
+    ((_ category operation message)
+     (t2-private-raise category operation message))))
+(define t1-wave1-native-fail t2-wave2-native-fail)
