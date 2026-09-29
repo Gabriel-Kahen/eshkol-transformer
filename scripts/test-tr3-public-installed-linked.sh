@@ -230,7 +230,7 @@ grep -Fx "TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128" 
 test ! -s /out/step.stderr
 
 # A localized installed aggregate plus one read-only test bit inspector. The
-# same caller runs in nine fresh OS processes across A=1,2,3; no private
+# same caller runs in twelve fresh OS processes across A=1,2,3; no private
 # trainer, C2, D2, or optimizer entry is linked into the caller.
 clang-21 "${flags[@]}" -I /fixed-source/inc \
   -c tests/tr3_public_installed/resume_bits.c -o /out/resume_bits.o
@@ -246,7 +246,8 @@ timeout --foreground --signal=TERM --kill-after=5s 120s \
 for accumulation in 1 2 3; do
   directory="/out/corpus/resume-${accumulation}"
   cp -a /out/corpus/step-two "${directory}"
-  for mode in baseline producer receiver; do
+  printf '1' > "${directory}/interrupt-request"
+  for mode in baseline train-baseline producer receiver; do
     ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
       --kill-after=5s 120s \
       /out/fresh_resume "${directory}" "${mode}" "${accumulation}" \
@@ -256,20 +257,18 @@ for accumulation in 1 2 3; do
       "/out/fresh-${accumulation}-${mode}.stdout" >/dev/null
     test ! -s "/out/fresh-${accumulation}-${mode}.stderr"
   done
+  grep -Fx 'INTERRUPT-ACK 1' \
+    "/out/fresh-${accumulation}-producer.stdout" >/dev/null
   grep "^METRIC " "/out/fresh-${accumulation}-baseline.stdout" \
     > "/out/fresh-${accumulation}-baseline.metrics"
-  grep "^METRIC " "/out/fresh-${accumulation}-producer.stdout" \
-    > "/out/fresh-${accumulation}-resumed.metrics"
-  grep "^METRIC " "/out/fresh-${accumulation}-receiver.stdout" \
-    >> "/out/fresh-${accumulation}-resumed.metrics"
   test "$(wc -l < "/out/fresh-${accumulation}-baseline.metrics")" = 4
-  cmp "/out/fresh-${accumulation}-baseline.metrics" \
-      "/out/fresh-${accumulation}-resumed.metrics"
   cmp "${directory}/resume-fresh-before-0.c2" \
       "${directory}/resume-fresh-after-0.c2"
   cmp "${directory}/resume-mismatch-before-0.c2" \
       "${directory}/resume-mismatch-after-0.c2"
   cmp "${directory}/resume-baseline-1.c2" "${directory}/resume-k-1.c2"
+  cmp "${directory}/resume-baseline-4.c2" \
+      "${directory}/resume-train-baseline-4.c2"
   cmp "${directory}/resume-baseline-1.c2" \
       "${directory}/resume-restored-1.c2"
   for ordinal in 2 3 4; do
@@ -290,8 +289,20 @@ for accumulation in (1, 2, 3):
                (evidence / f"fresh-{accumulation}-baseline.metrics").read_text().splitlines()]
     assert len(records) == 4
     assert len({record[2] for record in records}) == 4, records
+    producer = (evidence / f"fresh-{accumulation}-producer.stdout").read_text().splitlines()
+    receiver = (evidence / f"fresh-{accumulation}-receiver.stdout").read_text().splitlines()
+    trained = [line.split() for line in producer + receiver if line.startswith("TRAIN ")]
+    assert len(trained) == 4, trained
+    full = [line.split() for line in
+            (evidence / f"fresh-{accumulation}-train-baseline.stdout").read_text().splitlines()
+            if line.startswith("FULL ")]
+    assert len(full) == 1 and int(full[0][4]) == 4, full
+    assert int(full[0][3]) == sum(int(record[4]) for record in records), full
     for update, record in enumerate(records, 1):
         assert record[0] == "METRIC" and int(record[1]) == update
+        train = trained[update - 1]
+        assert train[0] == "TRAIN" and int(train[1]) == update, train
+        assert train[2:5] == record[2:5] and int(train[5]) == 1, (train, record)
         rows.append(f"{accumulation}\t{update}\t{int(record[2]):08x}\t{int(record[3]):08x}")
 (evidence / "fresh-loss-variation.tsv").write_text("\n".join(rows) + "\n")
 PY
