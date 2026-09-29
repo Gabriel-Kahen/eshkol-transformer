@@ -35,10 +35,19 @@ Usage: eshkol-transformer pretrain --config PATH --tokenizer PATH --train-corpus
 Usage: eshkol-transformer evaluate --config PATH --tokenizer PATH --train-corpus DIRECTORY --validation-corpus DIRECTORY --checkpoint PATH
 ```
 
-Each is its own one-line response plus LF. Top-level help retains CLI3-A's
-existing bytes, then appends one blank line and these exact lines:
+Each is its own one-line response plus LF. Top-level help changes CLI3-A's
+usage line to admit direct commands while preserving its group descriptions.
+Its exact output, including the final LF, is:
 
 ```text
+Usage: eshkol-transformer GROUP COMMAND [OPTIONS]
+       eshkol-transformer pretrain|evaluate [OPTIONS]
+
+Groups:
+  tokenizer   Create and inspect tokenizer artifacts
+  corpus      Build and inspect D1 token corpora
+  checkpoint  Inspect C2 checkpoints
+
 Commands:
   pretrain    Train the fixed CPU f32 diagnostic profile (1..4 updates)
   evaluate    Evaluate a checkpoint with that fixed profile
@@ -59,7 +68,9 @@ other tokenizer families for this slice. A checkpoint's tokenizer and config
 identities must match these exact operands at restore.
 
 Open each finite D1 corpus through the public D2 ten-key option list with
-`:batch-size 1`, `:sequence-length 2`, `:maximum-manifest-bytes 1048576`,
+`:directory` set to that invocation's `--train-corpus` or
+`--validation-corpus` path, `:batch-size 1`, `:sequence-length 2`,
+`:maximum-manifest-bytes 1048576`,
 `:maximum-shard-bytes 1048576`, `:maximum-total-tokens 65536`,
 `:maximum-batch-bytes 34`, `:shuffle-seed #f`, `:shuffle-window-rows 1`, and
 `:packing? #t`. Each directory must pass D1/D2's complete checks. Training
@@ -153,7 +164,8 @@ establish that combined executable. CLI3-B must source-compose that aggregate,
 not link independently localized CLI3-A and TR3 archives.
 
 The focused end-to-end gate must build twice from fresh caches and compare the
-closure, symbol inventory and executable bytes. It must use the delivered CLI
+closure, symbol inventory and executable bytes, including an exact-byte check
+of the amended top-level help. It must use the delivered CLI
 binary to build or inspect accepted tokenizer/corpus inputs, pretrain through a
 finite D2 EOS with unequal active-token weights, save C2, evaluate a distinct
 corpus, and resume in a fresh process. Compare canonical checkpoints and f32
