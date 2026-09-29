@@ -1,0 +1,60 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g1_pending_extension.esk")
+(load "g3c4_p2g1_shell_publication_extension.esk")
+
+(extern i64 shell-test-prepare ptr ptr
+        :real et_g3c4_shell_test_prepare_v1)
+(extern i64 shell-test-field ptr i64
+        :real et_g3c4_output_envelope_test_field_v1)
+(extern i64 shell-test-ids-borrow ptr i64
+        :real et_g3c4_shell_test_ids_borrow_v1)
+(extern i64 shell-test-a2-view ptr i64
+        :real et_g3c4_shell_test_a2_view_v1)
+(extern i64 shell-test-mutation i64
+        :real et_g3c4_shell_test_mutation_v1)
+(extern i64 shell-test-published ptr ptr
+        :real et_g3c4_shell_test_published_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G1 shell FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (latest kind)
+  (let loop ((remaining (vector-ref g3c4-registry 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 1) kind) (car remaining))
+          (else (loop (cdr remaining))))))
+(define (dead? entry)
+  (and (eq? (vector-ref entry 2) 'dead)
+       (not (vector-ref entry 3))
+       (not (vector-ref entry 8))))
+(define (config mode seed)
+  (list ':profile 'diagnostic-c4 ':sampling mode
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed seed))
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define model-entry (car (vector-ref g3c4-model-registry 0)))
+
+(define (prepare call)
+  (let* ((generator-entry (vector-ref call 4))
+         (output (g3c4-p2g1-output-reserve call)))
+    (check "genuine P2 prefill and position-two token forward"
+           (= (shell-test-prepare (vector-ref generator-entry 3)
+                                  (vector-ref output 3)) 0))
+    output))

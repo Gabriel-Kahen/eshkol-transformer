@@ -108,6 +108,16 @@ ET_F32_TENSOR_API int32_t et_f32_tensor_abi_require_v1(
 ET_F32_TENSOR_API void
 et_f32_tensor_error_clear_v1(et_f32_tensor_error *error);
 
+#ifdef ET_F32_TENSOR_STORAGE_QUERY_PRIVATE
+/* Source-private, process-local inspection only; caller serializes with I2.
+ * For a nonempty representable span, return 1 iff it overlaps any live I2
+ * owned control/metadata/data/plan allocation or retained retired control,
+ * otherwise 0. Null, zero-byte, or overflowing spans return -1. The query
+ * never writes through pointer or acquires a borrow. */
+int32_t et_f32_tensor_private_storage_overlap_v1(
+    const void *pointer, size_t bytes);
+#endif
+
 /*
  * Shapes are deep-copied. Pointer outputs must initially contain NULL and are
  * byte-preserved on failure. All calls require caller serialization.

@@ -1,0 +1,72 @@
+(load "p2_g1_shell_test_common.esk")
+
+(define (run-success mode seed)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer
+                                           (config mode seed)))
+         (generator-entry (latest 'generator))
+         (shell
+           (g3c4-with-p2g1-output-call-internal
+             'g3c4-p2g1-shell-success generator (call)
+             (let ((output (prepare call)))
+               (reject "unprepared joint commit" 'invalid-state
+                 (lambda ()
+                   (g3c4-native-check
+                     (g3c4-native-generation-frame-commit
+                       (vector-ref generator-entry 3)
+                       (vector-ref output 3))
+                     'g3c4-p2g1-unprepared)))
+               (reject "pending shell cannot be released as live"
+                       'invalid-state
+                 (lambda ()
+                   (g3c4-p2g1-output-release-internal!
+                     (vector-ref output 0))))
+               (g3c4-p2g1-output-publish! call output))))
+         (entry (g3c4-p2g1-output-entry-live shell 'test)))
+    (check "published Eshkol shell owns one raw byte"
+           (and (eq? (vector-ref entry 2) 'live)
+                (= (bytevector-length (vector-ref entry 8)) 1)
+                (= (shell-test-field (vector-ref entry 3) 0) 3)
+                (= (shell-test-field (vector-ref entry 3) 4) 1)
+                (= (shell-test-published (vector-ref entry 3)
+                                         (vector-ref entry 8)) 1)
+                (not (vector-ref entry 4))
+                (not (vector-ref entry 5))
+                (not (vector-ref entry 6))))
+    (check "call links and shared guard cleared"
+           (and (not (vector-ref generator-entry 9))
+                (not (vector-ref model-entry 10))
+                (not (vector-ref m3-call-state 0))
+                (dead? (latest 'call))))
+    (reject "coordinator cannot publish a second time" 'invalid-state
+      (lambda ()
+        (g3c4-p2g1-output-publish! (latest 'call) (latest 'output))))
+    (check "output survives generator close"
+           (g3c4-generator-close-internal! generator))
+    (reject "wrong-kind registered shell cannot release output"
+            'invalid-state
+      (lambda () (g3c4-p2g1-output-release-internal! generator)))
+    (check "published native output I1 borrow starts"
+           (= (shell-test-ids-borrow (vector-ref entry 3) 1) 0))
+    (reject "borrowed output release preserves live shell" 'invalid-state
+      (lambda () (g3c4-p2g1-output-release-internal! shell)))
+    (check "borrowed output shell remains live"
+           (eq? (vector-ref entry 2) 'live))
+    (check "published native output I1 borrow ends"
+           (= (shell-test-ids-borrow (vector-ref entry 3) 0) 0))
+    (check "release after generator close"
+           (g3c4-p2g1-output-release-internal! shell))
+    (check "release tombstones shell"
+           (dead? entry))
+    (check "authenticated repeat release"
+           (g3c4-p2g1-output-release-internal! shell))
+    (reject "forged output shell rejected" 'invalid-argument
+      (lambda () (g3c4-p2g1-output-release-internal!
+                   (vector 'forged-output))))))
+
+(run-success 'greedy 7)
+(run-success 'categorical 13)
+
+(display "G3-C4 P2/G1 shell PASS: checks=")
+(display checks)
+(display " success=2") (newline)

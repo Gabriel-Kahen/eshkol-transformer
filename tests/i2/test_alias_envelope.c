@@ -1,5 +1,6 @@
 /* Development-only differential access to source-private helpers; no test ABI. */
 #define ET_F32_TENSOR_TESTING 1
+#define ET_F32_TENSOR_STORAGE_QUERY_PRIVATE 1
 #include "../../native/f32_tensor.c"
 
 static size_t checks;
@@ -9,6 +10,11 @@ static size_t checks;
 
 static void differential(const void *p, size_t n) {
   CHECK(storage_aliases_live(p, n) == storage_aliases_live_reference(p, n));
+  if (p == NULL || n == 0u || !pointer_span_fits(p, n))
+    CHECK(et_f32_tensor_private_storage_overlap_v1(p, n) == -1);
+  else
+    CHECK(et_f32_tensor_private_storage_overlap_v1(p, n) ==
+          storage_aliases_live_reference(p, n));
 }
 
 /* Explicit contract inventory, independent of the shortcut's allocation recorder. */
@@ -25,9 +31,11 @@ static void protected_span(const void *p, size_t n) {
   CHECK(p != NULL && n > 0u && first > 1u && first < UINTPTR_MAX - n - 1u);
   CHECK(storage_aliases_live_reference(p, n) == 1);
   CHECK(storage_aliases_live(p, n) == 1);
+  CHECK(et_f32_tensor_private_storage_overlap_v1(p, n) == 1);
   /* These boundary/interior probes must hit this allocation irrespective of
    * allocator placement or neighboring allocations. */
   CHECK(storage_aliases_live((void *)first, 1u) == 1);
+  CHECK(et_f32_tensor_private_storage_overlap_v1((void *)first, 1u) == 1);
   CHECK(storage_aliases_live((void *)(first + n - 1u), 1u) == 1);
   CHECK(storage_aliases_live((void *)(first + n / 2u), 1u) == 1);
   CHECK(storage_aliases_live((void *)(first - 1u), 2u) == 1);

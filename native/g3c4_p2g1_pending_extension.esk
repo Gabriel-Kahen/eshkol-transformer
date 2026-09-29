@@ -1,0 +1,5 @@
+;;; Source-private C4 P2/G1 pending-transcript reservation gate.
+;;; Load only after g3c4_output_envelope_extension.esk with a native owner
+;;; built with ET_G3C4_P2_G1_PENDING_PRIVATE. Never install this source.
+
+(vector-set! g3t-p2g1-pending-gate 0 #t)
