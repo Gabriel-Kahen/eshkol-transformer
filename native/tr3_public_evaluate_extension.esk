@@ -1,0 +1,100 @@
+;;; Installed fixed-profile validation against the leased trainer's model.
+;;; E3 owns traversal, no-grad mode, cursor restoration and private publication.
+(extern ptr tr3-evaluation-destination-create
+        :real et_e3_diagnostic_destination_create_v1)
+(extern i64 tr3-evaluation-destination-destroy ptr
+        :real et_e3_diagnostic_destination_destroy_v1)
+(extern i64 tr3-evaluation-selected-bits ptr i64
+        :real et_e3_private_selected_metric_bits_ref_v1)
+
+(define (tr3-evaluation-rethrow caught)
+  (if (transformer-error? caught)
+      (et-e1b-private-raise
+        (transformer-error-category caught) 'trainer-evaluate!
+        (transformer-error-message caught)
+        (transformer-error-details caught)
+        (transformer-error-cause caught))
+      (et-e1b-private-raise
+        'internal 'trainer-evaluate! "evaluation raised a foreign value"
+        '() #f)))
+
+(define (tr3-evaluation-destinations-destroy! destinations)
+  (let loop ((index 0))
+    (if (= index 4) #t
+        (begin
+          (if (vector-ref destinations index)
+              (if (not (= (tr3-evaluation-destination-destroy
+                            (vector-ref destinations index)) 0))
+                  (tr3-lease-fail-stop 134)))
+          (vector-set! destinations index #f)
+          (loop (+ index 1))))))
+
+(define (tr3-evaluation-destinations-create)
+  (let ((destinations (vector #f #f #f #f)))
+    (guard (caught
+             (#t (begin (tr3-evaluation-destinations-destroy! destinations)
+                        (raise caught))))
+      (let create ((index 0))
+        (if (= index 4) destinations
+            (let ((destination (tr3-evaluation-destination-create)))
+              (if (null? destination)
+                  (m3t-fail 'internal 'trainer-evaluate!
+                            "evaluation destination allocation failed"))
+              (vector-set! destinations index destination)
+              (create (+ index 1))))))))
+
+(define (tr3-evaluation-bit-ref frame selector)
+  (let* ((entry (e3-frame-entry-live frame 'trainer-evaluate!))
+         (word (tr3-evaluation-selected-bits
+                 (vector-ref entry 4) selector)))
+    (if (< word 0)
+        (let ((unreachable (e3-raise-native-setup 'trainer-evaluate!)))
+          unreachable))
+    word))
+
+(define (tr3-evaluation-project! frame)
+  ;; E3 has finished its own call guard before reaching this closed read set.
+  ;; Staging remains held in the sole metrics root throughout all four reads.
+  (m3-call 'trainer-evaluate!
+    (let* ((loss (tr3-evaluation-bit-ref frame 0))
+           (weight (tr3-evaluation-bit-ref frame 1))
+           (tokens (e3-counter-ref frame 0))
+           (batches (e3-counter-ref frame 1)))
+      (tr3-metrics-evaluation-fill-internal!
+        loss weight tokens batches))))
+
+(define (trainer-evaluate! trainer dataset)
+  (let ((staged? #f)
+        (lease #f)
+        (destinations #f)
+        (frame #f))
+    (guard (caught
+             (#t
+              (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                (if frame (e3-frame-unbind! frame))
+                (if destinations
+                    (tr3-evaluation-destinations-destroy! destinations))
+                (if lease (tr3-lease-evaluation-exit-internal! lease))
+                (if staged? (tr3-metrics-evaluation-abort-internal!)))
+              (tr3-evaluation-rethrow caught)))
+      ;; Authenticate the exact lease and held-out D2 identity before allocating
+      ;; an unpublished metrics token or changing any trainer/evaluator state.
+      (let ((admitted
+              (tr3-lease-evaluation-admit-internal trainer dataset)))
+      (tr3-metrics-evaluation-begin-internal!)
+      (set! staged? #t)
+      (set! lease (tr3-lease-evaluation-enter-internal! admitted))
+      (set! destinations (tr3-evaluation-destinations-create))
+      (set! frame (e3-frame-bind! (vector-ref lease 8) destinations))
+      (e3-evaluate-into! (vector-ref lease 8) dataset frame)
+      (tr3-evaluation-project! frame)
+      (e3-frame-unbind! frame)
+      (set! frame #f)
+      (tr3-evaluation-destinations-destroy! destinations)
+      (set! destinations #f)
+      (tr3-metrics-evaluation-prepublish-internal!)
+      (tr3-lease-evaluation-exit-internal! lease)
+      (set! lease #f)
+      (let ((token (tr3-metrics-evaluation-publish-internal!)))
+        (set! staged? #f)
+        token)))))

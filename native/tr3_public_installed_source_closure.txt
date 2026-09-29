@@ -47,6 +47,12 @@ native/tr3_c_restore_bindings_extension.esk
 native/tr3_c_joint_restore_extension.esk
 native/tr3_c_checkpoint_restore_extension.esk
 native/tr3_c_trainer_load_state_extension.esk
+native/m3_call_adapters.esk
+native/e3_p1_modes_extension.esk
+native/e3_errors_extension.esk
+native/e3_private_extension.esk
+internal/e3/lib/e3_d2_restore.esk
+native/e3_forward_schedule.esk
 native/tr3_metrics_extension.esk
 native/tr3b_objective_extension.esk
 native/tr3_o2_step_clear_extension.esk
@@ -54,6 +60,7 @@ native/tr3_step_transaction_extension.esk
 native/tr3_step_commit_tail_extension.esk
 native/tr3_step_composer_extension.esk
 native/tr3_public_step_extension.esk
+native/tr3_public_evaluate_extension.esk
 native/tr3_stop_policy_extension.esk
 native/tr3_public_state_extension.esk
 native/tr3_public_train_extension.esk

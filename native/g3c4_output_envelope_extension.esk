@@ -13,6 +13,10 @@
 (extern i64 g3t-native-output-accept-text ptr ptr ptr
         :real et_g3c4_private_output_accept_text_v1)
 
+;;; A later private extension may enable only the P2/G1 pending transcript.
+;;; The established C2 reservation remains the default for existing loads.
+(define g3t-p2g1-pending-gate (vector #f))
+
 (define (g3t-registry-entry candidate operation)
   (let loop ((remaining (vector-ref g3c4-registry 0)))
     (cond
@@ -108,7 +112,9 @@
          (generated (vector-ref policy 5)))
     (if (not (and (m3t-exact-i64? prompt-length)
                   (or (= prompt-length 1) (= prompt-length 2))
-                  (<= (+ prompt-length generated) 2)))
+                  (or (<= (+ prompt-length generated) 2)
+                      (and (vector-ref g3t-p2g1-pending-gate 0)
+                           (= prompt-length 2) (= generated 1)))))
         (g3c4-fail 'shape-mismatch operation
                    "C4 output prompt/generated lengths exceed C2"))
     (if (vector-ref ledger 4)

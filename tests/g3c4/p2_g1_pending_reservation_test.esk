@@ -1,0 +1,75 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g1_pending_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G1 reservation FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 1
+        ':eos #f ':seed 7))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define generator
+  (g3c4-generator-create-internal model tokenizer (config)))
+(define generator-entry (car (vector-ref g3c4-registry 0)))
+(define pending #f)
+
+(check "private extension enables isolated gate"
+       (vector-ref g3t-p2g1-pending-gate 0))
+(vector-set! g3t-p2g1-pending-gate 0 #f)
+(reject "feature-off P2/G1 remains rejected" 'shape-mismatch
+  (lambda ()
+    (g3c4-with-call-internal
+      'g3c4-p2g1-feature-off generator 2 1
+      (g3t-output-reserve (vector-ref m3-call-state 0) 2))))
+(check "feature-off rollback clears active owner"
+       (and (not (vector-ref generator-entry 9))
+            (not (vector-ref m3-call-state 0))))
+
+(vector-set! g3t-p2g1-pending-gate 0 #t)
+(reject "pending output still rejects call end" 'invalid-state
+  (lambda ()
+    (g3c4-with-call-internal
+      'g3c4-p2g1-pending generator 2 1
+      (let* ((call (vector-ref m3-call-state 0))
+             (output (g3t-output-reserve call 2))
+             (ledger (vector-ref call 10)))
+        (set! pending output)
+        (check "linked native-backed P2/G1 pending output"
+               (and (eq? (vector-ref ledger 4) output)
+                    (vector-ref output 3)
+                    (eq? (vector-ref output 2) 'pending)
+                    (= (bytevector-length
+                         (vector-ref (vector-ref output 8) 0)) 1)))
+        #t))))
+(check "abort tombstones pending output"
+       (and pending (eq? (vector-ref pending 2) 'dead)
+            (not (vector-ref pending 3))))
+(check "abort clears generator and shared call"
+       (and (not (vector-ref generator-entry 9))
+            (not (vector-ref m3-call-state 0))))
+(check "generator closes after pending rejection"
+       (g3c4-generator-close-internal! generator))
+
+(display "G3-C4 P2/G1 reservation PASS: checks=")
+(display checks)
+(display " feature-off=1 pending-rejection=1")
+(newline)

@@ -791,6 +791,17 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_PROMPT_PREFILL_PRIVATE)
 #error "ET_G3C4_OUTPUT_RESERVATION_PRIVATE requires Step 18A"
 #endif
+#if defined(ET_G3C4_P2_G1_PENDING_PRIVATE) && \
+    (!defined(ET_G3C4_OUTPUT_RESERVATION_PRIVATE) || \
+     !defined(ET_G3C4_OUTPUT_PREPARE_PRIVATE) || \
+     !defined(ET_G3C4_LAST_LOGIT_FRAME_PRIVATE))
+#error "ET_G3C4_P2_G1_PENDING_PRIVATE requires pending output and last-logit frame"
+#endif
+#ifdef ET_G3C4_P2_G1_PENDING_PRIVATE
+#define ET_G3C4_PENDING_TOTAL_LIMIT 3
+#else
+#define ET_G3C4_PENDING_TOTAL_LIMIT 2
+#endif
 #if defined(ET_G3C4_LOGITS_RESERVATION_PRIVATE) && \
     (!defined(ET_G3C4_ACTIVE_CALL_PRIVATE) || \
      !defined(ET_G3C4_GENERATOR_PRIVATE) || \
@@ -1471,7 +1482,8 @@ static int et_g3c4_transport_record_valid(
     if (output->parent_ctx == NULL ||
         (output->prompt_length != 1 && output->prompt_length != 2) ||
         (output->generated_length != 0 && output->generated_length != 1) ||
-        output->prompt_length + output->generated_length > 2 ||
+        output->prompt_length + output->generated_length >
+            ET_G3C4_PENDING_TOTAL_LIMIT ||
         output->ids == NULL
 #ifdef ET_G3C4_OUTPUT_TEXT_PRIVATE
         || output->text_ready > 1u
@@ -2616,7 +2628,7 @@ void *et_g3c4_private_output_reserve_v1(
     return NULL;
   }
   if ((prompt_length != 1 && prompt_length != 2) ||
-      prompt_length + context->budget > 2) {
+      prompt_length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT) {
     (void)et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
     return NULL;
   }
@@ -4907,7 +4919,8 @@ int64_t et_g3c4_private_prompt_prefill_preflight_v1(
   if (input == NULL) return et_g3c4_error_state.category;
   if (input->tensor == NULL || (input->length != 1 && input->length != 2))
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
-  if ((budget != 0 && budget != 1) || input->length + budget > 2)
+  if ((budget != 0 && budget != 1) ||
+      input->length + budget > ET_G3C4_PENDING_TOTAL_LIMIT)
     return et_g3c4_fail(
         ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
   return 0;
@@ -4919,6 +4932,9 @@ static int et_g3c4_prompt_prefill_borrow(
   et_i64_tensor_error error;
   const et_kernel_tensor_view_v1 *view;
   size_t index;
+#ifdef ET_G3C4_P2_G1_PENDING_PRIVATE
+  size_t stride0 = 0u, stride1 = 0u;
+#endif
 
   if (et_g3c4_capture_i64(
           et_i64_tensor_borrow_begin_v1(
@@ -4929,6 +4945,15 @@ static int et_g3c4_prompt_prefill_borrow(
               *borrow_output, view_output, &error), &error) != 0)
     return -1;
   view = *view_output;
+#ifdef ET_G3C4_P2_G1_PENDING_PRIVATE
+  if (et_g3c4_capture_i64(
+          et_i64_tensor_stride_bytes_at_v1(
+              input->tensor, 0u, &stride0, &error), &error) != 0 ||
+      et_g3c4_capture_i64(
+          et_i64_tensor_stride_bytes_at_v1(
+              input->tensor, 1u, &stride1, &error), &error) != 0)
+    return -1;
+#endif
   if (view == NULL || view->struct_size != sizeof(*view) ||
       view->data == NULL ||
       !et_g3c4_range_valid(
@@ -4940,7 +4965,12 @@ static int et_g3c4_prompt_prefill_borrow(
       view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
       view->offset_bytes != 0u || view->rank != 2u ||
       view->shape == NULL || view->shape[0] != 1u ||
-      view->shape[1] != (uint64_t)input->length) {
+      view->shape[1] != (uint64_t)input->length
+#ifdef ET_G3C4_P2_G1_PENDING_PRIVATE
+      || stride0 != (size_t)input->length * sizeof(int64_t) ||
+      stride1 != sizeof(int64_t)
+#endif
+      ) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return -1;
   }
@@ -5024,7 +5054,7 @@ int64_t et_g3c4_private_prompt_prefill_v1(
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
   if (context->call_kind != 2 ||
       (context->budget != 0 && context->budget != 1) ||
-      input->length + context->budget > 2)
+      input->length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
@@ -5345,7 +5375,8 @@ int64_t et_g3c4_private_output_prepare_v1(
     return et_g3c4_error_state.category;
   if (pending != output || output->parent_ctx != context ||
       context->call_kind != 2 ||
-      output->prompt_length + output->generated_length > 2 ||
+      output->prompt_length + output->generated_length >
+          ET_G3C4_PENDING_TOTAL_LIMIT ||
       output->generated_length != context->budget ||
       output->numeric_ready != 0u || output->ids_copied != 0u ||
       output->text_ready != 0u)
