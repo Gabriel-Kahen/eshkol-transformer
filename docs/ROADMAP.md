@@ -1570,6 +1570,25 @@ the accepted post-update tolerance, not treated as an exact native oracle.
 Independent review of `e7041cd`, explicit interruption, public resume,
 wider profiles and hosted integration remain pending.
 
+The bounded installed `trainer-evaluate!` candidate at `9778097`/tree
+`2d42c096` composes the accepted E3 evaluator with the same TR3/D2/T2/M3T
+aggregate. A private lease witness authenticates the T2-held T1 raw-byte core
+at trainer creation without narrowing existing trainer creation; evaluation
+admits only a distinct authentic validation dataset with matching V256 D1/D2
+identity and E3's fixed traversal profile. E3 restores the validation cursor
+and model mode on success and failure, while TR3 publishes exact f32 loss and
+mask-weight words and i64 token/batch counters through the sole metrics root.
+The pinned fe9 linked gate passed with 64 Eshkol sources, 33 native objects,
+108 global definitions and 176 undefined runtime symbols. Its poisoned public
+callers cover forged and busy receivers, cursor rollback, repeat publication,
+exact accepted E3 loss/weight words and counts, EOS rollback, and retained old
+metrics; the existing exact step and bridge checks remain green. The native
+gate proves E3's M3/M3T replacements retain every installed defined symbol
+and rejects predecessor objects in the link. Its 161-file evidence seal is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-evaluate-20260928-b/SHA256SUMS`
+(`9c3257c2...`). The E3 profile remains fixed to N1/T2/V256/D4; other D2
+profiles, train-loop summaries, and public resume composition remain pending.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

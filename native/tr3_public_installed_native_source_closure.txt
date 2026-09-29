@@ -1,4 +1,5 @@
 include/eshkol_transformer/a2_attention_abi.h
+include/eshkol_transformer/e3_evaluation_metrics_abi.h
 include/eshkol_transformer/f32_tensor.h
 include/eshkol_transformer/i64_tensor.h
 include/eshkol_transformer/indexed_cross_entropy.h
@@ -31,6 +32,10 @@ native/d2_native.h
 native/data_io.c
 native/e1b_error_consumer_bridge.c
 native/e1b_error_consumer_bridge.h
+native/e3_d2_native.c
+native/e3_d2_native.h
+native/e3_diagnostic_destinations.c
+native/e3_evaluation_metrics_provider.c
 native/f32_parameter_internal.h
 native/f32_tensor.c
 native/i2_wave2_package_bridge.c
@@ -63,6 +68,10 @@ native/tr3_public_step_metrics.c
 native/tr3_public_step_metrics.h
 native/tr3b_objective_bridge.c
 native/tr3b_objective_bridge.h
+src/eshkol_transformer/e3_frame.c
+src/eshkol_transformer/e3_frame_internal.h
+src/eshkol_transformer/m3_call_f32_integration.c
+src/eshkol_transformer/m3_call_pins.h
 src/eshkol_transformer/m3_i64_integration.c
 src/eshkol_transformer/m3_model.c
 src/eshkol_transformer/m3_model.h
