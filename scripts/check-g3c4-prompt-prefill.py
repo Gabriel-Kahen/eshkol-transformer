@@ -34,6 +34,15 @@ def c_function(text: str, signature: str) -> str:
     raise ValueError(f"unterminated C function: {signature}")
 
 
+def check_total_limit_definition(source: str) -> None:
+    require("#ifdef ET_G3C4_P2_G1_PENDING_PRIVATE\n"
+            "#define ET_G3C4_PENDING_TOTAL_LIMIT 3\n"
+            "#else\n#define ET_G3C4_PENDING_TOTAL_LIMIT 2\n#endif" in source,
+            "P2/G1 capacity must remain three only with the private feature")
+    require(source.count("#define ET_G3C4_PENDING_TOTAL_LIMIT ") == 2,
+            "P2/G1 capacity has an unexpected second definition")
+
+
 def check() -> None:
     for predecessor in ("check-g3c4-prompt-t1-borrow.py",
                         "check-g3c4-prefill2.py"):
@@ -49,6 +58,7 @@ def check() -> None:
 
     require("ET_G3C4_PROMPT_PREFILL_PRIVATE requires Steps 15A and 17A"
             in source, "binding macro does not require both accepted leaves")
+    check_total_limit_definition(source)
     symbols = (
         "et_g3c4_private_prompt_prefill_preflight_v1",
         "et_g3c4_private_prompt_prefill_v1",
@@ -64,7 +74,7 @@ def check() -> None:
         "et_g3c4_admit_idle_call(context_candidate)",
         "et_g3c4_admit_input(input_candidate, 0)",
         "input->length != 1 && input->length != 2",
-        "input->length + budget > 2",
+        "input->length + budget > ET_G3C4_PENDING_TOTAL_LIMIT",
     ], "pre-acquire P+G admission")
     for forbidden in ("et_g3c4_private_call_acquire_v1", "pins_begin",
                       "prefill1_v1", "prefill2_v1", "borrow_begin_v1"):
@@ -91,7 +101,7 @@ def check() -> None:
         "et_g3c4_admit_active_call(context_candidate)",
         "et_g3c4_admit_input(input_candidate, 0)",
         "context->call_kind != 2",
-        "input->length + context->budget > 2",
+        "input->length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT",
         "et_g3c4_prompt_prefill_borrow(input, &borrow, &view)",
         "input->length == 1",
         "ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill1_v1)(",

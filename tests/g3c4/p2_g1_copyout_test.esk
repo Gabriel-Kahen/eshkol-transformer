@@ -1,0 +1,185 @@
+(load "p2_g1_shell_test_common.esk")
+(load "g3c4_p2g1_copyout_extension.esk")
+
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 allocation-capture-zero i64 i64
+        :real et_g3c4_call_entry_alloc_capture_zero_v1)
+(extern i64 shell-test-copyout-corrupt i64
+        :real et_g3c4_shell_test_copyout_corrupt_v1)
+(extern i64 shell-test-copyout-corrupt-consumed
+        :real et_g3c4_shell_test_copyout_corrupt_consumed_v1)
+
+(define (publish-copyout mode seed)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer
+                                           (config mode seed)))
+         (shell
+           (g3c4-with-p2g1-output-call-internal
+             'g3c4-p2g1-copyout generator (call)
+             (g3c4-p2g1-output-publish! call (prepare call)))))
+    (vector generator shell)))
+
+(define first (publish-copyout 'greedy 41))
+(define generator-a (vector-ref first 0))
+(define shell-a (vector-ref first 1))
+(define entry-a (g3c4-p2g1-output-entry-live shell-a 'copyout-test))
+(define native-a (vector-ref entry-a 3))
+(define raw-a (vector-ref entry-a 8))
+(define snapshot-a (g3c4-p2g1-output-copy-internal shell-a))
+(define snapshot-a-again (g3c4-p2g1-output-copy-internal shell-a))
+(check "greedy copy has detached exact tuple"
+       (and (vector? snapshot-a) (= (vector-length snapshot-a) 5)
+            (bytevector? (vector-ref snapshot-a 0))
+            (= (bytevector-length (vector-ref snapshot-a 0)) 1)
+            (= (bytevector-u8-ref (vector-ref snapshot-a 0) 0)
+               (vector-ref snapshot-a 1))
+            (= (vector-ref snapshot-a 2) 1)
+            (= (vector-ref snapshot-a 3) 3)
+            (g3c4-rng-snapshot? (vector-ref snapshot-a 4))
+            (not (eq? (vector-ref snapshot-a 0) raw-a))
+            (not (eq? (vector-ref snapshot-a 0)
+                      (vector-ref snapshot-a-again 0)))
+            (not (eq? (vector-ref snapshot-a 4)
+                      (vector-ref snapshot-a-again 4)))))
+(bytevector-u8-set! (vector-ref snapshot-a 0) 0 0)
+(vector-set! (vector-ref snapshot-a 4) 2 999)
+(check "mutated copy does not change native or later copy"
+       (and (= (shell-test-published native-a raw-a) 1)
+            (= (vector-ref snapshot-a-again 1)
+               (bytevector-u8-ref (vector-ref snapshot-a-again 0) 0))
+            (not (= (vector-ref (vector-ref snapshot-a-again 4) 2) 999))))
+(check "generator close leaves output copyable"
+       (g3c4-generator-close-internal! generator-a))
+(check "copy after generator close has same value"
+       (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
+          (vector-ref snapshot-a-again 1)))
+
+(define original-byte (bytevector-u8-ref raw-a 0))
+(bytevector-u8-set! raw-a 0 (if (= original-byte 0) 1 0))
+(reject "changed raw byte rejects copy" 'invalid-argument
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(bytevector-u8-set! raw-a 0 original-byte)
+(check "repaired raw byte retries"
+       (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
+          original-byte))
+(check "published I1 borrow begins"
+       (= (shell-test-ids-borrow native-a 1) 0))
+(reject "borrowed I1 rejects copy" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(check "published I1 borrow ends"
+       (= (shell-test-ids-borrow native-a 0) 0))
+(check "copy retries after borrow"
+       (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
+          original-byte))
+
+;; Bytevectors use the runtime's bytevector arena constructor; RNG/result
+;; vectors use the separate vector constructor. Cut both in source order.
+(define (sweep-copyout-allocations kind)
+  (let loop ((index 0))
+    (if (> index 8) (exit 3))
+    (let ((caught #f))
+      (check "allocation arm" (= (allocation-arm kind index) 0))
+      (guard (condition (#t (set! caught condition)))
+        (g3c4-p2g1-output-copy-internal shell-a))
+      (let ((consumed (allocation-consumed))
+            (seen (allocation-disarm)))
+        (if (= consumed 1)
+            (begin
+              (check "allocation cut raised typed internal error"
+                     (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught)
+                               'internal)))
+              (check "allocation cut hit exact constructor"
+                     (= seen (+ index 1)))
+              (check "partial copy is absent or zeroed"
+                     (= (allocation-capture-zero
+                          0 (if (and (= kind 3) (= index 0)) -1 1)) 1))
+              (check "partial stage is absent or zeroed"
+                     (= (allocation-capture-zero
+                          1 (if (= kind 3) -1 56)) 1))
+              (check "allocation cut preserved published owner"
+                     (= (shell-test-published native-a raw-a) 1))
+              (check "allocation cut permits same-output retry"
+                     (= (vector-ref
+                          (g3c4-p2g1-output-copy-internal shell-a) 1)
+                        original-byte))
+              (loop (+ index 1)))
+            (begin
+              (check "all constructors traversed without failure"
+                     (not caught))
+              index))))))
+(define copyout-bytevector-cuts (sweep-copyout-allocations 3))
+(define copyout-vector-cuts (sweep-copyout-allocations 1))
+(check "two raw/stage bytevector allocation cuts"
+       (= copyout-bytevector-cuts 2))
+(check "two RNG/result vector allocation cuts"
+       (= copyout-vector-cuts 2))
+
+;; The native read succeeds, then a test-only linker wrapper changes only the
+;; transient staging word. Eshkol decoding must reject and scrub both buffers.
+(check "post-native capture arm" (= (allocation-arm 3 100) 0))
+(check "post-native decode corruption arm"
+       (= (shell-test-copyout-corrupt 1) 0))
+(reject "post-native decoded length rejects" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(check "post-native decode corruption was reached"
+       (= (shell-test-copyout-corrupt-consumed) 1))
+(check "post-native capture had no allocation failure"
+       (and (= (allocation-consumed) 0)
+            (= (allocation-disarm) 2)))
+(check "decode rejection scrubs both transient carriers"
+       (and (= (allocation-capture-zero 0 1) 1)
+            (= (allocation-capture-zero 1 56) 1)))
+(check "decode rejection preserves publication and retry"
+       (and (= (shell-test-published native-a raw-a) 1)
+            (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
+               original-byte)))
+
+(define second (publish-copyout 'categorical 43))
+(define generator-b (vector-ref second 0))
+(define shell-b (vector-ref second 1))
+(define entry-b (g3c4-p2g1-output-entry-live shell-b 'copyout-test))
+(define native-b (vector-ref entry-b 3))
+(define raw-b (vector-ref entry-b 8))
+(define snapshot-b (g3c4-p2g1-output-copy-internal shell-b))
+(check "categorical copy has valid RNG"
+       (and (= (vector-ref snapshot-b 2) 1)
+            (= (vector-ref snapshot-b 3) 3)
+            (g3c4-rng-snapshot? (vector-ref snapshot-b 4))
+            (= (shell-test-published native-b raw-b) 1)))
+(vector-set! entry-a 3 native-b)
+(reject "swapped native owner rejects copy" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(vector-set! entry-a 3 native-a)
+(vector-set! entry-a 8 raw-b)
+(reject "swapped raw owner rejects copy" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(vector-set! entry-a 8 raw-a)
+(check "both originals remain independently copyable"
+       (and (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
+               original-byte)
+            (= (vector-ref (g3c4-p2g1-output-copy-internal shell-b) 1)
+               (bytevector-u8-ref raw-b 0))))
+(reject "forged shell rejected" 'invalid-argument
+  (lambda () (g3c4-p2g1-output-copy-internal (vector 'forged))))
+(reject "wrong kind rejected" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal generator-b)))
+(check "release A" (g3c4-p2g1-output-release-internal! shell-a))
+(reject "released A cannot copy" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(check "earlier detached A copy survives release"
+       (= (vector-ref snapshot-a-again 1)
+          (bytevector-u8-ref (vector-ref snapshot-a-again 0) 0)))
+(check "B remains copyable" (vector? (g3c4-p2g1-output-copy-internal shell-b)))
+(check "release B and close generator"
+       (and (g3c4-p2g1-output-release-internal! shell-b)
+            (g3c4-generator-close-internal! generator-b)))
+
+(display "G3-C4 P2/G1 copy-out PASS: checks=")
+(display checks)
+(display " greedy=1 categorical=1 bytevector-cuts=2 vector-cuts=2 decode-cut=1") (newline)

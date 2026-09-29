@@ -21,10 +21,11 @@ def ordered(text, fragments, label):
         position = found
 
 
-def without_conditional_feature(text, macro):
-    """Remove source regions compiled only when a later feature is enabled."""
+def without_conditional_feature(text, macro, keep_else=False):
+    """Remove a later feature block; optionally retain its baseline #else."""
     kept = []
     depth = 0
+    baseline = False
     for line in text.splitlines(keepends=True):
         directive = line.lstrip()
         opens = (directive.startswith("#if ") or
@@ -33,8 +34,20 @@ def without_conditional_feature(text, macro):
         if depth:
             if opens:
                 depth += 1
+            elif directive.startswith("#else") and depth == 1:
+                baseline = keep_else
+                continue
+            elif directive.startswith("#elif") and depth == 1:
+                require(not keep_else,
+                        f"unsupported later-feature #elif: {macro}")
+                continue
             elif directive.startswith("#endif"):
                 depth -= 1
+                if depth == 0:
+                    baseline = False
+                    continue
+            if baseline:
+                kept.append(line)
             continue
         if opens and macro in directive:
             depth = 1
@@ -44,24 +57,42 @@ def without_conditional_feature(text, macro):
     return "".join(kept)
 
 
+def step5_projection(source):
+    # These features were accepted after Step 5. Keep the original baseline
+    # branches in shared active-call functions when a later feature has #else.
+    for macro in (
+        "ET_G3C4_MANUAL_ROLE_STEP_PRIVATE",
+        "ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE",
+        "ET_G3C4_MANUAL_PRE_A2_PRIVATE",
+        "ET_G3C4_MANUAL_ROLE0_PRIVATE",
+        "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE",
+        "ET_G3C4_GENERATOR_PRIVATE",
+        "ET_G3C4_P2_G1_PENDING_PRIVATE",
+        "ET_G3C4_P2_G1_PUBLICATION_PRIVATE",
+        "ET_G3C4_P2_G1_COPYOUT_PRIVATE",
+    ):
+        source = without_conditional_feature(
+            source, macro,
+            keep_else=(macro == "ET_G3C4_P2_G1_PUBLICATION_PRIVATE"))
+    return source
+
+
+def check_deferred_surfaces(step5_source):
+    for forbidden in (
+        "generator_seed", "generator_rng", "sampler", "role_step",
+        "frame_begin", "frame_commit", "g3c4-model-registry", "G3-S",
+    ):
+        require(forbidden not in step5_source,
+                f"Step 5 reaches deferred surface: {forbidden}")
+
+
 def check():
     subprocess.run(
         [sys.executable, str(ROOT / "scripts/check-g3c4-context-cache.py")],
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
-    step5_source = without_conditional_feature(
-        without_conditional_feature(
-            without_conditional_feature(
-                without_conditional_feature(
-                    without_conditional_feature(
-                        without_conditional_feature(
-                            source, "ET_G3C4_MANUAL_ROLE_STEP_PRIVATE"),
-                        "ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE"),
-                    "ET_G3C4_MANUAL_PRE_A2_PRIVATE"),
-                "ET_G3C4_MANUAL_ROLE0_PRIVATE"),
-            "ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE"),
-        "ET_G3C4_GENERATOR_PRIVATE")
+    step5_source = step5_projection(source)
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
     test = (ROOT / "tests/g3c4/test_active_call.c").read_text()
     contract = (ROOT / "docs/g3/G3_C4_ACTIVE_CALL_STEP5_CONTRACT.md").read_text()
@@ -87,12 +118,7 @@ def check():
         "int64_t budget", "uint32_t acquired_mask",
     ]:
         require(field in source, f"active context omits {field}")
-    for forbidden in [
-        "generator_seed", "generator_rng", "sampler", "role_step",
-        "frame_begin", "frame_commit", "g3c4-model-registry", "G3-S",
-    ]:
-        require(forbidden not in step5_source,
-                f"Step 5 reaches deferred surface: {forbidden}")
+    check_deferred_surfaces(step5_source)
 
     ordered(source, [
         "context = et_g3c4_admit_idle_call(candidate)",
