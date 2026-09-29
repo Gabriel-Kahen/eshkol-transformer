@@ -144,11 +144,31 @@ WRAPPER
     "$directory/p2g1-shell" \
     >"$directory/shell.stdout" 2>"$directory/shell.stderr"
   test ! -s "$directory/shell.stderr"
-  grep -E '^G3-C4 P2/G1 shell PASS: checks=[1-9][0-9]* success=2 mutation=3 retry=1 leases=2 ledger=1 old-scope=1$' \
+  grep -E '^G3-C4 P2/G1 shell PASS: checks=[1-9][0-9]* success=2 mutation=3 retry=1 leases=2 ledger=1 old-scope=1 swap=1$' \
     "$directory/shell.stdout" >/dev/null
 }
 
 compile_mode normal
+env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+  XDG_CACHE_HOME="$tmp/normal/cache" \
+  ESHKOL_CXX_COMPILER="$tmp/normal/cxx-wrap" \
+  ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+  "$eshkol_runner" --strict-types --optimize 0 --no-stdlib \
+  -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
+  -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
+  -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
+  -L "$tmp/normal" --lib g3c4_p2g1_shell \
+  "$PROJECT_ROOT/tests/g3c4/p2_g1_shell_edge_escape_test.esk" \
+  -o "$tmp/normal/p2g1-edge-escape" \
+  >"$tmp/normal/edge-compile.stdout" \
+  2>"$tmp/normal/edge-compile.stderr"
+set +e
+ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-edge-escape" \
+  >"$tmp/normal/edge.stdout" 2>"$tmp/normal/edge.stderr"
+edge_status=$?
+set -e
+test "$edge_status" -eq 134
+test ! -s "$tmp/normal/edge.stdout"
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-shell" \
   >"$tmp/normal/shell-repeat.stdout" \
   2>"$tmp/normal/shell-repeat.stderr"
@@ -163,6 +183,9 @@ for mode in normal sanitize; do
   done
 done
 cp "$tmp/normal/shell-repeat.stdout" "$evidence/shell-repeat.stdout"
+for log in edge-compile.stdout edge-compile.stderr edge.stdout edge.stderr; do
+  cp "$tmp/normal/$log" "$evidence/$log"
+done
 git -C "$PROJECT_ROOT" diff --check
 (
   cd "$evidence"

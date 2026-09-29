@@ -53,7 +53,7 @@
 
 (define (prepare call)
   (let* ((generator-entry (vector-ref call 4))
-         (output (g3t-output-reserve call 2)))
+         (output (g3c4-p2g1-output-reserve call)))
     (check "genuine P2 prefill and position-two token forward"
            (= (shell-test-prepare (vector-ref generator-entry 3)
                                   (vector-ref output 3)) 0))
@@ -239,7 +239,41 @@
             (not (vector-ref m3-call-state 0))
             (g3c4-generator-close-internal! old-scope-generator)))
 
+(define swap-generator-a
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 41)))
+(define swap-shell-a
+  (g3c4-with-p2g1-output-call-internal
+    'g3c4-p2g1-swap-a swap-generator-a (call)
+    (g3c4-p2g1-output-publish! call (prepare call))))
+(define swap-generator-b
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 43)))
+(define swap-shell-b
+  (g3c4-with-p2g1-output-call-internal
+    'g3c4-p2g1-swap-b swap-generator-b (call)
+    (g3c4-p2g1-output-publish! call (prepare call))))
+(define swap-entry-a (g3c4-registry-find swap-shell-a 'test))
+(define swap-entry-b (g3c4-registry-find swap-shell-b 'test))
+(define swap-native-a (vector-ref swap-entry-a 3))
+(define swap-native-b (vector-ref swap-entry-b 3))
+(vector-set! swap-entry-a 3 swap-native-b)
+(reject "swapped native owner cannot release another output"
+        'invalid-state
+  (lambda () (g3c4-p2g1-output-release-internal! swap-shell-a)))
+(check "owner swap preserves both native outputs"
+       (and (eq? (vector-ref swap-entry-a 2) 'live)
+            (eq? (vector-ref swap-entry-b 2) 'live)
+            (= (shell-test-field swap-native-a 0) 3)
+            (= (shell-test-field swap-native-b 0) 3)))
+(vector-set! swap-entry-a 3 swap-native-a)
+(check "restored owner A releases"
+       (g3c4-p2g1-output-release-internal! swap-shell-a))
+(check "owner B releases independently"
+       (g3c4-p2g1-output-release-internal! swap-shell-b))
+(check "swap generators close"
+       (and (g3c4-generator-close-internal! swap-generator-a)
+            (g3c4-generator-close-internal! swap-generator-b)))
+
 (display "G3-C4 P2/G1 shell PASS: checks=")
 (display checks)
-(display " success=2 mutation=3 retry=1 leases=2 ledger=1 old-scope=1")
+(display " success=2 mutation=3 retry=1 leases=2 ledger=1 old-scope=1 swap=1")
 (newline)

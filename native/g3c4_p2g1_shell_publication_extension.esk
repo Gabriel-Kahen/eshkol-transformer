@@ -7,6 +7,23 @@
 (extern i64 g3c4-native-generation-frame-commit ptr ptr
         :real et_g3c4_private_generation_frame_commit_v1)
 
+;;; Protected source-private owner map. Record slots: call, output, native,
+;;; raw, staging. The output/native/raw identities survive publication; the
+;;; call and staging references are dropped at the no-failure tail.
+(define g3c4-p2g1-output-records (vector '()))
+
+(define (g3c4-p2g1-record-for-call call)
+  (let loop ((remaining (vector-ref g3c4-p2g1-output-records 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) call) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g1-record-for-output output)
+  (let loop ((remaining (vector-ref g3c4-p2g1-output-records 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 1) output) (car remaining))
+          (else (loop (cdr remaining))))))
+
 (define (g3c4-p2g1-zero-bytes! value count)
   (let loop ((index 0))
     (if (< index count)
@@ -16,30 +33,40 @@
 
 (define (g3c4-p2g1-call-rollback! call generator-entry model-entry)
   (let* ((ledger (vector-ref call 10))
-         (child (vector-ref ledger 4)))
+         (child (vector-ref ledger 4))
+         (record (g3c4-p2g1-record-for-call call))
+         (original (if record (vector-ref record 1) #f)))
+    ;; A caller may repair a changed edge while still inside the active
+    ;; region. An escaping exception cannot authorize the wrong abort.
+    (if (not (and record (eq? child original)
+                  (or (not original)
+                      (and (vector? original)
+                           (= (vector-length original) 12)
+                           (eq? (vector-ref original 1) 'output)
+                           (eq? (vector-ref original 2) 'pending)
+                           (eq? (vector-ref original 3)
+                                (vector-ref record 2))
+                           (vector? (vector-ref original 8))
+                           (= (vector-length (vector-ref original 8)) 2)
+                           (eq? (vector-ref (vector-ref original 8) 0)
+                                (vector-ref record 3))
+                           (eq? (vector-ref (vector-ref original 8) 1)
+                                (vector-ref record 4))))))
+        (exit 134))
     (if (vector-ref ledger 0)
         (if (not (= (g3c4-native-call-abort
                       (vector-ref generator-entry 3)) 0))
             (exit 134)))
-    (if child
+    (if original
         (begin
-          (if (not (and (vector? child) (= (vector-length child) 12)
-                        (eq? (vector-ref child 1) 'output)
-                        (eq? (vector-ref child 2) 'pending)))
-              (exit 134))
-          (let ((auxiliary (vector-ref child 8)))
-            (if (not (and
-                        (vector? auxiliary)
-                        (= (vector-length auxiliary) 2)
-                        (bytevector? (vector-ref auxiliary 0))
-                        (= (bytevector-length (vector-ref auxiliary 0)) 1)
-                        (bytevector? (vector-ref auxiliary 1))
-                        (= (bytevector-length (vector-ref auxiliary 1)) 8)))
-              (exit 134))
-          (g3c4-p2g1-zero-bytes! (vector-ref auxiliary 0) 1)
-          (g3c4-p2g1-zero-bytes! (vector-ref auxiliary 1) 8)
-          (g3c4-entry-dead! child)
-          (vector-set! ledger 4 #f))))
+          (g3c4-p2g1-zero-bytes! (vector-ref record 3) 1)
+          (g3c4-p2g1-zero-bytes! (vector-ref record 4) 8)
+          (g3c4-entry-dead! original)
+          (vector-set! ledger 4 #f)
+          (vector-set! record 0 #f)
+          (vector-set! record 2 #f)
+          (vector-set! record 3 #f)
+          (vector-set! record 4 #f)))
     (if (vector-ref ledger 1)
         (if (eq? (vector-ref model-entry 10) call)
             (vector-set! model-entry 10 #f)
@@ -48,7 +75,8 @@
         (if (eq? (vector-ref generator-entry 9) call)
             (vector-set! generator-entry 9 #f)
             (exit 134)))
-    (g3c4-call-dead! call)))
+    (g3c4-call-dead! call)
+    (vector-set! record 0 #f)))
 
 ;;; The body must finish by calling g3c4-p2g1-output-publish! once. A caught
 ;;; in-region preflight rejection may be repaired before that final call.
@@ -65,7 +93,10 @@
               (call (vector shell 'call 'pending #f generator-entry
                             model-entry tokenizer #f #f #f ledger
                             g3c4-model-profile))
-              (next (cons call (vector-ref g3c4-registry 0))))
+              (next (cons call (vector-ref g3c4-registry 0)))
+              (record (vector call #f #f #f #f))
+              (records-next
+                (cons record (vector-ref g3c4-p2g1-output-records 0))))
          (guard (caught
                   (#t
                     (if (not (eq? (vector-ref ledger 3) 'committed))
@@ -75,6 +106,7 @@
                         (exit 134))
                     (raise caught)))
            (vector-set! g3c4-registry 0 next)
+           (vector-set! g3c4-p2g1-output-records 0 records-next)
            (let ((canonical (car (vector-ref g3c4-registry 0))))
              (g3c4-native-check
                (g3c4-native-call-acquire
@@ -94,6 +126,23 @@
                               "C4 P2/G1 call returned without publication"))
                answer))))))))
 
+(define (g3c4-p2g1-output-reserve call-entry)
+  (let* ((operation 'g3c4-p2g1-output-reserve)
+         (call (g3t-call-entry-live call-entry operation))
+         (record (g3c4-p2g1-record-for-call call)))
+    (if (not (and record
+                  (eq? (vector-ref (vector-ref call 10) 3) 'p2g1-shell)
+                  (not (vector-ref record 1))))
+        (g3c4-fail 'invalid-state operation
+                   "C4 P2/G1 output owner is not available"))
+    (let* ((output (g3t-output-reserve call 2))
+           (auxiliary (vector-ref output 8)))
+      (vector-set! record 1 output)
+      (vector-set! record 2 (vector-ref output 3))
+      (vector-set! record 3 (vector-ref auxiliary 0))
+      (vector-set! record 4 (vector-ref auxiliary 1))
+      output)))
+
 (define (g3c4-p2g1-output-publish! call-entry output-entry)
   (let* ((operation 'g3c4-p2g1-output-publish!)
          (call (g3t-call-entry-live call-entry operation))
@@ -107,8 +156,14 @@
          (staging (vector-ref auxiliary 1))
          (native (vector-ref generator-entry 3))
          (output-native (vector-ref output 3))
-         (shell (vector-ref output 0)))
+         (shell (vector-ref output 0))
+         (record (g3c4-p2g1-record-for-call call)))
     (if (not (and (eq? (vector-ref ledger 3) 'p2g1-shell)
+                  record
+                  (eq? (vector-ref record 1) output)
+                  (eq? (vector-ref record 2) output-native)
+                  (eq? (vector-ref record 3) raw)
+                  (eq? (vector-ref record 4) staging)
                   (= (vector-ref (vector-ref generator-entry 7) 5) 1)
                   (= (bytevector-length raw) 1)
                   (= (bytevector-length staging) 8)
@@ -156,6 +211,10 @@
                     (eq? (vector-ref auxiliary 0) raw)
                     (eq? (vector-ref auxiliary 1) staging)
                     (eq? (vector-ref output 3) output-native)
+                    (eq? (vector-ref record 1) output)
+                    (eq? (vector-ref record 2) output-native)
+                    (eq? (vector-ref record 3) raw)
+                    (eq? (vector-ref record 4) staging)
                     (eq? (vector-ref ledger 4) output)
                     (eq? (vector-ref generator-entry 9) call)
                     (eq? (vector-ref model-entry 10) call)
@@ -183,12 +242,20 @@
       (vector-set! output 8 raw)
       (vector-set! output 2 'live)
       (vector-set! ledger 4 #f)
+      (vector-set! record 0 #f)
+      (vector-set! record 4 #f)
       (g3c4-call-success! call generator-entry model-entry)
       shell)))
 
 (define (g3c4-p2g1-output-entry-live shell operation)
-  (let ((entry (g3c4-registry-find shell operation)))
+  (let* ((entry (g3c4-registry-find shell operation))
+         (record (g3c4-p2g1-record-for-output entry)))
     (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  record
+                  (eq? (vector-ref record 0) #f)
+                  (eq? (vector-ref record 2) (vector-ref entry 3))
+                  (eq? (vector-ref record 3) (vector-ref entry 8))
+                  (eq? (vector-ref record 4) #f)
                   (eq? (vector-ref entry 0) shell)
                   (eq? (vector-ref entry 1) 'output)
                   (eq? (vector-ref entry 2) 'live)
@@ -215,4 +282,8 @@
             (let ((live (g3c4-p2g1-output-entry-live shell operation)))
               (g3c4-native-check
                 (g3t-native-output-release (vector-ref live 3)) operation)
-              (g3c4-entry-dead! live)))))))
+              (g3c4-entry-dead! live)
+              (let ((record (g3c4-p2g1-record-for-output live)))
+                (vector-set! record 1 #f)
+                (vector-set! record 2 #f)
+                (vector-set! record 3 #f))))))))
