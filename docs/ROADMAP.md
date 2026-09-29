@@ -1654,13 +1654,14 @@ one published summary and no retained per-step results for that train call;
 the later-step failure publishes no summary. The pinned PyTorch reference
 differs by one ULP on the fourth post-update numerator and is checked using
 the accepted post-update tolerance, not treated as an exact native oracle.
-Independent review of `e7041cd`, explicit interruption, public resume,
-wider profiles and hosted integration remain pending.
+The bounded fixed-profile train path is merged through PR #161 (`221cc6ae`)
+after independent source/test review and 23/23 exact-head hosted checks;
+wider profiles remain pending.
 The independently approved [explicit interruption contract](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
-starts from reviewed #150 head `304a2a1`. A bounded optional same-thread
-predicate implementation and linked caller are staged on its isolated branch;
-the pinned fe9 gate, independent source/test review, #149/#151/#153 composition,
-and public train-interrupt fresh-process proof remain pending.
+adds a bounded optional same-thread predicate to public `trainer-train!`.
+Its public checkpoint and fresh-process composition passed the pinned fe9
+linked gate and independent source/test review at `efd23d0`, then merged
+through PR #161 after 23/23 exact-head hosted checks.
 
 The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
 accepted same-registry TR3-C snapshot and joint-restore entries with private
@@ -1769,9 +1770,9 @@ reference and compares each one-update train summary with independent step
 metrics. The combined `efd23d0` candidate passed the supported pinned fe9
 linked public gate and independent source/test review, with a 230-file seal at
 `tr3-public-train-interrupt-resume-fe9-efd23d0-20260929-a/SHA256SUMS`.
-The #153 production and test sources match that gated tree; exact-head hosted CI
-and merged-dependency retest remain. The fixed no-dropout profile supports
-only zero-RNG-state preservation.
+The #153 production and test sources matched that gated tree. PR #161 merged
+the fixed-profile composition as `221cc6ae` after 23/23 exact-head hosted
+checks. The fixed no-dropout profile supports only zero-RNG-state preservation.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
