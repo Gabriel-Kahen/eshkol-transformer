@@ -275,7 +275,7 @@ for accumulation in 1 2 3; do
     exit 1
   fi
   test ! -e "${directory}/interrupt-ack"
-  printf '1' > "${directory}/interrupt-request"
+  printf "1" > "${directory}/interrupt-request"
   wait "${producer_pid}"
   test "$(cat "${directory}/interrupt-ready")" = 1
   test "$(cat "${directory}/interrupt-ack")" = 1
@@ -290,7 +290,7 @@ for accumulation in 1 2 3; do
   grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS receiver A=${accumulation}" \
     "/out/fresh-${accumulation}-receiver.stdout" >/dev/null
   test ! -s "/out/fresh-${accumulation}-receiver.stderr"
-  grep -Fx 'INTERRUPT-ACK 1' \
+  grep -Fx "INTERRUPT-ACK 1" \
     "/out/fresh-${accumulation}-producer.stdout" >/dev/null
   grep "^METRIC " "/out/fresh-${accumulation}-baseline.stdout" \
     > "/out/fresh-${accumulation}-baseline.metrics"
