@@ -26,6 +26,7 @@ E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
     "${PROJECT_ROOT}/internal/t2/lib" \
     "${PROJECT_ROOT}/internal/t1/lib" \
     "${PROJECT_ROOT}/internal/d2/lib" \
+    "${PROJECT_ROOT}/internal/e3/lib" \
     "${PROJECT_ROOT}/src"
 
 ar rcsD "${temporary_dir}/libeshkol_transformer_cli3.a" \
