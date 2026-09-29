@@ -668,9 +668,15 @@ to the same-registry T2 tokenizer and native failure helpers. The next
 supported prerequisite build compiled the IR and native objects, then rejected
 a 101-row native closure manifest: compiler depfiles selected 98 rows and did
 not include the historical T1, X1, or P1 package bridge sources. Both test-only
-manifests now match those 98 compiler-selected rows while retaining the exact
-closure comparison. Link and runtime behavior remain unproved pending the next
-exact-head gate.
+manifests matched those 98 compiler-selected rows and retained the exact
+closure comparison. The next prerequisite gate passed that check but failed
+final native link: E3 and G3-T each included the M3 model and transport,
+yielding 49 duplicate globals and separate private registries. An independently
+reviewed test-only aggregate now compiles E3 then G3-T in one native translation
+unit with one M3 owner; standalone E3 and G3-T keep their original source modes.
+Both 99-row closures add only the aggregate source path. Local strict C/object
+tests pass. Supported prerequisite and successor linked/runtime gates remain
+pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are

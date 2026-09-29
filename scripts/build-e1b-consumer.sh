@@ -624,6 +624,10 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
     package_public_strings="${cli3_public_strings}"
     package_source_closure="${cli3_selected_source_closure}"
     package_native_source_closure="${cli3_native_source_closure}"
+    cli3_e3_source="${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c"
+    if [[ "${cli3_generate_fixture}" == 1 ]]; then
+      cli3_e3_source="${PROJECT_ROOT}/tests/cli3_generate/aggregate_native_owner.c"
+    fi
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
       "${PROJECT_ROOT}/native/checkpoint_io.c"
@@ -632,7 +636,7 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
       "${PROJECT_ROOT}/native/t1_i64_shell.c"
       "${PROJECT_ROOT}/native/e3_d2_native.c"
       "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c"
-      "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c"
+      "${cli3_e3_source}"
       "${PROJECT_ROOT}/native/e3_evaluation_metrics_provider.c"
       "${PROJECT_ROOT}/native/e3_diagnostic_destinations.c"
       "${PROJECT_ROOT}/native/n2_primitives_provider.c"
@@ -659,7 +663,6 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
     )
     if [[ "${cli3_generate_fixture}" == 1 ]]; then
       package_native_sources+=(
-        "${PROJECT_ROOT}/src/eshkol_transformer/g3t_transport.c"
         "${PROJECT_ROOT}/native/a2_kv_cache.c"
       )
     fi
@@ -1460,8 +1463,9 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       esac
     fi
     if [[ "${cli3_generate_fixture}" == 1 &&
-          "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/g3t_transport.c" ]]; then
+          "${package_native_source}" == "${PROJECT_ROOT}/tests/cli3_generate/aggregate_native_owner.c" ]]; then
       package_source_flags=(
+        -DET_CLI3_E3_G3T_AGGREGATE_BUILD
         -DET_G3T_PREFILL_SAMPLE_PRIVATE -DET_G3T_OUTPUT_TEXT_PRIVATE
         -DET_G3T_FINAL_PUBLICATION_PRIVATE
         -DET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE

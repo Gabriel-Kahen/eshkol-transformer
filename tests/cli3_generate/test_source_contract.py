@@ -86,21 +86,25 @@ class SingleRegistryContract(unittest.TestCase):
     def test_native_closure_uses_installed_tr3_bridge(self):
         closure = lines(FIXTURE / 'aggregate_native_source_closure.txt')
         predecessor = lines(NATIVE / 'cli3_native_source_closure.txt')
-        self.assertEqual(closure[:len(predecessor) + 1],
-                         predecessor[:6] +
-                         ['tests/cli3_generate/aggregate_bridge.c'] +
-                         predecessor[6:])
-        self.assertEqual(closure[len(predecessor) + 1:], [
+        expected = predecessor[:6] + [
+            'tests/cli3_generate/aggregate_bridge.c'] + predecessor[6:]
+        expected.insert(expected.index('src/eshkol_transformer/e3_frame.c'),
+                        'tests/cli3_generate/aggregate_native_owner.c')
+        g3_at = expected.index('src/eshkol_transformer/m3t_transport.h') + 1
+        expected[g3_at:g3_at] = [
             'src/eshkol_transformer/g3t_transport.c',
             'src/eshkol_transformer/g3t_transport.h',
             'include/eshkol_transformer/a2_kv_cache.h',
             'include/eshkol_transformer/g3n_primitives_abi.h',
             'include/eshkol_transformer/g3s_sampling_abi.h',
             'src/eshkol_transformer/g3t_prefill_roles.inc',
+        ]
+        expected += [
             'native/a2_kv_cache.c',
             'native/g3n_primitives_provider.c',
             'native/g3s_sampling_provider.c',
-        ])
+        ]
+        self.assertEqual(closure, expected)
         self.assertIn('#include "tr3_public_installed_bridge.c"',
                       (NATIVE / 'cli3_package_bridge.c').read_text())
         for legacy_bridge in ('native/t1_wave1_package_bridge.c',

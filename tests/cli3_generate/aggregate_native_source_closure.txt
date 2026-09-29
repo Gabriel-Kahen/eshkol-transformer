@@ -34,6 +34,7 @@ native/f32_parameter_internal.h
 include/eshkol_transformer/f32_tensor.h
 src/eshkol_transformer/m3t_f32_scoped.h
 src/eshkol_transformer/m3_call_pins.h
+tests/cli3_generate/aggregate_native_owner.c
 src/eshkol_transformer/e3_frame.c
 src/eshkol_transformer/e3_frame_internal.h
 include/eshkol_transformer/a2_attention_abi.h
@@ -45,6 +46,12 @@ include/eshkol_transformer/n3k_primitives_abi.h
 src/eshkol_transformer/m3_model.c
 src/eshkol_transformer/m3t_transport.c
 src/eshkol_transformer/m3t_transport.h
+src/eshkol_transformer/g3t_transport.c
+src/eshkol_transformer/g3t_transport.h
+include/eshkol_transformer/a2_kv_cache.h
+include/eshkol_transformer/g3n_primitives_abi.h
+include/eshkol_transformer/g3s_sampling_abi.h
+src/eshkol_transformer/g3t_prefill_roles.inc
 native/e3_evaluation_metrics_provider.c
 native/e3_diagnostic_destinations.c
 native/n2_primitives_provider.c
@@ -87,12 +94,6 @@ native/tr3_c_restore_bindings.c
 native/tr3_c_restore_bindings.h
 native/tr3_public_step_metrics.c
 native/tr3_public_step_metrics.h
-src/eshkol_transformer/g3t_transport.c
-src/eshkol_transformer/g3t_transport.h
-include/eshkol_transformer/a2_kv_cache.h
-include/eshkol_transformer/g3n_primitives_abi.h
-include/eshkol_transformer/g3s_sampling_abi.h
-src/eshkol_transformer/g3t_prefill_roles.inc
 native/a2_kv_cache.c
 native/g3n_primitives_provider.c
 native/g3s_sampling_provider.c
