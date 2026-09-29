@@ -26,6 +26,7 @@ native/kernel_abi.c
 src/eshkol_transformer/m3_i64_integration.c
 native/i64_tensor.c
 include/eshkol_transformer/i64_tensor.h
+native/i64_t1_pair_private.h
 src/eshkol_transformer/m3_model.h
 native/t1_i64_shell.c
 native/t1_i64_shell.h

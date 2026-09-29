@@ -1,5 +1,7 @@
 ;;; Additive C4 model/input authority in the single G3-G owning aggregate.
 ;;; The probes inspect exact registered shell identity without touching payloads.
+(extern ptr g3c4-native-input-from-t1-p2 ptr
+        :real et_g3c4_private_input_from_t1_p2_v1)
 (define (g3c4-public-transport-member shell)
   (let loop ((entries (vector-ref g3c4-registry 0)))
     (cond ((null? entries) #f)
@@ -38,11 +40,5 @@
     (if (not (t1-wave1-tensor-admitted? encoded))
         (g3c4-fail 'invalid-argument 'generation-c4-input-create
                    "expected same-aggregate sealed T1 input"))
-    (let ((length (t1-shell-length encoded)))
-      (if (not (= (t1-shell-last-status) 0))
-          (t1-wave1-native-fail 'generation-c4-input-create
-                               (t1-shell-last-status)))
-      (if (not (= length 2))
-          (g3c4-fail 'shape-mismatch 'generation-c4-input-create
-                     "C4 input requires exactly two byte IDs"))
-      (generation-input-create-internal encoded))))
+    (g3c4-input-create-with-native encoded 'generation-c4-input-create
+      g3c4-native-input-from-t1-p2)))

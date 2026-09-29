@@ -51,7 +51,7 @@ ar t "${g3g_artifact}/libeshkol_transformer_g3g_manual.a" \
   >"${g3g_evidence}/archive-members.txt"
 cmp "${g3g_prefix}_archive_members.txt" "${g3g_evidence}/archive-members.txt"
 if nm -g --defined-only "${g3g_artifact}/g3g_manual_package.o" | \
-    grep -E 'et_g3t_test_|et_e1b_private_|g3m-generate'; then
+    grep -E 'et_g3t_test_|et_e1b_private_|g3m-generate|et_t1_i64_shell_private_c4_read_v1|et_i64_tensor_private_t1_pair_validate_v1|et_g3c4_private_input_from_t1_p2_v1'; then
   die "G3-G manual production package exported a private or test seam"
 fi
 g3g_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
@@ -65,6 +65,23 @@ g3g_runner="$(eshkol_build_dir)/eshkol-run"
 if nm --defined-only "${g3g_evidence}/g3t-feature-off.o" | \
     grep -E 'et_g3t_(test_|private_(sample|zero|p2_zero|prompt_preflight|input_from_pair|full_request_preflight|input_from_t1|output_(ids|lengths|cache_lengths|rng)_clone|logits_copy_bits|logits_reserve|manual_))'; then
   die "G3-G manual feature-off transport exposed a gated seam"
+fi
+"${g3g_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native" \
+  -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/src/eshkol_transformer" \
+  -I "$(eshkol_source_dir)/inc" \
+  -DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE \
+  -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE \
+  -DET_G3C4_PROMPT_T1_BORROW_PRIVATE \
+  -c "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" \
+  -o "${g3g_evidence}/g3c4-feature-off.o"
+if nm -u --format=posix "${g3g_evidence}/g3c4-feature-off.o" | \
+    grep -F 'et_t1_i64_shell_private_c4_read_v1'; then
+  die "C4 owner feature-off path requires exact-pair authority"
+fi
+if nm -g --defined-only "${g3g_evidence}/g3c4-feature-off.o" | \
+    grep -F 'et_g3c4_private_input_from_t1_p2_v1'; then
+  die "C4 owner feature-off path exposed P2-only admission"
 fi
 g3g_compile() {
   env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \

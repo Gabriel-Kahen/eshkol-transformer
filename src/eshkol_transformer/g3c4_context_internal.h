@@ -38,6 +38,10 @@ int64_t et_g3c4_private_rng_release_v1(void *rng);
  * copies one or two byte-token IDs into a new owned dense CPU-i64 [1,P], and
  * retains no reference to the T1 shell. */
 void *et_g3c4_private_input_from_t1_v1(void *sealed_t1);
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+/* Same validated atomic read, but reject P1 before any owned I1 allocation. */
+void *et_g3c4_private_input_from_t1_p2_v1(void *sealed_t1);
+#endif
 /* The current closed tensor union contains only prompt inputs. */
 int64_t et_g3c4_private_tensor_release_v1(void *input);
 #endif

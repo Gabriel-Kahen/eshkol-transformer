@@ -98,7 +98,7 @@ def check() -> None:
             "prompt owner layout is not frozen")
 
     constructor = c_function(
-        owner, "void *et_g3c4_private_input_from_t1_v1")
+        owner, "static void *et_g3c4_input_from_t1_internal")
     ordered(constructor, [
         "et_g3c4_error_reset_internal()",
         "et_t1_i64_shell_length_v1(sealed_t1)",
@@ -118,6 +118,15 @@ def check() -> None:
     require("sealed_t1" not in constructor[constructor.index(
                 "et_g3c4_enroll_input(input)"):],
             "prompt owner retains T1 provenance after enrollment")
+    require("return et_g3c4_input_from_t1_internal(sealed_t1, 0);" in
+            c_function(owner, "void *et_g3c4_private_input_from_t1_v1"),
+            "private P1/P2 prompt no longer uses the reviewed constructor")
+    require("return et_g3c4_input_from_t1_internal(sealed_t1, 1);" in
+            c_function(owner, "void *et_g3c4_private_input_from_t1_p2_v1") and
+            "if (require_p2 && length != 2)" in constructor and
+            constructor.index("if (require_p2 && length != 2)") <
+            constructor.index("et_g3c4_input_allocate()"),
+            "public P2 guard no longer precedes owned input allocation")
 
     release = c_function(
         owner, "int64_t et_g3c4_private_tensor_release_v1")
@@ -163,15 +172,22 @@ def check() -> None:
     require("(extern i64 g3c4-native-tensor-release ptr" in eshkol and
             ":real et_g3c4_private_tensor_release_v1)" in eshkol,
             "Eshkol prompt release extern changed")
-    create = scheme_form(eshkol, "generation-input-create-internal")
-    require(create.startswith(
-        "(define (generation-input-create-internal encoded)"),
-        "prompt constructor arity changed")
+    create = eshkol[eshkol.index("(define-syntax g3c4-input-create-with-native"):
+                    eshkol.index("(define (generation-input-create-internal")]
+    require(create.startswith("(define-syntax g3c4-input-create-with-native") and
+            "(syntax-rules ()" in create,
+            "prompt constructor macro is not the reviewed direct native call")
+    require("(define (generation-input-create-internal encoded)" in eshkol and
+            "g3c4-input-create-with-native encoded 'generation-input-create-internal" in
+            scheme_form(eshkol, "generation-input-create-internal") and
+            "g3c4-native-input-from-t1))" in
+            scheme_form(eshkol, "generation-input-create-internal"),
+            "prompt constructor arity or private native choice changed")
     ordered(create, [
         "(t1-wave1-tensor-admitted? encoded)",
         "(vector shell 'input 'pending #f #f #f #f #f #f #f",
         "(vector-set! g3c4-registry 0 next)",
-        "(g3c4-native-input-from-t1 encoded)",
+        "(native-create encoded)",
         "(vector-set! canonical 3 created)",
         "(vector-set! canonical 2 'live)",
     ], "same-aggregate prompt publication")

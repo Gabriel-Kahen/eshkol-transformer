@@ -2,6 +2,7 @@ native/i64_tensor.c
 native/i64_t1_pair_private.h
 native/t1_i64_shell.c
 native/t1_i64_shell.h
+native/g3c4_public_model_input_extension.esk
 src/eshkol_transformer/g3c4_model_owner.c
 tests/g3c4/t1_i1_exact_pair.c
 tests/g3c4/t1_i1_exact_pair_linked.esk
