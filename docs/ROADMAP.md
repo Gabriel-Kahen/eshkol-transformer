@@ -1631,6 +1631,16 @@ restores and repeats a training step, then trains with invocation-delta limits
 while old evaluation metrics remain readable. The combined fe9 linked gate,
 independent source review and wider resume proof remain pending.
 
+The bounded [installed held-out improvement witness](TR3_HELDOUT_IMPROVEMENT.md)
+adds a distinct finite D2 validation corpus with active transitions disjoint
+from its training corpus. Its public caller evaluates before and after exactly
+32 CPU-f32 AdamW updates through `trainer-train!`; a separate strict checker
+requires finite positive held-out loss and a predeclared minimum drop of
+`0.25f` (`0x3e800000`), exact mask-weight/count words, and retained first
+metrics. Focused checker negative controls and shell/Python source checks pass.
+The fe9 linked runtime result, observed loss words, independent review, and
+combined supported gate remain pending.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

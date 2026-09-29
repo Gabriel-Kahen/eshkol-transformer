@@ -62,6 +62,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m tests.e3_reference.corpus \
   --output "${evidence}/corpus/e3"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus/step-three" --rows three
+PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3_public_installed.prepare_heldout \
+  --output "${evidence}/corpus/heldout-pair"
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \
   PYTHONDONTWRITEBYTECODE=1 "${oracle}" \
   -m tests.tr3_public_installed.check_unequal_reference \
@@ -266,6 +268,20 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
 grep -Fx TR3-PUBLIC-EVALUATE-AOT-PASS /out/evaluate.stdout >/dev/null
 test ! -s /out/evaluate.stderr
 
+# Fixed genuine CPU-f32 update count against distinct, disjoint D1/D2 corpora.
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_metrics_test \
+    tests/tr3_public_installed/heldout_runtime.esk -o /out/heldout_caller \
+    > /out/heldout-compile.stdout 2> /out/heldout-compile.stderr
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 600s \
+  /out/heldout_caller /out/corpus/heldout-pair/train \
+  /out/corpus/heldout-pair/heldout \
+  > /out/heldout.stdout 2> /out/heldout.stderr
+grep -Fx TR3-HELDOUT-AOT-PASS /out/heldout.stdout >/dev/null
+test ! -s /out/heldout.stderr
+
 # Focused bit and counter boundary proof for the actual installed C bridge.
 clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
   -I /fixed-source/inc -c native/tr3_public_installed_bridge.c \
@@ -289,6 +305,11 @@ PYTHONDONTWRITEBYTECODE=1 python3 \
 rg -q '^TR3-TRAIN-UNEQUAL-EXACT-PASS loss-bits=' \
   "${evidence}/unequal-exact.stdout"
 test ! -s "${evidence}/unequal-exact.stderr"
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  -m tests.tr3_public_installed.check_heldout \
+  "${evidence}/heldout.stdout" >"${evidence}/heldout-check.stdout" \
+  2>"${evidence}/heldout-check.stderr"
+test ! -s "${evidence}/heldout-check.stderr"
 
 python3 - "${evidence}/private.d" "${evidence}/source-closure.txt" <<'PY'
 from pathlib import Path
