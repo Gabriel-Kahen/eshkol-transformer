@@ -1,0 +1,47 @@
+(load "p2_g1_shell_test_common.esk")
+
+(define mutation-generator
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 17)))
+(define mutation-generator-entry (latest 'generator))
+(define mutation-captures (vector #f #f #f))
+(define (run-mutation mode)
+  (check "arm post-accept mutation"
+         (= (shell-test-mutation mode) 0))
+  (reject "altered raw/staging bytes cannot publish" 'invalid-state
+    (lambda ()
+      (g3c4-with-p2g1-output-call-internal
+        'g3c4-p2g1-shell-mutated mutation-generator (call)
+        (let* ((output (prepare call))
+               (auxiliary (vector-ref output 8)))
+          (vector-set! mutation-captures 0 output)
+          (vector-set! mutation-captures 1 (vector-ref auxiliary 0))
+          (vector-set! mutation-captures 2 (vector-ref auxiliary 1))
+          (g3c4-p2g1-output-publish! call output)))))
+  (check "mutation rollback scrubs both carriers"
+         (and (dead? (vector-ref mutation-captures 0))
+              (= (bytevector-u8-ref (vector-ref mutation-captures 1) 0) 0)
+              (let upper ((i 0))
+                (if (= i 8) #t
+                    (and (= (bytevector-u8-ref
+                              (vector-ref mutation-captures 2) i) 0)
+                         (upper (+ i 1))))))))
+(run-mutation 1)
+(run-mutation 2)
+(run-mutation 3)
+(check "mutation leaves generator reusable"
+       (and (not (vector-ref mutation-generator-entry 9))
+            (not (vector-ref m3-call-state 0))))
+(define retry-shell
+  (g3c4-with-p2g1-output-call-internal
+    'g3c4-p2g1-shell-retry mutation-generator (call)
+    (g3c4-p2g1-output-publish! call (prepare call))))
+(check "fresh retry after abort publishes"
+       (g3c4-p2g1-output-entry-live retry-shell 'test))
+(check "release fresh retry"
+       (g3c4-p2g1-output-release-internal! retry-shell))
+(check "close retried generator"
+       (g3c4-generator-close-internal! mutation-generator))
+
+(display "G3-C4 P2/G1 shell PASS: checks=")
+(display checks)
+(display " mutation=3 retry=1") (newline)

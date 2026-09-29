@@ -127,25 +127,36 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_g3c4_private_output_accept_text_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
-  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
-    XDG_CACHE_HOME="$directory/cache" ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
-    ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-    timeout --foreground --signal=TERM --kill-after=5s 600s \
-    "$eshkol_runner" --strict-types --optimize 0 --no-stdlib \
-    -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
-    -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
-    -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
-    -L "$directory" --lib g3c4_p2g1_shell \
-    "$PROJECT_ROOT/tests/g3c4/p2_g1_shell_publication_test.esk" \
-    -o "$directory/p2g1-shell" \
-    >"$directory/compile.stdout" 2>"$directory/compile.stderr"
-  "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
-    timeout --foreground --signal=TERM --kill-after=5s 120s \
-    "$directory/p2g1-shell" \
-    >"$directory/shell.stdout" 2>"$directory/shell.stderr"
-  test ! -s "$directory/shell.stderr"
-  grep -E '^G3-C4 P2/G1 shell PASS: checks=[1-9][0-9]* success=2 mutation=3 retry=1 leases=2 ledger=1 old-scope=1 swap=1$' \
-    "$directory/shell.stdout" >/dev/null
+  local test expected
+  for test in success mutation lease owner_swap; do
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache" ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      timeout --foreground --signal=TERM --kill-after=5s 600s \
+      "$eshkol_runner" --strict-types --optimize 0 --no-stdlib \
+      -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
+      -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
+      -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
+      -I "$PROJECT_ROOT/tests/g3c4" \
+      -L "$directory" --lib g3c4_p2g1_shell \
+      "$PROJECT_ROOT/tests/g3c4/p2_g1_shell_${test}_test.esk" \
+      -o "$directory/p2g1-$test" \
+      >"$directory/$test-compile.stdout" \
+      2>"$directory/$test-compile.stderr"
+    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+      timeout --foreground --signal=TERM --kill-after=5s 120s \
+      "$directory/p2g1-$test" \
+      >"$directory/$test.stdout" 2>"$directory/$test.stderr"
+    test ! -s "$directory/$test.stderr"
+    case "$test" in
+      success) expected='success=2' ;;
+      mutation) expected='mutation=3 retry=1' ;;
+      lease) expected='leases=2 ledger=1 old-scope=1' ;;
+      owner_swap) expected='swap=1' ;;
+    esac
+    grep -E "^G3-C4 P2/G1 shell PASS: checks=[1-9][0-9]* $expected$" \
+      "$directory/$test.stdout" >/dev/null
+  done
 }
 
 compile_mode normal
@@ -157,6 +168,7 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
   -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
   -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
   -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
+  -I "$PROJECT_ROOT/tests/g3c4" \
   -L "$tmp/normal" --lib g3c4_p2g1_shell \
   "$PROJECT_ROOT/tests/g3c4/p2_g1_shell_edge_escape_test.esk" \
   -o "$tmp/normal/p2g1-edge-escape" \
@@ -169,20 +181,31 @@ edge_status=$?
 set -e
 test "$edge_status" -eq 134
 test ! -s "$tmp/normal/edge.stdout"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-shell" \
-  >"$tmp/normal/shell-repeat.stdout" \
-  2>"$tmp/normal/shell-repeat.stderr"
-test ! -s "$tmp/normal/shell-repeat.stderr"
+for test in success mutation lease owner_swap; do
+  ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-$test" \
+    >"$tmp/normal/$test-repeat.stdout" \
+    2>"$tmp/normal/$test-repeat.stderr"
+  test ! -s "$tmp/normal/$test-repeat.stderr"
+done
 compile_mode sanitize
-cmp "$tmp/normal/shell.stdout" "$tmp/normal/shell-repeat.stdout"
-cmp "$tmp/normal/shell.stdout" "$tmp/sanitize/shell.stdout"
+for test in success mutation lease owner_swap; do
+  cmp "$tmp/normal/$test.stdout" "$tmp/normal/$test-repeat.stdout"
+  cmp "$tmp/normal/$test.stdout" "$tmp/sanitize/$test.stdout"
+done
 for mode in normal sanitize; do
-  for log in native.stdout native.stderr oracle.stdout compile.stdout \
-      compile.stderr shell.stdout shell.stderr; do
+  for log in native.stdout native.stderr oracle.stdout; do
     cp "$tmp/$mode/$log" "$evidence/$mode-$log"
   done
+  for test in success mutation lease owner_swap; do
+    for log in "$test.stdout" "$test.stderr" \
+        "$test-compile.stdout" "$test-compile.stderr"; do
+      cp "$tmp/$mode/$log" "$evidence/$mode-$log"
+    done
+  done
 done
-cp "$tmp/normal/shell-repeat.stdout" "$evidence/shell-repeat.stdout"
+for test in success mutation lease owner_swap; do
+  cp "$tmp/normal/$test-repeat.stdout" "$evidence/$test-repeat.stdout"
+done
 for log in edge-compile.stdout edge-compile.stderr edge.stdout edge.stderr; do
   cp "$tmp/normal/$log" "$evidence/$log"
 done
@@ -191,5 +214,7 @@ git -C "$PROJECT_ROOT" diff --check
   cd "$evidence"
   sha256sum -- *.stdout *.stderr >SHA256SUMS
 )
-cat "$evidence/static.stdout" "$evidence/normal-shell.stdout"
+cat "$evidence/static.stdout" "$evidence/normal-success.stdout" \
+  "$evidence/normal-mutation.stdout" "$evidence/normal-lease.stdout" \
+  "$evidence/normal-owner_swap.stdout"
 printf 'G3-C4 P2/G1 shell evidence: %s\n' "$evidence"

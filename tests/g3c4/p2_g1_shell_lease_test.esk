@@ -1,0 +1,74 @@
+(load "p2_g1_shell_test_common.esk")
+
+(define (run-held-lease kind seed)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer
+                                           (config 'greedy seed)))
+         (generator-entry (latest 'generator))
+         (observed (vector #f)))
+    (g3c4-with-p2g1-output-call-internal
+      'g3c4-p2g1-shell-held generator (call)
+      (let ((output (prepare call)))
+        (vector-set! observed 0 output)
+        (check "open scoped external lease"
+               (= (if (eq? kind 'ids)
+                      (shell-test-ids-borrow (vector-ref output 3) 1)
+                      (shell-test-a2-view (vector-ref generator-entry 3) 1))
+                  0))
+        (reject "held lease rejects publication in active region"
+                'invalid-state
+          (lambda () (g3c4-p2g1-output-publish! call output)))
+        (check "end external lease before abort"
+               (= (if (eq? kind 'ids)
+                      (shell-test-ids-borrow (vector-ref output 3) 0)
+                      (shell-test-a2-view (vector-ref generator-entry 3) 0))
+                  0))
+        (g3c4-p2g1-call-rollback! call generator-entry model-entry)))
+    (check "held lease explicit abort tombstones"
+           (and (dead? (vector-ref observed 0))
+                (not (vector-ref generator-entry 9))
+                (not (vector-ref m3-call-state 0))))
+    (check "held lease generator closes"
+           (g3c4-generator-close-internal! generator))))
+(run-held-lease 'ids 23)
+(run-held-lease 'a2 29)
+
+(define ledger-generator
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 31)))
+(define ledger-shell
+  (g3c4-with-p2g1-output-call-internal
+    'g3c4-p2g1-shell-ledger ledger-generator (call)
+    (let* ((output (prepare call))
+           (ledger (vector-ref call 10)))
+      (vector-set! ledger 4 #f)
+      (reject "altered child ledger rejects before rollback" 'invalid-state
+        (lambda () (g3c4-p2g1-output-publish! call output)))
+      (vector-set! ledger 4 output)
+      (g3c4-p2g1-output-publish! call output))))
+(check "repaired child ledger permits publication"
+       (g3c4-p2g1-output-entry-live ledger-shell 'test))
+(check "ledger output release"
+       (g3c4-p2g1-output-release-internal! ledger-shell))
+(check "ledger generator close"
+       (g3c4-generator-close-internal! ledger-generator))
+
+(define old-scope-generator
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 37)))
+(reject "old auto scope still rejects a pending P2/G1 output" 'invalid-state
+  (lambda ()
+    (g3c4-with-call-internal
+      'g3c4-p2g1-old-scope old-scope-generator 2 1
+      (let* ((call (vector-ref m3-call-state 0))
+             (output (g3t-output-reserve call 2)))
+        (reject "joint shell coordinator rejects old call scope"
+                'invalid-state
+          (lambda () (g3c4-p2g1-output-publish! call output)))
+        #t))))
+(check "old auto scope rolls back"
+       (and (dead? (latest 'output))
+            (not (vector-ref m3-call-state 0))
+            (g3c4-generator-close-internal! old-scope-generator)))
+
+(display "G3-C4 P2/G1 shell PASS: checks=")
+(display checks)
+(display " leases=2 ledger=1 old-scope=1") (newline)

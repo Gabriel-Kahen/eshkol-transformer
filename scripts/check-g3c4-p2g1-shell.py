@@ -5,7 +5,11 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 shell = (root / "native/g3c4_p2g1_shell_publication_extension.esk").read_text()
-fixture = (root / "tests/g3c4/p2_g1_shell_publication_test.esk").read_text()
+fixture = "\n".join(
+    (root / f"tests/g3c4/p2_g1_shell_{case}_test.esk").read_text()
+    for case in ("success", "mutation", "lease", "owner_swap")
+)
+common = (root / "tests/g3c4/p2_g1_shell_test_common.esk").read_text()
 edge = (root / "tests/g3c4/p2_g1_shell_edge_escape_test.esk").read_text()
 runner = (root / "scripts/test-g3c4-p2g1-shell.sh").read_text()
 contract = (root / "docs/g3/G3_C4_P2_G1_SHELL_PUBLICATION_PROPOSAL.md").read_text()
@@ -44,6 +48,8 @@ for phrase in (
 ):
     assert phrase in fixture, phrase
 assert "--wrap=et_g3c4_private_output_accept_text_v1" in runner
+assert "g3c4-p2g1-output-reserve" in common
+assert "p2_g1_shell_${test}_test.esk" in runner
 assert "p2_g1_shell_edge_escape_test.esk" in runner
 assert "edge_status" in runner and "-eq 134" in runner
 assert "(vector-set! (vector-ref call 10) 4 #f)" in edge
