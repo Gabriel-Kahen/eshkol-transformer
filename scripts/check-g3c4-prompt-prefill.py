@@ -64,7 +64,9 @@ def check() -> None:
         "et_g3c4_private_prompt_prefill_v1",
     )
     for symbol in symbols:
-        require(source.count(symbol) == 1 and header.count(symbol) == 1,
+        require(source.count(f"int64_t {symbol}(") == 1 and
+                source.count(symbol) == 2 and
+                header.count(symbol) == 1,
                 f"source-private binding boundary changed: {symbol}")
 
     preflight = c_function(

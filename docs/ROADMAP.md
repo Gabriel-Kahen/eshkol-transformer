@@ -713,6 +713,52 @@ negatives. The composed public C4 input candidate passed its own
 malformed-input and ownership gate at `9581b8a` as described above. Neither
 the private prerequisite nor that gate establishes public C4 generation.
 
+The independently reviewed [public C4 model/input authority contract](g3/G3_C4_PUBLIC_MODEL_INPUT_AUTHORITY_PROPOSAL.md)
+is the next additive `diagnostic-c4` package leaf. Its isolated implementation
+candidate composes the accepted private C4 model/input registries into the
+existing C2 owning archive, exposes seeded model creation and exact P2 T1-to-I1
+input copy, and extends only exact C4 input release. The isolated integration
+with the reviewed T1/I1 exact-pair seam moves public P2 admission into a
+source-private validated reader before I1 allocation; the original private
+P1/P2 constructor remains available. Its new linked corruption/borrow and
+allocation witnesses, installed package normal/repeat, supported sanitizer,
+and independent source-and-test review passed at `9581b8a` (the current
+private-coordinator base). The next isolated source-private P2/G1 producer
+uses the accepted caller-owned C4 input for genuine P2 prefill, last-logit
+sampling, one-token forward, and exactly one existing shell publication.
+The independent source-and-test review and supported pinned-fe9 normal,
+repeat and sanitizer gate passed at `9f41d1a`/tree `b31e5fb`: two authentic
+P2 prompts, 30 linked coordinator checks and rollback/retry; its 30-file
+seal is `g3c4-p2g1-coordinator-clang21-9f41d1a-20260929-a/SHA256SUMS`.
+This producer does not admit a public C4 generator or result. The proposed
+[exact-owner output adapter](g3/G3_C4_P2_G1_PUBLIC_OUTPUT_ADAPTER_PROPOSAL.md)
+is the next review dependency: it requires new source-private rank-one I1
+clone ownership and an exact borrowed-view device check. Current retained
+I1 storage is CPU-only with no device field, so A0's non-CPU retained-state
+branch is unreachable through this fixed public profile; the proposed
+test-only in-borrow injection witnesses defensive `device-mismatch` mapping.
+The source-composed C4 result-owner adapter is independently reviewed and
+supported-gated at `031ea3d`/tree `3ade857`; the public C4 seeded model and
+owned P2 input have merged through #159 at `a51ab96`. A separate isolated
+G3-G one-archive candidate now composes the accepted private coordinator and
+result adapter, routes only exact C4 identities through the existing public
+operations, and admits a copied published C4 result RNG as a constructor
+source. Its installed closure probe passes, but a P2/G1 runtime admission
+failure exposed a package-local top-level pending-gate initializer that does
+not execute in the installed archive. An explicit authenticated C4 route
+enablement and exact installed normal/repeat/sanitizer gate remain under
+review; no installed C4 generator authority is accepted yet. This fixed leaf
+does not admit EOS, repeated decode, persistence or CLI3 `generate`.
+
+The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
+is independently reviewed and passed a supported pinned-fe9 normal/repeat/
+sanitizer gate at `3e03e1c` (54-file seal). It binds each live sealed T1 to
+its birth I1 tensor/borrow/view/storage, validates the current descriptor
+before copying byte IDs, and adds feature-gated corruption and whole-pair-swap
+negatives. The composed public C4 input candidate still needs its own
+malformed-input and ownership gate; the private seal does not establish public
+C4 input or generation authority.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
