@@ -3,6 +3,8 @@
 
 (extern void publish-step ptr :real et_tr3_test_publish_step_v1)
 (extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+(extern void validate-stop-policy ptr ptr
+        :real et_tr3_test_validate_stop_policy_v1)
 
 (define (check label success)
   (if success #t
@@ -38,5 +40,27 @@
 (check 'receiver-before-key
        (fails? 'invalid-argument
                (lambda () (metrics-ref #f "loss"))))
+(define policy (trainer-stop-policy 7 #f 3))
+(define fields (vector #f))
+(validate-stop-policy (vector policy) fields)
+(check 'stop-policy-fields
+       (and (= (vector-ref (vector-ref fields 0) 0) 7)
+            (eq? (vector-ref (vector-ref fields 0) 1) #f)
+            (= (vector-ref (vector-ref fields 0) 2) 3)))
+(vector-set! (vector-ref fields 0) 0 99)
+(validate-stop-policy (vector policy) fields)
+(check 'stop-policy-detached-fields
+       (= (vector-ref (vector-ref fields 0) 0) 7))
+(define foreign-token (guard (caught (#t caught)) (error "")))
+(define (policy-rejected? value)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-argument)
+                    (eq? (transformer-error-operation caught)
+                         'trainer-train!))))
+    (validate-stop-policy (vector value) (vector #f)) #f))
+(check 'stop-policy-forged (policy-rejected? (vector 'forged)))
+(check 'stop-policy-foreign (policy-rejected? foreign-token))
 (display "TR3-PUBLIC-METRICS-LINKED-PASS")
 (newline)

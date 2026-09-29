@@ -71,6 +71,37 @@
                   (loop (+ index 1)))))))
 
 (define corpus-directory (car (cdr (command-line))))
+(define policy-a (trainer-stop-policy 7 #f 3))
+(define policy-b (trainer-stop-policy #f 2 #f))
+(check "stop policies are separate opaque identities"
+       (not (eq? policy-a policy-b)))
+(check "largest positive i64 policy limit is accepted"
+       (trainer-stop-policy #f 9223372036854775807 #f))
+(define (expect-policy-error label field thunk)
+  (let ((caught #f))
+    (guard (raised
+             (#t (set! caught
+                        (and (transformer-error? raised)
+                             (eq? (transformer-error-category raised)
+                                  'invalid-argument)
+                             (eq? (transformer-error-operation raised)
+                                  'trainer-stop-policy)
+                             (equal? (transformer-error-details raised)
+                                     (list (list 'field field)))))))
+      (thunk))
+    (check label caught)))
+(expect-policy-error "stop policy needs a limit" 'limits
+  (lambda () (trainer-stop-policy #f #f #f)))
+(expect-policy-error "stop tokens rejects zero" 'max-tokens
+  (lambda () (trainer-stop-policy 0 #f #f)))
+(expect-policy-error "stop updates rejects negative" 'max-updates
+  (lambda () (trainer-stop-policy #f -1 #f)))
+(expect-policy-error "stop epochs rejects wrong type" 'max-epochs
+  (lambda () (trainer-stop-policy #f #f "3")))
+(expect-policy-error "stop tokens rejects true" 'max-tokens
+  (lambda () (trainer-stop-policy #t #f #f)))
+(expect-policy-error "stop updates rejects inexact" 'max-updates
+  (lambda () (trainer-stop-policy #f 2.0 #f)))
 (expect-error "malformed config keeps X1 public operation"
               'invalid-argument 'config-parse
   (lambda () (config-parse "{")))

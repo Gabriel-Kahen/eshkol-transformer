@@ -1,0 +1,69 @@
+;;; Source-private authority for immutable public trainer stop policies.
+;;; The caller receives only an opaque error-object identity. The sole root
+;;; retains the fields; the future train loop must use the validation seam.
+
+(define tr3-stop-policy-root (vector '()))
+(define tr3-stop-policy-tag (vector 'tr3-stop-policy-v1))
+(define tr3-stop-policy-i64-max 9223372036854775807)
+
+(define (tr3-stop-policy-fail operation field message)
+  (et-e1b-private-raise 'invalid-argument operation message
+                        (list (list 'field field)) #f))
+
+(define (tr3-stop-policy-limit? value)
+  (or (eq? value #f)
+      (and (integer? value) (exact? value) (real? value)
+           (> value 0) (<= value tr3-stop-policy-i64-max))))
+
+(define (tr3-stop-policy-token-internal)
+  (guard (caught (#t caught)) (error "")))
+
+(define (trainer-stop-policy max-tokens max-updates max-epochs)
+  (if (not (tr3-stop-policy-limit? max-tokens))
+      (tr3-stop-policy-fail 'trainer-stop-policy 'max-tokens
+                            "max-tokens must be #f or a positive i64"))
+  (if (not (tr3-stop-policy-limit? max-updates))
+      (tr3-stop-policy-fail 'trainer-stop-policy 'max-updates
+                            "max-updates must be #f or a positive i64"))
+  (if (not (tr3-stop-policy-limit? max-epochs))
+      (tr3-stop-policy-fail 'trainer-stop-policy 'max-epochs
+                            "max-epochs must be #f or a positive i64"))
+  (if (and (eq? max-tokens #f) (eq? max-updates #f)
+           (eq? max-epochs #f))
+      (tr3-stop-policy-fail 'trainer-stop-policy 'limits
+                            "at least one stop limit is required"))
+  (let* ((token (tr3-stop-policy-token-internal))
+         (record (vector tr3-stop-policy-tag #f token
+                         max-tokens max-updates max-epochs))
+         (successor (cons record (vector-ref tr3-stop-policy-root 0))))
+    (vector-set! record 1 record)
+    ;; One checked root write promotes the entire new immutable authority.
+    (vector-set! tr3-stop-policy-root 0 successor)
+    (vector-ref (car (vector-ref tr3-stop-policy-root 0)) 2)))
+
+(define (tr3-stop-policy-validate-internal policy)
+  ;; Compare against trusted identities before examining caller data. Return
+  ;; detached scalar fields, never the mutable registry record.
+  (let find ((rows (vector-ref tr3-stop-policy-root 0)))
+    (cond ((null? rows)
+           (tr3-stop-policy-fail 'trainer-train! 'stop-policy
+                                 "unknown stop-policy identity"))
+          ((not (pair? rows)) (tr3-lease-fail-stop 134))
+          (else
+            (let ((record (car rows)))
+              (if (or (not (vector? record))
+                      (not (= (vector-length record) 6))
+                      (not (eq? (vector-ref record 0) tr3-stop-policy-tag))
+                      (not (eq? (vector-ref record 1) record))
+                      (not (error-object? (vector-ref record 2)))
+                      (not (tr3-stop-policy-limit? (vector-ref record 3)))
+                      (not (tr3-stop-policy-limit? (vector-ref record 4)))
+                      (not (tr3-stop-policy-limit? (vector-ref record 5)))
+                      (not (or (vector-ref record 3)
+                               (vector-ref record 4)
+                               (vector-ref record 5))))
+                  (tr3-lease-fail-stop 134))
+              (if (eq? policy (vector-ref record 2))
+                  (vector (vector-ref record 3) (vector-ref record 4)
+                          (vector-ref record 5))
+                  (find (cdr rows))))))))
