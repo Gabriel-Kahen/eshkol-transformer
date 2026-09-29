@@ -81,6 +81,15 @@ ASan/UBSan/LSan, source-closure and feature-off symbol gates on supported
 pins. The fixture proves no live output, committed third position, EOS
 termination, or general no-cache parity.
 
+Negative cuts must also corrupt the authenticated owned I1 prompt descriptor
+(rank, `[1,2]` extent, dense strides and storage) and place `-1` and `256`
+in each stored ID position. Reject before changing cache, binding, frame,
+RNG or pending numeric fields; abort must drain the pending owner. Forge
+sampler/provider success with an out-of-range candidate ID or malformed
+output descriptor, then prove unchanged pending/cache/binding/frame/RNG and
+caller output, followed by a valid fresh transcript after abort. These checks
+use test-only seams and grant no public raw-I1 authority.
+
 The next dependency is a separately reviewed private generation frame
 prepare/commit and output-publication gate. Only afterward may an Eshkol
 result/public-package gate be proposed. Repeated decode, `G>1`, N>1,
