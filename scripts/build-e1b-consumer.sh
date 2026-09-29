@@ -13,6 +13,25 @@ raw_package_bridge=$2
 raw_package_renames=$3
 raw_public_exports=$4
 raw_include_dirs=("${@:6}")
+# This reviewed test aggregate includes M3 and M3T exports. Select it only by
+# its complete lexical tuple and trusted roots; its CLI3 closure checks below
+# still run before toolchain verification or compilation.
+cli3_generate_exact_tuple=0
+cli3_generate_prefix="${PROJECT_ROOT}/tests/cli3_generate/aggregate"
+if [[ "${raw_private_root}" == "${cli3_generate_prefix}_root.esk" && \
+      "${raw_package_bridge}" == "${cli3_generate_prefix}_bridge.c" && \
+      "${raw_package_renames}" == "${cli3_generate_prefix}_private_renames.txt" && \
+      "${raw_public_exports}" == "${cli3_generate_prefix}_public_exports.txt" && \
+      "${#raw_include_dirs[@]}" == 7 && \
+      "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+      "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+      "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+      "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+      "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+      "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+      "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]]; then
+  cli3_generate_exact_tuple=1
+fi
 g3g_tuple_requested=0
 g3g_g0_tuple_requested=0
 g3g_manual_tuple_requested=0
@@ -48,6 +67,9 @@ for g3g_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
 done
 source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
 if [[ "${e3_tuple_requested}" == 1 ]]; then
+  m3_tuple_requested=0
+  m3t_tuple_requested=0
+elif [[ "${cli3_generate_exact_tuple}" == 1 ]]; then
   m3_tuple_requested=0
   m3t_tuple_requested=0
 else

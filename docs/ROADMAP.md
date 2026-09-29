@@ -656,6 +656,9 @@ with the public oracle and repeats, exercises malformed/corrupt/wrong-kind C2
 failures, and reruns the original six CLI commands. The predecessor linked
 gate, successor independent review and supported linked/runtime gate remain
 pending; the production CLI3 package does not yet export `generate`.
+The isolated prerequisite build exposed an M3/M3T policy-dispatch collision
+from the reviewed CLI3 aggregate exports. Its exact CLI3 tuple dispatch repair
+passed independent source/tests review; the supported gate remains pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
