@@ -13,3 +13,4 @@
 (load "g3t_lengths_owner_extension.esk")
 (load "g3t_text_result_extension.esk")
 (load "g3g_public_extension.esk")
+(load "generate_extension.esk")

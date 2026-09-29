@@ -114,3 +114,11 @@ void et_e1b_public_g3_generator_close_v1(void *arg0, void *output) {
   et_e1b_ensure_private_initialized_v1();
   *et_e1b_box_value_v1(output) = et_e1b_private_g3_generator_close_cabi_v1(*et_e1b_box_value_v1(arg0));
 }
+
+extern eshkol_tagged_value_t cli3_generate_private_dispatch_cabi_v1(
+    eshkol_tagged_value_t arguments);
+void et_e1b_public_cli3_generate_dispatch_v1(void *arguments, void *output) {
+  et_e1b_ensure_private_initialized_v1();
+  *et_e1b_box_value_v1(output) =
+      cli3_generate_private_dispatch_cabi_v1(*et_e1b_box_value_v1(arguments));
+}

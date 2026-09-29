@@ -1,0 +1,175 @@
+;;; Bounded CLI3 command over the reviewed single CLI3/TR3/G3-G C2 registry.
+;;; The standalone CLI3 package remains unchanged until this union is gated.
+
+(define cli3-generate-help
+  "Usage: eshkol-transformer generate --config PATH --tokenizer PATH --train-corpus DIRECTORY --checkpoint PATH --prompt-hex HH --sampling greedy|categorical --seed N\n")
+(define cli3-generate-global-help
+  "Usage: eshkol-transformer GROUP COMMAND [OPTIONS]\n       eshkol-transformer pretrain|evaluate|generate [OPTIONS]\n\nGroups:\n  tokenizer   Create and inspect tokenizer artifacts\n  corpus      Build and inspect D1 token corpora\n  checkpoint  Inspect C2 checkpoints\n\nCommands:\n  pretrain    Train the fixed CPU f32 diagnostic profile (1..4 updates)\n  evaluate    Evaluate a checkpoint with that fixed profile\n  generate    Restore a C2 checkpoint and generate one raw byte\n")
+
+(define (cli3-g-hex-digit character)
+  (let ((value (char->integer character)))
+    (cond ((and (>= value 48) (<= value 57)) (- value 48))
+          ((and (>= value 97) (<= value 102)) (- value 87))
+          ((and (>= value 65) (<= value 70)) (- value 55))
+          (else #f))))
+(define (cli3-g-parse-byte source)
+  (if (not (and (string? source) (= (string-length source) 2)))
+      (cli3-usage "--prompt-hex requires exactly two hexadecimal digits"))
+  (let ((high (cli3-g-hex-digit (string-ref source 0)))
+        (low (cli3-g-hex-digit (string-ref source 1))))
+    (if (not (and high low))
+        (cli3-usage "--prompt-hex requires exactly two hexadecimal digits"))
+    (+ (* high 16) low)))
+(define (cli3-g-hex2 byte)
+  (substring (cli3-json-hex4 byte) 2 4))
+
+(define (cli3-g-generate-run config tokenizer-path corpus checkpoint
+                             prompt sampling seed)
+  (let ((dataset #f) (trainer #f) (generator #f)
+        (input #f) (output #f))
+    (define (cleanup)
+      (let ((owned-generator generator) (owned-output output)
+            (owned-input input) (owned-trainer trainer)
+            (owned-dataset dataset) (failure #f))
+        (define (attempt thunk)
+          (guard (caught (#t (if (not failure) (set! failure caught))))
+            (thunk)))
+        (set! generator #f)
+        (set! output #f)
+        (set! input #f)
+        (set! trainer #f)
+        (set! dataset #f)
+        (if owned-generator
+            (attempt (lambda () (g3g-public-generator-close owned-generator))))
+        (if owned-output
+            (attempt (lambda () (g3g-public-generation-output-release owned-output))))
+        (if owned-input
+            (attempt (lambda () (g3g-public-generation-tensor-release owned-input))))
+        (if owned-trainer
+            (attempt (lambda () (trainer-release! owned-trainer))))
+        (if owned-dataset
+            (attempt (lambda () (d2-token-dataset-close! owned-dataset))))
+        (if failure (raise failure))
+        #t))
+    (guard (caught
+             (#t (guard (cleanup-failure (#t #f)) (cleanup))
+                 (raise caught)))
+      (let* ((resolved (cli3-b-resolved config 'generate))
+             (tokenizer (cli3-b-tokenizer tokenizer-path resolved)))
+        (set! dataset (cli3-b-dataset corpus tokenizer))
+        (let* ((model
+                 (with-region ('cli3-generate-model 65536)
+                   (m3t-public-model-create
+                     resolved (m3t-public-initializer-state
+                                (x1-private-config-ref resolved 'run.seed)))))
+               (tree (module-parameters model))
+               (paths (cli3-b-unique-paths tree))
+               (optimizer
+                 (o2-public-optimizer-create
+                   (list 'transformer-optimizer-config 1 0 '() 'adamw
+                         'f32 'cpu '(none) '(constant)
+                         (list (list 'group paths "3dcccccd" "3f000000"
+                                     "3f000000" "3a83126f" "00000000")))
+                   tree)))
+          (set! trainer (trainer-create resolved tokenizer dataset
+                                        model optimizer))
+          (cli3-b-restore! trainer checkpoint)
+          (module-eval! model)
+          (set! generator
+            (g3g-public-generator-create
+              model tokenizer
+              (list ':profile 'diagnostic-c2 ':sampling sampling
+                    ':temperature-bits #x3f800000 ':top-k 256
+                    ':top-p-bits #x3f800000 ':max-new-tokens 1
+                    ':eos #f ':seed seed)))
+          (set! input
+            (g3g-public-generation-input-create
+              (t2-wave2-tokenizer-encode tokenizer (bytevector prompt))))
+          (set! output (g3g-public-generator-generate generator input))
+          (let ((text (g3g-public-generation-output-text output)))
+            (if (not (and (pair? text) (null? (cdr text))
+                          (bytevector? (car text))
+                          (= (bytevector-length (car text)) 1)))
+                (cli3-fail 'invalid-state 'generate
+                           "G3 output was not one raw byte" '()))
+            (let ((result
+                    (string-append
+                      "{\"artifact\":\"generation\",\"generated_hex\":\""
+                      (cli3-g-hex2 (bytevector-u8-ref (car text) 0))
+                      "\",\"prompt_hex\":\"" (cli3-g-hex2 prompt)
+                      "\",\"sampling\":\"" (symbol->string sampling)
+                      "\",\"seed\":" (number->string seed) "}\n")))
+              (cleanup)
+              result)))))))
+
+(define (cli3-generate options)
+  (let loop ((remaining options) (config #f) (tokenizer #f)
+             (corpus #f) (checkpoint #f) (prompt #f)
+             (sampling #f) (seed #f))
+    (if (null? remaining)
+        (begin
+          (if (or (not config) (not tokenizer) (not corpus)
+                  (not checkpoint) (not prompt) (not sampling) (not seed))
+              (cli3-usage "generate is missing a required option"))
+          (cli3-g-generate-run config tokenizer corpus checkpoint
+                               prompt sampling seed))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--config")
+             (if config (cli3-usage "duplicate --config"))
+             (loop (cdr (cdr remaining)) (cli3-next-value remaining option)
+                   tokenizer corpus checkpoint prompt sampling seed))
+            ((string=? option "--tokenizer")
+             (if tokenizer (cli3-usage "duplicate --tokenizer"))
+             (loop (cdr (cdr remaining)) config
+                   (cli3-next-value remaining option) corpus checkpoint
+                   prompt sampling seed))
+            ((string=? option "--train-corpus")
+             (if corpus (cli3-usage "duplicate --train-corpus"))
+             (loop (cdr (cdr remaining)) config tokenizer
+                   (cli3-next-value remaining option) checkpoint prompt
+                   sampling seed))
+            ((string=? option "--checkpoint")
+             (if checkpoint (cli3-usage "duplicate --checkpoint"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus
+                   (cli3-next-value remaining option) prompt sampling seed))
+            ((string=? option "--prompt-hex")
+             (if prompt (cli3-usage "duplicate --prompt-hex"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus checkpoint
+                   (cli3-g-parse-byte (cli3-next-value remaining option))
+                   sampling seed))
+            ((string=? option "--sampling")
+             (if sampling (cli3-usage "duplicate --sampling"))
+             (let ((value (cli3-next-value remaining option)))
+               (if (not (or (string=? value "greedy")
+                            (string=? value "categorical")))
+                   (cli3-usage "--sampling requires greedy or categorical"))
+               (loop (cdr (cdr remaining)) config tokenizer corpus checkpoint
+                     prompt (if (string=? value "greedy")
+                                'greedy 'categorical) seed)))
+            ((string=? option "--seed")
+             (if seed (cli3-usage "duplicate --seed"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus checkpoint
+                   prompt sampling
+                   (cli3-parse-i64 (cli3-next-value remaining option)
+                                   option cli3-i64-max)))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-generate-private-dispatch arguments)
+  (if (or (equal? arguments '("--help"))
+          (equal? arguments '("generate" "--help"))
+          (and (pair? arguments) (string=? (car arguments) "generate")))
+      (begin
+        (cli3-native-fallback-status-set 70)
+        (set! cli3-command-published? #f)
+        (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+        (guard (raised (#t (cli3-format-raised raised)))
+          (let ((text
+                  (cond ((equal? arguments '("--help"))
+                         cli3-generate-global-help)
+                        ((equal? arguments '("generate" "--help"))
+                         cli3-generate-help)
+                        (else (cli3-generate (cdr arguments))))))
+            (cli3-write-output text)
+            (cli3-result 0 "" ""))))
+      (cli3-private-dispatch arguments)))

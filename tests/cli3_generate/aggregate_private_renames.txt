@@ -1,4 +1,5 @@
 cli3-private-dispatch cli3_private_dispatch_cabi_v1
+cli3-generate-private-dispatch cli3_generate_private_dispatch_cabi_v1
 g3g-public-generation-input-create et_e1b_private_g3_generation_input_create_cabi_v1
 g3g-public-generation-output-cache-lengths et_e1b_private_g3_generation_output_cache_lengths_cabi_v1
 g3g-public-generation-output-ids et_e1b_private_g3_generation_output_ids_cabi_v1

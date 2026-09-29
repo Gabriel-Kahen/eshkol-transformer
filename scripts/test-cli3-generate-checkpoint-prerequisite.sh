@@ -32,7 +32,7 @@ compile() {
     "${runner}" --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
     -L "${scratch}" --lib cli3_generate_prerequisite "$@"
 }
-compile "${PROJECT_ROOT}/src/eshkol_transformer/cli.esk" \
+compile "${PROJECT_ROOT}/tests/cli3_generate/cli.esk" \
   -o "${scratch}/eshkol-transformer"
 compile "${PROJECT_ROOT}/tests/cli3_generate/public_runtime.esk" \
   -o "${scratch}/public-runtime"
@@ -80,6 +80,75 @@ for run in normal repeat; do
 done
 cmp "${evidence}/normal.stdout" "${evidence}/repeat.stdout"
 cmp "${scratch}/before.c2" "${scratch}/first.c2"
+generate_base=("${scratch}/eshkol-transformer" generate
+  --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1"
+  --train-corpus "${scratch}/train" --checkpoint "${scratch}/first.c2"
+  --prompt-hex 41 --seed 1729)
+for mode in greedy categorical; do
+  for repeat in first second; do
+    "${generate_base[@]}" --sampling "${mode}" \
+      >"${evidence}/generate-${mode}-${repeat}.json" \
+      2>"${evidence}/generate-${mode}-${repeat}.stderr"
+    [[ ! -s "${evidence}/generate-${mode}-${repeat}.stderr" ]]
+  done
+  cmp "${evidence}/generate-${mode}-first.json" \
+      "${evidence}/generate-${mode}-second.json"
+done
+python3 - "${evidence}" <<'PY'
+from pathlib import Path
+import json
+import sys
+root = Path(sys.argv[1])
+parts = (root / 'normal.stdout').read_text().split()
+assert parts[0] == 'CLI3-GENERATE-CHECKPOINT-PREREQUISITE-PASS'
+for mode, expected in [('greedy', int(parts[1])),
+                       ('categorical', int(parts[2]))]:
+    record = json.loads((root / f'generate-{mode}-first.json').read_text())
+    assert record == {'artifact': 'generation', 'generated_hex': f'{expected:02x}',
+                      'prompt_hex': '41', 'sampling': mode, 'seed': 1729}
+PY
+run_negative() {
+  local name=$1 expected=$2
+  shift 2
+  set +e
+  "$@" >"${evidence}/${name}.stdout" 2>"${evidence}/${name}.stderr"
+  local status=$?
+  set -e
+  [[ "${status}" == "${expected}" ]] || \
+    die "${name}: expected status ${expected}, got ${status}"
+  [[ ! -s "${evidence}/${name}.stdout" ]]
+  [[ -s "${evidence}/${name}.stderr" ]]
+  if [[ "${expected}" == 2 ]]; then
+    grep -F 'eshkol-transformer: usage message=' \
+      "${evidence}/${name}.stderr" >/dev/null
+  else
+    grep -F 'category="corrupt-data"' \
+      "${evidence}/${name}.stderr" >/dev/null
+  fi
+}
+run_negative malformed-prompt 2 "${scratch}/eshkol-transformer" generate \
+  --prompt-hex x --sampling greedy --seed 1729
+run_negative wrong-sampling 2 "${scratch}/eshkol-transformer" generate \
+  --prompt-hex 41 --sampling top-p --seed 1729
+run_negative duplicate-seed 2 "${generate_base[@]}" --seed 1729 \
+  --sampling greedy
+run_negative corrupt-checkpoint 12 "${scratch}/eshkol-transformer" generate \
+  --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+  --train-corpus "${scratch}/train" --checkpoint "${scratch}/corrupt.c2" \
+  --prompt-hex 41 --sampling greedy --seed 1729
+run_negative malformed-checkpoint 12 "${scratch}/eshkol-transformer" generate \
+  --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+  --train-corpus "${scratch}/train" --checkpoint "${scratch}/torn.c2" \
+  --prompt-hex 41 --sampling greedy --seed 1729
+run_negative wrong-kind-checkpoint 12 "${scratch}/eshkol-transformer" generate \
+  --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+  --train-corpus "${scratch}/train" --checkpoint "${scratch}/byte.t1" \
+  --prompt-hex 41 --sampling greedy --seed 1729
+cmp "${scratch}/before.c2" "${scratch}/first.c2"
+CLI3_GENERATE_EXPECTED=1 TMPDIR="${evidence}" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3.sh" "${scratch}" \
+  >"${evidence}/six-command-suite.stdout" \
+  2>"${evidence}/six-command-suite.stderr"
 cmp "${prefix}_source_closure.txt" \
   "${scratch}/aggregate.o.evidence/source-closure.txt"
 cmp "${prefix}_native_source_closure.txt" \

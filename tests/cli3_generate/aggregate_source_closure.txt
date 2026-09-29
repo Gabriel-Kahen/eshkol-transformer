@@ -81,3 +81,4 @@ native/g3t_ids_owner_extension.esk
 native/g3t_lengths_owner_extension.esk
 native/g3t_text_result_extension.esk
 native/g3g_public_extension.esk
+tests/cli3_generate/generate_extension.esk
