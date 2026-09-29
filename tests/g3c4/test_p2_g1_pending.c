@@ -9,6 +9,8 @@ static int forge_sample;
 static int64_t forged_token;
 static int forge_descriptor;
 static int malformed_input_view;
+static int malformed_output_view;
+static et_g3c4_model_owner_internal *p2g1_test_owner;
 
 int32_t __real_et_i64_tensor_borrow_view_v1(
     const et_i64_tensor_borrow *, const et_kernel_tensor_view_v1 **,
@@ -35,6 +37,18 @@ int32_t __wrap_et_i64_tensor_borrow_view_v1(
       case 4: changed.byte_length = 8u; break;
       default: break;
     }
+    *result = &changed;
+  }
+  if (status == 0 && malformed_output_view && (*result)->rank == 1u &&
+      (*result)->shape != NULL && (*result)->shape[0] == 1u) {
+    static et_kernel_tensor_view_v1 changed;
+    static uint64_t shape[1];
+    changed = **result;
+    shape[0] = 1u;
+    changed.shape = shape;
+    if (malformed_output_view == 1) changed.rank = 2u;
+    if (malformed_output_view == 2) changed.byte_length = 0u;
+    if (malformed_output_view == 3) changed.data = NULL;
     *result = &changed;
   }
   return status;
@@ -324,8 +338,12 @@ static void forged_sampler_cuts(
   }
 }
 
-int main(void) {
+#ifndef ET_G3C4_P2_G1_PENDING_TEST_MAIN
+#define ET_G3C4_P2_G1_PENDING_TEST_MAIN main
+#endif
+int ET_G3C4_P2_G1_PENDING_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
+  p2g1_test_owner = owner;
   pending_parity(owner, 0);
   pending_parity(owner, 1);
   prompt_failure_cuts(owner);

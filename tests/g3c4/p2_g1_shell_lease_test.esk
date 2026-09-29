@@ -1,0 +1,38 @@
+(load "p2_g1_shell_test_common.esk")
+
+(define (run-held-lease kind seed)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer
+                                           (config 'greedy seed)))
+         (generator-entry (latest 'generator))
+         (observed (vector #f)))
+    (g3c4-with-p2g1-output-call-internal
+      'g3c4-p2g1-shell-held generator (call)
+      (let ((output (prepare call)))
+        (vector-set! observed 0 output)
+        (check "open scoped external lease"
+               (= (if (eq? kind 'ids)
+                      (shell-test-ids-borrow (vector-ref output 3) 1)
+                      (shell-test-a2-view (vector-ref generator-entry 3) 1))
+                  0))
+        (reject "held lease rejects publication in active region"
+                (if (eq? kind 'ids) 'invalid-state 'invalid-argument)
+          (lambda () (g3c4-p2g1-output-publish! call output)))
+        (check "end external lease before abort"
+               (= (if (eq? kind 'ids)
+                      (shell-test-ids-borrow (vector-ref output 3) 0)
+                      (shell-test-a2-view (vector-ref generator-entry 3) 0))
+                  0))
+        (g3c4-p2g1-call-rollback! call generator-entry model-entry)))
+    (check "held lease explicit abort tombstones"
+           (and (dead? (vector-ref observed 0))
+                (not (vector-ref generator-entry 9))
+                (not (vector-ref m3-call-state 0))))
+    (check "held lease generator closes"
+           (g3c4-generator-close-internal! generator))))
+(run-held-lease 'ids 23)
+(run-held-lease 'a2 29)
+
+(display "G3-C4 P2/G1 shell PASS: checks=")
+(display checks)
+(display " leases=2") (newline)
