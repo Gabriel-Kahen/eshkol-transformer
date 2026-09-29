@@ -31,6 +31,18 @@ void *et_g3c4_private_rng_seed_v1(int64_t seed);
 void *et_g3c4_private_rng_clone_v1(void *rng);
 int64_t et_g3c4_private_rng_word_v1(void *rng, int64_t index);
 int64_t et_g3c4_private_rng_release_v1(void *rng);
+#ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
+/* Registered, detached fixed-profile public result owners. */
+void *et_g3c4_private_result_tensor_create_v1(int64_t kind, int64_t value);
+int64_t et_g3c4_private_result_tensor_release_v1(void *result);
+void *et_g3c4_private_result_rng_create_v1(
+    int64_t w0, int64_t w1, int64_t w2, int64_t w3);
+/* 0 exact CPU view, 1 current live view's device differs, -1 typed error. */
+int64_t et_g3c4_private_output_device_state_v1(void *output);
+#ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_TESTING
+void et_g3c4_private_result_test_inject_device_v1(int enabled);
+#endif
+#endif
 #endif
 
 #ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
@@ -113,6 +125,13 @@ int64_t et_g3c4_private_prompt_prefill_preflight_v1(
  * numerical prefill. The input owner and borrowed view are never retained. */
 int64_t et_g3c4_private_prompt_prefill_v1(
     void *context, void *input, float last_logits[256]);
+#ifdef ET_G3C4_P2_G1_COORDINATOR_PRIVATE
+/* Source-private fixed P2/G1 producer. Preflight runs before call admission;
+ * run requires the reserved pending output and leaves publication to the
+ * Eshkol shell. Neither routine retains the input owner. */
+int64_t et_g3c4_private_p2g1_preflight_v1(void *context, void *input);
+int64_t et_g3c4_private_p2g1_run_v1(void *context, void *input);
+#endif
 #endif
 
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE

@@ -1,0 +1,330 @@
+;;; Fixed diagnostic pretrain/evaluate commands in the CLI3/TR3 registry owner.
+
+(extern i64 cli3-native-same-directory ptr ptr
+        :real et_cli3_private_same_directory_v1)
+(extern i64 cli3-native-output-ready ptr i64
+        :real et_cli3_private_output_ready_v1)
+
+(define cli3-b-byte-fingerprint
+  "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")
+
+(define (cli3-b-resolved path command)
+  (let* ((source (cli3-utf8 (cli3-read-file path 16384 'config-parse)
+                            'config-parse))
+         (resolved (x1-private-config-resolve
+                     (x1-private-config-parse source) '())))
+    (x1-private-config-validate resolved)
+    (if (not
+          (and (= (x1-private-config-ref resolved 'model.context-length) 2)
+               (= (x1-private-config-ref resolved 'model.hidden-size) 4)
+               (= (x1-private-config-ref resolved 'model.layer-count) 1)
+               (= (x1-private-config-ref resolved 'model.query-head-count) 2)
+               (= (x1-private-config-ref resolved 'model.kv-head-count) 2)
+               (= (x1-private-config-ref resolved 'model.head-size) 2)
+               (= (x1-private-config-ref resolved 'model.vocabulary-size) 256)
+               (eq? (x1-private-config-ref resolved 'model.dtype) 'f32)
+               (eq? (x1-private-config-ref resolved 'model.device) 'cpu)
+               (x1-private-config-ref resolved 'run.deterministic)
+               (> (x1-private-config-ref resolved
+                                         'training.accumulation-steps) 0)))
+        (cli3-fail 'unsupported command
+                   "only the fixed CPU f32 diagnostic profile is supported"
+                   '()))
+    resolved))
+
+(define (cli3-b-tokenizer path resolved)
+  (let* ((policy (c2-public-persistence-policy
+                   1048576 1048576 1048576 64 'cpu))
+         (tokenizer (t2-wave2-tokenizer-load
+                      (cli3-path path 'tokenizer-load) policy)))
+    (if (not (and (= (t2-wave2-tokenizer-vocab-size tokenizer)
+                     (x1-private-config-ref resolved 'model.vocabulary-size))
+                  (string=? (t2-wave2-tokenizer-fingerprint tokenizer)
+                            cli3-b-byte-fingerprint)
+                  (tr3-lease-e3-byte-profile? tokenizer)))
+        (cli3-fail 'unsupported 'tokenizer-load
+                   "only the canonical byte tokenizer is supported" '()))
+    tokenizer))
+
+(define (cli3-b-dataset directory tokenizer)
+  (d2-token-dataset-open
+    (list ':directory (cli3-path directory 'token-dataset-open)
+          ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576
+          ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536
+          ':maximum-batch-bytes 34 ':shuffle-seed #f
+          ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+
+(define (cli3-b-seen-handle? handle seen)
+  (if (null? seen) #f
+      (or (eq? handle (car seen))
+          (cli3-b-seen-handle? handle (cdr seen)))))
+
+(define (cli3-b-unique-paths tree)
+  (let loop ((remaining (parameter-tree-paths tree))
+             (seen '()) (paths '()))
+    (if (null? remaining) (cli3-reverse paths)
+        (let ((handle (parameter-tree-handle tree (car remaining))))
+          (if (cli3-b-seen-handle? handle seen)
+              (loop (cdr remaining) seen paths)
+              (loop (cdr remaining) (cons handle seen)
+                    (cons (car remaining) paths)))))))
+
+(define (cli3-b-create-trainer resolved tokenizer dataset)
+  (let* ((model
+           (with-region ('cli3-b-model 65536)
+             (m3t-public-model-create
+               resolved (m3t-public-initializer-state
+                          (x1-private-config-ref resolved 'run.seed)))))
+         (tree (module-parameters model))
+         (paths (cli3-b-unique-paths tree))
+         (optimizer
+           (o2-public-optimizer-create
+             (list 'transformer-optimizer-config 1 0 '() 'adamw
+                   'f32 'cpu '(none) '(constant)
+                   (list (list 'group paths "3dcccccd" "3f000000"
+                               "3f000000" "3a83126f" "00000000")))
+             tree)))
+    (trainer-create resolved tokenizer dataset model optimizer)))
+
+(define (cli3-b-policy)
+  (c2-public-persistence-policy 16777216 524288 8388608 64 'cpu))
+
+(define (cli3-b-restore! trainer path)
+  (let ((state #f))
+    (guard (caught
+             (#t (if state (c2-public-trainer-state-release! state))
+                 (raise caught)))
+      (set! state
+        (c2-public-checkpoint-load
+          (cli3-path path 'checkpoint-load) (cli3-b-policy)
+          (k2-public-capability-discover)))
+      (trainer-load-state! trainer state)
+      (c2-public-trainer-state-release! state)
+      (set! state #f)
+      #t)))
+
+(define (cli3-b-f32-word metrics key)
+  (let* ((coded (tr3-metrics-ref-coded-internal metrics key))
+         (word (- -1 coded)))
+    (if (or (< word 0) (> word 4294967295)
+            (= (bitwise-and (arithmetic-shift word -23) 255) 255))
+        (cli3-fail 'invalid-state 'metrics-ref
+                   "nonfinite diagnostic metric" '()))
+    word))
+
+(define (cli3-b-weight-word metrics)
+  (let ((word (cli3-b-f32-word metrics 'mask-weight)))
+    (if (or (= word 0) (not (= (bitwise-and word 2147483648) 0)))
+        (cli3-fail 'invalid-state 'metrics-ref
+                   "diagnostic mask weight must be positive" '()))
+    word))
+
+(define (cli3-b-hex8 word)
+  (string-append
+    (cli3-json-hex4 (arithmetic-shift word -16))
+    (cli3-json-hex4 (bitwise-and word 65535))))
+
+(define (cli3-b-pretrain-json checkpoint summary)
+  (string-append
+    "{\"artifact\":\"checkpoint\",\"checkpoint\":"
+    (cli3-json-string-limit checkpoint 49154)
+    ",\"epochs\":"
+    (number->string (tr3-metrics-ref-coded-internal summary 'epochs))
+    ",\"loss_f32_bits\":\""
+    (cli3-b-hex8 (cli3-b-f32-word summary 'loss))
+    "\",\"mask_weight_f32_bits\":\""
+    (cli3-b-hex8 (cli3-b-weight-word summary))
+    "\",\"tokens\":"
+    (number->string (tr3-metrics-ref-coded-internal summary 'tokens))
+    ",\"updates\":"
+    (number->string (tr3-metrics-ref-coded-internal summary 'updates))
+    "}\n"))
+
+(define (cli3-b-evaluate-json summary)
+  (string-append
+    "{\"artifact\":\"evaluation\",\"batches\":"
+    (number->string (tr3-metrics-ref-coded-internal summary 'batches))
+    ",\"loss_f32_bits\":\""
+    (cli3-b-hex8 (cli3-b-f32-word summary 'loss))
+    "\",\"mask_weight_f32_bits\":\""
+    (cli3-b-hex8 (cli3-b-weight-word summary))
+    "\",\"tokens\":"
+    (number->string (tr3-metrics-ref-coded-internal summary 'tokens))
+    "}\n"))
+
+(define (cli3-b-output-preflight path force?)
+  (let ((status
+          (cli3-native-output-ready
+            (cli3-path path 'checkpoint-save!) (if force? 1 0))))
+    (cond ((= status 0) #t)
+          ((= status 1)
+           (cli3-fail 'invalid-state 'checkpoint-save!
+                      "checkpoint already exists; use --force" '()))
+          (else
+           (cli3-fail 'io 'checkpoint-save!
+                      "checkpoint parent is unavailable" '())))))
+
+(define (cli3-b-release-all state trainer heldout dataset)
+  (let ((failure #f))
+    (define (attempt thunk)
+      (guard (caught (#t (if (not failure) (set! failure caught))))
+        (thunk)))
+    (if state
+        (attempt (lambda () (c2-public-trainer-state-release! state))))
+    (if trainer (attempt (lambda () (trainer-release! trainer))))
+    (if heldout
+        (attempt (lambda () (d2-token-dataset-close! heldout))))
+    (if dataset
+        (attempt (lambda () (d2-token-dataset-close! dataset))))
+    (if failure (raise failure))
+    #t))
+
+(define (cli3-b-pretrain-run config tokenizer-path corpus checkpoint
+                             maximum resume force?)
+  (let ((dataset #f) (trainer #f) (state #f))
+    (define (cleanup)
+      (let ((owned-state state) (owned-trainer trainer)
+            (owned-dataset dataset))
+        (set! state #f)
+        (set! trainer #f)
+        (set! dataset #f)
+        (cli3-b-release-all owned-state owned-trainer #f owned-dataset)))
+    (guard (caught (#t (cleanup) (raise caught)))
+      (let* ((resolved (cli3-b-resolved config 'pretrain))
+             (tokenizer (cli3-b-tokenizer tokenizer-path resolved)))
+        (if (and resume (string=? resume checkpoint) (not force?))
+            (cli3-usage "--resume equals --checkpoint and requires --force"))
+        (cli3-b-output-preflight checkpoint force?)
+        (set! dataset (cli3-b-dataset corpus tokenizer))
+        (set! trainer (cli3-b-create-trainer resolved tokenizer dataset))
+        (if resume (cli3-b-restore! trainer resume))
+        (let* ((summary (trainer-train!
+                          trainer (trainer-stop-policy #f maximum #f)))
+               (output (cli3-b-pretrain-json checkpoint summary)))
+          (set! state (trainer-state trainer))
+          (c2-public-checkpoint-save!
+            state checkpoint (cli3-b-policy)
+            (if force? (list ':overwrite? #t) '()))
+          (set! cli3-command-published? #t)
+          (cleanup)
+          output)))))
+
+(define (cli3-b-evaluate-run config tokenizer-path corpus validation
+                             checkpoint)
+  (let ((dataset #f) (heldout #f) (trainer #f))
+    (define (cleanup)
+      (let ((owned-trainer trainer) (owned-heldout heldout)
+            (owned-dataset dataset))
+        (set! trainer #f)
+        (set! heldout #f)
+        (set! dataset #f)
+        (cli3-b-release-all #f owned-trainer owned-heldout owned-dataset)))
+    (guard (caught (#t (cleanup) (raise caught)))
+      (let* ((same? (cli3-native-same-directory
+                      (cli3-path corpus 'token-dataset-open)
+                      (cli3-path validation 'token-dataset-open)))
+             (resolved (cli3-b-resolved config 'evaluate))
+             (tokenizer (cli3-b-tokenizer tokenizer-path resolved)))
+        (if (< same? 0)
+            (cli3-fail 'io 'token-dataset-open
+                       "training or validation directory is unavailable" '()))
+        (if (= same? 1)
+            (cli3-fail 'invalid-argument 'trainer-evaluate!
+                       "validation directory equals training directory" '()))
+        (set! dataset (cli3-b-dataset corpus tokenizer))
+        (set! trainer (cli3-b-create-trainer resolved tokenizer dataset))
+        (cli3-b-restore! trainer checkpoint)
+        (set! heldout (cli3-b-dataset validation tokenizer))
+        (let ((output
+                (cli3-b-evaluate-json
+                  (trainer-evaluate! trainer heldout))))
+          (cleanup)
+          output)))))
+
+(define (cli3-pretrain options)
+  (let loop ((remaining options) (config #f) (tokenizer #f)
+             (corpus #f) (checkpoint #f) (maximum #f)
+             (resume #f) (force? #f))
+    (if (null? remaining)
+        (begin
+          (if (or (not config) (not tokenizer) (not corpus)
+                  (not checkpoint) (not maximum))
+              (cli3-usage "pretrain is missing a required option"))
+          (cli3-b-pretrain-run config tokenizer corpus checkpoint
+                               maximum resume force?))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--force")
+             (if force? (cli3-usage "duplicate --force"))
+             (loop (cdr remaining) config tokenizer corpus checkpoint
+                   maximum resume #t))
+            ((string=? option "--config")
+             (if config (cli3-usage "duplicate --config"))
+             (loop (cdr (cdr remaining)) (cli3-next-value remaining option)
+                   tokenizer corpus checkpoint maximum resume force?))
+            ((string=? option "--tokenizer")
+             (if tokenizer (cli3-usage "duplicate --tokenizer"))
+             (loop (cdr (cdr remaining)) config
+                   (cli3-next-value remaining option) corpus checkpoint
+                   maximum resume force?))
+            ((string=? option "--train-corpus")
+             (if corpus (cli3-usage "duplicate --train-corpus"))
+             (loop (cdr (cdr remaining)) config tokenizer
+                   (cli3-next-value remaining option) checkpoint maximum
+                   resume force?))
+            ((string=? option "--checkpoint")
+             (if checkpoint (cli3-usage "duplicate --checkpoint"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus
+                   (cli3-next-value remaining option) maximum resume force?))
+            ((string=? option "--max-updates")
+             (if maximum (cli3-usage "duplicate --max-updates"))
+             (let ((value (cli3-parse-i64
+                            (cli3-next-value remaining option) option 4)))
+               (if (= value 0)
+                   (cli3-usage "--max-updates must be in 1..4"))
+               (loop (cdr (cdr remaining)) config tokenizer corpus
+                     checkpoint value resume force?)))
+            ((string=? option "--resume")
+             (if resume (cli3-usage "duplicate --resume"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus
+                   checkpoint maximum (cli3-next-value remaining option)
+                   force?))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-evaluate options)
+  (let loop ((remaining options) (config #f) (tokenizer #f)
+             (corpus #f) (validation #f) (checkpoint #f))
+    (if (null? remaining)
+        (begin
+          (if (or (not config) (not tokenizer) (not corpus)
+                  (not validation) (not checkpoint))
+              (cli3-usage "evaluate is missing a required option"))
+          (cli3-b-evaluate-run config tokenizer corpus validation checkpoint))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--config")
+             (if config (cli3-usage "duplicate --config"))
+             (loop (cdr (cdr remaining))
+                   (cli3-next-value remaining option) tokenizer corpus
+                   validation checkpoint))
+            ((string=? option "--tokenizer")
+             (if tokenizer (cli3-usage "duplicate --tokenizer"))
+             (loop (cdr (cdr remaining)) config
+                   (cli3-next-value remaining option) corpus validation
+                   checkpoint))
+            ((string=? option "--train-corpus")
+             (if corpus (cli3-usage "duplicate --train-corpus"))
+             (loop (cdr (cdr remaining)) config tokenizer
+                   (cli3-next-value remaining option) validation checkpoint))
+            ((string=? option "--validation-corpus")
+             (if validation (cli3-usage "duplicate --validation-corpus"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus
+                   (cli3-next-value remaining option) checkpoint))
+            ((string=? option "--checkpoint")
+             (if checkpoint (cli3-usage "duplicate --checkpoint"))
+             (loop (cdr (cdr remaining)) config tokenizer corpus validation
+                   (cli3-next-value remaining option)))
+            (else (cli3-usage (string-append "unknown option " option))))))))

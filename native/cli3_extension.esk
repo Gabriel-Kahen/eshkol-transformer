@@ -15,7 +15,11 @@
 
 (define cli3-version "eshkol-transformer 0.0.1\n")
 (define cli3-help
-  "Usage: eshkol-transformer GROUP COMMAND [OPTIONS]\n\nGroups:\n  tokenizer   Create and inspect tokenizer artifacts\n  corpus      Build and inspect D1 token corpora\n  checkpoint  Inspect C2 checkpoints\n")
+  "Usage: eshkol-transformer GROUP COMMAND [OPTIONS]\n       eshkol-transformer pretrain|evaluate [OPTIONS]\n\nGroups:\n  tokenizer   Create and inspect tokenizer artifacts\n  corpus      Build and inspect D1 token corpora\n  checkpoint  Inspect C2 checkpoints\n\nCommands:\n  pretrain    Train the fixed CPU f32 diagnostic profile (1..4 updates)\n  evaluate    Evaluate a checkpoint with that fixed profile\n")
+(define cli3-pretrain-help
+  "Usage: eshkol-transformer pretrain --config PATH --tokenizer PATH --train-corpus DIRECTORY --checkpoint PATH --max-updates N [--resume PATH] [--force]\n")
+(define cli3-evaluate-help
+  "Usage: eshkol-transformer evaluate --config PATH --tokenizer PATH --train-corpus DIRECTORY --validation-corpus DIRECTORY --checkpoint PATH\n")
 (define cli3-tokenizer-help
   "Usage: eshkol-transformer tokenizer COMMAND [OPTIONS]\n\nCommands:\n  byte       Create a canonical byte tokenizer\n  train-bpe  Train a bounded deterministic BPE tokenizer\n  inspect    Validate and inspect a tokenizer artifact\n")
 (define cli3-corpus-help
@@ -794,6 +798,8 @@
                    seen-file? seen-metadata? seen-tensor? #t))
             (else (cli3-usage (string-append "unknown option " option))))))))
 
+(load "cli3_b_extension.esk")
+
 (define (cli3-dispatch-command arguments)
   (cond
     ((equal? arguments '("--help")) cli3-help)
@@ -801,6 +807,8 @@
     ((equal? arguments '("tokenizer" "--help")) cli3-tokenizer-help)
     ((equal? arguments '("corpus" "--help")) cli3-corpus-help)
     ((equal? arguments '("checkpoint" "--help")) cli3-checkpoint-help)
+    ((equal? arguments '("pretrain" "--help")) cli3-pretrain-help)
+    ((equal? arguments '("evaluate" "--help")) cli3-evaluate-help)
     ((equal? arguments '("tokenizer" "byte" "--help"))
      cli3-tokenizer-byte-help)
     ((equal? arguments '("tokenizer" "train-bpe" "--help"))
@@ -815,6 +823,10 @@
      cli3-checkpoint-inspect-help)
     ((or (null? arguments) (null? (cdr arguments)))
      (cli3-usage "expected a known group and command"))
+    ((string=? (car arguments) "pretrain")
+     (cli3-pretrain (cdr arguments)))
+    ((string=? (car arguments) "evaluate")
+     (cli3-evaluate (cdr arguments)))
     ((and (string=? (car arguments) "tokenizer")
           (string=? (car (cdr arguments)) "byte"))
      (let ((result (cli3-tokenizer-byte (cdr (cdr arguments))))) result))

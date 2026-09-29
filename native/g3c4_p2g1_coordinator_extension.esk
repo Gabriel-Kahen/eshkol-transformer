@@ -1,0 +1,29 @@
+;;; Production source-private P2/G1 coordinator. Load after the pending
+;;; publication shell with ET_G3C4_P2_G1_COORDINATOR_PRIVATE enabled.
+;;; Public generation dispatch waits for an exact-owner C4 output adapter.
+
+(extern i64 g3c4-native-p2g1-preflight ptr ptr
+        :real et_g3c4_private_p2g1_preflight_v1)
+(extern i64 g3c4-native-p2g1-run ptr ptr
+        :real et_g3c4_private_p2g1_run_v1)
+
+(define (g3c4-p2g1-generate-internal generator input)
+  (let* ((operation 'g3c4-p2g1-generate-internal)
+         (generator-entry
+           (g3c4-generator-entry-call-ready generator operation))
+         (input-entry (g3c4-input-entry-live input operation))
+         (native-generator (vector-ref generator-entry 3))
+         (native-input (vector-ref input-entry 3)))
+    ;; The fixed P2 shape and whole request are checked while the generator
+    ;; is idle, before the sibling scope acquires a call or reserves output.
+    (g3c4-native-check
+      (g3c4-native-p2g1-preflight native-generator native-input) operation)
+    (g3c4-with-p2g1-output-call-internal operation generator (call)
+      (if (not (and (eq? (g3c4-input-entry-live input operation) input-entry)
+                    (eq? (vector-ref input-entry 3) native-input)))
+          (g3c4-fail 'invalid-state operation
+                     "C4 P2/G1 input owner changed before prefill"))
+      (let ((output (g3c4-p2g1-output-reserve call)))
+        (g3c4-native-check
+          (g3c4-native-p2g1-run native-generator native-input) operation)
+        (g3c4-p2g1-output-publish! call output)))))
