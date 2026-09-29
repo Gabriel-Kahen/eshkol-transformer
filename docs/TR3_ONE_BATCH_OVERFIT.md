@@ -24,6 +24,12 @@ the functional change to actual model parameter state rather than metrics
 publication. The public installed API does not expose raw parameter bytes,
 so this does not identify which parameter tensor changed.
 
+The installed trainer package includes `transformer/model.esk` and the eight
+accepted M3 public forward, output, and diagnostic boxed entries in its
+existing same-aggregate bridge. Their trusted entry names are renamed and
+localized with the rest of the trainer package; the witness links no second
+M3 object or registry.
+
 Forward observations and state snapshots occur before trainer enrollment or
 after `trainer-release!`: the public facade rejects direct model calls on an
 enrolled trainer component. `:deterministic? #t` validates a deterministic

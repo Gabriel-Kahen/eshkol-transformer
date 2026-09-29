@@ -43,6 +43,35 @@ class OverfitSourceContract(unittest.TestCase):
         )[0]
         self.assertNotIn("set-mode-modules!", load)
 
+    def test_public_m3_probe_uses_same_aggregate_package_closure(self) -> None:
+        native = ROOT / "native"
+        installed_root = (native / "tr3_public_installed_root.esk").read_text()
+        self.assertEqual(installed_root.count('(load "tr3_public_release_candidate_root.esk")'), 1)
+        self.assertEqual(installed_root.count('(load "m3_call_adapters.esk")'), 1)
+
+        accepted = (native / "m3_package_bridge.c").read_text().split("\n\n", 1)[1]
+        bridge = (native / "tr3_public_installed_bridge.c").read_text()
+        self.assertIn(accepted, bridge)
+        self.assertIn("transformer/model.esk\n",
+                      (native / "tr3_public_installed_facades.txt").read_text())
+
+        renames = set((native / "tr3_public_installed_private_renames.txt")
+                      .read_text().splitlines())
+        exports = set((native / "tr3_public_installed_exports.txt")
+                      .read_text().splitlines())
+        accepted_renames = {
+            row for row in (native / "m3_package_private_renames.txt")
+            .read_text().splitlines() if row.startswith("m3-public-")
+        }
+        accepted_exports = {
+            row for row in (native / "m3_package_public_exports.txt")
+            .read_text().splitlines() if row.startswith("et_e1b_public_m3_")
+        }
+        self.assertEqual(len(accepted_renames), 8)
+        self.assertEqual(len(accepted_exports), 8)
+        self.assertLessEqual(accepted_renames, renames)
+        self.assertLessEqual(accepted_exports, exports)
+
 
 if __name__ == "__main__":
     unittest.main()
