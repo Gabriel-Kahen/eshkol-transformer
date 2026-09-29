@@ -681,8 +681,15 @@ left T2's authenticated C2 policy projector unset outside CLI dispatch, so
 public tokenizer LOAD rejected its valid C2 policy. The fixture now reinstalls
 that exact projector at its public policy entry; forged policies still reach
 the T2 guard. The witness also moves model forwards outside the trainer's
-enrolled ownership window, as required by the accepted TR3 contract. Supported
-prerequisite and command linked/runtime acceptance remain pending.
+enrolled ownership window, as required by the accepted TR3 contract. The next
+exact prerequisite gate passed aggregate build/link and CLI tokenizer, corpus,
+and pretrain, then reached the forged-capability public LOAD negative. That
+witness had incorrectly required a null error cause: C2 intentionally wraps
+K2's `invalid-argument`/`capability-require` error under public
+`invalid-argument`/`checkpoint-load`. The fixture now checks both operations
+and categories, while the remaining negative checks retain their strict cause
+expectations. Supported prerequisite and command linked/runtime acceptance
+remain pending at the corrected heads.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are

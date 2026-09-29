@@ -138,6 +138,14 @@ class SingleRegistryContract(unittest.TestCase):
                      '(generation-output-text output)', '(greedy-oracle '):
             self.assertIn(call, witness)
         self.assertIn('(tokenizer-load tokenizer-path (vector \'forged))', witness)
+        self.assertIn('(check "forged capability report"', witness)
+        self.assertNotIn('(expect-error "forged capability report"', witness)
+        self.assertIn("(eq? (transformer-error-operation cause)\n"
+                      "                                'capability-require)", witness)
+        c2 = (NATIVE / 'c2_public_extension.esk').read_text()
+        self.assertIn('(transformer-error-details caught) caught)', c2)
+        k2 = (NATIVE / 'k2_wave2_extension.esk').read_text()
+        self.assertIn("(k2-match-index report request capability 'capability-require)", k2)
         self.assertLess(witness.index('(define before-logits'),
                         witness.index('(define trainer (trainer-create'))
         self.assertLess(witness.index('failed LOAD leaves receiver model untouched'),

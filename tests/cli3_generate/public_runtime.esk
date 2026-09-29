@@ -116,8 +116,19 @@
     tree))
 (define before-logits (logits-for model 65))
 (define checkpoint-policy (persistence-policy 16777216 524288 8388608 64 'cpu))
-(expect-error "forged capability report" 'invalid-argument 'checkpoint-load
-  (lambda () (checkpoint-load checkpoint-path checkpoint-policy (vector 'forged))))
+(check "forged capability report"
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) 'invalid-argument)
+                    (eq? (transformer-error-operation caught) 'checkpoint-load)
+                    (let ((cause (transformer-error-cause caught)))
+                      (and (transformer-error? cause)
+                           (eq? (transformer-error-category cause)
+                                'invalid-argument)
+                           (eq? (transformer-error-operation cause)
+                                'capability-require))))))
+    (checkpoint-load checkpoint-path checkpoint-policy (vector 'forged))
+    #f))
 (define capabilities (capability-discover))
 (expect-error "corrupt checksum" 'corrupt-data 'checkpoint-load
   (lambda () (checkpoint-load corrupt-path checkpoint-policy capabilities)))
