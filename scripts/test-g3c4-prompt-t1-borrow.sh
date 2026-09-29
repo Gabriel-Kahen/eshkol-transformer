@@ -296,6 +296,14 @@ done <"${PROJECT_ROOT}/native/g3c4_prompt_t1_borrow_source_closure.txt" \
 sha256sum "${PROJECT_ROOT}/scripts/test-g3c4-prompt-t1-borrow.sh" \
   "${PROJECT_ROOT}/scripts/check-g3c4-prompt-t1-borrow.py" \
   >"${evidence}/runner-sha256.txt"
-git -C "${PROJECT_ROOT}" diff --check
+if git -C "${PROJECT_ROOT}" rev-parse HEAD >/dev/null 2>&1; then
+  git -C "${PROJECT_ROOT}" diff --check
+else
+  declared_gitdir="$(sed -n 's/^gitdir: //p' "${PROJECT_ROOT}/.git" 2>/dev/null || true)"
+  [[ "${declared_gitdir}" == /* && ! -e "${declared_gitdir}" ]] || \
+    die "git diff check failed for a reason other than inaccessible worktree metadata"
+  printf 'worktree git metadata inaccessible; host diff check required\n' \
+    >"${evidence}/host-diff-check-required.stdout"
+fi
 cat "${tmp}/normal/runtime.stdout"
 printf 'G3-C4 prompt/T1 borrow evidence: %s\n' "${evidence}"
