@@ -27,6 +27,50 @@ mutable even though its identity is protected; text acceptance compared it
 with I1 only before publication. A later read must compare them again. No
 existing native function copies the published ID/length/cache/RNG tuple.
 
+## Required I2 storage-inspection prerequisite
+
+The detached output has `parent_ctx=NULL`, so the pending-copy helper's
+`context->pins.views[0..13]` cannot protect model f32 storage. I1 and A2
+already expose source-private, context-free storage-overlap queries;
+**I2/f32 does not**. The C4 copy entrypoint below must remain unimplemented
+until a separately reviewed, conditional I2 helper such as
+`et_f32_tensor_private_storage_overlap_v1(pointer, bytes)` is accepted in
+`native/f32_tensor.c` and declared under a private macro in
+`include/eshkol_transformer/f32_tensor.h`. This is an inspection query, not
+new tensor/model ownership, borrowing or a public ABI.
+
+For a non-null, representable nonempty span it returns `1` on overlap with
+any process-local live f32 tensor control, shape, strides or data; live
+parameter/borrow/plan control and their owned arrays or prepared buffers;
+and retained retired controls. It returns `0` only when disjoint from all
+such allocations. Null, zero-length or overflowing spans return `-1`; the
+C4 caller maps that to `invalid-argument/identity`, overlap to
+`invalid-argument/alias`, and must never treat either as disjoint. The
+helper has no output buffer, error-record write, allocation, model/context
+argument, or mutation. It must use the authoritative I2 registries and
+their existing retired-control index, not rely on a C4 owner or a borrowed
+view; corruption that prevents a reliable scan is an internal fail-stop,
+never a `0` result. The C4 call remains serialized as required by I2.
+
+An active f32 borrow does not suppress inspection: its owner data and
+borrow record remain protected and are reported as overlaps. A closed G3
+generator or aborted construction owner supplies no pin requirement: live
+f32 allocations belonging to any model remain protected; freed payload is
+no longer owned, while retained retired controls still overlap. A sealed
+model's parameter storage likewise remains protected after generator close.
+C4 has no sealed model-owner close operation: generator close leaves that
+owner sealed, so the contract does not infer model destruction from it. If
+an I2 owner is actually destroyed, only its retained retired control and
+any other still-live f32 allocation remain protected; freed payload is not
+an owned span. The prerequisite gate must prove data, shape, stride,
+live/retired control, parameter and plan overlaps, external active borrow,
+two independent models,
+closed-generator and aborted-owner cases, a disjoint carrier, and null/end
+overflow. For every rejection, carrier bytes and I2 ownership remain
+unchanged. Compare the query against I2's existing
+`storage_aliases_live_reference` behavior without weakening feature-off I2
+symbols or public behavior.
+
 ## One conditional native copy boundary
 
 Add one **new, reviewed C4-private** entrypoint, provisionally
@@ -41,23 +85,24 @@ changes no native record size or installed ABI. Its seven signed little-endian
 length, then RNG words 0–3. There is no pointer, tensor handle, raw storage
 alias, or executable object in the result.
 
-Before writing, authenticate the native output through the existing
-registered-output path and require `P=2`, `G=1`, published, detached,
+Only after that I2 prerequisite is reviewed and gated, before writing,
+authenticate the native output through the existing registered-output path
+and require `P=2`, `G=1`, published, detached,
 `text_ready=ids_copied=numeric_ready=1`, I1 live/unborrowed with exact dense
 `i64[1]` shape/stride/bytes, length one, cache length three, and valid
 four-word RNG. Validate both bytevector headers/ranges, raw length one,
 destination length 56, and their nonoverlap with each other, registered
-transport/model owner records, and native tensor/cache storage. Unlike the
-pending-copy helper, this check cannot depend on an active context or its
-pins. Begin a scoped I1 borrow, read its exact view, require ID `[0,255]`
-and `raw[0]=ID`, then end that borrow on every path. Stage all seven words
-locally and copy them to the destination only after every fallible check and
+transport/model owner records, and all I1, A2 and I2-owned storage using
+the three context-free private overlap queries. Unlike the pending-copy
+helper, this check cannot depend on an active context or its pins. Begin a
+scoped I1 borrow, read its exact view, require ID `[0,255]` and `raw[0]=ID`,
+then end that borrow on every path. Stage all seven words locally and copy
+them to the destination only after every fallible check and
 borrow end succeeds. A rejected request leaves the destination header and
-all 56 payload bytes,
-output, raw owner, cache and RNG unchanged; cleanup preserves the first
-error. A borrowed I1 rejects before writing and succeeds after its owner
-ends the borrow. A malformed native owner/descriptor is an internal
-invariant error; malformed caller carriers and stale/forged identities use
+all 56 payload bytes, output, raw owner, cache and RNG unchanged; cleanup
+preserves the first error. A borrowed I1 rejects before writing and succeeds
+after its owner ends the borrow. A malformed native owner/descriptor is an
+internal invariant error; malformed caller carriers and stale/forged identities use
 the established typed native error mapping. No live native pointer or I1
 lease escapes.
 
@@ -69,10 +114,10 @@ shell **and** the protected native/raw identity record before allocating a
 fresh raw bytevector `[1]`, exact native staging `[56]`, and result/RNG
 containers. The result carrier is a fresh five-slot vector and no slot
 aliases the live shell or native I1. It passes the existing private raw
-carrier and new staging to
-the native copy boundary. It then decodes the seven signed little-endian
-words with the existing C2-style unsigned-load/sign-conversion pattern,
-checks ID `[0,255]`, lengths `1/3`, RNG schema
+carrier and new staging to the native copy boundary. It then decodes the
+seven signed little-endian words with the existing C2-style
+unsigned-load/sign-conversion pattern, checks ID `[0,255]`, lengths `1/3`,
+RNG schema
 `g3.philox4x32-10.categorical-f32.v1`, and rechecks shell/record identities
 and `raw[0]=ID` before filling the preallocated result. Its private result
 is exactly `(raw-copy, selected-id, length, cache-length, rng-snapshot)`,
@@ -110,14 +155,16 @@ Release must invalidate later reads while preserving earlier copies.
 Negative cuts cover pending/dead/wrong-kind/forged/cross-call shells,
 two-output native/raw owner swaps, mutated raw content and native ID
 `-1/256`, malformed I1 shape/stride/storage, malformed/short/overlapping
-destination and raw carriers, an external I1 borrow, and each reachable
+destination and raw carriers, including aliases into borrowed and closed-
+generator I2 storage, an external I1 borrow, and each reachable
 allocation/borrow/view failure. For every rejection, prove no partial
 destination write or returned result, no leaked lease, unchanged output,
 cache and RNG, then repair/end the lease and retry or release. Keep the old
 pending-ID-copy route, shell release, feature-off symbols, diagnostic C2,
-and public package behavior unchanged. Run focused source/symbol closure,
-normal/repeat/sanitizer linked native-plus-Eshkol gates on pinned fe9, and
-seal exact head/tree evidence before integration.
+and public package behavior unchanged. First gate the I2 inspection helper
+with its own focused source/negative/feature-off tests. Then run focused
+source/symbol closure and normal/repeat/sanitizer linked native-plus-Eshkol
+gates on pinned fe9; seal exact head/tree evidence before integration.
 
 Only after this private read boundary is reviewed may a separate package
 adapter define fresh public IDs/text/lengths/RNG ownership. EOS comparison
