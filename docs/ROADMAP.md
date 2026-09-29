@@ -1559,6 +1559,18 @@ is sealed at `tr3-public-checkpoint-package-20260928/final-head/SHA256SUMS`
 pending independent source/evidence review and final integration; it does not
 claim the wider full-trajectory or fresh-process resume acceptance gate.
 
+The bounded [public fresh-process resume witness](TR3_PUBLIC_FRESH_RESUME.md)
+now runs an ordinary installed-facade caller in separate baseline, checkpoint
+producer, and receiver processes for `A=1,2,3`, `K=1`, and a three-update
+suffix crossing finite D2 EOS. On the exact #151 base `f85871a`, the supported
+fe9 linked gate passes all nine processes, bit-identical public step metrics,
+all K/restore/suffix canonical C2 byte comparisons, and corrupt-load and
+config-mismatch receiver-preservation negatives. Its 208-file evidence seal
+is `tr3-public-fresh-resume-f85871a-20260928-a/SHA256SUMS` (`c9acf59f...`).
+This test-only candidate awaits independent review and integration. Effective
+rate, RNG words, optimizer moments, and epoch-start cursor are covered by
+complete C2 bytes but have no independent public accessors.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

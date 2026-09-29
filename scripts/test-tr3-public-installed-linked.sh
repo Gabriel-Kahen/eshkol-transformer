@@ -218,6 +218,55 @@ grep -Fx "TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128" 
   /out/step.stdout >/dev/null
 test ! -s /out/step.stderr
 
+# A localized installed aggregate plus one read-only test bit inspector. The
+# same caller runs in nine fresh OS processes across A=1,2,3; no private
+# trainer, C2, D2, or optimizer entry is linked into the caller.
+clang-21 "${flags[@]}" -I /fixed-source/inc \
+  -c tests/tr3_public_installed/resume_bits.c -o /out/resume_bits.o
+ar rcsD /out/libeshkol_transformer_tr3_public_resume_test.a \
+  /out/combined.o /out/resume_bits.o
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_public_resume_test \
+    tests/tr3_public_installed/fresh_resume.esk -o /out/fresh_resume \
+    > /out/fresh-resume-compile.stdout \
+    2> /out/fresh-resume-compile.stderr
+for accumulation in 1 2 3; do
+  directory="/out/corpus/resume-${accumulation}"
+  cp -a /out/corpus/step-two "${directory}"
+  for mode in baseline producer receiver; do
+    ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
+      --kill-after=5s 120s \
+      /out/fresh_resume "${directory}" "${mode}" "${accumulation}" \
+      > "/out/fresh-${accumulation}-${mode}.stdout" \
+      2> "/out/fresh-${accumulation}-${mode}.stderr"
+    grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS ${mode} A=${accumulation}" \
+      "/out/fresh-${accumulation}-${mode}.stdout" >/dev/null
+    test ! -s "/out/fresh-${accumulation}-${mode}.stderr"
+  done
+  grep "^METRIC " "/out/fresh-${accumulation}-baseline.stdout" \
+    > "/out/fresh-${accumulation}-baseline.metrics"
+  grep "^METRIC " "/out/fresh-${accumulation}-producer.stdout" \
+    > "/out/fresh-${accumulation}-resumed.metrics"
+  grep "^METRIC " "/out/fresh-${accumulation}-receiver.stdout" \
+    >> "/out/fresh-${accumulation}-resumed.metrics"
+  test "$(wc -l < "/out/fresh-${accumulation}-baseline.metrics")" = 4
+  cmp "/out/fresh-${accumulation}-baseline.metrics" \
+      "/out/fresh-${accumulation}-resumed.metrics"
+  cmp "${directory}/resume-fresh-before-0.c2" \
+      "${directory}/resume-fresh-after-0.c2"
+  cmp "${directory}/resume-mismatch-before-0.c2" \
+      "${directory}/resume-mismatch-after-0.c2"
+  cmp "${directory}/resume-baseline-1.c2" "${directory}/resume-k-1.c2"
+  cmp "${directory}/resume-baseline-1.c2" \
+      "${directory}/resume-restored-1.c2"
+  for ordinal in 2 3 4; do
+    cmp "${directory}/resume-baseline-${ordinal}.c2" \
+        "${directory}/resume-resumed-${ordinal}.c2"
+  done
+done
+
 # Focused bit and counter boundary proof for the actual installed C bridge.
 clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
   -I /fixed-source/inc -c native/tr3_public_installed_bridge.c \
