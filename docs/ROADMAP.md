@@ -681,6 +681,14 @@ Only their reviewed composition may enable `generator-generate!` to return
 an authentic C4 output. EOS, repeated decode, persistence and CLI3 remain
 separate gates.
 
+The [additive C4 model/input authority proposal](g3/G3_C4_PUBLIC_MODEL_INPUT_AUTHORITY_PROPOSAL.md)
+is contract-only. It proposes seeded C4 model creation, a P2-only T1-to-I1
+input constructor and exact C4 input release through the existing public
+tensor-release name, with one owning package and unchanged C2 dispatch.
+There is no sealed C4 model teardown today; successful diagnostic C4 models
+remain process-lifetime owners. Public exports, generation and accessor
+composition require independent review and later implementation gates.
+
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver

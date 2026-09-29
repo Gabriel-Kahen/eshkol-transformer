@@ -43,6 +43,10 @@ an authentic same-aggregate sealed T1 `[2]` byte tensor to a C4-owned dense
 I1 `[1,2]`, reject malformed shape/storage and IDs outside `[0,255]`, retain
 no T1 borrow, and not make C2 input or output clones valid C4 prompts. No
 current public call is asserted to create either C4 owner.
+The proposed additive names, exact release dispatch and process-lifetime
+model limitation are specified in the separate
+[public C4 model/input authority contract](G3_C4_PUBLIC_MODEL_INPUT_AUTHORITY_PROPOSAL.md);
+they remain unimplemented and subject to independent API review.
 
 ## One package and one producer transaction
 
