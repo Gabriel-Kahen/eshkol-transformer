@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Closed fixed-profile G3-G revision-3 package source contract."""
 from pathlib import Path
+import re
 
 root = Path(__file__).resolve().parents[1]
 native = root / "native"
@@ -77,6 +78,23 @@ assert "-DET_F32_TENSOR_STORAGE_QUERY_PRIVATE" in (
     root / "scripts/build-e1b-consumer.sh"
 ).read_text()
 assert "ET_G3T_TESTING" not in (root / "scripts/build-e1b-consumer.sh").read_text()
+# Both profile sources load into one Eshkol module. A shared binding silently
+# routes C4 through C2 even when each profile passes its standalone tests.
+binding_pattern = re.compile(
+    r"\((?:extern\s+\S+|define(?:-syntax)?)\s+(?:\()?([\w!?*-]+)"
+)
+c2_bindings = set().union(*(
+    set(binding_pattern.findall((native / name).read_text()))
+    for name in ("g3t_prefill_sample_extension.esk", "g3t_output_text_extension.esk")
+))
+c4_envelope = (native / "g3c4_output_envelope_extension.esk").read_text()
+c4_bindings = set(binding_pattern.findall(c4_envelope))
+assert not (c2_bindings & c4_bindings), "C2/C4 output bindings collide"
+for operation in ("reserve", "release", "prepare", "copy-decode-ids", "accept-text"):
+    assert f"g3c4-native-output-{operation}" in c4_bindings
+for operation in ("reserve", "prepare"):
+    assert f"g3c4-output-{operation}" in c4_bindings
+assert "g3c4-t1-decode-output!" in c4_bindings
 dispatch = (native / "g3c4_public_generation_dispatch_extension.esk").read_text()
 assert dispatch.index("(g3c4-native-p2g1-preflight") < dispatch.index(
     "(vector-set! g3t-p2g1-pending-gate 0 #t)"
