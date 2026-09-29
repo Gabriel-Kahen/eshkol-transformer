@@ -72,7 +72,8 @@ PY
 
 for horizon in 1024 8192; do
   corpus="${out}/corpus-${horizon}"
-  late="$(PYTHONDONTWRITEBYTECODE=1 python3 -m tests.e3_horizon.generate \
+  late="$(PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${PROJECT_ROOT}" \
+    python3 -m tests.e3_horizon.generate \
     --output "${corpus}" --horizon "${horizon}")"
   [[ "${late}" == "${corpus}/shard-0000000000000001.ets" ]] || \
     die "generated late shard path differs from the admitted two-shard layout"
