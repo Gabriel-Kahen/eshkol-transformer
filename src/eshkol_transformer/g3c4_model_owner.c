@@ -830,6 +830,20 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE)
 #error "C4 result inspection testing requires the private result owner"
 #endif
+#if defined(ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE) && \
+    (!defined(ET_G3C4_P2_G1_PENDING_PRIVATE) || \
+     !defined(ET_G3C4_TOKEN_FORWARD_PRIVATE))
+#error "C4 P2/G2 first frame requires pending output and token forward"
+#endif
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+#define ET_G3C4_PRIVATE_MAX_NEW 2
+#define ET_G3C4_P2_G2_TUPLE(prompt, budget) \
+  ((prompt) == 2 && (budget) == 2)
+#else
+#define ET_G3C4_PRIVATE_MAX_NEW 1
+#define ET_G3C4_P2_G2_TUPLE(prompt, budget) 0
+#define ET_G3C4_P2_G2_FRAME_CHECK(context) 0
+#endif
 #ifdef ET_G3C4_P2_G1_PENDING_PRIVATE
 #define ET_G3C4_PENDING_TOTAL_LIMIT 3
 #else
@@ -1588,9 +1602,14 @@ static int et_g3c4_transport_record_valid(
 #endif
     if (output->parent_ctx == NULL ||
         (output->prompt_length != 1 && output->prompt_length != 2) ||
-        (output->generated_length != 0 && output->generated_length != 1) ||
-        output->prompt_length + output->generated_length >
-            ET_G3C4_PENDING_TOTAL_LIMIT ||
+        ((output->generated_length != 0 &&
+          output->generated_length != 1) &&
+         !ET_G3C4_P2_G2_TUPLE(
+             output->prompt_length, output->generated_length)) ||
+        ((output->prompt_length + output->generated_length >
+              ET_G3C4_PENDING_TOTAL_LIMIT) &&
+         !ET_G3C4_P2_G2_TUPLE(
+             output->prompt_length, output->generated_length)) ||
         output->ids == NULL
 #ifdef ET_G3C4_OUTPUT_TEXT_PRIVATE
         || output->text_ready > 1u
@@ -1973,6 +1992,27 @@ static int et_g3c4_pending_output_lookup(
   }
   return 0;
 }
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+static int et_g3c4_p2g2_first_frame_preflight(
+    et_g3c4_context_internal *context) {
+  et_g3c4_output_internal *pending = NULL;
+  if (context->budget != 2 || context->generator_policy[4] != 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL || pending->prompt_length != 2 ||
+      pending->generated_length != 2 || pending->numeric_ready != 0u ||
+      pending->ids_copied != 0u || pending->text_ready != 0u ||
+      (context->token_frame_state != ET_G3C4_TOKEN_FRAME_IDLE &&
+       context->token_frame_position != 2))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  return 0;
+}
+#define ET_G3C4_P2_G2_FRAME_CHECK(context) \
+  (et_g3c4_p2g2_first_frame_preflight(context) != 0)
+#endif
 #endif
 
 #ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
@@ -2202,7 +2242,8 @@ static int et_g3c4_valid_generator_policy(
       !et_g3c4_positive_f32_bits(temperature_bits) ||
       !et_g3c4_positive_f32_bits(p_bits) ||
       (uint32_t)p_bits > UINT32_C(0x3f800000) ||
-      k < 1 || k > 256 || max_new < 0 || max_new > 1 ||
+      k < 1 || k > 256 || max_new < 0 ||
+      max_new > ET_G3C4_PRIVATE_MAX_NEW ||
       eos < -1 || eos > 255)
     return 0;
   if (mode == 0 &&
@@ -2642,7 +2683,12 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
 static int et_g3c4_valid_call_tuple(int64_t call_kind, int64_t budget) {
   return (call_kind == 0 && budget == 0) ||
          (call_kind == 1 && budget == 0) ||
-         (call_kind == 2 && (budget == 0 || budget == 1));
+         (call_kind == 2 &&
+          (budget == 0 || budget == 1
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+           || budget == 2
+#endif
+          ));
 }
 
 static int et_g3c4_pins_idle(
@@ -2808,13 +2854,20 @@ void *et_g3c4_private_output_reserve_v1(
   context = et_g3c4_admit_active_call(context_candidate);
   if (context == NULL) return NULL;
   if (context->call_kind != 2 ||
-      (context->budget != 0 && context->budget != 1)) {
+      (context->budget != 0 && context->budget != 1
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+       && context->budget != 2
+#endif
+       )) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return NULL;
   }
   if ((prompt_length != 1 && prompt_length != 2) ||
-      prompt_length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT) {
+      (prompt_length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT &&
+       !ET_G3C4_P2_G2_TUPLE(prompt_length, context->budget)) ||
+      (context->budget == 2 &&
+       !ET_G3C4_P2_G2_TUPLE(prompt_length, context->budget))) {
     (void)et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
     return NULL;
   }
@@ -3648,13 +3701,17 @@ int64_t et_g3c4_private_token_frame_stage_v1(
   }
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
-  if (context->call_kind != 2 || context->budget != 1 ||
+  if (context->call_kind != 2 ||
+      (context->budget != 1 &&
+       !ET_G3C4_P2_G2_TUPLE(2, context->budget)) ||
       context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED ||
       context->token_frame_transaction == NULL) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+  if (context->budget == 2 && ET_G3C4_P2_G2_FRAME_CHECK(context))
+    return et_g3c4_error_state.category;
   if (speculative_token != context->token_frame_candidate) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
@@ -3857,13 +3914,17 @@ int64_t et_g3c4_private_token_forward_v1(
   }
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
-  if (context->call_kind != 2 || context->budget != 1 ||
+  if (context->call_kind != 2 ||
+      (context->budget != 1 &&
+       !ET_G3C4_P2_G2_TUPLE(2, context->budget)) ||
       context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED ||
       context->token_frame_transaction == NULL) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+  if (context->budget == 2 && ET_G3C4_P2_G2_FRAME_CHECK(context))
+    return et_g3c4_error_state.category;
   if (speculative_token != context->token_frame_candidate) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
@@ -4798,9 +4859,11 @@ typedef struct et_g3c4_prefill2_scratch {
   float fu[16], fg[16], fd[8], y[8], nf[8], z[512];
 } et_g3c4_prefill2_scratch;
 
-int64_t et_g3c4_private_prefill2_v1(
+static int64_t et_g3c4_prefill2_impl(
     void *candidate, const int64_t token_ids[2],
-    float last_logits_output[256]) {
+    float last_logits_output[256],
+    const et_g3c4_input_internal *owned_input,
+    const et_kernel_tensor_view_v1 *owned_view) {
   static const uint64_t ids_shape[2] = {1u, 2u};
   static const uint64_t token_embedding_row[4] = {1u, 2u, 256u, 4u};
   static const uint64_t position_embedding_row[4] = {1u, 2u, 4u, 4u};
@@ -4871,9 +4934,22 @@ int64_t et_g3c4_private_prefill2_v1(
     }
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+  /* Only prompt_prefill may pass the active owned-I1 borrow for budget two.
+   * The standalone raw-pointer entry below never carries that authority. */
+  if (context->budget == 2 &&
+      (owned_input == NULL || owned_view == NULL ||
+       owned_input->tensor == NULL || owned_input->length != 2 ||
+       owned_view->data != token_ids || owned_view->rank != 2u ||
+       owned_view->shape == NULL || owned_view->shape[0] != 1u ||
+       owned_view->shape[1] != 2u)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
   if (!((context->call_kind == 0 && context->budget == 0) ||
         (context->call_kind == 2 &&
-         (context->budget == 0 || context->budget == 1))) ||
+         (context->budget == 0 || context->budget == 1 ||
+          ET_G3C4_P2_G2_TUPLE(2, context->budget)))) ||
       !et_g3c4_token_frame_idle(context)) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -5150,6 +5226,13 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+
+int64_t et_g3c4_private_prefill2_v1(
+    void *candidate, const int64_t token_ids[2],
+    float last_logits_output[256]) {
+  return et_g3c4_prefill2_impl(
+      candidate, token_ids, last_logits_output, NULL, NULL);
+}
 #endif
 
 #ifdef ET_G3C4_PROMPT_PREFILL_PRIVATE
@@ -5165,10 +5248,16 @@ int64_t et_g3c4_private_prompt_prefill_preflight_v1(
   if (input == NULL) return et_g3c4_error_state.category;
   if (input->tensor == NULL || (input->length != 1 && input->length != 2))
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
-  if ((budget != 0 && budget != 1) ||
-      input->length + budget > ET_G3C4_PENDING_TOTAL_LIMIT)
+  if (((budget != 0 && budget != 1) ||
+       input->length + budget > ET_G3C4_PENDING_TOTAL_LIMIT) &&
+      !ET_G3C4_P2_G2_TUPLE(input->length, budget))
     return et_g3c4_fail(
         ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+  if (budget == 2 && context->generator_policy[4] != 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+#endif
   return 0;
 }
 
@@ -5299,8 +5388,9 @@ int64_t et_g3c4_private_prompt_prefill_v1(
   if (input->tensor == NULL || (input->length != 1 && input->length != 2))
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
   if (context->call_kind != 2 ||
-      (context->budget != 0 && context->budget != 1) ||
-      input->length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT)
+      (((context->budget != 0 && context->budget != 1) ||
+        input->length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT) &&
+       !ET_G3C4_P2_G2_TUPLE(input->length, context->budget)))
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
@@ -5340,9 +5430,17 @@ int64_t et_g3c4_private_prompt_prefill_v1(
   if (input->length == 1)
     status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill1_v1)(
         context, *(const int64_t *)view->data, last_logits_output);
-  else
-    status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill2_v1)(
-        context, (const int64_t *)view->data, last_logits_output);
+  else {
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+    if (context->budget == 2)
+      status = et_g3c4_prefill2_impl(
+          context, (const int64_t *)view->data,
+          last_logits_output, input, view);
+    else
+#endif
+      status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill2_v1)(
+          context, (const int64_t *)view->data, last_logits_output);
+  }
 #undef ET_G3C4_PROMPT_CAT
 #undef ET_G3C4_PROMPT_CAT_INNER
   if (status != 0) goto fail;
@@ -5451,13 +5549,17 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
   }
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
-  if (context->call_kind != 2 || context->budget != 1 ||
+  if (context->call_kind != 2 ||
+      (context->budget != 1 &&
+       !ET_G3C4_P2_G2_TUPLE(2, context->budget)) ||
       et_g3c4_sampler_runtime == NULL ||
       !et_g3c4_token_frame_idle(context)) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+  if (context->budget == 2 && ET_G3C4_P2_G2_FRAME_CHECK(context))
+    return et_g3c4_error_state.category;
   if (!et_g3c4_prefill_binding_matches_pins(context)) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
@@ -5572,6 +5674,9 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
   }
   token_position = *(const int64_t *)committed_lengths->data;
   if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  if (ET_G3C4_P2_G2_TUPLE(2, context->budget) && token_position != 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   append_counts = et_g3c4_view(
       &append_count, sizeof(append_count), "i64", 1u, append_shape);
   if (et_g3c4_capture_kernel(
@@ -5652,6 +5757,12 @@ int64_t et_g3c4_private_output_prepare_v1(
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(context_candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+  /* Budget two owns only a pending transcript in this feature slice. */
+  if (context->budget == 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   output = et_g3c4_admit_output(output_candidate, 0);
   if (output == NULL) return et_g3c4_error_state.category;
   if (et_g3c4_pending_output_lookup(context, &pending) != 0)
@@ -7156,6 +7267,11 @@ int64_t et_g3c4_private_call_acquire_v1(
   if (!et_g3c4_valid_call_tuple(call_kind, budget))
     return et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+  if (budget == 2 && context->generator_policy[4] != 2)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+#endif
   if (et_g3c4_cache_idle_preflight(context) != 0)
     return et_g3c4_error_state.category;
   if (et_g3c4_capture_f32(
