@@ -257,3 +257,69 @@ int64_t et_g3c4_result_test_output_shape_v1(
   return 0;
 }
 #endif
+
+#ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_TESTING
+static int64_t result_i1_cut = -1;
+static int64_t result_copy_cut;
+static int64_t result_post_clone_kind;
+static int64_t result_copy_cut_consumed;
+static int64_t result_post_clone_reached;
+extern int64_t et_g3c4_call_entry_alloc_arm_v1(int64_t, int64_t);
+
+int64_t et_g3c4_result_test_i1_cut_v1(int64_t index) {
+  if (index < -1 || index > 8) return -1;
+  result_i1_cut = index;
+  return 0;
+}
+int64_t et_g3c4_result_test_copy_cut_v1(int64_t active) {
+  if (active != 0 && active != 1) return -1;
+  result_copy_cut = active;
+  result_copy_cut_consumed = 0;
+  return 0;
+}
+int64_t et_g3c4_result_test_copy_consumed_v1(void) {
+  return result_copy_cut_consumed;
+}
+int64_t et_g3c4_result_test_post_clone_v1(int64_t kind) {
+  if (kind != 0 && kind != 1 && kind != 2) return -1;
+  result_post_clone_kind = kind;
+  result_post_clone_reached = 0;
+  return 0;
+}
+int64_t et_g3c4_result_test_post_reached_v1(void) {
+  return result_post_clone_reached;
+}
+
+void *__real_et_g3c4_private_result_tensor_create_v1(int64_t, int64_t);
+void *__wrap_et_g3c4_private_result_tensor_create_v1(
+    int64_t kind, int64_t value) {
+  void *result;
+  if (result_i1_cut >= 0)
+    et_i64_tensor_test_fail_alloc_after_v1((size_t)result_i1_cut);
+  result = __real_et_g3c4_private_result_tensor_create_v1(kind, value);
+  if (result_i1_cut >= 0) {
+    et_i64_tensor_test_reset_allocator_v1();
+    result_i1_cut = -1;
+  }
+  if (result != NULL && result_post_clone_kind != 0) {
+    result_post_clone_reached = 1;
+    if (et_g3c4_call_entry_alloc_arm_v1(result_post_clone_kind, 0) != 0)
+      abort();
+    result_post_clone_kind = 0;
+  }
+  return result;
+}
+int32_t __real_et_i64_tensor_copy_from_v1(
+    et_i64_tensor *, const int64_t *, size_t, et_i64_tensor_error *);
+int32_t __wrap_et_i64_tensor_copy_from_v1(
+    et_i64_tensor *tensor, const int64_t *source, size_t count,
+    et_i64_tensor_error *error) {
+  if (result_copy_cut) {
+    result_copy_cut = 0;
+    result_copy_cut_consumed = 1;
+    return __real_et_i64_tensor_copy_from_v1(
+        tensor, NULL, count, error);
+  }
+  return __real_et_i64_tensor_copy_from_v1(tensor, source, count, error);
+}
+#endif

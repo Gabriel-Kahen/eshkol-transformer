@@ -163,7 +163,9 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_kernel_runtime_dispatch \
   -Wl,--wrap=et_g3c4_private_output_copy_decode_ids_v1 \
   -Wl,--wrap=et_g3c4_private_output_accept_text_v1 \
-  -Wl,--wrap=et_g3c4_private_output_copy_snapshot_v1
+  -Wl,--wrap=et_g3c4_private_output_copy_snapshot_v1 \
+  -Wl,--wrap=et_g3c4_private_result_tensor_create_v1 \
+  -Wl,--wrap=et_i64_tensor_copy_from_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local test expected

@@ -19,6 +19,53 @@
 (extern i64 owner-fail-reset
         :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
 
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 shell-test-copyout-corrupt i64
+        :real et_g3c4_shell_test_copyout_corrupt_v1)
+(extern i64 shell-test-copyout-corrupt-consumed
+        :real et_g3c4_shell_test_copyout_corrupt_consumed_v1)
+(extern i64 result-test-i1-cut i64
+        :real et_g3c4_result_test_i1_cut_v1)
+(extern i64 result-test-copy-cut i64
+        :real et_g3c4_result_test_copy_cut_v1)
+(extern i64 result-test-copy-consumed
+        :real et_g3c4_result_test_copy_consumed_v1)
+(extern i64 result-test-post-clone i64
+        :real et_g3c4_result_test_post_clone_v1)
+(extern i64 result-test-post-reached
+        :real et_g3c4_result_test_post_reached_v1)
+
+(define (reject-public label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (list? (transformer-error-details caught))
+                      (<= (length (transformer-error-details caught)) 4)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (live-result-count)
+  (let loop ((tail (vector-ref g3c4-registry 0)) (count 0))
+    (if (null? tail) count
+        (let* ((entry (car tail)) (kind (vector-ref entry 1)))
+          (loop (cdr tail)
+                (if (and (eq? (vector-ref entry 2) 'live)
+                         (or (eq? kind 'ids) (eq? kind 'lengths)
+                             (eq? kind 'cache-lengths)
+                             (eq? kind 'result-rng)))
+                    (+ count 1) count))))))
+(define (retry-id output)
+  (let* ((shell (car (g3c4-public-generation-output-ids output)))
+         (entry (g3c4-registry-find shell 'test))
+         (value (result-test-value (vector-ref entry 3) 5)))
+    (g3c4-public-generation-tensor-release! shell)
+    value))
 (define prompt-a
   (g3c4-public-generation-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
@@ -77,6 +124,49 @@
   (lambda () (g3c4-public-generation-output-ids prompt-a)))
 (reject "wrong tensor release kind" 'invalid-argument
   (lambda () (g3c4-public-generation-tensor-release! output-a)))
+(reject-public "forged public operation and cause" 'invalid-argument
+               'generation-output-ids
+  (lambda () (g3c4-public-generation-output-ids (vector 'forged))))
+(reject-public "C4 model wrong output kind" 'invalid-argument
+               'generation-output-rng
+  (lambda () (g3c4-public-generation-output-rng model)))
+(vector-set! model-entry 2 'dead)
+(reject-public "dead authentic C4 model is still wrong kind" 'invalid-argument
+               'generation-output-ids
+  (lambda () (g3c4-public-generation-output-ids model)))
+(vector-set! model-entry 2 'live)
+(define output-a-entry (g3c4-registry-find output-a 'test))
+(define output-b-entry (g3c4-registry-find output-b 'test))
+(define raw-a (vector-ref output-a-entry 8))
+(define raw-b (vector-ref output-b-entry 8))
+(define raw-original (bytevector-u8-ref raw-a 0))
+(bytevector-u8-set! raw-a 0 (if (= raw-original 0) 1 0))
+(reject-public "malformed raw and ID parity" 'invalid-argument
+               'generation-output-text
+  (lambda () (g3c4-public-generation-output-text output-a)))
+(bytevector-u8-set! raw-a 0 raw-original)
+(vector-set! output-a-entry 3 native-b)
+(reject "cross-output native swap refuses accessor" 'invalid-state
+  (lambda () (g3c4-public-generation-output-ids output-a)))
+(vector-set! output-a-entry 3 native-a)
+(vector-set! output-a-entry 8 raw-b)
+(reject "cross-output raw swap refuses accessor" 'invalid-state
+  (lambda () (g3c4-public-generation-output-text output-a)))
+(vector-set! output-a-entry 8 raw-a)
+(check "both owners survive swap restoration"
+       (and (= (shell-test-published native-a raw-a) 1)
+            (= (shell-test-published native-b raw-b) 1)
+            (>= (retry-id output-a) 0)))
+(check "post-native decode corruption arm"
+       (= (shell-test-copyout-corrupt 1) 0))
+(reject-public "post-native decode failure through public wrapper"
+               'invalid-state 'generation-output-ids
+  (lambda () (g3c4-public-generation-output-ids output-a)))
+(check "post-native cut consumed, owner unchanged and retry"
+       (and (= (shell-test-copyout-corrupt-consumed) 1)
+            (= (shell-test-published native-a raw-a) 1)
+            (>= (retry-id output-a) 0)))
+
 (check "output I1 borrow begins" (= (shell-test-ids-borrow native-a 1) 0))
 (reject "held output borrow preserves output" 'invalid-state
   (lambda () (g3c4-public-generation-output-ids output-a)))
@@ -86,15 +176,10 @@
   (lambda () (g3c4-public-generation-output-ids output-a)))
 (result-test-inject-device 0)
 (check "device injection restored and retry succeeds"
-       (= (result-test-value
-            (vector-ref
-              (g3c4-registry-find
-                (car (g3c4-public-generation-output-ids output-a)) 'test) 3)
-            5)
-          (vector-ref copy-a 1)))
+       (= (retry-id output-a) (vector-ref copy-a 1)))
 (check "prior borrowed view device does not persist"
        (and (= (result-test-prior-device native-a) 0)
-            (pair? (g3c4-public-generation-output-ids output-a))))
+            (>= (retry-id output-a) 0)))
 (check "malformed retained I1 shape injected"
        (= (result-test-shape native-a 1) 0))
 (reject "malformed retained I1 rejected" 'internal
@@ -131,15 +216,83 @@
   (lambda () (g3c4-public-generation-output-ids output-b)))
 (check "allocation failure reset" (= (owner-fail-reset) 0))
 (check "same output retry after clone failure"
-       (>= (result-test-value
-             (vector-ref
-               (g3c4-registry-find
-                 (car (g3c4-public-generation-output-ids output-b)) 'test) 3)
-             5)
-           0))
+       (>= (retry-id output-b) 0))
 (check "independent B output remains live"
        (= (shell-test-published native-b
             (vector-ref (g3c4-p2g1-output-entry-live output-b 'test) 8)) 1))
+(define b-live-before (live-result-count))
+(define (b-still-published)
+  (and (= (live-result-count) b-live-before)
+       (= (shell-test-published native-b raw-b) 1)))
+(define (sweep-public-alloc kind)
+  (let loop ((index 0))
+    (if (> index 24) (exit 4))
+    (let ((caught #f) (created #f))
+      (check "Eshkol allocation arm" (= (allocation-arm kind index) 0))
+      (guard (condition (#t (set! caught condition)))
+        (set! created (car (g3c4-public-generation-output-ids output-b))))
+      (let ((consumed (allocation-consumed))
+            (seen (allocation-disarm)))
+        (if (= consumed 1)
+            (begin
+              (check "Eshkol allocation cut is bounded internal"
+                     (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught) 'internal)
+                          (eq? (transformer-error-operation caught)
+                               'generation-output-ids)
+                          (eq? (transformer-error-cause caught) #f)
+                          (= seen (+ index 1))))
+              (check "Eshkol cut published no clone or output mutation"
+                     (b-still-published))
+              (check "same-output retry after Eshkol cut"
+                     (>= (retry-id output-b) 0))
+              (loop (+ index 1)))
+            (begin
+              (check "Eshkol allocation sweep reached successful tail"
+                     (and (not caught) created))
+              (g3c4-public-generation-tensor-release! created)
+              index))))))
+(define vector-cuts (sweep-public-alloc 1))
+(define cons-cuts (sweep-public-alloc 2))
+(check "shell/ledger/list preallocation cuts reached"
+       (and (>= vector-cuts 3) (>= cons-cuts 2)
+            (b-still-published)))
+
+(let cut ((index 0))
+  (if (< index 4)
+      (begin
+        (check "native I1 create cut armed" (= (result-test-i1-cut index) 0))
+        (reject-public "native I1 create failure" 'internal
+                       'generation-output-ids
+          (lambda () (g3c4-public-generation-output-ids output-b)))
+        (check "failed I1 create published no clone" (b-still-published))
+        (check "same-output retry after I1 create failure"
+               (>= (retry-id output-b) 0))
+        (cut (+ index 1)))))
+(check "native I1 copy failure armed" (= (result-test-copy-cut 1) 0))
+(reject-public "native I1 copy failure" 'invalid-argument
+               'generation-output-ids
+  (lambda () (g3c4-public-generation-output-ids output-b)))
+(check "I1 copy cut reached, no clone, retry"
+       (and (= (result-test-copy-consumed) 1)
+            (b-still-published) (>= (retry-id output-b) 0)))
+
+(check "post-clone vector cut armed" (= (result-test-post-clone 1) 0))
+(define post-vector (car (g3c4-public-generation-output-ids output-b)))
+(check "no vector allocation after native owner exists"
+       (and (= (result-test-post-reached) 1)
+            (= (allocation-consumed) 0)
+            (= (allocation-disarm) 0)))
+(g3c4-public-generation-tensor-release! post-vector)
+(check "post-clone cons cut armed" (= (result-test-post-clone 2) 0))
+(define post-cons (car (g3c4-public-generation-output-ids output-b)))
+(check "no cons allocation after native owner exists"
+       (and (= (result-test-post-reached) 1)
+            (= (allocation-consumed) 0)
+            (= (allocation-disarm) 0)))
+(g3c4-public-generation-tensor-release! post-cons)
+(check "post-clone probes retain original output" (b-still-published))
+
 (check "release original result owners"
        (and (g3c4-public-generation-tensor-release! ids-a)
             (g3c4-public-generation-tensor-release! ids-a)
