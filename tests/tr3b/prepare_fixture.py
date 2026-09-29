@@ -15,11 +15,12 @@ FINGERPRINT = (
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--rows", choices=("two", "one", "empty"), default="two")
+    parser.add_argument("--rows", choices=("two", "one", "empty", "three"), default="two")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     shards = {"two": ((3, 197, 41, 7),),
-              "one": ((3, 197),), "empty": ()}[args.rows]
+              "one": ((3, 197),), "empty": (),
+              "three": ((3, 197, 41, 7, 11, 19),)}[args.rows]
     write_d1_resource(args.output, shards, fingerprint=FINGERPRINT, vocab=256)
 
 
