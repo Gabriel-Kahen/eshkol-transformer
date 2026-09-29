@@ -69,7 +69,8 @@ def check() -> None:
     ordered(reserve, [
         "et_g3c4_admit_active_call(context_candidate)",
         "context->call_kind != 2", "context->budget != 0",
-        "prompt_length != 1", "prompt_length + context->budget > 2",
+        "prompt_length != 1",
+        "prompt_length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT",
         "et_g3c4_pending_output_lookup(context, &pending)",
         "et_g3c4_output_allocate()", "ids_shape[0] = (uint64_t)context->budget",
         "et_i64_tensor_create_v1(", "output->transport.magic",
@@ -84,7 +85,7 @@ def check() -> None:
 
     execute = c_function(source, "int64_t et_g3c4_private_prompt_prefill_v1")
     ordered(execute, [
-        "input->length + context->budget > 2",
+        "input->length + context->budget > ET_G3C4_PENDING_TOTAL_LIMIT",
         "et_g3c4_pending_output_lookup(context, &pending_output)",
         "pending_output == NULL",
         "pending_output->prompt_length != input->length",
