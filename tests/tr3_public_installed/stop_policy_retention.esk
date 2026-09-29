@@ -1,0 +1,77 @@
+(require transformer.trainer)
+(require transformer.error_consumer)
+
+(extern void validate-stop-policy ptr ptr
+        :real et_tr3_test_validate_stop_policy_v1)
+(extern void stop-policy-root ptr :real et_tr3_test_stop_policy_root_v1)
+
+(define (check label value)
+  (if value #t
+      (begin (display "TR3-STOP-POLICY-RETENTION-FAIL ")
+             (display label) (newline) (exit 1))))
+
+(define (fields policy)
+  (let ((output (vector #f)))
+    (validate-stop-policy (vector policy) output)
+    (vector-ref output 0)))
+
+(define (publish limit)
+  ;; Caller wrapper storage dies with this region. Only the trusted policy
+  ;; record and its opaque token may be promoted into the process root.
+  (with-region ('tr3-stop-policy-retention 65536)
+    (trainer-stop-policy limit #f #f)))
+
+(define above-i64-rejected
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-argument)
+                    (eq? (transformer-error-operation caught)
+                         'trainer-stop-policy)
+                    (equal? (transformer-error-details caught)
+                            '((field max-tokens))))))
+    (trainer-stop-policy 9223372036854775808 #f #f) #f))
+(check 'above-i64-rejected above-i64-rejected)
+
+(define oldest (publish 1))
+(define before (__arena-used))
+(let loop ((limit 2))
+  (if (> limit 1024) #t
+      (begin (publish limit) (loop (+ limit 1)))))
+(define used-1024 (__arena-used))
+(check 'oldest-at-1024 (= (vector-ref (fields oldest) 0) 1))
+(define before-8192 (__arena-used))
+(let loop ((limit 1025))
+  (if (> limit 8192) #t
+      (begin (publish limit) (loop (+ limit 1)))))
+(define used-8192 (__arena-used))
+(check 'oldest-at-8192 (= (vector-ref (fields oldest) 0) 1))
+(define root-box (vector #f))
+(stop-policy-root root-box)
+(define rows (vector-ref (vector-ref root-box 0) 0))
+(define authority-tag (vector-ref (car rows) 0))
+(define record-count
+  (let loop ((remaining rows) (count 0))
+    (if (null? remaining) count
+        (let ((record (car remaining)))
+          (check 'scalar-only-authority
+                 (and (vector? record) (= (vector-length record) 6)
+                      (eq? (vector-ref record 0) authority-tag)
+                      (eq? (vector-ref record 1) record)
+                      (error-object? (vector-ref record 2))
+                      (integer? (vector-ref record 3))
+                      (exact? (vector-ref record 3))
+                      (eq? (vector-ref record 4) #f)
+                      (eq? (vector-ref record 5) #f)))
+          (loop (cdr remaining) (+ count 1))))))
+(check 'policy-count (= record-count 8192))
+(check 'immutable-fields
+       (let ((copy (fields oldest)))
+         (vector-set! copy 0 99)
+         (= (vector-ref (fields oldest) 0) 1)))
+(check 'last-policy (= (vector-ref (fields (publish 8193)) 0) 8193))
+(display "TR3-STOP-POLICY-RETENTION-PASS retained-1023=")
+(display (- used-1024 before))
+(display " retained-7168=")
+(display (- used-8192 before-8192))
+(newline)
