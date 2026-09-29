@@ -7,6 +7,7 @@ artifact_dir="${1:-$(project_build_dir)/cli3}"
 executable="${artifact_dir}/eshkol-transformer"
 [[ -x "${executable}" ]] || die "CLI3 executable not found: ${executable}"
 bash "${PROJECT_ROOT}/scripts/test-cli3-native-closure-policy.sh"
+bash "${PROJECT_ROOT}/scripts/test-cli3-b-observation-reference.sh"
 for command in ar cmp python3 sha256sum; do
   require_command "${command}"
 done
