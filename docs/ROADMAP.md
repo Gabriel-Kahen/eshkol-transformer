@@ -690,6 +690,12 @@ including exact export/source/native closure and unchanged C2 runtime behavior.
 Independent source-and-test review, malformed/borrow and allocation failure
 witnesses, and sanitizer evidence remain pending. This leaf does not admit a public C4 generator, result, EOS,
 repeated decode, persistence or CLI3 `generate`.
+The sealed [T1/I1 descriptor probe](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
+shows authentic sealed T1 length/read still accepts mutated rank, dtype,
+device, layout and replacement storage. The public C4 input candidate is
+blocked until the proposed source-private exact-pair validation/read gate
+rejects those cases before I1 copy; existing normal/repeat package passes do
+not establish that invariant. No production change is approved by this note.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
