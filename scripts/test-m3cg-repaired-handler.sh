@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Explicit frozen-runtime witness, not a toolchain pin or production builder.
+# Explicit fe9 runtime witness, not a toolchain pin or production builder.
 set -euo pipefail
 m3h_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ $# == 3 ]] || { echo 'usage: test-m3cg-repaired-handler.sh RUNTIME_SOURCE RUNTIME_BUILD OUTPUT' >&2; exit 2; }
@@ -7,13 +7,15 @@ m3h_source="$(realpath "$1")"
 m3h_build="$(realpath "$2")"
 mkdir -p "$3"
 m3h_out="$(realpath "$3")"
-m3h_expected_runtime=c32bb593ac1f365f3cbeaefd581704c4be029a4aa8877db29463d0e12356c168
-m3h_expected_runner=4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1
-[[ "$(git -c safe.directory="${m3h_source}" -C "${m3h_source}" rev-parse HEAD)" == 81298b4a9608fb92eb6f351a2eabd8392da7d9ef ]]
-[[ "$(git -c safe.directory="${m3h_source}" -C "${m3h_source}" rev-parse HEAD^{tree})" == 7669312845a9d8d372006af52271045e69505813 ]]
+m3h_expected_runtime=32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e
+m3h_expected_runner=7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa
+m3h_expected_provenance=4b2e87315b91dd27f6453862a4c4ebcd9fa1f577619d3bfa6ceca92964a9824c
+[[ "$(git -c safe.directory="${m3h_source}" -C "${m3h_source}" rev-parse HEAD)" == fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9 ]]
+[[ "$(git -c safe.directory="${m3h_source}" -C "${m3h_source}" rev-parse HEAD^{tree})" == 66c21f7ec19b1b4a42199fa30ed8e0e9727021bf ]]
 [[ -z "$(git -c safe.directory="${m3h_source}" -C "${m3h_source}" status --porcelain=v1)" ]]
 [[ "$(sha256sum "${m3h_build}/libeshkol-runtime.a" | cut -d' ' -f1)" == "${m3h_expected_runtime}" ]]
 [[ "$(sha256sum "${m3h_build}/eshkol-run" | cut -d' ' -f1)" == "${m3h_expected_runner}" ]]
+[[ "$(sha256sum "${m3h_build}/eshkol-transformer-provenance.tsv" | cut -d' ' -f1)" == "${m3h_expected_provenance}" ]]
 [[ "$(clang-21 -dumpversion)" == 21.1.8 ]]
 m3h_env=(env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH
  -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX -u COMPILER_PATH
@@ -59,6 +61,7 @@ done
 # sorted under the C locale, and hashed from the read-only source mount.
 m3h_reviewed=(
  docs/M3_CALL_GUARD_ORDER.md
+ docs/ROADMAP.md
  native/m3t_transport_extension.esk
  scripts/test-m3cg-repaired-handler.sh
  tests/m3cg/predecessor_sources.sha256
@@ -111,6 +114,7 @@ printf '%s\n' \
 cmp expected stdout
 [[ ! -s stderr ]]
 sha256sum "${m3h_build}/libeshkol-runtime.a" "${m3h_build}/eshkol-run" \
+ "${m3h_build}/eshkol-transformer-provenance.tsv" \
  "${m3h_root}/native/m3_model_extension.esk" "${m3h_root}/native/m3_call_adapters.esk" \
  "${m3h_root}/tests/m3cg/handler_failure_shim.cpp" source-inputs.sha256 \
  private.ll aggregate.o witness >hashes.txt
