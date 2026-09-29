@@ -167,7 +167,7 @@ WRAPPER
       -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
       -I "$PROJECT_ROOT/tests/g3c4" \
       -L "$directory" --lib g3c4_p2g1_shell \
-      "$PROJECT_ROOT/tests/g3c4/p2_g1_copyout_test.esk" \
+      "$PROJECT_ROOT/tests/g3c4/p2_g1_${test}_test.esk" \
       -o "$directory/p2g1-$test" \
       >"$directory/$test-compile.stdout" \
       2>"$directory/$test-compile.stderr"
