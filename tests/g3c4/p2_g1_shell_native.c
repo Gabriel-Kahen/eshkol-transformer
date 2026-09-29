@@ -30,6 +30,14 @@ int64_t et_g3c4_coordinator_test_generator_rng_word_v1(
   return context->generator_rng_words[index];
 }
 
+int64_t et_g3c4_coordinator_test_input_length_v1(
+    void *input_candidate, int64_t length) {
+  et_g3c4_input_internal *input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL || (length != 1 && length != 2)) return -1;
+  input->length = length;
+  return 0;
+}
+
 int64_t et_g3c4_coordinator_test_prefill_token_v1(
     void *context_candidate, int64_t index) {
   et_g3c4_context_internal *context =
