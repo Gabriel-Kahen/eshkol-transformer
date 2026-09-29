@@ -17,7 +17,7 @@ native/checkpoint_io.h
 native/kernel_abi.c
 include/eshkol_transformer/kernel_abi.h
 src/eshkol_transformer/m3_i64_integration.c
-src/eshkol_transformer/../../native/i64_tensor.c
+native/i64_tensor.c
 include/eshkol_transformer/i64_tensor.h
 src/eshkol_transformer/m3_model.h
 native/t1_i64_shell.c
@@ -28,8 +28,8 @@ native/d2_native.h
 native/e3_d2_native.h
 src/eshkol_transformer/m3_call_f32_integration.c
 src/eshkol_transformer/m3t_f32_integration.c
-src/eshkol_transformer/../../native/f32_tensor.c
-src/eshkol_transformer/../../native/f32_parameter_internal.h
+native/f32_tensor.c
+native/f32_parameter_internal.h
 include/eshkol_transformer/f32_tensor.h
 src/eshkol_transformer/m3t_f32_scoped.h
 src/eshkol_transformer/m3_call_pins.h
@@ -44,7 +44,6 @@ include/eshkol_transformer/n3k_primitives_abi.h
 src/eshkol_transformer/m3_model.c
 src/eshkol_transformer/m3t_transport.c
 src/eshkol_transformer/m3t_transport.h
-src/eshkol_transformer/../../native/t1_i64_shell.h
 native/e3_evaluation_metrics_provider.c
 native/e3_diagnostic_destinations.c
 native/n2_primitives_provider.c
@@ -54,11 +53,8 @@ native/indexed_cross_entropy.c
 native/l3s_masked_objective_provider.c
 native/tr3b_objective_bridge.c
 native/tr3b_objective_bridge.h
-native/../src/eshkol_transformer/m3_model.h
-native/../src/eshkol_transformer/m3t_transport.h
 native/o2_optimizer.c
 native/o2_optimizer_internal.h
-native/f32_parameter_internal.h
 native/tr3_o2_step_clear.inc
 native/tr3_o2_step_clear_internal.h
 native/tr3_c_o2_restore.inc
