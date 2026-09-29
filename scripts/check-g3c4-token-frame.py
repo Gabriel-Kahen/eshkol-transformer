@@ -45,9 +45,26 @@ def without_conditional_feature(text, macro):
 
 def body(source, symbol, next_symbol=None):
     start = source.index(f"int64_t {symbol}")
-    end = source.index(
-        f"\nint64_t {next_symbol}" if next_symbol else "\n#endif", start)
-    return source[start:end]
+    if next_symbol:
+        end = source.index(f"\nint64_t {next_symbol}", start)
+        return source[start:end]
+    # The final token-frame function contains nested feature #endif lines.
+    # End at its matching C brace, not the first nested preprocessor close.
+    opening = source.index("{", start)
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:index + 1]
+    raise ValueError(f"unterminated token-frame function: {symbol}")
+
+
+def check_abort_owner(abort):
+    require("et_g3c4_token_frame_discard(context)" in abort,
+            "explicit frame abort does not own transaction cleanup")
 
 
 def check():
@@ -102,8 +119,7 @@ def check():
         "context->budget = 0",
         "et_g3c4_token_frame_reset(context)",
     ], "joint publication tail")
-    require("et_g3c4_token_frame_discard(context)" in abort,
-            "explicit frame abort does not own transaction cleanup")
+    check_abort_owner(abort)
     require("et_g3c4_token_frame_discard(context);" in frame_source[frame_source.index(
             "int64_t et_g3c4_private_call_abort_v1"):],
             "active-call abort does not own pending frame cleanup")
