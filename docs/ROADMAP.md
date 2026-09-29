@@ -681,6 +681,13 @@ later private features, while preserving synthetic negative rejection. All
 runtime test blobs remain identical to the gated `123505d` tree. Hosted
 #155/#157 merges and merged-head retest remain.
 
+The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
+is in an isolated implementation candidate. It binds each live sealed T1 to
+its birth I1 tensor/borrow/view/storage, validates the current descriptor
+before copying byte IDs, and adds feature-gated corruption and whole-pair-swap
+negatives. It does not add public C4 input/generation authority; supported
+linked normal/repeat/sanitizer evidence and independent source review remain.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one

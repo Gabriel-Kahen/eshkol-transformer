@@ -1,5 +1,9 @@
 #include "eshkol_transformer/i64_tensor.h"
 
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+#include "i64_t1_pair_private.h"
+#endif
+
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +34,48 @@ struct et_i64_tensor_borrow {
 
 static et_i64_tensor *live_tensors;
 static et_i64_tensor_borrow *live_borrows;
+
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+static const char et_i64_t1_dtype[] = "i64";
+static const char et_i64_t1_device[] = "cpu";
+
+int32_t et_i64_tensor_private_t1_pair_validate_v1(
+    const et_i64_tensor *tensor, const et_i64_tensor_borrow *borrow,
+    const et_kernel_tensor_view_v1 *view, int64_t expected_length) {
+  const et_i64_tensor *live_tensor;
+  const et_i64_tensor_borrow *live_borrow;
+  if (expected_length != 1 && expected_length != 2)
+    return ET_I64_T1_PAIR_SHAPE;
+  for (live_tensor = live_tensors; live_tensor != NULL;
+       live_tensor = live_tensor->registry_next)
+    if (live_tensor == tensor) break;
+  if (live_tensor == NULL) return ET_I64_T1_PAIR_INVALID_STATE;
+  for (live_borrow = live_borrows; live_borrow != NULL;
+       live_borrow = live_borrow->registry_next)
+    if (live_borrow == borrow) break;
+  if (live_borrow == NULL) return ET_I64_T1_PAIR_INVALID_STATE;
+  if (tensor->magic != ET_I64_TENSOR_MAGIC ||
+      borrow->magic != ET_I64_BORROW_MAGIC || borrow->owner != tensor ||
+      tensor->active_borrow != borrow || view != &borrow->view)
+    return ET_I64_T1_PAIR_INVALID_STATE;
+  if (tensor->rank != 1u || tensor->element_count != (size_t)expected_length ||
+      tensor->byte_length != (size_t)expected_length * sizeof(int64_t) ||
+      tensor->shape == NULL || tensor->strides == NULL || tensor->data == NULL ||
+      tensor->shape[0] != (uint64_t)expected_length ||
+      tensor->strides[0] != sizeof(int64_t) ||
+      view->struct_size != sizeof(*view) || view->rank != 1u ||
+      view->shape != tensor->shape || view->shape[0] != (uint64_t)expected_length ||
+      view->byte_length != tensor->byte_length)
+    return ET_I64_T1_PAIR_SHAPE;
+  if (view->dtype != et_i64_t1_dtype) return ET_I64_T1_PAIR_DTYPE;
+  if (view->device != et_i64_t1_device) return ET_I64_T1_PAIR_DEVICE;
+  if (view->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      view->offset_bytes != 0u)
+    return ET_I64_T1_PAIR_LAYOUT;
+  if (view->data != tensor->data) return ET_I64_T1_PAIR_STORAGE;
+  return ET_I64_T1_PAIR_OK;
+}
+#endif
 
 static int storage_aliases_live_i1(const void *storage,
                                    size_t storage_bytes);
@@ -803,8 +849,13 @@ int32_t et_i64_tensor_borrow_begin_v1(et_i64_tensor *tensor,
   borrow->view.struct_size = sizeof(borrow->view);
   borrow->view.data = tensor->data;
   borrow->view.byte_length = tensor->byte_length;
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+  borrow->view.dtype = et_i64_t1_dtype;
+  borrow->view.device = et_i64_t1_device;
+#else
   borrow->view.dtype = "i64";
   borrow->view.device = "cpu";
+#endif
   borrow->view.layout = ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR;
   borrow->view.offset_bytes = 0u;
   borrow->view.rank = tensor->rank;

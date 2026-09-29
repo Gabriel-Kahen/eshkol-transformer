@@ -32,6 +32,23 @@ int64_t et_t1_i64_shell_seal_v1(void *candidate);
 int64_t et_t1_i64_shell_abort_v1(void *candidate);
 int64_t et_t1_i64_shell_last_status_v1(void);
 
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+enum {
+  ET_T1_C4_READ_OK = 0,
+  ET_T1_C4_READ_INVALID_ARGUMENT = 1,
+  ET_T1_C4_READ_INVALID_STATE = 2,
+  ET_T1_C4_READ_SHAPE = 3,
+  ET_T1_C4_READ_DTYPE = 4,
+  ET_T1_C4_READ_DEVICE = 5,
+  ET_T1_C4_READ_LAYOUT = 6,
+  ET_T1_C4_READ_STORAGE = 7,
+  ET_T1_C4_READ_RANGE = 8
+};
+/* output is a trusted two-word native stack destination. No write on error. */
+int32_t et_t1_i64_shell_private_c4_read_v1(const void *candidate,
+                                            int64_t output[2]);
+#endif
+
 #ifdef ET_T1_I64_SHELL_TESTING
 enum {
   ET_T1_I64_SHELL_TEST_FAIL_NONE = 0,
@@ -41,6 +58,28 @@ enum {
 };
 void et_t1_i64_shell_test_fail_stage_v1(int64_t stage);
 int64_t et_t1_i64_shell_test_live_count_v1(void);
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+enum {
+  ET_T1_TEST_CORRUPT_RANK = 1,
+  ET_T1_TEST_CORRUPT_SHAPE_POINTER = 2,
+  ET_T1_TEST_CORRUPT_SHAPE_EXTENT = 3,
+  ET_T1_TEST_CORRUPT_STRUCT_SIZE = 4,
+  ET_T1_TEST_CORRUPT_BYTE_LENGTH = 5,
+  ET_T1_TEST_CORRUPT_DTYPE = 6,
+  ET_T1_TEST_CORRUPT_DEVICE = 7,
+  ET_T1_TEST_CORRUPT_LAYOUT = 8,
+  ET_T1_TEST_CORRUPT_OFFSET = 9,
+  ET_T1_TEST_CORRUPT_DATA = 10,
+  ET_T1_TEST_CORRUPT_TENSOR = 11,
+  ET_T1_TEST_CORRUPT_BORROW = 12,
+  ET_T1_TEST_CORRUPT_VIEW = 13,
+  ET_T1_TEST_CORRUPT_LENGTH = 14,
+  ET_T1_TEST_CORRUPT_WHOLE_PAIR = 15
+};
+int32_t et_t1_i64_shell_test_corrupt_v1(void *candidate, int32_t field,
+                                        uintptr_t value);
+int32_t et_t1_i64_shell_test_restore_v1(void *candidate);
+#endif
 #endif
 
 #ifdef __cplusplus

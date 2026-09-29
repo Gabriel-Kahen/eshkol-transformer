@@ -1,0 +1,60 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+(extern i64 pair-test-corrupt ptr i64 i64
+        :real et_g3c4_prompt_test_t1_corrupt_v1)
+(extern i64 pair-test-swap ptr ptr
+        :real et_g3c4_prompt_test_t1_pair_swap_v1)
+(extern i64 pair-test-restore ptr
+        :real et_g3c4_prompt_test_t1_restore_v1)
+(extern i64 pair-test-token ptr i64
+        :real et_g3c4_prompt_test_token_v1)
+(extern i64 pair-test-i1-count i64
+        :real et_g3c4_prompt_test_i1_count_v1)
+(extern i64 pair-test-transport-count i64
+        :real et_g3c4_prompt_test_transport_count_v1)
+
+(define checks 0)
+(define (check condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 exact-pair linked FAIL") (newline) (exit 1))))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define source (t1-wave1-tokenizer-encode tokenizer (bytevector 1 2)))
+(define other (t1-shell-create 2))
+(check (not (null? other)))
+(check (= (t1-shell-write other 0 3) 0))
+(check (= (t1-shell-write other 1 4) 0))
+(check (= (t1-shell-seal other) 0))
+(define i1-before (pair-test-i1-count 0))
+(define input-before (pair-test-transport-count 2))
+
+(define (rejected category)
+  (let ((result (g3c4-native-input-from-t1 source)))
+    (check (null? result))
+    (check (= (g3c4-native-last-error-category) category))
+    (check (= (pair-test-i1-count 0) i1-before))
+    (check (= (pair-test-transport-count 2) input-before))))
+
+(check (= (pair-test-corrupt source 1 2) 0))
+(rejected 3)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-corrupt source 6 1) 0))
+(rejected 3)
+(check (= (pair-test-restore source) 0))
+(check (= (pair-test-swap source other) 0))
+(rejected 2)
+(check (= (pair-test-restore source) 0))
+(define created (g3c4-native-input-from-t1 source))
+(check (not (null? created)))
+(check (= (pair-test-token created 0) 1))
+(check (= (pair-test-token created 1) 2))
+(check (= (g3c4-native-tensor-release created) 0))
+(check (= (pair-test-i1-count 0) i1-before))
+(check (= (pair-test-transport-count 2) (+ input-before 1)))
+(display "G3-C4 T1/I1 EXACT PAIR LINKED PASS: ")
+(display checks) (display " checks") (newline)
