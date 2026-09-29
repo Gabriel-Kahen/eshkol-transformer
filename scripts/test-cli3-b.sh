@@ -24,6 +24,7 @@ config = (root / 'config.json').read_text()
 PY
 "${binary}" tokenizer byte --config "${scratch}/config.json" \
   --output "${scratch}/byte.t1" >"${scratch}/tokenizer.json"
+mkdir "${scratch}/train" "${scratch}/validation"
 "${binary}" corpus build --tokenizer "${scratch}/byte.t1" \
   --document "${scratch}/train.txt" --output-directory "${scratch}/train" \
   --shard-token-limit 4 >"${scratch}/train.json"
