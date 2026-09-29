@@ -77,7 +77,7 @@ for horizon in 1024 8192; do
     --output "${corpus}" --horizon "${horizon}")"
   [[ "${late}" == "${corpus}/shard-0000000000000001.ets" ]] || \
     die "generated late shard path differs from the admitted two-shard layout"
-  runtime_timeout="${E3_HORIZON_RUNTIME_TIMEOUT_SECONDS:-1800}"
+  runtime_timeout="${E3_HORIZON_RUNTIME_TIMEOUT_SECONDS:-3600}"
   ESHKOL_ARENA_POISON=1 E3_HORIZON_LATE_SHARD="${late}" \
     /usr/bin/time -f 'elapsed_seconds=%e peak_rss_kib=%M' \
     -o "${out}/runtime-${horizon}.time" \

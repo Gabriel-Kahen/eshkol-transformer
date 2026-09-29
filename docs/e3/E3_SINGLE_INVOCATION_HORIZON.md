@@ -27,9 +27,14 @@ the installed package object is copied byte-for-byte without source changes.
 
 The supported gate builds the fixed public package, compiles the caller at O2,
 and runs both horizons with `ESHKOL_ARENA_POISON=1`. The per-process timeout is
-1,800 seconds; the proposed operational peak RSS ceiling is 524,288 KiB. The
-8,192 process traverses 8,191 batches before the fault and all 8,192 on retry,
-so several minutes of runtime are expected. The package compile retains its
+3,600 seconds; the proposed operational peak RSS ceiling is 524,288 KiB. The
+8,192 process traverses 8,191 batches before the fault and all 8,192 on retry.
+On the pinned `05f4f48` gate, 1,024 completed in 345.14 seconds at 162,400 KiB,
+while 8,192 reached the former 1,800-second timeout (exit 124, 160,436 KiB).
+Linear scaling of the measured 1,024 runtime projects 2,761.12 seconds for
+8,192, so the new bound leaves about 30% headroom. This projection is a timeout
+choice, not an 8,192 runtime result; the exact-head gate must still complete.
+The package compile retains its
 900-second per-compile timeout and may need roughly 5 GiB peak RSS as prior E3
 aggregate builds did; run it in the coordinated disk-backed supported lane.
 The caller prints root-arena deltas for failure and retry, and GNU time records
