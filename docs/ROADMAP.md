@@ -1638,15 +1638,20 @@ from its training corpus. Its public caller evaluates before and after exactly
 requires finite positive held-out loss and a predeclared minimum drop of
 `0.25f` (`0x3e800000`), exact mask-weight/count words, and retained first
 metrics. Focused checker negative controls and shell/Python source checks pass.
-The fe9 linked runtime result, observed loss words, independent review, and
-combined supported gate remain pending.
+The exact-head fe9 linked gate and independent source review passed at
+`86771b0`: 32 updates reduced held-out loss from 5.54273176 to 4.08261538,
+clearing the predeclared `0.25f` drop. Sealed evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-heldout-fe9-86771b0-20260929-a/SHA256SUMS`.
+The combined acceptance union still requires its own supported fe9 gate.
 
 The isolated TR3 acceptance union combines that held-out witness with the
 fixed one-batch overfit witness and its eight lease-gated M3 public entries.
 The installed linked runner now checks both original quantitative criteria,
-alongside state/load, train, evaluate, and exact resume behavior. Both input
+alongside state/load, train, evaluate, and a restore-and-repeat step. Both input
 candidates passed independent source review and exact-head supported fe9 gates;
-the combined tree still requires its own review and supported linked gate.
+independent integration review found no source/test merge regression at
+`899b03e`. The combined tree still requires an exact-head supported fe9 linked
+gate.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
