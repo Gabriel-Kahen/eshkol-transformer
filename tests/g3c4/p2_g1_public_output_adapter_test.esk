@@ -122,6 +122,21 @@
                          (vector-ref entry 3) index 'test)
                        (vector-ref (vector-ref copy-a 4) (+ index 1)))
                     (loop (+ index 1)))))))
+(define rng-a-entry (g3c4-registry-find rng-a 'test))
+(define rng-a-words (vector-ref rng-a-entry 7))
+(define rng-a-birth-word (vector-ref rng-a-words 3))
+(vector-set! rng-a-words 3 (if (= rng-a-birth-word 0) 1 0))
+(reject-public "published RNG successor word tamper rejects release"
+               'invalid-state 'generation-rng-release!
+  (lambda () (g3c4-public-generation-rng-release! rng-a)))
+(vector-set! rng-a-words 3 rng-a-birth-word)
+(check "RNG birth-word restoration preserves native owner and retry"
+       (and (eq? (vector-ref rng-a-entry 2) 'live)
+            (= (g3c4-native-rng-word-checked
+                 (vector-ref rng-a-entry 3) 2 'test)
+               rng-a-birth-word)
+            (eq? (g3c4-public-result-entry-live
+                   rng-a 'generation-rng-release!) rng-a-entry)))
 (reject "forged output" 'invalid-argument
   (lambda () (g3c4-public-generation-output-ids (vector 'forged))))
 (reject "wrong C4 kind" 'invalid-argument
