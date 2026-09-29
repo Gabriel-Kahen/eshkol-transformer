@@ -65,8 +65,8 @@
 (define accumulation (string->number (car (cdr (cdr args)))))
 (check 'accumulation (or (= accumulation 1) (= accumulation 2)
                          (= accumulation 3)))
-(check 'mode (or (string=? mode "baseline") (string=? mode "producer")
-                 (string=? mode "receiver")))
+(check 'mode (or (string=? mode "baseline") (string=? mode "train-baseline")
+                 (string=? mode "producer") (string=? mode "receiver")))
 (define checkpoint-policy
   (persistence-policy 16777216 524288 8388608 64 'cpu))
 (define report (capability-discover))
@@ -121,6 +121,25 @@
     (display " ") (display (metrics-ref metrics 'microbatches))
     (display " ") (display (metrics-ref metrics 'update)) (newline)
     (save trainer prefix ordinal)))
+(define (train-one trainer ordinal prefix interrupt?)
+  (let ((summary
+          (if interrupt?
+              (trainer-train! trainer (trainer-stop-policy #f 4 #f)
+                              interrupt?)
+              (trainer-train! trainer (trainer-stop-policy #f 1 #f)))))
+    (check 'train-one-schema
+      (and (= (metrics-ref summary 'updates) 1)
+           (> (metrics-ref summary 'tokens) 0)
+           (>= (metrics-ref summary 'epochs) 0)
+           (>= (f32-bits (vector (metrics-ref summary 'loss))) 0)
+           (>= (f32-bits (vector (metrics-ref summary 'mask-weight))) 0)))
+    (display "TRAIN ") (display ordinal) (display " ")
+    (display (f32-bits (vector (metrics-ref summary 'loss)))) (display " ")
+    (display (f32-bits (vector (metrics-ref summary 'mask-weight))))
+    (display " ") (display (metrics-ref summary 'tokens))
+    (display " ") (display (metrics-ref summary 'updates))
+    (display " ") (display (metrics-ref summary 'epochs)) (newline)
+    (save trainer prefix ordinal)))
 
 (define main (tuple 1729))
 (define trainer (vector-ref main 0))
@@ -131,8 +150,31 @@
      (if (> ordinal 4) #t
          (begin (step trainer ordinal "baseline")
                 (loop (+ ordinal 1))))))
+  ((string=? mode "train-baseline")
+   (let ((summary (trainer-train! trainer (trainer-stop-policy #f 4 #f))))
+     (check 'uninterrupted-train
+       (and (= (metrics-ref summary 'updates) 4)
+            (> (metrics-ref summary 'tokens) 0)
+            (> (f32-bits (vector (metrics-ref summary 'loss))) 0)
+            (> (f32-bits (vector (metrics-ref summary 'mask-weight))) 0)))
+     (display "FULL ")
+     (display (f32-bits (vector (metrics-ref summary 'loss))))
+     (display " ")
+     (display (f32-bits (vector (metrics-ref summary 'mask-weight))))
+     (display " ") (display (metrics-ref summary 'tokens))
+     (display " ") (display (metrics-ref summary 'updates))
+     (display " ") (display (metrics-ref summary 'epochs)) (newline)
+     (save trainer "train-baseline" 4)))
   ((string=? mode "producer")
-   (step trainer 1 "k"))
+   (let ((ack (vector #f)))
+     (train-one trainer 1 "k"
+       (lambda ()
+         (check 'external-request
+           (= (file-size (string-append directory "/interrupt-request")) 1))
+         (vector-set! ack 0 #t)
+         #t))
+     (check 'interrupt-ack (vector-ref ack 0))
+     (display "INTERRUPT-ACK 1") (newline)))
   (else
    (let* ((before-cursor (token-dataset-cursor dataset))
           (original (read-bytes (path "k" 1)))
@@ -164,7 +206,7 @@
      (save trainer "restored" 1)
      (let loop ((ordinal 2))
        (if (> ordinal 4) #t
-           (begin (step trainer ordinal "resumed")
+           (begin (train-one trainer ordinal "resumed" #f)
                   (loop (+ ordinal 1))))))))
 (check 'release (trainer-release! trainer))
 (check 'close (token-dataset-close! dataset))

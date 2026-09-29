@@ -1643,6 +1643,16 @@ The separate reviewed private factor gate directly measures the four changing
 effective rates. The public API has no factor, moment, RNG-word, or epoch-start
 accessor; the fixed no-dropout trainer does not advance RNG counters. This
 test-only follow-up awaits narrow independent review and integration.
+The combined train-interrupt candidate composes reviewed public C2 resume
+and the explicit same-thread interrupt callback on the merged #149/C2 base.
+Its installed caller now runs an uninterrupted four-update `trainer-train!`
+path, a caller-acknowledged interrupt after one committed update, and a fresh
+OS-process C2 load followed by three public train calls for `A=1,2,3`.
+It compares final and intermediate canonical C2 bytes with the public step
+reference and compares each one-update train summary with independent step
+metrics. Focused static checks pass; the combined pinned fe9 linked gate and
+independent review remain pending. The fixed no-dropout profile supports only
+zero-RNG-state preservation.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
