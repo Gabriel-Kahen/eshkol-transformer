@@ -24,6 +24,13 @@ the functional change to actual model parameter state rather than metrics
 publication. The public installed API does not expose raw parameter bytes,
 so this does not identify which parameter tensor changed.
 
+Forward observations and state snapshots occur before trainer enrollment or
+after `trainer-release!`: the public facade rejects direct model calls on an
+enrolled trainer component. `:deterministic? #t` validates a deterministic
+forward request without changing module mode. The model stays in the required
+train mode for `trainer-train!`; public state-dict loads copy parameter values
+and leave that mode untouched.
+
 This checks fit to the training batch only. It does not establish held-out
 improvement, generalization, exact resume, GPU behavior, mixed precision, or
 long-run memory bounds. The linked fe9 build and its ordinary installed API

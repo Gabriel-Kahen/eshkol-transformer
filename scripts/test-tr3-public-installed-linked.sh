@@ -56,6 +56,10 @@ mkdir -p -- "${evidence}"
 evidence="$(readlink -f -- "${evidence}")"
 [[ "${evidence}" != "${PROJECT_ROOT}" && "${evidence}" != "${PROJECT_ROOT}/"* ]] || \
   die "evidence must be outside checkout"
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  tests.tr3_public_installed.test_overfit_source_contract \
+  >"${evidence}/overfit-contract.stdout" \
+  2>"${evidence}/overfit-contract.stderr"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.tr3b.prepare_fixture \
   --output "${evidence}/corpus/step-two"
 PYTHONDONTWRITEBYTECODE=1 python3 -m tests.e3_reference.corpus \
