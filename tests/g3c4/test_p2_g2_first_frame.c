@@ -124,6 +124,15 @@ static void rejection_and_retry(et_g3c4_model_owner_internal *owner) {
   snapshot_cache(context->cache, &before);
   memcpy(original_rng, context->generator_rng_words, sizeof(original_rng));
   OK(et_g3c4_private_call_acquire_v1(context, 2, 2));
+  memset(logits, 0x7f, sizeof(logits));
+  /* The legacy raw-pointer entry cannot commit P2 under a budget-two call,
+   * even if its bytes happen to match the owned I1 prompt. */
+  CHECK(et_g3c4_private_prefill2_v1(context, prompt, logits) ==
+        ET_G3C4_INVALID_STATE);
+  for (size_t i = 0; i < sizeof(logits); i++)
+    CHECK(((const unsigned char *)logits)[i] == 0x7f);
+  snapshot_cache(context->cache, &after);
+  check_cache_snapshot_equal(&before, &after);
   CHECK(et_g3c4_private_output_reserve_v1(context, 1) == NULL);
   CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_SHAPE_MISMATCH);
   et_i64_tensor_test_fail_alloc_after_v1(0u);
@@ -134,6 +143,16 @@ static void rejection_and_retry(et_g3c4_model_owner_internal *owner) {
   CHECK(output != NULL);
   int64_t *ids = (int64_t *)et_i64_tensor_test_data_storage_v1(input->tensor);
   CHECK(ids != NULL);
+  CHECK(et_g3c4_private_prefill2_v1(context, ids, logits) ==
+        ET_G3C4_INVALID_STATE);
+  CHECK(output->numeric_ready == 0u && output->ids_copied == 0u &&
+        output->text_ready == 0u);
+  for (size_t i = 0; i < sizeof(logits); i++)
+    CHECK(((const unsigned char *)logits)[i] == 0x7f);
+  snapshot_cache(context->cache, &after);
+  check_cache_snapshot_equal(&before, &after);
+  CHECK(memcmp(context->generator_rng_words, original_rng,
+               sizeof(original_rng)) == 0);
   for (size_t position = 0; position < 2u; position++) {
     for (size_t bad = 0; bad < 2u; bad++) {
       int64_t original = ids[position];

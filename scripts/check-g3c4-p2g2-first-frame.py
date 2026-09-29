@@ -29,9 +29,15 @@ for required in (
     "ET_G3C4_P2_G2_TUPLE(2, context->budget) && token_position != 2",
     "Budget two owns only a pending transcript",
     "context->call_kind != 2 || context->budget != 1 ||",
+    "return et_g3c4_prefill2_impl(\n"
+    "      candidate, token_ids, last_logits_output, NULL, NULL);",
+    "owned_view->data != token_ids",
+    "last_logits_output, input, view);",
 ):
     if required not in owner:
         raise SystemExit(f"P2/G2 first-frame guard missing: {required}")
+if owner.count("et_g3c4_prefill2_impl(") != 3:
+    raise SystemExit("P2/G2 owned-prompt prefill gained another internal caller")
 
 for required in (
     "et_g3c4_private_prompt_prefill_preflight_v1(context, input, 2)",
@@ -47,6 +53,8 @@ for required in (
     "et_i64_tensor_borrow_begin_v1", "et_a2_kv_cache_read_borrow_begin_v1",
     "et_i64_tensor_test_fail_alloc_after_v1(0u)",
     "et_a2_kv_cache_test_fail_alloc_after_v1(0u)",
+    "et_g3c4_private_prefill2_v1(context, prompt, logits)",
+    "et_g3c4_private_prefill2_v1(context, ids, logits)",
 ):
     if required not in fixture:
         raise SystemExit(f"P2/G2 first-frame witness missing: {required}")

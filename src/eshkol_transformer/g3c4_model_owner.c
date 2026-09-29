@@ -4859,9 +4859,11 @@ typedef struct et_g3c4_prefill2_scratch {
   float fu[16], fg[16], fd[8], y[8], nf[8], z[512];
 } et_g3c4_prefill2_scratch;
 
-int64_t et_g3c4_private_prefill2_v1(
+static int64_t et_g3c4_prefill2_impl(
     void *candidate, const int64_t token_ids[2],
-    float last_logits_output[256]) {
+    float last_logits_output[256],
+    const et_g3c4_input_internal *owned_input,
+    const et_kernel_tensor_view_v1 *owned_view) {
   static const uint64_t ids_shape[2] = {1u, 2u};
   static const uint64_t token_embedding_row[4] = {1u, 2u, 256u, 4u};
   static const uint64_t position_embedding_row[4] = {1u, 2u, 4u, 4u};
@@ -4932,6 +4934,18 @@ int64_t et_g3c4_private_prefill2_v1(
     }
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+  /* Only prompt_prefill may pass the active owned-I1 borrow for budget two.
+   * The standalone raw-pointer entry below never carries that authority. */
+  if (context->budget == 2 &&
+      (owned_input == NULL || owned_view == NULL ||
+       owned_input->tensor == NULL || owned_input->length != 2 ||
+       owned_view->data != token_ids || owned_view->rank != 2u ||
+       owned_view->shape == NULL || owned_view->shape[0] != 1u ||
+       owned_view->shape[1] != 2u)) {
+    (void)et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return et_g3c4_error_state.category;
+  }
   if (!((context->call_kind == 0 && context->budget == 0) ||
         (context->call_kind == 2 &&
          (context->budget == 0 || context->budget == 1 ||
@@ -5212,6 +5226,13 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+
+int64_t et_g3c4_private_prefill2_v1(
+    void *candidate, const int64_t token_ids[2],
+    float last_logits_output[256]) {
+  return et_g3c4_prefill2_impl(
+      candidate, token_ids, last_logits_output, NULL, NULL);
+}
 #endif
 
 #ifdef ET_G3C4_PROMPT_PREFILL_PRIVATE
@@ -5409,9 +5430,17 @@ int64_t et_g3c4_private_prompt_prefill_v1(
   if (input->length == 1)
     status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill1_v1)(
         context, *(const int64_t *)view->data, last_logits_output);
-  else
-    status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill2_v1)(
-        context, (const int64_t *)view->data, last_logits_output);
+  else {
+#ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+    if (context->budget == 2)
+      status = et_g3c4_prefill2_impl(
+          context, (const int64_t *)view->data,
+          last_logits_output, input, view);
+    else
+#endif
+      status = ET_G3C4_PROMPT_CAT(et_g3c4_private_pre, fill2_v1)(
+          context, (const int64_t *)view->data, last_logits_output);
+  }
 #undef ET_G3C4_PROMPT_CAT
 #undef ET_G3C4_PROMPT_CAT_INNER
   if (status != 0) goto fail;
