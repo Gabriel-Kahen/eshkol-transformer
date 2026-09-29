@@ -6,6 +6,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 artifact_dir="${1:-$(project_build_dir)/cli3}"
 executable="${artifact_dir}/eshkol-transformer"
 [[ -x "${executable}" ]] || die "CLI3 executable not found: ${executable}"
+bash "${PROJECT_ROOT}/scripts/test-cli3-native-closure-policy.sh"
 for command in ar cmp python3 sha256sum; do
   require_command "${command}"
 done

@@ -2,6 +2,7 @@
 
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "${PROJECT_ROOT}/scripts/cli3-native-closure-policy.sh"
 
 [[ "$#" -ge 5 ]] || die \
   "usage: $0 TRUSTED_PRIVATE_ROOT.esk PACKAGE_BRIDGE.c PACKAGE_RENAMES.txt PUBLIC_EXPORTS.txt OUTPUT.o [INCLUDE_DIR ...]"
@@ -1103,24 +1104,6 @@ elif [[ "${package_policy}" == m3-model-aggregate || \
   package_dependency_prefix=m3
 fi
 
-cli3_check_native_lexical_containment() {
-  local raw=$1 part depth=0
-  local -a parts
-  [[ "${raw}" == "${PROJECT_ROOT}/"* ]] || \
-    die "CLI3 native depfile path is outside the repository"
-  IFS=/ read -r -a parts <<<"${raw#"${PROJECT_ROOT}/"}"
-  for part in "${parts[@]}"; do
-    case "${part}" in
-      ''|.) continue ;;
-      ..)
-        (( depth > 0 )) || die "CLI3 native depfile path escapes the repository"
-        depth=$((depth - 1))
-        ;;
-      *) depth=$((depth + 1)) ;;
-    esac
-  done
-}
-
 run_compiler() {
   "${e1b_clean_toolchain_env[@]}" \
     -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
@@ -1466,10 +1449,11 @@ if [[ -n "${package_native_source_closure}" ]]; then
             # Includes within the integration TU use reviewed relative paths.
             # Compare their real repository identity, not ../ spelling.
             if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
-              cli3_check_native_lexical_containment "${native_dependency}"
+              native_dependency="$(cli3_canonical_native_dependency_path "${native_dependency}")"
+            else
+              "${package_dependency_prefix}_check_native_dependency_path" "${native_dependency}"
+              native_dependency="$(realpath -- "${native_dependency}")"
             fi
-            "${package_dependency_prefix}_check_native_dependency_path" "${native_dependency}"
-            native_dependency="$(realpath -- "${native_dependency}")"
             m3t_verified_source="$(realpath -- "${e1b_source}")"
             case "${native_dependency}" in
               "${m3t_verified_source}/"*)
