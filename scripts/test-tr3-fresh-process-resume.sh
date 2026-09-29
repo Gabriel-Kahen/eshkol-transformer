@@ -24,6 +24,9 @@ root = Path(sys.argv[1])
 evidence = Path(sys.argv[2])
 base = (root / "tests/tr3_snapshot/runtime_smoke.esk").read_text()
 base = base.split('(define tuple (make-tuple 1729))', 1)[0]
+assert base.count("'(none) '(constant)") == 1
+base = base.replace("'(none) '(constant)",
+                    "'(none) '(linear 2 6 \"3dcccccd\")", 1)
 base = base.replace(
     '(load "tr3_c_snapshot_root.esk")',
     '(load "tr3_c_private_resume_trajectory_root.esk")',
@@ -128,6 +131,7 @@ script = script.replace('TR3-C joint runtime seal:',
 PY
 chmod +x "${evidence}/fresh-gate.generated.sh"
 TR3_FRESH_RESUME_EVIDENCE_DIR="${evidence}" "${evidence}/fresh-gate.generated.sh"
+python3 tests/tr3_resume_trajectory/check_learning_rate.py "${evidence}"
 
 {
   printf 'fresh_gate_sha256\t%s\n' \
