@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -28,8 +29,23 @@ class SingleRegistryContract(unittest.TestCase):
                        if name.startswith(('et_e1b_public_g3_',
                                            'et_e1b_public_m3_'))})
         expected.add('et_e1b_public_cli3_generate_dispatch_v1')
-        self.assertEqual(lines(FIXTURE / 'aggregate_public_exports.txt'),
-                         sorted(expected))
+        exports = lines(FIXTURE / 'aggregate_public_exports.txt')
+        self.assertEqual(exports, sorted(name for name in expected
+                                         if name.startswith('et_e1b_public_')))
+
+        error_globals = {name for name in lines(NATIVE / 'cli3_public_strings.txt')
+                         if name.startswith('et_e1b_error_')}
+        self.assertEqual(len(error_globals), 6)
+        self.assertEqual(lines(FIXTURE / 'aggregate_public_strings.txt'),
+                         sorted(set(exports) | error_globals))
+
+        build = (ROOT / 'scripts/build-e1b-consumer.sh').read_text()
+        pattern = re.search(r"^export_pattern='([^']+)'$", build, re.M).group(1)
+        for name in exports:
+            self.assertIsNotNone(re.fullmatch(pattern, name), name)
+        for name in error_globals:
+            with self.subTest(rejected_export=name):
+                self.assertIsNone(re.fullmatch(pattern, name))
 
     def test_bridge_keeps_one_predecessor(self):
         bridge = (FIXTURE / 'aggregate_bridge.c').read_text()

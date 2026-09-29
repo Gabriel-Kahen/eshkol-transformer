@@ -1,9 +1,3 @@
-et_e1b_error_category_v1
-et_e1b_error_cause_v1
-et_e1b_error_details_v1
-et_e1b_error_message_v1
-et_e1b_error_operation_v1
-et_e1b_error_predicate_v1
 et_e1b_public_c1_persistence_policy_v1
 et_e1b_public_c2_checkpoint_inspect_v1
 et_e1b_public_c2_checkpoint_load_v1
