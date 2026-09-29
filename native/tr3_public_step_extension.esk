@@ -1,0 +1,73 @@
+;;; Installed fixed-profile public step. The accepted private composer owns the
+;;; transaction; this extension owns one staged result in the sole metrics root.
+(extern i64 tr3-step-metrics-accumulate ptr ptr
+        :real et_tr3_step_metrics_accumulate_v1)
+(extern i64 tr3-step-metrics-mean-bits ptr
+        :real et_tr3_step_metrics_mean_bits_v1)
+
+(define (tr3-public-step-rethrow caught)
+  (if (transformer-error? caught)
+      (et-e1b-private-raise
+        (transformer-error-category caught) 'trainer-step!
+        (transformer-error-message caught)
+        (transformer-error-details caught)
+        (transformer-error-cause caught))
+      (et-e1b-private-raise
+        'internal 'trainer-step! "trainer step raised a foreign value" '() #f)))
+
+(define (tr3-public-step-f32-check status)
+  (if (= status -2)
+      (m3t-fail 'unsupported 'trainer-step!
+                "unsupported binary32 rounding or flush controls"))
+  (if (= status -1)
+      (m3t-fail 'invalid-state 'trainer-step!
+                "nonfinite physical f32 step observation"))
+  status)
+
+(define (trainer-step! trainer)
+  (let ((staged? #f))
+    (guard (caught
+             (#t (begin
+                   (if staged?
+                       (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                         (tr3-metrics-step-abort-internal!)))
+                   (tr3-public-step-rethrow caught))))
+      ;; The caller's exact shell is authenticated before result allocation.
+      (tr3-lease-record-for-shell-internal trainer 'trainer-step!)
+      (tr3-metrics-step-begin-internal!)
+      (set! staged? #t)
+      (let* ((accumulator (make-bytevector 8 0))
+             (observed-microbatches 0)
+             (token
+               (tr3-step-composer-with-hooks-internal!
+                 trainer
+                 (lambda (observation)
+                   (tr3-public-step-f32-check
+                     (tr3-step-metrics-accumulate accumulator observation))
+                   ;; Count actual completed VJPs from an exact literal. X1's
+                   ;; configured A can carry an unflagged i64 across its
+                   ;; accessor and is never installed as a public counter.
+                   (set! observed-microbatches (+ observed-microbatches 1))
+                   #t)
+                 (lambda (ledger)
+                   (let* ((frame (vector-ref ledger 0))
+                          (saved (vector-ref frame 7))
+                          (tokens (vector-ref ledger 6))
+                          (weight (tr3b-u32-le accumulator 4))
+                          (loss (tr3-public-step-f32-check
+                                  (tr3-step-metrics-mean-bits accumulator))))
+                     (if (or (not (= weight
+                                     (tr3-step-f32-integer-bits tokens)))
+                             (not (= observed-microbatches
+                                     (vector-ref ledger 8)))
+                             (not (tr3-metrics-i64?
+                                    observed-microbatches)))
+                         (m3t-fail 'invalid-state 'trainer-step!
+                                   "physical f32 step reduction or count differs"))
+                     (tr3-metrics-step-fill-internal!
+                       loss weight tokens observed-microbatches
+                       (+ (vector-ref saved 1) 1))))
+                 (lambda () (tr3-metrics-step-precommit-internal!))
+                 (lambda () (tr3-metrics-step-publish-internal!)))))
+        (set! staged? #f)
+        token))))

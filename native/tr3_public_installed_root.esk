@@ -1,3 +1,9 @@
 ;;; Installed trainer facet in the same TR3/C2 registry-owning aggregate.
 (load "tr3_public_release_candidate_root.esk")
 (load "tr3_metrics_extension.esk")
+(load "tr3b_objective_extension.esk")
+(load "tr3_o2_step_clear_extension.esk")
+(load "tr3_step_transaction_extension.esk")
+(load "tr3_step_commit_tail_extension.esk")
+(load "tr3_step_composer_extension.esk")
+(load "tr3_public_step_extension.esk")

@@ -11,6 +11,8 @@ extern eshkol_tagged_value_t tr3_step_precommit(void)
     __asm__("tr3-metrics-step-precommit-internal!");
 extern eshkol_tagged_value_t tr3_step_publish(void)
     __asm__("tr3-metrics-step-publish-internal!");
+extern eshkol_tagged_value_t tr3_step_test_inject(eshkol_tagged_value_t)
+    __asm__("tr3-step-composer-test-inject-internal!");
 
 /* Test-only producer, linked with the unlocalized copy of the same aggregate. */
 void et_tr3_test_publish_step_v1(void *output) {
@@ -32,4 +34,10 @@ int64_t et_tr3_test_f32_bits_v1(void *input) {
       eshkol_value_f32_to_bits_v1(&value, &bits) != ESHKOL_VALUE_F32_OK)
     return -1;
   return (int64_t)bits;
+}
+
+void et_tr3_test_set_step_fault_v1(void *cut, void *output) {
+  et_e1b_ensure_private_initialized_v1();
+  *et_e1b_box_value_v1(output) =
+      tr3_step_test_inject(*et_e1b_box_value_v1(cut));
 }
