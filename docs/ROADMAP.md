@@ -760,7 +760,11 @@ persistence or CLI3 `generate`. A [source-private fixed P2/G2 contract](g3/G3_C4
 is independently reviewed before any budget-two implementation. It
 requires an internal first-token commit without partial output, a second
 position-three frame, and EOS-aware logical output length; no public P2/G2
-admission follows from the existing one-token profile.
+admission follows from the existing one-token profile. A source-private
+first-frame candidate now isolates native budget-two policy/call/P2 preflight
+and staged position-two forward behind a feature macro; it deliberately
+retains pending-output rejection and claims no commit, EOS or G2 output.
+Independent source review and the supported pinned gate are pending.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
