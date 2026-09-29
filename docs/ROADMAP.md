@@ -1642,6 +1642,11 @@ comparisons; its seal is
 Root independently reran the same source/tree with the same 246 checks and
 15 byte comparisons; the verified 87-file root seal is
 `tr3-fresh-resume-root-d835a51-20260925/SHA256SUMS` (`1967e564...`).
+Test-only candidate `e569b8b` adds a linear O2 schedule and compares native
+next-update factor and derived effective binary32 learning-rate bits across
+the 12 uninterrupted/producer/fresh-receiver updates. Its historical 81298
+gate compiles but fails at the first process with the previously documented
+D2 closure incompatibility; the supported fe9 trajectory run remains pending.
 The bounded [private TR3-C retention diagnosis](TR3_C_RETENTION_CYCLE_DIAGNOSIS.md)
 passes pinned f31/LLVM21 ASan/UBSan/LSan tests at 32 and 128 genuine
 snapshot→C2 SAVE/LOAD→joint restore cycles after one P1/C2 identity prewarm,

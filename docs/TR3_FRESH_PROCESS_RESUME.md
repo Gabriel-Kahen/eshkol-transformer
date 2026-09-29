@@ -29,6 +29,18 @@ so those two TR3-C §13 comparisons remain pending. Public trainer packaging,
 full failure-prefix/environment acceptance, and other model profiles remain
 separate gates.
 
+The later test-only `e569b8b` candidate changes this witness's O2 fixture to
+the accepted linear schedule (warmup 2, total 6, minimum ratio 0.1). Before
+each genuine update, it records O2's native next-update schedule-factor bits.
+The gate computes the effective binary32 learning-rate bits from those factors
+and the fixed optimizer-group learning rate, then compares uninterrupted K/R
+against producer K and fresh receiver R at all 12 updates. It also requires
+the four independently frozen nonconstant O2 schedule factors. This is an
+internal O2 observation; the public next-step metrics check remains pending.
+The historical 81298 gate compiled this candidate but the first process raised
+`Unhandled exception: user exception`, consistent with the documented D2
+closure incompatibility of that runner. Supported fe9 execution is pending.
+
 The clean source `15a7c8a` (tree `68b2d56`) passed the pinned gate with
 246 runtime checks across nine processes and 15 byte comparisons. Compilation
 took 1:43.19, peaked at 5,388,024 KiB RSS, and used no swap. The full
