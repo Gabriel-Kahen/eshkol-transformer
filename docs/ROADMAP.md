@@ -644,15 +644,16 @@ generation, and Wave 3 remains incomplete.
 | CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | The bounded six-command CLI3-A source from clean `392fac8` is selectively integrated at `62fa411`: tokenizer byte/train-bpe/inspect, corpus build/inspect and checkpoint inspect. Root verified all 21 CLI paths against that candidate and the 1,204 non-CLI base paths against `fc924df`. On the supported immutable Ubuntu 22/Clang 21 image with authenticated runtime `81298`, two fresh network-disabled builds produced 16 byte-identical regular files. The exact 8-global/2-export/83-string/34-source/36-formatter/54-native/157-undefined boundary, 35 public E1B AOT checks, six-command behavior/artifact/grammar/I/O tests, formatter-to-production negative, and genuine condition-5 handler-allocation plus published-shard rollback/static-fallback witness passed; root verified the 83-file evidence manifest. This accepts the bounded CLI3-A source and gate, not the root aggregate CI or full CLI3. The bounded fixed-profile pretrain/evaluate CLI3-B source is independently reviewed at `b035ca5`/tree `22340a4` after merged TR3 fresh-process head `efc2e714`. On the pinned fe9/Clang 21 image, two network-disabled builds of identical production source `7c9ef1b` passed exact source/native/export/undefined/public-string manifests and produced 16 byte-identical files; the final full CLI suite passed artifact/grammar and negative cases, fresh-process checkpoint identity, held-out evaluation, and independent O0/O2 raw-observation binary32 loss replay. The 66-file seal is `cli3b-gate-d30f4b0/SHA256SUMS` (`ec8525fd...`). Merged-head integration review and hosted exact-head CI remain pending. `generate` awaits its separate accepted contract | active |
 
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite is an isolated
-single-registry candidate under source review. It composes the accepted
+single-registry candidate. It composes the accepted
 CLI3/TR3 C2 root with the accepted public G3-G C2 P1/G1 suffix, then uses a
 fresh CLI3 pretrain checkpoint, capability-gated public LOAD and trainer
 restore, the exact restored M3T model, authentic T1 input, and public G3
 output owners. A public M3 logits argmax supplies the one-byte greedy oracle.
 The supported linked/runtime gate and CLI3 `generate` command remain pending.
-The isolated prerequisite build exposed an M3/M3T policy-dispatch collision
-from the reviewed CLI3 aggregate exports. An exact CLI3 tuple dispatch repair
-passes focused source-policy tests; independent review and the supported gate
+The independently reviewed exact CLI3 tuple repair passed source-policy tests.
+Its next supported build exposed six shared error globals incorrectly listed as
+package exports. The corrected manifest matches the retained builder-selected
+146-export list byte for byte; independent review and the linked/runtime gate
 remain pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
