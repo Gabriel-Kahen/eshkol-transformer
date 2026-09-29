@@ -667,7 +667,14 @@ duplicate globals and separate private registries. The test-only CLI3 package
 now compiles E3 then G3-T in one native translation unit with one M3 owner;
 standalone E3 and G3-T retain their original source modes. The candidate
 99-row closure adds only the aggregate source path. Local strict C/object tests
-pass; supported linked/runtime acceptance remains pending independent review.
+pass. The supported gate then built and linked both executables and completed
+CLI3 tokenizer, corpus, and one-update pretrain, but the first direct public
+runtime call failed: package initialization left T2's authenticated C2 policy
+projector unset outside CLI dispatch, so public tokenizer LOAD rejected its
+valid C2 policy. The fixture now reinstalls that exact projector at its public
+policy entry; forged policies still reach the T2 guard. The witness also moves
+model forwards outside the trainer's enrolled ownership window, as required by
+the accepted TR3 contract. Supported linked/runtime acceptance remains pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
