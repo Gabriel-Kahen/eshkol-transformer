@@ -17,6 +17,7 @@ class OverfitSourceContract(unittest.TestCase):
             "(define initial-state (module-state-dict model))",
             "(define initial-logits (forward-bits model input))",
             "(define trainer (trainer-create config tokenizer training model optimizer))",
+            "(check 'enrolled-model-forward-rejected",
             "(define before (trainer-evaluate! trainer evaluation))",
             "(define summary (trainer-train! trainer (trainer-stop-policy #f 32 #f)))",
             "(define after (trainer-evaluate! trainer evaluation))",
@@ -28,6 +29,12 @@ class OverfitSourceContract(unittest.TestCase):
         )
         positions = [source.index(item) for item in ordered]
         self.assertEqual(positions, sorted(positions))
+        rejection = source.split("(check 'enrolled-model-forward-rejected", 1)[1].split(
+            "(define before", 1
+        )[0]
+        self.assertIn("(model-forward model input ':deterministic? #t)", rejection)
+        self.assertIn("(transformer-error-category raised) 'invalid-state", rejection)
+        self.assertIn("(transformer-error-operation raised) 'model-forward", rejection)
 
     def test_provider_contract_for_mode_and_lease(self) -> None:
         gate = (ROOT / "native/tr3_lease_public_gates_extension.esk").read_text()
@@ -60,7 +67,8 @@ class OverfitSourceContract(unittest.TestCase):
         exports = set((native / "tr3_public_installed_exports.txt")
                       .read_text().splitlines())
         accepted_renames = {
-            row for row in (native / "m3_package_private_renames.txt")
+            row.replace("m3-public-", "tr3-public-", 1)
+            for row in (native / "m3_package_private_renames.txt")
             .read_text().splitlines() if row.startswith("m3-public-")
         }
         accepted_exports = {
@@ -71,6 +79,11 @@ class OverfitSourceContract(unittest.TestCase):
         self.assertEqual(len(accepted_exports), 8)
         self.assertLessEqual(accepted_renames, renames)
         self.assertLessEqual(accepted_exports, exports)
+        self.assertFalse(any(row.startswith("m3-public-") for row in renames))
+        gates = (native / "tr3_lease_public_gates_extension.esk").read_text()
+        for row in accepted_renames:
+            gate = row.split()[0]
+            self.assertIn(f"(define ({gate} ", gates)
 
 
 if __name__ == "__main__":

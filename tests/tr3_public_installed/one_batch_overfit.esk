@@ -89,6 +89,12 @@
 (check 'stable-initial-logits
        (bytes=? initial-logits (forward-bits model input)))
 (define trainer (trainer-create config tokenizer training model optimizer))
+(check 'enrolled-model-forward-rejected
+  (guard (raised
+           (#t (and (transformer-error? raised)
+                    (eq? (transformer-error-category raised) 'invalid-state)
+                    (eq? (transformer-error-operation raised) 'model-forward))))
+    (model-forward model input ':deterministic? #t) #f))
 (define before (trainer-evaluate! trainer evaluation))
 (observe 'before before)
 (define repeated (trainer-evaluate! trainer evaluation))

@@ -27,8 +27,10 @@ so this does not identify which parameter tensor changed.
 The installed trainer package includes `transformer/model.esk` and the eight
 accepted M3 public forward, output, and diagnostic boxed entries in its
 existing same-aggregate bridge. Their trusted entry names are renamed and
-localized with the rest of the trainer package; the witness links no second
-M3 object or registry.
+localized to the lease-aware `tr3-public-*` gates with the rest of the trainer
+package; the witness links no second M3 object or registry. A public forward
+on the enrolled model must raise `invalid-state` at `model-forward`, while
+forwards before enrollment and after release still succeed.
 
 Forward observations and state snapshots occur before trainer enrollment or
 after `trainer-release!`: the public facade rejects direct model calls on an
