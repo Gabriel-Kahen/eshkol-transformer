@@ -691,6 +691,15 @@ Independent source-and-test review, malformed/borrow and allocation failure
 witnesses, and sanitizer evidence remain pending. This leaf does not admit a public C4 generator, result, EOS,
 repeated decode, persistence or CLI3 `generate`.
 
+The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
+is independently reviewed and passed a supported pinned-fe9 normal/repeat/
+sanitizer gate at `3e03e1c` (54-file seal). It binds each live sealed T1 to
+its birth I1 tensor/borrow/view/storage, validates the current descriptor
+before copying byte IDs, and adds feature-gated corruption and whole-pair-swap
+negatives. The composed public C4 input candidate still needs its own
+malformed-input and ownership gate; the private seal does not establish public
+C4 input or generation authority.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
