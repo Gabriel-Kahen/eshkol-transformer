@@ -716,10 +716,10 @@ verified the 137-file
 `g3c4-public-model-input-validated-clang21-9581b8a-20260929-b/SHA256SUMS`
 seal. The reviewed integration with #158 repinned five predecessor manifests
 and passed the pinned Clang 21 installed/linked gate at `3c5e584`/tree
-`ddd06ba` (138-file seal). Composition with the newer #153/#158 main and
-hosted CI remain. This leaf does not
-admit a public C4 generator, result, EOS,
-repeated decode, persistence or CLI3 `generate`.
+`ddd06ba` (138-file seal). The bounded model/input leaf merged through
+[#159](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/159) at
+`a51ab960` after exact hosted CI. That leaf alone adds no public C4
+generator or result.
 
 The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
 is independently reviewed and passed a supported pinned-fe9 normal/repeat/
@@ -729,6 +729,33 @@ before copying byte IDs, and adds feature-gated corruption and whole-pair-swap
 negatives. The composed public C4 input candidate passed its own
 malformed-input and ownership gate at `9581b8a` as described above. Neither
 the private prerequisite nor that gate establishes public C4 generation.
+
+The next isolated source-private P2/G1 producer
+uses the accepted caller-owned C4 input for genuine P2 prefill, last-logit
+sampling, one-token forward, and exactly one existing shell publication.
+The independent source-and-test review and supported pinned-fe9 normal,
+repeat and sanitizer gate passed at `9f41d1a`/tree `b31e5fb`: two authentic
+P2 prompts, 30 linked coordinator checks and rollback/retry; its 30-file
+seal is `g3c4-p2g1-coordinator-clang21-9f41d1a-20260929-a/SHA256SUMS`.
+This producer alone does not admit a public C4 generator or result. The
+reviewed [exact-owner output adapter contract](g3/G3_C4_P2_G1_PUBLIC_OUTPUT_ADAPTER_PROPOSAL.md)
+requires source-private rank-one I1 clone ownership and an exact borrowed-view
+device check. Current retained
+I1 storage is CPU-only with no device field, so A0's non-CPU retained-state
+branch is unreachable through this fixed public profile; a test-only
+in-borrow injection witnesses defensive `device-mismatch` mapping.
+The source-composed C4 result-owner adapter is independently reviewed and
+supported-gated at `031ea3d`/tree `3ade857`. The one-archive candidate at
+`68c4f9c` composes that adapter, the accepted private coordinator and the
+merged #159 model/input leaf. It routes only exact C4 identities through the
+existing public operations and accepts an authenticated published result RNG
+as a copied constructor source. Its exact C4 branch enables the pending gate
+after native P2/G1 preflight; C2 capacity remains two. The installed caller
+exposed a C2/C4 output binding collision and a stale one-shot test assertion;
+both have focused reviewed repairs. The exact supported installed
+normal/repeat and source-composed native normal/repeat/sanitizer gate remains
+pending, so no installed C4 generation authority is accepted yet. This fixed
+leaf adds no EOS, `G>1` decode, persistence or CLI3 `generate`.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver

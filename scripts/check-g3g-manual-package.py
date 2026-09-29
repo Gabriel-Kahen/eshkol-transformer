@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Closed fixed-profile G3-G revision-3 package source contract."""
 from pathlib import Path
+import re
 
 root = Path(__file__).resolve().parents[1]
 native = root / "native"
@@ -14,9 +15,9 @@ native_sources = read("native_source_closure")
 facades = read("facades")
 assert len(exports) == 105 and exports == sorted(set(exports))
 assert len(strings) == 111 and strings == sorted(set(strings))
-assert len(sources) == 45 and len(sources) == len(set(sources))
-assert len(native_sources) == 57 and len(native_sources) == len(set(native_sources))
-assert len(read("native_objects")) == 5
+assert len(sources) == 52 and len(sources) == len(set(sources))
+assert len(native_sources) == 59 and len(native_sources) == len(set(native_sources))
+assert len(read("native_objects")) == 6
 assert len(facades) == 8 and facades == sorted(set(facades))
 assert read("archive_members") == ["g3g_manual_package.o"]
 added = {
@@ -33,11 +34,17 @@ assert {line.split()[1] for line in renames if line.startswith(("g3g-", "g3c4-pu
     for name in added | {name for name in exports if name.startswith("et_e1b_public_g3_")}
 }
 assert sources[0] == "native/g3g_manual_package_root.esk"
-assert sources[-6:] == [
+assert sources[-13:] == [
     f"native/{name}.esk" for name in (
         "g3c4_i2_construction_extension", "g3c4_p1_construction_extension",
         "g3c4_model_extension", "g3c4_call_entry_extension",
-        "g3c4_public_model_input_extension", "g3g_manual_public_extension",
+        "g3c4_public_model_input_extension",
+        "g3c4_output_envelope_extension", "g3c4_p2g1_pending_extension",
+        "g3c4_p2g1_shell_publication_extension",
+        "g3c4_p2g1_copyout_extension", "g3c4_p2g1_coordinator_extension",
+        "g3c4_public_output_adapter_extension",
+        "g3c4_public_generation_dispatch_extension",
+        "g3g_manual_public_extension",
     )
 ]
 assert "native/g3g_manual_package_bridge.c" in native_sources
@@ -50,7 +57,7 @@ assert (root / "scripts/build-e1b-consumer.sh").read_text().count(
 assert "native/i64_t1_pair_private.h" in native_sources
 assert "native/g3g_g0_package_bridge.c" not in native_sources
 package_root = (native / "g3g_manual_package_root.esk").read_text()
-for name in (name for name in sources[-6:]
+for name in (name for name in sources[-13:]
              if name != "native/g3c4_p1_construction_extension.esk"):
     assert package_root.count(f'(load "{Path(name).name}")') == 1
 bridge = (native / "g3g_manual_package_bridge.c").read_text()
@@ -66,5 +73,37 @@ assert "(define (diagnostic-c4-model-create-seeded " not in (
     root / "lib/transformer/diagnostic_transport.esk"
 ).read_text()
 assert "et_g3t_private_logits_copy_bits_v1" not in bridge
+assert "native/g3c4_primitives_provider.c" in native_sources
+assert "-DET_F32_TENSOR_STORAGE_QUERY_PRIVATE" in (
+    root / "scripts/build-e1b-consumer.sh"
+).read_text()
 assert "ET_G3T_TESTING" not in (root / "scripts/build-e1b-consumer.sh").read_text()
+# Both profile sources load into one Eshkol module. A shared binding silently
+# routes C4 through C2 even when each profile passes its standalone tests.
+binding_pattern = re.compile(
+    r"\((?:extern\s+\S+|define(?:-syntax)?)\s+(?:\()?([\w!?*-]+)"
+)
+c2_bindings = set().union(*(
+    set(binding_pattern.findall((native / name).read_text()))
+    for name in ("g3t_prefill_sample_extension.esk", "g3t_output_text_extension.esk")
+))
+c4_envelope = (native / "g3c4_output_envelope_extension.esk").read_text()
+c4_bindings = set(binding_pattern.findall(c4_envelope))
+assert not (c2_bindings & c4_bindings), "C2/C4 output bindings collide"
+for operation in ("reserve", "release", "prepare", "copy-decode-ids", "accept-text"):
+    assert f"g3c4-native-output-{operation}" in c4_bindings
+for operation in ("reserve", "prepare"):
+    assert f"g3c4-output-{operation}" in c4_bindings
+assert "g3c4-t1-decode-output!" in c4_bindings
+dispatch = (native / "g3c4_public_generation_dispatch_extension.esk").read_text()
+assert dispatch.index("(g3c4-native-p2g1-preflight") < dispatch.index(
+    "(vector-set! g3t-p2g1-pending-gate 0 #t)"
+)
+assert dispatch.index("(vector-set! g3t-p2g1-pending-gate 0 #t)") < dispatch.index(
+    "(g3c4-p2g1-generate-internal generator input)"
+)
+public_test = (root / "tests/g3g_manual/public_runtime.esk").read_text()
+for witness in ("C2 P2/G1 remains over capacity before C4 call",
+                "C2 P2/G1 remains over capacity after C4 call"):
+    assert witness in public_test
 print("G3-G manual package source contract: PASS")

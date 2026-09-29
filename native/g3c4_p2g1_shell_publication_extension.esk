@@ -135,7 +135,7 @@
                   (not (vector-ref record 1))))
         (g3c4-fail 'invalid-state operation
                    "C4 P2/G1 output owner is not available"))
-    (let* ((output (g3t-output-reserve call 2))
+    (let* ((output (g3c4-output-reserve call 2))
            (auxiliary (vector-ref output 8)))
       (vector-set! record 1 output)
       (vector-set! record 2 (vector-ref output 3))
@@ -170,10 +170,10 @@
                   (eq? (vector-ref ledger 4) output)))
         (g3c4-fail 'invalid-state operation
                    "C4 P2/G1 output tuple or child ledger changed"))
-    (g3c4-native-check (g3t-native-output-prepare native output-native)
+    (g3c4-native-check (g3c4-native-output-prepare native output-native)
                        operation)
     (g3c4-native-check
-      (g3t-native-output-copy-decode-ids native output-native staging)
+      (g3c4-native-output-copy-decode-ids native output-native staging)
       operation)
     (let ((accepted-byte (bytevector-u8-ref staging 0)))
       (let check-upper ((index 1))
@@ -185,7 +185,7 @@
               (check-upper (+ index 1)))))
       (t1-private-g3-decode-raw-into! tokenizer staging raw)
       (g3c4-native-check
-        (g3t-native-output-accept-text native output-native raw) operation)
+        (g3c4-native-output-accept-text native output-native raw) operation)
       (g3t-output-entry-pending call output operation)
       (g3c4-baseline-tokenizer-entry
         tokenizer operation 'invalid-state 'invalid-state)
@@ -281,7 +281,7 @@
             #t
             (let ((live (g3c4-p2g1-output-entry-live shell operation)))
               (g3c4-native-check
-                (g3t-native-output-release (vector-ref live 3)) operation)
+                (g3c4-native-output-release (vector-ref live 3)) operation)
               (g3c4-entry-dead! live)
               (let ((record (g3c4-p2g1-record-for-output live)))
                 (vector-set! record 1 #f)

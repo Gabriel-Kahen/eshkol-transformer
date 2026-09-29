@@ -39,7 +39,7 @@
   (lambda ()
     (g3c4-with-call-internal
       'g3c4-p2g1-feature-off generator 2 1
-      (g3t-output-reserve (vector-ref m3-call-state 0) 2))))
+      (g3c4-output-reserve (vector-ref m3-call-state 0) 2))))
 (check "feature-off rollback clears active owner"
        (and (not (vector-ref generator-entry 9))
             (not (vector-ref m3-call-state 0))))
@@ -50,7 +50,7 @@
     (g3c4-with-call-internal
       'g3c4-p2g1-pending generator 2 1
       (let* ((call (vector-ref m3-call-state 0))
-             (output (g3t-output-reserve call 2))
+             (output (g3c4-output-reserve call 2))
              (ledger (vector-ref call 10)))
         (set! pending output)
         (check "linked native-backed P2/G1 pending output"
