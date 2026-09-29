@@ -1654,13 +1654,13 @@ one published summary and no retained per-step results for that train call;
 the later-step failure publishes no summary. The pinned PyTorch reference
 differs by one ULP on the fourth post-update numerator and is checked using
 the accepted post-update tolerance, not treated as an exact native oracle.
-Independent review of `e7041cd`, explicit interruption, public resume,
-wider profiles and hosted integration remain pending.
+Independent review of `e7041cd`, wider profiles and hosted integration remain
+pending.
 The independently approved [explicit interruption contract](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
-starts from reviewed #150 head `304a2a1`. A bounded optional same-thread
-predicate implementation and linked caller are staged on its isolated branch;
-the pinned fe9 gate, independent source/test review, #149/#151/#153 composition,
-and public train-interrupt fresh-process proof remain pending.
+adds a bounded optional same-thread predicate to public `trainer-train!`.
+Its public checkpoint and fresh-process composition passed the pinned fe9
+linked gate and independent source/test review at `efd23d0`; exact-head hosted
+CI and merged-dependency retest remain.
 
 The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
 accepted same-registry TR3-C snapshot and joint-restore entries with private

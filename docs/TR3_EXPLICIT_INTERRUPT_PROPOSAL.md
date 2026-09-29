@@ -1,9 +1,10 @@
 # TR3 explicit interruption proposal
 
 Status: contract independently approved; bounded implementation and focused
-linked caller staged on the branch based on reviewed `trainer-train!` candidate
-`304a2a1` (tree `767f982`). Full pinned fe9 gate, public checkpoint composition,
-and hosted acceptance remain pending.
+linked caller composed with public checkpoint and fresh-process resume. The
+combined `efd23d0` candidate passed the supported pinned fe9 linked gate and
+independent source/test review. Exact-head hosted CI and merged-dependency
+retest remain.
 
 ## Runtime and contract boundary
 
