@@ -28,21 +28,28 @@ the installed package object is copied byte-for-byte without source changes.
 
 The supported gate builds the fixed public package, compiles the caller at O2,
 and runs both horizons with `ESHKOL_ARENA_POISON=1`. The per-process timeout is
-3,600 seconds; the proposed operational peak RSS ceiling is 524,288 KiB. The
-8,192 process traverses 8,191 batches before the fault and all 8,192 on retry.
-The earlier two-shard fixture passed 1,024 in 345.14 seconds/162,400 KiB at
-`05f4f48` and 356.70 seconds/163,372 KiB at `5fb359e`. Its 8,192 process
-timed out at 1,800 and 3,600 seconds respectively; neither is a horizon pass.
+3,600 seconds and the runtime peak RSS ceiling is 524,288 KiB. The 8,192
+process traverses 8,191 batches before the fault and all 8,192 on retry. On
+exact source `b4baeb6`/tree `fa848ea`, the pinned fe9/f31 supported gate passed
+package, closure, executable and both runtimes. The 1,024 process completed in
+388.47 seconds/160,792 KiB; 8,192 completed in 3,004.26 seconds/160,948 KiB.
+Both reported the expected traversal-stage failure and full same-authority
+retry, exact batch/token counts and mask-weight bits, positive loss, and
+root-arena failure/retry deltas of 8,976/7,408 bytes. Host pre/post checks and
+Docker all exited zero. The verified 98-file seal is
+`e3-horizon-b4baeb6-fe9-f31-20260929-prepared/SHA256SUMS-RUN` (SHA-256
+`59268e06c964eecc40c9f52d847845ec9ef41d6284c5a1248f309e7863b89e79`).
+
+The earlier large-first-shard fixture passed 1,024 in 345.14 seconds/162,400
+KiB at `05f4f48` and 356.70 seconds/163,372 KiB at `5fb359e`. Its 8,192 process
+timed out at 1,800 and 3,600 seconds respectively; neither was a horizon pass.
 In that layout, each D2 batch reread and validated the entire first shard:
 16,592 bytes at H=1,024 and 131,280 bytes at H=8,192. The fixed-size shards
 bound that per-batch read while preserving the same final-batch fault and full
-retry. The exact-head 8,192 gate must still complete before acceptance. The
-package compile retains its 900-second per-compile timeout and may need roughly
-5 GiB peak RSS as prior E3 aggregate builds did; run it in the coordinated
-disk-backed supported lane.
-The caller prints root-arena deltas for failure and retry, and GNU time records
-elapsed seconds and peak RSS. These values must be measured on the exact gate
-head before acceptance; they are not asserted flat.
+retry. The package compile retains its 900-second per-compile timeout and may
+need roughly 5 GiB peak RSS as prior E3 aggregate builds did. The measured
+arena deltas above describe root-arena retention, not native cumulative
+allocation.
 
 This leaf does not prove native cumulative allocation, balanced pins/views/FDs,
 mode restoration, absent/present gradient invariance, independent 8,193-batch
