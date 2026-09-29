@@ -40,11 +40,11 @@
                   (eq? (vector-ref entry 11) g3c4-model-profile)
                   (if (eq? kind 'result-rng)
                       (and (g3c4-rng-snapshot? (vector-ref entry 7))
-                           (let match ((index 1))
+                           (let check-words ((index 1))
                              (if (= index 5) #t
                                  (and (= (vector-ref (vector-ref entry 7) index)
                                          (vector-ref (vector-ref record 3) index))
-                                      (match (+ index 1))))))
+                                      (check-words (+ index 1))))))
                       (and (m3t-exact-i64? (vector-ref entry 7))
                            (= (vector-ref entry 7) (vector-ref record 3))))))
         (g3c4-fail 'invalid-state operation
