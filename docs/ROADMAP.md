@@ -664,6 +664,14 @@ The 20-file seal is
 This remains a source-private `(P,G,N)=(2,1,1)` detached snapshot; EOS,
 repeated decode, N>1, a public generator and CLI3 `generate` are not provided.
 
+The [C4 P2/G1 public-profile gate](g3/G3_C4_P2_G1_PUBLIC_PROFILE_GATE.md)
+records the next package dependency. Public diagnostic-C2 output accessors
+already exist through merged G3-G #140/#142/#146, but C2 admits only
+`P+G<=2`; the private C4 output has cache length `3` and a different owner
+registry. Public C4 model/config/generator authority and exact coexistence
+with that C2 package require a separate accepted profile before any C4
+output-accessor adapter can be implemented or claimed.
+
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
